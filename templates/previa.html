@@ -2,43 +2,104 @@
 {% block title %}Prévia — {{ processo.numero_processo if processo else sessao_id }}{% endblock %}
 
 {% block extra_style %}
-.previa-container { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }
-.previa-pjecalc { font-family: 'Courier New', monospace; font-size: 0.88rem; line-height: 1.6; }
-.previa-pjecalc h3 { font-family: 'Segoe UI', Arial, sans-serif; color: #1a3a6b; margin: 16px 0 8px; border-bottom: 2px solid #1a3a6b; padding-bottom: 4px; }
-.previa-pjecalc hr { border: none; border-top: 1px solid #dee2e6; margin: 8px 0; }
-.campo { display: flex; gap: 8px; padding: 3px 0; }
-.label { color: #6c757d; min-width: 160px; }
-.valor { color: #222; font-weight: 500; }
-.alerta { background: #fff3cd; padding: 4px 8px; border-radius: 4px; color: #856404; margin: 2px 0; }
-.verba-header { color: #1a3a6b; font-weight: 600; }
-.verba-campo { color: #444; padding-left: 20px; }
-.verba-reflexa { color: #6c757d; font-style: italic; padding-left: 20px; }
-.menu-item { color: #1a3a6b; font-weight: 600; }
-.sidebar { position: sticky; top: 20px; }
-.sidebar .card { padding: 16px; }
-.sidebar h3 { color: #1a3a6b; font-size: 1rem; margin-bottom: 12px; }
-.campo-editor { border: 1px solid #dee2e6; border-radius: 6px; padding: 16px; margin-bottom: 16px; background: #f8f9fa; }
-.campo-editor label { display: block; font-size: 0.85rem; color: #6c757d; margin-bottom: 4px; }
-.campo-editor input, .campo-editor select {
-  width: 100%; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 4px;
-  font-size: 0.9rem; margin-bottom: 8px;
+/* Layout */
+.previa-container { display: grid; grid-template-columns: 1fr 300px; gap: 20px; align-items: start; }
+.sidebar { position: sticky; top: 16px; }
+@media (max-width: 900px) { .previa-container { grid-template-columns: 1fr; } .sidebar { position: static; } }
+
+/* Seções do formulário */
+.secao {
+  border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 16px; overflow: hidden;
 }
-.campo-ausente { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.9rem; }
-#msg-edicao { display: none; margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 0.85rem; }
-@media (max-width: 900px) { .previa-container { grid-template-columns: 1fr; } }
+.secao-titulo {
+  background: #1a3a6b; color: #fff; padding: 10px 16px; font-size: 0.95rem; font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  user-select: none;
+}
+.secao-titulo .confianca-badge {
+  font-size: 0.75rem; padding: 2px 8px; border-radius: 10px; font-weight: 400;
+}
+.conf-alta { background: rgba(40,167,69,0.3); color: #d4edda; }
+.conf-media { background: rgba(255,193,7,0.4); color: #fff3cd; }
+.conf-baixa { background: rgba(220,53,69,0.3); color: #f8d7da; }
+.secao-corpo { padding: 16px; }
+.secao-corpo.recolhido { display: none; }
+
+/* Grade de campos */
+.campos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.campos-grid.col3 { grid-template-columns: 1fr 1fr 1fr; }
+.campo-col2 { grid-column: 1 / -1; }
+@media (max-width: 600px) { .campos-grid { grid-template-columns: 1fr; } }
+
+/* Campo individual */
+.campo-form { position: relative; }
+.campo-form label {
+  display: block; font-size: 0.78rem; color: #6c757d; margin-bottom: 3px;
+  font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.campo-form input[type=text],
+.campo-form input[type=number],
+.campo-form input[type=date],
+.campo-form select,
+.campo-form textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 5px;
+  font-size: 0.92rem; background: #fff; transition: border-color 0.15s;
+  font-family: inherit;
+}
+.campo-form input:focus, .campo-form select:focus, .campo-form textarea:focus {
+  outline: none; border-color: #1a3a6b; box-shadow: 0 0 0 2px rgba(26,58,107,0.12);
+}
+.campo-form .campo-salvo {
+  border-color: #28a745 !important; box-shadow: 0 0 0 2px rgba(40,167,69,0.15) !important;
+  transition: all 0.3s;
+}
+.campo-form .campo-ausente { border-color: #ffc107 !important; background: #fffdf0 !important; }
+.campo-form .indicador-confianca {
+  position: absolute; right: 8px; top: 28px; font-size: 0.7rem; color: #adb5bd;
+  pointer-events: none;
+}
+.checkbox-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 0;
+}
+.checkbox-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+.checkbox-row label { font-size: 0.9rem; color: #333; cursor: pointer; font-weight: 500; margin: 0; }
+
+/* Verbas */
+.verba-card {
+  border: 1px solid #dee2e6; border-radius: 6px; margin-bottom: 10px; overflow: hidden;
+}
+.verba-header {
+  background: #f8f9fa; padding: 10px 14px; display: flex;
+  justify-content: space-between; align-items: center; cursor: pointer;
+}
+.verba-header:hover { background: #f0f4ff; }
+.verba-nome { font-weight: 600; color: #1a3a6b; font-size: 0.92rem; }
+.verba-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+.verba-corpo { padding: 14px; display: none; }
+.verba-corpo.aberta { display: block; }
+
+/* Toast de feedback */
+#toast {
+  position: fixed; bottom: 24px; right: 24px; padding: 10px 18px;
+  border-radius: 6px; font-size: 0.9rem; font-weight: 600; z-index: 9999;
+  opacity: 0; transition: opacity 0.3s; pointer-events: none;
+}
+#toast.visivel { opacity: 1; }
+#toast.ok { background: #28a745; color: #fff; }
+#toast.erro { background: #dc3545; color: #fff; }
 {% endblock %}
 
 {% block content %}
 <!-- Cabeçalho -->
-<div class="card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px;">
+<div class="card" style="display:flex; justify-content:space-between; align-items:center; padding:14px 22px; margin-bottom:16px;">
   <div>
-    <h2 style="margin:0;">Prévia do Cálculo</h2>
-    <div style="color:#6c757d; font-size:0.9rem; margin-top:4px;">
+    <h2 style="margin:0; font-size:1.2rem;">Prévia do Cálculo</h2>
+    <div style="color:#6c757d; font-size:0.88rem; margin-top:3px;">
       Processo: <strong>{{ processo.numero_processo if processo else '—' }}</strong>
       &nbsp;|&nbsp; Reclamante: <strong>{{ processo.reclamante if processo else '—' }}</strong>
     </div>
   </div>
-  <div style="display:flex; gap:8px; align-items:center;">
+  <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
     {% if status == 'previa_gerada' %}
     <span class="badge badge-amarelo">Aguardando Confirmação</span>
     {% elif status == 'confirmado' %}
@@ -50,9 +111,8 @@
     {% else %}
     <span class="badge badge-cinza">{{ status }}</span>
     {% endif %}
-
     {% if calculo.arquivo_pjc %}
-    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success" style="padding:8px 16px;">
+    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success" style="padding:7px 14px; font-size:0.88rem;">
       Download .pjc
     </a>
     {% endif %}
@@ -61,22 +121,21 @@
 
 <!-- Alertas e campos ausentes -->
 {% if campos_ausentes %}
-<div class="alerta-box">
-  <strong>Campos ausentes que precisam ser preenchidos:</strong>
-  <ul style="margin-top:8px; padding-left:20px;">
+<div class="alerta-box" style="margin-bottom:12px;">
+  <strong>Campos que precisam ser preenchidos:</strong>
+  <ul style="margin-top:6px; padding-left:20px;">
     {% for campo in campos_ausentes %}
-    <li>{{ campo }}</li>
+    <li style="font-size:0.9rem;">{{ campo }}</li>
     {% endfor %}
   </ul>
 </div>
 {% endif %}
-
 {% if alertas %}
-<div class="alerta-box">
+<div class="alerta-box" style="margin-bottom:12px;">
   <strong>Alertas do processamento:</strong>
-  <ul style="margin-top:8px; padding-left:20px;">
+  <ul style="margin-top:6px; padding-left:20px;">
     {% for alerta in alertas %}
-    <li>{{ alerta }}</li>
+    <li style="font-size:0.9rem;">{{ alerta }}</li>
     {% endfor %}
   </ul>
 </div>
@@ -85,139 +144,660 @@
 <!-- Layout principal -->
 <div class="previa-container">
 
-  <!-- Prévia formatada -->
-  <div class="card">
-    <h2>Parâmetros do Cálculo</h2>
-    {{ previa_texto | replace('\n', '<br>') | safe }}
-  </div>
+  <!-- Formulário eletrônico -->
+  <div>
+
+    <!-- ═══ 1. PROCESSO ═══ -->
+    {% set conf_proc = dados.get('processo', {}).get('confianca', 1.0) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-processo')">
+        1. Identificação do Processo
+        <span class="confianca-badge {{ 'conf-alta' if conf_proc >= 0.8 else ('conf-media' if conf_proc >= 0.5 else 'conf-baixa') }}">
+          {{ (conf_proc * 100)|int }}% confiança
+        </span>
+      </div>
+      <div class="secao-corpo" id="s-processo">
+        <div class="campos-grid">
+          <div class="campo-form campo-col2">
+            <label>Número do Processo</label>
+            <input type="text" value="{{ dados.get('processo', {}).get('numero', '') or '' }}"
+                   onchange="salvarCampo('processo.numero', this.value, this)"
+                   placeholder="0000000-00.0000.0.00.0000">
+          </div>
+          <div class="campo-form">
+            <label>Reclamante</label>
+            <input type="text" value="{{ dados.get('processo', {}).get('reclamante', '') or '' }}"
+                   onchange="salvarCampo('processo.reclamante', this.value, this)"
+                   {{ 'class=campo-ausente' if 'processo.reclamante' in campos_ausentes }}>
+          </div>
+          <div class="campo-form">
+            <label>Reclamado / Empresa</label>
+            <input type="text" value="{{ dados.get('processo', {}).get('reclamado', '') or '' }}"
+                   onchange="salvarCampo('processo.reclamado', this.value, this)"
+                   {{ 'class=campo-ausente' if 'processo.reclamado' in campos_ausentes }}>
+          </div>
+          <div class="campo-form">
+            <label>Estado (UF)</label>
+            <select onchange="salvarCampo('processo.estado', this.value, this)">
+              <option value="">— selecione —</option>
+              {% for uf in ['AC','AL','AM','AP','BA','CE','DF','ES','GO','MA','MG','MS','MT','PA','PB','PE','PI','PR','RJ','RN','RO','RR','RS','SC','SE','SP','TO'] %}
+              <option value="{{ uf }}" {{ 'selected' if dados.get('processo', {}).get('estado') == uf }}>{{ uf }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Município</label>
+            <input type="text" value="{{ dados.get('processo', {}).get('municipio', '') or '' }}"
+                   onchange="salvarCampo('processo.municipio', this.value, this)"
+                   {{ 'class=campo-ausente' if 'processo.municipio' in campos_ausentes }}>
+          </div>
+          <div class="campo-form campo-col2">
+            <label>Vara do Trabalho</label>
+            <input type="text" value="{{ dados.get('processo', {}).get('vara', '') or '' }}"
+                   onchange="salvarCampo('processo.vara', this.value, this)">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 2. CONTRATO ═══ -->
+    {% set conf_cont = dados.get('contrato', {}).get('confianca', 1.0) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-contrato')">
+        2. Dados do Contrato de Trabalho
+        <span class="confianca-badge {{ 'conf-alta' if conf_cont >= 0.8 else ('conf-media' if conf_cont >= 0.5 else 'conf-baixa') }}">
+          {{ (conf_cont * 100)|int }}% confiança
+        </span>
+      </div>
+      <div class="secao-corpo" id="s-contrato">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Data de Admissão</label>
+            <input type="text" placeholder="DD/MM/AAAA"
+                   value="{{ dados.get('contrato', {}).get('admissao', '') or '' }}"
+                   onchange="salvarCampo('contrato.admissao', this.value, this)"
+                   {{ 'class=campo-ausente' if 'contrato.admissao' in campos_ausentes }}>
+          </div>
+          <div class="campo-form">
+            <label>Data de Demissão / Rescisão</label>
+            <input type="text" placeholder="DD/MM/AAAA"
+                   value="{{ dados.get('contrato', {}).get('demissao', '') or '' }}"
+                   onchange="salvarCampo('contrato.demissao', this.value, this)">
+          </div>
+          <div class="campo-form">
+            <label>Data de Ajuizamento</label>
+            <input type="text" placeholder="DD/MM/AAAA"
+                   value="{{ dados.get('contrato', {}).get('ajuizamento', '') or '' }}"
+                   onchange="salvarCampo('contrato.ajuizamento', this.value, this)"
+                   {{ 'class=campo-ausente' if 'contrato.ajuizamento' in campos_ausentes }}>
+          </div>
+          <div class="campo-form">
+            <label>Tipo de Rescisão</label>
+            <select onchange="salvarCampo('contrato.tipo_rescisao', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="sem_justa_causa" {{ 'selected' if dados.get('contrato', {}).get('tipo_rescisao') == 'sem_justa_causa' }}>Sem Justa Causa</option>
+              <option value="justa_causa" {{ 'selected' if dados.get('contrato', {}).get('tipo_rescisao') == 'justa_causa' }}>Justa Causa</option>
+              <option value="pedido_demissao" {{ 'selected' if dados.get('contrato', {}).get('tipo_rescisao') == 'pedido_demissao' }}>Pedido de Demissão</option>
+              <option value="distrato" {{ 'selected' if dados.get('contrato', {}).get('tipo_rescisao') == 'distrato' }}>Distrato</option>
+              <option value="morte" {{ 'selected' if dados.get('contrato', {}).get('tipo_rescisao') == 'morte' }}>Morte</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Regime de Trabalho</label>
+            <select onchange="salvarCampo('contrato.regime', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="Tempo Integral" {{ 'selected' if dados.get('contrato', {}).get('regime') == 'Tempo Integral' }}>Tempo Integral</option>
+              <option value="Tempo Parcial" {{ 'selected' if dados.get('contrato', {}).get('regime') == 'Tempo Parcial' }}>Tempo Parcial</option>
+              <option value="Trabalho Intermitente" {{ 'selected' if dados.get('contrato', {}).get('regime') == 'Trabalho Intermitente' }}>Trabalho Intermitente</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Carga Horária (horas/mês)</label>
+            <input type="number" min="1" max="300"
+                   value="{{ dados.get('contrato', {}).get('carga_horaria', '') or '' }}"
+                   onchange="salvarCampo('contrato.carga_horaria', this.value, this)"
+                   placeholder="220">
+          </div>
+          <div class="campo-form">
+            <label>Maior Remuneração (R$)</label>
+            <input type="number" step="0.01" min="0"
+                   value="{{ dados.get('contrato', {}).get('maior_remuneracao', '') or '' }}"
+                   onchange="salvarCampo('contrato.maior_remuneracao', this.value, this)"
+                   placeholder="0,00">
+          </div>
+          <div class="campo-form">
+            <label>Última Remuneração (R$)</label>
+            <input type="number" step="0.01" min="0"
+                   value="{{ dados.get('contrato', {}).get('ultima_remuneracao', '') or '' }}"
+                   onchange="salvarCampo('contrato.ultima_remuneracao', this.value, this)"
+                   placeholder="0,00">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 3. PRESCRIÇÃO ═══ -->
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-prescricao')">
+        3. Prescrição
+      </div>
+      <div class="secao-corpo" id="s-prescricao">
+        <div class="checkbox-row">
+          <input type="checkbox" id="pres-quinquenal"
+                 {{ 'checked' if dados.get('prescricao', {}).get('quinquenal') }}
+                 onchange="salvarCampo('prescricao.quinquenal', this.checked ? 'true' : 'false', this)">
+          <label for="pres-quinquenal">Prescrição Quinquenal (5 anos)</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="pres-fgts"
+                 {{ 'checked' if dados.get('prescricao', {}).get('fgts') }}
+                 onchange="salvarCampo('prescricao.fgts', this.checked ? 'true' : 'false', this)">
+          <label for="pres-fgts">Prescrição do FGTS (30 anos / REs 709212 e 522897)</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 4. AVISO PRÉVIO ═══ -->
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-aviso')">
+        4. Aviso Prévio
+      </div>
+      <div class="secao-corpo" id="s-aviso">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Tipo de Aviso Prévio</label>
+            <select onchange="salvarCampo('aviso_previo.tipo', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="Calculado" {{ 'selected' if dados.get('aviso_previo', {}).get('tipo') == 'Calculado' }}>Calculado</option>
+              <option value="Informado" {{ 'selected' if dados.get('aviso_previo', {}).get('tipo') == 'Informado' }}>Informado</option>
+              <option value="Nao Apurar" {{ 'selected' if dados.get('aviso_previo', {}).get('tipo') == 'Nao Apurar' }}>Não Apurar</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Prazo (dias)</label>
+            <input type="number" min="0" max="90"
+                   value="{{ dados.get('aviso_previo', {}).get('prazo_dias', '') or '' }}"
+                   onchange="salvarCampo('aviso_previo.prazo_dias', this.value, this)"
+                   placeholder="30">
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin-top:8px;">
+          <input type="checkbox" id="aviso-projetar"
+                 {{ 'checked' if dados.get('aviso_previo', {}).get('projetar') }}
+                 onchange="salvarCampo('aviso_previo.projetar', this.checked ? 'true' : 'false', this)">
+          <label for="aviso-projetar">Projetar Aviso Prévio no contrato</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 5. FGTS ═══ -->
+    {% set conf_fgts = dados.get('fgts', {}).get('confianca', 1.0) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-fgts')">
+        5. FGTS
+        <span class="confianca-badge {{ 'conf-alta' if conf_fgts >= 0.8 else ('conf-media' if conf_fgts >= 0.5 else 'conf-baixa') }}">
+          {{ (conf_fgts * 100)|int }}% confiança
+        </span>
+      </div>
+      <div class="secao-corpo" id="s-fgts">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Alíquota do FGTS (%)</label>
+            <input type="number" step="0.01" min="0" max="100"
+                   value="{{ ((dados.get('fgts', {}).get('aliquota') or 0) * 100)|round(2) if dados.get('fgts', {}).get('aliquota') else '' }}"
+                   onchange="salvarCampo('fgts.aliquota', (parseFloat(this.value)/100).toString(), this)"
+                   placeholder="8">
+            <span style="font-size:0.8rem; color:#6c757d;">Padrão: 8%</span>
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin-top:8px;">
+          <input type="checkbox" id="fgts-multa40"
+                 {{ 'checked' if dados.get('fgts', {}).get('multa_40') }}
+                 onchange="salvarCampo('fgts.multa_40', this.checked ? 'true' : 'false', this)">
+          <label for="fgts-multa40">Multa de 40% — art. 18, §1º, Lei 8.036/90</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="fgts-multa467"
+                 {{ 'checked' if dados.get('fgts', {}).get('multa_467') }}
+                 onchange="salvarCampo('fgts.multa_467', this.checked ? 'true' : 'false', this)">
+          <label for="fgts-multa467">Multa art. 467 da CLT</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 6. HONORÁRIOS ═══ -->
+    {% set conf_hon = dados.get('honorarios', {}).get('confianca', 1.0) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-honorarios')">
+        6. Honorários Advocatícios
+        <span class="confianca-badge {{ 'conf-alta' if conf_hon >= 0.8 else ('conf-media' if conf_hon >= 0.5 else 'conf-baixa') }}">
+          {{ (conf_hon * 100)|int }}% confiança
+        </span>
+      </div>
+      <div class="secao-corpo" id="s-honorarios">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Percentual de Honorários (%)</label>
+            <input type="number" step="0.01" min="0" max="100"
+                   value="{{ ((dados.get('honorarios', {}).get('percentual') or 0) * 100)|round(2) if dados.get('honorarios', {}).get('percentual') else '' }}"
+                   onchange="salvarCampo('honorarios.percentual', (parseFloat(this.value)/100).toString(), this)"
+                   placeholder="5">
+          </div>
+          <div class="campo-form">
+            <label>Valor Fixo de Honorários (R$)</label>
+            <input type="number" step="0.01" min="0"
+                   value="{{ dados.get('honorarios', {}).get('valor_fixo', '') or '' }}"
+                   onchange="salvarCampo('honorarios.valor_fixo', this.value, this)"
+                   placeholder="0,00">
+          </div>
+          <div class="campo-form">
+            <label>Parte Devedora dos Honorários</label>
+            <select onchange="salvarCampo('honorarios.parte_devedora', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="Reclamado" {{ 'selected' if dados.get('honorarios', {}).get('parte_devedora') == 'Reclamado' }}>Reclamado</option>
+              <option value="Reclamante" {{ 'selected' if dados.get('honorarios', {}).get('parte_devedora') == 'Reclamante' }}>Reclamante</option>
+              <option value="Ambos" {{ 'selected' if dados.get('honorarios', {}).get('parte_devedora') == 'Ambos' }}>Ambos</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Honorários Periciais (R$)</label>
+            <input type="number" step="0.01" min="0"
+                   value="{{ dados.get('honorarios', {}).get('periciais', '') or '' }}"
+                   onchange="salvarCampo('honorarios.periciais', this.value, this)"
+                   placeholder="0,00">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 7. CORREÇÃO E JUROS ═══ -->
+    {% set conf_cj = dados.get('correcao_juros', {}).get('confianca', 1.0) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-correcao')">
+        7. Correção Monetária e Juros
+        <span class="confianca-badge {{ 'conf-alta' if conf_cj >= 0.8 else ('conf-media' if conf_cj >= 0.5 else 'conf-baixa') }}">
+          {{ (conf_cj * 100)|int }}% confiança
+        </span>
+      </div>
+      <div class="secao-corpo" id="s-correcao">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Índice de Correção Monetária</label>
+            <select onchange="salvarCampo('correcao_juros.indice_correcao', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="Tabela JT Unica Mensal" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'Tabela JT Unica Mensal' }}>Tabela JT Única Mensal (padrão ADC 58 STF)</option>
+              <option value="IPCA-E" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'IPCA-E' }}>IPCA-E</option>
+              <option value="Selic" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'Selic' }}>SELIC</option>
+              <option value="TRCT" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'TRCT' }}>TR/CT</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Taxa de Juros</label>
+            <select onchange="salvarCampo('correcao_juros.taxa_juros', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="Juros Padrao" {{ 'selected' if dados.get('correcao_juros', {}).get('taxa_juros') == 'Juros Padrao' }}>Juros Padrão (1% a.m.)</option>
+              <option value="Selic" {{ 'selected' if dados.get('correcao_juros', {}).get('taxa_juros') == 'Selic' }}>SELIC</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Base de Cálculo dos Juros</label>
+            <select onchange="salvarCampo('correcao_juros.base_juros', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="Verbas" {{ 'selected' if dados.get('correcao_juros', {}).get('base_juros') == 'Verbas' }}>Verbas</option>
+              <option value="Credito Total" {{ 'selected' if dados.get('correcao_juros', {}).get('base_juros') == 'Credito Total' }}>Crédito Total</option>
+            </select>
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin-top:8px;">
+          <input type="checkbox" id="jam-fgts"
+                 {{ 'checked' if dados.get('correcao_juros', {}).get('jam_fgts') }}
+                 onchange="salvarCampo('correcao_juros.jam_fgts', this.checked ? 'true' : 'false', this)">
+          <label for="jam-fgts">Incluir JAM-FGTS (TR + 3% a.a.)</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 8. CONTRIBUIÇÃO SOCIAL ═══ -->
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-previdencia')">
+        8. Contribuição Previdenciária (INSS)
+      </div>
+      <div class="secao-corpo" id="s-previdencia">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Responsabilidade pelo Recolhimento</label>
+            <select onchange="salvarCampo('contribuicao_social.responsabilidade', this.value, this)">
+              <option value="">— selecione —</option>
+              <option value="Empregador" {{ 'selected' if dados.get('contribuicao_social', {}).get('responsabilidade') == 'Empregador' }}>Empregador</option>
+              <option value="Empregado" {{ 'selected' if dados.get('contribuicao_social', {}).get('responsabilidade') == 'Empregado' }}>Empregado</option>
+              <option value="Ambos" {{ 'selected' if dados.get('contribuicao_social', {}).get('responsabilidade') == 'Ambos' }}>Ambos</option>
+            </select>
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin-top:8px;">
+          <input type="checkbox" id="lei-11941"
+                 {{ 'checked' if dados.get('contribuicao_social', {}).get('lei_11941') }}
+                 onchange="salvarCampo('contribuicao_social.lei_11941', this.checked ? 'true' : 'false', this)">
+          <label for="lei-11941">Aplicar cálculo pela Lei 11.941/2009</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 9. IMPOSTO DE RENDA ═══ -->
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-ir')">
+        9. Imposto de Renda
+      </div>
+      <div class="secao-corpo" id="s-ir">
+        <div class="checkbox-row">
+          <input type="checkbox" id="ir-apurar"
+                 {{ 'checked' if dados.get('imposto_renda', {}).get('apurar') }}
+                 onchange="salvarCampo('imposto_renda.apurar', this.checked ? 'true' : 'false', this)">
+          <label for="ir-apurar">Apurar Imposto de Renda</label>
+        </div>
+        <div class="campos-grid" style="margin-top:10px;">
+          <div class="campo-form">
+            <label>Meses Tributáveis</label>
+            <input type="number" min="0"
+                   value="{{ dados.get('imposto_renda', {}).get('meses_tributaveis', '') or '' }}"
+                   onchange="salvarCampo('imposto_renda.meses_tributaveis', this.value, this)"
+                   placeholder="0">
+          </div>
+          <div class="campo-form">
+            <label>Número de Dependentes</label>
+            <input type="number" min="0"
+                   value="{{ dados.get('imposto_renda', {}).get('dependentes', '') or '' }}"
+                   onchange="salvarCampo('imposto_renda.dependentes', this.value, this)"
+                   placeholder="0">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 10. VERBAS DEFERIDAS ═══ -->
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-verbas')">
+        10. Verbas Deferidas
+        <span class="confianca-badge conf-alta">{{ verbas|length }} verba(s)</span>
+      </div>
+      <div class="secao-corpo" id="s-verbas">
+        {% if not verbas %}
+        <p style="color:#6c757d; font-size:0.9rem;">Nenhuma verba extraída. Verifique a sentença e os alertas acima.</p>
+        {% endif %}
+        {% for verba in verbas %}
+        <div class="verba-card">
+          <div class="verba-header" onclick="toggleVerba({{ loop.index0 }})">
+            <div>
+              <div class="verba-nome">{{ verba.nome_pjecalc or verba.nome_sentenca }}</div>
+              {% if verba.nome_pjecalc and verba.nome_pjecalc != verba.nome_sentenca %}
+              <div style="font-size:0.78rem; color:#6c757d; margin-top:2px;">
+                Sentença: "{{ verba.nome_sentenca }}"
+              </div>
+              {% endif %}
+            </div>
+            <div class="verba-badges">
+              {% if verba.tipo %}<span class="badge badge-azul" style="font-size:0.72rem;">{{ verba.tipo }}</span>{% endif %}
+              {% if not verba.mapeada %}<span class="badge badge-amarelo" style="font-size:0.72rem;">Não mapeada</span>{% endif %}
+              {% if verba.confianca and verba.confianca < 0.7 %}<span class="badge badge-vermelho" style="font-size:0.72rem;">Baixa confiança</span>{% endif %}
+              <span style="font-size:0.8rem; color:#6c757d;">▼</span>
+            </div>
+          </div>
+          <div class="verba-corpo" id="verba-corpo-{{ loop.index0 }}">
+            <div class="campos-grid">
+              <div class="campo-form campo-col2">
+                <label>Nome no PJE-Calc</label>
+                <input type="text" value="{{ verba.nome_pjecalc or verba.nome_sentenca }}"
+                       onchange="salvarVerba({{ loop.index0 }}, 'nome_pjecalc', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Tipo</label>
+                <select onchange="salvarVerba({{ loop.index0 }}, 'tipo', this.value, this)">
+                  <option value="">—</option>
+                  <option value="Principal" {{ 'selected' if verba.tipo == 'Principal' }}>Principal</option>
+                  <option value="Reflexa" {{ 'selected' if verba.tipo == 'Reflexa' }}>Reflexa</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Característica</label>
+                <select onchange="salvarVerba({{ loop.index0 }}, 'caracteristica', this.value, this)">
+                  <option value="">—</option>
+                  <option value="Comum" {{ 'selected' if verba.caracteristica == 'Comum' }}>Comum</option>
+                  <option value="13o Salario" {{ 'selected' if verba.caracteristica == '13o Salario' }}>13º Salário</option>
+                  <option value="Aviso Previo" {{ 'selected' if verba.caracteristica == 'Aviso Previo' }}>Aviso Prévio</option>
+                  <option value="Ferias" {{ 'selected' if verba.caracteristica == 'Ferias' }}>Férias</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Ocorrência</label>
+                <select onchange="salvarVerba({{ loop.index0 }}, 'ocorrencia', this.value, this)">
+                  <option value="">—</option>
+                  <option value="Mensal" {{ 'selected' if verba.ocorrencia == 'Mensal' }}>Mensal</option>
+                  <option value="Dezembro" {{ 'selected' if verba.ocorrencia == 'Dezembro' }}>Dezembro</option>
+                  <option value="Periodo Aquisitivo" {{ 'selected' if verba.ocorrencia == 'Periodo Aquisitivo' }}>Período Aquisitivo</option>
+                  <option value="Desligamento" {{ 'selected' if verba.ocorrencia == 'Desligamento' }}>Desligamento</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Período Início</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ verba.periodo_inicio or '' }}"
+                       onchange="salvarVerba({{ loop.index0 }}, 'periodo_inicio', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Período Fim</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ verba.periodo_fim or '' }}"
+                       onchange="salvarVerba({{ loop.index0 }}, 'periodo_fim', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Base de Cálculo</label>
+                <select onchange="salvarVerba({{ loop.index0 }}, 'base_calculo', this.value, this)">
+                  <option value="">—</option>
+                  <option value="Maior Remuneracao" {{ 'selected' if verba.base_calculo == 'Maior Remuneracao' }}>Maior Remuneração</option>
+                  <option value="Historico Salarial" {{ 'selected' if verba.base_calculo == 'Historico Salarial' }}>Histórico Salarial</option>
+                  <option value="Salario Minimo" {{ 'selected' if verba.base_calculo == 'Salario Minimo' }}>Salário Mínimo</option>
+                  <option value="Piso Salarial" {{ 'selected' if verba.base_calculo == 'Piso Salarial' }}>Piso Salarial</option>
+                  <option value="Verbas" {{ 'selected' if verba.base_calculo == 'Verbas' }}>Verbas</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Percentual (%)</label>
+                <input type="number" step="0.01" min="0"
+                       value="{{ (verba.percentual * 100)|round(2) if verba.percentual else '' }}"
+                       onchange="salvarVerba({{ loop.index0 }}, 'percentual', (parseFloat(this.value)||0)/100, this)"
+                       placeholder="100">
+              </div>
+              <div class="campo-form">
+                <label>Valor Informado (R$)</label>
+                <input type="number" step="0.01" min="0"
+                       value="{{ verba.valor_informado or '' }}"
+                       onchange="salvarVerba({{ loop.index0 }}, 'valor_informado', this.value, this)"
+                       placeholder="0,00">
+              </div>
+            </div>
+            <div style="margin-top:10px; display:flex; gap:20px; flex-wrap:wrap;">
+              <div class="checkbox-row">
+                <input type="checkbox" id="v{{ loop.index0 }}-fgts"
+                       {{ 'checked' if verba.incidencia_fgts }}
+                       onchange="salvarVerba({{ loop.index0 }}, 'incidencia_fgts', this.checked ? 'true':'false', this)">
+                <label for="v{{ loop.index0 }}-fgts">Incide FGTS</label>
+              </div>
+              <div class="checkbox-row">
+                <input type="checkbox" id="v{{ loop.index0 }}-inss"
+                       {{ 'checked' if verba.incidencia_inss }}
+                       onchange="salvarVerba({{ loop.index0 }}, 'incidencia_inss', this.checked ? 'true':'false', this)">
+                <label for="v{{ loop.index0 }}-inss">Incide INSS</label>
+              </div>
+              <div class="checkbox-row">
+                <input type="checkbox" id="v{{ loop.index0 }}-ir"
+                       {{ 'checked' if verba.incidencia_ir }}
+                       onchange="salvarVerba({{ loop.index0 }}, 'incidencia_ir', this.checked ? 'true':'false', this)">
+                <label for="v{{ loop.index0 }}-ir">Incide IR</label>
+              </div>
+            </div>
+            {% if verba.texto_original %}
+            <details style="margin-top:10px;">
+              <summary style="cursor:pointer; font-size:0.82rem; color:#6c757d;">
+                Trecho da sentença que originou esta verba
+              </summary>
+              <blockquote style="margin:6px 0 0; padding:8px 12px; border-left:3px solid #dee2e6;
+                                 font-size:0.82rem; color:#555; background:#fafafa; border-radius:0 4px 4px 0;">
+                {{ verba.texto_original }}
+              </blockquote>
+            </details>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+  </div><!-- /formulário -->
 
   <!-- Sidebar de ações -->
   <div class="sidebar">
 
-    <!-- Confirmar -->
     {% if status in ['previa_gerada', 'em_andamento'] %}
     <div class="card">
-      <h3>Confirmar e Preencher</h3>
-      <p style="color:#6c757d; font-size:0.88rem; margin-bottom:12px;">
-        Após confirmar, o agente preencherá automaticamente o PJE-Calc com estes parâmetros.
+      <h3 style="color:#1a3a6b; font-size:1rem; margin-bottom:10px;">Confirmar e Enviar</h3>
+      <p style="color:#6c757d; font-size:0.85rem; margin-bottom:12px;">
+        Verifique todos os campos antes de confirmar.
+        Os dados serão usados pelo agente para preencher o PJE-Calc.
       </p>
-      <button class="btn btn-success" style="width:100%;" onclick="confirmarPrevia()">
-        Confirmar e Iniciar PJE-Calc
+      <button class="btn btn-success" style="width:100%; padding:12px;"
+              onclick="confirmarPrevia()">
+        Confirmar Parâmetros
       </button>
-      <div id="msg-confirmar" style="display:none; margin-top:8px;"></div>
+      <div id="msg-confirmar" style="display:none; margin-top:8px; font-size:0.85rem;
+           padding:8px; border-radius:4px;"></div>
     </div>
     {% endif %}
 
-    <!-- Editar campo -->
     <div class="card">
-      <h3>Editar Parâmetro</h3>
-      <div class="campo-editor">
-        <label>Campo (ex: contrato.admissao)</label>
-        <input type="text" id="campo-editar" placeholder="secao.campo">
-        <label>Novo valor</label>
-        <input type="text" id="valor-editar" placeholder="novo valor">
-        <button class="btn btn-warning" style="width:100%;" onclick="editarCampo()">
-          Atualizar Campo
-        </button>
-        <div id="msg-edicao"></div>
+      <h3 style="color:#1a3a6b; font-size:1rem; margin-bottom:8px;">Resumo</h3>
+      <div style="font-size:0.85rem; color:#444; line-height:1.8;">
+        <div><strong>Processo:</strong> {{ processo.numero_processo if processo else '—' }}</div>
+        <div><strong>Reclamante:</strong> {{ processo.reclamante if processo else '—' }}</div>
+        <div><strong>Reclamado:</strong> {{ processo.reclamado if processo else '—' }}</div>
+        <div><strong>Verbas:</strong> {{ verbas|length }}</div>
+        <div><strong>Status:</strong> {{ status }}</div>
       </div>
     </div>
 
-    <!-- Verbas -->
-    <div class="card">
-      <h3>Verbas ({{ verbas|length }})</h3>
-      {% for verba in verbas %}
-      <div style="padding:8px; border-bottom:1px solid #eee; font-size:0.85rem;">
-        <div style="font-weight:600; color:#1a3a6b;">
-          {{ verba.nome_pjecalc or verba.nome_sentenca }}
-          {% if not verba.mapeada %}
-          <span class="badge badge-amarelo" style="font-size:0.7rem;">Manual</span>
-          {% endif %}
-        </div>
-        <div style="color:#6c757d;">{{ verba.tipo }} | {{ verba.caracteristica }} | {{ verba.ocorrencia }}</div>
-        {% if verba.periodo_inicio %}
-        <div style="color:#6c757d;">{{ verba.periodo_inicio }} a {{ verba.periodo_fim or '—' }}</div>
-        {% endif %}
-      </div>
-      {% endfor %}
-    </div>
-
-    <!-- Histórico de sessões do processo -->
     {% if processo %}
-    <div class="card">
-      <h3>Histórico</h3>
-      <a href="/processo/{{ processo.numero_processo }}" style="color:#1a3a6b; font-size:0.9rem;">
-        Ver todos os cálculos deste processo →
+    <div class="card" style="padding:14px;">
+      <a href="/processo/{{ processo.numero_processo }}"
+         style="color:#1a3a6b; font-size:0.88rem; text-decoration:none;">
+        Ver histórico deste processo →
       </a>
     </div>
     {% endif %}
 
-  </div>
-</div>
+  </div><!-- /sidebar -->
+
+</div><!-- /previa-container -->
+
+<!-- Toast de feedback -->
+<div id="toast"></div>
 {% endblock %}
 
 {% block extra_script %}
 <script>
-  const SESSAO_ID = "{{ sessao_id }}";
+const SESSAO_ID = "{{ sessao_id }}";
 
-  async function editarCampo() {
-    const campo = document.getElementById('campo-editar').value.trim();
-    const valor = document.getElementById('valor-editar').value.trim();
-    if (!campo || !valor) { alert('Preencha o campo e o novo valor.'); return; }
+// Recolher/expandir seções
+function toggleSecao(id) {
+  const corpo = document.getElementById(id);
+  if (corpo) corpo.classList.toggle('recolhido');
+}
 
+// Recolher/expandir verbas
+function toggleVerba(idx) {
+  const corpo = document.getElementById('verba-corpo-' + idx);
+  if (corpo) corpo.classList.toggle('aberta');
+}
+
+// Toast de feedback
+function mostrarToast(msg, tipo) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'visivel ' + tipo;
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.className = '', 2500);
+}
+
+// Salvar campo principal
+async function salvarCampo(campo, valor, el) {
+  try {
     const form = new FormData();
     form.append('campo', campo);
-    form.append('valor', valor);
-
-    const msg = document.getElementById('msg-edicao');
-    msg.style.display = 'block';
-    msg.style.background = '#fff3cd';
-    msg.style.color = '#856404';
-    msg.textContent = 'Salvando...';
-
-    try {
-      const resp = await fetch('/previa/' + SESSAO_ID + '/editar', { method: 'POST', body: form });
-      const dados = await resp.json();
-      if (dados.sucesso) {
-        msg.style.background = '#d4edda';
-        msg.style.color = '#155724';
-        msg.textContent = 'Campo atualizado! Recarregando prévia...';
-        setTimeout(() => window.location.reload(), 1200);
-      } else {
-        throw new Error('Falha ao atualizar campo.');
+    form.append('valor', String(valor));
+    const resp = await fetch('/previa/' + SESSAO_ID + '/editar', { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      if (el) {
+        el.classList.add('campo-salvo');
+        setTimeout(() => el.classList.remove('campo-salvo'), 1500);
       }
-    } catch(err) {
-      msg.style.background = '#f8d7da';
-      msg.style.color = '#721c24';
-      msg.textContent = 'Erro: ' + err.message;
+      mostrarToast('Salvo: ' + campo, 'ok');
+    } else {
+      mostrarToast('Erro ao salvar ' + campo, 'erro');
     }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
   }
+}
 
-  async function confirmarPrevia() {
-    if (!confirm(
-      'Confirma os parâmetros apresentados?\n\n' +
-      'O agente irá preencher o PJE-Calc automaticamente.\n' +
-      'Certifique-se de que o PJE-Calc está aberto e pronto.'
-    )) return;
-
-    const msg = document.getElementById('msg-confirmar');
-    msg.style.display = 'block';
-    msg.style.background = '#d4edda';
-    msg.style.color = '#155724';
-    msg.textContent = 'Confirmando e iniciando automação...';
-
-    try {
-      const resp = await fetch('/previa/' + SESSAO_ID + '/confirmar', { method: 'POST' });
-      const dados = await resp.json();
-      if (dados.sucesso) {
-        msg.textContent = dados.mensagem;
-        setTimeout(() => window.location.reload(), 3000);
+// Salvar campo de verba
+async function salvarVerba(indice, campo, valor, el) {
+  try {
+    const form = new FormData();
+    form.append('indice', indice);
+    form.append('campo', campo);
+    form.append('valor', String(valor));
+    const resp = await fetch('/previa/' + SESSAO_ID + '/editar-verba', { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      if (el) {
+        el.classList.add('campo-salvo');
+        setTimeout(() => el.classList.remove('campo-salvo'), 1500);
       }
-    } catch(err) {
-      msg.style.background = '#f8d7da';
-      msg.style.color = '#721c24';
-      msg.textContent = 'Erro: ' + err.message;
+      mostrarToast('Verba salva', 'ok');
+    } else {
+      mostrarToast('Erro ao salvar verba', 'erro');
     }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
   }
+}
+
+// Confirmar prévia
+async function confirmarPrevia() {
+  if (!confirm(
+    'Confirma os parâmetros do cálculo?\n\n' +
+    'Verifique se todos os campos estão corretos antes de confirmar.'
+  )) return;
+
+  const msg = document.getElementById('msg-confirmar');
+  msg.style.display = 'block';
+  msg.style.background = '#fff3cd';
+  msg.style.color = '#856404';
+  msg.textContent = 'Confirmando...';
+
+  try {
+    const resp = await fetch('/previa/' + SESSAO_ID + '/confirmar', { method: 'POST' });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      msg.style.background = '#d4edda';
+      msg.style.color = '#155724';
+      msg.textContent = dados.mensagem;
+      setTimeout(() => window.location.reload(), 3000);
+    }
+  } catch(err) {
+    msg.style.background = '#f8d7da';
+    msg.style.color = '#721c24';
+    msg.textContent = 'Erro: ' + err.message;
+  }
+}
 </script>
 {% endblock %}

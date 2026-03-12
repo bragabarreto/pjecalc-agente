@@ -3,42 +3,104 @@
 
 {% block extra_style %}
 .upload-area {
-  border: 2px dashed #1a3a6b; border-radius: 8px; padding: 40px;
-  text-align: center; cursor: pointer; transition: background 0.2s;
+  border: 2px dashed #1a3a6b; border-radius: 8px; padding: 30px;
+  text-align: center; cursor: pointer; transition: all 0.2s; background: #f8f9ff;
 }
 .upload-area:hover { background: #f0f4ff; }
-.upload-area input[type=file] { display: none; }
+.upload-area.tem-arquivo { border-color: #28a745; background: #f0fff4; }
 .progress-bar { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; margin: 16px 0; }
 .progress-fill { height: 100%; background: #1a3a6b; width: 0%; transition: width 0.4s; }
 #status-area { display: none; }
+.doc-card {
+  border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;
+  margin-bottom: 12px; background: #fafafa;
+}
+.doc-card-header {
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+}
+.doc-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
+.tab-btn {
+  padding: 6px 14px; border: 1px solid #dee2e6; border-radius: 4px;
+  background: #fff; cursor: pointer; font-size: 0.85rem; transition: all 0.2s;
+}
+.tab-btn.ativa { background: #1a3a6b; color: #fff; border-color: #1a3a6b; }
+.aba-conteudo { display: none; }
+.aba-conteudo.ativa { display: block; }
+.doc-file-area {
+  border: 1px dashed #adb5bd; border-radius: 6px; padding: 20px;
+  text-align: center; cursor: pointer; background: #fff;
+}
+.doc-file-area:hover { background: #f0f4ff; border-color: #1a3a6b; }
+.doc-file-area input[type=file] { display: none; }
+.contexto-area { margin-top: 10px; }
+.contexto-area label { display: block; font-size: 0.82rem; color: #6c757d; margin-bottom: 3px; }
+.contexto-area textarea {
+  width: 100%; padding: 8px; border: 1px solid #dee2e6; border-radius: 4px;
+  font-size: 0.88rem; resize: vertical; font-family: inherit;
+}
 {% endblock %}
 
 {% block content %}
-<div class="card" style="max-width:700px; margin:0 auto;">
+<div class="card" style="max-width:820px; margin:0 auto;">
   <h2>Novo Cálculo de Liquidação</h2>
-  <p style="color:#6c757d; margin-bottom:20px;">
-    Envie a sentença trabalhista em PDF, DOCX ou TXT. O agente irá extrair
-    automaticamente os parâmetros e gerar a prévia para sua apreciação.
+  <p style="color:#6c757d; margin-bottom:24px;">
+    Envie a sentença trabalhista e documentos complementares. O agente extrai automaticamente
+    os parâmetros para preenchimento do PJE-Calc.
   </p>
 
   <form id="form-upload" enctype="multipart/form-data">
-    <div class="upload-area" onclick="document.getElementById('arquivo-sentenca').click()">
-      <input type="file" id="arquivo-sentenca" name="sentenca" accept=".pdf,.docx,.doc,.txt">
-      <div style="font-size:2rem; color:#1a3a6b; margin-bottom:8px;">📄</div>
-      <div style="font-size:1.1rem; color:#1a3a6b; font-weight:600;">Clique para selecionar a sentença</div>
-      <div style="color:#6c757d; font-size:0.9rem; margin-top:6px;">PDF, DOCX ou TXT</div>
-      <div id="nome-arquivo" style="margin-top:12px; color:#28a745; font-weight:600;"></div>
+
+    <!-- Sentença principal -->
+    <div style="margin-bottom:24px;">
+      <h4 style="color:#1a3a6b; margin-bottom:8px;">
+        Sentença Trabalhista <span style="color:#dc3545; font-size:0.9rem;">*</span>
+      </h4>
+      <div class="upload-area" id="area-sentenca"
+           onclick="document.getElementById('arquivo-sentenca').click()">
+        <input type="file" id="arquivo-sentenca" name="sentenca" accept=".pdf,.docx,.doc,.txt">
+        <div style="font-size:2rem; color:#1a3a6b; margin-bottom:6px;">📄</div>
+        <div style="font-size:1rem; color:#1a3a6b; font-weight:600;">Clique para selecionar a sentença</div>
+        <div style="color:#6c757d; font-size:0.85rem; margin-top:4px;">PDF, DOCX ou TXT</div>
+        <div id="nome-sentenca" style="margin-top:10px; color:#28a745; font-weight:600;"></div>
+      </div>
     </div>
 
-    <div style="margin-top:20px; text-align:center;">
-      <button type="submit" class="btn btn-primary" style="font-size:1rem; padding:12px 32px;">
+    <!-- Documentos complementares -->
+    <div style="margin-bottom:24px; border-top:1px solid #e9ecef; padding-top:20px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
+        <div>
+          <h4 style="color:#1a3a6b; margin:0 0 4px;">Documentos Complementares</h4>
+          <p style="color:#6c757d; font-size:0.85rem; margin:0;">
+            Adicione contracheques, acordos, laudos, atas ou qualquer documento relevante ao cálculo.
+            A contextualização orienta a IA sobre o conteúdo de cada documento (opcional).
+            Você pode inserir arquivo, imagem/foto ou colar texto diretamente.
+          </p>
+        </div>
+        <button type="button" id="btn-add-doc" class="btn btn-secondary"
+                style="flex-shrink:0; margin-left:16px; white-space:nowrap;"
+                onclick="adicionarDocumento()">+ Adicionar Documento</button>
+      </div>
+
+      <div id="lista-docs-extras"></div>
+
+      <div id="limite-msg" style="display:none; font-size:0.85rem; color:#856404;
+           background:#fff3cd; padding:8px 12px; border-radius:4px;">
+        Limite máximo de 10 documentos adicionais atingido.
+      </div>
+    </div>
+
+    <!-- Botão submit -->
+    <div style="text-align:center; padding-top:12px; border-top:1px solid #e9ecef;">
+      <button type="submit" class="btn btn-primary" style="font-size:1rem; padding:12px 48px;">
         Processar Sentença
       </button>
     </div>
+
   </form>
 
+  <!-- Status / progresso -->
   <div id="status-area" style="margin-top:24px;">
-    <div class="alerta-box">
+    <div id="status-box" class="alerta-box">
       <strong>Processando...</strong> O agente está extraindo os dados da sentença.
     </div>
     <div class="progress-bar"><div class="progress-fill" id="progresso"></div></div>
@@ -49,82 +111,219 @@
 
 {% block extra_script %}
 <script>
-  const inputArquivo = document.getElementById('arquivo-sentenca');
-  const nomeArquivo = document.getElementById('nome-arquivo');
+let contadorDocs = 0;
+let docsAtivos = 0;
 
-  inputArquivo.addEventListener('change', function() {
-    if (this.files.length > 0) {
-      nomeArquivo.textContent = 'Selecionado: ' + this.files[0].name;
+// Sentença principal — atualizar área ao selecionar
+document.getElementById('arquivo-sentenca').addEventListener('change', function() {
+  if (this.files.length > 0) {
+    document.getElementById('nome-sentenca').textContent = 'Selecionado: ' + this.files[0].name;
+    document.getElementById('area-sentenca').classList.add('tem-arquivo');
+  }
+});
+
+function adicionarDocumento() {
+  if (docsAtivos >= 10) return;
+  const idx = contadorDocs++;
+  docsAtivos++;
+  const container = document.getElementById('lista-docs-extras');
+
+  const card = document.createElement('div');
+  card.id = `doc-card-${idx}`;
+  card.className = 'doc-card';
+  card.dataset.idx = idx;
+
+  card.innerHTML = `
+    <div class="doc-card-header">
+      <strong style="color:#1a3a6b;">Documento ${docsAtivos}</strong>
+      <button type="button" class="btn btn-danger"
+              style="padding:4px 12px; font-size:0.8rem;"
+              onclick="removerDocumento(${idx})">Remover</button>
+    </div>
+
+    <div class="doc-tabs">
+      <button type="button" class="tab-btn ativa"
+              onclick="setarAba(${idx}, 'arquivo')">📄 Arquivo (PDF/DOCX/TXT)</button>
+      <button type="button" class="tab-btn"
+              onclick="setarAba(${idx}, 'imagem')">🖼 Imagem / Foto</button>
+      <button type="button" class="tab-btn"
+              onclick="setarAba(${idx}, 'texto')">📋 Texto colado (Ctrl+V)</button>
+    </div>
+
+    <div id="aba-arquivo-${idx}" class="aba-conteudo ativa">
+      <div class="doc-file-area" onclick="document.getElementById('doc-arq-${idx}').click()">
+        <input type="file" id="doc-arq-${idx}" accept=".pdf,.docx,.doc,.txt">
+        <div style="color:#6c757d; font-size:0.9rem;">Clique para selecionar (PDF, DOCX ou TXT)</div>
+        <div id="nome-arq-${idx}" style="color:#28a745; font-size:0.85rem; margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div id="aba-imagem-${idx}" class="aba-conteudo">
+      <div class="doc-file-area" onclick="document.getElementById('doc-img-${idx}').click()">
+        <input type="file" id="doc-img-${idx}" accept="image/jpeg,image/png,image/webp,image/gif">
+        <div style="color:#6c757d; font-size:0.9rem;">Clique para selecionar imagem (JPG, PNG, WEBP)</div>
+        <div id="nome-img-${idx}" style="color:#28a745; font-size:0.85rem; margin-top:6px;"></div>
+        <div id="preview-img-${idx}" style="margin-top:8px;"></div>
+      </div>
+    </div>
+
+    <div id="aba-texto-${idx}" class="aba-conteudo">
+      <textarea id="doc-txt-${idx}"
+                placeholder="Cole aqui o texto do documento (Ctrl+V)..." rows="6"
+                style="width:100%; padding:10px; border:1px solid #dee2e6; border-radius:6px;
+                       font-size:0.88rem; font-family:inherit; resize:vertical;"></textarea>
+    </div>
+
+    <div class="contexto-area">
+      <label>Contextualização (opcional) — descreva do que trata este documento para orientar a IA:</label>
+      <textarea id="doc-ctx-${idx}" rows="2"
+                placeholder="Ex: Contracheques referentes ao período de jan/2020 a jun/2021, para verificação de horas extras e adicional noturno."></textarea>
+    </div>
+  `;
+
+  // Listeners de arquivo
+  card.querySelector(`#doc-arq-${idx}`).addEventListener('change', function() {
+    if (this.files[0]) document.getElementById(`nome-arq-${idx}`).textContent = this.files[0].name;
+  });
+  card.querySelector(`#doc-img-${idx}`).addEventListener('change', function() {
+    if (this.files[0]) {
+      document.getElementById(`nome-img-${idx}`).textContent = this.files[0].name;
+      // Preview da imagem
+      const reader = new FileReader();
+      reader.onload = e => {
+        document.getElementById(`preview-img-${idx}`).innerHTML =
+          `<img src="${e.target.result}" style="max-height:120px; max-width:100%; border-radius:4px; margin-top:4px;">`;
+      };
+      reader.readAsDataURL(this.files[0]);
     }
   });
 
-  document.getElementById('form-upload').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const arquivo = inputArquivo.files[0];
-    if (!arquivo) { alert('Selecione um arquivo de sentença.'); return; }
+  container.appendChild(card);
+  atualizarUI();
+}
 
-    const formData = new FormData();
-    formData.append('sentenca', arquivo);
-
-    document.getElementById('status-area').style.display = 'block';
-    document.getElementById('progresso').style.width = '20%';
-    document.getElementById('mensagem-status').textContent = 'Enviando arquivo...';
-
-    try {
-      const resp = await fetch('/processar', { method: 'POST', body: formData });
-      const dados = await resp.json();
-
-      document.getElementById('progresso').style.width = '50%';
-      document.getElementById('mensagem-status').textContent = 'Extraindo dados da sentença com IA...';
-
-      // Aguardar processamento
-      await aguardarProcessamento(dados.sessao_id, dados.url_previa);
-
-    } catch(err) {
-      document.querySelector('.alerta-box').className = 'erro-box';
-      document.querySelector('.erro-box').innerHTML = '<strong>Erro:</strong> ' + err.message;
-    }
+function removerDocumento(idx) {
+  const card = document.getElementById(`doc-card-${idx}`);
+  if (card) { card.remove(); docsAtivos--; }
+  // Renumerar
+  document.querySelectorAll('.doc-card').forEach((c, i) => {
+    c.querySelector('strong').textContent = `Documento ${i + 1}`;
   });
+  atualizarUI();
+}
 
-  async function aguardarProcessamento(sessaoId, urlPrevia) {
-    let tentativas = 0;
-    const max = 60; // 5 minutos
+function setarAba(idx, aba) {
+  ['arquivo', 'imagem', 'texto'].forEach(a => {
+    document.getElementById(`aba-${a}-${idx}`).classList.toggle('ativa', a === aba);
+  });
+  const tabBtns = document.querySelectorAll(`#doc-card-${idx} .tab-btn`);
+  const ordem = {arquivo: 0, imagem: 1, texto: 2};
+  tabBtns.forEach((btn, i) => btn.classList.toggle('ativa', i === ordem[aba]));
+}
 
-    while (tentativas < max) {
-      await new Promise(r => setTimeout(r, 5000)); // aguardar 5s
-      tentativas++;
+function atualizarUI() {
+  document.getElementById('btn-add-doc').style.display = docsAtivos >= 10 ? 'none' : '';
+  document.getElementById('limite-msg').style.display = docsAtivos >= 10 ? 'block' : 'none';
+}
 
-      try {
-        const resp = await fetch('/status/' + sessaoId);
-        const status = await resp.json();
+// Submit do formulário
+document.getElementById('form-upload').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const arquivo = document.getElementById('arquivo-sentenca').files[0];
+  if (!arquivo) { alert('Selecione o arquivo da sentença.'); return; }
 
-        const pct = Math.min(50 + (tentativas / max) * 45, 95);
-        document.getElementById('progresso').style.width = pct + '%';
+  const formData = new FormData();
+  formData.append('sentenca', arquivo);
 
-        if (status.tem_previa) {
-          document.getElementById('progresso').style.width = '100%';
-          document.getElementById('mensagem-status').textContent = 'Prévia gerada! Redirecionando...';
-          await new Promise(r => setTimeout(r, 1000));
-          window.location.href = urlPrevia;
-          return;
-        }
+  // Coletar docs extras na ordem visual
+  let pos = 0;
+  document.querySelectorAll('.doc-card').forEach(card => {
+    const idx = card.dataset.idx;
+    const ctx = (document.getElementById(`doc-ctx-${idx}`) || {}).value || '';
 
-        if (status.status === 'erro') {
-          throw new Error('Erro durante o processamento da sentença.');
-        }
+    const abaArquivo = document.getElementById(`aba-arquivo-${idx}`);
+    const abaImagem  = document.getElementById(`aba-imagem-${idx}`);
+    const abaTxt     = document.getElementById(`aba-texto-${idx}`);
 
-        document.getElementById('mensagem-status').textContent =
-          'Processando... (' + tentativas * 5 + 's)';
-
-      } catch(err) {
-        document.querySelector('.alerta-box').className = 'erro-box';
-        document.querySelector('[class$="-box"]').innerHTML = '<strong>Erro:</strong> ' + err.message;
-        return;
+    if (abaArquivo && abaArquivo.classList.contains('ativa')) {
+      const f = document.getElementById(`doc-arq-${idx}`).files[0];
+      if (f) {
+        formData.append(`doc_arquivo_${pos}`, f);
+        if (ctx) formData.append(`doc_contexto_${pos}`, ctx);
+        pos++;
+      }
+    } else if (abaImagem && abaImagem.classList.contains('ativa')) {
+      const f = document.getElementById(`doc-img-${idx}`).files[0];
+      if (f) {
+        formData.append(`doc_imagem_${pos}`, f);
+        if (ctx) formData.append(`doc_contexto_${pos}`, ctx);
+        pos++;
+      }
+    } else if (abaTxt && abaTxt.classList.contains('ativa')) {
+      const txt = (document.getElementById(`doc-txt-${idx}`) || {}).value || '';
+      if (txt.trim()) {
+        formData.append(`doc_texto_${pos}`, txt.trim());
+        if (ctx) formData.append(`doc_contexto_${pos}`, ctx);
+        pos++;
       }
     }
+  });
 
+  // Ocultar formulário e exibir barra de progresso
+  document.getElementById('form-upload').style.display = 'none';
+  document.getElementById('status-area').style.display = 'block';
+  document.getElementById('progresso').style.width = '15%';
+  document.getElementById('mensagem-status').textContent = 'Enviando arquivos...';
+
+  try {
+    const resp = await fetch('/processar', { method: 'POST', body: formData });
+    if (!resp.ok) throw new Error('Erro ao enviar: ' + resp.status);
+    const dados = await resp.json();
+
+    document.getElementById('progresso').style.width = '35%';
+    const extra = pos > 0 ? ` + ${pos} documento(s) adicional(is)` : '';
     document.getElementById('mensagem-status').textContent =
-      'O processamento está demorando mais que o esperado. Verifique o status em /status/' + sessaoId;
+      `Sentença recebida${extra}. Extraindo dados com IA...`;
+
+    await aguardarProcessamento(dados.sessao_id, dados.url_previa);
+
+  } catch(err) {
+    const box = document.getElementById('status-box');
+    box.className = 'erro-box';
+    box.innerHTML = '<strong>Erro:</strong> ' + err.message;
   }
+});
+
+async function aguardarProcessamento(sessaoId, urlPrevia) {
+  let tentativas = 0;
+  const max = 72; // 6 minutos
+  while (tentativas < max) {
+    await new Promise(r => setTimeout(r, 5000));
+    tentativas++;
+    try {
+      const resp = await fetch('/status/' + sessaoId);
+      const status = await resp.json();
+      const pct = Math.min(35 + (tentativas / max) * 60, 95);
+      document.getElementById('progresso').style.width = pct + '%';
+      if (status.tem_previa) {
+        document.getElementById('progresso').style.width = '100%';
+        document.getElementById('mensagem-status').textContent = 'Prévia gerada! Redirecionando...';
+        await new Promise(r => setTimeout(r, 800));
+        window.location.href = urlPrevia;
+        return;
+      }
+      if (status.status === 'erro') throw new Error('Erro durante o processamento da sentença.');
+      document.getElementById('mensagem-status').textContent =
+        'Processando com IA... (' + (tentativas * 5) + 's)';
+    } catch(err) {
+      const box = document.getElementById('status-box');
+      box.className = 'erro-box';
+      box.innerHTML = '<strong>Erro:</strong> ' + err.message;
+      return;
+    }
+  }
+  document.getElementById('mensagem-status').textContent =
+    'O processamento está demorando. Verifique: /status/' + sessaoId;
+}
 </script>
 {% endblock %}

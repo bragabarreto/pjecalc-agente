@@ -83,18 +83,47 @@ async def processar_sentenca(
     db: Session = Depends(get_db),
 ):
     """
-    Recebe o arquivo de sentença, extrai dados e inicia o processamento.
-    O processamento pesado (extração via LLM) roda em background.
+    Recebe o arquivo de sentença e documentos complementares (até 10),
+    extrai dados e inicia o processamento em background.
     """
     sessao_id = str(uuid.uuid4())
 
-    # Salvar arquivo temporariamente
+    # Salvar sentença principal em temp
     sufixo = Path(sentenca.filename or "sentenca.pdf").suffix.lower()
     tmp_dir = Path(tempfile.mkdtemp())
     tmp_path = tmp_dir / f"sentenca{sufixo}"
-
     with open(tmp_path, "wb") as f:
         shutil.copyfileobj(sentenca.file, f)
+
+    # Coletar documentos extras do form (doc_arquivo_N, doc_imagem_N, doc_texto_N, doc_contexto_N)
+    form = await request.form()
+    extras: list[dict] = []
+    for i in range(10):
+        contexto = str(form.get(f"doc_contexto_{i}", "")).strip()
+
+        arq = form.get(f"doc_arquivo_{i}")
+        img = form.get(f"doc_imagem_{i}")
+        txt = form.get(f"doc_texto_{i}")
+
+        if arq and hasattr(arq, "filename") and arq.filename:
+            suf = Path(arq.filename).suffix.lower()
+            extra_path = tmp_dir / f"extra_{i}{suf}"
+            extra_path.write_bytes(await arq.read())
+            extras.append({"tipo": "arquivo", "caminho": str(extra_path), "contexto": contexto})
+
+        elif img and hasattr(img, "filename") and img.filename:
+            suf = Path(img.filename).suffix.lower() or ".jpg"
+            extra_path = tmp_dir / f"extra_img_{i}{suf}"
+            extra_path.write_bytes(await img.read())
+            extras.append({
+                "tipo": "imagem",
+                "caminho": str(extra_path),
+                "mime_type": getattr(img, "content_type", "image/jpeg"),
+                "contexto": contexto,
+            })
+
+        elif txt and str(txt).strip():
+            extras.append({"tipo": "texto", "conteudo": str(txt).strip(), "contexto": contexto})
 
     # Processar em background
     background_tasks.add_task(
@@ -102,12 +131,17 @@ async def processar_sentenca(
         sessao_id=sessao_id,
         caminho=tmp_path,
         formato=sufixo,
+        extras=extras,
     )
 
+    n_extras = len(extras)
     return JSONResponse({
         "sessao_id": sessao_id,
         "status": "processando",
-        "mensagem": "Sentença recebida. Processando extração de dados...",
+        "mensagem": (
+            f"Sentença recebida com {n_extras} documento(s) adicional(is). Processando..."
+            if n_extras else "Sentença recebida. Processando extração de dados..."
+        ),
         "url_status": f"/status/{sessao_id}",
         "url_previa": f"/previa/{sessao_id}",
     })
@@ -390,21 +424,55 @@ def _tarefa_processar_sentenca(
     sessao_id: str,
     caminho: Path,
     formato: str,
+    extras: list[dict] | None = None,
 ) -> None:
     """
     Tarefa de background: lê, extrai e classifica dados da sentença.
+    Aceita documentos extras (arquivos, imagens, textos colados) para enriquecer a extração.
     Persiste resultado no banco de dados.
     """
+    import base64
     db = SessionLocal()
     try:
         repo = RepositorioCalculo(db)
 
-        # Fase 1: Ingestão
+        # Fase 1: Ingestão da sentença principal
         resultado = ler_documento(caminho)
         texto = resultado["texto"]
 
+        # Fase 1b: Processar documentos extras
+        extras_processados: list[dict] = []
+        for extra in (extras or []):
+            try:
+                if extra["tipo"] == "texto":
+                    extras_processados.append({
+                        "tipo": "texto",
+                        "conteudo": extra["conteudo"],
+                        "contexto": extra.get("contexto", ""),
+                    })
+                elif extra["tipo"] == "arquivo":
+                    res_extra = ler_documento(extra["caminho"])
+                    extras_processados.append({
+                        "tipo": "texto",
+                        "conteudo": res_extra["texto"],
+                        "contexto": extra.get("contexto", ""),
+                    })
+                elif extra["tipo"] == "imagem":
+                    img_bytes = Path(extra["caminho"]).read_bytes()
+                    extras_processados.append({
+                        "tipo": "imagem",
+                        "conteudo": base64.standard_b64encode(img_bytes).decode(),
+                        "mime_type": extra.get("mime_type", "image/jpeg"),
+                        "contexto": extra.get("contexto", ""),
+                    })
+            except Exception as e_extra:
+                import logging
+                logging.getLogger("pjecalc_agent.webapp").warning(
+                    f"Falha ao processar documento extra: {e_extra}"
+                )
+
         # Fase 2: Extração
-        dados = extrair_dados_sentenca(texto, sessao_id=sessao_id)
+        dados = extrair_dados_sentenca(texto, sessao_id=sessao_id, extras=extras_processados)
 
         # Fase 3: Classificação
         verbas_mapeadas = mapear_para_pjecalc(dados.get("verbas_deferidas", []))

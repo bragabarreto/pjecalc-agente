@@ -132,6 +132,7 @@ Retorne APENAS o JSON, sem markdown, sem explicações."""
 def extrair_dados_sentenca(
     texto: str,
     sessao_id: str | None = None,
+    extras: list[dict] | None = None,
 ) -> dict[str, Any]:
     """
     Extrai todos os dados necessários para preenchimento do PJE-Calc
@@ -139,7 +140,12 @@ def extrair_dados_sentenca(
 
     Fase 1: extração via regex (rápida, sem custo de API)
     Fase 2: extração via Claude API (NLP jurídico profundo)
+              — inclui documentos extras (textos e imagens) no contexto do LLM
     Fase 3: merge e validação dos resultados
+
+    Parâmetros:
+        extras: lista de documentos complementares, cada um com:
+            {"tipo": "texto"|"imagem", "conteudo": str|base64, "contexto": str, "mime_type": str}
 
     Retorna o JSON estruturado conforme schema do Manual, Seção 2.5.
     """
@@ -153,8 +159,8 @@ def extrair_dados_sentenca(
     # Fase 1: extração regex pré-processada
     dados_regex = _extrair_via_regex(texto_completo)
 
-    # Fase 2: extração via LLM (Claude)
-    dados_llm = _extrair_via_llm(texto_principal[:12000])  # limite seguro de tokens
+    # Fase 2: extração via LLM (Claude) — com extras
+    dados_llm = _extrair_via_llm(texto_principal[:12000], extras=extras)
 
     # Fase 3: merge (LLM prevalece; regex preenche onde LLM retornou null)
     dados = _merge_extracao(dados_regex, dados_llm)
@@ -238,25 +244,69 @@ def _buscar_data_contexto(texto: str, padrao_contexto: str) -> str | None:
 
 # ── Extração via LLM ──────────────────────────────────────────────────────────
 
-def _extrair_via_llm(texto: str) -> dict[str, Any]:
-    """Usa a Claude API para extração profunda de parâmetros jurídicos."""
+def _extrair_via_llm(
+    texto: str,
+    extras: list[dict] | None = None,
+) -> dict[str, Any]:
+    """
+    Usa a Claude API para extração profunda de parâmetros jurídicos.
+
+    Documentos extras são incluídos no contexto:
+    - "texto": adicionados ao prompt como seções de contexto
+    - "imagem": enviados como blocos de imagem (visão multimodal)
+    """
     if not ANTHROPIC_API_KEY:
         return {}
 
     cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
     try:
+        # Montar blocos de conteúdo da mensagem
+        content_blocks: list[dict] = []
+
+        # Imagens vêm primeiro (melhor contextualização pelo Claude)
+        secoes_extras: list[str] = []
+        for i, extra in enumerate(extras or [], start=1):
+            ctx = extra.get("contexto", "").strip()
+            ctx_str = f" [{ctx}]" if ctx else ""
+
+            if extra.get("tipo") == "imagem":
+                content_blocks.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "media_type": extra.get("mime_type", "image/jpeg"),
+                        "data": extra["conteudo"],
+                    },
+                })
+                secoes_extras.append(
+                    f"=== DOCUMENTO ADICIONAL {i}{ctx_str} === (imagem enviada acima)"
+                )
+            elif extra.get("tipo") == "texto" and extra.get("conteudo"):
+                trecho = extra["conteudo"][:4000]  # limite por documento
+                secoes_extras.append(
+                    f"=== DOCUMENTO ADICIONAL {i}{ctx_str} ===\n{trecho}"
+                )
+
+        # Prompt principal da sentença
+        prompt_sentenca = _EXTRACTION_PROMPT.format(texto=texto)
+
+        # Acrescentar extras ao prompt textual
+        if secoes_extras:
+            prompt_sentenca += (
+                "\n\n" + "\n\n".join(secoes_extras) +
+                "\n\nOs documentos adicionais acima complementam a sentença. "
+                "Use-os para preencher ou corrigir campos ausentes ou com baixa confiança."
+            )
+
+        content_blocks.append({"type": "text", "text": prompt_sentenca})
+
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=CLAUDE_MAX_TOKENS,
             temperature=CLAUDE_EXTRACTION_TEMPERATURE,
             system=_SYSTEM_PROMPT,
-            messages=[
-                {
-                    "role": "user",
-                    "content": _EXTRACTION_PROMPT.format(texto=texto),
-                }
-            ],
+            messages=[{"role": "user", "content": content_blocks}],
         )
         conteudo = resposta.content[0].text.strip()
 
