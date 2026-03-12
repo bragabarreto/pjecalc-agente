@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Processo {{ numero_processo }} — Agente PJE-Calc{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Processo: {{ numero_processo }}</h2>
+  {% if processo %}
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; margin-bottom:20px;">
+    <div><span style="color:#6c757d; font-size:0.85rem;">Reclamante</span><br><strong>{{ processo.reclamante or '—' }}</strong></div>
+    <div><span style="color:#6c757d; font-size:0.85rem;">Reclamado</span><br><strong>{{ processo.reclamado or '—' }}</strong></div>
+    <div><span style="color:#6c757d; font-size:0.85rem;">Estado / Município</span><br><strong>{{ processo.estado or '—' }} / {{ processo.municipio or '—' }}</strong></div>
+  </div>
+  {% endif %}
+  <a href="/novo" class="btn btn-primary" style="margin-top:8px;">+ Novo Cálculo para este processo</a>
+</div>
+
+<div class="card">
+  <h2>Histórico de Cálculos</h2>
+  {% if calculos %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Data</th>
+        <th>Status</th>
+        <th>Admissão</th>
+        <th>Demissão</th>
+        <th>Arquivo .PJC</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for calc in calculos %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ calc.criado_em.strftime('%d/%m/%Y %H:%M') if calc.criado_em else '—' }}</td>
+        <td>
+          {% if calc.status == 'pjc_exportado' %}
+          <span class="badge badge-verde">PJC Exportado</span>
+          {% elif calc.status == 'confirmado' %}
+          <span class="badge badge-azul">Confirmado</span>
+          {% elif calc.status == 'previa_gerada' %}
+          <span class="badge badge-amarelo">Prévia Gerada</span>
+          {% elif calc.status == 'erro' %}
+          <span class="badge badge-vermelho">Erro</span>
+          {% else %}
+          <span class="badge badge-cinza">{{ calc.status }}</span>
+          {% endif %}
+        </td>
+        <td>{{ calc.admissao or '—' }}</td>
+        <td>{{ calc.demissao or '—' }}</td>
+        <td>
+          {% if calc.arquivo_pjc %}
+          <a href="/download/{{ calc.sessao_id }}/pjc" class="btn btn-success" style="padding:4px 10px; font-size:0.8rem;">Download .pjc</a>
+          {% else %}
+          —
+          {% endif %}
+        </td>
+        <td>
+          <a href="/previa/{{ calc.sessao_id }}" class="btn btn-secondary" style="padding:4px 10px; font-size:0.8rem;">Ver Prévia</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#6c757d;">Nenhum cálculo encontrado para este processo.</p>
+  {% endif %}
+</div>
+{% endblock %}

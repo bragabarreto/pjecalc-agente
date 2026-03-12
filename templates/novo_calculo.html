@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}Novo Cálculo — Agente PJE-Calc{% endblock %}
+
+{% block extra_style %}
+.upload-area {
+  border: 2px dashed #1a3a6b; border-radius: 8px; padding: 40px;
+  text-align: center; cursor: pointer; transition: background 0.2s;
+}
+.upload-area:hover { background: #f0f4ff; }
+.upload-area input[type=file] { display: none; }
+.progress-bar { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; margin: 16px 0; }
+.progress-fill { height: 100%; background: #1a3a6b; width: 0%; transition: width 0.4s; }
+#status-area { display: none; }
+{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width:700px; margin:0 auto;">
+  <h2>Novo Cálculo de Liquidação</h2>
+  <p style="color:#6c757d; margin-bottom:20px;">
+    Envie a sentença trabalhista em PDF, DOCX ou TXT. O agente irá extrair
+    automaticamente os parâmetros e gerar a prévia para sua apreciação.
+  </p>
+
+  <form id="form-upload" enctype="multipart/form-data">
+    <div class="upload-area" onclick="document.getElementById('arquivo-sentenca').click()">
+      <input type="file" id="arquivo-sentenca" name="sentenca" accept=".pdf,.docx,.doc,.txt">
+      <div style="font-size:2rem; color:#1a3a6b; margin-bottom:8px;">📄</div>
+      <div style="font-size:1.1rem; color:#1a3a6b; font-weight:600;">Clique para selecionar a sentença</div>
+      <div style="color:#6c757d; font-size:0.9rem; margin-top:6px;">PDF, DOCX ou TXT</div>
+      <div id="nome-arquivo" style="margin-top:12px; color:#28a745; font-weight:600;"></div>
+    </div>
+
+    <div style="margin-top:20px; text-align:center;">
+      <button type="submit" class="btn btn-primary" style="font-size:1rem; padding:12px 32px;">
+        Processar Sentença
+      </button>
+    </div>
+  </form>
+
+  <div id="status-area" style="margin-top:24px;">
+    <div class="alerta-box">
+      <strong>Processando...</strong> O agente está extraindo os dados da sentença.
+    </div>
+    <div class="progress-bar"><div class="progress-fill" id="progresso"></div></div>
+    <p id="mensagem-status" style="color:#6c757d; font-size:0.9rem; text-align:center;"></p>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+  const inputArquivo = document.getElementById('arquivo-sentenca');
+  const nomeArquivo = document.getElementById('nome-arquivo');
+
+  inputArquivo.addEventListener('change', function() {
+    if (this.files.length > 0) {
+      nomeArquivo.textContent = 'Selecionado: ' + this.files[0].name;
+    }
+  });
+
+  document.getElementById('form-upload').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const arquivo = inputArquivo.files[0];
+    if (!arquivo) { alert('Selecione um arquivo de sentença.'); return; }
+
+    const formData = new FormData();
+    formData.append('sentenca', arquivo);
+
+    document.getElementById('status-area').style.display = 'block';
+    document.getElementById('progresso').style.width = '20%';
+    document.getElementById('mensagem-status').textContent = 'Enviando arquivo...';
+
+    try {
+      const resp = await fetch('/processar', { method: 'POST', body: formData });
+      const dados = await resp.json();
+
+      document.getElementById('progresso').style.width = '50%';
+      document.getElementById('mensagem-status').textContent = 'Extraindo dados da sentença com IA...';
+
+      // Aguardar processamento
+      await aguardarProcessamento(dados.sessao_id, dados.url_previa);
+
+    } catch(err) {
+      document.querySelector('.alerta-box').className = 'erro-box';
+      document.querySelector('.erro-box').innerHTML = '<strong>Erro:</strong> ' + err.message;
+    }
+  });
+
+  async function aguardarProcessamento(sessaoId, urlPrevia) {
+    let tentativas = 0;
+    const max = 60; // 5 minutos
+
+    while (tentativas < max) {
+      await new Promise(r => setTimeout(r, 5000)); // aguardar 5s
+      tentativas++;
+
+      try {
+        const resp = await fetch('/status/' + sessaoId);
+        const status = await resp.json();
+
+        const pct = Math.min(50 + (tentativas / max) * 45, 95);
+        document.getElementById('progresso').style.width = pct + '%';
+
+        if (status.tem_previa) {
+          document.getElementById('progresso').style.width = '100%';
+          document.getElementById('mensagem-status').textContent = 'Prévia gerada! Redirecionando...';
+          await new Promise(r => setTimeout(r, 1000));
+          window.location.href = urlPrevia;
+          return;
+        }
+
+        if (status.status === 'erro') {
+          throw new Error('Erro durante o processamento da sentença.');
+        }
+
+        document.getElementById('mensagem-status').textContent =
+          'Processando... (' + tentativas * 5 + 's)';
+
+      } catch(err) {
+        document.querySelector('.alerta-box').className = 'erro-box';
+        document.querySelector('[class$="-box"]').innerHTML = '<strong>Erro:</strong> ' + err.message;
+        return;
+      }
+    }
+
+    document.getElementById('mensagem-status').textContent =
+      'O processamento está demorando mais que o esperado. Verifique o status em /status/' + sessaoId;
+  }
+</script>
+{% endblock %}

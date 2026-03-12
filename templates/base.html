@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Agente PJE-Calc{% endblock %}</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; background: #f5f6fa; color: #222; }
+    .navbar {
+      background: #1a3a6b; color: #fff; padding: 12px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    }
+    .navbar a { color: #fff; text-decoration: none; font-weight: 600; font-size: 1.1rem; }
+    .navbar .nav-links a { margin-left: 20px; font-weight: 400; font-size: 0.95rem; }
+    .container { max-width: 1100px; margin: 32px auto; padding: 0 20px; }
+    .card {
+      background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+      padding: 24px; margin-bottom: 24px;
+    }
+    .card h2 { color: #1a3a6b; margin-bottom: 16px; font-size: 1.3rem; }
+    .badge {
+      display: inline-block; padding: 3px 10px; border-radius: 12px;
+      font-size: 0.8rem; font-weight: 600;
+    }
+    .badge-verde { background: #d4edda; color: #155724; }
+    .badge-azul { background: #cce5ff; color: #004085; }
+    .badge-amarelo { background: #fff3cd; color: #856404; }
+    .badge-vermelho { background: #f8d7da; color: #721c24; }
+    .badge-cinza { background: #e2e3e5; color: #383d41; }
+    .btn {
+      display: inline-block; padding: 10px 22px; border-radius: 6px;
+      border: none; cursor: pointer; font-size: 0.95rem; font-weight: 600;
+      text-decoration: none; transition: background 0.2s;
+    }
+    .btn-primary { background: #1a3a6b; color: #fff; }
+    .btn-primary:hover { background: #0f2450; }
+    .btn-success { background: #28a745; color: #fff; }
+    .btn-success:hover { background: #1e7e34; }
+    .btn-warning { background: #ffc107; color: #212529; }
+    .btn-warning:hover { background: #e0a800; }
+    .btn-danger { background: #dc3545; color: #fff; }
+    .btn-danger:hover { background: #c82333; }
+    .btn-secondary { background: #6c757d; color: #fff; }
+    .btn-secondary:hover { background: #545b62; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+    th { background: #1a3a6b; color: #fff; padding: 10px 14px; text-align: left; }
+    td { padding: 9px 14px; border-bottom: 1px solid #e9ecef; }
+    tr:hover td { background: #f0f4ff; }
+    .alerta-box {
+      background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px;
+      padding: 12px 16px; margin-bottom: 16px; color: #856404;
+    }
+    .erro-box {
+      background: #f8d7da; border: 1px solid #dc3545; border-radius: 6px;
+      padding: 12px 16px; margin-bottom: 16px; color: #721c24;
+    }
+    .sucesso-box {
+      background: #d4edda; border: 1px solid #28a745; border-radius: 6px;
+      padding: 12px 16px; margin-bottom: 16px; color: #155724;
+    }
+    .footer {
+      text-align: center; padding: 24px; color: #6c757d;
+      font-size: 0.85rem; border-top: 1px solid #dee2e6; margin-top: 40px;
+    }
+    {% block extra_style %}{% endblock %}
+  </style>
+</head>
+<body>
+  <nav class="navbar">
+    <a href="/">Agente PJE-Calc</a>
+    <div class="nav-links">
+      <a href="/">Processos</a>
+      <a href="/novo">Novo Cálculo</a>
+    </div>
+  </nav>
+  <div class="container">
+    {% block content %}{% endblock %}
+  </div>
+  <div class="footer">
+    Agente PJE-Calc v1.0 — 2026 | Manual Técnico CSJT/TRT8
+  </div>
+  {% block extra_script %}{% endblock %}
+</body>
+</html>

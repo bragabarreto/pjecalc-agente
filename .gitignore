@@ -1,0 +1,43 @@
+# .gitignore — Agente PJE-Calc
+
+# ── Ambiente virtual Python ───────────────────────────────────────────────────
+venv/
+.venv/
+env/
+
+# ── Segredos e configuração local ────────────────────────────────────────────
+.env
+*.env.local
+
+# ── Banco de dados local ──────────────────────────────────────────────────────
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# ── Arquivos gerados ──────────────────────────────────────────────────────────
+output/
+logs/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# ── Arquivos de processo e sentença (dados pessoais/sigilosos) ────────────────
+*.pdf
+*.docx
+*.pjc
+
+# ── Arquivos do sistema operacional ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp

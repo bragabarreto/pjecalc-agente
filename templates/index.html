@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Processos — Agente PJE-Calc{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Processos Recentes</h2>
+  <div style="display:flex; gap:12px; margin-bottom:20px;">
+    <a href="/novo" class="btn btn-primary">+ Novo Cálculo</a>
+  </div>
+
+  {% if processos %}
+  <table>
+    <thead>
+      <tr>
+        <th>Nº do Processo</th>
+        <th>Reclamante</th>
+        <th>Reclamado</th>
+        <th>Estado</th>
+        <th>Cálculos</th>
+        <th>Última Atualização</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for proc in processos %}
+      <tr>
+        <td><a href="/processo/{{ proc.numero_processo }}">{{ proc.numero_processo }}</a></td>
+        <td>{{ proc.reclamante or '—' }}</td>
+        <td>{{ proc.reclamado or '—' }}</td>
+        <td>{{ proc.estado or '—' }}</td>
+        <td>{{ proc.calculos|length }}</td>
+        <td>{{ proc.atualizado_em.strftime('%d/%m/%Y %H:%M') if proc.atualizado_em else '—' }}</td>
+        <td>
+          <a href="/processo/{{ proc.numero_processo }}/previa-atual" class="btn btn-secondary" style="padding:5px 12px; font-size:0.85rem;">Ver Prévia</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#6c757d;">Nenhum processo encontrado. Inicie um <a href="/novo">novo cálculo</a>.</p>
+  {% endif %}
+</div>
+{% endblock %}

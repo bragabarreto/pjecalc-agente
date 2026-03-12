@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Prévia — {{ processo.numero_processo if processo else sessao_id }}{% endblock %}
+
+{% block extra_style %}
+.previa-container { display: grid; grid-template-columns: 1fr 340px; gap: 24px; align-items: start; }
+.previa-pjecalc { font-family: 'Courier New', monospace; font-size: 0.88rem; line-height: 1.6; }
+.previa-pjecalc h3 { font-family: 'Segoe UI', Arial, sans-serif; color: #1a3a6b; margin: 16px 0 8px; border-bottom: 2px solid #1a3a6b; padding-bottom: 4px; }
+.previa-pjecalc hr { border: none; border-top: 1px solid #dee2e6; margin: 8px 0; }
+.campo { display: flex; gap: 8px; padding: 3px 0; }
+.label { color: #6c757d; min-width: 160px; }
+.valor { color: #222; font-weight: 500; }
+.alerta { background: #fff3cd; padding: 4px 8px; border-radius: 4px; color: #856404; margin: 2px 0; }
+.verba-header { color: #1a3a6b; font-weight: 600; }
+.verba-campo { color: #444; padding-left: 20px; }
+.verba-reflexa { color: #6c757d; font-style: italic; padding-left: 20px; }
+.menu-item { color: #1a3a6b; font-weight: 600; }
+.sidebar { position: sticky; top: 20px; }
+.sidebar .card { padding: 16px; }
+.sidebar h3 { color: #1a3a6b; font-size: 1rem; margin-bottom: 12px; }
+.campo-editor { border: 1px solid #dee2e6; border-radius: 6px; padding: 16px; margin-bottom: 16px; background: #f8f9fa; }
+.campo-editor label { display: block; font-size: 0.85rem; color: #6c757d; margin-bottom: 4px; }
+.campo-editor input, .campo-editor select {
+  width: 100%; padding: 7px 10px; border: 1px solid #ced4da; border-radius: 4px;
+  font-size: 0.9rem; margin-bottom: 8px;
+}
+.campo-ausente { background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; padding: 8px 12px; margin-bottom: 8px; font-size: 0.9rem; }
+#msg-edicao { display: none; margin-top: 8px; padding: 8px; border-radius: 4px; font-size: 0.85rem; }
+@media (max-width: 900px) { .previa-container { grid-template-columns: 1fr; } }
+{% endblock %}
+
+{% block content %}
+<!-- Cabeçalho -->
+<div class="card" style="display:flex; justify-content:space-between; align-items:center; padding:16px 24px;">
+  <div>
+    <h2 style="margin:0;">Prévia do Cálculo</h2>
+    <div style="color:#6c757d; font-size:0.9rem; margin-top:4px;">
+      Processo: <strong>{{ processo.numero_processo if processo else '—' }}</strong>
+      &nbsp;|&nbsp; Reclamante: <strong>{{ processo.reclamante if processo else '—' }}</strong>
+    </div>
+  </div>
+  <div style="display:flex; gap:8px; align-items:center;">
+    {% if status == 'previa_gerada' %}
+    <span class="badge badge-amarelo">Aguardando Confirmação</span>
+    {% elif status == 'confirmado' %}
+    <span class="badge badge-azul">Confirmado</span>
+    {% elif status == 'pjc_exportado' %}
+    <span class="badge badge-verde">PJC Exportado</span>
+    {% elif status == 'erro' %}
+    <span class="badge badge-vermelho">Erro</span>
+    {% else %}
+    <span class="badge badge-cinza">{{ status }}</span>
+    {% endif %}
+
+    {% if calculo.arquivo_pjc %}
+    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success" style="padding:8px 16px;">
+      Download .pjc
+    </a>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Alertas e campos ausentes -->
+{% if campos_ausentes %}
+<div class="alerta-box">
+  <strong>Campos ausentes que precisam ser preenchidos:</strong>
+  <ul style="margin-top:8px; padding-left:20px;">
+    {% for campo in campos_ausentes %}
+    <li>{{ campo }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+{% if alertas %}
+<div class="alerta-box">
+  <strong>Alertas do processamento:</strong>
+  <ul style="margin-top:8px; padding-left:20px;">
+    {% for alerta in alertas %}
+    <li>{{ alerta }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<!-- Layout principal -->
+<div class="previa-container">
+
+  <!-- Prévia formatada -->
+  <div class="card">
+    <h2>Parâmetros do Cálculo</h2>
+    {{ previa_texto | replace('\n', '<br>') | safe }}
+  </div>
+
+  <!-- Sidebar de ações -->
+  <div class="sidebar">
+
+    <!-- Confirmar -->
+    {% if status in ['previa_gerada', 'em_andamento'] %}
+    <div class="card">
+      <h3>Confirmar e Preencher</h3>
+      <p style="color:#6c757d; font-size:0.88rem; margin-bottom:12px;">
+        Após confirmar, o agente preencherá automaticamente o PJE-Calc com estes parâmetros.
+      </p>
+      <button class="btn btn-success" style="width:100%;" onclick="confirmarPrevia()">
+        Confirmar e Iniciar PJE-Calc
+      </button>
+      <div id="msg-confirmar" style="display:none; margin-top:8px;"></div>
+    </div>
+    {% endif %}
+
+    <!-- Editar campo -->
+    <div class="card">
+      <h3>Editar Parâmetro</h3>
+      <div class="campo-editor">
+        <label>Campo (ex: contrato.admissao)</label>
+        <input type="text" id="campo-editar" placeholder="secao.campo">
+        <label>Novo valor</label>
+        <input type="text" id="valor-editar" placeholder="novo valor">
+        <button class="btn btn-warning" style="width:100%;" onclick="editarCampo()">
+          Atualizar Campo
+        </button>
+        <div id="msg-edicao"></div>
+      </div>
+    </div>
+
+    <!-- Verbas -->
+    <div class="card">
+      <h3>Verbas ({{ verbas|length }})</h3>
+      {% for verba in verbas %}
+      <div style="padding:8px; border-bottom:1px solid #eee; font-size:0.85rem;">
+        <div style="font-weight:600; color:#1a3a6b;">
+          {{ verba.nome_pjecalc or verba.nome_sentenca }}
+          {% if not verba.mapeada %}
+          <span class="badge badge-amarelo" style="font-size:0.7rem;">Manual</span>
+          {% endif %}
+        </div>
+        <div style="color:#6c757d;">{{ verba.tipo }} | {{ verba.caracteristica }} | {{ verba.ocorrencia }}</div>
+        {% if verba.periodo_inicio %}
+        <div style="color:#6c757d;">{{ verba.periodo_inicio }} a {{ verba.periodo_fim or '—' }}</div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Histórico de sessões do processo -->
+    {% if processo %}
+    <div class="card">
+      <h3>Histórico</h3>
+      <a href="/processo/{{ processo.numero_processo }}" style="color:#1a3a6b; font-size:0.9rem;">
+        Ver todos os cálculos deste processo →
+      </a>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+  const SESSAO_ID = "{{ sessao_id }}";
+
+  async function editarCampo() {
+    const campo = document.getElementById('campo-editar').value.trim();
+    const valor = document.getElementById('valor-editar').value.trim();
+    if (!campo || !valor) { alert('Preencha o campo e o novo valor.'); return; }
+
+    const form = new FormData();
+    form.append('campo', campo);
+    form.append('valor', valor);
+
+    const msg = document.getElementById('msg-edicao');
+    msg.style.display = 'block';
+    msg.style.background = '#fff3cd';
+    msg.style.color = '#856404';
+    msg.textContent = 'Salvando...';
+
+    try {
+      const resp = await fetch('/previa/' + SESSAO_ID + '/editar', { method: 'POST', body: form });
+      const dados = await resp.json();
+      if (dados.sucesso) {
+        msg.style.background = '#d4edda';
+        msg.style.color = '#155724';
+        msg.textContent = 'Campo atualizado! Recarregando prévia...';
+        setTimeout(() => window.location.reload(), 1200);
+      } else {
+        throw new Error('Falha ao atualizar campo.');
+      }
+    } catch(err) {
+      msg.style.background = '#f8d7da';
+      msg.style.color = '#721c24';
+      msg.textContent = 'Erro: ' + err.message;
+    }
+  }
+
+  async function confirmarPrevia() {
+    if (!confirm(
+      'Confirma os parâmetros apresentados?\n\n' +
+      'O agente irá preencher o PJE-Calc automaticamente.\n' +
+      'Certifique-se de que o PJE-Calc está aberto e pronto.'
+    )) return;
+
+    const msg = document.getElementById('msg-confirmar');
+    msg.style.display = 'block';
+    msg.style.background = '#d4edda';
+    msg.style.color = '#155724';
+    msg.textContent = 'Confirmando e iniciando automação...';
+
+    try {
+      const resp = await fetch('/previa/' + SESSAO_ID + '/confirmar', { method: 'POST' });
+      const dados = await resp.json();
+      if (dados.sucesso) {
+        msg.textContent = dados.mensagem;
+        setTimeout(() => window.location.reload(), 3000);
+      }
+    } catch(err) {
+      msg.style.background = '#f8d7da';
+      msg.style.color = '#721c24';
+      msg.textContent = 'Erro: ' + err.message;
+    }
+  }
+</script>
+{% endblock %}

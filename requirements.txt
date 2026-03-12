@@ -1,0 +1,48 @@
+# requirements.txt — Agente PJE-Calc
+# Manual Técnico PJE-Calc v1.0 — 2026
+# Instalar: pip install -r requirements.txt
+
+# ── API Claude (Anthropic) — NLP jurídico ────────────────────────────────────
+anthropic>=0.40.0
+
+# ── Leitura de documentos ────────────────────────────────────────────────────
+pdfplumber>=0.10.0
+python-docx>=1.1.0
+pdfminer.six>=20231228
+chardet>=5.2.0
+
+# ── OCR (PDFs escaneados) ────────────────────────────────────────────────────
+pytesseract>=0.3.10
+pdf2image>=1.17.0
+Pillow>=10.0.0
+
+# ── Automação desktop (PJE-Calc Cidadão) ────────────────────────────────────
+pyautogui>=0.9.54
+pygetwindow>=0.0.9
+pywinauto>=0.6.8
+
+# ── Automação web (PJE-Calc corporativo via navegador) ───────────────────────
+playwright>=1.40.0
+
+# ── Processamento de planilhas (cartão de ponto) ─────────────────────────────
+openpyxl>=3.1.0
+pandas>=2.0.0
+
+# ── Interface Web (FastAPI) ──────────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.27.0
+python-multipart>=0.0.9
+
+# ── Banco de Dados ───────────────────────────────────────────────────────────
+sqlalchemy>=2.0.0
+# Para PostgreSQL em produção, adicionar: psycopg2-binary>=2.9.9
+
+# ── Interface CLI e exibição ─────────────────────────────────────────────────
+rich>=13.0.0
+jinja2>=3.1.0
+
+# ── Logging estruturado ──────────────────────────────────────────────────────
+structlog>=23.0.0
+
+# ── Utilitários ──────────────────────────────────────────────────────────────
+python-dateutil>=2.8.2
