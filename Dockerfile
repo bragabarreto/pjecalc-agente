@@ -41,4 +41,4 @@ EXPOSE 8000
 
 # ── Comando de inicialização ──────────────────────────────────────────────────
 # Railway sobrescreve PORT automaticamente via variável de ambiente.
-CMD uvicorn webapp:app --host 0.0.0.0 --port ${PORT}
+CMD ["uvicorn", "webapp:app", "--host", "0.0.0.0", "--port", "8000"]
