@@ -49,6 +49,8 @@ def ler_documento(caminho: str | Path) -> dict[str, Any]:
 
 # ── Leitura por formato ───────────────────────────────────────────────────────
 
+_PDF_MAX_PAGINAS = 40  # limite por documento para não estourar memória na nuvem
+
 def _ler_pdf(caminho: Path, alertas: list[str]) -> dict[str, Any]:
     """Tenta extração nativa; recorre ao OCR se o texto for insuficiente."""
     try:
@@ -58,7 +60,12 @@ def _ler_pdf(caminho: Path, alertas: list[str]) -> dict[str, Any]:
 
     paginas: list[str] = []
     with pdfplumber.open(str(caminho)) as pdf:
-        for i, pagina in enumerate(pdf.pages, start=1):
+        total = len(pdf.pages)
+        if total > _PDF_MAX_PAGINAS:
+            alertas.append(
+                f"PDF com {total} páginas — processando apenas as primeiras {_PDF_MAX_PAGINAS}."
+            )
+        for pagina in pdf.pages[:_PDF_MAX_PAGINAS]:
             texto_pg = pagina.extract_text() or ""
             paginas.append(texto_pg)
 

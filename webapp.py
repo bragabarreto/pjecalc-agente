@@ -98,6 +98,9 @@ async def processar_sentenca(
     # Coletar documentos extras do form (doc_arquivo_N, doc_imagem_N, doc_texto_N, doc_contexto_N)
     form = await request.form()
     extras: list[dict] = []
+    _MAX_FILE_BYTES = 15 * 1024 * 1024  # 15 MB por arquivo
+    _IMG_MAX_PX = 1536               # redimensionar imagens para no máximo 1536px
+
     for i in range(10):
         contexto = str(form.get(f"doc_contexto_{i}", "")).strip()
 
@@ -106,24 +109,47 @@ async def processar_sentenca(
         txt = form.get(f"doc_texto_{i}")
 
         if arq and hasattr(arq, "filename") and arq.filename:
+            dados = await arq.read()
+            if len(dados) > _MAX_FILE_BYTES:
+                continue  # ignorar arquivos muito grandes
             suf = Path(arq.filename).suffix.lower()
             extra_path = tmp_dir / f"extra_{i}{suf}"
-            extra_path.write_bytes(await arq.read())
+            extra_path.write_bytes(dados)
+            del dados
             extras.append({"tipo": "arquivo", "caminho": str(extra_path), "contexto": contexto})
 
         elif img and hasattr(img, "filename") and img.filename:
-            suf = Path(img.filename).suffix.lower() or ".jpg"
-            extra_path = tmp_dir / f"extra_img_{i}{suf}"
-            extra_path.write_bytes(await img.read())
+            from PIL import Image as _PIL
+            import io as _io
+            dados = await img.read()
+            if len(dados) > _MAX_FILE_BYTES:
+                continue
+            # Redimensionar para economizar memória e tokens do LLM
+            try:
+                pil_img = _PIL.open(_io.BytesIO(dados))
+                pil_img.thumbnail((_IMG_MAX_PX, _IMG_MAX_PX), _PIL.Resampling.LANCZOS)
+                buf = _io.BytesIO()
+                fmt = "JPEG" if pil_img.mode in ("RGB", "L") else "PNG"
+                if pil_img.mode == "RGBA":
+                    pil_img = pil_img.convert("RGB")
+                    fmt = "JPEG"
+                pil_img.save(buf, format=fmt, quality=85)
+                dados = buf.getvalue()
+                mime = "image/jpeg" if fmt == "JPEG" else "image/png"
+            except Exception:
+                mime = getattr(img, "content_type", "image/jpeg")
+            extra_path = tmp_dir / f"extra_img_{i}.jpg"
+            extra_path.write_bytes(dados)
+            del dados
             extras.append({
                 "tipo": "imagem",
                 "caminho": str(extra_path),
-                "mime_type": getattr(img, "content_type", "image/jpeg"),
+                "mime_type": mime,
                 "contexto": contexto,
             })
 
         elif txt and str(txt).strip():
-            extras.append({"tipo": "texto", "conteudo": str(txt).strip(), "contexto": contexto})
+            extras.append({"tipo": "texto", "conteudo": str(txt).strip()[:8000], "contexto": contexto})
 
     # Processar em background
     background_tasks.add_task(
@@ -500,7 +526,6 @@ def _tarefa_processar_sentenca(
         logging.getLogger("pjecalc_agent.webapp").error(
             f"Erro no processamento da sentença [{sessao_id}]: {e}", exc_info=True
         )
-        # Marcar como erro no banco
         try:
             calculo = db.query(Calculo).filter_by(sessao_id=sessao_id).first()
             if calculo:
@@ -510,11 +535,13 @@ def _tarefa_processar_sentenca(
             pass
     finally:
         db.close()
-        # Limpar arquivo temporário
+        # Limpar arquivos temporários e forçar GC para liberar memória
         try:
             shutil.rmtree(caminho.parent, ignore_errors=True)
         except Exception:
             pass
+        import gc
+        gc.collect()
 
 
 def _tarefa_automacao_pjecalc(sessao_id: str) -> None:

@@ -9,9 +9,6 @@ LABEL maintainer="Agente PJE-Calc" \
 
 # ── Dependências de sistema ───────────────────────────────────────────────────
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    tesseract-ocr \
-    tesseract-ocr-por \
-    poppler-utils \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
