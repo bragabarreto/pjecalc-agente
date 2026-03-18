@@ -52,16 +52,36 @@
 
     <!-- Sentença principal -->
     <div style="margin-bottom:24px;">
-      <h4 style="color:#1a3a6b; margin-bottom:8px;">
+      <h4 style="color:#1a3a6b; margin-bottom:10px;">
         Sentença Trabalhista <span style="color:#dc3545; font-size:0.9rem;">*</span>
       </h4>
-      <div class="upload-area" id="area-sentenca"
-           onclick="document.getElementById('arquivo-sentenca').click()">
-        <input type="file" id="arquivo-sentenca" name="sentenca" accept=".pdf,.docx,.doc,.txt">
-        <div style="font-size:2rem; color:#1a3a6b; margin-bottom:6px;">📄</div>
-        <div style="font-size:1rem; color:#1a3a6b; font-weight:600;">Clique para selecionar a sentença</div>
-        <div style="color:#6c757d; font-size:0.85rem; margin-top:4px;">PDF, DOCX ou TXT</div>
-        <div id="nome-sentenca" style="margin-top:10px; color:#28a745; font-weight:600;"></div>
+      <div class="doc-tabs">
+        <button type="button" class="tab-btn ativa" id="tab-sent-arquivo"
+                onclick="setarAbaSentenca('arquivo')">📄 Arquivo (PDF/DOCX/TXT)</button>
+        <button type="button" class="tab-btn" id="tab-sent-texto"
+                onclick="setarAbaSentenca('texto')">📋 Texto colado (Ctrl+V)</button>
+      </div>
+
+      <div id="aba-sent-arquivo" class="aba-conteudo ativa">
+        <div class="upload-area" id="area-sentenca"
+             onclick="document.getElementById('arquivo-sentenca').click()">
+          <input type="file" id="arquivo-sentenca" name="sentenca" accept=".pdf,.docx,.doc,.txt">
+          <div style="font-size:2rem; color:#1a3a6b; margin-bottom:6px;">📄</div>
+          <div style="font-size:1rem; color:#1a3a6b; font-weight:600;">Clique para selecionar a sentença</div>
+          <div style="color:#6c757d; font-size:0.85rem; margin-top:4px;">PDF, DOCX ou TXT</div>
+          <div id="nome-sentenca" style="margin-top:10px; color:#28a745; font-weight:600;"></div>
+        </div>
+      </div>
+
+      <div id="aba-sent-texto" class="aba-conteudo">
+        <textarea id="sentenca-texto" name="sentenca_texto"
+                  placeholder="Cole aqui o texto da sentença (Ctrl+V)..."
+                  rows="14"
+                  style="width:100%; padding:12px; border:1px solid #ced4da; border-radius:8px;
+                         font-size:0.9rem; font-family:inherit; resize:vertical; line-height:1.5;"></textarea>
+        <div id="contador-sentenca" style="text-align:right; font-size:0.8rem; color:#6c757d; margin-top:4px;">
+          0 caracteres
+        </div>
       </div>
     </div>
 
@@ -114,12 +134,26 @@
 let contadorDocs = 0;
 let docsAtivos = 0;
 
-// Sentença principal — atualizar área ao selecionar
+// Sentença principal — alternar abas
+function setarAbaSentenca(aba) {
+  document.getElementById('aba-sent-arquivo').classList.toggle('ativa', aba === 'arquivo');
+  document.getElementById('aba-sent-texto').classList.toggle('ativa', aba === 'texto');
+  document.getElementById('tab-sent-arquivo').classList.toggle('ativa', aba === 'arquivo');
+  document.getElementById('tab-sent-texto').classList.toggle('ativa', aba === 'texto');
+}
+
+// Sentença — atualizar nome ao selecionar arquivo
 document.getElementById('arquivo-sentenca').addEventListener('change', function() {
   if (this.files.length > 0) {
     document.getElementById('nome-sentenca').textContent = 'Selecionado: ' + this.files[0].name;
     document.getElementById('area-sentenca').classList.add('tem-arquivo');
   }
+});
+
+// Contador de caracteres no texto colado
+document.getElementById('sentenca-texto').addEventListener('input', function() {
+  document.getElementById('contador-sentenca').textContent =
+    this.value.length.toLocaleString('pt-BR') + ' caracteres';
 });
 
 function adicionarDocumento() {
@@ -229,11 +263,21 @@ function atualizarUI() {
 // Submit do formulário
 document.getElementById('form-upload').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const arquivo = document.getElementById('arquivo-sentenca').files[0];
-  if (!arquivo) { alert('Selecione o arquivo da sentença.'); return; }
-
   const formData = new FormData();
-  formData.append('sentenca', arquivo);
+
+  const abaArquivoAtiva = document.getElementById('aba-sent-arquivo').classList.contains('ativa');
+  if (abaArquivoAtiva) {
+    const arquivo = document.getElementById('arquivo-sentenca').files[0];
+    if (!arquivo) { alert('Selecione o arquivo da sentença ou use a aba "Texto colado".'); return; }
+    formData.append('sentenca', arquivo);
+  } else {
+    const texto = document.getElementById('sentenca-texto').value.trim();
+    if (!texto) { alert('Cole o texto da sentença antes de processar.'); return; }
+    if (texto.length < 100) { alert('O texto parece muito curto. Verifique se foi colado corretamente.'); return; }
+    // Enviar como arquivo .txt
+    const blob = new Blob([texto], { type: 'text/plain' });
+    formData.append('sentenca', blob, 'sentenca_colada.txt');
+  }
 
   // Coletar docs extras na ordem visual
   let pos = 0;
