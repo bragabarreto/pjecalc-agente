@@ -479,7 +479,14 @@ def extrair_dados_sentenca(
     dados_regex = _extrair_via_regex(texto_completo)
 
     # Fase 2: extração via LLM (Claude) — com extras
-    dados_llm = _extrair_via_llm(texto_principal[:12000], extras=extras)
+    # Inclui cabeçalho (nomes, datas, processo) + dispositivo (verbas, parâmetros)
+    cabecalho = texto_completo[:3000]
+    dispositivo = texto_principal[-9000:]
+    if cabecalho and dispositivo and cabecalho not in dispositivo:
+        texto_para_llm = cabecalho + "\n\n[...trecho omitido...]\n\n" + dispositivo
+    else:
+        texto_para_llm = texto_principal[:12000]
+    dados_llm = _extrair_via_llm(texto_para_llm, extras=extras)
 
     # Fase 3: merge (LLM prevalece; regex preenche onde LLM retornou null)
     dados = _merge_extracao(dados_regex, dados_llm)
@@ -515,7 +522,7 @@ def _extrair_de_relatorio_estruturado(
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{
                 "role": "user",
-                "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:18000]),
+                "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:25000]),
             }],
         )
         conteudo = resposta.content[0].text.strip()
@@ -823,18 +830,32 @@ _CAMPOS_OPCIONAIS = {
 }
 
 
+def _campo_tem_valor(dados: dict[str, Any], chave: str) -> bool:
+    """Verifica se um campo pontilhado (ex: 'processo.estado') tem valor não-nulo no dict."""
+    partes = chave.split(".")
+    obj = dados
+    for p in partes:
+        if not isinstance(obj, dict):
+            return False
+        obj = obj.get(p)
+    return bool(obj)
+
+
 def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     """
     Identifica campos obrigatórios ausentes e campos com baixa confiança.
     Preenche 'campos_ausentes' e 'alertas'.
     """
-    campos_ausentes = dados.get("campos_ausentes", [])
+    # Filtrar campos_ausentes recebidos do LLM: manter apenas os que realmente estão vazios
+    campos_ausentes_llm = dados.get("campos_ausentes", [])
+    campos_ausentes = [c for c in campos_ausentes_llm if not _campo_tem_valor(dados, c)]
     alertas = dados.get("alertas", [])
 
     for secao, campo in _CAMPOS_OBRIGATORIOS:
+        chave = f"{secao}.{campo}"
         valor = dados.get(secao, {}).get(campo)
-        if not valor:
-            campos_ausentes.append(f"{secao}.{campo}")
+        if not valor and chave not in campos_ausentes:
+            campos_ausentes.append(chave)
 
     # Verificar confiança abaixo do limiar
     for secao in ["processo", "contrato", "fgts", "honorarios", "correcao_juros"]:
