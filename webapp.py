@@ -21,7 +21,7 @@ from fastapi import (
     BackgroundTasks, Depends, FastAPI, File, Form, HTTPException,
     Request, UploadFile,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -621,11 +621,39 @@ async def api_detalhe_calculo(sessao_id: str, db: Session = Depends(get_db)):
         } if calculo.processo else None,
         "dados": calculo.dados(),
         "verbas": calculo.verbas_mapeadas(),
+        "verbas_mapeadas": calculo.verbas_mapeadas(),   # alias para a extensão
         "tem_previa": calculo.previa_texto is not None,
         "arquivo_pjc": calculo.arquivo_pjc,
         "criado_em": calculo.criado_em.isoformat() if calculo.criado_em else None,
         "confirmado_em": calculo.confirmado_em.isoformat() if calculo.confirmado_em else None,
     }
+
+
+@app.get("/download/extensao")
+async def download_extensao():
+    """
+    Gera e serve o .zip da extensão Chrome/Firefox para instalação com um clique.
+    O usuário extrai o zip e carrega a pasta no browser (modo desenvolvedor).
+    """
+    import io
+    import zipfile
+
+    extension_dir = BASE_DIR / "extension"
+    if not extension_dir.exists():
+        raise HTTPException(status_code=404, detail="Pasta extension/ não encontrada no servidor.")
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(extension_dir.rglob("*")):
+            if f.is_file():
+                zf.write(f, f.relative_to(extension_dir))
+    buffer.seek(0)
+
+    return Response(
+        content=buffer.read(),
+        media_type="application/zip",
+        headers={"Content-Disposition": "attachment; filename=agente-pjecalc-extensao.zip"},
+    )
 
 
 # ── Tarefas em Background ─────────────────────────────────────────────────────

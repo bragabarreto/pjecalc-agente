@@ -1,0 +1,109 @@
+/* popup.css — Agente PJE-Calc */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  width: 300px;
+  font-family: 'Segoe UI', Arial, sans-serif;
+  font-size: 13px;
+  color: #222;
+  background: #fff;
+}
+
+.header {
+  background: #1a3a6b;
+  color: #fff;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section {
+  padding: 12px 14px;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.section-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #1a3a6b;
+  margin-bottom: 2px;
+}
+
+label {
+  font-size: 11px;
+  color: #555;
+  font-weight: 500;
+}
+
+input[type=text] {
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+input[type=text]:focus {
+  border-color: #1a3a6b;
+  box-shadow: 0 0 0 2px rgba(26,58,107,0.12);
+}
+
+.btn-primary {
+  width: 100%;
+  padding: 9px 12px;
+  background: #1a3a6b;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+  transition: background 0.15s;
+}
+
+.btn-primary:hover { background: #15305a; }
+
+.btn-secondary {
+  width: 100%;
+  padding: 7px 12px;
+  background: #f0f0f0;
+  color: #333;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  margin-top: 2px;
+  transition: background 0.15s;
+}
+
+.btn-secondary:hover { background: #e2e2e2; }
+
+#status {
+  min-height: 24px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-ok   { color: #155724; background: #d4edda; }
+.status-erro { color: #721c24; background: #f8d7da; }
+
+.footer {
+  padding: 6px 14px;
+  font-size: 10px;
+  color: #999;
+  text-align: center;
+  border-top: 1px solid #eee;
+}

@@ -1,0 +1,41 @@
+{
+  "manifest_version": 3,
+  "name": "Agente PJE-Calc",
+  "version": "1.0.0",
+  "description": "Preenchimento automático do PJE-Calc Cidadão a partir de sentenças trabalhistas analisadas por IA",
+  "permissions": ["storage", "activeTab", "scripting", "tabs"],
+  "host_permissions": [
+    "http://localhost:9257/*",
+    "https://*.railway.app/*",
+    "https://*.up.railway.app/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "Agente PJE-Calc"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:9257/pjecalc/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "agente-pjecalc@trt.jus.br",
+      "strict_min_version": "109.0"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

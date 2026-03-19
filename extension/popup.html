@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Agente PJE-Calc</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+  <div class="header">
+    <img src="icons/icon48.png" width="22" height="22" alt=""> Agente PJE-Calc
+  </div>
+
+  <!-- Seção: Abrir PJE-Calc com sessão ativa -->
+  <div class="section">
+    <div class="section-title">Preencher PJE-Calc</div>
+    <label for="sessao-id">ID da Sessão</label>
+    <input id="sessao-id" type="text" placeholder="Cole aqui o ID da sessão confirmada" spellcheck="false">
+    <label for="server-url" style="margin-top:8px">Servidor</label>
+    <input id="server-url" type="text" placeholder="https://seu-app.railway.app" spellcheck="false">
+    <button id="btn-abrir" class="btn-primary">
+      Abrir PJE-Calc e Preencher
+    </button>
+  </div>
+
+  <!-- Seção: Configurações -->
+  <div class="section">
+    <div class="section-title">Configurações</div>
+    <label for="server-config">URL padrão do servidor</label>
+    <input id="server-config" type="text" placeholder="https://seu-app.railway.app" spellcheck="false">
+    <button id="btn-salvar-config" class="btn-secondary">Salvar configuração</button>
+  </div>
+
+  <div id="status"></div>
+
+  <div class="footer">
+    Extensão Agente PJE-Calc v1.0 · Chrome &amp; Firefox
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

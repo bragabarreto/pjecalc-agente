@@ -36,7 +36,9 @@
 {% endblock %}
 
 {% block content %}
-<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+{% set base_url = request.base_url | string | replace('http://', 'https://') | trim('/') %}
+{% set pjecalc_url = 'http://localhost:9257/pjecalc/pages/principal.jsf#agente-sessao=' ~ sessao_id ~ '&agente-server=' ~ (base_url | urlencode) %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
   <div>
     <h2 style="color:#1a3a6b; margin-bottom:4px;">Guia de Preenchimento — PJE-Calc</h2>
     <p style="color:#666; font-size:0.9rem;">
@@ -44,63 +46,88 @@
       {% if processo and processo.reclamante %} — {{ processo.reclamante }}{% endif %}
     </p>
   </div>
-  <div class="no-print">
-    <a href="/download/{{ sessao_id }}/launcher" class="btn btn-success btn-download btn-lg" style="margin-right:8px;">
-      ⬇ Baixar Automação <small style="display:block; font-size:0.72rem; opacity:0.85;">(duplo-clique para executar)</small>
+  <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
+    <a href="{{ pjecalc_url }}" target="_blank" class="btn btn-success btn-download btn-lg"
+       style="font-weight:700; padding:10px 18px;">
+      Preencher PJE-Calc Automaticamente
+      <small style="display:block; font-size:0.7rem; font-weight:400; opacity:0.9; margin-top:2px;">
+        (requer extensão instalada)
+      </small>
     </a>
-    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary btn-download" style="margin-right:8px;">⬇ Baixar .pjc</a>
-    <button onclick="window.print()" class="btn btn-secondary" style="margin-right:8px;">Imprimir</button>
+    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary btn-download">⬇ Baixar .pjc</a>
+    <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
     <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-primary btn-download">Baixar JSON</a>
   </div>
 </div>
 
-<!-- Aviso -->
-<div class="aviso-box no-print">
-  <h4>Como preencher o PJE-Calc automaticamente — <em>sem usar o terminal</em></h4>
-  <ol style="font-size:0.9rem; color:#856404; margin:0; padding-left:18px; line-height:1.9;">
-    <li>Clique em <strong>⬇ Baixar Automação</strong> acima</li>
-    <li>Abra a pasta <em>Downloads</em> e dê <strong>duplo-clique</strong> no arquivo <code>.bat</code></li>
-    <li>O script instala as dependências automaticamente (na 1ª vez) e abre o <strong>PJE-Calc Cidadão</strong></li>
-    <li>O browser preenche todos os campos — em caso de dificuldade, o sistema pausa e você completa manualmente</li>
-    <li>Revise e clique em <strong>Liquidar</strong> dentro do PJE-Calc</li>
-  </ol>
-  <p style="font-size:0.82rem; color:#888; margin-top:10px; margin-bottom:0;">
-    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado em
-    <code>C:\Program Files\pjecalc-windows64-2.14.0</code>
-    (já detectado no seu computador) · Python 3.x instalado · Acesso à internet no momento do download
+<!-- Aviso principal: extensão -->
+<div class="aviso-box no-print" style="background:#e8f4fd; border-color:#1a3a6b;">
+  <h4 style="color:#1a3a6b;">Automação via Extensão de Browser — Chrome e Firefox</h4>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:10px;">
+
+    <div>
+      <p style="font-size:0.9rem; font-weight:600; color:#1a3a6b; margin-bottom:6px;">
+        Instalação da extensão (uma única vez)
+      </p>
+      <ol style="font-size:0.88rem; color:#333; margin:0; padding-left:18px; line-height:2;">
+        <li>Baixe: <a href="/download/extensao" style="color:#1a3a6b; font-weight:600;">⬇ Extensão Agente PJE-Calc (.zip)</a></li>
+        <li>Extraia o arquivo <code>.zip</code> em qualquer pasta</li>
+        <li>
+          <strong>Chrome:</strong> acesse <code>chrome://extensions</code> →
+          ative <em>Modo do desenvolvedor</em> → clique <em>Carregar sem compactação</em> → selecione a pasta extraída
+        </li>
+        <li>
+          <strong>Firefox:</strong> acesse <code>about:debugging</code> →
+          <em>Este Firefox</em> → <em>Carregar extensão temporária</em> → selecione o arquivo <code>manifest.json</code>
+        </li>
+      </ol>
+    </div>
+
+    <div>
+      <p style="font-size:0.9rem; font-weight:600; color:#1a3a6b; margin-bottom:6px;">
+        Uso por processo (após instalar)
+      </p>
+      <ol style="font-size:0.88rem; color:#333; margin:0; padding-left:18px; line-height:2;">
+        <li>Verifique que o <strong>PJE-Calc Cidadão</strong> está aberto (<code>localhost:9257</code>)</li>
+        <li>Clique em <strong style="color:#155724;">Preencher PJE-Calc Automaticamente</strong> acima</li>
+        <li>A extensão busca os dados confirmados e preenche todos os campos em sequência</li>
+        <li>Se algum campo não for encontrado, um aviso amarelo aparece — preencha manualmente e clique <em>Continuar</em></li>
+        <li>Revise e clique em <strong>Liquidar</strong></li>
+      </ol>
+    </div>
+
+  </div>
+  <p style="font-size:0.8rem; color:#555; margin-top:12px; margin-bottom:0;">
+    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado e rodando em
+    <code>C:\Program Files\pjecalc-windows64-2.14.0</code> ·
+    Extensão instalada no Chrome ou Firefox ·
+    Acesso à internet para buscar os dados do servidor
   </p>
 </div>
 
-<!-- Passos detalhados (colapsáveis) -->
+<!-- Alternativas colapsáveis -->
 <details class="no-print" style="margin-bottom:20px;">
   <summary style="cursor:pointer; color:#1a3a6b; font-weight:600; padding:8px 0;">
-    Detalhes técnicos / modo manual (expandir)
+    Alternativas: popup da extensão / arquivo .bat / script Python (expandir)
   </summary>
   <div class="card" style="margin-top:10px;">
-    <div class="passo">
-      <div class="passo-num">1</div>
-      <div class="passo-txt">Baixe o <strong>arquivo .bat</strong> (botão verde acima) para a pasta Downloads</div>
-    </div>
-    <div class="passo">
-      <div class="passo-num">2</div>
-      <div class="passo-txt"><strong>Duplo-clique</strong> no arquivo .bat — uma janela de terminal se abre brevemente e instala as dependências na primeira vez</div>
-    </div>
-    <div class="passo">
-      <div class="passo-num">3</div>
-      <div class="passo-txt">O script verifica se o <strong>PJE-Calc Cidadão</strong> está rodando; se não estiver, inicia-o automaticamente</div>
-    </div>
-    <div class="passo">
-      <div class="passo-num">4</div>
-      <div class="passo-txt">O browser Chromium abre no PJE-Calc local (<code>localhost:9257</code>) e preenche todos os campos</div>
-    </div>
-    <div class="passo">
-      <div class="passo-num">5</div>
-      <div class="passo-txt">Revise os dados e clique em <strong>Liquidar</strong> · Exporte o <strong>.pjc</strong> para juntar nos autos</div>
-    </div>
-    <p style="font-size:0.82rem; color:#888; margin-top:8px;">
-      Alternativa avançada: baixe o script <code>.py</code> e execute via
-      <code>python auto_pjecalc_XXX.py</code> diretamente no terminal.
-    </p>
+    <p style="font-weight:600; color:#1a3a6b; margin-bottom:8px;">Alternativa 1 — Usar o popup da extensão manualmente</p>
+    <ol style="font-size:0.88rem; line-height:1.9; padding-left:18px; margin-bottom:14px;">
+      <li>Clique no ícone da extensão na barra do browser</li>
+      <li>Configure a URL do servidor (uma vez): <code>{{ base_url }}</code></li>
+      <li>Cole o ID da sessão: <code style="font-size:0.8rem;">{{ sessao_id }}</code></li>
+      <li>Clique em <em>Abrir PJE-Calc e Preencher</em></li>
+    </ol>
+    <p style="font-weight:600; color:#1a3a6b; margin-bottom:8px;">Alternativa 2 — Arquivo .bat (requer Python)</p>
+    <ol style="font-size:0.88rem; line-height:1.9; padding-left:18px; margin-bottom:14px;">
+      <li>Baixe: <a href="/download/{{ sessao_id }}/launcher">⬇ Automação .bat</a></li>
+      <li>Dê duplo-clique — instala Playwright e preenche via browser Chromium separado</li>
+    </ol>
+    <p style="font-weight:600; color:#1a3a6b; margin-bottom:8px;">Alternativa 3 — Script Python direto</p>
+    <ol style="font-size:0.88rem; line-height:1.9; padding-left:18px;">
+      <li>Baixe: <a href="/download/{{ sessao_id }}/script">⬇ Script .py</a></li>
+      <li>Execute: <code>pip install playwright &amp;&amp; playwright install chromium &amp;&amp; python auto_pjecalc_XXX.py</code></li>
+    </ol>
   </div>
 </details>
 
