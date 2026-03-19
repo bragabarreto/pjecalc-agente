@@ -322,16 +322,28 @@ async def confirmar_previa(
 
     repo.confirmar_previa(sessao_id)
 
+    # Gerar arquivo .pjc em ambos os modos
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    url_pjc = None
+    try:
+        from modules.pjc_generator import gerar_pjc
+        caminho_pjc = gerar_pjc(dados, verbas_mapeadas, sessao_id)
+        repo.marcar_exportado(sessao_id, str(caminho_pjc))
+        url_pjc = f"/download/{sessao_id}/pjc"
+    except Exception as exc:
+        logger.warning(f"Não foi possível gerar .pjc: {exc}")
+
     if CLOUD_MODE:
         mensagem = (
-            "Parâmetros confirmados e salvos. "
-            "Baixe o arquivo de parâmetros e use-o para preencher o PJE-Calc "
-            "na sua máquina local."
+            "Parâmetros confirmados. "
+            "Baixe o arquivo .pjc e importe-o no PJE-Calc na sua máquina local."
         )
         return JSONResponse({
             "sucesso": True,
             "mensagem": mensagem,
             "cloud_mode": True,
+            "url_pjc": url_pjc,
             "url_parametros": f"/download/{sessao_id}/parametros",
             "url_instrucoes": f"/instrucoes/{sessao_id}",
             "url_status": f"/status/{sessao_id}",
@@ -342,6 +354,7 @@ async def confirmar_previa(
             "sucesso": True,
             "mensagem": "Prévia confirmada. O PJE-Calc será preenchido automaticamente.",
             "cloud_mode": False,
+            "url_pjc": url_pjc,
             "url_status": f"/status/{sessao_id}",
         })
 
@@ -391,11 +404,23 @@ async def previa_atual_processo(
 
 @app.get("/download/{sessao_id}/pjc")
 async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
-    """Download do arquivo .pjc gerado (modo desktop)."""
+    """Download do arquivo .pjc gerado."""
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
-    if not calculo or not calculo.arquivo_pjc:
-        raise HTTPException(status_code=404, detail="Arquivo .pjc não disponível")
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    # Gerar sob demanda se ainda não foi gerado
+    if not calculo.arquivo_pjc or not Path(calculo.arquivo_pjc).exists():
+        try:
+            from modules.pjc_generator import gerar_pjc
+            dados = calculo.dados()
+            verbas_mapeadas = calculo.verbas_mapeadas()
+            caminho_pjc = gerar_pjc(dados, verbas_mapeadas, sessao_id)
+            repo.marcar_exportado(sessao_id, str(caminho_pjc))
+            calculo = repo.buscar_sessao(sessao_id)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=f"Erro ao gerar .pjc: {exc}")
 
     caminho = Path(calculo.arquivo_pjc)
     if not caminho.exists():
@@ -404,7 +429,7 @@ async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
     return FileResponse(
         path=str(caminho),
         filename=caminho.name,
-        media_type="application/xml",
+        media_type="application/zip",
     )
 
 

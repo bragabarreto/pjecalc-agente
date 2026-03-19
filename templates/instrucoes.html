@@ -45,42 +45,43 @@
     </p>
   </div>
   <div class="no-print">
+    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success btn-download" style="margin-right:8px;">⬇ Baixar .pjc</a>
     <button onclick="window.print()" class="btn btn-secondary" style="margin-right:8px;">Imprimir</button>
-    <a href="/download/{{ sessao_id }}/parametros" class="btn btn-primary btn-download">Baixar JSON</a>
+    <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-primary btn-download">Baixar JSON</a>
   </div>
 </div>
 
 <!-- Aviso -->
 <div class="aviso-box no-print">
-  <h4>Como usar este guia</h4>
+  <h4>Como usar o arquivo .pjc</h4>
   <p style="font-size:0.9rem; color:#856404;">
-    Os parâmetros abaixo foram extraídos da sentença pelo agente e confirmados por você.
-    Use-os para preencher o PJE-Calc na sua máquina local, siga os passos abaixo, realize a liquidação e exporte o arquivo <strong>.pjc</strong>.
+    O arquivo <strong>.pjc</strong> já contém todos os parâmetros do cálculo prontos para importação no PJE-Calc.
+    Baixe-o acima, importe no PJE-Calc (Arquivo → Importar Cálculo), revise, liquide e exporte para juntada nos autos do PJE.
   </p>
 </div>
 
 <!-- Passos -->
 <div class="card no-print">
-  <h2>Passos para obter o arquivo .pjc</h2>
+  <h2>Passos para obter o arquivo .pjc final</h2>
   <div class="passo">
     <div class="passo-num">1</div>
-    <div class="passo-txt">Abra o <strong>PJE-Calc</strong> na sua máquina e crie um novo cálculo (Arquivo → Novo)</div>
+    <div class="passo-txt">Baixe o arquivo <strong>.pjc</strong> usando o botão acima e abra o <strong>PJE-Calc</strong> na sua máquina</div>
   </div>
   <div class="passo">
     <div class="passo-num">2</div>
-    <div class="passo-txt">Preencha os dados do processo, parâmetros do contrato e verbas conforme os campos listados abaixo (ou imprima esta página para consultar)</div>
+    <div class="passo-txt">No PJE-Calc, clique em <strong>Arquivo → Importar Cálculo</strong> e selecione o arquivo <strong>.pjc</strong> baixado — todos os campos já estarão preenchidos</div>
   </div>
   <div class="passo">
     <div class="passo-num">3</div>
-    <div class="passo-txt">Clique em <strong>Operações → Validar</strong> para verificar inconsistências</div>
+    <div class="passo-txt">Revise os parâmetros carregados e, se necessário, ajuste algum campo antes de liquidar (consulte os dados abaixo para conferência)</div>
   </div>
   <div class="passo">
     <div class="passo-num">4</div>
-    <div class="passo-txt">Clique em <strong>Operações → Liquidar</strong> e confirme a data de liquidação</div>
+    <div class="passo-txt">Clique em <strong>Operações → Validar</strong> para verificar inconsistências, em seguida <strong>Operações → Liquidar</strong> e confirme a data</div>
   </div>
   <div class="passo">
     <div class="passo-num">5</div>
-    <div class="passo-txt">Clique em <strong>Operações → Exportar</strong> e salve o arquivo <strong>.pjc</strong> para juntar nos autos do PJE</div>
+    <div class="passo-txt">Clique em <strong>Operações → Exportar</strong> e salve o arquivo <strong>.pjc</strong> final para juntar nos autos do PJE</div>
   </div>
 </div>
 

@@ -662,13 +662,16 @@
     </div>
     {% endif %}
 
-    {% if status == 'confirmado' %}
+    {% if status in ('confirmado', 'pjc_exportado') %}
     <div class="card" style="border: 2px solid #28a745;">
       <h3 style="color:#155724; font-size:1rem; margin-bottom:10px;">Parâmetros Confirmados</h3>
-      <a href="/instrucoes/{{ sessao_id }}" class="btn btn-success" style="width:100%; padding:10px; text-align:center; display:block; margin-bottom:8px;">
+      <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success" style="width:100%; padding:10px; text-align:center; display:block; margin-bottom:8px; font-weight:600;">
+        ⬇ Baixar Arquivo .pjc
+      </a>
+      <a href="/instrucoes/{{ sessao_id }}" class="btn btn-primary" style="width:100%; padding:10px; text-align:center; display:block; margin-bottom:8px;">
         Ver Guia de Preenchimento
       </a>
-      <a href="/download/{{ sessao_id }}/parametros" class="btn btn-primary" style="width:100%; padding:10px; text-align:center; display:block;">
+      <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-secondary" style="width:100%; padding:8px; text-align:center; display:block; font-size:0.85rem;">
         Baixar Parâmetros JSON
       </a>
     </div>
