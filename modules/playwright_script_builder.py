@@ -734,57 +734,86 @@ if __name__ == "__main__":
 
 _TEMPLATE_BAT = """\
 @echo off
-title Agente PJE-Calc — $$$NUMERO$$$
+title Agente PJE-Calc
 chcp 65001 > nul
 cls
 
 echo.
 echo  ============================================================
-echo    AGENTE PJE-CALC — Automacao de Preenchimento
+echo    AGENTE PJE-CALC - Automacao de Preenchimento
 echo    Processo: $$$NUMERO$$$
 echo  ============================================================
 echo.
 
-:: Verificar Python
+:: ── 1. Verificar Python ──────────────────────────────────────────────────────
 python --version > nul 2>&1
 if %errorlevel% neq 0 (
-    echo  [ERRO] Python nao encontrado.
+    echo  [ERRO] Python nao encontrado no PATH.
     echo  Instale em: https://python.org/downloads
     echo  Marque "Add Python to PATH" durante a instalacao.
+    echo.
     pause
     exit /b 1
 )
+echo  Python: OK
+echo.
 
-:: Verificar/instalar Playwright
+:: ── 2. Verificar/instalar Playwright ─────────────────────────────────────────
 python -c "from playwright.sync_api import sync_playwright" > nul 2>&1
 if %errorlevel% neq 0 (
-    echo  Instalando Playwright (aguarde ~1 minuto)...
-    pip install playwright > nul 2>&1
-    playwright install chromium > nul 2>&1
+    echo  Instalando Playwright - aguarde, pode demorar 1-2 minutos...
+    pip install playwright
+    if %errorlevel% neq 0 (
+        echo  [ERRO] Falha ao instalar playwright via pip.
+        echo  Tente manualmente: pip install playwright
+        pause
+        exit /b 1
+    )
+    python -m playwright install chromium
+    if %errorlevel% neq 0 (
+        echo  [ERRO] Falha ao instalar o browser Chromium.
+        echo  Tente manualmente: python -m playwright install chromium
+        pause
+        exit /b 1
+    )
     echo  Playwright instalado com sucesso.
+    echo.
+) else (
+    echo  Playwright: OK
+    echo.
 )
 
+:: ── 3. Baixar script de automacao ────────────────────────────────────────────
+set SCRIPT_TEMP=%TEMP%\\pjecalc_auto_$$$SESSAO_CURTO$$$.py
 echo  Baixando script de automacao...
-python -c "import urllib.request; urllib.request.urlretrieve('$$$SCRIPT_URL$$$', '%TEMP%\\\\pjecalc_auto_$$$SESSAO_CURTO$$$.py')" > nul 2>&1
+python -c "import urllib.request, sys; urllib.request.urlretrieve('$$$SCRIPT_URL$$$', r'%SCRIPT_TEMP%')" 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo  [ERRO] Nao foi possivel baixar o script.
-    echo  Verifique se voce tem acesso a internet e tente novamente.
+    echo  URL: $$$SCRIPT_URL$$$
+    echo  Verifique a conexao com a internet e tente novamente.
+    echo.
     pause
     exit /b 1
 )
-
-echo  Iniciando automacao...
+echo  Script baixado. Iniciando automacao...
 echo.
-python "%TEMP%\\pjecalc_auto_$$$SESSAO_CURTO$$$.py"
 
-del "%TEMP%\\pjecalc_auto_$$$SESSAO_CURTO$$$.py" > nul 2>&1
+:: ── 4. Executar automacao ────────────────────────────────────────────────────
+python "%SCRIPT_TEMP%"
+set SAIDA=%errorlevel%
 
-if %errorlevel% neq 0 (
-    echo.
-    echo  Automacao encerrada com erro. Verifique o PJE-Calc manualmente.
-    pause
+del "%SCRIPT_TEMP%" > nul 2>&1
+
+echo.
+if %SAIDA% neq 0 (
+    echo  [AVISO] O script encerrou com codigo de erro %SAIDA%.
+    echo  Verifique o PJE-Calc e complete manualmente se necessario.
+) else (
+    echo  Automacao concluida com sucesso!
 )
+echo.
+pause
 """
 
 
