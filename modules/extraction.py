@@ -504,17 +504,18 @@ def _extrair_de_relatorio_estruturado(
     if not ANTHROPIC_API_KEY:
         return _estrutura_vazia_com_regex({})
 
-    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    # Timeout explícito: 120s evita travar indefinidamente no Railway
+    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
 
     try:
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=8192,  # relatórios complexos com muitas verbas precisam de mais tokens
+            max_tokens=4096,  # 4096 suficiente para JSON do schema; 8192 causava timeout
             temperature=0.0,  # mapeamento determinístico
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{
                 "role": "user",
-                "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:30000]),
+                "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:18000]),
             }],
         )
         conteudo = resposta.content[0].text.strip()
@@ -528,7 +529,8 @@ def _extrair_de_relatorio_estruturado(
     except json.JSONDecodeError as e:
         logger.warning(f"JSON inválido no relatório estruturado: {e} — fazendo fallback para extração direta")
         return {"_erro_llm": str(e), "alertas": [f"Relatório com JSON inválido; usando extração direta: {e}"]}
-    except anthropic.APIError as e:
+    except Exception as e:
+        logger.warning(f"Falha ao mapear relatório: {e}")
         return {"_erro_llm": str(e), "alertas": [f"Falha ao mapear relatório: {e}"]}
 
 
@@ -619,7 +621,7 @@ def _extrair_via_llm(
     if not ANTHROPIC_API_KEY:
         return {}
 
-    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=90.0)
 
     try:
         # Montar blocos de conteúdo da mensagem
@@ -672,7 +674,8 @@ def _extrair_via_llm(
         conteudo = resposta.content[0].text.strip()
         return _limpar_e_parsear_json(conteudo)
 
-    except (json.JSONDecodeError, anthropic.APIError) as e:
+    except Exception as e:
+        logger.warning(f"Falha na extração via IA: {e}")
         return {"_erro_llm": str(e), "alertas": [f"Falha na extração via IA: {e}"]}
 
 
