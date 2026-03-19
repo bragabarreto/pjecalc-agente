@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import uuid
 from datetime import datetime
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 import anthropic
 
@@ -19,6 +22,45 @@ from config import (
     CONFIDENCE_THRESHOLD_AUTO,
 )
 from modules.ingestion import normalizar_valor, normalizar_data, segmentar_sentenca
+
+
+# ── Limpeza de JSON retornado pelo LLM ───────────────────────────────────────
+
+def _limpar_e_parsear_json(texto: str) -> dict:
+    """
+    Tenta parsear JSON retornado pelo LLM com tolerância a erros comuns:
+    - Remove blocos markdown ```json ... ```
+    - Remove vírgulas antes de } ou ]  (trailing commas)
+    - Extrai primeiro bloco { ... } caso haja texto em volta
+    """
+    # 1. Remover blocos markdown
+    texto = re.sub(r"^```(?:json)?\s*", "", texto.strip(), flags=re.MULTILINE)
+    texto = re.sub(r"\s*```\s*$", "", texto, flags=re.MULTILINE)
+    texto = texto.strip()
+
+    # 2. Tentar parse direto
+    try:
+        return json.loads(texto)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Remover trailing commas  (,  seguida de espaços/newlines e } ou ])
+    limpo = re.sub(r",\s*([}\]])", r"\1", texto)
+    try:
+        return json.loads(limpo)
+    except json.JSONDecodeError:
+        pass
+
+    # 4. Extrair o maior bloco JSON da resposta
+    match = re.search(r"\{.*\}", limpo, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # 5. Sem recuperação possível — relançar com o texto limpo para logging
+    return json.loads(limpo)  # levanta JSONDecodeError com contexto útil
 
 
 # ── Prompt principal para o Claude ───────────────────────────────────────────
@@ -279,7 +321,12 @@ def extrair_dados_sentenca(
     sessao_id = sessao_id or str(uuid.uuid4())
 
     if is_relatorio:
-        return _extrair_de_relatorio_estruturado(texto, sessao_id)
+        resultado = _extrair_de_relatorio_estruturado(texto, sessao_id)
+        # Se o mapeamento do relatório falhou, fazer fallback para extração normal
+        if "_erro_llm" in resultado:
+            logger.warning("Falha no relatório estruturado — iniciando extração direta como fallback")
+        else:
+            return resultado
 
     # Segmentar sentença para focar no dispositivo
     blocos = segmentar_sentenca(texto)
@@ -329,16 +376,17 @@ def _extrair_de_relatorio_estruturado(
             }],
         )
         conteudo = resposta.content[0].text.strip()
-        conteudo = re.sub(r"^```(?:json)?\s*", "", conteudo)
-        conteudo = re.sub(r"\s*```$", "", conteudo)
-        dados = json.loads(conteudo)
+        dados = _limpar_e_parsear_json(conteudo)
         dados = _validar_e_completar(dados)
         if "alertas" not in dados:
             dados["alertas"] = []
         dados["alertas"].insert(0, "Dados extraídos de relatório estruturado (alta confiança).")
         return dados
 
-    except (json.JSONDecodeError, anthropic.APIError) as e:
+    except json.JSONDecodeError as e:
+        logger.warning(f"JSON inválido no relatório estruturado: {e} — fazendo fallback para extração direta")
+        return {"_erro_llm": str(e), "alertas": [f"Relatório com JSON inválido; usando extração direta: {e}"]}
+    except anthropic.APIError as e:
         return {"_erro_llm": str(e), "alertas": [f"Falha ao mapear relatório: {e}"]}
 
 
@@ -480,12 +528,7 @@ def _extrair_via_llm(
             messages=[{"role": "user", "content": content_blocks}],
         )
         conteudo = resposta.content[0].text.strip()
-
-        # Remover eventuais blocos markdown
-        conteudo = re.sub(r"^```(?:json)?\s*", "", conteudo)
-        conteudo = re.sub(r"\s*```$", "", conteudo)
-
-        return json.loads(conteudo)
+        return _limpar_e_parsear_json(conteudo)
 
     except (json.JSONDecodeError, anthropic.APIError) as e:
         return {"_erro_llm": str(e), "alertas": [f"Falha na extração via IA: {e}"]}
