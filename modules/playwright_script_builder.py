@@ -40,13 +40,14 @@ USO:
 """
 
 import json
+import re
 import sys
 import time
 
 # ── DADOS DO CÁLCULO (gerados pelo Agente PJE-Calc) ──────────────────────────
 
-DADOS = json.loads('''$$$DADOS_JSON$$$''')
-VERBAS_MAPEADAS = json.loads('''$$$VERBAS_JSON$$$''')
+DADOS = json.loads("""$$$DADOS_JSON$$$""")
+VERBAS_MAPEADAS = json.loads("""$$$VERBAS_JSON$$$""")
 
 # ── CONFIGURAÇÃO ──────────────────────────────────────────────────────────────
 

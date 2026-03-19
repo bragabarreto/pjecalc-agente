@@ -450,12 +450,15 @@ async def download_script(sessao_id: str, db: Session = Depends(get_db)):
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    from modules.playwright_script_builder import gerar_script
-    dados = calculo.dados()
-    verbas_mapeadas = calculo.verbas_mapeadas()
     try:
+        from modules.playwright_script_builder import gerar_script
+        dados = calculo.dados()
+        verbas_mapeadas = calculo.verbas_mapeadas()
         caminho = gerar_script(dados, verbas_mapeadas, sessao_id)
+    except HTTPException:
+        raise
     except Exception as exc:
+        logger.exception(f"Erro ao gerar script [{sessao_id}]: {exc}")
         raise HTTPException(status_code=500, detail=f"Erro ao gerar script: {exc}")
 
     return FileResponse(
