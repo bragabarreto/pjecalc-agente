@@ -635,17 +635,6 @@
                 <label for="v{{ loop.index0 }}-ir">Incide IR</label>
               </div>
             </div>
-            {% if verba.texto_original %}
-            <details style="margin-top:10px;">
-              <summary style="cursor:pointer; font-size:0.82rem; color:#6c757d;">
-                Trecho da sentença que originou esta verba
-              </summary>
-              <blockquote style="margin:6px 0 0; padding:8px 12px; border-left:3px solid #dee2e6;
-                                 font-size:0.82rem; color:#555; background:#fafafa; border-radius:0 4px 4px 0;">
-                {{ verba.texto_original }}
-              </blockquote>
-            </details>
-            {% endif %}
           </div>
         </div>
         {% endfor %}

@@ -60,6 +60,10 @@
                 onclick="setarAbaSentenca('arquivo')">📄 Arquivo (PDF/DOCX/TXT)</button>
         <button type="button" class="tab-btn" id="tab-sent-texto"
                 onclick="setarAbaSentenca('texto')">📋 Texto colado (Ctrl+V)</button>
+        <button type="button" class="tab-btn" id="tab-sent-relatorio"
+                onclick="setarAbaSentenca('relatorio')" style="border-color:#6f42c1;">
+          🤖 Relatório Estruturado
+        </button>
       </div>
 
       <div id="aba-sent-arquivo" class="aba-conteudo ativa">
@@ -74,12 +78,34 @@
       </div>
 
       <div id="aba-sent-texto" class="aba-conteudo">
-        <textarea id="sentenca-texto" name="sentenca_texto"
+        <textarea id="sentenca-texto"
                   placeholder="Cole aqui o texto da sentença (Ctrl+V)..."
                   rows="14"
                   style="width:100%; padding:12px; border:1px solid #ced4da; border-radius:8px;
                          font-size:0.9rem; font-family:inherit; resize:vertical; line-height:1.5;"></textarea>
         <div id="contador-sentenca" style="text-align:right; font-size:0.8rem; color:#6c757d; margin-top:4px;">
+          0 caracteres
+        </div>
+      </div>
+
+      <div id="aba-sent-relatorio" class="aba-conteudo">
+        <div style="background:#f3f0ff; border:1px solid #d0bfff; border-radius:8px;
+                    padding:12px 16px; margin-bottom:10px; font-size:0.88rem; color:#5a3e99;">
+          <strong>Relatório Estruturado do Projeto Claude</strong> — Cole aqui a saída gerada pelo
+          seu Projeto Claude de análise de sentença. O agente fará o mapeamento direto ao PJE-Calc
+          com alta confiança, sem reprocessar a sentença do zero.
+        </div>
+        <textarea id="sentenca-relatorio"
+                  placeholder="Cole aqui o relatório gerado pelo Projeto Claude (Ctrl+V)...
+
+Exemplo de início esperado:
+✅ DADOS EXTRAÍDOS E ESTRUTURADOS PARA CALC-MACHINE
+1. INFORMAÇÕES PROCESSUAIS
+..."
+                  rows="18"
+                  style="width:100%; padding:12px; border:1px solid #d0bfff; border-radius:8px;
+                         font-size:0.88rem; font-family:inherit; resize:vertical; line-height:1.5;"></textarea>
+        <div id="contador-relatorio" style="text-align:right; font-size:0.8rem; color:#6c757d; margin-top:4px;">
           0 caracteres
         </div>
       </div>
@@ -136,10 +162,20 @@ let docsAtivos = 0;
 
 // Sentença principal — alternar abas
 function setarAbaSentenca(aba) {
-  document.getElementById('aba-sent-arquivo').classList.toggle('ativa', aba === 'arquivo');
-  document.getElementById('aba-sent-texto').classList.toggle('ativa', aba === 'texto');
-  document.getElementById('tab-sent-arquivo').classList.toggle('ativa', aba === 'arquivo');
-  document.getElementById('tab-sent-texto').classList.toggle('ativa', aba === 'texto');
+  ['arquivo', 'texto', 'relatorio'].forEach(a => {
+    document.getElementById('aba-sent-' + a).classList.toggle('ativa', a === aba);
+    document.getElementById('tab-sent-' + a).classList.toggle('ativa', a === aba);
+  });
+  // Destacar aba relatório com cor roxa quando ativa
+  const tabRel = document.getElementById('tab-sent-relatorio');
+  if (aba === 'relatorio') {
+    tabRel.style.background = '#6f42c1';
+    tabRel.style.color = '#fff';
+    tabRel.style.borderColor = '#6f42c1';
+  } else {
+    tabRel.style.background = '';
+    tabRel.style.color = '';
+  }
 }
 
 // Sentença — atualizar nome ao selecionar arquivo
@@ -150,9 +186,13 @@ document.getElementById('arquivo-sentenca').addEventListener('change', function(
   }
 });
 
-// Contador de caracteres no texto colado
+// Contadores de caracteres
 document.getElementById('sentenca-texto').addEventListener('input', function() {
   document.getElementById('contador-sentenca').textContent =
+    this.value.length.toLocaleString('pt-BR') + ' caracteres';
+});
+document.getElementById('sentenca-relatorio').addEventListener('input', function() {
+  document.getElementById('contador-relatorio').textContent =
     this.value.length.toLocaleString('pt-BR') + ' caracteres';
 });
 
@@ -265,18 +305,29 @@ document.getElementById('form-upload').addEventListener('submit', async function
   e.preventDefault();
   const formData = new FormData();
 
-  const abaArquivoAtiva = document.getElementById('aba-sent-arquivo').classList.contains('ativa');
+  const abaArquivoAtiva   = document.getElementById('aba-sent-arquivo').classList.contains('ativa');
+  const abaTextoAtiva     = document.getElementById('aba-sent-texto').classList.contains('ativa');
+  const abaRelatorioAtiva = document.getElementById('aba-sent-relatorio').classList.contains('ativa');
+
   if (abaArquivoAtiva) {
     const arquivo = document.getElementById('arquivo-sentenca').files[0];
-    if (!arquivo) { alert('Selecione o arquivo da sentença ou use a aba "Texto colado".'); return; }
+    if (!arquivo) { alert('Selecione o arquivo da sentença ou use outra aba.'); return; }
     formData.append('sentenca', arquivo);
-  } else {
+    formData.append('input_type', 'arquivo');
+
+  } else if (abaTextoAtiva) {
     const texto = document.getElementById('sentenca-texto').value.trim();
     if (!texto) { alert('Cole o texto da sentença antes de processar.'); return; }
     if (texto.length < 100) { alert('O texto parece muito curto. Verifique se foi colado corretamente.'); return; }
-    // Enviar como arquivo .txt
-    const blob = new Blob([texto], { type: 'text/plain' });
-    formData.append('sentenca', blob, 'sentenca_colada.txt');
+    formData.append('sentenca', new Blob([texto], { type: 'text/plain' }), 'sentenca_colada.txt');
+    formData.append('input_type', 'texto');
+
+  } else if (abaRelatorioAtiva) {
+    const rel = document.getElementById('sentenca-relatorio').value.trim();
+    if (!rel) { alert('Cole o relatório estruturado antes de processar.'); return; }
+    if (rel.length < 200) { alert('O relatório parece incompleto. Verifique se foi colado corretamente.'); return; }
+    formData.append('sentenca', new Blob([rel], { type: 'text/plain' }), 'relatorio_estruturado.txt');
+    formData.append('input_type', 'relatorio');
   }
 
   // Coletar docs extras na ordem visual

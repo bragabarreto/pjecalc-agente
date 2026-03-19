@@ -31,6 +31,118 @@ Para datas, use o formato DD/MM/AAAA. Para valores monetários, use float sem s�
 Para percentuais, use float (ex: 50% = 0.5). Inclua sempre um score de confiança
 entre 0.0 e 1.0 para cada campo extraído."""
 
+_SYSTEM_PROMPT_RELATORIO = """Você é um assistente especializado em Direito do Trabalho brasileiro.
+Você receberá um relatório já estruturado e analisado de uma sentença trabalhista,
+produzido por um sistema especializado de pré-processamento.
+Sua tarefa é converter esse relatório diretamente para o schema JSON do PJE-Calc.
+O relatório já identificou e classificou todas as verbas, parâmetros e reflexos —
+preserve essa classificação sem alterações. Responda SOMENTE com JSON válido, sem texto adicional.
+Use null para campos não encontrados no relatório.
+Para datas, use DD/MM/AAAA. Para valores monetários, use float sem símbolo.
+Para percentuais, use float (ex: 50% = 0.5, 10% = 0.1, 8% = 0.08).
+Use confianca=0.95 para campos explicitamente presentes no relatório."""
+
+_RELATORIO_PROMPT = """Converta o relatório estruturado abaixo diretamente para o schema JSON do PJE-Calc.
+
+=== RELATÓRIO ESTRUTURADO DA SENTENÇA ===
+{texto}
+
+=== SCHEMA JSON ESPERADO ===
+{{
+  "processo": {{
+    "numero": "string | null",
+    "reclamante": "string | null",
+    "reclamado": "string | null",
+    "estado": "UF 2 letras | null",
+    "municipio": "string | null",
+    "vara": "string | null",
+    "confianca": 0.0-1.0
+  }},
+  "contrato": {{
+    "admissao": "DD/MM/AAAA | null",
+    "demissao": "DD/MM/AAAA | null",
+    "tipo_rescisao": "sem_justa_causa | justa_causa | pedido_demissao | distrato | morte | null",
+    "regime": "Tempo Integral | Tempo Parcial | Trabalho Intermitente | null",
+    "carga_horaria": "número inteiro (horas/mês) | null",
+    "maior_remuneracao": "float | null",
+    "ultima_remuneracao": "float | null",
+    "ajuizamento": "DD/MM/AAAA | null",
+    "confianca": 0.0-1.0
+  }},
+  "prescricao": {{
+    "quinquenal": "true | false | null",
+    "fgts": "true | false | null",
+    "confianca": 0.0-1.0
+  }},
+  "aviso_previo": {{
+    "tipo": "Calculado | Informado | Nao Apurar | null",
+    "prazo_dias": "número inteiro | null",
+    "projetar": "true | false | null",
+    "confianca": 0.0-1.0
+  }},
+  "verbas_deferidas": [
+    {{
+      "nome_sentenca": "string — nome exato como aparece no relatório",
+      "texto_original": "trecho do relatório que descreve esta verba",
+      "tipo": "Principal | Reflexa | null",
+      "caracteristica": "Comum | 13o Salario | Aviso Previo | Ferias | null",
+      "ocorrencia": "Mensal | Dezembro | Periodo Aquisitivo | Desligamento | null",
+      "periodo_inicio": "DD/MM/AAAA | null",
+      "periodo_fim": "DD/MM/AAAA | null",
+      "percentual": "float | null",
+      "base_calculo": "Maior Remuneracao | Historico Salarial | Salario Minimo | Piso Salarial | Verbas | null",
+      "valor_informado": "float | null",
+      "incidencia_fgts": "true | false | null",
+      "incidencia_inss": "true | false | null",
+      "incidencia_ir": "true | false | null",
+      "verba_principal_ref": "nome da verba principal se reflexa | null",
+      "confianca": 0.0-1.0
+    }}
+  ],
+  "fgts": {{
+    "aliquota": "float (ex: 0.08) | null",
+    "multa_40": "true | false | null",
+    "multa_467": "true | false | null",
+    "confianca": 0.0-1.0
+  }},
+  "honorarios": {{
+    "percentual": "float | null",
+    "valor_fixo": "float | null",
+    "parte_devedora": "Reclamado | Reclamante | Ambos | null",
+    "periciais": "float | null",
+    "confianca": 0.0-1.0
+  }},
+  "correcao_juros": {{
+    "indice_correcao": "string | null",
+    "base_juros": "Verbas | Credito Total | null",
+    "taxa_juros": "Juros Padrao | Selic | null",
+    "jam_fgts": "true | false | null",
+    "confianca": 0.0-1.0
+  }},
+  "contribuicao_social": {{
+    "responsabilidade": "Empregador | Empregado | Ambos | null",
+    "lei_11941": "true | false | null",
+    "confianca": 0.0-1.0
+  }},
+  "imposto_renda": {{
+    "apurar": "true | false",
+    "meses_tributaveis": "número inteiro | null",
+    "dependentes": "número inteiro | null",
+    "confianca": 0.0-1.0
+  }},
+  "campos_ausentes": ["lista de campos obrigatórios não encontrados no relatório"],
+  "alertas": ["lista de avisos relevantes extraídos do relatório"]
+}}
+
+IMPORTANTE:
+- Verbas marcadas como 🔵 no relatório são CONDENAÇÕES PRINCIPAIS (tipo: "Principal")
+- Verbas marcadas como 🔸 são REFLEXOS (tipo: "Reflexa")
+- Preservar exatamente a classificação de principal/reflexo do relatório
+- Para verbas reflexas, preencher "verba_principal_ref" com o nome da verba principal correspondente
+- Usar confianca=0.95 para todos os campos presentes no relatório
+
+Retorne APENAS o JSON, sem markdown, sem explicações."""
+
 _EXTRACTION_PROMPT = """Analise a sentença trabalhista abaixo e extraia as informações
 no formato JSON especificado.
 
@@ -133,28 +245,30 @@ def extrair_dados_sentenca(
     texto: str,
     sessao_id: str | None = None,
     extras: list[dict] | None = None,
+    is_relatorio: bool = False,
 ) -> dict[str, Any]:
     """
-    Extrai todos os dados necessários para preenchimento do PJE-Calc
-    a partir do texto normalizado da sentença.
+    Extrai todos os dados necessários para preenchimento do PJE-Calc.
 
-    Fase 1: extração via regex (rápida, sem custo de API)
-    Fase 2: extração via Claude API (NLP jurídico profundo)
-              — inclui documentos extras (textos e imagens) no contexto do LLM
-    Fase 3: merge e validação dos resultados
+    Dois modos:
+    - is_relatorio=False (padrão): extração a partir de sentença bruta
+        Fase 1: regex → Fase 2: LLM → Fase 3: merge → Fase 4: validação
+    - is_relatorio=True: o texto já é um relatório estruturado (ex: saída do Projeto Claude)
+        Pula regex; usa prompt especializado de mapeamento direto ao schema
 
     Parâmetros:
-        extras: lista de documentos complementares, cada um com:
-            {"tipo": "texto"|"imagem", "conteudo": str|base64, "contexto": str, "mime_type": str}
-
-    Retorna o JSON estruturado conforme schema do Manual, Seção 2.5.
+        extras: documentos complementares {"tipo", "conteudo", "contexto", "mime_type"}
+        is_relatorio: True se o texto for um relatório pré-estruturado
     """
     sessao_id = sessao_id or str(uuid.uuid4())
+
+    if is_relatorio:
+        return _extrair_de_relatorio_estruturado(texto, sessao_id)
 
     # Segmentar sentença para focar no dispositivo
     blocos = segmentar_sentenca(texto)
     texto_principal = blocos.get("dispositivo") or texto
-    texto_completo = texto  # usar para dados do processo e contrato
+    texto_completo = texto
 
     # Fase 1: extração regex pré-processada
     dados_regex = _extrair_via_regex(texto_completo)
@@ -169,6 +283,47 @@ def extrair_dados_sentenca(
     dados = _validar_e_completar(dados)
 
     return dados
+
+
+def _extrair_de_relatorio_estruturado(
+    texto_relatorio: str,
+    sessao_id: str,
+) -> dict[str, Any]:
+    """
+    Converte um relatório já estruturado (ex: saída do Projeto Claude) diretamente
+    ao schema JSON do PJE-Calc, sem reprocessar a sentença bruta.
+
+    O relatório já identificou verbas, parâmetros e reflexos — o LLM apenas mapeia
+    ao schema, preservando a classificação original.
+    """
+    if not ANTHROPIC_API_KEY:
+        return _estrutura_vazia_com_regex({})
+
+    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+
+    try:
+        resposta = cliente.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=CLAUDE_MAX_TOKENS,
+            temperature=0.0,  # mapeamento determinístico
+            system=_SYSTEM_PROMPT_RELATORIO,
+            messages=[{
+                "role": "user",
+                "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:20000]),
+            }],
+        )
+        conteudo = resposta.content[0].text.strip()
+        conteudo = re.sub(r"^```(?:json)?\s*", "", conteudo)
+        conteudo = re.sub(r"\s*```$", "", conteudo)
+        dados = json.loads(conteudo)
+        dados = _validar_e_completar(dados)
+        if "alertas" not in dados:
+            dados["alertas"] = []
+        dados["alertas"].insert(0, "Dados extraídos de relatório estruturado (alta confiança).")
+        return dados
+
+    except (json.JSONDecodeError, anthropic.APIError) as e:
+        return {"_erro_llm": str(e), "alertas": [f"Falha ao mapear relatório: {e}"]}
 
 
 # ── Extração via Regex ────────────────────────────────────────────────────────

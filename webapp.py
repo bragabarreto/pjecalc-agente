@@ -151,6 +151,9 @@ async def processar_sentenca(
         elif txt and str(txt).strip():
             extras.append({"tipo": "texto", "conteudo": str(txt).strip()[:8000], "contexto": contexto})
 
+    # Detectar se é relatório estruturado (ex: saída do Projeto Claude)
+    is_relatorio = str(form.get("input_type", "")).strip() == "relatorio"
+
     # Processar em background
     background_tasks.add_task(
         _tarefa_processar_sentenca,
@@ -158,6 +161,7 @@ async def processar_sentenca(
         caminho=tmp_path,
         formato=sufixo,
         extras=extras,
+        is_relatorio=is_relatorio,
     )
 
     n_extras = len(extras)
@@ -451,6 +455,7 @@ def _tarefa_processar_sentenca(
     caminho: Path,
     formato: str,
     extras: list[dict] | None = None,
+    is_relatorio: bool = False,
 ) -> None:
     """
     Tarefa de background: lê, extrai e classifica dados da sentença.
@@ -498,7 +503,12 @@ def _tarefa_processar_sentenca(
                 )
 
         # Fase 2: Extração
-        dados = extrair_dados_sentenca(texto, sessao_id=sessao_id, extras=extras_processados)
+        dados = extrair_dados_sentenca(
+            texto,
+            sessao_id=sessao_id,
+            extras=extras_processados,
+            is_relatorio=is_relatorio,
+        )
 
         # Fase 3: Classificação
         verbas_mapeadas = mapear_para_pjecalc(dados.get("verbas_deferidas", []))
