@@ -45,7 +45,9 @@
     </p>
   </div>
   <div class="no-print">
-    <a href="/download/{{ sessao_id }}/script" class="btn btn-primary btn-download" style="margin-right:8px;">⬇ Baixar Script de Automação (.py)</a>
+    <a href="/download/{{ sessao_id }}/launcher" class="btn btn-success btn-download btn-lg" style="margin-right:8px;">
+      ⬇ Baixar Automação <small style="display:block; font-size:0.72rem; opacity:0.85;">(duplo-clique para executar)</small>
+    </a>
     <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary btn-download" style="margin-right:8px;">⬇ Baixar .pjc</a>
     <button onclick="window.print()" class="btn btn-secondary" style="margin-right:8px;">Imprimir</button>
     <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-primary btn-download">Baixar JSON</a>
@@ -54,51 +56,53 @@
 
 <!-- Aviso -->
 <div class="aviso-box no-print">
-  <h4>Como usar o Script de Automação</h4>
-  <p style="font-size:0.9rem; color:#856404;">
-    O <strong>Script de Automação</strong> (.py) preenche o PJE-Calc automaticamente na sua máquina.
-    Baixe-o, instale as dependências uma vez e execute — o script abre o browser, você faz login,
-    e ele preenche todos os campos automaticamente. Em caso de campo não encontrado, o script pausa
-    para você completar manualmente.
+  <h4>Como preencher o PJE-Calc automaticamente — <em>sem usar o terminal</em></h4>
+  <ol style="font-size:0.9rem; color:#856404; margin:0; padding-left:18px; line-height:1.9;">
+    <li>Clique em <strong>⬇ Baixar Automação</strong> acima</li>
+    <li>Abra a pasta <em>Downloads</em> e dê <strong>duplo-clique</strong> no arquivo <code>.bat</code></li>
+    <li>O script instala as dependências automaticamente (na 1ª vez) e abre o <strong>PJE-Calc Cidadão</strong></li>
+    <li>O browser preenche todos os campos — em caso de dificuldade, o sistema pausa e você completa manualmente</li>
+    <li>Revise e clique em <strong>Liquidar</strong> dentro do PJE-Calc</li>
+  </ol>
+  <p style="font-size:0.82rem; color:#888; margin-top:10px; margin-bottom:0;">
+    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado em
+    <code>C:\Program Files\pjecalc-windows64-2.14.0</code>
+    (já detectado no seu computador) · Python 3.x instalado · Acesso à internet no momento do download
   </p>
 </div>
 
-<!-- Passos -->
-<div class="card no-print">
-  <h2>Passos para preencher o PJE-Calc automaticamente</h2>
-  <div class="passo">
-    <div class="passo-num">1</div>
-    <div class="passo-txt">Baixe o <strong>Script de Automação (.py)</strong> usando o botão acima</div>
-  </div>
-  <div class="passo">
-    <div class="passo-num">2</div>
-    <div class="passo-txt">No terminal (cmd ou PowerShell), instale as dependências <em>(apenas uma vez)</em>:<br>
-      <code style="background:#f4f4f4; padding:2px 6px; border-radius:3px;">pip install playwright &amp;&amp; playwright install chromium</code>
+<!-- Passos detalhados (colapsáveis) -->
+<details class="no-print" style="margin-bottom:20px;">
+  <summary style="cursor:pointer; color:#1a3a6b; font-weight:600; padding:8px 0;">
+    Detalhes técnicos / modo manual (expandir)
+  </summary>
+  <div class="card" style="margin-top:10px;">
+    <div class="passo">
+      <div class="passo-num">1</div>
+      <div class="passo-txt">Baixe o <strong>arquivo .bat</strong> (botão verde acima) para a pasta Downloads</div>
     </div>
-  </div>
-  <div class="passo">
-    <div class="passo-num">3</div>
-    <div class="passo-txt">Execute o script:<br>
-      <code style="background:#f4f4f4; padding:2px 6px; border-radius:3px;">python auto_pjecalc_PROCESSO_XXXXX.py</code>
+    <div class="passo">
+      <div class="passo-num">2</div>
+      <div class="passo-txt"><strong>Duplo-clique</strong> no arquivo .bat — uma janela de terminal se abre brevemente e instala as dependências na primeira vez</div>
     </div>
+    <div class="passo">
+      <div class="passo-num">3</div>
+      <div class="passo-txt">O script verifica se o <strong>PJE-Calc Cidadão</strong> está rodando; se não estiver, inicia-o automaticamente</div>
+    </div>
+    <div class="passo">
+      <div class="passo-num">4</div>
+      <div class="passo-txt">O browser Chromium abre no PJE-Calc local (<code>localhost:9257</code>) e preenche todos os campos</div>
+    </div>
+    <div class="passo">
+      <div class="passo-num">5</div>
+      <div class="passo-txt">Revise os dados e clique em <strong>Liquidar</strong> · Exporte o <strong>.pjc</strong> para juntar nos autos</div>
+    </div>
+    <p style="font-size:0.82rem; color:#888; margin-top:8px;">
+      Alternativa avançada: baixe o script <code>.py</code> e execute via
+      <code>python auto_pjecalc_XXX.py</code> diretamente no terminal.
+    </p>
   </div>
-  <div class="passo">
-    <div class="passo-num">4</div>
-    <div class="passo-txt">O browser abre no <strong>PJE-Calc</strong> — faça login normalmente e pressione Enter no terminal quando concluído</div>
-  </div>
-  <div class="passo">
-    <div class="passo-num">5</div>
-    <div class="passo-txt">O script preenche todos os campos automaticamente. Revise os dados e clique em <strong>Operações → Liquidar</strong></div>
-  </div>
-  <div class="passo">
-    <div class="passo-num">6</div>
-    <div class="passo-txt">Clique em <strong>Operações → Exportar</strong> e salve o arquivo <strong>.pjc</strong> final para juntar nos autos do PJE</div>
-  </div>
-  <p style="font-size:0.82rem; color:#888; margin-top:8px;">
-    Alternativa manual: se preferir, use o arquivo <strong>.pjc</strong> e importe via
-    <strong>Cálculo → Novo Cálculo Externo</strong> no PJE-Calc.
-  </p>
-</div>
+</details>
 
 {% set proc = dados.get('processo', {}) %}
 {% set cont = dados.get('contrato', {}) %}

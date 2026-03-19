@@ -665,11 +665,14 @@
     {% if status in ('confirmado', 'pjc_exportado') %}
     <div class="card" style="border: 2px solid #28a745;">
       <h3 style="color:#155724; font-size:1rem; margin-bottom:10px;">Parâmetros Confirmados</h3>
-      <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success" style="width:100%; padding:10px; text-align:center; display:block; margin-bottom:8px; font-weight:600;">
-        ⬇ Baixar Arquivo .pjc
+      <a href="/download/{{ sessao_id }}/launcher" class="btn btn-success" style="width:100%; padding:12px; text-align:center; display:block; margin-bottom:8px; font-weight:700; font-size:1rem;">
+        ⬇ Baixar Automação <span style="display:block; font-size:0.72rem; font-weight:400; opacity:0.85;">(duplo-clique para executar)</span>
       </a>
       <a href="/instrucoes/{{ sessao_id }}" class="btn btn-primary" style="width:100%; padding:10px; text-align:center; display:block; margin-bottom:8px;">
         Ver Guia de Preenchimento
+      </a>
+      <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary" style="width:100%; padding:8px; text-align:center; display:block; margin-bottom:6px; font-size:0.85rem;">
+        ⬇ Baixar .pjc (alternativa)
       </a>
       <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-secondary" style="width:100%; padding:8px; text-align:center; display:block; font-size:0.85rem;">
         Baixar Parâmetros JSON
@@ -794,12 +797,11 @@ async function confirmarPrevia() {
     if (dados.sucesso) {
       msg.style.background = '#d4edda';
       msg.style.color = '#155724';
-      msg.textContent = dados.mensagem;
-      if (dados.cloud_mode && dados.url_instrucoes) {
-        // Em modo cloud: redirecionar para o guia de preenchimento
+      msg.textContent = dados.mensagem || 'Confirmado! Redirecionando...';
+      if (dados.url_instrucoes) {
         setTimeout(() => window.location.href = dados.url_instrucoes, 1500);
       } else {
-        setTimeout(() => window.location.reload(), 3000);
+        setTimeout(() => window.location.reload(), 2000);
       }
     }
   } catch(err) {

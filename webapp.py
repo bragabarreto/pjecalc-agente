@@ -312,6 +312,7 @@ async def editar_verba(
 
 @app.post("/previa/{sessao_id}/confirmar")
 async def confirmar_previa(
+    request: Request,
     sessao_id: str,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
@@ -326,7 +327,7 @@ async def confirmar_previa(
 
     repo.confirmar_previa(sessao_id)
 
-    # Gerar .pjc e script de automação
+    # Gerar .pjc (backup)
     dados = calculo.dados()
     verbas_mapeadas = calculo.verbas_mapeadas()
     url_pjc = None
@@ -338,30 +339,35 @@ async def confirmar_previa(
     except Exception as exc:
         logger.warning(f"Não foi possível gerar .pjc: {exc}")
 
+    url_launcher = f"/download/{sessao_id}/launcher"
+    url_script   = f"/download/{sessao_id}/script"
+
     if CLOUD_MODE:
-        mensagem = (
-            "Parâmetros confirmados. Baixe o Script de Automação "
-            "e execute-o na sua máquina para preencher o PJE-Calc automaticamente."
-        )
         return JSONResponse({
             "sucesso": True,
-            "mensagem": mensagem,
+            "mensagem": (
+                "Parâmetros confirmados. Clique em 'Baixar Automação' "
+                "e dê duplo-clique no arquivo .bat para preencher o PJE-Calc automaticamente."
+            ),
             "cloud_mode": True,
-            "url_script": f"/download/{sessao_id}/script",
-            "url_pjc": url_pjc,
+            "url_launcher":   url_launcher,
+            "url_script":     url_script,
+            "url_pjc":        url_pjc,
             "url_parametros": f"/download/{sessao_id}/parametros",
             "url_instrucoes": f"/instrucoes/{sessao_id}",
-            "url_status": f"/status/{sessao_id}",
+            "url_status":     f"/status/{sessao_id}",
         })
     else:
         background_tasks.add_task(_tarefa_automacao_pjecalc, sessao_id=sessao_id)
         return JSONResponse({
             "sucesso": True,
-            "mensagem": "Prévia confirmada. O PJE-Calc será preenchido automaticamente.",
+            "mensagem": "Parâmetros confirmados. Baixe a automação e dê duplo-clique para preencher o PJE-Calc.",
             "cloud_mode": False,
-            "url_script": f"/download/{sessao_id}/script",
-            "url_pjc": url_pjc,
-            "url_status": f"/status/{sessao_id}",
+            "url_launcher":   url_launcher,
+            "url_script":     url_script,
+            "url_pjc":        url_pjc,
+            "url_instrucoes": f"/instrucoes/{sessao_id}",
+            "url_status":     f"/status/{sessao_id}",
         })
 
 
@@ -436,6 +442,42 @@ async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
         path=str(caminho),
         filename=caminho.name,
         media_type="application/zip",
+    )
+
+
+@app.get("/download/{sessao_id}/launcher")
+async def download_launcher(
+    request: Request,
+    sessao_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Download do launcher .bat — duplo-clique para instalar e executar.
+    O .bat baixa automaticamente o script .py do servidor e o executa.
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    try:
+        from modules.playwright_script_builder import gerar_launcher_bat
+        base_url   = str(request.base_url).rstrip("/")
+        script_url = f"{base_url}/download/{sessao_id}/script"
+        dados      = calculo.dados()
+        numero     = dados.get("processo", {}).get("numero", sessao_id[:8])
+        caminho    = gerar_launcher_bat(script_url, sessao_id, numero)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception(f"Erro ao gerar launcher [{sessao_id}]: {exc}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar launcher: {exc}")
+
+    return FileResponse(
+        path=str(caminho),
+        filename=caminho.name,
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{caminho.name}"'},
     )
 
 
