@@ -1,0 +1,347 @@
+{% extends "base.html" %}
+{% block title %}Guia de Preenchimento — {{ processo.numero_processo if processo else sessao_id }}{% endblock %}
+
+{% block extra_style %}
+@media print {
+  .navbar, .btn-download, .no-print { display: none !important; }
+  .container { max-width: 100%; margin: 0; padding: 0 10px; }
+  .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+  body { background: #fff; font-size: 11pt; }
+}
+.secao-pjc { border-left: 4px solid #1a3a6b; margin-bottom: 20px; }
+.secao-pjc h3 { background: #e8edf5; color: #1a3a6b; padding: 8px 14px; font-size: 1rem; margin: 0; }
+.campos-lista { padding: 12px 14px; }
+.campo-linha { display: flex; border-bottom: 1px solid #f0f0f0; padding: 6px 0; font-size: 0.92rem; }
+.campo-linha:last-child { border-bottom: none; }
+.campo-nome { flex: 0 0 220px; color: #666; font-size: 0.85rem; }
+.campo-valor { font-weight: 600; color: #1a1a2e; }
+.campo-valor.ausente { color: #999; font-style: italic; font-weight: 400; }
+.campo-valor.nao-mencionado { color: #bbb; font-style: italic; font-weight: 400; }
+.verba-card { border: 1px solid #dee2e6; border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
+.verba-header { background: #1a3a6b; color: #fff; padding: 6px 12px; font-size: 0.88rem; display: flex; gap: 8px; align-items: center; }
+.verba-body { padding: 8px 12px; font-size: 0.85rem; }
+.verba-body .vl { display: flex; gap: 8px; padding: 3px 0; border-bottom: 1px solid #f5f5f5; }
+.verba-body .vl:last-child { border-bottom: none; }
+.vl-k { flex: 0 0 160px; color: #888; }
+.vl-v { font-weight: 600; }
+.badge-principal { background: #cce5ff; color: #004085; padding: 1px 6px; border-radius: 8px; font-size: 0.75rem; }
+.badge-reflexa { background: #fff3cd; color: #856404; padding: 1px 6px; border-radius: 8px; font-size: 0.75rem; }
+.aviso-box { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 14px; margin-bottom: 20px; }
+.aviso-box h4 { color: #856404; margin-bottom: 8px; }
+.passo { display: flex; gap: 12px; margin-bottom: 12px; align-items: flex-start; }
+.passo-num { flex: 0 0 28px; height: 28px; border-radius: 50%; background: #1a3a6b; color: #fff;
+  display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
+.passo-txt { flex: 1; padding-top: 4px; }
+.acoes-topo { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+  <div>
+    <h2 style="color:#1a3a6b; margin-bottom:4px;">Guia de Preenchimento — PJE-Calc</h2>
+    <p style="color:#666; font-size:0.9rem;">
+      {{ processo.numero_processo if processo else sessao_id }}
+      {% if processo and processo.reclamante %} — {{ processo.reclamante }}{% endif %}
+    </p>
+  </div>
+  <div class="no-print">
+    <button onclick="window.print()" class="btn btn-secondary" style="margin-right:8px;">Imprimir</button>
+    <a href="/download/{{ sessao_id }}/parametros" class="btn btn-primary btn-download">Baixar JSON</a>
+  </div>
+</div>
+
+<!-- Aviso -->
+<div class="aviso-box no-print">
+  <h4>Como usar este guia</h4>
+  <p style="font-size:0.9rem; color:#856404;">
+    Os parâmetros abaixo foram extraídos da sentença pelo agente e confirmados por você.
+    Use-os para preencher o PJE-Calc na sua máquina local, siga os passos abaixo, realize a liquidação e exporte o arquivo <strong>.pjc</strong>.
+  </p>
+</div>
+
+<!-- Passos -->
+<div class="card no-print">
+  <h2>Passos para obter o arquivo .pjc</h2>
+  <div class="passo">
+    <div class="passo-num">1</div>
+    <div class="passo-txt">Abra o <strong>PJE-Calc</strong> na sua máquina e crie um novo cálculo (Arquivo → Novo)</div>
+  </div>
+  <div class="passo">
+    <div class="passo-num">2</div>
+    <div class="passo-txt">Preencha os dados do processo, parâmetros do contrato e verbas conforme os campos listados abaixo (ou imprima esta página para consultar)</div>
+  </div>
+  <div class="passo">
+    <div class="passo-num">3</div>
+    <div class="passo-txt">Clique em <strong>Operações → Validar</strong> para verificar inconsistências</div>
+  </div>
+  <div class="passo">
+    <div class="passo-num">4</div>
+    <div class="passo-txt">Clique em <strong>Operações → Liquidar</strong> e confirme a data de liquidação</div>
+  </div>
+  <div class="passo">
+    <div class="passo-num">5</div>
+    <div class="passo-txt">Clique em <strong>Operações → Exportar</strong> e salve o arquivo <strong>.pjc</strong> para juntar nos autos do PJE</div>
+  </div>
+</div>
+
+{% set proc = dados.get('processo', {}) %}
+{% set cont = dados.get('contrato', {}) %}
+{% set pres = dados.get('prescricao', {}) %}
+{% set avp  = dados.get('aviso_previo', {}) %}
+{% set fgts = dados.get('fgts', {}) %}
+{% set hon  = dados.get('honorarios', {}) %}
+{% set cj   = dados.get('correcao_juros', {}) %}
+{% set cs   = dados.get('contribuicao_social', {}) %}
+{% set ir   = dados.get('imposto_renda', {}) %}
+
+{# Macro para exibir campo #}
+{% macro campo(nome, valor, placeholder='não mencionado') %}
+<div class="campo-linha">
+  <span class="campo-nome">{{ nome }}</span>
+  {% if valor is not none and valor != '' and valor != False %}
+    <span class="campo-valor">{{ valor }}</span>
+  {% elif valor == False %}
+    <span class="campo-valor">Não</span>
+  {% else %}
+    <span class="campo-valor nao-mencionado">{{ placeholder }}</span>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{% macro campo_bool(nome, valor) %}
+<div class="campo-linha">
+  <span class="campo-nome">{{ nome }}</span>
+  {% if valor is not none %}
+    <span class="campo-valor">{{ 'Sim' if valor else 'Não' }}</span>
+  {% else %}
+    <span class="campo-valor nao-mencionado">não mencionado</span>
+  {% endif %}
+</div>
+{% endmacro %}
+
+<!-- 1. Processo -->
+<div class="secao-pjc">
+  <h3>1. Dados do Processo</h3>
+  <div class="campos-lista">
+    {{ campo('Número do Processo', proc.get('numero')) }}
+    {{ campo('Reclamante', proc.get('reclamante')) }}
+    {{ campo('Reclamado', proc.get('reclamado')) }}
+    {{ campo('Estado (UF)', proc.get('estado')) }}
+    {{ campo('Município', proc.get('municipio')) }}
+    {{ campo('Vara', proc.get('vara')) }}
+  </div>
+</div>
+
+<!-- 2. Contrato -->
+<div class="secao-pjc">
+  <h3>2. Parâmetros do Contrato</h3>
+  <div class="campos-lista">
+    {{ campo('Data de Admissão', cont.get('admissao')) }}
+    {{ campo('Data de Demissão', cont.get('demissao')) }}
+    {{ campo('Data de Ajuizamento', cont.get('ajuizamento')) }}
+    {{ campo('Tipo de Rescisão', cont.get('tipo_rescisao')) }}
+    {{ campo('Regime de Trabalho', cont.get('regime')) }}
+    {% if cont.get('carga_horaria') %}
+      {{ campo('Carga Horária (h/mês)', cont.get('carga_horaria')) }}
+    {% endif %}
+    {{ campo('Maior Remuneração (R$)', cont.get('maior_remuneracao') | round(2) if cont.get('maior_remuneracao') else None) }}
+    {{ campo('Última Remuneração (R$)', cont.get('ultima_remuneracao') | round(2) if cont.get('ultima_remuneracao') else None) }}
+  </div>
+</div>
+
+<!-- 3. Prescrição -->
+{% if pres.get('quinquenal') is not none or pres.get('fgts') is not none %}
+<div class="secao-pjc">
+  <h3>3. Prescrição</h3>
+  <div class="campos-lista">
+    {% if pres.get('quinquenal') is not none %}
+      {{ campo_bool('Prescrição Quinquenal', pres.get('quinquenal')) }}
+    {% endif %}
+    {% if pres.get('fgts') is not none %}
+      {{ campo_bool('Prescrição FGTS (30 anos)', pres.get('fgts')) }}
+    {% endif %}
+  </div>
+</div>
+{% endif %}
+
+<!-- 4. Aviso Prévio -->
+<div class="secao-pjc">
+  <h3>4. Aviso Prévio</h3>
+  <div class="campos-lista">
+    {{ campo('Tipo', avp.get('tipo')) }}
+    {% if avp.get('prazo_dias') %}
+      {{ campo('Prazo (dias)', avp.get('prazo_dias')) }}
+    {% endif %}
+    {% if avp.get('projetar') is not none %}
+      {{ campo_bool('Projetar Aviso Prévio', avp.get('projetar')) }}
+    {% endif %}
+  </div>
+</div>
+
+<!-- 5. FGTS -->
+<div class="secao-pjc">
+  <h3>5. FGTS</h3>
+  <div class="campos-lista">
+    {{ campo('Alíquota', (fgts.get('aliquota') * 100)|round(1)|string + '%' if fgts.get('aliquota') else None) }}
+    {{ campo_bool('Multa de 40% (art. 18 §1º)', fgts.get('multa_40')) }}
+    {% if fgts.get('multa_467') is not none %}
+      {{ campo_bool('Multa art. 467', fgts.get('multa_467')) }}
+    {% endif %}
+  </div>
+</div>
+
+<!-- 6. Honorários -->
+<div class="secao-pjc">
+  <h3>6. Honorários Advocatícios</h3>
+  <div class="campos-lista">
+    {{ campo('Percentual', (hon.get('percentual') * 100)|round(1)|string + '%' if hon.get('percentual') else None) }}
+    {{ campo('Valor Fixo (R$)', hon.get('valor_fixo') | round(2) if hon.get('valor_fixo') else None) }}
+    {{ campo('Parte Devedora', hon.get('parte_devedora')) }}
+    {% if hon.get('periciais') is not none %}
+      {{ campo('Honorários Periciais (R$)', hon.get('periciais') | round(2)) }}
+    {% endif %}
+  </div>
+</div>
+
+<!-- 7. Correção e Juros -->
+<div class="secao-pjc">
+  <h3>7. Correção Monetária e Juros</h3>
+  <div class="campos-lista">
+    {{ campo('Índice de Correção', cj.get('indice_correcao')) }}
+    {{ campo('Base dos Juros', cj.get('base_juros')) }}
+    {{ campo('Taxa de Juros', cj.get('taxa_juros')) }}
+    {% if cj.get('jam_fgts') is not none %}
+      {{ campo_bool('JAM FGTS', cj.get('jam_fgts')) }}
+    {% endif %}
+  </div>
+</div>
+
+<!-- 8. Contribuição Social -->
+<div class="secao-pjc">
+  <h3>8. Contribuição Previdenciária (INSS)</h3>
+  <div class="campos-lista">
+    {{ campo('Responsabilidade', cs.get('responsabilidade')) }}
+    {% if cs.get('lei_11941') is not none %}
+      {{ campo_bool('Lei 11.941/2009', cs.get('lei_11941')) }}
+    {% endif %}
+  </div>
+</div>
+
+<!-- 9. Imposto de Renda -->
+<div class="secao-pjc">
+  <h3>9. Imposto de Renda</h3>
+  <div class="campos-lista">
+    {{ campo_bool('Apurar IR', ir.get('apurar')) }}
+    {% if ir.get('meses_tributaveis') is not none %}
+      {{ campo('Meses Tributáveis', ir.get('meses_tributaveis')) }}
+    {% endif %}
+    {% if ir.get('dependentes') is not none %}
+      {{ campo('Número de Dependentes', ir.get('dependentes')) }}
+    {% endif %}
+  </div>
+</div>
+
+<!-- 10. Verbas -->
+<div class="secao-pjc">
+  <h3>10. Verbas Deferidas</h3>
+  <div style="padding: 12px 14px;">
+    {% set verbas_pred = verbas_mapeadas.get('predefinidas', []) %}
+    {% set verbas_pers = verbas_mapeadas.get('personalizadas', []) %}
+    {% set verbas_nrec = verbas_mapeadas.get('nao_reconhecidas', []) %}
+
+    {% if verbas_pred %}
+    <p style="font-size:0.85rem; color:#666; margin-bottom:8px; font-weight:600;">VERBAS PRÉ-DEFINIDAS (aba "Verbas" do PJE-Calc):</p>
+    {% for v in verbas_pred %}
+    <div class="verba-card">
+      <div class="verba-header">
+        <span>{{ v.nome_sentenca }}</span>
+        <span class="{{ 'badge-reflexa' if v.tipo == 'Reflexa' else 'badge-principal' }}">{{ v.tipo or 'Principal' }}</span>
+        {% if v.nome_pjecalc %}
+          <span style="margin-left:auto; opacity:0.8; font-size:0.8rem;">→ {{ v.nome_pjecalc }}</span>
+        {% endif %}
+      </div>
+      <div class="verba-body">
+        {% if v.periodo_inicio or v.periodo_fim %}
+        <div class="vl"><span class="vl-k">Período:</span><span class="vl-v">{{ v.periodo_inicio or '?' }} a {{ v.periodo_fim or '?' }}</span></div>
+        {% endif %}
+        {% if v.percentual is not none %}
+        <div class="vl"><span class="vl-k">Percentual:</span><span class="vl-v">{{ (v.percentual * 100)|round(2) }}%</span></div>
+        {% endif %}
+        {% if v.base_calculo %}
+        <div class="vl"><span class="vl-k">Base de Cálculo:</span><span class="vl-v">{{ v.base_calculo }}</span></div>
+        {% endif %}
+        {% if v.valor_informado is not none %}
+        <div class="vl"><span class="vl-k">Valor Informado:</span><span class="vl-v">R$ {{ v.valor_informado | round(2) }}</span></div>
+        {% endif %}
+        <div class="vl">
+          <span class="vl-k">Incidências:</span>
+          <span class="vl-v">
+            {% set inc = [] %}
+            {% if v.incidencia_fgts %}{% set _ = inc.append('FGTS') %}{% endif %}
+            {% if v.incidencia_inss %}{% set _ = inc.append('INSS') %}{% endif %}
+            {% if v.incidencia_ir %}{% set _ = inc.append('IR') %}{% endif %}
+            {{ inc|join(', ') or '—' }}
+          </span>
+        </div>
+        {% if v.caracteristica %}
+        <div class="vl"><span class="vl-k">Característica:</span><span class="vl-v">{{ v.caracteristica }}</span></div>
+        {% endif %}
+        {% if v.ocorrencia %}
+        <div class="vl"><span class="vl-k">Ocorrência:</span><span class="vl-v">{{ v.ocorrencia }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if verbas_pers %}
+    <p style="font-size:0.85rem; color:#666; margin: 16px 0 8px; font-weight:600;">VERBAS PERSONALIZADAS (adicionar manualmente):</p>
+    {% for v in verbas_pers %}
+    <div class="verba-card" style="border-left: 3px solid #ffc107;">
+      <div class="verba-header" style="background: #856404;">
+        <span>{{ v.nome_sentenca }}</span>
+        <span class="{{ 'badge-reflexa' if v.tipo == 'Reflexa' else 'badge-principal' }}">{{ v.tipo or 'Principal' }}</span>
+      </div>
+      <div class="verba-body">
+        {% if v.periodo_inicio or v.periodo_fim %}
+        <div class="vl"><span class="vl-k">Período:</span><span class="vl-v">{{ v.periodo_inicio or '?' }} a {{ v.periodo_fim or '?' }}</span></div>
+        {% endif %}
+        {% if v.percentual is not none %}
+        <div class="vl"><span class="vl-k">Percentual:</span><span class="vl-v">{{ (v.percentual * 100)|round(2) }}%</span></div>
+        {% endif %}
+        {% if v.base_calculo %}
+        <div class="vl"><span class="vl-k">Base de Cálculo:</span><span class="vl-v">{{ v.base_calculo }}</span></div>
+        {% endif %}
+        {% if v.valor_informado is not none %}
+        <div class="vl"><span class="vl-k">Valor Informado:</span><span class="vl-v">R$ {{ v.valor_informado | round(2) }}</span></div>
+        {% endif %}
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if verbas_nrec %}
+    <p style="font-size:0.85rem; color:#dc3545; margin: 16px 0 8px; font-weight:600;">NÃO RECONHECIDAS — verificar manualmente:</p>
+    {% for v in verbas_nrec %}
+    <div class="verba-card" style="border-left: 3px solid #dc3545;">
+      <div class="verba-header" style="background: #721c24;">
+        <span>{{ v.nome_sentenca }}</span>
+      </div>
+      <div class="verba-body">
+        <div class="vl"><span class="vl-k">Obs.:</span><span class="vl-v" style="color:#dc3545;">Verificar se existe no PJE-Calc ou criar como personalizada</span></div>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if not verbas_pred and not verbas_pers and not verbas_nrec %}
+    <p style="color:#999; font-style:italic; font-size:0.9rem;">Nenhuma verba classificada.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="no-print" style="margin-top: 24px; text-align: center; color: #888; font-size: 0.85rem;">
+  <a href="/previa/{{ sessao_id }}" class="btn btn-secondary" style="margin-right:8px;">← Voltar à Prévia</a>
+  <a href="/download/{{ sessao_id }}/parametros" class="btn btn-primary">Baixar parâmetros JSON</a>
+</div>
+{% endblock %}

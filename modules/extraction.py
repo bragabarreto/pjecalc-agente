@@ -130,7 +130,7 @@ _RELATORIO_PROMPT = """Converta o relatório estruturado abaixo diretamente para
     "dependentes": "número inteiro | null",
     "confianca": 0.0-1.0
   }},
-  "campos_ausentes": ["lista de campos obrigatórios não encontrados no relatório"],
+  "campos_ausentes": ["lista de campos OBRIGATÓRIOS não encontrados — ver nota abaixo"],
   "alertas": ["lista de avisos relevantes extraídos do relatório"]
 }}
 
@@ -140,6 +140,13 @@ IMPORTANTE:
 - Preservar exatamente a classificação de principal/reflexo do relatório
 - Para verbas reflexas, preencher "verba_principal_ref" com o nome da verba principal correspondente
 - Usar confianca=0.95 para todos os campos presentes no relatório
+- CAMPOS OPCIONAIS — NÃO incluir em campos_ausentes se não mencionados no relatório:
+  prescricao.quinquenal, prescricao.fgts, honorarios.periciais, contrato.carga_horaria,
+  imposto_renda.dependentes, imposto_renda.meses_tributaveis, aviso_previo.prazo_dias,
+  contribuicao_social.lei_11941, fgts.multa_467
+- Só incluir em campos_ausentes campos OBRIGATÓRIOS que estão faltando:
+  processo.numero, processo.reclamante, processo.reclamado, processo.estado,
+  contrato.admissao, contrato.ajuizamento
 
 Retorne APENAS o JSON, sem markdown, sem explicações."""
 
@@ -232,9 +239,18 @@ no formato JSON especificado.
     "dependentes": "número inteiro | null",
     "confianca": 0.0-1.0
   }},
-  "campos_ausentes": ["lista de campos obrigatórios não encontrados"],
+  "campos_ausentes": ["lista de campos OBRIGATÓRIOS não encontrados — ver nota abaixo"],
   "alertas": ["lista de avisos para o operador"]
 }}
+
+NOTA SOBRE campos_ausentes:
+- CAMPOS OPCIONAIS — NÃO incluir em campos_ausentes se não mencionados na sentença:
+  prescricao.quinquenal, prescricao.fgts, honorarios.periciais, contrato.carga_horaria,
+  imposto_renda.dependentes, imposto_renda.meses_tributaveis, aviso_previo.prazo_dias,
+  contribuicao_social.lei_11941, fgts.multa_467
+- Só incluir em campos_ausentes campos OBRIGATÓRIOS que estão faltando:
+  processo.numero, processo.reclamante, processo.reclamado, processo.estado,
+  contrato.admissao, contrato.ajuizamento
 
 Retorne APENAS o JSON, sem markdown, sem explicações."""
 
@@ -598,6 +614,21 @@ _CAMPOS_CONDICIONAIS = [
     ("contrato", "maior_remuneracao"),  # necessária para Aviso Prévio e Multa 477
 ]
 
+# Campos que NÃO devem aparecer em campos_ausentes se não mencionados na sentença
+_CAMPOS_OPCIONAIS = {
+    "prescricao.quinquenal",
+    "prescricao.fgts",
+    "honorarios.periciais",
+    "contrato.carga_horaria",
+    "imposto_renda.dependentes",
+    "imposto_renda.meses_tributaveis",
+    "aviso_previo.prazo_dias",
+    "contribuicao_social.lei_11941",
+    "fgts.multa_467",
+    "processo.municipio",   # útil mas não bloqueia cálculo
+    "processo.vara",
+}
+
 
 def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     """
@@ -628,6 +659,9 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
                 f"Verba [{i+1}] '{verba.get('nome_sentenca', '?')}': "
                 f"confiança baixa ({conf:.0%}). Confirme o preenchimento."
             )
+
+    # Remover campos opcionais que o LLM pode ter incluído indevidamente
+    campos_ausentes = [c for c in campos_ausentes if c not in _CAMPOS_OPCIONAIS]
 
     dados["campos_ausentes"] = list(set(campos_ausentes))
     dados["alertas"] = alertas

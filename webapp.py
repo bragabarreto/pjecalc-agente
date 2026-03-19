@@ -324,20 +324,26 @@ async def confirmar_previa(
 
     if CLOUD_MODE:
         mensagem = (
-            "Prévia confirmada e salva. "
-            "Para preencher o PJE-Calc, execute a automação local na máquina "
-            "onde o PJE-Calc está instalado."
+            "Parâmetros confirmados e salvos. "
+            "Baixe o arquivo de parâmetros e use-o para preencher o PJE-Calc "
+            "na sua máquina local."
         )
+        return JSONResponse({
+            "sucesso": True,
+            "mensagem": mensagem,
+            "cloud_mode": True,
+            "url_parametros": f"/download/{sessao_id}/parametros",
+            "url_instrucoes": f"/instrucoes/{sessao_id}",
+            "url_status": f"/status/{sessao_id}",
+        })
     else:
         background_tasks.add_task(_tarefa_automacao_pjecalc, sessao_id=sessao_id)
-        mensagem = "Prévia confirmada. O PJE-Calc será preenchido automaticamente."
-
-    return JSONResponse({
-        "sucesso": True,
-        "mensagem": mensagem,
-        "cloud_mode": CLOUD_MODE,
-        "url_status": f"/status/{sessao_id}",
-    })
+        return JSONResponse({
+            "sucesso": True,
+            "mensagem": "Prévia confirmada. O PJE-Calc será preenchido automaticamente.",
+            "cloud_mode": False,
+            "url_status": f"/status/{sessao_id}",
+        })
 
 
 @app.get("/processo/{numero_processo}", response_class=HTMLResponse)
@@ -385,7 +391,7 @@ async def previa_atual_processo(
 
 @app.get("/download/{sessao_id}/pjc")
 async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
-    """Download do arquivo .pjc gerado."""
+    """Download do arquivo .pjc gerado (modo desktop)."""
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo or not calculo.arquivo_pjc:
@@ -399,6 +405,77 @@ async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
         path=str(caminho),
         filename=caminho.name,
         media_type="application/xml",
+    )
+
+
+@app.get("/download/{sessao_id}/parametros")
+async def download_parametros(sessao_id: str, db: Session = Depends(get_db)):
+    """
+    Download dos parâmetros confirmados em JSON.
+    Usado para preencher o PJE-Calc localmente via script de automação.
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+
+    payload = {
+        "sessao_id": sessao_id,
+        "exportado_em": datetime.now().isoformat(),
+        "processo": dados.get("processo", {}),
+        "contrato": dados.get("contrato", {}),
+        "prescricao": dados.get("prescricao", {}),
+        "aviso_previo": dados.get("aviso_previo", {}),
+        "fgts": dados.get("fgts", {}),
+        "honorarios": dados.get("honorarios", {}),
+        "correcao_juros": dados.get("correcao_juros", {}),
+        "contribuicao_social": dados.get("contribuicao_social", {}),
+        "imposto_renda": dados.get("imposto_renda", {}),
+        "verbas_mapeadas": verbas_mapeadas,
+    }
+
+    numero = dados.get("processo", {}).get("numero", sessao_id[:8])
+    nome_arquivo = f"pjecalc_{numero.replace('-','').replace('.','')}.json"
+
+    from fastapi.responses import Response
+    return Response(
+        content=json.dumps(payload, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{nome_arquivo}"'},
+    )
+
+
+@app.get("/instrucoes/{sessao_id}", response_class=HTMLResponse)
+async def instrucoes_preenchimento(
+    request: Request,
+    sessao_id: str,
+    db: Session = Depends(get_db),
+):
+    """
+    Página com instruções passo a passo para preencher o PJE-Calc
+    usando os parâmetros confirmados no agente.
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+
+    return templates.TemplateResponse(
+        "instrucoes.html",
+        {
+            "request": request,
+            "sessao_id": sessao_id,
+            "calculo": calculo,
+            "processo": calculo.processo,
+            "dados": dados,
+            "verbas_mapeadas": verbas_mapeadas,
+        },
     )
 
 

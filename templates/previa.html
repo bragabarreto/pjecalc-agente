@@ -648,17 +648,29 @@
 
     {% if status in ['previa_gerada', 'em_andamento'] %}
     <div class="card">
-      <h3 style="color:#1a3a6b; font-size:1rem; margin-bottom:10px;">Confirmar e Enviar</h3>
+      <h3 style="color:#1a3a6b; font-size:1rem; margin-bottom:10px;">Confirmar Parâmetros</h3>
       <p style="color:#6c757d; font-size:0.85rem; margin-bottom:12px;">
         Verifique todos os campos antes de confirmar.
-        Os dados serão usados pelo agente para preencher o PJE-Calc.
+        Após confirmar, você receberá o guia de preenchimento do PJE-Calc.
       </p>
       <button class="btn btn-success" style="width:100%; padding:12px;"
               onclick="confirmarPrevia()">
-        Confirmar Parâmetros
+        Confirmar e Gerar Guia
       </button>
       <div id="msg-confirmar" style="display:none; margin-top:8px; font-size:0.85rem;
            padding:8px; border-radius:4px;"></div>
+    </div>
+    {% endif %}
+
+    {% if status == 'confirmado' %}
+    <div class="card" style="border: 2px solid #28a745;">
+      <h3 style="color:#155724; font-size:1rem; margin-bottom:10px;">Parâmetros Confirmados</h3>
+      <a href="/instrucoes/{{ sessao_id }}" class="btn btn-success" style="width:100%; padding:10px; text-align:center; display:block; margin-bottom:8px;">
+        Ver Guia de Preenchimento
+      </a>
+      <a href="/download/{{ sessao_id }}/parametros" class="btn btn-primary" style="width:100%; padding:10px; text-align:center; display:block;">
+        Baixar Parâmetros JSON
+      </a>
     </div>
     {% endif %}
 
@@ -780,7 +792,12 @@ async function confirmarPrevia() {
       msg.style.background = '#d4edda';
       msg.style.color = '#155724';
       msg.textContent = dados.mensagem;
-      setTimeout(() => window.location.reload(), 3000);
+      if (dados.cloud_mode && dados.url_instrucoes) {
+        // Em modo cloud: redirecionar para o guia de preenchimento
+        setTimeout(() => window.location.href = dados.url_instrucoes, 1500);
+      } else {
+        setTimeout(() => window.location.reload(), 3000);
+      }
     }
   } catch(err) {
     msg.style.background = '#f8d7da';
