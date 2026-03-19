@@ -992,7 +992,7 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
         f"<hashCalculoCorreto>false</hashCalculoCorreto>",
         f"<hashAtualizacaoCorreto>false</hashAtualizacaoCorreto>",
         f"<diaFechamentoMes>31</diaFechamentoMes>",
-        f"<calculoExterno>true</calculoExterno>",
+        f"<calculoExterno>false</calculoExterno>",
         f"<parcelasAtualizaveisCreditosReclamante>null</parcelasAtualizaveisCreditosReclamante>",
         f"<parcelasAtualizaveisDescontoCreditosReclamante>null</parcelasAtualizaveisDescontoCreditosReclamante>",
         f"<parcelasAtualizaveisOutrosDebitosReclamado>null</parcelasAtualizaveisOutrosDebitosReclamado>",
