@@ -45,7 +45,8 @@
     </p>
   </div>
   <div class="no-print">
-    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success btn-download" style="margin-right:8px;">⬇ Baixar .pjc</a>
+    <a href="/download/{{ sessao_id }}/script" class="btn btn-primary btn-download" style="margin-right:8px;">⬇ Baixar Script de Automação (.py)</a>
+    <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary btn-download" style="margin-right:8px;">⬇ Baixar .pjc</a>
     <button onclick="window.print()" class="btn btn-secondary" style="margin-right:8px;">Imprimir</button>
     <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-primary btn-download">Baixar JSON</a>
   </div>
@@ -53,36 +54,50 @@
 
 <!-- Aviso -->
 <div class="aviso-box no-print">
-  <h4>Como usar o arquivo .pjc</h4>
+  <h4>Como usar o Script de Automação</h4>
   <p style="font-size:0.9rem; color:#856404;">
-    O arquivo <strong>.pjc</strong> já contém todos os parâmetros do cálculo prontos para importação no PJE-Calc.
-    Baixe-o acima, importe no PJE-Calc via <strong>Cálculo → Novo Cálculo Externo</strong> (NÃO "Importar"), revise, liquide e exporte para juntada nos autos do PJE.
+    O <strong>Script de Automação</strong> (.py) preenche o PJE-Calc automaticamente na sua máquina.
+    Baixe-o, instale as dependências uma vez e execute — o script abre o browser, você faz login,
+    e ele preenche todos os campos automaticamente. Em caso de campo não encontrado, o script pausa
+    para você completar manualmente.
   </p>
 </div>
 
 <!-- Passos -->
 <div class="card no-print">
-  <h2>Passos para obter o arquivo .pjc final</h2>
+  <h2>Passos para preencher o PJE-Calc automaticamente</h2>
   <div class="passo">
     <div class="passo-num">1</div>
-    <div class="passo-txt">Baixe o arquivo <strong>.pjc</strong> usando o botão acima e acesse o <strong>PJE-Calc</strong> (pje.trt7.jus.br/pjecalc ou versão desktop)</div>
+    <div class="passo-txt">Baixe o <strong>Script de Automação (.py)</strong> usando o botão acima</div>
   </div>
   <div class="passo">
     <div class="passo-num">2</div>
-    <div class="passo-txt">No menu lateral, clique em <strong>Cálculo → Novo Cálculo Externo</strong>, selecione o arquivo <strong>.pjc</strong> baixado e clique em <strong>Confirmar</strong> — todos os campos já estarão preenchidos</div>
+    <div class="passo-txt">No terminal (cmd ou PowerShell), instale as dependências <em>(apenas uma vez)</em>:<br>
+      <code style="background:#f4f4f4; padding:2px 6px; border-radius:3px;">pip install playwright &amp;&amp; playwright install chromium</code>
+    </div>
   </div>
   <div class="passo">
     <div class="passo-num">3</div>
-    <div class="passo-txt">Revise os parâmetros carregados e, se necessário, ajuste algum campo antes de liquidar (consulte os dados abaixo para conferência)</div>
+    <div class="passo-txt">Execute o script:<br>
+      <code style="background:#f4f4f4; padding:2px 6px; border-radius:3px;">python auto_pjecalc_PROCESSO_XXXXX.py</code>
+    </div>
   </div>
   <div class="passo">
     <div class="passo-num">4</div>
-    <div class="passo-txt">Clique em <strong>Operações → Validar</strong> para verificar inconsistências, em seguida <strong>Operações → Liquidar</strong> e confirme a data</div>
+    <div class="passo-txt">O browser abre no <strong>PJE-Calc</strong> — faça login normalmente e pressione Enter no terminal quando concluído</div>
   </div>
   <div class="passo">
     <div class="passo-num">5</div>
+    <div class="passo-txt">O script preenche todos os campos automaticamente. Revise os dados e clique em <strong>Operações → Liquidar</strong></div>
+  </div>
+  <div class="passo">
+    <div class="passo-num">6</div>
     <div class="passo-txt">Clique em <strong>Operações → Exportar</strong> e salve o arquivo <strong>.pjc</strong> final para juntar nos autos do PJE</div>
   </div>
+  <p style="font-size:0.82rem; color:#888; margin-top:8px;">
+    Alternativa manual: se preferir, use o arquivo <strong>.pjc</strong> e importe via
+    <strong>Cálculo → Novo Cálculo Externo</strong> no PJE-Calc.
+  </p>
 </div>
 
 {% set proc = dados.get('processo', {}) %}

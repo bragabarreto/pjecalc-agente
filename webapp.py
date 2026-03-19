@@ -26,6 +26,10 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
+import logging
+
+logger = logging.getLogger("pjecalc_agent.webapp")
+
 from config import OUTPUT_DIR, CLOUD_MODE
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
@@ -322,7 +326,7 @@ async def confirmar_previa(
 
     repo.confirmar_previa(sessao_id)
 
-    # Gerar arquivo .pjc em ambos os modos
+    # Gerar .pjc e script de automação
     dados = calculo.dados()
     verbas_mapeadas = calculo.verbas_mapeadas()
     url_pjc = None
@@ -336,13 +340,14 @@ async def confirmar_previa(
 
     if CLOUD_MODE:
         mensagem = (
-            "Parâmetros confirmados. "
-            "Baixe o arquivo .pjc e importe-o no PJE-Calc na sua máquina local."
+            "Parâmetros confirmados. Baixe o Script de Automação "
+            "e execute-o na sua máquina para preencher o PJE-Calc automaticamente."
         )
         return JSONResponse({
             "sucesso": True,
             "mensagem": mensagem,
             "cloud_mode": True,
+            "url_script": f"/download/{sessao_id}/script",
             "url_pjc": url_pjc,
             "url_parametros": f"/download/{sessao_id}/parametros",
             "url_instrucoes": f"/instrucoes/{sessao_id}",
@@ -354,6 +359,7 @@ async def confirmar_previa(
             "sucesso": True,
             "mensagem": "Prévia confirmada. O PJE-Calc será preenchido automaticamente.",
             "cloud_mode": False,
+            "url_script": f"/download/{sessao_id}/script",
             "url_pjc": url_pjc,
             "url_status": f"/status/{sessao_id}",
         })
@@ -430,6 +436,33 @@ async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
         path=str(caminho),
         filename=caminho.name,
         media_type="application/zip",
+    )
+
+
+@app.get("/download/{sessao_id}/script")
+async def download_script(sessao_id: str, db: Session = Depends(get_db)):
+    """
+    Gera e serve o script Python Playwright standalone para automação do PJE-Calc.
+    O usuário baixa o script e executa localmente: python auto_pjecalc_XXX.py
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    from modules.playwright_script_builder import gerar_script
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    try:
+        caminho = gerar_script(dados, verbas_mapeadas, sessao_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar script: {exc}")
+
+    return FileResponse(
+        path=str(caminho),
+        filename=caminho.name,
+        media_type="text/x-python",
+        headers={"Content-Disposition": f'attachment; filename="{caminho.name}"'},
     )
 
 

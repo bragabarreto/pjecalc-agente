@@ -41,7 +41,7 @@ CONFIDENCE_THRESHOLD_BLOCK = 0.50   # abaixo → parada bloqueante
 # ── Automação de interface ───────────────────────────────────────────────────
 AUTOMATION_BACKEND = "pyautogui"    # "pyautogui" | "playwright"
 PJECALC_WINDOW_TITLE = "PJE-Calc"  # título da janela desktop
-PJECALC_URL = ""                    # preencher para versão web corporativa
+PJECALC_URL = os.environ.get("PJECALC_URL", "https://pje.trt7.jus.br/pjecalc")
 
 # Tempos de espera (segundos)
 WAIT_AFTER_CLICK = 0.5

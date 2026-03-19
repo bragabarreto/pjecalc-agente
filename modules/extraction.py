@@ -96,8 +96,10 @@ _RELATORIO_PROMPT = """Converta o relatório abaixo para o schema JSON do PJE-Ca
 - "Vara/Juízo:" → processo.vara
 - "Cidade/Comarca:" → processo.municipio
 - "Estado:" → processo.estado (2 letras, ex: CE)
-- "Reclamante:" → processo.reclamante (incluir nome + CPF se houver)
-- "Reclamada:" ou "Reclamado:" → processo.reclamado (incluir nome + CNPJ/CPF se houver)
+- "Reclamante:" → processo.reclamante (apenas nome, sem CPF)
+- CPF do reclamante se explicitado → processo.cpf_reclamante (formato: "000.000.000-00")
+- "Reclamada:" ou "Reclamado:" → processo.reclamado (apenas razão social/nome, sem CNPJ)
+- CNPJ da reclamada se explicitado → processo.cnpj_reclamado (formato: "00.000.000/0000-00")
 - "Data de Distribuição/Autuação:" ou "Data de Ajuizamento:" → contrato.ajuizamento
 
 **SEÇÃO 2 — DADOS DO CONTRATO** → preenche "contrato":
@@ -122,6 +124,31 @@ _RELATORIO_PROMPT = """Converta o relatório abaixo para o schema JSON do PJE-Ca
     → Para TODAS as verbas salariais principais (diferenças, saldo, 13º, aviso prévio salarial):
       base_calculo = "Historico Salarial"
     → Incluir a nota de histórico como alerta
+    → Preencher historico_salarial como lista de entradas por período
+
+**HISTÓRICO SALARIAL DETALHADO** → preenche "historico_salarial":
+Se houver tabela de evolução salarial (salários diferentes em períodos distintos):
+  historico_salarial: [
+    {"data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 1518.00},
+    {"data_inicio": "01/09/2024", "data_fim": "28/02/2025", "valor": 1800.00}
+  ]
+Se houver apenas um salário uniforme durante todo o contrato → historico_salarial = []
+
+**FALTAS** → preenche "faltas":
+Se a sentença mencionar faltas injustificadas ou justificadas, extrair:
+  faltas: [
+    {"data_inicial": "DD/MM/AAAA", "data_final": "DD/MM/AAAA", "justificada": false, "descricao": ""}
+  ]
+Se não mencionado → faltas = []
+
+**FÉRIAS** → preenche "ferias":
+Se a sentença mencionar períodos de férias não gozadas ou situações específicas, extrair:
+  ferias: [
+    {"situacao": "Vencidas", "periodo_inicio": "DD/MM/AAAA", "periodo_fim": "DD/MM/AAAA",
+     "abono": false, "dobra": false}
+  ]
+Situações: "Vencidas" | "Proporcionais" | "Gozadas"
+Se não mencionado → ferias = []
 
 **AVISO PRÉVIO** → preenche "aviso_previo":
 - Se há condenação em aviso prévio indenizado calculado pela Lei 12.506/2011:
@@ -203,7 +230,9 @@ Mapeamento dos critérios da sentença para PJE-Calc:
   "processo": {{
     "numero": "string | null",
     "reclamante": "string | null",
+    "cpf_reclamante": "string | null",
     "reclamado": "string | null",
+    "cnpj_reclamado": "string | null",
     "estado": "UF 2 letras | null",
     "municipio": "string | null",
     "vara": "string | null",
@@ -281,6 +310,16 @@ Mapeamento dos critérios da sentença para PJE-Calc:
     "dependentes": "número inteiro | null",
     "confianca": 0.95
   }},
+  "historico_salarial": [
+    {{"data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00}}
+  ],
+  "faltas": [
+    {{"data_inicial": "DD/MM/AAAA", "data_final": "DD/MM/AAAA", "justificada": false, "descricao": ""}}
+  ],
+  "ferias": [
+    {{"situacao": "Vencidas | Proporcionais | Gozadas", "periodo_inicio": "DD/MM/AAAA",
+      "periodo_fim": "DD/MM/AAAA", "abono": false, "dobra": false}}
+  ],
   "campos_ausentes": [],
   "alertas": []
 }}
@@ -693,7 +732,9 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
         "processo": {
             "numero": regex.get("numero_processo"),
             "reclamante": regex.get("reclamante"),
+            "cpf_reclamante": None,
             "reclamado": regex.get("reclamado"),
+            "cnpj_reclamado": None,
             "estado": regex.get("estado"),
             "municipio": None,
             "vara": None,
@@ -739,6 +780,9 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
             "confianca": 0.5,
         },
         "imposto_renda": {"apurar": False, "meses_tributaveis": None, "dependentes": None, "confianca": 0.5},
+        "historico_salarial": [],
+        "faltas": [],
+        "ferias": [],
         "campos_ausentes": [],
         "alertas": ["Extração via IA indisponível — dados obtidos somente via regex"],
     }
