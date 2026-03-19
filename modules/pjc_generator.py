@@ -376,15 +376,15 @@ def _xml_calculada(verba: dict, vid: int, calc_id: int, ordem: int,
         f"<zeraValorNegativo>false</zeraValorNegativo>"
         f"<comentarios></comentarios>"
         f"<gerarReflexo>DIFERENCA</gerarReflexo>"
-        f"<aplicarProporcionalidade>false</aplicarProporcionalidade>"
+        f"<aplicarProporcionalidade>true</aplicarProporcionalidade>"
         f"<ativo>true</ativo>"
         f"<comporPrincipal>{_compor_principal(verba.get('compor_principal', True))}</comporPrincipal>"
         f"<verbaAlterada>false</verbaAlterada>"
         f"<salarioCategoriaValorDevido>null</salarioCategoriaValorDevido>"
         f"<salarioCategoriaValorPago>null</salarioCategoriaValorPago>"
         f"<excluirFaltaJustificada>false</excluirFaltaJustificada>"
-        f"<excluirFaltaNaoJustificada>false</excluirFaltaNaoJustificada>"
-        f"<excluirFeriasGozadas>false</excluirFeriasGozadas>"
+        f"<excluirFaltaNaoJustificada>true</excluirFaltaNaoJustificada>"
+        f"<excluirFeriasGozadas>true</excluirFeriasGozadas>"
         f"<ordem>{ordem}</ordem>"
         f"<calculo><Calculo><internalRef>{calc_id}</internalRef></Calculo></calculo>"
         f"<assuntoCnj><AssuntoCnj></AssuntoCnj></assuntoCnj>"
@@ -433,15 +433,15 @@ def _xml_reflexo(verba: dict, vid: int, calc_id: int, ordem: int,
         f"<zeraValorNegativo>false</zeraValorNegativo>"
         f"<comentarios></comentarios>"
         f"<gerarReflexo>NAO_APLICAR</gerarReflexo>"
-        f"<aplicarProporcionalidade>false</aplicarProporcionalidade>"
+        f"<aplicarProporcionalidade>true</aplicarProporcionalidade>"
         f"<ativo>true</ativo>"
         f"<comporPrincipal>{_compor_principal(verba.get('compor_principal', True))}</comporPrincipal>"
         f"<verbaAlterada>false</verbaAlterada>"
         f"<salarioCategoriaValorDevido>null</salarioCategoriaValorDevido>"
         f"<salarioCategoriaValorPago>null</salarioCategoriaValorPago>"
         f"<excluirFaltaJustificada>false</excluirFaltaJustificada>"
-        f"<excluirFaltaNaoJustificada>false</excluirFaltaNaoJustificada>"
-        f"<excluirFeriasGozadas>false</excluirFeriasGozadas>"
+        f"<excluirFaltaNaoJustificada>true</excluirFaltaNaoJustificada>"
+        f"<excluirFeriasGozadas>true</excluirFeriasGozadas>"
         f"<ordem>{ordem}</ordem>"
         f"<calculo><Calculo><internalRef>{calc_id}</internalRef></Calculo></calculo>"
         f"<assuntoCnj><AssuntoCnj></AssuntoCnj></assuntoCnj>"
@@ -875,17 +875,19 @@ def _xml_pensao(calc_id: int) -> str:
 
 
 def _xml_secoes_vazias(calc_id: int) -> str:
-    """Seções obrigatórias mas vazias para o arquivo ser válido."""
+    """Seções vazias que vêm ANTES de fgts/inss (ordem exata dos arquivos válidos)."""
     return (
         f"<listaDeFerias><Set></Set></listaDeFerias>"
         f"<apuracoesDeJuros><List></List></apuracoesDeJuros>"
         f"<excecoesDaCargaHoraria><Set></Set></excecoesDaCargaHoraria>"
         f"<excecoesDoSabado><Set></Set></excecoesDoSabado>"
         f"<faltas><Set></Set></faltas>"
-        f"<multas><Set></Set></multas>"
-        f"<armazenamentos><List></List></armazenamentos>"
-        f"<custasPagasDoReclamado><Set></Set></custasPagasDoReclamado>"
-        f"<custasPagasDoReclamante><Set></Set></custasPagasDoReclamante>"
+    )
+
+
+def _xml_secoes_pos_calculo(calc_id: int) -> str:
+    """Seções vazias que vêm APÓS custasJudiciais (ordem exata dos arquivos válidos)."""
+    return (
         f"<seguroDesemprego><SeguroDesemprego>"
         f"<id>{calc_id}</id><versao>0</versao>"
         f"<apurarSeguroDesemprego>false</apurarSeguroDesemprego>"
@@ -938,8 +940,8 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
     apuracao_aviso = _apuracao_aviso_enum(avp.get("tipo"))
     prazo_aviso = int(avp.get("prazo_dias") or 0)
     projetar_aviso = _bool_str(avp.get("projetar"))
-    presc_fgts = _bool_str(pres.get("fgts"))
-    presc_quiq = _bool_str(pres.get("quinquenal"))
+    presc_fgts = _bool_str(pres.get("fgts")) if pres.get("fgts") is not None else "true"
+    presc_quiq = _bool_str(pres.get("quinquenal")) if pres.get("quinquenal") is not None else "true"
     indice_acum = "MES_SUBSEQUENTE_E_MES_DO_VENCIMENTO"
 
     # IDs das seções
@@ -963,7 +965,7 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
         f"<valorUltimaRemuneracao>{f'{float(ultima_rem):.2f}' if ultima_rem else 'null'}</valorUltimaRemuneracao>",
         f"<valorMaiorRemuneracao>{float(maior_rem):.2f}</valorMaiorRemuneracao>",
         f"<dataInicioCalculo>null</dataInicioCalculo>",
-        f"<dataTerminoCalculo>null</dataTerminoCalculo>",
+        f"<dataTerminoCalculo>{dem_ts or 0}</dataTerminoCalculo>",
         f"<valorCargaHorariaPadrao>{float(carga_horaria):.4f}</valorCargaHorariaPadrao>",
         f"<sabadoDiaUtil>true</sabadoDiaUtil>",
         f"<projetaAvisoIndenizado>{projetar_aviso}</projetaAvisoIndenizado>",
@@ -990,7 +992,7 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
         f"<hashCalculoCorreto>false</hashCalculoCorreto>",
         f"<hashAtualizacaoCorreto>false</hashAtualizacaoCorreto>",
         f"<diaFechamentoMes>31</diaFechamentoMes>",
-        f"<calculoExterno>false</calculoExterno>",
+        f"<calculoExterno>true</calculoExterno>",
         f"<parcelasAtualizaveisCreditosReclamante>null</parcelasAtualizaveisCreditosReclamante>",
         f"<parcelasAtualizaveisDescontoCreditosReclamante>null</parcelasAtualizaveisDescontoCreditosReclamante>",
         f"<parcelasAtualizaveisOutrosDebitosReclamado>null</parcelasAtualizaveisOutrosDebitosReclamado>",
@@ -1000,15 +1002,17 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
         "<municipio><Municipio></Municipio></municipio>",
         _xml_verbas(verbas_mapeadas, calc_id, adm_ts, dem_ts),
         _xml_historico_salarial(dados, calc_id, adm_ts, dem_ts),
-        _xml_secoes_vazias(calc_id),
+        _xml_secoes_vazias(calc_id),           # listaDeFerias, apuracoesDeJuros, excecoesDaCargaHoraria, excecoesDoSabado, faltas
         _xml_fgts(fgts, calc_id, fid, adm_ts, dem_ts),
         _xml_inss(cs, calc_id, iid, adm_ts, dem_ts),
         _xml_previdencia(calc_id),
         _xml_pensao(calc_id),
         _xml_parametros(cj, cs, calc_id),
+        "<multas><Set></Set></multas>",
         _xml_honorarios(hon, calc_id, hon_base),
         _xml_irpf(ir, calc_id, irid),
         _xml_custas(calc_id, cid),
+        _xml_secoes_pos_calculo(calc_id),      # seguroDesemprego, salarioFamilia, pontosFacultativos, ...
         "</Calculo>",
     ]
 
