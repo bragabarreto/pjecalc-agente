@@ -151,23 +151,23 @@ _RELATORIO_PROMPT = """Converta o relatório abaixo para o schema JSON do PJE-Ca
 **HISTÓRICO SALARIAL DETALHADO** → preenche "historico_salarial":
 Se houver tabela de evolução salarial (salários diferentes em períodos distintos):
   historico_salarial: [
-    {"data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 1518.00},
-    {"data_inicio": "01/09/2024", "data_fim": "28/02/2025", "valor": 1800.00}
+    {{"data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 1518.00}},
+    {{"data_inicio": "01/09/2024", "data_fim": "28/02/2025", "valor": 1800.00}}
   ]
 Se houver apenas um salário uniforme durante todo o contrato → historico_salarial = []
 
 **FALTAS** → preenche "faltas":
 Se a sentença mencionar faltas injustificadas ou justificadas, extrair:
   faltas: [
-    {"data_inicial": "DD/MM/AAAA", "data_final": "DD/MM/AAAA", "justificada": false, "descricao": ""}
+    {{"data_inicial": "DD/MM/AAAA", "data_final": "DD/MM/AAAA", "justificada": false, "descricao": ""}}
   ]
 Se não mencionado → faltas = []
 
 **FÉRIAS** → preenche "ferias":
 Se a sentença mencionar períodos de férias não gozadas ou situações específicas, extrair:
   ferias: [
-    {"situacao": "Vencidas", "periodo_inicio": "DD/MM/AAAA", "periodo_fim": "DD/MM/AAAA",
-     "abono": false, "dobra": false}
+    {{"situacao": "Vencidas", "periodo_inicio": "DD/MM/AAAA", "periodo_fim": "DD/MM/AAAA",
+     "abono": false, "dobra": false}}
   ]
 Situações: "Vencidas" | "Proporcionais" | "Gozadas"
 Se não mencionado → ferias = []
