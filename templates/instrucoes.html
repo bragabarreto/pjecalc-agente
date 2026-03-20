@@ -36,8 +36,6 @@
 {% endblock %}
 
 {% block content %}
-{% set base_url = request.base_url | string | replace('http://', 'https://') | trim('/') %}
-{% set pjecalc_url = 'http://localhost:9257/pjecalc/pages/principal.jsf#agente-sessao=' ~ sessao_id ~ '&agente-server=' ~ (base_url | urlencode) %}
 <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
   <div>
     <h2 style="color:#1a3a6b; margin-bottom:4px;">Guia de Preenchimento — PJE-Calc</h2>

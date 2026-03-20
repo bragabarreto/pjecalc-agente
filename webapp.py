@@ -566,8 +566,17 @@ async def instrucoes_preenchimento(
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
+    from urllib.parse import quote as url_quote
+
     dados = calculo.dados()
     verbas_mapeadas = calculo.verbas_mapeadas()
+
+    base_url = str(request.base_url).rstrip("/").replace("http://", "https://")
+    pjecalc_url = (
+        "http://localhost:9257/pjecalc/pages/principal.jsf"
+        f"#agente-sessao={sessao_id}"
+        f"&agente-server={url_quote(base_url, safe='')}"
+    )
 
     return templates.TemplateResponse(
         "instrucoes.html",
@@ -578,6 +587,8 @@ async def instrucoes_preenchimento(
             "processo": calculo.processo,
             "dados": dados,
             "verbas_mapeadas": verbas_mapeadas,
+            "base_url": base_url,
+            "pjecalc_url": pjecalc_url,
         },
     )
 
