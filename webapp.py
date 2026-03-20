@@ -578,19 +578,23 @@ async def instrucoes_preenchimento(
         f"&agente-server={url_quote(base_url, safe='')}"
     )
 
-    return templates.TemplateResponse(
-        "instrucoes.html",
-        {
-            "request": request,
-            "sessao_id": sessao_id,
-            "calculo": calculo,
-            "processo": calculo.processo,
-            "dados": dados,
-            "verbas_mapeadas": verbas_mapeadas,
-            "base_url": base_url,
-            "pjecalc_url": pjecalc_url,
-        },
-    )
+    try:
+        return templates.TemplateResponse(
+            "instrucoes.html",
+            {
+                "request": request,
+                "sessao_id": sessao_id,
+                "calculo": calculo,
+                "processo": calculo.processo,
+                "dados": dados,
+                "verbas_mapeadas": verbas_mapeadas,
+                "base_url": base_url,
+                "pjecalc_url": pjecalc_url,
+            },
+        )
+    except Exception as exc:
+        logger.exception(f"Erro ao renderizar instrucoes [{sessao_id}]: {exc}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar página de instruções: {exc}")
 
 
 @app.get("/api/processos")
@@ -649,7 +653,7 @@ async def download_extensao():
     import io
     import zipfile
 
-    extension_dir = BASE_DIR / "extension"
+    extension_dir = Path(__file__).parent / "extension"
     if not extension_dir.exists():
         raise HTTPException(status_code=404, detail="Pasta extension/ não encontrada no servidor.")
 
