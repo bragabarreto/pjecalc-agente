@@ -368,15 +368,23 @@ let modoOcultoAtual = false;
 
 async function verificarPjeCalc() {
   document.getElementById('btnVerificar').disabled = true;
+  document.getElementById('btnExecutar').disabled = true;
   logMsg('Verificando PJE-Calc em localhost:9257…', 'wait');
   try {
     const resp = await fetch('/api/verificar_pjecalc');
-    const { disponivel } = await resp.json();
-    if (disponivel) {
+    const { disponivel, iniciado, erro } = await resp.json();
+    if (disponivel && iniciado) {
+      document.getElementById('btnExecutar').disabled = false;
+      logMsg('✅ PJE-Calc iniciado automaticamente e disponível em localhost:9257', 'ok');
+    } else if (disponivel) {
       document.getElementById('btnExecutar').disabled = false;
       logMsg('✅ PJE-Calc disponível em localhost:9257', 'ok');
+    } else if (erro) {
+      logMsg('❌ ' + erro, 'err');
+      logMsg('Verifique se PJECALC_DIR está correto no arquivo .env', 'wait');
     } else {
-      logMsg('❌ PJE-Calc não encontrado. Abra o PJE-Calc Cidadão primeiro.', 'err');
+      logMsg('❌ PJE-Calc não encontrado em localhost:9257.', 'err');
+      logMsg('Verifique se PJECALC_DIR está correto no arquivo .env', 'wait');
     }
   } catch(e) {
     logMsg('❌ Erro ao verificar: ' + e, 'err');
