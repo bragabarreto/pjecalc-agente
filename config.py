@@ -4,6 +4,13 @@
 import os
 from pathlib import Path
 
+# Carrega variáveis do arquivo .env (se existir) — útil na instalação local
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / ".env", override=False)
+except ImportError:
+    pass  # python-dotenv não instalado ainda (primeira execução)
+
 # ── Diretórios base ──────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
 
