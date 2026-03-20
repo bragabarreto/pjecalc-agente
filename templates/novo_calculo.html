@@ -391,7 +391,7 @@ document.getElementById('form-upload').addEventListener('submit', async function
 
 async function aguardarProcessamento(sessaoId, urlPrevia) {
   let tentativas = 0;
-  const max = 72; // 6 minutos
+  const max = 120; // 10 minutos
   while (tentativas < max) {
     await new Promise(r => setTimeout(r, 5000));
     tentativas++;

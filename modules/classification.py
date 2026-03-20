@@ -330,22 +330,41 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
         "nao_reconhecidas": [...],
         "reflexas_sugeridas": [...],
     }
+    Otimização: verbas não reconhecidas são classificadas em UMA única chamada
+    ao Claude (em lote), evitando N chamadas sequenciais.
     """
     predefinidas: list[dict] = []
-    personalizadas: list[dict] = []
-    nao_reconhecidas: list[dict] = []
+    pendentes_llm: list[dict] = []   # verbas que precisam de classificação LLM
     reflexas_acumuladas: list[dict] = []
 
+    # Passagem 1: classificar via dicionário (instantâneo)
     for verba in verbas:
-        resultado = classificar_verba(verba)
-
-        if resultado.get("mapeada"):
+        nome = verba.get("nome_sentenca", "")
+        chave = _normalizar_chave(nome)
+        config_pjec = VERBAS_PREDEFINIDAS.get(chave) or _buscar_por_similaridade(chave)
+        if config_pjec:
+            resultado = {**verba, **config_pjec}
+            resultado["lancamento"] = "Expresso"
+            resultado["mapeada"] = True
+            resultado["confianca_mapeamento"] = 1.0
+            resultado["reflexas_sugeridas"] = REFLEXAS_TIPICAS.get(config_pjec["nome_pjecalc"], [])
             predefinidas.append(resultado)
-            reflexas_acumuladas.extend(resultado.get("reflexas_sugeridas", []))
-        elif resultado.get("sugestao_llm"):
-            personalizadas.append(resultado)
+            reflexas_acumuladas.extend(resultado["reflexas_sugeridas"])
         else:
-            nao_reconhecidas.append(resultado)
+            pendentes_llm.append(verba)
+
+    # Passagem 2: classificar não reconhecidas em UMA chamada LLM
+    personalizadas: list[dict] = []
+    nao_reconhecidas: list[dict] = []
+    if pendentes_llm:
+        classificadas = _classificar_lote_via_llm(pendentes_llm)
+        for resultado in classificadas:
+            resultado["lancamento"] = "Manual"
+            resultado["mapeada"] = False
+            if resultado.get("sugestao_llm"):
+                personalizadas.append(resultado)
+            else:
+                nao_reconhecidas.append(resultado)
 
     # Deduplicar reflexas
     nomes_reflexas_vistos: set[str] = set()
@@ -399,26 +418,40 @@ def _buscar_por_similaridade(chave: str) -> dict[str, Any] | None:
     return melhor_match
 
 
-def _classificar_via_llm(verba: dict[str, Any]) -> dict[str, Any]:
+def _classificar_lote_via_llm(verbas_nao_reconhecidas: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Usa Claude para sugerir classificação de verba não reconhecida.
-    Retorna a verba com campos 'sugestao_llm' e configuração sugerida.
+    Classifica todas as verbas não reconhecidas em UMA única chamada ao Claude.
+    Evita N chamadas sequenciais (uma por verba) que causam lentidão excessiva.
     """
+    if not verbas_nao_reconhecidas:
+        return []
+
     if not ANTHROPIC_API_KEY:
-        verba["sugestao_llm"] = None
-        verba["nao_reconhecida"] = True
-        return verba
+        for v in verbas_nao_reconhecidas:
+            v["sugestao_llm"] = None
+            v["nao_reconhecida"] = True
+        return verbas_nao_reconhecidas
 
-    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-    prompt = f"""Você é um especialista em PJE-Calc (sistema de cálculo trabalhista).
-A seguinte verba foi extraída de uma sentença trabalhista e não foi reconhecida automaticamente:
+    import json as _json, re as _re
 
-Nome: {verba.get('nome_sentenca')}
-Texto original: {verba.get('texto_original', '')[:300]}
+    # Montar lista de verbas para o prompt
+    itens = []
+    for i, v in enumerate(verbas_nao_reconhecidas):
+        itens.append(
+            f'{i}. Nome: "{v.get("nome_sentenca", "")}" | '
+            f'Texto: "{v.get("texto_original", "")[:200]}"'
+        )
+    lista_verbas = "\n".join(itens)
 
-Sugira como classificar esta verba no PJE-Calc com o seguinte JSON:
+    prompt = f"""Você é especialista em PJE-Calc (cálculo trabalhista).
+Classifique as verbas abaixo extraídas de uma sentença trabalhista.
+Responda APENAS com um array JSON com {len(verbas_nao_reconhecidas)} objetos (um por verba, na mesma ordem):
+
+{lista_verbas}
+
+Schema de cada objeto:
 {{
-  "nome_pjecalc": "nome a usar no campo Nome da verba",
+  "nome_pjecalc": "nome a usar no campo Nome",
   "caracteristica": "Comum | 13o Salario | Aviso Previo | Ferias",
   "ocorrencia": "Mensal | Dezembro | Periodo Aquisitivo | Desligamento",
   "incidencia_fgts": true/false,
@@ -427,29 +460,38 @@ Sugira como classificar esta verba no PJE-Calc com o seguinte JSON:
   "tipo": "Principal | Reflexa",
   "compor_principal": true/false,
   "pagina_pjecalc": "Verbas | Multas e Indenizacoes",
-  "assunto_cnj_sugerido": "descrição do assunto TPU mais adequado",
   "confianca": 0.0-1.0,
   "justificativa": "breve explicação"
 }}
-Responda APENAS com o JSON."""
+
+Responda SOMENTE com o array JSON, sem markdown."""
 
     try:
+        cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=60.0)
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=512,
+            max_tokens=1024 * len(verbas_nao_reconhecidas),
             temperature=CLAUDE_EXTRACTION_TEMPERATURE,
             messages=[{"role": "user", "content": prompt}],
         )
-        import json, re
         conteudo = resposta.content[0].text.strip()
-        conteudo = re.sub(r"^```(?:json)?\s*", "", conteudo)
-        conteudo = re.sub(r"\s*```$", "", conteudo)
-        sugestao = json.loads(conteudo)
-        verba["sugestao_llm"] = sugestao
-        verba.update(sugestao)
+        conteudo = _re.sub(r"^```(?:json)?\s*", "", conteudo)
+        conteudo = _re.sub(r"\s*```\s*$", "", conteudo)
+        sugestoes = _json.loads(conteudo)
+        if not isinstance(sugestoes, list):
+            raise ValueError("Resposta não é uma lista")
+        for i, v in enumerate(verbas_nao_reconhecidas):
+            if i < len(sugestoes) and isinstance(sugestoes[i], dict):
+                v["sugestao_llm"] = sugestoes[i]
+                v.update(sugestoes[i])
+            else:
+                v["sugestao_llm"] = None
+                v["nao_reconhecida"] = True
     except Exception as e:
-        verba["sugestao_llm"] = None
-        verba["nao_reconhecida"] = True
-        verba["erro_classificacao"] = str(e)
+        import logging
+        logging.getLogger(__name__).warning(f"Classificação em lote falhou: {e}")
+        for v in verbas_nao_reconhecidas:
+            v["sugestao_llm"] = None
+            v["nao_reconhecida"] = True
 
-    return verba
+    return verbas_nao_reconhecidas
