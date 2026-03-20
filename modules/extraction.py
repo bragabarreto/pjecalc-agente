@@ -71,9 +71,26 @@ def _limpar_e_parsear_json(texto: str) -> dict:
         try:
             return _sanitizar_chaves(json.loads(match.group()))
         except json.JSONDecodeError:
-            pass
+            limpo = match.group()
 
-    # 5. Sem recuperação possível — relançar com o texto limpo para logging
+    # 5. Tentar fechar JSON truncado — contar chaves/colchetes abertos e fechá-los
+    try:
+        parcial = limpo
+        # Remover trailing incompleto (valor string cortado ou vírgula pendente)
+        parcial = re.sub(r',\s*$', '', parcial.rstrip())
+        parcial = re.sub(r':\s*"[^"]*$', ': null', parcial)  # string aberta no fim
+        # Fechar estruturas abertas
+        abre = parcial.count('{') - parcial.count('}')
+        fecha_colchete = parcial.count('[') - parcial.count(']')
+        if fecha_colchete > 0:
+            parcial += ']' * fecha_colchete
+        if abre > 0:
+            parcial += '}' * abre
+        return _sanitizar_chaves(json.loads(parcial))
+    except json.JSONDecodeError:
+        pass
+
+    # 6. Sem recuperação possível — relançar com o texto limpo para logging
     return _sanitizar_chaves(json.loads(limpo))  # levanta JSONDecodeError com contexto útil
 
 
@@ -722,7 +739,7 @@ def _extrair_de_relatorio_estruturado(
     try:
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=4096,  # 4096 suficiente para JSON do schema; 8192 causava timeout
+            max_tokens=6000,  # 6000 evita truncação de JSON grandes sem timeout
             temperature=0.0,  # mapeamento determinístico
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{

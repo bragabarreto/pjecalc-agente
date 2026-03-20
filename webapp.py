@@ -30,7 +30,11 @@ import logging
 
 logger = logging.getLogger("pjecalc_agent.webapp")
 
+import time as _time
 from config import OUTPUT_DIR, CLOUD_MODE, PJECALC_DIR
+
+# Sessões em processamento (em memória) — evita 404 enquanto background task roda
+_sessoes_processando: dict[str, float] = {}  # sessao_id → timestamp de início
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
@@ -158,6 +162,9 @@ async def processar_sentenca(
     # Detectar se é relatório estruturado (ex: saída do Projeto Claude)
     is_relatorio = str(form.get("input_type", "")).strip() == "relatorio"
 
+    # Registrar sessão em memória antes de iniciar background (evita 404 durante processamento)
+    _sessoes_processando[sessao_id] = _time.time()
+
     # Processar em background
     background_tasks.add_task(
         _tarefa_processar_sentenca,
@@ -187,6 +194,9 @@ async def verificar_status(sessao_id: str, db: Session = Depends(get_db)):
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo:
+        # Enquanto background task ainda processa, retornar "processando" (não 404)
+        if sessao_id in _sessoes_processando:
+            return JSONResponse({"status": "processando", "sessao_id": sessao_id})
         return JSONResponse({"status": "nao_encontrado"}, status_code=404)
 
     return JSONResponse({
@@ -874,6 +884,8 @@ def _tarefa_processar_sentenca(
             pass
     finally:
         db.close()
+        # Remover da lista de sessões em processamento
+        _sessoes_processando.pop(sessao_id, None)
         # Limpar arquivos temporários e forçar GC para liberar memória
         try:
             shutil.rmtree(caminho.parent, ignore_errors=True)

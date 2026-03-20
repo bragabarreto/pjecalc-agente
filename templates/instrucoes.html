@@ -53,7 +53,7 @@
   </div>
   <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
     {% if not cloud_mode %}
-    <!-- Botão principal: automação Playwright local (apenas modo local) -->
+    <!-- Botão principal: automação Playwright local -->
     <button id="btn-preencher-playwright" onclick="iniciarPreenchimento()"
        class="btn btn-success btn-lg"
        style="font-weight:700; padding:10px 18px;">
@@ -63,20 +63,6 @@
       </small>
     </button>
     {% endif %}
-    <!-- Extensão de browser (funciona local e cloud) -->
-    <a href="{{ pjecalc_url }}" target="_blank"
-       class="btn {% if cloud_mode %}btn-success btn-lg{% else %}btn-outline-success{% endif %} btn-download"
-       {% if cloud_mode %}style="font-weight:700; padding:10px 18px;"{% endif %}
-       title="Requer extensão Agente PJE-Calc instalada no browser">
-      {% if cloud_mode %}
-        Preencher via Extensão de Browser
-        <small style="display:block; font-size:0.7rem; font-weight:400; opacity:0.9; margin-top:2px;">
-          (requer extensão instalada no Chrome/Firefox)
-        </small>
-      {% else %}
-        Via Extensão
-      {% endif %}
-    </a>
     <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary btn-download">⬇ Baixar .pjc</a>
     <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
     <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-primary btn-download">Baixar JSON</a>
@@ -99,67 +85,31 @@
 {% endif %}
 
 <!-- Aviso principal: automação local -->
+{% if not cloud_mode %}
 <div class="aviso-box no-print" style="background:#e8f4fd; border-color:#1a3a6b;">
-  <h4 style="color:#1a3a6b;">Automação Automática — PJE-Calc Cidadão</h4>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:10px;">
-
-    <div>
-      <p style="font-size:0.9rem; font-weight:600; color:#1a3a6b; margin-bottom:6px;">
-        Como funciona (botão principal acima)
-      </p>
-      <ol style="font-size:0.88rem; color:#333; margin:0; padding-left:18px; line-height:2;">
-        <li>Clique em <strong style="color:#155724;">Preencher PJE-Calc Automaticamente</strong></li>
-        <li>O sistema inicia o PJE-Calc Cidadão automaticamente (se necessário)</li>
-        <li>Um browser abre e preenche cada seção do cálculo em sequência</li>
-        <li>Se algum campo precisar de ajuste, um aviso amarelo aparece — preencha e clique <em>Continuar</em></li>
-        <li>Revise e clique em <strong>Liquidar</strong></li>
-      </ol>
-    </div>
-
-    <div>
-      <p style="font-size:0.9rem; font-weight:600; color:#1a3a6b; margin-bottom:6px;">
-        Alternativa: extensão de browser
-      </p>
-      <ol style="font-size:0.88rem; color:#333; margin:0; padding-left:18px; line-height:2;">
-        <li>Baixe: <a href="/download/extensao" style="color:#1a3a6b; font-weight:600;">⬇ Extensão (.zip)</a>
-          → extraia → instale no Chrome ou Firefox</li>
-        <li>Abra o PJE-Calc Cidadão manualmente (<code>localhost:9257</code>)</li>
-        <li>Clique em <strong>Via Extensão</strong> ao lado do botão principal</li>
-      </ol>
-    </div>
-
-  </div>
-  <p style="font-size:0.8rem; color:#555; margin-top:12px; margin-bottom:0;">
-    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado na pasta do agente ·
-    Playwright instalado (<code>pip install playwright &amp;&amp; playwright install chromium</code>)
+  <h4 style="color:#1a3a6b;">Como funciona a automação</h4>
+  <ol style="font-size:0.9rem; color:#333; margin:10px 0 0; padding-left:18px; line-height:2.2;">
+    <li>Clique em <strong style="color:#155724;">Preencher PJE-Calc Automaticamente</strong> acima</li>
+    <li>O sistema inicia o PJE-Calc Cidadão automaticamente (se ainda não estiver aberto)</li>
+    <li>Um browser abre e preenche cada seção do cálculo em sequência — acompanhe o progresso aqui</li>
+    <li>Se algum campo precisar de ajuste, um aviso amarelo aparece no PJE-Calc — preencha e clique <em>Continuar</em></li>
+    <li>Revise os dados no PJE-Calc e clique em <strong>Liquidar</strong></li>
+  </ol>
+  <p style="font-size:0.8rem; color:#555; margin-top:10px; margin-bottom:0;">
+    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado na pasta do agente e
+    Playwright instalado (executado automaticamente pelo <code>instalar.bat</code>)
   </p>
 </div>
-
-<!-- Alternativas colapsáveis -->
-<details class="no-print" style="margin-bottom:20px;">
-  <summary style="cursor:pointer; color:#1a3a6b; font-weight:600; padding:8px 0;">
-    Alternativas: popup da extensão / arquivo .bat / script Python (expandir)
-  </summary>
-  <div class="card" style="margin-top:10px;">
-    <p style="font-weight:600; color:#1a3a6b; margin-bottom:8px;">Alternativa 1 — Usar o popup da extensão manualmente</p>
-    <ol style="font-size:0.88rem; line-height:1.9; padding-left:18px; margin-bottom:14px;">
-      <li>Clique no ícone da extensão na barra do browser</li>
-      <li>Configure a URL do servidor (uma vez): <code>{{ base_url }}</code></li>
-      <li>Cole o ID da sessão: <code style="font-size:0.8rem;">{{ sessao_id }}</code></li>
-      <li>Clique em <em>Abrir PJE-Calc e Preencher</em></li>
-    </ol>
-    <p style="font-weight:600; color:#1a3a6b; margin-bottom:8px;">Alternativa 2 — Arquivo .bat (requer Python)</p>
-    <ol style="font-size:0.88rem; line-height:1.9; padding-left:18px; margin-bottom:14px;">
-      <li>Baixe: <a href="/download/{{ sessao_id }}/launcher">⬇ Automação .bat</a></li>
-      <li>Dê duplo-clique — instala Playwright e preenche via browser Chromium separado</li>
-    </ol>
-    <p style="font-weight:600; color:#1a3a6b; margin-bottom:8px;">Alternativa 3 — Script Python direto</p>
-    <ol style="font-size:0.88rem; line-height:1.9; padding-left:18px;">
-      <li>Baixe: <a href="/download/{{ sessao_id }}/script">⬇ Script .py</a></li>
-      <li>Execute: <code>pip install playwright &amp;&amp; playwright install chromium &amp;&amp; python auto_pjecalc_XXX.py</code></li>
-    </ol>
-  </div>
-</details>
+{% else %}
+<div class="aviso-box no-print" style="background:#fff3cd; border-color:#ffc107;">
+  <h4 style="color:#856404;">Automação disponível apenas na instalação local</h4>
+  <p style="font-size:0.9rem; color:#333; margin:6px 0 0;">
+    Para preencher o PJE-Calc automaticamente, instale o Agente PJE-Calc localmente
+    e acesse via <code>http://localhost:8000</code>.
+    Use o guia abaixo para preenchimento manual.
+  </p>
+</div>
+{% endif %}
 
 {% set proc = dados.get('processo', {}) %}
 {% set cont = dados.get('contrato', {}) %}

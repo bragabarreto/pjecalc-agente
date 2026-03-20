@@ -26,8 +26,8 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 :: Instalar Playwright
-echo [3/6] Configurando Playwright (automacao web PJE-Calc corporativo)...
-playwright install firefox
+echo [3/6] Configurando Playwright (automacao web PJE-Calc)...
+playwright install firefox chromium
 
 :: Criar estrutura de dados
 echo [4/6] Criando estrutura de dados...
