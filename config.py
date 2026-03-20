@@ -41,6 +41,13 @@ CLAUDE_MODEL = "claude-sonnet-4-6"          # modelo padrão para NLP jurídico
 CLAUDE_EXTRACTION_TEMPERATURE = 0.0         # determinístico para extração
 CLAUDE_MAX_TOKENS = 4096
 
+# ── API Gemini (Google) — opcional ───────────────────────────────────────────
+# Se GEMINI_API_KEY estiver definida, usa Gemini 2.5 Flash para extração.
+# Deixe em branco para usar Claude (padrão).
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+USE_GEMINI = bool(GEMINI_API_KEY)
+
 # ── Limites de confiança (NLP) ───────────────────────────────────────────────
 CONFIDENCE_THRESHOLD_AUTO = 0.75    # abaixo → acionar usuário
 CONFIDENCE_THRESHOLD_BLOCK = 0.50   # abaixo → parada bloqueante

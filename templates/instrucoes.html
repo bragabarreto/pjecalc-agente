@@ -33,13 +33,15 @@
   display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
 .passo-txt { flex: 1; padding-top: 4px; }
 .acoes-topo { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
-/* Log de progresso da automação */
-#log-automacao { display:none; background:#1a1a2e; color:#e2e8f0; border-radius:6px;
-  padding:12px 16px; font-family:monospace; font-size:0.82rem; max-height:240px;
-  overflow-y:auto; margin-top:12px; line-height:1.6; }
-#log-automacao .log-ok   { color:#68d391; }
+/* Log de progresso da automação — CalcMachine style */
+#log-automacao { background:#1a1a2e; color:#00ff88; border-radius:0 0 6px 6px;
+  padding:12px 16px; font-family:monospace; font-size:0.82rem; height:300px;
+  overflow-y:auto; line-height:1.6; }
+#log-automacao .log-ok   { color:#00ff88; }
 #log-automacao .log-err  { color:#fc8181; }
 #log-automacao .log-wait { color:#f6e05e; }
+.controles-automacao { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-bottom:0; }
+.controles-automacao .form-check { margin:0; }
 {% endblock %}
 
 {% block content %}
@@ -52,53 +54,37 @@
     </p>
   </div>
   <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
-    {% if not cloud_mode %}
-    <!-- Botão principal: automação Playwright local -->
-    <button id="btn-preencher-playwright" onclick="iniciarPreenchimento()"
-       class="btn btn-success btn-lg"
-       style="font-weight:700; padding:10px 18px;">
-      Preencher PJE-Calc Automaticamente
-      <small style="display:block; font-size:0.7rem; font-weight:400; opacity:0.9; margin-top:2px;">
-        (inicia PJE-Calc e preenche via browser)
-      </small>
-    </button>
-    {% endif %}
     <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary btn-download">⬇ Baixar .pjc</a>
     <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
     <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-primary btn-download">Baixar JSON</a>
   </div>
 </div>
 
-<!-- Log de progresso da automação Playwright (apenas modo local) -->
+<!-- Painel de automação CalcMachine -->
 {% if not cloud_mode %}
-<div id="caixa-automacao" class="no-print" style="display:none; margin-bottom:16px;">
-  <div style="background:#1a3a6b; color:#fff; padding:10px 16px; border-radius:6px 6px 0 0;
-       display:flex; align-items:center; gap:10px;">
-    <span id="automacao-status-icone">&#9654;</span>
-    <strong id="automacao-status-texto">Iniciando automação…</strong>
-    <span id="automacao-spinner" style="margin-left:auto;">
-      <span class="spinner-border spinner-border-sm" role="status"></span>
-    </span>
+<div class="no-print" style="margin-bottom:20px;">
+  <div style="background:#1a3a6b; color:#fff; padding:10px 16px; border-radius:6px 6px 0 0;">
+    <strong>Automação PJE-Calc</strong>
   </div>
-  <div id="log-automacao"></div>
-</div>
-{% endif %}
-
-<!-- Aviso principal: automação local -->
-{% if not cloud_mode %}
-<div class="aviso-box no-print" style="background:#e8f4fd; border-color:#1a3a6b;">
-  <h4 style="color:#1a3a6b;">Como funciona a automação</h4>
-  <ol style="font-size:0.9rem; color:#333; margin:10px 0 0; padding-left:18px; line-height:2.2;">
-    <li>Clique em <strong style="color:#155724;">Preencher PJE-Calc Automaticamente</strong> acima</li>
-    <li>O sistema inicia o PJE-Calc Cidadão automaticamente (se ainda não estiver aberto)</li>
-    <li>Um browser abre e preenche cada seção do cálculo em sequência — acompanhe o progresso aqui</li>
-    <li>Se algum campo precisar de ajuste, um aviso amarelo aparece no PJE-Calc — preencha e clique <em>Continuar</em></li>
-    <li>Revise os dados no PJE-Calc e clique em <strong>Liquidar</strong></li>
-  </ol>
-  <p style="font-size:0.8rem; color:#555; margin-top:10px; margin-bottom:0;">
-    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado na pasta do agente e
-    Playwright instalado (executado automaticamente pelo <code>instalar.bat</code>)
-  </p>
+  <div style="background:#f8f9fa; border:1px solid #dee2e6; border-top:none; padding:12px 16px; border-radius:0;">
+    <div class="controles-automacao">
+      <button id="btnVerificar" class="btn btn-outline-primary btn-sm" onclick="verificarPjeCalc()">
+        🔍 Verificar PJE-Calc
+      </button>
+      <div class="form-check form-check-inline">
+        <input type="checkbox" id="modo_oculto" class="form-check-input">
+        <label for="modo_oculto" class="form-check-label" style="font-size:0.9rem;">Modo oculto</label>
+      </div>
+      <button id="btnExecutar" class="btn btn-success btn-sm" onclick="executarAutomacao()" disabled>
+        ▶ Executar Automação
+      </button>
+      <button id="btnEncerrar" class="btn btn-danger btn-sm" onclick="encerrarAutomacao()" disabled>
+        ⏹ Encerrar
+      </button>
+    </div>
+  </div>
+  <pre id="log-automacao">Clique em "Verificar PJE-Calc" para começar.
+</pre>
 </div>
 {% else %}
 <div class="aviso-box no-print" style="background:#fff3cd; border-color:#ffc107;">
@@ -375,96 +361,99 @@
 {% if not cloud_mode %}
 <script>
 const SESSAO_ID = "{{ sessao_id }}";
-let logIdx = 0;
-let sseSource = null;
+let evtSource = null;
+let reconexoes = 0;
+const MAX_RECONEXOES = 5;
+let modoOcultoAtual = false;
 
-function iniciarPreenchimento() {
-  const btn = document.getElementById('btn-preencher-playwright');
-  const caixa = document.getElementById('caixa-automacao');
-  const logDiv = document.getElementById('log-automacao');
-  const statusTexto = document.getElementById('automacao-status-texto');
-  const spinner = document.getElementById('automacao-spinner');
-
-  btn.disabled = true;
-  btn.textContent = 'Aguarde…';
-  caixa.style.display = 'block';
-  logDiv.style.display = 'block';
-  logIdx = 0;
-
-  // Inicia automação no servidor
-  fetch(`/api/preencher/${SESSAO_ID}`, { method: 'POST' })
-    .then(r => r.json())
-    .then(data => {
-      if (!data.ok) {
-        statusTexto.textContent = 'Erro: ' + data.mensagem;
-        spinner.innerHTML = '&#10060;';
-        btn.disabled = false;
-        btn.textContent = 'Preencher PJE-Calc Automaticamente';
-        return;
-      }
-      statusTexto.textContent = 'Automação em andamento…';
-      iniciarSSE();
-    })
-    .catch(err => {
-      statusTexto.textContent = 'Erro ao iniciar: ' + err;
-      btn.disabled = false;
-      btn.textContent = 'Preencher PJE-Calc Automaticamente';
-    });
+async function verificarPjeCalc() {
+  document.getElementById('btnVerificar').disabled = true;
+  logMsg('Verificando PJE-Calc em localhost:9257…', 'wait');
+  try {
+    const resp = await fetch('/api/verificar_pjecalc');
+    const { disponivel } = await resp.json();
+    if (disponivel) {
+      document.getElementById('btnExecutar').disabled = false;
+      logMsg('✅ PJE-Calc disponível em localhost:9257', 'ok');
+    } else {
+      logMsg('❌ PJE-Calc não encontrado. Abra o PJE-Calc Cidadão primeiro.', 'err');
+    }
+  } catch(e) {
+    logMsg('❌ Erro ao verificar: ' + e, 'err');
+  } finally {
+    document.getElementById('btnVerificar').disabled = false;
+  }
 }
 
-function iniciarSSE() {
-  const logDiv = document.getElementById('log-automacao');
-  const statusTexto = document.getElementById('automacao-status-texto');
-  const spinner = document.getElementById('automacao-spinner');
-  const btn = document.getElementById('btn-preencher-playwright');
+function executarAutomacao() {
+  modoOcultoAtual = document.getElementById('modo_oculto').checked;
+  reconexoes = 0;
+  document.getElementById('btnExecutar').disabled = true;
+  document.getElementById('btnEncerrar').disabled = false;
+  logMsg('Conectando ao servidor de automação…', 'wait');
+  abrirSSE();
+}
 
-  sseSource = new EventSource(`/api/preencher/${SESSAO_ID}/progresso?desde=${logIdx}`);
-
-  sseSource.onmessage = function(e) {
-    const data = JSON.parse(e.data);
-
-    if (data.fim) {
-      sseSource.close();
-      spinner.innerHTML = '&#10003;';
-      btn.disabled = false;
-      btn.textContent = 'Preencher PJE-Calc Automaticamente';
-      return;
-    }
-
-    const msg = data.msg || '';
-    logIdx = (data.idx || logIdx) + 1;
-
-    const linha = document.createElement('div');
-    if (msg.startsWith('ERRO') || msg.startsWith('Error')) {
-      linha.className = 'log-err';
-    } else if (msg.startsWith('AGUARDANDO') || msg.includes('⚠')) {
-      linha.className = 'log-wait';
-      statusTexto.textContent = 'Aguardando ação no PJE-Calc…';
-    } else if (msg.startsWith('CONCLUIDO')) {
-      linha.className = 'log-ok';
-      statusTexto.textContent = 'Concluído — revise e clique em Liquidar';
-      spinner.innerHTML = '&#10003;';
-      btn.disabled = false;
-      btn.textContent = 'Preencher novamente';
+function abrirSSE() {
+  evtSource = new EventSource(
+    `/api/executar/${SESSAO_ID}?modo_oculto=${modoOcultoAtual}`
+  );
+  evtSource.onmessage = (e) => {
+    const { msg } = JSON.parse(e.data);
+    const tipo = msg.startsWith('ERRO') || msg.startsWith('Error') ? 'err'
+               : (msg.startsWith('AGUARDANDO') || msg.includes('⚠')) ? 'wait'
+               : 'ok';
+    logMsg(msg, tipo);
+    if (msg === '[FIM DA EXECUÇÃO]') finalizarAutomacao();
+  };
+  evtSource.onerror = () => {
+    evtSource.close();
+    if (reconexoes < MAX_RECONEXOES) {
+      reconexoes++;
+      logMsg(`Reconectando (tentativa ${reconexoes}/${MAX_RECONEXOES})…`, 'wait');
+      setTimeout(() => abrirSSE(), 3000);
     } else {
-      linha.className = 'log-ok';
+      logMsg('Falha na conexão SSE após 5 tentativas.', 'err');
+      finalizarAutomacao();
     }
-    linha.textContent = msg;
-    logDiv.appendChild(linha);
-    logDiv.scrollTop = logDiv.scrollHeight;
   };
+}
 
-  sseSource.onerror = function() {
-    sseSource.close();
-    // Tenta reconectar após 2s se não concluído
-    setTimeout(() => {
-      const msgs = document.querySelectorAll('#log-automacao div');
-      const ultimo = msgs.length ? msgs[msgs.length-1].textContent : '';
-      if (!ultimo.startsWith('CONCLUIDO') && !ultimo.startsWith('ERRO')) {
-        iniciarSSE();
-      }
-    }, 2000);
-  };
+function encerrarAutomacao() {
+  if (evtSource) { evtSource.close(); evtSource = null; }
+  logMsg('Conexão encerrada pelo usuário.', 'wait');
+  finalizarAutomacao();
+}
+
+function finalizarAutomacao() {
+  document.getElementById('btnExecutar').disabled = false;
+  document.getElementById('btnEncerrar').disabled = true;
+  tocarConclusao();
+}
+
+function logMsg(msg, tipo = 'ok') {
+  const pre = document.getElementById('log-automacao');
+  const span = document.createElement('span');
+  span.className = `log-${tipo}`;
+  span.textContent = msg + '\n';
+  pre.appendChild(span);
+  pre.scrollTop = pre.scrollHeight;
+}
+
+function tocarConclusao() {
+  try {
+    const ctx = new AudioContext();
+    [261.63, 329.63, 392.00].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      gain.gain.setValueAtTime(0.3, ctx.currentTime + i * 0.3);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i * 0.3 + 0.4);
+      osc.start(ctx.currentTime + i * 0.3);
+      osc.stop(ctx.currentTime + i * 0.3 + 0.5);
+    });
+  } catch(e) {}
 }
 </script>
 {% endif %}

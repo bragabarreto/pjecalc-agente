@@ -1,23 +1,68 @@
 # modules/playwright_pjecalc.py — Automação Playwright para PJE-Calc Cidadão
 #
-# Inicia o PJE-Calc Cidadão (localhost:9257) via subprocess e preenche os
-# formulários JSF/RichFaces com Playwright.  O browser fica visível ao usuário.
-#
-# Uso:
-#   from modules.playwright_pjecalc import iniciar_e_preencher
-#   iniciar_e_preencher(dados, verbas_mapeadas, sessao_id, progresso_callback)
+# Implementação conforme Manual Técnico v2.0:
+#   - Verificação HTTP após TCP (não apenas porta)
+#   - Decorator @retry com detecção de ViewExpiredException
+#   - Monitor de AJAX JSF nativo (jsf.ajax.addOnEvent)
+#   - Hierarquia de seletores: get_by_label → [id$=] → XPath contains → escaped CSS
+#   - press_sequentially para campos de data
+#   - Mapeamento dinâmico de campos para diagnóstico
+#   - Tratamento do erro de primeira carga do PJE-Calc
 
 from __future__ import annotations
 
+import functools
+import json
 import re
 import socket
 import subprocess
 import time
+import urllib.request
 import logging
+import os
 from pathlib import Path
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+# ── Decorator de retry ────────────────────────────────────────────────────────
+
+def retry(max_tentativas: int = 3, delay: int = 2):
+    """Retry automático com screenshot em falha e detecção de ViewExpiredException."""
+    def decorator(func):
+        @functools.wraps(func)
+        def wrapper(self: "PJECalcPlaywright", *args, **kwargs):
+            ultima_exc = None
+            for tentativa in range(1, max_tentativas + 1):
+                try:
+                    return func(self, *args, **kwargs)
+                except Exception as exc:
+                    ultima_exc = exc
+                    self._log(f"  ⚠ Tentativa {tentativa}/{max_tentativas} em {func.__name__}: {exc}")
+                    # Screenshot para diagnóstico
+                    try:
+                        os.makedirs("screenshots", exist_ok=True)
+                        self._page.screenshot(
+                            path=f"screenshots/erro_{func.__name__}_{tentativa}.png",
+                            full_page=True,
+                        )
+                    except Exception:
+                        pass
+                    # Recupera ViewState expirado
+                    try:
+                        body = self._page.locator("body").text_content() or ""
+                        if "ViewExpired" in body or "expired" in body.lower():
+                            self._log("  ↻ ViewState expirado — recarregando página…")
+                            self._page.reload()
+                            self._page.wait_for_load_state("networkidle")
+                    except Exception:
+                        pass
+                    if tentativa < max_tentativas:
+                        time.sleep(delay * tentativa)
+            raise ultima_exc
+        return wrapper
+    return decorator
+
 
 # ── Verificação e inicialização do PJE-Calc ───────────────────────────────────
 
@@ -31,10 +76,12 @@ def pjecalc_rodando() -> bool:
         return False
 
 
-def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 90) -> None:
+def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 120) -> None:
     """
     Inicia o PJE-Calc Cidadão via iniciarPjeCalc.bat se não estiver rodando.
-    Aguarda até `timeout` segundos o Tomcat responder na porta 9257.
+    Aguarda:
+      1) porta TCP 9257 abrir
+      2) HTTP http://localhost:9257/pjecalc responder com 200/302
     """
     dir_path = Path(pjecalc_dir)
     bat = dir_path / "iniciarPjeCalc.bat"
@@ -46,6 +93,8 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 90) -> None:
 
     if pjecalc_rodando():
         logger.info("PJE-Calc já está rodando em localhost:9257.")
+        # Ainda verifica HTTP para garantir que o Tomcat terminou o deploy
+        _aguardar_http(timeout=30)
         return
 
     logger.info(f"Iniciando PJE-Calc Cidadão a partir de {dir_path}…")
@@ -55,18 +104,38 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 90) -> None:
         creationflags=subprocess.CREATE_NEW_CONSOLE,
     )
 
+    # 1) Aguarda porta TCP abrir
     inicio = time.time()
     while time.time() - inicio < timeout:
         if pjecalc_rodando():
-            logger.info("PJE-Calc disponível em localhost:9257.")
-            time.sleep(3)   # aguarda inicialização completa do Seam/JSF
-            return
+            logger.info("PJE-Calc: porta TCP 9257 aberta.")
+            break
         time.sleep(2)
+    else:
+        raise TimeoutError(
+            f"PJE-Calc não ficou disponível em {timeout}s. "
+            "Verifique se o Java está instalado corretamente."
+        )
 
-    raise TimeoutError(
-        f"PJE-Calc não ficou disponível em {timeout}s. "
-        "Verifique se o Java está instalado corretamente."
-    )
+    # 2) Aguarda HTTP responder (Tomcat pode aceitar TCP antes de concluir deploy)
+    _aguardar_http(timeout=60)
+
+
+def _aguardar_http(timeout: int = 60) -> None:
+    """Aguarda http://localhost:9257/pjecalc responder com status 200 ou 302."""
+    url = "http://localhost:9257/pjecalc"
+    inicio = time.time()
+    while time.time() - inicio < timeout:
+        try:
+            with urllib.request.urlopen(url, timeout=5) as resp:
+                if resp.status in (200, 302):
+                    logger.info("PJE-Calc HTTP respondendo — pronto.")
+                    time.sleep(2)  # margem para finalizar deploy Seam/JSF
+                    return
+        except Exception:
+            pass
+        time.sleep(3)
+    raise TimeoutError(f"PJE-Calc: porta aberta mas HTTP não respondeu em {timeout}s.")
 
 
 # ── Utilitários de formatação ─────────────────────────────────────────────────
@@ -103,10 +172,11 @@ def _parsear_numero_processo(numero: str | None) -> dict:
 class PJECalcPlaywright:
     """
     Preenche o PJE-Calc Cidadão via Playwright (browser visível).
-    Todas as interações são via seletores JSF/RichFaces.
+    Implementa as recomendações do Manual Técnico v2.0.
     """
 
     PJECALC_BASE = "http://localhost:9257/pjecalc"
+    LOG_DIR = Path("data/logs")
 
     def __init__(self, log_cb: Callable[[str], None] | None = None):
         self._log_cb = log_cb or (lambda msg: None)
@@ -116,16 +186,20 @@ class PJECalcPlaywright:
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
-    def iniciar_browser(self) -> None:
+    def iniciar_browser(self, headless: bool = False) -> None:
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
         self._browser = self._pw.chromium.launch(
-            headless=False,
-            slow_mo=200,
-            args=["--start-maximized"],
+            headless=headless,
+            slow_mo=0 if headless else 150,
+            args=[] if headless else ["--start-maximized"],
         )
-        ctx = self._browser.new_context(no_viewport=True)
+        ctx = self._browser.new_context(
+            no_viewport=True,
+            locale="pt-BR",
+        )
         self._page = ctx.new_page()
+        self._page.set_default_timeout(30000)
 
     def fechar(self) -> None:
         try:
@@ -142,115 +216,280 @@ class PJECalcPlaywright:
         logger.info(msg)
         self._log_cb(msg)
 
+    # ── Monitor de AJAX JSF ────────────────────────────────────────────────────
+
+    def _instalar_monitor_ajax(self) -> None:
+        """Injeta listener no sistema de AJAX do JSF para esperas precisas."""
+        self._page.evaluate("""() => {
+            window.__ajaxCompleto = true;
+            if (typeof jsf !== 'undefined' && jsf.ajax) {
+                jsf.ajax.addOnEvent(function(data) {
+                    if (data.status === 'begin') window.__ajaxCompleto = false;
+                    if (data.status === 'success' || data.status === 'complete')
+                        window.__ajaxCompleto = true;
+                });
+            }
+        }""")
+
+    def _aguardar_ajax(self, timeout: int = 15000) -> None:
+        """Aguarda conclusão do AJAX JSF; fallback para networkidle."""
+        try:
+            self._page.wait_for_function(
+                "() => window.__ajaxCompleto === true",
+                timeout=timeout,
+            )
+        except Exception:
+            try:
+                self._page.wait_for_load_state("networkidle", timeout=5000)
+            except Exception:
+                self._page.wait_for_timeout(2000)
+
+    # ── Descoberta dinâmica de campos ─────────────────────────────────────────
+
+    def mapear_campos(self, nome_pagina: str = "pagina") -> list[dict]:
+        """
+        Cataloga todos os campos input/select/textarea da página atual.
+        Salva em data/logs/campos_{nome_pagina}.json para diagnóstico.
+        """
+        campos = self._page.evaluate("""() => {
+            const campos = [];
+            document.querySelectorAll('input, select, textarea').forEach(el => {
+                const lbl = document.querySelector(`label[for='${el.id}']`);
+                campos.push({
+                    id: el.id,
+                    name: el.name || '',
+                    type: el.type || el.tagName.toLowerCase(),
+                    tag: el.tagName.toLowerCase(),
+                    label: lbl ? lbl.textContent.trim() : '',
+                    visible: el.offsetParent !== null,
+                    sufixo: el.id.includes(':') ? el.id.split(':').pop() : el.id
+                });
+            });
+            return campos;
+        }""")
+        # Salvar para diagnóstico
+        try:
+            self.LOG_DIR.mkdir(parents=True, exist_ok=True)
+            caminho = self.LOG_DIR / f"campos_{nome_pagina}.json"
+            caminho.write_text(
+                json.dumps(campos, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            self._log(f"  📋 Mapeamento de campos salvo: {caminho}")
+        except Exception:
+            pass
+        return campos
+
+    # ── Localização de elementos — hierarquia de 4 níveis ────────────────────
+
+    def _localizar(
+        self,
+        field_id: str,
+        label: str | None = None,
+        tipo: str = "input",
+        timeout: int = 5000,
+    ):
+        """
+        Localiza elemento JSF seguindo hierarquia do manual:
+        1. get_by_label (mais estável)
+        2. [id$='sufixo'] (sufixo do ID)
+        3. XPath contains(@id) (sem problema com dois-pontos)
+        4. ID escapado (último recurso)
+        Retorna Locator visível ou None.
+        """
+        # Nível 1: por label
+        if label:
+            loc = self._page.get_by_label(label, exact=False)
+            if loc.count() > 0:
+                return loc.first
+
+        # Nível 2: sufixo de ID (tipo=input, select, ou qualquer)
+        sufixo = field_id.split(":")[-1]  # extrai sufixo se vier com prefixo
+        seletores = [
+            f"[id$='{sufixo}_input']",   # RichFaces calendar
+            f"[id$=':{sufixo}']",
+            f"[id$='{sufixo}']",
+        ]
+        if tipo == "select":
+            seletores = [f"select{s}" for s in seletores] + seletores
+        elif tipo == "checkbox":
+            seletores = [f"input[type='checkbox']{s}" for s in seletores] + seletores
+
+        for sel in seletores:
+            try:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    return loc.first
+            except Exception:
+                continue
+
+        # Nível 3: XPath contains(@id)
+        xpath_map = {
+            "input":    f"//input[contains(@id, '{sufixo}')]",
+            "select":   f"//select[contains(@id, '{sufixo}')]",
+            "checkbox": f"//input[@type='checkbox' and contains(@id, '{sufixo}')]",
+        }
+        xpath = xpath_map.get(tipo, f"//*[contains(@id, '{sufixo}')]")
+        try:
+            loc = self._page.locator(xpath)
+            if loc.count() > 0:
+                return loc.first
+        except Exception:
+            pass
+
+        # Nível 4: ID completo com dois-pontos escapados
+        escaped = field_id.replace(":", "\\:")
+        try:
+            loc = self._page.locator(f"#{escaped}")
+            if loc.count() > 0:
+                return loc.first
+        except Exception:
+            pass
+
+        return None
+
     # ── Primitivas DOM ─────────────────────────────────────────────────────────
 
-    def _seletores_campo(self, field_id: str) -> list[str]:
-        """Gera lista de seletores para um campo JSF/RichFaces."""
-        return [
-            f"[id='formulario:{field_id}_input']",   # RichFaces calendar
-            f"[id='formulario:{field_id}']",
-            f"input[id$=':{field_id}']",
-            f"input[id$='{field_id}']",
-            f"textarea[id$='{field_id}']",
-        ]
-
-    def _aguardar_seletor(self, seletor: str, timeout: int = 5000):
-        try:
-            self._page.wait_for_selector(seletor, timeout=timeout, state="attached")
-            return self._page.query_selector(seletor)
-        except Exception:
-            return None
-
-    def _preencher(self, field_id: str, valor: str, obrigatorio: bool = True) -> bool:
-        """Preenche um campo de input JSF."""
+    def _preencher(
+        self,
+        field_id: str,
+        valor: str,
+        obrigatorio: bool = True,
+        label: str | None = None,
+    ) -> bool:
+        """Preenche campo de input JSF com fallback entre 4 estratégias."""
         if not valor:
             return False
-        for sel in self._seletores_campo(field_id):
-            el = self._aguardar_seletor(sel, 3000)
-            if el:
-                try:
-                    el.triple_click()
-                    el.type(valor, delay=30)
-                    el.dispatch_event("input")
-                    el.dispatch_event("change")
-                    el.dispatch_event("blur")
-                    self._log(f"  ✓ {field_id}: {valor}")
-                    return True
-                except Exception:
-                    continue
-        if obrigatorio:
-            self._log(f"  ⚠ {field_id}: campo não encontrado — preencha manualmente.")
-        return False
+        loc = self._localizar(field_id, label, tipo="input")
+        if not loc:
+            if obrigatorio:
+                self._log(f"  ⚠ {field_id}: campo não encontrado — preencha manualmente.")
+            return False
+        try:
+            loc.wait_for(state="visible", timeout=8000)
+            loc.click()
+            loc.fill("")
+            loc.fill(valor)
+            loc.dispatch_event("input")
+            loc.dispatch_event("change")
+            loc.dispatch_event("blur")
+            self._log(f"  ✓ {field_id}: {valor}")
+            return True
+        except Exception as e:
+            if obrigatorio:
+                self._log(f"  ⚠ {field_id}: erro ao preencher — {e}")
+            return False
 
-    def _preencher_data(self, field_id: str, data: str) -> bool:
-        """Preenche campos de data (RichFaces calendar usa _input)."""
-        return self._preencher(field_id, data)
+    def _preencher_data(
+        self,
+        field_id: str,
+        data: str,
+        label: str | None = None,
+    ) -> bool:
+        """
+        Preenche campo de data usando press_sequentially + Tab.
+        Mais confiável para campos JSF/RichFaces com máscara de data.
+        """
+        if not data:
+            return False
+        loc = self._localizar(field_id, label, tipo="input")
+        if not loc:
+            self._log(f"  ⚠ data {field_id}: campo não encontrado — preencha manualmente.")
+            return False
+        try:
+            loc.wait_for(state="visible", timeout=8000)
+            loc.click()
+            loc.fill("")
+            loc.press_sequentially(data, delay=50)
+            loc.dispatch_event("change")
+            loc.press("Tab")
+            self._aguardar_ajax()
+            self._log(f"  ✓ data {field_id}: {data}")
+            return True
+        except Exception as e:
+            self._log(f"  ⚠ data {field_id}: erro — {e}")
+            return False
 
-    def _selecionar(self, field_id: str, valor: str) -> bool:
-        """Seleciona opção em um <select> JSF."""
-        seletores = [
-            f"[id='formulario:{field_id}']",
-            f"select[id$=':{field_id}']",
-            f"select[id$='{field_id}']",
-        ]
-        for sel in seletores:
-            el = self._aguardar_seletor(sel, 3000)
-            if el:
-                try:
-                    tag = el.evaluate("e => e.tagName.toLowerCase()")
-                    if tag == "select":
-                        # Tenta por label (texto visível) e por value
-                        try:
-                            el.select_option(label=valor)
-                        except Exception:
-                            el.select_option(value=valor)
-                        el.dispatch_event("change")
-                        self._log(f"  ✓ select {field_id}: {valor}")
-                        return True
-                except Exception:
-                    continue
-        self._log(f"  ⚠ select {field_id}: não encontrado — selecione manualmente.")
-        return False
+    def _selecionar(
+        self,
+        field_id: str,
+        valor: str,
+        label: str | None = None,
+    ) -> bool:
+        """Seleciona opção em <select> JSF por label (texto visível) ou value."""
+        if not valor:
+            return False
+        loc = self._localizar(field_id, label, tipo="select")
+        if not loc:
+            self._log(f"  ⚠ select {field_id}: não encontrado — selecione manualmente.")
+            return False
+        try:
+            loc.wait_for(state="visible", timeout=8000)
+            # Tenta por label primeiro (mais estável), depois por value
+            try:
+                loc.select_option(label=valor)
+            except Exception:
+                loc.select_option(value=valor)
+            loc.dispatch_event("change")
+            self._aguardar_ajax()
+            self._log(f"  ✓ select {field_id}: {valor}")
+            return True
+        except Exception as e:
+            self._log(f"  ⚠ select {field_id}: erro — {e}")
+            return False
 
     def _marcar_radio(self, field_id: str, valor: str) -> bool:
-        """Clica em um radio button JSF."""
+        """Clica em radio button JSF."""
         seletores = [
-            f"[id='formulario:{field_id}'] input[value='{valor}']",
-            f"table[id='formulario:{field_id}'] input[value='{valor}']",
-            f"input[name$='{field_id}'][value='{valor}']",
+            f"input[type='radio'][value='{valor}'][id$='{field_id}']",
+            f"table[id$='{field_id}'] input[value='{valor}']",
+            f"input[type='radio'][name$='{field_id}'][value='{valor}']",
+            f"//input[@type='radio' and @value='{valor}' and contains(@id, '{field_id}')]",
         ]
         for sel in seletores:
-            el = self._aguardar_seletor(sel, 3000)
-            if el:
-                el.click()
-                self._log(f"  ✓ radio {field_id}: {valor}")
-                return True
+            try:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    loc.first.click()
+                    self._log(f"  ✓ radio {field_id}: {valor}")
+                    return True
+            except Exception:
+                continue
+        self._log(f"  ⚠ radio {field_id}={valor}: não encontrado")
         return False
 
-    def _marcar_checkbox(self, field_id: str, marcar: bool = True) -> bool:
-        """Marca ou desmarca um checkbox JSF."""
-        seletores = [
-            f"[id='formulario:{field_id}']",
-            f"input[id$=':{field_id}']",
-            f"input[id$='{field_id}']",
-        ]
-        for sel in seletores:
-            el = self._aguardar_seletor(sel, 3000)
-            if el:
-                try:
-                    tipo = el.evaluate("e => e.type")
-                    if tipo == "checkbox":
-                        atual = el.is_checked()
-                        if atual != marcar:
-                            el.click()
-                        return True
-                except Exception:
-                    continue
-        return False
+    def _marcar_checkbox(
+        self,
+        field_id: str,
+        marcar: bool = True,
+        label: str | None = None,
+    ) -> bool:
+        """Marca ou desmarca checkbox JSF."""
+        loc = self._localizar(field_id, label, tipo="checkbox")
+        if not loc:
+            return False
+        try:
+            loc.wait_for(state="visible", timeout=5000)
+            if loc.is_checked() != marcar:
+                loc.click()
+                self._aguardar_ajax()
+            return True
+        except Exception:
+            return False
 
     def _clicar_menu_lateral(self, texto: str) -> None:
-        """Clica em um link do menu lateral pelo texto."""
-        time.sleep(0.5)
+        """Clica em link do menu lateral pelo texto (Playwright locator nativo)."""
+        self._page.wait_for_timeout(400)
+        # Tenta locator has-text primeiro, depois get_by_role
+        loc = self._page.locator(f"a:has-text('{texto}')")
+        if loc.count() == 0:
+            loc = self._page.get_by_role("link", name=texto)
+        if loc.count() > 0:
+            loc.first.click()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            return
+        # Fallback JavaScript
         self._page.evaluate(f"""
             const links = document.querySelectorAll('a');
             for (const a of links) {{
@@ -259,51 +498,75 @@ class PJECalcPlaywright:
                 }}
             }}
         """)
-        time.sleep(1.5)
+        self._aguardar_ajax()
+        self._log(f"  ⚠ Menu '{texto}': usado fallback JS")
 
     def _clicar_aba(self, aba_id: str) -> None:
-        """Clica em uma aba RichFaces."""
+        """Clica em aba RichFaces."""
         seletores = [
-            f"[id='formulario:{aba_id}_lbl']",
-            f"#formulario\\:{aba_id}_lbl",
             f"[id$='{aba_id}_lbl']",
+            f"[id$='{aba_id}_header']",
+            f"[id$='{aba_id}'] span",
         ]
         for sel in seletores:
-            el = self._aguardar_seletor(sel, 4000)
-            if el:
-                el.click()
-                time.sleep(0.8)
-                return
+            try:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    loc.first.click()
+                    self._aguardar_ajax()
+                    return
+            except Exception:
+                continue
+
+    def _clicar_botao(self, texto: str, obrigatorio: bool = True) -> bool:
+        """Clica em botão pelo texto visível."""
+        loc = self._page.locator(
+            f"input[type='submit'][value='{texto}'], "
+            f"input[type='button'][value='{texto}'], "
+            f"button:has-text('{texto}'), "
+            f"a:has-text('{texto}')"
+        )
+        if loc.count() > 0:
+            loc.first.click()
+            self._aguardar_ajax()
+            return True
+        if obrigatorio:
+            self._log(f"  ⚠ Botão '{texto}' não encontrado.")
+        return False
 
     def _clicar_salvar(self) -> None:
         seletores = [
-            "[id='formulario:salvar']",
-            "[id='formulario:btnSalvar']",
+            "[id$='salvar']",
             "input[value='Salvar']",
-            "button[id*='salvar']",
+            "button:has-text('Salvar')",
         ]
         for sel in seletores:
-            el = self._aguardar_seletor(sel, 4000)
-            if el:
-                el.click()
-                time.sleep(1.5)
-                return
+            try:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    loc.first.click()
+                    self._aguardar_ajax()
+                    return
+            except Exception:
+                continue
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
 
     def _clicar_novo(self) -> None:
         seletores = [
-            "[id='formulario:novo']",
-            "[id='formulario:btnNovo']",
+            "[id$='novo']",
             "input[value='Novo']",
-            "button[id*='novo']",
+            "button:has-text('Novo')",
             ".sprite-novo",
         ]
         for sel in seletores:
-            el = self._aguardar_seletor(sel, 4000)
-            if el:
-                el.click()
-                time.sleep(0.8)
-                return
+            try:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    loc.first.click()
+                    self._aguardar_ajax()
+                    return
+            except Exception:
+                continue
 
     def _aguardar_usuario(self, mensagem: str) -> None:
         """Injeta overlay amarelo para o usuário agir e clicar em Continuar."""
@@ -316,7 +579,7 @@ class PJECalcPlaywright:
                 'background:#fff3cd;border-bottom:3px solid #ffc107;padding:16px 24px;'+
                 'font-family:Arial;font-size:14px;display:flex;align-items:center;'+
                 'gap:16px;box-shadow:0 4px 8px rgba(0,0,0,.2);';
-            div.innerHTML = '<span style="font-size:22px">⚠️</span>' +
+            div.innerHTML = '<span style="font-size:22px">\u26a0\ufe0f</span>' +
                 '<span style="flex:1"><strong>Ação necessária:</strong> ' + msg + '</span>' +
                 '<button id="pjecalc-continuar" style="background:#1a3a6b;color:#fff;' +
                 'border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:14px;">'+
@@ -329,38 +592,35 @@ class PJECalcPlaywright:
         """
         try:
             self._page.evaluate(js, mensagem)
-            # Aguarda o usuário clicar em Continuar (até 10 minutos)
             self._page.wait_for_selector("#pjecalc-agente-overlay", state="detached", timeout=600000)
         except Exception:
             pass
 
     def _verificar_e_fazer_login(self) -> None:
-        """Verifica se está logado; se não, tenta credenciais padrão ou aguarda usuário."""
+        """Verifica se está logado; se não, tenta credenciais padrão."""
         url = self._page.url
         if "logon" not in url.lower():
             return
 
         self._log("Página de login detectada — tentando credenciais padrão…")
-
-        # Credenciais padrão comuns do PJE-Calc Cidadão
-        for usuario, senha in [("admin", "pjeadmin"), ("admin", "admin"), ("pjecalc", "pjecalc"), ("advogado", "advogado")]:
+        for usuario, senha in [
+            ("admin", "pjeadmin"),
+            ("admin", "admin"),
+            ("pjecalc", "pjecalc"),
+            ("advogado", "advogado"),
+        ]:
             try:
                 sel_user = "input[name*='usuario'], input[id*='usuario'], input[type='text'][name*='j_'], input[name*='j_username']"
-                sel_pwd  = "input[type='password']"
-                sel_btn  = "input[type='submit'], button[type='submit'], input[value*='ntrar'], input[value*='ogar']"
-
                 self._page.fill(sel_user, usuario, timeout=2000)
-                self._page.fill(sel_pwd, senha, timeout=2000)
-                self._page.click(sel_btn, timeout=2000)
-                time.sleep(2)
-
+                self._page.fill("input[type='password']", senha, timeout=2000)
+                self._page.click("input[type='submit'], button[type='submit']", timeout=2000)
+                self._page.wait_for_timeout(2000)
                 if "logon" not in self._page.url.lower():
                     self._log(f"Login automático com '{usuario}' — OK.")
                     return
             except Exception:
                 continue
 
-        # Aguarda login manual
         self._aguardar_usuario(
             "Faça o login no PJE-Calc e clique em <strong>Continuar</strong>."
         )
@@ -370,28 +630,30 @@ class PJECalcPlaywright:
     def _ir_para_calculo_externo(self) -> None:
         """Navega para a tela de Cálculo Externo (novo cálculo)."""
         self._log("Navegando para Cálculo Externo…")
-        # Tenta pelo menu lateral
         self._clicar_menu_lateral("Cálculo Externo")
-        time.sleep(1)
-        # Se não funcionou, navega diretamente
+        self._page.wait_for_timeout(1000)
         if "calculo" not in self._page.url.lower():
             self._page.goto(
                 f"{self.PJECALC_BASE}/pages/calculo/calculoExterno.jsf",
                 wait_until="domcontentloaded",
+                timeout=30000,
             )
-            time.sleep(1.5)
+            self._aguardar_ajax()
 
     # ── Fase 1: Dados do Processo + Parâmetros ─────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_dados_processo(self, dados: dict) -> None:
         self._log("Fase 1 — Dados do processo…")
+        self.mapear_campos("fase1_dados_processo")
+
         proc = dados.get("processo", {})
         cont = dados.get("contrato", {})
         pres = dados.get("prescricao", {})
         avp  = dados.get("aviso_previo", {})
 
         self._clicar_aba("tabDadosProcesso")
-        time.sleep(0.5)
+        self._page.wait_for_timeout(400)
 
         # Número do processo
         num = _parsear_numero_processo(proc.get("numero"))
@@ -403,13 +665,11 @@ class PJECalcPlaywright:
             self._preencher("regiao", num.get("regiao", ""), False)
             self._preencher("vara", num.get("vara", ""), False)
 
-        # Partes
         if proc.get("reclamante"):
-            self._preencher("reclamanteNome", proc["reclamante"])
+            self._preencher("reclamanteNome", proc["reclamante"], False)
         if proc.get("reclamado"):
-            self._preencher("reclamadoNome", proc["reclamado"])
+            self._preencher("reclamadoNome", proc["reclamado"], False)
 
-        # Documentos fiscais
         if proc.get("cpf_reclamante"):
             self._marcar_radio("documentoFiscalReclamante", "CPF")
             self._preencher("reclamanteNumeroDocumentoFiscal", proc["cpf_reclamante"], False)
@@ -417,22 +677,31 @@ class PJECalcPlaywright:
             self._marcar_radio("tipoDocumentoFiscalReclamado", "CNPJ")
             self._preencher("reclamadoNumeroDocumentoFiscal", proc["cnpj_reclamado"], False)
 
-        # Tab: Parâmetros do Cálculo
+        # Aba Parâmetros do Cálculo
         self._log("  → Aba Parâmetros do Cálculo…")
         self._clicar_aba("tabParametrosCalculo")
-        time.sleep(0.5)
+        self._page.wait_for_timeout(400)
+        self.mapear_campos("fase1_parametros")
 
         if cont.get("admissao"):
-            self._preencher_data("dataAdmissao", cont["admissao"])
+            self._preencher_data("dataAdmissao", cont["admissao"], label="Data de Admissão")
         if cont.get("demissao"):
-            self._preencher_data("dataDemissao", cont["demissao"])
+            self._preencher_data("dataDemissao", cont["demissao"], label="Data de Demissão")
         if cont.get("ajuizamento"):
-            self._preencher_data("dataAjuizamento", cont["ajuizamento"])
+            self._preencher_data("dataAjuizamento", cont["ajuizamento"], label="Data de Ajuizamento")
 
         if cont.get("ultima_remuneracao"):
-            self._preencher("valorUltimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]))
+            self._preencher(
+                "valorUltimaRemuneracao",
+                _fmt_br(cont["ultima_remuneracao"]),
+                label="Última Remuneração",
+            )
         if cont.get("maior_remuneracao"):
-            self._preencher("valorMaiorRemuneracao", _fmt_br(cont["maior_remuneracao"]), False)
+            self._preencher(
+                "valorMaiorRemuneracao",
+                _fmt_br(cont["maior_remuneracao"]),
+                False,
+            )
         if cont.get("carga_horaria"):
             self._preencher("valorCargaHorariaPadrao", str(cont["carga_horaria"]), False)
 
@@ -442,7 +711,7 @@ class PJECalcPlaywright:
             "Trabalho Intermitente": "INTERMITENTE",
         }
         regime = regime_map.get(cont.get("regime", "Tempo Integral"), "INTEGRAL")
-        self._selecionar("regimeDoContrato", regime)
+        self._selecionar("regimeDoContrato", regime, label="Regime do Contrato")
 
         if pres.get("quinquenal") is not None:
             self._marcar_checkbox("prescricaoQuinquenal", bool(pres["quinquenal"]))
@@ -461,24 +730,30 @@ class PJECalcPlaywright:
 
     # ── Fase 2: Histórico Salarial ─────────────────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_historico_salarial(self, dados: dict) -> None:
         self._log("Fase 2 — Histórico salarial…")
         hist_lista = dados.get("historico_salarial") or []
 
         if not hist_lista:
-            # Fallback: usar salário único a partir de ultima_remuneracao
             cont = dados.get("contrato", {})
             sal = cont.get("ultima_remuneracao") or cont.get("maior_remuneracao")
             adm = cont.get("admissao")
             dem = cont.get("demissao")
             if sal and adm:
-                hist_lista = [{"nome": "BASE DE CÁLCULO", "valor": sal, "data_inicio": adm, "data_fim": dem or adm}]
+                hist_lista = [{
+                    "nome": "BASE DE CÁLCULO",
+                    "valor": sal,
+                    "data_inicio": adm,
+                    "data_fim": dem or adm,
+                }]
 
         if not hist_lista:
             self._log("  Sem histórico salarial — fase ignorada.")
             return
 
         self._clicar_menu_lateral("Histórico Salarial")
+        self.mapear_campos("fase2_historico")
 
         for h in hist_lista:
             self._clicar_novo()
@@ -497,9 +772,11 @@ class PJECalcPlaywright:
 
     # ── Fase 3: Verbas ─────────────────────────────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_verbas(self, verbas_mapeadas: dict) -> None:
         self._log("Fase 3 — Verbas…")
         self._clicar_menu_lateral("Verbas")
+        self.mapear_campos("fase3_verbas")
 
         todas = (
             verbas_mapeadas.get("predefinidas", [])
@@ -546,7 +823,6 @@ class PJECalcPlaywright:
             self._clicar_salvar()
             self._log(f"  ✓ Verba: {nome}")
 
-        # Verbas não reconhecidas
         nao_rec = verbas_mapeadas.get("nao_reconhecidas", [])
         if nao_rec:
             nomes = ", ".join(v.get("nome_sentenca", "?") for v in nao_rec)
@@ -559,20 +835,21 @@ class PJECalcPlaywright:
 
     # ── Fase 4: FGTS ──────────────────────────────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_fgts(self, fgts: dict) -> None:
         self._log("Fase 4 — FGTS…")
         self._clicar_menu_lateral("FGTS")
+        self.mapear_campos("fase4_fgts")
 
         aliquota = fgts.get("aliquota", 0.08)
-        pct = round(aliquota * 100)
-        # Seleciona alíquota por texto na tabela
+        pct = round(float(aliquota) * 100) if float(aliquota) <= 1 else round(float(aliquota))
         self._page.evaluate(f"""
             const tds = document.querySelectorAll('td');
             for (const td of tds) {{
                 if (td.textContent.trim() === '{pct}%') {{ td.click(); break; }}
             }}
         """)
-        time.sleep(0.3)
+        self._aguardar_ajax(3000)
 
         if fgts.get("multa_40"):
             self._marcar_checkbox("multa", True)
@@ -584,9 +861,11 @@ class PJECalcPlaywright:
 
     # ── Fase 5: Contribuição Social (INSS) ────────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_contribuicao_social(self, cs: dict) -> None:
         self._log("Fase 5 — Contribuição Social…")
         self._clicar_menu_lateral("Contribuição Social")
+        self.mapear_campos("fase5_inss")
 
         resp_map = {"Empregado": "EMPREGADO", "Empregador": "EMPREGADOR", "Ambos": "AMBOS"}
         resp = resp_map.get(cs.get("responsabilidade", "Ambos"), "AMBOS")
@@ -600,9 +879,11 @@ class PJECalcPlaywright:
 
     # ── Fase 6: Parâmetros de Atualização ─────────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_parametros_atualizacao(self, cj: dict) -> None:
         self._log("Fase 6 — Parâmetros de atualização…")
         self._clicar_menu_lateral("Parâmetros de Atualização")
+        self.mapear_campos("fase6_correcao")
 
         indice_map = {
             "Tabela JT Única Mensal": "IPCAE",
@@ -627,6 +908,7 @@ class PJECalcPlaywright:
 
     # ── Fase 7: IRPF ──────────────────────────────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_irpf(self, ir: dict) -> None:
         if not ir.get("apurar"):
             self._log("Fase 7 — IRPF ignorado (não apurar).")
@@ -634,6 +916,7 @@ class PJECalcPlaywright:
 
         self._log("Fase 7 — IRPF…")
         self._clicar_menu_lateral("Imposto de Renda")
+        self.mapear_campos("fase7_irpf")
         self._marcar_checkbox("apurarImpostoRenda", True)
 
         if ir.get("meses_tributaveis"):
@@ -647,6 +930,7 @@ class PJECalcPlaywright:
 
     # ── Fase 8: Honorários ────────────────────────────────────────────────────
 
+    @retry(max_tentativas=3)
     def fase_honorarios(self, hon: dict) -> None:
         if not hon.get("percentual") and not hon.get("valor_fixo") and not hon.get("periciais"):
             self._log("Fase 8 — Honorários ignorados (sem dados).")
@@ -654,6 +938,7 @@ class PJECalcPlaywright:
 
         self._log("Fase 8 — Honorários…")
         self._clicar_menu_lateral("Honorários")
+        self.mapear_campos("fase8_honorarios")
         self._clicar_novo()
 
         self._selecionar("tpHonorario", "ADVOCATICIOS")
@@ -680,8 +965,26 @@ class PJECalcPlaywright:
         """Executa todas as fases de preenchimento do cálculo."""
         base = f"{self.PJECALC_BASE}/pages/principal.jsf"
         self._log("Abrindo PJE-Calc…")
-        self._page.goto(base, wait_until="domcontentloaded", timeout=30000)
-        time.sleep(2)
+        self._page.goto(base, wait_until="domcontentloaded", timeout=60000)
+        self._page.wait_for_timeout(2000)
+
+        # Trata erro de primeira carga (comportamento conhecido do PJe-Calc)
+        try:
+            body = self._page.locator("body").text_content() or ""
+            if "Erro interno" in body or "erro interno" in body.lower():
+                self._log("Erro interno na primeira carga — navegando para Página Inicial…")
+                link = self._page.locator("a:has-text('Página Inicial')")
+                if link.count() > 0:
+                    link.first.click()
+                    self._aguardar_ajax()
+        except Exception:
+            pass
+
+        # Instala monitor AJAX JSF
+        try:
+            self._instalar_monitor_ajax()
+        except Exception:
+            pass
 
         self._verificar_e_fazer_login()
 
@@ -699,19 +1002,20 @@ class PJECalcPlaywright:
         self._log("CONCLUIDO: Todas as fases preenchidas. Revise e clique em Liquidar.")
 
 
-# ── Função pública ─────────────────────────────────────────────────────────────
+# ── Funções públicas ───────────────────────────────────────────────────────────
 
 def iniciar_e_preencher(
     dados: dict[str, Any],
     verbas_mapeadas: dict[str, Any],
     pjecalc_dir: str | Path,
     log_cb: Callable[[str], None] | None = None,
+    headless: bool = False,
 ) -> None:
     """
-    Ponto de entrada público.
-    1. Inicia PJE-Calc Cidadão (se não estiver rodando).
-    2. Abre Playwright browser (visível).
-    3. Preenche todos os campos do cálculo.
+    Ponto de entrada público (modo callback).
+    1. Inicia PJE-Calc Cidadão (se não estiver rodando), verificando TCP + HTTP.
+    2. Abre Playwright browser.
+    3. Preenche todos os campos do cálculo seguindo as 8 fases.
     """
     cb = log_cb or (lambda m: None)
 
@@ -721,10 +1025,58 @@ def iniciar_e_preencher(
 
     agente = PJECalcPlaywright(log_cb=cb)
     try:
-        agente.iniciar_browser()
+        agente.iniciar_browser(headless=headless)
         agente.preencher_calculo(dados, verbas_mapeadas)
         # Browser permanece aberto para o usuário revisar e clicar Liquidar
     except Exception as exc:
         cb(f"ERRO: {exc}")
         logger.exception(f"Erro na automação Playwright: {exc}")
         raise
+
+
+def preencher_como_generator(
+    dados: dict[str, Any],
+    verbas_mapeadas: dict[str, Any],
+    pjecalc_dir: str | Path,
+    modo_oculto: bool = False,
+):
+    """
+    Generator que faz yield de mensagens de log para SSE streaming direto.
+    Padrão CalcMachine: thread separada + queue.Queue como bridge.
+
+    Uso:
+        for msg in preencher_como_generator(dados, verbas, pjecalc_dir):
+            # transmitir msg via SSE
+    """
+    import queue
+    import threading
+
+    log_queue: queue.Queue[str | None] = queue.Queue()
+
+    def _cb(msg: str) -> None:
+        log_queue.put(msg)
+
+    def _run() -> None:
+        try:
+            iniciar_e_preencher(
+                dados=dados,
+                verbas_mapeadas=verbas_mapeadas,
+                pjecalc_dir=pjecalc_dir,
+                log_cb=_cb,
+                headless=modo_oculto,
+            )
+        except Exception as exc:
+            log_queue.put(f"ERRO: {exc}")
+            logger.exception(f"Erro na automação (generator): {exc}")
+        finally:
+            log_queue.put(None)  # sentinela de fim
+
+    threading.Thread(target=_run, daemon=True).start()
+
+    while True:
+        msg = log_queue.get()
+        if msg is None:
+            break
+        yield msg
+
+    yield "[FIM DA EXECUÇÃO]"

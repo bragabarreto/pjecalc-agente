@@ -135,6 +135,28 @@ Exemplo de início esperado:
       </div>
     </div>
 
+    <!-- Seleção de modelo de IA -->
+    <div style="margin-bottom:20px; border-top:1px solid #e9ecef; padding-top:20px;">
+      <h4 style="color:#1a3a6b; margin-bottom:8px;">Modelo de IA para Extração</h4>
+      <div style="display:flex; gap:12px; flex-wrap:wrap;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+          <input type="radio" name="modelo_ia_ui" value="claude" checked
+                 onchange="document.getElementById('campo-modelo-ia').value='claude'">
+          <span>Claude (Anthropic)</span>
+        </label>
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
+          <input type="radio" name="modelo_ia_ui" value="gemini"
+                 onchange="document.getElementById('campo-modelo-ia').value='gemini'">
+          <span>Gemini 2.5 Flash (Google)</span>
+        </label>
+      </div>
+      <input type="hidden" id="campo-modelo-ia" name="modelo_ia" value="claude">
+      <p style="font-size:0.8rem; color:#888; margin:6px 0 0;">
+        O modelo escolhido será usado para extrair os parâmetros da sentença.
+        Configure as chaves de API em <code>.env</code>.
+      </p>
+    </div>
+
     <!-- Botão submit -->
     <div style="text-align:center; padding-top:12px; border-top:1px solid #e9ecef;">
       <button type="submit" class="btn btn-primary" style="font-size:1rem; padding:12px 48px;">
@@ -329,6 +351,10 @@ document.getElementById('form-upload').addEventListener('submit', async function
     formData.append('sentenca', new Blob([rel], { type: 'text/plain' }), 'relatorio_estruturado.txt');
     formData.append('input_type', 'relatorio');
   }
+
+  // Modelo de IA selecionado
+  const modeloIA = document.getElementById('campo-modelo-ia').value;
+  if (modeloIA) formData.append('modelo_ia', modeloIA);
 
   // Coletar docs extras na ordem visual
   let pos = 0;

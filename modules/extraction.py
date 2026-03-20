@@ -20,6 +20,9 @@ from config import (
     CLAUDE_EXTRACTION_TEMPERATURE,
     CLAUDE_MAX_TOKENS,
     CONFIDENCE_THRESHOLD_AUTO,
+    GEMINI_API_KEY,
+    GEMINI_MODEL,
+    USE_GEMINI,
 )
 from modules.ingestion import normalizar_valor, normalizar_data, segmentar_sentenca
 
@@ -664,6 +667,7 @@ def extrair_dados_sentenca(
     sessao_id: str | None = None,
     extras: list[dict] | None = None,
     is_relatorio: bool = False,
+    usar_gemini: bool | None = None,
 ) -> dict[str, Any]:
     """
     Extrai todos os dados necessários para preenchimento do PJE-Calc.
@@ -677,6 +681,7 @@ def extrair_dados_sentenca(
     Parâmetros:
         extras: documentos complementares {"tipo", "conteudo", "contexto", "mime_type"}
         is_relatorio: True se o texto for um relatório pré-estruturado
+        usar_gemini: True=forçar Gemini, False=forçar Claude, None=usar config global USE_GEMINI
     """
     sessao_id = sessao_id or str(uuid.uuid4())
 
@@ -696,9 +701,8 @@ def extrair_dados_sentenca(
     # Fase 1: extração regex pré-processada
     dados_regex = _extrair_via_regex(texto_completo)
 
-    # Fase 2: extração via LLM (Claude) — texto completo quando possível
-    # Inclui cabeçalho (identificação, datas, partes) + dispositivo (verbas, parâmetros)
-    # Limites generosos: Claude Sonnet 4.6 suporta 200k tokens de contexto
+    # Fase 2: extração via LLM — Claude ou Gemini conforme configuração
+    # Limites generosos: Claude Sonnet 4.6 suporta 200k tokens; Gemini 2.5 Flash 1M tokens
     _LIMITE_TOTAL = 28000
     _LIMITE_CABECALHO = 6000
     _LIMITE_DISPOSITIVO = 22000
@@ -708,7 +712,19 @@ def extrair_dados_sentenca(
         texto_para_llm = cabecalho + "\n\n[...trecho intermediário omitido...]\n\n" + dispositivo
     else:
         texto_para_llm = texto_completo[:_LIMITE_TOTAL]
-    dados_llm = _extrair_via_llm(texto_para_llm, extras=extras)
+
+    # usar_gemini: True=forçar Gemini, False=forçar Claude, None=usar config global
+    _usar_gemini = USE_GEMINI if usar_gemini is None else usar_gemini
+
+    if _usar_gemini and GEMINI_API_KEY:
+        logger.info("Extração via Gemini (%s)", GEMINI_MODEL)
+        dados_llm = _extrair_via_gemini(texto_para_llm, extras=extras)
+        # Fallback para Claude se Gemini falhar
+        if "_erro_llm" in dados_llm and ANTHROPIC_API_KEY:
+            logger.warning("Gemini falhou — fallback para Claude")
+            dados_llm = _extrair_via_llm(texto_para_llm, extras=extras)
+    else:
+        dados_llm = _extrair_via_llm(texto_para_llm, extras=extras)
 
     # Fase 3: merge (LLM prevalece; regex preenche onde LLM retornou null)
     dados = _merge_extracao(dados_regex, dados_llm)
@@ -964,6 +980,56 @@ def _extrair_via_llm(
     except Exception as e:
         logger.warning(f"Falha na extração via IA: {e}")
         return {"_erro_llm": str(e), "alertas": [f"Falha na extração via IA: {e}"]}
+
+
+# ── Extração via Gemini (Google) ──────────────────────────────────────────────
+
+def _extrair_via_gemini(
+    texto: str,
+    extras: list[dict] | None = None,
+) -> dict[str, Any]:
+    """
+    Usa Gemini 2.5 Flash para extração profunda de parâmetros jurídicos.
+    Ativado quando GEMINI_API_KEY está configurada em .env.
+    Textos extras do tipo "texto" são incluídos no prompt; imagens são ignoradas
+    (Gemini suportaria, mas simplificamos para evitar dependência extra).
+    """
+    if not GEMINI_API_KEY:
+        return {}
+
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+
+        # Montar prompt completo
+        secoes_extras: list[str] = []
+        for i, extra in enumerate(extras or [], start=1):
+            if extra.get("tipo") == "texto" and extra.get("conteudo"):
+                ctx = extra.get("contexto", "").strip()
+                ctx_str = f" [{ctx}]" if ctx else ""
+                trecho = extra["conteudo"][:8000]
+                secoes_extras.append(
+                    f"=== DOCUMENTO ADICIONAL {i}{ctx_str} ===\n{trecho}"
+                )
+
+        prompt = _SYSTEM_PROMPT + "\n\n" + _EXTRACTION_PROMPT.format(texto=texto[:25000])
+        if secoes_extras:
+            prompt += (
+                "\n\n" + "\n\n".join(secoes_extras) +
+                "\n\nOs documentos adicionais acima complementam a sentença. "
+                "Use-os para preencher ou corrigir campos ausentes ou com baixa confiança."
+            )
+
+        resp = model.generate_content(
+            prompt,
+            generation_config={"temperature": 0.0, "max_output_tokens": 8192},
+        )
+        return _limpar_e_parsear_json(resp.text)
+
+    except Exception as e:
+        logger.warning(f"Falha na extração via Gemini: {e}")
+        return {"_erro_llm": str(e), "alertas": [f"Falha na extração via Gemini: {e}"]}
 
 
 # ── Merge e Validação ─────────────────────────────────────────────────────────

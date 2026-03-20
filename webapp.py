@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import shutil
 import tempfile
@@ -162,6 +163,14 @@ async def processar_sentenca(
     # Detectar se é relatório estruturado (ex: saída do Projeto Claude)
     is_relatorio = str(form.get("input_type", "")).strip() == "relatorio"
 
+    # Modelo de IA selecionado pelo usuário: "gemini" | "claude" | "" (padrão do config)
+    modelo_ia = str(form.get("modelo_ia", "")).strip().lower()
+    usar_gemini: bool | None = None
+    if modelo_ia == "gemini":
+        usar_gemini = True
+    elif modelo_ia == "claude":
+        usar_gemini = False
+
     # Registrar sessão em memória antes de iniciar background (evita 404 durante processamento)
     _sessoes_processando[sessao_id] = _time.time()
 
@@ -173,6 +182,7 @@ async def processar_sentenca(
         formato=sufixo,
         extras=extras,
         is_relatorio=is_relatorio,
+        usar_gemini=usar_gemini,
     )
 
     n_extras = len(extras)
@@ -689,6 +699,61 @@ _automacao_log: dict[str, list[str]] = {}
 _automacao_ativa: dict[str, bool] = {}
 
 
+# ── Novos endpoints CalcMachine ────────────────────────────────────────────────
+
+@app.get("/api/verificar_pjecalc")
+async def verificar_pjecalc():
+    """Proxy para verificar localhost:9257 sem Mixed Content no browser."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get("http://localhost:9257/pjecalc")
+            return {"disponivel": r.status_code in (200, 302, 404)}
+    except Exception:
+        return {"disponivel": False}
+
+
+@app.get("/api/executar/{sessao_id}")
+async def executar_automacao_sse(
+    sessao_id: str,
+    modo_oculto: bool = False,
+    db: Session = Depends(get_db),
+):
+    """
+    SSE endpoint — transmite logs da automação Playwright em tempo real.
+    Padrão CalcMachine: generator Python → StreamingResponse text/event-stream.
+    """
+    from fastapi.responses import StreamingResponse
+
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+
+    async def gerador_sse():
+        from modules.playwright_pjecalc import preencher_como_generator
+        loop = asyncio.get_event_loop()
+        gen = preencher_como_generator(dados, verbas_mapeadas, PJECALC_DIR, modo_oculto)
+        while True:
+            try:
+                msg = await loop.run_in_executor(None, next, gen)
+                yield f"data: {json.dumps({'msg': msg})}\n\n"
+                if msg == "[FIM DA EXECUÇÃO]":
+                    break
+            except StopIteration:
+                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                break
+
+    return StreamingResponse(
+        gerador_sse(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/preencher/{sessao_id}")
 async def iniciar_preenchimento_playwright(
     sessao_id: str,
@@ -795,6 +860,7 @@ def _tarefa_processar_sentenca(
     formato: str,
     extras: list[dict] | None = None,
     is_relatorio: bool = False,
+    usar_gemini: bool | None = None,
 ) -> None:
     """
     Tarefa de background: lê, extrai e classifica dados da sentença.
@@ -847,6 +913,7 @@ def _tarefa_processar_sentenca(
             sessao_id=sessao_id,
             extras=extras_processados,
             is_relatorio=is_relatorio,
+            usar_gemini=usar_gemini,
         )
 
         # Fase 3: Classificação
