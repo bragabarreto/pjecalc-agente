@@ -47,7 +47,8 @@ IF NOT EXIST venv\Scripts\python.exe (
 
     venv\Scripts\playwright install chromium
     IF ERRORLEVEL 1 (
-        echo AVISO: Falha ao instalar Playwright. A automacao pode nao funcionar.
+        echo AVISO: Falha ao instalar browser Playwright. Tentando novamente...
+        venv\Scripts\python -m playwright install chromium
     )
 
     :: Criar pastas de dados
