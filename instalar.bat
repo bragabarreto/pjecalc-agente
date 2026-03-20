@@ -49,28 +49,34 @@ IF ERRORLEVEL 1 (
 )
 
 :: Configurar ANTHROPIC_API_KEY
-echo [6/6] Configurando chave de API...
+echo [6/7] Configurando chave de API...
 IF "%ANTHROPIC_API_KEY%"=="" (
     echo.
     echo IMPORTANTE: Configure sua chave da API Anthropic:
-    echo   set ANTHROPIC_API_KEY=sua-chave-aqui
-    echo   (ou adicione ao arquivo .env na pasta do projeto)
+    echo   Edite o arquivo .env na pasta do agente e adicione:
+    echo   ANTHROPIC_API_KEY=sua-chave-aqui
     echo.
 ) ELSE (
     echo ANTHROPIC_API_KEY ja configurada.
 )
 
+:: Criar atalhos na area de trabalho e na Inicializacao do Windows
+echo [7/7] Criando atalhos (area de trabalho e inicializacao automatica)...
+set "PJECALC_BASE=%~dp0"
+set "PJECALC_BASE=%PJECALC_BASE:~0,-1%"
+powershell -NoProfile -Command ^
+  "& { $base = $env:PJECALC_BASE; $pyW = $base + '\venv\Scripts\pythonw.exe'; $ws = New-Object -ComObject WScript.Shell; $desk = [Environment]::GetFolderPath('Desktop'); $s = $ws.CreateShortcut($desk + '\Agente PJE-Calc.lnk'); $s.TargetPath = $pyW; $s.Arguments = 'launcher.pyw'; $s.WorkingDirectory = $base; $s.Description = 'Agente PJE-Calc - Automacao de Calculos Trabalhistas'; $s.Save(); $startup = [Environment]::GetFolderPath('Startup'); $s2 = $ws.CreateShortcut($startup + '\Agente PJE-Calc.lnk'); $s2.TargetPath = $pyW; $s2.Arguments = 'launcher.pyw'; $s2.WorkingDirectory = $base; $s2.Description = 'Agente PJE-Calc - Automacao de Calculos Trabalhistas'; $s2.Save(); Write-Host 'Atalhos criados com sucesso.' }"
+
 echo.
 echo ============================================================
 echo  Instalacao concluida!
 echo.
-echo  MODO WEB (recomendado):
-echo    venv\Scripts\activate
-echo    uvicorn webapp:app --reload --port 8000
-echo    Acesse: http://localhost:8000
+echo  COMO USAR:
+echo    Duplo clique no atalho "Agente PJE-Calc" na area de trabalho.
+echo    O aplicativo abre automaticamente no browser.
 echo.
-echo  MODO LINHA DE COMANDO:
-echo    venv\Scripts\activate
-echo    python main.py --sentenca caminho\sentenca.pdf
+echo    O servidor tambem inicia sozinho ao ligar o computador.
+echo.
+echo  Configure as chaves de API no arquivo .env antes de usar.
 echo ============================================================
 pause
