@@ -990,17 +990,17 @@ def _extrair_via_gemini(
 ) -> dict[str, Any]:
     """
     Usa Gemini 2.5 Flash para extração profunda de parâmetros jurídicos.
+    Usa o novo SDK google-genai (substituto do descontinuado google-generativeai).
     Ativado quando GEMINI_API_KEY está configurada em .env.
-    Textos extras do tipo "texto" são incluídos no prompt; imagens são ignoradas
-    (Gemini suportaria, mas simplificamos para evitar dependência extra).
     """
     if not GEMINI_API_KEY:
         return {}
 
     try:
-        import google.generativeai as genai
-        genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel(GEMINI_MODEL)
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=GEMINI_API_KEY)
 
         # Montar prompt completo
         secoes_extras: list[str] = []
@@ -1021,9 +1021,13 @@ def _extrair_via_gemini(
                 "Use-os para preencher ou corrigir campos ausentes ou com baixa confiança."
             )
 
-        resp = model.generate_content(
-            prompt,
-            generation_config={"temperature": 0.0, "max_output_tokens": 8192},
+        resp = client.models.generate_content(
+            model=GEMINI_MODEL,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=8192,
+            ),
         )
         return _limpar_e_parsear_json(resp.text)
 

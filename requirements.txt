@@ -52,4 +52,4 @@ python-dotenv>=1.0.0
 httpx>=0.27.0
 
 # ── API Gemini (Google) — opcional, ativar via GEMINI_API_KEY ─────────────────
-google-generativeai>=0.8.0
+google-genai>=1.0.0
