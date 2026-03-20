@@ -703,36 +703,14 @@ _automacao_ativa: dict[str, bool] = {}
 
 @app.get("/api/verificar_pjecalc")
 async def verificar_pjecalc():
-    """
-    Verifica localhost:9257. Se não estiver rodando, tenta iniciar o PJE-Calc
-    automaticamente usando PJECALC_DIR configurado no .env.
-    Retorna: {"disponivel": bool, "iniciado": bool, "erro": str|None}
-    """
+    """Verifica se localhost:9257 está respondendo (apenas checagem, sem iniciar)."""
     import httpx
-
-    async def _checar() -> bool:
-        try:
-            async with httpx.AsyncClient(timeout=5.0) as client:
-                r = await client.get("http://localhost:9257/pjecalc")
-                return r.status_code in (200, 302, 404)
-        except Exception:
-            return False
-
-    # 1. Verificar se já está rodando
-    if await _checar():
-        return {"disponivel": True, "iniciado": False, "erro": None}
-
-    # 2. Tentar iniciar automaticamente
     try:
-        from modules.playwright_pjecalc import iniciar_pjecalc
-        await asyncio.get_event_loop().run_in_executor(
-            None, iniciar_pjecalc, PJECALC_DIR
-        )
-        if await _checar():
-            return {"disponivel": True, "iniciado": True, "erro": None}
-        return {"disponivel": False, "iniciado": False, "erro": "PJE-Calc iniciado mas porta 9257 não respondeu."}
-    except Exception as exc:
-        return {"disponivel": False, "iniciado": False, "erro": str(exc)}
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get("http://localhost:9257/pjecalc")
+            return {"disponivel": r.status_code in (200, 302, 404)}
+    except Exception:
+        return {"disponivel": False}
 
 
 @app.get("/api/executar/{sessao_id}")

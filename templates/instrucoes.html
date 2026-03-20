@@ -75,7 +75,7 @@
         <input type="checkbox" id="modo_oculto" class="form-check-input">
         <label for="modo_oculto" class="form-check-label" style="font-size:0.9rem;">Modo oculto</label>
       </div>
-      <button id="btnExecutar" class="btn btn-success btn-sm" onclick="executarAutomacao()" disabled>
+      <button id="btnExecutar" class="btn btn-success btn-sm" onclick="executarAutomacao()">
         ▶ Executar Automação
       </button>
       <button id="btnEncerrar" class="btn btn-danger btn-sm" onclick="encerrarAutomacao()" disabled>
@@ -83,7 +83,8 @@
       </button>
     </div>
   </div>
-  <pre id="log-automacao">Clique em "Verificar PJE-Calc" para começar.
+  <pre id="log-automacao">Pronto. Clique em "▶ Executar Automação" para iniciar.
+O PJE-Calc será aberto automaticamente se necessário.
 </pre>
 </div>
 {% else %}
@@ -368,26 +369,17 @@ let modoOcultoAtual = false;
 
 async function verificarPjeCalc() {
   document.getElementById('btnVerificar').disabled = true;
-  document.getElementById('btnExecutar').disabled = true;
   logMsg('Verificando PJE-Calc em localhost:9257…', 'wait');
   try {
     const resp = await fetch('/api/verificar_pjecalc');
-    const { disponivel, iniciado, erro } = await resp.json();
-    if (disponivel && iniciado) {
-      document.getElementById('btnExecutar').disabled = false;
-      logMsg('✅ PJE-Calc iniciado automaticamente e disponível em localhost:9257', 'ok');
-    } else if (disponivel) {
-      document.getElementById('btnExecutar').disabled = false;
-      logMsg('✅ PJE-Calc disponível em localhost:9257', 'ok');
-    } else if (erro) {
-      logMsg('❌ ' + erro, 'err');
-      logMsg('Verifique se PJECALC_DIR está correto no arquivo .env', 'wait');
+    const { disponivel } = await resp.json();
+    if (disponivel) {
+      logMsg('✅ PJE-Calc já está rodando em localhost:9257', 'ok');
     } else {
-      logMsg('❌ PJE-Calc não encontrado em localhost:9257.', 'err');
-      logMsg('Verifique se PJECALC_DIR está correto no arquivo .env', 'wait');
+      logMsg('ℹ️ PJE-Calc não está rodando — será iniciado automaticamente ao Executar', 'wait');
     }
   } catch(e) {
-    logMsg('❌ Erro ao verificar: ' + e, 'err');
+    logMsg('⚠ Erro ao verificar: ' + e, 'wait');
   } finally {
     document.getElementById('btnVerificar').disabled = false;
   }
