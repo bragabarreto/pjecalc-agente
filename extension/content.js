@@ -74,17 +74,32 @@ async function pausarParaUsuario(mensagem) {
       'display:flex', 'align-items:center', 'gap:14px',
       'box-shadow:0 4px 10px rgba(0,0,0,.25)',
     ].join(';');
-    div.innerHTML =
-      '<span style="font-size:24px">\u26A0\uFE0F</span>' +
-      '<span style="flex:1"><strong>A\u00e7\u00e3o necess\u00e1ria:</strong> ' + mensagem + '</span>' +
-      '<button id="pjecalc-btn-continuar" style="background:#1a3a6b;color:#fff;border:none;' +
-      'padding:8px 22px;border-radius:4px;cursor:pointer;font:14px Arial,sans-serif;white-space:nowrap">' +
-      'Continuar \u25B6</button>';
+
+    const icone = document.createElement('span');
+    icone.style.fontSize = '24px';
+    icone.textContent = '\u26A0\uFE0F';
+
+    const texto = document.createElement('span');
+    texto.style.flex = '1';
+    const titulo = document.createElement('strong');
+    titulo.textContent = 'A\u00e7\u00e3o necess\u00e1ria: ';
+    texto.appendChild(titulo);
+    // mensagem pode conter HTML com <strong>/<em>/<br> — usar DOMParser para segurança
+    const frag = document.createRange().createContextualFragment(mensagem);
+    texto.appendChild(frag);
+
+    const btn = document.createElement('button');
+    btn.id = 'pjecalc-btn-continuar';
+    btn.textContent = 'Continuar \u25B6';
+    btn.style.cssText = 'background:#1a3a6b;color:#fff;border:none;' +
+      'padding:8px 22px;border-radius:4px;cursor:pointer;font:14px Arial,sans-serif;white-space:nowrap';
+
+    div.appendChild(icone);
+    div.appendChild(texto);
+    div.appendChild(btn);
     document.body.prepend(div);
-    document.getElementById('pjecalc-btn-continuar').addEventListener('click', () => {
-      div.remove();
-      resolve();
-    });
+
+    btn.addEventListener('click', () => { div.remove(); resolve(); });
   });
 }
 
