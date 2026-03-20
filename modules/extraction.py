@@ -79,13 +79,21 @@ def _limpar_e_parsear_json(texto: str) -> dict:
 
 # ── Prompt principal para o Claude ───────────────────────────────────────────
 
-_SYSTEM_PROMPT = """Você é um assistente especializado em Direito do Trabalho brasileiro.
-Sua tarefa é extrair informações estruturadas de sentenças trabalhistas para preenchimento
-do sistema PJE-Calc. Responda SOMENTE com JSON válido, sem texto adicional.
-Siga rigorosamente o schema solicitado. Use null para campos não encontrados.
-Para datas, use o formato DD/MM/AAAA. Para valores monetários, use float sem símbolo.
-Para percentuais, use float (ex: 50% = 0.5). Inclua sempre um score de confiança
-entre 0.0 e 1.0 para cada campo extraído."""
+_SYSTEM_PROMPT = """Você é um especialista em Direito do Trabalho brasileiro e no sistema PJE-Calc \
+(Programa de Cálculos da Justiça do Trabalho — CNJ/TST).
+
+Sua tarefa é analisar o conteúdo fornecido (sentença, documentos ou relatório) e extrair \
+todas as informações necessárias para preenchimento preciso e completo do PJE-Calc, \
+mapeando cada dado ao campo e enumeração exata do sistema.
+
+Regras absolutas:
+- Responda SOMENTE com JSON válido, sem markdown (sem ```json), sem texto antes ou depois
+- Datas: DD/MM/AAAA
+- Valores monetários: float sem símbolo (ex: 1518.00)
+- Percentuais: float decimal (ex: 15% → 0.15; 8% → 0.08; 40% → 0.40)
+- Use null para campos genuinamente ausentes no texto
+- Quando a legislação define valor padrão e não há indicação contrária: aplique o padrão com confianca=0.85
+- confianca por seção: 0.95 = extraído diretamente | 0.85 = inferido por lógica jurídica | 0.6 = incerto"""
 
 _SYSTEM_PROMPT_RELATORIO = """Você é um especialista em Direito do Trabalho brasileiro e em conversão de dados jurídicos para o sistema PJE-Calc.
 Receberá um relatório estruturado de sentença trabalhista produzido pelo sistema Calc-Machine.
@@ -383,18 +391,158 @@ REGRAS FINAIS:
 - alertas: copiar todos os ⚠️ ALERTAS do relatório como strings no array
 - Retornar APENAS JSON puro, sem markdown, sem texto antes ou depois"""
 
-_EXTRACTION_PROMPT = """Analise a sentença trabalhista abaixo e extraia as informações
-no formato JSON especificado.
+_EXTRACTION_PROMPT = """Analise o conteúdo abaixo (sentença trabalhista e/ou documentos complementares) \
+e extraia TODOS os dados para preenchimento completo e preciso do PJE-Calc, \
+seguindo rigorosamente o guia de extração e o schema JSON abaixo.
 
-=== SENTENÇA ===
+=== CONTEÚDO ===
 {texto}
 
-=== SCHEMA ESPERADO ===
+=== GUIA DE EXTRAÇÃO PARA PJE-CALC ===
+
+**PROCESSO E PARTES** → preenche "processo":
+- numero: formato CNJ — NNNNNNN-DD.AAAA.J.RR.VVVV (ex: "0001234-56.2023.5.07.0001")
+- reclamante: nome completo do trabalhador (sem CPF inline)
+- cpf_reclamante: CPF se explicitado, formato "000.000.000-00"
+- reclamado: razão social/nome do empregador (sem CNPJ inline)
+- cnpj_reclamado: CNPJ se explicitado, formato "00.000.000/0000-00"
+- estado: UF de 2 letras da vara — buscar em "Vara do Trabalho de [cidade] - UF" ou cabeçalho
+- vara: descrição da vara/juízo
+
+**CONTRATO DE TRABALHO** → preenche "contrato":
+- admissao: buscar "admitido em", "admissão:", "contratado em", "início do contrato"
+- demissao: data REAL da dispensa — buscar "dispensado em", "rescisão em", "demitido em"
+  ⚠️ NUNCA usar data de projeção com aviso prévio — apenas a data efetiva do desligamento
+- tipo_rescisao:
+    "sem justa causa" / "dispensa imotivada" / "rescisão imotivada" / "rescisão indireta" → "sem_justa_causa"
+    "com justa causa" → "justa_causa"
+    "pedido de demissão" → "pedido_demissao"
+    "distrato" → "distrato"
+    "falecimento" / "morte" → "morte"
+- ultima_remuneracao: último salário pago (valor do último mês); se houve evolução salarial, usar o mais recente
+- maior_remuneracao: maior salário recebido no contrato; se não diferenciado, igual à ultima_remuneracao
+- ajuizamento: data de distribuição/autuação/protocolo da reclamação trabalhista
+- regime: "Tempo Integral" (padrão), "Tempo Parcial" (jornada reduzida art. 58-A CLT), "Trabalho Intermitente"
+- carga_horaria: horas/mês se informado; null se omitido (não incluir em campos_ausentes)
+
+**AVISO PRÉVIO** → preenche "aviso_previo":
+- Deferido calculado pela Lei 12.506/2011: tipo="Calculado", projetar=true
+- Deferido com dias fixos (ex: "aviso prévio de 30 dias"): tipo="Informado", prazo_dias=30, projetar=true
+- Indeferido ou ausente: tipo="Nao Apurar", projetar=false
+
+**HISTÓRICO SALARIAL** → preenche "historico_salarial":
+- Preencher SOMENTE quando o salário mudou ao longo do contrato (evolução salarial)
+- Cada entrada: data_inicio (DD/MM/AAAA), data_fim (DD/MM/AAAA), valor (float)
+- Salário único durante todo o contrato → historico_salarial = []
+
+**VERBAS DEFERIDAS** → preenche "verbas_deferidas" (SEÇÃO MAIS CRÍTICA):
+Listar cada parcela condenada. Para cada verba:
+
+nome_sentenca: nome exato da verba como aparece na sentença
+  (ex: "SALDO DE SALÁRIO", "HORAS EXTRAS", "DÉCIMO TERCEIRO SALÁRIO", "DANOS MORAIS")
+tipo:
+  "Principal" → condenação direta
+  "Reflexa" → repercussão de verba principal (ex: "Reflexo em 13º", "Reflexo em férias + 1/3")
+caracteristica:
+  "13o Salario" → 13º salário (proporcional, integral)
+  "Ferias" → férias vencidas, proporcionais, 1/3 de férias
+  "Aviso Previo" → verba salarial do aviso prévio
+  "Comum" → todos os demais (horas extras, adicionais, diferenças, saldo, danos, multas)
+ocorrencia:
+  "Mensal" → verbas que se repetem mensalmente (horas extras, adicionais, diferenças salariais)
+  "Dezembro" → 13º salário
+  "Periodo Aquisitivo" → férias (ocorrem a cada período aquisitivo)
+  "Desligamento" → verbas pagas na rescisão (saldo de salário, aviso, multas rescisórias)
+base_calculo:
+  "Historico Salarial" → verba calculada sobre o salário de cada mês (quando há evolução salarial)
+  "Maior Remuneracao" → usa o maior salário do contrato
+  "Salario Minimo" → baseada explicitamente no salário mínimo federal
+  "Piso Salarial" → baseada no piso da categoria profissional
+  "Verbas" → para verbas reflexas (base = verba principal)
+  null → não especificado
+incidências (aplicar a lógica trabalhista):
+  Verbas salariais (diferenças, saldo, horas extras, adicionais, 13º):
+    incidencia_fgts=true, incidencia_inss=true, incidencia_ir=true
+  Férias + 1/3:
+    incidencia_fgts=false, incidencia_inss=true, incidencia_ir=true
+  Aviso prévio indenizado, danos morais, danos materiais, multas (art. 467, 477, 40%):
+    incidencia_fgts=false, incidencia_inss=false, incidencia_ir=false
+verba_principal_ref: para verbas reflexas, informar o nome_sentenca da verba principal
+
+**FGTS** → preenche "fgts":
+- aliquota: 0.08 (8%) para a maioria dos contratos; 0.02 (2%) para aprendizes
+  Buscar "alíquota de X%" ou "FGTS à alíquota de X%"
+- multa_40: true quando deferida "multa de 40%" / "multa rescisória" / "art. 18 §1º da Lei 8.036"
+- multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
+
+**HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios":
+- percentual: extrair de qualquer forma que indique porcentagem:
+    "honorários de 15%", "15 (quinze) por cento", "vinte por cento (20%)",
+    "no percentual de 15%", "à razão de 15%", "de 5 a 15%" (usar valor máximo em faixas)
+    Converter sempre para decimal: 15% → 0.15, 20% → 0.20
+- valor_fixo: quando fixado em valor monetário (não percentual)
+- parte_devedora:
+    "Reclamado" → sucumbência da reclamada / reclamante venceu (caso mais comum)
+    "Ambos" → sucumbência recíproca / ambas as partes sucumbiram parcialmente
+    "Reclamante" → reclamante condenado em honorários (raro, em improcedências)
+    Padrão quando não especificado: "Reclamado"
+- Se honorários indeferidos ou não mencionados: percentual=null, parte_devedora=null
+- periciais: honorários periciais (laudo técnico), distinto dos advocatícios
+
+**CORREÇÃO MONETÁRIA E JUROS** → preenche "correcao_juros":
+Mapear EXATAMENTE para os enums disponíveis no PJE-Calc:
+
+Caso 1 — ADC 58 / Tabela JT / critérios do TST:
+  Indicadores: "ADC 58", "Tabela JT Única Mensal", "IPCA-E até o ajuizamento e SELIC a partir",
+               "critérios da Justiça do Trabalho", "OJ 07 da SBDI-2", "Súmula 200"
+  → indice_correcao = "Tabela JT Unica Mensal" | taxa_juros = "Selic"
+
+Caso 2 — Apenas SELIC:
+  Indicadores: "atualizado pela SELIC", "taxa SELIC", "correção pela SELIC" (sem distinção de fases)
+  → indice_correcao = "Selic" | taxa_juros = "Selic"
+
+Caso 3 — IPCA-E + juros de 1% ao mês:
+  Indicadores: "IPCA-E mais juros de 1% ao mês", "IPCA-E e juros moratórios de 1%",
+               "IPCA-E + juros legais", "IPCA-E acrescido de 1% ao mês"
+  → indice_correcao = "IPCA-E" | taxa_juros = "Juros Padrao"
+
+Caso 4 — TR / TRCT + juros de 1% ao mês:
+  Indicadores: "TR mais 1% ao mês", "TRCT", "correção pela TR e juros de 1%"
+  → indice_correcao = "TRCT" | taxa_juros = "Juros Padrao"
+
+Caso 5 — IPCA-E sem especificação de juros:
+  → indice_correcao = "IPCA-E" | taxa_juros = "Juros Padrao"
+
+"Juros Padrao" = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
+"Selic" = taxa SELIC acumulada (aplicável desde ADC 58, 30/08/2021)
+base_juros: "Verbas" (padrão — juros calculados verba a verba) ou
+            "Credito Total" (apenas se a sentença mencionar explicitamente)
+jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
+
+**CONTRIBUIÇÕES PREVIDENCIÁRIAS** → preenche "contribuicao_social":
+- responsabilidade:
+    "Ambos" → padrão legal (cada parte recolhe sua quota — empregador e empregado)
+             Usar quando: não especificado, "cada parte arcará com sua quota",
+             "dedução na fonte", "regime de competência"
+    "Empregador" → APENAS quando explicitamente "só o empregador recolherá"
+    "Empregado" → raramente isolado; somente se explicitado
+    Padrão quando omitido: "Ambos"
+- lei_11941: true se mencionar "Lei 11.941/2009" ou "regime de competência" (forma de apuração)
+
+**IMPOSTO DE RENDA** → preenche "imposto_renda":
+- apurar=true quando: sentença determina apuração de IR, ou há verbas tributáveis (salários,
+  horas extras, 13º, férias) com valores expressivos
+- apurar=false quando: apenas verbas indenizatórias (danos morais, aviso prévio indenizado, multas)
+- meses_tributaveis: número de meses de competência tributável, se informado
+
+=== SCHEMA JSON ESPERADO ===
 {{
   "processo": {{
     "numero": "string | null",
     "reclamante": "string | null",
+    "cpf_reclamante": "string | null",
     "reclamado": "string | null",
+    "cnpj_reclamado": "string | null",
     "estado": "UF 2 letras | null",
     "municipio": "string | null",
     "vara": "string | null",
@@ -424,25 +572,25 @@ no formato JSON especificado.
   }},
   "verbas_deferidas": [
     {{
-      "nome_sentenca": "string — nome exato como aparece na sentença",
-      "texto_original": "trecho exato da sentença que originou esta verba",
-      "tipo": "Principal | Reflexa | null",
-      "caracteristica": "Comum | 13o Salario | Aviso Previo | Ferias | null",
-      "ocorrencia": "Mensal | Dezembro | Periodo Aquisitivo | Desligamento | null",
+      "nome_sentenca": "string",
+      "texto_original": "trecho ou parâmetros da verba",
+      "tipo": "Principal | Reflexa",
+      "caracteristica": "Comum | 13o Salario | Aviso Previo | Ferias",
+      "ocorrencia": "Mensal | Dezembro | Periodo Aquisitivo | Desligamento",
       "periodo_inicio": "DD/MM/AAAA | null",
       "periodo_fim": "DD/MM/AAAA | null",
       "percentual": "float | null",
       "base_calculo": "Maior Remuneracao | Historico Salarial | Salario Minimo | Piso Salarial | Verbas | null",
       "valor_informado": "float | null",
-      "incidencia_fgts": "true | false | null",
-      "incidencia_inss": "true | false | null",
-      "incidencia_ir": "true | false | null",
-      "verba_principal_ref": "nome da verba principal se reflexa | null",
+      "incidencia_fgts": true,
+      "incidencia_inss": true,
+      "incidencia_ir": false,
+      "verba_principal_ref": "nome_sentenca da verba principal se reflexa | null",
       "confianca": 0.0-1.0
     }}
   ],
   "fgts": {{
-    "aliquota": "float (ex: 0.08) | null",
+    "aliquota": "float | null",
     "multa_40": "true | false | null",
     "multa_467": "true | false | null",
     "confianca": 0.0-1.0
@@ -455,7 +603,7 @@ no formato JSON especificado.
     "confianca": 0.0-1.0
   }},
   "correcao_juros": {{
-    "indice_correcao": "string — ex: Tabela JT Unica Mensal | IPCA-E | Selic | TRCT | null",
+    "indice_correcao": "Tabela JT Unica Mensal | IPCA-E | Selic | TRCT | null",
     "base_juros": "Verbas | Credito Total | null",
     "taxa_juros": "Juros Padrao | Selic | null",
     "jam_fgts": "true | false | null",
@@ -467,47 +615,27 @@ no formato JSON especificado.
     "confianca": 0.0-1.0
   }},
   "imposto_renda": {{
-    "apurar": "true | false",
+    "apurar": true,
     "meses_tributaveis": "número inteiro | null",
     "dependentes": "número inteiro | null",
     "confianca": 0.0-1.0
   }},
-  "campos_ausentes": ["lista de campos OBRIGATÓRIOS não encontrados — ver nota abaixo"],
-  "alertas": ["lista de avisos para o operador"]
+  "historico_salarial": [
+    {{"data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00}}
+  ],
+  "faltas": [],
+  "ferias": [],
+  "campos_ausentes": ["campos OBRIGATÓRIOS ausentes — ver regra abaixo"],
+  "alertas": ["avisos relevantes para o operador"]
 }}
 
-NOTA SOBRE campos_ausentes:
-- CAMPOS OPCIONAIS — NÃO incluir em campos_ausentes se não mencionados na sentença:
-  prescricao.quinquenal, prescricao.fgts, honorarios.periciais, contrato.carga_horaria,
-  imposto_renda.dependentes, imposto_renda.meses_tributaveis, aviso_previo.prazo_dias,
-  contribuicao_social.lei_11941, fgts.multa_467
-- Só incluir em campos_ausentes campos OBRIGATÓRIOS que estão faltando:
+REGRA campos_ausentes — incluir SOMENTE estes campos quando ausentes:
   processo.numero, processo.reclamante, processo.reclamado, processo.estado,
   contrato.admissao, contrato.ajuizamento
-
-DICAS DE EXTRAÇÃO — CAMPOS FREQUENTEMENTE ERRADOS:
-
-HONORÁRIOS ADVOCATÍCIOS:
-- Extrair percentual de frases como: "honorários advocatícios de 15%", "15 (quinze) por cento a título
-  de honorários", "no percentual de vinte por cento (20%)", "condeno em honorários de 5% a 15%"
-  (usar valor máximo em faixas)
-- parte_devedora: "sucumbência recíproca" → "Ambos"; caso normal (reclamante vencedor) → "Reclamado"
-  "Reclamante" só se a sentença condenar o reclamante em honorários
-- Se não há honorários ou foram indeferidos: percentual=null, parte_devedora=null
-
-CORREÇÃO MONETÁRIA E JUROS — mapear para os enums exatos do PJE-Calc:
-- "ADC 58", "Tabela JT Única Mensal", "IPCA-E até ajuizamento + SELIC" → "Tabela JT Unica Mensal" + "Selic"
-- "taxa SELIC" sem outra especificação → "Selic" + "Selic"
-- "IPCA-E + 1% ao mês" ou "IPCA-E + juros moratórios" → "IPCA-E" + "Juros Padrao"
-- "TR + 1% ao mês" ou "TRCT" → "TRCT" + "Juros Padrao"
-- "Juros Padrao" = juros legais de 1% ao mês (padrão trabalhista pré-ADC 58)
-- base_juros: "Verbas" é o padrão; "Credito Total" apenas se explicitamente mencionado
-
-CONTRIBUIÇÕES PREVIDENCIÁRIAS:
-- Quando não há menção específica: responsabilidade = "Ambos" (padrão legal)
-- "dedução na fonte", "descontar do salário", "regime de competência" → responsabilidade = "Ambos"
-- Apenas quando explícito "só o empregador" → responsabilidade = "Empregador"
-- Lei 11.941/2009 → lei_11941 = true (define regime de competência)
+NÃO incluir campos opcionais: carga_horaria, cpf_reclamante, cnpj_reclamado,
+  honorarios.periciais, imposto_renda.dependentes, imposto_renda.meses_tributaveis,
+  aviso_previo.prazo_dias, contribuicao_social.lei_11941, fgts.multa_467,
+  prescricao.*, processo.municipio, processo.vara
 
 Retorne APENAS o JSON, sem markdown, sem explicações."""
 
@@ -551,14 +679,18 @@ def extrair_dados_sentenca(
     # Fase 1: extração regex pré-processada
     dados_regex = _extrair_via_regex(texto_completo)
 
-    # Fase 2: extração via LLM (Claude) — com extras
-    # Inclui cabeçalho (nomes, datas, processo) + dispositivo (verbas, parâmetros)
-    cabecalho = texto_completo[:3000]
-    dispositivo = texto_principal[-9000:]
+    # Fase 2: extração via LLM (Claude) — texto completo quando possível
+    # Inclui cabeçalho (identificação, datas, partes) + dispositivo (verbas, parâmetros)
+    # Limites generosos: Claude Sonnet 4.6 suporta 200k tokens de contexto
+    _LIMITE_TOTAL = 28000
+    _LIMITE_CABECALHO = 6000
+    _LIMITE_DISPOSITIVO = 22000
+    cabecalho = texto_completo[:_LIMITE_CABECALHO]
+    dispositivo = texto_principal[-_LIMITE_DISPOSITIVO:]
     if cabecalho and dispositivo and cabecalho not in dispositivo:
-        texto_para_llm = cabecalho + "\n\n[...trecho omitido...]\n\n" + dispositivo
+        texto_para_llm = cabecalho + "\n\n[...trecho intermediário omitido...]\n\n" + dispositivo
     else:
-        texto_para_llm = texto_principal[:12000]
+        texto_para_llm = texto_completo[:_LIMITE_TOTAL]
     dados_llm = _extrair_via_llm(texto_para_llm, extras=extras)
 
     # Fase 3: merge (LLM prevalece; regex preenche onde LLM retornou null)
@@ -784,7 +916,7 @@ def _extrair_via_llm(
                     f"=== DOCUMENTO ADICIONAL {i}{ctx_str} === (imagem enviada acima)"
                 )
             elif extra.get("tipo") == "texto" and extra.get("conteudo"):
-                trecho = extra["conteudo"][:4000]  # limite por documento
+                trecho = extra["conteudo"][:8000]  # limite por documento
                 secoes_extras.append(
                     f"=== DOCUMENTO ADICIONAL {i}{ctx_str} ===\n{trecho}"
                 )
@@ -804,7 +936,7 @@ def _extrair_via_llm(
 
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=CLAUDE_MAX_TOKENS,
+            max_tokens=8192,  # verbas longas podem gerar JSON grande
             temperature=CLAUDE_EXTRACTION_TEMPERATURE,
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content_blocks}],
