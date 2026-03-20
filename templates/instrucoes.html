@@ -189,8 +189,8 @@
     {% if cont.get('carga_horaria') %}
       {{ campo('Carga Horária (h/mês)', cont.get('carga_horaria')) }}
     {% endif %}
-    {{ campo('Maior Remuneração (R$)', cont.get('maior_remuneracao') | round(2) if cont.get('maior_remuneracao') else None) }}
-    {{ campo('Última Remuneração (R$)', cont.get('ultima_remuneracao') | round(2) if cont.get('ultima_remuneracao') else None) }}
+    {{ campo('Maior Remuneração (R$)', cont.get('maior_remuneracao')|float|round(2) if cont.get('maior_remuneracao') else None) }}
+    {{ campo('Última Remuneração (R$)', cont.get('ultima_remuneracao')|float|round(2) if cont.get('ultima_remuneracao') else None) }}
   </div>
 </div>
 
@@ -227,7 +227,7 @@
 <div class="secao-pjc">
   <h3>5. FGTS</h3>
   <div class="campos-lista">
-    {{ campo('Alíquota', (fgts.get('aliquota') * 100)|round(1)|string + '%' if fgts.get('aliquota') else None) }}
+    {{ campo('Alíquota', (fgts.get('aliquota')|float * 100)|round(1)|string + '%' if fgts.get('aliquota') else None) }}
     {{ campo_bool('Multa de 40% (art. 18 §1º)', fgts.get('multa_40')) }}
     {% if fgts.get('multa_467') is not none %}
       {{ campo_bool('Multa art. 467', fgts.get('multa_467')) }}
@@ -239,11 +239,11 @@
 <div class="secao-pjc">
   <h3>6. Honorários Advocatícios</h3>
   <div class="campos-lista">
-    {{ campo('Percentual', (hon.get('percentual') * 100)|round(1)|string + '%' if hon.get('percentual') else None) }}
-    {{ campo('Valor Fixo (R$)', hon.get('valor_fixo') | round(2) if hon.get('valor_fixo') else None) }}
+    {{ campo('Percentual', (hon.get('percentual')|float * 100)|round(1)|string + '%' if hon.get('percentual') else None) }}
+    {{ campo('Valor Fixo (R$)', hon.get('valor_fixo')|float|round(2) if hon.get('valor_fixo') else None) }}
     {{ campo('Parte Devedora', hon.get('parte_devedora')) }}
     {% if hon.get('periciais') is not none %}
-      {{ campo('Honorários Periciais (R$)', hon.get('periciais') | round(2)) }}
+      {{ campo('Honorários Periciais (R$)', hon.get('periciais')|float|round(2) if hon.get('periciais') else None) }}
     {% endif %}
   </div>
 </div>
@@ -310,13 +310,13 @@
         <div class="vl"><span class="vl-k">Período:</span><span class="vl-v">{{ v.periodo_inicio or '?' }} a {{ v.periodo_fim or '?' }}</span></div>
         {% endif %}
         {% if v.percentual is not none %}
-        <div class="vl"><span class="vl-k">Percentual:</span><span class="vl-v">{{ (v.percentual * 100)|round(2) }}%</span></div>
+        <div class="vl"><span class="vl-k">Percentual:</span><span class="vl-v">{{ (v.percentual|float * 100)|round(2) }}%</span></div>
         {% endif %}
         {% if v.base_calculo %}
         <div class="vl"><span class="vl-k">Base de Cálculo:</span><span class="vl-v">{{ v.base_calculo }}</span></div>
         {% endif %}
         {% if v.valor_informado is not none %}
-        <div class="vl"><span class="vl-k">Valor Informado:</span><span class="vl-v">R$ {{ v.valor_informado | round(2) }}</span></div>
+        <div class="vl"><span class="vl-k">Valor Informado:</span><span class="vl-v">R$ {{ v.valor_informado|float|round(2) }}</span></div>
         {% endif %}
         <div class="vl">
           <span class="vl-k">Incidências:</span>
@@ -352,13 +352,13 @@
         <div class="vl"><span class="vl-k">Período:</span><span class="vl-v">{{ v.periodo_inicio or '?' }} a {{ v.periodo_fim or '?' }}</span></div>
         {% endif %}
         {% if v.percentual is not none %}
-        <div class="vl"><span class="vl-k">Percentual:</span><span class="vl-v">{{ (v.percentual * 100)|round(2) }}%</span></div>
+        <div class="vl"><span class="vl-k">Percentual:</span><span class="vl-v">{{ (v.percentual|float * 100)|round(2) }}%</span></div>
         {% endif %}
         {% if v.base_calculo %}
         <div class="vl"><span class="vl-k">Base de Cálculo:</span><span class="vl-v">{{ v.base_calculo }}</span></div>
         {% endif %}
         {% if v.valor_informado is not none %}
-        <div class="vl"><span class="vl-k">Valor Informado:</span><span class="vl-v">R$ {{ v.valor_informado | round(2) }}</span></div>
+        <div class="vl"><span class="vl-k">Valor Informado:</span><span class="vl-v">R$ {{ v.valor_informado|float|round(2) }}</span></div>
         {% endif %}
       </div>
     </div>
