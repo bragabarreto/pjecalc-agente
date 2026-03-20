@@ -26,12 +26,26 @@ from modules.ingestion import normalizar_valor, normalizar_data, segmentar_sente
 
 # ── Limpeza de JSON retornado pelo LLM ───────────────────────────────────────
 
+def _sanitizar_chaves(obj: Any) -> Any:
+    """
+    Remove aspas extras de chaves JSON que o LLM pode gerar incorretamente.
+    Ex: '"data_inicio"' → 'data_inicio'
+    Processa recursivamente dicts e listas.
+    """
+    if isinstance(obj, dict):
+        return {k.strip('"\'').strip(): _sanitizar_chaves(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_sanitizar_chaves(item) for item in obj]
+    return obj
+
+
 def _limpar_e_parsear_json(texto: str) -> dict:
     """
     Tenta parsear JSON retornado pelo LLM com tolerância a erros comuns:
     - Remove blocos markdown ```json ... ```
     - Remove vírgulas antes de } ou ]  (trailing commas)
     - Extrai primeiro bloco { ... } caso haja texto em volta
+    - Sanitiza chaves com aspas extras (ex: '"data_inicio"')
     """
     # 1. Remover blocos markdown
     texto = re.sub(r"^```(?:json)?\s*", "", texto.strip(), flags=re.MULTILINE)
@@ -40,14 +54,14 @@ def _limpar_e_parsear_json(texto: str) -> dict:
 
     # 2. Tentar parse direto
     try:
-        return json.loads(texto)
+        return _sanitizar_chaves(json.loads(texto))
     except json.JSONDecodeError:
         pass
 
     # 3. Remover trailing commas  (,  seguida de espaços/newlines e } ou ])
     limpo = re.sub(r",\s*([}\]])", r"\1", texto)
     try:
-        return json.loads(limpo)
+        return _sanitizar_chaves(json.loads(limpo))
     except json.JSONDecodeError:
         pass
 
@@ -55,12 +69,12 @@ def _limpar_e_parsear_json(texto: str) -> dict:
     match = re.search(r"\{.*\}", limpo, re.DOTALL)
     if match:
         try:
-            return json.loads(match.group())
+            return _sanitizar_chaves(json.loads(match.group()))
         except json.JSONDecodeError:
             pass
 
     # 5. Sem recuperação possível — relançar com o texto limpo para logging
-    return json.loads(limpo)  # levanta JSONDecodeError com contexto útil
+    return _sanitizar_chaves(json.loads(limpo))  # levanta JSONDecodeError com contexto útil
 
 
 # ── Prompt principal para o Claude ───────────────────────────────────────────
@@ -195,31 +209,66 @@ Se não mencionado → ferias = []
 - "Multa art. 467 CLT — Indeferida" → fgts.multa_467 = false
 
 **SEÇÃO 6 — HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios":
-- "Percentual total fixado:" → honorarios.percentual (ex: 15% → 0.15)
-- "Sucumbência integral da reclamada" → honorarios.parte_devedora = "Reclamado"
-- "Sucumbência recíproca" → honorarios.parte_devedora = "Ambos"
-- "Sucumbência integral da reclamante" → honorarios.parte_devedora = "Reclamante"
-- Honorários periciais: honorarios.periciais (campo opcional)
+- "Percentual total fixado:" → honorarios.percentual (ex: 15% → 0.15; 20% → 0.20)
+  Reconhecer formatos variados: "15%", "15 (quinze) por cento", "vinte por cento (20%)",
+  "no percentual de 15%", "à razão de 15%", "correspondente a 15% do valor"
+- Se houver faixa ("de 5 a 15%"), usar o valor máximo
+- Se indeferidos ou não mencionados: honorarios.percentual = null, honorarios.parte_devedora = null
+- Sucumbência → parte devedora:
+    "Sucumbência integral da reclamada" / "sucumbe integralmente a reclamada" → "Reclamado"
+    "Sucumbência recíproca" / "ambas as partes sucumbiram" → "Ambos"
+    "Sucumbência integral da reclamante" → "Reclamante"
+    Quando não há menção de sucumbência recíproca → padrão "Reclamado"
+- Honorários advocatícios do reclamante vencedor → parte_devedora = "Reclamado"
+- honorarios.periciais: valor dos honorários periciais (distinto dos advocatícios)
+- honorarios.valor_fixo: quando fixado em valor, não percentual
 
 **SEÇÃO 7 — CORREÇÃO MONETÁRIA E JUROS** → preenche "correcao_juros":
-Mapeamento dos critérios da sentença para PJE-Calc:
-- Critérios da ADC 58 / TST (IPCA-E pré-judicial + SELIC judicial + IPCA/SELIC-IPCA pós-30/08/2024):
-    correcao_juros.indice_correcao = "Tabela JT Unica Mensal"
-    correcao_juros.taxa_juros = "Selic"
-- Apenas SELIC (sem distinção de fases):
-    correcao_juros.indice_correcao = "Selic"
-    correcao_juros.taxa_juros = "Selic"
-- IPCA-E + juros padrão:
-    correcao_juros.indice_correcao = "IPCA-E"
-    correcao_juros.taxa_juros = "Juros Padrao"
-- Tabela única mensal sem especificação: indice_correcao = "Tabela JT Unica Mensal"
-- correcao_juros.base_juros: "Verbas" (padrão) ou "Credito Total" se explicitado
-- correcao_juros.jam_fgts: true se a sentença mencionar JAM (juros sobre atraso de FGTS)
+Mapeamento dos critérios da sentença para os enums do PJE-Calc:
+
+CASOS MAIS COMUNS:
+1. ADC 58 / critérios TST (menção a "ADC 58", "Tabela JT Única Mensal", "IPCA-E até o ajuizamento
+   e SELIC a partir do ajuizamento", ou simplesmente "critérios da Justiça do Trabalho"):
+     indice_correcao = "Tabela JT Unica Mensal"
+     taxa_juros = "Selic"
+
+2. Apenas SELIC para tudo ("atualizado pela SELIC", "taxa SELIC", sem distinguir fases):
+     indice_correcao = "Selic"
+     taxa_juros = "Selic"
+
+3. IPCA-E + juros legais de 1% ao mês ("IPCA-E mais juros de 1% ao mês", "IPCA-E + juros
+   moratórios de 1% ao mês"):
+     indice_correcao = "IPCA-E"
+     taxa_juros = "Juros Padrao"
+
+4. TR + juros de 1% ao mês ("TR", "TRCT", "correção pela TR mais 1% ao mês"):
+     indice_correcao = "TRCT"
+     taxa_juros = "Juros Padrao"
+
+5. IPCA-E sem especificação de juros:
+     indice_correcao = "IPCA-E"
+     taxa_juros = "Juros Padrao"  (padrão quando índice é IPCA-E)
+
+NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
+      "Selic" = taxa SELIC acumulada (aplicável após ADC 58)
+
+- correcao_juros.base_juros:
+    "Verbas" = padrão (juros calculados verba a verba)
+    "Credito Total" = apenas quando explicitamente mencionado "crédito total" ou "total da dívida"
+- correcao_juros.jam_fgts: true se a sentença mencionar "JAM" ou "juros sobre atraso de FGTS"
 
 **CONTRIBUIÇÕES PREVIDENCIÁRIAS** → preenche "contribuicao_social":
-- contribuicao_social.responsabilidade: "Ambos" (padrão quando ambos devem recolher)
-  "Empregador" quando só o empregador; "Empregado" quando só o empregado
-- contribuicao_social.lei_11941: true se explícito na sentença (campo opcional)
+- contribuicao_social.responsabilidade:
+    "Ambos" → padrão em contratos normais de emprego (empregador e empregado recolhem cada qual sua parte)
+             → também quando mencionado "cada parte arcará com sua quota-parte"
+             → também quando há "dedução na fonte" (implica responsabilidade de ambos)
+    "Empregador" → apenas quando a sentença determina que "a responsabilidade é exclusivamente do empregador"
+                   ou "o empregador arcará com toda a contribuição"
+    "Empregado" → raramente usado isoladamente; só quando explicitado
+    ⚠️ Quando não mencionado explicitamente → usar "Ambos" (padrão da legislação trabalhista)
+- contribuicao_social.lei_11941: true se a sentença mencionar "Lei 11.941/2009" ou "regime de
+  competência" no contexto previdenciário (define forma de apuração das contribuições)
+  Omitir (null) se não mencionado explicitamente
 
 **IMPOSTO DE RENDA** → preenche "imposto_renda":
 - imposto_renda.apurar: true se a sentença determinar apuração de IR; false se não mencionar
@@ -436,6 +485,30 @@ NOTA SOBRE campos_ausentes:
   processo.numero, processo.reclamante, processo.reclamado, processo.estado,
   contrato.admissao, contrato.ajuizamento
 
+DICAS DE EXTRAÇÃO — CAMPOS FREQUENTEMENTE ERRADOS:
+
+HONORÁRIOS ADVOCATÍCIOS:
+- Extrair percentual de frases como: "honorários advocatícios de 15%", "15 (quinze) por cento a título
+  de honorários", "no percentual de vinte por cento (20%)", "condeno em honorários de 5% a 15%"
+  (usar valor máximo em faixas)
+- parte_devedora: "sucumbência recíproca" → "Ambos"; caso normal (reclamante vencedor) → "Reclamado"
+  "Reclamante" só se a sentença condenar o reclamante em honorários
+- Se não há honorários ou foram indeferidos: percentual=null, parte_devedora=null
+
+CORREÇÃO MONETÁRIA E JUROS — mapear para os enums exatos do PJE-Calc:
+- "ADC 58", "Tabela JT Única Mensal", "IPCA-E até ajuizamento + SELIC" → "Tabela JT Unica Mensal" + "Selic"
+- "taxa SELIC" sem outra especificação → "Selic" + "Selic"
+- "IPCA-E + 1% ao mês" ou "IPCA-E + juros moratórios" → "IPCA-E" + "Juros Padrao"
+- "TR + 1% ao mês" ou "TRCT" → "TRCT" + "Juros Padrao"
+- "Juros Padrao" = juros legais de 1% ao mês (padrão trabalhista pré-ADC 58)
+- base_juros: "Verbas" é o padrão; "Credito Total" apenas se explicitamente mencionado
+
+CONTRIBUIÇÕES PREVIDENCIÁRIAS:
+- Quando não há menção específica: responsabilidade = "Ambos" (padrão legal)
+- "dedução na fonte", "descontar do salário", "regime de competência" → responsabilidade = "Ambos"
+- Apenas quando explícito "só o empregador" → responsabilidade = "Empregador"
+- Lei 11.941/2009 → lei_11941 = true (define regime de competência)
+
 Retorne APENAS o JSON, sem markdown, sem explicações."""
 
 
@@ -589,13 +662,71 @@ def _extrair_via_regex(texto: str) -> dict[str, Any]:
         re.search(r"(?i)(multa\s+(?:de\s+)?40\s*%|art\.?\s*18.*§\s*1)", texto)
     )
 
-    # Honorários
-    m = re.search(
-        r"(?i)honorários\s+advocatícios[^.]*?(\d+(?:,\d+)?)\s*%", texto
-    )
-    resultado["honorarios_percentual"] = (
-        float(m.group(1).replace(",", ".")) / 100 if m else None
-    )
+    # Honorários — vários padrões de sentença
+    hon_pct = None
+    for pat in [
+        r"(?i)honorários\s+(?:advocatícios|sucumbenciais)[^.;]{0,80}?(\d+(?:[,.]\d+)?)\s*%",
+        r"(?i)(\d+(?:[,.]\d+)?)\s*%\s*(?:\([^)]+\)\s*)?(?:de\s+)?honorários",
+        r"(?i)condeno[^.;]{0,60}honorários[^.;]{0,60}?(\d+(?:[,.]\d+)?)\s*%",
+        r"(?i)(?:arbitro|fixo|fixar)\s+honorários[^.;]{0,60}?(\d+(?:[,.]\d+)?)\s*%",
+        r"(?i)honorários[^.;]{0,40}?no\s+percentual\s+de\s+(\d+(?:[,.]\d+)?)\s*%",
+    ]:
+        m = re.search(pat, texto)
+        if m:
+            hon_pct = float(m.group(1).replace(",", ".")) / 100
+            break
+    resultado["honorarios_percentual"] = hon_pct
+
+    # Parte devedora dos honorários
+    if re.search(r"(?i)sucumb[êe]ncia\s+rec[íi]proca", texto):
+        resultado["honorarios_parte_devedora"] = "Ambos"
+    elif re.search(r"(?i)sucumb[êe]ncia\s+(?:integral\s+)?(?:da\s+)?reclamad[ao]", texto):
+        resultado["honorarios_parte_devedora"] = "Reclamado"
+    elif re.search(r"(?i)sucumb[êe]ncia\s+(?:integral\s+)?(?:do\s+|da\s+)?reclamante", texto):
+        resultado["honorarios_parte_devedora"] = "Reclamante"
+    else:
+        resultado["honorarios_parte_devedora"] = None
+
+    # Correção monetária e juros — detecção de padrões comuns
+    txt_lower = texto.lower()
+    if any(p in txt_lower for p in ["adc 58", "adc nº 58", "tabela jt", "tabela única mensal",
+                                      "selic a partir", "ipca-e até o ajuizamento"]):
+        resultado["indice_correcao"] = "Tabela JT Unica Mensal"
+        resultado["taxa_juros"] = "Selic"
+    elif re.search(r"(?i)selic\b.*(?:corre[çc][ãa]o|atualiza[çc][ãa]o)", texto) or \
+         re.search(r"(?i)(?:corre[çc][ãa]o|atualiza[çc][ãa]o).*\bselic\b", texto):
+        resultado["indice_correcao"] = "Selic"
+        resultado["taxa_juros"] = "Selic"
+    elif re.search(r"(?i)ipca[- ]?e\b.*juros\s+(?:de\s+)?1\s*%", texto) or \
+         re.search(r"(?i)ipca[- ]?e\b.*juros\s+(?:de\s+)?um\s+por\s+cento", texto):
+        resultado["indice_correcao"] = "IPCA-E"
+        resultado["taxa_juros"] = "Juros Padrao"
+    elif re.search(r"(?i)\btr\b.*juros\s+(?:de\s+)?1\s*%", texto) or \
+         re.search(r"(?i)trct\b", texto):
+        resultado["indice_correcao"] = "TRCT"
+        resultado["taxa_juros"] = "Juros Padrao"
+    elif re.search(r"(?i)ipca[- ]?e\b", texto):
+        resultado["indice_correcao"] = "IPCA-E"
+        resultado["taxa_juros"] = None
+    else:
+        resultado["indice_correcao"] = None
+        resultado["taxa_juros"] = None
+
+    # JAM-FGTS
+    resultado["jam_fgts"] = bool(re.search(r"(?i)\bjam\b|juros\s+(?:sobre|do)\s+atraso.*fgts", texto))
+
+    # Contribuição social — responsabilidade
+    if re.search(r"(?i)responsabilidade\s+(?:de\s+)?ambas?\s+as?\s+partes?", texto):
+        resultado["contrib_responsabilidade"] = "Ambos"
+    elif re.search(r"(?i)(?:apenas|só|somente)\s+(?:o\s+)?empregador", texto):
+        resultado["contrib_responsabilidade"] = "Empregador"
+    elif re.search(r"(?i)dedu[çc][ãa]o\s+na\s+fonte|desconto\s+(?:do|no)\s+salário", texto):
+        resultado["contrib_responsabilidade"] = "Ambos"
+    else:
+        resultado["contrib_responsabilidade"] = None
+
+    # Lei 11.941/2009
+    resultado["lei_11941"] = bool(re.search(r"(?i)lei\s+(?:n[oº°]?\s*)?11\.941", texto))
 
     return resultado
 
@@ -731,7 +862,27 @@ def _merge_extracao(
     hon = llm.get("honorarios", {})
     if hon.get("percentual") is None and regex.get("honorarios_percentual") is not None:
         hon["percentual"] = regex["honorarios_percentual"]
+    if hon.get("parte_devedora") is None and regex.get("honorarios_parte_devedora") is not None:
+        hon["parte_devedora"] = regex["honorarios_parte_devedora"]
     llm["honorarios"] = hon
+
+    # Correção monetária e juros — regex como fallback
+    cj = llm.get("correcao_juros", {})
+    if cj.get("indice_correcao") is None and regex.get("indice_correcao") is not None:
+        cj["indice_correcao"] = regex["indice_correcao"]
+    if cj.get("taxa_juros") is None and regex.get("taxa_juros") is not None:
+        cj["taxa_juros"] = regex["taxa_juros"]
+    if not cj.get("jam_fgts") and regex.get("jam_fgts"):
+        cj["jam_fgts"] = True
+    llm["correcao_juros"] = cj
+
+    # Contribuição social
+    cs = llm.get("contribuicao_social", {})
+    if cs.get("responsabilidade") is None and regex.get("contrib_responsabilidade") is not None:
+        cs["responsabilidade"] = regex["contrib_responsabilidade"]
+    if not cs.get("lei_11941") and regex.get("lei_11941"):
+        cs["lei_11941"] = True
+    llm["contribuicao_social"] = cs
 
     return llm
 
@@ -773,20 +924,20 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
         "honorarios": {
             "percentual": regex.get("honorarios_percentual"),
             "valor_fixo": None,
-            "parte_devedora": None,
+            "parte_devedora": regex.get("honorarios_parte_devedora"),
             "periciais": None,
             "confianca": 0.5,
         },
         "correcao_juros": {
-            "indice_correcao": None,
-            "base_juros": None,
-            "taxa_juros": None,
-            "jam_fgts": None,
+            "indice_correcao": regex.get("indice_correcao"),
+            "base_juros": "Verbas",
+            "taxa_juros": regex.get("taxa_juros"),
+            "jam_fgts": regex.get("jam_fgts") or None,
             "confianca": 0.5,
         },
         "contribuicao_social": {
-            "responsabilidade": None,
-            "lei_11941": None,
+            "responsabilidade": regex.get("contrib_responsabilidade") or "Ambos",
+            "lei_11941": regex.get("lei_11941") or None,
             "confianca": 0.5,
         },
         "imposto_renda": {"apurar": False, "meses_tributaveis": None, "dependentes": None, "confianca": 0.5},
@@ -873,6 +1024,26 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
                 f"Verba [{i+1}] '{verba.get('nome_sentenca', '?')}': "
                 f"confiança baixa ({conf:.0%}). Confirme o preenchimento."
             )
+
+    # Aplicar padrões inteligentes para campos frequentemente não extraídos
+
+    # Contribuição social: padrão legal é "Ambos" quando não especificado
+    cs = dados.get("contribuicao_social", {})
+    if not cs.get("responsabilidade"):
+        cs["responsabilidade"] = "Ambos"
+        dados["contribuicao_social"] = cs
+
+    # Correção/juros: se ausentes e há verbas deferidas, aplicar padrão ADC 58 com alerta
+    cj = dados.get("correcao_juros", {})
+    if not cj.get("indice_correcao") and dados.get("verbas_deferidas"):
+        cj["indice_correcao"] = "Tabela JT Unica Mensal"
+        cj["taxa_juros"] = "Selic"
+        cj.setdefault("base_juros", "Verbas")
+        dados["correcao_juros"] = cj
+        alertas.append(
+            "Índice de correção não identificado — aplicado padrão ADC 58 "
+            "(Tabela JT Única Mensal + SELIC). Verifique na sentença."
+        )
 
     # Remover campos opcionais que o LLM pode ter incluído indevidamente
     campos_ausentes = [c for c in campos_ausentes if c not in _CAMPOS_OPCIONAIS]
