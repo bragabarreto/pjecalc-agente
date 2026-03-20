@@ -170,14 +170,35 @@ def _bool_str(v: bool | None, default: bool = False) -> str:
 
 
 def _esc(s: str | None) -> str:
-    """Escapa caracteres especiais XML."""
+    """Escapa caracteres especiais XML e converte chars fora do ISO-8859-1 para entidades numéricas."""
     if not s:
         return ""
-    return (str(s)
-            .replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;"))
+    import unicodedata
+    s = unicodedata.normalize("NFC", str(s))
+    s = (s.replace("&", "&amp;")
+          .replace("<", "&lt;")
+          .replace(">", "&gt;")
+          .replace('"', "&quot;"))
+    # Chars fora do Latin-1 (>255) → entidade numérica XML para evitar '?' no encode
+    result = []
+    for ch in s:
+        if ord(ch) > 255:
+            result.append(f"&#{ord(ch)};")
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+def _limpar_nome(nome: str | None) -> str:
+    """Remove CPF/CNPJ embutidos no nome (ex: 'NOME ? CPF: 000.000.000-00')."""
+    if not nome:
+        return ""
+    # Remove padrões: NOME ? CPF: xxx / NOME – CNPJ: xxx / NOME - CPF xxx
+    nome = re.sub(
+        r'\s*[?–—\-]+\s*(?:CPF|CNPJ)\s*[:\s]*[\d.\-/]+',
+        '', nome, flags=re.IGNORECASE
+    )
+    return nome.strip()
 
 
 # ── Gerador de meses entre duas datas ────────────────────────────────────────
@@ -220,12 +241,12 @@ def _xml_processo(proc: dict, calc_id: int) -> str:
         f"<reclamante><Reclamante>"
         f"<tipoDocumentoPrevidenciario>null</tipoDocumentoPrevidenciario>"
         f"<numeroDocumentoPrevidenciario>null</numeroDocumentoPrevidenciario>"
-        f"<nome>{_esc(proc.get('reclamante', ''))}</nome>"
+        f"<nome>{_esc(_limpar_nome(proc.get('reclamante', '')))}</nome>"
         f"<tipoDocumentoFiscal>null</tipoDocumentoFiscal>"
         f"<numeroDocumentoFiscal>null</numeroDocumentoFiscal>"
         f"</Reclamante></reclamante>"
         f"<reclamado><Reclamado>"
-        f"<nome>{_esc(proc.get('reclamado', ''))}</nome>"
+        f"<nome>{_esc(_limpar_nome(proc.get('reclamado', '')))}</nome>"
         f"<tipoDocumentoFiscal>null</tipoDocumentoFiscal>"
         f"<numeroDocumentoFiscal>null</numeroDocumentoFiscal>"
         f"</Reclamado></reclamado>"
@@ -801,8 +822,10 @@ def _xml_parametros(cj: dict, cs: dict, calc_id: int) -> str:
         f"<apartirDeOutroIndice>null</apartirDeOutroIndice>"
         f"<ignorarTaxaNegativa>false</ignorarTaxaNegativa>"
         f"<juros>{juros}</juros>"
+        f"<jurosPadrao>null</jurosPadrao>"
         f"<aplicarJurosFasePreJudicial>true</aplicarJurosFasePreJudicial>"
-        f"<combinarOutroJuros>false</combinarOutroJuros>"
+        f"<combinarOutroJuros>true</combinarOutroJuros>"
+        f"<apertirDe>null</apertirDe>"
         f"<baseDeJurosDasVerbas>{base_juros}</baseDeJurosDasVerbas>"
         f"<indiceDeCorrecaoDoFGTS>UTILIZAR_INDICE_TRABALHISTA</indiceDeCorrecaoDoFGTS>"
         f"<jurosDeFgtsComJam>{jam_fgts}</jurosDeFgtsComJam>"
@@ -817,6 +840,7 @@ def _xml_parametros(cj: dict, cs: dict, calc_id: int) -> str:
         f"<aplicarMultaDosSalariosDevidosDoINSS>false</aplicarMultaDosSalariosDevidosDoINSS>"
         f"<tipoDeMultaDosSalariosDevidosDoINSS>URBANA</tipoDeMultaDosSalariosDevidosDoINSS>"
         f"<pagamentoDaMultaDosSalariosDevidosDoINSS>INTEGRAL</pagamentoDaMultaDosSalariosDevidosDoINSS>"
+        f"<salarioDevidoFormaAplicacao>null</salarioDevidoFormaAplicacao>"
         f"<salarioPagoFormaAplicacao>MES_A_MES</salarioPagoFormaAplicacao>"
         f"<correcaoTrabalhistaDosSalariosPagosDoINSS>false</correcaoTrabalhistaDosSalariosPagosDoINSS>"
         f"<jurosTrabalhistasDosSalariosPagosDoINSS>false</jurosTrabalhistasDosSalariosPagosDoINSS>"
@@ -835,6 +859,7 @@ def _xml_parametros(cj: dict, cs: dict, calc_id: int) -> str:
         f"<listaDeExcecaoDeJurosDaAtualizacao><Set></Set></listaDeExcecaoDeJurosDaAtualizacao>"
         f"<listaDeCombinacaoDeIndices><Set></Set></listaDeCombinacaoDeIndices>"
         f"<listaDeCombinacaoDeJuros><Set></Set></listaDeCombinacaoDeJuros>"
+        f"<entePublico>null</entePublico>"
         f"</ParametrosDeAtualizacao></parametrosDeAtualizacao>"
     )
 
@@ -989,7 +1014,7 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
         f"<idSetor>0</idSetor>",
         f"<instancia>null</instancia>",
         f"<validado>false</validado>",
-        f"<hashCalculoCorreto>false</hashCalculoCorreto>",
+        f"<hashCalculoCorreto>true</hashCalculoCorreto>",
         f"<hashAtualizacaoCorreto>false</hashAtualizacaoCorreto>",
         f"<diaFechamentoMes>31</diaFechamentoMes>",
         f"<calculoExterno>false</calculoExterno>",
@@ -1049,7 +1074,7 @@ def gerar_pjc(
     caminho_pjc = OUTPUT_DIR / f"{nome_base}.PJC"
 
     xml_str = _montar_xml(dados, verbas_mapeadas, calc_id)
-    xml_bytes = xml_str.encode("iso-8859-1", errors="replace")
+    xml_bytes = xml_str.encode("iso-8859-1", errors="xmlcharrefreplace")
 
     with zipfile.ZipFile(caminho_pjc, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(f"{nome_base}.PJC", xml_bytes)

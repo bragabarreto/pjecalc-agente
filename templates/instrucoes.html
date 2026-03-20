@@ -33,6 +33,13 @@
   display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
 .passo-txt { flex: 1; padding-top: 4px; }
 .acoes-topo { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+/* Log de progresso da automação */
+#log-automacao { display:none; background:#1a1a2e; color:#e2e8f0; border-radius:6px;
+  padding:12px 16px; font-family:monospace; font-size:0.82rem; max-height:240px;
+  overflow-y:auto; margin-top:12px; line-height:1.6; }
+#log-automacao .log-ok   { color:#68d391; }
+#log-automacao .log-err  { color:#fc8181; }
+#log-automacao .log-wait { color:#f6e05e; }
 {% endblock %}
 
 {% block content %}
@@ -45,12 +52,30 @@
     </p>
   </div>
   <div class="no-print" style="display:flex; gap:8px; flex-wrap:wrap; align-items:flex-start;">
-    <a href="{{ pjecalc_url }}" target="_blank" class="btn btn-success btn-download btn-lg"
+    {% if not cloud_mode %}
+    <!-- Botão principal: automação Playwright local (apenas modo local) -->
+    <button id="btn-preencher-playwright" onclick="iniciarPreenchimento()"
+       class="btn btn-success btn-lg"
        style="font-weight:700; padding:10px 18px;">
       Preencher PJE-Calc Automaticamente
       <small style="display:block; font-size:0.7rem; font-weight:400; opacity:0.9; margin-top:2px;">
-        (requer extensão instalada)
+        (inicia PJE-Calc e preenche via browser)
       </small>
+    </button>
+    {% endif %}
+    <!-- Extensão de browser (funciona local e cloud) -->
+    <a href="{{ pjecalc_url }}" target="_blank"
+       class="btn {% if cloud_mode %}btn-success btn-lg{% else %}btn-outline-success{% endif %} btn-download"
+       {% if cloud_mode %}style="font-weight:700; padding:10px 18px;"{% endif %}
+       title="Requer extensão Agente PJE-Calc instalada no browser">
+      {% if cloud_mode %}
+        Preencher via Extensão de Browser
+        <small style="display:block; font-size:0.7rem; font-weight:400; opacity:0.9; margin-top:2px;">
+          (requer extensão instalada no Chrome/Firefox)
+        </small>
+      {% else %}
+        Via Extensão
+      {% endif %}
     </a>
     <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary btn-download">⬇ Baixar .pjc</a>
     <button onclick="window.print()" class="btn btn-secondary">Imprimir</button>
@@ -58,48 +83,55 @@
   </div>
 </div>
 
-<!-- Aviso principal: extensão -->
+<!-- Log de progresso da automação Playwright (apenas modo local) -->
+{% if not cloud_mode %}
+<div id="caixa-automacao" class="no-print" style="display:none; margin-bottom:16px;">
+  <div style="background:#1a3a6b; color:#fff; padding:10px 16px; border-radius:6px 6px 0 0;
+       display:flex; align-items:center; gap:10px;">
+    <span id="automacao-status-icone">&#9654;</span>
+    <strong id="automacao-status-texto">Iniciando automação…</strong>
+    <span id="automacao-spinner" style="margin-left:auto;">
+      <span class="spinner-border spinner-border-sm" role="status"></span>
+    </span>
+  </div>
+  <div id="log-automacao"></div>
+</div>
+{% endif %}
+
+<!-- Aviso principal: automação local -->
 <div class="aviso-box no-print" style="background:#e8f4fd; border-color:#1a3a6b;">
-  <h4 style="color:#1a3a6b;">Automação via Extensão de Browser — Chrome e Firefox</h4>
+  <h4 style="color:#1a3a6b;">Automação Automática — PJE-Calc Cidadão</h4>
   <div style="display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:10px;">
 
     <div>
       <p style="font-size:0.9rem; font-weight:600; color:#1a3a6b; margin-bottom:6px;">
-        Instalação da extensão (uma única vez)
+        Como funciona (botão principal acima)
       </p>
       <ol style="font-size:0.88rem; color:#333; margin:0; padding-left:18px; line-height:2;">
-        <li>Baixe: <a href="/download/extensao" style="color:#1a3a6b; font-weight:600;">⬇ Extensão Agente PJE-Calc (.zip)</a></li>
-        <li>Extraia o arquivo <code>.zip</code> em qualquer pasta</li>
-        <li>
-          <strong>Chrome:</strong> acesse <code>chrome://extensions</code> →
-          ative <em>Modo do desenvolvedor</em> → clique <em>Carregar sem compactação</em> → selecione a pasta extraída
-        </li>
-        <li>
-          <strong>Firefox:</strong> acesse <code>about:debugging</code> →
-          <em>Este Firefox</em> → <em>Carregar extensão temporária</em> → selecione o arquivo <code>manifest.json</code>
-        </li>
+        <li>Clique em <strong style="color:#155724;">Preencher PJE-Calc Automaticamente</strong></li>
+        <li>O sistema inicia o PJE-Calc Cidadão automaticamente (se necessário)</li>
+        <li>Um browser abre e preenche cada seção do cálculo em sequência</li>
+        <li>Se algum campo precisar de ajuste, um aviso amarelo aparece — preencha e clique <em>Continuar</em></li>
+        <li>Revise e clique em <strong>Liquidar</strong></li>
       </ol>
     </div>
 
     <div>
       <p style="font-size:0.9rem; font-weight:600; color:#1a3a6b; margin-bottom:6px;">
-        Uso por processo (após instalar)
+        Alternativa: extensão de browser
       </p>
       <ol style="font-size:0.88rem; color:#333; margin:0; padding-left:18px; line-height:2;">
-        <li>Verifique que o <strong>PJE-Calc Cidadão</strong> está aberto (<code>localhost:9257</code>)</li>
-        <li>Clique em <strong style="color:#155724;">Preencher PJE-Calc Automaticamente</strong> acima</li>
-        <li>A extensão busca os dados confirmados e preenche todos os campos em sequência</li>
-        <li>Se algum campo não for encontrado, um aviso amarelo aparece — preencha manualmente e clique <em>Continuar</em></li>
-        <li>Revise e clique em <strong>Liquidar</strong></li>
+        <li>Baixe: <a href="/download/extensao" style="color:#1a3a6b; font-weight:600;">⬇ Extensão (.zip)</a>
+          → extraia → instale no Chrome ou Firefox</li>
+        <li>Abra o PJE-Calc Cidadão manualmente (<code>localhost:9257</code>)</li>
+        <li>Clique em <strong>Via Extensão</strong> ao lado do botão principal</li>
       </ol>
     </div>
 
   </div>
   <p style="font-size:0.8rem; color:#555; margin-top:12px; margin-bottom:0;">
-    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado e rodando em
-    <code>C:\Program Files\pjecalc-windows64-2.14.0</code> ·
-    Extensão instalada no Chrome ou Firefox ·
-    Acesso à internet para buscar os dados do servidor
+    Pré-requisito: <strong>PJE-Calc Cidadão</strong> instalado na pasta do agente ·
+    Playwright instalado (<code>pip install playwright &amp;&amp; playwright install chromium</code>)
   </p>
 </div>
 
@@ -389,4 +421,101 @@
   <a href="/previa/{{ sessao_id }}" class="btn btn-secondary" style="margin-right:8px;">← Voltar à Prévia</a>
   <a href="/download/{{ sessao_id }}/parametros" class="btn btn-primary">Baixar parâmetros JSON</a>
 </div>
+
+{% if not cloud_mode %}
+<script>
+const SESSAO_ID = "{{ sessao_id }}";
+let logIdx = 0;
+let sseSource = null;
+
+function iniciarPreenchimento() {
+  const btn = document.getElementById('btn-preencher-playwright');
+  const caixa = document.getElementById('caixa-automacao');
+  const logDiv = document.getElementById('log-automacao');
+  const statusTexto = document.getElementById('automacao-status-texto');
+  const spinner = document.getElementById('automacao-spinner');
+
+  btn.disabled = true;
+  btn.textContent = 'Aguarde…';
+  caixa.style.display = 'block';
+  logDiv.style.display = 'block';
+  logIdx = 0;
+
+  // Inicia automação no servidor
+  fetch(`/api/preencher/${SESSAO_ID}`, { method: 'POST' })
+    .then(r => r.json())
+    .then(data => {
+      if (!data.ok) {
+        statusTexto.textContent = 'Erro: ' + data.mensagem;
+        spinner.innerHTML = '&#10060;';
+        btn.disabled = false;
+        btn.textContent = 'Preencher PJE-Calc Automaticamente';
+        return;
+      }
+      statusTexto.textContent = 'Automação em andamento…';
+      iniciarSSE();
+    })
+    .catch(err => {
+      statusTexto.textContent = 'Erro ao iniciar: ' + err;
+      btn.disabled = false;
+      btn.textContent = 'Preencher PJE-Calc Automaticamente';
+    });
+}
+
+function iniciarSSE() {
+  const logDiv = document.getElementById('log-automacao');
+  const statusTexto = document.getElementById('automacao-status-texto');
+  const spinner = document.getElementById('automacao-spinner');
+  const btn = document.getElementById('btn-preencher-playwright');
+
+  sseSource = new EventSource(`/api/preencher/${SESSAO_ID}/progresso?desde=${logIdx}`);
+
+  sseSource.onmessage = function(e) {
+    const data = JSON.parse(e.data);
+
+    if (data.fim) {
+      sseSource.close();
+      spinner.innerHTML = '&#10003;';
+      btn.disabled = false;
+      btn.textContent = 'Preencher PJE-Calc Automaticamente';
+      return;
+    }
+
+    const msg = data.msg || '';
+    logIdx = (data.idx || logIdx) + 1;
+
+    const linha = document.createElement('div');
+    if (msg.startsWith('ERRO') || msg.startsWith('Error')) {
+      linha.className = 'log-err';
+    } else if (msg.startsWith('AGUARDANDO') || msg.includes('⚠')) {
+      linha.className = 'log-wait';
+      statusTexto.textContent = 'Aguardando ação no PJE-Calc…';
+    } else if (msg.startsWith('CONCLUIDO')) {
+      linha.className = 'log-ok';
+      statusTexto.textContent = 'Concluído — revise e clique em Liquidar';
+      spinner.innerHTML = '&#10003;';
+      btn.disabled = false;
+      btn.textContent = 'Preencher novamente';
+    } else {
+      linha.className = 'log-ok';
+    }
+    linha.textContent = msg;
+    logDiv.appendChild(linha);
+    logDiv.scrollTop = logDiv.scrollHeight;
+  };
+
+  sseSource.onerror = function() {
+    sseSource.close();
+    // Tenta reconectar após 2s se não concluído
+    setTimeout(() => {
+      const msgs = document.querySelectorAll('#log-automacao div');
+      const ultimo = msgs.length ? msgs[msgs.length-1].textContent : '';
+      if (!ultimo.startsWith('CONCLUIDO') && !ultimo.startsWith('ERRO')) {
+        iniciarSSE();
+      }
+    }, 2000);
+  };
+}
+</script>
+{% endif %}
 {% endblock %}

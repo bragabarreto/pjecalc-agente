@@ -30,7 +30,7 @@ import logging
 
 logger = logging.getLogger("pjecalc_agent.webapp")
 
-from config import OUTPUT_DIR, CLOUD_MODE
+from config import OUTPUT_DIR, CLOUD_MODE, PJECALC_DIR
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
@@ -590,6 +590,7 @@ async def instrucoes_preenchimento(
                 "verbas_mapeadas": verbas_mapeadas,
                 "base_url": base_url,
                 "pjecalc_url": pjecalc_url,
+                "cloud_mode": CLOUD_MODE,
             },
         )
     except Exception as exc:
@@ -671,7 +672,112 @@ async def download_extensao():
     )
 
 
+# ── Automação Playwright local ────────────────────────────────────────────────
+
+# Dicionário compartilhado: sessao_id → lista de mensagens de progresso
+_automacao_log: dict[str, list[str]] = {}
+_automacao_ativa: dict[str, bool] = {}
+
+
+@app.post("/api/preencher/{sessao_id}")
+async def iniciar_preenchimento_playwright(
+    sessao_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """
+    Inicia o preenchimento automático do PJE-Calc Cidadão via Playwright (local).
+    Requer PJE-Calc instalado no diretório configurado em PJECALC_DIR.
+    """
+    if CLOUD_MODE:
+        raise HTTPException(
+            status_code=400,
+            detail="Automação local indisponível em modo cloud. Use a extensão de browser.",
+        )
+
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    if _automacao_ativa.get(sessao_id):
+        return JSONResponse({"ok": False, "mensagem": "Automação já em execução para esta sessão."})
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+
+    _automacao_log[sessao_id] = []
+    _automacao_ativa[sessao_id] = True
+
+    background_tasks.add_task(
+        _tarefa_playwright, sessao_id, dados, verbas_mapeadas
+    )
+    return JSONResponse({"ok": True, "mensagem": "Automação iniciada."})
+
+
+@app.get("/api/preencher/{sessao_id}/progresso")
+async def progresso_preenchimento(sessao_id: str, desde: int = 0):
+    """
+    SSE stream com o progresso da automação Playwright.
+    O cliente passa `desde=N` para receber apenas mensagens a partir do índice N.
+    """
+    from fastapi.responses import StreamingResponse
+
+    async def gerador():
+        ultima_pos = desde
+        idle_count = 0
+        while True:
+            msgs = _automacao_log.get(sessao_id, [])
+            if len(msgs) > ultima_pos:
+                for msg in msgs[ultima_pos:]:
+                    yield f"data: {json.dumps({'idx': ultima_pos, 'msg': msg})}\n\n"
+                    ultima_pos += 1
+                idle_count = 0
+            else:
+                idle_count += 1
+                # Encerra stream se automação concluída e nenhuma mensagem nova por 5s
+                if not _automacao_ativa.get(sessao_id) and idle_count > 10:
+                    yield "data: {\"fim\": true}\n\n"
+                    break
+            import asyncio
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        gerador(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 # ── Tarefas em Background ─────────────────────────────────────────────────────
+
+def _tarefa_playwright(
+    sessao_id: str,
+    dados: dict,
+    verbas_mapeadas: dict,
+) -> None:
+    """Executa a automação Playwright em thread separada."""
+    from modules.playwright_pjecalc import iniciar_e_preencher
+
+    def _cb(msg: str) -> None:
+        _automacao_log.setdefault(sessao_id, []).append(msg)
+
+    try:
+        iniciar_e_preencher(
+            dados=dados,
+            verbas_mapeadas=verbas_mapeadas,
+            pjecalc_dir=PJECALC_DIR,
+            log_cb=_cb,
+        )
+    except Exception as exc:
+        _cb(f"ERRO: {exc}")
+        logger.exception(f"Erro na automação Playwright [{sessao_id}]: {exc}")
+    finally:
+        _automacao_ativa[sessao_id] = False
+
 
 def _tarefa_processar_sentenca(
     sessao_id: str,

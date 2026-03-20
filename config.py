@@ -43,6 +43,13 @@ AUTOMATION_BACKEND = "pyautogui"    # "pyautogui" | "playwright"
 PJECALC_WINDOW_TITLE = "PJE-Calc"  # título da janela desktop
 PJECALC_URL = os.environ.get("PJECALC_URL", "https://pje.trt7.jus.br/pjecalc")
 
+# Diretório local do PJE-Calc Cidadão (para automação Playwright local).
+# Pode ser sobrescrito via env var PJECALC_DIR.
+PJECALC_DIR = Path(os.environ.get(
+    "PJECALC_DIR",
+    str(BASE_DIR.parent / "pjecalc-windows64-2.14.0"),
+))
+
 # Tempos de espera (segundos)
 WAIT_AFTER_CLICK = 0.5
 WAIT_AFTER_SAVE = 1.5
