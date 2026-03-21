@@ -489,34 +489,35 @@ class PJECalcPlaywright:
             return False
 
     def _clicar_menu_lateral(self, texto: str) -> None:
-        """Clica em link do menu lateral. Se oculto, expande o nó pai antes."""
+        """
+        Clica em link do menu lateral via JavaScript (invulnerável a visibilidade).
+        Funciona mesmo que o menu esteja colapsado — dispara o onclick do JSF/A4J
+        diretamente sem depender de Playwright ver o elemento.
+        """
         self._page.wait_for_timeout(400)
+        # Método primário: JS click — bypassa visibilidade, funciona em menus colapsados
+        clicou = self._page.evaluate(
+            """(texto) => {
+                const links = [...document.querySelectorAll('a')];
+                const el = links.find(a => a.textContent.trim().includes(texto));
+                if (el) { el.click(); return true; }
+                return false;
+            }""",
+            texto,
+        )
+        if clicou:
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            return
+        # Fallback: Playwright (visível ou não)
         loc = self._page.locator(f"a:has-text('{texto}')")
         if loc.count() == 0:
             loc = self._page.get_by_role("link", name=texto)
         if loc.count() == 0:
             self._log(f"  ⚠ Menu '{texto}': link não encontrado.")
             return
-        # Se invisível, tenta expandir o nó pai do menu RichFaces
         try:
-            if not loc.first.is_visible():
-                self._log(f"  → Menu '{texto}' oculto — expandindo nó pai…")
-                pai = loc.first.locator(
-                    "xpath=ancestor::*[contains(@class,'rich-tree-node') "
-                    "or contains(@class,'menuGroup') "
-                    "or contains(@class,'rich-tree-handle')][1]"
-                )
-                if pai.count() > 0 and pai.first.is_visible():
-                    pai.first.click()
-                    self._page.wait_for_timeout(600)
-                else:
-                    loc.first.hover(force=True)
-                    self._page.wait_for_timeout(800)
-                loc.first.wait_for(state="visible", timeout=5000)
-        except Exception:
-            pass
-        try:
-            loc.first.click()
+            loc.first.click(force=True)
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
         except Exception as e:

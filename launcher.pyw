@@ -4,13 +4,13 @@
 # Roda silenciosamente (sem janela de terminal).
 #
 # Comportamento:
-#   - Se o servidor já estiver rodando em localhost:8000, apenas abre o browser.
-#   - Se não estiver rodando, inicia o uvicorn em background e aguarda ficar pronto.
+#   - Encerra o servidor anterior (se houver) via PID file.
+#   - Inicia uvicorn com o código atual.
+#   - Abre http://localhost:8000 no browser padrão.
 
 import os
 import socket
 import subprocess
-import sys
 import time
 import webbrowser
 from pathlib import Path
@@ -18,6 +18,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).parent
 PORT = 8000
 PYTHON = BASE_DIR / "venv" / "Scripts" / "python.exe"
+PID_FILE = BASE_DIR / "server.pid"
 
 
 def _servidor_rodando() -> bool:
@@ -28,8 +29,30 @@ def _servidor_rodando() -> bool:
         return False
 
 
+def _parar_servidor_anterior() -> None:
+    """Encerra o processo uvicorn anterior usando o PID salvo."""
+    if PID_FILE.exists():
+        try:
+            pid = PID_FILE.read_text().strip()
+            subprocess.run(
+                ["taskkill", "/F", "/PID", pid, "/T"],
+                capture_output=True,
+            )
+        except Exception:
+            pass
+        try:
+            PID_FILE.unlink()
+        except Exception:
+            pass
+    # Aguarda a porta liberar (até 5s)
+    for _ in range(10):
+        if not _servidor_rodando():
+            break
+        time.sleep(0.5)
+
+
 def _iniciar_servidor() -> None:
-    subprocess.Popen(
+    proc = subprocess.Popen(
         [
             str(PYTHON), "-m", "uvicorn",
             "webapp:app",
@@ -41,6 +64,7 @@ def _iniciar_servidor() -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+    PID_FILE.write_text(str(proc.pid))
     # Aguarda o servidor ficar pronto (até 20s)
     for _ in range(40):
         time.sleep(0.5)
@@ -49,9 +73,8 @@ def _iniciar_servidor() -> None:
 
 
 def main() -> None:
-    if not _servidor_rodando():
-        _iniciar_servidor()
-
+    _parar_servidor_anterior()
+    _iniciar_servidor()
     webbrowser.open(f"http://localhost:{PORT}")
 
 
