@@ -30,6 +30,7 @@ echo "[PJE-Calc] Iniciando Tomcat na porta 9257..."
 #   -Xms512m -Xmx1024m          → heap reduzido para ambiente servidor (original: 1024/2048)
 #   -XX:MaxPermSize=512m        → apenas para Java 8 (ignorado no Java 11+)
 java \
+    -Djava.awt.headless=true \
     -Duser.timezone=GMT-3 \
     -Dfile.encoding=ISO-8859-1 \
     -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe \
