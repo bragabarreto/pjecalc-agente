@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="titulo" value="Relatório da Atualização" />
+	<ui:param name="menuCalculo" value="#{true}" />
+	<ui:param name="apresentador" value="#{apresentadorRelatorioPagamento}" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+
+	<ui:define name="nofiltroCampos">
+			
+		<a4j:loadScript src="resource://jquery.js"/>
+
+		<ui:include src="/pages/calculo/resumo-calculo.xhtml" />
+		
+		<br/>
+		
+		<h:panelGroup>
+			<fieldset><legend>Formato de Saída do Relatório *</legend>
+				<h:selectOneRadio id="formatoSaida" value="#{apresentador.formatoRelatorio}"
+								label="Formato de Saída" 
+								styleClass="labelInput; font-weight: bold" 
+								layout="pageDirection" 
+								required="true">
+					<s:selectItems value="#{enumItems.formatoRelatorioEnum}" var="item" label="#{item.nome}"/>
+					<s:convertEnum />
+				</h:selectOneRadio>
+			</fieldset>
+		</h:panelGroup>
+		
+		<br/>
+		
+       	<fieldset><legend>Selecione para imprimir</legend>
+       	
+	       	<a4j:outputPanel id="panelModalBusca" ajaxRendered="true" >
+						
+				<div class="boxCheckBoxTodos">
+	       			<input id="selecionarTodos"  type="checkbox" class="css-checkbox" onclick="jQuery('.labelCheckBox tr td input:enabled').attr('checked',jQuery('#selecionarTodos').attr('checked'))"/>
+					<label for="selecionarTodos" class="css-label" style="color: #666666;">Selecionar Todos</label>      	
+	         	</div>
+				
+				<h:panelGroup>
+					<ui:param name="calculo" value="#{apresentador.calculo}" />
+					<h:selectManyCheckbox id="tipoDeRelatorio" value="#{apresentador.relatoriosSelecionados}" layout="pageDirection" styleClass="labelCheckBox" onclick="jQuery(function() {prepararCheckAll('#selecionarTodos','.labelCheckBox tr td input:enabled');});">
+						<s:selectItems value="#{apresentador.relatoriosPagamento}" var="item" label="#{item.nome}" disabled="#{not item.isSelecionado(calculo)}" />	
+						<s:convertEnum />
+					</h:selectManyCheckbox>		
+				</h:panelGroup>
+						
+			</a4j:outputPanel>
+			
+		</fieldset>   
+		    
+	</ui:define>
+	
+	<ui:define name="script">
+		<a4j:outputPanel id="painelScript" ajaxRendered="true">
+			<script language="JavaScript">
+				jQuery(function() {
+					prepararCheckAll('#selecionarTodos','.labelCheckBox tr td input:enabled');
+				});
+			</script>
+		</a4j:outputPanel>
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario">
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="imprimirConsolidado" value="Imprimir" actionListener="#{apresentador.gerarRelatorioPagamento}" styleClass="botao"/>
+		<s:span rendered="#{apresentador.downloadPagamentoDisponivel}">
+			<h:commandLink id="linkDownloadConsolidado" actionListener="#{apresentador.downloadRelatorioPagamento}" value=""/>
+			<script type="text/javascript">
+				if(typeof jsfcljs == 'function') {
+					jsfcljs(document.getElementById('formulario'),{'formulario:linkDownloadConsolidado':'formulario:linkDownloadConsolidado'},'');
+				}
+			</script>
+		</s:span>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

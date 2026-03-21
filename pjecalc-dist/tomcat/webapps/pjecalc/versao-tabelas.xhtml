@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+
+	<f:view encoding="ISO-8859-1" locale="pt_BR">
+
+		<head>
+		
+			<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+			<meta http-equiv="cache-control" content="no-cache" />
+			<meta http-equiv="pragma" content="no-cache" />
+			<meta http-equiv="expires" content="-1" />
+	
+		  	<title>
+				<ui:insert name="title">PJe-Calc - Versão Tabelas</ui:insert>
+		  	</title>
+		
+			<link rel="SHORTCUT ICON" href="#{facesContext.externalContext.requestContextPath}/images/favi_icon.gif" />
+			
+			<style type="text/css">
+				body{
+					background-color: #346785;
+				}
+				
+				.box{
+					background-color: #FFF;
+				    margin:auto;
+				    max-height: 120px;
+				    max-width: 400px;
+				    position:fixed;
+				    top:0;
+				    bottom:0;
+				    left:0;
+				    right:0;
+				    text-align: center;
+				    border-radius: 5px;
+				    line-height: 100%;
+				}
+				
+				h3{
+				    line-height: 50%;
+					font-size: 15px;
+					font-family: Arial;
+					color: #706D6E;
+				}
+				.titulo {
+					font-size: 20px;
+				}			
+				.info-versao {
+					color: #7c7778;
+				}		
+			</style>
+
+		</head>
+	
+		<body id="logon">
+		
+			<f:loadBundle basename="messages" var="mensagens" />
+			
+			<h:panelGroup rendered="#{aplicacao.tipoDeVersao ne 'ONLINE'}">
+				<script language="javascript" type="text/javascript">
+					location.href = 'pages/principal.jsf';
+				</script>
+			</h:panelGroup>
+	
+			<div class="box">
+				<h3 class="titulo" id="tabelas-nivel">Tabelas Nacionais</h3>
+				<h:panelGroup rendered="#{empty apresentadorVersaoTabelas.controle}">
+				<h3 id="tabelas-mensagem" class="info-versao">
+					<h:outputText value="Tabelas não sincronizadas com o ambiente nacional." />
+				</h3>
+				</h:panelGroup>
+				<h:panelGroup rendered="#{not empty apresentadorVersaoTabelas.controle}">
+					<h3 id="tabelas-nome" class="info-versao">
+						<h:outputText value="Nome: " />
+						<h:outputText value="#{apresentadorVersaoTabelas.controle.nome}" />
+					</h3>
+					<h3 id="tabelas-hash" class="info-versao">
+						<h:outputText value="Hash: " />
+						<h:outputText value="#{apresentadorVersaoTabelas.controle.hash}" />
+					</h3>
+					<h3 id="tabelas-data" class="info-versao">
+						<h:outputText value="Data: " />
+						<h:outputText value="#{apresentadorVersaoTabelas.controle.dataNotificacao}">
+							<f:convertDateTime pattern="dd/MM/yyyy HH:mm" timeZone="GMT-3" />
+						</h:outputText>
+					</h3>
+				</h:panelGroup>
+			</div>
+
+		</body>
+		
+	</f:view>
+
+</html>

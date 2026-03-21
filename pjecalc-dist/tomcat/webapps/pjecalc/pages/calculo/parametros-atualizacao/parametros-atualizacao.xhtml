@@ -1,0 +1,838 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Correção, Juros e Multa" />
+	<ui:param name="apresentador" value="#{apresentadorParametrosDeAtualizacao}" />
+	<ui:param name="registro" value="#{parametrosDeAtualizacao}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="../resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+		<br/>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+		<rich:tabPanel switchType="client" immediate="true"> 
+			<rich:tab id="tabDadosGerais" label="Dados Gerais">
+				<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+					<h:panelGroup>
+						<fieldset>
+							<legend>Correção Monetária</legend>
+							<h:panelGrid id="pnlCorrecaoMonetaria" columns="1" cellpadding="3" cellspacing="3" border="0" styleClass="tabelaRowTop">	
+								
+								<h:panelGroup styleClass="itemGrupo">
+									<h:outputLabel value="Índice Trabalhista" for="indiceTrabalhista" />
+									<br/>
+									<h:selectOneMenu id="indiceTrabalhista" value="#{registro.indiceTrabalhista}" style="width:345px;">
+										<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+										<a4j:support event="onchange" ajaxSingle="true" reRender="groupOutroIndice" limitToList="true" />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								
+								<h:panelGroup id="checkCombinarOutroIndice" styleClass="itemGrupo">
+									<h:selectBooleanCheckbox id="combinarOutroIndice" value="#{registro.combinarOutroIndice}">
+										<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentador.atualizarOutroIndice}" reRender="groupOutroIndice" limitToList="true" />
+									</h:selectBooleanCheckbox>
+									<h:outputLabel value="Combinar com Outro Índice" for="combinarOutroIndice" />
+								</h:panelGroup>
+								
+								<h:panelGroup id="groupOutroIndice">
+								
+									<h:panelGrid id="camposOutroIndice" rendered="#{registro.combinarOutroIndice}" columns="3" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="Outro Índice Trabalhista *" for="outroIndiceTrabalhista" />
+											<br/>
+											<h:selectOneMenu id="outroIndiceTrabalhista" label="Outro Índice Trabalhista" value="#{registro.outroIndiceTrabalhista}"  style="width:345px;">
+												<s:selectItems value="#{apresentador.indiceMonetarioParaCalculoOutroEnum}" var="item" noSelectionLabel="" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+											<cobra:toolTip>
+							    				<rich:message for="outroIndiceTrabalhista" style="margin-left:5px;"/>
+							    			</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="A partir de *" for="apartirDeOutroIndice" /><br/>
+											<rich:calendar id="apartirDeOutroIndice" value="#{registro.apartirDeOutroIndice}" label="A partir de" 
+														   inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"> 
+												<f:facet name="footer">
+										        	<h:outputText value="" style="text-align:center" />
+										        </f:facet>
+											</rich:calendar>
+							    			<cobra:toolTip>
+							    				<rich:message for="apartirDeOutroIndice" style="margin-left:5px;"/>
+							    			</cobra:toolTip>	    			
+										</h:panelGroup>
+										
+										<h:panelGroup styleClass="itemGrupo">
+											<a4j:commandLink id="addOutroIndice" styleClass="botaoAddItem" title="Adicionar" limitToList="true" actionListener="#{apresentador.adicionarOutroIndice}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="groupOutroIndice,checkCombinarOutroIndice,painelMensagens" />
+										</h:panelGroup>
+									</h:panelGrid>
+										
+									<h:panelGroup id="listagemIndicesCombinados">
+										<rich:dataTable value="#{listaDeCombinacaoDeIndices}" var="item" rendered="#{registro.combinarOutroIndice}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="505px"> 
+								    		<rich:column style="width:5%;">
+										    	<f:facet name="header">
+									    			<h:outputText value="Ação"/>
+									    		</f:facet>
+									    		<a4j:commandLink id="excluirDep" process="listagemIndicesCombinados,excluirDep" limitToList="true" 
+								    							 styleClass="linkExcluir" title="Excluir" 
+								    							 actionListener="#{apresentador.removerOutroIndice(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+								    							 reRender="pnlCorrecaoMonetaria">
+								    			</a4j:commandLink>
+										    </rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="Índice"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.outroIndiceTrabalhista.nome}"/>
+									    	</rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="A partir de"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.apartirDeOutroIndice}">
+								    				<f:convertDateTime pattern="dd/MM/yyyy" />
+								    			</h:outputText>
+									    	</rich:column>
+										</rich:dataTable>
+									</h:panelGroup>
+										
+								</h:panelGroup>
+								
+								<h:panelGroup styleClass="itemGrupo">
+									<h:selectBooleanCheckbox id="ignorarTaxaNegativa" value="#{registro.ignorarTaxaNegativa}"/>
+									<h:outputLabel value="Ignorar Taxa Negativa para Índice(s) selecionado(s)" for="ignorarTaxaNegativa" />
+								
+								</h:panelGroup>
+							</h:panelGrid>
+						</fieldset>
+					</h:panelGroup>
+					<h:panelGroup>
+						<fieldset>
+							<legend>Juros de Mora</legend>	
+							<h:panelGrid id="pnlJuros" columns="1" cellpadding="3" cellspacing="3" border="0" styleClass="tabelaRowTop">
+								<h:panelGroup id="checkJurosPreJudiciais" styleClass="itemGrupo">
+									<h:selectBooleanCheckbox id="aplicarJurosFasePreJudicial" value="#{registro.aplicarJurosFasePreJudicial}">
+										<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentador.atualizarJurosFasePreJudicial}" reRender="tabelaDeJuros,checkCombinarOutroJuros,groupOutroJuros" limitToList="true" />
+									</h:selectBooleanCheckbox>
+									<h:outputLabel value="Aplicar Juros na Fase Pré-Judicial" for="aplicarJurosFasePreJudicial" />
+									<h:outputText class="linkHelp" id="jurosPreJudicialHelp" style="margin-left:1px">
+										<rich:toolTip for="jurosPreJudicialHelp" showEvent="mouseover" styleClass="tooltipHelp">
+											Se este campo estiver marcado, a tabela de juros selecionada no campo "Tabela de Juros" e posteriores combinações serão utilizadas a partir do vencimento das verbas. Caso contrário, elas serão utilizadas a partir da data do ajuizamento da ação.
+										</rich:toolTip>
+						     	    </h:outputText>
+								</h:panelGroup>
+								<h:panelGroup id="tabelaDeJuros" styleClass="itemGrupo">
+									<h:outputLabel value="Tabela de Juros" for="juros" />
+									<br/>
+									<h:selectOneMenu id="juros" value="#{registro.juros}" style="width:185px;">
+										<s:selectItems value="#{enumItems.jurosEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+										<a4j:support event="onchange" ajaxSingle="true" reRender="groupOutroJuros" limitToList="true" />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								<h:panelGroup id="checkCombinarOutroJuros" styleClass="itemGrupo">
+									<h:selectBooleanCheckbox id="combinarOutroJuros" value="#{registro.combinarOutroJuros}">
+										<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentador.atualizarOutroJuros}" reRender="groupOutroJuros" limitToList="true" />
+									</h:selectBooleanCheckbox>
+									<h:outputLabel value="Combinar com Outra Tabela de Juros" for="combinarOutroJuros" />
+								</h:panelGroup>
+								<h:panelGroup id="groupOutroJuros">
+									<h:panelGrid id="camposOrdemJuros" rendered="#{registro.combinarOutroJuros}" columns="3" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="Tabela Juros *" for="outroJuros" />
+											<br/>
+											<h:selectOneMenu id="outroJuros" label="Tipo Juros" value="#{registro.outroJuros}"  style="width:185px;">
+												<s:selectItems value="#{enumItems.jurosEnum}" var="item" noSelectionLabel="" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+											<cobra:toolTip>
+							    				<rich:message for="outroJuros" style="margin-left:5px;"/>
+							    			</cobra:toolTip>
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="A partir de *" for="apartirDeOutroJuros" /><br/>
+											<rich:calendar id="apartirDeOutroJuros" value="#{registro.apartirDeOutroJuros}" label="A partir de" 
+														   inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"> 
+												<f:facet name="footer">
+										        	<h:outputText value="" style="text-align:center" />
+										        </f:facet>
+											</rich:calendar>
+							    			<cobra:toolTip>
+							    				<rich:message for="apartirDeOutroJuros" style="margin-left:5px;"/>
+							    			</cobra:toolTip>	    			
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<a4j:commandLink id="addOutroJuros" styleClass="botaoAddItem" title="Adicionar" limitToList="true" actionListener="#{apresentador.adicionarOutroJuros}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="groupOutroJuros,painelMensagens" />
+										</h:panelGroup>
+									</h:panelGrid>
+									<h:panelGroup id="listagemJurosCombinados">
+										<rich:dataTable value="#{listaDeCombinacaoDeJuros}" rendered="#{registro.combinarOutroJuros}" var="item" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="300px"> 
+								    		<rich:column style="width:5%;">
+										    	<f:facet name="header">
+									    			<h:outputText value="Ação"/>
+									    		</f:facet>
+									    		<a4j:commandLink id="excluirDep" process="listagemJurosCombinados,excluirDep" limitToList="true" 
+								    							 styleClass="linkExcluir" title="Excluir" 
+								    							 actionListener="#{apresentador.removerOutroJuros(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+								    							 reRender="pnlJuros">
+								    			</a4j:commandLink>
+										    </rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="Índice"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.outroJuros.nome}"/>
+									    	</rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="A partir de"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.apartirDeOutroJuros}">
+								    				<f:convertDateTime pattern="dd/MM/yyyy" />
+								    			</h:outputText>
+									    	</rich:column>
+										</rich:dataTable>
+									</h:panelGroup>
+								</h:panelGroup>
+							</h:panelGrid>
+						</fieldset>
+					</h:panelGroup>
+				</h:panelGrid>
+			</rich:tab>
+			<rich:tab id="tabDadosEspecificos" label="Dados Específicos">
+				<h:panelGrid columns="1" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+					<h:panelGroup>
+						<h:panelGrid columns="3" cellpadding="1" cellspacing="1" border="0" styleClass="tabelaRowTop">
+							<h:panelGrid columns="1" cellpadding="0" cellspacing="0" border="0">
+								<h:panelGroup>
+									<fieldset>
+										<legend>Verbas</legend>
+										<h:panelGroup layout="block" styleClass="itemGrupo" >
+											<h:outputLabel value="Bases de Juros *" for="baseDeJurosDasVerbas" />
+											<br/>
+											<h:selectOneMenu id="baseDeJurosDasVerbas" value="#{registro.baseDeJurosDasVerbas}" required="true">
+												<s:selectItems value="#{enumItems.baseDeJurosDasVerbasEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+									</fieldset>
+								</h:panelGroup>							
+								<h:panelGroup>
+									<fieldset>
+										<legend>FGTS
+											<h:outputText class="linkHelp" id="indiceDeCorrecaoDoFGTSHelp" style="margin-left:1px">
+									   	 		<rich:toolTip for="indiceDeCorrecaoDoFGTSHelp" showEvent="mouseover" styleClass="tooltipHelp" style="font-weight: normal;">
+									   				Optando por "Utilizar índice JAM e índice trabalhista", o FGTS será corrigido pelo índice JAM até a data da demissão, e pelo índice trabalhista a partir desta data até a data da liquidação.
+									   			</rich:toolTip>
+					     	    	        </h:outputText>
+										</legend>
+										<h:panelGroup layout="block" styleClass="itemGrupo" >
+											<h:selectOneRadio id="indiceDeCorrecaoDoFGTS" value="#{registro.indiceDeCorrecaoDoFGTS}" styleClass="labelInput" layout="pageDirection">
+												<s:selectItems value="#{enumItems.indiceDeCorrecaoDoFGTSEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+												<a4j:support event="onchange" actionListener="#{apresentador.mudarCorrecaoFGTS}" ajaxSingle="true" reRender="panelDeJurosDeFgtsComJam" limitToList="true" />
+											</h:selectOneRadio>
+										</h:panelGroup>
+										<h:panelGroup style="margin-top:11px;" styleClass="itemGrupo" id="panelDeJurosDeFgtsComJam">
+											<h:panelGroup rendered="#{apresentador.mostrarCampoJurosMoraFGTS()}">
+												<h:selectBooleanCheckbox id="jurosDeFgtsComJam" value="#{registro.jurosDeFgtsComJam}" />
+												<h:outputLabel value="Juros de Mora" for="jurosDeFgtsComJam" />
+											</h:panelGroup>
+										</h:panelGroup>
+									</fieldset>
+								</h:panelGroup>
+							</h:panelGrid>
+							<h:panelGroup>
+								<fieldset>
+									<legend>Previdência Privada</legend>
+									<h:panelGroup layout="block" styleClass="itemGrupo" >
+										<h:panelGrid columns="1" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+											<h:panelGroup styleClass="itemGrupo">
+												<h:selectBooleanCheckbox id="jurosDePrevidenciaPrivada" value="#{registro.jurosDePrevidenciaPrivada}" disabled="#{not registro.jurosHabilitado}">
+												</h:selectBooleanCheckbox>
+												<h:outputLabel value="Juros" for="jurosDePrevidenciaPrivada" />
+											</h:panelGroup>
+											<h:panelGroup>
+												<h:selectOneRadio id="indiceDeCorrecaoDePrevidenciaPrivada" value="#{registro.indiceDeCorrecaoDePrevidenciaPrivada}" styleClass="labelInput" layout="pageDirection">
+													<s:selectItems value="#{enumItems.opcaoDeIndiceDeCorrecaoEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+													<a4j:support event="onchange" actionListener="#{apresentador.mudarPrevidenciaPrivada}" ajaxSingle="true" reRender="outroIndiceDeCorrecaoDePrevidenciaPrivada" limitToList="true" />
+												</h:selectOneRadio>
+											</h:panelGroup>
+											<h:panelGroup>
+												<h:selectOneMenu id="outroIndiceDeCorrecaoDePrevidenciaPrivada" label="Outro índice" value="#{registro.outroIndiceDeCorrecaoDePrevidenciaPrivada}" disabled="#{not apresentador.isHabilitadoOutrasPrevidenciaPrivada()}" required="#{apresentador.isHabilitadoOutrasPrevidenciaPrivada()}">
+													<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoEnum}" var="item" label="#{item.nome}" noSelectionLabel="" />
+													<s:convertEnum />
+												</h:selectOneMenu>
+								    			<cobra:toolTip>
+								    				<rich:message for="outroIndiceDeCorrecaoDePrevidenciaPrivada" style="margin-left:5px;"/>
+								    			</cobra:toolTip>	  
+							    			</h:panelGroup>
+										</h:panelGrid>
+									</h:panelGroup>
+								</fieldset>
+							</h:panelGroup>							
+							<h:panelGroup>
+								<fieldset>
+									<legend>Custas Judiciais</legend>
+									<h:panelGroup layout="block" styleClass="itemGrupo" >
+										<h:panelGrid columns="1" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+							    			
+							    			<h:panelGrid columns="2" cellpadding="2" cellspacing="2" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="correcaoDasCustas" value="#{registro.correcaoDasCustas}" >
+														<a4j:support event="onchange" actionListener="#{apresentador.mudarIndiceDeCorrecao}" ajaxSingle="true" reRender="indiceDeCorrecaoDasCustas,outroIndiceDeCorrecaoDasCustas"  limitToList="true" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Correção" for="correcaoDasCustas" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="jurosDeCustas" value="#{registro.jurosDeCustas}" disabled="#{not registro.jurosHabilitado}">
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Juros" for="jurosDeCustas" />
+												</h:panelGroup>
+							    			</h:panelGrid>
+											<h:panelGroup>
+												<h:selectOneRadio id="indiceDeCorrecaoDasCustas" value="#{registro.indiceDeCorrecaoDasCustas}" styleClass="labelInput" layout="pageDirection" disabled="#{!registro.correcaoDasCustas}">
+													<s:selectItems value="#{enumItems.opcaoDeIndiceDeCorrecaoEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+													<a4j:support event="onchange" actionListener="#{apresentador.mudarCustas}" ajaxSingle="true" reRender="outroIndiceDeCorrecaoDasCustas" limitToList="true" />
+												</h:selectOneRadio>
+											</h:panelGroup>
+											<h:panelGroup>
+												<h:selectOneMenu id="outroIndiceDeCorrecaoDasCustas" label="Outro índice" value="#{registro.outroIndiceDeCorrecaoDasCustas}" disabled="#{not apresentador.isHabilitadoOutrasCustas()}" required="#{apresentador.isHabilitadoOutrasCustas()}">
+													<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoEnum}" var="item" label="#{item.nome}" noSelectionLabel="" />
+													<s:convertEnum />
+												</h:selectOneMenu>
+								    			<cobra:toolTip>
+								    				<rich:message for="outroIndiceDeCorrecaoDasCustas" style="margin-left:5px;"/>
+								    			</cobra:toolTip>	  
+							    			</h:panelGroup>
+							    			
+										</h:panelGrid>
+									</h:panelGroup>
+								</fieldset>
+							</h:panelGroup>							
+						</h:panelGrid>
+					</h:panelGroup>
+					<h:panelGroup>
+						<fieldset>
+							<legend>Contribuição Social</legend>
+							<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+									<h:panelGroup>
+										<fieldset>
+											<legend>Salários Devidos</legend>
+											<h:panelGrid columns="1" cellpadding="0" cellspacing="0" border="0">
+												<h:panelGroup>
+													<fieldset>
+														<legend>Atualização</legend>
+														
+														<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+															<h:panelGroup id="grupoLei11941" layout="block" styleClass="itemGrupoCorrecao" >
+																<h:panelGroup styleClass="itemGrupoCorrecao" rendered="#{registro.correcaoTrabalhistaDosSalariosDevidosDoINSS or (registro.salarioDevidoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosDevidosDoINSS)}">
+																	<h:selectBooleanCheckbox id="correcaoLei11941" value="#{registro.lei11941}">
+																		<a4j:support event="onchange" ajaxSingle="true" reRender="grupoLei11941, grupoLei11941Pago, grupoLei11941Multa" limitToList="true" actionListener="#{apresentador.mudarLei11941}" oncomplete="sugerirData11941();"/>
+																	</h:selectBooleanCheckbox>
+																	<h:outputLabel value="Lei nº 11.941/2009" for="correcaoLei11941" />
+																</h:panelGroup>
+																<h:panelGroup id="grupoAplicarLei11941" layout="block" styleClass="itemGrupoCorrecao" rendered="#{registro.lei11941 and (registro.correcaoTrabalhistaDosSalariosDevidosDoINSS or (registro.salarioDevidoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosDevidosDoINSS))}">
+																	<h:outputLabel value="A partir de" for="aplicarAteLei11941" style="padding:3px;" />
+																	<rich:calendar id="aplicarAteLei11941" value="#{registro.apartirDeLei11941}" label="Aplicar até" inputSize="10" popup="true" 
+																					datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																					oninputblur="sugerirData11941Pago();" onchanged="sugerirData11941Pago();"> 
+																		<f:facet name="footer">
+																        	<h:outputText value="" style="text-align:center" />
+																        </f:facet>
+																	</rich:calendar>
+													    			<cobra:toolTip>
+													    				<rich:message for="aplicarAteLei11941" style="margin-left:5px;"/>
+													    			</cobra:toolTip>	    			
+																</h:panelGroup>
+															</h:panelGroup>
+														</h:panelGrid>
+														
+														<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+															<h:panelGroup id="grupoLei11941Multa" layout="block" styleClass="itemGrupoCorrecao" >
+																<h:panelGroup styleClass="itemGrupoCorrecao" rendered="#{(registro.correcaoTrabalhistaDosSalariosDevidosDoINSS or (registro.salarioDevidoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosDevidosDoINSS)) and registro.lei11941}">
+																	<h:selectBooleanCheckbox id="correcaoLei11941Multa" value="#{registro.lei11941Multa}">
+																		<a4j:support event="onchange" ajaxSingle="true" reRender="grupoLei11941Multa" limitToList="true" oncomplete="sugerirData11941Multa();"/>
+																	</h:selectBooleanCheckbox>
+																	<h:outputLabel value="Limitar multa" for="correcaoLei11941Multa" />
+																</h:panelGroup>
+																<h:panelGroup id="grupoAplicarLei11941Multa" layout="block" styleClass="itemGrupoCorrecao" rendered="#{registro.lei11941 and registro.lei11941Multa and (registro.correcaoTrabalhistaDosSalariosDevidosDoINSS or (registro.salarioDevidoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosDevidosDoINSS))}">
+																	<h:outputLabel value="A partir de" for="aplicarAteLei11941Multa" style="padding:3px;" />
+																	<rich:calendar id="aplicarAteLei11941Multa" value="#{registro.apartirDeLei11941Multa}" label="Aplicar até" inputSize="10" popup="true" 
+																					datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																					oninputblur="sugerirData11941PagoMulta();" onchanged="sugerirData11941PagoMulta();">  
+																		<f:facet name="footer">
+																        	<h:outputText value="" style="text-align:center" />
+																        </f:facet>
+																	</rich:calendar>
+													    			<cobra:toolTip>
+													    				<rich:message for="aplicarAteLei11941Multa" style="margin-left:5px;"/>
+													    			</cobra:toolTip>
+													    			<h:outputText class="linkHelp" id="limitarMultaHelp" style="margin-left:1px">
+															   	 		<rich:toolTip for="limitarMultaHelp" showEvent="mouseover" styleClass="tooltipHelp" style="font-weight: normal;">
+															   				Esta opção permite estabelecer a data inicial da apuração da multa previdenciária. Se a data for futura, deixe o campo 'A partir de' em branco. Desmarque esta opção para apurar a multa previdenciária, mês a mês, considerando a data de vencimento das contribuições sociais.
+															   			</rich:toolTip>
+											     	    	        </h:outputText>	    			
+																</h:panelGroup>
+															</h:panelGroup>
+														</h:panelGrid>
+																
+														<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+														
+															<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" id="pfTrabalhistaDevido">
+																
+																<fieldset>
+																	<legend>Trabalhista</legend>
+																	<h:panelGroup id="grupoSalariosDevidosTrabalhista" layout="block" styleClass="itemGrupoCorrecao" >
+																		<h:panelGroup styleClass="itemGrupoCorrecao">
+																			<h:selectBooleanCheckbox id="correcaoTrabalhistaDosSalariosDevidosDoINSS" value="#{registro.correcaoTrabalhistaDosSalariosDevidosDoINSS}">
+																				<a4j:support event="onchange" actionListener="#{apresentador.mudarCorrecaoTrabalhistaDosSalariosDevidos}" ajaxSingle="true" reRender="grupoLei11941, grupoLei11941Multa, grupoSalariosDevidosTrabalhista,grupoSalariosDevidosPrevidenciaria" limitToList="true" oncomplete="sugerirDataAplicarAteDevidos();"/>
+																			</h:selectBooleanCheckbox>
+																			<h:outputLabel value="Correção" for="correcaoTrabalhistaDosSalariosDevidosDoINSS" />
+																		</h:panelGroup>
+																		<h:panelGroup styleClass="itemGrupoCorrecao">
+																			<h:selectBooleanCheckbox id="jurosTrabalhistasDosSalariosDevidosDoINSS" value="#{registro.jurosTrabalhistasDosSalariosDevidosDoINSS}" disabled="#{not apresentador.isHabilitadoJurosDeCorrecaoDosSalariosDevidos()}">
+																			</h:selectBooleanCheckbox>
+																			<h:outputLabel value="Juros" for="aplicarAteDosSalariosDevidosDoINSS" />
+																		</h:panelGroup>
+																		<br/>
+																		<h:panelGroup id="grupoAplicarAteDosSalariosDevidosDoINSS" layout="block" styleClass="itemGrupoCorrecao" rendered="#{registro.correcaoTrabalhistaDosSalariosDevidosDoINSS and registro.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+																			<h:outputLabel value="Aplicar até #{apresentador.isHabilitarAplicarAteDosSalariosDevidos()?' *':''}" for="aplicarAteDosSalariosDevidosDoINSS" style="padding:3px;" />
+																			<br />
+																			<rich:calendar id="aplicarAteDosSalariosDevidosDoINSS" value="#{registro.aplicarAteDosSalariosDevidosDoINSS}" label="Aplicar até" disabled="#{not apresentador.isHabilitarAplicarAteDosSalariosDevidos()}" required="#{apresentador.isHabilitarAplicarAteDosSalariosDevidos()}" inputSize="10" popup="true" 
+																							datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																							oninputblur="sugerirDataAplicarAtePagos();" onchanged="sugerirDataAplicarAtePagos();"> 
+																				<f:facet name="footer">
+																		        	<h:outputText value="" style="text-align:center" />
+																		        </f:facet>
+																			</rich:calendar>
+															    			<cobra:toolTip>
+															    				<rich:message for="aplicarAteDosSalariosDevidosDoINSS" style="margin-left:5px;"/>
+															    			</cobra:toolTip>	    			
+																		</h:panelGroup>
+																	</h:panelGroup>
+																</fieldset>	
+															</h:panelGroup>
+															<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" >
+																<fieldset>
+																	<legend>Previdenciária</legend>
+																	<h:panelGroup id="grupoSalariosDevidosPrevidenciaria" layout="block" styleClass="itemGrupoCorrecao" >
+																		<h:panelGroup styleClass="itemGrupoCorrecao">
+																			<h:selectBooleanCheckbox id="correcaoPrevidenciariaDosSalariosDevidosDoINSS" value="#{registro.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+																				<a4j:support event="onchange" actionListener="#{apresentador.mudarCorrecaoPrevidenciariaDosSalariosDevidos}" ajaxSingle="true" process="grupoLei11941, grupoLei11941Multa, gridMultaDosSalariosDevidosDoINSS,grupoSalariosDevidosPrevidenciaria" reRender="grupoLei11941, grupoLei11941Multa, gridMultaDosSalariosDevidosDoINSS,grupoSalariosDevidosPrevidenciaria,grupoSalariosDevidosTrabalhista" limitToList="true" oncomplete="sugerirDataAplicarAteDevidos();"/>
+																			</h:selectBooleanCheckbox>
+																			<h:outputLabel value="Correção" for="correcaoPrevidenciariaDosSalariosDevidosDoINSS" />
+																		</h:panelGroup>
+																		<h:panelGroup styleClass="itemGrupoCorrecao">
+																			<h:selectBooleanCheckbox id="jurosPrevidenciariosDosSalariosDevidosDoINSS" value="#{registro.jurosPrevidenciariosDosSalariosDevidosDoINSS}" disabled="#{not apresentador.isHabilitadoJurosPrevidenciarioDosSalariosDevidos()}">
+																				<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentador.mudarJurosPrevidenciarioSalariosDevidos}" reRender="jurosPrevidenciariosDosSalariosDevidosDoINSS,gridMultaDosSalariosDevidosDoINSS" limitToList="true"/>
+																			</h:selectBooleanCheckbox>
+																			<h:outputLabel value="Juros" for="jurosPrevidenciariosDosSalariosDevidosDoINSS" />
+																		</h:panelGroup>
+																		<h:panelGrid columns="2" styleClass="itemGrupo" rendered="#{(registro.correcaoPrevidenciariaDosSalariosDevidosDoINSS) and (not registro.correcaoTrabalhistaDosSalariosDevidosDoINSS)}">
+																			<h:selectOneRadio id="radioFormaAplicacao" value="#{registro.salarioDevidoFormaAplicacao}" styleClass="labelInput" layout="pageDirection">
+																				<s:selectItems value="#{enumItems.formaAplicacaoEnum}" var="item" label="#{item.nome}" />
+																				<s:convertEnum />
+																				<a4j:support event="onchange" ajaxSingle="true" oncomplete="sugerirDataAPartirDeDevidos();" reRender="grupoLei11941, grupoLei11941Multa, grupoSalariosDevidosPrevidenciaria" limitToList="true" />
+																			</h:selectOneRadio>
+																			<h:panelGroup rendered="#{registro.salarioDevidoFormaAplicacao eq 'A_PARTIR_DE'}">
+																				<br />
+																				<rich:calendar id="aPartirDeFormaCorrecaoSalarioDevido" value="#{registro.aplicarAteDosSalariosDevidosDoINSS}" label="A Partir de" inputSize="10" popup="true" required="true"
+																								datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																								oninputblur="sugerirDataAPartirDePagos();" onchanged="sugerirDataAPartirDePagos();" />
+																				<cobra:toolTip>
+																    				<rich:message for="aPartirDeFormaCorrecaoSalarioDevido" style="margin-left:5px;"/>
+																    			</cobra:toolTip>				 
+																			</h:panelGroup>
+																		</h:panelGrid>
+																	</h:panelGroup>
+																</fieldset>	
+															</h:panelGroup>
+														</h:panelGrid>
+														
+													</fieldset>
+												</h:panelGroup>
+											
+												<h:panelGroup>
+													<fieldset>
+														<legend>Multa Previdenciária</legend>
+														<h:panelGrid id="gridMultaDosSalariosDevidosDoINSS" columns="1" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+															<h:panelGroup layout="block" styleClass="itemGrupo" style="padding-left:12px;">
+																<h:selectBooleanCheckbox id="aplicarMultaDosSalariosDevidosDoINSS" value="#{registro.aplicarMultaDosSalariosDevidosDoINSS}"  disabled="#{not apresentador.isHabilitadoAplicarMultaDosSalariosDevidos()}">
+																	<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentador.mudarMultaPrevidenciariaSalariosDevidos}" reRender="jurosPrevidenciariosDosSalariosDevidosDoINSS,gridMultaDosSalariosDevidosDoINSS" limitToList="true"/>
+																</h:selectBooleanCheckbox>						
+																<h:outputLabel value="Aplicar Multa Previdenciária" for="aplicarMultaDosSalariosDevidosDoINSS" />
+															</h:panelGroup>
+															<h:panelGroup layout="block" styleClass="itemGrupo">
+																	<h:panelGroup styleClass="itemGrupo" >
+																		<fieldset>
+																			<legend>Tipo</legend>
+																			<h:panelGroup>
+																				<h:selectOneRadio id="tipoDeMultaDosSalariosDevidosDoINSS" value="#{registro.tipoDeMultaDosSalariosDevidosDoINSS}" styleClass="labelInput" layout="pageDirection" disabled="#{not apresentador.isHabilitadoTipoEPagamentoDaMultaDosSalariosDevidos()}">
+																					<s:selectItems value="#{enumItems.tipoDaMultaDoINSSEnum}" var="item" label="#{item.nome}" />
+																					<s:convertEnum />
+																				</h:selectOneRadio>
+																			</h:panelGroup>
+																		</fieldset>
+																	</h:panelGroup>
+																	<h:panelGroup styleClass="itemGrupo" >
+																		<fieldset>
+																			<legend>Pagamento</legend>
+																			<h:panelGroup styleClass="itemGrupo" >
+																				<h:selectOneRadio id="pagamentoDaMultaDosSalariosDevidosDoINSS" value="#{registro.pagamentoDaMultaDosSalariosDevidosDoINSS}" styleClass="labelInput" layout="pageDirection" disabled="#{not apresentador.isHabilitadoTipoEPagamentoDaMultaDosSalariosDevidos()}">
+																					<s:selectItems value="#{enumItems.tipoPagamentoDaMultaDoINSSEnum}" var="item" label="#{item.nome}" />
+																					<s:convertEnum />
+																				</h:selectOneRadio>
+																			</h:panelGroup>
+																		</fieldset>
+																	</h:panelGroup>
+															</h:panelGroup>
+														</h:panelGrid>
+													</fieldset>
+												</h:panelGroup>
+											</h:panelGrid>
+										</fieldset>
+								</h:panelGroup>
+								<h:panelGroup>
+									<fieldset>
+										<legend>Salários Pagos</legend>
+										<h:panelGrid columns="1" cellpadding="0" cellspacing="0" border="0">
+											<h:panelGroup>
+												<fieldset>
+													<legend>Atualização</legend>
+													
+													<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+														<h:panelGroup id="grupoLei11941Pago" layout="block" styleClass="itemGrupoCorrecao" >
+															<h:panelGroup styleClass="itemGrupoCorrecao" rendered="#{registro.correcaoTrabalhistaDosSalariosPagosDoINSS or (registro.salarioPagoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosPagosDoINSS)}">
+																<h:selectBooleanCheckbox id="correcaoLei11941Pago" value="#{registro.lei11941Pago}">
+																	<a4j:support event="onchange" ajaxSingle="true" reRender="grupoLei11941, grupoLei11941Pago, grupoLei11941PagoMulta" limitToList="true" actionListener="#{apresentador.mudarLei11941}" oncomplete="sugerirData11941Pago();"/>
+																</h:selectBooleanCheckbox>
+																<h:outputLabel value="Lei nº 11.941/2009" for="correcaoLei11941Pago" />
+															</h:panelGroup>
+															<h:panelGroup id="grupoAplicarLei11941Pago" layout="block" styleClass="itemGrupoCorrecao" rendered="#{registro.lei11941Pago and (registro.correcaoTrabalhistaDosSalariosPagosDoINSS or (registro.salarioPagoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosPagosDoINSS))}">
+																<h:outputLabel value="A partir de" for="aplicarAteLei11941Pago" style="padding:3px;" />
+																<rich:calendar id="aplicarAteLei11941Pago" value="#{registro.apartirDeLei11941Pago}" label="Aplicar até" inputSize="10" popup="true" 
+																				datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																				oninputblur="sugerirData11941();" onchanged="sugerirData11941();"> 
+																	<f:facet name="footer">
+															        	<h:outputText value="" style="text-align:center" />
+															        </f:facet>
+																</rich:calendar>
+												    			<cobra:toolTip>
+												    				<rich:message for="aplicarAteLei11941Pago" style="margin-left:5px;"/>
+												    			</cobra:toolTip>	    			
+															</h:panelGroup>
+														</h:panelGroup>
+													</h:panelGrid>
+													
+													<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+														<h:panelGroup id="grupoLei11941PagoMulta" layout="block" styleClass="itemGrupoCorrecao" >
+															<h:panelGroup styleClass="itemGrupoCorrecao" rendered="#{(registro.correcaoTrabalhistaDosSalariosPagosDoINSS or (registro.salarioPagoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosPagosDoINSS)) and registro.lei11941Pago}">
+																<h:selectBooleanCheckbox id="correcaoLei11941PagoMulta" value="#{registro.lei11941PagoMulta}">
+																	<a4j:support event="onchange" ajaxSingle="true" reRender="grupoLei11941PagoMulta" limitToList="true" oncomplete="sugerirData11941PagoMulta();"/>
+																</h:selectBooleanCheckbox>
+																<h:outputLabel value="Limitar multa" for="correcaoLei11941PagoMulta" />
+															</h:panelGroup>
+															<h:panelGroup id="grupoAplicarLei11941PagoMulta" layout="block" styleClass="itemGrupoCorrecao" rendered="#{registro.lei11941Pago and registro.lei11941PagoMulta and (registro.correcaoTrabalhistaDosSalariosPagosDoINSS or (registro.salarioPagoFormaAplicacao.valor == 'PD' and registro.correcaoPrevidenciariaDosSalariosPagosDoINSS))}">
+																<h:outputLabel value="A partir de" for="aplicarAteLei11941PagoMulta" style="padding:3px;" />
+																<rich:calendar id="aplicarAteLei11941PagoMulta" value="#{registro.apartirDeLei11941PagoMulta}" label="Aplicar até" inputSize="10" popup="true" 
+																				datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																				oninputblur="sugerirData11941Multa();" onchanged="sugerirData11941Multa();">  
+																	<f:facet name="footer">
+															        	<h:outputText value="" style="text-align:center" />
+															        </f:facet>
+																</rich:calendar>
+												    			<cobra:toolTip>
+												    				<rich:message for="aplicarAteLei11941PagoMulta" style="margin-left:5px;"/>
+												    			</cobra:toolTip>
+												    			<h:outputText class="linkHelp" id="limitarPagoMultaHelp" style="margin-left:1px">
+															   	 		<rich:toolTip for="limitarPagoMultaHelp" showEvent="mouseover" styleClass="tooltipHelp" style="font-weight: normal;">
+															   				Esta opção permite estabelecer a data inicial da apuração da multa previdenciária. Se a data for futura, deixe o campo 'A partir de' em branco. Desmarque esta opção para apurar a multa previdenciária, mês a mês, considerando a data de vencimento das contribuições sociais.
+															   			</rich:toolTip>
+											     	    	     </h:outputText>	 	    			
+															</h:panelGroup>
+														</h:panelGroup>
+													</h:panelGrid>
+														
+													<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+														<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" id="pfTrabalhistaPago" >
+															<fieldset>
+																<legend>Trabalhista</legend>
+																<h:panelGroup id="grupoSalariosPagosTrabalhista" layout="block" styleClass="itemGrupoCorrecao" >
+																	<h:panelGroup styleClass="itemGrupoCorrecao">
+																		<h:selectBooleanCheckbox id="correcaoTrabalhistaDosSalariosPagosDoINSS" value="#{registro.correcaoTrabalhistaDosSalariosPagosDoINSS}">
+																			<a4j:support event="onchange" actionListener="#{apresentador.mudarCorrecaoTrabalhistaDosSalariosPagos}" ajaxSingle="true" reRender="grupoLei11941Pago, grupoLei11941PagoMulta, grupoSalariosPagosTrabalhista,grupoSalariosPagosPrevidenciaria" limitToList="true" oncomplete="sugerirDataAplicarAtePagos();" />
+																		</h:selectBooleanCheckbox>
+																		<h:outputLabel value="Correção" for="correcaoTrabalhistaDosSalariosPagosDoINSS" />
+																	</h:panelGroup>
+																	<h:panelGroup styleClass="itemGrupoCorrecao">
+																		<h:selectBooleanCheckbox id="jurosTrabalhistasDosSalariosPagosDoINSS" value="#{registro.jurosTrabalhistasDosSalariosPagosDoINSS}" disabled="#{not apresentador.isHabilitadoJurosDeCorrecaoDosSalariosPagos()}">
+																		</h:selectBooleanCheckbox>
+																		<h:outputLabel value="Juros" for="aplicarAteDosSalariosPagosDoINSS" />
+																	</h:panelGroup>
+																	<br/>
+																	<h:panelGroup id="grupoAplicarAteDosSalariosPagosDoINSS" layout="block" styleClass="itemGrupo" rendered="#{registro.correcaoTrabalhistaDosSalariosPagosDoINSS and registro.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+																		<h:outputLabel value="Aplicar até #{apresentador.isHabilitarAplicarAteDosSalariosPagos()?' *':''}" for="aplicarAteDosSalariosPagosDoINSS" style="padding:3px;" />
+																		<br />
+																		<rich:calendar id="aplicarAteDosSalariosPagosDoINSS" value="#{registro.aplicarAteDosSalariosPagosDoINSS}" 
+																					   label="Aplicar até" disabled="#{not apresentador.isHabilitarAplicarAteDosSalariosPagos()}" 
+																					   required="#{apresentador.isHabilitarAplicarAteDosSalariosPagos()}" inputSize="10" popup="true" 
+																					   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()" 
+																					   oninputblur="sugerirDataAplicarAteDevidos();" onchanged="sugerirDataAplicarAteDevidos();"> 
+																			<f:facet name="footer">
+																	        	<h:outputText value="" style="text-align:center" />
+																	        </f:facet>
+																		</rich:calendar>
+														    			<cobra:toolTip>
+														    				<rich:message for="aplicarAteDosSalariosPagosDoINSS" style="margin-left:5px;"/>
+														    			</cobra:toolTip>	    			
+																	</h:panelGroup>
+																</h:panelGroup>
+															</fieldset>	
+														</h:panelGroup>
+														<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" >
+															<fieldset>
+																<legend>Previdenciária</legend>
+																<h:panelGroup id="grupoSalariosPagosPrevidenciaria" layout="block" styleClass="itemGrupoCorrecao" >
+																	<h:panelGroup styleClass="itemGrupoCorrecao">
+																		<h:selectBooleanCheckbox id="correcaoPrevidenciariaDosSalariosPagosDoINSS" value="#{registro.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+																			<a4j:support event="onchange" actionListener="#{apresentador.mudarCorrecaoPrevidenciariaDosSalariosPagos}" ajaxSingle="true" process="grupoLei11941Pago, grupoLei11941PagoMulta, gridMultaDosSalariosPagosDoINSS,grupoSalariosPagosPrevidenciaria" reRender="grupoLei11941Pago, grupoLei11941PagoMulta, gridMultaDosSalariosPagosDoINSS,grupoSalariosPagosPrevidenciaria,grupoSalariosPagosTrabalhista" limitToList="true" oncomplete="sugerirDataAplicarAtePagos();"/>
+																		</h:selectBooleanCheckbox>
+																		<h:outputLabel value="Correção" for="correcaoPrevidenciariaDosSalariosPagosDoINSS" />
+																	</h:panelGroup>
+																	<h:panelGroup styleClass="itemGrupoCorrecao">
+																		<h:selectBooleanCheckbox id="jurosPrevidenciariosDosSalariosPagosDoINSS" value="#{registro.jurosPrevidenciariosDosSalariosPagosDoINSS}" disabled="#{not apresentador.isHabilitadoJurosPrevidenciarioDosSalariosPagos()}">
+																		  <a4j:support event="onchange" actionListener="#{apresentador.mudarJurosPrevidenciarioSalariosPagos}" ajaxSingle="true" reRender="jurosPrevidenciariosDosSalariosPagosDoINSS,gridMultaDosSalariosPagosDoINSS" limitToList="true"/>
+																		</h:selectBooleanCheckbox>
+																		<h:outputLabel value="Juros" for="jurosPrevidenciariosDosSalariosPagosDoINSS" />
+																	</h:panelGroup>
+																	<h:panelGrid columns="2" styleClass="itemGrupo" rendered="#{(registro.correcaoPrevidenciariaDosSalariosPagosDoINSS) and (not registro.correcaoTrabalhistaDosSalariosPagosDoINSS)}">
+																		<h:selectOneRadio id="radioFormaAplicacaoSalarioPago" value="#{registro.salarioPagoFormaAplicacao}" styleClass="labelInput" layout="pageDirection">
+																			<s:selectItems value="#{enumItems.formaAplicacaoEnum}" var="item" label="#{item.nome}" />
+																			<s:convertEnum />
+																			<a4j:support event="onchange" ajaxSingle="true" oncomplete="sugerirDataAPartirDePagos();" reRender="grupoLei11941Pago, grupoLei11941PagoMulta, grupoSalariosPagosPrevidenciaria" limitToList="true" />
+																		</h:selectOneRadio>
+																		<h:panelGroup rendered="#{registro.salarioPagoFormaAplicacao eq 'A_PARTIR_DE'}">
+																			<br />
+																			<rich:calendar id="aPartirDeFormaCorrecaoSalarioPago" value="#{registro.aplicarAteDosSalariosPagosDoINSS}" label="A Partir de" inputSize="10" popup="true" required="true"
+																							datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																							oninputblur="sugerirDataAPartirDeDevidos();" onchanged="sugerirDataAPartirDeDevidos();" />
+																			<cobra:toolTip>
+															    				<rich:message for="aPartirDeFormaCorrecaoSalarioPago" style="margin-left:5px;"/>
+															    			</cobra:toolTip>				 
+																		</h:panelGroup>
+																	</h:panelGrid>
+																</h:panelGroup>
+															</fieldset>	
+														</h:panelGroup>
+													</h:panelGrid>
+												</fieldset>
+											</h:panelGroup>
+											<h:panelGroup>
+												<fieldset>
+													<legend>Multa Previdenciária</legend>
+													<h:panelGrid id="gridMultaDosSalariosPagosDoINSS" columns="1" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+														<h:panelGroup layout="block" styleClass="itemGrupo" style="padding-left:12px;">
+															<h:selectBooleanCheckbox id="aplicarMultaDosSalariosPagosDoINSS" value="#{registro.aplicarMultaDosSalariosPagosDoINSS}" disabled="#{not apresentador.isHabilitadoAplicarMultaDosSalariosPagos()}">
+																<a4j:support event="onchange" actionListener="#{apresentador.mudarMultaPrevidenciariaSalariosPagos}" ajaxSingle="true" reRender="jurosPrevidenciariosDosSalariosPagosDoINSS,gridMultaDosSalariosPagosDoINSS" limitToList="true"/>
+															</h:selectBooleanCheckbox>
+															<h:outputLabel value="Aplicar Multa Previdenciária" for="aplicarMultaDosSalariosPagosDoINSS" />
+														</h:panelGroup>
+														<h:panelGroup layout="block" styleClass="itemGrupo">
+																<h:panelGroup styleClass="itemGrupo" >
+																	<fieldset>
+																		<legend>Tipo</legend>
+																		<h:panelGroup>
+																			<h:selectOneRadio id="tipoDeMultaDosSalariosPagosDoINSS" value="#{registro.tipoDeMultaDosSalariosPagosDoINSS}" styleClass="labelInput" layout="pageDirection" disabled="#{not apresentador.isHabilitadoTipoEPagamentoDaMultaDosSalariosPagos()}">
+																				<s:selectItems value="#{enumItems.tipoDaMultaDoINSSEnum}" var="item" label="#{item.nome}" />
+																				<s:convertEnum />
+																			</h:selectOneRadio>
+																		</h:panelGroup>
+																	</fieldset>
+																</h:panelGroup>
+																<h:panelGroup styleClass="itemGrupo" >
+																	<fieldset>
+																		<legend>Pagamento</legend>
+																		<h:panelGroup styleClass="itemGrupo" >
+																			<h:selectOneRadio id="pagamentoDaMultaDosSalariosPagosDoINSS" value="#{registro.pagamentoDaMultaDosSalariosPagosDoINSS}" styleClass="labelInput" layout="pageDirection" disabled="#{not apresentador.isHabilitadoTipoEPagamentoDaMultaDosSalariosPagos()}">
+																				<s:selectItems value="#{enumItems.tipoPagamentoDaMultaDoINSSEnum}" var="item" label="#{item.nome}" />
+																				<s:convertEnum />
+																			</h:selectOneRadio>
+																		</h:panelGroup>
+																	</fieldset>
+																</h:panelGroup>
+														</h:panelGroup>
+													</h:panelGrid>
+												</fieldset>
+											</h:panelGroup>
+										</h:panelGrid>
+									</fieldset>
+								</h:panelGroup>
+							</h:panelGrid>
+						</fieldset>
+					</h:panelGroup>
+				</h:panelGrid>
+			</rich:tab>
+		</rich:tabPanel>
+	</ui:define>
+	
+	<ui:define name="script">
+		<script>
+			function sugerirData11941Multa() {
+				var iAPartirDeSalarioDevido = $('formulario:aplicarAteLei11941MultaInputDate');
+				var iAPartirDeSalarioPago = $('formulario:aplicarAteLei11941PagoMultaInputDate');		
+				
+				if(iAPartirDeSalarioDevido != null){
+					if(iAPartirDeSalarioPago != null){
+						iAPartirDeSalarioDevido.value = iAPartirDeSalarioPago.value;
+					}
+				}
+			}
+			
+			function sugerirData11941PagoMulta() {
+				var iAPartirDeSalarioDevido = $('formulario:aplicarAteLei11941MultaInputDate');
+				var iAPartirDeSalarioPago = $('formulario:aplicarAteLei11941PagoMultaInputDate');
+
+				if(iAPartirDeSalarioPago != null){
+					if(iAPartirDeSalarioDevido != null){
+						iAPartirDeSalarioPago.value = iAPartirDeSalarioDevido.value;
+					}
+				}
+			}
+			
+			function sugerirData11941() {
+				var iAPartirDeSalarioDevido = $('formulario:aplicarAteLei11941InputDate');
+				var iAPartirDeSalarioPago = $('formulario:aplicarAteLei11941PagoInputDate');
+				
+				if(iAPartirDeSalarioDevido != null){
+					if(iAPartirDeSalarioPago != null){
+						iAPartirDeSalarioDevido.value = iAPartirDeSalarioPago.value;
+					}
+				}
+			}
+			
+			function sugerirData11941Pago() {
+				var iAPartirDeSalarioDevido = $('formulario:aplicarAteLei11941InputDate');
+				var iAPartirDeSalarioPago = $('formulario:aplicarAteLei11941PagoInputDate');
+				
+				if(iAPartirDeSalarioPago != null){
+					if(iAPartirDeSalarioDevido != null){
+						iAPartirDeSalarioPago.value = iAPartirDeSalarioDevido.value;
+					}
+				}
+			}
+			
+			function sugerirDataAplicarAteDevidos() {
+				var iAPartirDeSalarioPago = $('formulario:aPartirDeFormaCorrecaoSalarioPagoInputDate');
+				var iAPartirDeSalarioDevido = $('formulario:aPartirDeFormaCorrecaoSalarioDevidoInputDate');
+				
+				var iAplicarAteSalarioPago = $('formulario:aplicarAteDosSalariosPagosDoINSSInputDate');
+				var iAplicarAteSalarioDevido = $('formulario:aplicarAteDosSalariosDevidosDoINSSInputDate');
+				
+				if(iAplicarAteSalarioDevido != null){
+					if(iAplicarAteSalarioPago != null){
+						iAplicarAteSalarioDevido.value = iAplicarAteSalarioPago.value;
+					}else if(iAPartirDeSalarioPago != null){
+						iAplicarAteSalarioDevido.value = iAPartirDeSalarioPago.value;
+					}
+				}else if(iAPartirDeSalarioDevido != null){
+					if(iAplicarAteSalarioPago != null){
+						iAPartirDeSalarioDevido.value = iAplicarAteSalarioPago.value;
+					}else if(iAPartirDeSalarioPago != null){
+						iAPartirDeSalarioDevido.value = iAPartirDeSalarioPago.value;
+					}
+				}
+			}
+			
+			function sugerirDataAplicarAtePagos() {
+				var iAPartirDeSalarioPago = $('formulario:aPartirDeFormaCorrecaoSalarioPagoInputDate');
+				var iAPartirDeSalarioDevido = $('formulario:aPartirDeFormaCorrecaoSalarioDevidoInputDate');
+				
+				var iAplicarAteSalarioPago = $('formulario:aplicarAteDosSalariosPagosDoINSSInputDate');
+				var iAplicarAteSalarioDevido = $('formulario:aplicarAteDosSalariosDevidosDoINSSInputDate');
+				
+				if(iAplicarAteSalarioPago != null){
+					if(iAplicarAteSalarioDevido != null){
+						iAplicarAteSalarioPago.value = iAplicarAteSalarioDevido.value;	
+					}else if(iAPartirDeSalarioDevido != null){
+						iAplicarAteSalarioPago.value = iAPartirDeSalarioDevido.value;
+					}
+				}else if(iAPartirDeSalarioPago != null){
+					if(iAplicarAteSalarioDevido != null){
+						iAPartirDeSalarioPago.value = iAplicarAteSalarioDevido.value;	
+					}else if(iAPartirDeSalarioDevido != null){
+						iAPartirDeSalarioPago.value = iAPartirDeSalarioDevido.value;
+					}
+				}
+				
+			}
+			
+			function sugerirDataAPartirDePagos() {
+				var iAPartirDeSalarioPago = $('formulario:aPartirDeFormaCorrecaoSalarioPagoInputDate');
+				var iAPartirDeSalarioDevido = $('formulario:aPartirDeFormaCorrecaoSalarioDevidoInputDate');
+				
+				var iAplicarAteSalarioPago = $('formulario:aplicarAteDosSalariosPagosDoINSSInputDate');
+				var iAplicarAteSalarioDevido = $('formulario:aplicarAteDosSalariosDevidosDoINSSInputDate');
+				
+				if(iAPartirDeSalarioPago != null){
+					if(iAPartirDeSalarioDevido != null){
+						iAPartirDeSalarioPago.value = iAPartirDeSalarioDevido.value;
+					} else if(iAplicarAteSalarioDevido != null){
+						iAPartirDeSalarioPago.value = iAplicarAteSalarioDevido.value;
+					}
+				} else if(iAplicarAteSalarioPago != null){
+					if(iAPartirDeSalarioDevido != null){
+						iAplicarAteSalarioPago.value = iAPartirDeSalarioDevido.value;
+					} else if(iAplicarAteSalarioDevido != null){
+						iAplicarAteSalarioPago.value = iAplicarAteSalarioDevido.value;
+					}
+				}
+			}
+			
+			function sugerirDataAPartirDeDevidos() {
+				var iAPartirDeSalarioPago = $('formulario:aPartirDeFormaCorrecaoSalarioPagoInputDate');
+				var iAPartirDeSalarioDevido = $('formulario:aPartirDeFormaCorrecaoSalarioDevidoInputDate');
+				
+				var iAplicarAteSalarioPago = $('formulario:aplicarAteDosSalariosPagosDoINSSInputDate');
+				var iAplicarAteSalarioDevido = $('formulario:aplicarAteDosSalariosDevidosDoINSSInputDate');
+
+				if(iAPartirDeSalarioDevido != null){
+					if(iAPartirDeSalarioPago != null){
+						iAPartirDeSalarioDevido.value = iAPartirDeSalarioPago.value;
+					} else if(iAplicarAteSalarioPago != null){
+						iAPartirDeSalarioDevido.value = iAplicarAteSalarioPago.value;
+					}
+				} else if(iAplicarAteSalarioDevido != null){
+					if(iAPartirDeSalarioPago != null){
+						iAplicarAteSalarioDevido.value = iAPartirDeSalarioPago.value;
+					} else if(iAplicarAteSalarioPago != null){
+						iAplicarAteSalarioDevido.value = iAplicarAteSalarioPago.value;
+					}
+				} 
+			}
+		</script>
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorParametrosDeAtualizacao.salvar}" styleClass="botao" onclick="allToUpperCase()"/> 
+	</ui:define>
+	
+</ui:composition>
+
+</html>

@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="demonstrativo-calculo-verbas" language="groovy" pageWidth="842" pageHeight="605" orientation="Landscape" columnWidth="762" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="2.1435888100000016"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" isDefault="true" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<parameter name="demonstrativo" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_de_calculo_2" class="java.lang.Object" isForPrompting="false"/>
+	<field name="nome" class="java.lang.String"/>
+	<field name="periodo" class="java.lang.Object"/>
+	<field name="incidencia" class="java.lang.String"/>
+	<field name="ocorrencias" class="java.lang.Object"/>
+	<field name="formula" class="java.lang.String"/>
+	<field name="totalDoValorCorrigido" class="java.math.BigDecimal"/>
+	<field name="comentario" class="java.lang.String"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="17" splitType="Stretch">
+			<staticText>
+				<reportElement style="titulo" x="0" y="1" width="802" height="16"/>
+				<textElement textAlignment="Center"/>
+				<text><![CDATA[Demonstrativo de Verbas]]></text>
+			</staticText>
+		</band>
+	</title>
+	<columnHeader>
+		<band splitType="Stretch"/>
+	</columnHeader>
+	<detail>
+		<band height="109" splitType="Stretch">
+			<staticText>
+				<reportElement style="default" x="4" y="0" width="33" height="13"/>
+				<textElement/>
+				<text><![CDATA[Nome:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" positionType="Float" x="373" y="15" width="429" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$F{incidencia}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" positionType="Float" x="4" y="15" width="50" height="13"/>
+				<textElement/>
+				<text><![CDATA[Período:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" positionType="Float" x="55" y="15" width="175" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$F{periodo}.formatInicial("dd/MM/yyyy")+" a "+$F{periodo}.formatFinal("dd/MM/yyyy")]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" positionType="Float" x="308" y="15" width="65" height="13"/>
+				<textElement/>
+				<text><![CDATA[Incidência(s):]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="39" y="0" width="763" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$F{nome}]]></textFieldExpression>
+			</textField>
+			<subreport>
+				<reportElement positionType="Float" x="-19" y="43" width="841" height="42"/>
+				<subreportParameter name="totalDoValorCorrigido">
+					<subreportParameterExpression><![CDATA[$F{totalDoValorCorrigido}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="formula">
+					<subreportParameterExpression><![CDATA[$F{formula}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$F{ocorrencias}]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_de_calculo_2}]]></subreportExpression>
+			</subreport>
+			<staticText>
+				<reportElement style="default" positionType="Float" x="4" y="28" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Comentário:]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default-bold" positionType="Float" x="64" y="28" width="738" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$F{comentario}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<columnFooter>
+		<band splitType="Stretch"/>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+</jasperReport>

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="atualizacao-resumo" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.331000000000001"/>
+	<property name="ireport.x" value="86"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="demonstrativo" class="java.lang.Object"/>
+	<parameter name="jr_demonstrativo_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<queryString language="SQL">
+		<![CDATA[]]>
+	</queryString>
+	<field name="itens" class="java.lang.Object"/>
+	<field name="totalDevido" class="java.math.BigDecimal"/>
+	<field name="totalPago" class="java.math.BigDecimal"/>
+	<field name="totalDiferenca" class="java.math.BigDecimal"/>
+	<field name="cabecalho" class="java.lang.String"/>
+	<field name="descritivoDeEventos" class="java.lang.String"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<pageHeader>
+		<band splitType="Stretch"/>
+	</pageHeader>
+	<detail>
+		<band height="60">
+			<printWhenExpression><![CDATA[$F{cabecalho}.equals("Créditos do Reclamante")]]></printWhenExpression>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" mode="Opaque" x="0" y="28" width="802" height="14" backcolor="#CCCCCC">
+					<printWhenExpression><![CDATA[$F{cabecalho}.equals("Créditos do Reclamante")]]></printWhenExpression>
+				</reportElement>
+				<textElement verticalAlignment="Middle">
+					<font size="9" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[$F{descritivoDeEventos}]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="14">
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="577" y="0" width="76" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="286" y="0" width="73" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="653" y="0" width="71" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Pago]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="724" y="0" width="77" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Diferença]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="359" y="0" width="72" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Taxa]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="431" y="0" width="74" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="505" y="0" width="72" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" mode="Opaque" x="0" y="0" width="286" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="9" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[$F{cabecalho}]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="14">
+			<subreport>
+				<reportElement x="-20" y="0" width="802" height="14"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="demonstrativo">
+					<subreportParameterExpression><![CDATA[$P{demonstrativo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$F{itens}]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_pagamento_3}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="32">
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" mode="Opaque" x="724" y="0" width="77" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{totalDiferenca}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" mode="Opaque" x="653" y="0" width="71" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{totalPago}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="0" y="0" width="577" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Total Parcial]]></text>
+			</staticText>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" mode="Opaque" x="577" y="0" width="76" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{totalDevido}]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+</jasperReport>

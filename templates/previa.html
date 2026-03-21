@@ -196,6 +196,18 @@
             <input type="text" value="{{ dados.get('processo', {}).get('vara', '') or '' }}"
                    onchange="salvarCampo('processo.vara', this.value, this)">
           </div>
+          <div class="campo-form">
+            <label>Valor da Causa (R$)</label>
+            <input type="text" placeholder="Ex: 25000,00"
+                   value="{{ dados.get('processo', {}).get('valor_causa', '') or '' }}"
+                   onchange="salvarCampo('processo.valor_causa', this.value, this)">
+          </div>
+          <div class="campo-form">
+            <label>Autuado em</label>
+            <input type="text" placeholder="DD/MM/AAAA"
+                   value="{{ dados.get('processo', {}).get('autuado_em', '') or '' }}"
+                   onchange="salvarCampo('processo.autuado_em', this.value, this)">
+          </div>
         </div>
       </div>
     </div>

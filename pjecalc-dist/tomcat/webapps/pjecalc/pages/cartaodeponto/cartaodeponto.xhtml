@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="titulo" value="Montar" />
+	<ui:param name="apresentador" value="#{apresentadorCartaoDePonto}" />
+	<ui:param name="enctype" value="multipart/form-data" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+
+	<ui:define name="nofiltroCampos">
+	
+	<ui:include src="../calculo/resumo-calculo.xhtml" />
+
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario">
+	
+		<a4j:loadScript src="resource://jquery.js"/>
+   	
+    	<h:panelGroup  rendered="#{lista.rowCount eq 0}" >
+    	    <br></br>
+			<br></br>
+    		<fieldset>
+    			<legend>Apurar - Gerar os Valores de Cartão de Ponto a Partir das Jornadas Lançadas</legend>
+    			<h:panelGrid columns="2" cellspacing="2" cellpadding="4" border="0">
+    				<h:outputLabel value="Dia do Fechamento Mensal: *" for="diaFechamentoMesPadrao" />
+					<h:panelGroup>
+						<h:inputText id="diaFechamentoMesPadrao" value="#{apresentador.calculo.diaFechamentoMes}" label="Dia Fechamento Padrão" size="5" maxlength="5" required="true" style="text-align:right;" />
+						<cobra:toolTip>
+		    				<rich:message for="diaFechamentoMesPadrao"/>
+		    			</cobra:toolTip>
+					</h:panelGroup>
+				</h:panelGrid>
+				<h:panelGrid columns="1" cellspacing="4" border="0">
+					<h:panelGroup>
+						<fieldset style="width: 350px;">
+							<legend>Exceções</legend>
+							<h:panelGrid id="pnlExcecoes" columns="4" cellspacing="4" border="0">
+								<h:panelGroup>
+									<h:outputLabel value="Início *" for="dataInicioExcecao" /><br />
+									<rich:calendar id="dataInicioExcecao" value="#{apresentador.excecaoDoFechamento.dataInicioExcecao}"
+												   label="Data Inicial" inputSize="8" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+												   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												   showWeekDaysBar="false" showFooter="false" 
+												   styleClass="special" inputClass="maskDateCompetencia" oninputfocus="$(this).monthYearMask()">
+										<f:facet name="footer">
+								        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<cobra:toolTip>
+					    				<rich:message for="dataInicioExcecao"/>
+					    			</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Fim *" for="dataTerminoExcecao" /><br />
+									<rich:calendar id="dataTerminoExcecao" value="#{apresentador.excecaoDoFechamento.dataTerminoExcecao}"
+												   label="Data Final" inputSize="8" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+												   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												   showWeekDaysBar="false" showFooter="false" 
+												   styleClass="special" inputClass="maskDateCompetencia" oninputfocus="$(this).monthYearMask()">
+										<f:facet name="footer">
+								        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<cobra:toolTip>
+					    				<rich:message for="dataTerminoExcecao"/>
+					    			</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Exceção *" for="diaFechamento" /><br/>
+									<h:inputText id="diaFechamentoMes" value="#{apresentador.excecaoDoFechamento.diaFechamentoMes}" label="Valor Exceção do Dia do Fechamento" size="5" maxlength="5" style="text-align:right;" />
+									<cobra:toolTip>
+					    				<rich:message for="diaFechamentoMes"/>
+					    			</cobra:toolTip>
+								</h:panelGroup>
+								<a4j:commandLink id="incluirExcecaoCH" actionListener="#{apresentador.incluirExcecaoFechamento}"
+												 reRender="painelListaExcecoesFechamento,pnlExcecoes,painelMensagens"
+												 styleClass="botaoAddItem" title="Adicionar Base"
+												 rendered="#{!apresentador.emModoSomenteVisualizacao}" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>
+						</fieldset>
+					</h:panelGroup>
+				</h:panelGrid>
+				<br />
+				<a4j:outputPanel id="painelListaExcecoesFechamento" ajaxRendered="true">
+					<h:panelGroup rendered="#{excecoesDoFechamento.rowCount gt 0}" >
+						<rich:dataTable id="listagemExcecaoCH" value="#{excecoesDoFechamento}" rowClasses="linha-par, linha-impar"
+										cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{excecoesDoFechamento.rowCount}" var="excecao">
+							<rich:column style="width:10%;">
+								<f:facet name="header">
+									<h:outputText value="Ação"/>
+								</f:facet>
+								<a4j:region>
+									<h:commandLink id="excluirExcecaoCH" limitToList="true"
+												   actionListener="#{apresentador.excluirExcecaoDoFechamento}"
+												   styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+										<a4j:support event="onclick" reRender="painelListaExcecoesFechamento" limitToList="true" ajaxSingle="true"/>
+									</h:commandLink>
+								</a4j:region>
+							</rich:column>
+					    	<rich:column style="width:15%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Início"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{excecao.dataInicioExcecao}" id="inicioExc">
+				    				<f:converter converterId="competenciaConverter"/>
+				    			</h:outputText>
+					    	</rich:column>
+					    	<rich:column style="width:15%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Fim"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{excecao.dataTerminoExcecao}" id="fimExc">
+				    				<f:converter converterId="competenciaConverter"/>
+				    			</h:outputText>
+					    	</rich:column>
+					    	<rich:column style="width:55%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Dia de Fechamento"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{excecao.diaFechamentoMes}" id="valor" required="true" style="text-align:right;" />
+					    	</rich:column>
+					    </rich:dataTable>
+				    </h:panelGroup>
+			    </a4j:outputPanel>
+			    <a4j:commandButton id="montarApartirDaApuracao" value="Apurar Cartão de Ponto"   action="#{apresentador.montarApartirDaApuracao}"   styleClass="botaoGrande" rendered="#{apresentador.emModoListagem}"/>
+			</fieldset>
+				
+				<br></br>
+				<br></br>
+					    	
+	    		<fieldset>
+	    			<legend>Importar - Gerar os Valores de Cartão de Ponto a Partir de Arquivo Externo</legend>
+					<h:panelGroup layout="block" style="width:100%;">
+						<h:panelGrid columns="1" cellpadding="3" cellspacing="3">
+							<h:panelGroup id="pnlFileUpload" class="panelFileUpload" layout="block">
+								<h:outputLabel for="arquivo" value="Selecionar Arquivo CSV *"/><br />
+								<rich:fileUpload id="arquivo" fileUploadListener="#{apresentador.uploadListener}"  locale="pt_BR" immediateUpload="true" addControlLabel="Escolher Arquivo..." clearAllControlLabel="Remover" cancelEntryControlLabel="Cancelar" clearControlLabel="" transferErrorLabel="Erro na transferência" stopControlLabel="Parar" doneLabel="Feito" stopEntryControlLabel="Parar" sizeErrorLabel="Tamanho do arquivo maior que o limite máximo permitido.">
+									<a4j:support event="onclear" reRender="pnlFileUpload" />
+								</rich:fileUpload>
+							</h:panelGroup>
+							<h:outputLink class="linkCartaoDePonto" value="#{facesContext.externalContext.requestContextPath}/templateCartaoDePonto/ExemploCartaoDePonto.csv">Para baixar um arquivo de exemplo preenchido, clique aqui.</h:outputLink>
+						</h:panelGrid>
+					</h:panelGroup>
+					<h:commandButton id="confirmarImportacao"  value="Confirmar" immediate="true" action="#{apresentador.importarCSV()}" styleClass="botaoGrande" onclick="AguardeShow(); return true;" />
+				</fieldset>
+				
+				<br></br>
+				<br></br>
+				<a4j:commandButton id="abrirApurarCartaoImportado" value="Voltar" immediate="true"  action="#{apresentador.abrirApurarCartaoDePonto}" styleClass="botaoGrande"/>
+			</h:panelGroup>
+			
+			
+		    
+		<a4j:outputPanel id="painelOcorrencias" ajaxRendered="true">
+		
+			<h:panelGroup rendered="#{lista.rowCount gt 0}" >
+			
+				<rich:dataTable value="#{apresentadorCartaoDePonto.listaLinhas}" var="linha" width="100%" id="tabOcorrencias" rowClasses="linha-par, linha-impar" >
+				   <f:facet name="header">
+				   <h:outputText value="OCORRÊNCIAS DO CARTÃO DE PONTO" style="font-size:12px;"></h:outputText>
+				   </f:facet>
+				   <rich:columns value="#{apresentadorCartaoDePonto.listaColunas}" var="coluna"  index="ind" id="coluna#{ind}"> 
+				      <f:facet name="header">
+				         <h:outputText value="#{coluna.header}" style="white-space:pre-line;"/>
+				      </f:facet>
+				      <h:panelGroup  rendered="#{ind gt 0}">
+				      		<h:outputText value="#{linha[ind] == null ? ' - ' : linha[ind]}" >
+					      </h:outputText>
+				      </h:panelGroup>
+				       <h:panelGroup  rendered="#{ind eq 0}">
+				      		<h:outputText value="#{linha[ind]}"  style="font-weight: bold;" ></h:outputText>
+				      </h:panelGroup>
+				      
+				   </rich:columns> 
+				   </rich:dataTable>
+			</h:panelGroup>
+
+		</a4j:outputPanel>
+
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<div style="width:600px;">
+			<a4j:commandButton id="excluir" value="Excluir" action="#{apresentador.remover}" styleClass="botao" rendered="#{lista.rowCount gt 0}" onclick="if (!confirma('#{apresentador.verificarVinculoComVerba() ? mensagens.MSG0176 : mensagens.MSG0002}',this)) return false;" />
+			<a4j:commandButton id="apurarCartaoImportado" value="Voltar" immediate="true"  action="#{apresentador.abrirApurarCartaoDePonto}" styleClass="botaoGrande" rendered="#{lista.rowCount gt 0}"/>
+		</div>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

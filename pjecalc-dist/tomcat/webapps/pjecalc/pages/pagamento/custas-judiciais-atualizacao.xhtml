@@ -1,0 +1,537 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Custas Judiciais" />
+	<ui:param name="apresentador" value="#{apresentadorCustasJudiciaisAtualizacao}" />
+	<ui:param name="registro" value="#{custasJudiciais}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="/pages/calculo/resumo-calculo.xhtml">
+			<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+	</ui:define>
+
+	<ui:define name="camposFormulario">
+		<h:panelGroup id="painelFormularioCustas">
+			
+
+					<h:panelGrid columns="1" cellpadding="5"  cellspacing="5">
+					
+						<h:panelGroup>
+							<h:outputLabel value="Identificação das Custas Judiciais" for="identificacaoCustas" /><br />
+							<h:inputText id="identificacaoCustas" label="Identificação das Custas Judiciais" value="#{registro.folhaDoEvento}" 
+							     			 size="68" maxlength="80"/>
+																
+							<rich:message showDetail="false" showSummary="false" for="identificacaoCustas">
+							   <f:facet name="errorMarker">
+							  	   <h:outputLink class="linkErro" id="identificacaoCustasErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="identificacaoCustas"/>
+									   </rich:toolTip>
+							       </h:outputLink>
+							 </f:facet>
+							</rich:message>
+							<h:outputText class="linkHelp" id="identificacaoHelp" style="margin-left:1px">
+							<rich:toolTip for="identificacaoHelp" showEvent="mouseover" styleClass="tooltipHelp">
+							   	Informar os números dos ID's ou das folhas do processo. Exemplo: ID0000001/ID0000002 ou fls.001/003.
+							</rich:toolTip>
+				     	   </h:outputText>
+					    </h:panelGroup>
+					
+						<h:panelGroup>
+							<fieldset style="margin-left: -1px;">
+								<legend>Custas Fixas</legend>
+								<h:panelGrid id="pnlCustasFixasAtualizacao" columns="2" cellpadding="0"  cellspacing="0">
+								
+								
+								<h:panelGroup id="painelCustasFixas">
+									<h:panelGrid columns="3" cellpadding="0"  cellspacing="0" style="padding-right: 55px;">
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="Vencimento" for="dataVencimentoCustasFixas"/><br />
+											<rich:calendar id="dataVencimentoCustasFixas"
+														   label="Vencimento" inputSize="10" popup="true"
+														   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+														   value="#{apresentador.custasFixasAtualizacao.dataEvento}">
+												<f:facet name="footer">
+										        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+										        </f:facet>									       
+										        <f:converter converterId="dateConverter"/>
+											</rich:calendar>
+											<cobra:toolTip>
+							                	<rich:message for="dataVencimentoCustasFixas" style="padding-left:5px;" />
+							                </cobra:toolTip>
+							                <h:panelGroup>
+							                	<a4j:commandLink id="habilitarCampos"  styleClass="botaoAtualizarItem2" title="Atualizar Data" limitToList="true" actionListener="#{apresentador.verificarParametrosDeCustasFixas}" reRender="painelCustasFixas"/>
+							                </h:panelGroup>
+										</h:panelGroup>
+										<h:outputText />
+										<h:outputText />
+									
+									
+										<h:panelGroup  styleClass="itemGrupo">
+											<h:outputLabel value="Atos dos Oficiais de Justiça - Zona Urbana" for="qtdeAtosUrbanos" />
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeAtosUrbanos" value="#{apresentador.parametrosDeCustasFixas.valorAtosUrbanosOficialJustica}" >
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorAtosUrbanosOficialJustica != null}" />
+											</h:outputLabel> 
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeAtosUrbanos" label="Quatidade de Atos dos Oficiais de Justiça - Zona Urbana" disabled="#{apresentador.parametrosDeCustasFixas.valorAtosUrbanosOficialJustica == null}" 
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeAtosUrbanos}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeAtosUrbanos"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+																						
+												
+										<h:panelGroup  styleClass="itemGrupo">
+											<h:outputLabel value="Atos dos Oficiais de Justiça - Zona Rural" for="qtdeAtosRurais" />
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeAtosRurais" value="#{apresentador.parametrosDeCustasFixas.valorAtosRuraisOficialJustica}">
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorAtosRuraisOficialJustica != null}" />
+											</h:outputLabel>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeAtosRurais" label="Quatidade de Atos dos Oficiais de Justiça - Zona Rural" disabled="#{apresentador.parametrosDeCustasFixas.valorAtosRuraisOficialJustica == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeAtosRurais}" onfocus="$(this).integerMask()" >
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeAtosRurais"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+																				
+												
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="Agravo de Instrumento" for="qtdeAgravosDeInstrumento"/>
+										</h:panelGroup>	
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeAgravosDeInstrumento" value="#{apresentador.parametrosDeCustasFixas.valorAgravoDeInstrumento}" >
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorAgravoDeInstrumento != null}" />
+											</h:outputLabel>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeAgravosDeInstrumento" label="Quatidade de Agravo de Instrumento" disabled="#{apresentador.parametrosDeCustasFixas.valorAgravoDeInstrumento == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeAgravosDeInstrumento}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeAgravosDeInstrumento"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+																						
+												
+										<h:panelGroup  styleClass="itemGrupo">
+											<h:outputLabel value="Agravo de Petição" for="qtdeAgravosDePeticao" />
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeAgravosDePeticao" value="#{apresentador.parametrosDeCustasFixas.valorAgravoDePeticao}" >
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorAgravoDePeticao != null}" />
+											</h:outputLabel>
+										</h:panelGroup>		
+										<h:panelGroup>
+											<h:inputText id="qtdeAgravosDePeticao" label="Quatidade de Agravo de Petição" disabled="#{apresentador.parametrosDeCustasFixas.valorAgravoDePeticao == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeAgravosDePeticao}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeAgravosDePeticao"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>		
+										
+																						
+										<h:panelGroup  styleClass="itemGrupo">
+											<h:outputLabel value="Impugnação à Sentença de Liquidação" for="qtdeImpugnacaoSentenca" />
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeImpugnacaoSentenca" value="#{apresentador.parametrosDeCustasFixas.valorImpugnacaoSentencaDeLiquidacao}">
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorImpugnacaoSentencaDeLiquidacao != null}" />
+											</h:outputLabel>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeImpugnacaoSentenca" label="Quatidade de Impugnação à Sentença de Liquidação" disabled="#{apresentador.parametrosDeCustasFixas.valorImpugnacaoSentencaDeLiquidacao == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeImpugnacaoSentenca}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeImpugnacaoSentenca"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+																				
+												
+										<h:panelGroup  styleClass="itemGrupo">
+											<h:outputLabel value="Embargos à Arrematação" for="qtdeEmbargosArrematacao" />
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeEmbargosArrematacao" value="#{apresentador.parametrosDeCustasFixas.valorEmbargosAArrematacao}" >
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorEmbargosAArrematacao != null}" />
+											</h:outputLabel>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeEmbargosArrematacao" label="Quatidade de Embargos à Arrematação" disabled="#{apresentador.parametrosDeCustasFixas.valorEmbargosAArrematacao == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeEmbargosArrematacao}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeEmbargosArrematacao"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+																
+												
+										<h:panelGroup  styleClass="itemGrupo">
+											<h:outputLabel value="Embargos à Execução" for="qtdeEmbargosExecucao" />
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeEmbargosExecucao" value="#{apresentador.parametrosDeCustasFixas.valorEmbargosAExecucao}" >
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorEmbargosAExecucao != null}" />
+											</h:outputLabel>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeEmbargosExecucao" label="Quatidade de Embargos à Execução" disabled="#{apresentador.parametrosDeCustasFixas.valorEmbargosAExecucao == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeEmbargosExecucao}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeEmbargosExecucao"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+																	
+												
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="Embargos de Terceiros" for="qtdeEmbargosTerceiros"/>
+										</h:panelGroup>	
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeEmbargosTerceiros" value="#{apresentador.parametrosDeCustasFixas.valorEmbargosDeTerceiros}" >
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorEmbargosDeTerceiros != null}" />
+											</h:outputLabel>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeEmbargosTerceiros" label="Quatidade de Embargos de Terceiros" disabled="#{apresentador.parametrosDeCustasFixas.valorEmbargosDeTerceiros == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeEmbargosTerceiros}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeEmbargosTerceiros"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+										
+										
+										<h:panelGroup  styleClass="itemGrupo">
+											<h:outputLabel value="Recurso de Revista" for="qtdeRecursoRevista" />
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel for="qtdeRecursoRevista" value="#{apresentador.parametrosDeCustasFixas.valorRecursoDeRevista}" >
+												<f:converter converterId="bigDecimalConverter"/>
+												<h:outputText value="x" rendered="#{apresentador.parametrosDeCustasFixas.valorRecursoDeRevista != null}" />
+											</h:outputLabel>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:inputText id="qtdeRecursoRevista" label="Quatidade de Recurso de Revista" disabled="#{apresentador.parametrosDeCustasFixas.valorRecursoDeRevista == null}"
+												size="1" maxlength="3" value="#{apresentador.custasFixasAtualizacao.qtdeRecursoRevista}" onfocus="$(this).integerMask()">
+											</h:inputText>
+										    <cobra:toolTip>
+						                       	<rich:message for="qtdeRecursoRevista"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+												
+									</h:panelGrid>
+									<a4j:commandButton id="confirmar" value="Confirmar" actionListener="#{apresentador.confirmarCustasFixasAtualizacao}" reRender="pnlCustasFixasAtualizacao" styleClass="botao" />	
+								</h:panelGroup>	
+							
+								<h:panelGroup rendered="#{listaDeCustasFixasAtualizacao.size != 0}">
+									<rich:dataTable id="listagemCustasFixas" styleClass="tableWithCellNavigation" value="#{listaDeCustasFixasAtualizacao}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" var="_custaFixaAtualizacao" rows="9" style="border:solid 1px #ccc;"> 
+								    
+									    <rich:column style="text-align:center;">
+								    		<f:facet name="header">
+							    				<h:outputText value="Data do Evento"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{_custaFixaAtualizacao.dataEvento}">
+							    				<f:convertDateTime pattern="dd/MM/yyyy" />
+							    			</h:outputText>
+								    	</rich:column>
+									    	
+								    	<rich:column style="text-align:center;">
+								    		<f:facet name="header">
+							    				<h:outputText value="Custa"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{_custaFixaAtualizacao.nomeCusta}" />
+								    	</rich:column>		
+								    	
+								    	<rich:column>
+							    			<f:facet name="header">
+							    				<h:outputText value="Índice"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{_custaFixaAtualizacao.valorCusta}" />
+								    	</rich:column>	
+								    	
+								    	<rich:column>
+							    			<f:facet name="header">
+							    				<h:outputText value="Quantidade"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{_custaFixaAtualizacao.qtdCusta}" />
+								    	</rich:column>
+								    	
+									</rich:dataTable>
+									<rich:datascroller renderIfSinglePage="false" align="center" for="listagemCustasFixas" maxPages="9" fastStep="10"
+								     stepControls="show" fastControls="hide" boundaryControls="show" style="width: 100%; border: none;" id="sc1" />
+								</h:panelGroup>
+							</h:panelGrid>
+							
+						</fieldset>
+					</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:panelGrid columns="2" cellpadding="0"  cellspacing="3">
+								<h:panelGroup>
+									<fieldset style="width:420px; margin-left: -4px;">
+										<legend>Autos 5%</legend>
+											<h:panelGroup id="painelAutosJudiciais" layout="block">
+												<h:panelGrid columns="4" cellpadding="2" cellspacing="2">
+												
+													<h:panelGroup>
+														<h:outputLabel value="Tipo de Auto *" for="tipoDeAuto" /><br />
+														<h:selectOneMenu id="tipoDeAuto" label="Tipo de Auto" value="#{autoJudicial.tipoDeAuto}">
+															<s:selectItems value="#{enumItems.tipoDeAutoEnum}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+															<s:convertEnum />
+														</h:selectOneMenu>
+														<cobra:toolTip>
+										                      <rich:message for="tipoDeAuto"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+												
+													<h:panelGroup>
+														<h:outputLabel value="Vencimento *" for="dataVencimentoAuto" /><br />
+														<rich:calendar id="dataVencimentoAuto"
+																	   label="Vencimento" inputSize="12" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{autoJudicial.dataVencimentoAuto}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                      	<rich:message for="dataVencimentoAuto"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													
+													<h:panelGroup>
+														<h:outputLabel value="Valor do Bem *" for="valorAvaliacaoAuto" /><br />
+														<h:inputText id="valorAvaliacaoAuto" label="Valor" size="16" maxlength="16" value="#{autoJudicial.valorAvaliacaoAuto}" onfocus="$(this).currencyMask()">
+															<f:converter converterId="bigDecimalConverter"/>
+														</h:inputText>	
+														<cobra:toolTip>
+										                     <rich:message for="valorAvaliacaoAuto"/>
+										                </cobra:toolTip>
+													</h:panelGroup>
+													
+													<h:panelGroup styleClass="itemGrupo">
+														<a4j:commandLink id="cmdIncluirAutos"  styleClass="botaoAddItem" title="Adicionar" limitToList="true"  actionListener="#{apresentador.adicionarAutoJudicial}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="painelMensagens, painelAutosJudiciais, painelListagemAutos"/>
+													</h:panelGroup>	
+												</h:panelGrid>
+												
+												</h:panelGroup>
+												<h:panelGroup id="painelListagemAutos" layout="block">
+													<rich:dataTable id="listagemAutos" value="#{autosJudiciais}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" var="item" rows="#{autosJudiciais.rowCount}" rendered="#{autosJudiciais.rowCount gt 0}"> 
+											    		<rich:column style="width:5%;">
+													    	<f:facet name="header">
+												    			<h:outputText value="Ação"/>
+												    		</f:facet>
+													    	<a4j:commandLink id="excluirAutoJudicial"  immediate="true" limitToList="true" styleClass="linkExcluir" title="Excluir" onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();" oncomplete="AguardeHide();" actionListener="#{apresentador.removerAutoJudicial}" reRender="painelMensagens, painelAutosJudiciais,painelListagemAutos"/>
+													    </rich:column>
+													    
+													    <rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Tipo"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.tipoDeAuto.nome}">
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Vencimento"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.dataVencimentoAuto}">
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Valor"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.valorAvaliacaoAuto}">
+											    				<f:converter converterId="bigDecimalConverter"/>
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Teto"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.valorTetoTransiente}">
+											    				<f:converter converterId="bigDecimalConverter"/>
+											    			</h:outputText>
+												    	</rich:column>
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Custas"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.valorCustasAutoTransiente}">
+											    				<f:converter converterId="bigDecimalConverter"/>
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+													</rich:dataTable>
+												</h:panelGroup>
+										</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<fieldset style="height: 100%; width:388px; margin-right: -1px;">
+										<legend>Armazenamento 0,1%</legend>
+											<h:panelGroup id="painelArmazenamento"   layout="block">
+													<h:panelGrid columns="4" cellpadding="2"  cellspacing="2">
+														<h:panelGroup>
+															<h:outputLabel value="Início *" for="dataInicioArmazenamento" /><br />
+															<rich:calendar id="dataInicioArmazenamento"
+																		   label="Início" inputSize="10" popup="true"
+																		   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																		   value="#{armazenamento.dataInicioArmazenamento}">
+																<f:facet name="footer">
+														        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														        </f:facet>
+															</rich:calendar>
+															<cobra:toolTip>
+											                      	<rich:message for="dataInicioArmazenamento"/>
+											                 </cobra:toolTip>
+														</h:panelGroup>
+													
+														<h:panelGroup>
+															<h:outputLabel value="Término" for="dataTerminoArmazenamento" /><br />
+															<rich:calendar id="dataTerminoArmazenamento"
+																		   label="Término" inputSize="8" popup="true"
+																		   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																		   value="#{armazenamento.dataTerminoArmazenamento}">
+																<f:facet name="footer">
+														        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														        </f:facet>
+															</rich:calendar>
+															<cobra:toolTip>
+											                      	<rich:message for="dataTerminoArmazenamento"/>
+											                 </cobra:toolTip>
+														</h:panelGroup>
+														
+														<h:panelGroup>
+															<h:outputLabel value="Valor do Bem *" for="valorAvaliacaoArmazenamento" /><br />
+															<h:inputText id="valorAvaliacaoArmazenamento" label="Valor" size="16" maxlength="16" value="#{armazenamento.valorAvaliacaoArmazenamento}" onfocus="$(this).currencyMask()">
+																<f:converter converterId="bigDecimalConverter"/>
+															</h:inputText>	
+															<cobra:toolTip>
+											                     <rich:message for="valorAvaliacaoArmazenamento"/>
+											                </cobra:toolTip>
+														</h:panelGroup>
+														
+														<h:panelGroup styleClass="itemGrupo">
+															<a4j:commandLink id="cmdIncluirArmazenamento"  styleClass="botaoAddItem" title="Adicionar" limitToList="true"  actionListener="#{apresentador.adicionarArmazenamento}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="painelMensagens, painelArmazenamento, painelListagemArmazenamento"/>
+														</h:panelGroup>	
+													</h:panelGrid>
+												
+												</h:panelGroup>
+												<h:panelGroup id="painelListagemArmazenamento" layout="block">
+													<rich:dataTable id="listagemArmazenamentos" value="#{armazenamentos}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" var="item" rows="#{armazenamentos.rowCount}" rendered="#{armazenamentos.rowCount gt 0}"> 
+											    		<rich:column style="width:5%;">
+													    	<f:facet name="header">
+												    			<h:outputText value="Ação"/>
+												    		</f:facet>
+													    	<a4j:commandLink id="excluirArmazenamento"  immediate="true" limitToList="true" styleClass="linkExcluir" title="Excluir" onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();" oncomplete="AguardeHide();" actionListener="#{apresentador.removerArmazenamento}" reRender="painelMensagens, painelArmazenamento,painelListagemArmazenamento"/>
+													    </rich:column>
+													    
+													   <rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Início"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.dataInicioArmazenamento}">
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Término"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.dataTerminoArmazenamento}">
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Valor"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.valorAvaliacaoArmazenamento}">
+											    				<f:converter converterId="bigDecimalConverter"/>
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Qtd Dias"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.qtdeDiasTransiente}">
+											    			</h:outputText>
+												    	</rich:column>
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Custas"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{item.valorCustasArmazenamentoTrasiente}">
+											    				<f:converter converterId="bigDecimalConverter"/>
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+													</rich:dataTable>
+												</h:panelGroup>
+								
+									</fieldset>
+								</h:panelGroup> 
+								
+							</h:panelGrid>
+						</h:panelGroup>
+					
+					</h:panelGrid>
+
+			<br/>
+			
+	    </h:panelGroup>
+	</ui:define>
+	
+	<ui:define name="script">
+		<script type="text/javascript">
+			function ativarAbaComErros(){
+				if (jQuery("td.primeiraAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabCustasDevidas_lbl").click();
+					return false;
+				}
+			}
+		</script>
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao" onclick="allToUpperCase()" oncomplete="ativarAbaComErros();"/>  
+	</ui:define>
+	
+</ui:composition>
+
+</html>

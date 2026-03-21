@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<body>
+<f:view >
+
+<h:panelGroup>
+
+		<ui:param name="labelData" value="#{nomeIndice=='JAM'?'Data':'Mês/Ano'}" />
+		<ui:param name="labelTaxa" value="#{nomeIndice=='JAM'?'Taxa do Dia(%)':'Taxa do Mês(%)'}" />
+
+		<a4j:outputPanel id="painelSubtabela#{nomeIndice}">
+			<h:panelGroup  style="width: 100%;" rendered="#{listaDeIndices.size gt 0}">
+			
+			
+				<rich:dataTable id="listagemIndices#{nomeIndice}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0"  
+								width="100%" rows="8" value="#{listaDeIndices}" var="indice" > 
+				
+				    	<rich:column rendered="#{nomeIndice=='JAM'}">
+			    			<f:facet name="header">
+			    				<h:outputText value="#{labelData}"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.competencia}">
+			    				  <f:converter converterId="org.jboss.seam.faces.dateConverter"/>
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column rendered="#{nomeIndice!='JAM'}">
+			    			<f:facet name="header">
+			    				<h:outputText value="#{labelData}"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.competencia}">
+			    				  <f:converter converterId="competenciaConverter"/>
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="#{labelTaxa}"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.taxa}">
+			    				<f:converter converterId="seisCasasDecimaisConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Índice Acumulado"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.valorAcumulado}">
+			    				<f:converter converterId="noveCasasDecimaisConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Criado Em"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.dataCriacao}">
+			    				<f:converter converterId="org.jboss.seam.faces.dateConverter"/>
+			    			</h:outputText>
+				    	</rich:column>			
+				    	    				    				    	
+				</rich:dataTable>
+				
+				<ui:include src="../comum/paginacao.xhtml">
+					<ui:param name="paramListagem" value="listagemIndices#{nomeIndice}" />
+				 </ui:include>
+				
+			</h:panelGroup>
+		
+		</a4j:outputPanel>
+</h:panelGroup>
+</f:view>
+</body>
+
+</html>

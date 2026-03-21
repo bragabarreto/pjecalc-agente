@@ -1,0 +1,633 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="titulo" value="Histórico Salarial" />
+	<ui:param name="apresentador" value="#{apresentadorHistoricoSalarial}" />
+	<ui:param name="registro" value="#{apresentadorHistoricoSalarial.registro}" />
+	<ui:param name="filtro" value="#{apresentadorHistoricoSalarial.filtro}" />
+	<ui:param name="listaDeOcorrencias" value="#{apresentadorHistoricoSalarial.listaOcorrencias}" />
+	<ui:param name="enctype" value="multipart/form-data" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="resumo-calculo.xhtml" />
+	</ui:define>
+
+	<ui:define name="resultadoTabela">
+	
+			<h:panelGroup id="painelListagem" style="width: 600px;" >
+			
+				<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" 
+								cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{lista.size}" var="historico"> 
+		    		<rich:column style="width:20%;">
+				    	<f:facet name="header">
+			    			<h:outputText value="Ações"/>
+			    		</f:facet>
+					    <a4j:region>
+				    		<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}" reRender="painelNovo" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+			    			<a4j:commandLink id="alterarHistorico" styleClass="linkAlterar" title="Alterar" actionListener="#{apresentadorHistoricoSalarial.alterar}" reRender="painelNovo" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+							<a4j:commandLink id="excluirHistorico" styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentadorHistoricoSalarial.excluir}" reRender="painelNovo" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+				    	</a4j:region>
+				    </rich:column>
+		    	
+			    	<rich:column style="width:80%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Nome"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{historico.nome}" id="nome" size="35"></h:outputText>
+			    	</rich:column>
+		    	
+		    	
+				</rich:dataTable>
+			
+			</h:panelGroup>
+	
+	</ui:define>
+	
+
+	<ui:define name="nocamposFormulario">
+	
+		<a4j:loadScript src="resource://jquery.js"/>
+	
+		<h:panelGroup id="painelNovo">
+		
+			<h:panelGroup rendered="#{apresentadorHistoricoSalarial.emModoFormulario}" >
+					
+					<h:panelGrid columns="1" cellspacing="2" border="0">
+						
+						<h:panelGroup id="pnlUpload" layout="block">
+							<fieldset style="margin-left:-1px;">
+					  			<legend>Importar Histórico Salarial a partir de Arquivo Externo</legend>
+								<h:panelGroup layout="block" style="width:100%;">
+									<h:outputText value="Atenção! Após realizar a importação via arquivo externo, os dados anteriormente cadastrados serão excluídos." />
+									<h:panelGrid columns="1" cellpadding="3" cellspacing="3">
+										<h:panelGroup id="pnlFileUpload" class="panelFileUpload" layout="block">
+											<h:outputLabel for="arquivo" value="Selecionar Arquivo CSV *"/><br />
+											<rich:fileUpload id="arquivo" fileUploadListener="#{apresentador.listenerUpload}" locale="pt_BR" immediateUpload="true" 
+												addControlLabel="Escolher Arquivo..." clearAllControlLabel="Remover" cancelEntryControlLabel="Cancelar" clearControlLabel="" 
+												transferErrorLabel="Erro na transferência" stopControlLabel="Parar" doneLabel="Feito" stopEntryControlLabel="Parar" 
+												sizeErrorLabel="Tamanho do arquivo maior que o limite máximo permitido." disabled="#{apresentador.emModoSomenteVisualizacao or registro.nome=='ÚLTIMA REMUNERAÇÃO'}" immediate="true">
+													<a4j:support event="onclear" reRender="pnlFileUpload" />
+											</rich:fileUpload>
+										</h:panelGroup>
+										<h:outputLink class="linkCartaoDePonto" value="#{facesContext.externalContext.requestContextPath}/templateHistoricoSalarial/ExemploHistoricoSalarial.csv">Para baixar um arquivo de exemplo preenchido, clique aqui.</h:outputLink>
+									</h:panelGrid>
+								</h:panelGroup>
+								<a4j:commandButton value="Confirmar" actionListener="#{apresentador.importarCSV()}" disabled="#{apresentador.emModoSomenteVisualizacao or registro.nome=='ÚLTIMA REMUNERAÇÃO'}" immediate="true" reRender="painelMensagens,painelNovo" process="pnlFileUpload" ajaxSingle="true" limitToList="true" styleClass="botaoGrande" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+							</fieldset>
+						</h:panelGroup>
+					
+						<h:panelGroup>
+								<h:outputLabel value="Nome *" for="nome" /><br />
+								<h:inputText id="nome" label="Nome" value="#{apresentadorHistoricoSalarial.registro.nome}" 
+								      disabled="#{apresentador.emModoSomenteVisualizacao or registro.nome=='ÚLTIMA REMUNERAÇÃO'}" size="68" maxlength="120"/>
+								<cobra:autoComplete id="autoCompleteNomeHistorico" 
+																	facesBean="#{apresentador}" 
+																	idDescricao="nome" 
+																	semResultado="" 
+																	metodo="autoCompleteNomeHistorico" 
+																	voDescricao="#{objeto}" 
+																	minChars="1" 
+																	width="700" 
+																	rendered="true"
+																	info=""
+																	icoShow="false"
+																	/>
+								<rich:message showDetail="false" showSummary="false" for="nome">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="nomeErro">
+											   <rich:toolTip showEvent="mouseover"  styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="nome"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGrid columns="2" cellspacing="0" border="0">
+							<h:panelGroup>
+								<fieldset  style="width: 93px; height: 60px; margin-left:-2px;"><legend>Parcela</legend>
+									<h:panelGroup>						
+										<a4j:region>
+											<h:selectOneRadio id="tipoVariacaoDaParcela" style="margin-top: 6px; margin-left: 3px;" disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" layout="pageDirection" value="#{apresentadorHistoricoSalarial.registro.tipoVariacaoParcela}">
+												<s:selectItems value="#{enumItems.tipoVariacaoDaParcelaEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+												<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="panelBase" />
+											</h:selectOneRadio>
+										</a4j:region>
+									</h:panelGroup>
+								</fieldset>
+							</h:panelGroup>
+							
+							<h:panelGroup id="pnlIncidencia">
+								<fieldset style="float:left; width: 618px; height: 60px; margin-left:-2px;">
+									<legend>Incidência</legend>
+									<h:panelGrid columns="1" cellspacing="0" border="0">
+										<h:panelGrid columns="4" cellpadding="0" cellspacing="0" border="0">
+											<h:panelGroup>
+												<a4j:region>
+													<h:selectBooleanCheckbox id="fgts" style="margin-top: 16px; margin-left: 6px;" label="FGTS" value="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}" disabled="#{apresentador.emModoSomenteVisualizacao}"  >
+														<a4j:support event="onchange" actionListener="#{apresentadorHistoricoSalarial.registro.marcarIncidenciasFGTS()}" limitToList="true" ajaxSingle="true" reRender="painelProporcionalizarFGTS, painelDadosMiniCrud, painelFlags, painelScript"/>
+													</h:selectBooleanCheckbox>
+												</a4j:region>
+												<h:outputText value="FGTS" style="padding-left: 4px"/>
+												<rich:message showDetail="false" showSummary="false" for="fgtsBox">
+												    <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="fgtsBox">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="fgtsBox"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+												    </f:facet>
+												</rich:message>
+												<h:outputText class="linkHelp" id="fgtsHelp" style="margin-left:1px">
+													<rich:toolTip for="fgtsHelp" showEvent="mouseover" styleClass="tooltipHelp">
+													   	Marque esta incidência para cobrar FGTS sobre o Histórico Salarial que está sendo criado.
+													</rich:toolTip>
+									     	    </h:outputText>
+											</h:panelGroup>
+											<h:panelGroup id="painelProporcionalizarFGTS">
+												<a4j:region rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}">
+													<h:selectBooleanCheckbox id="proporcionalizarFGTS" disabled="#{apresentador.emModoSomenteVisualizacao}"  value="#{apresentadorHistoricoSalarial.registro.aplicarProporcionalidadeFGTS}" style="margin-left:15px; margin-top: 16px;"/>
+													<h:outputText value="Proporcionalizar FGTS" for="proporcionalizarFGTS" style="padding-left: 3px;"/>
+													<rich:message showDetail="false" showSummary="false" for="propFgtsBox">
+													    <f:facet name="errorMarker">
+												     	   <h:outputLink class="linkErro" id="propFgtsBox">
+															   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+															        <rich:message showDetail="true" showSummary="false" for="propFgtsBox"/>
+															   </rich:toolTip>
+												     	   </h:outputLink>
+													    </f:facet>
+													</rich:message>
+													<h:outputText class="linkHelp" id="propFgtsHelp" style="margin-left:1px">
+														<rich:toolTip for="propFgtsHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Marque para proporcionalizar o valor da base ao período do FGTS. Serão excluídas faltas não justificadas e períodos de férias gozadas. Para apurar FGTS sobre valores "pagos" de férias gozadas + 1/3 e 13º salário, acesse a página FGTS, clique no ícone Ocorrências, acrescente os valores pagos nos meses correspondentes da coluna Base (Histórico) e clique em Salvar.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</a4j:region>
+											</h:panelGroup>
+											<h:panelGroup>
+												<a4j:region>
+													<h:selectBooleanCheckbox id="inss" label="Contribuição Social"  disabled="#{apresentador.emModoSomenteVisualizacao}"  value="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}" style="margin-left:15px; margin-top: 16px;">
+														<a4j:support event="onchange" actionListener="#{apresentadorHistoricoSalarial.registro.marcarIncidenciasContribuicaoSocial()}" limitToList="true" ajaxSingle="true" reRender="painelProporcionalizarINSS, painelFlags, painelDadosMiniCrud, painelScript"/>
+													</h:selectBooleanCheckbox>
+												</a4j:region>
+												<h:outputText value="Contribuição Social" style="padding-left: 4px;"/>
+												<rich:message showDetail="false" showSummary="false" for="inssBox">
+												    <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="inssBox">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="inssBox"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+												    </f:facet>
+												</rich:message>
+												<h:outputText class="linkHelp" id="inssHelp" style="margin-left:1px">
+													<rich:toolTip for="inssHelp" showEvent="mouseover" styleClass="tooltipHelp">
+													   	Marque esta incidência para incluir o Histórico Salarial que está sendo criado na base de cálculo da Contribuição Social.
+													</rich:toolTip>
+									     	    </h:outputText>
+											</h:panelGroup>
+											<h:panelGroup  id="painelProporcionalizarINSS">
+												<a4j:region rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}">
+													<h:selectBooleanCheckbox id="proporcionalizarINSS" disabled="#{apresentador.emModoSomenteVisualizacao}"  value="#{apresentadorHistoricoSalarial.registro.aplicarProporcionalidadeINSS}" style="margin-left:15px; margin-top: 16px;"/>
+													<h:outputText value="Proporcionalizar Contribuição Social" for="proporcionalizarINSS" style="padding-left: 3px;"/>
+													<rich:message showDetail="false" showSummary="false" for="propInssBox">
+													    <f:facet name="errorMarker">
+												     	   <h:outputLink class="linkErro" id="propInssBox">
+															   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+															        <rich:message showDetail="true" showSummary="false" for="propInssBox"/>
+															   </rich:toolTip>
+												     	   </h:outputLink>
+													    </f:facet>
+													</rich:message>
+													<h:outputText class="linkHelp" id="propInssHelp" style="margin-left:1px">
+														<rich:toolTip for="propInssHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Marque para proporcionalizar o valor da base ao período da Contribuição Social. Serão excluídas faltas não justificadas e períodos de férias gozadas, e sugeridos valores relativos ao 13º salário. Para acrescentar valores "pagos" de férias gozadas + 1/3 e ajustar o 13º salário, acesse a página Contribuição Social, clique no ícone Ocorrências, faça as alterações na coluna Salários Pagos (Histórico) e clique em Salvar.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</a4j:region>
+											</h:panelGroup>
+										</h:panelGrid>
+									</h:panelGrid>
+								</fieldset>
+							</h:panelGroup>
+						</h:panelGrid>
+					</h:panelGrid>
+					
+					<h:panelGroup id="pnlOcorrenciasGeradas">
+						<fieldset style="width: 721px;">
+							<legend>Ocorrências </legend>
+							<h:panelGroup  rendered="#{apresentadorHistoricoSalarial.emModoInclusaoOuAlteracao and registro.nome!='ÚLTIMA REMUNERAÇÃO'}" >
+							<h:panelGrid columns="1" cellspacing="0" border="0">
+							
+								<h:panelGrid columns="2" cellspacing="4" border="0">
+								
+								<h:panelGroup>
+									<fieldset style="width: 300px;">
+										<legend>Período</legend>
+										
+										<h:panelGrid columns="2" cellspacing="4" border="0">
+											<h:panelGroup>
+											
+												<rich:jQuery id="mskCompetencias" selector=".maskDate" timing="onload" query="mask('99/9999')"></rich:jQuery>
+												
+												<h:outputLabel value="Competência Inicial *"/><br />
+												     <rich:calendar id="competenciaInicial" value="#{apresentadorHistoricoSalarial.registro.competenciaInicial}"  
+												     				label="Competência Inicial" inputSize="14" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+												     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+												     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												     				>
+														<f:facet name="footer">
+															<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														</f:facet>		            
+												    </rich:calendar>
+												    <rich:message showDetail="false" showSummary="false" for="competenciaInicial">
+													     <f:facet name="errorMarker">
+													     	   <h:outputLink class="linkErro" id="competenciaInicialErro">
+																   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																        <rich:message showDetail="true" showSummary="false" for="competenciaInicial"/>
+																   </rich:toolTip>
+													     	   </h:outputLink>
+													     </f:facet>
+													</rich:message>
+											</h:panelGroup>	
+											
+											
+											<h:panelGroup>
+												<h:outputLabel value="Competência Final *"/><br />
+												     <rich:calendar id="competenciaFinal" value="#{apresentadorHistoricoSalarial.registro.competenciaFinal}"  
+												     				label="Competência Final" inputSize="14" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+												     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+												     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												     				 >
+														<f:facet name="footer">
+															<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														</f:facet>		            
+												    </rich:calendar>
+												    <rich:message showDetail="false" showSummary="false" for="competenciaFinal">
+													     <f:facet name="errorMarker">
+													     	   <h:outputLink class="linkErro" id="competenciaFinalErro">
+																   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																        <rich:message showDetail="true" showSummary="false" for="competenciaFinal"/>
+																   </rich:toolTip>
+													     	   </h:outputLink>
+													     </f:facet>
+													</rich:message>
+											</h:panelGroup>	
+											
+											
+										</h:panelGrid>
+							
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<fieldset  style="width: 100px;"><legend>Tipo do Valor</legend>
+										<h:panelGroup>						
+											<a4j:region>
+												<h:selectOneRadio id="tipoValor" disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" layout="pageDirection" value="#{apresentadorHistoricoSalarial.registro.tipoValor}">
+													<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+													<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="panelBase" />
+												</h:selectOneRadio>
+											</a4j:region>
+										</h:panelGroup>
+									</fieldset>
+								</h:panelGroup>
+								
+							</h:panelGrid>
+							
+							<h:panelGrid columns="2" cellspacing="4" border="0">
+							
+						
+								
+								<a4j:outputPanel id="panelBase">
+								
+									<h:panelGroup rendered="#{apresentadorHistoricoSalarial.registro.tipoValor.valor == 'I'}">
+								
+										<fieldset style="width: 130px;">
+										
+											<legend>Base Informada</legend>
+											
+											<h:panelGrid columns="2" cellspacing="4" border="0">
+												<h:panelGroup>
+													<h:outputLabel value="Valor *" for="valorParaBaseDeCalculo"/><br />
+													<h:inputText id="valorParaBaseDeCalculo" label="Valor (R$)"  value="#{apresentadorHistoricoSalarial.registro.valorParaBaseDeCalculo}" 
+																  size="16" maxlength="16" onfocus="$(this).currencyMask()">
+														<f:converter converterId="bigDecimalConverter"/>
+													</h:inputText>
+													 <cobra:toolTip>
+									                      <rich:message for="valorParaBaseDeCalculo"/>
+								                   </cobra:toolTip>	
+												</h:panelGroup>
+											</h:panelGrid>
+									
+										  </fieldset>
+									</h:panelGroup>
+									
+									<h:panelGroup rendered="#{apresentadorHistoricoSalarial.registro.tipoValor.valor == 'C'}">
+										<fieldset style="width: 100%;">
+										
+											<legend>Base Calculada</legend>
+											
+											<h:panelGrid columns="3" cellspacing="4" border="0">
+												<h:panelGroup>
+													<h:outputLabel value="Quantidade *" for="quantidade" /><br />
+													<h:inputText id="quantidade" label="Quantidade" onkeypress="mascara_precisao_decimal(this,23,4)" value="#{apresentadorHistoricoSalarial.registro.quantidade}" size="8" maxlength="10">
+														<f:converter converterId="quatroCasasDecimaisConverter"/>
+													</h:inputText>
+													 <cobra:toolTip>
+									                      <rich:message for="quantidade"/>
+								                   </cobra:toolTip>												
+												</h:panelGroup>
+												
+												<h:panelGroup>
+													<h:outputLabel for="baseDeReferencia" value="Base de Referência *"/><br />
+													<a4j:region>
+													<h:selectOneMenu id="baseDeReferencia" value="#{apresentadorHistoricoSalarial.registro.baseDeReferencia}" style="width:130px;">
+														<s:selectItems value="#{enumItems.baseDeRefereciaParaHistoricoSalarialEnum}" var="item" label="#{item.nome}" noSelectionLabel="" />
+														<a4j:support event="onchange" reRender="painelCategoria" limitToList="true"/> 
+														<s:convertEnum/>
+													</h:selectOneMenu>
+													</a4j:region>
+													 <cobra:toolTip>
+									                      <rich:message for="baseDeReferencia"/>
+								                   </cobra:toolTip>	
+												</h:panelGroup>
+												
+												<a4j:outputPanel id="painelCategoria">
+													<h:panelGroup rendered="#{apresentadorHistoricoSalarial.registro.baseDeReferencia.valor == 'SC'}" >
+														<h:outputLabel for="categoria" value="Categoria *" /><br />
+														<h:selectOneMenu id="categoria" label="Categoria" value="#{apresentadorHistoricoSalarial.registro.categoria}" style="width:150px;">
+															<s:selectItems value="#{apresentadorHistoricoSalarial.categorias}" var="item" label="#{item.nome}" noSelectionLabel="" />
+															<s:convertEntity/>
+														</h:selectOneMenu>
+														 <cobra:toolTip>
+										                      <rich:message for="categoria"/>
+									                   </cobra:toolTip>
+													</h:panelGroup>
+												</a4j:outputPanel>
+											</h:panelGrid>
+										  </fieldset>
+									</h:panelGroup>
+								
+								</a4j:outputPanel>
+								
+								<h:panelGroup>
+										<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+											
+											<a4j:outputPanel id="painelFlags">
+												<h:panelGrid columns="1" cellspacing="2" cellpadding="2" border="0">
+													<h:panelGroup id="painelFGTSRecolhido">
+														<a4j:region rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}">
+															<h:selectBooleanCheckbox id="fgtsRecolhido" value="#{apresentadorHistoricoSalarial.registro.sinalizacaoFGTSRecolhido}"/>
+															<h:outputText value="FGTS Recolhidos" for="fgtsRecolhido" style="padding-left: 3px"/>
+														</a4j:region>
+													</h:panelGroup>
+													
+													<h:panelGroup id="painelINSSRecolhido">
+														<a4j:region rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}">
+															<h:selectBooleanCheckbox id="inssRecolhido" value="#{apresentadorHistoricoSalarial.registro.sinalizacaoINSSRecolhido}"/>
+															<h:outputText value="Contribuição Social Recolhida" for="inssRecolhido" style="padding-left: 3px;"/>
+														</a4j:region>
+													</h:panelGroup>
+												</h:panelGrid>
+											</a4j:outputPanel>
+											<h:panelGroup>
+										    		<a4j:commandLink id="cmdGerarOcorrencias"  limitToList="true" 
+										    						 actionListener="#{apresentadorHistoricoSalarial.gerarOcorrencias}" 
+									    							 styleClass="botaoAddItem" title="Gerar Ocorrências" style="margin-bottom:-4px;"
+									    							 reRender="painelNovo,painelDadosMiniCrud,painelMensagens,painelScript" oncomplete="$('formulario:competenciaFinalInputDate').select();">
+									    			</a4j:commandLink>
+											</h:panelGroup>
+											
+										</h:panelGrid>		
+								</h:panelGroup>
+								
+								</h:panelGrid>
+							
+							</h:panelGrid>
+							
+							</h:panelGroup>
+					<br />
+					
+					<a4j:outputPanel id="painelDadosMiniCrud" ajaxRendered="true">
+						
+						<h:panelGroup  style="width: 600px;"  rendered="#{listaDeOcorrencias.rowCount gt 0}" >
+				
+								<rich:dataTable id="listagemMC" value="#{listaDeOcorrencias}" rowClasses="linha-par, linha-impar" 
+												cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{listaDeOcorrencias.size}" var="ocorrencia"> 
+						    		<rich:column style="width:10%;">
+									    	<f:facet name="header">
+								    			<h:outputText value="Ações"/>
+								    		</f:facet>
+										    <a4j:region>
+									    		<h:commandLink id="excluirItem2"  limitToList="true" disabled="#{apresentador.emModoSomenteVisualizacao or registro.nome=='ÚLTIMA REMUNERAÇÃO'}" 
+									    						 actionListener="#{apresentadorHistoricoSalarial.excluirOcorrencia}" 
+								    							 styleClass="linkExcluir" title="Excluir"
+								    							 onclick="AguardeShow();" oncomplete="AguardeHide();">
+								    							 <a4j:support event="onclick" reRender="valor,painelDadosMiniCrud" limitToList="true" ajaxSingle="true"/>
+								    			</h:commandLink>
+									    	</a4j:region>
+								    </rich:column>
+						    	
+							    	<rich:column style="width:15%;">
+						    			<f:facet name="header">
+						    				<h:outputText value="Mês/Ano"/>
+						    			</f:facet>	
+						    			<h:outputText value="#{ocorrencia.dataOcorrencia}" id="data">
+						    				<f:converter converterId="competenciaConverter"/>
+						    			</h:outputText>
+							    	</rich:column>
+							    	
+							    	<rich:column style="width:75%;">
+						    			<f:facet name="header">
+						    				<h:outputText value="Valor"/>
+						    			</f:facet>	
+						    			<h:inputText value="#{ocorrencia.valor}" id="valor" disabled="#{apresentador.emModoSomenteVisualizacao or registro.nome=='ÚLTIMA REMUNERAÇÃO'}"  required="true" style="text-align:right;" onfocus="$(this).currencyMask()" size="16" maxlength="16">
+						    				<a4j:support event="onchange" ajaxSingle="true" limitToList="true" /> 
+											<f:converter converterId="bigDecimalConverter"/>
+										</h:inputText>
+							    	</rich:column>
+							    	
+							    	<rich:column style="width:100%;"  rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}" >
+						    		
+						    			<f:facet name="header" rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}">
+						    				<h:panelGrid columns="2" cellspacing="0" border="0">
+							    						    					
+						    					<h:panelGroup layout="block">
+						    						<h:outputText value="Incide FGTS"/>
+						    					</h:panelGroup>
+
+						    					<br/>
+
+						    					<h:panelGroup layout="block" rendered="#{apresentadorHistoricoSalarial.emModoInclusaoOuAlteracao}">
+								    				<input id="selecionarTodos3" type="checkbox" class="css-checkbox" onclick="jQuery('.labelInput3:enabled').attr('checked',jQuery('#selecionarTodos3').attr('checked'))"/>
+										    		<label for="selecionarTodos3" id="selecionarTodosLabel3" class="css-label" style="width: 0px; padding-left:18px;"></label>
+						    					</h:panelGroup>
+
+					    					</h:panelGrid>
+						    			</f:facet>
+
+						    			<h:selectBooleanCheckbox id="incideFGTS"  value="#{ocorrencia.incidenciaFGTS}" styleClass="labelInput3" disabled="#{apresentador.emModoSomenteVisualizacao}" 
+						    									 rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}" onclick="jQuery(function() {prepararCheckAll('#selecionarTodos3','.labelInput3');});" />
+							    	</rich:column>
+
+							    	<rich:column style="width:100%;"  rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}" >
+						    		
+						    			<f:facet name="header" rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}">
+						    				<h:panelGrid columns="2" cellspacing="0" border="0">
+							    						    					
+						    					<h:panelGroup layout="block">
+						    						<h:outputText value="FGTS Recolhido"/>
+						    					</h:panelGroup>
+						    					
+						    					<br/>
+						    					
+						    					<h:panelGroup layout="block" rendered="#{apresentadorHistoricoSalarial.emModoInclusaoOuAlteracao}">
+								    				<input id="selecionarTodos1" type="checkbox" class="css-checkbox" onclick="jQuery('.labelInput1:enabled').attr('checked',jQuery('#selecionarTodos1').attr('checked'))"/>
+										    		<label for="selecionarTodos1" id="selecionarTodosLabel1" class="css-label" style="width: 0px; padding-left:18px;"></label>			    	
+						    					</h:panelGroup>
+					    					
+					    					</h:panelGrid>
+						    			</f:facet>	
+						    			
+						    			<h:selectBooleanCheckbox id="recolhidoFGTS"  value="#{ocorrencia.recolhidoFGTS}" styleClass="labelInput1" disabled="#{apresentador.emModoSomenteVisualizacao}" 
+						    									 rendered="#{apresentadorHistoricoSalarial.registro.incidenciaFGTS}" onclick="jQuery(function() {prepararCheckAll('#selecionarTodos1','.labelInput1');});" />
+							    	</rich:column>
+							    	
+							    	<rich:column style="width:100%;" rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}">
+						    			<f:facet name="header" rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}">
+
+						    				<h:panelGrid columns="2" cellspacing="0" border="0">
+
+							    				<h:panelGroup layout="block">
+						    						<h:outputText value="Incide Contribuição Social"/>
+						    					</h:panelGroup>
+						    				
+						    					<br/>
+						    								
+						    					<h:panelGroup layout="block" rendered="#{apresentadorHistoricoSalarial.emModoInclusaoOuAlteracao}">
+								    				<input id="selecionarTodos4" type="checkbox" class="css-checkbox" onclick="jQuery('.labelInput4:enabled').attr('checked',jQuery('#selecionarTodos4').attr('checked'))"/>
+										    		<label for="selecionarTodos4" id="selecionarTodosLabel4" class="css-label" style="width: 0px; padding-left:18px;"></label>
+						    					</h:panelGroup>
+
+					    					</h:panelGrid>
+						    			</f:facet>	
+						    			<h:selectBooleanCheckbox id="incideINSS"  value="#{ocorrencia.incidenciaINSS}" styleClass="labelInput4" disabled="#{apresentador.emModoSomenteVisualizacao}" 
+						    									 rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}" onclick="jQuery(function() {prepararCheckAll('#selecionarTodos4','.labelInput4');});"/>
+							    	</rich:column>
+							    	
+							    	<rich:column style="width:100%;" rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}">
+						    			<f:facet name="header" rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}">
+						    				
+						    				<h:panelGrid columns="2" cellspacing="0" border="0">
+							    				
+							    				<h:panelGroup layout="block">
+						    						<h:outputText value="Contribuição Social Recolhida"/>
+						    					</h:panelGroup>
+						    				
+						    					<br/>
+						    								
+						    					<h:panelGroup layout="block" rendered="#{apresentadorHistoricoSalarial.emModoInclusaoOuAlteracao}">
+								    				<input id="selecionarTodos2" type="checkbox" class="css-checkbox" onclick="jQuery('.labelInput2:enabled').attr('checked',jQuery('#selecionarTodos2').attr('checked'))"/>
+										    		<label for="selecionarTodos2" id="selecionarTodosLabel2" class="css-label" style="width: 0px; padding-left:18px;"></label>			    	
+						    					</h:panelGroup>
+					    					
+					    					</h:panelGrid>
+						    			</f:facet>	
+						    			<h:selectBooleanCheckbox id="recolhidoINSS"  value="#{ocorrencia.recolhidoINSS}" styleClass="labelInput2" disabled="#{apresentador.emModoSomenteVisualizacao}" 
+						    									 rendered="#{apresentadorHistoricoSalarial.registro.incidenciaINSS}" onclick="jQuery(function() {prepararCheckAll('#selecionarTodos2','.labelInput2');});"/>
+							    	</rich:column>
+							    	
+								</rich:dataTable>
+						
+						</h:panelGroup>	
+						
+						<script type="text/javascript">
+							/* <![CDATA[ */              
+						       jQuery(function() {
+						    	   	prepararCheckAll('#selecionarTodos1','.labelInput1');
+									prepararCheckAll('#selecionarTodos2','.labelInput2');
+									prepararCheckAll('#selecionarTodos3','.labelInput3');
+									prepararCheckAll('#selecionarTodos4','.labelInput4');
+									jQuery('#formulario:listagemMC').enableCellNavigation();
+								});
+						    /* ]]> */
+						</script>
+			
+					</a4j:outputPanel>									
+					</fieldset>
+					</h:panelGroup>
+			</h:panelGroup>
+		</h:panelGroup>
+		<a4j:outputPanel id="painelOcorrencias" ajaxRendered="true">
+		
+			<h:panelGroup rendered="#{lista.rowCount eq 0 and apresentadorHistoricoSalarial.operacao == 'OUTRO'}">
+				<h:outputLabel style="float:left; margin:14px 10px 5px 16px;" value="Não existe Histórico Salarial com Ocorrências Cadastradas" />
+			</h:panelGroup>
+			
+			<h:panelGroup rendered="#{apresentadorHistoricoSalarial.operacao == 'OUTRO' and lista.rowCount gt 0}" >
+				<rich:dataTable value="#{apresentadorHistoricoSalarial.listaLinhas}" var="linha" width="100%" id="tabOcorrencias" styleClass="tableWithCellNavigation" rowClasses="linha-par, linha-impar" >
+				   <f:facet name="header">
+				   <h:outputText value="OCORRÊNCIAS DO HISTÓRICO SALARIAL" style="font-size:12px;"></h:outputText>
+				   </f:facet>
+				   <rich:columns value="#{apresentadorHistoricoSalarial.listaColunas}" var="coluna"  index="ind" id="coluna#{ind}"> 
+					   	<f:facet name="header">
+					    	<h:outputText value="#{coluna.header}"/>
+					   	</f:facet>
+					    <h:panelGroup  rendered="#{ind gt 0}">
+							<h:inputText rendered="#{linha[ind] == null ? false : true}" value="#{linha[ind]}" disabled="#{coluna.header == 'ÚLTIMA REMUNERAÇÃO' ? true : false}" required="false" id="linha#{ind}"  style="text-align:right;" size="16" maxlength="16" onfocus="$(this).currencyMask()" />
+						</h:panelGroup>
+					    <h:panelGroup  rendered="#{ind eq 0}">
+					    	<h:outputText value="#{linha[ind]}"  style="font-weight: bold;" ></h:outputText>
+					    </h:panelGroup>
+				   </rich:columns> 
+				</rich:dataTable>
+			</h:panelGroup>
+		</a4j:outputPanel>
+			
+	
+	</ui:define>
+	
+	<ui:define name="script">
+		<a4j:outputPanel id="painelScript" ajaxRendered="true">
+			<script language="JavaScript">
+				var cmptFinal = document.getElementById('formulario:competenciaFinalInputDate');
+				var nomeHistorico = document.getElementById('formulario:nome');
+				if(cmptFinal != null and nomeHistorico == ''){
+					  if(cmptFinal.value != "")	
+						 cmptFinal.select();
+				}
+			</script>
+		</a4j:outputPanel>
+	</ui:define>
+	
+	
+	<ui:define name="filtroBotoes">
+		<div style="width:600px;">
+			<a4j:commandButton id="incluir" value="Novo"  actionListener="#{apresentadorHistoricoSalarial.novo}"  reRender="painelNovo" immediate="true" styleClass="botao" rendered="#{apresentadorHistoricoSalarial.emModoListagem}"/>
+			<a4j:commandButton id="visualizarOcorrencias" value="Grade de Ocorrências"  action="#{apresentadorHistoricoSalarial.visualizarOcorrenciasConsolidadas}" styleClass="botaoGrande" reRender="painelNovo" rendered="#{apresentadorHistoricoSalarial.emModoListagem}"/>
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorHistoricoSalarial.salvar}" styleClass="botao" reRender="painelNovo" rendered="#{apresentadorHistoricoSalarial.emModoFormulario  and apresentadorHistoricoSalarial.operacao != 'VISUALIZACAO' and operacao!='EXCLUSAO' }" onclick="allToUpperCase()"/>
+			<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.remover}" imeddiate="true" styleClass="botao" reRender="painelNovo" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />
+			<a4j:commandButton id="cancelar" value="Cancelar" actionListener="#{apresentadorHistoricoSalarial.cancelar}" immediate="true" styleClass="botao" reRender="painelNovo" rendered="#{apresentadorHistoricoSalarial.emModoFormulario and apresentadorHistoricoSalarial.operacao != 'VISUALIZACAO'}"/>
+			<a4j:commandButton id="salvarEditavel" value="Salvar" action="#{apresentadorHistoricoSalarial.salvarEditavel}" styleClass="botao" reRender="painelNovo" rendered="#{apresentadorHistoricoSalarial.operacao == 'OUTRO'}" />  
+			<a4j:commandButton id="voltar" value="Voltar" actionListener="#{apresentadorHistoricoSalarial.voltar}" styleClass="botao" reRender="painelNovo" immediate="true" rendered="#{apresentadorHistoricoSalarial.operacao == 'OUTRO' or apresentadorHistoricoSalarial.operacao == 'VISUALIZACAO'}"/>
+		</div>
+	</ui:define>
+	
+
+</ui:composition>
+
+</html>

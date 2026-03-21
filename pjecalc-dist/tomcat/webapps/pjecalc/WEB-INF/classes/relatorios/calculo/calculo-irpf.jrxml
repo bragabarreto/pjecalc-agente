@@ -1,0 +1,739 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="ocorrencias-pago-empresaRat1986" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<style name="default" isDefault="true" pattern="" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" isDefault="false" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" isDefault="false" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" isDefault="false" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" isDefault="false" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitle" isDefault="false" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="2" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitlevalue" isDefault="false" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="45" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["/opt/jboss-eap-5.1/jboss-as/server/default/data/relatorios/calculo/"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="irpf" class="java.lang.Object" isForPrompting="false"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="40" splitType="Stretch">
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="802" height="40"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[Demonstrativo de Imposto de Renda]]></text>
+			</staticText>
+		</band>
+	</title>
+	<pageHeader>
+		<band splitType="Stretch"/>
+	</pageHeader>
+	<columnHeader>
+		<band splitType="Stretch"/>
+	</columnHeader>
+	<detail>
+		<band height="30" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{irpf}.acumuladoAnterior]]></printWhenExpression>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="0" y="0" width="802" height="30"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="11"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Rendimentos Recebidos Acumuladamente Relativos a Anos-Calendário Anteriores ao do Recebimento - " + $P{irpf}.periodoAnterior]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="28" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{irpf}.acumuladoAnterior]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[ Nome: TRIBUTAÇÃO EXCLUSIVA]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="subtitlevalue" positionType="Float" mode="Opaque" x="0" y="14" width="802" height="14" />
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.formulaAnosAnteriores]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="subtitle" positionType="Float" x="0" y="14" width="152" height="14"/>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Base(s): ]]></text>
+			</staticText>
+		</band>
+		<band height="61" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{irpf}.acumuladoAnterior]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="57" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Verbas]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="162" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Contribuição Social]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="219" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Previdência Privada]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="276" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Pensão Alimentícia]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="333" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Honorários]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="390" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dependentes]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="447" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Aposentado > 65 anos]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="504" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="561" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Faixa]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="618" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Alíquota]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="675" y="0" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dedução]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="732" y="0" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="57" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.juros)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="162" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.contribuicaoSocial)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="219" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.previdenciaPrivada)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="276" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.pensaoAlimenticia)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="333" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.honorarios)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="390" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.dependentes)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="447" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.aposentadoMaior60Anos)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="504" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.base)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="561" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.ocorrenciaAcumuladoAnterior.faixa]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="618" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaAcumuladoAnterior.aliquota]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="675" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaAcumuladoAnterior.deducao]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="732" y="28" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaAcumuladoAnterior.devido]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="0" y="28" width="57" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaAcumuladoAnterior.verbas)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="114" y="0" width="48" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Quant. de Meses]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="114" y="28" width="48" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.ocorrenciaAcumuladoAnterior.meses]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="30" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{irpf}.acumuladoAnterior && ($P{irpf}.tributacaoNormal || $P{irpf}.tributacaoExclusiva || $P{irpf}.tributacaoEmSeparado)]]></printWhenExpression>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="0" y="0" width="802" height="30"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="11"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Rendimentos Recebidos Acumuladamente Relativos ao Ano-Calendário do Recebimento - " + $P{irpf}.periodo]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="28" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{irpf}.tributacaoNormal]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[ Nome: TRIBUTAÇÃO NORMAL]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="subtitlevalue" positionType="Float" mode="Opaque" x="0" y="14" width="802" height="14" />
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.formulaNormal]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="subtitle" positionType="Float" x="0" y="14" width="152" height="14"/>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Base(s): ]]></text>
+			</staticText>
+		</band>
+		<band height="61">
+			<printWhenExpression><![CDATA[$P{irpf}.tributacaoNormal]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="61" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Verbas]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="122" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Contribuição Social]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="183" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Previdência Privada]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="244" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Pensão Alimentícia]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="305" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Honorários]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="366" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dependentes]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="427" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Aposentado > 65 anos]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="488" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="549" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Faixa]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="610" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Alíquota]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="671" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dedução]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="732" y="0" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="61" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.juros)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="122" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.contribuicaoSocial)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="183" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.previdenciaPrivada)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="244" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.pensaoAlimenticia)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="305" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.honorarios)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="366" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.dependentes)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="427" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.aposentadoMaior60Anos)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="488" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.base)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="549" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.ocorrenciaTributacaoNormal.faixa]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="610" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoNormal.aliquota]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="671" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoNormal.deducao]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="732" y="28" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoNormal.devido]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="0" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoNormal.verbas)]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="28" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{irpf}.tributacaoExclusiva]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[ Nome: TRIBUTAÇÃO EXCLUSIVA]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="subtitlevalue" positionType="Float" mode="Opaque" x="0" y="14" width="802" height="14" />
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.formulaExclusiva]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="subtitle" positionType="Float" x="0" y="14" width="152" height="14"/>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Base(s): ]]></text>
+			</staticText>
+		</band>
+		<band height="61">
+			<printWhenExpression><![CDATA[$P{irpf}.tributacaoExclusiva]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="61" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Verbas]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="122" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Contribuição Social]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="183" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Previdência Privada]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="244" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Pensão Alimentícia]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="305" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Honorários]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="366" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dependentes]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="427" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Aposentado > 65 anos]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="488" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="549" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Faixa]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="610" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Alíquota]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="671" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dedução]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="732" y="0" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="61" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.juros)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="122" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.contribuicaoSocial)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="183" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.previdenciaPrivada)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="244" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.pensaoAlimenticia)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="305" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.honorarios)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="366" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.dependentes)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="427" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.aposentadoMaior60Anos)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="488" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.base)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="549" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.ocorrenciaTributacaoExclusiva.faixa]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="610" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoExclusiva.aliquota]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="671" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoExclusiva.deducao]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="732" y="28" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoExclusiva.devido]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="0" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoExclusiva.verbas)]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="28" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{irpf}.tributacaoEmSeparado]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[ Nome: TRIBUTAÇÃO EM SEPARADO]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="subtitlevalue" positionType="Float" mode="Opaque" x="0" y="14" width="802" height="14" />
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.formulaSeparado]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="subtitle" positionType="Float" x="0" y="14" width="152" height="14"/>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Base(s): ]]></text>
+			</staticText>
+		</band>
+		<band height="61">
+			<printWhenExpression><![CDATA[$P{irpf}.tributacaoEmSeparado]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="61" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Verbas]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="122" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Contribuição Social]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="183" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Previdência Privada]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="244" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Pensão Alimentícia]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="305" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Honorários]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="366" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dependentes]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="427" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Aposentado > 65 anos]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="488" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="549" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Faixa]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="610" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Alíquota]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="671" y="0" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dedução]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="732" y="0" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="61" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.juros)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="122" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.contribuicaoSocial)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="183" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.previdenciaPrivada)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="244" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.pensaoAlimenticia)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="305" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.honorarios)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="366" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.dependentes)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="427" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.aposentadoMaior60Anos)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="488" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.base)]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="549" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{irpf}.ocorrenciaTributacaoEmSeparado.faixa]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="610" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoEmSeparado.aliquota]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="671" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoEmSeparado.deducao]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="732" y="28" width="70" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.ocorrenciaTributacaoEmSeparado.devido]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToTallestObject" x="0" y="28" width="61" height="28"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{irpf}.ocorrenciaTributacaoEmSeparado.verbas)]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band height="14" splitType="Stretch">
+			<textField isStretchWithOverflow="true" pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" stretchType="RelativeToBandHeight" mode="Opaque" x="732" y="-5" width="70" height="14" isPrintWhenDetailOverflows="true" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{irpf}.totalDevido]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" stretchType="RelativeToBandHeight" mode="Opaque" x="0" y="-5" width="732" height="14" isPrintWhenDetailOverflows="true" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle">
+					<font size="8"/>
+				</textElement>
+				<text><![CDATA[Total Devido]]></text>
+			</staticText>
+		</band>
+	</summary>
+</jasperReport>

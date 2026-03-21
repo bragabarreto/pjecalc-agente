@@ -1,0 +1,2734 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils"
+	template="/templates/template-conteudo.xhtml">
+	
+	<ui:param name="legendaDoFormulario" value="Dados de Parcelas Atualizáveis do Cálculo Externo" />
+	<ui:param name="apresentador" value="#{apresentadorParcelasAtualizaveis}" />
+	<ui:param name="creditosDoReclamante" value="#{apresentador.creditosDoReclamante}" />
+	<ui:param name="debitosDoReclamante" value="#{apresentador.debitosDoReclamante}" />
+	<ui:param name="descontosCreditosDoReclamante" value="#{apresentador.descontoCreditosDoReclamante}" />
+	<ui:param name="outrosDebitosDoReclamado" value="#{apresentador.outrosDebitosDoReclamado}" />
+	<ui:param name="filtro" value="#{apresentador.filtro}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="resumo-calculo.xhtml">
+			<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+		<br/>
+	</ui:define>
+
+	<ui:define name="camposFormulario">
+	
+		<style>
+			.pr-25 {
+				padding-right: 25px;
+			}
+			
+			.mr-10 {
+				margin-right: 10px;
+			}
+			
+			.mb-10 {
+				margin-bottom: 10px;
+			}
+		</style>
+	
+		<rich:tabPanel switchType="client" immediate="true">
+			<rich:tab id="tabCreditosDoReclamante" label="Créditos do Reclamante" styleClass="primeiraAba">
+				<fieldset id="fsVerbasTributavel" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="verbasTributavel" value="#{creditosDoReclamante.marcarVerbasTributavel}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlVerbasTributavel" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Verbas Tributáveis" for="verbasTributavel" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlVerbasTributavel">
+						<h:panelGrid columns="4" rendered="#{creditosDoReclamante.marcarVerbasTributavel}">
+							<h:panelGroup>
+								<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+								<h:inputText id="valorParcelaCredReclamVerbasTributavel" value="#{creditosDoReclamante.valorParcelaVerbasTributavel}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+								<cobra:toolTip>
+			                      	<rich:message for="valorParcelaCredReclamVerbasTributavel" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+								<h:inputText value="#{creditosDoReclamante.valorJurosVerbasTributavel}" onfocus="$(this).currencyMask()" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+								<h:inputText value="#{apresentadorParcelasAtualizaveis.indicesCorrecaoUtilizados}" size="30" disabled="true" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Taxa de Juros" styleClass="topLabel" />
+								<h:inputText value="#{apresentadorParcelasAtualizaveis.tipoTaxaJuros}" size="35" disabled="true" />
+							</h:panelGroup>
+						</h:panelGrid>
+					</h:panelGroup>	
+				</fieldset>
+				
+				<fieldset id="fsVerbasNaoTributavel" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="verbasNaoTributavel" value="#{creditosDoReclamante.marcarVerbasNaoTributavel}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlVerbasNaoTributavel" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Verbas Não Tributáveis" for="verbasNaoTributavel" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlVerbasNaoTributavel">
+						<h:panelGrid columns="4" rendered="#{creditosDoReclamante.marcarVerbasNaoTributavel}">
+							<h:panelGroup>
+								<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+								<h:inputText id="valorParcelaCredReclamVerbasNaoTributavel" value="#{creditosDoReclamante.valorParcelaVerbasNaoTributavel}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+								<cobra:toolTip>
+			                      	<rich:message for="valorParcelaCredReclamVerbasNaoTributavel" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+								<h:inputText value="#{creditosDoReclamante.valorJurosVerbasNaoTributavel}" onfocus="$(this).currencyMask()" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+								<h:inputText value="#{apresentadorParcelasAtualizaveis.indicesCorrecaoUtilizados}" size="30" disabled="true" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Taxa de Juros" styleClass="topLabel" />
+								<h:inputText value="#{apresentadorParcelasAtualizaveis.tipoTaxaJuros}" size="35" disabled="true" />
+							</h:panelGroup>
+						</h:panelGrid>
+					</h:panelGroup>	
+				</fieldset>
+				
+				<fieldset id="fsFgts" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="fgts" value="#{creditosDoReclamante.marcarFgts}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlFgts" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="FGTS" for="fgts" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlFgts">
+						<h:panelGrid columns="4" rendered="#{creditosDoReclamante.marcarFgts}">
+							<h:panelGroup>
+								<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+								<h:inputText id="valorParcelaCredReclamFgts" value="#{creditosDoReclamante.valorParcelaFgts}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+								<cobra:toolTip>
+			                      	<rich:message for="valorParcelaCredReclamFgts" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+								<h:inputText value="#{creditosDoReclamante.valorJurosFgts}" disabled="#{parametrosDeAtualizacao.indiceDeCorrecaoDoFGTS eq 'UTILIZAR_INDICE_JAM'}" onfocus="$(this).currencyMask()" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+								<h:inputText value="#{parametrosDeAtualizacao.indiceDeCorrecaoDoFGTS.nome}" size="30" disabled="true" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Taxa de Juros" styleClass="topLabel" />
+								<h:inputText value="#{apresentadorParcelasAtualizaveis.tipoTaxaJuros}" size="35" disabled="true" />
+							</h:panelGroup>
+						</h:panelGrid>
+					</h:panelGroup>	
+				</fieldset>
+				
+				<fieldset id="fsMultaFgts" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaFgts" value="#{creditosDoReclamante.marcarMultaFgts}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaFgts,pnlBasePensaoAlimenticia" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa do FGTS" for="multaFgts" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlMultaFgts">
+						<h:panelGrid columns="4" rendered="#{creditosDoReclamante.marcarMultaFgts}">
+							<h:panelGroup>
+								<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+								<h:inputText id="valorParcelaCredReclamMultaFgts" value="#{creditosDoReclamante.valorParcelaMultaFgts}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+								<cobra:toolTip>
+			                      	<rich:message for="valorParcelaCredReclamMultaFgts" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+								<h:inputText value="#{creditosDoReclamante.valorJurosMultaFgts}" disabled="#{parametrosDeAtualizacao.indiceDeCorrecaoDoFGTS eq 'UTILIZAR_INDICE_JAM'}" onfocus="$(this).currencyMask()" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+								<h:inputText value="#{parametrosDeAtualizacao.indiceDeCorrecaoDoFGTS.nome}" size="30" disabled="true" />
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Taxa de Juros" styleClass="topLabel" />
+								<h:inputText value="#{apresentadorParcelasAtualizaveis.tipoTaxaJuros}" size="35" disabled="true" />
+							</h:panelGroup>
+						</h:panelGrid>
+					</h:panelGroup>
+				</fieldset>
+				
+				<fieldset id="fsMultaIndenizacaoDevidaReclamante" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaIndenizacaoDevidaReclamante" value="#{creditosDoReclamante.marcarMultaIndenizDevReclamante}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaIndenizacaoDevidaReclamante" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa/Indenização Devida ao Reclamante (+)" for="multaIndenizacaoDevidaReclamante" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlMultaIndenizacaoDevidaReclamante">
+						<h:panelGroup rendered="#{creditosDoReclamante.marcarMultaIndenizDevReclamante}">
+						
+							<h:panelGroup>
+								<h:outputLabel value="Descrição *" styleClass="topLabel" />
+								<h:inputText id="descricaoCredReclamMultaDevReclamante" value="#{creditosDoReclamante.multaIndenizDevReclamante.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+								<cobra:toolTip>
+			                      	<rich:message for="descricaoCredReclamMultaDevReclamante" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>	
+
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{creditosDoReclamante.multaIndenizDevReclamante.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoMultaIndenizReclamante" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoMultaIndenizReclamante">
+									<h:panelGrid columns="4" rendered="#{creditosDoReclamante.multaIndenizDevReclamante.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaCredReclamMultaDevReclamante" value="#{creditosDoReclamante.multaIndenizDevReclamante.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaCredReclamMultaDevReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosMultaIndenizReclamante">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosCredReclamMultaDevReclamante" value="#{creditosDoReclamante.multaIndenizDevReclamante.valorJurosInformado}" onfocus="$(this).currencyMask()" disabled="#{not creditosDoReclamante.multaIndenizDevReclamante.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosCredReclamMultaDevReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{creditosDoReclamante.multaIndenizDevReclamante.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlCredReclamMultaDevReclamanteAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosDevidoReclamante" value="#{creditosDoReclamante.multaIndenizDevReclamante.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosMultaIndenizReclamante,pnlCredReclamMultaDevReclamanteAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosDevidoReclamante" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{creditosDoReclamante.multaIndenizDevReclamante.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeCredReclamMultaDevReclamante" /><br />
+														<rich:calendar id="dataJurosAPartirDeCredReclamMultaDevReclamante"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{creditosDoReclamante.multaIndenizDevReclamante.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeCredReclamMultaDevReclamante"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeCredReclamMultaDevReclamanteHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeCredReclamMultaDevReclamanteHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{creditosDoReclamante.multaIndenizDevReclamante.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Principal" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="creditosReclamanteMultaReclamanteDescontoContrSocial" value="#{creditosDoReclamante.multaIndenizDevReclamante.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:creditosReclamanteMultaReclamanteDescontoContrSocial'),$('formulario:creditosReclamanteMultaReclamanteDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="creditosReclamanteMultaReclamanteDescontoPrevPriv" value="#{creditosDoReclamante.multaIndenizDevReclamante.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:creditosReclamanteMultaReclamanteDescontoContrSocial'),$('formulario:creditosReclamanteMultaReclamanteDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaCredReclamMultaDevReclamante" value="#{creditosDoReclamante.multaIndenizDevReclamante.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaCredReclamMultaDevReclamante" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemMultasIndenizDevReclamante}" process="pnlMultaIndenizacaoDevidaReclamante" reRender="pnlMultaIndenizacaoDevidaReclamante painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>
+							
+							<h:panelGroup id="listagemMultas">
+								<rich:dataTable value="#{listaMultasIndenizDevReclamante}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_multa" rendered="#{listaMultasIndenizDevReclamante.rowCount > 0}"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+								    	<h:commandLink actionListener="#{apresentador.removerItemMultasIndenizDevReclamante}" process="listagemMultas" reRender="listagemMultas" limitToList="true" ajaxSingle="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_multa.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_multa.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_multa.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_multa.valorJurosInformado == null ? '-' : _multa.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_multa.indiceTrabalhistaInformado.nome}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_multa.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_multa.taxaCalculado}" />
+							    	</rich:column>
+									<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_multa.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_multa.dataApartirDeAplicarJurosInformado != null ? _multa.dataApartirDeAplicarJurosInformado : creditosDoReclamante.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_multa.tipoValor eq 'INFORMADO' and _multa.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>
+								</rich:dataTable>
+							</h:panelGroup>
+						</h:panelGroup>
+					</h:panelGroup>
+				</fieldset>
+				
+				<fieldset id="fsMultaIndenizacaoDevidaReclamado" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaIndenizacaoDevidaReclamado" value="#{creditosDoReclamante.marcarMultaIndenizDevReclamado}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaIndenizacaoDevidaReclamado" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa/Indenização Devida ao Reclamado (-)" for="multaIndenizacaoDevidaReclamado" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlMultaIndenizacaoDevidaReclamado">
+						<h:panelGroup rendered="#{creditosDoReclamante.marcarMultaIndenizDevReclamado}">
+							
+							<h:panelGroup>
+								<h:outputLabel value="Descrição *" styleClass="topLabel" />
+								<h:inputText id="descricaoCredReclamMultaDevReclamado" value="#{creditosDoReclamante.multaIndenizDevReclamado.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+								<cobra:toolTip>
+			                      	<rich:message for="descricaoCredReclamMultaDevReclamado" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>	
+						
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{creditosDoReclamante.multaIndenizDevReclamado.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoMultaIndenizReclamado" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoMultaIndenizReclamado">
+									<h:panelGrid columns="4" rendered="#{creditosDoReclamante.multaIndenizDevReclamado.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaCredReclamMultaDevReclamado" value="#{creditosDoReclamante.multaIndenizDevReclamado.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaCredReclamMultaDevReclamado" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosMultaIndenizReclamado">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosCredReclamMultaDevReclamado" value="#{creditosDoReclamante.multaIndenizDevReclamado.valorJurosInformado}" onfocus="$(this).currencyMask()" disabled="#{not creditosDoReclamante.multaIndenizDevReclamado.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosCredReclamMultaDevReclamado" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{creditosDoReclamante.multaIndenizDevReclamado.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlCredReclamMultaDevReclamadoAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosDevidoReclamado" value="#{creditosDoReclamante.multaIndenizDevReclamado.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosMultaIndenizReclamado,pnlCredReclamMultaDevReclamadoAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosDevidoReclamado" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{creditosDoReclamante.multaIndenizDevReclamado.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeCredReclamMultaDevReclamado" /><br />
+														<rich:calendar id="dataJurosAPartirDeCredReclamMultaDevReclamado"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{creditosDoReclamante.multaIndenizDevReclamado.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeCredReclamMultaDevReclamado"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeCredReclamMultaDevReclamadoHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeCredReclamMultaDevReclamadoHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{creditosDoReclamante.multaIndenizDevReclamado.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Principal" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="creditosReclamanteMultaReclamadoDescontoContrSocial" value="#{creditosDoReclamante.multaIndenizDevReclamado.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:creditosReclamanteMultaReclamadoDescontoContrSocial'),$('formulario:creditosReclamanteMultaReclamadoDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="creditosReclamanteMultaReclamadoDescontoPrevPriv" value="#{creditosDoReclamante.multaIndenizDevReclamado.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:creditosReclamanteMultaReclamadoDescontoContrSocial'),$('formulario:creditosReclamanteMultaReclamadoDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaCredReclamMultaDevReclamado" value="#{creditosDoReclamante.multaIndenizDevReclamado.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaCredReclamMultaDevReclamado" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>	
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemMultasIndenizDevReclamado}" process="pnlMultaIndenizacaoDevidaReclamado" reRender="pnlMultaIndenizacaoDevidaReclamado painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>	
+							
+							<h:panelGroup id="listagemMultasReclamado">
+								<rich:dataTable value="#{listaMultasIndenizDevReclamado}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_multa" rendered="#{listaMultasIndenizDevReclamado.rowCount > 0}"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+					    				<h:commandLink actionListener="#{apresentador.removerItemMultasIndenizDevReclamado}" process="listagemMultasReclamado" reRender="listagemMultasReclamado" limitToList="true" ajaxSingle="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_multa.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_multa.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_multa.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_multa.valorJurosInformado == null ? '-' : _multa.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_multa.indiceTrabalhistaInformado.nome}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_multa.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_multa.taxaCalculado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_multa.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_multa.dataApartirDeAplicarJurosInformado != null ? _multa.dataApartirDeAplicarJurosInformado : creditosDoReclamante.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_multa.tipoValor eq 'INFORMADO' and _multa.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>							    						    	
+								</rich:dataTable>
+							</h:panelGroup>	
+						</h:panelGroup>	
+					</h:panelGroup>	
+				</fieldset>
+			</rich:tab>
+			<rich:tab id="tabDescontoCreditosDoReclamante" label="Descontos dos Créditos do Reclamante" styleClass="segundaAba">
+				<fieldset id="fsContribSocialSegurado" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="contribSocialSegurado" value="#{descontosCreditosDoReclamante.marcarContribSocialSegurado}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlcontribSocialSegurado" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Contribuição Social Segurado (descontar do principal)" for="contribSocialSegurado" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlcontribSocialSegurado">
+						<h:panelGrid columns="3" border="0" cellspacing="4" cellpadding="4" rendered="#{descontosCreditosDoReclamante.marcarContribSocialSegurado}">
+							<h:panelGroup>
+								<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+								<h:inputText id="valorParcelaDescCredReclamContribSocialSegurado" value="#{descontosCreditosDoReclamante.valorParcelaContribSocialSegurado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+								<cobra:toolTip>
+			                      	<rich:message for="valorParcelaDescCredReclamContribSocialSegurado" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>
+							<h:panelGroup>
+								<a4j:region>
+									<h:selectBooleanCheckbox style="margin-top:13px;vertical-align: bottom;" id="corrigirDescontoReclamante" value="#{descontosCreditosDoReclamante.corrigirDescontoReclamante}">
+										<a4j:support event="onchange" reRender="correcaoDesconto" limitToList="true" ajaxSingle="true"/>
+									</h:selectBooleanCheckbox>
+									<h:outputLabel value="Corrigir Desconto" for="corrigirDescontoReclamante" />
+								</a4j:region>
+							</h:panelGroup>
+							<h:panelGroup id="correcaoDesconto">
+								<a4j:region rendered="#{descontosCreditosDoReclamante.corrigirDescontoReclamante}">
+									<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+									<h:inputText value="#{apresentadorParcelasAtualizaveis.indicesCorrecaoUtilizados}" size="30" disabled="true" />
+								</a4j:region>
+							</h:panelGroup>
+						</h:panelGrid>
+					</h:panelGroup>
+				</fieldset>
+				
+				<fieldset id="fsPrevidenciaPrivada" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="previdenciaPrivada" value="#{descontosCreditosDoReclamante.marcarPrevidenciaPrivada}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlPrevidenciaPrivada" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Previdência Privada" for="previdenciaPrivada" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlPrevidenciaPrivada">
+						<h:panelGrid columns="2" rendered="#{descontosCreditosDoReclamante.marcarPrevidenciaPrivada}">
+							<h:panelGroup>
+								<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+								<h:inputText id="valorParcelaDescCredReclamPrevidenciaPrivada" value="#{descontosCreditosDoReclamante.valorParcelaPrevidenciaPrivada}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+								<h:outputText class="linkHelp" id="prevPrivHelp" style="margin-left:1px">
+									<rich:toolTip for="prevPrivHelp" showEvent="mouseover" styleClass="tooltipHelp">
+									   	Valores referentes a juros de previdência privada devem ser lançados na aba Outros Débitos do Reclamado.
+									</rich:toolTip>
+					     	    </h:outputText>
+					     	    <cobra:toolTip>
+			                      	<rich:message for="valorParcelaDescCredReclamPrevidenciaPrivada" />
+			                  	</cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+								<h:selectOneMenu value="#{descontosCreditosDoReclamante.indiceTrabalhistaPrevidenciaPrivada}" style="width:160px;">
+									<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+								</h:selectOneMenu>
+							</h:panelGroup>
+						</h:panelGrid>
+					</h:panelGroup>
+				</fieldset>
+				
+				<fieldset id="fsPensaoAlimenticia" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="pensaoAlimenticia" value="#{descontosCreditosDoReclamante.marcarPensaoAlimenticia}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlPensaoAlimenticia" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Pensão Alimentícia" for="pensaoAlimenticia" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlPensaoAlimenticia">
+						<h:panelGroup rendered="#{descontosCreditosDoReclamante.marcarPensaoAlimenticia}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Alíquota (%) *" for="aliquotaPensaoAlimenticia" styleClass="topLabel" />
+									<h:inputText id="aliquotaPensaoAlimenticia" label="Alíquota (%)" required="false" value="#{descontosCreditosDoReclamante.aliquotaPensaoAlimenticia}" maxlength="6" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="aliquotaPensaoAlimenticia"/>
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:selectBooleanCheckbox id="descontoCredPensaoAlimenticiaIncideJuros" value="#{descontosCreditosDoReclamante.aplicarJurosPensaoAlimenticia}" />
+									<h:outputLabel value="Incidir sobre Juros" for="descontoCredPensaoAlimenticiaIncideJuros" />
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGroup>
+								<fieldset class="mb-10">
+									<legend>Base da Pensão *</legend>
+									<h:panelGrid id="pnlBasePensaoAlimenticia" columns="2">
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="descontoCredPensaoAlimenticiaPrincipalTributavel" value="#{descontosCreditosDoReclamante.incidirSobrePrincipalTributavelPensaoAlimenticia}">
+												<a4j:support event="onchange" ajaxSingle="true" reRender="pnlBasePensaoAlimenticia" limitToList="true" />
+											</h:selectBooleanCheckbox>
+											<h:outputLabel value="Principal Tributável" for="descontoCredPensaoAlimenticiaPrincipalTributavel" />
+										</h:panelGroup>
+										<h:panelGroup rendered="#{descontosCreditosDoReclamante.incidirSobrePrincipalTributavelPensaoAlimenticia}">
+											<h:inputText id="percPrincipalTribPensaoAliment" required="false" label="Percentual de base para verbas tributáveis" size="6" maxlength="6" value="#{descontosCreditosDoReclamante.percPrincipalTributavelPensaoAlimenticia}" onfocus="$(this).currencyMask()" />
+											<h:outputText value=" (%)" />
+											<cobra:toolTip>
+						                      	<rich:message for="percPrincipalTribPensaoAliment"/>
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										<h:outputText rendered="#{not descontosCreditosDoReclamante.incidirSobrePrincipalTributavelPensaoAlimenticia}" />
+										
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="descontoCredPensaoAlimenticiaPrincipalNaoTributavel" value="#{descontosCreditosDoReclamante.incidirSobrePrincipalNaoTributavelPensaoAlimenticia}">
+												<a4j:support event="onchange" ajaxSingle="true" reRender="pnlBasePensaoAlimenticia" limitToList="true" />
+											</h:selectBooleanCheckbox>
+											<h:outputLabel value="Principal Não Tributável" for="descontoCredPensaoAlimenticiaPrincipalNaoTributavel" />
+										</h:panelGroup>
+										<h:panelGroup rendered="#{descontosCreditosDoReclamante.incidirSobrePrincipalNaoTributavelPensaoAlimenticia}">
+											<h:inputText id="percPrincipalNaoTribPensaoAliment" required="false" label="Percentual de base para verbas não tributáveis" size="6" maxlength="6" value="#{descontosCreditosDoReclamante.percPrincipalNaoTributavelPensaoAlimenticia}" onfocus="$(this).currencyMask()" />
+											<h:outputText value=" (%)" />
+											<cobra:toolTip>
+						                      	<rich:message for="percPrincipalNaoTribPensaoAliment"/>
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										<h:outputText rendered="#{not descontosCreditosDoReclamante.incidirSobrePrincipalNaoTributavelPensaoAlimenticia}" />
+
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="descontoCredPensaoAlimenticiaFgts" value="#{descontosCreditosDoReclamante.incidirSobreFgtsPensaoAlimenticia}">
+												<a4j:support event="onchange" ajaxSingle="true" reRender="pnlBasePensaoAlimenticia" limitToList="true" />
+											</h:selectBooleanCheckbox>
+											<h:outputLabel value="FGTS" for="descontoCredPensaoAlimenticiaFgts" />
+										</h:panelGroup>
+										<h:outputText />
+										
+										<h:panelGroup rendered="#{descontosCreditosDoReclamante.incidirSobreFgtsPensaoAlimenticia and creditosDoReclamante.marcarMultaFgts}">
+											<h:selectBooleanCheckbox id="descontoCredPensaoAlimenticiaMultaFgts" value="#{descontosCreditosDoReclamante.incidirSobreMultaPensaoAlimenticia}" />
+											<h:outputLabel value="Multa do FGTS" for="descontoCredPensaoAlimenticiaMultaFgts" />
+										</h:panelGroup>
+									</h:panelGrid>
+								</fieldset>
+							</h:panelGroup>
+						</h:panelGroup>
+					</h:panelGroup>	
+				</fieldset>
+				
+				<fieldset id="fsMultaIndenizTerceiroReclamante" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaIndenizTerceiroReclamante" value="#{descontosCreditosDoReclamante.marcarMultaIndenizTerceiroReclamante}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaIndenizTerceiroReclamante" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa/Indenização Devida a Terceiros pelo Reclamante" for="multaIndenizTerceiroReclamante" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlMultaIndenizTerceiroReclamante">
+						<h:panelGroup rendered="#{descontosCreditosDoReclamante.marcarMultaIndenizTerceiroReclamante}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Descrição *" styleClass="topLabel" />
+									<h:inputText id="descricaoMultaTerceiroReclamanteDescCredReclam" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="descricaoMultaTerceiroReclamanteDescCredReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Credor *" styleClass="topLabel" />
+									<h:inputText id="credorMultaTerceiroReclamanteDescCredReclam" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.credor}" label="Credor" required="false" maxlength="100" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="credorMultaTerceiroReclamanteDescCredReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoMultaIndenizTerceiroReclamante" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoMultaIndenizTerceiroReclamante">
+									<h:panelGrid columns="4" rendered="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaDescCredReclamMultaTerceiroReclamante" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaDescCredReclamMultaTerceiroReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosMultaIndenizTerceiroReclamante">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosDescCredReclamMultaTerceiroReclamante" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.valorJurosInformado}" onfocus="$(this).currencyMask()" disabled="#{not descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosDescCredReclamMultaTerceiroReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlDescCredReclamMultaDevTercReclamanteAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosDescCredReclamMultaDevTercReclamante" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosMultaIndenizTerceiroReclamante,pnlDescCredReclamMultaDevTercReclamanteAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosDescCredReclamMultaDevTercReclamante" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeDescCredReclamMultaDevTercReclamante" /><br />
+														<rich:calendar id="dataJurosAPartirDeDescCredReclamMultaDevTercReclamante"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeDescCredReclamMultaDevTercReclamante"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeDescCredReclamMultaDevTercReclamanteHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeDescCredReclamMultaDevTercReclamanteHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Principal" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="descontosReclamanteMultaDescontoContrSocial" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:descontosReclamanteMultaDescontoContrSocial'),$('formulario:descontosReclamanteMultaDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="descontosReclamanteMultaDescontoPrevPriv" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:descontosReclamanteMultaDescontoContrSocial'),$('formulario:descontosReclamanteMultaDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaDescCredReclamMultaTerceiroReclamante" value="#{descontosCreditosDoReclamante.multaIndenizTerceiroReclamante.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaDescCredReclamMultaTerceiroReclamante" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemMultasIndenizTerceiroReclamante}" process="pnlMultaIndenizTerceiroReclamante" reRender="pnlMultaIndenizTerceiroReclamante painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>
+								
+							<h:panelGroup id="listagemMultasTerceiroReclamante">	
+								<rich:dataTable value="#{listaMultasIndenizTerceiroReclamante}" rendered="#{listaMultasIndenizTerceiroReclamante.rowCount > 0}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_multa"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+								    	<h:commandLink actionListener="#{apresentador.removerItemMultasIndenizTerceiroReclamante}" process="listagemMultasTerceiroReclamante" reRender="listagemMultasTerceiroReclamante" limitToList="true" ajaxSingle="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_multa.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_multa.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_multa.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_multa.valorJurosInformado == null ? '-' : _multa.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_multa.indiceTrabalhistaInformado.nome}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_multa.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_multa.taxaCalculado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Credor</f:facet>	
+						    			<h:outputText value="#{_multa.credor}" />
+							    	</rich:column>
+									<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_multa.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_multa.dataApartirDeAplicarJurosInformado != null ? _multa.dataApartirDeAplicarJurosInformado : descontosCreditosDoReclamante.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_multa.tipoValor eq 'INFORMADO' and _multa.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>
+								</rich:dataTable>
+							</h:panelGroup>	
+						</h:panelGroup>
+					</h:panelGroup>	
+				</fieldset>
+				
+				<fieldset id="fsHonorariosDevidoReclamante" class="mb-10">
+
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="honorariosDevidoReclamante" value="#{descontosCreditosDoReclamante.marcarHonorariosDevReclamante}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlHonorariosDevidoReclamante" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Honorários Devidos pelo Reclamante" for="honorariosDevidoReclamante" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlHonorariosDevidoReclamante">
+						<h:panelGroup rendered="#{descontosCreditosDoReclamante.marcarHonorariosDevReclamante}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Tipo de Honorário *" styleClass="topLabel" />
+									<h:selectOneMenu id="descontosCreditosDoReclamanteTpHonorario" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.tipo}" label="Tipo de Honorário">
+										<s:selectItems value="#{enumItems.tipoHonorarioEnum}" var="item" label="#{item.nome}" />
+										<a4j:support event="onchange" process="descontosCreditosDoReclamanteTpHonorario, descontosCreditosDoReclamanteDescHonorario" actionListener="#{apresentador.mudarTipoDeHonorarioDescontos}" limitToList="true" reRender="descontosCreditosDoReclamanteDescHonorario" />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								
+								<h:panelGroup id="descontosCreditosDoReclamanteDescHonorario">
+									<h:outputLabel value="Descrição *" styleClass="topLabel" />
+									<h:inputText id="descricaoHonorariosDevReclamanteDescCredReclam" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="descricaoHonorariosDevReclamanteDescCredReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>	
+									<h:outputLabel value="Credor *" styleClass="topLabel" />
+									<h:inputText id="credorHonorariosDevReclamanteDescCredReclam" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.credor}" label="Credor" required="false" maxlength="100" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="credorHonorariosDevReclamanteDescCredReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px; width: 200px; float: right;">
+										<legend>Documento Fiscal</legend>
+										<h:selectOneRadio id="descontosCredReclamHonorariosDocFiscal" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.tipoDocFiscal}" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+										<h:outputLabel value="Número: " />
+										<h:inputText id="numDocFiscalHonorariosDevReclamanteDescCredReclam" label="Número" 
+														value="#{descontosCreditosDoReclamante.honorariosDevReclamante.numeroDocFiscal}" onfocus="$(this).dynamicMask('formulario:descontosCredReclamHonorariosDocFiscal')">
+											<f:converter converterId="mascaraDinamicaConverter"/>
+											<f:validator validatorId="validadorDinamico"/>
+											<f:param name="seletor" value="documentoFiscalReclamanteHonorariosDescontosReclam"/>
+										</h:inputText>
+										<cobra:toolTip>
+					                      	<rich:message for="numDocFiscalHonorariosDevReclamanteDescCredReclam" />
+					                  	</cobra:toolTip>
+									</fieldset>
+								</h:panelGroup>	
+								
+								<h:panelGroup id="pnlHonorarioJurosIrpfReclamante">
+									<fieldset style="margin: 5px 0px 5px 0px; width: 200px;">
+										<h:selectBooleanCheckbox id="boImpostoRendaHonorariosReclamante" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.apurarIrpf}">
+											<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="pnlHonorarioJurosIrpfReclamante" />
+										</h:selectBooleanCheckbox>
+										<h:outputLabel value="Apurar Imposto de Renda" for="boImpostoRendaHonorariosReclamanteDebReclam" />
+										<br/>
+										<h:panelGroup rendered="#{descontosCreditosDoReclamante.honorariosDevReclamante.apurarIrpf and descontosCreditosDoReclamante.honorariosDevReclamante.tipoValor eq 'INFORMADO'}">
+											<h:selectBooleanCheckbox id="boIncidirSobreJuros" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.incidirIrpfSobreJuros}" />
+											<h:outputLabel value="Incidir sobre Juros" for="boIncidirSobreJuros" />
+										</h:panelGroup>
+										<h:selectOneRadio value="#{descontosCreditosDoReclamante.honorariosDevReclamante.tipoIrpf}" rendered="#{descontosCreditosDoReclamante.honorariosDevReclamante.apurarIrpf}" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoDeImpostoDeRendaEnum}" var="item" label="#{item.nome}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{descontosCreditosDoReclamante.honorariosDevReclamante.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoHonorarioReclamante" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoHonorarioReclamante">
+									<h:panelGrid columns="4" rendered="#{descontosCreditosDoReclamante.honorariosDevReclamante.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaDescCredReclamHonorarioDevReclamante" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaDescCredReclamHonorarioDevReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosHonorarioReclamante">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosHonorariosDevReclamanteDescCredReclam" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.valorJurosInformado}" onfocus="$(this).currencyMask()" disabled="#{not descontosCreditosDoReclamante.honorariosDevReclamante.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosHonorariosDevReclamanteDescCredReclam" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{descontosCreditosDoReclamante.honorariosDevReclamante.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlDescCredReclamHonorarioReclamanteAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosHonorariosReclamante" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosHonorarioReclamante,pnlDescCredReclamHonorarioReclamanteAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosHonorariosReclamante" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{descontosCreditosDoReclamante.honorariosDevReclamante.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeDescCredReclamHonorarioReclamante" /><br />
+														<rich:calendar id="dataJurosAPartirDeDescCredReclamHonorarioReclamante"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{descontosCreditosDoReclamante.honorariosDevReclamante.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeDescCredReclamHonorarioReclamante"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeDescCredReclamHonorarioReclamanteHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeDescCredReclamHonorarioReclamanteHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{descontosCreditosDoReclamante.honorariosDevReclamante.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Bruto Devido ao Reclamante" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="descontosReclamanteHonorarioDescontoContrSocial" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:descontosReclamanteHonorarioDescontoContrSocial'),$('formulario:descontosReclamanteHonorarioDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="descontosReclamanteHonorarioDescontoPrevPriv" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:descontosReclamanteHonorarioDescontoContrSocial'),$('formulario:descontosReclamanteHonorarioDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaDescCredReclamHonorariosDevReclamante" value="#{descontosCreditosDoReclamante.honorariosDevReclamante.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaDescCredReclamHonorariosDevReclamante" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemHonorariosDevReclamanteDescontoReclam}" process="pnlHonorariosDevidoReclamante" reRender="pnlHonorariosDevidoReclamante,painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>
+								
+							<h:panelGroup id="listagemHonorariosDescontoReclam" ajaxRendered="true">	
+								<rich:dataTable value="#{listaHonorariosDevReclamanteDescontoReclam}" rendered="#{listaHonorariosDevReclamanteDescontoReclam.rowCount > 0}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_honorario"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+								    	<h:commandLink actionListener="#{apresentador.removerItemHonorariosDevReclamanteDescontoReclam}" process="listagemHonorariosDescontoReclam" reRender="listagemHonorariosDescontoReclam" immediate="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_honorario.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_honorario.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Tipo</f:facet>
+						    			<h:outputText value="#{_honorario.tipo.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_honorario.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_honorario.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_honorario.indiceTrabalhistaInformado.nome}" rendered="#{_honorario.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_honorario.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_honorario.taxaCalculado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Apurar IR</f:facet>	
+						    			<h:outputText value="#{_honorario.apurarIrpf ? 'SIM' : 'NÃO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Credor</f:facet>	
+						    			<h:outputText value="#{_honorario.credor}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_honorario.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_honorario.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_honorario.dataApartirDeAplicarJurosInformado != null ? _honorario.dataApartirDeAplicarJurosInformado : debitosDoReclamante.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_honorario.tipoValor eq 'INFORMADO' and _honorario.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>
+								</rich:dataTable>
+							</h:panelGroup>	
+						</h:panelGroup>		
+					</h:panelGroup>
+				</fieldset>
+				
+				<fieldset id="fsCustasReclamante" class="mb-10">
+					<h:panelGroup id="pnlMarcarCustasReclamante">
+						<h:selectBooleanCheckbox id="custasReclamante" value="#{descontosCreditosDoReclamante.marcarCustasConhecimentoReclamante}" disabled="#{debitosDoReclamante.marcarCustasConhecimentoDevReclamante}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlCustasReclamante, pnlMarcarCustasReclamanteDebReclam, pnlMarcarCustasReclamante" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Custas de Conhecimento Devidas pelo Reclamante" for="custasReclamante" />
+						<h:outputText class="linkHelp" id="custasReclamanteHelp" style="margin-left:1px" rendered="#{debitosDoReclamante.marcarCustasConhecimentoDevReclamante}">
+							<rich:toolTip for="custasReclamanteHelp" showEvent="mouseover" styleClass="tooltipHelp">
+							   	Já existe Custas de Conhecimento Devidas pelo Reclamante configurada na aba Débitos do Reclamante. 
+							</rich:toolTip>
+			     	    </h:outputText>
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlCustasReclamante">
+						<h:panelGroup rendered="#{descontosCreditosDoReclamante.marcarCustasConhecimentoReclamante}">
+					
+							<fieldset style="margin: 5px 0px 5px 0px; width: 200px;"><legend>Tipo do Valor</legend>
+								<h:selectOneRadio value="#{descontosCreditosDoReclamante.custasConhecimentoReclamante.tipoValor}" styleClass="labelInput">
+									<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoCustasReclamante" />
+								</h:selectOneRadio>
+							</fieldset>
+							
+							<h:panelGroup id="pnlInformadoCalculadoCustasReclamante">
+								<h:panelGrid columns="4" rendered="#{descontosCreditosDoReclamante.custasConhecimentoReclamante.tipoValor eq 'INFORMADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+										<h:inputText id="valorParcelaDescCredReclamCustasDevReclamante" value="#{descontosCreditosDoReclamante.custasConhecimentoReclamante.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+										<cobra:toolTip>
+					                      	<rich:message for="valorParcelaDescCredReclamCustasDevReclamante" />
+					                  	</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+										<h:inputText value="#{descontosCreditosDoReclamante.custasConhecimentoReclamante.valorJurosInformado}" onfocus="$(this).currencyMask()" />
+									</h:panelGroup>
+									
+									<h:panelGroup styleClass="mr-10">
+										<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+										<h:outputText value="NÃO" rendered="#{not parametrosDeAtualizacao.correcaoDasCustas}" />
+										<h:outputText value="#{parametrosDeAtualizacao.indiceDeCorrecaoDasCustas eq 'UTILIZAR_INDICE_TRABALHISTA' ? 'ÍNDICE TRABALHISTA' : parametrosDeAtualizacao.outroIndiceDeCorrecaoDasCustas.nome}" rendered="#{parametrosDeAtualizacao.correcaoDasCustas}" />
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Aplicar Juros" styleClass="topLabel"/>
+										<h:outputText value="#{parametrosDeAtualizacao.jurosDeCustas ? 'SIM' : 'NÃO'}" />
+									</h:panelGroup>
+								</h:panelGrid>
+								
+								<h:panelGrid columns="2" rendered="#{descontosCreditosDoReclamante.custasConhecimentoReclamante.tipoValor eq 'CALCULADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Base de Cálculo" />
+										<h:panelGrid columns="1">
+											<h:outputText value="#{calculoAberto.custasJudiciais.baseParaCustasCalculadas.nome}" />
+										</h:panelGrid>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Alíquota (%)" styleClass="topLabel" />
+										<h:outputText value="#{descontosCreditosDoReclamante.custasConhecimentoReclamante.taxaCalculado}">
+											<f:convertNumber pattern="#,##0.00" />
+										</h:outputText>
+									</h:panelGroup>
+								</h:panelGrid>
+							</h:panelGroup>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+			</rich:tab>
+			<rich:tab id="tabOutrosDebitosDoReclamado" label="Outros Débitos do Reclamado" styleClass="terceiraAba">
+				
+				<fieldset id="fsContribSocialSeguradoDevidosOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="contribSocialSeguradoDevidos" value="#{outrosDebitosDoReclamado.marcarContribSocialSegurado}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlContribSocialSeguradoDevidosOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Contribuição Social Segurado Salários Devidos (recolher a previdência)" for="contribSocialSeguradoDevidos" />
+					</h:panelGroup>
+					<br/>
+					<h:panelGroup id="pnlContribSocialSeguradoDevidosOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarContribSocialSegurado}">
+							<h:panelGrid columns="2" columnClasses="pr-25" rendered="#{parametrosDeAtualizacao.lei11941}">
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas Vencidas até Fev/2009 *" styleClass="topLabel" />
+									<h:inputText id="valorParcelasAteFev2009ContribSocialSeguradoOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelasAteFev2009ContribSocialSegurado}" label="Valor das Parcelas Vencidas até Fev/2009" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelasAteFev2009ContribSocialSeguradoOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros das Parcelas Vencidas até Fev/2009" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosAteFev2009ContribSocialSegurado}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas a partir de Mar/2009 *" styleClass="topLabel" />
+									<h:inputText id="valorParcelasAposFev2009ContribSocialSeguradoOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelasAposFev2009ContribSocialSegurado}" label="Valor das Parcelas a partir de Mar/2009" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelasAposFev2009ContribSocialSeguradoOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros das Parcelas a partir de Mar/2009" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosAposFev2009ContribSocialSegurado}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+							</h:panelGrid>
+							<h:panelGrid columns="2" columnClasses="pr-25" rendered="#{not parametrosDeAtualizacao.lei11941}">
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas *" styleClass="topLabel" />
+									<h:inputText id="valorParcelaContribSocialSeguradoOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelaContribSocialSegurado}" label="Valor das Parcelas" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelaContribSocialSeguradoOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosContribSocialSegurado}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>
+				</fieldset>
+				
+				<fieldset id="fsContribSocialPatronalDevidosOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="contribSocialPatronalDevidos" value="#{outrosDebitosDoReclamado.marcarContribSocialPatronal}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlContribSocialPatronalDevidosOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Contribuição Social Patronal Salários Devidos" for="contribSocialPatronalDevidos" />
+					</h:panelGroup>
+					<h:panelGroup id="pnlContribSocialPatronalDevidosOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarContribSocialPatronal}">
+							<h:panelGrid columns="2" columnClasses="pr-25" rendered="#{parametrosDeAtualizacao.lei11941}">
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas Vencidas até Fev/2009 *" styleClass="topLabel" />
+									<h:inputText id="valorParcelasAteFev2009ContribSocialPatronalOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelasAteFev2009ContribSocialPatronal}" label="Valor das Parcelas Vencidas até Fev/2009" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelasAteFev2009ContribSocialPatronalOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros das Parcelas Vencidas até Fev/2009" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosAteFev2009ContribSocialPatronal}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas a partir de Mar/2009 *" styleClass="topLabel" />
+									<h:inputText id="valorParcelasAposFev2009ContribSocialPatronalOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelasAposFev2009ContribSocialPatronal}" label="Valor das Parcelas a partir de Mar/2009" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelasAposFev2009ContribSocialPatronalOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros das Parcelas a partir de Mar/2009" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosAposFev2009ContribSocialPatronal}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+							</h:panelGrid>
+							<h:panelGrid columns="2" columnClasses="pr-25" rendered="#{not parametrosDeAtualizacao.lei11941}">
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas *" styleClass="topLabel" />
+									<h:inputText id="valorParcelaContribSocialPatronalOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelaContribSocialPatronal}" label="Valor das Parcelas" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelaContribSocialPatronalOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosContribSocialPatronal}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsMultaContribSocialDevidosOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaContribSocialDevidos" value="#{outrosDebitosDoReclamado.marcarMultaContribSocialDevidos}"
+												 disabled="#{not parametrosDeAtualizacao.lei11941 and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaContribSocialDevidosOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa sobre Contribuição Social Salários Devidos" for="multaContribSocialDevidos" />
+						<h:panelGroup rendered="#{not parametrosDeAtualizacao.lei11941 and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+							<h:outputText class="linkHelp" id="multaContribSocialDevidosHelp" style="margin-left:1px">
+								<rich:toolTip for="multaContribSocialDevidosHelp" showEvent="mouseover" styleClass="tooltipHelp">
+								   	Para habilitar este campo deve existir Correção Previdenciária de Contribuição Social dos Salários Devidos configurada nos Parâmetros do Cálculo Externo.
+								</rich:toolTip>
+				     	    </h:outputText>
+				     	    <cobra:toolTip>
+		                      	<rich:message for="multaContribSocialDevidosHelp" />
+		                  	</cobra:toolTip>
+	                  	</h:panelGroup>
+					</h:panelGroup>
+					<h:panelGroup id="pnlMultaContribSocialDevidosOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarMultaContribSocialDevidos}">
+							<h:panelGrid columns="2" columnClasses="pr-25, pr-25" rendered="#{parametrosDeAtualizacao.lei11941}">
+								<h:panelGroup>
+									<h:outputLabel value="Data Inicial *" styleClass="topLabel" />
+									<rich:calendar id="dataInicialAteFev2009MultaContribSocialDevidos" value="#{outrosDebitosDoReclamado.dataInicialAteFev2009MultaContribSocialDevidos}" label="Data Inicial" required="false" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+												   disabled="#{parametrosDeAtualizacao.lei11941 and parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosDevidosDoINSS and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+										<f:facet name="footer">
+								        	<h:outputText value="#{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<h:outputText value="Parcelas Vencidas até Fev/2009" />
+									<cobra:toolTip>
+				                      	<rich:message for="dataInicialAteFev2009MultaContribSocialDevidos" />
+				                  	</cobra:toolTip>
+				                  	<h:panelGroup rendered="#{parametrosDeAtualizacao.lei11941 and parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosDevidosDoINSS and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+										<h:outputText class="linkHelp" id="multaDataInicialContribSocialDevidosHelp" style="margin-left:1px">
+											<rich:toolTip for="multaDataInicialContribSocialDevidosHelp" showEvent="mouseover" styleClass="tooltipHelp">
+											   	Para habilitar este campo deve existir Correção Previdenciária de Contribuição Social dos Salários Devidos configurada nos Parâmetros do Cálculo Externo.
+											</rich:toolTip>
+							     	    </h:outputText>
+							     	    <cobra:toolTip>
+					                      	<rich:message for="multaDataInicialContribSocialDevidosHelp" />
+					                  	</cobra:toolTip>
+				                  	</h:panelGroup>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Taxa" styleClass="topLabel" />
+									<h:outputText value="0,33% por dia de atraso, limitado a 20%" />
+								</h:panelGroup>
+								
+								
+								<h:panelGroup>
+									<h:outputLabel value="Data Inicial *" styleClass="topLabel" />
+									<rich:calendar id="dataInicialAposFev2009MultaContribSocialDevidos" value="#{outrosDebitosDoReclamado.dataInicialAposFev2009MultaContribSocialDevidos}" label="Data Inicial" required="false" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+										<f:facet name="footer">
+								        	<h:outputText value="#{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<h:outputText value="Parcelas a partir de Mar/2009" />
+									<cobra:toolTip>
+				                      	<rich:message for="dataInicialAposFev2009MultaContribSocialDevidos" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Taxa" styleClass="topLabel" />
+									<h:outputText value="0,33% por dia de atraso, limitado a 20%" />
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="2" columnClasses="pr-25, pr-25" rendered="#{not parametrosDeAtualizacao.lei11941}">
+								<h:panelGroup>
+									<h:outputLabel value="Data Inicial *" styleClass="topLabel" />
+									<rich:calendar id="dataInicialBaseMultaContribSocialDevidosOutrosDeb" value="#{outrosDebitosDoReclamado.dataInicialBaseMultaContribSocialDevidos}" label="Data Inicial" required="false" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+										<f:facet name="footer">
+								        	<h:outputText value="#{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<cobra:toolTip>
+				                      	<rich:message for="dataInicialBaseMultaContribSocialDevidosOutrosDeb" />
+				                  	</cobra:toolTip>
+									<h:outputText value="Contribuição Social Salários Devidos" />
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Taxa" styleClass="topLabel" />
+									<h:outputText value="0,33% por dia de atraso, limitado a 20%" />
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsContribSocialPagosOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="contribSocialPagos" value="#{outrosDebitosDoReclamado.marcarContribSocialPagos}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlContribSocialPagosOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Contribuição Social Salários Pagos (pacto)" for="contribSocialPagos" />
+					</h:panelGroup>
+					<h:panelGroup id="pnlContribSocialPagosOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarContribSocialPagos}">
+							<h:panelGrid columns="2" columnClasses="pr-25" rendered="#{parametrosDeAtualizacao.lei11941Pago}">
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas Vencidas até Fev/2009 *" styleClass="topLabel" />
+									<h:inputText id="valorParcelasAteFev2009ContribSocialPagosOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelasAteFev2009ContribSocialPagos}" label="Valor das Parcelas Vencidas até Fev/2009" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelasAteFev2009ContribSocialPagosOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros das Parcelas Vencidas até Fev/2009" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosAteFev2009ContribSocialPagos}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas a partir de Mar/2009 *" styleClass="topLabel" />
+									<h:inputText id="valorParcelasAposFev2009ContribSocialPagosOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelasAposFev2009ContribSocialPagos}" label="Valor das Parcelas a partir de Mar/2009" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelasAposFev2009ContribSocialPagosOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros das Parcelas a partir de Mar/2009" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosAposFev2009ContribSocialPagos}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+							</h:panelGrid>
+							<h:panelGrid columns="2" columnClasses="pr-25" rendered="#{not parametrosDeAtualizacao.lei11941Pago}">
+								<h:panelGroup>
+									<h:outputLabel value="Valor das Parcelas *" styleClass="topLabel" />
+									<h:inputText id="valorParcelaContribSocialPagosOutrosDeb" value="#{outrosDebitosDoReclamado.valorParcelaContribSocialPagos}" label="Valor das Parcelas" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelaContribSocialPagosOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.valorJurosContribSocialPagos}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsMultaContribSocialPagosOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaContribSocialPagos" value="#{outrosDebitosDoReclamado.marcarMultaContribSocialPagos}"
+												 disabled="#{not parametrosDeAtualizacao.lei11941Pago and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaContribSocialPagosOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa sobre Contribuição Social Salários Pagos" for="multaContribSocialPagos" />
+						<h:panelGroup rendered="#{not parametrosDeAtualizacao.lei11941Pago and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+							<h:outputText class="linkHelp" id="multaContribSocialPagosHelp" style="margin-left:1px">
+								<rich:toolTip for="multaContribSocialPagosHelp" showEvent="mouseover" styleClass="tooltipHelp">
+								   	Para habilitar este campo deve existir Correção Previdenciária de Contribuição Social dos Salários Pagos configurada nos Parâmetros do Cálculo Externo.
+								</rich:toolTip>
+				     	    </h:outputText>
+				     	    <cobra:toolTip>
+		                      	<rich:message for="multaContribSocialPagosHelp" />
+		                  	</cobra:toolTip>
+	                  	</h:panelGroup>
+					</h:panelGroup>
+					<h:panelGroup id="pnlMultaContribSocialPagosOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarMultaContribSocialPagos}">
+							<h:panelGrid columns="2" columnClasses="pr-25, pr-25" rendered="#{parametrosDeAtualizacao.lei11941Pago}">
+								<h:panelGroup>
+									<h:outputLabel value="Data Inicial *" styleClass="topLabel" />
+									<rich:calendar id="dataInicialAteFev2009MultaContribSocialPagos" value="#{outrosDebitosDoReclamado.dataInicialAteFev2009MultaContribSocialPagos}" label="Data Inicial" required="false" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+										     	   disabled="#{parametrosDeAtualizacao.lei11941Pago and parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosPagosDoINSS and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+										<f:facet name="footer">
+								        	<h:outputText value="#{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<h:outputText value="Parcelas Vencidas até Fev/2009" />
+									<cobra:toolTip>
+				                      	<rich:message for="dataInicialAteFev2009MultaContribSocialPagos" />
+				                  	</cobra:toolTip>
+				                  	<h:panelGroup rendered="#{parametrosDeAtualizacao.lei11941Pago and parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosPagosDoINSS and not parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+										<h:outputText class="linkHelp" id="multaDataInicialContribSocialPagosHelp" style="margin-left:1px">
+											<rich:toolTip for="multaDataInicialContribSocialPagosHelp" showEvent="mouseover" styleClass="tooltipHelp">
+											   	Para habilitar este campo deve existir Correção Previdenciária de Contribuição Social dos Salários Pagos configurada nos Parâmetros do Cálculo Externo.
+											</rich:toolTip>
+							     	    </h:outputText>
+							     	    <cobra:toolTip>
+					                      	<rich:message for="multaDataInicialContribSocialPagosHelp" />
+					                  	</cobra:toolTip>
+				                  	</h:panelGroup>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Taxa" styleClass="topLabel" />
+									<h:outputText value="0,33% por dia de atraso, limitado a 20%" />
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Data Inicial *" styleClass="topLabel" />
+									<rich:calendar id="dataInicialAposFev2009MultaContribSocialPagos" value="#{outrosDebitosDoReclamado.dataInicialAposFev2009MultaContribSocialPagos}" label="Data Inicial" required="false" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+										<f:facet name="footer">
+								        	<h:outputText value="#{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<h:outputText value="Parcelas a partir de Mar/2009" />
+									<cobra:toolTip>
+			                      		<rich:message for="dataInicialAposFev2009MultaContribSocialPagos" />
+			                  		</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Taxa" styleClass="topLabel" />
+									<h:outputText value="0,33% por dia de atraso, limitado a 20%" />
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="2" columnClasses="pr-25, pr-25" rendered="#{not parametrosDeAtualizacao.lei11941Pago}">
+								<h:panelGroup>
+									<h:outputLabel value="Data Inicial *" styleClass="topLabel" />
+									<rich:calendar id="dataInicialBaseMultaContribSocialPagosOutrosDeb" value="#{outrosDebitosDoReclamado.dataInicialBaseMultaContribSocialPagos}" label="Data Inicial" required="false" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+										<f:facet name="footer">
+								        	<h:outputText value="#{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<cobra:toolTip>
+				                      	<rich:message for="dataInicialBaseMultaContribSocialPagosOutrosDeb" />
+				                  	</cobra:toolTip>
+									<h:outputText value="Contribuição Social Salários Devidos" />
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Taxa" styleClass="topLabel" />
+									<h:outputText value="0,33% por dia de atraso, limitado a 20%" />
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsJurosPrevidenciaPrivadaOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="jurosPrevidenciaPrivateOutrosDeb" value="#{outrosDebitosDoReclamado.marcarJurosPrevidenciaPrivada}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlJurosPrevidenciaPrivadaOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Juros sobre Previdência Privada" for="jurosPrevidenciaPrivateOutrosDeb" />
+					</h:panelGroup>
+					<h:panelGroup id="pnlJurosPrevidenciaPrivadaOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarJurosPrevidenciaPrivada}">
+							<h:panelGrid columns="3">
+									<h:panelGroup>
+										<h:outputLabel value="Valor dos Juros *" styleClass="topLabel" />
+										<h:inputText id="valorJurosPrevidenciaPrivadaOutrosDeb" value="#{outrosDebitosDoReclamado.valorJurosPrevidenciaPrivada}" label="Valor dos Juros" required="false" onfocus="$(this).currencyMask()" />
+										<cobra:toolTip>
+					                      	<rich:message for="valorJurosPrevidenciaPrivadaOutrosDeb" />
+					                  	</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+										<h:selectOneMenu value="#{outrosDebitosDoReclamado.indiceTrabalhistaInformadoPrevidenciaPrivada}" style="width:160px;">
+											<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+										</h:selectOneMenu>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="boAplicarJurosPrevidenciaPrivadaOutrosDeb" value="#{outrosDebitosDoReclamado.aplicarJurosPrevidenciaPrivada}" />
+										<h:outputLabel value="Aplicar Juros" for="boAplicarJurosPrevidenciaPrivadaOutrosDeb" />
+									</h:panelGroup>
+								</h:panelGrid>
+							</h:panelGroup>
+						</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsMultaIndenizTerceiroReclamOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaIndenizTerceiroReclamOutrosDeb" value="#{outrosDebitosDoReclamado.marcarMultaIndenizTerceiroReclamado}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaIndenizTerceiroReclamOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa/Indenização Devida a Terceiros pelo Reclamado" for="multaIndenizTerceiroReclamOutrosDeb" />
+					</h:panelGroup>
+					<h:panelGroup id="pnlMultaIndenizTerceiroReclamOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarMultaIndenizTerceiroReclamado}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Descrição *" styleClass="topLabel" />
+									<h:inputText id="descricaoMultaTerceiroReclamadoOutrosDeb" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="descricaoMultaTerceiroReclamadoOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Credor *" styleClass="topLabel" />
+									<h:inputText id="credorMultaTerceiroReclamadoOutrosDeb" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.credor}" label="Credor" required="false" maxlength="100" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="credorMultaTerceiroReclamadoOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoMultaIndenizTerceiroReclamanteOutrosDeb" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoMultaIndenizTerceiroReclamanteOutrosDeb">
+									<h:panelGrid columns="4" rendered="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaOutrosDebMultaTerceiroReclamado" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaOutrosDebMultaTerceiroReclamado" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosMultaIndenizTerceiroReclamanteOutrosDeb">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosOutrosDebMultaTerceiroReclamado" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.valorJurosInformado}" onfocus="$(this).currencyMask()" disabled="#{not outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosOutrosDebMultaTerceiroReclamado" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlOutrosDebReclamadoMultaDevTercReclamanteAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosOutrosDebReclamadoMultaDevTercReclamante" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosMultaIndenizTerceiroReclamanteOutrosDeb,pnlOutrosDebReclamadoMultaDevTercReclamanteAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosOutrosDebReclamadoMultaDevTercReclamante" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeOutrosDebReclamadoMultaDevTercReclamante" /><br />
+														<rich:calendar id="dataJurosAPartirDeOutrosDebReclamadoMultaDevTercReclamante"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeOutrosDebReclamadoMultaDevTercReclamante"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeOutrosDebReclamadoMultaDevTercReclamanteHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeOutrosDebReclamadoMultaDevTercReclamanteHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Principal" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="outrosDebitosReclamadoMultaDescontoContrSocial" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:outrosDebitosReclamadoMultaDescontoContrSocial'),$('formulario:outrosDebitosReclamadoMultaDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="outrosDebitosReclamadoMultaDescontoPrevPriv" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:outrosDebitosReclamadoMultaDescontoContrSocial'),$('formulario:outrosDebitosReclamadoMultaDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaOutrosDebMultaTerceiroReclamado" value="#{outrosDebitosDoReclamado.multaIndenizTerceiroReclamado.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaOutrosDebMultaTerceiroReclamado" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemMultasIndenizTerceiroReclamadoOutrosDeb}" process="pnlMultaIndenizTerceiroReclamOutrosDeb" reRender="pnlMultaIndenizTerceiroReclamOutrosDeb painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>
+										
+							<h:panelGroup id="listagemMultasTerceiroReclamadoOutrosDeb">														
+								<rich:dataTable value="#{listaMultasIndenizTerceiroReclamadoOutrosDeb}" rendered="#{listaMultasIndenizTerceiroReclamadoOutrosDeb.rowCount > 0}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_multa"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+								    	<h:commandLink actionListener="#{apresentador.removerItemMultasIndenizTerceiroReclamadoOutrosDeb}" process="listagemMultasTerceiroReclamadoOutrosDeb" reRender="listagemMultasTerceiroReclamadoOutrosDeb" limitToList="true" ajaxSingle="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_multa.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_multa.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_multa.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_multa.valorJurosInformado == null ? '-' : _multa.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_multa.indiceTrabalhistaInformado.nome}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_multa.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_multa.taxaCalculado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Credor</f:facet>	
+						    			<h:outputText value="#{_multa.credor}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_multa.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_multa.dataApartirDeAplicarJurosInformado != null ? _multa.dataApartirDeAplicarJurosInformado : outrosDebitosDoReclamado.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_multa.tipoValor eq 'INFORMADO' and _multa.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>
+								</rich:dataTable>
+							</h:panelGroup>		
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsHonorarioDevidosReclamOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="honorarioDevidosReclamOutrosDeb" value="#{outrosDebitosDoReclamado.marcarHonorariosDevReclamado}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlHonorarioDevidosReclamOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Honorários Devidos pelo Reclamado" for="honorarioDevidosReclamOutrosDeb" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlHonorarioDevidosReclamOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarHonorariosDevReclamado}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Tipo de Honorário *" styleClass="topLabel" />
+									<h:selectOneMenu value="#{outrosDebitosDoReclamado.honorariosDevReclamado.tipo}" label="Tipo de Honorário">
+										<s:selectItems value="#{enumItems.tipoHonorarioEnum}" var="item" label="#{item.nome}" />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Descrição *" styleClass="topLabel" />
+									<h:inputText id="descricaoHonorariosDevReclamadoOutrosDeb" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="descricaoHonorariosDevReclamadoOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+							</h:panelGrid>
+								
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<h:outputLabel value="Credor *" styleClass="topLabel" />
+									<h:inputText id="credorHonorariosDevReclamadoOutrosDeb" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.credor}" label="Credor" required="false" maxlength="100" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="credorHonorariosDevReclamadoOutrosDeb" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px; width: 200px;">
+										<legend>Documento Fiscal</legend>
+										<h:selectOneRadio id="outrosDebitosReclamadoHonorariosDocFiscal" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.tipoDocFiscal}" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+										<h:outputLabel value="Número: " />
+										<h:inputText id="numDocFiscalHonorariosDevReclamadoOutrosDeb" label="Número" 
+														value="#{outrosDebitosDoReclamado.honorariosDevReclamado.numeroDocFiscal}" onfocus="$(this).dynamicMask('formulario:outrosDebitosReclamadoHonorariosDocFiscal')">
+											<f:converter converterId="mascaraDinamicaConverter"/>
+											<f:validator validatorId="validadorDinamico"/>
+											<f:param name="seletor" value="documentoFiscalReclamanteHonorariosOutrosDebitosReclamado"/>
+										</h:inputText>
+										<cobra:toolTip>
+					                      	<rich:message for="numDocFiscalHonorariosDevReclamadoOutrosDeb" />
+					                  	</cobra:toolTip>
+									</fieldset>
+								</h:panelGroup>
+							
+								<h:panelGroup id="pnlJurosIrpfHonorarioReclamanteOutrosDeb">
+									<fieldset style="margin: 5px 0px 5px 0px; width: 200px;">
+										<h:selectBooleanCheckbox id="boImpostoRendaHonorariosReclamanteOutrosDeb" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.apurarIrpf}">
+											<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="pnlJurosIrpfHonorarioReclamanteOutrosDeb" />
+										</h:selectBooleanCheckbox>
+										<h:outputLabel value="Apurar Imposto de Renda" for="boImpostoRendaHonorariosReclamanteOutrosDeb" />
+										<br/>
+										<h:panelGroup rendered="#{outrosDebitosDoReclamado.honorariosDevReclamado.apurarIrpf and outrosDebitosDoReclamado.honorariosDevReclamado.tipoValor eq 'INFORMADO'}">
+											<h:selectBooleanCheckbox id="boIncidirSobreJurosOutrosDeb" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.incidirIrpfSobreJuros}" />
+											<h:outputLabel value="Incidir sobre Juros" for="boIncidirSobreJurosOutrosDeb" />
+										</h:panelGroup>
+										<h:selectOneRadio value="#{outrosDebitosDoReclamado.honorariosDevReclamado.tipoIrpf}" rendered="#{outrosDebitosDoReclamado.honorariosDevReclamado.apurarIrpf}" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoDeImpostoDeRendaEnum}" var="item" label="#{item.nome}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>	
+							</h:panelGrid>	
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{outrosDebitosDoReclamado.honorariosDevReclamado.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoHonorarioReclamanteOutrosDeb" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoHonorarioReclamanteOutrosDeb">
+									<h:panelGrid columns="4" rendered="#{outrosDebitosDoReclamado.honorariosDevReclamado.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaOutrosDebHonorariosDevReclamado" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaOutrosDebHonorariosDevReclamado" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosHonorarioReclamanteOutrosDeb">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosHonorariosDevReclamadoOutrosDeb" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.valorJurosInformado}" onfocus="$(this).currencyMask()" disabled="#{not outrosDebitosDoReclamado.honorariosDevReclamado.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosHonorariosDevReclamadoOutrosDeb" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{outrosDebitosDoReclamado.honorariosDevReclamado.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlOutrosDebReclamadoHonorariosDevReclamadoAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosOutrosDebReclamadoHonorariosDevReclamado" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosHonorarioReclamanteOutrosDeb,pnlOutrosDebReclamadoHonorariosDevReclamadoAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosOutrosDebReclamadoHonorariosDevReclamado" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{outrosDebitosDoReclamado.honorariosDevReclamado.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeOutrosDebReclamadoHonorariosDevReclamado" /><br />
+														<rich:calendar id="dataJurosAPartirDeOutrosDebReclamadoHonorariosDevReclamado"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{outrosDebitosDoReclamado.honorariosDevReclamado.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeOutrosDebReclamadoHonorariosDevReclamado"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeOutrosDebReclamadoHonorariosDevReclamadoHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeOutrosDebReclamadoHonorariosDevReclamadoHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{outrosDebitosDoReclamado.honorariosDevReclamado.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Bruto Devido ao Reclamante" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="outrosDebitosReclamadoHonorarioDescontoContrSocial" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:outrosDebitosReclamadoHonorarioDescontoContrSocial'),$('formulario:outrosDebitosReclamadoHonorarioDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="outrosDebitosReclamadoHonorarioDescontoPrevPriv" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:outrosDebitosReclamadoHonorarioDescontoContrSocial'),$('formulario:outrosDebitosReclamadoHonorarioDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaOutrosDebHonorariosDevReclamado" value="#{outrosDebitosDoReclamado.honorariosDevReclamado.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaOutrosDebHonorariosDevReclamado" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>	
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemHonorariosDevReclamadoOutrosDeb}" process="pnlHonorarioDevidosReclamOutrosDeb" reRender="pnlHonorarioDevidosReclamOutrosDeb painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>
+							
+							<h:panelGroup id="listagemHonorariosOutrosDeb">
+								<rich:dataTable value="#{listaHonorariosDevReclamadoOutrosDeb}" rendered="#{listaHonorariosDevReclamadoOutrosDeb.rowCount > 0}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_honorario"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+								    	<h:commandLink actionListener="#{apresentador.removerItemHonorariosDevReclamadoOutrosDeb}" process="listagemHonorariosOutrosDeb" reRender="listagemHonorariosOutrosDeb" limitToList="true" ajaxSingle="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_honorario.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_honorario.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Tipo</f:facet>
+						    			<h:outputText value="#{_honorario.tipo.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_honorario.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_honorario.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_honorario.indiceTrabalhistaInformado.nome}" rendered="#{_honorario.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_honorario.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_honorario.taxaCalculado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Apurar IR</f:facet>	
+						    			<h:outputText value="#{_honorario.apurarIrpf ? 'SIM' : 'NÃO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Credor</f:facet>	
+						    			<h:outputText value="#{_honorario.credor}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_honorario.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_honorario.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_honorario.dataApartirDeAplicarJurosInformado != null ? _honorario.dataApartirDeAplicarJurosInformado : outrosDebitosDoReclamado.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_honorario.tipoValor eq 'INFORMADO' and _honorario.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>
+								</rich:dataTable>
+							</h:panelGroup>	
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsContribSocial10OutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="contribSocial10OutrosDeb" value="#{outrosDebitosDoReclamado.marcarContribSocial10}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlContribSocial10OutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Contribuição Social 10% (Lei Complementar 110/2001)" for="contribSocial10OutrosDeb" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlContribSocial10OutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarContribSocial10}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+									<h:inputText id="valorParcelaOutrosDebContribSocial10" value="#{outrosDebitosDoReclamado.valorParcelaContribSocial10}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelaOutrosDebContribSocial10" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+									<h:selectOneMenu value="#{outrosDebitosDoReclamado.indiceTrabalhistaContribSocial10}" style="width:160px;">
+										<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+									</h:selectOneMenu>
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsContribSocial05OutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="contribSocial05OutrosDeb" value="#{outrosDebitosDoReclamado.marcarContribSocial05}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlContribSocial05OutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Contribuição Social 0,5% (Lei Complementar 110/2001)" for="contribSocial05OutrosDeb" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlContribSocial05OutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarContribSocial05}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+									<h:inputText id="valorParcelaOutrosDebContribSocial05" value="#{outrosDebitosDoReclamado.valorParcelaContribSocial05}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelaOutrosDebContribSocial05" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+									<h:selectOneMenu value="#{outrosDebitosDoReclamado.indiceTrabalhistaContribSocial05}" style="width:160px;">
+										<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+									</h:selectOneMenu>
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsCustasConhecimentoReclamadoOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="custasConhecimentoReclamadoOutrosDeb" value="#{outrosDebitosDoReclamado.marcarCustasConhecimentoReclamado}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlCustasConhecimentoReclamadoOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Custas de Conhecimento Devidas pelo Reclamado" for="custasConhecimentoReclamadoOutrosDeb" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlCustasConhecimentoReclamadoOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarCustasConhecimentoReclamado}">
+					
+							<fieldset style="margin: 5px 0px 5px 0px; width: 200px;"><legend>Tipo do Valor</legend>
+								<h:selectOneRadio value="#{outrosDebitosDoReclamado.custasConhecimentoReclamado.tipoValor}" styleClass="labelInput">
+									<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoCustasConhecimentoReclamadoOutrosDeb" />
+								</h:selectOneRadio>
+							</fieldset>
+							
+							<h:panelGroup id="pnlInformadoCalculadoCustasConhecimentoReclamadoOutrosDeb">
+								<h:panelGrid columns="4" rendered="#{outrosDebitosDoReclamado.custasConhecimentoReclamado.tipoValor eq 'INFORMADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+										<h:inputText id="valorParcelaOutrosDebCustasConhecimentoReclamado" value="#{outrosDebitosDoReclamado.custasConhecimentoReclamado.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()"/>
+										<cobra:toolTip>
+					                      	<rich:message for="valorParcelaOutrosDebCustasConhecimentoReclamado" />
+					                  	</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+										<h:inputText value="#{outrosDebitosDoReclamado.custasConhecimentoReclamado.valorJurosInformado}" onfocus="$(this).currencyMask()" />
+									</h:panelGroup>
+									
+									<h:panelGroup styleClass="mr-10">
+										<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+										<h:outputText value="NÃO" rendered="#{not parametrosDeAtualizacao.correcaoDasCustas}" />
+										<h:outputText value="#{parametrosDeAtualizacao.indiceDeCorrecaoDasCustas eq 'UTILIZAR_INDICE_TRABALHISTA' ? 'ÍNDICE TRABALHISTA' : parametrosDeAtualizacao.outroIndiceDeCorrecaoDasCustas.nome}" rendered="#{parametrosDeAtualizacao.correcaoDasCustas}" />
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Aplicar Juros" styleClass="topLabel"/>
+										<h:outputText value="#{parametrosDeAtualizacao.jurosDeCustas ? 'SIM' : 'NÃO'}" />
+									</h:panelGroup>
+								</h:panelGrid>
+								
+								<h:panelGrid columns="2" rendered="#{outrosDebitosDoReclamado.custasConhecimentoReclamado.tipoValor eq 'CALCULADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Base de Cálculo" />
+										<h:panelGrid columns="1">
+											<h:outputText value="#{calculoAberto.custasJudiciais.baseParaCustasCalculadas.nome}" />
+										</h:panelGrid>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Alíquota (%)" styleClass="topLabel" />
+										<h:outputText value="#{outrosDebitosDoReclamado.custasConhecimentoReclamado.taxaCalculado}">
+											<f:convertNumber pattern="#,##0.00" />
+										</h:outputText>
+									</h:panelGroup>
+								</h:panelGrid>
+							</h:panelGroup>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsCustasLiquidacaoOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="custasLiquidacaoOutrosDeb" value="#{outrosDebitosDoReclamado.marcarCustasLiquidacao}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlCustasLiquidacaoOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Custas de Liquidação" for="custasLiquidacaoOutrosDeb" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlCustasLiquidacaoOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarCustasLiquidacao}">
+						
+							<fieldset style="margin: 5px 0px 5px 0px; width: 200px;"><legend>Tipo do Valor</legend>
+								<h:selectOneRadio value="#{outrosDebitosDoReclamado.custasLiquidacao.tipoValor}" styleClass="labelInput">
+									<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoCustasLiquidacaoOutrosDeb" />
+								</h:selectOneRadio>
+							</fieldset>
+							
+							<h:panelGroup id="pnlInformadoCalculadoCustasLiquidacaoOutrosDeb">
+								<h:panelGrid columns="4" rendered="#{outrosDebitosDoReclamado.custasLiquidacao.tipoValor eq 'INFORMADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+										<h:inputText id="valorParcelaOutrosDebCustasLiquidacao" value="#{outrosDebitosDoReclamado.custasLiquidacao.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+										<cobra:toolTip>
+					                      	<rich:message for="valorParcelaOutrosDebCustasLiquidacao" />
+					                  	</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+										<h:inputText value="#{outrosDebitosDoReclamado.custasLiquidacao.valorJurosInformado}" onfocus="$(this).currencyMask()" />
+									</h:panelGroup>
+									
+									<h:panelGroup styleClass="mr-10">
+										<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+										<h:outputText value="NÃO" rendered="#{not parametrosDeAtualizacao.correcaoDasCustas}" />
+										<h:outputText value="#{parametrosDeAtualizacao.indiceDeCorrecaoDasCustas eq 'UTILIZAR_INDICE_TRABALHISTA' ? 'ÍNDICE TRABALHISTA' : parametrosDeAtualizacao.outroIndiceDeCorrecaoDasCustas.nome}" rendered="#{parametrosDeAtualizacao.correcaoDasCustas}" />
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Aplicar Juros" styleClass="topLabel"/>
+										<h:outputText value="#{parametrosDeAtualizacao.jurosDeCustas ? 'SIM' : 'NÃO'}" />
+									</h:panelGroup>
+								</h:panelGrid>
+								
+								<h:panelGrid columns="2" rendered="#{outrosDebitosDoReclamado.custasLiquidacao.tipoValor eq 'CALCULADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Base de Cálculo" />
+										<h:panelGrid columns="1">
+											<h:outputText value="#{calculoAberto.custasJudiciais.baseParaCustasCalculadas.nome}" />
+										</h:panelGrid>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Alíquota (%)" styleClass="topLabel" />
+										<h:outputText value="#{outrosDebitosDoReclamado.custasLiquidacao.taxaCalculado}">
+											<f:convertNumber pattern="#,##0.00" />
+										</h:outputText>
+									</h:panelGroup>
+								</h:panelGrid>
+							</h:panelGroup>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsCustasExecucaoOutrosDeb" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="custasExecucaoOutrosDeb" value="#{outrosDebitosDoReclamado.marcarCustasExecucao}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlCustasExecucaoOutrosDeb" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Custas de Execução" for="custasExecucaoOutrosDeb" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlCustasExecucaoOutrosDeb">
+						<h:panelGroup rendered="#{outrosDebitosDoReclamado.marcarCustasExecucao}">
+							<h:panelGrid columns="4">
+								<h:panelGroup>
+									<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+									<h:inputText id="valorParcelaOutrosDebCustasExecucao" value="#{outrosDebitosDoReclamado.custasExecucao.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+									<cobra:toolTip>
+				                      	<rich:message for="valorParcelaOutrosDebCustasExecucao" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+									<h:inputText value="#{outrosDebitosDoReclamado.custasExecucao.valorJurosInformado}" onfocus="$(this).currencyMask()" />
+								</h:panelGroup>
+								
+								<h:panelGroup styleClass="mr-10">
+									<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+									<h:outputText value="NÃO" rendered="#{not parametrosDeAtualizacao.correcaoDasCustas}" />
+									<h:outputText value="#{parametrosDeAtualizacao.indiceDeCorrecaoDasCustas eq 'UTILIZAR_INDICE_TRABALHISTA' ? 'ÍNDICE TRABALHISTA' : parametrosDeAtualizacao.outroIndiceDeCorrecaoDasCustas.nome}" rendered="#{parametrosDeAtualizacao.correcaoDasCustas}" />
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Aplicar Juros" styleClass="topLabel"/>
+									<h:outputText value="#{parametrosDeAtualizacao.jurosDeCustas ? 'SIM' : 'NÃO'}" />
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+			</rich:tab>
+			<rich:tab id="tabDebitosDoReclamante" label="Débitos do Reclamante" styleClass="quartaAba">
+				<fieldset id="fsMultaIndenizTerceiroReclamanteDebReclam" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="multaIndenizTerceiroReclamanteDebReclam" value="#{debitosDoReclamante.marcarMultaIndenizDevReclamante}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlMultaIndenizTerceiroReclamanteDebReclam" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Multa/Indenização Devida a Terceiros pelo Reclamante" for="multaIndenizTerceiroReclamanteDebReclam" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlMultaIndenizTerceiroReclamanteDebReclam">
+						<h:panelGroup rendered="#{debitosDoReclamante.marcarMultaIndenizDevReclamante}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Descrição *" styleClass="topLabel" />
+									<h:inputText id="descricaoMultaDevReclamanteDebReclam" value="#{debitosDoReclamante.multaIndenizDevReclamante.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="descricaoMultaDevReclamanteDebReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>	
+								
+								<h:panelGroup>
+									<h:outputLabel value="Credor *" styleClass="topLabel" />
+									<h:inputText id="credorMultaDevReclamanteDebReclam" value="#{debitosDoReclamante.multaIndenizDevReclamante.credor}" label="Credor" required="false" maxlength="100" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="credorMultaDevReclamanteDebReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{debitosDoReclamante.multaIndenizDevReclamante.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoMultaIndenizTerceiroReclamanteDebReclam" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoMultaIndenizTerceiroReclamanteDebReclam">
+									<h:panelGrid columns="4" rendered="#{debitosDoReclamante.multaIndenizDevReclamante.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaDebReclamMultaDevReclamante" value="#{debitosDoReclamante.multaIndenizDevReclamante.valorParcelaInformado}"  label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaDebReclamMultaDevReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosMultaIndenizTerceiroReclamanteDebReclam">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosDebReclamMultaDevReclamante" value="#{debitosDoReclamante.multaIndenizDevReclamante.valorJurosInformado}"  onfocus="$(this).currencyMask()" disabled="#{not debitosDoReclamante.multaIndenizDevReclamante.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosDebReclamMultaDevReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{debitosDoReclamante.multaIndenizDevReclamante.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlDebReclamanteMultaDevReclamanteAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosDebReclamanteMultaDevReclamante" value="#{debitosDoReclamante.multaIndenizDevReclamante.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosMultaIndenizTerceiroReclamanteDebReclam,pnlDebReclamanteMultaDevReclamanteAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosDebReclamanteMultaDevReclamante" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{debitosDoReclamante.multaIndenizDevReclamante.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeOutrosDebReclamadoMultaDevTercReclamante" /><br />
+														<rich:calendar id="dataJurosAPartirDeDebReclamanteMultaDevReclamante"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{debitosDoReclamante.multaIndenizDevReclamante.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeDebReclamanteMultaDevReclamante"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeDebReclamanteMultaDevReclamanteHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeDebReclamanteMultaDevReclamanteHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{debitosDoReclamante.multaIndenizDevReclamante.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Principal" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="debitosReclamanteMultaDescontoContrSocial" value="#{debitosDoReclamante.multaIndenizDevReclamante.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:debitosReclamanteMultaDescontoContrSocial'),$('formulario:debitosReclamanteMultaDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="debitosReclamanteMultaDescontoPrevPriv" value="#{debitosDoReclamante.multaIndenizDevReclamante.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:debitosReclamanteMultaDescontoContrSocial'),$('formulario:debitosReclamanteMultaDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaDebReclamMultaDevReclamante" value="#{debitosDoReclamante.multaIndenizDevReclamante.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaDebReclamMultaDevReclamante" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemMultasIndenizDevReclamanteDebReclam}" process="pnlMultaIndenizTerceiroReclamanteDebReclam" reRender="pnlMultaIndenizTerceiroReclamanteDebReclam painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />	
+							</h:panelGrid>
+						
+							<h:panelGroup id="listagemMultasDevReclamanteDebReclam">
+								<rich:dataTable value="#{listaMultasIndenizDevReclamanteDebReclam}" rendered="#{listaMultasIndenizDevReclamanteDebReclam.rowCount > 0}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_multa"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+								    	<h:commandLink actionListener="#{apresentador.removerItemMultasIndenizDevReclamanteDebReclam}" process="listagemMultasDevReclamanteDebReclam" reRender="listagemMultasDevReclamanteDebReclam" limitToList="true" ajaxSingle="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_multa.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_multa.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_multa.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_multa.valorJurosInformado == null ? '-' : _multa.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_multa.indiceTrabalhistaInformado.nome}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_multa.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_multa.taxaCalculado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Credor</f:facet>	
+						    			<h:outputText value="#{_multa.credor}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_multa.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_multa.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_multa.dataApartirDeAplicarJurosInformado != null ? _multa.dataApartirDeAplicarJurosInformado : debitosDoReclamante.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_multa.tipoValor eq 'INFORMADO' and _multa.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>
+								</rich:dataTable>
+							</h:panelGroup>	
+						</h:panelGroup>	
+					</h:panelGroup>
+				</fieldset>
+				
+				<fieldset id="fsHonorariosDevidoReclamanteDebReclam" class="mb-10">
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="honorariosDevidoReclamanteDebReclam" value="#{debitosDoReclamante.marcarHonorariosDevReclamante}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlHonorariosDevidoReclamanteDebReclam" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Honorários Devidos pelo Reclamante" for="honorariosDevidoReclamanteDebReclam" />
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlHonorariosDevidoReclamanteDebReclam">
+						<h:panelGroup rendered="#{debitosDoReclamante.marcarHonorariosDevReclamante}">
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<h:outputLabel value="Tipo de Honorário *" styleClass="topLabel" />
+									<h:selectOneMenu value="#{debitosDoReclamante.honorariosDevReclamante.tipo}" label="Tipo de Honorário">
+										<s:selectItems value="#{enumItems.tipoHonorarioEnum}" var="item" label="#{item.nome}" />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Descrição *" styleClass="topLabel" />
+									<h:inputText id="descricaoHonorariosDevReclamanteDebReclam" value="#{debitosDoReclamante.honorariosDevReclamante.descricao}" label="Descrição" required="false" maxlength="60" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="descricaoHonorariosDevReclamanteDebReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<h:outputLabel value="Credor *" styleClass="topLabel" />
+									<h:inputText id="credorHonorariosDevReclamanteDebReclam" value="#{debitosDoReclamante.honorariosDevReclamante.credor}" label="Credor" required="false" maxlength="100" size="50" />
+									<cobra:toolTip>
+				                      	<rich:message for="credorHonorariosDevReclamanteDebReclam" />
+				                  	</cobra:toolTip>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px; width: 200px;">
+										<legend>Documento Fiscal</legend>
+										<h:selectOneRadio id="debitosReclamHonorariosDocFiscal" value="#{debitosDoReclamante.honorariosDevReclamante.tipoDocFiscal}" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+										<h:outputLabel value="Número: " />
+										<h:inputText id="numDocFiscalHonorariosDevReclamDebReclam" label="Número" 
+														value="#{debitosDoReclamante.honorariosDevReclamante.numeroDocFiscal}" 
+														onfocus="$(this).dynamicMask('formulario:debitosReclamHonorariosDocFiscal')">
+											<f:converter converterId="mascaraDinamicaConverter"/>
+											<f:validator validatorId="validadorDinamico"/>
+											<f:param name="seletor" value="documentoFiscalReclamanteHonorariosDebitosReclam"/>
+										</h:inputText>
+										<cobra:toolTip>
+					                      	<rich:message for="numDocFiscalHonorariosDevReclamDebReclam" />
+					                  	</cobra:toolTip>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlHonorarioJuros">
+									<fieldset style="margin: 5px 0px 5px 0px; width: 200px;">
+										<h:selectBooleanCheckbox id="boImpostoRendaHonorariosReclamanteDebReclam" value="#{debitosDoReclamante.honorariosDevReclamante.apurarIrpf}">
+											<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="pnlHonorarioJuros" />
+										</h:selectBooleanCheckbox>
+										<h:outputLabel value="Apurar Imposto de Renda" for="boImpostoRendaHonorariosReclamanteDebReclam" />
+										<br/>
+										<h:panelGroup rendered="#{debitosDoReclamante.honorariosDevReclamante.apurarIrpf and debitosDoReclamante.honorariosDevReclamante.tipoValor eq 'INFORMADO'}">
+											<h:selectBooleanCheckbox id="boIncidirSobreJurosDebReclam" value="#{debitosDoReclamante.honorariosDevReclamante.incidirIrpfSobreJuros}" />
+											<h:outputLabel value="Incidir sobre Juros" for="boIncidirSobreJurosDebReclam" />
+										</h:panelGroup>
+										<h:selectOneRadio value="#{debitosDoReclamante.honorariosDevReclamante.tipoIrpf}" rendered="#{debitosDoReclamante.honorariosDevReclamante.apurarIrpf}" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoDeImpostoDeRendaEnum}" var="item" label="#{item.nome}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+							</h:panelGrid>
+							
+							<h:panelGrid columns="3">
+								<h:panelGroup>
+									<fieldset style="margin: 5px 0px 5px 0px;"><legend>Tipo do Valor</legend>
+										<h:selectOneRadio value="#{debitosDoReclamante.honorariosDevReclamante.tipoValor}" layout="pageDirection" styleClass="labelInput">
+											<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlHonorarioJuros,pnlInformadoCalculadoHonorarioReclamanteDebReclam" />
+										</h:selectOneRadio>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="pnlInformadoCalculadoHonorarioReclamanteDebReclam">
+									<h:panelGrid columns="4" rendered="#{debitosDoReclamante.honorariosDevReclamante.tipoValor eq 'INFORMADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+											<h:inputText id="valorParcelaDebReclamHonorariosDevReclamante" value="#{debitosDoReclamante.honorariosDevReclamante.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+											<cobra:toolTip>
+						                      	<rich:message for="valorParcelaDebReclamHonorariosDevReclamante" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup id="pnlJurosHonorarioReclamanteDebReclam">
+											<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+											<h:inputText id="valorJurosHonorariosDevReclamanteDebReclam" value="#{debitosDoReclamante.honorariosDevReclamante.valorJurosInformado}" onfocus="$(this).currencyMask()" disabled="#{not debitosDoReclamante.honorariosDevReclamante.aplicarJurosInformado}"/>
+											<cobra:toolTip>
+						                      	<rich:message for="valorJurosHonorariosDevReclamanteDebReclam" />
+						                  	</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+											<h:selectOneMenu value="#{debitosDoReclamante.honorariosDevReclamante.indiceTrabalhistaInformado}" style="width:160px;">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoExternoEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGrid id="pnlDebReclamHonorariosDevReclamanteAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="boAplicarJurosHonorariosReclamanteDebReclam" value="#{debitosDoReclamante.honorariosDevReclamante.aplicarJurosInformado}">
+														<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlJurosHonorarioReclamanteDebReclam,pnlDebReclamHonorariosDevReclamanteAplicarJurosInformado" />
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Juros" for="boAplicarJurosHonorariosReclamanteDebReclam" />
+												</h:panelGroup>
+												
+												<h:panelGroup layout="block" rendered="#{debitosDoReclamante.honorariosDevReclamante.aplicarJurosInformado}">
+													<h:panelGroup>
+														<h:outputLabel value="A partir de" for="dataJurosAPartirDeDebReclamHonorariosDevReclamante" /><br />
+														<rich:calendar id="dataJurosAPartirDeDebReclamHonorariosDevReclamante"
+																	   label="A partir de" inputSize="10" popup="true"
+																	   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																	   value="#{debitosDoReclamante.honorariosDevReclamante.dataApartirDeAplicarJurosInformado}">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<cobra:toolTip>
+										                 	<rich:message for="dataJurosAPartirDeDebReclamHonorariosDevReclamante"/>
+										                 </cobra:toolTip>
+													</h:panelGroup>
+													<h:outputText class="linkHelp" id="dataJurosAPartirDeDebReclamHonorariosDevReclamanteHelp" style="margin-left:1px">
+														<rich:toolTip for="dataJurosAPartirDeDebReclamHonorariosDevReclamanteHelp" showEvent="mouseover" styleClass="tooltipHelp">
+														   	Se a data "A partir de" não for informada, os juros serão apurados a partir do dia seguinte à data da última atualização lançada na aba parâmetros do cálculo externo.
+														</rich:toolTip>
+										     	    </h:outputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="2" rendered="#{debitosDoReclamante.honorariosDevReclamante.tipoValor eq 'CALCULADO'}">
+										<h:panelGroup>
+											<h:outputLabel value="Base de Cálculo" />
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:selectBooleanCheckbox value="#{true}" disabled="true" />
+													<h:outputLabel value="(+) Bruto Devido ao Reclamante" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="debitosReclamanteHonorarioDescontoContrSocial" value="#{debitosDoReclamante.honorariosDevReclamante.aplicarDescontoContribSocialCalculado}" onchange="desmarcarDescontoPrevPriv($('formulario:debitosReclamanteHonorarioDescontoContrSocial'),$('formulario:debitosReclamanteHonorarioDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Contribuição Social" />
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:selectBooleanCheckbox id="debitosReclamanteHonorarioDescontoPrevPriv" value="#{debitosDoReclamante.honorariosDevReclamante.aplicarDescontoPrevPrivadaCalculado}" onchange="marcarDescontoContrSocial($('formulario:debitosReclamanteHonorarioDescontoContrSocial'),$('formulario:debitosReclamanteHonorarioDescontoPrevPriv'))"/>
+													<h:outputLabel value="(-) Desconto da Previdência Privada" />
+												</h:panelGroup>
+											</h:panelGrid>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Alíquota (%) *" styleClass="topLabel" />
+												<h:inputText id="aliquotaDebReclamHonorariosDevReclamante" value="#{debitosDoReclamante.honorariosDevReclamante.taxaCalculado}" maxlength="6" label="Alíquota" required="false" onfocus="$(this).currencyMask()" />
+												<cobra:toolTip>
+							                      	<rich:message for="aliquotaDebReclamHonorariosDevReclamante" />
+							                  	</cobra:toolTip>
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								</h:panelGroup>	
+								<h:commandLink styleClass="botaoAddItem mb-10" title="Adicionar" actionListener="#{apresentador.adicionarItemHonorariosDevReclamanteDebReclam}" process="pnlHonorariosDevidoReclamanteDebReclam" reRender="pnlHonorariosDevidoReclamanteDebReclam  painelMensagens" limitToList="true" ajaxSingle="true" onclick="allToUpperCase();AguardeShow();" oncomplete="AguardeHide();" />
+							</h:panelGrid>
+							
+							<h:panelGroup id="listagemHonorariosDebReclam">
+								<rich:dataTable value="#{listaHonorariosDevReclamanteDebReclam}" rendered="#{listaHonorariosDevReclamanteDebReclam.rowCount > 0}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" var="_honorario"> 
+						    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+								    	<f:facet name="header">Ação</f:facet>
+								    	<h:commandLink actionListener="#{apresentador.removerItemHonorariosDevReclamanteDebReclam}" process="listagemHonorariosDebReclam" reRender="listagemHonorariosDebReclam" limitToList="true" ajaxSingle="true" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+								    </rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Descrição</f:facet>	
+						    			<h:outputText value="#{_honorario.descricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Forma</f:facet>
+						    			<h:outputText value="#{_honorario.tipoValor.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Tipo</f:facet>
+						    			<h:outputText value="#{_honorario.tipo.nome}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Parcela</f:facet>	
+						    			<h:outputText value="#{_honorario.valorParcelaInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros</f:facet>	
+						    			<h:outputText value="#{_honorario.valorJurosInformado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Índice</f:facet>	
+						    			<h:outputText value="#{_honorario.indiceTrabalhistaInformado.nome}" rendered="#{_honorario.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Base de Cálculo</f:facet>	
+						    			<h:outputText value="#{_honorario.baseDeCalculoDescricao}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Alíquota (%)</f:facet>	
+						    			<h:outputText value="#{_honorario.taxaCalculado}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Apurar IR</f:facet>	
+						    			<h:outputText value="#{_honorario.apurarIrpf ? 'SIM' : 'NÃO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Credor</f:facet>	
+						    			<h:outputText value="#{_honorario.credor}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Aplicar Juros</f:facet>	
+						    			<h:outputText value="#{_honorario.aplicarJurosInformado ? 'Sim' : 'Não'}" rendered="#{_honorario.tipoValor eq 'INFORMADO'}" />
+							    	</rich:column>
+							    	<rich:column>
+						    			<f:facet name="header">Juros A Partir De</f:facet>	
+						    			<h:outputText value="#{_honorario.dataApartirDeAplicarJurosInformado != null ? _honorario.dataApartirDeAplicarJurosInformado : descontosCreditosDoReclamante.calculoExterno.diaSeguinteADataDeLiquidacao}" rendered="#{_honorario.tipoValor eq 'INFORMADO' and _honorario.aplicarJurosInformado}">
+						    				<f:convertDateTime pattern="dd/MM/yyyy" />
+						    			</h:outputText>
+							    	</rich:column>
+								</rich:dataTable>
+							</h:panelGroup>	
+						</h:panelGroup>
+					</h:panelGroup>		
+				</fieldset>
+				
+				<fieldset id="fsCustasReclamanteDebReclam" class="mb-10">
+					<h:panelGroup id="pnlMarcarCustasReclamanteDebReclam">
+						<h:selectBooleanCheckbox id="custasReclamanteDebReclam" value="#{debitosDoReclamante.marcarCustasConhecimentoDevReclamante}" disabled="#{descontosCreditosDoReclamante.marcarCustasConhecimentoReclamante}">
+							<a4j:support event="onchange" ajaxSingle="true" reRender="pnlCustasReclamanteDebReclam, pnlMarcarCustasReclamanteDebReclam, pnlMarcarCustasReclamante" limitToList="true" />
+						</h:selectBooleanCheckbox>
+						<h:outputLabel value="Custas de Conhecimento Devidas pelo Reclamante" for="custasReclamanteDebReclam" />
+						<h:outputText class="linkHelp" id="custasReclamanteDebReclamHelp" style="margin-left:1px" rendered="#{descontosCreditosDoReclamante.marcarCustasConhecimentoReclamante}">
+							<rich:toolTip for="custasReclamanteDebReclamHelp" showEvent="mouseover" styleClass="tooltipHelp">
+							   	Já existe Custas de Conhecimento Devidas pelo Reclamante configurada na aba Descontos dos Créditos do Reclamante. 
+							</rich:toolTip>
+			     	    </h:outputText>
+					</h:panelGroup>
+					
+					<h:panelGroup id="pnlCustasReclamanteDebReclam">
+						<h:panelGroup rendered="#{debitosDoReclamante.marcarCustasConhecimentoDevReclamante}">
+							<fieldset style="margin: 5px 0px 5px 0px; width: 200px;"><legend>Tipo do Valor</legend>
+								<h:selectOneRadio value="#{debitosDoReclamante.custasConhecimentoDevReclamante.tipoValor}" styleClass="labelInput">
+									<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="pnlInformadoCalculadoCustasReclamanteDebReclam" />
+								</h:selectOneRadio>
+							</fieldset>
+							<h:panelGroup id="pnlInformadoCalculadoCustasReclamanteDebReclam">
+								<h:panelGrid columns="4" rendered="#{debitosDoReclamante.custasConhecimentoDevReclamante.tipoValor eq 'INFORMADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Valor da Parcela *" styleClass="topLabel" />
+										<h:inputText id="valorParcelaDebReclamCustasConhecimentoDevReclamante" value="#{debitosDoReclamante.custasConhecimentoDevReclamante.valorParcelaInformado}" label="Valor da Parcela" required="false" onfocus="$(this).currencyMask()" />
+										<cobra:toolTip>
+					                      	<rich:message for="valorParcelaDebReclamCustasConhecimentoDevReclamante" />
+					                  	</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Valor dos Juros" styleClass="topLabel" />
+										<h:inputText value="#{debitosDoReclamante.custasConhecimentoDevReclamante.valorJurosInformado}" onfocus="$(this).currencyMask()" />
+									</h:panelGroup>
+									
+									<h:panelGroup styleClass="mr-10">
+										<h:outputLabel value="Índice de Correção" styleClass="topLabel" />
+										<h:outputText value="NÃO" rendered="#{not parametrosDeAtualizacao.correcaoDasCustas}" />
+										<h:outputText value="#{parametrosDeAtualizacao.indiceDeCorrecaoDasCustas eq 'UTILIZAR_INDICE_TRABALHISTA' ? 'ÍNDICE TRABALHISTA' : parametrosDeAtualizacao.outroIndiceDeCorrecaoDasCustas.nome}" rendered="#{parametrosDeAtualizacao.correcaoDasCustas}" />
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Aplicar Juros" styleClass="topLabel"/>
+										<h:outputText value="#{parametrosDeAtualizacao.jurosDeCustas ? 'SIM' : 'NÃO'}" />
+									</h:panelGroup>
+								</h:panelGrid>
+								
+								<h:panelGrid columns="2" rendered="#{debitosDoReclamante.custasConhecimentoDevReclamante.tipoValor eq 'CALCULADO'}">
+									<h:panelGroup>
+										<h:outputLabel value="Base de Cálculo" />
+										<h:panelGrid columns="1">
+											<h:outputText value="#{calculoAberto.custasJudiciais.baseParaCustasCalculadas.nome}" />
+										</h:panelGrid>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Alíquota (%)" styleClass="topLabel" />
+										<h:outputText value="#{debitosDoReclamante.custasConhecimentoDevReclamante.taxaCalculado}">
+											<f:convertNumber pattern="#,##0.00" />
+										</h:outputText>
+									</h:panelGroup>
+								</h:panelGrid>
+							</h:panelGroup>
+						</h:panelGroup>
+					</h:panelGroup>
+				</fieldset>
+			</rich:tab>
+		</rich:tabPanel>
+	</ui:define>
+
+	<ui:define name="script">
+		<script type="text/javascript">
+			function desmarcarDescontoPrevPriv(descontoSocial,descontoPrevPriv){
+				if(!descontoSocial.checked) {
+					descontoPrevPriv.checked=false;
+				}
+			}
+			function marcarDescontoContrSocial(descontoSocial,descontoPrevPriv){
+				if(descontoPrevPriv.checked) {
+					descontoSocial.checked=true;
+				}
+			}
+		</script>
+	</ui:define>
+
+	<ui:define name="filtroBotoes">
+		<h:panelGroup id="painelBotoes">
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" reRender="painelMensagens" styleClass="botao" rendered="#{apresentador.emModoFormulario  and apresentador.operacao != 'VISUALIZACAO' and operacao!='EXCLUSAO' }" onclick="allToUpperCase()"/>
+		</h:panelGroup>	
+	</ui:define>
+
+</ui:composition>

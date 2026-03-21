@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="atualizacao-inss-evento" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+	<property name="ireport.zoom" value="1.1000000000000019"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="jr_contribuicao_social_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<queryString language="SQL">
+		<![CDATA[]]>
+	</queryString>
+	<field name="dataEvento" class="java.util.Date"/>
+	<field name="somatorioDevido" class="java.math.BigDecimal"/>
+	<field name="somatorioJuros" class="java.math.BigDecimal"/>
+	<field name="somatorioMulta" class="java.math.BigDecimal"/>
+	<field name="somatorioTotal" class="java.math.BigDecimal"/>
+	<field name="somatorioPago" class="java.math.BigDecimal"/>
+	<field name="somatorioDiferenca" class="java.math.BigDecimal"/>
+	<field name="somatorioJurosDiferenca" class="java.math.BigDecimal"/>
+	<field name="somatorioMultaDiferenca" class="java.math.BigDecimal"/>
+	<field name="somatorioTotalDiferenca" class="java.math.BigDecimal"/>
+	<field name="ocorrencias" class="net.sf.jasperreports.engine.JRDataSource"/>
+	<field name="tipo" class="java.lang.String"/>
+	<field name="valorPagamento" class="java.math.BigDecimal"/>
+	<field name="valorPagoAMaior" class="java.math.BigDecimal"/>
+	<detail>
+		<band height="77" splitType="Stretch">
+			<subreport>
+				<reportElement x="-19" y="30" width="842" height="16"/>
+				<dataSourceExpression><![CDATA[$F{ocorrencias}]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_contribuicao_social_pagamento_3}]]></subreportExpression>
+			</subreport>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="403" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioTotal}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="604" y="46" width="65" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioJurosDiferenca}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="336" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioMulta}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="1" y="46" width="201" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[]]></text>
+			</staticText>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="537" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioDiferenca}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="669" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioMultaDiferenca}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="736" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioTotalDiferenca}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="470" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioPago}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="269" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioJuros}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="202" y="46" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle" markup="none"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{somatorioDevido}]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="201" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="536" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Diferença]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="735" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="668" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Multa]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="67" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Contrib. Social]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="402" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="268" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="134" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[  Índice Correção	]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="335" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Multa]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="603" y="15" width="65" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Competência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="469" y="15" width="67" height="15"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Pago]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="0" y="0" width="802" height="15"/>
+				<textElement verticalAlignment="Middle">
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[$F{tipo}+" em: "+new SimpleDateFormat("dd/MM/yyyy").format($F{dataEvento})+" - Valor Pago: "+new DecimalFormat("#,##0.00").format($F{valorPagamento})]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement positionType="Float" x="0" y="61" width="399" height="10">
+					<printWhenExpression><![CDATA[$F{valorPagoAMaior}.compareTo(BigDecimal.ZERO) > 0]]></printWhenExpression>
+				</reportElement>
+				<textElement verticalAlignment="Top">
+					<font size="7" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Obs.: Valor Pago à Maior: "+new DecimalFormat("#,##0.00").format($F{valorPagoAMaior})]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+</jasperReport>

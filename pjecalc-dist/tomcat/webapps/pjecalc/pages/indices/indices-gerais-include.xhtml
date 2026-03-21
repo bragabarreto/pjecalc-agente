@@ -1,0 +1,214 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<body>
+<f:view>
+	
+<h:panelGroup >		
+		<h:panelGrid columns="2" cellpadding="0" border="0">
+		<h:panelGroup id="painelNovo#{nomeIndice}">
+		
+			<rich:jQuery id="mskCompetencia#{nomeIndice}" selector=".maskDateCompetencia" timing="onload" query="mask('99/9999')"></rich:jQuery>
+			
+			<ui:fragment rendered="#{identity.hasPermission('TABELAS_INDICES_GERAIS', 'MANUTENCAO')}">
+			
+			<fieldset style="width: 330px;"><legend><b>Nova Taxa</b></legend>
+				<h:panelGrid columns="3" cellspacing="4" cellpadding="2" border="0">
+					<h:panelGroup>
+						<h:outputLabel value="Mês/Ano *" for="mesAno#{nomeIndice}" /><br />
+						<rich:calendar id="mesAno#{nomeIndice}" value="#{apresentador.registro.competencia}"
+									   label="Mês/Ano *" inputSize="7" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+									   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									   showWeekDaysBar="false" showFooter="false" 
+									   styleClass="special" inputClass="maskDateCompetencia">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<rich:message showDetail="false" showSummary="false" for="mesAno#{nomeIndice}">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="mesAno#{nomeIndice}Erro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="mesAno#{nomeIndice}"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+						
+					<h:panelGroup>
+						<h:outputLabel value="Taxa do Mês(%) *" for="taxaMes#{nomeIndice}"/><br />
+						<h:inputText id="taxaMes#{nomeIndice}" value="#{apresentador.registro.taxa}" 
+								label="Taxa do Mês(%) *" size="16" maxlength="12" onfocus="$(this).decimalMaskAllowNegative(6)">
+								<f:converter converterId="seisCasasDecimaisConverter"/>
+						</h:inputText>
+						<rich:message showDetail="false" showSummary="false" for="taxaMes#{nomeIndice}">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="taxaMes#{nomeIndice}Erro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="taxaMes#{nomeIndice}"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<a4j:commandLink id="cmdIncluir#{nomeIndice}" 
+										 styleClass="botaoAddSalvar" actionListener="#{apresentador.adicionar}" value="Salvar"
+										 title="Salvar Novo Registro" reRender="mskCompetencias, painelListagem#{nomeIndice},painelNovo#{nomeIndice}"/>
+					</h:panelGroup>	
+					
+				</h:panelGrid>
+			</fieldset>
+		
+			</ui:fragment>
+		
+		</h:panelGroup>
+		
+		<h:panelGroup id="painelConsulta#{nomeIndice}">
+			
+			<rich:jQuery id="mskCompetenciaConsulta#{nomeIndice}" selector=".maskDateConsulta" timing="onload" query="mask('99/9999')"></rich:jQuery>
+		
+			<fieldset style="width: 310px"><legend><b>Consulta</b></legend>
+				<h:panelGrid columns="3" cellspacing="4" cellpadding="2" border="0">
+					<h:panelGroup>
+						<h:outputLabel value="Tabela de *" for="mesAnoConsulta#{nomeIndice}" /><br />
+						<rich:calendar id="mesAnoConsulta#{nomeIndice}" value="#{apresentador.filtro.competencia}"
+									   label="Mês/Ano" inputSize="7" popup="true" datePattern="MM/yyyy" enableManualInput="true"  
+									   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									   showWeekDaysBar="false" showFooter="false" 
+									   styleClass="special" inputClass="maskDateConsulta">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<rich:message showDetail="false" showSummary="false" for="mesAnoConsulta#{nomeIndice}">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="mesAnoConsulta#{nomeIndice}Erro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="mesAnoConsulta#{nomeIndice}"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="A partir de" for="aPartirDe#{nomeIndice}" /><br />
+						<rich:calendar id="aPartirDe#{nomeIndice}" value="#{apresentador.filtro.competenciaParaVerAcumulado}"
+									   label="Mês/Ano" inputSize="7" popup="true" datePattern="MM/yyyy" enableManualInput="true"  
+									   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									   showWeekDaysBar="false" showFooter="false" 
+									   styleClass="special" inputClass="maskDateConsulta">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<rich:message showDetail="false" showSummary="false" for="aPartirDe#{nomeIndice}">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="aPartirDe#{nomeIndice}Erro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="aPartirDe#{nomeIndice}"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<a4j:commandLink id="cmdVisualizar#{nomeIndice}" 
+										 styleClass="botaoBuscar" 
+										 title="Visualizar Tabela" value="Pesquisar" 
+										 actionListener="#{apresentador.pesquisar}" reRender="painelSpan#{nomeIndice}, painelSubtabela#{nomeIndice},painelConsulta#{nomeIndice} "
+										 />
+					</h:panelGroup>
+					
+				</h:panelGrid>
+			</fieldset>
+		</h:panelGroup>
+		</h:panelGrid>
+		
+		<a4j:outputPanel id="painelListagem#{nomeIndice}">
+			<h:panelGroup  style="width: 100%;" rendered="#{apresentador.listaDeIndices.size gt 0}">
+			
+				<rich:dataTable id="listagem#{nomeIndice}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="#{apresentador.listaDeIndices.size}"
+							value="#{apresentador.listaDeIndices}" var="indice"> 
+				
+						<rich:column style="width:10%;" rendered="#{identity.hasPermission('TABELAS_INDICES_GERAIS', 'MANUTENCAO')}">
+					    	<f:facet name="header">
+				    			<h:outputText value="Ação"/>
+				    		</f:facet>
+					    	<a4j:commandLink id="excluirItem#{nomeIndice}"  actionListener="#{apresentador.excluir(indice)}"  reRender="painelListagem#{nomeIndice}"
+				    							 styleClass="linkExcluir" title="Excluir" 
+				    							 onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false;">
+				    			</a4j:commandLink>
+					    </rich:column>
+		    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Mês/Ano"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.competencia}">
+			    				  <f:converter converterId="competenciaConverter"/>
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Taxa do Mês(%)"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.taxa}">
+			    				<f:converter converterId="seisCasasDecimaisConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Índice Acumulado"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.valorAcumulado}">
+			    				<f:converter converterId="noveCasasDecimaisConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Criado Em"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.dataCriacao}">
+			    				<f:converter converterId="org.jboss.seam.faces.dateConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	    				    				    	
+				</rich:dataTable>
+			
+			</h:panelGroup>
+		
+		</a4j:outputPanel>
+
+</h:panelGroup>
+	<a4j:outputPanel id="painelSpan#{nomeIndice}">
+		<s:span rendered="#{apresentador.subtabelaDeIndices.size gt 0}">
+			<script>
+				Richfaces.showModalPanel('modal#{nomeIndice}');
+			</script>
+		</s:span>
+	</a4j:outputPanel>
+	
+	<ui:include src="modal-consulta-indices.xhtml">
+		<ui:param name="listaDeIndices" value="#{apresentador.subtabelaDeIndices}" />
+		<ui:param name="tituloModal" value="#{tituloModal}" />
+	 </ui:include>
+
+</f:view>
+</body>
+
+</html>

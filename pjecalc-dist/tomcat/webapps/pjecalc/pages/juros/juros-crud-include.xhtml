@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<body>
+<f:view>
+	
+<h:panelGroup >	
+	<h:panelGrid columns="1" cellpadding="0" border="0" width="100%">
+		<h:panelGroup id="painelNovo#{nomeJuros}" layout="block" style="width:600px;" rendered="#{identity.hasPermission('TABELAS_JUROS', 'MANUTENCAO')}">
+
+			<ui:param name="aliquotaConverter" value="#{empty aliquotaConverter ? 'bigDecimalConverter' : aliquotaConverter}" />
+	
+			<fieldset><legend><b>Nova Alíquota</b></legend>
+			
+				<h:panelGrid columns="5" cellspacing="4" border="0">
+				
+					<h:panelGroup>
+						<h:outputLabel value="Início de Vigência *" for="dataInicio#{nomeJuros}" /><br />
+						<rich:calendar id="dataInicio#{nomeJuros}" value="#{apresentador.registro.dataInicio}"
+									   label="Data Inicial" inputSize="14" popup="true" datePattern="dd/MM/yyyy"
+									   enableManualInput="true" oninputfocus="$(this).dateMask()">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center; width:150px;" />
+					        </f:facet>
+						</rich:calendar>
+						<cobra:toolTip>
+		    				<rich:message for="dataInicio#{nomeJuros}"/>
+		    			</cobra:toolTip>
+					</h:panelGroup>			
+					
+					<h:panelGroup>
+						<h:outputLabel value="Alíquota (%) *" for="aliquota#{nomeJuros}" /><br />
+						<h:inputText id="aliquota#{nomeJuros}" label="Alíquota (%)" 
+									 value="#{apresentador.registro.aliquota}"  style="width:85px;" onfocus="$(this).decimalMask(4)" maxlength="8">
+							
+							<f:converter converterId="#{aliquotaConverter}"/>
+						</h:inputText>
+						<cobra:toolTip>
+	                       	<rich:message for="aliquota#{nomeJuros}"/>
+	                   </cobra:toolTip>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+							<h:outputLabel value="Tipo de Juros" for="tipoDeJuros#{nomeJuros}" /><br />
+							<h:selectOneMenu id="tipoDeJuros#{nomeJuros}" value="#{apresentador.registro.tipoDeJuros}" style="width:100px;">
+								<s:selectItems value="#{enumItems.tipoDeJurosEnum}" var="item" label="#{item.nome}" />
+								<s:convertEnum />
+							</h:selectOneMenu>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+							<h:outputLabel value="Tipo Quantidade *" for="tipoDeQuantidade#{nomeJuros}" /><br />
+							<h:selectOneMenu id="tipoDeQuantidade#{nomeJuros}" value="#{apresentador.registro.tipoDeQuantidade}" style="width:100px;" required="true">
+								<s:selectItems value="#{enumItems.tipoDeQuantidadeDeJurosBaseEnum}" var="item" label="#{item.nome}" />
+								<s:convertEnum />
+							</h:selectOneMenu>
+					</h:panelGroup>
+				
+					<h:panelGroup layout="block">
+						<a4j:commandLink id="cmdIncluirAliquota#{nomeJuros}" value="Salvar" 
+										 actionListener="#{apresentador.adicionar}" 
+										 styleClass="botaoAddSalvar" title="Salvar Nova Alíquota" reRender="painelNovo#{nomeJuros}, painelListagem#{nomeJuros}"/>
+					</h:panelGroup>	
+					
+				</h:panelGrid>
+			
+			
+			</fieldset>
+			
+		</h:panelGroup>
+		
+		<a4j:outputPanel id="painelListagem#{nomeJuros}">
+								
+					<h:panelGroup  style="width: 100%;"  rendered="#{apresentador.listaDeJuros.size gt 0}" >
+			
+							<rich:dataTable id="listagem#{nomeJuros}" value="#{apresentador.listaDeJuros}" rowClasses="linha-par, linha-impar" 
+											cellpadding="0" cellspacing="4" border="0" width="100%" rows="24" var="juros"> 
+					    		<rich:column style="width:10%;" rendered="#{identity.hasPermission('TABELAS_JUROS', 'MANUTENCAO')}">
+								    	<f:facet name="header">
+							    			<h:outputText value="Ação"/>
+							    		</f:facet>
+									    <a4j:region>
+								    		<a4j:commandLink id="excluir#{nomeJuros}" immediate="true" rendered="#{juros.dataFim eq null}"
+								    						 actionListener="#{apresentador.excluir(juros)}"  reRender="painelListagem#{nomeJuros}"
+							    							 styleClass="linkExcluir" title="Excluir" 
+							    							 onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();"
+							    							 oncomplete="AguardeHide();">
+							    			</a4j:commandLink>
+								    	</a4j:region>
+							    </rich:column>
+					    	
+						    	<rich:column style="width:15%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Início de Vigência"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{juros.dataInicio}">
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+						    	<rich:column style="width:15%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Fim de Vigência"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{juros.dataFim}" >
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+						    	<rich:column style="width:30%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Alíquota (%)"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{juros.aliquota}">
+					    				<f:converter converterId="#{aliquotaConverter}"/>
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+						    	<rich:column style="width:15%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Tipo de Juros"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{juros.tipoDeJuros.nome}">
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+						    	<rich:column style="width:15%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Tipo Quantidade"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{juros.tipoDeQuantidade.nome}">
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+							</rich:dataTable>
+							
+							<ui:include src="../comum/paginacao.xhtml">
+								<ui:param name="paramListagem" value="listagem#{nomeJuros}" />
+							 </ui:include>
+					
+					</h:panelGroup>	
+							
+			</a4j:outputPanel>
+		
+		
+		
+		
+	</h:panelGrid>
+
+</h:panelGroup>
+	
+</f:view>
+</body>
+
+</html>

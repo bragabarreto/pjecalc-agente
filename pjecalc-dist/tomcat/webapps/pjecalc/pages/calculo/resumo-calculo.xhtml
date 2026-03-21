@@ -1,0 +1,21 @@
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xml:lang="pt" lang="pt" 
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core" 
+    xmlns:a4j="http://richfaces.org/a4j"
+    xmlns:rich="http://richfaces.org/rich">
+
+	<a4j:outputPanel id="panelDadosCalculo" ajaxRendered="true">
+		<h:panelGroup rendered="#{apresentador.emModoListagem or exibirDadosDoCalculo}">
+			<fieldset><legend>Dados do Cálculo</legend>
+				<div class="panelVerbaCalculo">
+					<h:outputText styleClass="labelVerbaCalculo" value="Cálculo: #{calculoAberto.id}" />
+					<br />
+					<h:outputText styleClass="labelVerbaCalculo" value="Processo: #{empty calculoAberto.getIdentificacaoDoProcesso() ? 'Não Informado' : calculoAberto.getIdentificacaoDoProcesso()}" />
+				</div>
+			</fieldset>
+		</h:panelGroup>
+	</a4j:outputPanel>
+
+</html>

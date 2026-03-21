@@ -1,0 +1,70 @@
+<html xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich">	
+<!--
+	PARAMETROS DO TEMPLATE
+	- title: Titulo do painel
+	- modelPanelId: Id do modelpanel
+	- uploadFacesBean: FacesBean com o metodo upload, closeUploadPanel e stopUpload
+	- maxFilesQuantity: Numero maximo de arquivo permitido para upload
+	- acceptedTypes: Tipos de arquivos aceitos
+	- reRender: ID do componente que sera renderizado na volta
+ -->
+ 
+ 	<ui:param name="acceptedTypes" value="#{empty acceptedTypes ? '*' : acceptedTypes}" />
+ 	<ui:param name="titleDefault" value="Anexar Arquivos (#{acceptedTypes})" />
+ 	<ui:param name="title" value="#{empty title ? titleDefault : title}" />
+ 	<ui:param name="modelPanelId" value="#{empty modelPanelId ? 'fileUploadModelPanel' : modelPanelId}" />
+ 	<ui:param name="maxFilesQuantity" value="#{empty maxFilesQuantity ? 1 : maxFilesQuantity}" />
+ 	<ui:param name="onupload" value="#{empty onupload ? ';' : onupload}" />
+ 	<ui:param name="showErro" value="#{empty showErro ? 'true' : showErro}" />
+ 	
+    <rich:modalPanel id="#{modelPanelId}" resizeable="false" moveable="true" autosized="true">
+        <f:facet name="header">
+        	<h:outputText value="#{title}"/>
+        </f:facet>
+        <f:facet name="controls">
+            <h:panelGroup>
+                <h:graphicImage value="/images/ico_fechar.gif" style="cursor:pointer" id="hidelink#{modelPanelId}" alt="Fechar" />
+                <rich:componentControl for="#{modelPanelId}" attachTo="hidelink#{modelPanelId}" operation="hide" event="onclick"/>
+            </h:panelGroup>
+        </f:facet>
+        <h:panelGroup>
+        
+			<h:form id="form#{modelPanelId}">
+				<rich:fileUpload id="upload#{modelPanelId}"
+	     			fileUploadListener="#{uploadFacesBean.upload}"	     			
+	     			onfileuploadcomplete="posEventoUpload();"
+	               	maxFilesQuantity="#{maxFilesQuantity}"
+	                immediateUpload="true"
+	                immediate="true"
+	                acceptedTypes="#{acceptedTypes}"
+	 	    		required="true"
+	        		addControlLabel="Adicionar"
+	        		stopControlLabel="Parar"
+	        		stopEntryControlLabel="Parar"
+	        		clearControlLabel="Limpar"
+	        		clearAllControlLabel="Limpar"
+	        		cancelEntryControlLabel="Cancelar"
+	        		uploadControlLabel="Confirmar"
+	        		doneLabel="Concluido"
+	        		progressLabel="Carregando"
+	        		onupload="#{onupload}"
+		       		ontyperejected="Richfaces.hideModalPanel('#{modelPanelId}'); mensagemErro#{modelPanelId}();"
+	    	   		onsizerejected="Richfaces.hideModalPanel('#{modelPanelId}'); mensagemTamanhoUpload#{modelPanelId}();"
+	    	   		onuploadcomplete="fechar#{modelPanelId}();"
+	    	   		status="nenhum">
+	    	   		<a4j:support event="onuploadcanceled" actionListener="#{uploadFacesBean.stopUpload}" status="nenhum"/>
+	    	   	</rich:fileUpload>
+            </h:form>
+        </h:panelGroup>
+	</rich:modalPanel>
+	<a4j:form>
+		<a4j:jsFunction name="mensagemTamanhoUpload#{modelPanelId}" actionListener="#{uploadFacesBean.mesagemErroTamanhoUpload}"/>
+		<a4j:jsFunction name="mensagemErro#{modelPanelId}" actionListener="#{uploadFacesBean.mensagemErroTipoUpload}" />
+		<a4j:jsFunction name="fechar#{modelPanelId}" reRender="#{modelPanelId},#{reRender}"/>			
+	</a4j:form>
+	
+</html>

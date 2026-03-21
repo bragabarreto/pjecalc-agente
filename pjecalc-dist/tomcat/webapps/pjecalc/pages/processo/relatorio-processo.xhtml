@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="titulo" value="Relatório Consolidado" />
+	<ui:param name="menuCalculo" value="#{true}" />
+	<ui:param name="apresentador" value="#{apresentadorRelatorioPorProcesso}" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+	<ui:param name="filtro" value="#{apresentadorRelatorioPorProcesso.filtro}" />
+	
+	<ui:define name="nofiltroCampos">
+	</ui:define>	
+
+	<ui:define name="nocamposFormulario">
+			
+		<a4j:loadScript src="resource://jquery.js"/>
+		
+       	<a4j:outputPanel id="panelBusca" ajaxRendered="true">
+	       	<h:panelGroup rendered="#{lista.rowCount == 0}">
+       		<fieldset>
+       		
+       			<legend>Selecione por Processo</legend>
+       			
+       			<h:panelGrid columns="2">
+					<h:panelGrid columns="7" cellpadding="2" cellspacing="2">
+						<h:panelGroup id="panelBuscaProcesso">
+							<h:outputLabel for="numeroProcessoBusca" value="Número" /><br/>
+							<h:inputText required="true" disabled="#{not (lista.rowCount == 0)}" id="numeroProcessoBusca" label="Número" value="#{filtro.numeroProcesso}" maxlength="7" onblur="$(this).leftPad('0',7)" onfocus="$(this).integerMask()"/>
+							<cobra:toolTip>
+			                	<rich:message for="numeroProcessoBusca"/>
+			                </cobra:toolTip>
+							<script>
+								$('formulario:numeroProcessoBusca').leftPad('0',7)
+							</script>
+							<span class="digito">-</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="digitoProcessoBusca" value="Dígito" /><br/>
+							<h:inputText required="true" disabled="#{not (lista.rowCount == 0)}" id="digitoProcessoBusca" label="Dígito" value="#{filtro.digitoProcesso}" size="3" maxlength="2" onfocus="$(this).integerMask()"/>
+							<cobra:toolTip>
+			                	<rich:message for="digitoProcessoBusca"/>
+			                </cobra:toolTip>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="anoProcessoBusca" value="Ano" /><br/>
+							<h:inputText required="true" disabled="#{not (lista.rowCount == 0)}" id="anoProcessoBusca" label="Ano" value="#{filtro.anoProcesso}" size="5" maxlength="4" onblur="$(this).leftPad('0',4)" onfocus="$(this).integerMask()"/>
+							<cobra:toolTip>
+			                	<rich:message for="anoProcessoBusca"/>
+			                </cobra:toolTip>						
+							<script>
+								$('formulario:anoProcessoBusca').leftPad('0',4)
+							</script>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="justicaBusca" value="Justiça" /><br/>
+							<h:inputText disabled="true" required="true" id="justicaBusca" label="Justiça" value="#{filtro.justica}" size="5" maxlength="1" onfocus="$(this).integerMask()"/>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="regiaoBusca" value="Tribunal" /><br/>
+							<h:inputText required="true" disabled="#{not (lista.rowCount == 0)}" id="regiaoBusca" label="Região" value="#{filtro.regiao}" size="5" maxlength="2" onblur="$(this).leftPad('0',2)" onfocus="$(this).integerMask()"/>
+							<cobra:toolTip>
+			                	<rich:message for="regiaoBusca"/>
+			                </cobra:toolTip>
+							<script>
+								$('formulario:regiaoBusca').leftPad('0',2)
+							</script>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="varaProcessoBusca" value="Vara" /><br/>
+							<h:inputText required="true" disabled="#{not (lista.rowCount == 0)}" id="varaProcessoBusca" label="Vara" value="#{filtro.varaProcesso}" size="10" maxlength="4" onblur="$(this).leftPad('0',4)" onfocus="$(this).integerMask()"/>
+							<cobra:toolTip>
+			                	<rich:message for="varaProcessoBusca"/>
+			                </cobra:toolTip>
+							<script>
+								$('formulario:varaProcessoBusca').leftPad('0',4)
+							</script>
+						</h:panelGroup>
+					</h:panelGrid>
+					<h:panelGroup>
+						<a4j:commandLink 
+							 styleClass="botaoBuscar" actionListener="#{apresentador.selecionarProcesso()}"
+							 onclick="AguardeShow();" oncomplete="AguardeHide();" limitToList="true" ajaxSingle="true" process="panelBuscaProcesso,digitoProcessoBusca,anoProcessoBusca,justicaBusca,regiaoBusca,varaProcessoBusca" title="Selecionar" value="Selecionar"
+							 reRender="panelBusca,panelBuscaProcesso,resultadoBusca,painelScript,painelMensagens,botoes" />
+					</h:panelGroup>
+				</h:panelGrid>
+
+			</fieldset>
+			
+			<br/>
+			
+			<fieldset>
+       			<legend>Selecione por Reclamado</legend>
+       			
+       			<h:panelGrid columns="3" cellpadding="2" cellspacing="2">
+       				<h:panelGroup id="panelBuscaReclamado">
+	       				<fieldset>
+	       					<legend>Documento Fiscal</legend>
+							<h:panelGrid columns="2" cellspacing="4" border="0">
+								<h:panelGroup>
+									<h:outputLabel for="tipoDocumentoFiscalReclamado" value="Tipo" /><br />
+									<h:selectOneRadio id="tipoDocumentoFiscalReclamado" value="#{apresentador.tipoDocumentoFiscalReclamado}" disabled="#{not (lista.rowCount == 0)}" styleClass="labelInput">
+										<s:selectItems value="#{enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+										<s:convertEnum />
+									</h:selectOneRadio>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Número" for="reclamadoNumeroDocumentoFiscal" /><br />
+									<h:inputText id="reclamadoNumeroDocumentoFiscal" label="Número" disabled="#{not (lista.rowCount == 0)}"
+												value="#{filtro.numeroDocumentoFiscalReclamado}" size="26"
+												onfocus="$(this).dynamicMask('formulario:tipoDocumentoFiscalReclamado')"
+												required="true">
+										<f:converter converterId="mascaraDinamicaConverter"/>
+										<f:validator validatorId="validadorDinamico"/>
+										<f:param name="seletor" value="tipoDocumentoFiscalReclamado"/>
+									</h:inputText>
+									
+									<rich:message showDetail="false" showSummary="false" for="reclamadoNumeroDocumentoFiscal">
+									     <f:facet name="errorMarker">
+									     	   <h:outputLink class="linkErro" id="reclamadoNumeroDocumentoFiscalErro">
+												   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+												        <rich:message showDetail="true" showSummary="false" for="reclamadoNumeroDocumentoFiscal"/>
+												   </rich:toolTip>
+									     	   </h:outputLink>
+									     </f:facet>
+									</rich:message>
+								</h:panelGroup>
+							</h:panelGrid>
+						</fieldset>
+       				</h:panelGroup>
+       				
+       				<h:panelGroup>
+						<a4j:commandLink 
+							 styleClass="botaoBuscar" actionListener="#{apresentador.selecionarReclamado()}"
+							 onclick="AguardeShow();" oncomplete="AguardeHide();" limitToList="true" ajaxSingle="true" process="panelBuscaReclamado" title="Selecionar" value="Selecionar"
+							 reRender="panelBusca,panelBuscaReclamado,resultadoBusca,painelScript,painelMensagens,botoes" />
+					</h:panelGroup>
+       			</h:panelGrid>
+       		</fieldset>
+       		</h:panelGroup>
+		</a4j:outputPanel>
+		
+		<br />
+		
+		<a4j:outputPanel ajaxRendered="true">
+		
+			<h:panelGroup id="resultadoBusca">
+			
+				<h:panelGroup rendered="#{not (lista.rowCount == 0)}">
+				
+					<fieldset><legend>Formato de Saída do Relatório *</legend>
+						<h:selectOneRadio id="formatoSaida" value="#{apresentador.formatoRelatorio}"
+										label="Formato de Saída" 
+										styleClass="labelInput; font-weight: bold" 
+										layout="pageDirection" 
+										required="true" >
+							<s:selectItems value="#{enumItems.formatoRelatorioEnum}" var="item" label="#{item.nome}"/>
+							<s:convertEnum />
+						</h:selectOneRadio>
+					</fieldset>
+					
+					<br/>
+		
+					<fieldset>
+			
+						<legend>Selecione os Cálculos</legend>
+						
+						<a4j:region>					
+							<h:panelGroup style="float:right">
+								<h:outputLabel value="Filtrar por Reclamado:" for="selecaoReclamado" style="margin-left:3px"/>
+								<h:selectOneMenu id="selecaoReclamado" value="#{apresentador.reclamadoSelecionado}" label="Selecione o Reclamado" style="width:150px; margin-left:10px; margin-bottom:10px;">
+									<s:selectItems value="#{apresentador.getListaReclamados()}" var="item" label="#{item}" noSelectionLabel="Todos" />
+									<a4j:support event="onchange" actionListener="#{apresentador.atualizarLista()}" reRender="listagem,painelScript" limitToList="true" ajaxSingle="true"/>
+								</h:selectOneMenu>
+							</h:panelGroup>						
+						</a4j:region>
+		
+						<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" rows="#{lista.rowCount}" cellpadding="3" border="0" width="100%" var="calculoParaRelatorioPorProcesso">
+						
+							<rich:column style="width:2%;">
+								<f:facet name="header">
+									<h:panelGrid columns="1">
+					    				<h:selectBooleanCheckbox id="selecionarTodos" styleClass="checkAllHead" onclick="jsfCheckTodos()"/>
+							    	</h:panelGrid>
+							    </f:facet>
+							    <h:panelGrid columns="1">
+						    		<h:selectBooleanCheckbox id="calculoSelecionado" value="#{calculoParaRelatorioPorProcesso.selecionado}" styleClass="checkAll selectBoolean" style="margin-left:4px;">
+						    			<a4j:support event="onclick" ajaxSingle="true" limitToList="true"/>
+						    		</h:selectBooleanCheckbox>
+								</h:panelGrid>
+							</rich:column>	    			
+
+					    	<rich:column style="width:9%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Cálculo"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.calculo.id}" />
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:12%;">
+					    		<f:facet name="header">
+				    				<h:outputText value="Processo"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.calculo.getIdentificacaoDoProcesso()}"/>
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:21%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Reclamante"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.calculo.processo.reclamante.nome}" />
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:6%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="CPF"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.numeroDocumentoFiscalReclamante}" />
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:24%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Reclamado"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.calculo.processo.reclamado.nome}" />
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:10%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Documento Fiscal"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.numeroDocumentoFiscalReclamado}" />
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:8%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Liquidação Cálculo"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.calculo.dataDeLiquidacao}" />
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:8%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Liquidação Atualização"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{calculoParaRelatorioPorProcesso.calculo.atualizacao.dataDeLiquidacao}" />
+					    	</rich:column>
+				
+						</rich:dataTable>
+					
+					</fieldset>
+					
+				</h:panelGroup>
+				
+			</h:panelGroup>
+			
+		</a4j:outputPanel>
+
+	</ui:define>
+	
+	<ui:define name="script">
+			<a4j:outputPanel id="painelScript" ajaxRendered="true">
+				<script language="JavaScript">
+					jQuery(function() {
+						prepararCheckAll('.checkAllHead','.checkAll');
+					});
+				</script>
+			</a4j:outputPanel>
+		</ui:define>
+	
+	<ui:define name="noresultadoTabela">		
+
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+		<a4j:outputPanel id="botoes" ajaxRendered="true">
+			<a4j:commandButton id="imprimirConsolidado" value="Imprimir do Cálculo" rendered="#{(lista.rowCount > 0)}" actionListener="#{apresentador.gerarRelatorioConsolidadoPorProcesso}" styleClass="botaoGrande"/>
+			<s:span rendered="#{apresentador.downloadConsolidadoPorProcessoDisponivel}">
+				<h:commandLink id="linkDownloadConsolidado" actionListener="#{apresentador.downloadRelatorioConsolidadoPorProcesso}" value=""/>
+				<script type="text/javascript">
+					if(typeof jsfcljs == 'function') {
+						jsfcljs(document.getElementById('formulario'),{'formulario:linkDownloadConsolidado':'formulario:linkDownloadConsolidado'},'');
+					}
+				</script>
+			</s:span>
+			
+			<a4j:commandButton id="imprimirConsolidadoAtualizacao" value="Imprimir da Atualização" rendered="#{(lista.rowCount > 0)}" actionListener="#{apresentador.gerarRelatorioConsolidadoPorProcessoAtualizacao}" styleClass="botaoGrande"/>
+			<s:span rendered="#{apresentador.downloadConsolidadoPorProcessoDisponivelAtualizacao}">
+				<h:commandLink id="linkDownloadConsolidadoAtualizacao" actionListener="#{apresentador.downloadRelatorioConsolidadoPorProcessoAtualizacao}" value=""/>
+				<script type="text/javascript">
+					if(typeof jsfcljs == 'function') {
+						jsfcljs(document.getElementById('formulario'),{'formulario:linkDownloadConsolidadoAtualizacao':'linkDownloadConsolidadoAtualizacao'},'');
+					}
+				</script>
+			</s:span>
+			
+			<a4j:commandButton id="limparBusca" styleClass="botao" value="Limpar" rendered="#{(lista.rowCount > 0)}" actionListener="#{apresentador.limparBusca()}" />
+		</a4j:outputPanel>
+	</ui:define>
+	
+	<ui:define name="auxiliar">
+		<h:form>
+        	<a4j:jsFunction name="jsfCheckTodos" immediate="true" limitToList="true" onbeforedomupdate="checkTodos()" oncomplete="AguardeHide()" />        	
+        </h:form>
+		<script>
+			function checkTodos() {
+				AguardeShow();
+				elems = jQuery('.selectBoolean');				
+				elems.attr('checked',jQuery('#formulario:listagem:selecionarTodos').attr('checked'));
+			}
+		</script>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

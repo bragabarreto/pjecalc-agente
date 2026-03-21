@@ -1,0 +1,54 @@
+<ui:composition  xmlns="http://www.w3.org/1999/xhtml"
+                 xmlns:ui="http://java.sun.com/jsf/facelets"
+                 xmlns:h="http://java.sun.com/jsf/html"
+                 xmlns:f="http://java.sun.com/jsf/core"
+                 xmlns:s="http://jboss.com/products/seam/taglib"
+                 xmlns:c="http://java.sun.com/jstl/core"
+                 xmlns:wi="http://www.itx.com.br/jsf"
+                 xmlns:a="http://richfaces.org/a4j"
+                 xmlns:rich="http://richfaces.org/rich">
+    
+    <ui:param name="widthDiv" value="#{empty props.widthDiv ? (empty widthDiv ? '250px' : widthDiv) : props.widthDiv}" />               
+	<ui:param name="inNewLine" value="#{empty inNewLine ? props.inNewLine : inNewLine}" />
+	<ui:param name="tipMessage" value="#{empty props.tipMessage ? tipMessage : props.tipMessage}"/>
+    <ui:param name="obfuscate" value="#{empty props.obfuscate ? obfuscate : props.obfuscate}"/>	
+	<ui:param name="showRequired" value="#{empty showRequired ? (required or requiredField) : showRequired}"/>
+	<ui:param name="homeRef" value="#{empty homeRef ? home : homeRef}" />
+	<ui:param name="showLock" value="#{empty showLock ? true : showLock}" />
+
+    <div class="propertyView" id="propertyView#{fieldId}Div"
+     	style="float: left; #{inNewLine != true ? '' : 'clear: both;'} width: #{widthDiv} !important; min-width: #{widthDiv} !important; #{styleDiv}">
+        <s:div id="#{fieldId}Div" styleClass="name">    
+	        <s:label styleClass="#{invalid?'errors':''}">
+	            <ui:insert name="label"/>
+	            <s:span styleClass="required" 
+	            	rendered="#{showRequired}">*</s:span>
+	        </s:label>
+	        
+			<c:if test="#{not empty tipMessage}">
+				<h:graphicImage id="#{fieldId}EditTipImg"
+								style="height:12px; margin-left:3px; margin-bottom:-2px" 
+								url="/img/help.gif" alt="#{typeMessage}"/>
+				<rich:toolTip for="#{fieldId}EditTipImg" 
+							  value="#{tipMessage}"
+							  style="background-color:#{richSkin.generalBackgroundColor}; 
+					   				border-color:#{richSkin.panelBorderColor}; padding:5px; font-weight:normal;">
+				</rich:toolTip>
+			</c:if>
+				
+			<ui:insert name="messages">
+				<s:message styleClass="errorFields errors" style="position: absolute; margin-top: -5px"/>
+			</ui:insert>  
+        </s:div>
+        <span class="value #{invalid?'errors':''}">
+            <s:validateAll>
+           		<s:div id="div#{fieldId}" rendered="#{!obfuscate}">
+               		<ui:insert/>
+               	</s:div>
+               	<h:outputText value="ocultado" rendered="#{obfuscate}" />
+            </s:validateAll>
+        </span>
+        
+    </div>
+    
+</ui:composition>

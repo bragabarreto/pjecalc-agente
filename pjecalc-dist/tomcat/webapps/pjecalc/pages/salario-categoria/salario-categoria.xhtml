@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	
+	<ui:param name="dadosDe" value="Piso Salarial" />
+	<ui:param name="titulo" value="#{apresentadorSalarioCategoria.titulo}" />
+	<ui:param name="apresentador" value="#{apresentadorSalarioCategoria}" />
+	<ui:param name="registro" value="#{apresentadorSalarioCategoria.registro}" />
+	<ui:param name="filtro" value="#{apresentadorSalarioCategoria.filtro}" />
+	<ui:param name="listaDeOcorrencias" value="#{apresentadorSalarioCategoria.listaOcorrencias}" />
+	
+	<ui:define name="filtroCampos">
+	
+		<h:panelGrid columns="2" cellpadding="3"  cellspacing="3" columnStyle="width:30%;">
+			<h:panelGroup>
+					<h:outputLabel value="Nome" for="nomeBusca"/><br />
+					<h:inputText id="nomeBusca"  label="Nome" value="#{filtro.nome}" size="71" maxlength="120">
+					</h:inputText>
+			</h:panelGroup>
+			<h:panelGroup>
+				<h:outputLabel for="estadoBusca" value="Estado" /><br />
+				<h:selectOneMenu id="estadoBusca" label="Estado" value="#{filtro.estado}" style="width:150px;">
+					<s:selectItems value="#{apresentadorSalarioCategoria.estados}" var="item" label="#{item.sigla}" noSelectionLabel="" /> 
+					<s:convertEntity/>
+				</h:selectOneMenu>
+			</h:panelGroup>
+		</h:panelGrid>
+	
+	</ui:define>
+	
+	
+	<ui:define name="resultadoTabela">
+	
+			<h:panelGroup id="painelListagem" style="width: 600px;" >
+			
+				<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" 
+								cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{lista.size}" var="salarioCategoria"> 
+		    		<rich:column style="width:20%;">
+					    	<f:facet name="header">
+				    			<h:outputText value="Ações"/>
+				    		</f:facet>
+						    <a4j:region>
+					    			<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentadorSalarioCategoria.visualizar}" />
+					    		
+					    			<a4j:commandLink id="alterarHistorico" styleClass="linkAlterar" title="Alterar" action="#{apresentadorSalarioCategoria.alterar}" rendered="#{identity.hasPermission('TABELAS_SALARIO_CATEGORIA', 'MANUTENCAO')}"/>
+					    
+				    				<a4j:commandLink id="excluirSalarioCategoria" styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentadorSalarioCategoria.excluir}" rendered="#{identity.hasPermission('TABELAS_SALARIO_CATEGORIA', 'MANUTENCAO')}"/>
+				    							 
+					    	</a4j:region>
+				    </rich:column>
+		    	
+			    	<rich:column style="width:40%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Nome"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{salarioCategoria.nome}" id="nome"></h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column style="width:40%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Estado"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{salarioCategoria.estado != null ? salarioCategoria.estado.sigla : ''}" id="estado"></h:outputText>
+			    	</rich:column>
+		    	
+				</rich:dataTable>
+			
+			</h:panelGroup>	
+	
+	
+	</ui:define>
+	
+
+	<ui:define name="camposFormulario">
+	
+		<a4j:outputPanel id="painelNovo" ajaxRendered="true">
+		
+			<h:panelGroup>
+					
+					<h:panelGrid columns="2" cellspacing="3" border="0">
+						<h:panelGroup>
+							<h:outputLabel value="Nome *" for="nome" /><br />
+							<h:inputText id="nome" label="Nome" value="#{apresentadorSalarioCategoria.registro.nome}" size="68" maxlength="120" required="true" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+							</h:inputText>
+			    			<cobra:toolTip>
+			    				<rich:message for="nome"/>
+			    			</cobra:toolTip>	    			
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="estado" value="Estado *" /><br />
+							<h:selectOneMenu id="estado" label="Estado" value="#{apresentadorSalarioCategoria.registro.estado}" style="width:150px;" required="true" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+								<s:selectItems value="#{apresentadorSalarioCategoria.estados}" var="item" label="#{item.sigla}" noSelectionLabel="" /> 
+								<s:convertEntity/>
+							</h:selectOneMenu>
+			    			<cobra:toolTip>
+			    				<rich:message for="estado"/>
+			    			</cobra:toolTip>	    			
+						</h:panelGroup>
+					</h:panelGrid>
+					
+					<fieldset style="width: 590px;">
+							<legend>Ocorrências </legend>
+
+							<a4j:region rendered="#{apresentadorSalarioCategoria.emModoInclusaoOuAlteracao}">							
+							<h:panelGrid columns="4" cellspacing="4" border="0" id="gridMinicrud">
+							
+								<h:panelGroup>
+									<fieldset style="width: 250px;">
+										<legend>Período</legend>
+										
+										<h:panelGrid columns="2" cellspacing="4" border="0">
+											<h:panelGroup>
+												<h:outputLabel value="Mês/Ano Inicial *"/><br />
+												     <rich:calendar id="competenciaInicial" value="#{apresentadorSalarioCategoria.registro.competenciaInicial}"  
+												     				label="Mês/Ano Inicial" inputSize="11" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+												     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+												     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												     				oninputfocus="$(this).monthYearMask()"
+												     				disabled="#{apresentador.emModoSomenteVisualizacao}" >
+														<f:facet name="footer">
+															<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														</f:facet>		            
+												    </rich:calendar>
+									    			<cobra:toolTip>
+									    				<rich:message for="competenciaInicial"/>
+									    			</cobra:toolTip>	    			
+											</h:panelGroup>	
+											
+											
+											<h:panelGroup>
+												<h:outputLabel value="Mês/Ano Final *"/><br />
+												     <rich:calendar id="competenciaFinal" value="#{apresentadorSalarioCategoria.registro.competenciaFinal}"  
+												     				label="Mês/Ano Final" inputSize="11" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+												     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+												     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												     				oninputfocus="$(this).monthYearMask()"
+												     				disabled="#{apresentador.emModoSomenteVisualizacao}" >
+														<f:facet name="footer">
+															<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														</f:facet>		            
+												    </rich:calendar>
+									    			<cobra:toolTip>
+									    				<rich:message for="competenciaFinal"/>
+									    			</cobra:toolTip>	    			
+											</h:panelGroup>	
+											
+										</h:panelGrid>
+							
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Valor do Salário *" for="valorParaBaseDeCalculo"/><br />
+									<h:inputText id="valorParaBaseDeCalculo" label="Valor do Salário"  value="#{apresentadorSalarioCategoria.registro.valorParaBaseDeCalculo}" 
+												  size="16" maxlength="16" onfocus="$(this).currencyMask()" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+										<f:converter converterId="bigDecimalConverter"/>
+									</h:inputText>
+					    			<cobra:toolTip>
+					    				<rich:message for="valorParaBaseDeCalculo"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								
+								<h:panelGroup>
+										<h:panelGrid columns="1" cellspacing="0" border="0">
+										
+											<h:panelGroup style="margin-left:-4px;">
+										    		<a4j:commandLink id="cmdGerarOcorrencias" limitToList="true"
+										    						 actionListener="#{apresentadorSalarioCategoria.gerarOcorrencias}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+									    							 styleClass="botaoAddItem" title="Gerar Ocorrências" style="margin-bottom:0px;"
+									    							 rendered="#{not apresentador.emModoSomenteVisualizacao}" reRender="gridMinicrud,painelDadosMiniCrud,painelMensagens">
+									    			</a4j:commandLink>
+											</h:panelGroup>
+											
+										</h:panelGrid>		
+								</h:panelGroup>
+							
+							</h:panelGrid>
+							</a4j:region>
+							
+					<br />
+					
+					<a4j:outputPanel id="painelDadosMiniCrud" ajaxRendered="true">
+						
+						<h:panelGroup  style="width: 600px;"  rendered="#{listaDeOcorrencias.rowCount gt 0}" >
+				
+								<rich:dataTable id="listagemMC" value="#{listaDeOcorrencias}" rowClasses="linha-par, linha-impar" 
+												cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{listaDeOcorrencias.size}" var="ocorrencia"> 
+						    		<rich:column style="width:10%;" rendered="#{identity.hasPermission('TABELAS_SALARIO_CATEGORIA', 'MANUTENCAO')}">
+									    	<f:facet name="header">
+								    			<h:outputText value="Ações"/>
+								    		</f:facet>
+										    <a4j:region>
+									    		<h:commandLink id="excluirItem2"  limitToList="true"
+									    						 rendered="#{identity.hasPermission('TABELAS_SALARIO_CATEGORIA', 'MANUTENCAO')}" 
+									    						 actionListener="#{apresentadorSalarioCategoria.excluirOcorrencia}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+								    							 styleClass="linkExcluir" title="Excluir" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+								    							 <a4j:support event="onclick" reRender="valor,painelDadosMiniCrud" limitToList="true" ajaxSingle="true"/>
+								    			</h:commandLink>
+									    	</a4j:region>
+								    </rich:column>
+						    	
+							    	<rich:column style="width:15%;">
+						    			<f:facet name="header">
+						    				<h:outputText value="Mês/Ano"/>
+						    			</f:facet>	
+						    			<h:outputText value="#{ocorrencia.dataOcorrencia}" id="data">
+						    				<f:converter converterId="competenciaConverter"/>
+						    			</h:outputText>
+							    	</rich:column>
+							    	
+							    	<rich:column style="width:75%;">
+						    			<f:facet name="header">
+						    				<h:outputText value="Valor do Salário"/>
+						    			</f:facet>	
+						    			<h:inputText value="#{ocorrencia.valor}" id="valor" required="true" style="text-align:right;" onfocus="$(this).currencyMask()" disabled="#{apresentador.emModoSomenteVisualizacao}" size="16" maxlength="16" >
+						    				<a4j:support event="onchange" ajaxSingle="true" limitToList="true" /> 
+											<f:converter converterId="bigDecimalConverter"/>
+										</h:inputText>
+							    	</rich:column>
+							    	
+								</rich:dataTable>
+						
+						</h:panelGroup>	
+			
+					</a4j:outputPanel>									
+					</fieldset>
+			
+			</h:panelGroup>
+		</a4j:outputPanel>
+		
+	</ui:define>
+	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="buscar" value="Buscar" actionListener="#{apresentadorSalarioCategoria.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentadorSalarioCategoria.emModoListagem}" onclick="allToUpperCase()"/>	
+		<a4j:commandButton id="incluir" value="Novo"  actionListener="#{apresentadorSalarioCategoria.novo}"  reRender="painelNovo" immediate="true" styleClass="botao" rendered="#{identity.hasPermission('TABELAS_SALARIO_CATEGORIA', 'MANUTENCAO') and apresentadorSalarioCategoria.emModoListagem}"/>
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorSalarioCategoria.salvar}" styleClass="botao" rendered="#{apresentadorSalarioCategoria.emModoFormulario  and apresentadorSalarioCategoria.operacao != 'VISUALIZACAO'  and apresentadorSalarioCategoria.operacao != 'EXCLUSAO'}" onclick="allToUpperCase()"/>
+		<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.remover}" imeddiate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />  
+		<a4j:commandButton id="cancelar" value="Cancelar" actionListener="#{apresentadorSalarioCategoria.cancelar}" immediate="true" styleClass="botao" rendered="#{apresentadorSalarioCategoria.emModoFormulario and apresentadorSalarioCategoria.operacao != 'VISUALIZACAO'}"/>
+		<a4j:commandButton id="voltar" value="Voltar" actionListener="#{apresentadorSalarioCategoria.voltar}" styleClass="botao"  immediate="true" rendered="#{apresentadorSalarioCategoria.operacao == 'VISUALIZACAO'}"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="consolidado-processo-atualizacao" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<parameter name="logo" class="java.io.InputStream" isForPrompting="false"/>
+	<parameter name="jr_resumo_atualizacao_processo_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/calculo-resumo.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_atualizacao_processo_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-processo-reclamantes.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_atualizacao_processo_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="consolidado-processo" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_atualizacao_processo_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_atualizacao_processo_5" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-processo-debito-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<queryString>
+		<![CDATA[]]>
+	</queryString>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="114" splitType="Stretch">
+			<printWhenExpression><![CDATA[$V{PAGE_NUMBER} == 1]]></printWhenExpression>
+			<image>
+				<reportElement x="5" y="6" width="158" height="34"/>
+				<imageExpression class="java.io.InputStream"><![CDATA[$P{logo}]]></imageExpression>
+			</image>
+			<staticText>
+				<reportElement style="default" x="0" y="59" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Processo:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="60" y="59" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{consolidado-processo}.numeroDoProcesso]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="0" y="73" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamado:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="60" y="73" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{consolidado-processo}.reclamado]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="0" y="87" width="98" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Ajuizamento:]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="96" y="87" width="174" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{consolidado-processo}.dataDeAjuizamento]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="270" y="87" width="97" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Liquidação:]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="367" y="87" width="149" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{consolidado-processo}.dataDaLiquidacaoAtualizacao]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="titulo" x="0" y="43" width="802" height="16"/>
+				<textElement textAlignment="Center">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[RELATÓRIO CONSOLIDADO DA ATUALIZAÇÃO]]></text>
+			</staticText>
+			<line>
+				<reportElement x="0" y="107" width="802" height="1"/>
+			</line>
+		</band>
+	</title>
+	<columnHeader>
+		<band splitType="Stretch"/>
+	</columnHeader>
+	<detail>
+		<band height="50">
+			<subreport>
+				<reportElement x="-19" y="0" width="841" height="50"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="resumoAtualizacao">
+					<subreportParameterExpression><![CDATA[$P{consolidado-processo}.resumoAtualizacao]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_atualizacao_processo_5">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_atualizacao_processo_5}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_atualizacao_processo_4">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_atualizacao_processo_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_atualizacao_processo_3">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_atualizacao_processo_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_atualizacao_processo_2">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_atualizacao_processo_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_atualizacao_processo_1">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_atualizacao_processo_1}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{consolidado-processo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_atualizacao_processo_1}]]></subreportExpression>
+			</subreport>
+		</band>
+	</detail>
+	<columnFooter>
+		<band height="15" splitType="Stretch">
+			<textField>
+				<reportElement x="681" y="0" width="80" height="15"/>
+				<textElement textAlignment="Right">
+					<font fontName="SansSerif" size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Pág. "+$V{PAGE_NUMBER}+" de"]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report">
+				<reportElement x="761" y="0" width="40" height="15"/>
+				<textElement>
+					<font fontName="SansSerif" size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[" " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band splitType="Stretch"/>
+	</summary>
+</jasperReport>

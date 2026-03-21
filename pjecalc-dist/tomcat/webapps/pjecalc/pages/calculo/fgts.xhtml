@@ -1,0 +1,306 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="FGTS" />
+	<ui:param name="apresentador" value="#{apresentadorFgts}" />
+	<ui:param name="registro" value="#{fgts}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+		<br/>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+	
+		<h:panelGrid columns="1" cellspacing="0" border="0">
+		
+			<h:panelGroup>
+
+				<h:panelGrid columns="4" cellspacing="0" border="0">
+				
+					<h:panelGrid columns="1" cellspacing="0" border="0">	
+						<h:panelGroup>
+							<fieldset><legend>Destino</legend>
+								<a4j:region>
+									<h:selectOneRadio id="tipoDeVerba" value="#{registro.destinoDoFgts}" styleClass="labelInput" layout="lineDirection">
+										<s:selectItems value="#{enumItems.destinoDoFgtsEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+									</h:selectOneRadio>
+								</a4j:region>
+							</fieldset>
+						</h:panelGroup>
+						
+						
+						<h:panelGroup>			
+							<fieldset ><legend>Compor Principal</legend>
+								<h:selectOneRadio id="comporPrincipal" value="#{registro.comporPrincipal}" styleClass="labelInput" 
+													layout="lineDirection">
+									<s:selectItems value="#{enumItems.logicoEnum}" var="item" label="#{item.nome}"/>
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</fieldset>
+						</h:panelGroup>
+						
+					</h:panelGrid>
+					
+					<h:panelGroup>
+						<a4j:region>
+						<fieldset >
+								<legend>
+									<h:selectBooleanCheckbox id="multa" value="#{registro.multa}" style="margin-left:2px;margin-right:5px;" disabled="#{not fgts.deveCobrarMulta}">
+										<a4j:support event="onchange" actionListener="#{apresentador.atualizaInformacoesDeMulta()}" reRender="tipoDoValorDaMulta,gridMultaCalculada,gridMultaInformada,multaDoArtigo467,excluirAvisoDaMulta,painelIncidenciaPensaoAlimenticia" limitToList="true" ajaxSingle="true"/>
+									</h:selectBooleanCheckbox>
+									Multa
+								</legend>								
+								<h:panelGrid columns="3" border="0">
+									<h:panelGroup>
+										<fieldset>
+											<legend>Valor *</legend>
+											<h:selectOneRadio id="tipoDoValorDaMulta" value="#{registro.tipoDoValorDaMulta}" styleClass="labelInput" layout="pageDirection" disabled="#{not fgts.deveCobrarMulta or not registro.multa}">
+												<s:selectItems value="#{enumItems.tipoDeBaseDoFgtsEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+												<a4j:support event="onchange" reRender="gridMultaCalculada,gridMultaInformada" limitToList="true" ajaxSingle="true"/>
+											</h:selectOneRadio>
+										</fieldset>
+									</h:panelGroup>
+
+									<h:panelGroup id="gridMultaCalculada">
+										<h:panelGrid columns="1" cellspacing="3" border="0" rendered="#{registro.tipoDoValorDaMulta=='CALCULADA'}">
+											<h:panelGroup>
+												<h:selectOneRadio id="multaDoFgts" value="#{registro.multaDoFgts}" styleClass="labelInput" layout="lineDirection" disabled="#{not fgts.deveCobrarMulta or not registro.multa}">
+													<s:selectItems value="#{enumItems.valorDaMultaDoFgtsEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+												</h:selectOneRadio>
+											</h:panelGroup>
+										
+											<h:panelGroup>
+												<h:outputLabel value="Incidência" for="incidenciaDoFgts" />
+												<br/>
+												<h:selectOneMenu id="incidenciaDoFgts" value="#{registro.incidenciaDoFgts}" disabled="#{not fgts.deveCobrarMulta or not registro.multa}">
+													<s:selectItems value="#{enumItems.incidenciaDeMultaDoFgtsEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+													<a4j:support event="onchange" actionListener="#{apresentador.atualizarIncidenciaDoFgts()}" reRender="excluirAvisoDaMulta" limitToList="true" ajaxSingle="true"/>
+												</h:selectOneMenu>
+											</h:panelGroup>
+										</h:panelGrid>
+									</h:panelGroup>
+									
+									<h:panelGroup id="gridMultaInformada">
+										<h:panelGrid columns="1" cellspacing="3" border="0" rendered="#{registro.tipoDoValorDaMulta=='INFORMADA'}">
+											<h:panelGroup>
+												<h:outputLabel value="Valor *" for="valorInformadoDaMulta" style="width:5px;"/><br />
+												<h:inputText id="valorInformadoDaMulta" value="#{registro.valorInformadoDaMulta}" label="Valor" size="16" maxlength="16" onfocus="$(this).currencyMask()" disabled="#{not fgts.deveCobrarMulta or not registro.multa}" required="#{registro.tipoDoValorDaMulta=='INFORMADA'}" style="width:80px; text-align:right;">
+												</h:inputText>
+								    			<cobra:toolTip>
+								    				<rich:message for="valorInformadoDaMulta"/>
+								    			</cobra:toolTip>	    			
+											</h:panelGroup>
+										</h:panelGrid>
+									</h:panelGroup>
+								</h:panelGrid>
+								
+								<h:panelGrid columns="2" cellspacing="1" border="0">
+									<h:selectBooleanCheckbox id="excluirAvisoDaMulta" value="#{registro.excluirAvisoDaMulta}" disabled="#{not fgts.deveCobrarMulta or not registro.multa or registro.incidenciaDoFgts == 'SOBRE_DEPOSITADO_SACADO'}" style="margin-left:2px;"/>
+									<h:outputLabel value="Excluir da Base da Multa o valor de FGTS sobre Aviso Prévio" for="excluirAvisoDaMulta" />
+								</h:panelGrid>
+									
+								<h:panelGrid columns="1" cellspacing="3" border="0">
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="multaDoArtigo467" value="#{registro.multaDoArtigo467}" disabled="#{not fgts.deveCobrarMulta or not registro.multa}"/>
+										<h:outputLabel value="Multa do artigo 467 da CLT" for="multaDoArtigo467" />
+									</h:panelGroup>
+								</h:panelGrid>
+						</fieldset>
+						</a4j:region>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<fieldset ><legend>Lei Complementar 110/2001</legend>	
+							<h:selectBooleanCheckbox id="multa10" value="#{registro.multa10}" disabled="#{not fgts.deveCobrarMulta}"/>
+							<h:outputLabel value="Contribuição Social 10%" for="multa10" />
+							<br/>
+							<h:selectBooleanCheckbox id="contribuiçãoSocial" value="#{registro.contribuicaoSocial05}" style="margin-top:5px;"/>
+							<h:outputLabel value="Contribuição Social 0,5%" for="contribuiçãoSocial" />
+						</fieldset>
+					</h:panelGroup>
+					
+				</h:panelGrid>
+				
+				<h:panelGrid columns="2"  border="0" cellspacing="4" styleClass="tabelaRowTop">
+				
+					<h:panelGrid columns="1" border="0" cellspacing="0">
+						<h:panelGroup id="painelIncidenciaPensaoAlimenticia">
+							<fieldset style="width:260px; padding:5px;"><legend>Incidência</legend>
+								<a4j:region>
+									<h:selectBooleanCheckbox id="incidenciaPensaoAlimenticia" value="#{registro.incidenciaPensaoAlimenticia}">
+										<a4j:support event="onchange" limitToList="true" actionListener="#{registro.setIncidenciaPensaoAlimenticiaSobreMulta(false)}" ajaxSingle="true" reRender="painelIncidenciaPensaoAlimenticia"/>
+									</h:selectBooleanCheckbox>
+									<h:outputLabel value=" Pensão Alimentícia sobre FGTS" for="incidenciaPensaoAlimenticia" />
+								</a4j:region>
+								<br/>
+								<a4j:region rendered="#{registro.incidenciaPensaoAlimenticia and registro.multa}">
+									<h:selectBooleanCheckbox id="incidenciaPensaoAlimenticiaSobreMulta" value="#{registro.incidenciaPensaoAlimenticiaSobreMulta}" style="margin-top:5px;"/>
+									<h:outputLabel value=" Pensão Alimentícia sobre Multa do FGTS" for="incidenciaPensaoAlimenticiaSobreMulta" />	
+								</a4j:region>
+								
+							</fieldset>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<fieldset style="width: 258px; padding:6px;">
+								<legend>Parâmetros das Ocorrências</legend>
+								
+								<h:panelGrid columns="2" cellspacing="0" border="0">
+								
+									<h:panelGroup>
+										<fieldset style="height: 60px; ">
+											<legend>Período</legend>
+										
+											<h:panelGrid columns="2" cellspacing="3" border="0">
+												<h:panelGroup>
+													<h:outputLabel value="Data Inicial" for="periodoInicial" /><br />
+									    			<h:inputText id="periodoInicial" label="Data Inicial" size="10" value="#{registro.periodoInicial}" disabled="true">
+								    					<f:converter converterId="dataConverter"/>
+									    			</h:inputText>
+												</h:panelGroup>
+															
+												<h:panelGroup>
+													<h:outputLabel value="Data Final" for="" /><br />
+									    			<h:inputText id="periodoFinal" label="Data Final" size="10" value="#{registro.periodoFinal}" disabled="true">
+								    					<f:converter converterId="dataConverter"/>
+									    			</h:inputText>
+												</h:panelGroup>
+											</h:panelGrid>
+										</fieldset>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<fieldset>
+											<legend>Alíquota</legend>
+											<h:selectOneRadio id="aliquota" value="#{registro.aliquota}" styleClass="labelInput" layout="pageDirection" disabled="true">
+												<s:selectItems value="#{enumItems.aliquotaDoFgtsEnum}" var="item" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneRadio>
+										</fieldset>
+									</h:panelGroup>
+									
+								</h:panelGrid>
+								
+							</fieldset>
+						</h:panelGroup>
+					
+					</h:panelGrid>
+				
+				   	
+				   	<h:panelGroup>
+
+						<fieldset style="width:410px; clear:left; margin-left:6px;"><legend>Saldo e/ou Saque</legend>
+						<h:panelGrid columns="4" cellspacing="4" cellpadding="2" border="0">
+							
+						   	<h:panelGroup>
+								<h:selectBooleanCheckbox  id="deduzirDoFGTS" label="Deduzir do FGTS" style="padding-left: 4px; margin-top:16px;" value="#{registro.deduzirDoFGTS}" disabled="#{listaDeOperacoes.rowCount == 0}">
+									<a4j:support event="onchange" ajaxSingle="true" limitToList="true"/>
+								</h:selectBooleanCheckbox>
+								<h:outputLabel value="Deduzir do FGTS" for="deduzirDoFGTS" />					
+						   	</h:panelGroup>
+							
+							<a4j:region>	
+							<h:panelGrid id="painelMinicrud" columns="3" cellspacing="0" border="0">
+							
+								<h:panelGroup>
+									<h:outputLabel value="Data *" for="competencia" /><br />
+									<rich:calendar id="competencia" value="#{operacaoDeFgts.competencia}" label="Data"  inputSize="14" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"> 
+										<f:facet name="footer">
+								        	<h:outputText value="" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+					    			<cobra:toolTip>
+					    				<rich:message for="competencia"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Valor *" for="valor" style="width:5px;"/><br />
+									<h:inputText id="valor" value="#{operacaoDeFgts.valor}" 
+											label="Valor" size="16" maxlength="16" onfocus="$(this).currencyMask()">
+									</h:inputText>
+					    			<cobra:toolTip>
+					    				<rich:message for="valor"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+							
+								<h:panelGroup>
+									<a4j:commandLink id="cmdIncluir" styleClass="botaoAddItem" title="Adicionar" limitToList="true" actionListener="#{apresentador.adicionarOperacao}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="deduzirDoFGTS,painelMinicrud,painelListaOperacoes,painelMensagens" />
+								</h:panelGroup>	
+							</h:panelGrid>
+							</a4j:region>
+						
+						</h:panelGrid>				
+						
+							<a4j:outputPanel id="painelListaOperacoes">
+							<h:panelGroup  style="width: 100%;" >
+								<rich:dataTable id="listagem" value="#{listaDeOperacoes}" rowClasses="linha-par, linha-impar" 
+													cellpadding="0" cellspacing="4" border="0" width="100%" var="item"> 
+							    		<rich:column style="width:10%;">
+										    	<f:facet name="header">
+									    			<h:outputText value="Ação"/>
+									    		</f:facet>
+											    <a4j:region>
+										    		<a4j:commandLink id="excluirDep" immediate="true" limitToList="true" 
+									    							 styleClass="linkExcluir" title="Excluir" 
+									    							 actionListener="#{apresentador.removerOperacao}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+									    							 reRender="deduzirDoFGTS,painelListaOperacoes" >
+									    			</a4j:commandLink>
+										    	</a4j:region>
+									    </rich:column>
+							    	
+								    	<rich:column style="width:10%;">
+							    			<f:facet name="header">
+							    				<h:outputText value="Data"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.competencia}"/>
+								    	</rich:column>
+								    	
+								    	<rich:column style="width:10%;">
+							    			<f:facet name="header">
+							    				<h:outputText value="Valor R$"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.valor}">
+							    			</h:outputText>
+								    	</rich:column>
+									</rich:dataTable>
+							</h:panelGroup>
+							</a4j:outputPanel>
+									
+						</fieldset>	
+				   	
+				   	</h:panelGroup>
+				   	
+				</h:panelGrid>
+				
+			</h:panelGroup>
+			
+		</h:panelGrid>
+	
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorFgts.salvar}" styleClass="botao" onclick="allToUpperCase()"/>  
+		<a4j:commandButton id="ocorrencias" value="Ocorrências" immediate="true" styleClass="botaoMedio" action="#{apresentador.parametrizarOcorrencias}" />
+	</ui:define>
+	
+</ui:composition>
+
+</html>

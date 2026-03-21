@@ -6,7 +6,8 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "bash -c 'uvicorn webapp:app --host 0.0.0.0 --port ${PORT:-8000}'"
+# docker-entrypoint.sh inicia PJE-Calc (Tomcat) + aguarda + sobe uvicorn
+startCommand = "/usr/local/bin/docker-entrypoint.sh"
 healthcheckPath = "/"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"

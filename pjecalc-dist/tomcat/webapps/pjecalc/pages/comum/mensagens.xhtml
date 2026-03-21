@@ -1,0 +1,51 @@
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xml:lang="pt" lang="pt" 
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core" 
+    xmlns:a4j="http://richfaces.org/a4j"
+    xmlns:rich="http://richfaces.org/rich">
+
+		<rich:modalPanel id="#{empty id ? 'msgPanel' : id}" resizeable="false" moveable="false" autosized="true" zindex="2000" width="450">
+           	<f:facet name="header">
+               	<h:outputText value="#{requestScope.tituloPainel}" />
+            </f:facet>
+
+            <f:facet name="controls">
+            	<h:graphicImage url="/images/ico_fechar.gif" style="cursor: pointer;" onclick="Richfaces.hideModalPanel('formulario:#{empty id ? 'msgPanel' : id}')" alt="Fechar" />
+            </f:facet>
+            
+			<table border="0" width="100%">
+				<tr>
+					<td valign="top">
+			            <h:graphicImage url="/images/icone_msg_positiva.gif" style="border: none;" rendered="#{requestScope.infoMessages}" alt="Positivo" />
+		            	<h:graphicImage url="/images/icone_msg_alerta.gif" style="border: none;" rendered="#{requestScope.warnMessages}" alt="Alerta" />
+		            	<h:graphicImage url="/images/icone_msg_negativa.gif" style="border: none;" rendered="#{requestScope.errorMessages}" alt="Negativo" />
+					</td>
+					<td valign="top">
+							<h:messages layout="table" showSummary="true" showDetail="false" styleClass="msgSucesso" rendered="#{requestScope.infoMessages}"/>
+							<h:messages layout="table" showSummary="true" showDetail="false" styleClass="msgAlerta" rendered="#{requestScope.warnMessages}"/>
+							<h:messages layout="table" showSummary="true" showDetail="false" styleClass="msgErro" rendered="#{requestScope.errorMessages}"/>
+							<h:outputText value="#{requestScope.filterMessages}"/>																		
+					</td>
+				</tr>
+				<tr>
+					<td colspan="2" align="center" >
+						<br/>
+               			<h:commandButton id="btnFecharSucesso#{empty id ? 'msgPanel' : id}" value="Fechar" styleClass="BtFechar" immediate="true" onclick="Richfaces.hideModalPanel('#{empty id ? 'msgPanel' : id}');return false;" onmouseover="this.className='BtFechar_focus'" onmouseout="this.className='BtFechar'" rendered="#{requestScope.infoMessages}" />
+						<h:commandButton id="btnFecharAlerta#{empty id ? 'msgPanel' : id}" value="Fechar" styleClass="BtFechar" immediate="true" onclick="Richfaces.hideModalPanel('#{empty id ? 'msgPanel' : id}');return false;" onmouseover="this.className='BtFechar_focus'" onmouseout="this.className='BtFechar'" rendered="#{requestScope.warnMessages}" />
+						<h:commandButton id="btnFecharErro#{empty id ? 'msgPanel' : id}" value="Fechar" styleClass="BtFechar" immediate="true" onclick="Richfaces.hideModalPanel('#{empty id ? 'msgPanel' : id}');return false;" onmouseover="this.className='BtFechar_focus'" onmouseout="this.className='BtFechar'" rendered="#{requestScope.errorMessages}" />                    			
+					</td>
+				</tr>
+			
+			</table>
+			
+       	</rich:modalPanel>
+       	<script type="text/javascript" charset="iso-8859-1">
+       		jQuery(function() {
+        		Richfaces.showModalPanel('formulario:#{empty id ? 'msgPanel' : id}');
+ 						jQuery("#fechar").focus();
+       		});
+       	</script>
+	    
+</html>                            

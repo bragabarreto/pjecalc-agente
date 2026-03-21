@@ -1,0 +1,167 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="legendaDoFormulario" value="Enviar Dados de Atualização" />
+	<ui:param name="apresentador" value="#{apresentadorCalculo}" />
+	<ui:param name="registro" value="#{apresentador.registro}" />
+	<ui:param name="filtro" value="#{apresentador.filtro}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="../calculo/resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+		<br/>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+		<h:panelGrid columns="5" cellpadding="3" cellspacing="4" border="0" rendered="false">
+			<h:panelGroup>
+				<h:outputLabel value="Número" /><br />
+				<h:inputText id="idCalculo" value="#{apresentador.registro.id}" styleClass="leitura" disabled="true" />
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel value="Tipo" /><br />
+				<h:inputText id="tipo" value="#{apresentador.registro.tipoCalculo}"  size="10" maxlength="1" styleClass="leitura" disabled="true"/>
+			</h:panelGroup>
+			
+			<h:panelGroup >
+				<h:outputLabel value="Data de Criação" /><br />
+				     <rich:calendar id="dataCriacao" value="#{apresentador.registro.dataCriacao}"  inputSize="23" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" disabled="true">
+						<f:facet name="footer">
+							<h:outputText value="{selectedDateControl}" style="text-align:center"  />
+						</f:facet>		            
+				    </rich:calendar>
+			</h:panelGroup>	
+   		 </h:panelGrid>
+		
+		<h:panelGroup>	
+			<h:panelGrid columns="4" cellspacing="6" border="0">
+				<h:panelGroup>
+					<h:outputLabel value="Justificativa" /><br/>
+					<h:inputTextarea id="comentarios" value="#{apresentador.historicoValidacaoDoCalculo.justificativa}" 
+									 label="Comentários" cols="95" rows="3"
+									 onkeyup="limitarTextArea(this, 255)"
+									 onkeypress="limitarTextArea(this, 255)" onchange="limitarTextArea(this, 255)">
+					</h:inputTextarea>
+				</h:panelGroup>	
+			</h:panelGrid>
+		
+			<h:panelGrid>
+				<h:panelGroup id="painelBotoes">
+					<a4j:commandButton id="validar" reRender="loginAplicacaoButton" value="Consolidar Dados" actionListener="#{apresentador.consolidarDadosParaEnvioAtualizacao}" styleClass="botaoMedio" onclick="AguardeShow();" oncomplete="AguardeHide();"/>	
+					
+					<a4j:commandButton id="loginAplicacaoButton"
+	                                        action="#{apresentador.enviarDados()}"
+	                                        value="Enviar para o PJe"
+	                                        onclick="AguardeShow();if (!confirma('#{mensagens.MSG0153}',this)) return false;"
+                                        	oncomplete="window.location.reload();"
+	                                        styleClass="botaoMedio"
+	                                        reRender="painelListagem" 
+	                                        rendered="#{apresentador.pjecalcImportacao != null}"/>
+				</h:panelGroup>
+				
+			</h:panelGrid>
+		
+		</h:panelGroup>
+		
+	</ui:define>
+	
+	
+	<ui:define name="nofiltroBotoes">
+	</ui:define>	
+
+	<ui:define name="noresultadoTabela">
+			
+		<a4j:outputPanel id="painelListagem">
+		
+			<script type="text/javascript">
+				jQuery(document).ready(function() {
+					 jQuery(function() {
+               	 		exibirDetalhesTabela('.linkTitulo', '.linkDestinacoes');
+				     });
+					jQuery(".list-check").find(":checked").parent().toggleClass("checked");
+					jQuery(".list-check").find(":disabled").parent().toggleClass("disabled");
+					jQuery(".list-check :checkbox").click(function () {
+						jQuery(this).parent().toggleClass("checked");
+					});
+				});
+			</script>
+			
+			<h:panelGroup rendered="#{historicoValidacoesDoCalculo.rowCount eq 0}">
+				<h:outputLabel style="float:left; margin:14px 10px 5px 16px;" value="Não existem registros de alterações na situação do cálculo." />
+			</h:panelGroup>
+		
+			<rich:dataTable id="listagem" value="#{historicoValidacoesDoCalculo}" rowClasses="linha-par, linha-par-exibir, linha-impar, linha-impar-exibir" 
+           				cellpadding="3" border="0" width="100%" rows="#{historicoValidacoesDoCalculo.rowCount}" var="validacao" style="min-width:800px;"
+           				rendered="#{historicoValidacoesDoCalculo.rowCount gt 0}"> 
+            
+           	<f:facet name="header">
+				<rich:columnGroup>
+					<rich:column>
+						<h:outputText value="Data" />
+					</rich:column>
+					<rich:column>
+						<h:outputText value="Usuário" />
+					</rich:column>
+					<rich:column>
+						<h:outputText value="Justificativa" styleClass="linkTitulo linkDetalhe" />
+					</rich:column>							
+				</rich:columnGroup>
+	 	   </f:facet>
+
+		   <rich:columnGroup>
+				<rich:column>
+					<h:outputText value="#{validacao.dataAlteracao}" />
+				</rich:column>
+				<rich:column>
+					<h:outputText value="#{validacao.nome}" />
+				</rich:column>										
+				<rich:column>
+					<h:panelGroup id="divDestinacoes">
+						<ui:param name="validacaoId" value="#{validacao.id}" />
+						<h:outputText value="Exibir" styleClass="linkDestinacoes linkDetalhe exibirItem#{validacaoId}"/>
+					</h:panelGroup>
+				</rich:column>							
+		   </rich:columnGroup>
+
+		   <rich:column colspan="4">
+				<h:panelGroup layout="block" styleClass="detalhe3d">
+						<h:inputTextarea id="comentarios" value="#{validacao.justificativa}" 
+							 label="Comentários" cols="95" rows="3"
+							 onkeyup="limitarTextArea(this, 255)"
+							 onkeypress="limitarTextArea(this, 255)" onchange="limitarTextArea(this, 255)" disabled="true">
+						</h:inputTextarea>
+				</h:panelGroup>
+				</rich:column> 								 
+				</rich:dataTable>
+				<ui:include src="/pages/comum/paginacao.xhtml">
+			    	<ui:param name="lista" value="#{apresentador.lista}" />
+				</ui:include>
+		
+		</a4j:outputPanel>
+		
+		<h:panelGroup rendered="#{apresentador.submitted}">
+			<script	src="#{facesContext.externalContext.requestContextPath}/plugins/sweetAlert/sweetalert.min.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"/>
+			<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/plugins/sweetAlert/sweetalert.css?#{mensagens.versao}" />
+	        <script>
+				var sucesso = #{apresentador.sucesso};
+				swal(sucesso ? 'Sucesso!' : 'Erro!', '#{apresentador.mensagemServicoPje}', sucesso ? 'success' : 'error');
+			</script>
+	    </h:panelGroup>
+		
+	</ui:define> 
+
+</ui:composition>
+
+</html>

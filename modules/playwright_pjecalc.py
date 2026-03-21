@@ -78,20 +78,15 @@ def pjecalc_rodando() -> bool:
 
 def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) -> None:
     """
-    Inicia o PJE-Calc Cidadão via iniciarPjeCalc.bat se não estiver rodando.
+    Inicia o PJE-Calc Cidadão via iniciarPjeCalc.bat (Windows) ou iniciarPjeCalc.sh (Linux).
     Aguarda:
       1) porta TCP 9257 abrir
       2) HTTP http://localhost:9257/pjecalc responder com 200/302
     Emite mensagens de progresso via log_cb durante a espera.
     """
+    import platform
     _log = log_cb or (lambda m: None)
     dir_path = Path(pjecalc_dir)
-    bat = dir_path / "iniciarPjeCalc.bat"
-    if not bat.exists():
-        raise FileNotFoundError(
-            f"iniciarPjeCalc.bat não encontrado em {dir_path}. "
-            "Verifique a configuração PJECALC_DIR."
-        )
 
     if pjecalc_rodando():
         logger.info("PJE-Calc já está rodando em localhost:9257.")
@@ -101,11 +96,34 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
 
     logger.info(f"Iniciando PJE-Calc Cidadão a partir de {dir_path}…")
     _log("Iniciando PJE-Calc Cidadão… (pode levar até 3 minutos)")
-    subprocess.Popen(
-        ["cmd", "/c", str(bat)],
-        cwd=str(dir_path),
-        creationflags=subprocess.CREATE_NEW_CONSOLE,
-    )
+
+    sistema = platform.system()
+    if sistema == "Windows":
+        launcher = dir_path / "iniciarPjeCalc.bat"
+        if not launcher.exists():
+            raise FileNotFoundError(
+                f"iniciarPjeCalc.bat não encontrado em {dir_path}. "
+                "Verifique a configuração PJECALC_DIR."
+            )
+        subprocess.Popen(
+            ["cmd", "/c", str(launcher)],
+            cwd=str(dir_path),
+            creationflags=subprocess.CREATE_NEW_CONSOLE,
+        )
+    else:
+        # Linux / Docker: usa iniciarPjeCalc.sh
+        launcher = dir_path / "iniciarPjeCalc.sh"
+        if not launcher.exists():
+            raise FileNotFoundError(
+                f"iniciarPjeCalc.sh não encontrado em {dir_path}. "
+                "Verifique a configuração PJECALC_DIR ou crie o script shell."
+            )
+        subprocess.Popen(
+            ["bash", str(launcher)],
+            cwd=str(dir_path),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     # 1) Aguarda porta TCP abrir
     inicio = time.time()
@@ -426,13 +444,15 @@ class PJECalcPlaywright:
         field_id: str,
         valor: str,
         label: str | None = None,
+        obrigatorio: bool = True,
     ) -> bool:
         """Seleciona opção em <select> JSF por label (texto visível) ou value."""
         if not valor:
             return False
         loc = self._localizar(field_id, label, tipo="select")
         if not loc:
-            self._log(f"  ⚠ select {field_id}: não encontrado — selecione manualmente.")
+            if obrigatorio:
+                self._log(f"  ⚠ select {field_id}: não encontrado — selecione manualmente.")
             return False
         try:
             loc.wait_for(state="visible", timeout=8000)
@@ -488,18 +508,21 @@ class PJECalcPlaywright:
         except Exception:
             return False
 
-    def _clicar_menu_lateral(self, texto: str) -> None:
+    def _clicar_menu_lateral(self, texto: str, obrigatorio: bool = True) -> bool:
         """
         Clica em link do menu lateral via JavaScript (invulnerável a visibilidade).
         Funciona mesmo que o menu esteja colapsado — dispara o onclick do JSF/A4J
         diretamente sem depender de Playwright ver o elemento.
+        Retorna True se clicou com sucesso, False se não encontrou.
         """
         self._page.wait_for_timeout(400)
         # Método primário: JS click — bypassa visibilidade, funciona em menus colapsados
         clicou = self._page.evaluate(
             """(texto) => {
                 const links = [...document.querySelectorAll('a')];
-                const el = links.find(a => a.textContent.trim().includes(texto));
+                const el = links.find(a =>
+                    a.textContent.replace(/\s+/g, ' ').trim().includes(texto)
+                );
                 if (el) { el.click(); return true; }
                 return false;
             }""",
@@ -508,32 +531,33 @@ class PJECalcPlaywright:
         if clicou:
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
-            return
+            return True
         # Fallback: Playwright (visível ou não)
         loc = self._page.locator(f"a:has-text('{texto}')")
         if loc.count() == 0:
             loc = self._page.get_by_role("link", name=texto)
         if loc.count() == 0:
-            self._log(f"  ⚠ Menu '{texto}': link não encontrado.")
-            return
+            if obrigatorio:
+                self._log(f"  ⚠ Menu '{texto}': link não encontrado.")
+                try:
+                    todos = self._page.evaluate("""() => {
+                        return [...document.querySelectorAll('a')]
+                            .map(a => a.textContent.replace(/\\s+/g, ' ').trim())
+                            .filter(t => t.length > 1 && t.length < 80);
+                    }""")
+                    self._log(f"  ℹ Links disponíveis: {list(dict.fromkeys(todos))[:30]}")
+                except Exception:
+                    pass
+            return False
         try:
             loc.first.click(force=True)
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
+            return True
         except Exception as e:
-            self._log(f"  ⚠ Menu '{texto}': erro ao clicar — {e}")
-            return
-        # Fallback JavaScript
-        self._page.evaluate(f"""
-            const links = document.querySelectorAll('a');
-            for (const a of links) {{
-                if (a.textContent.trim().toLowerCase().includes('{texto.lower()}')) {{
-                    a.click(); break;
-                }}
-            }}
-        """)
-        self._aguardar_ajax()
-        self._log(f"  ⚠ Menu '{texto}': usado fallback JS")
+            if obrigatorio:
+                self._log(f"  ⚠ Menu '{texto}': erro ao clicar — {e}")
+            return False
 
     def _clicar_aba(self, aba_id: str) -> None:
         """Clica em aba RichFaces."""
@@ -586,21 +610,52 @@ class PJECalcPlaywright:
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
 
     def _clicar_novo(self) -> None:
-        seletores = [
-            "[id$='novo']",
-            "input[value='Novo']",
-            "button:has-text('Novo')",
-            ".sprite-novo",
-        ]
-        for sel in seletores:
+        """Clica no botão Novo — busca exata por texto 'Novo'."""
+        # Método 1: seletores CSS conhecidos
+        for sel in ["[id$='novo']", "[id$='novoBt']", "[id$='novoBtn']",
+                    "input[value='Novo']", "button:has-text('Novo')"]:
             try:
                 loc = self._page.locator(sel)
                 if loc.count() > 0:
-                    loc.first.click()
-                    self._aguardar_ajax()
-                    return
+                    loc.first.click(); self._aguardar_ajax()
+                    self._page.wait_for_timeout(800); return
             except Exception:
                 continue
+
+        # Método 2: ARIA role (mais confiável para <a> com texto exato)
+        try:
+            loc = self._page.get_by_role("link", name="Novo", exact=True)
+            if loc.count() > 0:
+                loc.first.click(); self._aguardar_ajax()
+                self._page.wait_for_timeout(800); return
+        except Exception:
+            pass
+
+        # Método 3: JS sem filtro de menu, com normalização de \u00a0
+        clicou = self._page.evaluate("""() => {
+            const todos = [...document.querySelectorAll(
+                'a, input[type="submit"], input[type="button"], button')];
+            for (const el of todos) {
+                const txt = (el.textContent || el.value || el.title || '')
+                    .replace(/[\\s\\u00a0]+/g,' ').trim();
+                if (txt === 'Novo' || txt === 'Nova') { el.click(); return true; }
+            }
+            return false;
+        }""")
+        if clicou:
+            self._aguardar_ajax(); self._page.wait_for_timeout(800); return
+
+        # Diagnóstico
+        self._log("  ⚠ Botão Novo não encontrado — elementos clicáveis na página:")
+        try:
+            items = self._page.evaluate("""() => {
+                return [...document.querySelectorAll('a, input[type="submit"], button')]
+                    .map(el => el.id + ' | ' + (el.textContent||el.value||'').trim())
+                    .filter(s => s.length > 3 && s.length < 80);
+            }""")
+            self._log(f"  {items[:25]}")
+        except Exception:
+            pass
 
     def _aguardar_usuario(self, mensagem: str) -> None:
         """Injeta overlay amarelo para o usuário agir e clicar em Continuar."""
@@ -662,32 +717,57 @@ class PJECalcPlaywright:
     # ── Navegação principal ────────────────────────────────────────────────────
 
     def _ir_para_calculo_externo(self) -> None:
-        """Navega para a tela de Cálculo Externo via URL direta (mais confiável)."""
-        self._log("Navegando para Cálculo Externo…")
-        self._page.goto(
-            f"{self.PJECALC_BASE}/pages/calculo/calculoExterno.jsf",
-            wait_until="domcontentloaded",
-            timeout=30000,
-        )
-        self._aguardar_ajax()
-        self._log("  ✓ Tela de Cálculo Externo carregada.")
+        """Navega para o formulário de Novo Cálculo via menu 'Novo'.
+
+        Usa o fluxo 'Novo' (primeira liquidação de sentença), NÃO 'Cálculo Externo'
+        (que serve apenas para atualizar cálculos existentes).
+        Navegação via clique no menu — URL direta causa ViewState inválido no JSF.
+        """
+        self._log("Navegando para Novo Cálculo via menu…")
+
+        self._clicar_menu_lateral("Novo")
+        self._page.wait_for_timeout(1200)
+
+        # Recuperação: se página de erro, volta para home e tenta novamente
+        try:
+            body = self._page.locator("body").text_content(timeout=3000) or ""
+            if "Erro" in body and ("Servidor" in body or "inesperado" in body):
+                self._log("  Erro detectado após menu — voltando para Tela Inicial…")
+                link = self._page.locator("a:has-text('Tela Inicial'), a:has-text('Página Inicial')")
+                if link.count() > 0:
+                    link.first.click()
+                    self._page.wait_for_timeout(1500)
+                self._clicar_menu_lateral("Novo")
+                self._page.wait_for_timeout(1200)
+        except Exception:
+            pass
+
+        self._log("  ✓ Formulário de Novo Cálculo aberto.")
 
     # ── Fase 1: Dados do Processo + Parâmetros ─────────────────────────────────
 
     @retry(max_tentativas=3)
     def fase_dados_processo(self, dados: dict) -> None:
+        import datetime
         self._log("Fase 1 — Dados do processo…")
         self.mapear_campos("fase1_dados_processo")
 
         proc = dados.get("processo", {})
         cont = dados.get("contrato", {})
-        pres = dados.get("prescricao", {})
-        avp  = dados.get("aviso_previo", {})
+        presc = dados.get("prescricao", {})
+        ap = dados.get("aviso_previo", {})
 
+        # ── Campos do cabeçalho (Tipo e Data de Criação) ──
+        self._preencher("tipo", "Trabalhista", False)
+        hoje = datetime.date.today().strftime("%d/%m/%Y")
+        self._preencher_data("dataDeCriacao", hoje, False)
+        self._preencher_data("dataDeAbertura", hoje, False)
+
+        # ── Aba Dados do Processo ──
         self._clicar_aba("tabDadosProcesso")
         self._page.wait_for_timeout(400)
 
-        # Número do processo
+        # Número do processo (campos separados na interface)
         num = _parsear_numero_processo(proc.get("numero"))
         if num:
             self._preencher("numero", num.get("numero", ""), False)
@@ -697,109 +777,182 @@ class PJECalcPlaywright:
             self._preencher("regiao", num.get("regiao", ""), False)
             self._preencher("vara", num.get("vara", ""), False)
 
+        # Valor da causa e data de autuação
+        if proc.get("valor_causa"):
+            self._preencher("valorDaCausa", _fmt_br(proc["valor_causa"]), False)
+            self._preencher("valorCausa", _fmt_br(proc["valor_causa"]), False)
+        if proc.get("autuado_em"):
+            self._preencher_data("autuadoEm", proc["autuado_em"], False)
+            self._preencher_data("dataAutuacao", proc["autuado_em"], False)
+
+        # Partes
         if proc.get("reclamante"):
             self._preencher("reclamanteNome", proc["reclamante"], False)
+            self._preencher("nomeReclamante", proc["reclamante"], False)
         if proc.get("reclamado"):
             self._preencher("reclamadoNome", proc["reclamado"], False)
+            self._preencher("nomeReclamado", proc["reclamado"], False)
 
         if proc.get("cpf_reclamante"):
             self._marcar_radio("documentoFiscalReclamante", "CPF")
             self._preencher("reclamanteNumeroDocumentoFiscal", proc["cpf_reclamante"], False)
+            self._preencher("cpfReclamante", proc["cpf_reclamante"], False)
         if proc.get("cnpj_reclamado"):
             self._marcar_radio("tipoDocumentoFiscalReclamado", "CNPJ")
             self._preencher("reclamadoNumeroDocumentoFiscal", proc["cnpj_reclamado"], False)
+            self._preencher("cnpjReclamado", proc["cnpj_reclamado"], False)
 
-        # Aba Parâmetros do Cálculo
+        if proc.get("advogado_reclamante"):
+            self._preencher("nomeAdvogadoReclamante", proc["advogado_reclamante"], False)
+        if proc.get("oab_reclamante"):
+            self._preencher("numeroOABAdvogadoReclamante", proc["oab_reclamante"], False)
+
+        # ── Aba Parâmetros do Cálculo ──
         self._log("  → Aba Parâmetros do Cálculo…")
         self._clicar_aba("tabParametrosCalculo")
-        self._page.wait_for_timeout(400)
+        self._page.wait_for_timeout(600)
         self.mapear_campos("fase1_parametros")
 
+        # Dados do contrato
         if cont.get("admissao"):
-            self._preencher_data("dataAdmissao", cont["admissao"], label="Data de Admissão")
+            self._preencher_data("dataAdmissao", cont["admissao"], False)
+            self._preencher_data("dtAdmissao", cont["admissao"], False)
         if cont.get("demissao"):
-            self._preencher_data("dataDemissao", cont["demissao"], label="Data de Demissão")
+            self._preencher_data("dataDemissao", cont["demissao"], False)
+            self._preencher_data("dtDemissao", cont["demissao"], False)
         if cont.get("ajuizamento"):
-            self._preencher_data("dataAjuizamento", cont["ajuizamento"], label="Data de Ajuizamento")
+            self._preencher_data("dataAjuizamento", cont["ajuizamento"], False)
+            self._preencher_data("dtAjuizamento", cont["ajuizamento"], False)
 
-        if cont.get("ultima_remuneracao"):
-            self._preencher(
-                "valorUltimaRemuneracao",
-                _fmt_br(cont["ultima_remuneracao"]),
-                label="Última Remuneração",
-            )
-        if cont.get("maior_remuneracao"):
-            self._preencher(
-                "valorMaiorRemuneracao",
-                _fmt_br(cont["maior_remuneracao"]),
-                False,
-            )
-        if cont.get("carga_horaria"):
-            self._preencher("valorCargaHorariaPadrao", str(cont["carga_horaria"]), False)
+        rescisao_map = {
+            "sem_justa_causa": "SEM_JUSTA_CAUSA",
+            "justa_causa": "JUSTA_CAUSA",
+            "pedido_demissao": "PEDIDO_DEMISSAO",
+            "distrato": "DISTRATO",
+            "morte": "MORTE",
+        }
+        if cont.get("tipo_rescisao"):
+            self._selecionar("tipoRescisao", rescisao_map.get(cont["tipo_rescisao"], "SEM_JUSTA_CAUSA"), obrigatorio=False)
+            self._selecionar("motivoDesligamento", rescisao_map.get(cont["tipo_rescisao"], "SEM_JUSTA_CAUSA"), obrigatorio=False)
 
         regime_map = {
-            "Tempo Integral": "INTEGRAL",
-            "Tempo Parcial": "PARCIAL",
+            "Tempo Integral": "TEMPO_INTEGRAL",
+            "Tempo Parcial": "TEMPO_PARCIAL",
             "Trabalho Intermitente": "INTERMITENTE",
         }
-        regime = regime_map.get(cont.get("regime", "Tempo Integral"), "INTEGRAL")
-        self._selecionar("regimeDoContrato", regime, label="Regime do Contrato")
+        if cont.get("regime"):
+            self._selecionar("regimeTrabalho", regime_map.get(cont["regime"], "TEMPO_INTEGRAL"), obrigatorio=False)
+            self._selecionar("regimeDoContrato", regime_map.get(cont["regime"], "TEMPO_INTEGRAL"), obrigatorio=False)
 
-        if pres.get("quinquenal") is not None:
-            self._marcar_checkbox("prescricaoQuinquenal", bool(pres["quinquenal"]))
-        if pres.get("fgts") is not None:
-            self._marcar_checkbox("prescricaoFgts", bool(pres["fgts"]))
+        if cont.get("carga_horaria"):
+            self._preencher("cargaHoraria", str(int(cont["carga_horaria"])), False)
+            self._preencher("cargaHorariaMensal", str(int(cont["carga_horaria"])), False)
 
-        tipo_ap = avp.get("tipo", "Calculado")
-        self._selecionar("apuracaoPrazoDoAvisoPrevio", tipo_ap)
-        if tipo_ap == "Informado" and avp.get("prazo_dias"):
-            self._preencher("prazoAvisoInformado", str(avp["prazo_dias"]), False)
-        if avp.get("projetar"):
-            self._marcar_checkbox("projetaAvisoIndenizado", True)
+        if cont.get("maior_remuneracao"):
+            self._preencher("maiorRemuneracao", _fmt_br(cont["maior_remuneracao"]), False)
+            self._preencher("maiorSalario", _fmt_br(cont["maior_remuneracao"]), False)
+        if cont.get("ultima_remuneracao"):
+            self._preencher("ultimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]), False)
+            self._preencher("ultimoSalario", _fmt_br(cont["ultima_remuneracao"]), False)
+
+        # Aviso prévio
+        ap_tipo_map = {
+            "Calculado": "CALCULADO",
+            "Informado": "INFORMADO",
+            "Nao Apurar": "NAO_APURAR",
+        }
+        if ap.get("tipo"):
+            self._selecionar("tipoAvisoPrevio", ap_tipo_map.get(ap["tipo"], "CALCULADO"), obrigatorio=False)
+            self._selecionar("avisoPrevio", ap_tipo_map.get(ap["tipo"], "CALCULADO"), obrigatorio=False)
+        if ap.get("prazo_dias"):
+            self._preencher("diasAvisoPrevio", str(int(ap["prazo_dias"])), False)
+
+        # Prescrição
+        if presc.get("quinquenal") is not None:
+            self._marcar_checkbox("prescricaoQuinquenal", bool(presc["quinquenal"]))
+        if presc.get("fgts") is not None:
+            self._marcar_checkbox("prescricaoFgts", bool(presc["fgts"]))
+
+        # Índices de correção e juros
+        cj = dados.get("correcao_juros", {})
+        ir = dados.get("imposto_renda", {})
+
+        indice_map = {
+            "Tabela JT Única Mensal": "IPCAE",
+            "Tabela JT Unica Mensal": "IPCAE",
+            "IPCA-E": "IPCAE",
+            "Selic": "SELIC",
+            "TRCT": "TRCT",
+            "TR": "TRD",
+        }
+        indice = indice_map.get(cj.get("indice_correcao", ""), "IPCAE")
+        self._selecionar("indiceTrabalhista", indice, obrigatorio=False)
+        self._selecionar("indiceCorrecao", indice, obrigatorio=False)
+
+        juros_map = {"Selic": "SELIC", "Juros Padrão": "TRD_SIMPLES", "Juros Padrao": "TRD_SIMPLES"}
+        juros = juros_map.get(cj.get("taxa_juros", ""), "SELIC")
+        self._selecionar("juros", juros, obrigatorio=False)
+        self._selecionar("taxaJuros", juros, obrigatorio=False)
+
+        base_map = {"Verbas": "VERBA_INSS", "Credito Total": "CREDITO_TOTAL"}
+        base = base_map.get(cj.get("base_juros", "Verbas"), "VERBA_INSS")
+        self._selecionar("baseDeJurosDasVerbas", base, obrigatorio=False)
+
+        if ir.get("apurar"):
+            self._marcar_checkbox("apurarImpostoRenda", True)
+            if ir.get("meses_tributaveis"):
+                self._preencher("qtdMesesRendimento", str(ir["meses_tributaveis"]), False)
+            if ir.get("dependentes"):
+                self._marcar_checkbox("possuiDependentes", True)
+                self._preencher("quantidadeDependentes", str(ir["dependentes"]), False)
 
         self._clicar_salvar()
         self._log("Fase 1 concluída.")
 
     # ── Fase 2: Histórico Salarial ─────────────────────────────────────────────
 
-    @retry(max_tentativas=3)
+    @retry(max_tentativas=2)
     def fase_historico_salarial(self, dados: dict) -> None:
-        self._log("Fase 2 — Histórico salarial…")
-        hist_lista = dados.get("historico_salarial") or []
-
-        if not hist_lista:
-            cont = dados.get("contrato", {})
-            sal = cont.get("ultima_remuneracao") or cont.get("maior_remuneracao")
-            adm = cont.get("admissao")
-            dem = cont.get("demissao")
-            if sal and adm:
-                hist_lista = [{
-                    "nome": "BASE DE CÁLCULO",
-                    "valor": sal,
-                    "data_inicio": adm,
-                    "data_fim": dem or adm,
-                }]
-
-        if not hist_lista:
-            self._log("  Sem histórico salarial — fase ignorada.")
+        historico = dados.get("historico_salarial", [])
+        if not historico:
+            self._log("Fase 2 — Histórico Salarial: sem entradas extraídas — ignorado.")
             return
-
-        self._clicar_menu_lateral("Histórico Salarial")
-        self.mapear_campos("fase2_historico")
-
-        for h in hist_lista:
+        self._log(f"Fase 2 — Histórico Salarial: {len(historico)} período(s) extraído(s)…")
+        navegou = self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+        if not navegou:
+            self._log("  ⚠ Histórico Salarial não disponível no menu — listando para referência:")
+            for h in historico:
+                self._log(f"    {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
+            return
+        self.mapear_campos("fase2_historico_salarial")
+        for h in historico:
             self._clicar_novo()
-            self._preencher("nome", h.get("nome") or "BASE DE CÁLCULO")
-            self._marcar_radio("tipoVariacaoDaParcela", "MONETARIO")
-            self._preencher("valorParaBaseDeCalculo", _fmt_br(h.get("valor", 0)))
-            if h.get("data_inicio"):
-                self._preencher_data("competenciaInicial", h["data_inicio"])
-            if h.get("data_fim"):
-                self._preencher_data("competenciaFinal", h["data_fim"])
-            self._marcar_checkbox("incidenciaFGTS", True)
-            self._marcar_checkbox("incidenciaINSS", True)
+            try:
+                self._page.wait_for_selector(
+                    "[id$='dataInicio'], [id$='dataInicial'], [name*='dataInicio']",
+                    state="visible", timeout=6000
+                )
+            except Exception:
+                self._page.wait_for_timeout(1000)
+            self._preencher_data("dataInicio", h.get("data_inicio", ""), False)
+            self._preencher_data("dataFim", h.get("data_fim", ""), False)
+            # Tentar também nomes alternativos de campo
+            self._preencher_data("dataInicial", h.get("data_inicio", ""), False)
+            self._preencher_data("dataFinal", h.get("data_fim", ""), False)
+            self._preencher("salario", _fmt_br(h.get("valor", "")), False)
+            self._preencher("valor", _fmt_br(h.get("valor", "")), False)
             self._clicar_salvar()
-
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            try:
+                self._page.wait_for_selector(
+                    "[id$='filtroNome'], [id$='dataInicio'], [name*='filtroNome']",
+                    state="visible", timeout=5000
+                )
+            except Exception:
+                self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+                self._page.wait_for_timeout(800)
+            self._log(f"  ✓ Período: {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
         self._log("Fase 2 concluída.")
 
     # ── Fase 3: Verbas ─────────────────────────────────────────────────────────
@@ -828,8 +981,22 @@ class PJECalcPlaywright:
             "Desligamento": "DESLIGAMENTO",
         }
 
-        for v in todas:
+        for i, v in enumerate(todas):
             self._clicar_novo()
+            # Aguardar formulário de verba (campo descricao deve aparecer)
+            try:
+                self._page.wait_for_selector(
+                    "[id$='descricao'], [name*='descricao']",
+                    state="visible", timeout=8000
+                )
+            except Exception:
+                self._log("  ⚠ Formulário de verba não apareceu — aguardando mais…")
+                try:
+                    self._page.wait_for_load_state("networkidle", timeout=6000)
+                except Exception:
+                    self._page.wait_for_timeout(1500)
+            if i == 0:
+                self.mapear_campos("verba_form")  # captura IDs reais após abrir formulário
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
             self._preencher("descricao", nome)
             carac = carac_map.get(v.get("caracteristica", "Comum"), "COMUM")
@@ -853,6 +1020,17 @@ class PJECalcPlaywright:
                 self._preencher_data("periodoFinal", v["periodo_fim"], False)
 
             self._clicar_salvar()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(600)
+            # Após salvar, garantir retorno à lista de verbas
+            try:
+                self._page.wait_for_selector(
+                    "[id$='filtroNome'], [name*='filtroNome']",
+                    state="visible", timeout=5000
+                )
+            except Exception:
+                self._clicar_menu_lateral("Verbas")
+                self._page.wait_for_timeout(800)
             self._log(f"  ✓ Verba: {nome}")
 
         nao_rec = verbas_mapeadas.get("nao_reconhecidas", [])
@@ -870,24 +1048,24 @@ class PJECalcPlaywright:
     @retry(max_tentativas=3)
     def fase_fgts(self, fgts: dict) -> None:
         self._log("Fase 4 — FGTS…")
-        self._clicar_menu_lateral("FGTS")
+        # Tentar navegar para a seção FGTS no menu lateral
+        navegou = self._clicar_menu_lateral("FGTS", obrigatorio=False)
+        if not navegou:
+            navegou = self._clicar_menu_lateral("Fundo de Garantia", obrigatorio=False)
+        if not navegou:
+            self._log("  → Seção FGTS não encontrada no menu — incidência já configurada por verba.")
+            return
         self.mapear_campos("fase4_fgts")
-
+        # Alíquota FGTS (padrão 8%)
         aliquota = fgts.get("aliquota", 0.08)
-        pct = round(float(aliquota) * 100) if float(aliquota) <= 1 else round(float(aliquota))
-        self._page.evaluate(f"""
-            const tds = document.querySelectorAll('td');
-            for (const td of tds) {{
-                if (td.textContent.trim() === '{pct}%') {{ td.click(); break; }}
-            }}
-        """)
-        self._aguardar_ajax(3000)
-
-        if fgts.get("multa_40"):
-            self._marcar_checkbox("multa", True)
-        if fgts.get("multa_467"):
-            self._marcar_checkbox("multaDoArtigo467", True)
-
+        self._preencher("aliquotaFgts", _fmt_br(aliquota * 100), False)
+        self._preencher("percentualFgts", _fmt_br(aliquota * 100), False)
+        self._preencher("aliquota", _fmt_br(aliquota * 100), False)
+        # Multas
+        self._marcar_checkbox("multa40", bool(fgts.get("multa_40", True)))
+        self._marcar_checkbox("multaFgts40", bool(fgts.get("multa_40", True)))
+        self._marcar_checkbox("multa467", bool(fgts.get("multa_467", False)))
+        self._marcar_checkbox("multaFgts467", bool(fgts.get("multa_467", False)))
         self._clicar_salvar()
         self._log("Fase 4 concluída.")
 
@@ -898,98 +1076,128 @@ class PJECalcPlaywright:
         self._log("Fase 5 — Contribuição Social…")
         self._clicar_menu_lateral("Contribuição Social")
         self.mapear_campos("fase5_inss")
-
+        # No Cálculo Externo os campos são automáticos — tentar preencher se existirem
         resp_map = {"Empregado": "EMPREGADO", "Empregador": "EMPREGADOR", "Ambos": "AMBOS"}
         resp = resp_map.get(cs.get("responsabilidade", "Ambos"), "AMBOS")
-        self._selecionar("responsabilidade", resp)
-
+        self._selecionar("responsabilidade", resp, obrigatorio=False)
         if cs.get("lei_11941"):
             self._marcar_checkbox("lei11941", True)
-
-        self._clicar_salvar()
+        # Salvar apenas se o botão existir
+        sels = ["[id$='salvar']", "input[value='Salvar']", "button:has-text('Salvar')"]
+        for sel in sels:
+            try:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    loc.first.click(); self._aguardar_ajax(); break
+            except Exception:
+                continue
         self._log("Fase 5 concluída.")
 
     # ── Fase 6: Parâmetros de Atualização ─────────────────────────────────────
 
     @retry(max_tentativas=3)
     def fase_parametros_atualizacao(self, cj: dict) -> None:
-        self._log("Fase 6 — Parâmetros de atualização…")
-        self._clicar_menu_lateral("Parâmetros de Atualização")
-        self.mapear_campos("fase6_correcao")
-
-        indice_map = {
-            "Tabela JT Única Mensal": "IPCAE",
-            "IPCA-E": "IPCAE",
-            "Selic": "SELIC",
-            "TRCT": "TRCT",
-            "TR": "TRD",
-        }
-        indice = indice_map.get(cj.get("indice_correcao", ""), "IPCAE")
-        self._selecionar("indiceTrabalhista", indice)
-
-        juros_map = {"Selic": "SELIC", "Juros Padrão": "TRD_SIMPLES"}
-        juros = juros_map.get(cj.get("taxa_juros", ""), "TRD_SIMPLES")
-        self._selecionar("juros", juros)
-
-        base_map = {"Verbas": "VERBA_INSS", "Credito Total": "CREDITO_TOTAL"}
-        base = base_map.get(cj.get("base_juros", "Verbas"), "VERBA_INSS")
-        self._selecionar("baseDeJurosDasVerbas", base)
-
-        self._clicar_salvar()
-        self._log("Fase 6 concluída.")
+        self._log("Fase 6 — Parâmetros de atualização (preenchidos na Fase 1 — ignorado).")
 
     # ── Fase 7: IRPF ──────────────────────────────────────────────────────────
 
     @retry(max_tentativas=3)
     def fase_irpf(self, ir: dict) -> None:
-        if not ir.get("apurar"):
-            self._log("Fase 7 — IRPF ignorado (não apurar).")
-            return
-
-        self._log("Fase 7 — IRPF…")
-        self._clicar_menu_lateral("Imposto de Renda")
-        self.mapear_campos("fase7_irpf")
-        self._marcar_checkbox("apurarImpostoRenda", True)
-
-        if ir.get("meses_tributaveis"):
-            self._preencher("qtdMesesRendimento", str(ir["meses_tributaveis"]), False)
-        if ir.get("dependentes"):
-            self._marcar_checkbox("possuiDependentes", True)
-            self._preencher("quantidadeDependentes", str(ir["dependentes"]), False)
-
-        self._clicar_salvar()
-        self._log("Fase 7 concluída.")
+        self._log("Fase 7 — IRPF (preenchido na Fase 1 — ignorado).")
 
     # ── Fase 8: Honorários ────────────────────────────────────────────────────
 
     @retry(max_tentativas=3)
     def fase_honorarios(self, hon: dict) -> None:
-        if not hon.get("percentual") and not hon.get("valor_fixo") and not hon.get("periciais"):
-            self._log("Fase 8 — Honorários ignorados (sem dados).")
-            return
-
         self._log("Fase 8 — Honorários…")
-        self._clicar_menu_lateral("Honorários")
+        navegou = self._clicar_menu_lateral("Honorários", obrigatorio=False)
+        if not navegou:
+            navegou = self._clicar_menu_lateral("Honorarios", obrigatorio=False)
+        if not navegou:
+            self._log("  → Seção Honorários não encontrada no menu — ignorado.")
+            return
         self.mapear_campos("fase8_honorarios")
-        self._clicar_novo()
-
-        self._selecionar("tpHonorario", "ADVOCATICIOS")
-        self._preencher("descricao", "HONORÁRIOS ADVOCATÍCIOS", False)
-
-        devedor_map = {"Reclamado": "RECLAMADO", "Reclamante": "RECLAMANTE", "Ambos": "AMBOS"}
-        devedor = devedor_map.get(hon.get("parte_devedora", "Reclamado"), "RECLAMADO")
-        self._marcar_radio("tipoDeDevedor", devedor)
-
+        if hon.get("percentual"):
+            # percentual vem como float (ex: 0.15) → exibir como "15" para o PJE-Calc
+            self._preencher("percentualHonorarios", _fmt_br(hon["percentual"] * 100), False)
+            self._preencher("percentual", _fmt_br(hon["percentual"] * 100), False)
         if hon.get("valor_fixo"):
-            self._marcar_radio("tipoValor", "INFORMADO")
-            self._preencher("valor", _fmt_br(hon["valor_fixo"]), False)
-        elif hon.get("percentual"):
-            self._marcar_radio("tipoValor", "CALCULADO")
-            pct = round(hon["percentual"] * 100, 2)
-            self._preencher("aliquota", str(pct), False)
-
+            self._preencher("valorFixoHonorarios", _fmt_br(hon["valor_fixo"]), False)
+            self._preencher("valorFixo", _fmt_br(hon["valor_fixo"]), False)
+        if hon.get("periciais"):
+            self._preencher("honorariosPericiais", _fmt_br(hon["periciais"]), False)
+            self._preencher("valorPericiais", _fmt_br(hon["periciais"]), False)
+        parte_map = {"Reclamado": "RECLAMADO", "Reclamante": "RECLAMANTE", "Ambos": "AMBOS"}
+        if hon.get("parte_devedora"):
+            self._selecionar("parteDevedora", parte_map.get(hon["parte_devedora"], "RECLAMADO"), obrigatorio=False)
+            self._selecionar("responsabilidadeHonorarios", parte_map.get(hon["parte_devedora"], "RECLAMADO"), obrigatorio=False)
         self._clicar_salvar()
         self._log("Fase 8 concluída.")
+
+    # ── Liquidar / captura do .PJC ─────────────────────────────────────────────
+
+    def _clicar_liquidar(self) -> str | None:
+        """Clica Liquidar, aguarda geração e captura o arquivo .PJC gerado."""
+        self._log("Clicando Liquidar para gerar o .PJC…")
+        from config import OUTPUT_DIR
+        out_dir = Path(OUTPUT_DIR)
+        out_dir.mkdir(parents=True, exist_ok=True)
+
+        # Localizar botão Liquidar
+        liq_sels = [
+            "[id$='liquidar']", "[id$='liquidarBt']",
+            "input[value='Liquidar']", "a:has-text('Liquidar')",
+            "button:has-text('Liquidar')",
+        ]
+        loc = None
+        for sel in liq_sels:
+            try:
+                candidate = self._page.locator(sel)
+                if candidate.count() > 0:
+                    loc = candidate.first; break
+            except Exception:
+                continue
+
+        if loc is None:
+            # Fallback JS
+            self._page.evaluate("""() => {
+                const all = [...document.querySelectorAll('a, input[type="submit"], button')];
+                for (const el of all) {
+                    const txt = (el.textContent||el.value||'').replace(/[\\s\\u00a0]+/g,' ').trim();
+                    if (txt.includes('Liquidar')) { el.click(); return; }
+                }
+            }""")
+            self._aguardar_ajax(60000)
+        else:
+            try:
+                with self._page.expect_download(timeout=120000) as dl_info:
+                    loc.click()
+                d = dl_info.value
+                dest = out_dir / d.suggested_filename
+                d.save_as(str(dest))
+                self._log(f"PJC_GERADO:{dest}")
+                return str(dest)
+            except Exception as e:
+                self._log(f"  ⚠ Download direto falhou ({e}) — procurando link de download…")
+                loc.click()
+                self._aguardar_ajax(60000)
+
+        # Liquidar gerou página de resultado — procurar link de download do .PJC
+        self._page.wait_for_timeout(3000)
+        for txt in ["Exportar", "Download", "Baixar .pjc", "Salvar"]:
+            try:
+                with self._page.expect_download(timeout=30000) as dl_info:
+                    if self._clicar_botao(txt, obrigatorio=False):
+                        d = dl_info.value
+                        dest = out_dir / d.suggested_filename
+                        d.save_as(str(dest))
+                        self._log(f"PJC_GERADO:{dest}")
+                        return str(dest)
+            except Exception:
+                continue
+
+        self._log("  ⚠ .PJC não capturado automaticamente. Baixe manualmente no PJE-Calc.")
+        return None
 
     # ── Orquestrador principal ─────────────────────────────────────────────────
 
@@ -1031,7 +1239,12 @@ class PJECalcPlaywright:
         self.fase_irpf(dados.get("imposto_renda", {}))
         self.fase_honorarios(dados.get("honorarios", {}))
 
-        self._log("CONCLUIDO: Todas as fases preenchidas. Revise e clique em Liquidar.")
+        caminho_pjc = self._clicar_liquidar()
+        if caminho_pjc:
+            self._log("CONCLUIDO: .PJC gerado com sucesso. Disponível para download.")
+        else:
+            self._log("CONCLUIDO: Preencha manualmente e clique em Liquidar no PJE-Calc.")
+        self._log("[FIM DA EXECUÇÃO]")
 
 
 # ── Funções públicas ───────────────────────────────────────────────────────────

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="atualizacao-esocial" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" whenNoDataType="AllSectionsNoDetail" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+	<property name="ireport.zoom" value="1.1000000000000008"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<parameter name="jr_esocial_pagamento_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_esocial_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="demonstrativoEsocial" class="java.lang.Object" isForPrompting="false"/>
+	<queryString>
+		<![CDATA[]]>
+	</queryString>
+	<title>
+		<band height="22" splitType="Stretch">
+			<staticText>
+				<reportElement style="titulo" x="0" y="0" width="802" height="22"/>
+				<textElement textAlignment="Center">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[eSocial - Evento S-2501]]></text>
+			</staticText>
+		</band>
+	</title>
+	<detail>
+		<band height="20" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{demonstrativoEsocial}.esocialPorEventos.recordCount > 0]]></printWhenExpression>
+			<staticText>
+				<reportElement x="0" y="0" width="802" height="20">
+					<printWhenExpression><![CDATA[$P{demonstrativoEsocial}.esocialPorEventos.recordCount > 0]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Contribuição Social]]></text>
+			</staticText>
+		</band>
+		<band height="37">
+			<subreport>
+				<reportElement x="-20" y="0" width="844" height="37">
+					<printWhenExpression><![CDATA[$P{demonstrativoEsocial}.esocialPorEventos.recordCount > 0]]></printWhenExpression>
+				</reportElement>
+				<subreportParameter name="jr_esocial_pagamento_3">
+					<subreportParameterExpression><![CDATA[$P{jr_esocial_pagamento_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{demonstrativoEsocial}.esocialPorEventos]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_esocial_pagamento_2}]]></subreportExpression>
+			</subreport>
+		</band>
+	</detail>
+</jasperReport>

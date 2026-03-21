@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="atualizacao-irpf-evento" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+	<property name="ireport.zoom" value="1.331000000000003"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="irpf" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_pagamento_4" class="java.lang.Object" isForPrompting="false"/>
+	<queryString language="SQL">
+		<![CDATA[]]>
+	</queryString>
+	<field name="dataEvento" class="java.util.Date"/>
+	<field name="totalDevidoLiquidacao" class="java.math.BigDecimal"/>
+	<field name="totalDevidoPagamento" class="java.math.BigDecimal"/>
+	<field name="ocorrenciasAtualizacaoDs" class="net.sf.jasperreports.engine.JRDataSource"/>
+	<field name="ocorrenciasPagamentoDs" class="net.sf.jasperreports.engine.JRDataSource"/>
+	<field name="hasPagamento" class="java.lang.Boolean"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<pageHeader>
+		<band splitType="Stretch"/>
+	</pageHeader>
+	<detail>
+		<band height="39" splitType="Stretch">
+			<textField>
+				<reportElement x="0" y="2" width="802" height="14">
+					<printWhenExpression><![CDATA[$F{hasPagamento} == true]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Imposto de Renda Devido sobre Pagamento Realizado em: "+new SimpleDateFormat("dd/MM/yyyy").format($F{dataEvento})]]></textFieldExpression>
+			</textField>
+			<subreport>
+				<reportElement x="-20" y="14" width="842" height="25" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="irpf">
+					<subreportParameterExpression><![CDATA[$P{irpf}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$F{ocorrenciasAtualizacaoDs}]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_imposto_de_renda_pagamento_3}]]></subreportExpression>
+			</subreport>
+			<textField>
+				<reportElement x="0" y="2" width="802" height="14">
+					<printWhenExpression><![CDATA[$F{hasPagamento} == false]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Imposto de Renda Devido sobre Saldo Devedor em: "+new SimpleDateFormat("dd/MM/yyyy").format($F{dataEvento})]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="12">
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="0" y="0" width="732" height="12" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Total Devido   ]]></text>
+			</staticText>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" mode="Opaque" x="732" y="0" width="70" height="12" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{totalDevidoLiquidacao}]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="40">
+			<printWhenExpression><![CDATA[$F{ocorrenciasPagamentoDs}.getRecordCount() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="15" width="842" height="25" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="irpf">
+					<subreportParameterExpression><![CDATA[$P{irpf}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$F{ocorrenciasPagamentoDs}]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_imposto_de_renda_pagamento_4}]]></subreportExpression>
+			</subreport>
+			<textField>
+				<reportElement x="0" y="3" width="802" height="14">
+					<printWhenExpression><![CDATA[$F{hasPagamento} == true]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Imposto de Renda Pago em: "+new SimpleDateFormat("dd/MM/yyyy").format($F{dataEvento})]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="0" y="3" width="802" height="14">
+					<printWhenExpression><![CDATA[$F{hasPagamento} == false]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Imposto de Renda a Pagar em: "+new SimpleDateFormat("dd/MM/yyyy").format($F{dataEvento})]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="12">
+			<printWhenExpression><![CDATA[$F{ocorrenciasPagamentoDs}.getRecordCount() > 0]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="0" y="0" width="739" height="12" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Total Devido   ]]></text>
+			</staticText>
+			<textField pattern="#,##0.00">
+				<reportElement style="header" mode="Opaque" x="739" y="0" width="63" height="12" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="8" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{totalDevidoPagamento}]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="22"/>
+	</detail>
+</jasperReport>

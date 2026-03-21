@@ -1,0 +1,693 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<head>
+ <script type="text/javascript">
+
+
+ function Mascara(o,f){
+     v_obj=o
+     v_fun=f
+     setTimeout("execmascara()",1)
+ }
+ 
+ function execmascara(){
+     v_obj.value=v_fun(v_obj.value)
+ }
+  
+ function DataMesAno(v){
+ 	if(v.length > 7){
+ 		v=v.substring(0,v.length-1);
+ 		return v;
+ 	}		
+     v=v.replace(/\D/g,""); 
+     v=v.replace(/(\d{2})(\d)/,"$1/$2"); 
+     return v;
+ }
+
+ function setFocus(obj){
+     document.getElementById(obj).focus();
+ }
+ 
+ </script>
+</head>	
+	
+<body>
+<f:view>
+	
+<h:panelGroup >		
+		<h:panelGrid columns="2" cellpadding="0" border="0">
+		<h:panelGroup id="painelNovo#{nomeTabela}" rendered="#{identity.hasPermission('TABELAS_INSS', 'MANUTENCAO')}">
+		
+			
+			
+			<fieldset ><legend><b>Novo Registro</b></legend>
+			
+			<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+						<h:panelGroup>
+							<h:outputLabel value="Mês/Ano *" for="mesAno#{nomeTabela}" /><br />
+							<rich:calendar id="mesAno#{nomeTabela}" value="#{apresentador.registro.competencia}"
+										   label="Mês/Ano" inputSize="7" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+										   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+										   showWeekDaysBar="false" showFooter="false" 
+										   styleClass="special" oninputkeydown="Mascara(this,DataMesAno)" oninputkeyup="Mascara(this,DataMesAno)">
+								<f:facet name="footer">
+						        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+						        </f:facet>
+							</rich:calendar>
+							<rich:message showDetail="false" showSummary="false" for="mesAno#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="mesAno#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="mesAno#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+										
+					</h:panelGrid>
+					
+					
+				<h:panelGrid columns="3" cellspacing="4" cellpadding="2" border="0">
+					
+					
+					<h:panelGroup>
+					<fieldset ><legend><b>Faixas</b></legend>
+					<h:panelGrid columns="1" cellspacing="3" cellpadding="0" border="0">
+					
+					<h:panelGrid columns="4" cellspacing="0" cellpadding="3" border="0" >
+					<h:panelGroup layout="block" style="margin-top:12px;"><h:outputLabel  value="Faixa 1 *"/></h:panelGroup>
+										
+						<h:panelGroup>
+							<h:inputHidden id="faixa1#{nomeTabela}"/>
+							<h:outputLabel value="Valor Inicial" for="valorInicialFaixa1#{nomeTabela}"/><br />
+							<h:inputText id="valorInicialFaixa1#{nomeTabela}" 
+									value="#{apresentador.registro.primeiraFaixaPrevidenciaria.valorInicial}" 
+									label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+									style="text-align:right;" disabled="true">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="valorInicialFaixa1#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorInicialFaixa1#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorInicialFaixa1#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:outputLabel value="Valor Final" for="valorFinalFaixa1#{nomeTabela}"/><br />
+							<a4j:region>
+								<h:inputText id="valorFinalFaixa1#{nomeTabela}" value="#{apresentador.registro.primeiraFaixaPrevidenciaria.valorFinal}" 
+										label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+										<a4j:support event="onblur" reRender="panelValorInicialFaixa2#{nomeTabela}" limitToList="true" ajaxSingle="true" 
+											actionListener="#{apresentador.atualizarNovoValorInicial()}"/>
+										<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							</a4j:region>
+							<rich:message showDetail="false" showSummary="false" for="valorFinalFaixa1#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorFinalFaixa1#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorFinalFaixa1#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:outputLabel value="Alíquota (%)" for="aliquotaFaixa1#{nomeTabela}"/><br />
+							<h:inputText id="aliquotaFaixa1#{nomeTabela}" 
+									value="#{apresentador.registro.primeiraFaixaPrevidenciaria.aliquota}" 
+									label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" 
+									style="text-align:right;">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="aliquotaFaixa1#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="aliquotaFaixa1#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="aliquotaFaixa1#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+					</h:panelGroup>
+					</h:panelGrid>
+					
+					<h:panelGrid columns="4" cellspacing="0" cellpadding="3" border="0">
+					<h:outputLabel value="Faixa 2 *"/>				
+					<h:panelGroup id="panelValorInicialFaixa2#{nomeTabela}">
+							<h:inputText id="valorInicialFaixa2#{nomeTabela}" 
+										value="#{apresentador.registro.segundaFaixaPrevidenciaria.valorInicial}" 
+										label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+										style="text-align:right;" disabled="true">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="valorInicialFaixa2#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorInicialFaixa2#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorInicialFaixa2#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:region>
+							<h:inputText id="valorFinalFaixa2#{nomeTabela}" 
+									value="#{apresentador.registro.segundaFaixaPrevidenciaria.valorFinal}" 
+									label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+									style="text-align:right;">
+									<a4j:support event="onblur" reRender="panelValorInicialFaixa3#{nomeTabela}, panelValorFinalFaixa3#{nomeTabela}" limitToList="true" ajaxSingle="true" 
+											actionListener="#{apresentador.atualizarNovoValorInicial()}" />
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							</a4j:region>
+							<rich:message showDetail="false" showSummary="false" for="valorFinalFaixa2#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorFinalFaixa2#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorFinalFaixa2#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:inputText id="aliquotaFaixa2#{nomeTabela}" value="#{apresentador.registro.segundaFaixaPrevidenciaria.aliquota}" 
+									label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="aliquotaFaixa2#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="aliquotaFaixa2#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="aliquotaFaixa2#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+					</h:panelGroup>
+					</h:panelGrid>
+					
+					
+					<h:panelGrid id="panelFaixa3#{nomeTabela}" columns="5" cellspacing="0" cellpadding="3" border="0">
+					<h:outputLabel value="Faixa 3 *"/>
+						<h:panelGroup id="panelValorInicialFaixa3#{nomeTabela}">
+							<h:inputText id="valorInicialFaixa3#{nomeTabela}" 
+									value="#{apresentador.registro.terceiraFaixaPrevidenciaria.valorInicial}" 
+									label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+									style="text-align:right;" disabled="true">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="valorInicialFaixa3#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorInicialFaixa3#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorInicialFaixa3#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup id="panelValorFinalFaixa3#{nomeTabela}">
+							<a4j:region>
+							<h:inputText id="valorFinalFaixa3#{nomeTabela}" 
+											value="#{apresentador.registro.terceiraFaixaPrevidenciaria.valorFinal}" 
+											label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+											disabled="#{not apresentador.permiteExibicaoFaixa4}" style="text-align:right;">
+									<f:converter converterId="bigDecimalConverter"/>
+									<a4j:support event="onblur" reRender="panelValorInicialFaixa4#{nomeTabela}" limitToList="true"
+											actionListener="#{apresentador.atualizarNovoValorInicial()}"/>
+							</h:inputText>
+							</a4j:region>
+							<rich:message showDetail="false" showSummary="false" for="valorFinalFaixa3#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorFinalFaixa3#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorFinalFaixa3#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:inputText id="aliquotaFaixa3#{nomeTabela}" value="#{apresentador.registro.terceiraFaixaPrevidenciaria.aliquota}" 
+									label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="aliquotaFaixa3#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="aliquotaFaixa3#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="aliquotaFaixa3#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+					</h:panelGroup>
+					
+					<a4j:commandLink id="addFaixa4#{nomeTabela}" immediate="true" 
+					  styleClass="linkNovo" title="Nova Faixa" rendered="#{not apresentador.permiteExibicaoFaixa4}" >
+						<a4j:support event="onclick" actionListener="#{apresentador.habilitarFaixa4()}" oncomplete="setFocus('formulario:valorFinalFaixa3SeguradoEmpregado')"  reRender="panelFaixa4#{nomeTabela},panelFaixa3#{nomeTabela}"  />
+				    </a4j:commandLink>
+				    
+					</h:panelGrid>
+					
+				<h:panelGroup id="panelFaixa4#{nomeTabela}">
+					<h:panelGrid  columns="6" cellspacing="0" cellpadding="3" border="0" rendered="#{apresentador.permiteExibicaoFaixa4}">
+						<h:outputLabel value="Faixa 4 *" />
+						<h:panelGroup id="panelValorInicialFaixa4#{nomeTabela}">
+							<h:inputText id="valorInicialFaixa4#{nomeTabela}" 
+										value="#{apresentador.registro.quartaFaixaPrevidenciaria.valorInicial}" 
+										label="Valor Inicial" size="16" maxlength="14" disabled="true"
+										onfocus="$(this).decimalMask(2)" style="text-align:right;">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="valorInicialFaixa4#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorInicialFaixa4#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorInicialFaixa4#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:region>
+							<h:inputText id="valorFinalFaixa4#{nomeTabela}" 
+										value="#{apresentador.registro.quartaFaixaPrevidenciaria.valorFinal}" 
+										label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+										style="text-align:right;" disabled="#{not apresentador.permiteExibicaoFaixa5}">
+									<f:converter converterId="bigDecimalConverter"/>
+									<a4j:support event="onblur" reRender="panelValorInicialFaixa5#{nomeTabela}" limitToList="true"
+											actionListener="#{apresentador.atualizarNovoValorInicial()}" />
+							</h:inputText>
+							</a4j:region>
+							<rich:message showDetail="false" showSummary="false" for="valorFinalFaixa4#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorFinalFaixa4#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorFinalFaixa4#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:inputText id="aliquotaFaixa4#{nomeTabela}" value="#{apresentador.registro.quartaFaixaPrevidenciaria.aliquota}" 
+									label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="aliquotaFaixa4#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="aliquotaFaixa4#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="aliquotaFaixa4#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+					
+						<a4j:commandLink id="esconderFaixa4#{nomeTabela}" immediate="true" ajaxSingle="true" actionListener="#{apresentador.esconderFaixa4()}"  
+									reRender="panelFaixa4#{nomeTabela},panelFaixa3#{nomeTabela}" styleClass="linkExcluir" title="Remover Faixa" 
+									rendered="#{apresentador.permiteExibicaoFaixa4 and not apresentador.permiteExibicaoFaixa5}">
+					    </a4j:commandLink>
+					    
+					    <a4j:commandLink id="adicionarFaixa5#{nomeTabela}" immediate="true"    
+									 styleClass="linkNovo" title="Nova Faixa" 
+									rendered="#{apresentador.permiteExibicaoFaixa4 and not apresentador.permiteExibicaoFaixa5}">
+									<a4j:support immediate="true" actionListener="#{apresentador.habilitarFaixa5()}"
+								 event="onclick" oncomplete="setFocus('formulario:valorFinalFaixa4SeguradoEmpregado')" reRender="panelFaixa5#{nomeTabela},panelFaixa4#{nomeTabela}"  />
+					    </a4j:commandLink>
+				    
+					</h:panelGrid>
+				</h:panelGroup>
+				
+				<h:panelGroup id="panelFaixa5#{nomeTabela}">
+					<h:panelGrid columns="5" cellspacing="0" cellpadding="3" border="0" rendered="#{apresentador.permiteExibicaoFaixa5}">
+						<h:outputLabel value="Faixa 5 *"/>
+						<h:panelGroup id="panelValorInicialFaixa5#{nomeTabela}">
+							<h:inputText id="valorInicialFaixa5#{nomeTabela}" 
+										value="#{apresentador.registro.quintaFaixaPrevidenciaria.valorInicial}" 
+										label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+										style="text-align:right;" disabled="true">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="valorInicialFaixa5#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorInicialFaixa5#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorInicialFaixa5#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:inputText id="valorFinalFaixa5#{nomeTabela}" 
+										value="#{apresentador.registro.quintaFaixaPrevidenciaria.valorFinal}" 
+										label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+										style="text-align:right;" disabled="true">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="valorFinalFaixa5#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="valorFinalFaixa5#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorFinalFaixa5#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:inputText id="aliquotaFaixa5#{nomeTabela}" value="#{apresentador.registro.quintaFaixaPrevidenciaria.aliquota}" 
+									label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+									<f:converter converterId="bigDecimalConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="aliquotaFaixa5#{nomeTabela}">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="aliquotaFaixa5#{nomeTabela}Erro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="aliquotaFaixa5#{nomeTabela}"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+					
+						<a4j:commandLink id="esconderFaixa5#{nomeTabela}" immediate="true" ajaxSingle="true"  actionListener="#{apresentador.esconderFaixa5()}"  
+								reRender="panelFaixa5#{nomeTabela},panelFaixa4#{nomeTabela}" styleClass="linkExcluir" title="Remover Faixa" 
+								rendered="#{apresentador.permiteExibicaoFaixa5}">
+				    	</a4j:commandLink>
+					</h:panelGrid>
+				</h:panelGroup>	
+					
+				</h:panelGrid>
+				</fieldset>
+				</h:panelGroup>
+					
+				</h:panelGrid>
+				
+				<h:panelGrid columns="2" cellspacing="4" cellpadding="3" border="0">
+					<h:panelGroup>
+						<h:outputLabel value="Valor do Teto Máximo *" for="valorMaximo#{nomeTabela}"/><br />
+						<h:inputText id="valorTetoMaximo#{nomeTabela}" value="#{apresentador.registro.valorTetoMaximo}" 
+								label="Valor Máximo" size="29" maxlength="14" onfocus="$(this).decimalMask(2)"
+								style="text-align:right;">
+								<f:converter converterId="bigDecimalConverter"/>
+						</h:inputText>
+						<rich:message showDetail="false" showSummary="false" for="valorTetoMaximo#{nomeTabela}">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="valorTetoMaximo#{nomeTabela}Erro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="valorTetoMaximo#{nomeTabela}"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>	
+						<h:outputLabel value="Valor do Teto Benefício *" for="valorBeneficio#{nomeTabela}"/><br />
+						<h:inputText id="valorTetoBeneficio#{nomeTabela}" value="#{apresentador.registro.valorTetoBeneficio}" 
+								label="Valor Benefício" size="29" maxlength="14" onfocus="$(this).decimalMask(2)"
+								style="text-align:right;">
+								<f:converter converterId="bigDecimalConverter"/>
+						</h:inputText>
+						<rich:message showDetail="false" showSummary="false" for="valorTetoBeneficio#{nomeTabela}">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="valorTetoBeneficio#{nomeTabela}Erro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="valorTetoBeneficio#{nomeTabela}"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<a4j:commandLink id="cmdIncluir#{nomeTabela}" value="Salvar"
+										 styleClass="botaoAddSalvar" actionListener="#{apresentador.adicionar}"
+										 title="Salvar Novo Registro" reRender="mskCompetencias, painelListagem#{nomeTabela},painelNovo#{nomeTabela}"/>
+					</h:panelGroup>	
+				</h:panelGrid>
+			</fieldset>
+		</h:panelGroup>
+		
+		</h:panelGrid>
+		
+		
+		
+		<a4j:outputPanel id="painelListagem#{nomeTabela}">
+			<h:panelGroup  style="width: 100%;" rendered="#{apresentador.listaDeTabelas.size gt 0}">
+			
+				<rich:dataTable id="listagem#{nomeTabela}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="24"
+							value="#{apresentador.listaDeTabelas}" var="tabela" rowKeyVar="dataTableIndex"> 
+				
+						<rich:column style="width:7%;" rendered="#{identity.hasPermission('TABELAS_INSS', 'MANUTENCAO')}">
+					    	<f:facet name="header">
+				    			<h:outputText value="Ação"/>
+				    		</f:facet>
+					    	<a4j:commandLink rendered="#{identity.hasPermission('TABELAS_INSS', 'MANUTENCAO')}" id="excluirItem#{nomeTabela}"  actionListener="#{apresentador.excluir(tabela)}"  reRender="painelListagem#{nomeTabela}"
+				    						 styleClass="linkExcluir" title="Excluir" 
+				    						 onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false;" />
+				    		
+				    		<a4j:commandLink id="clonarItem#{nomeTabela}"  actionListener="#{apresentador.criarTabelaParaProximaCompetencia(tabela)}"  reRender="painelListagem#{nomeTabela}"
+				    						 styleClass="linkCopy" title="Copiar para Próxima Competência" rendered="#{identity.hasPermission('TABELAS_INSS', 'MANUTENCAO') and dataTableIndex eq 0}" 
+				    						 onclick="if (!confirma('#{mensagens.MSG0049}',this)) return false;" ajaxSingle="true"/>
+					    </rich:column>
+
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Mês/Ano"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.competencia}">
+			    				  <f:converter converterId="competenciaConverter"/>
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F1 <br /> Vl. Inicial
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.primeiraFaixaPrevidenciaria.valorInicial}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F1 <br /> Vl. Final
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.primeiraFaixaPrevidenciaria.valorFinal}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F1 <br /> (%)
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.primeiraFaixaPrevidenciaria.aliquota}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F2 <br /> Vl. Inicial
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.segundaFaixaPrevidenciaria.valorInicial}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F2 <br /> Vl. Final
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.segundaFaixaPrevidenciaria.valorFinal}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F2 <br /> (%)
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.segundaFaixaPrevidenciaria.aliquota}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F3 <br /> Vl. Inicial
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.terceiraFaixaPrevidenciaria.valorInicial}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F3 <br /> Vl. Final
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.terceiraFaixaPrevidenciaria.valorFinal}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F3 <br /> (%)
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.terceiraFaixaPrevidenciaria.aliquota}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F4 <br /> Vl. Inicial
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.quartaFaixaPrevidenciaria.valorInicial}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F4 <br /> Vl. Final
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.quartaFaixaPrevidenciaria.valorFinal}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F4 <br /> (%)
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.quartaFaixaPrevidenciaria.aliquota}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F5 <br /> Vl. Inicial
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.quintaFaixaPrevidenciaria.valorInicial}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F5 <br /> Vl. Final
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.quintaFaixaPrevidenciaria.valorFinal}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText>
+			    					F5 <br /> (%)
+			    				</h:outputText>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.quintaFaixaPrevidenciaria.aliquota}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Teto Máx."/>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.valorTetoMaximo}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Teto Ben."/>
+			    			</f:facet>	
+			    			<h:outputText value="#{tabela.valorTetoBeneficio}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	    				    				    	
+				</rich:dataTable>
+				
+				<ui:include src="../comum/paginacao.xhtml">
+					<ui:param name="paramListagem" value="listagem#{nomeTabela}" />
+				 </ui:include>
+			
+			</h:panelGroup>
+		
+		</a4j:outputPanel>
+
+</h:panelGroup>
+	
+</f:view>
+</body>
+
+</html>

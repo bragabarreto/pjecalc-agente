@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="calculo-inss" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="40"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" isDefault="true" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="inss" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["/opt/jboss-eap-5.1/jboss-as/server/default/data/relatorios/calculo/"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_4" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_5" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_6" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_7" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_8" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_9" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_10" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_11" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_inss_12" class="java.lang.Object" isForPrompting="false"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="36">
+			<textField>
+				<reportElement x="0" y="22" width="802" height="14">
+					<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioDevidoReclamado || $P{inss}.mostrarSecaoSalarioDevidoReclamante]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center">
+					<font size="11" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Contribuição Social sobre Salários Devidos - Período "+$P{inss}.periodoSalariosDevidos.formatInicial("dd/MM/yyyy")+" a "+$P{inss}.periodoSalariosDevidos.formatFinal("dd/MM/yyyy")]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="titulo" x="0" y="5" width="802" height="17"/>
+				<textElement textAlignment="Center"/>
+				<text><![CDATA[Demonstrativo de Contribuição Social]]></text>
+			</staticText>
+		</band>
+	</title>
+	<detail>
+		<band height="49" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioDevidoReclamante]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasSeguradoDevidoReclamante]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_2}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioDevidoReclamado]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasSeguradoDevidoReclamado]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_3}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[(($P{inss}.dataPrimeiraOcorrenciaDevidoMaiorQue1986 == false) && $P{inss}.mostrarSecaoSalarioDevidoEmpresa)]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasSeguradoDevidoEmpresa]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_4}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[($P{inss}.dataPrimeiraOcorrenciaDevidoMaiorQue1986 && $P{inss}.mostrarSecaoSalarioDevidoEmpresa)]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasSeguradoDevidoEmpresa]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_5}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioDevidoSAT]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasSeguradoDevidoSAT]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_6}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioDevidoTerceiros]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasSeguradoDevidoTerceiros]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_7}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioPagoSegurado]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasPagoSegurado]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_8}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[(($P{inss}.dataPrimeiraOcorrenciaPagoMaiorQue1986 == false) && $P{inss}.mostrarSecaoSalarioPagoEmpresa)]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasPagoEmpresa]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_9}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[($P{inss}.dataPrimeiraOcorrenciaPagoMaiorQue1986 && $P{inss}.mostrarSecaoSalarioPagoEmpresa)]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasPagoEmpresa]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_10}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioPagoSAT]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasPagoSAT]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_11}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{inss}.mostrarSecaoSalarioPagoTerceiros]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{inss}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{inss}.ocorrenciasPagoTerceiros]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_12}]]></subreportExpression>
+			</subreport>
+		</band>
+	</detail>
+	<columnFooter>
+		<band splitType="Stretch"/>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band splitType="Stretch"/>
+	</summary>
+</jasperReport>

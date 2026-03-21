@@ -1,0 +1,727 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Ocorrências" />
+	<ui:param name="lista" value="#{listaOcorrencias}"/>
+	<ui:param name="apresentador" value="#{apresentadorOcorrenciaDeVerba}" />
+	<ui:param name="verbaDeCalculoSelecionada" value="#{apresentador.verbaDeCalculoSelecionada}" />
+	<ui:param name="titulo" value="#{apresentadorVerbaDeCalculo.titulo}" />
+
+	<ui:define name="filtroCampos">
+		
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+	
+	</ui:define>
+	
+	<!--  
+	
+		FORMULÁRIO
+	-->
+	
+	
+	<ui:define name="camposFormulario">
+	<div style="min-width:1024px;">
+	<!-- INICIO DO FILTRO PARA ALTERACAO EM LOTE -->
+	<a4j:region id="regionAlterarEmLote">
+	<rich:simpleTogglePanel switchType="client" label="Alteração em lote" style="padding-left: 5px; padding-right: 5px;">
+			<f:facet name="openMarker"><img src="../../images/sideopen.png" alt="" width="17" height="15"  /></f:facet>
+			<f:facet name="closeMarker"><img src="../../images/sideclose.png" alt="" width="17" height="15"  /></f:facet>
+			<h:panelGrid id="gridAlterarEmLote" columns="13" cellspacing="4" border="0">
+			
+				<rich:jQuery id="mskCompetencias" selector=".maskDate" timing="onload" query="mask('99/9999')"></rich:jQuery>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Data Inicial" for="dataInicial" />
+					<br/>
+					
+					<rich:calendar id="dataInicial" value="#{apresentador.filtroParaAlterarVerbaEmLote.dataInicial}"  
+				     				label="Data Inicial" inputSize="9" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+				     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+				     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)" required="#{!param['formulario:isAlteracaoEmLote']}"
+				     				>
+						<f:facet name="footer">
+							<h:outputText value="" style="text-align:center" />
+						</f:facet>		            
+				    </rich:calendar>
+	    			
+	    			<cobra:toolTip>
+	    				<rich:message for="dataInicial"/>
+	    			</cobra:toolTip>	    			
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Data Final" for="dataFinal"/>
+					<br/>
+					<rich:calendar id="dataFinal" value="#{apresentador.filtroParaAlterarVerbaEmLote.dataFinal}"  
+				     				label="Data Final" inputSize="9" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+				     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+				     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)" required="#{!param['formulario:isAlteracaoEmLote']}"
+				     				>
+						<f:facet name="footer">
+							<h:outputText value="" style="text-align:center" />
+						</f:facet>		            
+				    </rich:calendar>
+					
+	    			<cobra:toolTip>
+	    				<rich:message for="dataFinal"/>
+	    			</cobra:toolTip>	    			
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Divisor" for="divisor" />
+					<br/>
+					<h:inputText id="divisor" value="#{apresentador.filtroParaAlterarVerbaEmLote.divisor}" maxlength="16" size="10" label="Divisor" onkeypress="mascara_precisao_decimal(this,19,4)" onkeyup="updateDisabled('formulario');">
+						<f:converter converterId="quatroCasasDecimaisConverter"/>	    							
+	    			</h:inputText>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Multiplicador" for="multiplicador" />
+					<br/>
+	   			 	<h:inputText id="multiplicador" value="#{apresentador.filtroParaAlterarVerbaEmLote.multiplicador}" size="10" onkeypress="mascara_precisao_decimal(this,19,8)" style="text-align:right;" onkeyup="updateDisabled('formulario');">
+	    				<f:converter converterId="oitoCasasDecimaisConverter"/>
+	    			</h:inputText>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Quantidade" for="quantidade" />
+					<br/>
+    				<h:inputText id="quantidade" value="#{apresentador.filtroParaAlterarVerbaEmLote.quantidade}" maxlength="16" size="10" onkeypress="mascara_precisao_decimal(this,19,4)" style="text-align:right;" onkeyup="updateDisabled('formulario');">
+						<f:converter converterId="quatroCasasDecimaisConverter"/>	    							
+    				</h:inputText>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Propor." for="propQuantidade" />
+					<br/>
+					<h:selectOneMenu id="propQuantidade" label="Proporcionar" value="#{apresentador.filtroParaAlterarVerbaEmLote.propQuantidade}" onchange="updateDisabled('formulario');">
+					   <f:selectItem itemValue="" itemLabel="" />
+					   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+					   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+					</h:selectOneMenu>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Dobra" for="dobra" />
+					<br/>
+					<h:selectOneMenu id="dobra" label="Dobra" value="#{apresentador.filtroParaAlterarVerbaEmLote.dobra}" onchange="updateDisabled('formulario');">
+					   <f:selectItem itemValue="" itemLabel="" />
+					   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+					   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+					</h:selectOneMenu>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Devido" for="devido" />
+					<br/>
+    			 	<h:inputText id="devido" value="#{apresentador.filtroParaAlterarVerbaEmLote.devido}" maxlength="16" size="12" style="text-align:right;" onfocus="$(this).currencyMask()" onkeyup="updateDisabled('formulario');">
+	    				<f:converter converterId="bigDecimalConverter"/>
+	    			</h:inputText>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Propor." for="propDevido"/>
+					<br/>
+					<h:selectOneMenu id="propDevido"  label="Proporcionar" value="#{apresentador.filtroParaAlterarVerbaEmLote.propDevido}" onchange="updateDisabled('formulario');">
+					   <f:selectItem itemValue="" itemLabel="" />
+					   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+					   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+					</h:selectOneMenu>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Pago" for="pago" />
+					<br/>
+	    			<h:inputText id="pago" value="#{apresentador.filtroParaAlterarVerbaEmLote.pago}" maxlength="16" size="12" style="text-align:right;" onfocus="$(this).currencyMask()" onkeyup="updateDisabled('formulario');">
+	    				<f:converter converterId="bigDecimalConverter"/>
+	    			</h:inputText>
+				</h:panelGroup>
+				<h:panelGroup>
+					<h:outputLabel value="Propor." for="propPago" />
+					<br/>
+					<h:selectOneMenu id="propPago" label="Proporcionar" value="#{apresentador.filtroParaAlterarVerbaEmLote.propPago}" onchange="updateDisabled('formulario');">
+					   <f:selectItem itemValue="" itemLabel="" />
+					   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+					   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+					</h:selectOneMenu>
+				</h:panelGroup>
+				<h:panelGroup>
+					<a4j:commandLink id="cmdVisualizar" styleClass="botaoAlterarItem" title="Alterar" value="" actionListener="#{apresentador.alterarEmLote(verbaDeCalculoSelecionada)}" onclick="AguardeShow();" oncomplete="AguardeHide();$('formulario:dataFinalInputDate').select();" limitToList="true" reRender="gridAlterarEmLote,listagem" />
+
+					<script type="text/javascript">
+						updateDisabled('formulario');
+					</script>
+				</h:panelGroup>
+			</h:panelGrid>	
+	</rich:simpleTogglePanel>
+	</a4j:region>
+	<!-- FINAL DO FILTRO PARA ALTERACAO EM LOTE -->
+	
+		<div class="box_ocorrencias">
+		<div /><rich:spacer width="1" height="7"/><div />	
+		<h:outputLabel styleClass="labelOcorrencia" value="#{verbaDeCalculoSelecionada.nome}"/>
+		<a4j:commandButton id="recuperar" actionListener="#{apresentador.recuperarOriginal(verbaDeCalculoSelecionada)}" 
+			styleClass="botaoRecuperar" immediate="true"
+			reRender="listagem"
+			rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" 
+			onclick="if(!checkSelecao('labelInput')) return false; allToUpperCase();if (!confirma('#{mensagens.MSG0016}',this)) return false;"/>
+		<rich:toolTip value="Recuperar Valores Originais" for="recuperar"/>
+		
+		<rich:dataTable id="listagem"  value="#{verbaDeCalculoSelecionada.ocorrencias}" styleClass="tableWithCellNavigation" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" var="ocorrencia" style="border:solid 1px #ccc;"> 
+			    	
+		    	<rich:column style="width:5%;" id="checkAtivar">
+				    	<f:facet name="header">
+			    			<h:panelGrid columns="2" layout="block">
+			    					<h:selectBooleanCheckbox id="ativarTodos" label="Ativo?" styleClass="css-checkbox-maior" valueChangeListener="#{apresentador.aoAtivarDesativarTodos}">
+										<a4j:support event="onchange" reRender="listagem" limitToList="true" ajaxSingle="true" oncomplete="jQuery('.tableWithCellNavigation').enableCellNavigation();" />
+							    		<rich:toolTip value="Ativar Todos" />
+									</h:selectBooleanCheckbox>
+						    		<h:outputText value="Ativo?" />
+					    	</h:panelGrid>
+			    		</f:facet>
+						<h:selectBooleanCheckbox id="ativo" label="Ativo" value="#{ocorrencia.ativo}" styleClass="checkAll">
+							<a4j:support event="onclick"
+								reRender="valor, divisor, checkSelecionar, devido, pago, multiplicador, quantidade, dobraValor"
+								limitToList="true" ajaxSingle="true"
+								oncomplete="jQuery('.tableWithCellNavigation').enableCellNavigation();" />
+						</h:selectBooleanCheckbox>
+			    </rich:column>
+			    
+		    	<rich:column style="width:6%;text-align:center;">
+		    		<f:facet name="header">
+	    				<h:outputText value="Data Inicial"/>
+	    			</f:facet>	
+	    			<h:inputText converter="#{dataConverter}" size="10" datePattern="dd/MM/yyyy" value="#{ocorrencia.dataInicial}" disabled="true" style="text-align:center;"/>
+		    	</rich:column>		
+		    		    	
+		    	<rich:column style="width:6%;text-align:center;">
+	    			<f:facet name="header">
+	    				<h:outputText value="Data Final"/>
+	    			</f:facet>
+	    			<h:inputText converter="#{dataConverter}" size="10" datePattern="dd/MM/yyyy" value="#{ocorrencia.dataFinal}" disabled="true" style="text-align:center;"/>
+		    	</rich:column>
+		    	
+		    	<rich:column id="valor" style="width:5%;">
+	    			<f:facet name="header">
+	    				<h:outputText value="Valor"/>
+	    			</f:facet>
+	    			<h:outputText value="#{ocorrencia.valor.nome}" />
+		    	</rich:column>		
+		    	
+		    	<rich:column id="divisor" style="width:11%;">
+	    			<f:facet name="header">
+	    				<h:outputText value="Divisor"/>
+	    			</f:facet>	
+	    			<h:inputText id="termoDiv" value="#{ocorrencia.divisor}" maxlength="16" size="16" required="#{ocorrencia.isValorCalculado()}"
+	    					label="Divisor" disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}" onkeypress="mascara_precisao_decimal(this,19,4)" style="text-align:right;">
+	    					<a4j:support event="onchange" ajaxSingle="true" limitToList="true" />
+	    					<s:validate/>
+						<f:converter converterId="quatroCasasDecimaisConverter"/>	    							
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="termoDiv"/>
+	    			</cobra:toolTip>
+		    	</rich:column>
+		    	<rich:column id="multiplicador" style="width:5%;">
+	    			<f:facet name="header">
+	    				<h:outputText value="Multiplicador"/>
+	    			</f:facet>
+	   			 	<h:inputText value="#{ocorrencia.multiplicador}" size="10" required="#{ocorrencia.isValorCalculado()}"
+	   			 					label="Multiplicador" id="termoMult"
+	    							disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}" onkeypress="mascara_precisao_decimal(this,19,8)" style="text-align:right;">
+	    				<a4j:support event="onchange" ajaxSingle="true" limitToList="true" />
+	    				<f:converter converterId="oitoCasasDecimaisConverter"/>
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="termoMult"/>
+	    			</cobra:toolTip>	    			
+		    	</rich:column>
+		    	
+		    	<rich:column id="quantidade" style="width:5%;">
+	    			<f:facet name="header">
+	    				<h:outputText value="Quantidade"/>
+	    			</f:facet>	
+	    			<h:inputText value="#{ocorrencia.quantidade}" maxlength="16" size="16" required="#{ocorrencia.isValorCalculado()}"
+	    							label="Quantidade" id="termoQuant"
+	    							disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}" onkeypress="mascara_precisao_decimal(this,19,4)" style="text-align:right;">
+						<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{ocorrencia.anularQuantidadeIntegral()}" />
+						<f:converter converterId="quatroCasasDecimaisConverter"/>	    							
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="termoQuant"/>
+	    			</cobra:toolTip>	
+		    	</rich:column>	
+		    	
+		    	<rich:column id="dobraValor" style="width:5%;">
+	    			<f:facet name="header">
+	    				<h:outputText value="Dobra"/>
+	    			</f:facet>	
+	    			<h:selectBooleanCheckbox id="dobra" label="Dobra" value="#{ocorrencia.dobra}" 
+	    						required="#{ocorrencia.isValorCalculado()}"
+	    						disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}">
+	    				<a4j:support event="onchange" ajaxSingle="true" limitToList="true" />		
+	    			</h:selectBooleanCheckbox>	
+	    			
+	    			<!-- <script type="text/javascript">
+						/* <![CDATA[ */   
+					       jQuery(function() {
+								jQuery('#formulario:listagem').enableCellNavigation();
+							});
+					    /* ]]> */
+					</script> -->
+	    			
+		    	</rich:column>	
+		    	
+		    	<rich:column id="devido" style="width:5%;">
+	    			<f:facet name="header">
+	    				<h:outputText value="#{verbaDeCalculoSelecionada.getTipoValor() == 'INFORMADO' ? 'Devido *' : 'Devido'}" />
+	    			</f:facet>
+	    			 <h:inputText required="#{ocorrencia.verbaDeCalculo.getTipoValor() == 'INFORMADO'}" value="#{ocorrencia.devidoNaTelaDeOcorrencias}" maxlength="16" size="16" disabled="#{not ocorrencia.ativo}" id="valorDevido"
+	    				label="Devido" style="text-align:right;" onfocus="$(this).currencyMask()" >
+	    				<a4j:support event="onblur" actionListener="#{ocorrencia.mudarValorDevido()}" ajaxSingle="true" 
+	    					limitToList="true" reRender="valor, divisor, multiplicador, quantidade, dobraValor"/>
+	    				<f:converter converterId="bigDecimalConverter"/>
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="valorDevido"/>
+	    			</cobra:toolTip>
+		    	</rich:column>
+		    	<rich:column id="pago" style="width:5%;">
+	    			<f:facet name="header">
+	    				<h:outputText value="Pago *"/>
+	    			</f:facet>	
+	    			<h:inputText value="#{ocorrencia.pago}" maxlength="16" size="16" required="true" disabled="#{not ocorrencia.ativo}" onfocus="$(this).currencyMask()"
+	    				id="valorPago" label="Pago" style="text-align:right;">
+	    				<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{ocorrencia.anularPagoIntegral()}" />
+	    				<f:converter converterId="bigDecimalConverter"/>
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="valorPago"/>
+	    			</cobra:toolTip>	    			
+		    	</rich:column>
+		    	
+		    	<rich:column style="width:5%;" id="checkSelecionar">
+				    	<f:facet name="header">
+			    			<h:panelGroup layout="block" style="margin-right:4px;">
+				    				<!-- <input id="selecionarTodos" type="checkbox" class="css-checkbox" onclick="jsfCheckTodos()"/>
+						    		<label for="selecionarTodos" id="selecionarTodosLabel" class="css-label" style="color: #666666; width: 0px; padding-left:23px;"></label>
+						    		<rich:toolTip value="Selecionar Todos" for="selecionarTodosLabel"/> -->
+						    		<h:selectBooleanCheckbox id="selecionarTodos" label="Selecionar Todos" styleClass="css-checkbox-maior" valueChangeListener="#{apresentador.aoSelecionarAsOcorrencias}">
+							    		<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="checkSelecionar" />
+							    		<rich:toolTip value="Selecionar Todos" />
+									</h:selectBooleanCheckbox>
+					    	</h:panelGroup>
+			    		</f:facet>
+			    		<h:selectBooleanCheckbox id="selecionar" label="Selecionar" value="#{ocorrencia.selecionada}" disabled="#{not ocorrencia.ativo}" styleClass="labelInput">
+							<a4j:support event="onclick" ajaxSingle="true" limitToList="true" />
+						</h:selectBooleanCheckbox>	
+			    </rich:column>
+			    
+			</rich:dataTable>
+			
+			<s:fragment rendered="#{verbaDeCalculoSelecionada.possuiReflexosHabilitados()}">
+			<div class="barraReflexo">
+				<div /><rich:spacer width="1" height="5"/><div />
+				<h:outputLabel styleClass="tituloReflexos" value="Reflexos"/>
+			</div>			
+			<!-- 
+				REFLEXOS A PARTIR DESSE PONTO
+			 -->
+			<div class="box_ocorrencias2">
+			<a4j:repeat id="reflexos" var="reflexo" value="#{verbaDeCalculoSelecionada.reflexosParaListagem}" rowKeyVar="row">
+			
+				<s:fragment rendered="#{reflexo.ativo}">
+				
+				<a4j:region>
+				<a4j:outputPanel id="panelReflexo">
+				
+				<!-- INICIO DO FILTRO PARA ALTERACAO EM LOTE DO REFLEXO -->
+				<a4j:region id="regionAlterarEmLote">
+				<rich:simpleTogglePanel switchType="client" label="Alteração em lote" style="padding-left: 5px; padding-right: 5px;">
+						<f:facet name="openMarker"><img src="../../images/sideopen.png" alt="" width="17" height="15"  /></f:facet>
+						<f:facet name="closeMarker"><img src="../../images/sideclose.png" alt="" width="17" height="15"  /></f:facet>
+						<h:panelGrid id="gridAlterarEmLote" columns="13" cellspacing="4" border="0">
+							
+							<rich:jQuery id="mskCompetencias2" selector=".maskDateRef#{row}" timing="onload" query="mask('99/9999')"></rich:jQuery>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Data Inicial" for="dataInicial" />
+								<br/>
+								
+								<rich:calendar id="dataInicial" value="#{apresentador.filtroParaAlterarVerbaEmLote.dataInicial}"  
+							     				label="Data Inicial" inputSize="9" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+							     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDateRef#{row}"
+							     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)" required="#{!param['formulario:isAlteracaoEmLote']}"
+							     				>
+									<f:facet name="footer">
+										<h:outputText value="" style="text-align:center" />
+									</f:facet>		            
+							    </rich:calendar>
+				    			
+				    			<cobra:toolTip>
+				    				<rich:message for="dataInicial"/>
+				    			</cobra:toolTip>	    			
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Data Final" for="dataFinal"/>
+								<br/>
+								<rich:calendar id="dataFinal" value="#{apresentador.filtroParaAlterarVerbaEmLote.dataFinal}"  
+							     				label="Data Final" inputSize="9" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+							     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDateRef#{row}"
+							     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)" required="#{!param['formulario:isAlteracaoEmLote']}"
+							     				>
+									<f:facet name="footer">
+										<h:outputText value="" style="text-align:center" />
+									</f:facet>		            
+							    </rich:calendar>
+								
+				    			<cobra:toolTip>
+				    				<rich:message for="dataFinal"/>
+				    			</cobra:toolTip>	    			
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Divisor" for="divisor" />
+								<br/>
+								<h:inputText id="divisor" value="#{apresentador.filtroParaAlterarVerbaEmLote.divisor}" maxlength="16" size="10" label="Divisor" onkeypress="mascara_precisao_decimal(this,19,4)" onkeyup="updateDisabled('formulario:reflexos:#{row}');">
+									<f:converter converterId="quatroCasasDecimaisConverter"/>	    							
+				    			</h:inputText>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Multiplicador" for="multiplicador" />
+								<br/>
+				   			 	<h:inputText id="multiplicador" value="#{apresentador.filtroParaAlterarVerbaEmLote.multiplicador}" size="10" onkeypress="mascara_precisao_decimal(this,19,8)" style="text-align:right;" onkeyup="updateDisabled('formulario:reflexos:#{row}');">
+				    				<f:converter converterId="oitoCasasDecimaisConverter"/>
+				    			</h:inputText>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Quantidade" for="quantidade" />
+								<br/>
+			    				<h:inputText id="quantidade" value="#{apresentador.filtroParaAlterarVerbaEmLote.quantidade}" maxlength="16" size="10" onkeypress="mascara_precisao_decimal(this,19,4)" style="text-align:right;" onkeyup="updateDisabled('formulario:reflexos:#{row}');">
+									<f:converter converterId="quatroCasasDecimaisConverter"/>	    							
+			    				</h:inputText>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Propor." for="propQuantidade" />
+								<br/>
+								<h:selectOneMenu id="propQuantidade" label="Proporcionar" value="#{apresentador.filtroParaAlterarVerbaEmLote.propQuantidade}" onchange="updateDisabled('formulario');">
+								   <f:selectItem itemValue="" itemLabel="" />
+								   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+								   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+								</h:selectOneMenu>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Dobra" for="dobra" />
+								<br/>
+								<h:selectOneMenu id="dobra" label="Dobra" value="#{apresentador.filtroParaAlterarVerbaEmLote.dobra}" onchange="updateDisabled('formulario:reflexos:#{row}');">
+								   <f:selectItem itemValue="" itemLabel="" />
+								   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+								   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+								</h:selectOneMenu>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Devido" for="devido" />
+								<br/>
+			    			 	<h:inputText id="devido" value="#{apresentador.filtroParaAlterarVerbaEmLote.devido}" maxlength="16" size="12" style="text-align:right;" onfocus="$(this).currencyMask()" onkeyup="updateDisabled('formulario:reflexos:#{row}');">
+				    				<f:converter converterId="bigDecimalConverter"/>
+				    			</h:inputText>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Propor." for="propDevido" />
+								<br/>
+								<h:selectOneMenu id="propDevido" label="Proporcionar" value="#{apresentador.filtroParaAlterarVerbaEmLote.propDevido}" onchange="updateDisabled('formulario');">
+								   <f:selectItem itemValue="" itemLabel="" />
+								   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+								   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+								</h:selectOneMenu>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Pago" for="pago" />
+								<br/>
+				    			<h:inputText id="pago" value="#{apresentador.filtroParaAlterarVerbaEmLote.pago}" maxlength="16" size="12" style="text-align:right;" onfocus="$(this).currencyMask()" onkeyup="updateDisabled('formulario:reflexos:#{row}');" >
+				    				<f:converter converterId="bigDecimalConverter"/>
+				    			</h:inputText>
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Propor." for="propPago" />
+								<br/>
+								<h:selectOneMenu id="propPago" label="Proporcionar" value="#{apresentador.filtroParaAlterarVerbaEmLote.propPago}" onchange="updateDisabled('formulario');">
+								   <f:selectItem itemValue="" itemLabel="" />
+								   <f:selectItem itemValue="#{true}" itemLabel="Sim" />
+								   <f:selectItem itemValue="#{false}" itemLabel="Não" />
+								</h:selectOneMenu>
+							</h:panelGroup>
+							<h:panelGroup>
+								<a4j:commandLink id="cmdVisualizar" styleClass="botaoAlterarItem" title="Alterar" value="" actionListener="#{apresentador.alterarEmLote(reflexo)}" onclick="AguardeShow();" oncomplete="AguardeHide();" limitToList="true" reRender="gridAlterarEmLote,listagem" />
+								<script type="text/javascript">
+									updateDisabled('formulario:reflexos:#{row}');
+								</script>
+							</h:panelGroup>
+						</h:panelGrid>	
+				</rich:simpleTogglePanel>
+				</a4j:region>
+				<!-- FINAL DO FILTRO PARA ALTERACAO EM LOTE DO REFLEXO -->
+				
+				<div /><rich:spacer width="1" height="7"/><div />
+				<h:outputLabel styleClass="labelOcorrencia" value="#{reflexo.nome}"/>
+				
+				<a4j:commandButton id="recuperar" actionListener="#{apresentador.recuperarOriginal(reflexo)}" 
+					styleClass="botaoRecuperarReflexo" 
+					immediate="true"
+					reRender="listagem#{reflexo.id}"
+					rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" 
+					onclick="allToUpperCase();if (!confirma('#{mensagens.MSG0016}',this)) return false;"/>
+				<rich:toolTip value="Recuperar Valores Originais" for="recuperar"/>
+				
+				<rich:dataTable id="listagem#{reflexo.id}" styleClass="tabela_reflexo tableWithCellNavigation" value="#{reflexo.ocorrencias}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" var="ocorrencia" style="border:solid 1px #ccc; margin-bottom:16px; margin-top:10px;"> 
+			    	
+	    		<rich:column style="width:8%;">
+				    	<f:facet name="header">
+			    			<h:panelGroup layout="block" style="margin-right:4px;">
+			    				<div style="float:left;">
+				    				<input id="ativarTodosReflexo#{reflexo.id}" type="checkbox" class="checkAllHeadReflexo#{reflexo.id} css-checkbox" />
+						    		<label for="ativarTodosReflexo#{reflexo.id}" id="ativarTodosReflexoLabel" class="css-label" style="color: #666666; width: 0px; padding-left:23px;"></label>
+						    		<rich:toolTip value="Ativar Todos" for="ativarTodosReflexoLabel"/>
+					    		</div>
+					    		<div style="float:left; padding-top: 4px;">
+						    		<h:outputText value="Ativo?"/>
+					    		</div> 
+					    	</h:panelGroup>
+			    		</f:facet>
+						<h:selectBooleanCheckbox id="ativo" label="Ativo" value="#{ocorrencia.ativo}" styleClass="checkAllReflexo#{reflexo.id}">
+							<a4j:support event="onclick"  ajaxSingle="true"
+								reRender="rdivisor, rcheckSelecionar, rdevido, rpago,
+							rmultiplicador, rquantidade, rdobraValor" limitToList="true"/>
+						</h:selectBooleanCheckbox>
+			    </rich:column>
+		    	
+		    	<rich:column style="text-align:center;">
+		    		<f:facet name="header">
+	    				<h:outputText value="Data Inicial"/>
+	    			</f:facet>	
+	    			<h:inputText converter="#{dataConverter}" size="12" datePattern="dd/MM/yyyy" value="#{ocorrencia.dataInicial}" 
+	    				disabled="true" style="text-align:center;"/>
+		    	</rich:column>		
+
+		    	<rich:column>
+	    			<f:facet name="header">
+	    				<h:outputText value="Data Final"/>
+	    			</f:facet>
+	    			<h:inputText converter="#{dataConverter}" size="12" datePattern="dd/MM/yyyy" value="#{ocorrencia.dataFinal}" 
+	    				disabled="true" style="text-align:center;"/>
+		    	</rich:column>
+		    	
+		    	<rich:column id="rvalor">
+	    			<f:facet name="header">
+	    				<h:outputText value="Valor"/>
+	    			</f:facet>
+	    			<h:outputText value="#{ocorrencia.valor.nome}" />
+		    	</rich:column>		
+		    	
+		    	<rich:column id="rdivisor">
+	    			<f:facet name="header">
+	    				<h:outputText value="Divisor"/>
+	    			</f:facet>
+	    			<h:inputText id="termoDivReflexo" value="#{ocorrencia.divisor}" size="10" required="#{ocorrencia.isValorCalculado()}"
+	    					disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}" onkeypress="mascara_precisao_decimal(this,19,4)" label="Divisor" style="text-align:right;">
+	    				<a4j:support event="onchange" ajaxSingle="true" limitToList="true" />
+	    				<s:validate/>
+						<f:converter converterId="quatroCasasDecimaisConverter"/>	    							
+					</h:inputText>	    							
+					<cobra:toolTip>
+	    				<rich:message for="termoDivReflexo"/>
+	    			</cobra:toolTip>
+		    	</rich:column>	 	
+
+		    	<rich:column id="rmultiplicador">
+	    			<f:facet name="header">
+	    				<h:outputText value="Multiplicador"/>
+	    			</f:facet>	
+	   			 	<h:inputText id="termoMultReflexo" value="#{ocorrencia.multiplicador}" size="10" required="#{ocorrencia.isValorCalculado()}"
+	   			 				 disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}" onkeypress="mascara_precisao_decimal(this,19,8)" label="Multiplicador" style="text-align:right;">
+	    				<a4j:support event="onchange" ajaxSingle="true" limitToList="true" />
+	    				<f:converter converterId="oitoCasasDecimaisConverter"/>
+					</h:inputText>
+					<cobra:toolTip>
+	    				<rich:message for="termoMultReflexo"/>
+	    			</cobra:toolTip>	    			
+						    							
+		    	</rich:column>
+		    	
+		    	<rich:column id="rquantidade">
+	    			<f:facet name="header">
+	    				<h:outputText value="Quantidade"/>
+	    			</f:facet>	
+	    			<h:inputText id="termoQuantReflexo" value="#{ocorrencia.quantidade}" size="10" required="#{ocorrencia.isValorCalculado()}"
+	    						 disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}" onkeypress="mascara_precisao_decimal(this,19,4)" label="Quantidade" style="text-align:right;">	    				
+	    				<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{ocorrencia.anularQuantidadeIntegral()}" />			
+						<f:converter converterId="quatroCasasDecimaisConverter"/>
+					</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="termoQuantReflexo"/>
+	    			</cobra:toolTip>	 	    							
+		    	</rich:column>	
+		    	
+		    	<rich:column id="rdobraValor">
+	    			<f:facet name="header">
+	    				<h:outputText value="Dobra"/>
+	    			</f:facet>	
+	    			<h:selectBooleanCheckbox id="dobra" label="Dobra" value="#{ocorrencia.dobra}" required="#{ocorrencia.isValorCalculado()}"
+	    							disabled="#{not ocorrencia.isValorCalculado() or not ocorrencia.ativo}">
+						<a4j:support event="onchange" ajaxSingle="true" limitToList="true" />	    							
+					</h:selectBooleanCheckbox>
+
+					<!-- <script type="text/javascript">
+						/* <![CDATA[ */   
+					       jQuery(function() {
+								jQuery('#formulario:listagem').enableCellNavigation();
+							});
+					    /* ]]> */
+					</script> -->
+		    	</rich:column>	
+		    	
+		    	<rich:column id="rdevido">
+	    			<f:facet name="header">
+	    				<h:outputText value="#{reflexo.getTipoValor() == 'INFORMADO' ? 'Devido *' : 'Devido'}" />
+	    			</f:facet>	
+	    			<h:inputText required="#{ocorrencia.verbaDeCalculo.getTipoValor() == 'INFORMADO'}" value="#{ocorrencia.devidoNaTelaDeOcorrencias}" size="16"  maxlength="16" disabled="#{not ocorrencia.ativo}" label="Devido" id="valorDevidoReflexo"
+	    				onfocus="$(this).currencyMask()" style="text-align:right;">
+	    				<a4j:support event="onblur" actionListener="#{ocorrencia.mudarValorDevido()}" ajaxSingle="true" 
+	    					limitToList="true" reRender="rvalor, rdivisor, rmultiplicador, rquantidade, rdobraValor" />	    				
+	    				<f:converter converterId="bigDecimalConverter"/>
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="valorDevidoReflexo"/>
+	    			</cobra:toolTip>	 	    							
+		    	</rich:column>
+		    	
+		    	<rich:column id="rpago">
+	    			<f:facet name="header">
+	    				<h:outputText value="Pago *"/>
+	    			</f:facet>	
+	    			<h:inputText value="#{ocorrencia.pago}" size="16" maxlength="16" required="true" disabled="#{not ocorrencia.ativo}"   id="valorPagoReflexo" label="Pago" style="text-align:right;"
+	    				 onfocus="$(this).currencyMask()">
+	    				<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{ocorrencia.anularPagoIntegral()}" />
+	    				<f:converter converterId="bigDecimalConverter"/>	    				
+					</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="valorPagoReflexo"/>
+	    			</cobra:toolTip>	 	    							
+		    	</rich:column>
+		    	
+		    	<rich:column style="width:5%;" id="rcheckSelecionar">
+				    	<f:facet name="header">
+			    			<h:outputText value="Selecionar"/>
+			    		</f:facet>
+			    		<h:selectBooleanCheckbox id="selecionar" label="Selecionar" value="#{ocorrencia.selecionada}" disabled="#{not ocorrencia.ativo}">
+			    			<a4j:support event="onclick" ajaxSingle="true" limitToList="true"/>
+			    		</h:selectBooleanCheckbox>
+			    </rich:column>
+				    	    				    				    	
+			</rich:dataTable>
+			
+			<script type="text/javascript">
+				/* <![CDATA[ */   
+			       jQuery(function() {
+						prepararCheckAllReflexo('.checkAllHeadReflexo#{reflexo.id}','.checkAllReflexo#{reflexo.id}');
+					});
+			    /* ]]> */
+			</script>
+			
+			</a4j:outputPanel>
+				</a4j:region>
+			
+			</s:fragment>
+				
+			</a4j:repeat>
+		</div>
+		</s:fragment>
+		</div>   
+		
+		<a4j:outputPanel id="painelScriptCheck">
+   			<script>
+				function checkSelecao(clazz) {
+					if (jQuery('.'+clazz+':checked').length == 0) {
+						jAlert('#{mensagens.MSG0015.replace("{0}","ao menos uma ocorrência")}', 'Erro');
+						return false;				
+					}
+					return true;
+				}
+			</script>
+    	
+    	</a4j:outputPanel>
+	</div>	
+	
+	</ui:define>
+	
+	<ui:define name="script">
+	    <h:form>
+          <a4j:jsFunction name="jsfCheckTodos" immediate="true" limitToList="true" onbeforedomupdate="checkTodos()" oncomplete="AguardeHide()">
+          </a4j:jsFunction>
+        </h:form>
+		<script type="text/javascript">
+			function checkTodos() {
+				AguardeShow();
+				elems = jQuery('.labelInput:enabled');
+				elems.attr('checked',jQuery('#selecionarTodos').attr('checked'));
+				for (i=0; i&lt;elems.size(); i++) {
+					elems[i].onclick();
+				}
+			}			
+			function updateDisabled(prefix) {
+				devidoEmpty = $(prefix + ':devido').value == '';
+				outrosEmpty = !($(prefix + ':divisor').value != '' || $(prefix + ':multiplicador').value != '' || $(prefix + ':quantidade').value != '' || $(prefix + ':dobra').options.selectedIndex > 0);
+				$(prefix + ':devido').disabled = !outrosEmpty;
+				$(prefix + ':propDevido').disabled = !outrosEmpty;
+				$(prefix + ':divisor').disabled = !devidoEmpty;
+				$(prefix + ':multiplicador').disabled = !devidoEmpty;
+				$(prefix + ':quantidade').disabled = !devidoEmpty;
+				$(prefix + ':propQuantidade').disabled = !devidoEmpty;
+				$(prefix + ':dobra').disabled = !devidoEmpty;
+			}
+			function prepararCheckAllReflexo(head, body) {
+				var flag = verificarCheckBox(head,body);
+				jQuery(head).attr('checked', flag);
+				jQuery(head).bind('click',function(){
+					checkAll(head,body);
+				});
+				jQuery(body).bind('click',function(){
+					checkHead(jQuery(this),head,body);
+				});
+			}
+			jQuery(function() {
+				prepararCheckAll('.checkAllHead','.checkAll');
+			});
+			
+		</script>
+		
+		<h:panelGroup id="panelScriptTable">
+			<!-- <script type="text/javascript">
+				/* <![CDATA[ */
+			       jQuery(function() {
+						jQuery('#formulario:listagem').enableCellNavigation();
+					});
+			    /* ]]> */
+			</script> -->
+		</h:panelGroup>
+		
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<h:inputHidden id="isAlteracaoEmLote" name="isAlteracaoEmLote" value="false"/>
+	    <a4j:commandButton   id="salvar" styleClass="botao" value="Salvar"  
+	                         rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" 
+	                         action="#{apresentador.salvar}"  
+	                         onclick="allToUpperCase();$('formulario:isAlteracaoEmLote').value='true';"/>
+	    <a4j:commandButton   id="cancelar" styleClass="botao" 
+	                         value="#{apresentador.operacao=='VISUALIZACAO'?'Voltar':'Cancelar'}" 
+	                         rendered="#{apresentador.emModoFormulario}"
+	                         action="#{apresentador.cancelar}"
+	                         immediate="true"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

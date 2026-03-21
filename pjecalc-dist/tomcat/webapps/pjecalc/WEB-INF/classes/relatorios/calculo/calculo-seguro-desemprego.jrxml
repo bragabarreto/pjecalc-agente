@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="ocorrencias-seguro-desemprego" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.464100000000001"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" isDefault="true" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitlevalue" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="100" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitle" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="2" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cellsemborda" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="0" rightPadding="0">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["/opt/jboss-eap-5.1/jboss-as/server/default/data/relatorios/calculo/"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="seguroDesemprego" class="java.lang.Object" isForPrompting="false"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="22" splitType="Stretch">
+			<staticText>
+				<reportElement style="titulo" x="0" y="5" width="802" height="17"/>
+				<textElement textAlignment="Center"/>
+				<text><![CDATA[Demonstrativo de Seguro-desemprego]]></text>
+			</staticText>
+		</band>
+	</title>
+	<pageHeader>
+		<band splitType="Stretch"/>
+	</pageHeader>
+	<columnHeader>
+		<band height="42" splitType="Stretch">
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="70" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[ Nome: SEGURO-DESEMPREGO]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="subtitlevalue" positionType="Float" mode="Opaque" x="0" y="14" width="802" height="14" forecolor="#000000" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{seguroDesemprego}.formula]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="164" y="28" width="152" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor da Parcela da Faixa Salarial]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="70" y="28" width="94" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Salário de Referência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="414" y="28" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="494" y="28" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice Correção]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="574" y="28" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Corrigido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="654" y="28" width="68" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="722" y="28" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="subtitle" positionType="Float" x="0" y="14" width="140" height="15">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Composição da Base: ]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="316" y="28" width="98" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Quantidade Parcelas]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="134" y="28" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="268" y="28" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice Correção]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="402" y="28" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Corrigido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="536" y="28" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="670" y="28" width="132" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="subtitle" positionType="Float" x="1" y="14" width="140" height="15">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Valor Informado]]></text>
+			</staticText>
+		</band>
+	</columnHeader>
+	<detail>
+		<band height="14" splitType="Stretch">
+			<textField pattern="MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="0" width="70" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{seguroDesemprego}.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="164" y="0" width="152" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.valorParcela]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="316" y="0" width="98" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.Integer"><![CDATA[$P{seguroDesemprego}.quantidadeParcelas]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="70" y="0" width="94" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.salarioReferencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="654" y="0" width="68" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{seguroDesemprego}.juros)]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.000000000" isBlankWhenNull="true">
+				<reportElement style="cell" x="494" y="0" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.indice]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="574" y="0" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="414" y="0" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.devido]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="722" y="0" width="80" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('C')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.total]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="134" y="0" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.devido]]></textFieldExpression>
+			</textField>
+			<textField pattern="MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="0" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{seguroDesemprego}.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.000000000" isBlankWhenNull="true">
+				<reportElement style="cell" x="268" y="0" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.indice]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="402" y="0" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="536" y="0" width="134" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{seguroDesemprego}.juros)]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="670" y="0" width="132" height="14">
+					<printWhenExpression><![CDATA[$P{seguroDesemprego}.tipoValorDoSeguroDesemprego.getValor().equals('I')]]></printWhenExpression>
+				</reportElement>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{seguroDesemprego}.total]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+</jasperReport>

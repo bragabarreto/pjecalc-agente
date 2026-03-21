@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<pages xmlns="http://jboss.com/products/seam/pages" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" login-view-id="/logon.jsf" no-conversation-view-id="/pages/principal.xhtml" xsi:schemaLocation="http://jboss.com/products/seam/pages http://jboss.com/products/seam/pages-2.2.xsd">
+	
+	<!-- 
+		REGRAS DE NAVEGAÇÃO PARA O CÁLCULO ABERTO
+		
+		Observações importantes:
+		
+		Acesso do recurso via menu de cálculo:
+		1 - Incluir a regra de navegação juntamente com a tag end-conversation para garantir o fechamento de conversações aninhadas.
+			Ex.:	
+			<rule if-outcome="calculo">
+				<end-conversation before-redirect="true"/>
+				<redirect view-id="/pages/calculo/calculo.xhtml"/>
+			</rule>
+			
+		2 - Se o caso de uso for apenas listagem, não deve ser iniciada uma conversação aninhada.
+		3 - Se o caso de uso efetuar uma transação atômica, deve ser iniciada uma conversação aninhada limitando o escopo dessa transação nos
+		  métodos específicos do apresentador com as anotações @Begin e @End. 
+			Ex.: 
+				@Begin(nested = true, flushMode = FlushModeType.MANUAL) public String alterar() { return 'calculo'; }
+				@End(beforeRedirect=true) public String salvar() { return 'calculo'; }
+				@End(beforeRedirect=true) public String cancelar() { return 'calculo'; }
+			
+		Acesso do recurso fora do menu de cálculo:
+		1 - Incluir apenas a regra de navegação.
+			Ex.:	
+			<rule if-outcome="calculo">
+				<redirect view-id="/pages/calculo/calculo.xhtml"/>
+			</rule>
+		2 - Se o caso de uso efetuar uma transação atômica, proceder de acordo com o item 3 do "Acesso do recurso pelo menu de cálculo".
+		 
+	-->
+	
+    <page login-required="false" view-id="/versao-tabelas.xhtml"/>
+	
+	<page login-required="false" view-id="/pages/*">
+		<navigation>
+		
+        	<!-- 
+        		Acesso de recursos com o cálculo fechado 
+        	-->
+			<rule if-outcome="principal">
+				<raise-event type="SESSION_CLEAN"/>
+				<redirect view-id="/pages/principal.xhtml"/>
+			</rule>
+			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="calculo">
+				<raise-event type="SESSION_CLEAN"/>
+				<redirect view-id="/pages/calculo/calculo.xhtml"/>
+			</rule>
+			<rule if-outcome="calculo-externo">
+				<raise-event type="SESSION_CLEAN"/>
+				<redirect view-id="/pages/calculo/calculo-externo.xhtml"/>
+			</rule>
+			<rule if-outcome="parcelas-atualizaveis">
+                <redirect view-id="/pages/calculo/parcelas-atualizaveis.xhtml"/>
+            </rule>
+			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="verba">
+				<raise-event type="SESSION_CLEAN"/>
+				<redirect view-id="/pages/verba/verba.xhtml"/>
+			</rule>
+			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="indicesGerais">
+				<raise-event type="SESSION_CLEAN"/>
+				<redirect view-id="/pages/indices/indices-gerais.xhtml"/>
+			</rule>
+			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="jurosPrincipal">
+				<raise-event type="SESSION_CLEAN"/>
+				<redirect view-id="/pages/juros/juros-principal.xhtml"/>
+			</rule>
+			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="tabelasPrevidenciarias">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/inss/tabela-previdenciaria.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="tabelaFiscal">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/irpf/tabela-irpf.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="parametrosCustasFixas">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/custas/parametros-custas-fixas.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="salarioMinimo">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/salariominimo/salario-minimo.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="salarioCategoria">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/salario-categoria/salario-categoria.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="tabelaSalarioFamilia">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/salario-familia/tabela-salario-familia.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="tabelaSeguroDesemprego">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/segurodesemprego/tabela-seguro-desemprego.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="valeTransporte">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/valetransporte/vale-transporte.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="feriado">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/feriado/feriado.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="perfil">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/perfil/perfil.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="logInfra">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/log-infra/log-infra.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="importacao">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/importacao/importacao.xhtml"/>
+   			</rule>
+			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="replicacao">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/replicacao/replicacao.xhtml"/>
+   			</rule>
+   			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="erro">
+    			<raise-event type="SESSION_CLEAN"/>
+    			<redirect view-id="/pages/erro.xhtml"/>
+   			</rule>
+   			
+        	<!-- 
+        		Acesso de recursos com o cálculo aberto via menu
+        	-->
+        	<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="verba">
+				<end-conversation before-redirect="true"/>
+				<redirect view-id="/pages/verba/verba.xhtml"/>
+			</rule>
+			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="indicesGerais">
+				<end-conversation before-redirect="true"/>
+				<redirect view-id="/pages/indices/indices-gerais.xhtml"/>
+			</rule>
+			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="jurosPrincipal">
+				<end-conversation before-redirect="true"/>
+				<redirect view-id="/pages/juros/juros-principal.xhtml"/>
+			</rule>
+			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="tabelasPrevidenciarias">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/inss/tabela-previdenciaria.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="tabelaFiscal">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/irpf/tabela-irpf.xhtml"/>
+   			</rule>
+			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="parametrosCustasFixas">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/custas/parametros-custas-fixas.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="salarioMinimo">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/salariominimo/salario-minimo.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="salarioCategoria">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/salario-categoria/salario-categoria.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="tabelaSalarioFamilia">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/salario-familia/tabela-salario-familia.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="tabelaSeguroDesemprego">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/segurodesemprego/tabela-seguro-desemprego.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="valeTransporte">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/valetransporte/vale-transporte.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="feriado">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/feriado/feriado.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="perfil">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/perfil/perfil.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="logInfra">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/log-infra/log-infra.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="importacao">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/importacao/importacao.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="replicacao">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/replicacao/replicacao.xhtml"/>
+   			</rule>
+   			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="erro">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/erro.xhtml"/>
+   			</rule>
+   			<!-- 
+   				Menus do cálculo 
+   			-->
+			<rule if="#{servicoDeCalculo.calculoAberto}" if-outcome="calculo">
+				<end-conversation before-redirect="true"/>
+				<redirect view-id="/pages/calculo/calculo.xhtml"/>
+			</rule>
+            <rule if-outcome="verbaDeCalculo">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/verba/verba-calculo.xhtml"/>
+            </rule>
+            <rule if-outcome="relatorio">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/relatorio/relatorio-calculo.xhtml"/>
+            </rule>
+            <rule if-outcome="relatorioPorProcesso">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/processo/relatorio-processo.xhtml"/>
+            </rule>
+            <rule if-outcome="exportacao">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/exportacao.xhtml"/>
+            </rule>
+            <rule if-outcome="validacao">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/validacao.xhtml"/>
+            </rule>
+            <rule if-outcome="historicoSalarial">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/historico-salarial.xhtml"/>
+            </rule>
+            <rule if-outcome="ferias">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/ferias.xhtml"/>
+            </rule>
+            <rule if-outcome="falta">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/falta.xhtml"/>
+            </rule>
+		    <rule if-outcome="inss">
+		    	<end-conversation before-redirect="false" root="true"/>
+			    <redirect view-id="/pages/calculo/inss/inss.xhtml"/>
+		    </rule>
+            <rule if-outcome="fgts">
+				<end-conversation before-redirect="false" root="true"/>
+                <redirect view-id="/pages/calculo/fgts.xhtml"/>
+            </rule>
+		    <rule if-outcome="previdenciaPrivada">
+			    <end-conversation before-redirect="true"/>
+			    <redirect view-id="/pages/calculo/previdencia-privada.xhtml"/>
+		    </rule>
+		    <rule if-outcome="pensaoAlimenticia">
+			    <end-conversation before-redirect="true"/>
+			    <redirect view-id="/pages/calculo/pensao-alimenticia.xhtml"/>
+		    </rule>
+		    <rule if-outcome="multas">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/multas-indenizacoes.xhtml"/>
+            </rule>
+            
+             <rule if-outcome="honorarios">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/honorarios.xhtml"/>
+            </rule>
+            <rule if-outcome="custasJudiciais">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/custas-judiciais.xhtml"/>
+            </rule>
+            <rule if-outcome="irpf">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/calculo/irpf.xhtml"/>
+            </rule>
+            <rule if-outcome="salarioFamilia">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/calculo/salario-familia.xhtml"/>
+   			</rule>
+   			 <rule if-outcome="seguroDesemprego">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/calculo/seguro-desemprego.xhtml"/>
+   			</rule>
+   			<rule if-outcome="cartaoDePonto">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/cartaodeponto/cartaodeponto.xhtml"/>
+   			</rule>
+   			<rule if-outcome="apuracaoCartaoDePonto">
+    			<end-conversation before-redirect="true"/>
+    			<redirect view-id="/pages/cartaodeponto/apuracao-cartaodeponto.xhtml"/>
+   			</rule>
+   			
+        	<!-- 
+        		Acesso de recursos com o cálculo aberto fora do menu
+        	-->
+            <rule if-outcome="verbasParaCalculo">
+                <redirect view-id="/pages/calculo/verba/verbas-para-calculo.xhtml"/>
+            </rule>
+            <rule if-outcome="visualizarOcorrencias">
+                <redirect view-id="/pages/calculo/parametrizar-ocorrencia.xhtml"/>
+            </rule>
+            <rule if-outcome="liquidacao">
+                <redirect view-id="/pages/calculo/liquidacao.xhtml"/>
+            </rule>
+            <rule if-outcome="parametrizarOcorrenciasDeFgts">
+                <redirect view-id="/pages/calculo/parametrizar-fgts.xhtml"/>
+            </rule>
+            <rule if-outcome="parametrizarOcorrenciasDeInss">
+                <redirect view-id="/pages/calculo/inss/parametrizar-inss.xhtml"/>
+            </rule>
+            <rule if-outcome="parametrosAtualizacao">
+                <redirect view-id="/pages/calculo/parametros-atualizacao/parametros-atualizacao.xhtml"/>
+            </rule>
+            
+            <rule if-outcome="validacao-atualizacao">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/pagamento/validacao-atualizacao.xhtml"/>
+            </rule>
+            <rule if-outcome="pagamento">
+                <redirect view-id="/pages/pagamento/pagamento.xhtml"/>
+            </rule>
+            <rule if-outcome="multasAtualizacao">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/pagamento/multas-indenizacoes-atualizacao.xhtml"/>
+            </rule>
+            <rule if-outcome="honorariosAtualizacao">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/pagamento/honorarios-atualizacao.xhtml"/>
+            </rule>
+            <rule if-outcome="custasJudiciaisAtualizacao">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/pagamento/custas-judiciais-atualizacao.xhtml"/>
+            </rule>
+            <rule if-outcome="pensaoAlimenticiaAtualizacao">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/pagamento/pensao-alimenticia-atualizacao.xhtml"/>
+            </rule>
+            <rule if-outcome="liquidacaoPagamento">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/pagamento/liquidacao-pagamento.xhtml"/>
+            </rule>
+            <rule if-outcome="relatorioPagamento">
+				<end-conversation before-redirect="true"/>
+                <redirect view-id="/pages/pagamento/relatorio-pagamento.xhtml"/>
+            </rule>
+			
+		</navigation>
+	</page>
+
+	<exception class="org.jboss.seam.security.NotLoggedInException">
+		<redirect view-id="/logon.xhtml"/>
+	</exception>    
+	
+	<exception class="org.jboss.seam.security.AuthorizationException">
+		<end-conversation/>
+		<redirect view-id="/pages/principal.xhtml"/>
+	</exception>	
+	
+	<exception class="javax.faces.application.ViewExpiredException">
+		<redirect view-id="/logon.xhtml"/>
+	</exception>
+    
+</pages>

@@ -1,0 +1,529 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Ocorrências" />
+	<ui:param name="apresentador" value="#{apresentadorOcorrenciasDeInss}" />
+	<ui:param name="inssSelecionado" value="#{apresentador.inssSelecionado}" />
+	<ui:param name="titulo" value="#{apresentador.titulo}" />
+	
+	<ui:define name="filtroCampos">
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+		
+		<h:panelGroup rendered="#{apresentador.emGeracao}">
+			<ui:include src="regerar-inss.xhtml" />
+		</h:panelGroup>
+		
+		<rich:tabPanel switchType="server" immediate="true" rendered="#{apresentador.emOcorrencias}">
+	        
+	        <rich:tab id="tabOcorrenciasSalariosDevidos" label="Salários Devidos">
+	      		<a4j:outputPanel>
+	      		
+				<!-- INICIO DO FILTRO PARA ALTERACAO EM LOTE DO DEVIDO -->
+				<a4j:region id="regionAlterarEmLote">
+				<rich:simpleTogglePanel switchType="client" label="Alteração em lote" style="padding-left: 5px; padding-right: 5px;">
+						<f:facet name="openMarker"><img src="../../../images/sideopen.png" alt="" width="17" height="15"  /></f:facet>
+						<f:facet name="closeMarker"><img src="../../../images/sideclose.png" alt="" width="17" height="15"  /></f:facet>
+						<h:panelGrid id="gridAlterarEmLote" columns="9" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel value="Competência Inicial" for="dataInicial" />
+								<br/>
+								<rich:calendar id="dataInicial" value="#{apresentador.filtroParaAlterarInssDevidoEmLote.dataInicial}"
+											   label="Competência Inicial" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+											   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+											   showWeekDaysBar="false" showFooter="false"  
+											   oninputfocus="$(this).monthYearMask()" styleClass="special" inputClass="maskDateCompetencia" 
+											   required="#{!param['formulario:isAlteracaoEmLote']}">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+									<f:converter converterId="dateConverter"/>
+								</rich:calendar>
+				    			<cobra:toolTip>
+				    				<rich:message for="dataInicial"/>
+				    			</cobra:toolTip>	    			
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Competência Final" for="dataFinal"/>
+								<br/>
+								<rich:calendar id="dataFinal" value="#{apresentador.filtroParaAlterarInssDevidoEmLote.dataFinal}"
+											   label="Competência Final" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+											   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+											   showWeekDaysBar="false" showFooter="false"  
+											   oninputfocus="$(this).monthYearMask()" styleClass="special" inputClass="maskDateCompetencia"
+											   required="#{!param['formulario:isAlteracaoEmLote']}">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+									<f:converter converterId="dateConverter"/>
+								</rich:calendar>
+				    			<cobra:toolTip>
+				    				<rich:message for="dataFinal"/>
+				    			</cobra:toolTip>	    			
+							</h:panelGroup>
+							<h:panelGroup>
+								<h:outputLabel value="Salários Pagos (Histórico)" for="salariosPago" />
+								<br/>
+				    			<h:inputText id="salariosPago" label="Salários Pagos (Histórico)" value="#{apresentador.filtroParaAlterarInssDevidoEmLote.salariosPago}" size="16" style="text-align:right; width:144px;" onfocus="$(this).currencyMask()" maxlength="16" />
+				    			<cobra:toolTip>
+				    				<rich:message for="salariosPago"/>
+				    			</cobra:toolTip>	    			
+							</h:panelGroup>
+							<h:panelGroup>
+								<a4j:commandLink id="cmdVisualizar" styleClass="botaoAlterarItem" title="Alterar" value="" actionListener="#{apresentador.alterarEmLoteDevido}" onclick="AguardeShow();" oncomplete="AguardeHide();$('formulario:dataFinalInputDate').select();" limitToList="true" reRender="gridAlterarEmLote,listagemOcorrenciasDevidos,painelMensagens" />
+							</h:panelGroup>
+						</h:panelGrid>	
+				</rich:simpleTogglePanel>
+				</a4j:region>
+				<!-- FINAL DO FILTRO PARA ALTERACAO EM LOTE DO DEVIDO -->
+	      		
+	        	<div class="box_ocorrencias">
+					<div /><rich:spacer width="1" height="7"/><div />
+					<h:outputLabel styleClass="labelOcorrencia" value="Ocorrências de Contribuição Social sobre Salários Devidos"/>
+
+					<a4j:commandButton id="recuperarDevidos" actionListener="#{apresentador.recuperarOriginalOcorrenciaSalarioDevido()}" 
+						styleClass="botaoRecuperar" oncomplete="$('formulario:isAlteracaoEmLote').value='false';AguardeHide();"
+						reRender="listagemOcorrenciasDevidos"
+						rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" 
+						onclick="if(!checkSelecao('labelInput1')) return false; allToUpperCase();if (!confirma('#{mensagens.MSG0016}',this)) return false; $('formulario:isAlteracaoEmLote').value='true'; AguardeShow();"/>
+					<rich:toolTip value="Recuperar Valores Originais" for="recuperarDevidos"/>
+
+					<a4j:commandButton id="copiarDevidos" actionListener="#{apresentador.copiarOcorrenciaSalarioPago()}"  oncomplete="$('formulario:isAlteracaoEmLote').value='false';AguardeHide();"
+						styleClass="botaoCopiar"
+						reRender="listagemOcorrenciasDevidos"
+						rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}"
+						onclick="if(!checkSelecao('labelInput1')) return false; allToUpperCase();if (!confirma('#{mensagens.MSG0048}',this)) return false; $('formulario:isAlteracaoEmLote').value='true'; AguardeShow();"/>
+					<rich:toolTip value="Copiar valor informado na aba Salários Pagos para esta aba" for="copiarDevidos"/>
+
+					<rich:dataTable id="listagemOcorrenciasDevidos" styleClass="tableWithCellNavigation" value="#{listaDeOcorrenciasSalariosDevidos}" rowClasses="linha-par, linha-impar"
+									cellpadding="3" border="0" width="100%" var="ocorrencia" style="border:solid 1px #ccc;"> 
+						    	
+					    	<rich:column style="text-align:center;">
+					    		<f:facet name="header">
+				    				<h:outputText value="Ocorrência"/>
+				    			</f:facet>	
+				    			<h:outputText id="ocorrencia" value="#{ocorrencia.dataOcorrenciaInss}" styleClass="#{ocorrencia.ocorrenciaDecimoTerceiro ? 'flag13Salario' : ''}"><!-- para aviso previo alterar para flagAvisoPrevio -->
+				    				<f:converter converterId="competenciaConverter"/>
+				    			</h:outputText>
+					    	</rich:column>		
+					    	
+					    	<rich:column>
+				    			<f:facet name="header">
+				    				<h:outputText value="Salários Pagos (Histórico)"/>
+				    			</f:facet>
+				    			<a4j:region>
+					    			<h:inputText id="baseHistoricoDevido" value="#{ocorrencia.valorBase}" size="16" required="true" style="text-align:right;"
+					    					label="Base (Histórico)" onfocus="$(this).currencyMask()" maxlength="16">
+					    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.baseHistoricoSalarioDevidoAlterada(ocorrencia)}" 
+					    								 reRender="tipoDeBaseDevido" />
+					    			</h:inputText>
+					    			<cobra:toolTip>
+					    				<rich:message for="baseHistoricoDevido"/>
+					    			</cobra:toolTip>
+				    			</a4j:region>	
+					    	</rich:column>
+					    	
+					    	<rich:column>
+				    			<f:facet name="header">
+				    				<h:outputText value="Tipo (Base)"/>
+				    			</f:facet>	
+				    			<h:outputText id="tipoDeBaseDevido" value="#{ocorrencia.tipoValorDaBase.nome}" />
+					    	</rich:column>	
+					    	
+					    	<rich:column id="rcheckSelecionar">
+						    	<f:facet name="header">
+					    			<h:panelGroup layout="block">
+			    						<input id="selecionarTodos1" type="checkbox" class="css-checkbox" onclick="jQuery('.labelInput1:enabled').attr('checked',jQuery('#selecionarTodos1').attr('checked'))"/>
+					    				<label for="selecionarTodos1" id="selecionarTodosLabel1" class="css-label" style="width: 0px; padding-left:18px;"></label>
+					    				<rich:toolTip value="Selecionar Todos" for="selecionarTodosLabel1"/>					    	
+				    				</h:panelGroup>
+					    		</f:facet>						    		
+							    <h:selectBooleanCheckbox id="selecionarDevido" label="Selecionar" value="#{ocorrencia.selecionada}" styleClass="labelInput1" onclick="jQuery(function() {prepararCheckAll('#selecionarTodos1','.labelInput1');});" />
+						    </rich:column>
+
+						</rich:dataTable>
+						
+					</div>   
+					
+					<h:panelGroup id="panelScriptTableDevido">
+						<!-- <script type="text/javascript">
+							/* <![CDATA[ */   
+						       jQuery(function() {
+									jQuery('#formulario:listagemOcorrenciasDevidos').enableCellNavigation();
+								});
+						    /* ]]> */
+						</script> -->
+					</h:panelGroup>
+					
+	            </a4j:outputPanel>
+	        </rich:tab>
+	        
+	        <rich:tab id="tabOcorrenciasSalariosPagos" label="Salários Pagos">
+	        		<a4j:outputPanel>
+	        		
+					<!-- INICIO DO FILTRO PARA ALTERACAO EM LOTE DO PAGO -->
+					<a4j:region id="regionAlterarEmLotePago">
+					<rich:simpleTogglePanel switchType="client" label="Alteração em lote" style="padding-left: 5px; padding-right: 5px;">
+							<f:facet name="openMarker"><img src="../../../images/sideopen.png" alt="" width="17" height="15"  /></f:facet>
+							<f:facet name="closeMarker"><img src="../../../images/sideclose.png" alt="" width="17" height="15"  /></f:facet>
+							<h:panelGrid id="gridAlterarEmLotePago" columns="9" cellspacing="4" border="0">
+								<h:panelGroup>
+									<h:outputLabel value="Competência Inicial" for="dataInicialPago" />
+									<br/>
+									<rich:calendar id="dataInicialPago" value="#{apresentador.filtroParaAlterarInssPagoEmLote.dataInicial}"
+												   label="Competência Inicial" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+												   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												   showWeekDaysBar="false" showFooter="false"  
+												   oninputfocus="$(this).monthYearMask()" styleClass="special" inputClass="maskDateCompetencia" 
+												   required="#{!param['formulario:isAlteracaoEmLote']}">
+										<f:facet name="footer">
+								        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+										<f:converter converterId="dateConverter"/>
+									</rich:calendar>
+					    			<cobra:toolTip>
+					    				<rich:message for="dataInicialPago"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Competência Final" for="dataFinalPago"/>
+									<br/>
+									<rich:calendar id="dataFinalPago" value="#{apresentador.filtroParaAlterarInssPagoEmLote.dataFinal}"
+												   label="Competência Final" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+												   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												   showWeekDaysBar="false" showFooter="false"  
+												   oninputfocus="$(this).monthYearMask()" styleClass="special" inputClass="maskDateCompetencia"
+												   required="#{!param['formulario:isAlteracaoEmLote']}">
+										<f:facet name="footer">
+								        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+										<f:converter converterId="dateConverter"/>
+									</rich:calendar>
+					    			<cobra:toolTip>
+					    				<rich:message for="dataFinalPago"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor" for="valorPago" />
+									<br/>
+					    			<h:inputText id="valorPago" label="Valor" value="#{apresentador.filtroParaAlterarInssPagoEmLote.valor}" size="16" style="text-align:right; width:100px;" onfocus="$(this).currencyMask()" maxlength="16"/>
+					    			<cobra:toolTip>
+					    				<rich:message for="valorPago"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Segurado" for="valorSegurado" />
+									<br/>
+					    			<h:inputText id="valorSegurado" label="Segurado" value="#{apresentador.filtroParaAlterarInssPagoEmLote.valorSegurado}" size="16" style="text-align:right; width:100px;" onfocus="$(this).currencyMask()" maxlength="16"/>
+					    			<cobra:toolTip>
+					    				<rich:message for="valorSegurado"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Empresa" for="valorEmpresa" />
+									<br/>
+					    			<h:inputText id="valorEmpresa" label="Empresa" value="#{apresentador.filtroParaAlterarInssPagoEmLote.valorEmpresa}" size="16" style="text-align:right; width:100px;" onfocus="$(this).currencyMask()" maxlength="16"/>
+					    			<cobra:toolTip>
+					    				<rich:message for="valorEmpresa"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="SAT" for="valorSat" />
+									<br/>
+					    			<h:inputText id="valorSat" label="SAT" value="#{apresentador.filtroParaAlterarInssPagoEmLote.valorSat}" size="16" style="text-align:right; width:100px;" onfocus="$(this).currencyMask()" maxlength="16"/>
+					    			<cobra:toolTip>
+					    				<rich:message for="valorSat"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Terceiros" for="valorTerceiro" />
+									<br/>
+					    			<h:inputText id="valorTerceiro" label="Terceiros" value="#{apresentador.filtroParaAlterarInssPagoEmLote.valorTerceiro}" size="16" style="text-align:right; width:100px;" onfocus="$(this).currencyMask()" maxlength="16"/>
+					    			<cobra:toolTip>
+					    				<rich:message for="valorTerceiro"/>
+					    			</cobra:toolTip>	    			
+								</h:panelGroup>
+								<h:panelGroup>
+									<a4j:commandLink id="cmdVisualizarPago" styleClass="botaoAlterarItem" title="Alterar" value="" actionListener="#{apresentador.alterarEmLotePago}" onclick="AguardeShow();" oncomplete="AguardeHide();$('formulario:dataFinalPagoInputDate').select();" limitToList="true" reRender="gridAlterarEmLotePago,listagemOcorrenciasPagos,painelMensagens" />
+								</h:panelGroup>
+							</h:panelGrid>	
+					</rich:simpleTogglePanel>
+					</a4j:region>
+					<!-- FINAL DO FILTRO PARA ALTERACAO EM LOTE DO PAGO -->
+
+	        		<div class="box_ocorrencias">
+						<div /><rich:spacer width="1" height="7"/><div />
+						<h:outputLabel styleClass="labelOcorrencia" value="Ocorrências de Contribuição Social sobre Salários Pagos"/>
+
+						<a4j:commandButton id="recuperarPagos" actionListener="#{apresentador.recuperarOriginalOcorrenciaInssSalariosPagos()}"  oncomplete="$('formulario:isAlteracaoEmLote').value='false'; AguardeHide();"
+							styleClass="botaoRecuperar"
+							title="Recuperar Valor Original"
+							reRender="listagemOcorrenciasPagos"
+							rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" 
+							onclick="if(!checkSelecao('labelInput2')) return false; allToUpperCase();if (!confirma('#{mensagens.MSG0016}',this)) return false; $('formulario:isAlteracaoEmLote').value='true'; AguardeShow();"/>
+						<rich:toolTip value="Recuperar Valores Originais" for="recuperarPagos"/>
+	
+						<a4j:commandButton id="copiarPagos" actionListener="#{apresentador.copiarOcorrenciaSalarioDevido()}"  oncomplete="$('formulario:isAlteracaoEmLote').value='false'; AguardeHide();"
+							styleClass="botaoCopiar"
+							reRender="listagemOcorrenciasPagos"
+							rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}"
+							onclick="if(!checkSelecao('labelInput2')) return false; allToUpperCase();if (!confirma('#{mensagens.MSG0048}',this)) return false; $('formulario:isAlteracaoEmLote').value='true'; AguardeShow();"/>
+						<rich:toolTip value="Copiar valor informado na aba Salários Devidos para esta aba" for="copiarPagos"/>
+
+						<rich:dataTable id="listagemOcorrenciasPagos" styleClass="tableWithCellNavigation" value="#{listaDeOcorrenciasSalariosPagos}" rowClasses="linha-par, linha-impar"
+										cellpadding="3" border="0" width="100%" var="ocorrencia" style="border:solid 1px #ccc;"> 
+
+                    <f:facet name="header">
+                        <rich:columnGroup>
+                            <rich:column rowspan="2" style="width:8%;">
+                                  <h:outputText value="Ocorrência" />
+                            </rich:column>
+                            <rich:column colspan="2">
+                                <h:outputText value="Salários Pagos (Histórico)" />
+                            </rich:column>
+                            <rich:column colspan="8">
+                                <h:outputText value="Contribuição Social Recolhida" />
+                            </rich:column>
+                            <rich:column rowspan="2" style="width:8%;">
+							<h:panelGroup layout="block">
+	    						<input id="selecionarTodos2" type="checkbox" class="css-checkbox" onclick="jQuery('.labelInput2:enabled').attr('checked',jQuery('#selecionarTodos2').attr('checked'))"/>
+			    				<label for="selecionarTodos2" id="selecionarTodosLabel2" class="css-label" style="width: 0px; padding-left:18px;"></label>
+			    				<rich:toolTip value="Selecionar Todos" for="selecionarTodosLabel2"/>					    	
+		    				</h:panelGroup>
+                            </rich:column>
+                            <rich:column breakBefore="true">
+                                <h:outputText value="Valor" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="Tipo" />
+                            </rich:column>
+                            <rich:column breakBefore="false">
+                                <h:outputText value="Segurado" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="Tipo" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="Empresa" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="Tipo" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="SAT" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="Tipo" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="Terceiros" />
+                            </rich:column>
+                            <rich:column>
+                                <h:outputText value="Tipo" />
+                            </rich:column>
+                        </rich:columnGroup>
+                    </f:facet>
+    
+    
+   					<rich:columnGroup>
+											
+						<rich:column style="width:8%;">
+							<h:outputText id="ocorrencia" value="#{ocorrencia.dataOcorrenciaInss}" styleClass="#{ocorrencia.ocorrenciaDecimoTerceiro ? 'flag13Salario' : ''}">
+			    				<f:converter converterId="competenciaConverter"/>
+			    			</h:outputText>			
+						</rich:column>				
+						
+						<rich:column>
+			    			<a4j:region>
+				    			<h:inputText id="baseHistoricoPago" value="#{ocorrencia.valorBase}" size="16" required="true" style="text-align:right;"
+				    					label="Base (Histórico)" onfocus="$(this).currencyMask()" maxlength="16">
+				    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" 
+				    								 actionListener="#{apresentador.baseHistoricoSalarioPagoAlterada(ocorrencia)}" 
+				    								 reRender="tipoDeBasePago" />
+				    			</h:inputText>
+				    			<cobra:toolTip>
+				    				<rich:message for="baseHistoricoPago"/>
+				    			</cobra:toolTip>
+			    			</a4j:region>	
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<h:outputText id="tipoDeBasePago" value="#{ocorrencia.tipoValorDaBase.nome}" />
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<a4j:region>
+				    			<h:inputText id="recolhidoSeguradoPago" value="#{ocorrencia.valorRecolhidoSegurado}" size="16" required="true" style="text-align:right;"
+				    					label="Recolhido Segurado" onfocus="$(this).currencyMask()" maxlength="16">
+				    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.recolhidoSeguradoSalarioPagoAlterado(ocorrencia)}" reRender="tipoRecolhidoSeguradoPago" />
+				    			</h:inputText>
+				    			<cobra:toolTip>
+				    				<rich:message for="recolhidoSeguradoPago"/>
+				    			</cobra:toolTip>
+			    			</a4j:region>	
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<h:outputText id="tipoRecolhidoSeguradoPago" value="#{ocorrencia.tipoValorDoRecolhidoSegurado.nome}" />
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<a4j:region>
+				    			<h:inputText id="recolhidoEmpresaPago" value="#{ocorrencia.valorRecolhidoEmpresa}" size="16" required="true" style="text-align:right;"
+				    					label="Recolhido Empresa" onfocus="$(this).currencyMask()" maxlength="16">
+				    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.recolhidoEmpresaSalarioPagoAlterado(ocorrencia)}" reRender="tipoRecolhidoEmpresaPago" />
+				    			</h:inputText>
+				    			<cobra:toolTip>
+				    				<rich:message for="recolhidoEmpresaPago"/>
+				    			</cobra:toolTip>
+			    			</a4j:region>
+				    	</rich:column>
+
+				    	<rich:column>
+			    			<h:outputText id="tipoRecolhidoEmpresaPago" value="#{ocorrencia.tipoValorDoRecolhidoEmpresa.nome}" />
+				    	</rich:column>
+
+				    	<rich:column>
+			    			<a4j:region>
+				    			<h:inputText id="recolhidoSATPago" value="#{ocorrencia.valorRecolhidoSAT}" size="16" required="true" style="text-align:right;"
+				    					label="Recolhido SAT" onfocus="$(this).currencyMask()" maxlength="16">
+				    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.recolhidoSATSalarioPagoAlterado(ocorrencia)}" reRender="tipoRecolhidoSATPago" />
+				    			</h:inputText>
+				    			<cobra:toolTip>
+				    				<rich:message for="recolhidoSATPago"/>
+				    			</cobra:toolTip>
+			    			</a4j:region>
+				    	</rich:column>
+
+				    	<rich:column>
+			    			<h:outputText id="tipoRecolhidoSATPago" value="#{ocorrencia.tipoValorDoRecolhidoSAT.nome}" />
+				    	</rich:column>
+
+				    	<rich:column>
+			    			<a4j:region>
+				    			<h:inputText id="recolhidoTerceirosPago" value="#{ocorrencia.valorRecolhidoTerceiros}" size="16" required="true" style="text-align:right;"
+				    					label="Recolhido Terceiros" onfocus="$(this).currencyMask()" maxlength="16">
+				    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.recolhidoTerceirosSalarioPagoAlterado(ocorrencia)}" reRender="tipoRecolhidoTerceirosPago" />
+				    			</h:inputText>
+				    			<cobra:toolTip>
+				    				<rich:message for="recolhidoTerceirosPago"/>
+				    			</cobra:toolTip>
+			    			</a4j:region>	
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<h:outputText id="tipoRecolhidoTerceirosPago" value="#{ocorrencia.tipoValorDoRecolhidoTerceiros.nome}" />
+				    	</rich:column>
+
+				    	<rich:column id="rcheckSelecionarPago">
+				    		<h:selectBooleanCheckbox id="selecionarPago" label="Selecionar" value="#{ocorrencia.selecionada}" styleClass="labelInput2" onclick="jQuery(function() {prepararCheckAll('#selecionarTodos2','.labelInput2');});" />
+				    	</rich:column>
+
+					</rich:columnGroup>
+
+                </rich:dataTable>
+							
+				</div></a4j:outputPanel>
+
+			</rich:tab>
+        
+    	</rich:tabPanel>
+    	
+    	<a4j:outputPanel id="painelScriptCheck">
+   			<script>
+				function checkSelecao(clazz) {
+					if (jQuery('.'+clazz+':checked').length == 0) {
+						jAlert('#{mensagens.MSG0015.replace("{0}","ao menos uma ocorrência")}', 'Erro');
+						return false;				
+					}
+					return true;
+				}
+			</script>
+    	
+    	</a4j:outputPanel>
+    	
+    	<h:panelGroup id="panelScriptTablePago">
+			<!-- <script type="text/javascript">
+				/* <![CDATA[ */   
+			       jQuery(function() {
+						jQuery('#formulario:listagemOcorrenciasPagos').enableCellNavigation();
+					});
+			    /* ]]> */
+			</script> -->
+		</h:panelGroup>
+								
+	
+	
+	</ui:define>
+	
+	<ui:define name="script">
+		<a4j:outputPanel id="painelScript" ajaxRendered="true">
+			<script language="JavaScript">
+				jQuery(function() {
+					prepararCheckAll('#selecionarTodos1','.labelInput1');
+					prepararCheckAll('#selecionarTodos2','.labelInput2');
+				});
+			</script>
+		</a4j:outputPanel>
+	</ui:define>
+
+	<ui:define name="filtroBotoes">
+		<h:inputHidden id="isAlteracaoEmLote" name="isAlteracaoEmLote" value="false"/>
+		
+		<h:panelGroup rendered="#{apresentador.emGeracao}">
+			<fieldset  style="width:315px;margin-left: 5px;"><legend>Opções de Regeração</legend>
+				<h:panelGrid columns="2" cellspacing="2" cellpadding="0" border="0" style="height:42px">
+					<h:panelGroup layout="block" style="padding-left:10px;">
+						<h:selectOneRadio id="tipoRegeracao" value="#{apresentador.manterAlteracoes}" styleClass="labelInput" layout="pageDirection">
+							<f:selectItem itemLabel="Manter alterações realizadas nas ocorrências" itemValue="#{true}" />
+							<f:selectItem itemLabel="Sobrescrever alterações realizadas nas ocorrências" itemValue="#{false}" />
+						</h:selectOneRadio>
+					</h:panelGroup>
+				</h:panelGrid>
+			</fieldset>
+		</h:panelGroup>	
+		
+		
+	    <a4j:commandButton   id="regerar" styleClass="botao" 
+	                         value="Regerar" 
+	                         rendered="#{apresentador.emOcorrencias}"
+	                         action="#{apresentador.regerar}"
+	                         immediate="true"/>
+	    <a4j:commandButton   id="salvar" styleClass="botao" 
+	    					 value="Salvar"
+	                         rendered="#{apresentador.emOcorrencias}"
+	                         action="#{apresentador.salvar}"  
+	                         onclick="allToUpperCase();$('formulario:isAlteracaoEmLote').value='true';"/>
+	    <a4j:commandButton   id="confirmarGeracao" styleClass="botao" 
+	                         value="Confirmar"  style="margin-top: 15px;"
+	                         rendered="#{apresentador.emGeracao}"
+	                         action="#{apresentador.confirmarGeracao}"/>
+	    <a4j:commandButton   id="cancelar" styleClass="botao" 
+	                         value="Cancelar" 
+	                         rendered="#{apresentador.emOcorrencias}"
+	                         action="#{apresentador.cancelar}"
+	                         immediate="true"/>
+	    <a4j:commandButton   id="cancelarGeracao" styleClass="botao" 
+	                         value="Cancelar" 
+	                         rendered="#{apresentador.emGeracao}"
+	                         action="#{apresentador.cancelarGeracao}"
+	                         immediate="true"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

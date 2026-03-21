@@ -401,7 +401,17 @@ function abrirSSE() {
     `/api/executar/${SESSAO_ID}?modo_oculto=${modoOcultoAtual}`
   );
   evtSource.onmessage = (e) => {
-    const { msg } = JSON.parse(e.data);
+    const dados = JSON.parse(e.data);
+    const msg = dados.msg;
+    if (msg === 'DOWNLOAD_DISPONIVEL' && dados.url) {
+      const btn = document.createElement('a');
+      btn.href = dados.url;
+      btn.className = 'btn btn-success';
+      btn.style = 'margin-top:12px; display:block; text-align:center; font-weight:700;';
+      btn.textContent = '⬇ Baixar .PJC Gerado';
+      document.getElementById('log-automacao').parentElement.appendChild(btn);
+      return;
+    }
     const tipo = msg.startsWith('ERRO') || msg.startsWith('Error') ? 'err'
                : (msg.startsWith('AGUARDANDO') || msg.includes('⚠') || msg.startsWith('⏳')) ? 'wait'
                : 'ok';

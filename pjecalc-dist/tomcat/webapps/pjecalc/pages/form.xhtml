@@ -1,0 +1,469 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+
+<ui:composition template="/templates/template-pilares.xhtml">
+	
+	<ui:param name="paramNome" value="Cálculo" />
+	
+	<ui:define name="navegacao">
+		<div class="naveg">
+			<h:outputText styleClass="n1" value="#{mensagens.menuCadastrosProjetos} > Projeto" />
+			<a class="arrow" />
+			<h:outputText styleClass="n2" value=" Etapa 1 - #{paramNome}: #{operacao.rotulo}" />
+		</div>
+	</ui:define>
+
+	<ui:define name="nofiltroCampos"></ui:define>
+	
+	<ui:define name="camposFormulario">
+	
+	<h:panelGrid columns="5" cellpadding="3" cellspacing="4" border="0">
+				<h:panelGroup>
+					<h:outputLabel value="Número" /><br />
+						<h:inputText id="numeroParametro" value="" 
+									 size="10" />
+						<script type="text/javascript">
+							mascara('numero', 'INTEIRO');
+						</script>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Tipo" /><br />
+						<h:inputText id="tipo" value="" 
+									 size="10" maxlength="1" />
+						<script type="text/javascript">
+							mascara('tipo', 'TEXTO');
+						</script>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Data de Criação"/><br />
+					     <rich:calendar id="dataCriacao" inputSize="23" popup="true" 
+					                        datePattern="dd/MM/yyyy"
+					                        enableManualInput="true" >
+						<f:facet name="footer">
+								      <h:outputText value="{selectedDateControl}" style="text-align:center" />
+						</f:facet>		            
+					    </rich:calendar>
+						<script type="text/javascript">
+							mascara('dataCriacao', 'DATA');
+						</script>
+				</h:panelGroup>			
+	     </h:panelGrid>
+	      		
+		<rich:tabPanel switchType="client"> 
+			<rich:tab label="Dados do Processo">
+				
+			<h:panelGrid columns="11">
+				<h:panelGroup>
+					<h:outputLabel value="Número" /><br />
+						<h:inputText id="numero" value="" 
+									 size="6" maxlength="7" />
+						<script type="text/javascript">
+							mascara('numero', 'INTEIRO');
+						</script>
+						<span class="digito">-</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Dígito" /><br />
+						<h:inputText id="digito" value="" 
+									 size="3" maxlength="2" />
+						<script type="text/javascript">
+							mascara('digito', 'INTEIRO');
+						</script>
+						<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Ano" /><br />
+						<h:inputText id="ano" value="" 
+									 size="5" maxlength="4" />
+						<script type="text/javascript">
+							mascara('ano', 'INTEIRO');
+						</script>
+						<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Justiça" /><br />
+						<h:inputText id="justica" value="" 
+									 size="5" maxlength="1" />
+						<script type="text/javascript">
+							mascara('justica', 'INTEIRO');
+						</script>
+						<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Tribunal" /><br />
+						<h:inputText id="tribunal" value="" 
+									 size="5" maxlength="2" />
+						<script type="text/javascript">
+							mascara('tribunal', 'INTEIRO');
+						</script>
+						<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Vara" /><br />
+						<h:inputText id="vara" value="" 
+									 size="5" maxlength="4" />
+						<script type="text/javascript">
+							mascara('vara', 'INTEIRO');
+						</script>
+				</h:panelGroup>
+			</h:panelGrid>
+					<fieldset><legend>Reclamante</legend>
+						
+						<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel for="nome" value="Nome" /><br />
+								<h:inputText id="nome" value=""  size="60" maxlength="150"
+									label="Nome" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('nome', 'TEXTO');
+				    			</script>
+				    			
+				    			<a href="#" id="latitude2" class="linkHelp"></a>
+									<script type="text/javascript">
+										jQuery(function() {
+										
+											jQuery('.linkHelp').each(function() {
+											jQuery(this).tipsy({gravity: 'n', html:true, title:
+												function() {
+													return '00º00´00´´N - onde N significa Norte.<br/> 00º00´00´´S - onde S significa Sul. <br/> 00º00´00´´L - onde L significa Leste. <br/> 00º00´00´´O - onde O significa Oeste.';
+												}
+											});
+										});
+									});
+									</script>
+							</h:panelGroup>
+							
+							
+						</h:panelGrid>
+					
+					
+						<fieldset style="float:left;"><legend>Documento Fiscal</legend>
+						<h:panelGrid columns="2" cellspacing="4" border="0">
+							<h:panelGroup>
+									<h:outputLabel for="documentoFiscal" value="Tipo" /><br />
+									<h:selectOneRadio id="documentoFiscal" value="CPF" styleClass="labelInput">
+										<f:selectItem itemValue="CPF" itemLabel="CPF"/>
+										<f:selectItem itemValue="CNPJ" itemLabel="CNPJ" />
+										<f:selectItem itemValue="CET" itemLabel="CET" />
+									</h:selectOneRadio>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel for="numeroReclamante" value="Número" /><br />
+									<h:inputText id="numeroReclamante" value=""  size="14" maxlength="14">
+									</h:inputText>
+									 <script type="text/javascript">
+					            		mascara('numeroReclamante', 'INTEIRO');
+					    			</script>
+								</h:panelGroup>
+						    	</h:panelGrid>
+						    </fieldset>
+						 
+						 	
+						    <fieldset style="float:left;"><legend>Documento Previdenciário</legend>
+						    <h:panelGrid columns="2" cellpadding="3" border="0">
+								<h:panelGroup>
+									<h:outputLabel for="documentoPrevidenciario" value="Tipo" /><br />
+									<h:selectOneRadio id="documentoPrevidenciario" value="PIS" styleClass="labelInput">
+										<f:selectItem itemValue="PIS" itemLabel="PIS"/>
+										<f:selectItem itemValue="PASEP" itemLabel="PASEP" />
+										<f:selectItem itemValue="NIT" itemLabel="NIT" />
+									</h:selectOneRadio>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel for="numeroReclamante2" value="Número" /><br />
+									<h:inputText id="numeroReclamante2" value=""  size="14" maxlength="14"
+										label="Nome" >
+									</h:inputText>
+									 <script type="text/javascript">
+					            		mascara('numeroReclamante2', 'INTEIRO');
+					    			</script>
+								</h:panelGroup>
+							 </h:panelGrid>
+							</fieldset>
+					
+						
+						<fieldset><legend>Advogado</legend>
+							<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel for="nomeAdvogado" value="Nome" /><br />
+								<h:inputText id="nomeAdvogado" size="49" maxlength="150"
+									label="Nome" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('nomeAdvogado', 'TEXTO');
+				    			</script>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel for="cpfAdvogado" value="CPF" /><br />
+								<h:inputText id="cpfAdvogado" size="14" maxlength="14"
+									label="CPF" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('cpfAdvogado', 'CPF');
+				    			</script>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel for="oab" value="OAB" /><br />
+								<h:inputText id="oab"  size="14" maxlength="8"
+									label="OAB" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('oab', 'TEXTONUMERO');
+				    			</script>
+							</h:panelGroup>
+						</h:panelGrid>
+						</fieldset>
+					</fieldset>
+					
+					<fieldset style="margin-top: 15px;"><legend>Reclamado</legend>
+						
+						<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel for="nomeReclamado" value="Nome" /><br />
+								<h:inputText id="nomeReclamado" value="" size="49" maxlength="150"
+									label="Nome" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('nomeReclamado', 'TEXTO');
+				    			</script>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel for="documentoFiscalReclamado" value="Documento Fiscal" /><br />
+								<h:selectOneRadio id="documentoFiscalReclamado" value="CPF" styleClass="labelInput">
+									<f:selectItem itemValue="CPF" itemLabel="CPF"/>
+									<f:selectItem itemValue="CNPJ" itemLabel="CNPJ" />
+									<f:selectItem itemValue="CET" itemLabel="CET" />
+								</h:selectOneRadio>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel for="numeroReclamado" value="Número" /><br />
+								<h:inputText id="numeroReclamado" value="" size="14" maxlength="14"
+									label="Nome" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('numeroReclamado', 'INTEIRO');
+				    			</script>
+							</h:panelGroup>
+							
+						</h:panelGrid>
+						
+						<fieldset><legend>Advogado</legend>
+							<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel value="Nome" /><br />
+								<h:inputText id="nomeAdvogadoReclamado" size="49" maxlength="150"
+									label="Nome" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('nomeAdvogadoReclamado', 'TEXTO');
+				    			</script>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="CPF" /><br />
+								<h:inputText id="cpfAdvogadoReclamado" size="14" maxlength="14"
+									label="CPF" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('cpfAdvogadoReclamado', 'CPF');
+				    			</script>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel for="oabReclamado" value="OAB" /><br />
+								<h:inputText id="oabReclamado"  size="14" maxlength="8"
+									label="OAB" >
+								</h:inputText>
+								 <script type="text/javascript">
+				            		mascara('oabReclamado', 'TEXTONUMERO');
+				    			</script>
+							</h:panelGroup>
+						</h:panelGrid>
+						</fieldset>
+					</fieldset>							
+			</rich:tab>
+			
+			<rich:tab label="Parâmetros de Cálculo">
+				
+				<h:panelGrid columns="2" cellpadding="3" cellspacing="4" border="0">
+					<h:panelGroup>
+					<h:outputLabel value="Estado" /><br />
+						<h:selectOneMenu value="Selecione" style="width:150px;"
+											 id="estado">
+								 <f:selectItem itemValue="selecione" itemLabel="Selecione" />							
+								 <f:selectItem itemValue="item1" itemLabel="item1" />
+								 <f:selectItem itemValue="item2" itemLabel="item2" />
+							</h:selectOneMenu>
+				</h:panelGroup>
+					
+				<h:panelGroup>
+					<h:outputLabel value="Município" /><br />
+						<h:selectOneMenu value="Selecione" style="width:150px;"
+											 id="municipio">
+								 <f:selectItem itemValue="selecione" itemLabel="Selecione" />							
+								 <f:selectItem itemValue="item1" itemLabel="item1" />
+								 <f:selectItem itemValue="item2" itemLabel="item2" />
+							</h:selectOneMenu>
+				</h:panelGroup>
+				</h:panelGrid>
+				<fieldset><legend>Datas do Cálculo</legend>
+	
+				<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0" >
+									
+						<h:panelGroup>
+					                <h:outputLabel value="Admissão"/><br />
+					                    <rich:calendar id="dataAdmissao" inputSize="22" popup="true" 
+					                        datePattern="dd/MM/yyyy"
+					                        enableManualInput="true" >
+								            <f:facet name="footer">
+								                  <h:outputText value="{selectedDateControl}" style="text-align:center" />
+								            </f:facet>
+								            
+					               	 	</rich:calendar>
+							            <script type="text/javascript">
+						            		mascara('dataAdmissao', 'DATA');
+						    			</script>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+					                <h:outputLabel value="Demissao"/><br />
+					                    <rich:calendar id="dataDemissao" inputSize="22" popup="true" 
+					                        datePattern="dd/MM/yyyy"
+					                        enableManualInput="true" >
+								            <f:facet name="footer">
+								                  <h:outputText value="{selectedDateControl}" style="text-align:center" />
+								            </f:facet>
+								            
+					               	 	</rich:calendar>
+							            <script type="text/javascript">
+						            		mascara('dataDemissao', 'DATA');
+						    			</script>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+					                <h:outputLabel value="Ajuizamento"/><br />
+					                    <rich:calendar id="dataAjuizamento" inputSize="22" popup="true" 
+					                        datePattern="dd/MM/yyyy"
+					                        enableManualInput="true" >
+								            <f:facet name="footer">
+								                  <h:outputText value="{selectedDateControl}" style="text-align:center" />
+								            </f:facet>
+								            
+					               	 	</rich:calendar>
+							            <script type="text/javascript">
+						            		mascara('dataAjuizamento', 'DATA');
+						    			</script>
+						</h:panelGroup>
+					
+					</h:panelGrid>
+					<fieldset><legend>Limitar Cálculo</legend>
+						<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0" >
+							
+							<h:panelGroup>
+						                <h:outputLabel value="Data Início"/><br />
+						                    <rich:calendar id="dataInicioCalculo" inputSize="22" popup="true" 
+						                        datePattern="dd/MM/yyyy"
+						                        enableManualInput="true" >
+									            <f:facet name="footer">
+									                  <h:outputText value="{selectedDateControl}" style="text-align:center" />
+									            </f:facet>
+									            
+						               	 	</rich:calendar>
+								            <script type="text/javascript">
+							            		mascara('dataInicioCalculo', 'DATA');
+							    			</script>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+						                <h:outputLabel value="Data Final"/><br />
+						                    <rich:calendar id="dataFimCalculo" inputSize="22" popup="true" 
+						                        datePattern="dd/MM/yyyy"
+						                        enableManualInput="true" >
+									            <f:facet name="footer">
+									                  <h:outputText value="{selectedDateControl}" style="text-align:center" />
+									            </f:facet>
+									            
+						               	 	</rich:calendar>
+								            <script type="text/javascript">
+							            		mascara('dataFimCalculo', 'DATA');
+							    			</script>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel for="outrosParametros" value="Aplicar Prescrição"/><br /><br />
+								<h:selectManyCheckbox id="aplicar" value="" layout="lineDirection" styleClass="labelInput">
+									<f:selectItem itemValue="1" itemLabel="Verbas (Quiquenal)"></f:selectItem>
+									<f:selectItem itemValue="2" itemLabel="FGTS"></f:selectItem>
+								</h:selectManyCheckbox>						
+						</h:panelGroup>
+							
+					</h:panelGrid>
+					</fieldset>
+				</fieldset>
+					
+				<fieldset><legend>Outros Parâmetros</legend>
+					<h:panelGrid columns="2" cellpadding="3" cellspacing="4" border="0">
+					<h:panelGroup>
+								<h:outputLabel value="Última Remuneração" /><br />
+								<h:inputText id="ultimaRemuneracao" label="Última Remuneração" size="25" maxlength="3" />
+								 <script type="text/javascript">
+				            		mascara('ultimaRemuneracao', 'MOEDA');
+				    			</script>	
+						</h:panelGroup>		
+						
+						<h:panelGroup>
+				                <h:outputLabel value="Carga Horária Padrão" /><br />
+				                 <h:inputText id="cargaHorariaPadrao" label="Carga Horária Padrão" size="25" maxlength="3" />
+								 <script type="text/javascript">
+				            		mascara('cargaHorariaPadrao', 'INTEIRO');
+				    			</script>
+						</h:panelGroup>
+					</h:panelGrid>
+					
+					<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+						<h:panelGroup>
+								<h:selectManyCheckbox id="outrosParametros" value="" layout="pageDirection" styleClass="labelInput">
+									<f:selectItem itemValue="1" itemLabel="Apurar Prazo de Aviso Prévio"></f:selectItem>
+									<f:selectItem itemValue="2" itemLabel="Projetar Aviso Prévio Indenizado"></f:selectItem>
+									<f:selectItem itemValue="3" itemLabel="Sábado como Dia Útil"></f:selectItem>
+									<f:selectItem itemValue="4" itemLabel="Zerar Valor Negativo"></f:selectItem>
+									<f:selectItem itemValue="5" itemLabel="Considerar Feriados Estaduais"></f:selectItem>
+									<f:selectItem itemValue="6" itemLabel="Considerar Feriados Municipais"></f:selectItem>		
+								</h:selectManyCheckbox>						
+						</h:panelGroup>	
+			</h:panelGrid>
+			</fieldset>
+			</rich:tab>
+			
+		</rich:tabPanel>
+										
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" action="projeto" styleClass="botao"/>
+		<a4j:commandButton id="cancelar" value="Alterar" action="projeto" immediate="true" styleClass="botao"/>
+	</ui:define>
+
+</ui:composition>
+</html>

@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<!-- <jsp:root xmlns:jsp="http://java.sun.com/JSP/Page" -->
+<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:ui="http://java.sun.com/jsf/facelets"
+      xmlns:h="http://java.sun.com/jsf/html"
+      xmlns:f="http://java.sun.com/jsf/core"
+      xmlns:a4j="http://richfaces.org/a4j"
+      xmlns:rich="http://richfaces.org/rich">
+
+<f:view>
+<f:loadBundle basename="messages" var="mensagens"/>
+<head>
+ 
+ <meta http-equiv="Content-Type" 	content="text/html; charset=iso-8859-1" />
+ <meta http-equiv="cache-control"   content="no-cache" />
+ <meta http-equiv="pragma" 			content="no-cache" />
+ <meta http-equiv="expires" 		content = "-1" />
+ 
+ <link rel="SHORTCUT ICON" href="#{facesContext.externalContext.requestContextPath}/images/favi_icon.gif"/>
+  <title>
+	<ui:insert name="title">Pje-Calc - Sistema de Cálculos Trabalhistas</ui:insert>
+  </title>
+
+  	<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/principal.css" />
+  	<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/conteudo.css" />
+  	
+	<script src="#{facesContext.externalContext.requestContextPath}/js/geral.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"></script>
+	
+	<ui:insert name="script"/>
+	<script>
+		/* <![CDATA[ */
+			jQuery(document).ready(function() {
+		    	iniciar();
+		    });
+		/* ]]> */
+    </script>
+    
+</head>
+
+<body>
+
+<h:form id="formulario" onsubmit="ajustaTextoSubmit(); return true;">
+   
+   <table width="100%" border="0" cellpadding="0" cellspacing="0" align="center">
+
+      <tr>
+        <td class="titulo" colspan="2" height="28px" valign="middle"> 
+            <ui:insert name="navegacao"/>
+        </td>
+      </tr>
+
+      <tr>
+        <td valign="top" width="100%" colspan="2">
+    
+			<div style="height:350px;overflow:auto;width:100%;">
+			
+				<a4j:outputPanel id="painelMensagem" ajaxRendered="true">		
+					<h:panelGroup rendered="#{requestScope.messagePresent}">
+						<ui:include src="/pages/comum/mensagem.xhtml"/>
+					</h:panelGroup>
+				</a4j:outputPanel>
+				
+				<!-- Inicio do Filtro de Busca -->
+				<h:panelGrid columns="1" border="0" width="100%">
+					<h:panelGroup>
+						<table cellpadding="0" cellspacing="0" width="680px">
+		                    <tr>
+		                        <td>
+		                            <ui:insert name="filtrocampos"></ui:insert>
+		                        </td>
+		                    </tr>
+		                </table>    
+					</h:panelGroup>
+		 		</h:panelGrid>               
+			</div>
+			<!-- Fim do Filtro de Busca -->
+
+		</td>
+
+      </tr>
+
+      <tr>
+		 <td align="left" class="bgbotao" style="padding-top: 3px;">
+		 	<ui:insert name="filtrobotoes"/>
+		 </td>
+      </tr>
+
+  	</table>
+	<rich:jQuery selector=":text" query="attr('autocomplete','off')" timing="onload" />
+
+</h:form>
+</body>
+</f:view>
+</html>

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Juros" />
+	<ui:param name="apresentador" value="#{apresentadorJurosPrincipal}" />
+
+	<ui:define name="nofiltroCampos"/>
+
+	<ui:define name="nocamposFormulario">
+		<rich:tabPanel switchType="server" immediate="true"> 
+			
+			<rich:tab id="tabJurosPadrao" label="Juros Padrão" actionListener="#{apresentadorJurosPadrao.iniciarApresentador}" reRender="painelJurosPadrao">
+				<a4j:outputPanel id="painelJurosPadrao">
+					<ui:include src="juros-padrao-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabJurosFazendaPublica" label="Juros Fazenda Pública" actionListener="#{apresentadorJurosFazendaPublica.iniciarApresentador}" reRender="painelJurosFazendaPublica">
+				<a4j:outputPanel id="painelJurosFazendaPublica">
+					<ui:include src="juros-fazenda-publica-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabJurosSelicInss" label="Juros Selic Contribuição Social" actionListener="#{apresentadorJurosSelicInss.iniciarApresentador}" reRender="painelJurosSelicInss">
+				<a4j:outputPanel id="painelJurosSelicInss">
+					<ui:include src="juros-selic-inss-include.xhtml">
+						<ui:param name="aliquotaConverter" value="quatroCasasDecimaisFixasConverter" />
+					</ui:include>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabJurosSelicIrpf" label="Juros Selic Imposto de Renda" actionListener="#{apresentadorJurosSelicIrpf.iniciarApresentador}" reRender="painelJurosSelicIrpf">
+				<a4j:outputPanel id="painelJurosSelicIrpf">
+					<ui:include src="juros-selic-irpf-include.xhtml">
+						<ui:param name="aliquotaConverter" value="quatroCasasDecimaisFixasConverter" />
+					</ui:include>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabJurosTaxaLegal" label="Juros Taxa Legal" actionListener="#{apresentadorJurosTaxaLegal.carregarListaDeJurosTaxaLegal}" reRender="painelJurosTaxaLegal">
+				<a4j:outputPanel id="painelJurosTaxaLegal">
+					<ui:include src="juros-taxa-legal-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+			
+		</rich:tabPanel>
+		
+		
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes"/>
+	<ui:define name="noresultadoTabela"/>
+	
+</ui:composition>
+
+</html>

@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="legenda" value="Dados da Liquidação" />
+	<ui:param name="apresentador" value="#{apresentadorLiquidacao}" />
+	<ui:param name="registro" value="#{apresentador.liquidacao}" />
+
+	<ui:define name="nofiltroCampos">	
+		<ui:include src="resumo-calculo.xhtml" />
+		<br />
+		<a4j:outputPanel id="panelFiltroCampos" ajaxRendered="true">
+			<h:panelGroup rendered="#{apresentador.emModoListagem}">
+				<fieldset><legend>#{empty legenda ? 'Dados da Busca' : legenda}</legend>
+					<h:panelGrid columns="2" cellpadding="3" cellspacing="3">
+						<h:panelGroup>
+							<h:outputLabel value="Data de Liquidação *" for="dataDeLiquidacao"/><br />
+							<rich:calendar id="dataDeLiquidacao" label="Data de Liquidação" value="#{registro.data}" inputSize="23" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" required="true" oninputfocus="$(this).dateMask()">
+								<f:facet name="footer">
+									<h:outputText style="text-align:center" />
+								</f:facet>     
+						    </rich:calendar>
+						    <cobra:toolTip>
+					        	<rich:message for="dataDeLiquidacao"/>
+						    </cobra:toolTip>
+						</h:panelGroup>
+						<h:panelGroup>
+							<fieldset><legend>Acumular Índices de Correção *</legend>
+								<h:selectOneRadio id="indicesAcumulados" value="#{registro.indicesAcumulados}"
+												label="Índices Acumulados" 
+												styleClass="labelInput" 
+												layout="pageDirection" 
+												required="true" >
+									<s:selectItems value="#{enumItems.indicesAcumuladosEnum}" var="item" label="#{item.nome}"/>
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</fieldset>
+						</h:panelGroup>
+					</h:panelGrid>
+					<h:outputText value="Obs.: Cálculo liquidado pela última vez na versão #{calculoAberto.getVersaoDoSistema()} do sistema." rendered="#{not empty calculoAberto.getVersaoDoSistema()}" />
+				</fieldset>
+			</h:panelGroup>
+		</a4j:outputPanel>
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+		
+		<fieldset><legend>Pendências do Cálculo</legend>
+		
+			<ui:param name="numErros" value="#{servicoDeValidacao.totalErro}" />
+			<ui:param name="numAlertas" value="#{servicoDeValidacao.totalAlerta}" />
+		
+			<h:panelGrid columns="1" cellpadding="4" cellspacing="4" style="width:100%;">
+			
+				<h:panelGroup rendered="#{not (numErros == 0 and numAlertas == 0)}">
+					<fieldset><legend>Legenda dos ícones</legend>
+						<h:panelGrid columns="2" cellpadding="8" cellspacing="5">
+							<h:outputLabel styleClass="validacaoErro"  value="Erro: Impede a liquidação do cálculo." />
+							<h:outputLabel styleClass="validacaoAlerta"  value="Alerta: Não impede a liquidação do cálculo." />
+						</h:panelGrid>
+					</fieldset>
+				</h:panelGroup>	
+				
+				<h:panelGroup layout="block" class="boxModuloValidacao" rendered="#{not (numErros == 0 and numAlertas == 0)}">
+					<a4j:repeat value="#{apresentador.telas}" var="tela">
+						<div class="boxSpanTitulo">
+							<span class="textoTitulo #{tela.instMenuItem.item.getStyleClass()}">#{tela.instMenuItem.item.rotulo}</span>
+						</div>
+						<ul>
+							<a4j:repeat value="#{tela.mensagens}" var="mensagem">
+								<ui:param name="actionBean" value="#{tela.instMenuItem.actionBean}" />
+								<ui:param name="action" value="#{tela.instMenuItem.menuAction.actionName}" />
+								<li>
+									<div class="boxItemValidacao" >
+							    		<a4j:commandLink immediate="true" action="#{actionBean[action]}">
+							    			<div class="#{mensagem.isImpeditivo()?'validacaoErro':'validacaoAlerta'}">
+							    			  #{mensagem.descricao}
+							    			</div>
+							    		</a4j:commandLink>
+							    	</div>
+								</li>
+							</a4j:repeat>
+						</ul>
+					</a4j:repeat>
+				</h:panelGroup>
+			
+				<h:panelGroup rendered="#{not (numErros == 0 and numAlertas == 0)}">
+					<div class="boxTotalizadorValidacao">
+						<h:panelGrid columns="4" cellpadding="3" cellspacing="3">
+							<h:outputLabel for="totalErros" value="Total de Erros" />
+							<h:inputText id="totalErros" value="#{servicoDeValidacao.totalErro}" label="Total de Erros" disabled="true" size="5" style="text-align:right;"/>
+							<h:outputLabel for="totalAlertas" value="Total de Alertas" />
+							<h:inputText id="totalAlertas" value="#{servicoDeValidacao.totalAlerta}" label="Total de Alertas" disabled="true" size="5" style="text-align:right;"/>
+						</h:panelGrid>
+					</div>
+				</h:panelGroup>
+				
+				<h:panelGroup layout="block" class="boxModuloValidacao" rendered="#{numErros == 0 and numAlertas == 0}">
+					<ul>
+						<li>
+							<div class="boxItemValidacao" style="padding: 13px 15px 12px 40px;">
+								<h:outputText class="validacaoSucesso" value="#{mensagens.MSG0041}"/>
+							</div>
+						</li>
+					</ul>
+				</h:panelGroup>
+			
+			</h:panelGrid>
+			
+		</fieldset>
+	
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario" />
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="liquidar" value="Liquidar" actionListener="#{apresentador.liquidar}" styleClass="botao" reRender="listagem"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

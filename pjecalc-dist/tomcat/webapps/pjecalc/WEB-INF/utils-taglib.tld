@@ -1,0 +1,147 @@
+<?xml version="1.0"?>
+<!DOCTYPE taglib PUBLIC "-//Sun Microsystems, Inc.//DTD JSP Tag Library 1.2//EN"
+"http://java.sun.com/dtd/web-jsptaglibrary_1_2.dtd">
+ 
+<taglib xmlns="http://java.sun.com/JSP/TagLibraryDescriptor">
+    <tlib-version>1.0</tlib-version>
+    <jsp-version>2.0</jsp-version>
+    <short-name>Componentes Cobra Tecnologia S/A</short-name>
+    <uri>http://www.cobra.com.br/jsf/utils</uri>
+    <display-name>Componentes Cobra Tecnologia S/A</display-name>
+    <tag>
+        <name>autoComplete</name>
+        <tag-class />
+        <body-content>empty</body-content>
+        <description>Componente AutoComplete</description>
+        
+        <attribute>
+            <name>id</name>
+            <required>true</required>
+            <rtexprvalue>false</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+                id para identificação do componente autocomplete (opcional tiver só um componente na tela).
+            </description>
+        </attribute>
+        
+        <attribute>
+            <name>idCodigo</name>
+            <required>true</required>
+            <rtexprvalue>false</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               id para identificação do campo inputHidden, para armazenar o codigo do registro selecionado.
+            </description>
+        </attribute>
+        
+        <attribute>
+            <name>idDescricao</name>
+            <required>true</required>
+            <rtexprvalue>false</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               id para identificação do campo inputTextArea, para exibir a descricao do registro selecionado.
+            </description>
+        </attribute>
+
+        <attribute>
+            <name>facesBean</name>
+            <required>true</required>
+            <rtexprvalue>true</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               nome do facesBean que contém o metodo de busca do componente. Ex.:'autocomplete'.
+            </description>
+        </attribute>
+
+        <attribute>
+            <name>metodo</name>
+            <required>true</required>
+            <rtexprvalue>true</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               nome do metodo de busca do componente. Ex.:'autocomplete'.
+            </description>
+        </attribute>
+	
+        <attribute>
+            <name>voCodigo</name>
+            <required>true</required>
+            <rtexprvalue>false</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               nome do atributo do modelo para recuperar o codigo do registro.
+            </description>
+        </attribute>
+
+        <attribute>
+            <name>voDescricao</name>
+            <required>true</required>
+            <rtexprvalue>true</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               nome do atributo do modelo para exibir a descricao do registro.
+            </description>
+        </attribute>
+	
+        <attribute>
+            <name>minChars</name>
+            <required>false</required>
+            <rtexprvalue>false</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               quantidade de caracteres para sensibilizar o componente.
+            </description>
+        </attribute>
+	
+        <attribute>
+            <name>width</name>
+            <required>false</required>
+            <rtexprvalue>false</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               tamanho da listagem do componente.
+            </description>
+        </attribute>
+	
+        <attribute>
+            <name>oncomplete</name>
+            <required>false</required>
+            <rtexprvalue>false</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               funcao script a ser executada apos a selecao do registro.
+            </description>
+        </attribute>
+
+        <attribute>
+            <name>rendered</name>
+            <required>false</required>
+            <rtexprvalue>true</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               Se false, o componente não é renderizado.
+            </description>
+        </attribute>
+        
+        <attribute>
+            <name>info</name>
+            <required>false</required>
+            <rtexprvalue>true</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               Texto informativo exibido quando o campo estiver vazio.
+            </description>
+        </attribute>
+        <attribute>
+            <name>icoShow</name>
+            <required>false</required>
+            <rtexprvalue>true</rtexprvalue>
+            <type>java.lang.String</type>
+            <description>
+               Se false, o componente nao exibe o icone da lupa.
+            </description>
+        </attribute>
+
+    </tag>
+</taglib>

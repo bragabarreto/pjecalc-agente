@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Atualização de Tabelas e Índices" />
+	<ui:param name="apresentador" value="#{apresentadorSincronizacao}" />
+	<ui:param name="enctype" value="multipart/form-data" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+
+	<ui:define name="nofiltroCampos">
+	
+		<a4j:loadScript src="resource://jquery.js"/>    	
+    
+    	
+    	<rich:tabPanel switchType="client" immediate="true"> 
+    	
+    		<rich:tab id="tabExportar" label="Exportar" styleClass="primeiraAba" rendered="#{aplicacao.isVersaoOnline() and (identity.hasRole('GESTOR_NACIONAL') or identity.hasRole('GESTOR_REGIONAL'))}">			
+
+				<a4j:outputPanel id="panelExportacao" ajaxRendered="true">
+			       	<fieldset>
+			       		<legend>Exportar</legend>
+						<h:panelGroup layout="block" style="width:100%;">
+							<h:panelGrid columns="1" cellpadding="3" cellspacing="3">		
+								<h:panelGroup class="panelExportar" layout="block">
+									<h:selectOneRadio id="tipoTabelaSinc" value="#{apresentador.informarTabelaSinc}" rendered="#{identity.hasRole('GESTOR_NACIONAL')}" styleClass="labelInput" layout="pageDirection">										 
+										<f:selectItem itemLabel="Tabelas Nacionais" itemValue="nacional" />
+										<f:selectItem itemLabel="Tabelas Nacionais e Regionais" itemValue="off-line" />
+									</h:selectOneRadio>
+									<h:selectOneRadio id="tipoTabelaSinc2" value="#{apresentador.informarTabelaSinc}" rendered="#{identity.hasRole('GESTOR_REGIONAL')}" styleClass="labelInput" layout="pageDirection">										 
+										<f:selectItem itemLabel="Tabelas Nacionais e Regionais" itemValue="off-line" />
+									</h:selectOneRadio>
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+		   				<a4j:commandButton id="confirmarExportacao" value="Exportar" actionListener="#{apresentador.exportar}" styleClass="botao"/>
+						<s:span rendered="#{apresentador.downloadDisponivel}">
+							<h:commandLink id="linkDownloadArquivo" action="#{apresentador.downloadArquivo}" value=""/>
+							<script type="text/javascript">
+								$('formulario:linkDownloadArquivo').click();
+							</script>
+						</s:span>
+					</fieldset>
+					<br/>
+					<h:panelGroup rendered="#{identity.hasRole('GESTOR_NACIONAL')}">
+						<fieldset>
+							<legend>Notificar Tribunais</legend>
+							<h:panelGroup layout="block" style="width:100%;">
+								<h:panelGrid columns="1" cellpadding="3" cellspacing="3">
+									<p>Após realizar toda a atualização das tabelas auxiliares, você pode notificar todos os demais Tribunais que existe uma nova atualização a ser realizada.</p>
+								</h:panelGrid>
+								<a4j:commandButton id="btnNotificar" value="Notificar" actionListener="#{apresentador.notificar}" reRender="pnlList" styleClass="botao" onclick="AguardeShow(); if (!confirma('Deseja notificar todos os Tribunais de que há uma nova atualização das tabelas auxiliares?',this)) return false;"/>
+							</h:panelGroup>
+							
+							<br />
+
+							<h:panelGroup id="pnlList">
+								<rich:dataTable id="ultimasNotificacoesList" value="#{ultimasNotificacoesTabelasAuxiliares}" captionStyle="font-weight: bold;" rowClasses="linha-par, linha-impar" 
+			           				cellpadding="3" border="0" width="100%" var="_controle"
+			           				rendered="#{not empty ultimasNotificacoesTabelasAuxiliares}"> 
+            
+					               <f:facet name="caption">
+					               		<h:outputText value="Últimas Notificações" />
+						           </f:facet>
+            
+									<rich:column>
+										<f:facet name="header">
+											<h:outputText value="Nome" />
+										</f:facet>
+										<h:outputText value="#{_controle.nome}" />
+									</rich:column>
+									
+									<rich:column>
+										<f:facet name="header">
+											<h:outputText value="Código Hash" />
+										</f:facet>
+										<h:outputText value="#{_controle.hash}" />
+									</rich:column>
+
+									<rich:column>
+										<f:facet name="header">
+											<h:outputText value="Data da Notificação" />
+										</f:facet>
+										<h:outputText value="#{_controle.dataNotificacao}">
+											<f:convertDateTime pattern="dd/MM/yyyy HH:mm" timeZone="GMT-3" />
+										</h:outputText>
+									</rich:column>
+									
+								</rich:dataTable>
+								<br />
+							</h:panelGroup>
+						</fieldset>
+					</h:panelGroup>
+	   					
+	   					
+				</a4j:outputPanel>
+
+    		</rich:tab>
+    		
+
+    		<rich:tab id="tabImportar" label="Importar" styleClass="segundaAba">
+
+				<rich:tabPanel switchType="client" immediate="true">	
+					<rich:tab id="tabOnline" label="Online" styleClass="primeiraAba">
+						<fieldset><legend>Importar Online</legend>
+							<p>A atualização das tabelas auxiliares de maneira online requer conexão com a internet. O processo de atualização online das tabelas pode levar alguns minutos.</p>
+							<br/>
+							<p>Ao atualizar as tabelas, as tabelas anteriores e de outros Regionais são apagadas. Então, sempre verifique se está criando um cálculo com as tabelas do Regional correto.</p>
+							<br/>
+							<h:panelGrid columns="2" rendered="#{not aplicacao.isVersaoOnline()}">
+								<p>Deseja obter as tabelas auxiliares de qual Regional?</p>
+								<h:selectOneMenu id="regional" label="Regional" value="#{apresentador.regionalSelecionado}" required="true">
+									<s:selectItems value="#{enumItems.tribunalEnum}" var="item" label="#{item.descricao}" />
+								</h:selectOneMenu>
+							</h:panelGrid>
+							<br/>
+							<h:commandButton id="atualizarOnline"  value="Atualizar Online" action="#{apresentador.atualizarOnline()}" styleClass="botaoGrande" onclick="AguardeShow(); return true;" />
+						</fieldset>	
+					</rich:tab>
+					<rich:tab id="tabViaArquivo" label="Via Arquivo" styleClass="segundaAba">
+						<fieldset><legend>Importar Via Arquivo</legend>
+							<p>Ao atualizar as tabelas, as tabelas anteriores e de outros Regionais são apagadas. Então, sempre verifique se está criando um cálculo com as tabelas do Regional correto.</p>
+							<h:panelGroup layout="block" style="width:100%;">
+								<h:panelGrid columns="1" cellpadding="3" cellspacing="3">		
+									<h:panelGroup id="pnlFileUpload" class="panelFileUpload" layout="block">
+										<h:outputLabel for="arquivo" value="Selecionar Arquivo:"/><br />
+										<rich:fileUpload id="arquivo" fileUploadListener="#{apresentador.uploadListener}"  locale="pt_BR" immediateUpload="true" addControlLabel="Escolher Arquivo..." clearAllControlLabel="Remover" cancelEntryControlLabel="Cancelar" clearControlLabel="" transferErrorLabel="Erro na transferência" stopControlLabel="Parar" doneLabel="Feito" stopEntryControlLabel="Parar" sizeErrorLabel="Tamanho do arquivo maior que o limite máximo permitido.">
+											<a4j:support event="onclear" reRender="pnlFileUpload" />
+										</rich:fileUpload>
+									</h:panelGroup>
+								</h:panelGrid>
+							</h:panelGroup>
+			    			<h:commandButton id="confirmarImportacao"  value="Importar" action="#{apresentador.importar()}" styleClass="botaoGrande" onclick="AguardeShow(); return true;" />
+						</fieldset>
+					</rich:tab>
+				</rich:tabPanel>
+				
+    		</rich:tab>
+    	
+    	</rich:tabPanel>
+		    
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario">
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes">
+		
+	</ui:define>
+	
+</ui:composition>
+
+</html>

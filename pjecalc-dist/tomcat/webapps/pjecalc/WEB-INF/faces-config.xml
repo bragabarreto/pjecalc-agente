@@ -1,0 +1,31 @@
+<faces-config xmlns="http://java.sun.com/xml/ns/javaee"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://java.sun.com/xml/ns/javaee
+        http://java.sun.com/xml/ns/javaee/web-facesconfig_1_2.xsd"
+	version="1.2">
+
+	<application>
+		<view-handler>com.sun.facelets.FaceletViewHandler</view-handler>
+		<message-bundle>messages</message-bundle>
+		<locale-config>
+			<default-locale>pt_BR</default-locale>
+		</locale-config>
+	</application>
+
+	<!-- 
+	<validator>
+		<validator-id>validadorDinamico</validator-id>
+		<validator-class>br.jus.trt8.pjecalc.comum.validators.ValidadorDinamico</validator-class>
+	</validator>
+	 -->
+
+	<component>
+	    <component-type>cobraToolTip</component-type>
+	    <component-class>br.jus.trt8.pjecalc.web.comum.componentes.UICobraToolTip</component-class>
+	</component>
+	<component>
+	    <component-type>cobraList</component-type>
+	    <component-class>br.jus.trt8.pjecalc.web.comum.componentes.UICobraList</component-class>
+	</component>
+
+</faces-config>

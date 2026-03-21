@@ -1,0 +1,371 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	
+	<ui:param name="dadosDe" value="Feriado ou Ponto Facultativo" />
+	<ui:param name="titulo" value="#{apresentadorFeriado.titulo}" />
+	<ui:param name="apresentador" value="#{apresentadorFeriado}" />
+	<ui:param name="registro" value="#{apresentadorFeriado.registro}" />
+	<ui:param name="filtro" value="#{apresentadorFeriado.filtro}" />
+	
+	<ui:define name="filtroCampos">
+	
+		<h:panelGrid columns="3" cellpadding="3"  cellspacing="3" columnStyle="width:30%;">
+			
+			<h:panelGroup>
+				<h:outputLabel for="tipoBusca" value="Tipo" /><br />
+				<a4j:region>
+					<h:selectOneMenu id="tipoBusca" label="Tipo" value="#{filtro.tipo}" style="width:180px;">
+						<s:selectItems value="#{enumItems.tipoFeriadoFiltroEnum}" var="item" label="#{item.nome}" noSelectionLabel="" /> 
+						<s:convertEnum/>
+					</h:selectOneMenu>
+				</a4j:region>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="abrangenciaBusca" value="Abrangência" /><br />
+				<a4j:region>
+					<h:selectOneMenu id="abrangenciaBusca" label="Abrangência" value="#{filtro.abrangencia}" style="width:150px;">
+						<s:selectItems value="#{enumItems.abrangenciaDoFeriadoFiltroEnum}" var="item" label="#{item.nome}" noSelectionLabel=""/> 
+						<s:convertEnum/>
+					</h:selectOneMenu>
+				</a4j:region>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+					<h:outputLabel value="Nome" for="nomeFeriadoBusca"/><br />
+					<h:inputText id="nomeFeriadoBusca"  label="Nome" value="#{filtro.nomeFeriado}" size="71" maxlength="80">
+					</h:inputText>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="estadoBusca" value="Estado" /><br />
+				<a4j:region>
+					<h:selectOneMenu id="estadoBusca" label="Estado" value="#{filtro.estado}" style="width:180px;">
+						<s:selectItems value="#{apresentadorFeriado.estados}" var="item" label="#{item.nome}" noSelectionLabel="" /> 
+						<a4j:support event="onchange" reRender="painelMunicipioBusca" limitToList="true"/>
+						<s:convertEntity/>
+					</h:selectOneMenu>
+				</a4j:region>
+			</h:panelGroup>
+		
+			<h:panelGroup id="painelMunicipioBusca">
+				<h:outputLabel for="municipioBusca" value="Município" /><br />
+				<h:selectOneMenu id="municipioBusca" label="Município" value="#{filtro.municipio}" style="width:150px;">
+					<s:selectItems value="#{apresentadorFeriado.municipiosFiltro}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+					<s:convertEntity/>
+				</h:selectOneMenu>
+			</h:panelGroup>
+				
+		</h:panelGrid>
+	
+	</ui:define>
+	
+	
+	<ui:define name="resultadoTabela">
+	
+			<h:panelGroup id="painelListagem" style="width: 600px;" >
+			
+				<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" 
+								cellpadding="0" cellspacing="4" border="0" width="100%" rows="10" var="item"> 
+		    		<rich:column style="width:10%;">
+					    	<f:facet name="header">
+				    			<h:outputText value="Ações"/>
+				    		</f:facet>
+						    <a4j:region>
+					    		<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}" />
+				    			<a4j:commandLink styleClass="linkAlterar" title="Alterar" ajaxSingle="true" actionListener="#{apresentador.alterar}" rendered="#{(identity.hasRole('GESTOR_REGIONAL') and item.abrangencia.valor !='F') or identity.hasRole('GESTOR_NACIONAL')}"/>
+				    			<a4j:commandLink styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" rendered="#{(identity.hasRole('GESTOR_REGIONAL') and item.abrangencia.valor !='F') or identity.hasRole('GESTOR_NACIONAL')}"/>
+					    	</a4j:region>
+				    </rich:column>
+		    	
+			    	<rich:column style="width:35%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Nome"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.nomeFeriado}" size="35"></h:outputText>
+			    	</rich:column>
+			    	<rich:column style="width:10%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Tipo"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.tipo.nome}" size="35"></h:outputText>
+			    	</rich:column>
+			    	<rich:column style="width:10%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Abrangência"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.abrangencia.nome}" size="35"></h:outputText>
+			    	</rich:column>
+			    	<rich:column style="width:17%;">
+						<f:facet name="header">
+							<h:outputText value="Município" />
+						</f:facet>
+						<h:outputText value="#{item.municipio.nome}">
+		    			</h:outputText>
+					</rich:column>
+			    	<rich:column style="width:18%;">
+						<f:facet name="header">
+							<h:outputText value="Estado" />
+						</f:facet>
+						<h:outputText value="#{item.estado.nome}">
+		    			</h:outputText>
+					</rich:column>
+					
+		    	
+				</rich:dataTable>
+				 <a4j:region>
+					<ui:include src="../comum/paginacao.xhtml">
+						<ui:param name="paramListagem" value="listagem" />
+					 </ui:include>
+				 </a4j:region>
+			
+			</h:panelGroup>	
+	
+	
+	</ui:define>
+	
+
+	<ui:define name="camposFormulario">
+	
+	<div id="painelGeral" style="width:600px;">
+		<h:panelGrid columns="1" cellpadding="3"  cellspacing="3">
+		
+				<h:panelGroup>
+					<fieldset style="width: 380px;"><legend><h:outputLabel value="Tipo *" /></legend>
+						<h:panelGroup>						
+							<a4j:region>
+								<h:selectOneRadio id="tipo" disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" layout="lineDirection" value="#{registro.tipo}">
+									<s:selectItems value="#{enumItems.tipoFeriadoEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="painelAbrangencia, painelEstado, painelMovel, panelDataENome, labelDatas" />
+								</h:selectOneRadio>
+							</a4j:region>
+						</h:panelGroup>
+					</fieldset>
+				</h:panelGroup>
+		
+				<h:panelGroup>
+					<fieldset style="width: 380px;"><legend><h:outputLabel value="Abrangência *" /></legend>
+						<h:panelGroup id="painelAbrangencia">						
+							<a4j:region>
+								<h:selectOneRadio id="abrangencia" disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" layout="lineDirection" value="#{registro.abrangencia}">
+									<s:selectItems value="#{registro.feriadoBancario ? enumItems.abrangenciaDoFeriadoBancarioEnum : enumItems.abrangenciaDoFeriadoEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="painelEstado, painelMovel, panelDataENome" />
+								</h:selectOneRadio>
+							</a4j:region>
+						</h:panelGroup>
+					</fieldset>
+				</h:panelGroup>
+				
+			
+				<h:panelGroup id="painelEstado">
+					
+					<h:panelGrid columns="3" cellpadding="3"  cellspacing="0">
+						
+						
+						<h:panelGroup rendered="#{registro.abrangencia.valor != 'F'}">
+							<h:outputLabel for="estado" value="Estado *" /><br />
+							<a4j:region>
+								<h:selectOneMenu id="estado" label="Estado" value="#{registro.estado}" style="width:80px;" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+									<s:selectItems value="#{apresentadorFeriado.estados}" var="item" label="#{item.sigla}" noSelectionLabel="" />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="painelMunicipio" /> 
+									<s:convertEntity/>
+								</h:selectOneMenu>
+							</a4j:region>
+			    			<cobra:toolTip>
+			    				<rich:message for="estado"/>
+			    			</cobra:toolTip>	    			
+						</h:panelGroup>
+						
+						<a4j:outputPanel id="painelMunicipio">
+							<h:panelGroup rendered="#{registro.abrangencia.valor == 'M'}">
+								<h:outputLabel for="municipio" value="Município *" /><br />
+								<h:selectOneMenu id="municipio" label="Município" value="#{registro.municipio}" style="width:146px;" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+									<s:selectItems value="#{apresentadorFeriado.municipios}" var="item" label="#{item.nome}" noSelectionLabel="" /> 
+									<s:convertEntity/>
+								</h:selectOneMenu>
+				    			<cobra:toolTip>
+				    				<rich:message for="municipio"/>
+				    			</cobra:toolTip>	    			
+							</h:panelGroup>
+						</a4j:outputPanel>
+						
+						<h:panelGroup>
+								<br/>
+							<a4j:region>
+								<h:selectBooleanCheckbox id="movel" disabled="#{apresentador.emModoSomenteVisualizacao}" value="#{registro.movel}" >
+									<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelRD, labelDatas, panelDataENome" />
+								</h:selectBooleanCheckbox>
+								<label for="movel">Móvel</label>
+							</a4j:region>						
+						</h:panelGroup>	
+						
+					</h:panelGrid>
+				
+				</h:panelGroup>
+				
+			</h:panelGrid>
+			
+			<h:panelGrid columns="2" cellpadding="3"  cellspacing="3" id="panelDataENome">
+				<h:panelGroup rendered="#{!registro.movel}">
+					<h:outputLabel value="Dia/Mês *" for="data" style="width:5px;"/><br />
+					<h:inputText id="data" value="#{registro.data}"  disabled="#{apresentador.emModoSomenteVisualizacao}" 
+							label="Dia/Mês" size="14" maxlength="5" onfocus="$(this).dateMaskDayAndMonth()">
+							<f:converter converterId="dateDayMonthConverter"/>
+					</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="data"/>
+	    			</cobra:toolTip>	    			
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Nome *" for="nomeFeriado"/><br />
+					<h:inputText id="nomeFeriado"  label="Nome" value="#{registro.nomeFeriado}" size="79" maxlength="60" disabled="#{apresentador.emModoSomenteVisualizacao}">
+					</h:inputText>
+					<cobra:toolTip>
+						<rich:message for="nomeFeriado"/>
+					</cobra:toolTip>
+				</h:panelGroup>
+			</h:panelGrid>
+			
+			<h:panelGrid columns="2" cellpadding="1"  cellspacing="1">
+				<h:panelGroup>
+					<fieldset>
+						<legend><h:outputLabel  value="Período de Vigência" /></legend>
+						
+						<h:panelGrid columns="2" cellpadding="2"  cellspacing="2">
+							<h:panelGroup>
+								 <h:outputLabel value="Início *" for="inicioVigencia" /><br />
+							     <rich:calendar id="inicioVigencia" value="#{registro.inicioVigencia}" 
+							     				inputSize="8" label="Início da Vigência"  popup="true" datePattern="dd/MM/yyyy" 
+							     				enableManualInput="true" styleClass="leitura" oninputfocus="$(this).dateMask()" 
+							     				disabled="#{apresentador.emModoSomenteVisualizacao}">
+									<f:facet name="footer">
+										<h:outputText value="{selectedDateControl}" style="text-align:center" />
+									</f:facet>		            
+									<f:converter converterId="dateConverter"/>
+							    </rich:calendar>
+								<cobra:toolTip>
+					   				<rich:message for="inicioVigencia"/>
+					   			</cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								 <h:outputLabel value="Fim" for="fimVigencia" /><br />
+							     <rich:calendar id="fimVigencia" value="#{registro.fimVigencia}" inputSize="8" label="Fim da Vigência" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" oninputfocus="$(this).dateMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+									<f:facet name="footer">
+										<h:outputText value="{selectedDateControl}" style="text-align:center" />
+									</f:facet>
+									<f:converter converterId="dateConverter"/>
+							    </rich:calendar>
+				                       <cobra:toolTip>
+				                           <rich:message for="fimVigencia"/>
+				                       </cobra:toolTip>
+							</h:panelGroup>
+						</h:panelGrid>
+						
+					</fieldset>
+				</h:panelGroup>
+				
+				<h:panelGroup layout="block" style="margin:0px 0 0 8px;">
+					<h:outputLabel value="Legislação" /><br/>
+					<h:inputTextarea id="descricaoLegislacao" value="#{registro.descricaoLegislacao}" 
+									 label="Justificativa" cols="52" rows="4"  disabled="#{apresentador.emModoSomenteVisualizacao}"
+									 onblur="ajustaTextoParaUpperCase(this)"
+									 onkeyup="limitarTextArea(this, 150)"
+									 onkeypress="limitarTextArea(this, 150)" onchange="limitarTextArea(this, 150)" >
+					</h:inputTextarea>
+				</h:panelGroup>
+		</h:panelGrid>
+		
+		
+		<h:panelGrid columns="1" cellpadding="0"  cellspacing="0">
+			<h:panelGroup>
+				<fieldset>
+					<legend><h:outputLabel  id="labelDatas" value="#{registro.labelDatas}" /></legend>
+					
+						<h:panelGroup id="painelRD" layout="block" style="margin-bottom:10px;">
+							<h:panelGrid columns="2" cellpadding="2"  cellspacing="2">
+								<a4j:region>
+									<h:outputLabel value="Data" for="dataFeriado" /><br />
+									<rich:calendar id="dataFeriado"
+												   label="Data" inputSize="8" popup="true" 
+												   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+												   value="#{excecaoDoFeriado.data}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+										<f:facet name="footer">
+								        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+								        </f:facet>
+									</rich:calendar>
+									<cobra:toolTip>
+					                      <rich:message for="dataFeriado"/>
+					                 </cobra:toolTip>
+								</a4j:region>
+								
+								<h:panelGroup styleClass="itemGrupo">
+									<a4j:commandLink rendered="#{(identity.hasRole('GESTOR_REGIONAL')) or (identity.hasRole('GESTOR_NACIONAL'))}" id="cmdIncluirRD"  styleClass="botaoAddItem" title="Adicionar" limitToList="true"  
+													 disabled="#{apresentador.emModoSomenteVisualizacao}"
+													 actionListener="#{apresentador.adicionarValor}" reRender="painelRD, painelListagemRD,painelMensagens"  onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+								</h:panelGroup>	
+								
+							</h:panelGrid>
+						</h:panelGroup>
+						
+						<h:panelGroup id="painelListagemRD">
+							<rich:dataTable id="listagemRDs" value="#{excecoesDoFeriado}" rowKeyVar="dataTableIndex" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" var="item" rows="10" rendered="#{excecoesDoFeriado.rowCount gt 0}">
+					    		<rich:column style="width:5%;" rendered="#{not apresentador.emModoSomenteVisualizacao}">
+							    	<f:facet name="header">
+						    			<h:outputText value="Ação"/>
+						    		</f:facet>
+							    	<a4j:commandLink id="excluirRD"  immediate="true" limitToList="true"  rendered="#{dataTableIndex eq 0}" 
+							    					 disabled="#{apresentador.emModoSomenteVisualizacao}"
+							    					 styleClass="linkExcluir" title="Excluir" actionListener="#{apresentador.removerValor}" reRender="painelRD,painelListagemRD" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+							    </rich:column>
+							    
+						    	<rich:column style="width:10%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Data"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{item.data}">
+					    			</h:outputText>
+						    	</rich:column>
+							</rich:dataTable> 
+							
+							<ui:include src="../comum/paginacao.xhtml">
+								<ui:param name="paramListagem" value="listagemRDs" />
+							 </ui:include>
+						</h:panelGroup>
+				
+				</fieldset>
+			</h:panelGroup>
+		</h:panelGrid>
+		</div>
+
+	</ui:define>
+	
+	
+	<ui:define name="filtroBotoes">
+		<h:panelGroup id="painelBotoes">
+			<a4j:commandButton id="buscar" value="Buscar" actionListener="#{apresentadorFeriado.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentadorFeriado.emModoListagem}" onclick="allToUpperCase()"/>	
+			<a4j:commandButton id="incluir" value="Novo"  actionListener="#{apresentadorFeriado.novo}"  immediate="true" styleClass="botao" rendered="#{apresentadorFeriado.emModoListagem and identity.hasPermission('TABELAS_FERIADO', 'MANUTENCAO')}"/>
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorFeriado.salvar}" styleClass="botao"  rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" onclick="allToUpperCase();"/>
+			<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.remover}" imeddiate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />  
+			<a4j:commandButton id="cancelar" value="Cancelar" actionListener="#{apresentadorFeriado.cancelar}" immediate="true" styleClass="botao" rendered="#{apresentadorFeriado.emModoFormulario and apresentadorFeriado.operacao != 'VISUALIZACAO'}"/>
+			<a4j:commandButton id="voltar" value="Voltar" actionListener="#{apresentadorFeriado.voltar}" styleClass="botao"  immediate="true" rendered="#{apresentadorFeriado.operacao == 'VISUALIZACAO'}"/>
+		</h:panelGroup>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="atualizacao-resumo" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="resumoPagamento" class="java.lang.Object"/>
+	<parameter name="jr_resumo_pagamento_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<queryString language="SQL">
+		<![CDATA[]]>
+	</queryString>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="22" splitType="Stretch">
+			<staticText>
+				<reportElement style="titulo" x="0" y="0" width="802" height="22"/>
+				<textElement textAlignment="Center">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[Resumo da Atualização do Cálculo]]></text>
+			</staticText>
+		</band>
+	</title>
+	<pageHeader>
+		<band splitType="Stretch"/>
+	</pageHeader>
+	<columnHeader>
+		<band height="27" splitType="Stretch"/>
+	</columnHeader>
+	<detail>
+		<band height="42">
+			<subreport>
+				<reportElement x="-20" y="14" width="802" height="14"/>
+				<subreportParameter name="resumoPagamento">
+					<subreportParameterExpression><![CDATA[$P{resumoPagamento}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumoPagamento}.ocorrenciasDebitoReclamado]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_pagamento_2}]]></subreportExpression>
+			</subreport>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="722" y="28" width="80" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle">
+					<font size="9" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{resumoPagamento}.valorTotalDebitoReclamado]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="0" y="28" width="722" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Total Devido Pelo Reclamado]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="0" y="0" width="722" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Descrição do Saldo Devedor por Credor]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="722" y="0" width="80" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Valor]]></text>
+			</staticText>
+		</band>
+		<band height="15">
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default" positionType="Float" x="1" y="5" width="802" height="10"/>
+				<textElement textAlignment="Justified" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{resumoPagamento}.observacoesReclamada]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="52">
+			<printWhenExpression><![CDATA[$P{resumoPagamento}.ocorrenciasDebitoCobrarReclamante.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="24" width="802" height="14"/>
+				<subreportParameter name="resumoPagamento">
+					<subreportParameterExpression><![CDATA[$P{resumoPagamento}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumoPagamento}.ocorrenciasDebitoCobrarReclamante]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_pagamento_3}]]></subreportExpression>
+			</subreport>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="722" y="38" width="80" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle">
+					<font size="9" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{resumoPagamento}.valorTotalDebitoCobrarReclamante]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="0" y="38" width="722" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Total Devido Pelo Reclamante]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="0" y="10" width="722" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Descrição do Saldo Devedor por Credor]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="cell" positionType="Float" mode="Opaque" x="722" y="10" width="80" height="14" backcolor="#CCCCCC"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Valor]]></text>
+			</staticText>
+		</band>
+		<band height="15">
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default" positionType="Float" x="1" y="5" width="802" height="10"/>
+				<textElement textAlignment="Justified" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{resumoPagamento}.observacoesReclamante]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band height="58">
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default" positionType="Float" x="1" y="5" width="802" height="14"/>
+				<textElement textAlignment="Justified" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{resumoPagamento}.descritivoDeEventos]]></textFieldExpression>
+			</textField>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default" positionType="Float" x="1" y="29" width="802" height="14"/>
+				<textElement textAlignment="Justified" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{resumoPagamento}.comentarios]]></textFieldExpression>
+			</textField>
+		</band>
+	</summary>
+</jasperReport>

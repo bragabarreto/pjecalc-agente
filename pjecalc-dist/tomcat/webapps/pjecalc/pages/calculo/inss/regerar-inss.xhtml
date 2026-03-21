@@ -1,0 +1,453 @@
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<body>
+<f:view>
+	
+	<script>
+		function sugerirPadraoLimitarTeto() {
+			if($('formulario:aliquotaEmpregado:2').checked){
+				$('formulario:limitarTeto').checked=true;
+			}else{
+				$('formulario:limitarTeto').checked=false;
+			}
+		}
+
+		function sugerirApuracaoAliquotasDaAtividade() {
+			if($('formulario:aliquotaEmpregador:0').checked){
+				$('formulario:apurarEmpresaPorAtividade').checked=true;
+				$('formulario:apurarRATPorAtividade').checked=true;
+			}else{
+				$('formulario:apurarEmpresaPorAtividade').checked=false;
+				$('formulario:apurarRATPorAtividade').checked=false;
+			}
+		}
+
+	</script>
+	
+	<fieldset>
+		<legend>Parâmetros das Ocorrências</legend>
+	<h:panelGroup layout="block" style="width:650px;">
+				<!--  Alíquota Segurado -->
+					<fieldset><legend>Alíquota Segurado</legend>
+						<h:panelGrid columns="2" cellspacing="2" cellpadding="0" border="0">
+							<h:panelGroup>
+								<a4j:region>
+								<h:selectOneRadio id="aliquotaEmpregado" value="#{inssSelecionado.tipoAliquotaSegurado}" styleClass="labelInput" layout="lineDirection" disabled="#{not apresentador.emEdicao}">
+									<s:selectItems value="#{enumItems.tipoDeAliquotaDoSeguradoEnum}" var="item" label="#{item.nome}" />
+									<a4j:support event="onchange" ajaxSingle="true" reRender="painelSeguradoFixa" limitToList="true"  oncomplete="sugerirPadraoLimitarTeto()"/>
+									<s:convertEnum />
+								</h:selectOneRadio>
+								</a4j:region>
+							</h:panelGroup>
+							
+							<h:panelGroup id="painelSeguradoFixa">
+								<a4j:outputPanel rendered="#{apresentador.aliquotaSeguradoFixa}">
+									<h:panelGroup styleClass="itemGrupo" style="margin-top:-10px;">
+										<h:outputLabel for="fixaInput" value="Alíquota Fixa (%) *" /><br/>
+										<h:inputText id="fixaInput" label="Alíquota Segurado Fixa" value="#{inssSelecionado.aliquotaSeguradoFixa}" style="width:100px;" onfocus="$(this).percentMask()" disabled="#{not apresentador.emEdicao}">
+											<f:converter converterId="bigDecimalConverter"/>
+										</h:inputText>
+										<cobra:toolTip>
+						    				<rich:message for="fixaInput" style="margin-left:5px;"/>
+						    			</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup styleClass="itemGrupo">
+										<h:selectBooleanCheckbox id="limitarTeto" value="#{inssSelecionado.limitarTeto}" style="margin-left:10px;" disabled="#{not apresentador.emEdicao}"></h:selectBooleanCheckbox>
+										<h:outputLabel value="Limitar ao Teto" for="limitarTeto"/>
+									</h:panelGroup>
+								
+								</a4j:outputPanel>
+							</h:panelGroup>
+							</h:panelGrid>
+					
+					</fieldset>
+					
+				<h:panelGroup layout="block" style="width:650px;">
+				<fieldset>
+					<legend>Alíquota Empregador</legend>									
+							<!-- Tipo -->
+							<h:panelGroup>
+								<a4j:region>
+								<h:selectOneRadio id="aliquotaEmpregador"  value="#{inssSelecionado.tipoAliquotaEmpregador}" styleClass="labelInput" layout="lineDirection" disabled="#{not apresentador.emEdicao}">
+									<s:selectItems value="#{enumItems.tipoDeAliquotaDoEmpregadorEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+									<a4j:support event="onchange" ajaxSingle="true" reRender="painelEmpregadorPorAtividadeEconomica,painelEmpregadorPorPeriodo,painelEmpregadorFixa" limitToList="true" oncomplete="sugerirApuracaoAliquotasDaAtividade()"/>
+									
+								</h:selectOneRadio>
+								</a4j:region>
+							</h:panelGroup>
+							
+							<!-- Aliquota do Empregador - Por Atividade Econômica -->
+							<h:panelGroup id="painelEmpregadorPorAtividadeEconomica" layout="block" styleClass="itemGrupo">
+								<a4j:outputPanel rendered="#{apresentador.aliquotaEmpregadorPorAtividadeEconomica}">
+									<h:panelGrid>
+										<h:panelGroup styleClass="itemGrupo">
+											
+												<h:inputHidden id="codigoAtividade" value="#{apresentador.atividadeEconomicaVO.id}" />
+												<h:outputLabel for="atividadesEconomicas" value="Atividade Econômica *" style="margin-top:8px;"/><br />
+												<h:inputTextarea id="atividadesEconomicas" label="Atividade Econômica *" 
+																 value="#{apresentador.atividadeEconomicaVO.descricao}" 
+																 style="width:450px; margin-top:8px;" disabled="#{not apresentador.emEdicao}"/>
+												<cobra:autoComplete id="autoCompleteAtividades" 
+																	facesBean="#{apresentador}" 
+																	semResultado="Registro n&#227;o encontrado."
+																	idDescricao="atividadesEconomicas" 
+																	idCodigo="codigoAtividade" 
+																	metodo="autoCompleteAtividades" 
+																	voCodigo="id" 
+																	voDescricao="#{objeto.descricao}" 
+																	minChars="1" 
+																	width="700" 
+																	rendered="true"
+																	info="Digite uma palavra chave ..."
+																	icoShow="false"
+																	/>
+											
+										    <cobra:toolTip>
+						                       	<rich:message for="atividadesEconomicas" style="margin-left:3px;"/>
+						                    </cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:panelGroup styleClass="itemGrupo" style="margin-top:5px;">
+												<h:selectBooleanCheckbox id="apurarEmpresaPorAtividade" value="#{inssSelecionado.apurarEmpresaPorAtividade}" disabled="#{not apresentador.emEdicao}"/>
+												<h:outputLabel value="Apurar Empresa" for="apurarEmpresaPorAtividade" />
+											</h:panelGroup>
+											<h:panelGroup styleClass="itemGrupo" style="margin-top:5px;">
+												<h:selectBooleanCheckbox id="apurarRATPorAtividade" value="#{inssSelecionado.apurarRATPorAtividade}" disabled="#{not apresentador.emEdicao}"/>
+												<h:outputLabel value="Apurar SAT" for="apurarRATPorAtividade" />
+											</h:panelGroup>
+											<h:panelGroup styleClass="itemGrupo" style="margin-top:5px;">
+												<h:selectBooleanCheckbox id="apurarTerceirosPorAtividade" value="#{inssSelecionado.apurarTerceirosPorAtividade}" disabled="#{not apresentador.emEdicao}"/>
+												<h:outputLabel value="Apurar Terceiros" for="apurarTerceirosPorAtividade" />
+											</h:panelGroup>
+										</h:panelGroup>
+									</h:panelGrid>
+								
+								</a4j:outputPanel>
+							</h:panelGroup>
+							
+							<!-- Aliquota do Empregador - Por Período -->
+							<h:panelGroup id="painelEmpregadorPorPeriodo" style="margin-left:-15px;">
+								<a4j:region rendered="#{apresentador.aliquotaEmpregadorPorPeriodo}">
+								
+								<h:panelGrid columns="6" border="0">
+									
+									<h:panelGroup rendered="#{apresentador.emEdicao}">
+										<h:outputLabel value="Início *" for="dataInicioPeriodo"/>
+										<br />
+									    <rich:calendar id="dataInicioPeriodo"  label="Início" value="#{apresentador.aliquotasDoEmpregadorPorPeriodo.dataInicioPeriodo}" inputSize="7" popup="true" datePattern="MM/yyyy" oninputfocus="$(this).monthYearMask()" enableManualInput="true" showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate" oncurrentdateselected="event.rich.component.selectDate(event.rich.date)">
+											<f:facet name="footer">
+												<h:outputText value="{selectedDateControl}" style="text-align:center" />
+											</f:facet>		            
+									    </rich:calendar>
+									    <cobra:toolTip>
+					                       	<rich:message for="dataInicioPeriodo" style="margin-left:5px;"/>
+					                    </cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup rendered="#{apresentador.emEdicao}">
+										<h:outputLabel value="Fim *" for="dataTerminoPeriodo"/>
+										<br />
+									    <rich:calendar id="dataTerminoPeriodo" value="#{apresentador.aliquotasDoEmpregadorPorPeriodo.dataTerminoPeriodo}" label="Fim" inputSize="7" popup="true" datePattern="MM/yyyy" oninputfocus="$(this).monthYearMask()" enableManualInput="true" showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate" oncurrentdateselected="event.rich.component.selectDate(event.rich.date)">
+											<f:facet name="footer">
+												<h:outputText value="{selectedDateControl}" style="text-align:center" />
+											</f:facet>		            
+									    </rich:calendar>
+									    <cobra:toolTip>
+					                       	<rich:message for="dataTerminoPeriodo" style="margin-left:5px;"/>
+					                    </cobra:toolTip>
+									</h:panelGroup>
+							
+								
+									<h:panelGroup rendered="#{apresentador.emEdicao}" >
+										<h:outputLabel value="Empresa (%) *" for="aliquotaEmpresaPorPeriodo" />
+										<br />
+										<h:inputText id="aliquotaEmpresaPorPeriodo" label="Empresa (%)"  value="#{apresentador.aliquotasDoEmpregadorPorPeriodo.aliquotaEmpresa}" style="width:73px;" onfocus="$(this).percentMask4()">
+											<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+										</h:inputText>
+									    <cobra:toolTip>
+					                       	<rich:message for="aliquotaEmpresaPorPeriodo" style="margin-left:5px;"/>
+					                    </cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup rendered="#{apresentador.emEdicao}">
+										<h:outputLabel value="SAT (%) *" for="aliquotaRatPorPeriodo" />
+										<br />
+										<h:inputText id="aliquotaRatPorPeriodo" label="SAT (%)"   value="#{apresentador.aliquotasDoEmpregadorPorPeriodo.aliquotaRAT}" style="width:50px;" onfocus="$(this).percentMask4()">
+											<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+										</h:inputText>
+									    <cobra:toolTip>
+					                       	<rich:message for="aliquotaRatPorPeriodo" style="margin-left:5px;"/>
+					                    </cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup rendered="#{apresentador.emEdicao}">
+										<h:outputLabel value="Terceiros (%) *" for="aliquotaTerceirosPorPeriodo" />
+										<br />
+										<h:inputText id="aliquotaTerceirosPorPeriodo" label="Terceiros (%)"  value="#{apresentador.aliquotasDoEmpregadorPorPeriodo.aliquotaTerceiros}" style="width:100px;" onfocus="$(this).percentMask4()">
+											<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+										</h:inputText>
+									    <cobra:toolTip>
+					                       	<rich:message for="aliquotaTerceirosPorPeriodo" style="margin-left:5px;"/>
+					                    </cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup rendered="#{apresentador.emEdicao}">
+										<a4j:commandLink id="cmdIncluirPorPeriodo" styleClass="botaoAddItem" style="margin-bottom:-2px;" title="Adicionar" limitToList="true" actionListener="#{apresentador.adicionarAliquotasPorPeriodo}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="painelEmpregadorPorPeriodo,painelMensagens" />
+									</h:panelGroup>	
+							
+								</h:panelGrid>
+								
+								<h:panelGroup>
+									<rich:dataTable id="listagemAliquotasPorPeriodo" value="#{apresentador.aliquotasPorPeriodos}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" var="item" rows="#{apresentador.aliquotasPorPeriodos.size}" rendered="#{apresentador.aliquotasPorPeriodos.size > 0}">
+							    		<rich:column style="width:10%;" rendered="#{apresentador.emEdicao}">
+									    	<f:facet name="header">
+								    			<h:outputText value="Ação"/>
+								    		</f:facet>
+								    		<a4j:commandLink id="excluirAliquotas"  immediate="true" limitToList="true" styleClass="linkExcluir" title="Excluir" onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();" oncomplete="AguardeHide();" actionListener="#{apresentador.removerAliquotasPorPeriodo(item)}" reRender="painelEmpregadorPorPeriodo"/>
+									    </rich:column>
+								    	<rich:column style="width:10%;">
+							    			<f:facet name="header">
+							    				<h:outputText value="Início"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.dataInicioPeriodo}">
+												<f:converter converterId="competenciaConverter"/>
+							    			</h:outputText>
+								    	</rich:column>
+								    	<rich:column style="width:10%;">
+							    			<f:facet name="header">
+							    				<h:outputText value="Fim"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.dataTerminoPeriodo}">
+							    				<f:converter converterId="competenciaConverter"/>
+							    			</h:outputText>
+								    	</rich:column>
+								    	<rich:column style="width:10%;">
+							    			<f:facet name="header">
+							    				<h:outputText value="Empresa (%)"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.aliquotaEmpresa}">
+							    				<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+							    			</h:outputText>
+								    	</rich:column>
+								    	<rich:column style="width:10%;">
+							    			<f:facet name="header">
+							    				<h:outputText value="SAT (%)"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.aliquotaRAT}">
+							    				<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+							    			</h:outputText>
+								    	</rich:column>
+								    	<rich:column style="width:10%;">
+							    			<f:facet name="header">
+							    				<h:outputText value="Terceiros (%)"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.aliquotaTerceiros}">
+							    				<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+							    			</h:outputText>
+								    	</rich:column>
+									</rich:dataTable>
+								</h:panelGroup>
+								<h:panelGroup style="text-align: center;" layout="block" rendered="#{not apresentador.emEdicao and apresentador.aliquotasPorPeriodos.size()==0}">
+									<h:outputText value="Não informado"/>
+								</h:panelGroup>
+								</a4j:region>
+							</h:panelGroup>
+							
+							<!-- Aliquota do Empregador - Fixa -->
+							<h:panelGroup id="painelEmpregadorFixa" layout="block" styleClass="itemGrupo">
+								<a4j:outputPanel rendered="#{apresentador.aliquotaEmpregadorFixa}">
+								<h:panelGroup styleClass="itemGrupo">
+									<h:outputLabel value="Empresa (%)" for="aliquotaEmpresaFixa" />
+									<br />
+									<h:inputText id="aliquotaEmpresaFixa" label="Empresa (%)"  value="#{inssSelecionado.aliquotaEmpresaFixa}" style="width:73px;" onfocus="$(this).percentMask4()" disabled="#{not apresentador.emEdicao}">
+										<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+									</h:inputText>
+								</h:panelGroup>
+								<h:panelGroup styleClass="itemGrupo">
+									<h:outputLabel value="SAT (%)" for="aliquotaRatFixa" />
+									<br />
+									<h:inputText id="aliquotaRatFixa" label="SAT (%)"   value="#{inssSelecionado.aliquotaRATFixa}" style="width:50px;" onfocus="$(this).percentMask4()" disabled="#{not apresentador.emEdicao}">
+										<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+									</h:inputText>
+								</h:panelGroup>
+								<h:panelGroup styleClass="itemGrupo">
+									<h:outputLabel value="Terceiros (%)" for="aliquotaTerceirosFixa" />
+									<br />
+									<h:inputText id="aliquotaTerceirosFixa" label="Terceiros (%)"  value="#{inssSelecionado.aliquotaTerceirosFixa}" style="width:100px;" onfocus="$(this).percentMask4()" disabled="#{not apresentador.emEdicao}">
+										<f:converter converterId="quatroCasasDecimaisFixasConverter"/>
+									</h:inputText>
+								</h:panelGroup>
+								</a4j:outputPanel>
+									</h:panelGroup>			
+						</fieldset>
+					</h:panelGroup>
+				
+					<h:panelGroup>
+					<fieldset><legend>Período de Incidência</legend>
+					
+					<!-- INSS sobre salários devidos -->					
+					<h:panelGrid columns="3" border="0">
+						<h:panelGroup>
+							<fieldset><legend>Sobre salários devidos</legend>
+								<h:panelGrid columns="2" border="0">
+										<h:panelGroup>
+											 <h:outputLabel value="Data Inicial *" for="periodoInicialDEVIDOS" />
+											 <br />
+										     <rich:calendar id="periodoInicialDEVIDOS"  label="Data Inicial" value="#{inssSelecionado.inssSobreSalariosDevidos.dataInicioPeriodo}" inputSize="15"  popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" oninputfocus="$(this).dateMask()" disabled="#{not apresentador.emEdicao}">
+												<f:facet name="footer">
+													<h:outputText value="{selectedDateControl}" style="text-align:center" />
+												</f:facet>		            
+										    </rich:calendar>
+					                         <cobra:toolTip>
+					                             <rich:message for="periodoInicialDEVIDOS"/>
+					                         </cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:outputLabel value="Data Final *" for="periodoFinalDEVIDOS" /><br />
+											<rich:calendar id="periodoFinalDEVIDOS" label="Data Final" value="#{inssSelecionado.inssSobreSalariosDevidos.dataTerminoPeriodo}"  inputSize="15" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" oninputfocus="$(this).dateMask()" disabled="#{not apresentador.emEdicao}">
+											    <f:facet name="footer">
+											        <h:outputText value="{selectedDateControl}" style="text-align:center" />
+											    </f:facet>		            
+											</rich:calendar>
+					                         <cobra:toolTip>
+					                             <rich:message for="periodoFinalDEVIDOS"/>
+					                         </cobra:toolTip>					
+										</h:panelGroup>
+								</h:panelGrid>
+							</fieldset>
+						</h:panelGroup>
+				
+
+					<!-- INSS sobre salários pagos -->					
+						<h:panelGroup>
+							<fieldset><legend>Sobre salários pagos</legend>
+								<h:panelGrid columns="2" border="0">
+									<h:panelGroup>
+										<h:outputLabel value="Data Inicial *" for="periodoInicialPAGOS" />
+										<br />
+									    <rich:calendar id="periodoInicialPAGOS" label="Data Inicial" value="#{inssSelecionado.inssSobreSalariosPagos.dataInicioPeriodo}" inputSize="15" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" oninputfocus="$(this).dateMask()" disabled="#{not apresentador.emEdicao}">
+											<f:facet name="footer">
+												<h:outputText value="{selectedDateControl}" style="text-align:center" />
+											</f:facet>		            
+									    </rich:calendar>
+				                        <cobra:toolTip>
+				                        	<rich:message for="periodoInicialPAGOS"/>
+				                        </cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Data Final *" for="periodoFinalPAGOS" />
+										<br />
+										<rich:calendar id="periodoFinalPAGOS" label="Data Final " value="#{inssSelecionado.inssSobreSalariosPagos.dataTerminoPeriodo}"  inputSize="15" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" oninputfocus="$(this).dateMask()" disabled="#{not apresentador.emEdicao}">
+										    <f:facet name="footer">
+										        <h:outputText value="{selectedDateControl}" style="text-align:center" />
+										    </f:facet>		            
+										</rich:calendar>
+				                         <cobra:toolTip>
+				                             <rich:message for="periodoFinalPAGOS"/>
+				                         </cobra:toolTip>					
+									</h:panelGroup>
+								</h:panelGrid>
+								</fieldset>
+							</h:panelGroup>
+					
+					</h:panelGrid>
+				</fieldset>
+			</h:panelGroup>
+					
+			</h:panelGroup>
+		
+					
+		
+			<!-- Aliquota do Empregador - Períodos em que o RECLAMADO optava pelo SIMPLES -->
+						<h:panelGroup layout="block" styleClass="itemGroup" style="width:600px;">
+							<fieldset>
+								<legend>Períodos em que o RECLAMADO optava pelo SIMPLES</legend>
+								<h:panelGroup id="painelReclamadoOptavaPeloSimples" layout="block" styleClass="itemPanelGroup">
+									<a4j:region>
+									<h:panelGroup layout="block" rendered="#{apresentador.emEdicao}">
+										
+										<h:panelGrid columns="3" border="0">
+																		
+											<h:panelGroup>
+												<h:outputLabel value="Início" for="dataInicioSimples" />
+												<br />
+											    <rich:calendar id="dataInicioSimples" value="#{apresentador.periodoDoINSSComOpcaoSimples.dataInicioSimples}" label="Início" inputSize="7" popup="true" datePattern="MM/yyyy" oninputfocus="$(this).monthYearMask()" enableManualInput="true" showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDateSimples" oncurrentdateselected="event.rich.component.selectDate(event.rich.date)">
+													<f:facet name="footer">
+														<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													</f:facet>		            
+											    </rich:calendar>
+								    			<cobra:toolTip>
+								    				<rich:message for="dataInicioSimples"/>
+								    			</cobra:toolTip>	    			
+											</h:panelGroup>
+											
+											<h:panelGroup> 
+												<h:outputLabel value="Fim" for="dataTerminoSimples" />
+												<br />
+											    <rich:calendar id="dataTerminoSimples" value="#{apresentador.periodoDoINSSComOpcaoSimples.dataTerminoSimples}" label="Fim" inputSize="7" popup="true" datePattern="MM/yyyy" oninputfocus="$(this).monthYearMask()" enableManualInput="true" showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDateSimples" oncurrentdateselected="event.rich.component.selectDate(event.rich.date)">
+													<f:facet name="footer">
+														<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													</f:facet>		            
+											    </rich:calendar>
+								    			<cobra:toolTip>
+								    				<rich:message for="dataTerminoSimples"/>
+								    			</cobra:toolTip>	 	    			
+											</h:panelGroup>
+										
+										<h:panelGroup>
+											<a4j:commandLink id="cmdIncluirPeriodoSimples"  styleClass="botaoAddItem" style="margin-top:4px;" title="Adicionar" limitToList="true"  actionListener="#{apresentador.adicionarPeriodoComOpcaoSimples}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="painelReclamadoOptavaPeloSimples,painelMensagens"/>
+										</h:panelGroup>	
+										
+									</h:panelGrid>
+										
+									</h:panelGroup>
+									<h:panelGroup layout="block">
+										<rich:dataTable id="listagem" value="#{inssSelecionado.periodosComOpcaoSimples}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" var="item" rows="#{inssSelecionado.periodosComOpcaoSimples.size}" rendered="#{inssSelecionado.periodosComOpcaoSimples.size gt 0}"> 
+								    		<rich:column style="width:5%;" rendered="#{apresentador.emEdicao}">
+										    	<f:facet name="header">
+									    			<h:outputText value="Ação"/>
+									    		</f:facet>
+										    	<a4j:commandLink id="excluirPeriodoComSimples"  immediate="true" limitToList="true" styleClass="linkExcluir" style="margin-left:-6px;" title="Excluir" onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();"  oncomplete="AguardeHide();" actionListener="#{apresentador.removerPeriodoComOpcaoSimples(item)}" reRender="painelReclamadoOptavaPeloSimples"/>
+										    </rich:column>
+									    	<rich:column style="width:10%;">
+								    			<f:facet name="header">
+								    				<h:outputText value="Início"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.dataInicioSimples}">
+													<f:converter converterId="competenciaConverter"/>
+								    			</h:outputText>
+									    	</rich:column>
+									    	<rich:column style="width:10%;">
+								    			<f:facet name="header">
+								    				<h:outputText value="Fim"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.dataTerminoSimples}">
+								    				<f:converter converterId="competenciaConverter"/>
+								    			</h:outputText>
+									    	</rich:column>
+										</rich:dataTable>
+									</h:panelGroup>
+									<h:panelGroup style="text-align: center;" layout="block" rendered="#{not apresentador.emEdicao and inssSelecionado.periodosComOpcaoSimples.size()==0}">
+										<h:outputText value="Não informado"/>
+									</h:panelGroup>
+									</a4j:region>
+								</h:panelGroup>
+							</fieldset>
+						</h:panelGroup>		
+	</fieldset>
+
+</f:view>
+</body>
+
+</html>                            

@@ -1,0 +1,227 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+	
+	
+		<div id="modalBoxAssinador" style="display: none;">
+
+    	 <div id="boxAssinador">
+			<h:graphicImage value="./images/sevErro.png" style="float:right; cursor:pointer" onclick="toggleDivAssinador();" alt="Erro" />
+			
+			<div class="modalboxDivAssinador">Assinador Digital</div>
+			<br></br>
+			<br></br>
+		 	<table width="650" cellspacing="5">
+		 			<tr>
+						<td width="3%" style="padding-left: 50px;" align="right">
+							<h:form>
+								<h:commandButton id="loginComApplet"  
+								value="Java Applet" 
+								styleClass="bt_pequeno" 
+								actionListener="#{identity.mudarParaApplet}"
+								/>
+							</h:form>
+						</td>
+						<td width="90%" align="left">
+							<ul>
+								<li>
+									Assinador que requer plugin do Java no Firefox.
+								</li>
+							</ul>
+						</td>
+					</tr>
+					<tr>
+						<td width="3%" style="padding-left: 50px;" align="right">
+							<h:form>
+								<h:commandButton id="loginComShodo"  
+								value="Shod&#333;" 
+								styleClass="bt_pequeno" 
+								actionListener="#{identity.mudarParaShodo}"
+								/>
+							</h:form>
+							
+						</td>
+						<td width="90%" align="left">
+							<ul>
+								<li>
+									Assinador fornecido pela Justiça do Trabalho <br></br> e também utilizado para autenticação no PJe.<!-- <br></br> Clique <a href="#{identity.linkShodo}">aqui</a> para executar a aplicação. -->
+								</li>
+							</ul>
+						</td>
+					</tr>
+					<!-- 
+					<tr>
+						<td width="3%" style="padding-left: 50px;" align="right">
+							<h:form>
+								<h:commandButton id="loginComPjeOffice"  
+								value="PJeOffice" 
+								styleClass="bt_pequeno" 
+								actionListener=""
+								/>
+							</h:form>
+						</td>
+						
+						
+							
+						<td width="90%" align="left">
+							<ul>
+								<li>
+									Assinador fornecido pelo CNJ. <br></br> Clique <a href="http://www.pje.jus.br/wiki/index.php/PJeOffice">aqui</a> para proceder com a instalação.
+								</li>
+							</ul>
+						</td>
+					</tr>
+					 -->
+	 		</table>
+			</div>
+		</div>
+		
+	<div id="modalBoxAmb" style="display: none;">
+
+    	 <div id="boxAmb">
+			<h:graphicImage value="./images/sevErro.png" style="float:right; cursor:pointer" onclick="toggleDivAmb();" alt="Erro" />
+			
+			<div class="modalboxDivAmb">Verificação de Ambiente</div>
+			<br></br>
+			<br></br>
+		 	<table  width="100%" cellspacing="5">
+				<tr>
+					<td width="70px" valign="top">
+						<div class="testeNavegador_false">
+							<h:graphicImage value="./images/failed.png" style="margin-left:37px" alt="Falhou" />
+						</div>
+						<div class="testeNavegador_true">
+							<h:graphicImage value="./images/passed.png" style="margin-left:30px" alt="Passou" />
+						</div>
+					</td>
+					<td>
+						<div class="testeNavegador_false">Seu navegador de Internet não foi homologado para o uso do PJe-Calc. Por favor utilize o Mozilla Firefox 3.x ou superior.</div>
+						<div class="testeNavegador_true">Navegador de Internet</div>
+					</td>
+				</tr>
+				<tr>
+					<td valign="top">
+						<div class="testeJava_false">
+							<h:graphicImage value="./images/failed.png" style="margin-left:37px" alt="Falhou" />
+						</div>
+						<div class="testeJava_true">
+							<h:graphicImage value="./images/passed.png" style="margin-left:30px" alt="Passou" />
+						</div>
+					</td>
+					<td>
+						<div class="testeJava_false">
+						O plugin java não está instalado ou não habilitado em seu navegador de internet. Ele é necessário para utilizar o certificado digital no PJE.
+						
+						No navegador Firefox, verifique o plugin Java (menu complementos/plugins).  
+						
+						A versão atualizada do Java está disponível no site <a href="http://www.java.com/pt_BR/download/" target="_blank">http://www.java.com/pt_BR/download/</a>.
+						</div>
+						<div class="testeJava_true">Java e plugins</div>
+					</td>
+				</tr> 
+				 </table>
+			</div>
+		</div>
+		
+		<div id="modalBoxReq"  style="display: none">
+		 	<div id="boxReq">
+			<h:graphicImage value="./images/sevErro.png" style="float:right; cursor:pointer" onclick="toggleDivReq();" alt="Erro" />
+			
+			<div class="modalboxDivReq">Pré-requisitos para utlização</div>
+			<br></br>
+			<br></br>
+				<table width="650" cellspacing="5">
+					<tr>
+						<td width="3%" style="padding-left: 50px;" align="right">
+							<a href="http://www.java.com/pt_BR/download/">
+								<h:graphicImage value="./images/java.png" alt="Java" />
+							</a>
+						</td>
+						<td width="90%" align="left">
+							<ul>
+								<li>
+									<a href="http://www.java.com/pt_BR/download/">Java plugin (versão 7.0 ou superior)</a>: seu navegador deve ter o plugin de execução de aplicativos Java. Clique <a href="http://www.java.com/pt_BR/download/">aqui</a> para ir para a página de download.
+								</li>
+							</ul>
+						</td>
+					</tr>
+					<tr>
+						<td width="3%" style="padding-left: 50px;" align="right">
+							<a href="http://www.mozilla.org/pt-BR/firefox/new/">
+								<h:graphicImage value="./images/fireFoxBro.png" alt="Firefox" />
+							</a>
+						</td>
+						<td width="90%" align="left">
+							<ul>
+								<li>
+									Navegador de internet (browser): recomendamos o uso do navegador <a href="http://www.mozilla.org/pt-BR/firefox/new/">Mozilla Firefox</a>. Clique <a href="http://www.mozilla.org/pt-BR/firefox/new/">aqui</a> para ir para a página de download.
+								</li>
+							</ul>
+						</td>
+					</tr>
+					<tr>
+						<td width="3%" style="padding-left: 50px;" align="right">
+							<h:graphicImage value="./images/windows.png" alt="Windows" />
+						</td>
+						<td width="90%" align="left">
+							<ul>
+								<li>
+									Sistema operacional: embora o PJe-Calc funcione também em sistemas operacionais livres, para melhor suporte quanto ao uso do certificado digital, recomendamos o uso do Windows XP, 2003, Vista, 7 (Seven) e 8.
+								</li>
+							</ul>
+						</td>
+					</tr>
+					<tr>
+						<td width="3%" style="padding-left: 50px; padding-top: 15px;" valign="top" align="right">
+							<h:graphicImage value="./images/keys.png" alt="Certificado Digital" />
+						</td>
+						<td width="90%" align="left">
+							<ul>
+								<li>
+								Certificado ICP-Brasil: a assinatura de documentos no PJe-Calc somente pode ser feita utilizando certificados digitais que pertençam à cadeia ICP-Brasil. A cadeia de certificação deve ser instalada no computador do usuário, o que pode ser feito seguindo as instruções da página do 
+								<a href="http://www.iti.gov.br/icp-brasil/repositorio">repositório das cadeias de certificação</a> mantida pelo Instituto Nacional de Tecnologia da Informação.<br /><br />
+
+								O uso de certificação digital também torna necessária a utilização de um dispositivo criptográfico que armazena suas chaves públicas e privadas. Esse dispositivo pode ser um 
+								cartão inteligente (smartcard) ou um token criptográfico. Quando utilizado um cartão inteligente, é necessário que o usuário disponha de uma leitora de 
+								smartcard devidamente instalada. Os aplicativos necessários à utilização desses dispositivos devem ser fornecidos pela entidade de quem foi adquirido o certificado 
+								digital. <br /><br />
+								
+								<!--Acima, você pode ver um link "Verificação de ambiente", que poderá ser utilizado para testar se seu certificado está funcionando corretamente no navegador. Outros testes podem ser feitos no sítio de 
+								atendimento do contribuinte da Receita Federal do Brasil (<a href="https://cav.receita.fazenda.gov.br">e-CAC</a>) ou utilizando o programa responsável pela administração do certificado no seu 
+								computador.<br /><br />-->
+								
+								Caso haja problemas de acesso nos testes acima, será necessário entrar em contato com seu fornecedor de certificado digital ou consultar um técnico especializado para configurar 
+								corretamente seu computador. Eis alguns sites têm dicas para instalação e configuração da leitora de certificados e de tokens 
+								criptográficos: <a href="http://www.certisign.com.br/atendimento-suporte/downloads">Certisign</a>, 
+								<a href="http://www.acbr.org.br/arquivos/manual/GuiadeinstalacaSafeSign.pdf ">Autoridade Certificadora Brasileira de Registros</a> 
+								e <a href="http://www.receita.fazenda.gov.br/Novidades/Informa/DestaqueCertificadoDigital.htm ">Receita Federal do Brasil</a>.
+									<br /> <br /> <br /> <br /> <b>Passos sugeridos para
+										preparar seu computador para usar o PJe-Calc</b>
+		
+		
+									<ol type="a">
+										<li>Instale os drivers da leitora de cartão inteligente ou do token criptográfico.</li>
+										<li>Instale a cadeia de certificação da <a href="">ICP-Brasil</a>
+											(<a href="http://www.iti.gov.br/icp-brasil/certificados">http://www.iti.gov.br/icp-brasil/certificados</a>)</li>
+										<li>Instale o navegador <a href="http://www.mozilla.org/pt-BR/firefox/new/">Mozilla Firefox</a>.</li>
+										<li>Instale ou atualize o <a href="http://www.java.com/pt_BR/download">plugin Java</a>.</li>
+										<li>Teste o uso de seu certificado digital no programa de gerenciamento do cartão ou use no link "Verificação de ambiente" acima.</li>
+									</ol>
+		
+								</li>
+							</ul>
+						</td>
+					</tr>
+		
+				</table>
+				</div>
+			</div>
+			
+</ui:composition>

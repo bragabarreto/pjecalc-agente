@@ -1,0 +1,19 @@
+<jboss-deployment-structure>
+	<deployment>
+		<exclude-subsystems>
+			<subsystem name="jaxrs" />
+		</exclude-subsystems>
+		<exclusions>
+			<module name="javax.faces.api" slot="main" />
+			<module name="com.sun.jsf-impl" slot="main" />
+			<module name="org.hibernate" slot="main" />
+			<module name="org.hibernate.envers" slot="main" />
+			<module name="org.hibernate.commons-annotations" slot="main" />
+			<module name="javax.el.api" slot="main" />
+			<module name="org.eclipse.jdt.ecj" slot="main" />
+		</exclusions>
+		<dependencies>
+			<module name="org.javassist" />
+		</dependencies>
+	</deployment>
+</jboss-deployment-structure>

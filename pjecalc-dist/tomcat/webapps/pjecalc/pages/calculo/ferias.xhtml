@@ -1,0 +1,358 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+	
+	<ui:param name="titulo" value="Férias" />
+	<ui:param name="apresentador" value="#{apresentadorFerias}" />
+	<ui:param name="lista" value="#{listaDeFerias}" />
+	<ui:param name="enctype" value="multipart/form-data" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+			
+	<ui:define name="nofiltroCampos">
+		<ui:include src="../calculo/resumo-calculo.xhtml" />
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+	</ui:define>
+	
+	<!--
+		FORMULÁRIO
+	-->
+	
+	<ui:define name="nocamposFormulario">
+	
+		<a4j:loadScript src="resource://jquery.js"/>
+	
+		<h:panelGrid columns="1">
+		
+			<h:panelGroup id="pnlUpload" layout="block">
+				<fieldset>
+		  			<legend>Importar Férias a partir de Arquivo Externo</legend>
+					<h:panelGroup layout="block" style="width:100%;">
+						<h:outputText value="Atenção! Após realizar a importação via arquivo externo, os dados anteriormente cadastrados serão excluídos." />
+						<h:panelGrid columns="1" cellpadding="3" cellspacing="3">
+							<h:panelGroup id="pnlFileUpload" class="panelFileUpload" layout="block">
+								<h:outputLabel for="arquivo" value="Selecionar Arquivo CSV *"/><br />
+								<rich:fileUpload id="arquivo" fileUploadListener="#{apresentadorFerias.listenerUpload}" locale="pt_BR" immediateUpload="true" 
+									addControlLabel="Escolher Arquivo..." clearAllControlLabel="Remover" cancelEntryControlLabel="Cancelar" clearControlLabel="" 
+									transferErrorLabel="Erro na transferência" stopControlLabel="Parar" doneLabel="Feito" stopEntryControlLabel="Parar" 
+									sizeErrorLabel="Tamanho do arquivo maior que o limite máximo permitido." immediate="true">
+									<a4j:support event="onclear" reRender="pnlFileUpload" />
+								</rich:fileUpload>
+							</h:panelGroup>
+							<h:outputLink class="linkCartaoDePonto" value="#{facesContext.externalContext.requestContextPath}/templateFerias/ExemploFerias.csv">Para baixar um arquivo de exemplo preenchido, clique aqui.</h:outputLink>
+						</h:panelGrid>
+					</h:panelGroup>
+					<a4j:commandButton value="Confirmar" actionListener="#{apresentador.importarCSV()}" immediate="true" reRender="painelMensagens,pnlUpload,painelOcorrenciasFerias" process="pnlFileUpload" ajaxSingle="true" limitToList="true" styleClass="botaoGrande" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+				</fieldset>
+			</h:panelGroup>
+		
+			<a4j:outputPanel id="painelFeriasColetivas" rendered="true" style="margin-left: 3px;">
+				<fieldset><legend>Regerar Períodos de Férias</legend>
+					<h:panelGroup id="painelDadosFeriasColetivas">
+						<h:outputLabel value="Data de Início de Férias Coletivas no Primeiro Ano do Contrato" for="inicioFeriasColetivas" style="margin-left:7px;margin-right:3px;" />
+						<rich:calendar id="inicioFeriasColetivas" value="#{apresentador.calculo.inicioFeriasColetivas}"
+									   label="Data de Início de Férias Coletivas no Primeiro Ano do Contrato" inputSize="10"
+									   popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+						</rich:calendar>
+						<cobra:toolTip>
+			   				<rich:message for="inicioFeriasColetivas"/>
+			   			</cobra:toolTip>
+			   			<h:outputText class="linkHelp" id="feriasColetivasHelp" style="margin-left:1px">
+							<rich:toolTip for="feriasColetivasHelp" showEvent="mouseover" styleClass="tooltipHelp">
+							   	Se houve férias coletivas no primeiro ano do contrato, indique a data de início no campo ao lado. Esta data será levada em consideração ao se regerar os períodos de férias. Caso contrário, deixe o campo em branco. 
+							</rich:toolTip>
+			     	    </h:outputText>
+					</h:panelGroup>
+					<h:panelGroup>
+						<a4j:commandButton id="regerarFeriasColetivas" styleClass="botaoMedio" value="Regerar Férias" actionListener="#{apresentador.regerarFerias}"
+			     	    				   ajaxSingle="true" limitToList="true" process="painelDadosFeriasColetivas" oncomplete="AguardeHide();"
+			     	    				   reRender="painelMensagens,painelDadosFeriasColetivas,painelOcorrenciasFerias"
+			     	    				   onclick="if (!confirma('#{mensagens.MSG0034}',this)) return false; AguardeShow();" />
+					</h:panelGroup>
+				</fieldset>
+			</a4j:outputPanel>
+		
+			<a4j:outputPanel id="painelOcorrenciasFerias">
+				
+				<rich:dataTable align="center" style="text-align:center;" rendered="true" value="#{lista}" rowClasses="linha-par, linha-impar" cellpadding="0" border="0" var="ferias"> 
+	
+		        	<f:facet name="header">
+	            		
+	            		<rich:columnGroup>
+	
+					    	<rich:column  align="center" rowspan="2" style="text-align:center; width:3%;">
+			    				Relativas
+					    	</rich:column>		
+	
+					    	<rich:column  align="center" colspan="2" style="text-align:center; width:16%;">
+			    				Períodos
+					    	</rich:column>		
+					    	
+					    	<rich:column  align="center" rowspan="2" style="text-align:center; width:4%;">
+			    				Prazo*
+					    	</rich:column>	
+			
+				    		<rich:column  align="center" rowspan="2" style="text-align:center; width:6%;">
+				    			Situação
+						    </rich:column>
+						    
+					    	<rich:column  align="center" rowspan="2" style="text-align:center; width:2%;">
+			    				Dobra
+					    	</rich:column>		
+			
+				    		<rich:column  align="center" rowspan="2" style="text-align:center; width:2%;">
+				    			Abono
+						    </rich:column>
+						    
+						    <rich:column  align="center" rowspan="2" style="text-align:center; width:5%;">
+				    			Dias Abono
+						    </rich:column>
+			
+					    	<rich:column  align="center" colspan="2" style="text-align:center;  width:16%;">
+			    				Gozo 1
+					    	</rich:column>		
+			
+					    	<rich:column  align="center" colspan="2" style="text-align:center;  width:16%;">
+			    				Gozo 2
+					    	</rich:column>		
+			
+					    	<rich:column  align="center" colspan="2" style="text-align:center;  width:16%;">
+			    				Gozo 3
+					    	</rich:column>		
+					    	
+					    	<rich:column  align="center" breakBefore="true" style="text-align:center; width:8%;">
+			    				Aquisitivo
+					    	</rich:column>		
+			
+					    	<rich:column  align="center" style="text-align:center; width:8%;">
+			    				Concessivo
+					    	</rich:column>
+					    	
+					    	<rich:column   align="center" style="text-align:center; width:14%;">
+			    				Período
+					    	</rich:column>		
+					    	
+					    	<rich:column  align="center" style="text-align:center; width:2%;">
+			    				Dobra
+					    	</rich:column>		
+					    	
+					    	<rich:column  align="center" style="text-align:center; width:14%;">
+			    				Período
+					    	</rich:column>		
+					    	
+					    	<rich:column  align="center" style="text-align:center; width:2%;">
+			    				Dobra
+					    	</rich:column>		
+					    	
+					    	<rich:column  align="center" style="text-align:center; width:14%;">
+			    				Período
+					    	</rich:column>		
+					    	
+					    	<rich:column  align="center" style="text-align:center; width:2%;">
+			    				Dobra
+					    	</rich:column>		
+	
+						</rich:columnGroup>
+	
+					</f:facet>
+	                
+	
+						<rich:column  align="center">
+							<h:outputText value="#{ferias.relativa}" style="text-align:center;"/>
+						</rich:column>		
+	
+						<rich:column  align="center">
+								<h:outputText value="#{ferias.periodoAquisitivo}" style="text-align:center;"/>
+						</rich:column>		
+	
+				    	<rich:column  align="center">
+		    					<h:outputText value="#{ferias.periodoConcessivo}" style="text-align:center;"/>
+				    	</rich:column>
+	    	
+			    		<rich:column  align="center">	    			
+	   			 				<h:inputText id="prazo" tabindex="1" value="#{ferias.prazo}" size="10" label="Prazo" maxlength="2" required="true" style="width:18px; text-align:center;" disabled="#{not apresentador.prazoHabilitado(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+								</h:inputText>
+		    					<cobra:toolTip>
+		    						<rich:message for="prazo"/>
+		    					</cobra:toolTip>
+			    		</rich:column>
+	
+						<rich:column  align="center">
+								<h:selectOneMenu id="situacao" tabindex="1" label="Situação" value="#{ferias.situacao}" style="text-align:center;">
+									<s:selectItems value="#{apresentador.getSituacoes(ferias)}" var="item" label="#{item.nome}"/>
+									<a4j:support event="onchange" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.mudarSituacao}" reRender="prazo,dobraGeral,abono,dataInicialDoPeriodoDeGozo1,dataFinalDoPeriodoDeGozo1,dobraDoPeriodoDeGozo1,dataInicialDoPeriodoDeGozo2,dataFinalDoPeriodoDeGozo2,dobraDoPeriodoDeGozo2,dataInicialDoPeriodoDeGozo3,dataFinalDoPeriodoDeGozo3,dobraDoPeriodoDeGozo3,quantidadeDiasAbono" />
+									<s:convertEnum />
+									<f:validator validatorId="validadorDeEntidade"/>
+									<f:param name="entidade" value="#{ferias}"/>
+								</h:selectOneMenu>
+						</rich:column>
+				    
+			    		<rich:column  align="center">
+								<h:selectBooleanCheckbox id="dobraGeral" tabindex="-1" label="dobraGeral" value="#{ferias.dobraGeral}"  disabled="#{not apresentador.dobraGeralHabilitada(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+								</h:selectBooleanCheckbox>
+		    					<cobra:toolTip>
+		    						<rich:message for="dobraGeral"/>
+		    					</cobra:toolTip>	    	
+			    		</rich:column>
+	
+			    		<rich:column  align="center">
+								<h:selectBooleanCheckbox id="abono" tabindex="-1" label="Abono" value="#{ferias.abono}" disabled="#{not apresentador.abonoHabilitado(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+		    						<a4j:support event="onchange" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.mudarAbono}" reRender="quantidadeDiasAbono"/>
+								</h:selectBooleanCheckbox>
+		    					<cobra:toolTip>
+		    						<rich:message for="abono"/>
+		    					</cobra:toolTip>
+				    	</rich:column>
+				    	
+				    	<rich:column  align="center">
+								<h:inputText id="quantidadeDiasAbono" tabindex="1" value="#{ferias.quantidadeDiasAbono}" size="10" label="Quantidade de dias de abono" maxlength="2" required="true" style="width:18px; text-align:center; margin-right:2px;" disabled="#{not apresentador.prazoHabilitado(ferias) or !ferias.abono}">
+		    						<f:validator validatorId="validadorDeEntidade"/>
+		    						<f:param name="entidade" value="#{ferias}"/>
+		    					</h:inputText>
+		    					<cobra:toolTip>
+		    						<rich:message for="quantidadeDiasAbono"/>
+		    					</cobra:toolTip>
+				    	</rich:column>
+	
+				    	<rich:column id="cGozo1" align="center">
+		    					<h:inputText id="dataInicialDoPeriodoDeGozo1" tabindex="1" label="Data Inicial do Período de Gozo 1" style="text-align:center;" size="9" datePattern="dd/MM/yyyy" value="#{ferias.dataInicialDoPeriodoDeGozo1}" onfocus="$(this).dateMask()" required="#{param['formulario:isSalvarFerias']=='true'}" disabled="#{not apresentador.primeiroPeriodoDeGozoHabilitado(ferias) or apresentador.verificarFeriasColetivas(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:converter converterId="dataConverter"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+	    							<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="cGozo1" />
+		    					</h:inputText>
+		    					<cobra:toolTip>
+		    						<rich:message for="dataInicialDoPeriodoDeGozo1"/>
+		    					</cobra:toolTip>	    			
+		    					<h:outputText value=" a " />	    			
+		    					<h:inputText id="dataFinalDoPeriodoDeGozo1" tabindex="1" label="Data Final do Período de Gozo 1" style="text-align:center;" size="9" datePattern="dd/MM/yyyy" value="#{ferias.dataFinalDoPeriodoDeGozo1}" onfocus="$(this).dateMask()" required="#{param['formulario:isSalvarFerias']=='true'}" disabled="#{not apresentador.primeiroPeriodoDeGozoHabilitado(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:converter converterId="dataConverter"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+	    							<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="cGozo1,cDobra1" actionListener="#{apresentador.mudarDataInicialDeGozo1}" />
+		    					</h:inputText>
+		    					<cobra:toolTip>
+		    						<rich:message for="dataFinalDoPeriodoDeGozo1"/>
+		    					</cobra:toolTip>
+			    		</rich:column>
+			    	
+			    		<rich:column id="cDobra1" align="center">
+								<h:selectBooleanCheckbox id="dobraDoPeriodoDeGozo1" tabindex="-1" style="text-align:center;" label="Dobra do Gozo 1" value="#{ferias.dobraDoPeriodoDeGozo1}" disabled="#{not apresentador.dobraGozo1Habilitada(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+								</h:selectBooleanCheckbox>
+		    					<cobra:toolTip>
+		    						<rich:message for="dobraDoPeriodoDeGozo1"/>
+		    					</cobra:toolTip>
+			    		</rich:column>
+	
+				    	<rich:column id="cGozo2" align="center">
+			    				<h:inputText id="dataInicialDoPeriodoDeGozo2" tabindex="1" label="Data Inicial do Período de Gozo 2" style="text-align:center;" size="9" datePattern="dd/MM/yyyy" value="#{ferias.dataInicialDoPeriodoDeGozo2}" onfocus="$(this).dateMask()" disabled="#{not apresentador.demaisPeriodoDeGozoHabilitado(ferias)}">
+		    						<f:validator validatorId="validadorDeEntidade"/>
+		    						<f:converter converterId="dataConverter"/>
+		    						<f:param name="entidade" value="#{ferias}"/>
+		    						<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="cGozo2" />
+			    				</h:inputText>
+			    				<cobra:toolTip>
+			    					<rich:message for="dataInicialDoPeriodoDeGozo2"/>
+			    				</cobra:toolTip>	    			
+			    				<h:outputText value=" a " />	    			
+			    				<h:inputText id="dataFinalDoPeriodoDeGozo2" tabindex="1" label="Data Final do Período de Gozo 2" style="text-align:center;" size="9" datePattern="dd/MM/yyyy" value="#{ferias.dataFinalDoPeriodoDeGozo2}" onfocus="$(this).dateMask()" disabled="#{not apresentador.demaisPeriodoDeGozoHabilitado(ferias)}">
+		    						<f:validator validatorId="validadorDeEntidade"/>
+		    						<f:converter converterId="dataConverter"/>
+		    						<f:param name="entidade" value="#{ferias}"/>
+		    						<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="cGozo2,cDobra2" actionListener="#{apresentador.mudarDataFinalDeGozo2}" />
+			    				</h:inputText>
+			    				<cobra:toolTip>
+			    					<rich:message for="dataFinalDoPeriodoDeGozo2"/>
+			    				</cobra:toolTip>
+			    		</rich:column>
+			    	
+				    	<rich:column id="cDobra2" align="center">
+								<h:selectBooleanCheckbox id="dobraDoPeriodoDeGozo2" tabindex="-1" label="Dobra do Gozo 2" style="text-align:center;" value="#{ferias.dobraDoPeriodoDeGozo2}" disabled="#{not apresentador.dobraGozo2Habilitada(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+								</h:selectBooleanCheckbox>
+		    					<cobra:toolTip>
+		    						<rich:message for="dobraDoPeriodoDeGozo2"/>
+		    					</cobra:toolTip>
+			    		</rich:column>
+	
+				    	<rich:column id="cGozo3" align="center">
+		    					<h:inputText id="dataInicialDoPeriodoDeGozo3" tabindex="1" label="Data Inicial do Período de Gozo 3" style="text-align:center;" size="9" datePattern="dd/MM/yyyy" value="#{ferias.dataInicialDoPeriodoDeGozo3}" onfocus="$(this).dateMask()" disabled="#{not apresentador.demaisPeriodoDeGozoHabilitado(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:converter converterId="dataConverter"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+	    							<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="cGozo3" />
+		    					</h:inputText>
+		    					<cobra:toolTip>
+		    						<rich:message for="dataInicialDoPeriodoDeGozo3"/>
+		    					</cobra:toolTip>	    			
+		    					<h:outputText value=" a " />	    			
+		    					<h:inputText id="dataFinalDoPeriodoDeGozo3" tabindex="1" label="Data Final do Período de Gozo 3" style="text-align:center;" size="9" datePattern="dd/MM/yyyy" value="#{ferias.dataFinalDoPeriodoDeGozo3}" onfocus="$(this).dateMask()" disabled="#{not apresentador.demaisPeriodoDeGozoHabilitado(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:converter converterId="dataConverter"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+	    							<a4j:support event="onchange" ajaxSingle="true" limitToList="true" reRender="cGozo3,cDobra3" actionListener="#{apresentador.mudarDataFinalDeGozo3}" />
+		    					</h:inputText>
+		    					<cobra:toolTip>
+		    						<rich:message for="dataFinalDoPeriodoDeGozo3"/>
+		    					</cobra:toolTip>	    			
+			    		</rich:column>		
+			    	
+				    	<rich:column id="cDobra3" align="center">
+								<h:selectBooleanCheckbox id="dobraDoPeriodoDeGozo3" tabindex="-1" label="Dobra do Gozo 3" style="text-align:center;" value="#{ferias.dobraDoPeriodoDeGozo3}" disabled="#{not apresentador.dobraGozo3Habilitada(ferias)}">
+	    							<f:validator validatorId="validadorDeEntidade"/>
+	    							<f:param name="entidade" value="#{ferias}"/>
+								</h:selectBooleanCheckbox>
+		    					<cobra:toolTip>
+		    						<rich:message for="dobraDoPeriodoDeGozo3"/>
+		    					</cobra:toolTip>
+			    		</rich:column>
+	
+				</rich:dataTable>
+	
+			</a4j:outputPanel>
+		
+			<a4j:outputPanel id="painelPrazoFeriasProporcionais" rendered="true" style="margin-left: 3px;">
+				<h:outputLabel value="Prazo das Férias Proporcionais" for="prazoFeriasProporcionais" />
+				<h:inputText id="prazoFeriasProporcionais" value="#{apresentador.calculo.prazoFeriasProporcional}" onfocus="$(this).integerMask()" label="Prazo Férias Proporcionais" size="9" maxlength="3" style="margin-left:5px" >
+				</h:inputText>
+				<cobra:toolTip>
+	   				<rich:message for="prazoFeriasProporcionais"/>
+	   			</cobra:toolTip>
+	   			<h:outputText class="linkHelp" id="fgtsHelp" style="margin-left:1px">
+					<rich:toolTip for="fgtsHelp" showEvent="mouseover" styleClass="tooltipHelp">
+					   	Preencha esse campo somente se deseja informar um valor de prazo de férias proporcionais. Se desejar utilizar o valor padrão, que depende do regime de trabalho e do número de faltas não justificadas, mantenha o campo em branco.
+					</rich:toolTip>
+	     	    </h:outputText>
+			</a4j:outputPanel>
+		
+		</h:panelGrid>
+
+	</ui:define>
+
+	<ui:define name="filtroBotoes">
+		<h:inputHidden id="isSalvarFerias" name="isSalvarFerias" value="false"/>
+	    <h:commandButton value="Salvar" actionListener="#{apresentador.salvar}" onclick="$('formulario:isSalvarFerias').value='true'; AguardeShow();" styleClass="botao" />
+	</ui:define>
+
+</ui:composition>
+
+</html>

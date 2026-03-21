@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="calculo-resumo-processo" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box leftPadding="5" rightPadding="5">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="5">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="jr_resumo_processo_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="resumo" class="java.lang.Object"/>
+	<parameter name="jr_resumo_processo_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_processo_4" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_processo_5" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_processo_6" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_processo_7" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_processo_8" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_processo_9" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_processo_10" class="java.lang.Object" isForPrompting="false"/>
+	<queryString>
+		<![CDATA[]]>
+	</queryString>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="22">
+			<staticText>
+				<reportElement style="titulo" x="0" y="5" width="802" height="17"/>
+				<textElement textAlignment="Center"/>
+				<text><![CDATA[Resumo dos Cálculos]]></text>
+			</staticText>
+		</band>
+	</title>
+	<columnHeader>
+		<band splitType="Stretch"/>
+	</columnHeader>
+	<detail>
+		<band height="14" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{resumo}.ocorrenciasReclamantes.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="14"/>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{resumo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumo}.ocorrenciasReclamantes]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_processo_2}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="56">
+			<subreport>
+				<reportElement x="-20" y="14" width="421" height="42"/>
+				<subreportParameter name="jr_resumo_processo_4">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_processo_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_processo_5">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_processo_5}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{resumo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_processo_3}]]></subreportExpression>
+			</subreport>
+			<subreport>
+				<reportElement x="401" y="14" width="421" height="42">
+					<printWhenExpression><![CDATA[$P{resumo}.ocorrenciasDebitoReclamado.size() > 0]]></printWhenExpression>
+				</reportElement>
+				<subreportParameter name="jr_resumo_processo_8">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_processo_8}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_processo_9">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_processo_9}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{resumo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_processo_6}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="52">
+			<printWhenExpression><![CDATA[$P{resumo}.ocorrenciasDebitoCobrarReclamante.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="401" y="10" width="420" height="42"/>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{resumo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumo}.getOcorrenciasDebitoCobrarReclamante()]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_processo_10}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="28">
+			<printWhenExpression><![CDATA[$P{resumo}.ocorrenciasVerbasForaDoPrincipal.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="10" width="841" height="18"/>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{resumo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumo}.ocorrenciasVerbasForaDoPrincipal]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_processo_7}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="32">
+			<printWhenExpression><![CDATA[$P{resumo}.mostrarComentarios]]></printWhenExpression>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default" positionType="Float" x="0" y="11" width="802" height="14"/>
+				<textElement textAlignment="Justified" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{resumo}.comentarios]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<columnFooter>
+		<band splitType="Stretch"/>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band splitType="Stretch"/>
+	</summary>
+</jasperReport>

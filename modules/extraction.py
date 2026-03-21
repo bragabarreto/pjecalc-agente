@@ -143,6 +143,9 @@ _RELATORIO_PROMPT = """Converta o relatório abaixo para o schema JSON do PJE-Ca
 - "Reclamada:" ou "Reclamado:" → processo.reclamado (apenas razão social/nome, sem CNPJ)
 - CNPJ da reclamada se explicitado → processo.cnpj_reclamado (formato: "00.000.000/0000-00")
 - "Data de Distribuição/Autuação:" ou "Data de Ajuizamento:" → contrato.ajuizamento
+- "Autuado em:" / "Data de autuação:" / "Data de distribuição:" → processo.autuado_em (DD/MM/AAAA)
+- "Valor da causa:" / "Valor atribuído à causa:" → processo.valor_causa (float; extrair de qualquer
+  seção do documento, inclusive cabeçalho do processo, petição inicial ou relatório)
 
 **SEÇÃO 2 — DADOS DO CONTRATO** → preenche "contrato":
 - "Admissão:" → contrato.admissao (OBRIGATÓRIO)
@@ -313,6 +316,8 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     "estado": "UF 2 letras | null",
     "municipio": "string | null",
     "vara": "string | null",
+    "valor_causa": "float | null",
+    "autuado_em": "DD/MM/AAAA | null",
     "confianca": 0.95
   }},
   "contrato": {{
@@ -566,6 +571,8 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "estado": "UF 2 letras | null",
     "municipio": "string | null",
     "vara": "string | null",
+    "valor_causa": "float | null",
+    "autuado_em": "DD/MM/AAAA | null",
     "confianca": 0.0-1.0
   }},
   "contrato": {{

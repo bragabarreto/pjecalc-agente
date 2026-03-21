@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<body>
+<f:view>
+	
+<h:panelGroup >		
+	
+	<h:panelGroup rendered="#{tipo eq 'DEVIDOS'}">
+ 		<h:panelGrid columns="2" border="0">
+       		<a4j:region>
+				<h:selectBooleanCheckbox id="apurarInssSegurado#{tipo}" value="#{registro.apurarInssSegurado}">
+					<a4j:support event="onchange" reRender="painelCobrarDoReclamante#{tipo}" limitToList="true" ajaxSingle="true"/>
+				</h:selectBooleanCheckbox>
+				<h:outputLabel for="apurarInssSegurado#{tipo}" value="Apurar INSS Segurado"/>
+       		</a4j:region>
+		
+			<h:panelGroup id="painelCobrarDoReclamante#{tipo}">
+				<a4j:region rendered="#{registro.apurarInssSegurado}">
+					<h:selectBooleanCheckbox id="cobrarDoReclamante#{tipo}" value="#{registro.cobrarInssDoReclamante}" style="margin-left:5px;"></h:selectBooleanCheckbox>
+					<h:outputLabel for="cobrarDoReclamante#{tipo}" value="Cobrar do Reclamante"/>
+				</a4j:region>
+			</h:panelGroup>
+		</h:panelGrid>
+	</h:panelGroup>
+         
+    <h:panelGrid columns="3" border="0">
+		<h:panelGroup>
+			<fieldset>
+				<legend>Período *</legend>
+				 
+				 <span style="margin-left: 8px; margin-right: 8px;"> De </span>
+				 
+			     <rich:calendar id="periodoInicial#{tipo}" value="#{registro.dataInicioPeriodo}" inputSize="15" 
+			     				popup="true" datePattern="dd/MM/yyyy" 
+			     				enableManualInput="true" styleClass="leitura" 
+			     				oninputfocus="$(this).dateMask()" >
+					<f:facet name="footer">
+						<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					</f:facet>		            
+			    </rich:calendar>
+                         <cobra:toolTip>
+                             <rich:message for="periodoInicial#{tipo}"/>
+                         </cobra:toolTip>
+                      
+                      <span style="margin-left: 20px; margin-right: 8px;"> Até </span>
+ 
+				<rich:calendar id="periodoFinal#{tipo}" value="#{registro.dataTerminoPeriodo}"  inputSize="15" popup="true" 
+							datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" 
+							oninputfocus="$(this).dateMask()">
+				    <f:facet name="footer">
+				        <h:outputText value="{selectedDateControl}" style="text-align:center" />
+				    </f:facet>		            
+				</rich:calendar>
+                         <cobra:toolTip>
+                             <rich:message for="periodoFinal#{tipo}"/>
+                         </cobra:toolTip>					
+			</fieldset>
+		</h:panelGroup>
+	</h:panelGrid>
+			
+</h:panelGroup>
+	
+
+</f:view>
+</body>
+
+</html>

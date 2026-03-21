@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<Context>
+	
+              
+    <Resource auth="Container" driverClassName="org.h2.Driver" maxActive="10" maxIdle="3" maxWait="10000" name="jdbc/pjeCalcDS" password="/pjecalc/" testOnBorrow="true" type="javax.sql.DataSource" url="jdbc:h2:.dados/pjecalc" username="pjecalc" validationQuery="select 1"/>
+              
+	<!-- <Resource name="jdbc/pjeCalcDS" auth="Container" type="javax.sql.DataSource"
+              maxActive="100" maxIdle="30" maxWait="10000" username="APP_PJECALC_HOM" password="app_pjecalc_hom"
+              driverClassName="oracle.jdbc.OracleDriver" url="jdbc:oracle:thin:@rac-pa-hom.trt8.net:1521:HOMDB" validationQuery="select 1 from dual" testOnBorrow="true" /> -->
+                       
+</Context>

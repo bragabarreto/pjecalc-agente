@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+	
+	<script>
+		jQuery(document).ready( function() {
+			jQuery("#loginUS\\:usuarioUS").focus();
+		});
+	</script>
+	
+			<h:form>
+
+				<div id="boxcentralUS">
+				
+					<h:panelGroup>
+					  	<h:outputLabel for="usuarioUS" value="Usuário"/><br/>
+					  	<h:inputText id="usuarioUS" value="#{credentials.username}" label="Nome" maxlength="40" style="width:322px;" styleClass="logonInput" />
+					</h:panelGroup>
+
+					<div /><rich:spacer width="1" height="5"/><div />
+
+					<h:panelGroup>
+						<h:outputLabel for="senhaUS" value="Senha"/><br/>
+						<h:inputSecret id="senhaUS" redisplay="true"  value="#{credentials.password}" label="Senha" maxlength="40" style="width:322px;" styleClass="logonInput"/>
+					</h:panelGroup>
+
+					<div id="boxMsgUS">
+						<span id="spanStatusUS">
+							<h:outputLabel value="Autenticando..." styleClass="labelMsgUS"/><br />
+						</span>
+						<span id="spanErroUS">
+							<rich:messages showSummary="false" showDetail="true" globalOnly="true" styleClass="labelMsgErro"/>
+						</span>
+					</div>
+					
+					<script type="text/javascript">
+						jQuery('#spanStatusUS').hide();
+					</script>
+			
+				</div>
+				
+				
+				<div id="botoescentralUS">
+					<h:commandButton action="#{identity.login}" styleClass="bt_logon" onclick="jQuery('#spanErroUS').hide();jQuery('#spanStatusUS').show();return true;"/><br />
+				</div>
+			
+			</h:form>
+
+
+</ui:composition>

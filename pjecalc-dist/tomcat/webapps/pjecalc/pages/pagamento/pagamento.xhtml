@@ -1,0 +1,1666 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="legendaDoFormulario" value="Dados do Pagamento" />
+	<ui:param name="apresentador" value="#{apresentadorPagamento}" />
+	<ui:param name="registro" value="#{apresentadorPagamento.registro}" />
+	<ui:param name="filtro" value="#{apresentadorPagamento.filtro}" />
+
+	<ui:define name="nofiltroCampos">
+		<ui:include src="../calculo/resumo-calculo.xhtml" />
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+	
+			<h:panelGroup id="painelListagem" style="width: 600px;" >
+			
+				<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" 
+								cellpadding="0" cellspacing="5" border="0" width="100%" rows="#{lista.size}" var="pagamento"> 
+		    		<rich:column style="width:20%;">
+				    	<f:facet name="header">
+			    			<h:outputText value="Ações"/>
+			    		</f:facet>
+					    <a4j:region>
+				    		<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+			    			<a4j:commandLink id="alterarPagamento" styleClass="linkAlterar" title="Alterar" actionListener="#{apresentador.alterar}" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+			    			<a4j:commandLink id="excluirPagamento" styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+				    	</a4j:region>
+				    </rich:column>
+		    	
+			    	<rich:column style="width:80%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Data do Pagamento"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{pagamento.dataPagamento}" id="dataPgto" size="35"></h:outputText>
+			    	</rich:column>
+		    	
+		    		<rich:column style="width:80%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Valor Total do Pagamento"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{pagamento.valorPagamento}" id="valorPgto" size="35"></h:outputText>
+			    	</rich:column>	
+			    	
+				</rich:dataTable>
+			
+			</h:panelGroup>	
+	
+	
+	</ui:define>
+	
+	<!--  
+	
+		FORMULÁRIO
+	-->
+	
+	
+	<ui:define name="camposFormulario">
+
+		<h:panelGrid columns="4" cellpadding="3" cellspacing="4" border="0">	
+		
+				<h:panelGroup>
+					<h:outputLabel value="Data do Pagamento *" for="dataPagamento" /><br />
+					<rich:calendar id="dataPagamento" value="#{apresentador.registro.dataPagamento}" label="Data do Pagamento" inputSize="22" popup="true" datePattern="dd/MM/yyyy" 
+										enableManualInput="true" oninputfocus="$(this).dateMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+						<f:facet name="footer">
+				        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+				        </f:facet>
+						<a4j:support event="oninputblur" ajaxSingle="true" limitToList="true" reRender="grupoDebitosDoReclamante,grupoDebitosDoReclamado" actionListener="#{apresentador.mudarDataPagamento}" />
+						<a4j:support event="onchanged" ajaxSingle="true" limitToList="true" reRender="grupoDebitosDoReclamante,grupoDebitosDoReclamado" actionListener="#{apresentador.mudarDataPagamento}" />
+					</rich:calendar>
+					<rich:message showDetail="false" showSummary="false" for="dataPagamento">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="dataPagamentoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="dataPagamento"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+				</h:panelGroup>												
+				
+				<h:panelGroup id="totalPagamento">
+					<h:outputLabel value="Valor Total do Pagamento *" for="valorPagamento" style="margin-left:10px;"/><br />
+					<h:inputText id="valorPagamento" value="#{apresentador.registro.valorPagamento}" label="Valor do Pagamento" size="27" maxlength="30" onfocus="$(this).currencyMask()" 
+									style="margin-left:10px;" disabled="#{apresentador.emModoSomenteVisualizacao}">
+						<f:converter converterId="bigDecimalConverter"/>
+						<a4j:support event="onblur" ajaxSingle="true" limitToList="true" reRender="gridValorCreditoReclamante,gridValorOutrosDebitosReclamado,gridValorDebitosReclamante" actionListener="#{apresentador.mudarValorTotalPagamento}"/>
+					</h:inputText>
+					<rich:message showDetail="false" showSummary="false" for="valorPagamento">
+						<f:facet name="errorMarker">
+					   		<h:outputLink class="linkErro" id="valorPagamentoErro">
+					   		 	<rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									<rich:message showDetail="true" showSummary="false" for="valorPagamento"/>
+								</rich:toolTip>
+					   		</h:outputLink>
+						</f:facet>
+					</rich:message>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Identificação do Pagamento" for="identificacaoC" /><br />
+					<h:inputText id="identificacaoC" label="Identificação do Pagamento" value="#{registro.folhaDoEvento}" 
+					     			 size="68" maxlength="80"/>
+														
+					<rich:message showDetail="false" showSummary="false" for="identificaoBox">
+					   <f:facet name="errorMarker">
+					  	   <h:outputLink class="linkErro" id="identificaoBox">
+							   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+							        <rich:message showDetail="true" showSummary="false" for="identificaoBox"/>
+							   </rich:toolTip>
+					       </h:outputLink>
+					 </f:facet>
+					</rich:message>
+					<h:outputText class="linkHelp" id="identificacaoHelp" style="margin-left:1px">
+					<rich:toolTip for="identificacaoHelp" showEvent="mouseover" styleClass="tooltipHelp">
+					   	Informar os números dos ID's ou das folhas do processo. Exemplo: ID0000001/ID0000002 ou fls.001/003.
+					</rich:toolTip>
+		     	   </h:outputText>
+			    </h:panelGroup>
+			    
+			    <h:panelGroup id="panelPagarPrecatorio">
+					<h:selectBooleanCheckbox id="pagarPrecatorio" value="#{apresentador.registro.pagarPrecatorio}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+						<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="panelPriorizarJuros,panelValorMultasDevidasReclamante,gridValorMultasDevidasReclamante,panelValorMultasDevidasReclamado,gridValorMultasDevidasReclamado,
+						                                                                            panelValorPrevidenciaPrivada,gridValorPrevidenciaPrivada,panelValorPensaoAlimenticia,gridValorPensaoAlimenticia,panelMultasTerceirosReclamante,
+						                                                                            pnlDebitosDoReclamante,pnlJurosDePrevidenciaPrivadaOutrosDebitos,gridValorJurosDePrevidenciaPrivadaOutrosDebitos,pnlValorImpostoDeRendaDoReclamanteOutrosDebitos,
+						                                                                            gridValorImpostoDeRendaDoReclamanteOutrosDebitos,pnlValorInssDezPorcento,gridValorInssDezPorcento,pnlValorInssMeioPorcento,gridValorInssMeioPorcento,
+						                                                                            pnlMultasDevidasATerceirosOutrosDebitos" actionListener="#{apresentador.mudarPagamentoPrecatorio}" />
+					</h:selectBooleanCheckbox>
+					<label for="pagarPrecatorio">Pagamento de Precatório</label>
+				</h:panelGroup>
+
+	     </h:panelGrid>
+	     
+		<rich:tabPanel switchType="client" immediate="true">
+			
+			<rich:tab id="tabCreditosDoReclamante" label="Créditos do Reclamante" styleClass="primeiraAba">
+			
+			<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+			
+				<h:panelGroup id="grupoCreditosDoReclamante">
+				
+					<fieldset><legend>Pagamento de Créditos do Reclamante</legend>
+
+						<h:panelGrid id="gridValorCreditoReclamante" columns="3" cellspacing="4" cellpadding="4" border="0" style="padding-top:8px;padding-bottom:12px">
+							<h:outputLabel value="Valor de Pagamento para Créditos do Reclamante*: " for="valorCreditoReclamante" />
+							<h:panelGroup>
+								<h:inputText id="valorCreditoReclamante" value="#{apresentador.registro.valorParcelaCreditoReclamante}" label="Valor: " size="15" maxlength="30"
+												onfocus="$(this).currencyMask()"  style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeParcelaDeCreditoDeReclamanteParaPagar}">
+									<f:converter converterId="bigDecimalConverter"/>
+									<a4j:support event="onblur" ajaxSingle="true" limitToList="true" reRender="gridValorCreditoReclamante,gridValorOutrosDebitosReclamado,totalPagamento" actionListener="#{apresentador.mudarValorDePagamentoCreditoReclamante}"/>
+								</h:inputText>
+								<rich:message showDetail="false" showSummary="false" for="valorCreditoReclamante">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="valorCreditoReclamanteErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="valorCreditoReclamante"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</h:panelGroup>
+							<h:panelGroup id="panelPriorizarJuros">
+								<h:selectBooleanCheckbox id="priorizarJuros" value="#{apresentador.registro.priorizarPagamentoDeJuros}" disabled="#{apresentador.emModoSomenteVisualizacao || apresentador.registro.pagarPrecatorio}"/>
+								<label for="priorizarJuros">Priorizar Pagamento de Juros</label>						
+							</h:panelGroup>
+						</h:panelGrid>
+
+						<fieldset><legend>Parcelas de Crédito do Reclamante</legend>
+
+							<div style="float: left; ">
+
+								<h:panelGrid columns="2" cellpadding="3" cellspacing="4" border="0">
+
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="selecionarPrincipal" value="#{apresentador.registro.selecionarValorPrincipal}"
+																disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeValorPrincipalParaCreditoDeReclamante}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorPrincipal" actionListener="#{apresentador.mudarSelecaoPrincipal}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarPrincipal">Principal</label>
+									</h:panelGroup>
+
+									<h:panelGrid id="gridValorPrincipal" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarValorPrincipal and !apresentador.registro.apurarValorPrincipal)? '*' : ''}:" for="valorPrincipal" />
+										<h:panelGroup id="panelValorPrincipal">
+											<h:inputText id="valorPrincipal" value="#{apresentador.registro.valorParcelaPrincipal}" label="Valor:" size="15" maxlength="15" 
+															onfocus="$(this).currencyMask()"  style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarValorPrincipal || apresentador.registro.apurarValorPrincipal}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorPrincipal">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorPrincipalErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorPrincipal"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarPrincipal" value="#{apresentador.registro.apurarValorPrincipal}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarValorPrincipal}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorPrincipal" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarPrincipal">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+						
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="selecionarFGTS" value="#{apresentador.registro.selecionarValorFgts}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeFgtsParaCreditoDeReclamante}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorFgts,panelRecolherDebitos,grupoDebitosDoReclamante" actionListener="#{apresentador.mudarSelecaoFgts}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarFGTS">FGTS</label>
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorFgts" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarValorFgts and !apresentador.registro.apurarValorFgts)? '*' : ''}:" for="valorFGTS" />
+										<h:panelGroup>
+											<h:inputText id="valorFGTS" value="#{apresentador.registro.valorParcelaFgts}" label="Valor:" size="15" 
+															maxlength="15" onfocus="$(this).currencyMask()" style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarValorFgts || apresentador.registro.apurarValorFgts}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorFGTS">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorFGTSErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorFGTS"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarFgts" value="#{apresentador.registro.apurarValorFgts}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarValorFgts}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorFgts" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarFgts">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup id="panelValorMultasDevidasReclamante">
+										<h:selectBooleanCheckbox id="selecionarMultasDevidasReclamante" value="#{apresentador.registro.selecionarValorMultasDevidasReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeMultaDevidaPeloReclamadoParaReclamante || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorMultasDevidasReclamante" actionListener="#{apresentador.mudarSelecaoMultasDevidasReclamante}"/>										
+										</h:selectBooleanCheckbox>
+										<label for="selecionarMultasDevidasReclamante">Multas/Indenizações devidas ao Reclamante</label>						
+									</h:panelGroup>		
+									
+									<h:panelGrid id="gridValorMultasDevidasReclamante" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarValorMultasDevidasReclamante and !apresentador.registro.apurarValorMultasDevidasReclamante)? '*' : ''}:" for="valorMultasDevidasReclamante" />
+										<h:panelGroup>
+											<h:inputText id="valorMultasDevidasReclamante" value="#{apresentador.registro.valorParcelaMultasDevidasReclamante}" label="Valor: " size="15" 
+														maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarValorMultasDevidasReclamante || apresentador.registro.apurarValorMultasDevidasReclamante || !apresentador.existeMultaDevidaPeloReclamadoParaReclamante || apresentador.registro.pagarPrecatorio}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorMultasReclamante">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorMultasReclamanteErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorMultasReclamante"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarMultasDevidasReclamante" value="#{apresentador.registro.apurarValorMultasDevidasReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarValorMultasDevidasReclamante || !apresentador.existeMultaDevidaPeloReclamadoParaReclamante || apresentador.registro.pagarPrecatorio}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorMultasDevidasReclamante" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarMultasDevidasReclamante">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+
+									<h:panelGroup style="height:36px" id="panelValorMultasDevidasReclamado">
+										<h:selectBooleanCheckbox id="selecionarMultasDevidasReclamado" value="#{apresentador.registro.selecionarValorMultasDevidasReclamado}" disabled="true" />
+										<label for="selecionarMultasDevidasReclamado">Multas/Indenizações devidas ao Reclamado</label>
+									</h:panelGroup>
+									
+									<h:panelGrid style="height:36px" id="gridValorMultasDevidasReclamado" columns="1" cellspacing="2" cellpadding="4" border="0">
+										<h:panelGroup style="padding-left:159px">
+											<h:selectBooleanCheckbox id="apurarMultasDevidasReclamado" value="#{apresentador.registro.apurarValorMultasDevidasReclamado}" disabled="true" />
+											<label for="apurarMultasDevidasReclamado">Apurar</label>
+										</h:panelGroup>
+									</h:panelGrid>
+
+								</h:panelGrid>
+							</div>
+						</fieldset>
+
+					</fieldset>
+									
+				</h:panelGroup>
+
+				<h:panelGrid columns="1" cellspacing="4" cellpadding="0" border="0" style="padding-top:9px;padding-left:0px">
+					<h:panelGroup id="panelRecolherDebitos">
+						<h:selectBooleanCheckbox id="recolherDebitos" value="#{apresentador.registro.recolherDebitosReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeParcelaDeDebitoDoReclamanteParaRecolher || apresentador.registro.selecionarDepositoDeFgts}">
+							<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="grupoDebitosDoReclamante" actionListener="#{apresentador.limparDebitosReclamante()}" />
+						</h:selectBooleanCheckbox>
+						<label for="recolherDebitos">Recolher Descontos do Reclamante</label>
+					</h:panelGroup>
+				</h:panelGrid>
+
+				<h:panelGroup id="grupoDebitosDoReclamante">
+				
+					<h:panelGroup rendered="#{apresentador.registro.recolherDebitosReclamante}">
+					
+						<fieldset><legend>Recolhimento de Descontos do Reclamante</legend>
+
+							<div style="float: left; ">
+					
+								<h:panelGrid columns="2" cellpadding="3" cellspacing="4" border="0">
+								
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="selecionarCustasJudiciais" value="#{apresentador.registro.selecionarCustasJudiciais}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeCustaDoReclamanteAPagar}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorCustasJudiciais" actionListener="#{apresentador.mudarSelecaoCustasJudiciais}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarCustasJudiciais">Custas Judiciais</label>
+									</h:panelGroup>
+									
+									<h:panelGrid id="gridValorCustasJudiciais" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarCustasJudiciais and !apresentador.registro.apurarCustasJudiciais)? '*' : ''}:" for="valorCustasJudiciais" />
+										<h:panelGroup>
+											<h:inputText id="valorCustasJudiciais" value="#{apresentador.registro.custasJudiciais}" label="Valor: " size="15" maxlength="15" 
+															onfocus="$(this).currencyMask()"  style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarCustasJudiciais || apresentador.registro.apurarCustasJudiciais}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorCustasJudiciais">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorCustasJudiciaisErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorCustasJudiciais"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarCustasJudiciais" value="#{apresentador.registro.apurarCustasJudiciais}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarCustasJudiciais}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorCustasJudiciais" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarCustasJudiciais">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup style="height:36px">
+										<h:selectBooleanCheckbox id="selecionarDepositoDeFGTS" value="#{apresentador.registro.selecionarDepositoDeFgts}" disabled="true" />
+										<label for="selecionarDepositoDeFGTS">Depósito de FGTS</label>
+									</h:panelGroup>
+
+									<h:panelGrid style="height:36px" id="gridValorDepositoDeFGTS" columns="1" cellspacing="2" cellpadding="4" border="0">
+										<h:panelGroup style="padding-left:159px">
+											<h:selectBooleanCheckbox id="apurarDepositoDeFgts" value="#{apresentador.registro.apurarDepositoDeFgts}" disabled="true" />
+											<label for="apurarDepositoDeFgts">Apurar</label>
+										</h:panelGroup>
+									</h:panelGrid>
+
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="selecionarDescontoDaContribuicaoSocial" value="#{apresentador.registro.selecionarDescontoDaContribuicaoSocial}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeDescontoContribuicaoSocialReclamante}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorDescontoDaContribuicaoSocial" actionListener="#{apresentador.mudarSelecaoDescontoDaContribuicaoSocial}"/>		
+										</h:selectBooleanCheckbox>
+										<label for="selecionarDescontoDaContribuicaoSocial">Desconto da Contribuição Social</label>						
+									</h:panelGroup>		
+									
+									<h:panelGrid id="gridValorDescontoDaContribuicaoSocial" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarDescontoDaContribuicaoSocial and !apresentador.registro.apurarDescontoDaContribuicaoSocial)? '*' : ''}:" for="valorDescontoDaContribuicaoSocial" />
+										<h:panelGroup>
+											<h:inputText id="valorDescontoDaContribuicaoSocial" value="#{apresentador.registro.descontoDaContribuicaoSocial}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  
+														style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarDescontoDaContribuicaoSocial || apresentador.registro.apurarDescontoDaContribuicaoSocial}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorDescontoInss">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorDescontoInssErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorDescontoInss"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarDescontoDaContribuicaoSocial" value="#{apresentador.registro.apurarDescontoDaContribuicaoSocial}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarDescontoDaContribuicaoSocial}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorDescontoDaContribuicaoSocial" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarDescontoDaContribuicaoSocial">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									
+									<h:panelGroup id="panelValorPrevidenciaPrivada">
+										<h:selectBooleanCheckbox id="selecionarPrevidenciaPrivada" value="#{apresentador.registro.selecionarPrevidenciaPrivada}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existePrevidenciaPrivada || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorPrevidenciaPrivada" actionListener="#{apresentador.mudarSelecaoPrevidenciaPrivada}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarPrevidenciaPrivada">Previdência Privada</label>						
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorPrevidenciaPrivada" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarPrevidenciaPrivada and !apresentador.registro.apurarPrevidenciaPrivada)? '*' : ''}:" for="valorPrevidenciaPrivada" />
+										<h:panelGroup>
+											<h:inputText id="valorPrevidenciaPrivada" value="#{apresentador.registro.previdenciaPrivada}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;" 
+														disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarPrevidenciaPrivada || apresentador.registro.apurarPrevidenciaPrivada}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorPrevidenciaPrivada">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorPrevidenciaPrivadaErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorPrevidenciaPrivada"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarPrevidenciaPrivada" value="#{apresentador.registro.apurarPrevidenciaPrivada}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarPrevidenciaPrivada}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorPrevidenciaPrivada" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarPrevidenciaPrivada">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup id="panelValorPensaoAlimenticia">
+										<h:selectBooleanCheckbox id="selecionarPensaoAlimenticia" value="#{apresentador.registro.selecionarPensaoAlimenticia}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existePensaoAlimenticia || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorPensaoAlimenticia" actionListener="#{apresentador.mudarSelecaoPensaoAlimenticia}"/>
+										</h:selectBooleanCheckbox>
+										<label for="pensaoAlimenticia">Pensão Alimentícia</label>						
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorPensaoAlimenticia" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarPensaoAlimenticia and !apresentador.registro.apurarPensaoAlimenticia)? '*' : ''}:" for="valorPensaoAlimenticia" />
+										<h:panelGroup>
+											<h:inputText id="valorPensaoAlimenticia" value="#{apresentador.registro.pensaoAlimenticia}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;" 
+														disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarPensaoAlimenticia || apresentador.registro.apurarPensaoAlimenticia}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorPensaoAlimenticia">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorPensaoAlimenticiaErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorPensaoAlimenticia"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarPensaoAlimenticia" value="#{apresentador.registro.apurarPensaoAlimenticia}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarPensaoAlimenticia}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorPensaoAlimenticia" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarPensaoAlimenticia">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="selecionarImpostoDoReclamante" value="#{apresentador.registro.selecionarImpostoDoReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeImpostoParaReclamante}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorImpostoDoReclamante" actionListener="#{apresentador.mudarSelecaoImpostoDoReclamante}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarImpostoDoReclamante">Imposto de Renda do Reclamante - Cobrar do Reclamante</label>						
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorImpostoDoReclamante" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarImpostoDoReclamante and !apresentador.registro.apurarImpostoDoReclamante)? '*' : ''}:" for="valorImpostoDoReclamante" />
+										<h:panelGroup>
+											<h:inputText id="valorImpostoDoReclamante" value="#{apresentador.registro.impostoDoReclamante}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;" 
+														disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarImpostoDoReclamante || apresentador.registro.apurarImpostoDoReclamante}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorImpostoDoReclamante">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorImpostoDoReclamanteErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorImpostoDoReclamante"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarImpostoDoReclamante" value="#{apresentador.registro.apurarImpostoDoReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarImpostoDoReclamante}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorImpostoDoReclamante" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarImpostoDoReclamante">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+								</h:panelGrid>
+								
+								<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+									<h:panelGroup id="panelMultasTerceirosReclamante">
+										
+										<div>
+										
+										<h:panelGrid columns="3" cellspacing="4" border="0">
+										
+										<h:panelGroup>
+										<fieldset>
+		
+												<legend>Multas/Indenizações Devidas a Terceiros</legend>
+										
+												<h:panelGrid columns="1" cellspacing="4" border="0">
+												
+													<h:panelGroup style="padding-left:5px">
+														<h:selectBooleanCheckbox id="multasDevidasATerceiros" value="#{apresentador.registro.pagarMultasDevidasTerceiros}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeMultaDevidaPeloReclamanteParaTerceiros || apresentador.registro.pagarPrecatorio}">
+															<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="grupoMultas, painelListaMultas" actionListener="#{apresentador.mudarSelecaoMultasDevidasTerceiros}"/>
+														</h:selectBooleanCheckbox>
+														<label for="multasDevidasATerceiros">Pagar Multas/Indenizações Devidas a Terceiros</label>						
+													</h:panelGroup>
+
+													<h:panelGroup id="grupoMultas">
+															
+															<h:panelGrid columns="4" cellspacing="4" border="0">
+																<h:panelGroup>
+																	<h:outputLabel value="Multas/Indenizações: " for="tipoMulta"/><br />
+																	<h:selectOneMenu id="tipoMulta" value="#{apresentador.multaSelecionadoReclamante}" label="Multas/Indenizações: " style="width:125px;"
+																						disabled="#{!apresentador.registro.pagarMultasDevidasTerceiros || apresentador.emModoSomenteVisualizacao}">
+									 									<s:selectItems value="#{apresentador.listaDeMultasDevidasPeloReclamanteParaTerceiros}" var="item" label="#{item.descricao}"/>
+									 									<s:convertEntity/>
+																	</h:selectOneMenu>
+																	<cobra:toolTip>
+								        								<rich:message showDetail="true" showSummary="false" for="tipoMulta"/>
+									    							</cobra:toolTip>
+																</h:panelGroup>
+		
+																<h:panelGroup id="panelValorMulta">
+																	<h:outputLabel value="Valor#{(apresentador.registro.pagarMultasDevidasTerceiros and !apresentador.apurarMulta)? '*' : ''}:" for="valorMulta" />
+																	<h:panelGroup>
+																		<h:inputText id="valorMulta" value="#{apresentador.multaValor}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;"
+																					disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.pagarMultasDevidasTerceiros || apresentador.apurarMulta}">
+																			<f:converter converterId="bigDecimalConverter"/>
+																		</h:inputText>
+																		<cobra:toolTip>
+									        								<rich:message showDetail="true" showSummary="false" for="valorMulta"/>
+										    							</cobra:toolTip>
+																	</h:panelGroup>
+																</h:panelGroup>
+																
+																<h:panelGrid columns="2" cellspacing="1" border="0" style="padding-top:13px">
+																	<h:selectBooleanCheckbox id="apurarMulta" value="#{apresentador.apurarMulta}" disabled="#{!apresentador.registro.pagarMultasDevidasTerceiros || apresentador.emModoSomenteVisualizacao}">
+																		<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="panelValorMulta" />
+																	</h:selectBooleanCheckbox>
+																	<label for="apurarMulta">Apurar</label>						
+																</h:panelGrid>
+																
+																<a4j:commandLink id="incluirMulta" actionListener="#{apresentador.adicionarMultaReclamante}" 
+																	 reRender="painelListaMultas" 
+																	styleClass="botaoAddItem" title="Adicionar Base"
+																	onclick="AguardeShow();" oncomplete="AguardeHide();"
+																	disabled="#{!apresentador.registro.pagarMultasDevidasTerceiros || apresentador.emModoSomenteVisualizacao}" />
+																
+															</h:panelGrid>
+													</h:panelGroup>
+
+												</h:panelGrid>
+										<br />
+										
+										<a4j:outputPanel id="painelListaMultas" ajaxRendered="true">
+											
+											<h:panelGroup rendered="#{multasReclamante.rowCount gt 0 and apresentador.registro.pagarMultasDevidasTerceiros}">
+									
+													<rich:dataTable id="listagemMultas" value="#{multasReclamante}" rowClasses="linha-par, linha-impar" 
+																	cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{multasReclamante.rowCount}" var="multaReclamante"> 
+											    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+														    	<f:facet name="header">
+													    			<h:outputText value="Ação"/>
+													    		</f:facet>
+															    <a4j:region>
+														    		<h:commandLink id="excluirMulta"  limitToList="true" 
+														    						 actionListener="#{apresentador.excluirMultasReclamante}" 
+													    							 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+													    							 <a4j:support event="onclick" reRender="painelListaMultas" limitToList="true" ajaxSingle="true"/>
+													    			</h:commandLink>
+														    	</a4j:region>
+													    </rich:column>
+											    	
+												    	<rich:column style="width:35%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Multas/Indenizações"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{multaReclamante.multa.descricao}" id="multas">
+											    			</h:outputText>
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:10%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Apurar"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{multaReclamante.apurarMulta ? 'SIM' : 'NÃO'}" id="apurarMulta" />
+												    	</rich:column>
+												    	
+												    	<rich:column style="width:20%;">
+											    			<f:facet name="header">
+											    				<h:outputText value="Valor"/>
+											    			</f:facet>	
+											    			<h:outputText value="#{multaReclamante.apurarMulta ? '-' : multaReclamante.valorMulta}" id="valorDaMulta" />
+												    	</rich:column>									    						    	
+											    	
+													</rich:dataTable>
+											
+											</h:panelGroup>	
+										
+										</a4j:outputPanel>
+												
+										</fieldset>
+										</h:panelGroup>
+								
+									<h:panelGroup>
+ 
+									<fieldset>
+
+											<legend>Honorários Brutos Devidos pelo Reclamante</legend>
+
+											<h:panelGrid columns="1" cellspacing="4" border="0">
+											
+												<h:panelGroup style="padding-left:5px">
+													<h:selectBooleanCheckbox id="honorariosDevidosPeloReclamante" value="#{apresentador.registro.pagarHonorariosBrutosDevidosReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeHonorarioDevidoPeloReclamante}">
+														<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="grupoHonorario, painelListaHonorario" actionListener="#{apresentador.mudarSelecaoHonorariosBrutosDevidosReclamante}"/>
+													</h:selectBooleanCheckbox>
+													<label for="honorariosDevidosPeloReclamante">Pagar Honorários Brutos Devidos pelo Reclamante</label>						
+												</h:panelGroup>	
+
+													<h:panelGroup id="grupoHonorario">
+															
+														<h:panelGrid columns="4" cellspacing="4" border="0">
+	
+															<h:panelGroup>
+																<h:outputLabel value="Honorários: " for="tipoHonorarios"/><br />
+																<h:selectOneMenu id="tipoHonorarios" value="#{apresentador.honorarioSelecionadoDevidoPeloReclamante}" label="Honorários: " style="width:125px;"
+																					disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamante || apresentador.emModoSomenteVisualizacao}">
+								 									<s:selectItems value="#{apresentador.listaDeHonorariosDevidosPeloReclamante}" var="item" label="#{item.descricao}"/>
+								 									<s:convertEntity/>
+																</h:selectOneMenu>
+																<cobra:toolTip>
+							        								<rich:message showDetail="true" showSummary="false" for="tipoHonorarios"/>
+								    							</cobra:toolTip>
+															</h:panelGroup>										
+															
+															<h:panelGroup id="panelValorHonorario">
+																<h:outputLabel value="Valor#{(apresentador.registro.pagarHonorariosBrutosDevidosReclamante and !apresentador.apurarHonorario)? '*' : ''}:" for="valorHonorario" />
+																<h:panelGroup>
+																	<h:inputText id="valorHonorario" value="#{apresentador.honorarioValor}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;"
+																				disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.pagarHonorariosBrutosDevidosReclamante || apresentador.apurarHonorario}">
+																		<f:converter converterId="bigDecimalConverter"/>
+																	</h:inputText>
+																	<cobra:toolTip>
+								        								<rich:message showDetail="true" showSummary="false" for="valorHonorario"/>
+									    							</cobra:toolTip>
+																</h:panelGroup>
+															</h:panelGroup>
+															
+															<h:panelGrid columns="2" cellspacing="1" border="0" style="padding-top:13px">
+																<h:selectBooleanCheckbox id="apurarHonorario" value="#{apresentador.apurarHonorario}" disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamante || apresentador.emModoSomenteVisualizacao}">
+																	<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="panelValorHonorario" />
+																</h:selectBooleanCheckbox>
+																<label for="apurarHonorario">Apurar</label>						
+															</h:panelGrid>
+															
+															<a4j:commandLink id="incluirHonorario" actionListener="#{apresentador.adicionarHonorarioReclamante}" 
+																 reRender="painelListaHonorario" 
+																styleClass="botaoAddItem" title="Adicionar Base"
+																onclick="AguardeShow();" oncomplete="AguardeHide();"
+																disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamante || apresentador.emModoSomenteVisualizacao}"/>
+															
+														</h:panelGrid>
+												
+													</h:panelGroup>
+
+											</h:panelGrid>
+									<br />
+									
+									<a4j:outputPanel id="painelListaHonorario" ajaxRendered="true">
+										
+										<h:panelGroup rendered="#{honorariosDevidosPeloReclamante.rowCount gt 0 and apresentador.registro.pagarHonorariosBrutosDevidosReclamante}" >
+								
+												<rich:dataTable id="listagemHonorario" value="#{honorariosDevidosPeloReclamante}" rowClasses="linha-par, linha-impar" 
+																cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{honorariosDevidosPeloReclamante.rowCount}" var="honorarioReclamante">
+
+										    		<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+												    	<f:facet name="header">
+											    			<h:outputText value="Ação"/>
+											    		</f:facet>
+													    <a4j:region>
+												    		<h:commandLink id="excluirHonorario"  limitToList="true" 
+												    						 actionListener="#{apresentador.excluirHonorarioReclamante}" 
+											    							 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+											    							 <a4j:support event="onclick" reRender="painelListaHonorario" limitToList="true" ajaxSingle="true"/>
+											    			</h:commandLink>
+												    	</a4j:region>
+												    </rich:column>
+										    	
+											    	<rich:column style="width:35%;">
+										    			<f:facet name="header">
+										    				<h:outputText value="Honorários"/>
+										    			</f:facet>	
+										    			<h:outputText value="#{honorarioReclamante.honorario.descricao}" id="descHonorario">
+										    			</h:outputText>
+											    	</rich:column>
+											    	
+											    	<rich:column style="width:10%;">
+										    			<f:facet name="header">
+										    				<h:outputText value="Apurar"/>
+										    			</f:facet>	
+										    			<h:outputText value="#{honorarioReclamante.apurarHonorario ? 'SIM' : 'NÃO'}" id="apurarHonorario">
+										    			</h:outputText>
+											    	</rich:column>
+											    	
+											    	<rich:column style="width:20%;">
+										    			<f:facet name="header">
+										    				<h:outputText value="Valor"/>
+										    			</f:facet>	
+										    			<h:outputText value="#{honorarioReclamante.apurarHonorario ? '-' : honorarioReclamante.valorHonorario}" id="valorHonorario">
+										    			</h:outputText>
+											    	</rich:column>
+											    	
+												</rich:dataTable>
+										
+										</h:panelGroup>	
+									
+									</a4j:outputPanel>
+											
+									</fieldset>
+								</h:panelGroup>
+																		
+							</h:panelGrid>	
+								
+								</div>
+							
+								
+								</h:panelGroup>
+								
+							</h:panelGrid>
+							
+							</div>
+
+						</fieldset>
+						
+					</h:panelGroup>
+					
+				</h:panelGroup>
+			
+			</h:panelGrid>
+			
+			</rich:tab>
+			
+			<rich:tab id="tabDebitosDoReclamado" label="Outros Débitos do Reclamado" styleClass="segundaAba">
+			
+			<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+			
+				<h:panelGroup id="grupoDebitosDoReclamado">
+				
+					<fieldset><legend>Pagamento de Outros Débitos do Reclamado</legend>
+
+						<h:panelGrid id="gridValorOutrosDebitosReclamado" columns="2" cellspacing="4" cellpadding="4" border="0" style="padding-top:8px;padding-bottom:12px">
+							<h:outputLabel value="Valor de Pagamento para Outros Débitos do Reclamado*: " for="valorOutrosDebitosReclamado" />
+							<h:panelGroup>
+								<h:inputText id="valorOutrosDebitosReclamado" value="#{apresentador.registro.valorParcelaOutrosDebitos}" label="Valor: " size="15" maxlength="30"
+												onfocus="$(this).currencyMask()"  style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeParcelaDeOutrosDebitosDoReclamadoParaPagar}">
+									<f:converter converterId="bigDecimalConverter"/>
+									<a4j:support event="onblur" ajaxSingle="true" limitToList="true" reRender="gridValorCreditoReclamante,gridValorOutrosDebitosReclamado,gridValorDebitosReclamante,totalPagamento" actionListener="#{apresentador.mudarValorDePagamentoOutrosDebitos}"/>
+								</h:inputText>
+								<rich:message showDetail="false" showSummary="false" for="valorOutrosDebitosReclamado">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="valorOutrosDebitosReclamadoErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="valorOutrosDebitosReclamado"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</h:panelGroup>
+						</h:panelGrid>
+
+						<fieldset><legend>Parcelas de Outros Débitos do Reclamado</legend>
+
+							<div style="float: left; ">
+
+								<h:panelGrid columns="2" cellpadding="3" cellspacing="4" border="0">
+				
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="selecionarCustasJudiciaisOutrosDebitos" value="#{apresentador.registro.selecionarCustasJudiciaisOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeCustaJudicialDoReclamado}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorCustasJudiciaisOutrosDebitos" actionListener="#{apresentador.mudarSelecaoCustasJudiciaisOutrosDebitos}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarCustasJudiciaisOutrosDebitos">Custas Judiciais</label>						
+									</h:panelGroup>
+									
+									<h:panelGrid id="gridValorCustasJudiciaisOutrosDebitos" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarCustasJudiciaisOutrosDebitos and !apresentador.registro.apurarCustasJudiciaisOutrosDebitos)? '*' : ''}:" for="valorCustasJudiciaisOutrosDebitos" />
+										<h:panelGroup>
+											<h:inputText id="valorCustasJudiciaisOutrosDebitos" value="#{apresentador.registro.custasJudiciaisOutrosDebitos}" label="Valor: " size="15" 
+															maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;" 
+															disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarCustasJudiciaisOutrosDebitos || apresentador.registro.apurarCustasJudiciaisOutrosDebitos}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorCustasJudiciaisOutrosDebitos">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorCustasJudiciaisOutrosDebitosErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorCustasJudiciaisOutrosDebitos"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarCustasJudiciaisOutrosDebitos" value="#{apresentador.registro.apurarCustasJudiciaisOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarCustasJudiciaisOutrosDebitos}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorCustasJudiciaisOutrosDebitos" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarCustasJudiciaisOutrosDebitos">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+
+									<h:panelGroup id="painelApurarInssSobreSalariosDevidos">
+										<h:selectBooleanCheckbox id="selecionarInssSobreSalariosDevidosOutrosDebitos" value="#{apresentador.registro.selecionarInssSobreSalariosDevidosOutrosDebitos}" 
+											disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeContribuicaoSocialSalariosDevidos}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssSobreSalariosDevidosOutrosDebitos" actionListener="#{apresentador.mudarSelecaoInssSobreSalariosDevidosOutrosDebitos}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarInssSobreSalariosDevidosOutrosDebitos">Contribuição Social sobre Salários Devidos</label>		
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorInssSobreSalariosDevidosOutrosDebitos" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarInssSobreSalariosDevidosOutrosDebitos and !apresentador.registro.apurarInssSobreSalariosDevidosOutrosDebitos)? '*' : ''}:" for="valorInssSobreSalariosDevidosOutrosDebitos" />
+										<h:panelGroup>
+											<h:inputText id="valorInssSobreSalariosDevidosOutrosDebitos" value="#{apresentador.registro.inssSobreSalariosDevidosOutrosDebitos}" label="Valor: " 
+															size="15" maxlength="15" onfocus="$(this).currencyMask()"  style="text-align:right;" 
+															disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssSobreSalariosDevidosOutrosDebitos || apresentador.registro.apurarInssSobreSalariosDevidosOutrosDebitos}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorInssSobreSalariosDevidos">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorInssSobreSalariosDevidosErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorInssSobreSalariosDevidos"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarInssSobreSalariosDevidosOutrosDebitos" value="#{apresentador.registro.apurarInssSobreSalariosDevidosOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssSobreSalariosDevidosOutrosDebitos}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssSobreSalariosDevidosOutrosDebitos" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarInssSobreSalariosDevidosOutrosDebitos">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup>
+										<h:selectBooleanCheckbox id="selecionarInssSobreSalariosPagosOutrosDebitos" value="#{apresentador.registro.selecionarInssSobreSalariosPagosOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeContribuicaoSocialSalariosPagos}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssSobreSalariosPagosOutrosDebitos" actionListener="#{apresentador.mudarSelecaoInssSobreSalariosPagosOutrosDebitos}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarInssSobreSalariosPagosOutrosDebitos">Contribuição Social sobre Salários Pagos</label>						
+									</h:panelGroup>		
+									
+									<h:panelGrid id="gridValorInssSobreSalariosPagosOutrosDebitos" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarInssSobreSalariosPagosOutrosDebitos and !apresentador.registro.apurarInssSobreSalariosPagosOutrosDebitos)? '*' : ''}:" for="valorInssSobreSalariosPagosOutrosDebitos" />
+										<h:panelGroup>
+											<h:inputText id="valorInssSobreSalariosPagosOutrosDebitos" value="#{apresentador.registro.inssSobreSalariosPagosOutrosDebitos}" label="Valor: " size="15" maxlength="15" 
+															onfocus="$(this).currencyMask()"  style="text-align:right;" 
+															disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssSobreSalariosPagosOutrosDebitos || apresentador.registro.apurarInssSobreSalariosPagosOutrosDebitos}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorInssSobreSalariosPagos">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorInssSobreSalariosPagosErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorInssSobreSalariosPagos"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarInssSobreSalariosPagosOutrosDebitos" value="#{apresentador.registro.apurarInssSobreSalariosPagosOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssSobreSalariosPagosOutrosDebitos}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssSobreSalariosPagosOutrosDebitos" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarInssSobreSalariosPagosOutrosDebitos">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup id="pnlJurosDePrevidenciaPrivadaOutrosDebitos">
+										<h:selectBooleanCheckbox id="selecionarJurosDePrevidenciaPrivadaOutrosDebitos" value="#{apresentador.registro.selecionarJurosDePrevidenciaPrivadaOutrosDebitos}" 
+												disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeJurosDePrevidenciaPrivada || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorJurosDePrevidenciaPrivadaOutrosDebitos" actionListener="#{apresentador.mudarSelecaoJurosDePrevidenciaPrivadaOutrosDebitos}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarJurosDePrevidenciaPrivadaOutrosDebitos">Juros de Previdência Privada</label>
+									</h:panelGroup>
+									
+									<h:panelGrid id="gridValorJurosDePrevidenciaPrivadaOutrosDebitos" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarJurosDePrevidenciaPrivadaOutrosDebitos and !apresentador.registro.apurarJurosDePrevidenciaPrivadaOutrosDebitos)? '*' : ''}:" for="valorJurosDePrevidenciaPrivadaOutrosDebitos" />
+										<h:panelGroup>
+											<h:inputText id="valorJurosDePrevidenciaPrivadaOutrosDebitos" value="#{apresentador.registro.jurosDePrevidenciaPrivadaOutrosDebitos}" label="Valor: " size="15" maxlength="15" 
+															onfocus="$(this).currencyMask()"  style="text-align:right;" 
+															disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarJurosDePrevidenciaPrivadaOutrosDebitos || apresentador.registro.apurarJurosDePrevidenciaPrivadaOutrosDebitos}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorJurosDePrevidenciaPrivadaOutrosDebitos">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorJurosDePrevidenciaPrivadaOutrosDebitosErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorJurosDePrevidenciaPrivadaOutrosDebitos"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarJurosDePrevidenciaPrivadaOutrosDebitos" value="#{apresentador.registro.apurarJurosDePrevidenciaPrivadaOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarJurosDePrevidenciaPrivadaOutrosDebitos}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorJurosDePrevidenciaPrivadaOutrosDebitos" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarJurosDePrevidenciaPrivadaOutrosDebitos">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup id="pnlValorImpostoDeRendaDoReclamanteOutrosDebitos">
+										<h:selectBooleanCheckbox id="selecionarImpostoDeRendaDoReclamanteOutrosDebitos" value="#{apresentador.registro.selecionarImpostoDeRendaDoReclamanteOutrosDebitos}" 
+												disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeImpostoParaReclamado || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorImpostoDeRendaDoReclamanteOutrosDebitos" actionListener="#{apresentador.mudarSelecaoImpostoDeRendaDoReclamanteOutrosDebitos}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarImpostoDeRendaDoReclamanteOutrosDebitos">Imposto de Renda do Reclamante - Cobrar do Reclamado</label>						
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorImpostoDeRendaDoReclamanteOutrosDebitos" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarImpostoDeRendaDoReclamanteOutrosDebitos and !apresentador.registro.apurarImpostoDeRendaDoReclamanteOutrosDebitos)? '*' : ''}:" for="valorImpostoDeRendaDoReclamanteOutrosDebitos" />
+										<h:panelGroup>
+											<h:inputText id="valorImpostoDeRendaDoReclamanteOutrosDebitos" value="#{apresentador.registro.impostoDeRendaDoReclamanteOutrosDebitos}" label="Valor: " size="15" maxlength="15" 
+															onfocus="$(this).currencyMask()"  style="text-align:right;" 
+															disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarImpostoDeRendaDoReclamanteOutrosDebitos || apresentador.registro.apurarImpostoDeRendaDoReclamanteOutrosDebitos}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorImpostoDeRendaDoReclamanteOutrosDebitos">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorImpostoReclamanteErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorImpostoDeRendaDoReclamanteOutrosDebitos"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarImpostoDeRendaDoReclamanteOutrosDebitos" value="#{apresentador.registro.apurarImpostoDeRendaDoReclamanteOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarImpostoDeRendaDoReclamanteOutrosDebitos}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorImpostoDeRendaDoReclamanteOutrosDebitos" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarImpostoDeRendaDoReclamanteOutrosDebitos">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup id="pnlValorInssDezPorcento">
+										<h:selectBooleanCheckbox id="selecionarInssDezPorcento" value="#{apresentador.registro.selecionarInssDezPorcento}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeInssDezPorcento || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssDezPorcento" actionListener="#{apresentador.mudarSelecaoInssDezPorcento}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarInssDezPorcento">Contribuição Social 10% - Lei Complementar 110/2001</label>						
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorInssDezPorcento" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarInssDezPorcento and !apresentador.registro.apurarInssDezPorcento)? '*' : ''}:" for="valorInssDezPorcento" />
+										<h:panelGroup>
+											<h:inputText id="valorInssDezPorcento" value="#{apresentador.registro.inssDezPorcento}" label="Valor: " size="15" maxlength="15" 
+															onfocus="$(this).currencyMask()"  style="text-align:right;" 
+															disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssDezPorcento || apresentador.registro.apurarInssDezPorcento}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorInssDezPorcento">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorInssDezPorcentoErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorInssDezPorcento"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarInssDezPorcento" value="#{apresentador.registro.apurarInssDezPorcento}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssDezPorcento}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssDezPorcento" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarInssDezPorcento">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGroup id="pnlValorInssMeioPorcento">
+										<h:selectBooleanCheckbox id="selecionarInssMeioPorcento" value="#{apresentador.registro.selecionarInssMeioPorcento}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeInssMeioPorcento || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssMeioPorcento" actionListener="#{apresentador.mudarSelecaoInssMeioPorcento}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarInssMeioPorcento">Contribuição Social 0,5% - Lei Complementar 110/2001</label>						
+									</h:panelGroup>	
+									
+									<h:panelGrid id="gridValorInssMeioPorcento" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarInssMeioPorcento and !apresentador.registro.apurarInssMeioPorcento)? '*' : ''}:" for="valorInssMeioPorcento" />
+										<h:panelGroup>
+											<h:inputText id="valorInssMeioPorcento" value="#{apresentador.registro.inssMeioPorcento}" label="Valor: " size="15" maxlength="15"
+															 onfocus="$(this).currencyMask()"  style="text-align:right;" 
+															 disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssMeioPorcento || apresentador.registro.apurarInssMeioPorcento}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorInssMeioPorcento">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorInssMeioPorcentoErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorInssMeioPorcento"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarInssMeioPorcento" value="#{apresentador.registro.apurarInssMeioPorcento}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarInssMeioPorcento}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorInssMeioPorcento" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarInssMeioPorcento">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+								</h:panelGrid>
+
+								<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+
+									<h:panelGroup>
+									
+										<div>
+									
+										<h:panelGrid columns="3" cellspacing="4" border="0">
+									
+											<h:panelGroup id="pnlMultasDevidasATerceirosOutrosDebitos">
+
+												<fieldset>
+
+													<legend>Multas/Indenizações Devidas a Terceiros</legend>
+
+													<h:panelGrid columns="1" cellspacing="4" border="0">
+													
+														<h:panelGroup style="padding-left:5px">
+															<h:selectBooleanCheckbox id="multasDevidasATerceirosOutrosDebitos" value="#{apresentador.registro.pagarMultasDevidasTerceirosOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeMultaDevidaPeloReclamadoParaTerceiros || apresentador.registro.pagarPrecatorio}">
+																<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="grupoMultasReclamado, painelListaMultasOutrosDebitos" actionListener="#{apresentador.mudarSelecaoMultasDevidasTerceirosOutrosDebitos}"/>
+															</h:selectBooleanCheckbox>
+															<label for="multasDevidasATerceirosOutrosDebitos">Pagar Multas/Indenizações Devidas a Terceiros</label>
+														</h:panelGroup>
+
+														<h:panelGroup id="grupoMultasReclamado">
+
+																<h:panelGrid columns="4" cellspacing="4" border="0">
+																	<h:panelGroup>
+																		<h:outputLabel value="Multas/Indenizações: " for="tipoMultaOutrosDebitos"/><br />
+																		<a4j:region>
+																			<h:selectOneMenu id="tipoMultaOutrosDebitos" value="#{apresentador.multaSelecionadoReclamanteOutros}" label="Multas/Indenizações: " style="width:125px;"
+																						disabled="#{!apresentador.registro.pagarMultasDevidasTerceirosOutrosDebitos || apresentador.emModoSomenteVisualizacao}">
+											 									<s:selectItems value="#{apresentador.listaDeMultasDevidasPeloReclamadoParaTerceiros}" var="item" label="#{item.descricao}"/>
+											 									<s:convertEntity/>
+																			</h:selectOneMenu>
+																			<cobra:toolTip>
+										        								<rich:message showDetail="true" showSummary="false" for="tipoMultaOutrosDebitos"/>
+											    							</cobra:toolTip>
+																		</a4j:region>
+																	</h:panelGroup>
+
+																	<h:panelGroup id="panelValorMultaOutrosDebitos">
+																		<h:outputLabel value="Valor#{(apresentador.registro.pagarMultasDevidasTerceirosOutrosDebitos and !apresentador.apurarMultaOutros)? '*' : ''}:" for="valorMultaOutrosDebitos" />
+																		<h:panelGroup>
+																			<h:inputText id="valorMultaOutrosDebitos" value="#{apresentador.multaValorOutros}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()" 
+																						style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.pagarMultasDevidasTerceirosOutrosDebitos || apresentador.apurarMultaOutros}">
+																				<f:converter converterId="bigDecimalConverter"/>
+																			</h:inputText>
+																			<cobra:toolTip>
+										        								<rich:message showDetail="true" showSummary="false" for="valorMultaOutrosDebitos"/>
+											    							</cobra:toolTip>
+																		</h:panelGroup>
+																	</h:panelGroup>
+
+																	<h:panelGrid columns="2" cellspacing="1" border="0" style="padding-top:13px">
+																		<h:selectBooleanCheckbox id="apurarMultaOutrosDebitos" value="#{apresentador.apurarMultaOutros}" disabled="#{!apresentador.registro.pagarMultasDevidasTerceirosOutrosDebitos || apresentador.emModoSomenteVisualizacao}">
+																			<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="panelValorMultaOutrosDebitos" />
+																		</h:selectBooleanCheckbox>
+																		<label for="apurarMultaOutrosDebitos">Apurar</label>						
+																	</h:panelGrid>
+																	
+																	<a4j:commandLink id="incluirMultaOutrosDebitos" actionListener="#{apresentador.adicionarMultaReclamanteOutros}" 
+																		 reRender="painelListaMultasOutrosDebitos" 
+																		styleClass="botaoAddItem" title="Adicionar Base"
+																		onclick="AguardeShow();" oncomplete="AguardeHide();"
+																		disabled="#{!apresentador.registro.pagarMultasDevidasTerceirosOutrosDebitos || apresentador.emModoSomenteVisualizacao}" />
+
+																</h:panelGrid>
+														</h:panelGroup>
+													</h:panelGrid>
+
+													<br />
+
+													<a4j:outputPanel id="painelListaMultasOutrosDebitos" ajaxRendered="true">
+										
+														<h:panelGroup rendered="#{multasReclamanteOutros.rowCount gt 0 and apresentador.registro.pagarMultasDevidasTerceirosOutrosDebitos}" >
+
+															<rich:dataTable id="listagemMultasOutrosDebitos" value="#{multasReclamanteOutros}" rowClasses="linha-par, linha-impar" 
+																	cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{multasReclamanteOutros.rowCount}" var="multaOutros"> 
+										    		
+										    					<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+													    			<f:facet name="header">
+												    					<h:outputText value="Ação"/>
+												    				</f:facet>
+														    		<a4j:region>
+													    				<h:commandLink id="excluirMultaOutrosDebitos"  limitToList="true" 
+													    						 actionListener="#{apresentador.excluirMultasReclamanteOutros}" 
+												    							 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+												    						<a4j:support event="onclick" reRender="painelListaMultasOutrosDebitos" limitToList="true" ajaxSingle="true"/>
+												    					</h:commandLink>
+													    			</a4j:region>
+												    			</rich:column>
+										    	
+														    	<rich:column style="width:35%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Multas/Indenizações"/>
+													    			</f:facet>	
+													    			<h:outputText value="#{multaOutros.multa.descricao}" id="descMultaOutros">
+													    			</h:outputText>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:10%;">
+																	<f:facet name="header">
+																		<h:outputText value="Apurar"/>
+																	</f:facet>	
+																	<h:outputText value="#{multaOutros.apurarMulta ? 'SIM' : 'NÃO'}" id="apurarMultaOutros" />
+																</rich:column>
+											    	
+														    	<rich:column style="width:15%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Valor"/>
+													    			</f:facet>	
+													    			<h:outputText value="#{multaOutros.apurarMulta ? '-' : multaOutros.valorMulta}" id="valorMultaOutros">
+													    			</h:outputText>
+														    	</rich:column>
+											    												    									    	
+															</rich:dataTable>
+										
+														</h:panelGroup>	
+									
+													</a4j:outputPanel>
+											
+												</fieldset>
+
+											</h:panelGroup>
+								
+											<h:panelGroup id="pnlHonorariosDevidosPeloReclamadoOutrosDebitos">
+
+												<fieldset>
+												
+													<legend>Honorários Brutos Devidos pelo Reclamado</legend>
+
+													<h:panelGrid columns="1" cellspacing="4" border="0">
+													
+														<h:panelGroup style="padding-left:5px">
+															<h:selectBooleanCheckbox id="honorariosDevidosPeloReclamadoOutrosDebitos" value="#{apresentador.registro.pagarHonorariosBrutosDevidosReclamadoOutrosDebitos}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeHonorarioDevidoPeloReclamado}">
+																<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="grupoHonorarioOutros, painelListaHonorarioOutrosDebitos" actionListener="#{apresentador.mudarSelecaoHonorariosBrutosDevidosReclamadoOutrosDebitos}"/>
+															</h:selectBooleanCheckbox>
+															<label for="honorariosDevidosPeloReclamadoOutrosDebitos">Pagar Honorários Brutos Devidos pelo Reclamado</label>
+														</h:panelGroup>
+												
+														<h:panelGroup id="grupoHonorarioOutros">
+															
+															<h:panelGrid columns="4" cellspacing="4" border="0">
+															
+																<h:panelGroup>
+																	<h:outputLabel value="Honorários: " for="tipoHonorariosOutrosDebitos"/><br />
+																	<a4j:region>
+																		<h:selectOneMenu id="tipoHonorariosOutrosDebitos" value="#{apresentador.honorarioSelecionadoDevidoPeloReclamadoOutros}" label="Honorários: " style="width:125px;"
+																						disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamadoOutrosDebitos || apresentador.emModoSomenteVisualizacao}">
+										 									<s:selectItems value="#{apresentador.listaDeHonorariosDevidosPeloReclamado}" var="item" label="#{item.descricao}"/>
+										 									<s:convertEntity/>
+																		</h:selectOneMenu>
+																		<cobra:toolTip>
+									        								<rich:message showDetail="true" showSummary="false" for="tipoHonorariosOutrosDebitos"/>
+										    							</cobra:toolTip>
+																	</a4j:region>
+																</h:panelGroup>										
+																
+																<h:panelGroup id="panelValorHonorarioOutrosDebitos">
+																	<h:outputLabel value="Valor#{(apresentador.registro.pagarHonorariosBrutosDevidosReclamadoOutrosDebitos and !apresentador.apurarHonorarioOutros)? '*' : ''}:" for="valorHonorarioOutrosDebitos" />
+																	<h:panelGroup>
+																		<h:inputText id="valorHonorarioOutrosDebitos" value="#{apresentador.honorarioValorOutros}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  
+																					style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.pagarHonorariosBrutosDevidosReclamadoOutrosDebitos || apresentador.apurarHonorarioOutros}">
+																			<f:converter converterId="bigDecimalConverter"/>
+																		</h:inputText>
+																		<cobra:toolTip>
+									        								<rich:message showDetail="true" showSummary="false" for="valorHonorarioOutrosDebitos"/>
+										    							</cobra:toolTip>
+																	</h:panelGroup>
+																</h:panelGroup>
+																
+																<h:panelGrid columns="2" cellspacing="1" border="0" style="padding-top:13px">
+																	<h:selectBooleanCheckbox id="apurarHonorarioOutrosDebitos" value="#{apresentador.apurarHonorarioOutros}" disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamadoOutrosDebitos || apresentador.emModoSomenteVisualizacao}">
+																		<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="panelValorHonorarioOutrosDebitos" />
+																	</h:selectBooleanCheckbox>
+																	<label for="apurarHonorarioOutrosDebitos">Apurar</label>						
+																</h:panelGrid>
+
+																<a4j:commandLink id="incluirHonorarioOutrosDebitos" actionListener="#{apresentador.adicionarHonorarioReclamadoOutros}"
+																	 reRender="painelListaHonorarioOutrosDebitos"
+																	styleClass="botaoAddItem" title="Adicionar Base"
+																	onclick="AguardeShow();" oncomplete="AguardeHide();"
+																	disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamadoOutrosDebitos || apresentador.emModoSomenteVisualizacao}" />
+
+															</h:panelGrid>
+
+														</h:panelGroup>
+
+													</h:panelGrid>
+
+													<br />
+
+													<a4j:outputPanel id="painelListaHonorarioOutrosDebitos" ajaxRendered="true">
+											
+														<h:panelGroup rendered="#{honorariosDevidosPeloReclamadoOutros.rowCount gt 0 and apresentador.registro.pagarHonorariosBrutosDevidosReclamadoOutrosDebitos}">
+									
+															<rich:dataTable id="listagemHonorarioOutrosDebitos" value="#{honorariosDevidosPeloReclamadoOutros}" rowClasses="linha-par, linha-impar" 
+																	cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{honorariosDevidosPeloReclamadoOutros.rowCount}" var="honorariosOutros">
+
+											    				<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+															    	<f:facet name="header">
+														    			<h:outputText value="Ação"/>
+														    		</f:facet>
+															    	<a4j:region>
+														    			<h:commandLink id="excluirHonorarioOutrosDebitos"  limitToList="true"
+														    					 actionListener="#{apresentador.excluirHonorarioReclamadoOutros}"
+													    						 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+													    					<a4j:support event="onclick" reRender="painelListaHonorarioOutrosDebitos" limitToList="true" ajaxSingle="true" />
+													    				</h:commandLink>
+														    		</a4j:region>
+													    		</rich:column>
+											    	
+														    	<rich:column style="width:35%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Honorários"/>
+													    			</f:facet>	
+													    			<h:outputText value="#{honorariosOutros.honorario.descricao}" id="descHonorariosOutros">
+													    			</h:outputText>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:10%;">
+																	<f:facet name="header">
+																		<h:outputText value="Apurar"/>
+																	</f:facet>	
+																	<h:outputText value="#{honorariosOutros.apurarHonorario ? 'SIM' : 'NÃO'}" id="apurarHonorario">
+																	</h:outputText>
+																</rich:column>
+														    	
+														    	<rich:column style="width:15%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Valor"/>
+													    			</f:facet>	
+													    			<h:outputText value="#{honorariosOutros.apurarHonorario ? '-' : honorariosOutros.valorHonorario}" id="valorHonorariosOutros">
+													    			</h:outputText>
+														    	</rich:column>
+	
+															</rich:dataTable>
+	
+														</h:panelGroup>	
+	
+													</a4j:outputPanel>
+
+												</fieldset>
+
+											</h:panelGroup>
+
+										</h:panelGrid>
+
+									</div>
+
+								</h:panelGroup>
+
+							</h:panelGrid>
+
+						</div>
+
+					</fieldset>
+						
+				</fieldset>
+					
+			</h:panelGroup>
+						
+		</h:panelGrid>			
+
+		</rich:tab>
+		
+		<rich:tab id="tabDebitosDoReclamante" label="Débitos do Reclamante" styleClass="terceiraAba">
+			<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+				<h:panelGroup id="pnlDebitosDoReclamante">
+					<fieldset>
+						<legend>Pagamento de Débitos do Reclamante</legend>
+						
+						<h:panelGrid id="gridValorDebitosReclamante" columns="2" cellspacing="4" cellpadding="4" border="0" style="padding-top:8px;padding-bottom:12px">
+							<h:outputLabel value="Valor de Pagamento para Débitos do Reclamante: " for="valorDebitosReclamante" />
+							<h:panelGroup>
+								<h:inputText id="valorDebitosReclamante" value="#{apresentador.registro.valorParcelaDebitosCobrarDoReclamante}" label="Valor: " size="15" maxlength="30"
+												onfocus="$(this).currencyMask()"  style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeParcelaDeDebitosCobrarDoReclamanteParaPagar || apresentador.registro.pagarPrecatorio}">
+									<f:converter converterId="bigDecimalConverter"/>
+									<a4j:support event="onblur" ajaxSingle="true" limitToList="true" reRender="gridValorCreditoReclamante,gridValorOutrosDebitosReclamado,gridValorDebitosReclamante,totalPagamento" actionListener="#{apresentador.mudarValorDePagamentoDebitosCobrarDoReclamante}"/>
+								</h:inputText>
+								<rich:message showDetail="false" showSummary="false" for="valorDebitosReclamante">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="valorDebitosReclamanteErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="valorDebitosReclamante"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</h:panelGroup>
+						</h:panelGrid>
+						
+						<fieldset>
+							<legend>Parcelas de Débitos do Reclamante</legend>
+						
+							<div style="float: left; ">
+							
+								<h:panelGrid columns="2" cellpadding="3" cellspacing="4" border="0">
+								
+									<h:panelGroup style="margin-right: 50px;">
+										<h:selectBooleanCheckbox id="selecionarCustasJudiciaisDebitosReclamante" value="#{apresentador.registro.selecionarCustasJudiciaisDebitosCobrarDoReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeCustaACobrarDoReclamante || apresentador.registro.pagarPrecatorio}">
+											<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorCustasJudiciaisDebitosReclamante" actionListener="#{apresentador.mudarSelecaoCustasJudiciaisDebitosCobrarDoReclamante}"/>
+										</h:selectBooleanCheckbox>
+										<label for="selecionarCustasJudiciaisDebitosReclamante">Custas Judiciais</label>
+									</h:panelGroup>
+									
+									<h:panelGrid id="gridValorCustasJudiciaisDebitosReclamante" columns="3" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Valor#{(apresentador.registro.selecionarCustasJudiciaisDebitosCobrarDoReclamante and !apresentador.registro.apurarCustasJudiciaisDebitosCobrarDoReclamante)? '*' : ''}:" for="valorCustasJudiciaisDebitosReclamante" />
+										<h:panelGroup>
+											<h:inputText id="valorCustasJudiciaisDebitosReclamante" value="#{apresentador.registro.custasJudiciaisDebitosCobrarDoReclamante}" label="Valor: " size="15" maxlength="15" 
+															onfocus="$(this).currencyMask()"  style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarCustasJudiciaisDebitosCobrarDoReclamante || apresentador.registro.apurarCustasJudiciaisDebitosCobrarDoReclamante}">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorCustasJudiciaisDebitosReclamante">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorCustasJudiciaisDebitosReclamanteErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorCustasJudiciaisDebitosReclamante"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+										<h:panelGroup>
+											<h:selectBooleanCheckbox id="apurarCustasJudiciaisDebitosReclamante" value="#{apresentador.registro.apurarCustasJudiciaisDebitosCobrarDoReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.selecionarCustasJudiciaisDebitosCobrarDoReclamante}">
+												<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="gridValorCustasJudiciaisDebitosReclamante" />
+											</h:selectBooleanCheckbox>
+											<label for="apurarCustasJudiciaisDebitosReclamante">Apurar</label>						
+										</h:panelGroup>
+									</h:panelGrid>
+									
+								</h:panelGrid>
+								
+								<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+	
+									<h:panelGroup>
+										
+										<div>
+										
+											<h:panelGrid columns="3" cellspacing="4" border="0">
+										
+												<h:panelGroup>
+	
+													<fieldset>
+	
+														<legend>Multas/Indenizações Devidas a Terceiros</legend>
+	
+														<h:panelGrid columns="1" cellspacing="4" border="0">
+														
+															<h:panelGroup style="padding-left:5px">
+																<h:selectBooleanCheckbox id="multasDevidasATerceirosDebitosReclamante" value="#{apresentador.registro.pagarMultasDevidasTerceirosDebitosCobrarDoReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeMultaACobrarDoReclamanteParaTerceiros || apresentador.registro.pagarPrecatorio}">
+																	<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="grupoMultasDebitosReclamante, painelListaMultasDebitosReclamante" actionListener="#{apresentador.mudarSelecaoMultasDevidasTerceirosDebitosCobrarDoReclamante}"/>
+																</h:selectBooleanCheckbox>
+																<label for="multasDevidasATerceirosDebitosReclamante">Pagar Multas/Indenizações Devidas a Terceiros</label>
+															</h:panelGroup>
+	
+															<h:panelGroup id="grupoMultasDebitosReclamante">
+	
+																	<h:panelGrid columns="4" cellspacing="4" border="0">
+																		<h:panelGroup>
+																			<h:outputLabel value="Multas/Indenizações: " for="tipoMultaDebitosReclamante"/><br />
+																			<a4j:region>
+																				<h:selectOneMenu id="tipoMultaDebitosReclamante" value="#{apresentador.multaSelecionadoCobrarDoReclamante}" label="Multas/Indenizações: " style="width:125px;"
+																							disabled="#{!apresentador.registro.pagarMultasDevidasTerceirosDebitosCobrarDoReclamante || apresentador.emModoSomenteVisualizacao}">
+												 									<s:selectItems value="#{apresentador.listaDeMultasACobrarDoReclamanteParaTerceiros}" var="item" label="#{item.descricao}"/>
+												 									<s:convertEntity/>
+																				</h:selectOneMenu>
+																				<cobra:toolTip>
+											        								<rich:message showDetail="true" showSummary="false" for="tipoMultaDebitosReclamante"/>
+												    							</cobra:toolTip>
+																			</a4j:region>
+																		</h:panelGroup>
+	
+																		<h:panelGroup id="panelValorMultaDebitosReclamante">
+																			<h:outputLabel value="Valor#{(apresentador.registro.pagarMultasDevidasTerceirosDebitosCobrarDoReclamante and !apresentador.apurarMultaCobrarDoReclamante)? '*' : ''}:" for="valorMultaDebitosReclamante" />
+																			<h:panelGroup>
+																				<h:inputText id="valorMultaDebitosReclamante" value="#{apresentador.multaValorCobrarDoReclamante}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()" 
+																							style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.pagarMultasDevidasTerceirosDebitosCobrarDoReclamante || apresentador.apurarMultaCobrarDoReclamante}">
+																					<f:converter converterId="bigDecimalConverter"/>
+																				</h:inputText>
+																				<cobra:toolTip>
+											        								<rich:message showDetail="true" showSummary="false" for="valorMultaDebitosReclamante"/>
+												    							</cobra:toolTip>
+																			</h:panelGroup>
+																		</h:panelGroup>
+	
+																		<h:panelGrid columns="2" cellspacing="1" border="0" style="padding-top:13px">
+																			<h:selectBooleanCheckbox id="apurarMultaDebitosReclamante" value="#{apresentador.apurarMultaCobrarDoReclamante}" disabled="#{!apresentador.registro.pagarMultasDevidasTerceirosDebitosCobrarDoReclamante || apresentador.emModoSomenteVisualizacao}">
+																				<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="panelValorMultaDebitosReclamante" />
+																			</h:selectBooleanCheckbox>
+																			<label for="apurarMultaDebitosReclamante">Apurar</label>						
+																		</h:panelGrid>
+																		
+																		<a4j:commandLink id="incluirMultaDebitosReclamante" actionListener="#{apresentador.adicionarMultaACobrarDoReclamante}" 
+																			 reRender="painelListaMultasDebitosReclamante" 
+																			styleClass="botaoAddItem" title="Adicionar Base"
+																			onclick="AguardeShow();" oncomplete="AguardeHide();"
+																			disabled="#{!apresentador.registro.pagarMultasDevidasTerceirosDebitosCobrarDoReclamante || apresentador.emModoSomenteVisualizacao}" />
+	
+																	</h:panelGrid>
+															</h:panelGroup>
+														</h:panelGrid>
+	
+														<br />
+	
+														<a4j:outputPanel id="painelListaMultasDebitosReclamante" ajaxRendered="true">
+											
+															<h:panelGroup rendered="#{multasCobrarDoReclamante.rowCount gt 0 and apresentador.registro.pagarMultasDevidasTerceirosDebitosCobrarDoReclamante}" >
+	
+																<rich:dataTable id="listagemMultasDebitosReclamante" value="#{multasCobrarDoReclamante}" rowClasses="linha-par, linha-impar" 
+																		cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{multasCobrarDoReclamante.rowCount}" var="multaCobrarDoReclamante"> 
+											    		
+											    					<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+														    			<f:facet name="header">
+													    					<h:outputText value="Ação"/>
+													    				</f:facet>
+															    		<a4j:region>
+														    				<h:commandLink id="excluirMultaDebitosReclamante"  limitToList="true" 
+														    						 actionListener="#{apresentador.excluirMultasACobrarDoReclamante}" 
+													    							 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+													    						<a4j:support event="onclick" reRender="painelListaMultasDebitosReclamante" limitToList="true" ajaxSingle="true"/>
+													    					</h:commandLink>
+														    			</a4j:region>
+													    			</rich:column>
+											    	
+															    	<rich:column style="width:35%;">
+														    			<f:facet name="header">
+														    				<h:outputText value="Multas/Indenizações"/>
+														    			</f:facet>	
+														    			<h:outputText value="#{multaCobrarDoReclamante.multa.descricao}" id="descMultaDebitosReclamante">
+														    			</h:outputText>
+															    	</rich:column>
+															    	
+															    	<rich:column style="width:10%;">
+																		<f:facet name="header">
+																			<h:outputText value="Apurar"/>
+																		</f:facet>	
+																		<h:outputText value="#{multaCobrarDoReclamante.apurarMulta ? 'SIM' : 'NÃO'}" id="apurarMultaDebitosReclamante" />
+																	</rich:column>
+												    	
+															    	<rich:column style="width:15%;">
+														    			<f:facet name="header">
+														    				<h:outputText value="Valor"/>
+														    			</f:facet>	
+														    			<h:outputText value="#{multaCobrarDoReclamante.apurarMulta ? '-' : multaOutros.valorMulta}" id="valorMultaDebitosReclamante">
+														    			</h:outputText>
+															    	</rich:column>
+												    												    									    	
+																</rich:dataTable>
+											
+															</h:panelGroup>	
+										
+														</a4j:outputPanel>
+												
+													</fieldset>
+	
+												</h:panelGroup>
+									
+												<h:panelGroup>
+	
+													<fieldset>
+													
+														<legend>Honorários Brutos Devidos pelo Reclamante</legend>
+	
+														<h:panelGrid columns="1" cellspacing="4" border="0">
+														
+															<h:panelGroup style="padding-left:5px">
+																<h:selectBooleanCheckbox id="honorariosDevidosPeloReclamadoDebitosReclamante" value="#{apresentador.registro.pagarHonorariosBrutosDevidosReclamanteDebitosCobrarDoReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.existeHonorarioACobrarDoReclamante || apresentador.registro.pagarPrecatorio}">
+																	<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="grupoHonorarioDebitosReclamante, painelListaHonorarioDebitosReclamante" actionListener="#{apresentador.mudarSelecaoHonorariosBrutosDevidosReclamadoDebitosCobrarDoReclamante}"/>
+																</h:selectBooleanCheckbox>
+																<label for="honorariosDevidosPeloReclamadoDebitosReclamante">Pagar Honorários Brutos Devidos pelo Reclamante</label>
+															</h:panelGroup>
+													
+															<h:panelGroup id="grupoHonorarioDebitosReclamante">
+																
+																<h:panelGrid columns="4" cellspacing="4" border="0">
+																
+																	<h:panelGroup>
+																		<h:outputLabel value="Honorários: " for="tipoHonorariosDebitosReclamante"/><br />
+																		<a4j:region>
+																			<h:selectOneMenu id="tipoHonorariosDebitosReclamante" value="#{apresentador.honorarioSelecionadoACobrarDoReclamante}" label="Honorários: " style="width:125px;"
+																							disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamanteDebitosCobrarDoReclamante || apresentador.emModoSomenteVisualizacao}">
+											 									<s:selectItems value="#{apresentador.listaDeHonorariosACobrarDoReclamante}" var="item" label="#{item.descricao}"/>
+											 									<s:convertEntity/>
+																			</h:selectOneMenu>
+																			<cobra:toolTip>
+										        								<rich:message showDetail="true" showSummary="false" for="tipoHonorariosDebitosReclamante"/>
+											    							</cobra:toolTip>
+																		</a4j:region>
+																	</h:panelGroup>										
+																	
+																	<h:panelGroup id="panelValorHonorarioDebitosReclamante">
+																		<h:outputLabel value="Valor#{(apresentador.registro.pagarHonorariosBrutosDevidosReclamanteDebitosCobrarDoReclamante and !apresentador.apurarHonorarioACobrarDoReclamante)? '*' : ''}:" for="valorHonorarioDebitosReclamante" />
+																		<h:panelGroup>
+																			<h:inputText id="valorHonorarioDebitosReclamante" value="#{apresentador.honorarioValorACobrarDoReclamante}" label="Valor: " size="15" maxlength="15" onfocus="$(this).currencyMask()"  
+																						style="text-align:right;" disabled="#{apresentador.emModoSomenteVisualizacao || !apresentador.registro.pagarHonorariosBrutosDevidosReclamanteDebitosCobrarDoReclamante || apresentador.apurarHonorarioACobrarDoReclamante}">
+																				<f:converter converterId="bigDecimalConverter"/>
+																			</h:inputText>
+																			<cobra:toolTip>
+										        								<rich:message showDetail="true" showSummary="false" for="valorHonorarioDebitosReclamante"/>
+											    							</cobra:toolTip>
+																		</h:panelGroup>
+																	</h:panelGroup>
+																	
+																	<h:panelGrid columns="2" cellspacing="1" border="0" style="padding-top:13px">
+																		<h:selectBooleanCheckbox id="apurarHonorarioDebitosReclamante" value="#{apresentador.apurarHonorarioACobrarDoReclamante}" disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamanteDebitosCobrarDoReclamante || apresentador.emModoSomenteVisualizacao}">
+																			<a4j:support event="onclick" ajaxSingle="true" limitToList="true" reRender="panelValorHonorarioDebitosReclamante" />
+																		</h:selectBooleanCheckbox>
+																		<label for="apurarHonorarioDebitosReclamante">Apurar</label>						
+																	</h:panelGrid>
+	
+																	<a4j:commandLink id="incluirHonorarioDebitosReclamante" actionListener="#{apresentador.adicionarHonorarioACobrarDoReclamante}"
+																		 reRender="painelListaHonorarioDebitosReclamante"
+																		styleClass="botaoAddItem" title="Adicionar Base"
+																		onclick="AguardeShow();" oncomplete="AguardeHide();"
+																		disabled="#{!apresentador.registro.pagarHonorariosBrutosDevidosReclamanteDebitosCobrarDoReclamante || apresentador.emModoSomenteVisualizacao}" />
+	
+																</h:panelGrid>
+	
+															</h:panelGroup>
+	
+														</h:panelGrid>
+	
+														<br />
+	
+														<a4j:outputPanel id="painelListaHonorarioDebitosReclamante" ajaxRendered="true">
+												
+															<h:panelGroup rendered="#{honorariosACobrarDoReclamante.rowCount gt 0 and apresentador.registro.pagarHonorariosBrutosDevidosReclamanteDebitosCobrarDoReclamante}">
+										
+																<rich:dataTable id="listagemHonorarioDebitosReclamante" value="#{honorariosACobrarDoReclamante}" rowClasses="linha-par, linha-impar" 
+																		cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{honorariosACobrarDoReclamante.rowCount}" var="honorariosACobrar">
+	
+												    				<rich:column style="width:10%;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+																    	<f:facet name="header">
+															    			<h:outputText value="Ação"/>
+															    		</f:facet>
+																    	<a4j:region>
+															    			<h:commandLink id="excluirHonorarioDebitosReclamante"  limitToList="true"
+															    					 actionListener="#{apresentador.excluirHonorarioACobrarDoReclamante}"
+														    						 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+														    					<a4j:support event="onclick" reRender="painelListaHonorarioDebitosReclamante" limitToList="true" ajaxSingle="true" />
+														    				</h:commandLink>
+															    		</a4j:region>
+														    		</rich:column>
+												    	
+															    	<rich:column style="width:35%;">
+														    			<f:facet name="header">
+														    				<h:outputText value="Honorários"/>
+														    			</f:facet>	
+														    			<h:outputText value="#{honorariosACobrar.honorario.descricao}" id="descHonorariosDebitosReclamante">
+														    			</h:outputText>
+															    	</rich:column>
+															    	
+															    	<rich:column style="width:10%;">
+																		<f:facet name="header">
+																			<h:outputText value="Apurar"/>
+																		</f:facet>	
+																		<h:outputText value="#{honorariosACobrar.apurarHonorario ? 'SIM' : 'NÃO'}" id="apurarHonorarioDebitosReclamante">
+																		</h:outputText>
+																	</rich:column>
+															    	
+															    	<rich:column style="width:15%;">
+														    			<f:facet name="header">
+														    				<h:outputText value="Valor"/>
+														    			</f:facet>	
+														    			<h:outputText value="#{honorariosACobrar.apurarHonorario ? '-' : honorariosOutros.valorHonorario}" id="valorHonorariosDebitosReclamante">
+														    			</h:outputText>
+															    	</rich:column>
+		
+																</rich:dataTable>
+		
+															</h:panelGroup>	
+		
+														</a4j:outputPanel>
+	
+													</fieldset>
+	
+												</h:panelGroup>
+	
+											</h:panelGrid>
+	
+										</div>
+	
+									</h:panelGroup>
+	
+								</h:panelGrid>
+								
+							</div>
+						</fieldset>		
+					</fieldset>
+				</h:panelGroup>	
+			</h:panelGrid>
+		</rich:tab>
+
+		</rich:tabPanel>
+		
+	</ui:define>	
+	
+	<ui:define name="script">
+		<script type="text/javascript">
+			function ativarAbaComErros(){
+				if (jQuery("td.primeiraAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabCreditosDoReclamante_lbl").click();
+					return false;
+				}
+				if (jQuery("td.segundaAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabDebitosDoReclamante_lbl").click();
+					return false;
+				}
+				if (jQuery("td.terceiraAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabDebitosDoReclamadoo_lbl").click();
+					return false;
+				}
+			}
+		</script>
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+	
+		<h:panelGroup id="painelBotoes">
+		
+			<a4j:commandButton id="incluir" value="Novo"  actionListener="#{apresentador.novo}"  immediate="true" styleClass="botao" rendered="#{apresentador.emModoListagem}"/>
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao" rendered="#{apresentador.emModoFormulario  and apresentador.operacao != 'VISUALIZACAO' and operacao!='EXCLUSAO' }" onclick="allToUpperCase()"/>
+			<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.remover}" imeddiate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />
+			<a4j:commandButton id="cancelar" value="Cancelar" actionListener="#{apresentador.cancelar}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoFormulario and apresentador.operacao != 'VISUALIZACAO'}"/>
+			<a4j:commandButton id="voltar" value="Voltar" actionListener="#{apresentador.voltar}" styleClass="botao"  immediate="true" rendered="#{apresentador.emModoFormulario  and apresentador.operacao == 'VISUALIZACAO'}"/>
+	
+		<h:panelGroup id="scriptAviso">
+			<script   type="text/javascript">
+				function checarValor(dataMenor, tipo) {
+					if (!(dataMenor &amp;&amp; tipo)) {
+						return true;
+					}else{
+						return confirma('#{mensagens.MSG0068}',$('formulario:salvar'));
+					}
+				}
+		    </script>
+		</h:panelGroup>
+		
+		</h:panelGroup>
+	    
+	</ui:define>
+	
+</ui:composition>
+
+</html>

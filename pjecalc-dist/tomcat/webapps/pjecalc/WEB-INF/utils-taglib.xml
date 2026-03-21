@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<!DOCTYPE facelet-taglib PUBLIC "-//Sun Microsystems, Inc.//DTD Facelet Taglib 1.0//EN" "http://java.sun.com/dtd/facelet-taglib_1_0.dtd">
+
+<facelet-taglib>
+    <namespace>http://www.cobra.com.br/jsf/utils</namespace>
+    <tag>
+        <tag-name>toolTip</tag-name>
+        <component>
+            <component-type>cobraToolTip</component-type>
+            <renderer-type>cobraToolTip.renderer</renderer-type>
+        </component>
+    </tag>
+    <tag>
+        <tag-name>List</tag-name>
+        <component>
+            <component-type>cobraList</component-type>
+            <renderer-type>cobraList.renderer</renderer-type>
+        </component>
+    </tag>
+     <tag>
+         <tag-name>autoComplete</tag-name>
+         <source>../pages/comum/autocomplete.xhtml</source>
+    </tag>
+</facelet-taglib>

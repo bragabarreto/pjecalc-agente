@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" 
+      xmlns:ui="http://java.sun.com/jsf/facelets"
+      xmlns:h="http://java.sun.com/jsf/html"
+      xmlns:f="http://java.sun.com/jsf/core"
+      xmlns:a4j="http://richfaces.org/a4j"
+      xmlns:rich="http://richfaces.org/rich"
+      xmlns:s="http://jboss.com/products/seam/taglib">
+
+<f:view>
+	<f:loadBundle basename="messages" var="mensagens" />
+	<head>
+	 
+	 <meta http-equiv="Content-Type" 	content="text/html; charset=iso-8859-1" />
+	 <meta http-equiv="cache-control"   content="no-cache" />
+	 <meta http-equiv="pragma" 			content="no-cache" />
+	 <meta http-equiv="expires" 		content = "-1" />
+	 
+	  	<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/principal.css?#{mensagens.versao}" />
+	  	<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/conteudo.css?#{mensagens.versao}" />
+	
+		<script src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.maskedinput.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"></script>
+		<script src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.alphanumeric.pack.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"></script>
+		<script	src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.alphanumeric.custom.js?#{mensagens.versao}"	type="text/javascript" charset="iso-8859-1"/>
+	    <script src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.maskfinancial-1.3.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"></script>
+		<script src="#{facesContext.externalContext.requestContextPath}/js/geral.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"></script>
+	
+		<script type="text/javascript">
+	    /* <![CDATA[ */              
+	        jQuery.noConflict();
+	    /* ]]> */
+	    </script> 
+	    <script type="text/javascript">
+	    /* <![CDATA[ */
+	    	jQuery(document).ready(function() {
+	        	setReadonly();
+	        	ajustaTabelas();
+	        	focusCampo();
+	        });
+	    /* ]]> */
+	    </script>
+	    
+	</head>
+
+	<body>
+	
+		<rich:modalPanel id="modal#{modalID}" onshow="#{onshow}" width="#{empty widthModal ? 500 : widthModal}" height="#{empty heightModal ? 400 : heightModal}" zindex="2000" resizeable="false" autosized="false" >
+			<f:facet name="header">
+				<h:panelGroup>
+	                <span style="color: #ffffff; font-size:14px;">#{tituloModal}</span>
+	        	</h:panelGroup>
+			</f:facet>
+			
+			<f:facet name="controls">
+				<h:graphicImage url="/images/close_modal.png" style="cursor: pointer;" onclick="Richfaces.hideModalPanel('modal#{modalID}')" alt="Fechar" />
+			</f:facet>
+			
+			<div class="modalVisualizar" style="height:auto; height: 100%; min-height: 100%; overflow:auto; padding: 6px;">
+				
+				<a4j:outputPanel id="panMsg#{modalID}" ajaxRendered="true">
+					<a4j:include id="painelMensagensModal#{modalID}" viewId="/pages/comum/mensagem.xhtml" />
+				</a4j:outputPanel>
+			
+				<div style="height:320px;overflow:auto;width:100%;">
+					<ui:insert name="camposFormularioModal">
+							<h:form id="formularioModal#{modalID}">
+								<ui:insert name="camposComFormInterno"/>
+								<ui:insert name="listagemFormModal"/>
+								<ui:insert name="botoesFormModal"/>
+							</h:form>
+					</ui:insert>
+					
+					<ui:insert name="listagemModal"/>
+				</div>
+				
+				<ui:insert name="botoesModal"/>
+			
+			</div>
+		</rich:modalPanel>
+		
+	</body>
+	
+</f:view>
+</html>

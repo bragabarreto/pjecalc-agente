@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Pensão Alimentícia" />
+	<ui:param name="apresentador" value="#{apresentadorPensaoAlimenticia}" />
+	<ui:param name="pensaoAlimenticia" value="#{pensaoAlimenticia}" />
+	
+	<ui:define name="nofiltroCampos">
+			<ui:include src="resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+			</ui:include>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+			<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+				<h:panelGroup>
+					<a4j:region>
+						<h:selectBooleanCheckbox id="apurarPensaoAlimenticia" value="#{pensaoAlimenticia.apurarPensaoAlimenticia}" >
+							<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelAliquota,painelIncidencia"/>
+						</h:selectBooleanCheckbox>
+						<label for="apurarPensaoAlimenticia">Apurar Pensão Alimentícia</label>
+					</a4j:region>						
+			</h:panelGroup>	
+			
+			</h:panelGrid>
+			
+			<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+				<h:panelGroup id="painelAliquota">
+					<h:outputLabel value="Alíquota (%) #{pensaoAlimenticia.apurarPensaoAlimenticia ? '*' : ''}" for="aliquota" /><br />
+					<h:inputText id="aliquota" label="Alíquota (%)" disabled="#{!pensaoAlimenticia.apurarPensaoAlimenticia}"  
+								 value="#{pensaoAlimenticia.aliquota}"  style="width:165px;" onfocus="$(this).percentMask()">
+						<f:converter converterId="bigDecimalConverter"/>
+					</h:inputText>
+					<cobra:toolTip>
+	                      	<rich:message for="aliquota"/>
+	                  </cobra:toolTip>
+				</h:panelGroup>
+				
+				<h:panelGroup id="painelIncidencia" style="margin-top:15px; width:150px;" layout="block">
+						<h:selectBooleanCheckbox id="incidirSobreJuros" value="#{pensaoAlimenticia.incidirSobreJuros}" disabled="#{!pensaoAlimenticia.apurarPensaoAlimenticia}">
+						</h:selectBooleanCheckbox>
+						<label for="incidirSobreJuros">Incidir sobre Juros</label>
+				</h:panelGroup>	
+			</h:panelGrid>
+			
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+		<a4j:outputPanel id="painelBotoes" ajaxRendered="true">
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao"/>
+		</a4j:outputPanel>
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela" />
+	
+</ui:composition>
+
+</html>

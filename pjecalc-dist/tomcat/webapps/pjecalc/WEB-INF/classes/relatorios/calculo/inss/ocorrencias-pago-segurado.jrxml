@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="ocorrencias-pago-segurado" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.7715610000000044"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" isDefault="true" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cellsemborda" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="0" rightPadding="0">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitle" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="2" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitlevalue" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="130" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="inss" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["/opt/jboss-eap-5.1/jboss-as/server/default/data/relatorios/calculo/"]]></defaultValueExpression>
+	</parameter>
+	<field name="inssSalarioPago" class="java.math.BigDecimal"/>
+	<field name="inssTeto" class="java.math.BigDecimal"/>
+	<field name="devido" class="java.math.BigDecimal"/>
+	<field name="inssRecolhido" class="java.math.BigDecimal"/>
+	<field name="indiceCorrecao" class="java.math.BigDecimal"/>
+	<field name="salarioPago" class="java.math.BigDecimal"/>
+	<field name="valorCorrigido" class="java.math.BigDecimal"/>
+	<field name="competenciaOcorrencia" class="java.util.Date"/>
+	<field name="aliquota" class="java.math.BigDecimal"/>
+	<field name="juros" class="java.math.BigDecimal"/>
+	<field name="total" class="java.math.BigDecimal"/>
+	<field name="multa" class="java.math.BigDecimal"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="43" splitType="Stretch">
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="14" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[ Nome: CONTRIBUIÇÃO SOCIAL SEGURADO]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="subtitlevalue" positionType="Float" mode="Opaque" x="0" y="28" width="802" height="15"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{inss}.formulaPago]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="subtitle" positionType="Float" x="0" y="28" width="140" height="15"/>
+				<textElement>
+					<font isBold="true"/>
+				</textElement>
+				<text><![CDATA[Base(s) para Salário Pago: ]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="0" y="0" width="802" height="14"/>
+				<textElement textAlignment="Center">
+					<font size="11" isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Contribuição Social sobre Salários Pagos - Período "+$P{inss}.periodoSalariosPagos.formatInicial("dd/MM/yyyy")+" a "+$P{inss}.periodoSalariosPagos.formatFinal("dd/MM/yyyy")]]></textFieldExpression>
+			</textField>
+		</band>
+	</title>
+	<columnHeader>
+		<band height="28" splitType="Stretch">
+			<frame>
+				<reportElement x="0" y="0" width="802" height="28"/>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="198" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Teto Segurado (C)]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="726" y="0" width="76" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Total]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="132" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Alíquota (B) ]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Ocorrência]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="330" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Contribuição Social Recolhida (E)]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="594" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Juros]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="66" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Salário Pago (A)]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="462" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Índice correção]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="528" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Valor corrigido]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="264" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Cont. Social Sal. Pago (D)]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="396" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Devido Segurado (F)]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="header" positionType="Float" mode="Opaque" x="660" y="0" width="66" height="28"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle"/>
+					<text><![CDATA[Multa]]></text>
+				</staticText>
+			</frame>
+		</band>
+	</columnHeader>
+	<detail>
+		<band height="14" splitType="Stretch">
+			<textField pattern="MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$F{competenciaOcorrencia}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" x="132" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{aliquota}]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="198" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($F{inssTeto})]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;-#,###,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="330" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{inssRecolhido}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="396" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{devido}]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="66" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{salarioPago}]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.000000000" isBlankWhenNull="true">
+				<reportElement style="cell" x="462" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{indiceCorrecao}]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="528" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($F{valorCorrigido})]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="264" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$F{inssSalarioPago}]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="594" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($F{juros})]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="726" y="0" width="76" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($F{total})]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="660" y="0" width="66" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($F{multa})]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<summary>
+		<band height="14" splitType="Stretch">
+			<staticText>
+				<reportElement style="cell" mode="Opaque" x="0" y="0" width="504" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font size="9" isBold="true"/>
+				</textElement>
+				<text><![CDATA[Observação: ]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="cellsemborda" x="66" y="0" width="736" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="9" isBold="true"/>
+				</textElement>
+				<text><![CDATA[D = A x B limitado a C                    F = D - E]]></text>
+			</staticText>
+			<frame>
+				<reportElement x="0" y="0" width="802" height="14"/>
+				<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+					<reportElement style="cell" mode="Opaque" x="528" y="0" width="66" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{inss}.valorTotalOcorrenciasPagoSegurado]]></textFieldExpression>
+				</textField>
+				<staticText>
+					<reportElement style="header" mode="Opaque" x="462" y="0" width="66" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9"/>
+					</textElement>
+					<text><![CDATA[Total]]></text>
+				</staticText>
+				<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+					<reportElement style="cell" mode="Opaque" x="726" y="0" width="76" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{inss}.totalGeralOcorrenciasPagoSegurado]]></textFieldExpression>
+				</textField>
+				<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+					<reportElement style="cell" mode="Opaque" x="594" y="0" width="66" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{inss}.totalDeJurosOcorrenciasPagoSegurado]]></textFieldExpression>
+				</textField>
+				<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+					<reportElement style="cell" mode="Opaque" x="660" y="0" width="66" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{inss}.totalDeMultaOcorrenciasPagoSegurado]]></textFieldExpression>
+				</textField>
+			</frame>
+		</band>
+	</summary>
+</jasperReport>

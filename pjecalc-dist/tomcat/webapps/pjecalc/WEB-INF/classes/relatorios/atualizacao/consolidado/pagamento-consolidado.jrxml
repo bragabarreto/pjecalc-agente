@@ -1,0 +1,569 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="pagamento-consolidado" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+	<property name="ireport.zoom" value="1.2100000000000004"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="83"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<parameter name="logo" class="java.io.InputStream" isForPrompting="false"/>
+	<parameter name="pagamento-consolidado" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_pagamento_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/atualizacao-resumo.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_pagamento_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-debito-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_justificativa_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_pagamento_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_pagamento_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_pagamento_4" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_pagamento_5" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_precatorio_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_precatorio_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_precatorio_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_contribuicao_social_pagamento_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_esocial_pagamento_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_pagamento_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_pagamento_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_pagamento_4" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_custas_inclusao_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_custas_inclusao_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_custas_inclusao_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_custas_inclusao_4" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_custas_inclusao_5" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_custas_inclusao_6" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_contribuicao_social_pagamento_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_contribuicao_social_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_esocial_pagamento_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_esocial_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_honorarios_pagamento_1" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_honorarios_pagamento_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_imposto_de_renda_honorarios_pagamento_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_pagamento_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-debito-cobrar-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_precatorio_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_precatorio_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_precatorio_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<queryString>
+		<![CDATA[]]>
+	</queryString>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="114" splitType="Stretch">
+			<printWhenExpression><![CDATA[$V{PAGE_NUMBER} == 1]]></printWhenExpression>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="628" y="6" width="175" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.numeroDoProcesso]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" x="573" y="23" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Cálculo:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="601" y="23" width="97" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.numeroDoCalculo]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" x="573" y="6" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Processo:]]></text>
+			</staticText>
+			<image>
+				<reportElement x="5" y="6" width="158" height="34"/>
+				<imageExpression class="java.io.InputStream"><![CDATA[$P{logo}]]></imageExpression>
+			</image>
+			<staticText>
+				<reportElement style="default" x="0" y="59" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamante:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="115" y="87" width="155" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[($P{pagamento-consolidado}.calculoExterno ? $P{pagamento-consolidado}.dataDeUltimaAtualizacao : ($P{pagamento-consolidado}.periodoDeCalculo.formatInicial("dd/MM/yyyy") + " a " + $P{pagamento-consolidado}.periodoDeCalculo.formatFinal("dd/MM/yyyy")))]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="60" y="73" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.reclamado]]></textFieldExpression>
+			</textField>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="626" y="87" width="150" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{pagamento-consolidado}.dataDaLiquidacao]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="60" y="59" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.reclamante]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="537" y="87" width="90" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Liquidação:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default" x="0" y="73" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamado:]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="367" y="87" width="149" height="13">
+					<printWhenExpression><![CDATA[!$P{pagamento-consolidado}.calculoExterno]]></printWhenExpression>
+				</reportElement>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{pagamento-consolidado}.dataDeAjuizamento]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="270" y="87" width="97" height="13">
+					<printWhenExpression><![CDATA[!$P{pagamento-consolidado}.calculoExterno]]></printWhenExpression>
+				</reportElement>
+				<textElement/>
+				<text><![CDATA[Data Ajuizamento:]]></text>
+			</staticText>
+			<textField>
+				<reportElement style="default" x="0" y="87" width="115" height="13"/>
+				<textElement markup="none"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[($P{pagamento-consolidado}.calculoExterno ? "Data Últ. Atualização: " : "Período do Cálculo:")]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="titulo" x="0" y="41" width="802" height="16"/>
+				<textElement textAlignment="Center">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[PLANILHA DE ATUALIZAÇÃO DE CÁLCULO]]></text>
+			</staticText>
+			<line>
+				<reportElement x="0" y="107" width="802" height="1"/>
+			</line>
+		</band>
+	</title>
+	<detail>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarResumo]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="resumoPagamento">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.resumoPagamento]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_pagamento_2">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_pagamento_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_pagamento_3">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_pagamento_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_pagamento_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarResumoPrecatorio]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="resumoPrecatorio">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.resumoPrecatorio]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_precatorio_2">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_precatorio_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_precatorio_3">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_precatorio_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_precatorio_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarJustificativas]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.justificativa.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_justificativa_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="7">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarResumo && $P{pagamento-consolidado}.mostrarAlgoAlemDoResumoEJustificativa]]></printWhenExpression>
+			<break>
+				<reportElement x="0" y="3" width="100" height="1"/>
+			</break>
+		</band>
+		<band height="114">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarResumo && $P{pagamento-consolidado}.mostrarAlgoAlemDoResumoEJustificativa && ($V{PAGE_NUMBER} > 1)]]></printWhenExpression>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="627" y="91" width="150" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{pagamento-consolidado}.dataDaLiquidacao]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="629" y="10" width="175" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.numeroDoProcesso]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="1" y="63" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamante:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default" x="538" y="91" width="90" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Liquidação:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" x="574" y="27" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Cálculo:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="600" y="27" width="97" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.numeroDoCalculo]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="61" y="63" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.reclamante]]></textFieldExpression>
+			</textField>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="368" y="91" width="149" height="13">
+					<printWhenExpression><![CDATA[!$P{pagamento-consolidado}.calculoExterno]]></printWhenExpression>
+				</reportElement>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{pagamento-consolidado}.dataDeAjuizamento]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="115" y="91" width="156" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[($P{pagamento-consolidado}.calculoExterno ? $P{pagamento-consolidado}.dataDeUltimaAtualizacao : ($P{pagamento-consolidado}.periodoDeCalculo.formatInicial("dd/MM/yyyy") + " a " + $P{pagamento-consolidado}.periodoDeCalculo.formatFinal("dd/MM/yyyy")))]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement style="default" x="1" y="91" width="115" height="13"/>
+				<textElement markup="none"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[($P{pagamento-consolidado}.calculoExterno ? "Data Últ. Atualização: " : "Período do Cálculo:")]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="titulo" x="1" y="47" width="802" height="16"/>
+				<textElement textAlignment="Center">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[PLANILHA DE ATUALIZAÇÃO DE CÁLCULO]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="61" y="77" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.reclamado]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" x="574" y="10" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Processo:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default" x="271" y="91" width="97" height="13">
+					<printWhenExpression><![CDATA[!$P{pagamento-consolidado}.calculoExterno]]></printWhenExpression>
+				</reportElement>
+				<textElement/>
+				<text><![CDATA[Data Ajuizamento:]]></text>
+			</staticText>
+			<line>
+				<reportElement x="1" y="111" width="802" height="1"/>
+			</line>
+			<staticText>
+				<reportElement style="default" x="1" y="77" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamado:]]></text>
+			</staticText>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarDemonstrativo]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="demonstrativo">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.demonstrativo]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_pagamento_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_pagamento_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_pagamento_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_pagamento_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_pagamento_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarDemonstrativoPrecatorio]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="demonstrativoPrecatorio">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.demonstrativoPrecatorio]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_precatorio_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_precatorio_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_precatorio_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_precatorio_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_precatorio_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarDemonstrativoINSS]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_contribuicao_social_pagamento_3">
+					<subreportParameterExpression><![CDATA[$P{jr_contribuicao_social_pagamento_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_contribuicao_social_pagamento_2">
+					<subreportParameterExpression><![CDATA[$P{jr_contribuicao_social_pagamento_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="demonstrativoINSS">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.demonstrativoINSS]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_contribuicao_social_pagamento_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarDemonstrativoEsocial]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_esocial_pagamento_3">
+					<subreportParameterExpression><![CDATA[$P{jr_esocial_pagamento_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_esocial_pagamento_2">
+					<subreportParameterExpression><![CDATA[$P{jr_esocial_pagamento_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="demonstrativoEsocial">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.demonstrativoEsocial]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_esocial_pagamento_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarIrpf]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_imposto_de_renda_pagamento_2">
+					<subreportParameterExpression><![CDATA[$P{jr_imposto_de_renda_pagamento_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="irpf">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.irpf]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_imposto_de_renda_pagamento_3">
+					<subreportParameterExpression><![CDATA[$P{jr_imposto_de_renda_pagamento_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_imposto_de_renda_pagamento_4">
+					<subreportParameterExpression><![CDATA[$P{jr_imposto_de_renda_pagamento_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_imposto_de_renda_pagamento_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="50">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarIrpfHonorarios]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_imposto_de_renda_honorarios_pagamento_2">
+					<subreportParameterExpression><![CDATA[$P{jr_imposto_de_renda_honorarios_pagamento_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.irpfHonorarios.getIrpfHonorariosPorEventos()]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_imposto_de_renda_honorarios_pagamento_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="63">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarIrpfHonorarios && $P{pagamento-consolidado}.irpfHonorarios.getIrpfHonorariosDoSaldo().getRecordCount() > 0]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="733" y="36" width="69" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor (G)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="469" y="36" width="124" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Faixa (D)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="329" y="36" width="70" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros (B)]]></text>
+			</staticText>
+			<subreport>
+				<reportElement x="-20" y="50" width="843" height="13"/>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.irpfHonorarios.getIrpfHonorariosDoSaldo()]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_imposto_de_renda_honorarios_pagamento_3}]]></subreportExpression>
+			</subreport>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="259" y="36" width="70" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Honorários (A)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="2" y="20" width="397" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<text><![CDATA[ Nome: IMPOSTO DE RENDA DE HONORÁRIOS SOBRE SALDO DEVEDOR]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="593" y="20" width="208" height="14" backcolor="#FFFFFF"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle"/>
+				<text><![CDATA[C = A + B		        G = [(C x E) – F]]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="593" y="36" width="70" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Alíquota (E)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="663" y="36" width="70" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Dedução (F)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="36" width="259" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Credor]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="399" y="36" width="70" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base (C)]]></text>
+			</staticText>
+			<textField>
+				<reportElement x="0" y="0" width="802" height="16"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font isBold="true"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Imposto de Renda de Honorários sobre o Saldo em: "+new SimpleDateFormat("dd/MM/yyyy").format($P{pagamento-consolidado}.irpfHonorarios.getDataLiquidacaoAtualizacao())]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="84" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{pagamento-consolidado}.mostrarCustas]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="1" y="17" width="800" height="17"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[Demonstrativo de Custas Judiciais]]></text>
+			</staticText>
+			<subreport>
+				<reportElement x="-20" y="34" width="842" height="50" isPrintWhenDetailOverflows="true"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_custas_inclusao_6">
+					<subreportParameterExpression><![CDATA[$P{jr_custas_inclusao_6}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_custas_inclusao_5">
+					<subreportParameterExpression><![CDATA[$P{jr_custas_inclusao_5}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_custas_inclusao_4">
+					<subreportParameterExpression><![CDATA[$P{jr_custas_inclusao_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="custas">
+					<subreportParameterExpression><![CDATA[$P{pagamento-consolidado}.custas]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_custas_inclusao_3">
+					<subreportParameterExpression><![CDATA[$P{jr_custas_inclusao_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_custas_inclusao_2">
+					<subreportParameterExpression><![CDATA[$P{jr_custas_inclusao_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{pagamento-consolidado}.custas.getCustasDaAtualizacao()]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_custas_inclusao_1}]]></subreportExpression>
+			</subreport>
+		</band>
+	</detail>
+	<columnFooter>
+		<band height="15" splitType="Stretch">
+			<textField>
+				<reportElement x="681" y="0" width="80" height="15"/>
+				<textElement textAlignment="Right">
+					<font fontName="SansSerif" size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Pág. "+$V{PAGE_NUMBER}+" de"]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report">
+				<reportElement x="761" y="0" width="40" height="15"/>
+				<textElement>
+					<font fontName="SansSerif" size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[" " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+			<textField>
+				<reportElement x="0" y="0" width="600" height="15"/>
+				<textElement>
+					<font fontName="SansSerif" size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{pagamento-consolidado}.identificacao]]></textFieldExpression>
+			</textField>
+		</band>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band splitType="Stretch"/>
+	</summary>
+</jasperReport>

@@ -1,0 +1,246 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	
+	<ui:param name="dadosDe" value="Tabela de Salário Família" />
+	<ui:param name="apresentador" value="#{apresentadorTabelaSalarioFamilia}" />
+	<ui:param name="registro" value="#{tabelaSalarioFamilia}" />
+	
+	<ui:define name="nofiltroCampos">
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+	</ui:define>
+
+	<ui:define name="nocamposFormulario">
+	
+		<a4j:outputPanel id ="painelNovo" rendered="#{identity.hasPermission('TABELAS_SALARIO_FAMILIA', 'MANUTENCAO')}">
+		
+			<fieldset>
+			
+				<legend><b><h:outputLabel value="Novo Registro" /></b></legend>
+				
+				<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+	
+					<h:panelGroup>	
+						<h:outputLabel value="Mês/Ano *" for="competencia" /><br />						
+						<rich:calendar id="competencia" value="#{registro.competencia}"
+									label="Mês/Ano" inputSize="7" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+									oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									showWeekDaysBar="false" showFooter="false"
+									styleClass="special" inputClass="maskDate"
+									required="true"
+									oninputfocus="$(this).monthYearMask()">
+								<f:facet name="footer">
+									<h:outputText value="{selectedDateControl}" style="text-align:center" />
+								</f:facet>
+						</rich:calendar>
+						<cobra:toolTip>
+							<rich:message for="competencia" />
+						</cobra:toolTip>
+					</h:panelGroup>
+	
+					<h:panelGroup>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+					
+						<fieldset style="width:430px;">
+							<legend><b><h:outputLabel value="Faixas" /></b></legend>
+						
+							<h:panelGrid columns="4" cellspacing="4" cellpadding="2" border="0">
+							
+								<h:panelGroup layout="block" style="margin-top:8px; width:50px;">
+									<h:outputLabel  value="Faixa 1 *"/>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor Inicial" for="valorInicialFaixa1" /><br />
+									<h:inputText id="valorInicialFaixa1" value="#{registro.valorInicialFaixa1}" label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;" disabled="true">
+										<f:converter converterId="bigDecimalConverter" />
+									</h:inputText>
+									<cobra:toolTip>
+										<rich:message for="valorInicialFaixa1" />
+									</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor Final" for="valorFinalFaixa1" /><br />
+									<a4j:region>
+									<h:inputText id="valorFinalFaixa1" value="#{registro.valorFinalFaixa1}" label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;" required="true">
+										<f:converter converterId="bigDecimalConverter" />
+										<a4j:support event="onblur" actionListener="#{registro.sugerirValorInicialFaixa2()}" reRender="groupValorInicialFaixa2" limitToList="true" ajaxSingle="true"/>
+									</h:inputText>
+									</a4j:region>
+									<cobra:toolTip>
+										<rich:message for="valorFinalFaixa1" />
+									</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:outputLabel value="Valor do Salário" for="valorSalarioFamiliaFaixa1" /><br />
+									<h:inputText id="valorSalarioFamiliaFaixa1" value="#{registro.valorSalarioFamiliaFaixa1}" label="Valor do Salário" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;" required="true">
+										<f:converter converterId="bigDecimalConverter" />
+									</h:inputText>
+									<cobra:toolTip>
+										<rich:message for="valorSalarioFamiliaFaixa1" />
+									</cobra:toolTip>
+								</h:panelGroup>
+							
+								<h:panelGroup style="margin-top:8px; width:50px;">
+									<h:outputLabel  value="Faixa 2 *"/>
+								</h:panelGroup>
+								<h:panelGroup id="groupValorInicialFaixa2">
+									<h:inputText id="valorInicialFaixa2" value="#{registro.valorInicialFaixa2}" label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;" disabled="true">
+										<f:converter converterId="bigDecimalConverter" />
+									</h:inputText>
+									<cobra:toolTip>
+										<rich:message for="valorInicialFaixa2" />
+									</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:inputText id="valorFinalFaixa2" value="#{registro.valorFinalFaixa2}" label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;" required="true">
+										<f:converter converterId="bigDecimalConverter" />
+									</h:inputText>
+									<cobra:toolTip>
+										<rich:message for="valorFinalFaixa2" />
+									</cobra:toolTip>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:inputText id="valorSalarioFamiliaFaixa2" value="#{registro.valorSalarioFamiliaFaixa2}" label="Valor do Salário" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;" required="true">
+										<f:converter converterId="bigDecimalConverter" />
+									</h:inputText>
+									<cobra:toolTip>
+										<rich:message for="valorSalarioFamiliaFaixa2" />
+									</cobra:toolTip>
+								</h:panelGroup>
+								
+							</h:panelGrid>
+						
+						</fieldset>
+						
+					</h:panelGroup>
+	
+					<h:panelGroup>
+						<a4j:commandLink id="cmdIncluirFaixa" value="Salvar" styleClass="botaoAddSalvar" action="#{apresentador.adicionar}" title="Salvar Novo Registro" reRender="painelNovo,painelListagem" />
+					</h:panelGroup>
+				
+				</h:panelGrid>
+				
+			</fieldset>
+		
+		</a4j:outputPanel>
+		
+		<a4j:outputPanel id="painelListagem">
+		
+			<h:panelGroup  style="width: 100%;" rendered="#{listaDeSalarioFamilia.size gt 0}">
+
+				<rich:dataTable id="listaDeSalarioFamilia" rowClasses="linha-par,linha-impar" cellpadding="3" border="0" width="100%" rows="24" value="#{listaDeSalarioFamilia}" var="tabela" rowKeyVar="dataTableIndex">
+
+					<f:facet name="header">
+						<rich:columnGroup>
+							<rich:column style="width:7%;" rendered="#{identity.hasPermission('TABELAS_SALARIO_FAMILIA', 'MANUTENCAO')}">
+								<h:outputText value="Ação"/>
+							</rich:column>
+							<rich:column>
+								<h:outputText value="Mês/Ano" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="F1" /><br/><h:outputText value="Vl. Inicial" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="F1" /><br/><h:outputText value="Vl. Final" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="F1" /><br/><h:outputText value="Vl. do Salário" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="F2" /><br/><h:outputText value="Vl. Inicial" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="F2" /><br/><h:outputText value="Vl. Final" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="F2" /><br/><h:outputText value="Vl. do Salário" />
+							</rich:column>
+						</rich:columnGroup>
+					</f:facet>
+					
+					<rich:columnGroup>					
+						<rich:column style="width:7%;" rendered="#{identity.hasPermission('TABELAS_SALARIO_FAMILIA', 'MANUTENCAO')}">						
+							<a4j:commandLink  id="excluirItem"  actionListener="#{apresentador.excluir(tabela)}" ajaxSingle="true" reRender="painelListagem" styleClass="linkExcluir" title="Excluir" onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false;" />
+				    		<a4j:commandLink id="clonarItem"  actionListener="#{apresentador.criarTabelaParaProximaCompetencia(tabela)}"  reRender="painelListagem"
+				    						 styleClass="linkCopy" title="Copiar para Próxima Competência" rendered="#{identity.hasPermission('TABELAS_SALARIO_FAMILIA', 'MANUTENCAO') and dataTableIndex eq 0}" 
+				    						 onclick="if (!confirma('#{mensagens.MSG0049}',this)) return false;" ajaxSingle="true"/>
+						</rich:column>
+	
+						<rich:column>						
+							<h:outputText value="#{tabela.competencia}">
+								<f:converter converterId="competenciaConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>
+							<h:outputText value="#{tabela.valorInicialFaixa1}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>						
+							<h:outputText value="#{tabela.valorFinalFaixa1}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>						
+							<h:outputText value="#{tabela.valorSalarioFamiliaFaixa1}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>
+							<h:outputText value="#{tabela.valorInicialFaixa2}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>						
+							<h:outputText value="#{tabela.valorFinalFaixa2}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>						
+							<h:outputText value="#{tabela.valorSalarioFamiliaFaixa2}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+						
+					</rich:columnGroup>
+
+				</rich:dataTable>
+
+				<ui:include src="../comum/paginacao.xhtml">
+					<ui:param name="paramListagem" value="listaDeSalarioFamilia" />
+				</ui:include>
+
+			</h:panelGroup>
+			
+		</a4j:outputPanel>
+	
+	</ui:define>
+	
+	
+	<ui:define name="nofiltroBotoes">
+	</ui:define>
+	
+</ui:composition>
+
+</html>

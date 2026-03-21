@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:rich="http://richfaces.org/rich">
+
+	<ui:composition template="/templates/template-conteudo.xhtml">
+    
+    <ui:param name="titulo" value="Erro" />
+	<ui:param name="apresentador" value="#{apresentadorErro}" />
+    
+		
+		<ui:define name="conteudo">
+			<div class="conteudoErro">
+			
+			<div class="boxErro">
+				
+				<div class="tipoErro">
+					Erro Interno no Servidor
+				</div>
+				
+				<br />
+				
+				<div class="descricaoErro">
+					Ocorreu um erro inesperado no sistema.<br/>
+					Tente a operação novamente.
+				</div>
+			
+			</div>
+			
+			<div class="botoesErro">
+				<h:panelGrid columns="2" cellpadding="3" cellspacing="3">		
+					<h:panelGroup>		
+						<div class="bt-inicial">
+							<h:commandButton  value="" title="Página Inicial" id="fechar" actionListener="#{apresentadorCalculo.fechar}" action="#{apresentador.iniciar}" immediate="true" styleClass="botaoGrande" />							
+						</div>
+					</h:panelGroup>		
+				</h:panelGrid>			
+			</div>
+				
+			</div>
+				
+		</ui:define>
+		
+	</ui:composition>
+
+</html>

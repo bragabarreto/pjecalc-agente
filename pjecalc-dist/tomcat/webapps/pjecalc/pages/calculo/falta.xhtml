@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Faltas" />
+	<ui:param name="apresentador" value="#{apresentadorFalta}" />
+	<ui:param name="registro" value="#{apresentadorFalta.registro}" />
+	
+	<ui:define name="nofiltroCampos">
+			<ui:include src="resumo-calculo.xhtml" />
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario">
+	
+		<fieldset>
+			<legend><b>Dados de #{dadosDe}</b></legend>
+		
+		<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+
+		<h:panelGroup layout="block">	
+			<fieldset style="width: 100%; min-height: 250px;"><legend><b>Nova Falta</b></legend>
+				<h:panelGrid id="painelMinicrud" columns="4" cellspacing="0" border="0">
+				
+					<h:panelGroup>
+						<h:outputLabel value="Data Inicial *" for="dataInicioPeriodoFalta" /><br />
+						<rich:calendar id="dataInicioPeriodoFalta" value="#{apresentadorFalta.registro.dataInicioPeriodoFalta}"
+									   oninputblur="sugerirDataFinal()"	onchanged="sugerirDataFinal()"
+									   label="Data Inicial" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<rich:message showDetail="false" showSummary="false" for="dataInicioPeriodoFalta">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="dataInicioPeriodoFaltaErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="dataInicioPeriodoFalta"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					
+					<h:panelGroup>
+						<h:outputLabel value="Data Final *" for="dataTerminoPeriodoFalta" /><br />
+						<rich:calendar id="dataTerminoPeriodoFalta" value="#{apresentadorFalta.registro.dataTerminoPeriodoFalta}" 
+									   label="Data Final" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<rich:message showDetail="false" showSummary="false" for="dataTerminoPeriodoFalta">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="dataTerminoPeriodoFaltaErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="dataTerminoPeriodoFalta"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<a4j:region>
+							<h:selectBooleanCheckbox id="faltaJustificada" value="#{apresentadorFalta.registro.faltaJustificada}" style="margin-top:10px; margin-left:5px;">
+								<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelJustificativa"/>
+							</h:selectBooleanCheckbox>
+							<label for="faltaJustificada">Falta Justificada</label>
+						</a4j:region>						
+					</h:panelGroup>	
+					
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="reiniciaFerias" value="#{apresentadorFalta.registro.reiniciarFerias}" style="margin-top:10px; margin-left:5px;" />
+						<label for="reiniciaFerias">Reiniciar Período Aquisitivo</label>
+					</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:commandLink id="cmdIncluirFalta"
+									 oncomplete="$('formulario:faltaJustificada').checked=false;"
+									 actionListener="#{apresentadorFalta.adicionar}" value="Salvar"
+									 styleClass="botaoAddSalvar" title="Salvar Nova Falta" reRender="painelMinicrud,painelJustificativa,painelListagemFalta"/>
+				</h:panelGroup>
+				
+				</h:panelGrid>
+				
+				<h:panelGroup id="painelJustificativa">
+					<a4j:region rendered="true">
+						<h:outputLabel value="Descrição" /><br/>
+						<h:inputTextarea id="justificativaDaFalta" value="#{apresentadorFalta.registro.justificativaDaFalta}" 
+										 label="Justificativa" cols="75" rows="5"
+										 onblur="ajustaTextoParaUpperCase(this)"
+										 onkeyup="limitarTextArea(this, 200)"
+										 onkeypress="limitarTextArea(this, 200)" onchange="limitarTextArea(this, 200)">
+										 <f:validateLength maximum="200"/>
+						</h:inputTextarea>
+						<rich:message showDetail="false" showSummary="false" for="justificativaDaFalta">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="justificativaDaFaltaErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="justificativaDaFalta"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</a4j:region>
+				</h:panelGroup>
+				
+				</fieldset>
+			</h:panelGroup>
+			
+			<h:panelGroup layout="block" style="margin-left: 20px;">
+				<fieldset style="min-height: 250px;">
+		  			<legend>Importar ocorrências de Faltas a partir de Arquivo Externo</legend>
+					<h:panelGroup layout="block" style="width:100%;">
+						<h:outputText value="Atenção! Após realizar a importação via arquivo externo, todos as ocorrências de faltas já cadastradas serão excluídas." />
+						<h:panelGrid columns="1" cellpadding="3" cellspacing="3">
+							<h:panelGroup id="pnlFileUpload" class="panelFileUpload" layout="block">
+								<h:outputLabel for="arquivo" value="Selecionar Arquivo CSV *"/><br />
+								<rich:fileUpload id="arquivo" fileUploadListener="#{apresentador.listenerUpload}"  locale="pt_BR" immediateUpload="true" 
+									addControlLabel="Escolher Arquivo..." clearAllControlLabel="Remover" cancelEntryControlLabel="Cancelar" clearControlLabel="" 
+									transferErrorLabel="Erro na transferência" stopControlLabel="Parar" doneLabel="Feito" stopEntryControlLabel="Parar" 
+									sizeErrorLabel="Tamanho do arquivo maior que o limite máximo permitido.">
+										<a4j:support event="onclear" reRender="pnlFileUpload" />
+								</rich:fileUpload>		
+							</h:panelGroup>
+							<h:outputLink class="linkCartaoDePonto" value="#{facesContext.externalContext.requestContextPath}/templateFaltas/ExemploFaltas.csv">Para baixar um arquivo de exemplo preenchido, clique aqui.</h:outputLink>
+						</h:panelGrid>
+					</h:panelGroup>
+					<h:commandButton id="confirmarImportacao" value="Confirmar" immediate="true" action="#{apresentador.importarCSV()}" styleClass="botaoGrande" onclick="AguardeShow(); return true;" />
+				</fieldset>
+			</h:panelGroup>
+		</h:panelGrid>
+			
+			
+		<a4j:outputPanel id="painelListagemFalta" ajaxRendered="true">
+							
+				<h:panelGroup  style="width: 100%;"  rendered="#{listaFaltas.rowCount gt 0}" >
+		
+						<rich:dataTable id="listagem" value="#{listaFaltas}" rowClasses="linha-par, linha-impar" 
+										cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{listaFaltas.rowCount}" var="falta"> 
+				    		<rich:column style="width:10%;">
+							    	<f:facet name="header">
+						    			<h:outputText value="Ação"/>
+						    		</f:facet>
+								    <a4j:region>
+							    		<a4j:commandLink id="excluirExcecaoSab" immediate="true" 
+							    						 actionListener="#{apresentadorFalta.excluir}"  reRender="painelListagemFalta"
+						    							 styleClass="linkExcluir" title="Excluir" 
+						    							 onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();"
+						    							 oncomplete="AguardeHide();">
+						    			</a4j:commandLink>
+							    	</a4j:region>
+						    </rich:column>
+				    	
+					    	<rich:column style="width:10%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Inicio"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{falta.dataInicioPeriodoFalta}" id="inicio">
+				    			</h:outputText>
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:10%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Fim"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{falta.dataTerminoPeriodoFalta}" id="fim">
+				    			</h:outputText>
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:5%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Justificada"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{falta.faltaJustificada ? 'Sim' : 'Não'}" id="justificada">
+				    			</h:outputText>
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:5%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Reiniciar Período Aquisitivo"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{falta.reiniciarFerias ? 'Sim' : 'Não'}" id="reiniciaFerias">
+				    			</h:outputText>
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:70%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Descrição"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{falta.justificativaDaFalta}" id="justificativa">
+				    			</h:outputText>
+					    	</rich:column>
+					    	
+						</rich:dataTable>
+				
+				</h:panelGroup>	
+						
+		</a4j:outputPanel>
+		</fieldset>
+	</ui:define>
+	
+	<ui:define name="nofiltroBotoes" />
+	<ui:define name="noresultadoTabela" />
+	
+	<ui:define name="script">
+		<script>
+			function sugerirDataFinal() {
+				$('formulario:dataTerminoPeriodoFaltaInputDate').value=$('formulario:dataInicioPeriodoFaltaInputDate').value;
+			}
+		</script>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

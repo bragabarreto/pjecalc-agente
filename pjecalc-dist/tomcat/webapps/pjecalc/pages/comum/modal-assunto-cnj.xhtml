@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-modalPanel-principal.xhtml">
+
+	<ui:param name="tituloModal" value="Assunto CNJ" />
+	<ui:param name="modalID" value="CNJ" />
+
+	<ui:define name="camposComFormInterno">
+		<ui:param name="apresentador" value="#{apresentadorAssunto}" />
+		
+			<a4j:outputPanel id="panelModalAssunto" >
+			
+				<h:outputLabel value="Assunto CNJ *" for="assuntosCnj#{modalID}" /><br />
+	   			<h:inputText id="assuntosCnj#{modalID}" value="#{apresentador.assuntoSelecionado}" readonly="true" styleClass="leitura" style="width: 50%">
+	   				
+	   			</h:inputText>
+	   		
+	   			<a4j:status for="regiaoArvore#{modalID}">
+					<f:facet name="start">
+						<h:graphicImage width="17" height="17" value="/images/carregando.gif" alt="Carregando..." />
+					</f:facet>
+				</a4j:status>
+	
+	   			<a4j:region id="regiaoArvore#{modalID}">
+	   				<rich:tree id="arv" style="width:300px" 
+				   			   value="#{apresentadorAssunto.assuntos}" var="item" 
+	   						   nodeSelectListener="#{apresentadorAssunto.processaSelecao}"
+				   			   ajaxSubmitSelection="true"  
+				   			   switchType="client" 
+							   limitToList="true"
+				   			   reRender="assuntosCnj#{modalID} , btnSelecionar#{modalID}" 
+				   			   adviseNodeOpened="#{apresentadorAssunto.adviseNodeOpened}"
+				   			   />
+				</a4j:region>
+				
+				<script>
+					var arvOnAjaxSelect = $('formularioModalCNJ:arv').component.onAjaxSelect;
+					var selectedNode;
+					$('formularioModalCNJ:arv').component.onAjaxSelect = function (event) {
+						if (event.selectedNode != selectedNode) {
+							selectedNode = event.selectedNode; 
+							return arvOnAjaxSelect(event);
+						}
+						return false;
+					};
+				</script>
+				
+			</a4j:outputPanel>
+			
+	</ui:define>
+
+	<ui:define name="listagemModal"/>
+			
+	<ui:define name="botoesModal">
+		<a4j:commandButton id="btnSelecionar#{modalID}" 
+						   value="Selecionar" 
+						   styleClass="botao" 
+						   disabled="#{apresentador.assuntoSelecionado == null}"				
+						   onclick="document.getElementById('formulario:codigoAssuntosCnj').value='#{apresentador.assuntoSelecionado.id}';document.getElementById('formulario:assuntosCnj').value='#{apresentador.assuntoSelecionado}';Richfaces.hideModalPanel('modal#{modalID}'); return false;" 
+						   />
+		&#160;
+	</ui:define>
+	
+</ui:composition>
+
+</html>

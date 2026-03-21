@@ -1,0 +1,779 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="calculo" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="20" bottomMargin="20">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String">
+		<defaultValueExpression><![CDATA[]]></defaultValueExpression>
+	</parameter>
+	<parameter name="calculo" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[br.jus.trt8.pjecalc.dominio.calculo.relatorio.CalculoJRAdapterScript.getInstance()]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/calculo-resumo.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_de_calculo_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-demonstrativo.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="logo" class="java.io.InputStream" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_de_calculo_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-demonstrativo-ocorrencias.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_fgts_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-fgts.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_fgts_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-fgts-ocorrencias.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_fgts_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-fgts-operacao.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_fgts_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-fgts-contribuicao-social.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/calculo-inss.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-devido-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-devido-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-devido-empresaRat.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_5" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-devido-empresaRat1986.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_6" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-devido-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_7" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-pago-segurado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_8" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-pago-empresaRat.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_9" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-pago-empresaRat1986.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_10" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_11" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_inss_12" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"inss/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	
+	
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/calculo-inss.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-empresaRat.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_5" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-empresaRat1986.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_6" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_7" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-segurado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_8" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-empresaRat.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_9" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-empresaRat1986.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_10" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_11" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_12" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_fgts_13" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-resumo.jrxml"]]></defaultValueExpression>
+	</parameter>
+
+	<parameter name="jr_demonstrativo_esocial_inss_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/calculo-inss.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-empresaRat.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_5" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-empresaRat1986.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_6" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-devido-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_7" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-segurado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_8" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-empresaRat.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_9" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-empresaRat1986.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_10" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_11" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_esocial_inss_12" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"esocial/ocorrencias-pago-terceiros.jrxml"]]></defaultValueExpression>
+	</parameter>
+>>>>>>> 96ff2379a8cb28f75c009946c2e597775e538e30
+	
+	<parameter name="jr_pensao_alimenticia_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-pensao-alimenticia.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_previdencia_privada_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-previdencia-privada.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_apuracao_de_juros_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-apuracao-juros.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_multa_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-multa.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_multa_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-multa-calculada.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_multa_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-multa-informada.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_honorario_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-honorario.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_honorario_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-honorario-calculada.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_honorario_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-honorario-informada.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_honorario_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-irpf-honorarios.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_custas_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-custa.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_custas_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-custa-fixas.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_custas_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-custa-autos.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_custas_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-custa-armazenamento.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_custas_5" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"ocorrencias-custa-recolhida.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_irpf_1" class="java.lang.Object"/>
+	<parameter name="jr_resumo_de_calculo_2" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-bruto-devido-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_3" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_4" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-credito-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_5" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-debito-reclamante.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_6" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-debito-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_7" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-fora-do-principal.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_8" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-custas-debito-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_resumo_de_calculo_9" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"resumo/ocorrencias-resumo-debito-sem-custas-reclamado.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_seguro_desemprego_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-seguro-desemprego.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_salario_familia_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-salario-familia.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_justificativa_1" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{SUBREPORT_DIR}+"calculo-justificativas.jrxml"]]></defaultValueExpression>
+	</parameter>
+	<queryString>
+		<![CDATA[]]>
+	</queryString>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="114" splitType="Stretch">
+			<printWhenExpression><![CDATA[$V{PAGE_NUMBER} == 1]]></printWhenExpression>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="627" y="6" width="175" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.numeroDoProcesso]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" x="640" y="23" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Cálculo:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="705" y="23" width="97" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.numeroDoCalculo]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" x="572" y="6" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Processo:]]></text>
+			</staticText>
+			<image>
+				<reportElement x="5" y="6" width="158" height="34"/>
+				<imageExpression class="java.io.InputStream"><![CDATA[$P{logo}]]></imageExpression>
+			</image>
+			<staticText>
+				<reportElement style="default" x="3" y="59" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamante:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="99" y="87" width="194" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.periodoDeCalculo.formatInicial("dd/MM/yyyy") + " a " + $P{calculo}.periodoDeCalculo.formatFinal("dd/MM/yyyy")]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="63" y="73" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.reclamado]]></textFieldExpression>
+			</textField>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="646" y="87" width="150" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{calculo}.dataDaLiquidacao]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="63" y="59" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.reclamante]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="561" y="87" width="90" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Liquidação:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default" x="3" y="73" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamado:]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="402" y="87" width="143" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{calculo}.dataDeAjuizamento]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="308" y="87" width="118" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Ajuizamento:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default" x="3" y="87" width="109" height="13"/>
+				<textElement/>
+				<text><![CDATA[Período do Cálculo:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="titulo" x="0" y="43" width="802" height="16"/>
+				<textElement textAlignment="Center">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[RELATÓRIO DE CÁLCULO]]></text>
+			</staticText>
+			<line>
+				<reportElement x="1" y="107" width="799" height="1"/>
+			</line>
+		</band>
+	</title>
+	<columnHeader>
+		<band splitType="Stretch"/>
+	</columnHeader>
+	<detail>
+		<band height="40" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarDemonstrativo]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="40"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="demonstrativo">
+					<subreportParameterExpression><![CDATA[$P{calculo}.demonstrativo]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_de_calculo_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_de_calculo_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.demonstrativo.verbas]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_de_calculo_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarApuracaoDeJuros]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="apuracaoDeJuros">
+					<subreportParameterExpression><![CDATA[$P{calculo}.apuracaoDeJuros]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.apuracaoDeJuros.ocorrenciaDeJuros]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_apuracao_de_juros_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarSalarioFamilia]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="salarioFamilia">
+					<subreportParameterExpression><![CDATA[$P{calculo}.salarioFamilia]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.salarioFamilia.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_salario_familia_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarSeguroDesemprego]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="seguroDesemprego">
+					<subreportParameterExpression><![CDATA[$P{calculo}.seguroDesemprego]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_seguro_desemprego_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="41" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarDemonstrativoFGTS]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="jr_demonstrativo_fgts_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_fgts_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_fgts_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_fgts_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_fgts_4">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_fgts_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="fgts">
+					<subreportParameterExpression><![CDATA[$P{calculo}.demonstrativoFGTS]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_fgts_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarDemonstrativoINSS]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="jr_demonstrativo_inss_5">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_5}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_6">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_6}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_7">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_7}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_8">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_8}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_9">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_9}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_12">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_12}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_10">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_10}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_4">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{calculo}.demonstrativoINSS]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_inss_11">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_inss_11}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_inss_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarDemonstrativoEsocialInssFgts]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_5">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_5}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_6">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_6}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_7">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_7}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_8">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_8}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_9">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_9}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_12">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_12}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_13">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_13}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_10">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_10}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_4">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="inss">
+					<subreportParameterExpression><![CDATA[$P{calculo}.demonstrativoEsocialInssFgts]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_esocial_inss_fgts_11">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_11}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_esocial_inss_fgts_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarPrevidenciaPrivada]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="previdenciaPrivada">
+					<subreportParameterExpression><![CDATA[$P{calculo}.previdenciaPrivada]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.previdenciaPrivada.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_previdencia_privada_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarPensaoAlimenticia]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="pensaoAlimenticia">
+					<subreportParameterExpression><![CDATA[$P{calculo}.pensaoAlimenticia]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_pensao_alimenticia_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="40">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarMulta]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="40"/>
+				<subreportParameter name="jr_demonstrativo_multa_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_multa_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_multa_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_multa_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.multa.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_multa_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="40">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarHonorario]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="40"/>
+				<subreportParameter name="jr_demonstrativo_honorario_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_honorario_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_honorario_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_honorario_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.honorario.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_honorario_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="42">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarHonorario]]></printWhenExpression>
+			<subreport>
+				<reportElement positionType="Float" stretchType="RelativeToBandHeight" x="-21" y="0" width="842" height="42" isRemoveLineWhenBlank="true">
+					<printWhenExpression><![CDATA[$P{calculo}.honorario.ocorrenciasIrpfHonorario.size() > 0]]></printWhenExpression>
+				</reportElement>
+				<dataSourceExpression><![CDATA[$P{calculo}.honorario.ocorrenciasIrpfHonorario]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_honorario_4}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="42">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarIrpf]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42" isRemoveLineWhenBlank="true"/>
+				<subreportParameter name="irpf">
+					<subreportParameterExpression><![CDATA[$P{calculo}.irpf]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_irpf_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="40">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarCustas]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="40"/>
+				<subreportParameter name="jr_demonstrativo_custas_4">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_custas_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_custas_3">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_custas_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="custas">
+					<subreportParameterExpression><![CDATA[$P{calculo}.custas]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_custas_2">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_custas_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_demonstrativo_custas_5">
+					<subreportParameterExpression><![CDATA[$P{jr_demonstrativo_custas_5}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_custas_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="7">
+			<break>
+				<reportElement x="0" y="3" width="802" height="1">
+					<printWhenExpression><![CDATA[$P{calculo}.mostrarResumo]]></printWhenExpression>
+				</reportElement>
+			</break>
+		</band>
+		<band height="114">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarResumo && ($V{PAGE_NUMBER} > 1)]]></printWhenExpression>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="627" y="10" width="175" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.numeroDoProcesso]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="561" y="91" width="90" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Liquidação:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" x="572" y="10" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Processo:]]></text>
+			</staticText>
+			<line>
+				<reportElement x="1" y="111" width="799" height="1"/>
+			</line>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="402" y="91" width="143" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{calculo}.dataDeAjuizamento]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="63" y="63" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.reclamante]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="3" y="91" width="109" height="13"/>
+				<textElement/>
+				<text><![CDATA[Período do Cálculo:]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="default-bold" x="646" y="91" width="150" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{calculo}.dataDaLiquidacao]]></textFieldExpression>
+			</textField>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="63" y="77" width="733" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.reclamado]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="3" y="77" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamado:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default" x="705" y="27" width="97" height="13"/>
+				<textElement textAlignment="Right"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.numeroDoCalculo]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default" x="3" y="63" width="60" height="13"/>
+				<textElement/>
+				<text><![CDATA[Reclamante:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" x="640" y="27" width="55" height="13"/>
+				<textElement textAlignment="Right"/>
+				<text><![CDATA[Cálculo:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" x="99" y="91" width="194" height="13"/>
+				<textElement/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{calculo}.periodoDeCalculo.formatInicial("dd/MM/yyyy") + " a " + $P{calculo}.periodoDeCalculo.formatFinal("dd/MM/yyyy")]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="titulo" x="0" y="47" width="802" height="16"/>
+				<textElement textAlignment="Center">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[RELATÓRIO DE CÁLCULO]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default" x="308" y="91" width="118" height="13"/>
+				<textElement/>
+				<text><![CDATA[Data Ajuizamento:]]></text>
+			</staticText>
+		</band>
+		<band height="40">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarResumo]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="40"/>
+				<subreportParameter name="jr_resumo_de_calculo_2">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_2}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_de_calculo_4">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_4}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_de_calculo_3">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_3}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_de_calculo_6">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_6}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_de_calculo_5">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_5}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_de_calculo_7">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_7}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_de_calculo_8">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_8}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="jr_resumo_de_calculo_9">
+					<subreportParameterExpression><![CDATA[$P{jr_resumo_de_calculo_9}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{calculo}.resumo]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.emptyDS]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_de_calculo_1}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="41">
+			<printWhenExpression><![CDATA[$P{calculo}.mostrarJustificativas]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="1" width="841" height="40"/>
+				<subreportParameter name="SUBREPORT_DIR">
+					<subreportParameterExpression><![CDATA[$P{SUBREPORT_DIR}]]></subreportParameterExpression>
+				</subreportParameter>
+				<subreportParameter name="justificativa">
+					<subreportParameterExpression><![CDATA[$P{calculo}.justificativa]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{calculo}.justificativa.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_justificativa_1}]]></subreportExpression>
+			</subreport>
+		</band>
+	</detail>
+	<columnFooter>
+		<band height="15" splitType="Stretch">
+			<textField>
+				<reportElement x="681" y="0" width="80" height="15"/>
+				<textElement textAlignment="Right">
+					<font fontName="SansSerif" size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA["Pág. "+$V{PAGE_NUMBER}+" de"]]></textFieldExpression>
+			</textField>
+			<textField evaluationTime="Report">
+				<reportElement x="761" y="0" width="40" height="15"/>
+				<textElement>
+					<font fontName="SansSerif" size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[" " + $V{PAGE_NUMBER}]]></textFieldExpression>
+			</textField>
+		</band>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band splitType="Stretch"/>
+	</summary>
+</jasperReport>

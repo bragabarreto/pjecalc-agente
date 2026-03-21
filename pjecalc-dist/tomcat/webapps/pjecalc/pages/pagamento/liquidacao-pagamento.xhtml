@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="legenda" value="Dados da Liquidação" />
+	<ui:param name="apresentador" value="#{apresentadorLiquidacaoPagamento}" />
+	<ui:param name="registro" value="#{apresentador.liquidacao}" />
+
+	<ui:define name="nofiltroCampos">	
+		<ui:include src="../calculo/resumo-calculo.xhtml" />
+		<br />
+		<a4j:outputPanel id="panelFiltroCampos" ajaxRendered="true">
+			<h:panelGroup rendered="#{apresentador.emModoListagem}">
+				<fieldset><legend>#{empty legenda ? 'Dados da Busca' : legenda}</legend>
+					<h:panelGrid columns="2" cellpadding="3" cellspacing="3">
+						<h:panelGroup>
+							<h:outputLabel value="Data de Liquidação *" for="dataDeLiquidacao"/><br />
+							<rich:calendar id="dataDeLiquidacao" label="Data de Liquidação" value="#{registro.data}" inputSize="23" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" required="true" oninputfocus="$(this).dateMask()">
+								<f:facet name="footer">
+									<h:outputText style="text-align:center" />
+								</f:facet>     
+						    </rich:calendar>
+						    <cobra:toolTip>
+					        	<rich:message for="dataDeLiquidacao"/>
+						    </cobra:toolTip>
+						</h:panelGroup>
+						<h:panelGroup>
+							<fieldset><legend>Parâmetros da Liquidação *</legend>
+								<h:panelGrid id="pnlParametros" columns="1" cellpadding="5" cellspacing="5">
+									<h:panelGroup>
+										<h:outputLabel value="Identificação do Cálculo" for="identificacaoCalculo" style="display: block" />
+										<h:inputText id="identificacaoCalculo" label="Identificação do Cálculo" value="#{registro.identificador}" 
+										     			 size="68" maxlength="80" />
+																			
+										<rich:message showDetail="false" showSummary="false" for="identificacaoCalculo">
+										   <f:facet name="errorMarker">
+										  	   <h:outputLink class="linkErro" id="identificacaoCalculoErro">
+												   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+												        <rich:message showDetail="true" showSummary="false" for="identificacaoCalculo"/>
+												   </rich:toolTip>
+										       </h:outputLink>
+										 </f:facet>
+										</rich:message>
+										<h:outputText class="linkHelp" id="identificacaoHelp" style="margin-left:1px">
+										<rich:toolTip for="identificacaoHelp" showEvent="mouseover" styleClass="tooltipHelp">
+										   	Informar os números dos ID's ou das folhas do processo. Exemplo: ID0000001/ID0000002 ou fls.001/003.
+										</rich:toolTip>
+							     	   </h:outputText>
+									</h:panelGroup>
+									<h:panelGroup layout="block">											
+										<h:selectBooleanCheckbox id="cobrarEncargosIrpf" disabled="#{!apresentador.permiteSelecionarCobrancaDeEncargosDeIrpf}" value="#{registro.cobrarEncargosIrpf}" />
+										<label for="cobrarEncargosIrpf">Cobrar encargos do Imposto de Renda</label>											
+									</h:panelGroup>
+									
+									<h:panelGroup layout="block">
+										<h:selectBooleanCheckbox id="atualizarRegraPrecatorio" value="#{registro.atualizarRegraPrecatorio}">
+											<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentador.atualizarRegraPrecatorio}" reRender="groupRegraPrecatorio" limitToList="true" />
+										</h:selectBooleanCheckbox>
+										<label for="atualizarRegraPrecatorio">Atualização de Precatório/RPV</label>											
+									</h:panelGroup>
+									
+									<h:panelGroup id="groupRegraPrecatorio">
+										<h:panelGrid id="pnlPrecatorio" rendered="#{registro.atualizarRegraPrecatorio}" columns="2">
+											<h:panelGrid columns="1">
+												<h:panelGroup>
+													<h:outputLabel for="tipoPrecatorio" value="Tipo *" style="display: block;" />
+													<h:selectOneRadio id="tipoPrecatorio" value="#{registro.tipoPrecatorio}" styleClass="labelInput">
+														<s:selectItems value="#{apresentador.enumItems.tipoPrecatorioEnum}" var="item" label="#{item.nome}"/> 
+														<s:convertEnum />
+													</h:selectOneRadio>
+												</h:panelGroup>
+												<h:panelGroup>
+													<h:outputLabel for="tipoEsferaPrecatorio" value="Esfera *" style="display: block;" />
+													<h:selectOneRadio id="tipoEsferaPrecatorio" value="#{registro.grupoEsferaPrecatorio}" styleClass="labelInput">
+														<s:selectItems value="#{apresentador.enumItems.grupoEsferaPrecatorioEnum}" var="item" label="#{item.nome}"/> 
+														<s:convertEnum />
+													</h:selectOneRadio>
+												</h:panelGroup>
+											</h:panelGrid>
+											<h:panelGroup>
+												<fieldset>
+													<legend>Período da Graça</legend>
+													<h:panelGrid columns="2">
+														<h:panelGroup styleClass="itemGrupo">
+															<h:outputLabel value="Início *" for="inicioPeriodoGraca" style="display: block;" />
+															<rich:calendar id="inicioPeriodoGraca" value="#{registro.dataInicioPeriodoDaGraca}" required="true" label="Início do Período da Graça" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"> 
+																<f:facet name="footer">
+														        	<h:outputText value="" style="text-align:center" />
+														        </f:facet>
+															</rich:calendar>
+											    			<cobra:toolTip>
+											    				<rich:message for="inicioPeriodoGraca" style="margin-left:5px;"/>
+											    			</cobra:toolTip>	    			
+														</h:panelGroup>
+														<h:panelGroup styleClass="itemGrupo">
+															<h:outputLabel value="Fim *" for="fimPeriodoGraca" style="display: block;" />
+															<rich:calendar id="fimPeriodoGraca" value="#{registro.dataFimPeriodoDaGraca}" required="true" label="Fim do Período da Graça" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"> 
+																<f:facet name="footer">
+														        	<h:outputText value="" style="text-align:center" />
+														        </f:facet>
+															</rich:calendar>
+											    			<cobra:toolTip>
+											    				<rich:message for="fimPeriodoGraca" style="margin-left:5px;"/>
+											    			</cobra:toolTip>	    			
+														</h:panelGroup>
+													</h:panelGrid>
+												</fieldset>
+											</h:panelGroup>
+										</h:panelGrid>
+									</h:panelGroup>
+									
+								</h:panelGrid>
+							</fieldset>
+						</h:panelGroup>
+					</h:panelGrid>
+					<br/>
+					<div style="margin-top: 8px; margin-left: 6px;">
+						<h:outputLabel value="Comentários" /><br/>
+						<h:inputTextarea id="comentarios" value="#{registro.comentarios}" 
+										 label="Comentários" cols="165" rows="4"
+										 onkeyup="limitarTextArea(this, 500)"
+										 onkeypress="limitarTextArea(this, 500)" onchange="limitarTextArea(this, 500)">
+						</h:inputTextarea>
+					</div>
+					<br/>
+					<h:outputText value="Obs.: Atualização do cálculo liquidada pela última vez na versão #{calculoAberto.atualizacao.getVersaoDoSistema()} do sistema." rendered="#{not empty calculoAberto.atualizacao.getVersaoDoSistema()}" />
+				</fieldset>
+			</h:panelGroup>
+		</a4j:outputPanel>
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario" />
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="liquidar" value="Liquidar" actionListener="#{apresentador.liquidar}" styleClass="botao" reRender="listagem"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

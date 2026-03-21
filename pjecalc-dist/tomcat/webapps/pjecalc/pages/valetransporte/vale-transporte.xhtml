@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	
+	<ui:param name="dadosDe" value="Vale Transporte" />
+	<ui:param name="titulo" value="#{apresentadorValeTransporte.titulo}" />
+	<ui:param name="apresentador" value="#{apresentadorValeTransporte}" />
+	<ui:param name="registro" value="#{apresentadorValeTransporte.registro}" />
+	<ui:param name="filtro" value="#{apresentadorValeTransporte.filtro}" />
+	
+	<ui:define name="filtroCampos">
+	
+		<h:panelGrid columns="3" cellpadding="3"  cellspacing="3" columnStyle="width:30%;">
+			<h:panelGroup>
+					<h:outputLabel value="Linha" for="linhaBusca"/><br />
+					<h:inputText id="linhaBusca"  label="Linha" value="#{filtro.descricaoLinha}" size="90" maxlength="100">
+					</h:inputText>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="estadoBusca" value="Estado" /><br />
+				<a4j:region>
+					<h:selectOneMenu id="estadoBusca" label="Estado" value="#{filtro.estado}" style="width:150px;">
+						<s:selectItems value="#{apresentadorValeTransporte.estados}" var="item" label="#{item.nome}" noSelectionLabel="" /> 
+						<a4j:support event="onchange" reRender="painelMunicipioBusca" limitToList="true"/>
+						<s:convertEntity/>
+					</h:selectOneMenu>
+				</a4j:region>
+			</h:panelGroup>
+			
+			<h:panelGroup id="painelMunicipioBusca">
+					<h:outputLabel for="municipioBusca" value="Município" /><br />
+					<h:selectOneMenu id="municipioBusca" label="Município" value="#{filtro.municipio}" style="width:150px;">
+						<s:selectItems value="#{apresentadorValeTransporte.municipiosFiltro}" var="item" label="#{item.nome}" noSelectionLabel="" />
+						<s:convertEntity/>
+					</h:selectOneMenu>
+				</h:panelGroup>
+		</h:panelGrid>
+	
+	</ui:define>
+	
+	
+	<ui:define name="resultadoTabela">
+	
+			<h:panelGroup id="painelListagem" style="width: 600px;" >
+			
+				<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" 
+								cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{lista.size}" var="item"> 
+		    		<rich:column style="width:10%;">
+					    	<f:facet name="header">
+				    			<h:outputText value="Ações"/>
+				    		</f:facet>
+						    <a4j:region>
+					    		<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}" />
+				    			<a4j:commandLink styleClass="linkAlterar" title="Alterar" ajaxSingle="true" actionListener="#{apresentador.alterar}" rendered="#{identity.hasPermission('TABELAS_VALE_TRANSPORTE', 'MANUTENCAO')}" />
+				    			<a4j:commandLink styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" rendered="#{identity.hasPermission('TABELAS_VALE_TRANSPORTE', 'MANUTENCAO')}" />
+					    	</a4j:region>
+				    </rich:column>
+		    	
+			    	<rich:column style="width:60%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Nome"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.descricaoLinha}" id="nome" size="35"></h:outputText>
+			    	</rich:column>
+			    	<rich:column style="width:17%;">
+						<f:facet name="header">
+							<h:outputText value="Município" />
+						</f:facet>
+						<h:outputText value="#{item.municipio.nome}">
+		    			</h:outputText>
+					</rich:column>
+			    	<rich:column style="width:18%;">
+						<f:facet name="header">
+							<h:outputText value="Estado" />
+						</f:facet>
+						<h:outputText value="#{item.estado.nome}">
+		    			</h:outputText>
+					</rich:column>
+					
+		    	
+				</rich:dataTable>
+			
+			</h:panelGroup>	
+	
+	
+	</ui:define>
+	
+
+	<ui:define name="camposFormulario">
+	
+	<div id="painelGeral" style="width: 700px;">
+		<h:panelGrid columns="3" cellpadding="3"  cellspacing="3">
+			<h:panelGroup>
+				<fieldset><legend>Tipo de Linha *</legend>
+					<h:panelGroup>						
+						<a4j:region>
+							<h:selectOneRadio id="tipoDeLinha" disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" layout="lineDirection" value="#{registro.tipoDeLinha}">
+								<s:selectItems value="#{enumItems.tipoDeLinhaEnum}" var="item" label="#{item.nome}" />
+								<s:convertEnum />
+								<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="painelMunicipio" />
+							</h:selectOneRadio>
+						</a4j:region>
+					</h:panelGroup>
+				</fieldset>
+			</h:panelGroup>
+			
+			
+			<h:panelGroup>
+				<h:outputLabel for="estado" value="Estado *" /><br />
+				<a4j:region>
+					<h:selectOneMenu id="estado" label="Estado" value="#{registro.estado}" style="width:70px;" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+						<s:selectItems value="#{apresentadorValeTransporte.estados}" var="item" label="#{item.sigla}" noSelectionLabel="" />
+						<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="painelMunicipio" /> 
+						<s:convertEntity/>
+					</h:selectOneMenu>
+				</a4j:region>
+    			<cobra:toolTip>
+    				<rich:message for="estado"/>
+    			</cobra:toolTip>	    			
+			</h:panelGroup>
+			
+			<a4j:outputPanel id="painelMunicipio">
+				<h:panelGroup rendered="#{registro.tipoDeLinha.valor == 'U'}" layout="block" style="margin-left:-80px;">
+					<h:outputLabel for="municipio" value="Município *" /><br />
+					<h:selectOneMenu id="municipio" label="Município" value="#{registro.municipio}" style="width:150px;" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+						<s:selectItems value="#{apresentadorValeTransporte.municipios}" var="item" label="#{item.nome}" noSelectionLabel="" /> 
+						<s:convertEntity/>
+					</h:selectOneMenu>
+	    			<cobra:toolTip>
+	    				<rich:message for="municipio"/>
+	    			</cobra:toolTip>	    			
+				</h:panelGroup>
+			</a4j:outputPanel>
+			
+			<h:panelGroup>
+				<h:outputLabel value="Linha *" for="descricaoLinha"/><br />
+				<h:inputTextarea id="descricaoLinha" value="#{registro.descricaoLinha}" 
+								 label="Linha" cols="60" rows="2" disabled="#{apresentador.emModoSomenteVisualizacao}"
+								 onblur="ajustaTextoParaUpperCase(this)"
+								 onkeyup="limitarTextArea(this, 100)"
+								 onkeypress="limitarTextArea(this, 100)" onchange="limitarTextArea(this, 100">
+								 <f:validateLength maximum="100"/>
+				</h:inputTextarea>
+				<cobra:toolTip>
+					<rich:message for="descricaoLinha"/>
+				</cobra:toolTip>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel value="Data Encerramento da Linha" for="dataEncerramentoLinha" /><br />
+				<a4j:region>
+				<rich:calendar id="dataEncerramentoLinha" 
+							   label="Data Encerramento da Linha" inputSize="24" popup="true" disabled="#{apresentador.emModoSomenteVisualizacao or !apresentador.emModoAlteracao}"
+							   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+							   value="#{registro.dataEncerramentoLinha}">
+					<f:facet name="footer">
+			        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+			        </f:facet>
+			          <a4j:support event="oninputblur" reRender="painelRD, painelListagemRD" limitToList="true" />
+					  <a4j:support event="onchanged"   reRender="painelRD, painelListagemRD" limitToList="true"/>
+					  <f:converter converterId="dateConverter"/>
+				</rich:calendar>
+				<cobra:toolTip>
+                      	<rich:message for="dataEncerramentoLinha"/>
+                 </cobra:toolTip>
+				</a4j:region>
+			</h:panelGroup>
+			
+		
+		</h:panelGrid>
+		
+		<h:panelGrid columns="1" cellpadding="3"  cellspacing="3">
+		<h:panelGroup>
+			<fieldset style="height: 100%; width: 365px;">
+				<legend>Valor do Vale Transporte</legend>
+				
+					<h:panelGroup id="painelRD"  styleClass="itemPanelGroup" layout="block">
+						<h:panelGrid columns="3" cellpadding="2"  cellspacing="2">
+							<h:panelGroup>
+								<h:outputLabel value="Data Início *" for="dataInicio" /><br />
+								<rich:calendar id="dataInicio"
+											   label="Data Início" inputSize="10" popup="true" 
+											   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+											   value="#{valorValeTransporte.dataInicio}"
+											    disabled="#{apresentador.emModoSomenteVisualizacao or (registro.dataEncerramentoLinha != null)}">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+								</rich:calendar>
+								<cobra:toolTip>
+				                      	<rich:message for="dataInicio"/>
+				                 </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Valor *" for="valor" /><br />
+								<h:inputText id="valor" label="Valor" size="16" maxlength="16" value="#{valorValeTransporte.valor}" 
+											 disabled="#{apresentador.emModoSomenteVisualizacao or (registro.dataEncerramentoLinha != null)}"
+											 onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>	
+								<cobra:toolTip>
+				                     <rich:message for="valor"/>
+				                </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup styleClass="itemGrupo">
+								<a4j:commandLink rendered="#{identity.hasPermission('TABELAS_VALE_TRANSPORTE', 'MANUTENCAO')}" id="cmdIncluirRD"  styleClass="botaoAddItem" title="Adicionar" limitToList="true"  
+												 disabled="#{apresentador.emModoSomenteVisualizacao or (registro.dataEncerramentoLinha != null)}"
+												 actionListener="#{apresentador.adicionarValor}" reRender="painelRD, painelListagemRD,painelMensagens" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+							</h:panelGroup>	
+							
+						</h:panelGrid>
+					</h:panelGroup>
+					
+					<h:panelGroup id="painelListagemRD" layout="block">
+						<rich:dataTable id="listagemRDs" value="#{ocorrencias}" rowKeyVar="dataTableIndex" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" var="item" rows="#{ocorrencias.rowCount}" rendered="#{ocorrencias.rowCount gt 0}">
+				    		<rich:column style="width:5%;" rendered="#{identity.hasPermission('TABELAS_VALE_TRANSPORTE', 'MANUTENCAO')}">
+						    	<f:facet name="header">
+					    			<h:outputText value="Ação"/>
+					    		</f:facet>
+						    	<a4j:commandLink id="excluirRD"  immediate="true" limitToList="true"  rendered="#{identity.hasPermission('TABELAS_VALE_TRANSPORTE', 'MANUTENCAO') and dataTableIndex eq 0}" 
+						    					 disabled="#{apresentador.emModoSomenteVisualizacao or (registro.dataEncerramentoLinha != null)}"
+						    					 styleClass="linkExcluir" title="Excluir" actionListener="#{apresentador.removerValor}" onclick="AguardeShow();" oncomplete="AguardeHide();" reRender="painelRD,painelListagemRD"/>
+						    </rich:column>
+						    
+					    	<rich:column style="width:10%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Data Início"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{item.dataInicio}">
+				    			</h:outputText>
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:10%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Data Fim"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{item.dataTermino}" class="DataTermino">
+				    			</h:outputText>
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:10%;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Valor"/>
+				    			</f:facet>	
+				    			<h:outputText value="#{item.valor}">
+				    				<f:converter converterId="bigDecimalConverter"/>
+				    			</h:outputText>
+					    	</rich:column>
+						</rich:dataTable> 
+					</h:panelGroup>
+			
+			</fieldset>
+		</h:panelGroup>
+		</h:panelGrid>
+	</div>	
+
+	</ui:define>
+
+	<ui:define name="script">
+		<script type="text/javascript">
+			function salvarVale() {
+				confirmar = document.getElementById('formulario:dataEncerramentoLinhaInputDate').value.trim() != '' &amp;&amp; jQuery('.DataTermino').size() > 0 &amp;&amp; jQuery("span[class='DataTermino']:first").text()=='';
+				if(confirmar == false){
+					return true;
+				}else{
+					return confirma('#{mensagens.MSG0057}',$('formulario:salvar'));
+				}
+			}
+	    </script>
+	</ui:define>
+	
+	
+	<ui:define name="filtroBotoes">
+		<h:panelGroup id="painelBotoes">
+			<a4j:commandButton id="buscar" value="Buscar" actionListener="#{apresentadorValeTransporte.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentadorValeTransporte.emModoListagem}" onclick="allToUpperCase()"/>	
+			<a4j:commandButton id="incluir" value="Novo"  actionListener="#{apresentadorValeTransporte.novo}"  immediate="true" styleClass="botao" rendered="#{apresentadorValeTransporte.emModoListagem and identity.hasPermission('TABELAS_VALE_TRANSPORTE', 'MANUTENCAO')}"/>
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorValeTransporte.salvar}" styleClass="botao"  rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" onclick="if (!salvarVale()) return false; allToUpperCase();"/>
+			<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.remover}" imeddiate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />  
+			<a4j:commandButton id="cancelar" value="Cancelar" actionListener="#{apresentadorValeTransporte.cancelar}" immediate="true" styleClass="botao" rendered="#{apresentadorValeTransporte.emModoFormulario and apresentadorValeTransporte.operacao != 'VISUALIZACAO'}"/>
+			<a4j:commandButton id="voltar" value="Voltar" actionListener="#{apresentadorValeTransporte.voltar}" styleClass="botao"  immediate="true" rendered="#{apresentadorValeTransporte.operacao == 'VISUALIZACAO'}"/>
+		</h:panelGroup>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Verba" />
+	<ui:param name="apresentador" value="#{apresentadorVerba}" />
+	<ui:param name="registro" value="#{apresentadorVerba.registro}" />
+	<ui:param name="filtro" value="#{apresentadorVerba.filtro}" />
+
+	<ui:define name="filtroCampos">
+	
+	<h:panelGrid columns="2" cellpadding="3" cellspacing="3">		
+			<h:panelGroup>
+					<h:outputLabel value="Liquidação"/><br />
+					     <rich:calendar id="liquidacao" inputSize="23" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura">
+							<f:facet name="footer">
+								<h:outputText style="text-align:center" />
+							</f:facet>		            
+					    </rich:calendar>
+				</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="parcelasCalculadas" value="Parcelas Calculadas" /><br />
+				<h:selectOneMenu id="parcelasCalculadas">
+								<f:selectItem itemLabel="Salário Retido"></f:selectItem>
+								<f:selectItem itemLabel="FGTS sobre Salário Retido"></f:selectItem>
+								<f:selectItem itemLabel="Abono"></f:selectItem>
+								<a4j:support event="onchange" limitToList="true"/>
+				</h:selectOneMenu>
+			</h:panelGroup>
+		</h:panelGrid>
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+
+		<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="10" var="item">
+	    	
+	    	<rich:column>
+	    		<f:facet name="header">
+    				<h:outputText value="Data Inicial"/>
+    			</f:facet>	
+    			<h:outputText value="10/07/2012" />
+	    	</rich:column>		
+	    		    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Data Final"/>
+    			</f:facet>
+    			<h:outputText value="12/07/2012" />	
+	    	</rich:column>
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Valor"/>
+    			</f:facet>	
+    			<h:outputText value="C" />
+	    	</rich:column>		
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Base"/>
+    			</f:facet>	
+    			<h:outputText value="10" />
+	    	</rich:column>		
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Divisor"/>
+    			</f:facet>	
+    			<h:outputText value="1.200,00" />
+	    	</rich:column>
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Multiplicador"/>
+    			</f:facet>	
+   			 <h:outputText value="2.000,00" />
+	    	</rich:column>
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Quantidade"/>
+    			</f:facet>	
+    			<h:outputText value="9" />
+	    	</rich:column>	
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Dobra"/>
+    			</f:facet>	
+    			<h:outputText value="Sim" />
+	    	</rich:column>	
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Devido"/>
+    			</f:facet>	
+    			<h:outputText value="100" />
+	    	</rich:column>
+	    	
+	    	<rich:column>
+    			<f:facet name="header">
+    				<h:outputText value="Pago"/>
+    			</f:facet>	
+    			<h:outputText value="400,00" />
+	    	</rich:column>
+	    				    				    	
+		</rich:dataTable>
+		    
+		<ui:include src="/pages/comum/paginacao.xhtml">
+	    	<ui:param name="lista" value="#{apresentador.lista}" />
+		</ui:include>
+	
+	</ui:define>
+	
+	<!--  
+		INICIO DO FORMULÁRIO	
+	-->
+		
+	<ui:define name="camposFormulario">
+	
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="buscar" value="Buscar" 	actionListener="#{apresentador.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentador.emModoListagem}" onclick="allToUpperCase()"/>	
+		<a4j:commandButton id="incluir" value="Liquidar"  	actionListener="#{apresentador.novo}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoListagem}" onclick="limpa(new Array('assuntosCnj'))"/>
+		<a4j:commandButton id="salvar" value="Salvar" 	actionListener="#{apresentador.salvar}" styleClass="botao" rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" onclick="allToUpperCase();"/>
+		<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.removerVerba}" imeddiate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />
+		<a4j:commandButton id="cancelar" value="#{apresentador.operacao=='VISUALIZACAO'?'Voltar':'Cancelar'}" actionListener="#{apresentador.cancelar}" ajaxSingle="true" styleClass="botao" rendered="#{apresentador.emModoFormulario}"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

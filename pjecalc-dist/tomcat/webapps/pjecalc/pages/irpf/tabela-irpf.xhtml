@@ -1,0 +1,535 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="IRPF" />
+	<ui:param name="apresentador" value="#{apresentadorTabelaFiscal}" />	
+
+	<ui:define name="nofiltroCampos"/>
+
+	<ui:define name="nocamposFormulario">
+		<a4j:outputPanel ajaxRendered="true">	
+			<script type="text/javascript">
+				jQuery(document).ready(function() {
+					 jQuery(function() {
+	                		exibirDetalhesTabela('.linkTitulo', '.linkDestinacoes');
+					});
+				});
+			</script>
+		</a4j:outputPanel>
+
+		<a4j:outputPanel id ="painelNovo" rendered="#{identity.hasPermission('TABELA_IRPF', 'MANUTENCAO')}">	
+
+			<fieldset style="width: 100%;">
+
+				<legend><b><h:outputLabel value="Novo Registro" /></b></legend>
+
+				<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+
+					<h:panelGroup>	
+
+						<h:outputLabel value="Mês/Ano *" for="mesAnoIrpf" /><br />						
+						<rich:calendar id="mesAnoIrpf" value="#{apresentador.registro.competencia}"
+									label="Mês/Ano" inputSize="7" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+									oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									showWeekDaysBar="false" showFooter="false"
+									styleClass="special" inputClass="maskDate"
+									oninputfocus="$(this).monthYearMask()">
+								<f:facet name="footer">
+									<h:outputText value="{selectedDateControl}" style="text-align:center" />
+								</f:facet>
+						</rich:calendar>
+						<cobra:toolTip>
+							<rich:message for="mesAnoIrpf" />
+						</cobra:toolTip>
+					</h:panelGroup>
+
+				</h:panelGrid>
+				
+				<h:panelGrid columns="3" cellspacing="4" cellpadding="2" border="0">
+
+					<h:panelGroup>
+
+						<fieldset>
+						
+							<legend><b><h:outputLabel value="Faixas" /></b></legend>
+
+							<h:panelGrid columns="1" cellspacing="3" cellpadding="0" border="0">
+							
+								<h:panelGrid columns="5" cellspacing="0" cellpadding="3" border="0" >
+
+									<h:panelGroup layout="block" style="margin-top:12px;">
+										<h:outputLabel  value="Faixa 1 *"/>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:inputHidden id="faixa1Irpf" />
+										<h:outputLabel value="Valor Inicial" for="valorInicialFaixa1Irpf" /><br />
+										<h:inputText id="valorInicialFaixa1Irpf" 
+											value="#{apresentador.registro.primeiraFaixaFiscal.valorInicial}"
+											label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)"
+											style="text-align:right;" disabled="true">
+											<f:converter converterId="bigDecimalConverter" />
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="valorInicialFaixa1Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+					
+									<h:panelGroup>
+										<h:outputLabel value="Valor Final" for="valorFinalFaixa1Irpf" /><br />
+										<a4j:region>
+											<h:inputText id="valorFinalFaixa1Irpf" value="#{apresentador.registro.primeiraFaixaFiscal.valorFinal}"
+													label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+												<a4j:support event="onblur" reRender="panelValorInicialFaixa2Irpf" limitToList="true" ajaxSingle="true" actionListener="#{apresentador.atualizarNovoValorInicial()}" />
+												<f:converter converterId="bigDecimalConverter" />
+											</h:inputText>
+										</a4j:region>
+										<cobra:toolTip>
+											<rich:message for="valorFinalFaixa1Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+					
+									<h:panelGroup>
+										<h:outputLabel value="Alíquota (%)" for="aliquotaFaixa1Irpf" /><br />
+										<h:inputText id="aliquotaFaixa1Irpf" value="#{apresentador.registro.primeiraFaixaFiscal.aliquota}"
+												label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+											<f:converter converterId="bigDecimalConverter" />
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="aliquotaFaixa1Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Parcela a Deduzir" for="deducaoFaixa1Irpf" /><br />
+										<h:inputText id="deducaoFaixa1Irpf" value="#{apresentador.registro.primeiraFaixaFiscal.deducao}"
+												label="Parcela a Deduzir" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+											<f:converter converterId="bigDecimalConverter" />
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="deducaoFaixa1Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+									
+								</h:panelGrid>
+				
+								<h:panelGrid columns="5" cellspacing="0" cellpadding="3" border="0">
+								
+									<h:outputLabel value="Faixa 2 *" />
+									
+									<h:panelGroup id="panelValorInicialFaixa2Irpf">
+										<h:inputText id="valorInicialFaixa2Irpf" value="#{apresentador.registro.segundaFaixaFiscal.valorInicial}"
+												label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)"
+												style="text-align:right;" disabled="true">
+											<f:converter converterId="bigDecimalConverter"/>
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="valorInicialFaixa2Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+					
+									<h:panelGroup>
+										<a4j:region>
+											<h:inputText id="valorFinalFaixa2Irpf"
+													value="#{apresentador.registro.segundaFaixaFiscal.valorFinal}" 
+													label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)" 
+													style="text-align:right;">
+												<a4j:support event="onblur" reRender="panelValorInicialFaixa3Irpf, panelValorFinalFaixa3Irpf"
+														limitToList="true" ajaxSingle="true" actionListener="#{apresentador.atualizarNovoValorInicial()}" />
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+										</a4j:region>
+										<cobra:toolTip>
+											<rich:message for="valorFinalFaixa2Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+					
+									<h:panelGroup>
+										<h:inputText id="aliquotaFaixa2Irpf" value="#{apresentador.registro.segundaFaixaFiscal.aliquota}"
+												label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+											<f:converter converterId="bigDecimalConverter" />
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="aliquotaFaixa2Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:inputText id="deducaoFaixa2Irpf" value="#{apresentador.registro.segundaFaixaFiscal.deducao}"
+												label="Parcela a Deduzir" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+											<f:converter converterId="bigDecimalConverter" />
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="deducaoFaixa2Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+									
+								</h:panelGrid>
+
+								<h:panelGrid id="panelFaixa3Irpf" columns="6" cellspacing="0" cellpadding="3" border="0">
+
+									<h:outputLabel value="Faixa 3 *"/>
+									
+									<h:panelGroup id="panelValorInicialFaixa3Irpf">
+										<h:inputText id="valorInicialFaixa3Irpf" value="#{apresentador.registro.terceiraFaixaFiscal.valorInicial}"
+												label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)"
+												style="text-align:right;" disabled="true">
+											<f:converter converterId="bigDecimalConverter"/>
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="valorInicialFaixa3Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+					
+									<h:panelGroup id="panelValorFinalFaixa3Irpf">
+										<a4j:region>
+											<h:inputText id="valorFinalFaixa3Irpf"
+													value="#{apresentador.registro.terceiraFaixaFiscal.valorFinal}"
+													label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)"
+													disabled="#{not apresentador.permiteExibicaoFaixa4}" style="text-align:right;">
+												<f:converter converterId="bigDecimalConverter" />
+												<a4j:support event="onblur" reRender="panelValorInicialFaixa4Irpf" limitToList="true"
+														actionListener="#{apresentador.atualizarNovoValorInicial()}" />
+											</h:inputText>
+										</a4j:region>
+										<cobra:toolTip>
+											<rich:message for="valorFinalFaixa3Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+					
+									<h:panelGroup>
+										<h:inputText id="aliquotaFaixa3Irpf" value="#{apresentador.registro.terceiraFaixaFiscal.aliquota}"
+												label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+											<f:converter converterId="bigDecimalConverter" />
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="aliquotaFaixa3Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:inputText id="deducaoFaixa3Irpf" value="#{apresentador.registro.terceiraFaixaFiscal.deducao}"
+												label="Parcela a Deduzir" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+											<f:converter converterId="bigDecimalConverter" />
+										</h:inputText>
+										<cobra:toolTip>
+											<rich:message for="deducaoFaixa3Irpf" />
+										</cobra:toolTip>
+									</h:panelGroup>
+				
+									<a4j:commandLink id="addFaixa4Irpf" immediate="true" ajaxSingle="true" actionListener="#{apresentador.habilitarFaixa4()}"
+											reRender="panelFaixa4Irpf,panelFaixa3Irpf" styleClass="linkNovo" title="Nova Faixa"
+											rendered="#{not apresentador.permiteExibicaoFaixa4}" limitToList="true" />
+
+								</h:panelGrid>
+				
+								<h:panelGroup id="panelFaixa4Irpf">
+								
+									<h:panelGrid  columns="7" cellspacing="0" cellpadding="3" border="0" rendered="#{apresentador.permiteExibicaoFaixa4}">
+										
+										<h:outputLabel value="Faixa 4 *" />
+										
+										<h:panelGroup id="panelValorInicialFaixa4Irpf">
+											<h:inputText id="valorInicialFaixa4Irpf"
+													value="#{apresentador.registro.quartaFaixaFiscal.valorInicial}"
+													label="Valor Inicial" size="16" maxlength="14" disabled="true"
+													onfocus="$(this).decimalMask(2)" style="text-align:right;">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<cobra:toolTip>
+												<rich:message for="valorInicialFaixa4Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+
+										<h:panelGroup>
+											<a4j:region>
+												<h:inputText id="valorFinalFaixa4Irpf" value="#{apresentador.registro.quartaFaixaFiscal.valorFinal}"
+														label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)"
+														style="text-align:right;" disabled="#{not apresentador.permiteExibicaoFaixa5}">
+													<f:converter converterId="bigDecimalConverter" />
+													<a4j:support event="onblur" reRender="panelValorInicialFaixa5Irpf" limitToList="true"
+															actionListener="#{apresentador.atualizarNovoValorInicial()}" />
+												</h:inputText>
+											</a4j:region>
+											<cobra:toolTip>
+												<rich:message for="valorFinalFaixa4Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+					
+										<h:panelGroup>
+											<h:inputText id="aliquotaFaixa4Irpf" value="#{apresentador.registro.quartaFaixaFiscal.aliquota}"
+													label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<cobra:toolTip>
+												<rich:message for="aliquotaFaixa4Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:inputText id="deducaoFaixa4Irpf" value="#{apresentador.registro.quartaFaixaFiscal.deducao}"
+													label="Parcela a Deduzir" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<cobra:toolTip>
+												<rich:message for="deducaoFaixa4Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+										
+										<a4j:commandLink id="esconderFaixa4Irpf" immediate="true" ajaxSingle="true" actionListener="#{apresentador.esconderFaixa4()}"
+												reRender="panelFaixa4Irpf,panelFaixa3Irpf" styleClass="linkExcluir" title="Remover Faixa" limitToList="true" 
+												rendered="#{apresentador.permiteExibicaoFaixa4 and not apresentador.permiteExibicaoFaixa5}" />
+
+										<a4j:commandLink id="adicionarFaixa5Irpf" immediate="true" ajaxSingle="true" actionListener="#{apresentador.habilitarFaixa5()}"
+												reRender="panelFaixa5Irpf,panelFaixa4Irpf" styleClass="linkNovo" title="Nova Faixa" limitToList="true"
+												rendered="#{apresentador.permiteExibicaoFaixa4 and not apresentador.permiteExibicaoFaixa5}" />
+
+									</h:panelGrid>
+
+								</h:panelGroup>
+								
+								<h:panelGroup id="panelFaixa5Irpf">
+								
+									<h:panelGrid columns="6" cellspacing="0" cellpadding="3" border="0" rendered="#{apresentador.permiteExibicaoFaixa5}">
+
+										<h:outputLabel value="Faixa 5 *"/>
+										
+										<h:panelGroup id="panelValorInicialFaixa5Irpf">
+											<h:inputText id="valorInicialFaixa5Irpf" value="#{apresentador.registro.quintaFaixaFiscal.valorInicial}"
+													label="Valor Inicial" size="16" maxlength="14" onfocus="$(this).decimalMask(2)"
+													style="text-align:right;" disabled="true">
+												<f:converter converterId="bigDecimalConverter" />
+											</h:inputText>
+											<cobra:toolTip>
+												<rich:message for="valorInicialFaixa5Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+
+										<h:panelGroup>
+											<h:inputText id="valorFinalFaixa5Irpf" value="#{apresentador.registro.quintaFaixaFiscal.valorFinal}"
+													label="Valor Final" size="16" maxlength="14" onfocus="$(this).decimalMask(2)"
+													style="text-align:right;" disabled="true">
+												<f:converter converterId="bigDecimalConverter" />
+											</h:inputText>
+											<cobra:toolTip>
+												<rich:message for="valorFinalFaixa5Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+					
+										<h:panelGroup>
+											<h:inputText id="aliquotaFaixa5Irpf" value="#{apresentador.registro.quintaFaixaFiscal.aliquota}"
+													label="Alíquota" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+												<f:converter converterId="bigDecimalConverter" />
+											</h:inputText>
+											<cobra:toolTip>
+												<rich:message for="aliquotaFaixa5Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+										
+										<h:panelGroup>
+											<h:inputText id="deducaoFaixa5Irpf" value="#{apresentador.registro.quintaFaixaFiscal.deducao}"
+													label="Parcela a Deduzir" size="16" maxlength="9" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+												<f:converter converterId="bigDecimalConverter" />
+											</h:inputText>
+											<cobra:toolTip>
+												<rich:message for="deducaoFaixa5Irpf" />
+											</cobra:toolTip>
+										</h:panelGroup>
+										
+										<a4j:commandLink id="esconderFaixa5Irpf" immediate="true" ajaxSingle="true" actionListener="#{apresentador.esconderFaixa5()}"
+												reRender="panelFaixa5Irpf,panelFaixa4Irpf" styleClass="linkExcluir" title="Remover Faixa" limitToList="true"
+												rendered="#{apresentador.permiteExibicaoFaixa5}" />
+
+									</h:panelGrid>
+
+								</h:panelGroup>
+
+							</h:panelGrid>
+
+						</fieldset>
+
+					</h:panelGroup>
+
+				</h:panelGrid>
+		
+				<h:panelGrid columns="3" cellspacing="4" cellpadding="3" border="0">
+
+					<h:panelGroup>
+						<h:outputLabel value="Dedução por Dependente *" for="valorDeducaoPorDependenteIrpf"/><br />
+						<h:inputText id="valorDeducaoPorDependenteIrpf" value="#{apresentador.registro.valorDeducaoPorDependente}"
+								label="Dedução por Dependente" size="29" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+							<f:converter converterId="bigDecimalConverter" />
+						</h:inputText>
+						<cobra:toolTip>
+							<rich:message for="valorDeducaoPorDependenteIrpf" />
+						</cobra:toolTip>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="Dedução por Aposentado Maior que 65 Anos *" for="valorDeducaoParaAposentadoMaiorQue65AnosIrpf"/><br />
+						<h:inputText id="valorDeducaoParaAposentadoMaiorQue65AnosIrpf" value="#{apresentador.registro.valorDeducaoParaAposentadoMaiorQue65Anos}"
+								label="Dedução por Aposentado Maior que 65 Anos" size="48" maxlength="14" onfocus="$(this).decimalMask(2)" style="text-align:right;">
+							<f:converter converterId="bigDecimalConverter" />
+						</h:inputText>
+						<cobra:toolTip>
+							<rich:message for="valorDeducaoParaAposentadoMaiorQue65AnosIrpf" />
+						</cobra:toolTip>
+					</h:panelGroup>
+			
+					<h:panelGroup>
+						<a4j:commandLink id="cmdIncluirIrpf" value="Salvar" styleClass="botaoAddSalvar"
+								actionListener="#{apresentador.adicionar}" title="Salvar Novo Registro"
+								reRender="painelListagem, painelNovo" />
+					</h:panelGroup>
+
+				</h:panelGrid>
+	
+			</fieldset>
+
+		</a4j:outputPanel>
+		
+		<a4j:outputPanel id="painelListagem">
+		
+			<h:panelGroup  style="width: 100%;" rendered="#{apresentador.listaDeTabelas.size gt 0}">
+
+				<rich:dataTable id="listagemIrpf" rowClasses="linha-par, linha-par-exibir, linha-impar, linha-impar-exibir" cellpadding="3" border="0" width="100%" rows="24"
+						value="#{apresentador.listaDeTabelas}" var="tabela" rowKeyVar="dataTableIndex">
+
+					<f:facet name="header">
+						<rich:columnGroup>
+							<rich:column style="width:7%;" rendered="#{identity.hasPermission('TABELA_IRPF', 'MANUTENCAO')}">
+								<h:outputText value="Ação"/>
+							</rich:column>
+							<rich:column>
+								<h:outputText value="Mês/Ano" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="Dedução por Dependente" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="Dedução por Aposentado Maior que 65 Anos" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="Faixas" styleClass="linkTitulo linkDetalhe" />
+							</rich:column>
+						</rich:columnGroup>
+					</f:facet>
+					
+					<rich:columnGroup>					
+						<rich:column style="width:7%;" rendered="#{identity.hasPermission('TABELA_IRPF', 'MANUTENCAO')}">						
+							<a4j:commandLink id="excluirItemIrpf"  actionListener="#{apresentador.excluir(tabela)}" ajaxSingle="true"
+									reRender="painelListagem" styleClass="linkExcluir" title="Excluir"
+									onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false;" />
+							<a4j:commandLink id="clonarItemIrpf" reRender="painelListagem"
+									actionListener="#{apresentador.criarTabelaParaProximaCompetencia(tabela)}"
+									styleClass="linkCopy" title="Copiar para próxima Competência" rendered="#{dataTableIndex eq 0}"
+									onclick="if (!confirma('#{mensagens.MSG0049}',this)) return false;" ajaxSingle="true" />
+						</rich:column>
+	
+						<rich:column>						
+							<h:outputText value="#{tabela.competencia}">
+								<f:converter converterId="competenciaConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>
+							<h:outputText value="#{tabela.valorDeducaoPorDependente}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>						
+							<h:outputText value="#{tabela.valorDeducaoParaAposentadoMaiorQue65Anos}">
+								<f:converter converterId="bigDecimalConverter" />
+							</h:outputText>
+						</rich:column>
+	
+						<rich:column>
+							<h:panelGroup id="divDestinacoes">
+								<ui:param name="principalId" value="#{tabela.id}" />
+								<h:outputText value="Exibir" styleClass="linkDestinacoes linkDetalhe exibirItem#{principalId}"/>
+							</h:panelGroup>						
+						</rich:column>					
+					</rich:columnGroup>
+					
+					
+					<rich:column colspan="5">
+
+						<h:panelGroup layout="block" styleClass="detalhe3d">
+
+							<rich:dataTable id="listaFaixa" value="#{tabela.getFaixas()}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0"
+									width="100%" rows="10" var="faixa">
+								
+								<f:facet name="header">
+									<rich:columnGroup>
+										<rich:column>
+											<h:outputText value="Faixas" />
+										</rich:column>
+										<rich:column>
+											<h:outputText value="Valor Inicial" />
+										</rich:column>
+										<rich:column>
+											<h:outputText value="Valor Final" />
+										</rich:column>
+										<rich:column>
+											<h:outputText value="Alíquota (%)" />
+										</rich:column>
+										<rich:column>
+											<h:outputText value="Dedução" />
+										</rich:column>
+									</rich:columnGroup>
+								</f:facet>
+
+								<rich:columnGroup>
+									<rich:column style="align:center;">
+										<h:outputText value="Faixa #{faixa.discriminador}" />							             
+									</rich:column>
+									<rich:column style="align:center;">
+										<h:outputText value="#{faixa.valorInicial}" />
+									</rich:column>
+									<rich:column style="align:center;">
+										<h:outputText value="#{faixa.valorFinal}" />
+									</rich:column>
+									<rich:column style="align:center;">
+										<h:outputText value="#{faixa.aliquota}" />
+									</rich:column>
+									<rich:column style="align:center;">
+										<h:outputText value="#{faixa.deducao}" />
+									</rich:column>										
+								</rich:columnGroup>
+
+							</rich:dataTable>
+
+						</h:panelGroup>
+
+					</rich:column>
+
+				</rich:dataTable>
+
+				<ui:include src="../comum/paginacao.xhtml">
+					<ui:param name="paramListagem" value="listagemIrpf" />
+				</ui:include>
+
+			</h:panelGroup>
+			
+		</a4j:outputPanel>
+			
+		
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes"/>
+	<ui:define name="noresultadoTabela"/>
+	
+</ui:composition>
+
+</html>

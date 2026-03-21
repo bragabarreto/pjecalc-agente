@@ -1,0 +1,49 @@
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xml:lang="pt" lang="pt" 
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core"
+    xmlns:a4j="http://richfaces.org/a4j"
+    xmlns:rich="http://richfaces.org/rich">
+    
+<ui:param name="id" value="#{paramListagem == null ? 'listagem' : paramListagem}" />
+
+<h:panelGroup>
+ <table align="center" style="margin-top:-15px">
+	<tr>
+		<td>
+			<rich:datascroller renderIfSinglePage="false" align="center" for="#{id}" maxPages="12" fastStep="10"
+			     pageIndexVar="pageIndex" pagesVar="pages" stepControls="show" fastControls="hide" boundaryControls="show"
+			     inactiveStyleClass="paginacaoInativa" selectedStyleClass="paginacaoSelecionada" oncomplete="#{paramExibir};#{paramCheckAll}"
+			     styleClass="paginacao" tableStyleClass="paginacaoTabela" id="paginacao#{id}" reRender="#{reRender}">
+			        <f:facet name="first" >
+			              <h:graphicImage id="pagPrimeiro#{id}" url="/images/ico_first.gif" title="Primeiro" alt="Primeiro" />
+			        </f:facet>
+			        <f:facet name="first_disabled" >
+			              <h:graphicImage id="pagPrimeiroOff#{id}" url="/images/ico_first_off.gif" title="Primeiro" alt="Primeiro desabilitado" />
+			        </f:facet>
+			         <f:facet name="previous" stepControls="hide" boundaryControls="hide">
+			              <h:graphicImage id="pagAnterior#{id}" url="/images/ico_prior.gif" title="Anterior" alt="Anterior" />
+			        </f:facet>
+			         <f:facet name="previous_disabled">
+			              <h:graphicImage id="pagAnteriorOff#{id}" url="/images/ico_prior_off.gif" title="Anterior" alt="Anterior desabilitado" />
+			        </f:facet>
+			         <f:facet name="next">
+			              <h:graphicImage id="pagProximo#{id}" url="/images/ico_next.gif" title="Pr&#243;ximo" alt="Proximo" />
+			        </f:facet>
+			         <f:facet name="next_disabled">
+			              <h:graphicImage id="pagProximoOff#{id}" url="/images/ico_next_off.gif" title="Pr&#243;ximo" alt="Proximo desabilitado" />
+			        </f:facet>
+			        <f:facet name="last">
+			              <h:graphicImage id="pagUltimo#{id}" url="/images/ico_last.gif" title="&#218;ltimo" alt="Ultimo" />
+			        </f:facet>
+			        <f:facet name="last_disabled">
+			              <h:graphicImage id="pagUltimoOff#{id}" url="/images/ico_last_off.gif" title="&#218;ltimo" alt="Ultimo desabilitado" />
+			        </f:facet>
+			 </rich:datascroller>
+			 </td>
+		</tr>
+	 </table>
+</h:panelGroup> 
+
+</html>

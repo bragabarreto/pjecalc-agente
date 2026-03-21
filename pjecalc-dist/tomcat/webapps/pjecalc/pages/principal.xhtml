@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:rich="http://richfaces.org/rich">
+
+	<ui:composition template="/templates/template-conteudo.xhtml">
+    
+		<ui:param name="home" value="true" />
+		<ui:param name="apresentador" value="#{apresentadorPrincipal}" />
+		
+		
+		<ui:define name="noCrud">
+		
+			<h:panelGroup rendered="#{not apresentador.isTabelasNacionaisAtualizadas()}">
+				<div class="alerta">
+					<span class="rich-messages-marker">
+						<h:outputText styleClass="texto" value="Alerta." />
+					</span>
+					<span style="margin-left: 5px;" />
+					<span class="rich-messages-label">
+						<h:outputText value="Existe uma nova versão das tabelas auxiliares nacionais disponíveis para atualização. Solicite ao Gestor Regional que faça a atualização." />
+					</span>
+				</div>
+			</h:panelGroup>
+		
+			<div class="conteudoPrincipal">
+			
+				<div class="painelPrincipalBotoes">
+					<div class="principalAbrirProjetos">	
+						<div id="botoesInicio">
+						
+								<div class="sprite-criar">                   
+									<h:commandLink action="#{apresentadorCalculo.iniciarComNovo}" immediate="true" title="Criar Novo Cálculo" />	                     
+								</div>
+								
+								<div class="sprite-abrir">
+									<h:commandLink action="#{apresentadorCalculo.iniciar}" immediate="true" title="Buscar Cálculo" />	                     
+								</div>
+													
+								<div class="sprite-importar">
+									<h:commandLink action="#{apresentadorImportacao.iniciar}" immediate="true" title="Importar Cálculo" />	                     
+								</div>
+						</div>
+						<div class="calculosRecentes">
+							<a4j:region>
+								<h:outputLabel value="Abrir Cálculos Recentes" /><br/>
+								<h:selectOneListbox name="listaCalculosRecentes" styleClass="listaCalculosRecentes" 
+													size="10" value="#{apresentador.registroComId}">
+									<s:selectItems value="#{apresentador.listaDeCalculosRecentesDoUsuario}" var="_calculo" itemValue="#{_calculo.calculo}" label="#{_calculo.getDescricao()}" />
+									<!-- <s:convertEntity /> -->
+									<a4j:support event="ondblclick" action="#{apresentador.abrirCalculo()}" onsubmit="AguardeShow()" oncomplete="AguardeHide()"/>
+									<a4j:support event="onkeypress" action="#{apresentador.abrirCalculo()}" onsubmit="if(event.which != 13)return false; AguardeShow()" oncomplete="AguardeHide()" />
+								</h:selectOneListbox>
+							</a4j:region>							
+						</div>	
+					</div>
+					
+					<rich:modalPanel id="modalSobre" resizeable="false" moveable="true" autosized="true" zindex="2000" width="564">
+						 <f:facet name="header">
+           				 	<h:panelGroup>
+                				<span style="color: #ffffff; font-size:14px;"></span>
+            				</h:panelGroup>
+        				</f:facet>
+       				<f:facet name="controls">
+            			<h:panelGroup>
+                			  <h:graphicImage value="../images/close_modal.png" style="cursor:pointer" onclick="Richfaces.hideModalPanel('modalSobre')" alt="Fechar" />
+            			</h:panelGroup>
+        			</f:facet>
+        			
+        			<div id="modalBox">
+        				
+						<div class="modalboxDiv">#{apresentador.sobreNomeDoSistema}</div>
+        				<div class="modalboxDiv3">#{apresentador.sobreDescricao}</div>
+        				<div class="modalboxDivSiteDoProjeto">Site do Projeto</div>
+        				<div>
+ 							<a  href="#{apresentador.sobreUrl}" class="modalboxDivSite" title="#{apresentador.sobreUrl}" target="_blank">
+								#{apresentador.sobreUrl}
+							</a>       				
+        				</div>
+        				
+						<div class="modalboxDivVersao">Versão #{mensagens.versao}</div>
+        					
+        			</div>
+		    
+	   				</rich:modalPanel>
+	   				
+					<div class="barraIcones">
+						<ul>
+							<li>
+								<a class="principalImageManual" href="http://pje.csjt.jus.br/manual/index.php/PJE-Calc" title="Manual" target="_blank">
+									Manual
+								</a>
+							</li>
+							<li >
+								<a class="principalImageTutorial" href="http://pje.csjt.jus.br/manual/index.php/PJe-Calc-Tutorial" title="Tutorial" target="_blank">
+									Tutorial
+								</a>
+							</li>
+							<li >
+								<h:commandLink styleClass="principalImageInfo" onclick="Richfaces.showModalPanel('modalSobre'); return false" title="Sobre" >Sobre</h:commandLink>
+							</li>
+						</ul>
+						
+					</div>
+				</div>
+			</div>		
+		</ui:define>
+		
+	</ui:composition>
+
+</html>

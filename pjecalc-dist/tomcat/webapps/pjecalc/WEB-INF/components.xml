@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<components xmlns="http://jboss.com/products/seam/components" xmlns:async="http://jboss.com/products/seam/async" xmlns:cache="http://jboss.com/products/seam/cache" xmlns:core="http://jboss.com/products/seam/core" xmlns:persistence="http://jboss.com/products/seam/persistence" xmlns:security="http://jboss.com/products/seam/security" xmlns:transaction="http://jboss.com/products/seam/transaction" xmlns:web="http://jboss.com/products/seam/web" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jboss.com/products/seam/core http://jboss.com/products/seam/core-2.2.xsd          http://jboss.com/products/seam/web http://jboss.com/products/seam/web-2.2.xsd           http://jboss.com/products/seam/components http://jboss.com/products/seam/components-2.2.xsd          http://jboss.com/products/seam/security http://jboss.com/products/seam/security-2.2.xsd          http://jboss.com/products/seam/persistence http://jboss.com/products/seam/persistence-2.2.xsd          http://jboss.com/products/seam/transaction http://jboss.com/products/seam/transaction-2.2.xsd          http://jboss.com/products/seam/cache http://jboss.com/products/seam/cache-2.2.xsd          http://jboss.com/products/seam/async http://jboss.com/products/seam/async-2.2.xsd">
+
+	<core:manager concurrent-request-timeout="5000" conversation-timeout="30000" default-flush-mode="MANUAL"/>
+	
+	<security:identity authenticate-method="#{autenticador.autenticar}"/>
+
+	<persistence:entity-manager-factory name="pjeCalc" persistence-unit-name="PJECALC_H2"/>
+	<persistence:managed-persistence-context auto-create="true" entity-manager-factory="#{pjeCalc}" name="entityManager"/>
+	<transaction:entity-transaction entity-manager="#{entityManager}"/>
+
+	<core:resource-loader>
+		<core:bundle-names>
+			<value>messages</value>
+			<value>url_tribunal</value>
+		</core:bundle-names>
+	</core:resource-loader>
+	
+	<web:exception-filter url-pattern="*.jsf"/>
+
+	<web:character-encoding-filter encoding="ISO-8859-1" override-client="true" url-pattern="*.jsf"/>
+
+	<web:multipart-filter create-temp-files="true" max-request-size="0" url-pattern="/*"/> 
+
+	<event type="org.jboss.seam.security.notLoggedIn">
+		<action execute="#{redirect.captureCurrentView}"/>
+	</event>
+	
+	<event type="org.jboss.seam.security.postAuthenticate">
+		<action execute="#{redirect.returnToCapturedView}"/>
+	</event>
+	
+</components>

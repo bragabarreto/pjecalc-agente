@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="menuCalculo" value="#{true}" />
+	<ui:param name="apresentador" value="#{apresentadorExportacao}" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+
+	<ui:define name="nofiltroCampos">
+	
+			<a4j:loadScript src="resource://jquery.js"/>
+						
+			<ui:include src="resumo-calculo.xhtml" />
+			
+			<br/>
+			
+       		<fieldset><legend>Dados da Exportação</legend>
+				<h:panelGrid columns="1" cellpadding="3" cellspacing="3">		
+					<h:panelGroup class="panelFileUpload" layout="block">
+						<h:outputLabel for="nomeArquivo" value="Nome do Arquivo"/><br />
+						<h:inputText id="nomeArquivo" label="Nome do Arquivo" value="#{apresentador.nome}" disabled="true" size="40"/>
+					</h:panelGroup>
+				</h:panelGrid>
+			</fieldset>
+        	
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario">
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="exportar" value="Exportar" actionListener="#{apresentador.exportar}" styleClass="botao"/>
+		<s:span rendered="#{apresentador.downloadDisponivel}">
+			<h:commandLink id="linkDownloadArquivo" actionListener="#{apresentador.downloadArquivo}" value=""/>
+			<script type="text/javascript">
+				if(typeof jsfcljs == 'function') {
+					jsfcljs(document.getElementById('formulario'),{'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'},'');
+				}
+			</script>			
+		</s:span>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

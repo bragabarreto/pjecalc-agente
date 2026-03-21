@@ -1,0 +1,43 @@
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xml:lang="pt" lang="pt" 
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core"
+    xmlns:a4j="http://richfaces.org/a4j"
+    xmlns:rich="http://richfaces.org/rich">
+
+	<script type="text/javascript">
+		jQuery(function() {
+			
+			jQuery('#divMensagem').animate({ height: 'toggle', opacity: 'show'}, 'slow', function(){
+				posicionaSeta();
+			});
+		});	   	
+	</script>
+	
+	<h:panelGroup rendered="#{facesContext.maximumSeverity ne null}">
+		<div id="divMensagem" style="display: none;">
+			<div class="#{facesContext.maximumSeverity.ordinal == '3' or facesContext.maximumSeverity.ordinal == '2' ? 'erro' : (facesContext.maximumSeverity.ordinal == '1' ? 'alerta' : 'sucesso') }">
+				<rich:messages layout="table" showSummary="false" showDetail="true" globalOnly="true">
+					<f:facet name="errorMarker">
+						<p class="texto">Erro.   </p>						
+					</f:facet>
+					<f:facet name="infoMarker">
+						<p class="texto">Sucesso.   </p>						
+					</f:facet>
+					<f:facet name="warnMarker">
+						<p class="texto">Alerta.   </p>						
+					</f:facet>
+				</rich:messages>
+				<h:outputText value="#{mensagens.MSG0005}" rendered="#{not apresentador.existemErrosGlobal()}"/>
+			</div>
+			<script type="text/javascript">
+
+			window.location='#irTopoPagina';
+
+			</script>	
+		</div>
+	</h:panelGroup>
+	
+</html>

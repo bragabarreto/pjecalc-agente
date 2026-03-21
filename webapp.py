@@ -735,12 +735,23 @@ async def executar_automacao_sse(
 
     async def gerador_sse():
         from modules.playwright_pjecalc import preencher_como_generator
+        from database import SessionLocal
         loop = asyncio.get_event_loop()
         gen = preencher_como_generator(dados, verbas_mapeadas, PJECALC_DIR, modo_oculto)
         while True:
             try:
                 msg = await loop.run_in_executor(None, next, gen)
                 yield f"data: {json.dumps({'msg': msg})}\n\n"
+                # Detectar .PJC gerado e persistir no banco
+                if msg.startswith("PJC_GERADO:"):
+                    caminho = msg.split(":", 1)[1].strip()
+                    db2 = SessionLocal()
+                    try:
+                        RepositorioCalculo(db2).marcar_exportado(sessao_id, caminho)
+                        db2.commit()
+                    finally:
+                        db2.close()
+                    yield f"data: {json.dumps({'msg': 'DOWNLOAD_DISPONIVEL', 'url': f'/download/{sessao_id}/pjc'})}\n\n"
                 if msg == "[FIM DA EXECUÇÃO]":
                     break
             except StopIteration:

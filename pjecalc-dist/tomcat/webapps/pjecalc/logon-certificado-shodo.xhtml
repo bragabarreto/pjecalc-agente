@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+	
+	
+					<div id="boxcentrallogoncertificado">
+					
+						 <h:commandButton id="loginAplicacaoButton"
+                                        action="#"
+                                        value="Acessar com Certificado Digital"
+                                        onclick="assinar();"
+                                        styleClass="bt_logond"/>
+						 
+						<form method="post" action="#{identity.logarComCertificadoDigital()}" id="assinaturaFormShodo">
+				           <h:inputHidden id="signature" />
+				           <h:inputHidden id="certChain" />
+				   
+				           <script>
+				               function submitForm() {
+				                   jQuery("#assinaturaFormShodo").get(0).submit();
+				               }
+				           </script>
+				        </form>
+				        
+				        <div id="boxMsg2">							
+ 							<span id="spanStatus">
+ 								<rich:spacer width="1" height="30"/>
+								<h:outputLabel value="Autenticando..." styleClass="labelMsg"/><br />
+							</span>
+							<span id="spanErro">
+								<rich:spacer width="1" height="5"/>
+								<rich:messages showSummary="false" showDetail="true" globalOnly="true" styleClass="labelMsgErro"/>
+								<a4j:region selfRendered="true">
+									<h:outputText value="#{mensagemErroLogin}" rendered="#{not empty mensagemErroLogin}" styleClass="labelMsgErro" />
+								</a4j:region>
+							</span>
+						</div>
+						
+						<div id="boxAssign" style="float:left; margin-bottom: 5px">
+							<a href="https://pje.trt8.jus.br/shodo/" target="_BLANK">
+								Assinador Digital - Shod&#333;
+							</a>
+						</div>
+						
+						<div id="boxAssign" style="float:left;">
+							<a href="http://idg.receita.fazenda.gov.br/orientacao/tributaria/senhas-e-procuracoes/senhas/certificados-digitais-1/orientacoes-sobre-emissao-renovacao-e-revogacao-de-certificados-digitais-e-cpf-ou-e-cnpj" target="_BLANK">
+								Saiba como obter o certificado digital
+							</a>
+						</div>
+						
+						<script type="text/javascript">
+							jQuery('#spanStatus').hide();
+						</script>
+
+					</div>
+
+</ui:composition>

@@ -1,0 +1,72 @@
+#popup_container {
+	font-family: Arial, sans-serif;
+	font-size: 12px;
+	min-width: 300px; /* Tamanho minimo */
+	max-width: 600px;  /* Tamanho maximo */
+	min-height: 100px;
+	background: #FFFFFF;
+	border: 1px solid #C0C0C0; /*#00B1EB;*/
+	color: #000;
+	width: expression(document.body.clientWidth ? "350px" : "auto"); /* Fix IE7 */
+}
+
+#popup_title {
+	font-family: Tahoma, sans-serif;
+	font-size: 12px;
+	font-weight: bold;
+	text-align: left;
+	line-height: 1.75em;
+	cursor: default;
+	padding-left: 10px;
+	background-color: #FFDFA6; /*#f4f8fb;*/
+	border: 1px solid #DAA520;
+	margin: 1px;
+	color: #4a526f;
+}
+
+
+.close {
+	background-image: url(../images/ico-close.png);
+	background-position: 2px 2px;
+	background-repeat: no-repeat;
+	padding: 15px 18px 5px 3px;
+	cursor: pointer;
+	float: right;
+}
+
+#popup_content {
+	background: 16px 16px no-repeat url(images/info.gif);
+	padding: 1em 1.75em;
+	margin: 0em;
+}
+
+#popup_content.alert {
+	/*background-image: url(images/info.gif); */
+}
+
+#popup_content.confirm {
+	background-image: url(../images/ico-question2.png);
+}
+
+#popup_content.prompt {
+	/*background-image: url(images/help.gif);*/
+}
+
+#popup_message {
+	margin-left:40px;
+	margin-top:10px;
+	text-align:left;
+	color: #4a526f;	
+	font-weight: bold;
+	margin-bottom: 15px;
+}
+
+#popup_panel {
+	text-align: center;
+}
+
+#popup_prompt {
+	margin: .5em 0em;
+}
+
+}

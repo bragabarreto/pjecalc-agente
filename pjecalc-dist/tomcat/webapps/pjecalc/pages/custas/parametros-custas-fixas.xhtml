@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Parâmetros de Custas Fixas" />
+	<ui:param name="apresentador" value="#{apresentadorParametrosCustasFixas}" />
+
+	<ui:define name="nofiltroCampos"/>
+
+	<ui:define name="nocamposFormulario">
+		<a4j:outputPanel rendered="#{identity.hasPermission('TABELAS_PARAMETROS_CUSTAS', 'MANUTENCAO')}">
+			<fieldset style="width: 100%;"><legend><b>Novo Registro</b></legend>
+				<h:panelGrid id="painelMinicrud" columns="4" cellspacing="0" border="0">
+					<h:panelGroup >
+						<h:panelGrid  columns="1" cellspacing="4" border="0">
+							<h:panelGroup styleClass="itemGrupo">
+								<h:outputLabel value="Início de Vigência *" for="dataInicio" />
+							</h:panelGroup>	
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Atos dos Oficiais de Justiça - Zona Urbana *" for="valorAtosUrbanosOficialJustica" />
+							</h:panelGroup>
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Atos dos Oficiais de Justiça - Zona Rural *" for="valorAtosRuraisOficialJustica" />
+							</h:panelGroup>
+							
+							
+							<h:panelGroup styleClass="itemGrupo">
+								<h:outputLabel value="Agravo de Instrumento *" for="valorAgravoDeInstrumento"/>
+							</h:panelGroup>	
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Agravo de Petição *" for="valorAgravoDePeticao" />
+							</h:panelGroup>
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Impugnação à Sentença de Liquidação *" for="valorImpugnacaoSentencaDeLiquidacao" />
+							</h:panelGroup>
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Recurso de Revista *" for="valorRecursoDeRevista" />
+							</h:panelGroup>
+						
+						</h:panelGrid>
+					</h:panelGroup>	
+					
+					<h:panelGroup >
+						<h:panelGrid  columns="1" cellspacing="0" border="0">
+							<h:panelGroup >
+							   <rich:calendar id="dataInicio" label="Início de Vigência" value="#{apresentador.registro.dataInicio}"  inputSize="16" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+								</rich:calendar>
+								<cobra:toolTip>
+							    <rich:message for="dataInicio"/>
+							    </cobra:toolTip>
+							</h:panelGroup>	
+							
+							<h:panelGroup>
+								<h:inputText id="valorAtosUrbanosOficialJustica" label="Atos dos Oficiais de Justiça - Zona Urbana" size="16" maxlength="16" value="#{apresentador.registro.valorAtosUrbanosOficialJustica}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorAtosUrbanosOficialJustica"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorAtosRuraisOficialJustica" label="Atos dos Oficiais de Justiça - Zona Rural" size="16" maxlength="16" value="#{apresentador.registro.valorAtosRuraisOficialJustica}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorAtosRuraisOficialJustica"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorAgravoDeInstrumento" label="Agravo de Instrumento" size="16" maxlength="12" value="#{apresentador.registro.valorAgravoDeInstrumento}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorAgravoDeInstrumento"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorAgravoDePeticao" label="Agravo de Petição" size="16" maxlength="16" value="#{apresentador.registro.valorAgravoDePeticao}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorAgravoDePeticao"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorImpugnacaoSentencaDeLiquidacao" label="Impugnação à Sentença de Liquidação" size="16" maxlength="12" value="#{apresentador.registro.valorImpugnacaoSentencaDeLiquidacao}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorImpugnacaoSentencaDeLiquidacao"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorRecursoDeRevista" label="Recurso de Revista" size="16" maxlength="16" value="#{apresentador.registro.valorRecursoDeRevista}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorRecursoDeRevista"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+						
+						</h:panelGrid>
+					
+					</h:panelGroup>		
+					
+					<h:panelGroup >
+						<h:panelGrid  columns="1" cellspacing="4" border="0">
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Embargos à Arrematação *" for="valorEmbargosAArrematacao" />
+							</h:panelGroup>
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Embargos à Execução *" for="valorEmbargosAExecucao" />
+							</h:panelGroup>
+							
+							
+							<h:panelGroup styleClass="itemGrupo">
+								<h:outputLabel value="Embargos de Terceiros *" for="valorEmbargosDeTerceiros"/>
+							</h:panelGroup>	
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Piso - Custas Conhecimento *" for="valorPisoCustasConhecimento" />
+							</h:panelGroup>
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Teto - Custas Liquidação *" for="valorTetoCustasLiquidacao" />
+							</h:panelGroup>
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<h:outputLabel value="Teto - Custas de Autos *" for="valorTetoCustasDeAutos" />
+							</h:panelGroup>
+							
+							<h:panelGroup  styleClass="itemGrupo">
+								<rich:spacer height="15px"/>
+							</h:panelGroup>
+							
+						</h:panelGrid>
+					</h:panelGroup>	
+					
+					<h:panelGroup >
+						<h:panelGrid  columns="1" cellspacing="0" border="0">
+							<h:panelGroup>
+								<h:inputText id="valorEmbargosAArrematacao" label="Embargos à Arrematação" size="16" maxlength="12" value="#{apresentador.registro.valorEmbargosAArrematacao}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorEmbargosAArrematacao"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorEmbargosAExecucao" label="Embargos à Execução" size="16" maxlength="16" value="#{apresentador.registro.valorEmbargosAExecucao}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorEmbargosAExecucao"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorEmbargosDeTerceiros" label="Embargos de Terceiros" size="16" maxlength="12" value="#{apresentador.registro.valorEmbargosDeTerceiros}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorEmbargosDeTerceiros"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorPisoCustasConhecimento" label="Piso - Custas Conhecimento" size="16" maxlength="16" value="#{apresentador.registro.valorPisoCustasConhecimento}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorPisoCustasConhecimento"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorTetoCustasLiquidacao" label="Teto - Custas Liquidação" size="16" maxlength="12" value="#{apresentador.registro.valorTetoCustasLiquidacao}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorTetoCustasLiquidacao"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:inputText id="valorTetoCustasDeAutos" label="Teto - Custas de Autos" size="16" maxlength="16" value="#{apresentador.registro.valorTetoCustasDeAutos}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+							    <cobra:toolTip>
+			                       	<rich:message for="valorTetoCustasDeAutos"/>
+			                    </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<a4j:commandLink id="cmdIncluir" style="margin-top: 0px; margin-left: -2px;margin-bottom: -3px;"
+												 styleClass="botaoAddSalvar" actionListener="#{apresentador.adicionar}" value="Salvar"
+												 title="Salvar Novo Registro" reRender="painelListagem,painelMinicrud"/>
+							</h:panelGroup>	
+							
+						</h:panelGrid>
+					
+					</h:panelGroup>	
+				
+				
+				</h:panelGrid>
+			</fieldset>
+		</a4j:outputPanel>
+		
+		<a4j:outputPanel id="painelListagem" >
+			<h:panelGroup  style="width: 100%;" rendered="#{listaParametros.rowCount gt 0}">
+			
+				<rich:dataTable id="listagem" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="#{listaParametros.rowCount}"
+							value="#{listaParametros}" var="item">
+							
+					<rich:column style="width:7%;" rendered="#{identity.hasPermission('TABELAS_PARAMETROS_CUSTAS', 'MANUTENCAO')}">
+				    	<f:facet name="header">
+			    			<h:outputText value="Ação"/>
+			    		</f:facet>
+				    	<a4j:commandLink id="excluirItem"  actionListener="#{apresentador.excluir(item)}"  reRender="painelListagem" immediate="true" rendered="#{item.dataFim eq null}"
+			    						 styleClass="linkExcluir" title="Excluir" 
+			    						 onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false;" />
+				    </rich:column>
+				    
+				    <rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Início
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.dataInicio}" datePattern="dd/MM/yyyy" />
+			    	</rich:column>	
+			    	
+			    	 <rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Fim
+		    				</h:outputText>
+		    			</f:facet>	
+			    		<h:outputText value="#{item.dataFim}" datePattern="dd/MM/yyyy" />
+			    	</rich:column>	
+			    	
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Atos dos Oficiais<br/>de Justiça<br/>Zona Urbana
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorAtosUrbanosOficialJustica}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Atos dos Oficiais<br/>de Justiça<br/>Zona Rural
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorAtosRuraisOficialJustica}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Agravo<br/>de<br/>Instrumento
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorAgravoDeInstrumento}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Agravo<br/>de<br/>Petição
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorAgravoDePeticao}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Impugnação<br/> à Sentença<br/>de Liquidação
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorImpugnacaoSentencaDeLiquidacao}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Recurso<br/>de<br/>Revista
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorRecursoDeRevista}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Embargos<br/>à<br/>Arrematação
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorEmbargosAArrematacao}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Embargos<br/>à<br/>Execução
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorEmbargosAExecucao}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Embargos<br/>de<br/>Terceiros
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorEmbargosDeTerceiros}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Piso - Custas<br/>Conhecimento
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorPisoCustasConhecimento}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Teto - Custas<br/>Liquidação
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorTetoCustasLiquidacao}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+
+			    	<rich:column>
+		    			<f:facet name="header">
+		    				<h:outputText>
+		    					Teto - Custas<br/>de Autos 
+		    				</h:outputText>
+		    			</f:facet>	
+		    			<h:outputText value="#{item.valorTetoCustasDeAutos}">
+		    				<f:converter converterId="bigDecimalConverter"/>
+		    			</h:outputText>
+			    	</rich:column>
+							
+				</rich:dataTable>
+			
+			</h:panelGroup>
+		</a4j:outputPanel>
+			
+		
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes"/>
+	<ui:define name="noresultadoTabela"/>
+	
+</ui:composition>
+
+</html>

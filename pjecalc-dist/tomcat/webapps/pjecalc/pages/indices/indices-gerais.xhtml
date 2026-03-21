@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Indices Gerais" />
+	<ui:param name="apresentador" value="#{apresentadorIndicesGerais}" />
+
+	<ui:define name="nofiltroCampos"/>
+
+
+	
+<ui:define name="nocamposFormulario">
+
+		<rich:tabPanel switchType="server" immediate="true"> 
+			
+			<rich:tab id="tabUnicaDebitoTrabalhista" label="Tabela Única de Atualização e Conversão de Débitos Trabalhistas" actionListener="#{apresentadorTabelaUnicaDebitoTrabalhista.carregarListaTUACDT}" reRender="paineltabelaUnicaDebitoTrabalhista">
+				<a4j:outputPanel id="paineltabelaUnicaDebitoTrabalhista">
+					<ui:include src="tuacdt-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabDevedorFazenda" label="Tabela Devedor Fazenda Pública" actionListener="#{apresentadorIndiceDFP.iniciarApresentador}" reRender="painelDevedorFazenda">
+				<a4j:outputPanel id="painelDevedorFazenda">
+					<ui:include src="dfp-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabIndebitoTributario" label="Tabela Repetição de Indébito Tributário" actionListener="#{apresentadorIndiceIT.iniciarApresentador}" reRender="painelIndebitoTributario">
+				<a4j:outputPanel id="painelIndebitoTributario">
+					<ui:include src="it-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+
+			<rich:tab id="tabUnicaJTMensal" label="Tabela JT Mensal" actionListener="#{apresentadorIndiceTabelaUnicaJTMensal.iniciarApresentador}" reRender="paineltabelaUnicaJTMensal">
+				<a4j:outputPanel id="paineltabelaUnicaJTMensal">
+					<ui:include src="tabelaunica-jtmensal-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabUnicaJTDiario" label="Tabela JT Diária" actionListener="#{apresentadorIndiceTabelaUnicaJTDiario.carregarListaDeTabelaUnicaJTDiario}" reRender="paineltabelaUnicaJTDiario">
+				<a4j:outputPanel id="paineltabelaUnicaJTDiario">
+					<ui:include src="tabelaunica-jtdiario-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabTR" label="TR" actionListener="#{apresentadorIndiceTR.iniciarApresentador}" reRender="painelTR">
+				<a4j:outputPanel id="painelTR">
+					<ui:include src="tr-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabUfir" label="UFIR" actionListener="#{apresentadorIndiceUFIR.carregarListaDeUFIR}" reRender="painelUFIR">
+				<a4j:outputPanel id="painelUFIR">
+					<ui:include src="ufir-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabCoeficienteUfir" label="Coeficiente UFIR" actionListener="#{apresentadorIndiceUFIR.carregarListaDeCoeficienteUFIR}" reRender="painelCUFIR">
+				<a4j:outputPanel id="painelCUFIR">
+					<ui:include src="coeficiente-ufir-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabIGPM" label="IGP-M" actionListener="#{apresentadorIndiceIGPM.iniciarApresentador}" reRender="painelIGPM">
+				<a4j:outputPanel id="painelIGPM">
+					<ui:include src="igpm-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabINPC" label="INPC" actionListener="#{apresentadorIndiceINPC.iniciarApresentador}" reRender="painelINPC">
+				<a4j:outputPanel id="painelINPC">
+					<ui:include src="inpc-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabIPC" label="IPC" actionListener="#{apresentadorIndiceIPC.iniciarApresentador}" reRender="painelIPC">
+				<a4j:outputPanel id="painelIPC">
+					<ui:include src="ipc-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabIPCA" label="IPCA" actionListener="#{apresentadorIndiceIPCA.iniciarApresentador}" reRender="painelIPCA">
+				<a4j:outputPanel id="painelIPCA">
+					<ui:include src="ipca-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabIPCAE" label="IPCA-E" actionListener="#{apresentadorIndiceIPCAE.iniciarApresentador}" reRender="painelIPCAE">
+				<a4j:outputPanel id="painelIPCAE">
+					<ui:include src="ipcae-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabIPCAETR" label="IPCA-E/TR" actionListener="#{apresentadorIndiceIPCAETR.iniciarApresentador}" reRender="painelIPCAETR">
+				<a4j:outputPanel id="painelIPCAETR">
+					<ui:include src="ipcaetr-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabJAM" label="JAM" actionListener="#{apresentadorIndiceJAM.iniciarApresentador}" reRender="painelJAM">
+				<a4j:outputPanel id="painelJAM">
+					<ui:include src="jam-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabSelicFazenda" label="Selic Simples" actionListener="#{apresentadorIndiceSelicFazenda.iniciarApresentador}" reRender="painelSelicFazenda">
+				<a4j:outputPanel id="painelSelicFazenda">
+					<ui:include src="selicfazenda-include.xhtml"/>
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabSelicDiaria" label="Selic Composta" actionListener="#{apresentadorSelicDiaria.carregarListaDeSelicDiaria}" reRender="painelSelicDiaria">
+				<a4j:outputPanel id="painelSelicDiaria">
+					<ui:include src="selicdiaria-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabPrecatorioFederal" label="Precatório Federal" actionListener="#{apresentadorIndicePrecatorioFederal.carregarListaDePrecatorioFederal}" reRender="painelPrecatorioFederal">
+				<a4j:outputPanel id="painelPrecatorioFederal">
+					<ui:include src="precatoriofederal-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+			
+			<rich:tab id="tabPrecatorioEstadual" label="Precatório Estadual/Municipal" actionListener="#{apresentadorIndicePrecatorioEstadual.carregarListaDePrecatorioEstadual}" reRender="painelPrecatorioEstadual">
+				<a4j:outputPanel id="painelPrecatorioEstadual">
+					<ui:include src="precatorioestadual-include.xhtml" />
+				</a4j:outputPanel>
+			</rich:tab>
+			
+		</rich:tabPanel>
+		
+		
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes"/>
+	<ui:define name="noresultadoTabela"/>
+	
+</ui:composition>
+
+</html>

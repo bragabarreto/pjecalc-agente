@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xml:lang="pt" lang="pt" 
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core" 
+    xmlns:a4j="http://richfaces.org/a4j"
+    xmlns:rich="http://richfaces.org/rich">
+
+<!-- PARAMETROS: 
+
+	id 			: id para o componente autocompletar (opcional tiver so um componente na tela).
+	idCodigo 	: id para o campo inputHidden armazenar o codigo do registro selecionado.
+	idDescricao : id para o campo inputText para exibir a descricao do registro selecionado.
+	facesBean 	: nome do facesBean que contem o metodo 'autocomplete'
+	voCodigo 	: nome do atributo do modelo para recuperar o codigo do registro.
+	voDescricao : nome do atributo do modelo para exibir a descricao do registro.
+	minChars 	: qtd de caracter para sensibilizar o componente.
+	width 		: tamanho da listagem do componente.
+	reRender 	: reRender do componente.
+	oncomplete 	: funcao script a ser executada apos a selecao do registro.
+	info 		: texto informativo.
+	icoShow 	: exibir ou nao o icone da lupa.
+	
+	EXEMPLO:
+	<ui:include src="../../comum/autocomplete.xhtml">
+		<ui:param name="id" value="Bolinha" />
+		<ui:param name="idCodigo" value="codigoBolinha" />
+		<ui:param name="idDescricao" value="nomeBolinha" />
+		<ui:param name="facesBean" value="#{lovBolinhaFacesBean}" />
+		<ui:param name="voCodigo" value="codigo" />
+		<ui:param name="voDescricao" value="#{objeto.codigo} - #{objeto.nome}" />
+		<ui:param name="minChars" value="1" />
+		<ui:param name="width" value="250" />
+		<ui:param name="reRender" value="idPainel" />
+		<ui:param name="oncomplete" value="atualizarPainel()" />
+		<ui:param name="info" value="Digite o nome ou codigo" />
+		<ui:param name="icoShow" value="false" />
+	</ui:include>
+ -->
+
+<ui:component>
+
+
+	<ui:param name="id" 		  value="#{empty id ? '' : id}" />
+	<ui:param name="idCodigo" 	  value="#{empty idCodigo ? 'idCodigo' : idCodigo}" />
+	<ui:param name="idDescricao"  value="#{empty idDescricao ? 'idDescricao' : idDescricao}" />
+	<ui:param name="voCodigo" 	  value="#{empty voCodigo ? 'codigo' : voCodigo}" />
+	<ui:param name="metodo" 	  value="#{empty metodo ? 'autocomplete' : metodo}" />
+	<ui:param name="facesBean"    value="#{empty facesBean ? 'facesBean' : facesBean}" />
+	<ui:param name="minChars" 	  value="#{empty minChars ? '1' : minChars}" />
+	<ui:param name="width" 		  value="#{empty width ? '250' : width}" />
+	<ui:param name="oncomplete"   value="#{empty oncomplete ? 'false' : oncomplete}" />
+	<ui:param name="rendered" 	  value="#{empty rendered ? 'true' : rendered}" />
+	<ui:param name="info" 		  value="#{empty info ? '' : info}" />
+	<ui:param name="icoShow" 	  value="#{empty icoShow ? 'true' : icoShow}" />
+	<ui:param name="semResultado" value="#{empty semResultado ? '' : semResultado}" />
+
+	<h:panelGroup rendered="#{rendered}">
+		<a4j:region>
+			<a4j:status id="status#{id}">
+				<f:facet name="start"><span class="startAutocomplete"></span></f:facet>
+				<f:facet name="stop"><h:panelGroup styleClass="stopAutocomplete" rendered="#{icoShow}"/></f:facet>
+	        </a4j:status>
+        </a4j:region>
+		<rich:suggestionbox id="suggestion#{id}" 
+							for="#{idDescricao}" 
+							usingSuggestObjects="true" 
+							nothingLabel="#{semResultado}"  
+							suggestionAction="#{facesBean[metodo]}" 
+							var="objeto" 
+							onselect="atualizarAutocomplete#{id}(suggestion)" 
+							onobjectchange="limpa(new Array('#{idCodigo}'))"
+							minChars="#{minChars}" 
+							status="status#{id}"
+							selfRendered="true" 
+							frame="below" 
+							limitToList="true" 
+							frequency="0"
+							shadowOpacity="true" 
+							shadowDepth="true" 
+							width="#{width}" 
+							>
+			<h:column>
+				<h:outputText value="#{voDescricao}" rendered="#{not empty voDescricao}"/> 
+				<h:outputText value="#{objeto.id} - #{objeto.descricao}" rendered="#{empty voDescricao}"/> 
+			</h:column>
+		</rich:suggestionbox>
+
+		<script type="text/javascript">
+			function atualizarAutocomplete#{id}(suggestionBox) {
+				//alert('Out If - Suggestion Box : '+suggestionBox);
+				setTimeout('try{ limparAutocomplete#{id}() }catch(err){}', 500);
+				if ( suggestionBox != null ){
+					//alert('In If - Suggestion Box : '+suggestionBox);
+					var items = suggestionBox.getSelectedItems();
+		            var codigo = suggestionBox.getSelectedItems().pluck('#{voCodigo}');
+		            //alert('In If - codigo : '+codigo);
+		            if (document.getElementById('formulario:#{idCodigo}') != null) {
+		            	document.getElementById('formulario:#{idCodigo}').value = codigo;
+		            }
+					if ( '#{oncomplete}' != 'false' ){
+						#{oncomplete};
+					}	
+				}
+		    }
+
+		    function limparAutocomplete#{id}(){
+				if ( document.getElementById('formulario:#{idCodigo}').value == '' 
+					|| document.getElementById('formulario:#{idDescricao}').value == '' 
+					|| document.getElementById('formulario:#{idDescricao}').value == 'Registro n&#227;o encontrado.' ){
+					document.getElementById('formulario:#{idCodigo}').value = '';
+					document.getElementById('formulario:#{idDescricao}').value = '#{info}';
+					//lov#{id}.css('color','Silver');
+				}
+		    }
+
+			var lov#{id} = jQuery('textArea[name=formulario:#{idDescricao}]');
+/*
+		    lov#{id}.blur(function() {
+				atualizarAutocomplete#{id}();
+				//lov#{id}.css('color','black');
+			});
+*/
+		    lov#{id}.focus(function() {
+		    	//lov#{id}.css('color','black');
+		    	if (lov#{id}.val() == '#{info}') {
+			    	lov#{id}.val('');
+				}
+			});
+
+		    if (lov#{id}.val() == '') {
+				lov#{id}.val('#{info}');
+				//lov#{id}.css('color','Silver');
+			}		 
+				
+		    
+	    </script>
+	</h:panelGroup>
+	
+	<!-- fica isolado aqui para sempre chamar a funcao mascara,  mesmo que o componente tenha o parametro rendered = false -->
+	<script type="text/javascript">
+		mascara('#{idDescricao}', 'AUTOCOMPLETE');
+	</script>
+	
+</ui:component>
+</html>                            

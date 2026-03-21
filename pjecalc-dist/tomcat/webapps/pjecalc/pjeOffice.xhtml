@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+
+<!DOCTYPE composition PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" 
+                      "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+    xmlns:ui="http://java.sun.com/jsf/facelets">
+		<script type="text/javascript">
+		  var JSESSION_ID = 'JSESSIONID=' + '#{utilLogin.recuperarJSessionId()}';
+		  var CONVERSATION_ID = '#{conversation.id}';
+		  var WEB_ROOT = '#{utilLogin.urlProject}';
+		  var APLICACAO_REQUISITANTE = "PJe";
+		  var CODIGO_SEGURANCA = "#{codigoSegurancaPjeOffice}";
+		  var PAGINA_LOGIN = "/logon.jsf?" + JSESSION_ID;
+		  var PAGINA_ASSINATURA = "/arquivoAssinadoUpload.seam?action=#{uploader}&amp;cid=" + CONVERSATION_ID;
+		  var PAGINA_DOWNLOAD = "/download.seam?cid=" + CONVERSATION_ID;
+		  var PAGINA_UPLOAD = "/arquivoAssinadoUpload.seam?cid="  + CONVERSATION_ID;
+		  var PARAM_CID = "" + JSESSION_ID;
+		  var PARAM_MO = "mo=P";
+		  var PARAM_DEJTACTION= "action=cadastroExpedienteDEJTAction";
+ 		</script>
+</ui:composition>

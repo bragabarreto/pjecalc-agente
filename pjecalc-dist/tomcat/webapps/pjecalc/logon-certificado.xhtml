@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+	
+	<h:form id="login">
+	
+		<div id="boxcentrallogoncertificado">
+		
+			<h:panelGroup style="float:left;">
+				<span id="spanLoginComCertificado">Carregando assinador digital...</span>
+				<h:commandButton id="loginComCertificado" value="Acessar com Certificado Digital" styleClass="bt_logond" ajaxSingle="true" immediate="true" onclick="setaEsperaAutenticacao();" />
+			</h:panelGroup>
+
+			<div id="boxMsg2">							
+					<span id="spanStatus">
+						<rich:spacer width="1" height="30"/>
+					<h:outputLabel value="Autenticando..." styleClass="labelMsg"/><br />
+				</span>
+				<span id="spanErro">
+					<rich:spacer width="1" height="5"/>
+					<rich:messages showSummary="false" showDetail="true" globalOnly="true" styleClass="labelMsgErro"/>
+					<a4j:region selfRendered="true">
+						<h:outputText value="#{mensagemErroLogin}" rendered="#{not empty mensagemErroLogin}" styleClass="labelMsgErro" />
+					</a4j:region>
+				</span>
+			</div>
+
+			<div id="boxAssign" style="float:left; margin-right: 80px;">
+					<a href="#" id="Ambiente" onclick="toggleDivAmb();testesAmbiente();">
+						Verificação de ambiente
+					</a>
+			</div>
+
+			<div id="boxAssign" style="float:left; margin-right: 80px;">
+					<a href="#" id="Requisitos" onclick="toggleDivReq();">
+						Pré-requisitos para utilização
+					</a> 
+			</div>
+			
+			<div id="boxAssign" style="float:left; margin-right: 80px;">
+					<a href="#" id="Assinador" onclick="toggleDivAssinador();">
+						Assinador Digital
+					</a> 
+			</div>
+
+			<script type="text/javascript">
+				jQuery('#spanStatus').hide();
+			</script>
+
+		</div>
+	
+		<!-- Dados para a assinatura digital -->
+		<a4j:outputPanel id="painelDocumentContent">
+			<h:outputText id="documentContent" value="#{identity.documentContent}" style="display:none;" escape="false"/>
+		</a4j:outputPanel>
+		<h:inputHidden id="documentSignature" value="#{identity.documentSignature}"/>
+		<h:inputHidden id="encodedCertified" value="#{identity.encodedCertified}"/>
+	
+		<object id="assinador" type="application/x-java-applet;version=1.7" width="1" height="1" name="assinador" style="position: absolute; top: -200px;">
+	
+			<param name="archive" value="applet/csjt-signer-1.0.11.jar" />
+			<param name="code" value="br.jus.cnj.pje.signerapplet.CNJSignerApplet" />
+	
+			<param name="codebase_lookup" value="false"/>
+			<param name="operationMode" value="simpleSign" />
+			<param name="mayscript" value="true" />
+			<param name="scriptable" value="true" />
+	
+			<param name="dataComponentName" value="login:documentContent" />
+			<param name="signedFieldName" value="login:documentSignature" />
+			<param name="certChainField" value="login:encodedCertified" />
+	
+			<param name="name" value="assinador" />
+			<param name="signatureAlgorithm" value="MD5withRSA"/>
+			<param name="afterSendSuccess" value="sucessoNAssinatura(jQuery('#login\\:encodedCertified').attr('value'))" />
+			<param name="afterSignError" value="" />
+			<param name="base64encoded" value="false"/>
+	
+		</object>
+
+		<a4j:jsFunction name="salvarDadosAssinatura" action="#{identity.logarComCertificadoDigital()}" oncomplete="setaFimEsperaAutenticacao();" />
+
+	</h:form>
+	
+	<script type="text/javascript">		
+	
+		function sucessoNAssinatura(ec) {
+			if (ec != '') {
+				salvarDadosAssinatura(ec);
+			}
+		}
+
+		function setaEsperaAutenticacao() {
+			jQuery('#spanErro').hide();
+			jQuery('#spanStatus').show();
+			jQuery('#login\\:loginComCertificado').hide();
+			jQuery('#login\\:Ambiente').hide();
+			jQuery('#login\\:Requisitos').hide();
+		}
+
+		function setaFimEsperaAutenticacao() {
+			window.location.reload();
+ 			jQuery('#spanErro').show();
+ 			jQuery('#spanStatus').hide();
+ 			jQuery('#login\\:loginComCertificado').show();
+ 			jQuery('#login\\:Ambiente').show();
+ 			jQuery('#login\\:Requisitos').show();
+ 			window.location.reload();
+		}
+
+		function verificarAppletCarregado() {
+			var app = jQuery('#assinador');
+			if (app == null) {
+				self.setTimeout("verificarAppletCarregado()",200);
+			} else {
+				jQuery('#login\\:loginComCertificado').show();
+				jQuery('#spanLoginComCertificado').hide();
+			}
+		}
+
+ 		jQuery(document).ready(function() {
+ 			jQuery('#login\\:loginComCertificado').hide();
+			verificarAppletCarregado();
+			var functionClickAssinar = function (e) {
+				var app = document.getElementById('assinador');
+				if(app == null || !app.setJsCode) {
+					alert('Aguarde alguns instantes até o assinador digital ser carregado.');
+					e.preventDefault();
+					return;
+				}
+				var test=false;
+				var code = 6;
+				if(test) {
+					code += 256;
+				}
+				if(app) {
+					app.setJsCode(code);
+				}
+				e.preventDefault();
+			};
+			var link = jQuery('#login\\:loginComCertificado');
+			link.bind('click', functionClickAssinar);
+ 		});
+ 		
+	  	function toggleDivAmb()
+		 {
+
+	    	if(document.getElementById('modalBoxAmb').style.display == 'block')
+	    	{
+	    	document.getElementById('modalBoxAmb').style.display = 'none';
+	    	document.getElementById('lateral').style.display = 'block';
+	    	}
+
+	    	else
+	    	{  
+	    	document.getElementById('lateral').style.display = 'none';
+	    	document.getElementById('modalBoxAmb').style.display = 'block'
+	    	}
+		}
+	  	
+	  	function toggleDivReq()
+		 {
+
+	    	if(document.getElementById('modalBoxReq').style.display == 'block')
+	    	{
+	    	document.getElementById('modalBoxReq').style.display = 'none';
+	    	document.getElementById('lateral').style.display = 'block';
+	    	}
+
+	    	else
+	    	{  
+	    	document.getElementById('lateral').style.display = 'none';
+	    	document.getElementById('modalBoxReq').style.display = 'block'
+	    	}
+		}
+	
+	  	function toggleDivAssinador()
+		 {
+
+	    	if(document.getElementById('modalBoxAssinador').style.display == 'block')
+	    	{
+	    	document.getElementById('modalBoxAssinador').style.display = 'none';
+	    	document.getElementById('lateral').style.display = 'block';
+	    	}
+
+	    	else
+	    	{  
+	    	document.getElementById('lateral').style.display = 'none';
+	    	document.getElementById('modalBoxAssinador').style.display = 'block'
+	    	}
+		}
+ 		
+ 		/* Scripts para testar o ambiente  */
+ 		function testesAmbiente(callbackPendencias) {
+ 				
+ 			testeNavegador(function(retorno) {
+ 				jQuery('.testeNavegador_' + retorno).show();
+ 				jQuery('.testeNavegador_' + !retorno).hide();
+ 						
+ 				if (callbackPendencias) {
+ 					if (!retorno) {
+ 						callbackPendencias();
+ 					}
+ 				}
+ 			});
+
+ 			testeJava(function(retorno) {
+ 						jQuery('.testeJava_' + retorno).show();
+ 						jQuery('.testeJava_' + !retorno).hide();
+ 						
+ 						if (callbackPendencias) {
+ 							if (!retorno) {
+ 								callbackPendencias();
+ 							}
+ 						}
+ 					});
+ 				
+ 			}
+
+ 			// Testa se plugin Java está habilitado no browser, usa o método 'navigator.javaEnabled()'
+ 			function testeJava(callback) {
+ 				callback(navigator.javaEnabled());
+ 			}
+
+ 			// Testa se o browser é Firefox
+ 			function testeNavegador(callback) {
+ 					if (jQuery.browser.mozilla == false) {
+ 						callback(false);
+ 						return;
+ 					} else {
+ 					if(jQuery.browser.version &lt; '30') {
+ 						callback(false);
+ 						return;
+ 						}
+ 					}
+ 					callback(true);
+ 			}
+
+	</script>
+		
+</ui:composition>

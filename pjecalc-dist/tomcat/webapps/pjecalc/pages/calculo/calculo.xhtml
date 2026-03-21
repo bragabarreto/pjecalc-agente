@@ -1,0 +1,1507 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="legendaDoFormulario" value="Dados do Cálculo" />
+	<ui:param name="apresentador" value="#{apresentadorCalculo}" />
+	<ui:param name="registro" value="#{apresentadorCalculo.registro}" />
+	<ui:param name="filtro" value="#{apresentadorCalculo.filtro}" />
+
+	<ui:define name="filtroCampos">
+	
+	<h:panelGroup layout="block" style="width:1000px;">
+	
+		<h:panelGrid columns="4" cellpadding="3" cellspacing="3">		
+			
+			<h:panelGroup>
+				<h:outputLabel for="tipoCalculoBusca" value="Tipo"/><br />
+				<h:selectOneMenu id="tipoCalculoBusca" value="#{filtro.tipoCalculo}" style="width:80px;">
+					<s:selectItems value="#{apresentadorCalculo.enumItems.tipoCalculoEnum}" var="item" label="#{item.nome}" noSelectionLabel="" /> 
+					<s:convertEnum /> 
+				</h:selectOneMenu>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				
+					<h:panelGrid columns="6" cellpadding="2" cellspacing="2">
+						<h:panelGroup>
+							<h:outputLabel for="numeroProcessoBusca" value="Número" /><br/>
+							<h:inputText id="numeroProcessoBusca" label="Número" value="#{filtro.numeroProcesso}" maxlength="7" onblur="$(this).leftPad('0',7)" onfocus="$(this).integerMask()"/>
+							<script>
+								$('formulario:numeroProcessoBusca').leftPad('0',7)
+							</script>
+							<span class="digito">-</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="digitoProcessoBusca" value="Dígito" /><br/>
+							<h:inputText id="digitoProcessoBusca" label="Dígito" value="#{filtro.digitoProcesso}" size="3" maxlength="2" onfocus="$(this).integerMask()"/>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="anoProcessoBusca" value="Ano" /><br/>
+							<h:inputText id="anoProcessoBusca" label="Ano" value="#{filtro.anoProcesso}" size="5" maxlength="4" onblur="$(this).leftPad('0',4)" onfocus="$(this).integerMask()"/>						
+							<script>
+								$('formulario:anoProcessoBusca').leftPad('0',4)
+							</script>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="justicaBusca" value="Justiça" /><br/>
+							<h:inputText id="justicaBusca" label="Justiça" value="#{filtro.justica}" size="5" maxlength="1" onfocus="$(this).integerMask()"/>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="regiaoBusca" value="Tribunal" /><br/>
+							<h:inputText id="regiaoBusca" label="Região" value="#{filtro.regiao}" size="5" maxlength="2" onblur="$(this).leftPad('0',2)" onfocus="$(this).integerMask()"/>
+							<script>
+								$('formulario:regiaoBusca').leftPad('0',2)
+							</script>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:outputLabel for="varaProcessoBusca" value="Vara" /><br/>
+							<h:inputText id="varaProcessoBusca" label="Vara" value="#{filtro.varaProcesso}" size="10" maxlength="4" onblur="$(this).leftPad('0',4)" onfocus="$(this).integerMask()"/>
+							<script>
+								$('formulario:varaProcessoBusca').leftPad('0',4)
+							</script>
+						</h:panelGroup>
+					</h:panelGrid>
+				
+			</h:panelGroup>
+
+ 			<h:panelGroup rendered="#{aplicacao.isVersaoOnline()}">
+				<h:selectBooleanCheckbox id="setor" selected="true" value="#{filtro.meuSetor}" style="margin-top:10px; margin-left:5px;" />					
+				<label for="faltaJustificada">Somente Cálculos deste Setor</label>
+			</h:panelGroup>
+
+		</h:panelGrid>
+			
+		<h:panelGrid columns="3" cellpadding="3" cellspacing="3" columnStyle="width:30%;">
+		
+			<h:panelGroup>
+				<h:outputLabel for="reclamanteBusca" value="Reclamante" /><br/>
+				<h:inputText id="reclamanteBusca" label="Reclamante" value="#{filtro.reclamante}" size="50" maxlength="150"/>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="reclamadoBusca" value="Reclamado" /><br/>
+				<h:inputText id="reclamadoBusca" label="Reclamado" value="#{filtro.reclamado}" size="50" maxlength="150"/>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="numeroCalculoBusca" value="Nº do Cálculo"/><br/>
+				<h:inputText id="numeroCalculoBusca" label="Nº do Cálculo" value="#{filtro.numeroCalculo}" size="25" onfocus="$(this).integerMask()" maxlength="18" />
+			</h:panelGroup >
+			
+		</h:panelGrid>
+		
+	</h:panelGroup>
+		
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+
+		<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="10" var="calculo"> 
+    		<rich:column style="width:8%;">
+			    	<f:facet name="header">
+		    			<h:outputText value="Ações"/>
+		    		</f:facet>
+	    			<a4j:commandLink styleClass="linkSelecionar" title="Abrir" action="#{apresentadorCalculo.abrir}" rendered="#{identity.setor.id == calculo.setor.id and identity.setor.instancia == calculo.setor.instancia}" />
+	    			<a4j:commandLink id="duplicar" action="#{apresentadorCalculo.duplicar}"
+									styleClass="linkCopy" title="Duplicar Cálculo" onclick="if (!confirma('#{mensagens.MSG0078}',this)) return false;"/>
+		    </rich:column>
+	    	
+	    	<rich:column style="width:15%;">
+	    		<f:facet name="header">
+    				<h:outputText value="Processo"/>
+    			</f:facet>	
+    			<h:outputText value="#{calculo.getIdentificacaoDoProcesso()}"/>
+	    	</rich:column>		
+	    		    	
+	    	<rich:column style="width:9%;">
+    			<f:facet name="header">
+    				<h:outputText value="Cálculo"/>
+    			</f:facet>	
+    			<h:outputText value="#{calculo.id}" />
+	    	</rich:column>
+	    	
+	    	<rich:column style="width:9%;">
+    			<f:facet name="header">
+    				<h:outputText value="Tipo"/>
+    			</f:facet>	
+    			<h:outputText value="#{calculo.tipoCalculo}" />
+	    	</rich:column>
+	    	
+	    	<rich:column style="width:25%;">
+    			<f:facet name="header">
+    				<h:outputText value="Reclamante"/>
+    			</f:facet>	
+    			<h:outputText value="#{calculo.processo.reclamante.nome}" />
+	    	</rich:column>		
+	    	
+	    	<rich:column style="width:25%;">
+    			<f:facet name="header">
+    				<h:outputText value="Reclamado"/>
+    			</f:facet>	
+    			<h:outputText value="#{calculo.processo.reclamado.nome}" />
+	    	</rich:column>
+
+		</rich:dataTable>
+		    
+		<ui:include src="/pages/comum/paginacao.xhtml">
+	    	<ui:param name="lista" value="#{apresentadorCalculo.lista}" />
+		</ui:include>
+	
+	</ui:define>
+	
+	<!--  
+	
+		FORMULÁRIO
+	-->
+	
+	
+	<ui:define name="camposFormulario">
+
+		<h:panelGrid columns="5" cellpadding="3" cellspacing="4" border="0">
+				<h:panelGroup>
+					<h:outputLabel value="Número *" /><br />
+					<h:inputText id="idCalculo" value="#{apresentadorCalculo.registro.id}" styleClass="leitura" disabled="true" />
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Tipo *" /><br />
+					<h:inputText id="tipo" value="#{apresentadorCalculo.registro.tipoCalculo}"  size="10" maxlength="1" styleClass="leitura" disabled="true"/>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Data de Criação *"/><br />
+					<h:inputText id="dataCriacao" value="#{apresentadorCalculo.registro.dataCriacao}"  size="20" maxlength="1" styleClass="leitura" disabled="true"/>
+				</h:panelGroup>
+				
+	     </h:panelGrid>
+	      		
+		<rich:tabPanel switchType="client" immediate="true"> 
+			
+			<rich:tab id="tabDadosProcesso" label="Dados do Processo" styleClass="primeiraAba">
+			
+			<h:panelGroup rendered="#{apresentadorCalculo.versaoOnline}">
+				<fieldset><legend>Informar Dados do Processo</legend>
+					<h:panelGrid columns="2" cellspacing="0" cellpadding="0" border="0" >
+						<h:panelGroup layout="block" style="padding-left:10px;">
+							<h:selectOneRadio id="processoInformadoManualmente" value="#{apresentadorCalculo.registro.processoInformadoManualmente}" styleClass="labelInput" layout="lineDirection">
+								<f:selectItem itemLabel="Manualmente" itemValue="#{true}" />
+								<f:selectItem itemLabel="Obter do PJe" itemValue="#{false}" />
+								<a4j:support limitToList="true" ajaxSingle="true" event="onchange" actionListener="#{apresentadorCalculo.limparDadosDoProcesso(event)}" reRender="painelIdentificacao,painelReclamante,painelReclamado,painelBotaoBusca" />
+							</h:selectOneRadio>							
+						</h:panelGroup>
+						<h:panelGroup id="painelBotaoBusca" style="margin-left:-12px">
+							<a4j:commandLink id="linkModalPPJE" rendered="#{!apresentadorCalculo.registro.processoInformadoManualmente}"
+											 styleClass="linkLov" style="padding-top:5px;" actionListener="#{apresentadorProcessoPJE.iniciarApresentador(
+											 																			apresentadorCalculo.registro.processo.numeroProcesso,
+											 																			apresentadorCalculo.registro.processo.digitoProcesso,
+											 																			apresentadorCalculo.registro.processo.anoProcesso,
+											 																			apresentadorCalculo.registro.processo.justica,
+											 																			apresentadorCalculo.registro.processo.regiao,
+											 																			apresentadorCalculo.registro.processo.varaProcesso)}" 
+											 immediate="true"
+											 reRender="painelMensagensModalPPJE,formularioModalPPJE:panelModalBusca, formularioModalPPJE:panelModalResultado, formularioModalPPJE:painelModalBotoes"
+											 limitToList="true"
+											 oncomplete="Richfaces.showModalPanel('modalPPJE'); return false;" 
+											 title="Selecionar Processo do PJe"/>
+						</h:panelGroup>
+					</h:panelGrid>
+				</fieldset>
+			</h:panelGroup>
+
+			<fieldset> <legend>Identificação do Processo</legend>
+			<h:panelGrid columns="3" id="painelIdentificacao">
+			<h:panelGrid columns="12">
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Número" for="numero" /><br />
+						<h:inputText id="numero" label="Número" value="#{apresentadorCalculo.registro.processo.numeroProcesso}" maxlength="7" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" onfocus="$(this).integerMask()" onblur="$('formulario:numero').leftPad('0',7)">
+							<f:converter converterId="padConverter"/>							
+						</h:inputText>
+						<script>
+							$('formulario:numero').leftPad('0',7)
+						</script>						
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="numero">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="numeroErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="numero"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="digito">-</span>
+				</h:panelGroup>
+				
+				<h:panelGroup id="panelDigito">
+					<h:outputLabel value="Dígito" for="digito" /><br />
+					<h:inputText id="digito" label="Dígito" value="#{apresentadorCalculo.registro.processo.digitoProcesso}" size="3" maxlength="2" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" onfocus="$(this).integerMask()" onblur="$('formulario:digito').leftPad('0',2)" >
+						<f:converter converterId="padConverter"/>
+					</h:inputText>
+					<script>
+						$('formulario:digito').leftPad('0',2)
+					</script>
+					<rich:message showDetail="false" showSummary="false" for="digito">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="digitoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="digito"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Ano" for="ano" /><br />
+						<h:inputText id="ano" label="Ano" value="#{apresentadorCalculo.registro.processo.anoProcesso}" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" size="5" maxlength="4" onfocus="$(this).integerMask()" onblur="$('formulario:ano').leftPad('0',4)" >
+							<f:converter converterId="padConverter"/>
+						</h:inputText>
+						<script>
+							$('formulario:ano').leftPad('0',4)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="ano">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="anoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="ano"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Justiça" for="justica" /><br />
+						<h:inputText id="justica" label="Justiça" value="#{apresentadorCalculo.registro.processo.justica}" size="5" maxlength="1" disabled="true" />
+						<script>
+							$('formulario:justica').leftPad('0',1)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="justica">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="justicaErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="justica"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Tribunal" for="regiao" /><br />
+						<h:inputText id="regiao" label="Tribunal" value="#{apresentadorCalculo.registro.processo.regiao}" size="5" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" maxlength="2" onfocus="$(this).integerMask()" onblur="$('formulario:regiao').leftPad('0',2)" >
+							<f:converter converterId="padConverter"/>							
+						</h:inputText>
+						<script>
+							$('formulario:regiao').leftPad('0',2)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="regiao">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="regiaoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="regiao"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Vara" for="vara" /><br />
+						<h:inputText id="vara" label="Vara" value="#{apresentadorCalculo.registro.processo.varaProcesso}" size="4" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" maxlength="4" onfocus="$(this).integerMask()" onblur="$('formulario:vara').leftPad('0',4)" >
+							<f:converter converterId="padConverter"/>
+						</h:inputText>
+						<script>
+						$('formulario:vara').leftPad('0',4)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="vara">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="varaErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="vara"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+				</h:panelGroup>
+
+			</h:panelGrid>
+			<h:panelGrid>
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel style="margin-left:30px" value="Valor da Causa" for="valorDaCausa" /><br />
+						<h:inputText style="margin-left:30px" id="valorDaCausa" label="Valor da Causa" value="#{apresentadorCalculo.registro.processo.valorDaCausa}" size="16" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" maxlength="16" onfocus="$(this).currencyMask()">
+							<f:converter converterId="bigDecimalConverter"/>
+						</h:inputText>	
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="vara">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="valorDaCausaErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="valorDaCausa"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+				</h:panelGroup>
+			</h:panelGrid>
+			<h:panelGrid>
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel style="margin-left:30px" value="Autuado em" for="autuadoEm" /><br />
+						<h:inputText style="margin-left:30px" id="autuadoEm" label="Autuado em" value="#{apresentadorCalculo.registro.processo.dataAutuacao}" size="16" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" maxlength="16" onfocus="$(this).dateMask()">
+							<f:converter converterId="dateConverter"/>
+						</h:inputText>	
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="vara">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="autuadoEmErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="autuadoEm"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+				</h:panelGroup>
+			</h:panelGrid>
+			</h:panelGrid>
+			</fieldset>
+			
+			<a4j:outputPanel id="painelReclamante">
+			
+			<fieldset><legend>Reclamante</legend>
+				<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel value="Nome" for="reclamanteNome" /><br />
+						<h:inputText id="reclamanteNome" label="Nome" value="#{apresentadorCalculo.registro.processo.reclamante.nome}" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" size="60" maxlength="150"/>
+						<rich:message showDetail="false" showSummary="false" for="reclamanteNome">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamanteNomeErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamanteNome"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+				</h:panelGrid>
+				
+				<h:panelGroup layout="block" style="width:800px;">
+				
+				<fieldset style="float:left;"><legend>Documento Fiscal</legend>
+				<h:panelGrid columns="2" cellspacing="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel for="documentoFiscalReclamante" value="Tipo" /><br />
+						<h:selectOneRadio id="documentoFiscalReclamante" value="#{apresentadorCalculo.registro.processo.reclamante.tipoDocumentoFiscal}" disabled="#{!apresentadorCalculo.informarProcessoManualmente}"  styleClass="labelInput" onclick="$('formulario:reclamanteNumeroDocumentoFiscal').disable(false);">
+							<s:selectItems value="#{apresentadorCalculo.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+							<s:convertEnum />
+						</h:selectOneRadio>
+					</h:panelGroup>
+						
+					<h:panelGroup id="painelReclamanteNumeroDocumentoFiscal">
+						<h:outputLabel value="Número" for="reclamanteNumeroDocumentoFiscal" /><br />
+						<h:inputText id="reclamanteNumeroDocumentoFiscal" label="Número" 
+										value="#{apresentadorCalculo.registro.processo.reclamante.numeroDocumentoFiscal}" size="26" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" 
+										onfocus="$(this).dynamicMask('formulario:documentoFiscalReclamante');">
+							<f:converter converterId="mascaraDinamicaConverter"/>
+							<f:validator validatorId="validadorDinamico"/>
+							<f:param name="seletor" value="documentoFiscalReclamante"/>
+						</h:inputText>
+						<rich:message showDetail="false" showSummary="false" for="reclamanteNumeroDocumentoFiscal">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamanteNumeroDocumentoFiscalErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamanteNumeroDocumentoFiscal"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+						<script>
+						if(#{apresentadorCalculo.informarProcessoManualmente}){
+							$('formulario:reclamanteNumeroDocumentoFiscal').disable(!jQuery("table[id='formulario:documentoFiscalReclamante'] input").is(":checked"));
+						}
+						</script>
+					</h:panelGroup>
+				</h:panelGrid>
+				</fieldset>
+						 
+				<fieldset style="float:left;"><legend>Documento Previdenciário</legend>
+				<h:panelGrid columns="2" cellpadding="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel for="reclamanteTipoDocumentoPrevidenciario" value="Tipo" /><br />
+						<h:selectOneRadio id="reclamanteTipoDocumentoPrevidenciario" value="#{apresentadorCalculo.registro.processo.reclamante.tipoDocumentoPrevidenciario}" 
+										  disabled="#{!apresentadorCalculo.informarProcessoManualmente}"
+										  styleClass="labelInput" onclick="$('formulario:reclamanteNumeroDocumentoPrevidenciario').disable(false);">
+							<s:selectItems value="#{apresentadorCalculo.enumItems.tipoDocumentoPrevidenciarioEnum}" var="item" label="#{item}"/> 
+							<s:convertEnum />
+						</h:selectOneRadio>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="Número" for="reclamanteNumeroDocumentoPrevidenciario" /><br />
+						<h:inputText id="reclamanteNumeroDocumentoPrevidenciario" label="Número" 
+									 value="#{apresentadorCalculo.registro.processo.reclamante.numeroDocumentoPrevidenciario}" 
+									 disabled="#{!apresentadorCalculo.informarProcessoManualmente}"
+									 maxlength="11" onfocus="$(this).dynamicMask('formulario:reclamanteTipoDocumentoPrevidenciario')">
+							<f:converter converterId="mascaraDinamicaConverter"/>
+							<f:validator validatorId="validadorDinamico"/>
+							<f:param name="seletor" value="reclamanteTipoDocumentoPrevidenciario"/>
+						</h:inputText>
+						<rich:message showDetail="false" showSummary="false" for="reclamanteNumeroDocumentoPrevidenciario">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamanteNumeroDocumentoPrevidenciarioErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamanteNumeroDocumentoPrevidenciario"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+						<script>
+							if(#{apresentadorCalculo.informarProcessoManualmente}){
+								$('formulario:reclamanteNumeroDocumentoPrevidenciario').disable(!jQuery("table[id='formulario:reclamanteTipoDocumentoPrevidenciario'] input").is(":checked"));
+							}
+						</script>
+					</h:panelGroup>
+				</h:panelGrid>
+				</fieldset>
+				
+				</h:panelGroup>
+				
+				<br/><br/>
+						
+				<fieldset style="margin-top: 48px;"><legend>Advogado</legend>
+				<h:panelGroup id="painelMCAdvogadosReclamante">
+				
+				
+				<h:panelGrid columns="4" cellpadding="3" cellspacing="0" border="0" rendered="#{apresentadorCalculo.informarProcessoManualmente}">
+					<h:panelGroup>
+						<h:outputLabel value="Nome" for="nomeAdvogadoReclamante" /><br />
+						<h:inputText id="nomeAdvogadoReclamante" label="Nome" value="#{apresentadorCalculo.advogadoReclamante.nome}"  size="59" maxlength="150"/>
+						<rich:message showDetail="false" showSummary="false" for="nomeAdvogadoReclamante">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="nomeAdvogadoReclamanteErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="nomeAdvogadoReclamante"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>					
+
+					<h:panelGroup>
+						<h:outputLabel value="OAB" for="numeroOABAdvogadoReclamante" /><br />
+						<h:inputText id="numeroOABAdvogadoReclamante" label="OAB" value="#{apresentadorCalculo.advogadoReclamante.numeroOAB}" size="9" maxlength="9" onfocus="$(this).textAndNumberMask()"/>
+						<rich:message showDetail="false" showSummary="false" for="numeroOABAdvogadoReclamante">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="numeroOABAdvogadoReclamanteErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="numeroOABAdvogadoReclamante"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<fieldset style="float:left; margin-top:-10px"><legend>Documento Fiscal</legend>
+						<h:panelGrid columns="2" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel for="tipoDocumentoAdvogadoReclamante" value="Tipo" /><br />
+								<h:selectOneRadio id="tipoDocumentoAdvogadoReclamante" value="#{apresentadorCalculo.advogadoReclamante.tipoDocumento}"  onclick="$('formulario:numeroDocumentoAdvogadoReclamante').disable(false);">
+									<s:selectItems value="#{apresentadorCalculo.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</h:panelGroup>
+								
+							<h:panelGroup id="painelReclamanteAdvogadoNumeroDocumentoFiscal">
+								<h:outputLabel value="Número" for="numeroDocumentoAdvogadoReclamante" /><br />
+								<h:inputText id="numeroDocumentoAdvogadoReclamante" label="Número" 
+												value="#{apresentadorCalculo.advogadoReclamante.numeroDocumento}" size="18"
+												onfocus="$(this).dynamicMask('formulario:tipoDocumentoAdvogadoReclamante')">
+									<f:converter converterId="mascaraDinamicaConverter"/>
+									<f:validator validatorId="validadorDinamico"/>
+									<f:param name="seletor" value="tipoDocumentoAdvogadoReclamante"/>
+								</h:inputText>
+								<rich:message showDetail="false" showSummary="false" for="numeroDocumentoAdvogadoReclamante">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="numeroDocumentoAdvogadoReclamanteErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="numeroDocumentoAdvogadoReclamante"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+								<script>
+									$('formulario:numeroDocumentoAdvogadoReclamante').disable(!jQuery("table[id='formulario:tipoDocumentoAdvogadoReclamante'] input").is(":checked"));
+								</script>
+							</h:panelGroup>
+						</h:panelGrid>
+					</fieldset>
+				</h:panelGroup>
+				
+				<a4j:commandLink id="incluirAdvogadoReclamante" actionListener="#{apresentador.adicionarAdvogadoReclamante}" limitToList="true" 
+														 reRender="painelListagemAdvogadoReclamante,painelMCAdvogadosReclamante" 
+														styleClass="botaoAddItem" title="Adicionar Advogado"
+														rendered="#{!apresentador.emModoSomenteVisualizacao}"
+														onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+				
+				
+				</h:panelGrid>
+				</h:panelGroup>
+				
+				<h:panelGroup id="painelListagemAdvogadoReclamante">
+						
+					<rich:dataTable id="listagemAdvogadoReclamante" rowClasses="linha-par, linha-impar" value="#{listaDeAdvogadosReclamante}" var="item"
+									cellpadding="0" cellspacing="4" border="0" width="690px"> 
+			    		<rich:column style="width:10%;" rendered="#{apresentadorCalculo.informarProcessoManualmente}">
+						    	<f:facet name="header">
+					    			<h:outputText value="Ação"/>
+					    		</f:facet>
+						    	<a4j:region>
+						    		<h:commandLink id="excluirAdvogadoReclamante"  limitToList="true" 
+						    					   actionListener="#{apresentador.excluirAdvogadoReclamante}" 
+					    						   styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+					    					<a4j:support event="onclick" reRender="painelListagemAdvogadoReclamante" limitToList="true" ajaxSingle="true"/>
+					    			</h:commandLink>
+						    	</a4j:region>
+					    </rich:column>
+			    	
+				    	<rich:column style="width:50%;">
+			    			<f:facet name="header">
+			    				<h:outputText value="Nome"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.nome}" style="text-transform:uppercase;">
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Tipo Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.tipoDocumento.valor}">	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Nº Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroDocumento}" >	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="OAB"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroOAB}">
+			    			</h:outputText>
+				    	</rich:column>
+			    	
+					</rich:dataTable>
+			
+					</h:panelGroup>	
+				
+				</fieldset>
+			</fieldset>
+			
+			</a4j:outputPanel>
+			<a4j:outputPanel id="painelReclamado">
+			
+			<fieldset style="margin-top: 15px;"><legend>Reclamado</legend>			
+				<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0">
+
+					<h:panelGroup>
+						<h:outputLabel value="Nome" for="reclamadoNome" /><br />
+						<h:inputText id="reclamadoNome" label="Nome" value="#{apresentadorCalculo.registro.processo.reclamado.nome}" disabled="#{!apresentadorCalculo.informarProcessoManualmente}" size="60" maxlength="150"/>
+						<rich:message showDetail="false" showSummary="false" for="reclamadoNome">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamadoNomeErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamadoNome"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+					<fieldset style="float:left;"> <legend>Documento Fiscal</legend>
+						<h:panelGrid columns="2" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel for="tipoDocumentoFiscalReclamado" value="Tipo" /><br />
+								<h:selectOneRadio id="tipoDocumentoFiscalReclamado" value="#{apresentadorCalculo.registro.processo.reclamado.tipoDocumentoFiscal}" 
+												  disabled="#{!apresentadorCalculo.informarProcessoManualmente}"
+												  styleClass="labelInput" onclick="$('formulario:reclamadoNumeroDocumentoFiscal').disable(false);">
+									<s:selectItems value="#{apresentadorCalculo.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Número" for="reclamadoNumeroDocumentoFiscal" /><br />
+								<h:inputText id="reclamadoNumeroDocumentoFiscal" label="Número" disabled="#{!apresentadorCalculo.informarProcessoManualmente}"
+											value="#{apresentadorCalculo.registro.processo.reclamado.numeroDocumentoFiscal}" size="26"
+											onfocus="$(this).dynamicMask('formulario:tipoDocumentoFiscalReclamado')">
+									<f:converter converterId="mascaraDinamicaConverter"/>
+									<f:validator validatorId="validadorDinamico"/>
+									<f:param name="seletor" value="tipoDocumentoFiscalReclamado"/>
+								</h:inputText>
+								
+								<rich:message showDetail="false" showSummary="false" for="reclamadoNumeroDocumentoFiscal">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="reclamadoNumeroDocumentoFiscalErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="reclamadoNumeroDocumentoFiscal"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+								<script>
+									if(#{apresentadorCalculo.informarProcessoManualmente}){
+										$('formulario:reclamadoNumeroDocumentoFiscal').disable(!jQuery("table[id='formulario:tipoDocumentoFiscalReclamado'] input").is(":checked"));
+									}
+								</script>
+							</h:panelGroup>
+						</h:panelGrid>
+				</fieldset>
+				</h:panelGroup>
+				</h:panelGrid>
+
+				<fieldset><legend>Advogado</legend>
+					<h:panelGroup id="painelMCAdvogadosReclamado">
+					
+					<h:panelGrid columns="4" cellpadding="2" cellspacing="0" border="0" rendered="#{apresentadorCalculo.informarProcessoManualmente}">
+						<h:panelGroup>
+						<h:outputLabel value="Nome" for="nomeAdvogadoReclamado" /><br />
+						<h:inputText id="nomeAdvogadoReclamado" label="Nome" value="#{apresentadorCalculo.advogadoReclamado.nome}"  size="59" maxlength="150"/>
+						<rich:message showDetail="false" showSummary="false" for="nomeAdvogadoReclamado">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="nomeAdvogadoReclamadoErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="nomeAdvogadoReclamado"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>					
+
+					<h:panelGroup>
+						<h:outputLabel value="OAB" for="numeroOABAdvogadoReclamado" /><br />
+						<h:inputText id="numeroOABAdvogadoReclamado" label="OAB" value="#{apresentadorCalculo.advogadoReclamado.numeroOAB}" size="9" maxlength="9" onfocus="$(this).textAndNumberMask()"/>
+						<rich:message showDetail="false" showSummary="false" for="numeroOABAdvogadoReclamado">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="numeroOABAdvogadoReclamadoErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="numeroOABAdvogadoReclamado"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<fieldset style="float:left; margin-top:-10px"><legend>Documento Fiscal</legend>
+						<h:panelGrid columns="2" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel for="tipoDocumentoAdvogadoReclamado" value="Tipo" /><br />
+								<h:selectOneRadio id="tipoDocumentoAdvogadoReclamado" value="#{apresentadorCalculo.advogadoReclamado.tipoDocumento}"  onclick="$('formulario:numeroDocumentoAdvogadoReclamado').disable(false);">
+									<s:selectItems value="#{apresentadorCalculo.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</h:panelGroup>
+								
+							<h:panelGroup id="painelReclamadoAdvogadoNumeroDocumentoFiscal">
+								<h:outputLabel value="Número" for="numeroDocumentoAdvogadoReclamado" /><br />
+								<h:inputText id="numeroDocumentoAdvogadoReclamado" label="Número" 
+												value="#{apresentadorCalculo.advogadoReclamado.numeroDocumento}" size="18"
+												onfocus="$(this).dynamicMask('formulario:tipoDocumentoAdvogadoReclamado')">
+									<f:converter converterId="mascaraDinamicaConverter"/>
+									<f:validator validatorId="validadorDinamico"/>
+									<f:param name="seletor" value="tipoDocumentoAdvogadoReclamado"/>
+								</h:inputText>
+								<rich:message showDetail="false" showSummary="false" for="numeroDocumentoAdvogadoReclamado">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="numeroDocumentoAdvogadoReclamadoErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="numeroDocumentoAdvogadoReclamado"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+								<script>
+									$('formulario:numeroDocumentoAdvogadoReclamado').disable(!jQuery("table[id='formulario:tipoDocumentoAdvogadoReclamado'] input").is(":checked"));
+								</script>
+							</h:panelGroup>
+						</h:panelGrid>
+					</fieldset>
+				</h:panelGroup>
+				
+				<a4j:commandLink id="incluirAdvogadoReclamado" actionListener="#{apresentador.adicionarAdvogadoReclamado}" limitToList="true" 
+														 reRender="painelListagemAdvogadoReclamado,painelMCAdvogadosReclamado" 
+														styleClass="botaoAddItem" title="Adicionar Advogado"
+														rendered="#{!apresentador.emModoSomenteVisualizacao}"
+														onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+					
+					</h:panelGrid>	
+					
+					</h:panelGroup>				
+					
+					<h:panelGroup  id="painelListagemAdvogadoReclamado">
+						
+					<rich:dataTable id="listagemAdvogadoReclamado" rowClasses="linha-par, linha-impar" value="#{listaDeAdvogadosReclamado}" var="item"
+									cellpadding="0" cellspacing="4" border="0" width="690px"> 
+			    		<rich:column style="width:10%;" rendered="#{apresentadorCalculo.informarProcessoManualmente}">
+						    	<f:facet name="header">
+					    			<h:outputText value="Ação"/>
+					    		</f:facet>
+							    <a4j:region>
+						    		<h:commandLink id="excluirAdvogadoReclamado"  limitToList="true" 
+						    					   actionListener="#{apresentador.excluirAdvogadoReclamado}" 
+					    						   styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+					    					<a4j:support event="onclick" reRender="painelListagemAdvogadoReclamado" limitToList="true" ajaxSingle="true"/>
+					    			</h:commandLink>
+						    	</a4j:region>
+					    </rich:column>
+			    	
+				    	<rich:column style="width:50%;">
+			    			<f:facet name="header">
+			    				<h:outputText value="Nome"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.nome}" style="text-transform:uppercase;">
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Tipo Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.tipoDocumento.valor}">	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Nº Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroDocumento}" >	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="OAB"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroOAB}">
+			    			</h:outputText>
+				    	</rich:column>
+			    	
+					</rich:dataTable>
+			
+					</h:panelGroup>	
+					
+				</fieldset>
+
+			</fieldset>
+
+			</a4j:outputPanel>
+
+			</rich:tab>
+			
+			<rich:tab id="tabParametrosCalculo" label="Parâmetros do Cálculo" styleClass="segundaAba">
+				
+				<h:panelGrid columns="2" cellpadding="3" cellspacing="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel for="estado" value="Estado *" /><br />
+						<a4j:region>
+						<h:selectOneMenu id="estado" label="Estado" value="#{apresentadorCalculo.registro.estado}" style="width:150px;">
+							<s:selectItems value="#{apresentadorCalculo.estados}" var="item" label="#{item.sigla}" noSelectionLabel="" /> 
+							<a4j:support event="onchange" reRender="painelMunicipio" limitToList="true"/>
+							<s:convertEntity/>
+						</h:selectOneMenu>
+						<rich:message for="estado" showDetail="false" showSummary="false">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink id="estadoErro" class="linkErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message for="estado" showDetail="true" showSummary="false"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</a4j:region>
+				</h:panelGroup>
+					
+				<h:panelGroup id="painelMunicipio">
+					<h:outputLabel for="municipio" value="Município *" /><br />
+					<h:selectOneMenu id="municipio" label="Município" value="#{apresentadorCalculo.registro.municipio}" style="width:150px;">
+						<s:selectItems value="#{apresentadorCalculo.municipios}" var="item" label="#{item.nome}" noSelectionLabel="" />
+						<a4j:support event="onchange" reRender="painelPontosFacultativos" limitToList="true"/>
+						<s:convertEntity/>
+					</h:selectOneMenu>
+					<rich:message for="municipio" showDetail="false" showSummary="false">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink id="municipioErro" class="linkErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message for="municipio" showDetail="true" showSummary="false"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+				</h:panelGroup>
+				
+				</h:panelGrid>
+
+				
+				
+				<fieldset><legend>Datas do Cálculo</legend>
+	
+				<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0" >
+									
+						<h:panelGroup>
+							<h:outputLabel value="Admissão *" for="dataAdmissao" /><br />
+							<rich:calendar id="dataAdmissao" value="#{apresentadorCalculo.registro.dataAdmissao}" label="Admissão" inputSize="22" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+								<f:facet name="footer">
+						        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+						        </f:facet>
+							</rich:calendar>
+							<rich:message showDetail="false" showSummary="false" for="dataAdmissao">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="dataAdmissaoErro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="dataAdmissao"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:outputLabel value="Demissão" for="dataDemissao" /><br />
+							<rich:calendar id="dataDemissao" value="#{apresentadorCalculo.registro.dataDemissao}" 
+										   label="Demissão" inputSize="22" popup="true" datePattern="dd/MM/yyyy" 
+										   enableManualInput="true" oninputfocus="$(this).dateMask()">
+								<a4j:support event="onchanged" reRender="painelBotoes" limitToList="true"/>
+								<a4j:support event="oninputchange" reRender="painelBotoes" limitToList="true"/>
+								<a4j:support event="oninputblur" reRender="painelBotoes" limitToList="true"/>
+								<f:facet name="footer">
+						        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+						        </f:facet>
+							</rich:calendar>
+							<rich:message showDetail="false" showSummary="false" for="dataDemissao">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="dataDemissaoErro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="dataDemissao"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup id="painelAjuizamento">
+							<h:outputLabel value="Ajuizamento *" for="dataAjuizamento" /><br />
+							<a4j:region>
+								<rich:calendar id="dataAjuizamento" value="#{apresentadorCalculo.registro.dataAjuizamento}" label="Ajuizamento" inputSize="22" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+								</rich:calendar>
+								<rich:message showDetail="false" showSummary="false" for="dataAjuizamento">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="dataAjuizamentoErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="dataAjuizamento"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</a4j:region>
+						</h:panelGroup>
+					
+					</h:panelGrid>
+					<fieldset><legend>Limitar Cálculo</legend>
+						<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0" >
+							
+							<h:panelGroup>
+							<a4j:region>
+								<h:outputLabel value="Data Inicial" for="dataInicioCalculo" /><br />
+								<rich:calendar id="dataInicioCalculo" value="#{apresentadorCalculo.registro.dataInicioCalculo}" 
+												label="Data Inicial" inputSize="22" popup="true" datePattern="dd/MM/yyyy" 
+												enableManualInput="true" oninputfocus="$(this).dateMask()">												
+									 <a4j:support event="onchanged" reRender="painelLimitarAvos" limitToList="true"/>
+									 <a4j:support event="oninputblur" reRender="painelLimitarAvos" limitToList="true"/>
+									  <f:converter converterId="dateConverter"/>
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>							       
+								</rich:calendar>
+								<cobra:toolTip>
+		        					<rich:message for="dataInicioCalculo"/>
+			    				</cobra:toolTip>
+								</a4j:region>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Data Final" for="dataTerminoCalculo" /><br />
+								<rich:calendar id="dataTerminoCalculo" 												
+												value="#{apresentadorCalculo.registro.dataTerminoCalculo}" label="Data Final" 
+												inputSize="22"	popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" 
+												oninputfocus="$(this).dateMask()">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+								</rich:calendar>
+								<cobra:toolTip>
+		        					<rich:message for="dataTerminoCalculo"/>
+			    				</cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<a4j:region>
+									<h:outputLabel for="prescricaoQuinquenal" value="Aplicar Prescrição"/><br /><br />
+									<h:selectBooleanCheckbox id="prescricaoQuinquenal" value="#{apresentadorCalculo.registro.prescricaoQuinquenal}">
+										<a4j:support event="onchange" reRender="painelLimitarAvos" limitToList="true"/>
+									</h:selectBooleanCheckbox>
+									<label for="prescricaoQuinquenal" style="padding-right: 10px;">Verbas (Quinquenal)</label>
+									<h:selectBooleanCheckbox id="prescricaoFgts" value="#{apresentadorCalculo.registro.prescricaoFgts}"/>
+									<label for="prescricaoFgts">FGTS</label>
+								</a4j:region>
+							</h:panelGroup>
+							
+					</h:panelGrid>
+					</fieldset>
+				</fieldset>
+					
+				<fieldset><legend>Outros Parâmetros</legend>
+					<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+						<h:panelGroup>
+							
+							<h:panelGrid columns="4" cellpadding="3" cellspacing="4" border="0">
+								<h:panelGroup>
+									<h:outputLabel value="Regime de Trabalho"/><br />
+									<h:selectOneMenu id="tipoDaBaseTabelada" value="#{registro.regimeDoContrato}" label="Regime de Contrato" style="width:200px;">
+									 	<s:selectItems value="#{enumItems.regimeDoContratoEnum}" var="item" label="#{item.nome}"/>
+										<s:convertEnum />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:outputLabel value="Maior Remuneração" for="valorMaiorRemuneracao" style="margin-left:10px;"/><br />
+									<h:inputText id="valorMaiorRemuneracao" value="#{apresentadorCalculo.registro.valorMaiorRemuneracao}" label="Maior Remuneração" size="16" maxlength="16" onfocus="$(this).currencyMask()" style="margin-left:10px;">
+										<f:converter converterId="bigDecimalConverter"/>
+									</h:inputText>
+									<rich:message showDetail="false" showSummary="false" for="valorMaiorRemuneracao">
+									     <f:facet name="errorMarker">
+									     	   <h:outputLink class="linkErro" id="valorMaiorRemuneracaoErro">
+												   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+												        <rich:message showDetail="true" showSummary="false" for="valorMaiorRemuneracao"/>
+												   </rich:toolTip>
+									     	   </h:outputLink>
+									     </f:facet>
+									</rich:message>
+								</h:panelGroup>		
+								
+								<h:panelGroup>
+									<h:outputLabel value="Última Remuneração" for="valorUltimaRemuneracao"/><br />
+									<h:inputText id="valorUltimaRemuneracao" value="#{apresentadorCalculo.registro.valorUltimaRemuneracao}" label="Última Remuneração" size="16" maxlength="16" onfocus="$(this).currencyMask()">
+										<f:converter converterId="bigDecimalConverter"/>
+									</h:inputText>
+									<rich:message showDetail="false" showSummary="false" for="valorUltimaRemuneracao">
+									     <f:facet name="errorMarker">
+									     	   <h:outputLink class="linkErro" id="valorUltimaRemuneracaoErro">
+												   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+												        <rich:message showDetail="true" showSummary="false" for="valorUltimaRemuneracao"/>
+												   </rich:toolTip>
+									     	   </h:outputLink>
+									     </f:facet>
+									</rich:message>
+									<h:outputText class="linkHelp" id="valorUltimaRemuneracaoHelp" style="margin-left:1px">
+									   	<rich:toolTip for="valorUltimaRemuneracaoHelp" showEvent="mouseover" styleClass="tooltipHelp">
+									   		Este campo se relaciona a um histórico salarial com o valor informado durante todo o período de cálculo, com incidência proporcional de Contribuição Social.
+									   	</rich:toolTip>
+					     	    	</h:outputText>
+								</h:panelGroup>
+							
+							</h:panelGrid>
+							
+							<div style="width:950px;">
+								<div style="float: left; ">
+								<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+									<h:panelGroup>
+										<h:panelGrid columns="2" cellpadding="2" cellspacing="2" border="0">
+											<h:panelGroup>
+												<h:outputLabel value="Prazo de Aviso Prévio" for="apuracaoPrazoDoAvisoPrevio"/><br />
+												<a4j:region>
+													<h:selectOneMenu id="apuracaoPrazoDoAvisoPrevio" value="#{apresentadorCalculo.registro.apuracaoPrazoDoAvisoPrevio}" label="Prazo de Aviso Prévio" style="width:125px;">
+													 	<s:selectItems value="#{enumItems.tipoDeApuracaoPrazoDoAvisoPrevioEnum}" var="item" label="#{item.nome}"/>
+													 	<a4j:support event="onchange" reRender="painelPrazoAvisoInformado,painelBotoes" limitToList="true"/>
+														<s:convertEnum />
+													</h:selectOneMenu>
+												</a4j:region>
+											</h:panelGroup>
+											
+											<a4j:outputPanel id="painelPrazoAvisoInformado">
+												<h:panelGroup rendered="#{apresentadorCalculo.registro.apuracaoPrazoDoAvisoPrevio.valor == 'I'}">
+													<h:outputLabel value="Quantidade" for="prazoAvisoInformado" /><br/>
+													<h:inputText id="prazoAvisoInformado" value="#{apresentadorCalculo.registro.prazoAvisoInformado}" onfocus="$(this).integerMask()" label="Quantidade" size="9" maxlength="3" >
+													</h:inputText>
+													<cobra:toolTip>
+										   				<rich:message for="prazoAvisoInformado"/>
+										   			</cobra:toolTip>
+												</h:panelGroup>
+											</a4j:outputPanel>
+											
+										</h:panelGrid>
+									</h:panelGroup>		
+									<h:panelGroup>
+											<h:selectBooleanCheckbox id="projetaAvisoIndenizado" value="#{apresentadorCalculo.registro.projetaAvisoIndenizado}"/>
+											<label for="projetaAvisoIndenizado">Projetar Aviso Prévio Indenizado</label>						
+									</h:panelGroup>		
+									<h:panelGroup id="painelLimitarAvos">
+										<h:selectBooleanCheckbox id="limitarAvos" value="#{apresentadorCalculo.registro.limitarAvosAoPeriodoDoCalculo}" disabled="#{not apresentadorCalculo.isPermiteLimitarAvos()}"/>
+										<label for="limitarAvos">Limitar Avos ao Período do Cálculo</label>		
+									</h:panelGroup>	
+									<h:panelGroup>
+											<h:selectBooleanCheckbox id="zeraValorNegativo" value="#{apresentadorCalculo.registro.zeraValorNegativo}"/>
+											<label for="zeraValorNegativo">Zerar Valor Negativo (Padrão)</label>						
+									</h:panelGroup>		
+									<h:panelGroup>
+											<h:selectBooleanCheckbox id="consideraFeriadoEstadual" value="#{apresentadorCalculo.registro.consideraFeriadoEstadual}"/>
+											<label for="consideraFeriadoEstadual">Considerar Feriados Estaduais</label>						
+									</h:panelGroup>		
+									<h:panelGroup>
+											<h:selectBooleanCheckbox id="consideraFeriadoMunicipal" value="#{apresentadorCalculo.registro.consideraFeriadoMunicipal}"/>
+											<label for="consideraFeriadoMunicipal">Considerar Feriados Municipais</label>						
+									</h:panelGroup>
+									</h:panelGrid>
+								</div>
+							
+							<h:panelGrid columns="2" cellspacing="4" border="0">
+							
+							<h:panelGroup>
+							<fieldset>
+									<legend>Carga Horária </legend>
+									
+									<h:panelGrid columns="2" cellspacing="2" cellpadding="4" border="0">
+										<h:outputLabel value="Padrão *:" for="valorCargaHorariaPadrao" />
+										<h:panelGroup>
+											<h:inputText id="valorCargaHorariaPadrao" value="#{apresentadorCalculo.registro.valorCargaHorariaPadrao}" label="Carga Horária Padrão" size="15" maxlength="7" onfocus="$(this).currencyMask()" required="true" style="text-align:right;">
+												<f:converter converterId="bigDecimalConverter"/>
+											</h:inputText>
+											<rich:message showDetail="false" showSummary="false" for="valorCargaHorariaPadrao">
+											     <f:facet name="errorMarker">
+											     	   <h:outputLink class="linkErro" id="valorCargaHorariaPadraoErro">
+														   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+														        <rich:message showDetail="true" showSummary="false" for="valorCargaHorariaPadrao"/>
+														   </rich:toolTip>
+											     	   </h:outputLink>
+											     </f:facet>
+											</rich:message>
+										</h:panelGroup>
+									</h:panelGrid>
+									
+									<h:panelGrid columns="1" cellspacing="4" border="0">
+									
+										<h:panelGroup>
+											<fieldset style="width: 325px;">
+												<legend>Exceções</legend>
+												
+												<h:panelGrid columns="4" cellspacing="4" border="0">
+													<h:panelGroup>
+														<h:outputLabel value="Início" for="dataInicioExcecao" /><br />
+														<rich:calendar id="dataInicioExcecao" value="#{apresentadorCalculo.excecaoDaCargaHoraria.dataInicioExcecao}" label="Data Inicial" inputSize="8" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<rich:message showDetail="false" showSummary="false" for="dataInicioExcecao">
+														     <f:facet name="errorMarker">
+														     	   <h:outputLink class="linkErro" id="dataInicioExcecaoErro">
+																	   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																	        <rich:message showDetail="true" showSummary="false" for="dataInicioExcecao"/>
+																	   </rich:toolTip>
+														     	   </h:outputLink>
+														     </f:facet>
+														</rich:message>
+													</h:panelGroup>
+													
+													
+													<h:panelGroup>
+														<h:outputLabel value="Fim" for="dataTerminoExcecao" /><br />
+														<rich:calendar id="dataTerminoExcecao" value="#{apresentadorCalculo.excecaoDaCargaHoraria.dataTerminoExcecao}" label="Data Final" inputSize="8" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<rich:message showDetail="false" showSummary="false" for="dataTerminoExcecao">
+														     <f:facet name="errorMarker">
+														     	   <h:outputLink class="linkErro" id="dataTerminoExcecaoErro">
+																	   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																	        <rich:message showDetail="true" showSummary="false" for="dataTerminoExcecao"/>
+																	   </rich:toolTip>
+														     	   </h:outputLink>
+														     </f:facet>
+														</rich:message>
+													</h:panelGroup>
+													
+														
+													<h:panelGroup>
+														<h:outputLabel value="Exceção" for="valorCargaHoraria" /><br/>
+														<h:inputText id="valorCargaHoraria" value="#{apresentadorCalculo.excecaoDaCargaHoraria.valorCargaHoraria}" label="Valor Exceção da Carga Horária" size="7" maxlength="6" onfocus="$(this).currencyMask()" style="text-align:right;">
+															<f:converter converterId="bigDecimalConverter"/>
+														</h:inputText>
+														<rich:message showDetail="false" showSummary="false" for="valorCargaHoraria">
+														     <f:facet name="errorMarker">
+														     	   <h:outputLink class="linkErro" id="valorCargaHorariaErro">
+																	   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																	        <rich:message showDetail="true" showSummary="false" for="valorCargaHoraria"/>
+																	   </rich:toolTip>
+														     	   </h:outputLink>
+														     </f:facet>
+														</rich:message>
+													</h:panelGroup>
+													
+													<a4j:commandLink id="incluirExcecaoCH" actionListener="#{apresentador.incluirExcecaoCargaHoraria}" 
+														 reRender="painelListaExcecoesCargaHoraria" 
+														styleClass="botaoAddItem" title="Adicionar Base"
+														rendered="#{!apresentador.emModoSomenteVisualizacao}" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+													
+												</h:panelGrid>
+									
+											</fieldset>
+										</h:panelGroup>
+									</h:panelGrid>
+							<br />
+							
+							<a4j:outputPanel id="painelListaExcecoesCargaHoraria" ajaxRendered="true">
+								
+								<h:panelGroup rendered="#{excecoesDaCargaHoraria.rowCount gt 0}" >
+						
+										<rich:dataTable id="listagemExcecaoCH" value="#{excecoesDaCargaHoraria}" rowClasses="linha-par, linha-impar" 
+														cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{excecoesDaCargaHoraria.rowCount}" var="excecao"> 
+								    		<rich:column style="width:10%;">
+											    	<f:facet name="header">
+										    			<h:outputText value="Ação"/>
+										    		</f:facet>
+												    <a4j:region>
+											    		<h:commandLink id="excluirExcecaoCH"  limitToList="true" 
+											    						 actionListener="#{apresentador.excluirExcecaoCargaHoraria}" 
+										    							 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+										    							 <a4j:support event="onclick" reRender="painelListaExcecoesCargaHoraria" limitToList="true" ajaxSingle="true"/>
+										    			</h:commandLink>
+											    	</a4j:region>
+										    </rich:column>
+								    	
+									    	<rich:column style="width:15%;">
+								    			<f:facet name="header">
+								    				<h:outputText value="Início"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{excecao.dataInicioExcecao}" id="inicioExc">
+								    			</h:outputText>
+									    	</rich:column>
+									    	
+									    	<rich:column style="width:15%;">
+								    			<f:facet name="header">
+								    				<h:outputText value="Fim"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{excecao.dataTerminoExcecao}" id="fimExc">
+								    			</h:outputText>
+									    	</rich:column>
+									    	
+									    	<rich:column style="width:55%;">
+								    			<f:facet name="header">
+								    				<h:outputText value="C.Horária"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{excecao.valorCargaHoraria}" id="valor" required="true" style="text-align:right;" >
+													<f:converter converterId="bigDecimalConverter"/>
+												</h:outputText>
+									    	</rich:column>
+								    	
+								    	
+										</rich:dataTable>
+								
+								</h:panelGroup>	
+							
+							</a4j:outputPanel>
+									
+							</fieldset>
+							</h:panelGroup>
+						
+							<h:panelGroup>
+							<fieldset>
+									<legend>Sábado </legend>
+									
+									<h:panelGrid columns="4" cellspacing="6" border="0">
+										<h:panelGroup>
+												<h:selectBooleanCheckbox id="sabadoDiaUtil" value="#{apresentadorCalculo.registro.sabadoDiaUtil}">
+												</h:selectBooleanCheckbox>
+												<label for="sabadoDiaUtil">Sábado como Dia Útil</label>						
+										</h:panelGroup>	
+									</h:panelGrid>
+									
+									<h:panelGrid columns="1" cellspacing="4" border="0">
+									
+										<h:panelGroup>
+											<fieldset style="width: 255px;">
+												<legend>Exceções</legend>
+												
+												<h:panelGrid columns="3" cellspacing="4" border="0">
+													<h:panelGroup>
+														<h:outputLabel value="Início" for="dataInicioExcecaoSabado" /><br />
+														<rich:calendar id="dataInicioExcecaoSabado" value="#{apresentadorCalculo.excecaoDoSabado.dataInicioExcecaoSabado}" label="Data Inicial" inputSize="8" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<rich:message showDetail="false" showSummary="false" for="dataInicioExcecaoSabado">
+														     <f:facet name="errorMarker">
+														     	   <h:outputLink class="linkErro" id="dataInicioExcecaoSabadoErro">
+																	   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																	        <rich:message showDetail="true" showSummary="false" for="dataInicioExcecaoSabado"/>
+																	   </rich:toolTip>
+														     	   </h:outputLink>
+														     </f:facet>
+														</rich:message>
+													</h:panelGroup>
+													
+													<h:panelGroup>
+														<h:outputLabel value="Fim" for="dataTerminoExcecaoSabado" /><br />
+														<rich:calendar id="dataTerminoExcecaoSabado" value="#{apresentadorCalculo.excecaoDoSabado.dataTerminoExcecaoSabado}" label="Data Final" inputSize="8" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+															<f:facet name="footer">
+													        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+													        </f:facet>
+														</rich:calendar>
+														<rich:message showDetail="false" showSummary="false" for="dataTerminoExcecaoSabado">
+														     <f:facet name="errorMarker">
+														     	   <h:outputLink class="linkErro" id="dataTerminoExcecaoSabadoErro">
+																	   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																	        <rich:message showDetail="true" showSummary="false" for="dataTerminoExcecaoSabado"/>
+																	   </rich:toolTip>
+														     	   </h:outputLink>
+														     </f:facet>
+														</rich:message>
+													</h:panelGroup>
+													
+													<a4j:commandLink id="incluirExcecaoSab" actionListener="#{apresentador.incluirExcecaoDoSabado}" 
+														 reRender="painelListaExcecoesDoSabado" 
+														styleClass="botaoAddItem" title="Adicionar Base"
+														rendered="#{!apresentador.emModoSomenteVisualizacao}" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+													
+												</h:panelGrid>
+									
+											</fieldset>
+										</h:panelGroup>
+									</h:panelGrid>
+							<br />
+							
+							<a4j:outputPanel id="painelListaExcecoesDoSabado" ajaxRendered="true">
+								
+								<h:panelGroup  style="width: 290px;"  rendered="#{excecoesDoSabado.rowCount gt 0}" >
+						
+										<rich:dataTable id="listagemExcecaoSab" value="#{excecoesDoSabado}" rowClasses="linha-par, linha-impar" 
+														cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{excecoesDoSabado.rowCount}" var="excecao"> 
+								    		<rich:column style="width:10%;">
+											    	<f:facet name="header">
+										    			<h:outputText value="Ação"/>
+										    		</f:facet>
+												    <a4j:region>
+											    		<h:commandLink id="excluirExcecaoSab"  limitToList="true" 
+											    						 actionListener="#{apresentador.excluirExcecaoDoSabado}" 
+										    							 styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+										    							 <a4j:support event="onclick" reRender="painelListaExcecoesDoSabado" limitToList="true" ajaxSingle="true"/>
+										    			</h:commandLink>
+											    	</a4j:region>
+										    </rich:column>
+								    	
+									    	<rich:column style="width:15%;">
+								    			<f:facet name="header">
+								    				<h:outputText value="Início"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{excecao.dataInicioExcecaoSabado}" id="inicioExcSab">
+								    			</h:outputText>
+									    	</rich:column>
+									    	
+									    	<rich:column style="width:15%;">
+								    			<f:facet name="header">
+								    				<h:outputText value="Fim"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{excecao.dataTerminoExcecaoSabado}" id="fimExcSab">
+								    			</h:outputText>
+									    	</rich:column>
+									    	
+										</rich:dataTable>
+								
+								</h:panelGroup>	
+							
+							</a4j:outputPanel>
+									
+							</fieldset>
+						</h:panelGroup>
+						
+						
+						<h:panelGroup>
+						
+							<fieldset>
+									<legend>Pontos Facultativos </legend>
+						
+							<h:panelGroup>
+								<a4j:outputPanel id="painelPontosFacultativos">
+									<h:panelGrid columns="2" cellspacing="2" cellpadding="2" border="0" columnClasses=",verticalTop">
+										<h:panelGroup>
+											<h:outputLabel value="Ponto Facultativo" for="pontoFacultativo" />
+											<br/>
+											<h:selectOneMenu id="pontoFacultativo" label="Ponto Facultativo" value="#{apresentador.pontoFacultativo.pontoFacultativo}" style="width:140px;"> 
+									 			<s:selectItems value="#{apresentador.pontosFacultativos}" var="item" label="#{item.nomeFeriado}" noSelectionLabel=""/>
+												<s:convertEntity/>
+											</h:selectOneMenu>
+											<cobra:toolTip>
+						        				<rich:message for="pontoFacultativo"/>
+							    			</cobra:toolTip>
+										</h:panelGroup>
+										<h:panelGroup>
+											<a4j:commandLink id="cmdAdicionarPontoFacultativo" actionListener="#{apresentador.adicionarPontoFacultativo}" styleClass="botaoAddItem" title="Adicionar Ponto Facultativo" 
+															reRender="painelPontosFacultativos,painelListaPontosFacultativos" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+										</h:panelGroup>
+									</h:panelGrid>
+								</a4j:outputPanel>
+								
+								<a4j:outputPanel id="painelListaPontosFacultativos">
+									<h:panelGroup style="width: 100%;" rendered="#{listaDePontosFacultativos.rowCount gt 0}">
+										<rich:dataTable id="listagemPontosFacultativos" value="#{listaDePontosFacultativos}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{listaDePontosFacultativos.rowCount}" var="item"> 
+								    		<rich:column>
+										    	<f:facet name="header">
+									    			<h:outputText value="Ação"/>
+									    		</f:facet>
+											    <a4j:region>
+										    		<a4j:commandLink id="excluirPontoFacultativo" immediate="true" actionListener="#{apresentador.removerPontoFacultativo(item)}"  limitToList="true" reRender="painelListaPontosFacultativos" styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+										    	</a4j:region>
+										    </rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="Nome"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.nomeFeriado}"/>
+									    	</rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="Abrangência"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.abrangencia.nome}"/>
+									    	</rich:column>
+									    </rich:dataTable>							
+									</h:panelGroup>
+								</a4j:outputPanel>
+							</h:panelGroup>
+							</fieldset>
+					</h:panelGroup>
+						
+							</h:panelGrid>	
+						
+						</div>
+					
+						
+						</h:panelGroup>
+						
+						
+						
+						
+						
+					</h:panelGrid>
+				
+			</fieldset>
+
+			<div class="floatField" style="margin-top: 8px; margin-left: 6px;">
+				<h:outputLabel value="Comentários" /><br/>
+				<h:inputTextarea id="comentarios" value="#{registro.comentarios}" 
+								 label="Comentários" cols="165" rows="3"
+								 onkeyup="limitarTextArea(this, 255)"
+								 onkeypress="limitarTextArea(this, 255)" onchange="limitarTextArea(this, 255)">
+				</h:inputTextarea>
+			</div>	
+
+			</rich:tab>
+			
+		</rich:tabPanel>
+		
+		
+		
+	</ui:define>	
+	
+	<ui:define name="script">
+		<script type="text/javascript">
+			function ativarAbaComErros(){
+				if (jQuery("td.primeiraAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabDadosProcesso_lbl").click();
+					return false;
+				}
+				if (jQuery("td.segundaAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabParametrosCalculo_lbl").click();
+					return false;
+				}
+			}
+		</script>
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+	
+		<h:panelGroup id="painelBotoes">
+		
+		<a4j:commandButton id="buscar" value="Buscar" actionListener="#{apresentadorCalculo.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentadorCalculo.emModoListagem}" onclick="allToUpperCase()" />
+		<a4j:commandButton id="limpar" value="Limpar" actionListener="#{apresentadorCalculo.limpar}" reRender="panelFiltroCampos" styleClass="botao" rendered="#{apresentadorCalculo.emModoListagem}" />
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorCalculo.salvar}" styleClass="botao" rendered="#{apresentadorCalculo.emModoFormulario}" 
+						   onclick="if (!checarValor(dataMenorQue('13/10/2011',$('formulario:dataDemissaoInputDate').value), $('formulario:apuracaoPrazoDoAvisoPrevio').value == 'APURACAO_CALCULADA')) return false; allToUpperCase()" oncomplete="ativarAbaComErros();"/>  
+		<a4j:commandButton id="cancelar" value="#{apresentadorCalculo.operacao == 'ALTERACAO' ? 'Fechar' : 'Cancelar'}" action="#{apresentadorCalculo.fechar}" styleClass="botao" rendered="#{apresentadorCalculo.emModoFormulario}"/>
+	
+		<h:panelGroup id="scriptAviso">
+			<script   type="text/javascript">
+				function checarValor(dataMenor, tipo) {
+					if (!(dataMenor &amp;&amp; tipo)) {
+						return true;
+					}else{
+						return confirma('#{mensagens.MSG0068}',$('formulario:salvar'));
+					}
+				}
+		    </script>
+		</h:panelGroup>
+		
+		</h:panelGroup>
+	    
+	</ui:define>
+	
+	<ui:define name="auxiliar">
+		<a4j:region>
+			<ui:include src="modal-processo-pje.xhtml"/>
+		</a4j:region>
+	</ui:define>
+	
+	
+</ui:composition>
+
+</html>

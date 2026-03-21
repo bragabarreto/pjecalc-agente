@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="pt" lang="pt"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+
+<body>
+
+<ui:composition template="/templates/template-principal.xhtml">
+
+	<ui:param name="notWaitCancel" value="#{true}" />
+	
+	<ui:define name="conteudo">
+		
+		<ui:insert name="noPilares">
+
+			<a4j:outputPanel id="scriptMenu" ajaxRendered="true">
+
+				<script type="text/javascript">
+				
+					jQuery(document).ready( function() {
+						
+						jQuery("input:text:visible:enabled:first").focus();
+												
+						jQuery('#menupainel .header').click(function() {
+							var abrindo = !jQuery(this).next().is(":visible"); 
+
+							jQuery(this).children("span").toggleClass("undock");								
+							jQuery(this).next().slideToggle(function(){
+							});
+							
+							if (abrindo) {
+								jQuery('.item-aberto').children("span").toggleClass("undock");
+								jQuery('.item-aberto').removeClass('item-aberto').next().slideToggle(function(){
+								});
+								jQuery(this).addClass('item-aberto');
+							}
+							else {
+								jQuery('.item-aberto').removeClass('item-aberto');
+							}
+							
+						});
+
+				    	jQuery('#linkSetaOn').click(function() {
+							jQuery("#conteudo").animate({marginLeft: "-240px", width:"117%"}, "slow");
+							jQuery('#linkSetaOff').animate({marginRight: "-38px"}, "slow");
+							jQuery('#linkSetaOn').hide();
+							jQuery('#linkSetaOff').show();
+							
+							
+							
+						});
+						
+						jQuery('#linkSetaOff').click(function() {
+							jQuery("#conteudo").animate({marginLeft: "0px", width:"100%" }, "slow");
+							jQuery('#linkSetaOff').animate({marginRight: "0px"}, "slow");
+					     	jQuery('#linkSetaOn').show();
+							jQuery('#linkSetaOff').hide();
+						
+						});
+
+						//Script para selecionar automaticamente o valor do input/textarea quando a tecla 
+						//TAB for pressionada ou ocorrer um evento de de mouse click.
+						jQuery("input[type='text'], textarea").live("keyup", function(e){
+							   
+							var code = e.keyCode || e.which;
+							   if(code == '9'){
+								   this.focus(); 
+								   this.select();
+								}      
+					    });
+
+						jQuery("input[type='text']").live("click", function(){							 
+							   this.focus(); this.select();   
+				        });
+						
+						jQuery("input[type='text']").live("focus", function(){							 
+							   this.focus(); this.select();   
+				        });
+						
+				        //Script para desabilitar o TAB para campos radio/checkbox/ e botão "excluir" dos grids.
+						//jQuery("input[type='radio'], input[type='checkbox'], .linkExcluir").each(function(){
+						//    this.tabIndex = -1;
+						//});
+
+					});
+					
+	
+
+				</script>
+			</a4j:outputPanel>
+
+			<div class="expandirRecolher">        
+                <div class="bloco" style="width: 230px">            
+                    <div id="linkSetaOn"></div>
+                    <div id="linkSetaOff" style="display: none;"></div>
+                    <span class="retrair">Retrair Menu</span>        
+                </div>
+                <div style="float:right; margin-right: 22px;" >
+                  <h:panelGroup rendered="#{aplicacao.isVersaoOnline()}" class="parent dropDown">
+						<h:outputLabel for="setorUsuario"/>
+						<h:selectOneMenu id="setorUsuario" value="#{identity.setorSelecionado}" converter="#{setorConverter}" disabled="#{servicoDeCalculo.isCalculoAberto()}">
+							<s:selectItems value="#{identity.setoresUsuario}"/>
+							<a4j:support event="onchange" action="#{identity.trocarSetor}"/> 
+						</h:selectOneMenu>
+				  </h:panelGroup>
+                </div>
+                
+			</div>
+
+			<table height="100%" border="0" cellspacing="0" cellpadding="0"> 
+				<tr>
+				
+					<h:panelGroup>
+						
+							
+						<td width="230px" valign="top" id="menuesq">
+						
+							<a4j:outputPanel id="arvore">
+								
+								<ui:include src="menu-pilares.xhtml" />
+	
+							</a4j:outputPanel>
+							
+						</td>
+
+						<td class="fundoMenuLateral" style="margin-left: 0;"></td>
+					</h:panelGroup>
+
+					<td valign="top" id="conteudoPrincipal" width="98%">
+					
+					<a4j:outputPanel id="panelIncludes">
+						
+						<div id="contentPrincipal">
+							<h:panelGroup>
+
+								<a4j:outputPanel ajaxRendered="true">
+									<div id="barraTitulo">
+										<ui:fragment rendered="#{not home and not empty gerenciadorDeMenus.menuItemAberto}">
+											<span style="padding-bottom: 5px; padding-top:3px;" class="textoTitulo #{gerenciadorDeMenus.menuItemAberto.styleClass}">#{gerenciadorDeMenus.menuItemAberto.menu.rotulo} > #{gerenciadorDeMenus.menuItemAberto.rotulo} #{not empty titulo ? '>' : ''} #{titulo}</span>
+										</ui:fragment>
+									</div>
+								
+									<a4j:include id="painelMensagens" viewId="/pages/comum/mensagem.xhtml" />
+								</a4j:outputPanel>
+	
+								<ui:insert name="noCrud">
+								
+									<a href="#" accesskey="2" onfocus="jQuery('#conteudoPrincipal :input:enabled:visible:first').focus();"></a>
+									
+									<!-- Inicio CRUD -->
+									<!-- Inicio da Busca -->
+									<table width="100%" cellpadding="0" cellspacing="0">
+										<tr>
+											<td align="left" colspan="2"><!--  span necessario para resolver o bug do IE. Para pagina que tem so um campo de texto,
+											o pressionamento do Enter nao envia no post a referencia do botao submit, gerando so um reload na pagina. -->
+											<span style="display: none;"><input type="text" /></span> 
+																						
+											<ui:insert name="nofiltroCampos">
+												<a4j:outputPanel id="panelFiltroCampos" ajaxRendered="true">
+													
+													<!-- TODO -->
+													<h:panelGroup rendered="#{apresentador.emModoListagem}"> <!-- {isListando} -->
+														<fieldset><legend>#{empty legenda ? 'Dados da Busca' : legenda}</legend> 
+															<ui:insert name="filtroCampos" />
+														</fieldset>
+													</h:panelGroup>
+												</a4j:outputPanel>
+											</ui:insert> 
+											<ui:insert name="nocamposFormulario">
+												<a4j:outputPanel id="panelFormulario" ajaxRendered="true">
+													<h:panelGroup rendered="#{apresentador.emModoFormulario}"> <!-- {isFormulario} --> 
+														<a4j:region id="regionFormulario" rendered="#{not hideFieldset}">
+															<ui:param name="legendaDoFormularioLocal" value="Dados de #{dadosDe}" />
+															<fieldset><legend><b>#{empty legendaDoFormulario ? legendaDoFormularioLocal : legendaDoFormulario}</b></legend>
+																<ui:insert name="camposFormulario" />
+															</fieldset>
+														</a4j:region>
+													</h:panelGroup>
+												</a4j:outputPanel>
+											</ui:insert>
+											</td>
+										</tr>
+										<tr>
+											<td><br />
+											</td>
+										</tr>
+										<ui:insert name="nofiltroBotoes">
+											<tr>
+												<td align="left" class="bgbotao" style="padding-top: 3px;">
+													<a4j:outputPanel id="panelBotoes" ajaxRendered="true">
+														<rich:hotKey key="return" handler="#{rich:element('buscar')}.onclick();return false;"/>
+														<ui:insert name="filtroBotoes" />
+													</a4j:outputPanel></td>
+												<!-- TODO -->
+												<td align="right" class="bgbotao" style="padding-right: 13px;">
+												</td>
+											</tr>
+										</ui:insert>
+										
+									</table>
+									<br />
+									<!-- LISTAGEM -->
+									<table width="100%" cellpadding="0" cellspacing="0">
+								
+										<tr>
+											<td align="left">
+												<ui:insert name="noresultadoTabela">
+												<a4j:outputPanel id="panelListagem" ajaxRendered="true">
+													<h:panelGroup rendered="#{apresentador.emModoListagem and lista.rowCount gt 0}">
+														<h:outputLabel style="float:right; margin:-14px 5px 0 0;" value="#{mensagens.resultadoContador} #{lista.rowCount}" />
+													</h:panelGroup>
+													
+													<h:panelGroup rendered="#{apresentador.emModoListagem and lista.rowCount le 0}" styleClass="box-msg-livre">											
+														<h:outputLabel value="#{mensagens.resultadoVazio}" />
+													</h:panelGroup>
+													
+											    	<h:panelGroup rendered="#{apresentador.emModoListagem and lista.rowCount gt 0}">
+											    		<ui:insert name="resultadoTabela"/>				    		
+											    	</h:panelGroup>
+													
+												</a4j:outputPanel>
+												</ui:insert>
+											</td>
+										</tr>
+									</table>
+									<!-- Fim CRUD -->
+								</ui:insert>
+							</h:panelGroup> 
+							
+							<script>
+								AguardeHide();
+							</script>
+						</div>
+					</a4j:outputPanel>
+					</td>
+				</tr>
+			</table>
+
+		</ui:insert>
+
+		<ui:insert name="panelCrud" />
+
+	</ui:define>
+</ui:composition>
+
+</body>
+</html>

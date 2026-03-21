@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich">	
+<!--
+ 
+	PARAMETROS DO TEMPLATE
+	
+	- suporte: Referencia a DocumentoSuporte
+	- reRender: ID do componente que sera renderizado na volta
+	
+ -->		
+	
+  <ui:param name="suporte" value="#{suporte}" />
+  
+	<rich:modalPanel id="modalNovoDocumento" zindex="2000" resizeable="false" autosized="true" width="500" styleClass="painelModal">
+		<f:facet name="header">Novo Documento</f:facet>
+		<f:facet name="controls">
+	       	<h:graphicImage url="/images/ico_fechar.gif" style="cursor: pointer;" onclick="Richfaces.hideModalPanel('modalNovoDocumento')" alt="Fechar" />
+	    </f:facet>
+	    
+  	<h:form id="form">
+
+	    <a4j:outputPanel id="painelMensagem">
+	        <h:inputHidden value="#{requestScope.errorMessages}" id="testeMensagem" />
+			<h:panelGroup rendered="#{requestScope.errorMessages}">
+				<div style="background: #FFF0F5; border: 1px solid red;">			
+					<table border="0" width="99%">
+						<tr>
+							<td id="areaErro" valign="top" width="80px">
+			            		<h:graphicImage id="icoErro" url="/images/icone_msg_negativa.gif" style="border: none;" alt="Erro" />&#160;&#160;
+			   	        		<h:outputText id="tituloErro" value="Erro." styleClass="msgErro"/>
+							</td>
+							<td valign="top">
+								<h:messages layout="table" showSummary="true" showDetail="false"/>
+								<h:outputText value="#{requestScope.filterMessages}"/>
+							</td>
+						</tr>
+					</table>
+				</div>
+			</h:panelGroup>
+			
+			<h:panelGroup rendered="#{requestScope.infoMessages}">
+				<div style="background: #F0FFFF; border: 1px solid #27408B;">
+					<table border="0" width="100%">
+						<tr>
+							<td id="areaSucesso" valign="top" width="80px">
+			            		<h:graphicImage id="icoSucesso" url="/images/icone_msg_positiva.gif" style="border: none;" alt="Sucesso" />&#160;&#160;
+			   	        		<h:outputText id="tituloSucesso" value="Sucesso." styleClass="msgSucesso"/>
+							</td>
+							<td valign="top">
+								<h:messages layout="table" showSummary="true" showDetail="false" id="mensagemDeSucesso"/>
+								<h:outputText value="#{requestScope.filterMessages}"/>
+							</td>
+						</tr>
+					</table>	
+				</div>				
+			</h:panelGroup>
+		</a4j:outputPanel>
+  		
+	    <a4j:region>
+		<a4j:outputPanel id="conteudoNovoDocumento" layout="inline">
+		
+				<h:panelGrid columns="3" cellpadding="4" cellspacing="4">
+
+					<h:panelGroup>
+						<h:outputLabel for="numero" value="C&#243;digo *" styleClass="obrigatorio" />
+						<br />
+						<h:inputText id="numero" value="#{suporte.documento.numero}"
+							label="C&#243;digo" maxlength="50" size="30" onblur="ajustaTexto(this)" />
+					</h:panelGroup>
+
+					<h:panelGroup>
+						<h:outputLabel for="dataEmissao" value="Data de Emiss&#227;o *" styleClass="obrigatorio" />
+						<br />
+						<rich:calendar id="dataEmissao" binding="#{suporte.formDataEmissao}"
+							value="#{suporte.documento.dataEmissao}" popup="true"
+							datePattern="dd/MM/yyyy"
+							enableManualInput="true"
+							converterMessage="Data Emiss&#227;o Inv&#225;lida">
+							<f:facet name="footer">
+								<h:outputText value="{selectedDateControl}"
+									style="text-align:center" />
+							</f:facet>
+							<a4j:support id="suporte1" event="oninputblur" immediate="true" actionListener="#{suporte.calcularDataFinal}" oncomplete="atualizarDataFinal()" focus="tipo" />
+							<a4j:support id="suporte2" event="oncollapse" immediate="true" actionListener="#{suporte.calcularDataFinal}" oncomplete="atualizarDataFinal()" focus="tipo" />
+						</rich:calendar>
+						<script>
+							mascaraFormulario('form', 'dataEmissao', 'DATA');
+						</script>
+					</h:panelGroup>
+
+					<h:panelGroup>
+						<h:outputLabel for="tipo" value="Tipo *" styleClass="obrigatorio" />
+						<br />
+						<h:selectOneMenu id="tipo" binding="#{suporte.formTipo}"
+							value="#{suporte.documento.tipoDocumento}"
+							converter="#{documentoFacesBean.tipoDocumentoConverter}"
+							>
+							<f:selectItems value="#{documentoFacesBean.tiposDocumentos}" id="tipoItems"/>
+							<a4j:support event="onchange" immediate="true" actionListener="#{suporte.calcularDataFinal}" oncomplete="atualizarDataFinal()" focus="orgaoEmissor" id="onChangeTipo"/>
+						</h:selectOneMenu>	
+					</h:panelGroup>
+
+					<h:panelGroup>
+						<h:outputLabel for="orgaoEmissor" value="&#211;rg&#227;o Emissor *" styleClass="obrigatorio" />
+						<br />
+						<h:inputText id="orgaoEmissor"  value="#{suporte.documento.orgaoEmissor}"
+							label="&#211;rg&#227;o Emissor" maxlength="200"
+							size="30" onblur="ajustaTexto(this)" />
+					</h:panelGroup>
+
+					<h:panelGroup>
+						<h:outputLabel for="localFisico" value="Local F&#237;sico" />
+						<br />
+						<h:inputText id="localFisico" value="#{suporte.documento.localFisico}"
+							label="Local F&#237;sico" maxlength="200"
+							size="30" onblur="ajustaTexto(this)" />
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel for="data" value="Data do Documento" />
+						<br />
+						<h:inputText id="data" value="#{suporte.documento.data}" disabled="true">
+							<f:convertDateTime pattern="dd/MM/yyyy"/>
+						</h:inputText>
+						<script>
+							mascaraFormulario('form', 'data', 'DATA');
+						</script>
+						<h:inputHidden value="#{suporte.documento.data}">
+							<f:convertDateTime pattern="dd/MM/yyyy"/>
+						</h:inputHidden>
+					</h:panelGroup>
+
+					<h:panelGroup>
+						<h:outputLabel for="dataFinal" value="Data Fim da Validade "/>
+						<br />
+						<h:inputHidden id="dataFinalCalculada" name="dataFinalCalculada" value="#{suporte.dataFinalCalculada}">
+							<f:convertDateTime pattern="dd/MM/yyyy"/>
+						</h:inputHidden>
+						<rich:calendar id="dataFinal"
+							value="#{suporte.documento.dataFinal}" popup="true"
+							datePattern="dd/MM/yyyy"
+							enableManualInput="true"
+							converterMessage="Data Fim Inv&#225;lida">
+							<f:facet name="footer">
+								<h:outputText value="{selectedDateControl}"
+									style="text-align:center" />
+							</f:facet>
+						</rich:calendar>
+						<script>
+							mascaraFormulario('form', 'dataFinal', 'DATA');
+						</script>
+					</h:panelGroup>
+					
+				</h:panelGrid>
+   						  		    				
+				<h:panelGrid columns="3" cellpadding="4" cellspacing="4">
+
+  					<a4j:outputPanel id="panelDinamico">
+  					<h:panelGroup id="fileUploadPanel">
+						<br />	
+						<h:panelGroup rendered="#{suporte.documento.nomeArquivo == null}">
+							<h:inputHidden label="Arquivo" value="" />
+							<a4j:region>
+							<h:inputHidden id="nomeArquivoCompleto" value="#{suporte.nomeArquivoCompleto}" />
+	         				<rich:fileUpload id="upload"  
+	         					fileUploadListener="#{suporte.upload}"
+   	        	    			required="true"
+   	        	    			autoclear="true"
+       	        				maxFilesQuantity="1"                			
+           	    				immediateUpload="true"
+               					acceptedTypes="pdf,doc,jpg,xls,txt"
+               					listHeight="60"
+	               				addControlLabel="Anexar"
+    	           				stopControlLabel="Parar"
+        	       				ontyperejected="alert('Tipo de arquivo n&#227;o permitido.')"
+            	   				onsizerejected="alert('Tamanho de arquivo n&#227;o permitido.')"
+            	   				onupload="extrairNomeArquivoCompleto()"
+            	   				onuploadcomplete="atualizarFileUploadPanel();">
+            				</rich:fileUpload>
+            				</a4j:region>					
+						</h:panelGroup>
+	           			<h:panelGroup rendered="#{suporte.documento.nomeArquivo != null}">
+							<div class="rich-fileupload-list-decor" style="width: 400px;">
+								<table class="rich-fileupload-toolbar-decor">
+									<tr>
+										<td>
+											<div class="rich-fileupload-button-border rich-fileupload-button-content rich-fileupload-font rich-fileupload-ico rich-fileupload-ico-add-dis " style="float: left; padding-left: 20px; padding-top: 4px; " >Anexar</div>
+										</td>
+									</tr>
+								</table>
+								<div class="rich-fileupload-list-overflow" style="width: 100%; height: 60px;">
+
+								<table style="width: 100%; height: 100%; " >
+									<tr>
+										<td style="width: 88%; padding-left: 10px; ">
+											<h:commandLink actionListener="#{suporte.download}" target="_blank" immediate="true" styleClass="rich-fileupload-anc" onclick="atualizarFileUploadPanel(); return true;">
+												<h:outputText id="arquivoLink" value="#{suporte.documento.nomeArquivo}" />
+											</h:commandLink>																														
+										</td>
+										<td style="width: 12%; padding-right: 10px; ">
+											<a4j:commandLink value="Excluir" reRender="fileUploadPanel" onclick="if(!confirm('Confirma exclus&#227;o?'))return false;" actionListener="#{suporte.excluirArquivo}" immediate="true" styleClass="rich-fileupload-anc">
+											</a4j:commandLink>
+										</td>
+									</tr>
+								</table>
+
+								</div>
+							</div>
+						</h:panelGroup>    
+            		</h:panelGroup>            		            
+            		</a4j:outputPanel>
+            		
+					<h:panelGroup>
+						<h:outputText value="Formatos aceitos: PDF, DOC, JPG, XLS e TXT" />
+					</h:panelGroup>
+            							
+				</h:panelGrid>
+			
+			<br /><br />
+			<center>
+				<a4j:commandButton styleClass="botao" value="Salvar" actionListener="#{suporte.salvarDocumento}" reRender="painelMensagem, #{reRender}" oncomplete="fecharJanela(); return false" onclick="if (!salvarDocumento()) return false" />
+				<h:commandButton id="btnFecharModalNovoDocumento" value="Fechar" styleClass="botao" immediate="true" onclick="Richfaces.hideModalPanel('modalNovoDocumento');return false;"/>
+			</center>
+		</a4j:outputPanel>
+		</a4j:region>
+	</h:form>
+	</rich:modalPanel>
+	
+		<a4j:form>
+			<a4j:jsFunction name="atualizarFileUploadPanel" reRender="fileUploadPanel">
+	   		</a4j:jsFunction>
+		</a4j:form>
+	    <a4j:form id="formAtualizarDataFinal">
+			<a4j:jsFunction name="atualizarDataFinal" reRender="dataFinalCalculada,dataFinal" oncomplete="mascaraFormulario('form','dataFinal','DATA')">
+	   		</a4j:jsFunction>
+		</a4j:form>
+	
+	<script language="JavaScript">
+	//<![CDATA[
+		jQuery(function() {
+			jQuery('#painelMensagem').animate({
+				height: 'toggle', opacity: 'show'}, 'slow');
+			jQuery('#areaIcone').click ( function () {
+				jQuery('#painelMensagem').animate({
+				height: 'toggle', opacity: 'hide'}, 'slow');
+		   	});
+		});
+	
+		window.onload = function () {
+			$('form:numero').focus();
+		}
+		
+		function extrairNomeArquivoCompleto() {
+			document.getElementById('form:nomeArquivoCompleto').value = document.getElementById('form:upload:file').value;
+			return true;		
+		}
+		
+		function salvarDocumento() {
+			dataFinal = $('form:dataFinalInputDate').value;
+			if (dataFinal != '') {
+				dataFinalCalculada = $('form:dataFinalCalculada').value;
+				if (dataFinal != dataFinalCalculada) {
+					if (!confirm('A data fim da validade foi alterada. Confirma a opera&#231;&#227;o?')) {
+						return false;
+					}
+				}	
+			} 
+			return true;
+		}
+		
+        function fecharJanela() {
+              if (document.getElementById('form:mensagemDeSucesso') != null) {
+                   Richfaces.hideModalPanel('modalNovoDocumento');
+              };
+         };
+		//]]>
+	</script>
+	
+  
+</html>

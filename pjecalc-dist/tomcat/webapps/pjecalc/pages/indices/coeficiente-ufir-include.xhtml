@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<body>
+<f:view>
+
+<h:panelGroup>
+
+			<h:panelGroup  style="width: 100%;" rendered="#{apresentadorIndiceUFIR.listaDeCoeficienteUFIR.size gt 0}">
+			
+				<rich:dataTable id="listagemCoeficienteUfir" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="24"
+							value="#{apresentadorIndiceUFIR.listaDeCoeficienteUFIR}" var="cufir"> 
+				
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Mês/Ano"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{cufir.competencia}">
+			    				  <f:converter converterId="competenciaConverter"/>
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Coeficiente do Mês(%)"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{cufir.taxa}">
+			    				<f:converter converterId="oitoCasasDecimaisFixasConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				</rich:dataTable>
+				
+				<ui:include src="../comum/paginacao.xhtml">
+					<ui:param name="paramListagem" value="listagemCoeficienteUfir" />
+				 </ui:include>
+				
+			</h:panelGroup>
+		
+</h:panelGroup>
+</f:view>
+</body>
+
+</html>

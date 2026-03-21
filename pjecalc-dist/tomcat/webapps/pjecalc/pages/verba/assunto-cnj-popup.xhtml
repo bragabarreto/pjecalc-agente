@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+ 	  xml:lang="pt" lang="pt"	
+	  xmlns:ui="http://java.sun.com/jsf/facelets"
+	  xmlns:h="http://java.sun.com/jsf/html"
+	  xmlns:f="http://java.sun.com/jsf/core" 
+	  xmlns:a4j="http://richfaces.org/a4j"
+	  xmlns:rich="http://richfaces.org/rich">
+
+	<body>
+		
+		<f:view>
+	    	
+	    	<ui:composition template="/templates/template-arvore-popup.xhtml">
+	
+				<ui:define name="filtrocampos">
+			
+					<ui:param name="apresentador" value="#{apresentadorAssunto}" />
+				
+					<h:outputLabel value="Assunto CNJ *" for="assuntosCnj" /><br />
+		   			<h:inputText id="assuntosCnj" value="#{apresentador.assuntoSelecionado}" readonly="true" styleClass="leitura" style="width: 50%" />
+		   		
+		   			<a4j:status for="regiaoArvore">
+						<f:facet name="start">
+							<h:graphicImage width="17" height="17" value="/images/carregando.gif" alt="Carregando..." />
+						</f:facet>
+					</a4j:status>
+	
+		   			<a4j:region id="regiaoArvore">
+		   				<rich:tree id="arv" style="width:300px" nodeSelectListener="#{apresentadorAssunto.processaSelecao}"
+					   			   reRender="assuntosCnj, btnSelecionar" ajaxSubmitSelection="true"  switchType="client"
+					   			   value="#{apresentadorAssunto.assuntos}" var="item" />
+					</a4j:region>
+		   		
+				</ui:define>
+	    
+				<ui:define name="filtrobotoes">			
+					<a4j:commandButton id="btnSelecionar" value="Selecionar" styleClass="botao" disabled="#{apresentador.assuntoSelecionado == null}"				
+									   oncomplete="window.opener.document.getElementById('formulario:codigoAssuntosCnj').value='#{apresentador.assuntoSelecionado.id}';window.opener.document.getElementById('formulario:assuntosCnj').value='#{apresentador.assuntoSelecionado}';window.close();" />				
+					&#160;
+		    	</ui:define>
+	    	
+			</ui:composition>
+	
+		</f:view>
+
+	</body>
+
+</html>

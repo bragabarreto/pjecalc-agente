@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Salário-família" />
+	<ui:param name="apresentador" value="#{apresentadorSalarioFamilia}" />
+	<ui:param name="registro" value="#{salarioFamilia}" />
+	
+	<ui:define name="nofiltroCampos">
+			<ui:include src="resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+			</ui:include>
+			<br />
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+	
+		<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+			<h:panelGroup>
+				<a4j:region>
+					<h:selectBooleanCheckbox id="apurarSalarioFamilia" value="#{registro.apurarSalarioFamilia}" disabled="#{!registro.datasSugeridasValidasParaCriacao}" >
+						<a4j:support event="onchange" limitToList="true" ajaxSingle="true" actionListener="#{apresentador.sugerirDados}" reRender="outputFormulario"/>
+					</h:selectBooleanCheckbox>
+					<label for="apurarSalarioFamilia">Apurar Salário-família</label>
+				</a4j:region>						
+			</h:panelGroup>	
+		</h:panelGrid>
+
+		<a4j:outputPanel id="outputFormulario" ajaxRendered="true">
+		
+		<div style="width: 1000px;">
+		
+			<h:panelGroup layout="block" style="float:left;">
+				<h:panelGrid columns="1" cellspacing="4" cellpadding="4" border="0">
+				
+					
+					<h:panelGroup>			
+						<fieldset><legend>Compor Principal *</legend>
+							<h:selectOneRadio id="comporPrincipal" value="#{registro.comporPrincipal}" styleClass="labelInput" 
+											disabled="#{not registro.apurarSalarioFamilia}" layout="lineDirection">
+								<s:selectItems value="#{enumItems.logicoEnum}" var="item" label="#{item.nome}"/>
+								<s:convertEnum />
+							</h:selectOneRadio>
+						</fieldset>
+					</h:panelGroup>
+					
+					<h:panelGroup layout="block" style="margin-left:-6px;">
+						<h:panelGrid columns="2" cellspacing="4" cellpadding="4" border="0">
+						
+							<h:panelGroup>
+								<h:outputLabel value="Competência Inicial *" for="dataInicial" /><br />
+								<rich:calendar id="dataInicial" value="#{registro.dataInicial}"
+											   label="Competência Inicial" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+											   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+											   showWeekDaysBar="false" showFooter="false" disabled="#{not (registro.apurarSalarioFamilia and listaDeVariacoes.rowCount == 0)}" 
+											   styleClass="special" inputClass="maskDateCompetencia" oninputfocus="$(this).monthYearMask()">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+							        <a4j:support event="onchanged" reRender="painelFormularioVariacao" limitToList="true" ajaxSingle="true"/>
+									<a4j:support event="oninputblur" reRender="painelFormularioVariacao" limitToList="true" ajaxSingle="true"/>
+									<f:converter converterId="dateConverter"/>
+								</rich:calendar>
+								<cobra:toolTip>
+				    				<rich:message for="dataInicial"/>
+				    			</cobra:toolTip>
+							</h:panelGroup>
+					
+							<h:panelGroup>
+								<h:outputLabel value="Competência Final *" for="dataFinal" /><br />
+								<rich:calendar id="dataFinal" value="#{registro.dataFinal}"
+											   label="Competência Final" inputSize="15" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+											   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+											   showWeekDaysBar="false" showFooter="false"  disabled="#{not (registro.apurarSalarioFamilia and listaDeVariacoes.rowCount == 0)}"
+											   styleClass="special" inputClass="maskDateCompetencia" oninputfocus="$(this).monthYearMask()">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+								<a4j:support event="onchanged" reRender="painelFormularioVariacao" limitToList="true" ajaxSingle="true"/>
+								<a4j:support event="oninputblur" reRender="painelFormularioVariacao" limitToList="true" ajaxSingle="true"/>
+								<f:converter converterId="dateConverter"/>
+								</rich:calendar>
+								<cobra:toolTip>
+				    				<rich:message for="dataFinal"/>
+				    			</cobra:toolTip>
+							</h:panelGroup>
+						
+						</h:panelGrid>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="Qtd de filhos menores de 14 anos *" for="quantFilhosMenores14Anos" />
+						<h:inputText id="quantFilhosMenores14Anos" value="#{registro.quantFilhosMenores14Anos}" onfocus="$(this).integerMask()" label="Qtd de filhos menores de 14 anos" size="11" maxlength="2"  style="text-align:right; margin-left:8px;" disabled="#{not registro.apurarSalarioFamilia}">
+						</h:inputText>
+						<cobra:toolTip>
+			   				<rich:message for="quantFilhosMenores14Anos"/>
+			   			</cobra:toolTip>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<fieldset style="width:270px;">
+							<legend>Variação Qtd de filhos menores de 14 anos</legend>
+
+							<a4j:outputPanel id="painelFormularioVariacao">
+								<h:panelGrid columns="3" cellspacing="2" cellpadding="2" border="0" columnClasses=",,verticalTop">
+									<h:panelGroup>
+										 <h:outputLabel value="Competência *" for="variacaoDataInicial" /><br />
+									     <rich:calendar id="variacaoDataInicial" value="#{variacaoQuantidadeFilhos.dataInicial}" inputSize="7"  
+									     				 oncurrentdateselected="event.rich.component.selectDate(event.rich.date)" styleClass="special" inputClass="maskDateCompetencia" 
+									     				 showWeekDaysBar="false" showFooter="false"
+									     				 popup="true" datePattern="MM/yyyy" enableManualInput="true" oninputfocus="$(this).monthYearMask()" 
+									     				 disabled="#{not (registro.apurarSalarioFamilia and not empty registro.dataInicial and not empty registro.dataFinal)}">
+											<f:facet name="footer">
+												<h:outputText value="{selectedDateControl}" style="text-align:center" />
+											</f:facet>
+									    </rich:calendar>
+										<cobra:toolTip>
+							   				<rich:message for="variacaoDataInicial"/>
+							   			</cobra:toolTip>
+									</h:panelGroup>
+									
+									<h:panelGroup>
+										<h:outputLabel value="Quantidade *" for="variacaoQuantFilhosMenores14Anos" /><br />
+										<h:inputText id="variacaoQuantFilhosMenores14Anos" value="#{variacaoQuantidadeFilhos.quantFilhosMenores14Anos}" label="Quantidade" size="10" maxlength="2" onfocus="$(this).integerMask()"  style="text-align:right;" disabled="#{not (registro.apurarSalarioFamilia and not empty registro.dataInicial and not empty registro.dataFinal)}">
+										</h:inputText>
+										<cobra:toolTip>
+							   				<rich:message for="variacaoQuantFilhosMenores14Anos"/>
+							   			</cobra:toolTip>
+									</h:panelGroup>
+									<h:panelGroup display="block" style="vertical-align: top;">
+										<a4j:commandLink id="cmdAdicionarVariacao" actionListener="#{apresentador.adicionarVariacao}" onclick="AguardeShow();" oncomplete="AguardeHide();" limitToList="true" styleClass="botaoAddItem" title="Adicionar Variação na Quantidade de Filhos" reRender="painelFormularioVariacao,painelListaVariacao,dataInicial,dataFinal,painelMensagens" disabled="#{not (registro.apurarSalarioFamilia and not empty registro.dataInicial and not empty registro.dataFinal)}"/>
+									</h:panelGroup>
+								</h:panelGrid>
+							</a4j:outputPanel>
+							
+							<a4j:outputPanel id="painelListaVariacao">
+								<h:panelGroup style="width: 100%;" rendered="#{listaDeVariacoes.rowCount gt 0}">
+									<rich:dataTable id="listagemVariacao" value="#{listaDeVariacoes}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{listaDeVariacoes.rowCount}" var="variacao"> 
+							    		<rich:column>
+									    	<f:facet name="header">
+								    			<h:outputText value="Ação"/>
+								    		</f:facet>
+										    <a4j:region>
+									    		<a4j:commandLink id="excluirVariacao" immediate="true" actionListener="#{apresentador.removerVariacao(variacao)}" onclick="AguardeShow();" oncomplete="AguardeHide();" limitToList="true" reRender="painelListaVariacao,dataInicial,dataFinal" styleClass="linkExcluir" title="Excluir" disabled="#{not registro.apurarSalarioFamilia}"/>
+									    	</a4j:region>
+									    </rich:column>
+								    	<rich:column>
+							    			<f:facet name="header">
+							    				<h:outputText value="Data Inicial"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{variacao.dataInicial}" >
+							    			 <f:convertDateTime pattern="MM/yyyy"/>
+							    			</h:outputText>
+								    	</rich:column>
+								    	<rich:column>
+							    			<f:facet name="header">
+							    				<h:outputText value="Quantidade"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{variacao.quantFilhosMenores14Anos}"/>
+								    	</rich:column>
+								    </rich:dataTable>							
+								</h:panelGroup>
+							</a4j:outputPanel>
+							
+						</fieldset>
+					</h:panelGroup>
+					
+				</h:panelGrid>
+			</h:panelGroup>
+		
+			<h:panelGroup layout="block" style="float:left;">
+				<fieldset style="min-height: 160px; max-width:215px !important;">
+					<legend>Remuneração Mensal - Salários Pagos</legend>
+					<h:panelGrid columns="1" cellspacing="4" cellpadding="4" border="0">
+						<h:panelGroup>
+							<h:selectOneRadio id="tipoSalarioPago" value="#{registro.tipoSalarioPago}" styleClass="labelInput" layout="pageDirection" disabled="#{not registro.apurarSalarioFamilia}">
+								<s:selectItems value="#{enumItems.tipoSalarioPagoEnum}" var="item" label="#{item.nome}" />
+								<s:convertEnum />
+								<a4j:support event="onchange" reRender="painelFormularioHistoricoSalarial" limitToList="true" ajaxSingle="true"/>
+							</h:selectOneRadio>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:outputPanel id="painelFormularioHistoricoSalarial">
+								<h:panelGrid columns="2" cellspacing="2" cellpadding="2" border="0" columnClasses=",verticalTop">
+									<h:panelGroup>
+										<h:outputLabel value="Histórico *" for="historicoSalarial" />
+										<br/>
+										<h:selectOneMenu id="historicoSalarial" label="Históricos" value="#{itemHistoricoSalarial.historicoSalarial}" style="width:140px;" disabled="#{not (registro.apurarSalarioFamilia and registro.tipoSalarioPago=='HISTORICO_SALARIAL')}"> 
+								 			<s:selectItems value="#{apresentador.historicosSalarial}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+											<s:convertEntity/>
+										</h:selectOneMenu>
+										<cobra:toolTip>
+					        				<rich:message for="historicoSalarial"/>
+						    			</cobra:toolTip>
+									</h:panelGroup>
+									<h:panelGroup>
+										<a4j:commandLink id="cmdAdicionarHistoricoSalarial" actionListener="#{apresentador.adicionarHistoricoSalarial}" onclick="AguardeShow();" oncomplete="AguardeHide();" styleClass="botaoAddItem" title="Adicionar Histórico Salarial" reRender="painelFormularioHistoricoSalarial,painelListaHistoricoSalarial" disabled="#{not (registro.apurarSalarioFamilia and registro.tipoSalarioPago=='HISTORICO_SALARIAL')}"/>
+									</h:panelGroup>
+								</h:panelGrid>
+							</a4j:outputPanel>
+							
+							<a4j:outputPanel id="painelListaHistoricoSalarial">
+								<h:panelGroup layout="block" style="max-width:200px !important;" rendered="#{listaDeHistoricoSalarial.rowCount gt 0}">
+									<rich:dataTable width="200px" id="listagemHistoricoSalarial" value="#{listaDeHistoricoSalarial}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" rows="#{listaDeHistoricoSalarial.rowCount}" var="item"> 
+							    		<rich:column style="width:40px;">
+									    	<f:facet name="header">
+								    			<h:outputText value="Ação"/>
+								    		</f:facet>
+										    <a4j:region>
+									    		<a4j:commandLink id="excluirHistoricoSalarial" immediate="true" actionListener="#{apresentador.removerHistoricoSalarial(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"  reRender="painelListaHistoricoSalarial" styleClass="linkExcluir" title="Excluir"  disabled="#{not registro.apurarSalarioFamilia}"/>
+									    	</a4j:region>
+									    </rich:column>
+								    	<rich:column style="max-width:50px;">
+							    			<f:facet name="header">
+							    				<h:outputText value="Histórico"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.historicoSalarial.nome}"/>
+								    	</rich:column>
+								    </rich:dataTable>							
+								</h:panelGroup>
+							</a4j:outputPanel>
+						</h:panelGroup>
+						
+					</h:panelGrid>
+				</fieldset>				
+			</h:panelGroup>
+		
+			<h:panelGroup layout="block" style="float:left;">
+				<fieldset style="min-height: 160px; width:300px;">
+					<legend>Remuneração Mensal - Salários Devidos (Diferença)</legend>
+					<h:panelGrid columns="1" cellspacing="4" cellpadding="4" border="0">
+						<h:panelGroup>
+							<a4j:outputPanel id="painelFormularioSalarioDevido">
+								<h:panelGrid columns="3" cellspacing="2" cellpadding="2" border="0" columnClasses=",,verticalTop">
+									<h:panelGroup>
+										<h:outputLabel value="Verba *" for="verba" />
+										<br/>
+										<h:selectOneMenu id="verba" label="Verba" value="#{itemSalarioDevido.verbaDeCalculo}"  disabled="#{not registro.apurarSalarioFamilia}" style="width:140px;"> 
+								 			<s:selectItems value="#{apresentador.verbas}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+											<s:convertEntity/>
+										</h:selectOneMenu>
+										<cobra:toolTip>
+					        				<rich:message for="verba"/>
+						    			</cobra:toolTip>
+									</h:panelGroup>
+									<h:panelGroup>
+										<h:outputLabel value="Integralizar *" for="integralizar"/>
+										<br/>
+										<h:selectOneMenu id="integralizar" value="#{itemSalarioDevido.integralizar}" label="Integralizar" disabled="#{not registro.apurarSalarioFamilia}" style="width:80px;">
+										 	<s:selectItems value="#{enumItems.logicoEnum}" var="item" label="#{item.nome}"/>
+											<s:convertEnum />
+										</h:selectOneMenu>
+										<cobra:toolTip>
+						        			<rich:message for="integralizar"/>
+							    		</cobra:toolTip>
+									</h:panelGroup>
+									<h:panelGroup>
+										<a4j:commandLink id="cmdAdicionarSalarioDevido" actionListener="#{apresentador.adicionarSalarioDevido}" onclick="AguardeShow();" oncomplete="AguardeHide();" styleClass="botaoAddItem" title="Adicionar Salário Devido" reRender="painelFormularioSalarioDevido,painelListaSalarioDevido" disabled="#{not registro.apurarSalarioFamilia}"/>
+									</h:panelGroup>
+								</h:panelGrid>
+							</a4j:outputPanel>
+							
+							<a4j:outputPanel id="painelListaSalarioDevido">
+								<h:panelGroup style="width: 100%;" rendered="#{listaDeSalarioDevido.rowCount gt 0}">
+									<rich:dataTable id="listagemSalarioDevido" value="#{listaDeSalarioDevido}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{listaDeSalarioDevido.rowCount}" var="item"> 
+							    		<rich:column>
+									    	<f:facet name="header">
+								    			<h:outputText value="Ação"/>
+								    		</f:facet>
+										    <a4j:region>
+									    		<a4j:commandLink id="excluirSalarioDevido" immediate="true" actionListener="#{apresentador.removerSalarioDevido(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"  reRender="painelListaSalarioDevido" styleClass="linkExcluir" title="Excluir"  disabled="#{not registro.apurarSalarioFamilia}"/>
+									    	</a4j:region>
+									    </rich:column>
+								    	<rich:column>
+							    			<f:facet name="header">
+							    				<h:outputText value="Verba"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.verbaDeCalculo.nome}"/>
+								    	</rich:column>
+								    	<rich:column>
+							    			<f:facet name="header">
+							    				<h:outputText value="Integralizar"/>
+							    			</f:facet>	
+							    			<h:outputText value="#{item.integralizar}"/>
+								    	</rich:column>
+								    </rich:dataTable>							
+								</h:panelGroup>
+							</a4j:outputPanel>
+						</h:panelGroup>
+						
+					</h:panelGrid>
+				</fieldset>				
+			</h:panelGroup>
+		
+		</div>
+		
+		</a4j:outputPanel>
+		
+	</ui:define>
+		
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao" disabled="#{!registro.datasSugeridasValidasParaCriacao}"  onclick="allToUpperCase()"/>  
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela" />
+	
+</ui:composition>
+
+</html>

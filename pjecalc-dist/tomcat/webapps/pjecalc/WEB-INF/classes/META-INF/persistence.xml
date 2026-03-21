@@ -1,0 +1,186 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<persistence xmlns="http://java.sun.com/xml/ns/persistence" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="1.0" xsi:schemaLocation="http://java.sun.com/xml/ns/persistence http://java.sun.com/xml/ns/persistence/persistence_1_0.xsd">
+
+	<persistence-unit name="PJECALC_H2" transaction-type="RESOURCE_LOCAL">
+	
+		<provider>org.hibernate.ejb.HibernatePersistence</provider>
+		
+		<!-- JBoss -->
+		
+
+		<!-- Tomcat -->
+		<non-jta-data-source>java:comp/env/jdbc/pjeCalcDS</non-jta-data-source>
+		
+		<!-- Calculo Externo -->
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculoexterno.ParcelasAtualizaveisCustas</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculoexterno.ParcelasAtualizaveisDebitosReclamante</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculoexterno.ParcelasAtualizaveisDescontoCreditosReclamante</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculoexterno.ParcelasAtualizaveisHonorario</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculoexterno.ParcelasAtualizaveisMultaIndenizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculoexterno.ParcelasAtualizaveisOutrosDebitosReclamado</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculoexterno.ParcelasAtualizaveisCreditosReclamante</class>
+
+		<class>br.jus.trt8.pjecalc.negocio.dominio.estado.Estado</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.municipio.Municipio</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.processo.Processo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.Calculo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verba.Verba</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.VerbaDeCalculo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.Principal</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.Reflexo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.Calculada</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.Informada</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.assuntocnj.AssuntoCnj</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.ocorrenciaverba.OcorrenciaDeVerba</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.formula.Formula</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.formula.FormulaCalculada</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.formula.FormulaReflexo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.formula.FormulaInformada</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.termo.Divisor</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.termo.Quantidade</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.termo.ValorPago</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.termo.ItemBaseVerba</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.usuario.Usuario</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.usuario.SetorUsuario</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.perfil.Perfil</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.historicosalarial.HistoricoSalarial</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.historicosalarial.OcorrenciaDoHistoricoSalarial</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.HistoricoSalarialDaVerba</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.ferias.Ferias</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.ExcecaoDaCargaHorariaDoCalculo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.ExcecaoDoSabadoDoCalculo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.faltas.Falta</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.controle.ControleAtualizacaoTabelas</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.dnfp.IndiceDevedorNaoFazenda</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.dfp.IndiceDevedorFazenda</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.it.IndiceIndebitoTributario</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.ipca.IndiceIPCA</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.ipcae.IndiceIPCAE</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.igpm.IndiceIGPM</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.jam.IndiceJAM</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.precatorios.IndicePrecatorioFederal</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.precatorios.IndicePrecatorioEstadual</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.tabelaunica.IndiceTabelaUnicaJTMensal</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.tabelaunica.IndiceTabelaUnicaJTDiario</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.tabelaunica.IndiceTabelaUnicaDebitoTrabalhista</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.selic.IndiceSelicDiaria</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.selic.IndiceSelicFazenda</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.tr.IndiceTR</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.ipc.IndiceIPC</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.ipcatr.IndiceIPCAETR</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.inpc.IndiceINPC</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.ufir.UFIR</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.coeficienteufir.CoeficienteUFIR</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.fgts.Fgts</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.fgts.OcorrenciaDeFgts</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.fgts.OperacaoDeFgts</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.BaseTetoEmpresa</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.seguradoempregado.TabelaPrevidenciariaSeguradoEmpregado</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.empregadodomestico.TabelaPrevidenciariaEmpregadoDomestico</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.atividadeeconomica.AtividadeEconomica</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.atividadeeconomica.AliquotasEmpresaPorAtividadeEconomica</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.atividadeeconomica.AliquotasRatPorAtividadeEconomica</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.atividadeeconomica.AliquotasTerceirosPorAtividadeEconomica</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.Inss</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.AliquotasDoEmpregadorPorPeriodo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.PeriodoDoINSSComOpcaoSimples</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.sobresalarios.InssSobreSalariosDevidos</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.sobresalarios.InssSobreSalariosPagos</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.sobresalarios.OcorrenciaDeInssSobreSalariosDevidos</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.sobresalarios.OcorrenciaDeInssSobreSalariosDevidosAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.sobresalarios.OcorrenciaDeInssSobreSalariosPagos</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.inss.sobresalarios.OcorrenciaDeInssSobreSalariosPagosAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.pensaoalimenticia.PensaoAlimenticia</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.previdenciaprivada.PrevidenciaPrivada</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.previdenciaprivada.AliquotaDePrevidenciaPrivada</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.previdenciaprivada.OcorrenciaDePrevidenciaPrivada</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.atualizacao.ParametrosDeAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.atualizacao.CombinacaoDeIndice</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.atualizacao.CombinacaoDeJuros</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.atualizacao.ExcecaoDeJurosDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.padrao.JurosPadrao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.fazendapublica.JurosFazendaPublica</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.selicinss.JurosSelicInss</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.selicirpf.JurosSelicIrpf</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.taxalegal.JurosTaxaLegal</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.multa.Multa</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.honorarios.Honorario</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.honorarios.HonorarioVerbaDeCalculo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.custas.ParametrosDeCustasFixas</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.custas.CustasFixasAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.custas.CustasJudiciais</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.custas.AutoJudicial</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.custas.CustaPaga</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.custas.Armazenamento</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.juros.ApuracaoDeJuros</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.irpf.Irpf</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.irpf.TabelaIrpf</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.inss.multa.TaxaMultaPrevidenciaria</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.irpf.OcorrenciaDeIrpf</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.irpf.OcorrenciaDeIrpfAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.irpf.OcorrenciaDeIrpfPagamento</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.salariocategoria.SalarioCategoria</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.salariocategoria.OcorrenciaDeSalarioCategoria</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.salariominimo.nacional.SalarioMinimoNacional</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.salariofamilia.TabelaSalarioFamilia</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.salariofamilia.SalarioFamilia</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.salariofamilia.ItemSalarioDevido</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.salariofamilia.ItemHistoricoSalarial</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.salariofamilia.VariacaoQuantidadeFilho</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.salariofamilia.OcorrenciaDeSalarioFamilia</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.valetransporte.ValeTransporte</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.valetransporte.ValorValeTransporte</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.segurodesemprego.TabelaSeguroDesemprego</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.feriado.Feriado</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.feriado.ExcecaoDoFeriado</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.segurodesemprego.SeguroDesemprego</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.segurodesemprego.ItemHistoricoSalarialDeSeguroDesemprego</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.segurodesemprego.ItemSalarioDevidoDeSeguroDesemprego</class>		
+		<class>br.jus.trt8.pjecalc.negocio.dominio.usuario.CalculoRecenteUsuario</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.loginfra.LogInfra</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.auditoria.Auditoria</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.ItemPontoFacultativo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.ValeTransporteDaVerba</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.processo.Advogado</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.HistoricoValidacaoDoCalculo</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.cartaodeponto.OcorrenciaDoCartaoDePonto</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.cartaodeponto.CartaoDePonto</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.verbacalculo.CartaoDePontoDaVerba</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.Atualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.CreditosDoReclamante</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.HonorarioDoPagamento</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.MultaDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.MultaDoPagamento</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.Pagamento</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.DebitosCobrarDoReclamante</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.DebitosDoReclamante</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.OutrosDebitosReclamado</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.HonorarioDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.PensaoAlimenticiaDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.CustasFixasDaAtualizacaoDoEvento</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.CustasJudiciaisDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.AutoJudicialDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.CustaPagaDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.pagamento.ArmazenamentoDaAtualizacao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.cartaodeponto.ApuracaoCartaoDePonto</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.cartaodeponto.PreenchimentoJornadaApuracaoCartao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.cartaodeponto.OcorrenciaJornadaApuracaoCartao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.cartaodeponto.ApuracaoDiariaCartao</class>
+		<class>br.jus.trt8.pjecalc.negocio.dominio.cartaodeponto.ExcecaoDoFechamentoDeCartaoDePonto</class>
+		<exclude-unlisted-classes>true</exclude-unlisted-classes>
+
+		<properties>	
+
+ 		   <property name="jboss.as.jpa.providerModule" value="application"/>
+		   <property name="jboss.as.jpa.managed" value="false"/>
+		   <property name="hibernate.dialect" value="br.jus.trt8.pjecalc.base.comum.DialetoH2"/>
+	       <property name="hibernate.hbm2ddl.auto" value="validate"/>
+   		   <property name="hibernate.show_sql" value="false"/>
+		   <property name="hibernate.validator.autoregister_listeners" value="false"/>
+		   <property name="hibernate.current_session_context_class" value="managed"/>
+
+		</properties>
+
+	</persistence-unit>
+	 
+</persistence>

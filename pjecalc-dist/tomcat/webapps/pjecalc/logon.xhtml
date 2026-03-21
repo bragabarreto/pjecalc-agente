@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+
+	<f:view encoding="ISO-8859-1" locale="pt_BR">
+
+		<head>
+		
+			<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+			<meta http-equiv="cache-control" content="no-cache" />
+			<meta http-equiv="pragma" content="no-cache" />
+			<meta http-equiv="expires" content="-1" />
+	
+		  	<title>
+				<ui:insert name="title">PJe-Calc - Login</ui:insert>
+		  	</title>
+		
+			<link rel="SHORTCUT ICON" href="#{facesContext.externalContext.requestContextPath}/images/favi_icon.gif" />
+			<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/logon.css" />
+			
+			<a4j:loadScript src="resource://jquery.js"/>
+			<script	src="#{facesContext.externalContext.requestContextPath}/js/geral.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"></script> 
+			<script	src="#{facesContext.externalContext.requestContextPath}/js/pjeOffice.js?#{mensagens.versao}" type="text/javascript"></script> 
+			<script	src="#{facesContext.externalContext.requestContextPath}/js/assinador.js?#{mensagens.versao}" type="text/javascript"></script>
+			<ui:include src="/templates/cssPage.xhtml" />
+			<style>
+				.link-login {
+					font-size: 1.2em;
+					font-family: Tahoma, Verdana, Helvetica, Arial;
+				}
+				a:link, a:visited, a:active {
+					color: #00C;
+				}
+				a:hover {
+					color: #00F;
+				}
+			</style>
+		</head>
+	
+		<body id="logon">
+		
+			<f:loadBundle basename="messages" var="mensagens" />
+			<h:panelGroup rendered="#{facesContext.externalContext.requestMap['showLogin'] == null and not identity.loggedIn}">
+				#{autenticador.ativarLoginUnico()}
+			</h:panelGroup>
+			<h:panelGroup rendered="#{identity.loggedIn}">
+				<script language="javascript" type="text/javascript">
+					location.href = 'pages/principal.jsf';
+				</script>
+			</h:panelGroup>
+			
+	
+			<div id="lateral">
+			
+				<div id="centro">
+				
+					<div id="boxAcessibilidade">
+						<h:form rendered="#{aplicacao.ambienteDesenvolvimento}">
+							<h:graphicImage id="paletaCoresBt"
+							    url="#{a4jSkin.imgIconPalette}" 
+							    style="cursor:pointer"
+								title="Alterar o esquema de cores" 
+								onclick="Richfaces.showModalPanel('skinPanel')" />
+			    				 							
+							<a4j:commandButton id="zoomNormalBt"
+								action="#{skinZoom.setTmNormal()}"
+								ajaxSingle="true"
+								oncomplete="location.reload()"
+								image="#{a4jSkin.imgIconZoomNormal}"
+								style="width: 17px;	height: 21px;" />	
+								
+						    <a4j:commandButton id="zoomMedioBt"
+						    	action="#{skinZoom.setTmMedio()}"
+								ajaxSingle="true"
+								oncomplete="location.reload()"
+								image="#{a4jSkin.imgIconZoomMedio}"
+								style="width: 17px;	height: 21px;" />
+						    
+						    <a4j:commandButton id="zoomGdeBt"
+						    	action="#{skinZoom.setTmGrande()}"
+								ajaxSingle="true"
+								oncomplete="location.reload()"
+								image="#{a4jSkin.imgIconZoomGrande}"
+								style="width: 17px;	height: 21px;" />
+						</h:form>						
+					</div>	
+					
+					<h:panelGroup class="boxlogin" rendered="#{not aplicacao.ambienteDesenvolvimento}">
+						<center>
+							<h2 style="font-size: 1.66em; margin: 10px; padding-top: 10px">Realize o login pelo</h2>
+							<h:graphicImage url="/images/logon/logo-pje.png" style="border: none; width: 180px; padding-bottom: 15px;" alt="Logo PJe" /><br/>
+							<a class="link-login" href="#{aplicacao.urlPJe}primeirograu" target="_BLANK" style="margin-right: 20px;">Primeiro grau</a>
+							<a class="link-login" href="#{aplicacao.urlPJe}segundograu" target="_BLANK">Segundo grau</a>
+						</center>
+						<div id="boxMsg2">							
+							<span id="spanErro">
+								<rich:spacer width="5" height="5"/>
+								<a4j:region selfRendered="true">
+									<h:outputText value="#{mensagemErroLogin}" rendered="#{not empty mensagemErroLogin}" styleClass="labelMsgErro" />
+								</a4j:region>
+							</span>
+						</div>
+					</h:panelGroup>		
+		
+					<h:panelGroup class="boxlogin" rendered="#{aplicacao.ambienteDesenvolvimento}">
+						<h:form>
+							<h:panelGrid columns="2" rendered="#{aplicacao.tipoDeVersao == 'ONLINE'}" style="width: 100%; text-align: center;">
+								<h:panelGroup>
+									<h:outputLabel value="Instância: " for="sInstancia" />
+									<h:selectOneMenu id="sInstancia" immediate="true" value="#{identity.instancia}">
+										<s:selectItems value="#{enumItems.instanciaSetorEnum}" var="item" label="#{item.nome}"/>
+										<s:convertEnum />
+										<a4j:support limitToList="true" ajaxSingle="true" event="onchange" oncomplete="location.reload()" reRender=":painelTipoLogin"/>
+									</h:selectOneMenu>
+								</h:panelGroup>	
+								
+								<h:panelGroup>
+									<h:outputLabel value="Modo: " for="sModoAutenticacao" />
+									<h:selectOneMenu id="sModoAutenticacao" value="#{identity.modoAutenticacao}">
+										<s:selectItems value="#{enumItems.modoAutenticacaoEnum}" var="item" label="#{item.nome}"/>
+										<s:convertEnum />
+										<a4j:support limitToList="true" ajaxSingle="true" event="onchange" oncomplete="location.reload()" reRender=":painelTipoLogin"/>
+									</h:selectOneMenu> 
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:form>
+						
+						<h:panelGroup id="painelTipoLogin" rendered="#{aplicacao.tipoDeVersao == 'ONLINE'}">
+							<h:panelGroup rendered="#{identity.modoAutenticacao eq 'USUARIO_SENHA'}">
+								<ui:include src="logon-usuario-senha.xhtml"></ui:include>
+							</h:panelGroup>
+							
+							<h:panelGroup rendered="#{identity.modoAutenticacao eq 'CERTIFICADO_DIGITAL' and identity.assinador.valor == 'A'}">
+								<ui:include src="logon-certificado.xhtml"></ui:include>
+							</h:panelGroup>
+							<h:panelGroup rendered="#{identity.modoAutenticacao eq 'CERTIFICADO_DIGITAL' and identity.assinador.valor == 'P'}">
+								<ui:include src="logon-certificado-pjeoffice.xhtml"></ui:include>
+							</h:panelGroup>
+							<h:panelGroup rendered="#{identity.modoAutenticacao eq 'CERTIFICADO_DIGITAL' and identity.assinador.valor == 'S'}">
+								<ui:include src="logon-certificado-shodo.xhtml"></ui:include>
+							</h:panelGroup>
+						</h:panelGroup>
+					</h:panelGroup>
+					
+					<h:panelGroup rendered="#{not aplicacao.isAmbienteProducao() and aplicacao.isVersaoOnline()}" styleClass="labelAmbiente">
+						<a href="#" onclick="alert('Este é um ambiente dedicado a testes do PJe-Calc e possui dados não oficiais. Qualquer cálculo realizado neste ambiente será inválido.');return false;" class="ambienteNaoOficial">NÃO OFICIAL</a>
+					</h:panelGroup>	
+
+					<div>
+						<h:outputLabel  value="Versão: #{mensagens.versao}" styleClass="labelVersao"/>
+					</div>
+				</div>
+			</div>
+
+			<rich:modalPanel id="skinPanel" height="100">
+		        <f:facet name="header">Esquema de cores da aplicação</f:facet>
+		        <f:facet name="controls">
+		                <h:panelGroup>
+		                        <h:graphicImage value="/images/closeMP.gif"
+		                                onclick="Richfaces.hideModalPanel('skinPanel')"/>
+		                </h:panelGroup>                                
+		        </f:facet>
+		        <s:decorate template="templates/template-edit-skin.xhtml">
+		                <ui:define name="label">
+		                        <h:outputText value="Escolha o esquema:" styleClass="label" />
+		                </ui:define>
+		                <a4j:form>
+		                        <h:selectOneMenu value="#{wiSkin.skin}" style="width: 250px">
+		                                <a4j:support event="onchange" oncomplete="location.reload()"/>
+		                                <f:selectItems value="#{wiSkin.skinList}" />
+		                        </h:selectOneMenu>
+		                </a4j:form>
+		        </s:decorate>
+			</rich:modalPanel>
+			
+			<h:panelGroup rendered="#{aplicacao.tipoDeVersao == 'ONLINE'}">
+				<ui:include src="logon-certificado-informacoes.xhtml"></ui:include>
+				<ui:include src="logon-certificado-scripts.xhtml"></ui:include>
+			</h:panelGroup>
+		</body>
+		
+	</f:view>
+
+</html>

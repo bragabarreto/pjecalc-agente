@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Salário Mínimo" />
+	<ui:param name="apresentador" value="#{apresentadorSalarioMinimoNacional}" />
+
+	<ui:define name="nofiltroCampos"/>
+
+	<ui:define name="nocamposFormulario">
+		<h:panelGrid columns="1" cellpadding="0" border="0" width="100%">
+
+	<a4j:outputPanel id="painelNovoNacional" ajaxRendered="true" rendered="#{identity.hasPermission('TABELAS_SALARIO_MINIMO', 'MANUTENCAO')}">
+	
+		<fieldset style="width: 590px;">
+				<legend>Novo Registro</legend>
+				
+				<h:panelGrid columns="4" cellspacing="4" border="0">
+				
+					<h:panelGroup>
+						<fieldset style="width: 250px;">
+							<legend>Período</legend>
+							
+							<h:panelGrid columns="2" cellspacing="4" border="0">
+								<h:panelGroup>
+									<h:outputLabel value="Mês/Ano Inicial *"/><br />
+									     <rich:calendar id="competenciaInicialNacional" value="#{apresentadorSalarioMinimoNacional.registro.competenciaInicial}"  
+									     				label="Mês/Ano Inicial" inputSize="12" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+									     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+									     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									     				oninputfocus="$(this).monthYearMask()"
+									     				>
+											<f:facet name="footer">
+												<h:outputText value="{selectedDateControl}" style="text-align:center" />
+											</f:facet>		            
+									    </rich:calendar>
+						    			<cobra:toolTip>
+						    				<rich:message for="competenciaInicialNacional"/>
+						    			</cobra:toolTip>	    			
+								</h:panelGroup>	
+								
+								<h:panelGroup>
+									<h:outputLabel value="Mês/Ano Final *"/><br />
+									     <rich:calendar id="competenciaFinalNacional" value="#{apresentadorSalarioMinimoNacional.registro.competenciaFinal}"  
+									     				label="Mês/Ano Final" inputSize="10" popup="true" datePattern="MM/yyyy" enableManualInput="true"
+									     				showWeekDaysBar="false" showFooter="false" styleClass="special" inputClass="maskDate"
+									     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									     				oninputfocus="$(this).monthYearMask()"
+									     				 >
+											<f:facet name="footer">
+												<h:outputText value="{selectedDateControl}" style="text-align:center" />
+											</f:facet>		            
+									    </rich:calendar>
+						    			<cobra:toolTip>
+						    				<rich:message for="competenciaFinalNacional"/>
+						    			</cobra:toolTip>	    			
+								</h:panelGroup>	
+								
+							</h:panelGrid>
+				
+						</fieldset>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="Valor do Salário *" for="valorNacional"/><br />
+						<h:inputText id="valorNacional" label="Valor do Salário"  value="#{apresentadorSalarioMinimoNacional.registro.valor}" 
+									  size="16" maxlength="16" onfocus="$(this).currencyMask()">
+							<f:converter converterId="bigDecimalConverter"/>
+						</h:inputText>
+		    			<cobra:toolTip>
+		    				<rich:message for="valorNacional"/>
+		    			</cobra:toolTip>	    			
+					</h:panelGroup>
+					
+					<h:panelGroup layout="block">
+						<a4j:commandLink id="cmdSalvarNacional" value="Salvar" 
+										 actionListener="#{apresentadorSalarioMinimoNacional.salvar}" 
+										 styleClass="botaoAddSalvar" title="Salvar Nova Alíquota" reRender="painelDadosMiniCrudNacional, painelNovoNacional"/>
+					</h:panelGroup>	
+					
+				</h:panelGrid>
+				
+		
+			</fieldset>
+		
+		
+		</a4j:outputPanel>
+		
+		<a4j:outputPanel id="painelDadosMiniCrudNacional" ajaxRendered="true">
+			
+			<h:panelGroup  style="width: 600px;"  rendered="#{apresentadorSalarioMinimoNacional.listaDeSalarios.size gt 0}" >
+
+					<rich:dataTable id="listagemMCNacional"
+						value="#{apresentadorSalarioMinimoNacional.listaDeSalarios}" rowClasses="linha-par, linha-impar"
+						cellpadding="0" cellspacing="4" border="0" width="100%"
+						rows="24" var="ocorrencia">
+						<rich:column style="width:10%;" rendered="#{identity.hasPermission('TABELAS_SALARIO_MINIMO', 'MANUTENCAO')}">
+							<f:facet name="header">
+								<h:outputText value="Ações" />
+							</f:facet>
+							<a4j:region>
+								<a4j:commandLink id="excluirItem2" 
+									limitToList="true"
+									actionListener="#{apresentadorSalarioMinimoNacional.excluir(ocorrencia)}" 
+									reRender="painelDadosMiniCrudNacional, painelMensagens" 
+									ajaxSingle="true" 
+									styleClass="linkExcluir" 
+									title="Excluir"
+									rendered="#{identity.hasPermission('TABELAS_SALARIO_MINIMO', 'MANUTENCAO')}"
+									onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();"
+									oncomplete="AguardeHide();"/> 
+									
+								
+							</a4j:region>
+				
+						</rich:column>
+
+						<rich:column style="width:15%;">
+							<f:facet name="header">
+								<h:outputText value="Mês/Ano" />
+							</f:facet>
+							<h:outputText value="#{ocorrencia.competencia}" id="data">
+								<f:converter converterId="competenciaConverter" />
+							</h:outputText>
+						</rich:column>
+
+						<rich:column style="width:75%;">
+							<f:facet name="header">
+								<h:outputText value="Valor do Salário" />
+							</f:facet>
+							<h:outputText value="#{ocorrencia.valor}">
+			    				<f:converter converterId="bigDecimalConverter"/>
+			    			</h:outputText>
+						</rich:column>
+
+					</rich:dataTable>
+					
+					<ui:include src="../comum/paginacao.xhtml">
+						<ui:param name="paramListagem" value="listagemMCNacional" />
+					 </ui:include>
+
+				</h:panelGroup>	
+
+		</a4j:outputPanel>									
+	
+	 
+	 	</h:panelGrid>
+	
+		
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes"/>
+	<ui:define name="noresultadoTabela"/>
+	
+</ui:composition>
+
+</html>

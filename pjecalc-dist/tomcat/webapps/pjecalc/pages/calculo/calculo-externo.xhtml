@@ -1,0 +1,1234 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils"
+	template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="legendaDoFormulario" value="Dados do Cálculo Externo" />
+	<ui:param name="apresentador" value="#{apresentadorCalculo}" />
+	<ui:param name="parametrosDeAtualizacao" value="#{apresentador.parametrosDeAtualizacao}" />
+	<ui:param name="fgts" value="#{apresentador.fgts}" />
+	<ui:param name="irpf" value="#{apresentador.irpf}" />
+	<ui:param name="registro" value="#{apresentador.registro}" />
+	<ui:param name="filtro" value="#{apresentador.filtro}" />
+
+	<ui:define name="camposFormulario">
+	
+		<style>
+			.pr-25 {
+				padding-right: 25px;
+			}
+			
+			.mb-10 {
+				margin-bottom: 10px;
+			}
+		</style>
+
+		<h:panelGrid columns="5" cellpadding="3" cellspacing="4" border="0">
+				<h:panelGroup>
+					<h:outputLabel value="Número *" /><br />
+					<h:inputText id="idCalculo" value="#{apresentador.registro.id}" styleClass="leitura" disabled="true" />
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Tipo *" /><br />
+					<h:inputText id="tipo" value="#{apresentador.registro.tipoCalculo}"  size="10" maxlength="1" styleClass="leitura" disabled="true"/>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<h:outputLabel value="Data de Criação *"/><br />
+					<h:inputText id="dataCriacao" value="#{apresentador.registro.dataCriacao}"  size="20" maxlength="1" styleClass="leitura" disabled="true"/>
+				</h:panelGroup>
+				
+	     </h:panelGrid>
+	      		
+		<rich:tabPanel switchType="client" immediate="true"> 
+			
+			<rich:tab id="tabDadosProcesso" label="Dados do Processo" styleClass="primeiraAba">
+			
+			<h:panelGroup rendered="#{apresentador.versaoOnline}">
+				<fieldset><legend>Informar Dados do Processo</legend>
+					<h:panelGrid columns="2" cellspacing="0" cellpadding="0" border="0" >
+						<h:panelGroup layout="block" style="padding-left:10px;">
+							<h:selectOneRadio id="processoInformadoManualmente" value="#{apresentador.registro.processoInformadoManualmente}" styleClass="labelInput" layout="lineDirection">
+								<f:selectItem itemLabel="Manualmente" itemValue="#{true}" />
+								<f:selectItem itemLabel="Obter do PJe" itemValue="#{false}" />
+								<a4j:support limitToList="true" ajaxSingle="true" event="onchange" actionListener="#{apresentador.limparDadosDoProcesso(event)}" reRender="painelIdentificacao,painelReclamante,painelReclamado,painelBotaoBusca" />
+							</h:selectOneRadio>							
+						</h:panelGroup>
+						<h:panelGroup id="painelBotaoBusca" style="margin-left:-12px">
+							<a4j:commandLink id="linkModalPPJE" rendered="#{!apresentador.registro.processoInformadoManualmente}"
+											 styleClass="linkLov" style="padding-top:5px;" actionListener="#{apresentadorProcessoPJE.iniciarApresentador(
+											 																			apresentador.registro.processo.numeroProcesso,
+											 																			apresentador.registro.processo.digitoProcesso,
+											 																			apresentador.registro.processo.anoProcesso,
+											 																			apresentador.registro.processo.justica,
+											 																			apresentador.registro.processo.regiao,
+											 																			apresentador.registro.processo.varaProcesso)}" 
+											 immediate="true"
+											 reRender="painelMensagensModalPPJE,formularioModalPPJE:panelModalBusca, formularioModalPPJE:panelModalResultado, formularioModalPPJE:painelModalBotoes"
+											 limitToList="true"
+											 oncomplete="Richfaces.showModalPanel('modalPPJE'); return false;" 
+											 title="Selecionar Processo do PJe"/>
+						</h:panelGroup>
+					</h:panelGrid>
+				</fieldset>
+			</h:panelGroup>
+
+			<fieldset> <legend>Identificação do Processo</legend>
+			<h:panelGrid columns="2" id="painelIdentificacao">
+			<h:panelGrid columns="12">
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Número" for="numero" /><br />
+						<h:inputText id="numero" label="Número" value="#{apresentador.registro.processo.numeroProcesso}" maxlength="7" disabled="#{!apresentador.informarProcessoManualmente}" onfocus="$(this).integerMask()" onblur="$('formulario:numero').leftPad('0',7)">
+							<f:converter converterId="padConverter"/>							
+						</h:inputText>
+						<script>
+							$('formulario:numero').leftPad('0',7)
+						</script>						
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="numero">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="numeroErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="numero"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="digito">-</span>
+				</h:panelGroup>
+				
+				<h:panelGroup id="panelDigito">
+					<h:outputLabel value="Dígito" for="digito" /><br />
+					<h:inputText id="digito" label="Dígito" value="#{apresentador.registro.processo.digitoProcesso}" size="3" maxlength="2" disabled="#{!apresentador.informarProcessoManualmente}" onfocus="$(this).integerMask()" onblur="$('formulario:digito').leftPad('0',2)" >
+						<f:converter converterId="padConverter"/>
+					</h:inputText>
+					<script>
+						$('formulario:digito').leftPad('0',2)
+					</script>
+					<rich:message showDetail="false" showSummary="false" for="digito">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="digitoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="digito"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Ano" for="ano" /><br />
+						<h:inputText id="ano" label="Ano" value="#{apresentador.registro.processo.anoProcesso}" disabled="#{!apresentador.informarProcessoManualmente}" size="5" maxlength="4" onfocus="$(this).integerMask()" onblur="$('formulario:ano').leftPad('0',4)" >
+							<f:converter converterId="padConverter"/>
+						</h:inputText>
+						<script>
+							$('formulario:ano').leftPad('0',4)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="ano">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="anoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="ano"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Justiça" for="justica" /><br />
+						<h:inputText id="justica" label="Justiça" value="#{apresentador.registro.processo.justica}" size="5" maxlength="1" disabled="true" />
+						<script>
+							$('formulario:justica').leftPad('0',1)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="justica">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="justicaErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="justica"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Tribunal" for="regiao" /><br />
+						<h:inputText id="regiao" label="Tribunal" value="#{apresentador.registro.processo.regiao}" size="5" disabled="#{!apresentador.informarProcessoManualmente}" maxlength="2" onfocus="$(this).integerMask()" onblur="$('formulario:regiao').leftPad('0',2)" >
+							<f:converter converterId="padConverter"/>							
+						</h:inputText>
+						<script>
+							$('formulario:regiao').leftPad('0',2)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="regiao">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="regiaoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="regiao"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+					<span class="ponto">.</span>
+				</h:panelGroup>
+				
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel value="Vara" for="vara" /><br />
+						<h:inputText id="vara" label="Vara" value="#{apresentador.registro.processo.varaProcesso}" size="4" disabled="#{!apresentador.informarProcessoManualmente}" maxlength="4" onfocus="$(this).integerMask()" onblur="$('formulario:vara').leftPad('0',4)" >
+							<f:converter converterId="padConverter"/>
+						</h:inputText>
+						<script>
+						$('formulario:vara').leftPad('0',4)
+						</script>
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="vara">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="varaErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="vara"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+				</h:panelGroup>
+				
+			</h:panelGrid>	
+			<h:panelGrid>
+				<h:panelGroup>
+					<a4j:region>
+						<h:outputLabel style="margin-left:30px" value="Valor da Causa" for="valorDaCausa" /><br />
+						<h:inputText style="margin-left:30px" id="valorDaCausa" label="Valor da Causa" value="#{apresentador.registro.processo.valorDaCausa}" size="16" disabled="#{!apresentador.informarProcessoManualmente}" maxlength="16" onfocus="$(this).currencyMask()">
+							<f:converter converterId="bigDecimalConverter"/>
+						</h:inputText>	
+					</a4j:region>
+					<rich:message showDetail="false" showSummary="false" for="vara">
+					     <f:facet name="errorMarker">
+					     	   <h:outputLink class="linkErro" id="valorDaCausaErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="valorDaCausa"/>
+								   </rich:toolTip>
+					     	   </h:outputLink>
+					     </f:facet>
+					</rich:message>
+				</h:panelGroup>
+			</h:panelGrid>
+			</h:panelGrid>
+			</fieldset>
+			
+			<a4j:outputPanel id="painelReclamante">
+			
+			<fieldset><legend>Reclamante</legend>
+				<h:panelGrid columns="1" cellpadding="3" cellspacing="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel value="Nome" for="reclamanteNome" /><br />
+						<h:inputText id="reclamanteNome" label="Nome" value="#{apresentador.registro.processo.reclamante.nome}" disabled="#{!apresentador.informarProcessoManualmente}" size="60" maxlength="150"/>
+						<rich:message showDetail="false" showSummary="false" for="reclamanteNome">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamanteNomeErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamanteNome"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+				</h:panelGrid>
+				
+				<h:panelGroup layout="block" style="width:800px;">
+				
+				<fieldset style="float:left;"><legend>Documento Fiscal</legend>
+				<h:panelGrid columns="2" cellspacing="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel for="documentoFiscalReclamante" value="Tipo" /><br />
+						<h:selectOneRadio id="documentoFiscalReclamante" value="#{apresentador.registro.processo.reclamante.tipoDocumentoFiscal}" disabled="#{!apresentador.informarProcessoManualmente}"  styleClass="labelInput" onclick="$('formulario:reclamanteNumeroDocumentoFiscal').disable(false);">
+							<s:selectItems value="#{apresentador.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+							<s:convertEnum />
+						</h:selectOneRadio>
+					</h:panelGroup>
+						
+					<h:panelGroup id="painelReclamanteNumeroDocumentoFiscal">
+						<h:outputLabel value="Número" for="reclamanteNumeroDocumentoFiscal" /><br />
+						<h:inputText id="reclamanteNumeroDocumentoFiscal" label="Número" 
+										value="#{apresentador.registro.processo.reclamante.numeroDocumentoFiscal}" size="26" disabled="#{!apresentador.informarProcessoManualmente}" 
+										onfocus="$(this).dynamicMask('formulario:documentoFiscalReclamante')">
+							<f:converter converterId="mascaraDinamicaConverter"/>
+							<f:validator validatorId="validadorDinamico"/>
+							<f:param name="seletor" value="documentoFiscalReclamante"/>
+						</h:inputText>
+						<rich:message showDetail="false" showSummary="false" for="reclamanteNumeroDocumentoFiscal">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamanteNumeroDocumentoFiscalErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamanteNumeroDocumentoFiscal"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+						<script>
+						if(#{apresentador.informarProcessoManualmente}){
+							$('formulario:reclamanteNumeroDocumentoFiscal').disable(!jQuery("table[id='formulario:documentoFiscalReclamante'] input").is(":checked"));
+						}
+						</script>
+					</h:panelGroup>
+				</h:panelGrid>
+				</fieldset>
+						 
+				<fieldset style="float:left;"><legend>Documento Previdenciário</legend>
+				<h:panelGrid columns="2" cellpadding="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel for="reclamanteTipoDocumentoPrevidenciario" value="Tipo" /><br />
+						<h:selectOneRadio id="reclamanteTipoDocumentoPrevidenciario" value="#{apresentador.registro.processo.reclamante.tipoDocumentoPrevidenciario}" 
+										  disabled="#{!apresentador.informarProcessoManualmente}"
+										  styleClass="labelInput" onclick="$('formulario:reclamanteNumeroDocumentoPrevidenciario').disable(false);">
+							<s:selectItems value="#{apresentador.enumItems.tipoDocumentoPrevidenciarioEnum}" var="item" label="#{item}"/> 
+							<s:convertEnum />
+						</h:selectOneRadio>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="Número" for="reclamanteNumeroDocumentoPrevidenciario" /><br />
+						<h:inputText id="reclamanteNumeroDocumentoPrevidenciario" label="Número" 
+									 value="#{apresentador.registro.processo.reclamante.numeroDocumentoPrevidenciario}" 
+									 disabled="#{!apresentador.informarProcessoManualmente}"
+									 maxlength="11" onfocus="$(this).dynamicMask('formulario:reclamanteTipoDocumentoPrevidenciario')">
+							<f:converter converterId="mascaraDinamicaConverter"/>
+							<f:validator validatorId="validadorDinamico"/>
+							<f:param name="seletor" value="reclamanteTipoDocumentoPrevidenciario"/>
+						</h:inputText>
+						<rich:message showDetail="false" showSummary="false" for="reclamanteNumeroDocumentoPrevidenciario">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamanteNumeroDocumentoPrevidenciarioErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamanteNumeroDocumentoPrevidenciario"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+						<script>
+							if(#{apresentador.informarProcessoManualmente}){
+								$('formulario:reclamanteNumeroDocumentoPrevidenciario').disable(!jQuery("table[id='formulario:reclamanteTipoDocumentoPrevidenciario'] input").is(":checked"));
+							}
+						</script>
+					</h:panelGroup>
+				</h:panelGrid>
+				</fieldset>
+				
+				</h:panelGroup>
+				
+				<br/><br/>
+						
+				<fieldset style="margin-top: 48px;"><legend>Advogado</legend>
+				<h:panelGroup id="painelMCAdvogadosReclamante">
+				
+					<a4j:region>
+				
+						<h:panelGrid columns="4" cellpadding="3" cellspacing="0" border="0" rendered="#{apresentador.informarProcessoManualmente}">
+							<h:panelGroup>
+								<h:outputLabel value="Nome" for="nomeAdvogadoReclamante" /><br />
+								<h:inputText id="nomeAdvogadoReclamante" label="Nome" value="#{apresentador.advogadoReclamante.nome}"  size="59" maxlength="150"/>
+								<rich:message showDetail="false" showSummary="false" for="nomeAdvogadoReclamante">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="nomeAdvogadoReclamanteErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="nomeAdvogadoReclamante"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</h:panelGroup>					
+		
+							<h:panelGroup>
+								<h:outputLabel value="OAB" for="numeroOABAdvogadoReclamante" /><br />
+								<h:inputText id="numeroOABAdvogadoReclamante" label="OAB" value="#{apresentador.advogadoReclamante.numeroOAB}" size="9" maxlength="9" onfocus="$(this).textAndNumberMask()"/>
+								<rich:message showDetail="false" showSummary="false" for="numeroOABAdvogadoReclamante">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="numeroOABAdvogadoReclamanteErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="numeroOABAdvogadoReclamante"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<fieldset style="float:left; margin-top:-10px"><legend>Documento Fiscal</legend>
+								<h:panelGrid columns="2" cellspacing="4" border="0">
+									<h:panelGroup>
+										<h:outputLabel for="tipoDocumentoAdvogadoReclamante" value="Tipo" /><br />
+										<h:selectOneRadio id="tipoDocumentoAdvogadoReclamante" value="#{apresentador.advogadoReclamante.tipoDocumento}"  onclick="$('formulario:numeroDocumentoAdvogadoReclamante').disable(false);">
+											<s:selectItems value="#{apresentador.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+									</h:panelGroup>
+										
+									<h:panelGroup id="painelReclamanteAdvogadoNumeroDocumentoFiscal">
+										<h:outputLabel value="Número" for="numeroDocumentoAdvogadoReclamante" /><br />
+										<h:inputText id="numeroDocumentoAdvogadoReclamante" label="Número" 
+														value="#{apresentador.advogadoReclamante.numeroDocumento}" size="18"
+														onfocus="$(this).dynamicMask('formulario:tipoDocumentoAdvogadoReclamante')">
+											<f:converter converterId="mascaraDinamicaConverter"/>
+											<f:validator validatorId="validadorDinamico"/>
+											<f:param name="seletor" value="tipoDocumentoAdvogadoReclamante"/>
+										</h:inputText>
+										<rich:message showDetail="false" showSummary="false" for="numeroDocumentoAdvogadoReclamante">
+										     <f:facet name="errorMarker">
+										     	   <h:outputLink class="linkErro" id="numeroDocumentoAdvogadoReclamanteErro">
+													   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+													        <rich:message showDetail="true" showSummary="false" for="numeroDocumentoAdvogadoReclamante"/>
+													   </rich:toolTip>
+										     	   </h:outputLink>
+										     </f:facet>
+										</rich:message>
+										<script>
+											$('formulario:numeroDocumentoAdvogadoReclamante').disable(!jQuery("table[id='formulario:tipoDocumentoAdvogadoReclamante'] input").is(":checked"));
+										</script>
+									</h:panelGroup>
+								</h:panelGrid>
+							</fieldset>
+						</h:panelGroup>
+						
+						<a4j:commandLink id="incluirAdvogadoReclamante" actionListener="#{apresentador.adicionarAdvogadoReclamante}" limitToList="true"
+																reRender="painelListagemAdvogadoReclamante,painelMCAdvogadosReclamante"
+																styleClass="botaoAddItem" title="Adicionar Advogado"
+																rendered="#{!apresentador.emModoSomenteVisualizacao}"
+																onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+						
+						
+						</h:panelGrid>
+					</a4j:region>
+				</h:panelGroup>
+				
+				<h:panelGroup id="painelListagemAdvogadoReclamante">
+						
+					<rich:dataTable id="listagemAdvogadoReclamante" rowClasses="linha-par, linha-impar" value="#{listaDeAdvogadosReclamante}" var="item"
+									cellpadding="0" cellspacing="4" border="0" width="690px"> 
+			    		<rich:column style="width:10%;" rendered="#{apresentador.informarProcessoManualmente}">
+						    	<f:facet name="header">
+					    			<h:outputText value="Ação"/>
+					    		</f:facet>
+						    	<a4j:region>
+						    		<h:commandLink id="excluirAdvogadoReclamante"  limitToList="true" 
+						    					   actionListener="#{apresentador.excluirAdvogadoReclamante}" 
+						    					   immediate="true"
+					    						   styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+					    					<a4j:support event="onclick" reRender="painelListagemAdvogadoReclamante" limitToList="true" ajaxSingle="true" immediate="true" />
+					    			</h:commandLink>
+						    	</a4j:region>
+					    </rich:column>
+			    	
+				    	<rich:column style="width:50%;">
+			    			<f:facet name="header">
+			    				<h:outputText value="Nome"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.nome}" style="text-transform:uppercase;">
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Tipo Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.tipoDocumento.valor}">	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Nº Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroDocumento}" >	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="OAB"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroOAB}">
+			    			</h:outputText>
+				    	</rich:column>
+			    	
+					</rich:dataTable>
+			
+					</h:panelGroup>	
+				
+				</fieldset>
+			</fieldset>
+			
+			</a4j:outputPanel>
+			<a4j:outputPanel id="painelReclamado">
+			
+			<fieldset style="margin-top: 15px;"><legend>Reclamado</legend>			
+				<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0">
+
+					<h:panelGroup>
+						<h:outputLabel value="Nome" for="reclamadoNome" /><br />
+						<h:inputText id="reclamadoNome" label="Nome" value="#{apresentador.registro.processo.reclamado.nome}" disabled="#{!apresentador.informarProcessoManualmente}" size="60" maxlength="150"/>
+						<rich:message showDetail="false" showSummary="false" for="reclamadoNome">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="reclamadoNomeErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="reclamadoNome"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+					<fieldset style="float:left;"> <legend>Documento Fiscal</legend>
+						<h:panelGrid columns="2" cellspacing="4" border="0">
+							<h:panelGroup>
+								<h:outputLabel for="tipoDocumentoFiscalReclamado" value="Tipo" /><br />
+								<h:selectOneRadio id="tipoDocumentoFiscalReclamado" value="#{apresentador.registro.processo.reclamado.tipoDocumentoFiscal}" 
+												  disabled="#{!apresentador.informarProcessoManualmente}"
+												  styleClass="labelInput" onclick="$('formulario:reclamadoNumeroDocumentoFiscal').disable(false);">
+									<s:selectItems value="#{apresentador.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Número" for="reclamadoNumeroDocumentoFiscal" /><br />
+								<h:inputText id="reclamadoNumeroDocumentoFiscal" label="Número" disabled="#{!apresentador.informarProcessoManualmente}"
+											value="#{apresentador.registro.processo.reclamado.numeroDocumentoFiscal}" size="26"
+											onfocus="$(this).dynamicMask('formulario:tipoDocumentoFiscalReclamado')">
+									<f:converter converterId="mascaraDinamicaConverter"/>
+									<f:validator validatorId="validadorDinamico"/>
+									<f:param name="seletor" value="tipoDocumentoFiscalReclamado"/>
+								</h:inputText>
+								
+								<rich:message showDetail="false" showSummary="false" for="reclamadoNumeroDocumentoFiscal">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="reclamadoNumeroDocumentoFiscalErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="reclamadoNumeroDocumentoFiscal"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+								<script>
+									if(#{apresentador.informarProcessoManualmente}){
+										$('formulario:reclamadoNumeroDocumentoFiscal').disable(!jQuery("table[id='formulario:tipoDocumentoFiscalReclamado'] input").is(":checked"));
+									}
+								</script>
+							</h:panelGroup>
+						</h:panelGrid>
+				</fieldset>
+				</h:panelGroup>
+				</h:panelGrid>
+
+				<fieldset><legend>Advogado</legend>
+					<h:panelGroup id="painelMCAdvogadosReclamado">
+					
+						<a4j:region>
+					
+							<h:panelGrid columns="4" cellpadding="2" cellspacing="0" border="0" rendered="#{apresentador.informarProcessoManualmente}">
+								<h:panelGroup>
+								<h:outputLabel value="Nome" for="nomeAdvogadoReclamado" /><br />
+								<h:inputText id="nomeAdvogadoReclamado" label="Nome" value="#{apresentador.advogadoReclamado.nome}"  size="59" maxlength="150"/>
+								<rich:message showDetail="false" showSummary="false" for="nomeAdvogadoReclamado">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="nomeAdvogadoReclamadoErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="nomeAdvogadoReclamado"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</h:panelGroup>					
+		
+							<h:panelGroup>
+								<h:outputLabel value="OAB" for="numeroOABAdvogadoReclamado" /><br />
+								<h:inputText id="numeroOABAdvogadoReclamado" label="OAB" value="#{apresentador.advogadoReclamado.numeroOAB}" size="9" maxlength="9" onfocus="$(this).textAndNumberMask()"/>
+								<rich:message showDetail="false" showSummary="false" for="numeroOABAdvogadoReclamado">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="numeroOABAdvogadoReclamadoErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="numeroOABAdvogadoReclamado"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<fieldset style="float:left; margin-top:-10px"><legend>Documento Fiscal</legend>
+								<h:panelGrid columns="2" cellspacing="4" border="0">
+									<h:panelGroup>
+										<h:outputLabel for="tipoDocumentoAdvogadoReclamado" value="Tipo" /><br />
+										<h:selectOneRadio id="tipoDocumentoAdvogadoReclamado" value="#{apresentador.advogadoReclamado.tipoDocumento}"  onclick="$('formulario:numeroDocumentoAdvogadoReclamado').disable(false);">
+											<s:selectItems value="#{apresentador.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+											<s:convertEnum />
+										</h:selectOneRadio>
+									</h:panelGroup>
+										
+									<h:panelGroup id="painelReclamadoAdvogadoNumeroDocumentoFiscal">
+										<h:outputLabel value="Número" for="numeroDocumentoAdvogadoReclamado" /><br />
+										<h:inputText id="numeroDocumentoAdvogadoReclamado" label="Número" 
+														value="#{apresentador.advogadoReclamado.numeroDocumento}" size="18"
+														onfocus="$(this).dynamicMask('formulario:tipoDocumentoAdvogadoReclamado')">
+											<f:converter converterId="mascaraDinamicaConverter"/>
+											<f:validator validatorId="validadorDinamico"/>
+											<f:param name="seletor" value="tipoDocumentoAdvogadoReclamado"/>
+										</h:inputText>
+										<rich:message showDetail="false" showSummary="false" for="numeroDocumentoAdvogadoReclamado">
+										     <f:facet name="errorMarker">
+										     	   <h:outputLink class="linkErro" id="numeroDocumentoAdvogadoReclamadoErro">
+													   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+													        <rich:message showDetail="true" showSummary="false" for="numeroDocumentoAdvogadoReclamado"/>
+													   </rich:toolTip>
+										     	   </h:outputLink>
+										     </f:facet>
+										</rich:message>
+										<script>
+											$('formulario:numeroDocumentoAdvogadoReclamado').disable(!jQuery("table[id='formulario:tipoDocumentoAdvogadoReclamado'] input").is(":checked"));
+										</script>
+									</h:panelGroup>
+								</h:panelGrid>
+							</fieldset>
+						</h:panelGroup>
+						
+						<a4j:commandLink id="incluirAdvogadoReclamado" actionListener="#{apresentador.adicionarAdvogadoReclamado}" limitToList="true" 
+																reRender="painelListagemAdvogadoReclamado,painelMCAdvogadosReclamado"
+																styleClass="botaoAddItem" title="Adicionar Advogado"
+																rendered="#{!apresentador.emModoSomenteVisualizacao}"
+																onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+							
+							</h:panelGrid>	
+						</a4j:region>
+					</h:panelGroup>				
+					
+					<h:panelGroup  id="painelListagemAdvogadoReclamado">
+						
+					<rich:dataTable id="listagemAdvogadoReclamado" rowClasses="linha-par, linha-impar" value="#{listaDeAdvogadosReclamado}" var="item"
+									cellpadding="0" cellspacing="4" border="0" width="690px"> 
+			    		<rich:column style="width:10%;" rendered="#{apresentador.informarProcessoManualmente}">
+						    	<f:facet name="header">
+					    			<h:outputText value="Ação"/>
+					    		</f:facet>
+							    <a4j:region>
+						    		<h:commandLink id="excluirAdvogadoReclamado"  limitToList="true" 
+						    					   actionListener="#{apresentador.excluirAdvogadoReclamado}"
+						    					   immediate="true"
+					    						   styleClass="linkExcluir" title="Excluir" onclick="AguardeShow();" oncomplete="AguardeHide();">
+					    					<a4j:support event="onclick" reRender="painelListagemAdvogadoReclamado" limitToList="true" ajaxSingle="true" immediate="true" />
+					    			</h:commandLink>
+						    	</a4j:region>
+					    </rich:column>
+			    	
+				    	<rich:column style="width:50%;">
+			    			<f:facet name="header">
+			    				<h:outputText value="Nome"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.nome}" style="text-transform:uppercase;">
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Tipo Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.tipoDocumento.valor}">	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Nº Documento"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroDocumento}" >	
+							</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="OAB"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{item.numeroOAB}">
+			    			</h:outputText>
+				    	</rich:column>
+			    	
+					</rich:dataTable>
+			
+					</h:panelGroup>	
+					
+				</fieldset>
+
+			</fieldset>
+
+			</a4j:outputPanel>
+
+			</rich:tab>
+			
+			<rich:tab id="tabParametrosCalculo" label="Parâmetros do Cálculo Externo" styleClass="segundaAba">
+				<h:panelGroup id="pnlDataUltimaAtualizacao">
+					<h:outputLabel value="Data da Última Atualização: *"/><br />
+					
+					<rich:calendar id="dataUltimaAtualizacao" value="#{registro.dataDeLiquidacao}" label="Data da última atualização" inputSize="22" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+						<f:facet name="footer">
+				        	<h:outputText value="#{selectedDateControl}" style="text-align:center" />
+				        </f:facet>
+					</rich:calendar>
+					<cobra:toolTip>
+	    				<rich:message for="dataUltimaAtualizacao" style="margin-left:5px;"/>
+	    			</cobra:toolTip>
+				</h:panelGroup>
+				<br/><br/>
+				
+				
+				<h:panelGrid columns="3">
+					<h:panelGrid>
+						<h:panelGroup>
+							<fieldset>
+								<legend class="mb-10">Correção Monetária</legend>
+								<h:panelGrid id="pnlCorrecaoMonetaria" columns="1" cellpadding="3" cellspacing="3" border="0" styleClass="tabelaRowTop">	
+									
+									<h:panelGroup styleClass="itemGrupo">
+										<h:outputLabel value="Índice Trabalhista" for="indiceTrabalhista" />
+										<br/>
+										<h:selectOneMenu id="indiceTrabalhista" value="#{parametrosDeAtualizacao.indiceTrabalhista}" style="width:345px;">
+											<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support event="onchange" ajaxSingle="true" reRender="groupOutroIndice" limitToList="true" />
+										</h:selectOneMenu>
+									</h:panelGroup>
+									
+									<h:panelGroup id="checkCombinarOutroIndice" styleClass="itemGrupo">
+										<h:selectBooleanCheckbox id="combinarOutroIndice" value="#{parametrosDeAtualizacao.combinarOutroIndice}">
+											<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentadorParametrosDeAtualizacao.atualizarOutroIndice}" reRender="groupOutroIndice" limitToList="true" />
+										</h:selectBooleanCheckbox>
+										<h:outputLabel value="Combinar com Outro Índice" for="combinarOutroIndice" />
+									</h:panelGroup>
+									
+									<h:panelGroup id="groupOutroIndice">
+									
+										<h:panelGrid id="camposOutroIndice" rendered="#{parametrosDeAtualizacao.combinarOutroIndice}" columns="3" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+											<h:panelGroup styleClass="itemGrupo">
+												<h:outputLabel value="Outro Índice Trabalhista *" for="outroIndiceTrabalhista" />
+												<br/>
+												<h:selectOneMenu id="outroIndiceTrabalhista" label="Outro Índice Trabalhista" value="#{parametrosDeAtualizacao.outroIndiceTrabalhista}"  style="width:345px;">
+													<s:selectItems value="#{apresentadorParametrosDeAtualizacao.indiceMonetarioParaCalculoOutroEnum}" var="item" noSelectionLabel="" label="#{item.nome}" />
+													<s:convertEnum />
+												</h:selectOneMenu>
+												<cobra:toolTip>
+								    				<rich:message for="outroIndiceTrabalhista" style="margin-left:5px;"/>
+								    			</cobra:toolTip>
+											</h:panelGroup>
+											
+											<h:panelGroup styleClass="itemGrupo">
+												<h:outputLabel value="A partir de *" for="apartirDeOutroIndice" /><br/>
+												<rich:calendar id="apartirDeOutroIndice" value="#{parametrosDeAtualizacao.apartirDeOutroIndice}" label="A partir de" 
+															   inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"> 
+													<f:facet name="footer">
+											        	<h:outputText value="" style="text-align:center" />
+											        </f:facet>
+												</rich:calendar>
+								    			<cobra:toolTip>
+								    				<rich:message for="apartirDeOutroIndice" style="margin-left:5px;"/>
+								    			</cobra:toolTip>	    			
+											</h:panelGroup>
+											
+											<h:panelGroup styleClass="itemGrupo">
+												<a4j:commandLink id="addOutroIndice" styleClass="botaoAddItem" title="Adicionar" limitToList="true" actionListener="#{apresentadorParametrosDeAtualizacao.adicionarOutroIndice}" onclick="AguardeShow();" oncomplete="AguardeHide();" process="pnlDataUltimaAtualizacao" reRender="pnlDataUltimaAtualizacao,groupOutroIndice,checkCombinarOutroIndice,painelMensagens" />
+											</h:panelGroup>
+										</h:panelGrid>
+											
+										<h:panelGroup id="listagemIndicesCombinados">
+											<rich:dataTable value="#{listaDeCombinacaoDeIndices}" var="item" rendered="#{parametrosDeAtualizacao.combinarOutroIndice}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="505px"> 
+									    		<rich:column style="width:5%;">
+											    	<f:facet name="header">
+										    			<h:outputText value="Ação"/>
+										    		</f:facet>
+										    		<a4j:commandLink id="excluirDep" process="listagemIndicesCombinados,excluirDep" limitToList="true" 
+									    							 styleClass="linkExcluir" title="Excluir" 
+									    							 actionListener="#{apresentadorParametrosDeAtualizacao.removerOutroIndice(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+									    							 reRender="pnlCorrecaoMonetaria">
+									    			</a4j:commandLink>
+											    </rich:column>
+										    	<rich:column>
+									    			<f:facet name="header">
+									    				<h:outputText value="Índice"/>
+									    			</f:facet>	
+									    			<h:outputText value="#{item.outroIndiceTrabalhista.nome}"/>
+										    	</rich:column>
+										    	<rich:column>
+									    			<f:facet name="header">
+									    				<h:outputText value="A partir de"/>
+									    			</f:facet>	
+									    			<h:outputText value="#{item.apartirDeOutroIndice}">
+									    				<f:convertDateTime pattern="dd/MM/yyyy" />
+									    			</h:outputText>
+										    	</rich:column>
+											</rich:dataTable>
+										</h:panelGroup>
+											
+									</h:panelGroup>
+									
+									<h:panelGroup styleClass="itemGrupo">
+										<h:selectBooleanCheckbox id="ignorarTaxaNegativa" value="#{parametrosDeAtualizacao.ignorarTaxaNegativa}"/>
+										<h:outputLabel value="Ignorar Taxa Negativa para Índice(s) selecionado(s)" for="ignorarTaxaNegativa" />
+									</h:panelGroup>
+								</h:panelGrid>
+							</fieldset>
+						</h:panelGroup>
+					</h:panelGrid>
+				
+					<h:panelGrid>
+						<h:panelGroup>
+							<fieldset class="mb-10"><legend>Verbas</legend>
+							<h:panelGroup>
+								<h:outputLabel value="Bases de Juros" for="baseDeJurosDasVerbas" styleClass="topLabel" />
+								<h:selectOneMenu id="baseDeJurosDasVerbas" value="#{parametrosDeAtualizacao.baseDeJurosDasVerbas}">
+									<s:selectItems value="#{enumItems.baseDeJurosDasVerbasEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+								</h:selectOneMenu>
+							</h:panelGroup>
+						</fieldset>
+						</h:panelGroup>
+						<h:panelGroup>
+							<fieldset class="mb-10" style="min-height: 100px;"><legend>FGTS</legend>
+								<h:panelGroup layout="block" styleClass="itemGrupo">
+									<h:outputText value="Destino" />
+									<h:selectOneRadio id="tipoDeVerba" value="#{fgts.destinoDoFgts}" styleClass="labelInput" layout="pageDirection">
+										<s:selectItems value="#{enumItems.destinoDoFgtsEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+									</h:selectOneRadio>
+								</h:panelGroup>
+								<h:panelGroup layout="block" styleClass="itemGrupo">
+									<h:outputText value="Correção" />
+									<h:selectOneRadio id="indiceDeCorrecaoDoFGTS" value="#{parametrosDeAtualizacao.indiceDeCorrecaoDoFGTS}" styleClass="labelInput" layout="pageDirection">
+										<s:selectItems value="#{enumItems.indiceDeCorrecaoDoFGTSCalculoExternoEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+									</h:selectOneRadio>
+								</h:panelGroup>
+							</fieldset>
+						</h:panelGroup>	
+					</h:panelGrid>
+					
+					<h:panelGrid>
+						<h:panelGroup>
+							<fieldset><legend>Juros de Mora</legend>	
+							<h:panelGrid id="pnlJuros" columns="1" cellpadding="3" cellspacing="3" border="0" styleClass="tabelaRowTop">
+								<h:panelGroup styleClass="itemGrupo">
+									<h:outputLabel value="Tabela de Juros" for="juros" />
+									<br/>
+									<h:selectOneMenu id="juros" value="#{parametrosDeAtualizacao.juros}" style="width:160px;">
+										<s:selectItems value="#{enumItems.jurosEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+										<a4j:support event="onchange" ajaxSingle="true" reRender="groupOutroJuros" limitToList="true" />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								<h:panelGroup id="checkCombinarOutroJuros" styleClass="itemGrupo">
+									<h:selectBooleanCheckbox id="combinarOutroJuros" value="#{parametrosDeAtualizacao.combinarOutroJuros}">
+										<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentadorParametrosDeAtualizacao.atualizarOutroJuros}" reRender="groupOutroJuros" limitToList="true" />
+									</h:selectBooleanCheckbox>
+									<h:outputLabel value="Combinar com Outra Tabela de Juros" for="combinarOutroJuros" />
+								</h:panelGroup>
+								<h:panelGroup id="groupOutroJuros">
+									<h:panelGrid id="camposOrdemJuros" rendered="#{parametrosDeAtualizacao.combinarOutroJuros}" columns="3" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="Tabela Juros *" for="outroJuros" />
+											<br/>
+											<h:selectOneMenu id="outroJuros" label="Tipo Juros" value="#{parametrosDeAtualizacao.outroJuros}"  style="width:160px;">
+												<s:selectItems value="#{enumItems.jurosEnum}" var="item" noSelectionLabel="" label="#{item.nome}" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+											<cobra:toolTip>
+							    				<rich:message for="outroJuros" style="margin-left:5px;"/>
+							    			</cobra:toolTip>
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<h:outputLabel value="A partir de *" for="apartirDeOutroJuros" /><br/>
+											<rich:calendar id="apartirDeOutroJuros" value="#{parametrosDeAtualizacao.apartirDeOutroJuros}" label="A partir de" 
+														   inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"> 
+												<f:facet name="footer">
+										        	<h:outputText value="" style="text-align:center" />
+										        </f:facet>
+											</rich:calendar>
+							    			<cobra:toolTip>
+							    				<rich:message for="apartirDeOutroJuros" style="margin-left:5px;"/>
+							    			</cobra:toolTip>	    			
+										</h:panelGroup>
+										<h:panelGroup styleClass="itemGrupo">
+											<a4j:commandLink id="addOutroJuros" styleClass="botaoAddItem" title="Adicionar" limitToList="true" actionListener="#{apresentadorParametrosDeAtualizacao.adicionarOutroJuros}" onclick="AguardeShow();" oncomplete="AguardeHide();" process="pnlDataUltimaAtualizacao" reRender="pnlDataUltimaAtualizacao,groupOutroJuros,checkCombinarOutroJuros,painelMensagens" />
+										</h:panelGroup>
+									</h:panelGrid>
+									<h:panelGroup id="listagemJurosCombinados">
+										<rich:dataTable value="#{listaDeCombinacaoDeJuros}" rendered="#{parametrosDeAtualizacao.combinarOutroJuros}" var="item" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="300px"> 
+								    		<rich:column style="width:5%;">
+										    	<f:facet name="header">
+									    			<h:outputText value="Ação"/>
+									    		</f:facet>
+									    		<a4j:commandLink id="excluirDep" process="listagemJurosCombinados,excluirDep" limitToList="true" 
+								    							 styleClass="linkExcluir" title="Excluir" 
+								    							 actionListener="#{apresentadorParametrosDeAtualizacao.removerOutroJuros(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+								    							 reRender="pnlJuros">
+								    			</a4j:commandLink>
+										    </rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="Índice"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.outroJuros.nome}"/>
+									    	</rich:column>
+									    	<rich:column>
+								    			<f:facet name="header">
+								    				<h:outputText value="A partir de"/>
+								    			</f:facet>	
+								    			<h:outputText value="#{item.apartirDeOutroJuros}">
+								    				<f:convertDateTime pattern="dd/MM/yyyy" />
+								    			</h:outputText>
+									    	</rich:column>
+										</rich:dataTable>
+									</h:panelGroup>
+								</h:panelGroup>
+							</h:panelGrid>
+							</fieldset>
+						</h:panelGroup>
+					</h:panelGrid>
+				</h:panelGrid>				
+				
+				<h:panelGrid>
+					<h:panelGroup>
+						<fieldset class="mb-10"><legend>Contribuição Social</legend>				
+							<h:panelGrid columns="2">
+								<h:panelGroup>
+									<fieldset><legend>Atualização da Contribuição Social dos Salários Devidos</legend>
+										<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+											<h:panelGroup id="grupoLei11941" layout="block" styleClass="itemGrupoCorrecao" >
+												<h:panelGroup styleClass="itemGrupoCorrecao" rendered="#{parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosDevidosDoINSS or (parametrosDeAtualizacao.salarioDevidoFormaAplicacao.valor == 'PD' and parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosDevidosDoINSS)}">
+													<h:selectBooleanCheckbox id="correcaoLei11941" value="#{parametrosDeAtualizacao.lei11941}">
+														<a4j:support event="onchange" ajaxSingle="true" reRender="grupoLei11941, grupoLei11941Pago" limitToList="true" actionListener="#{apresentadorParametrosDeAtualizacao.mudarLei11941}" oncomplete="sugerirData11941();"/>
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Lei nº 11.941/2009 a partir da competência março/2009" for="correcaoLei11941" />
+												</h:panelGroup>
+											</h:panelGroup>
+										</h:panelGrid>
+										
+										<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+										
+											<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" id="pfTrabalhistaDevido">
+												
+												<fieldset>
+													<legend>Trabalhista</legend>
+													<h:panelGroup id="grupoSalariosDevidosTrabalhista" layout="block" styleClass="itemGrupoCorrecao" >
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="correcaoTrabalhistaDosSalariosDevidosDoINSS" value="#{parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosDevidosDoINSS}">
+																<a4j:support event="onchange" actionListener="#{apresentadorParametrosDeAtualizacao.mudarCorrecaoTrabalhistaDosSalariosDevidos}" ajaxSingle="true" reRender="grupoLei11941, grupoSalariosDevidosTrabalhista,grupoSalariosDevidosPrevidenciaria" limitToList="true" oncomplete="sugerirDataAplicarAteDevidos();"/>
+															</h:selectBooleanCheckbox>
+															<h:outputLabel value="Correção" for="correcaoTrabalhistaDosSalariosDevidosDoINSS" />
+														</h:panelGroup>
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="jurosTrabalhistasDosSalariosDevidosDoINSS" value="#{parametrosDeAtualizacao.jurosTrabalhistasDosSalariosDevidosDoINSS}" disabled="#{not apresentadorParametrosDeAtualizacao.isHabilitadoJurosDeCorrecaoDosSalariosDevidos()}">
+															</h:selectBooleanCheckbox>
+															<h:outputLabel value="Juros" for="jurosTrabalhistasDosSalariosDevidosDoINSS" />
+														</h:panelGroup>
+														<br/>
+														<h:panelGroup id="grupoAplicarAteDosSalariosDevidosDoINSS" layout="block" styleClass="itemGrupoCorrecao" rendered="#{parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosDevidosDoINSS and parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+															<h:outputLabel value="Aplicar até #{apresentadorParametrosDeAtualizacao.isHabilitarAplicarAteDosSalariosDevidos()?' *':''}" for="aplicarAteDosSalariosDevidosDoINSS" style="padding:3px;" />
+															<br />
+															<rich:calendar id="aplicarAteDosSalariosDevidosDoINSS" value="#{parametrosDeAtualizacao.aplicarAteDosSalariosDevidosDoINSS}" label="Aplicar até" disabled="#{not apresentadorParametrosDeAtualizacao.isHabilitarAplicarAteDosSalariosDevidos()}" required="#{apresentadorParametrosDeAtualizacao.isHabilitarAplicarAteDosSalariosDevidos()}" inputSize="10" popup="true" 
+																			datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+																			oninputblur="sugerirDataAplicarAtePagos();" onchanged="sugerirDataAplicarAtePagos();"> 
+																<f:facet name="footer">
+														        	<h:outputText value="" style="text-align:center" />
+														        </f:facet>
+															</rich:calendar>
+											    			<cobra:toolTip>
+											    				<rich:message for="aplicarAteDosSalariosDevidosDoINSS" style="margin-left:5px;"/>
+											    			</cobra:toolTip>	    			
+														</h:panelGroup>
+													</h:panelGroup>
+												</fieldset>	
+											</h:panelGroup>
+											<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" >
+												<fieldset>
+													<legend>Previdenciária</legend>
+													<h:panelGroup id="grupoSalariosDevidosPrevidenciaria" layout="block" styleClass="itemGrupoCorrecao" >
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="correcaoPrevidenciariaDosSalariosDevidosDoINSS" value="#{parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosDevidosDoINSS}">
+																<a4j:support event="onchange" actionListener="#{apresentadorParametrosDeAtualizacao.mudarCorrecaoPrevidenciariaDosSalariosDevidos}" ajaxSingle="true" process="grupoLei11941,grupoSalariosDevidosPrevidenciaria" reRender="grupoLei11941,grupoSalariosDevidosPrevidenciaria,grupoSalariosDevidosTrabalhista" limitToList="true" oncomplete="sugerirDataAplicarAteDevidos();"/>
+															</h:selectBooleanCheckbox>
+															<h:outputLabel value="Correção" for="correcaoPrevidenciariaDosSalariosDevidosDoINSS" />
+														</h:panelGroup>
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="jurosPrevidenciariosDosSalariosDevidosDoINSS" value="#{parametrosDeAtualizacao.jurosPrevidenciariosDosSalariosDevidosDoINSS}" disabled="#{not apresentadorParametrosDeAtualizacao.isHabilitadoJurosPrevidenciarioDosSalariosDevidos()}" />
+															<h:outputLabel value="Juros" for="jurosPrevidenciariosDosSalariosDevidosDoINSS" />
+														</h:panelGroup>
+													</h:panelGroup>
+												</fieldset>	
+											</h:panelGroup>
+										</h:panelGrid>
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<fieldset><legend>Atualização da Contribuição Social dos Salários Pagos</legend>
+										<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+											<h:panelGroup id="grupoLei11941Pago" layout="block" styleClass="itemGrupoCorrecao" >
+												<h:panelGroup styleClass="itemGrupoCorrecao" rendered="#{parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosPagosDoINSS or (parametrosDeAtualizacao.salarioPagoFormaAplicacao.valor == 'PD' and parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosPagosDoINSS)}">
+													<h:selectBooleanCheckbox id="correcaoLei11941Pago" value="#{parametrosDeAtualizacao.lei11941Pago}">
+														<a4j:support event="onchange" ajaxSingle="true" reRender="grupoLei11941, grupoLei11941Pago" limitToList="true" actionListener="#{apresentadorParametrosDeAtualizacao.mudarLei11941}" oncomplete="sugerirData11941Pago();"/>
+													</h:selectBooleanCheckbox>
+													<h:outputLabel value="Aplicar Lei nº 11.941/2009 a partir da competência março/2009" for="correcaoLei11941Pago" />
+												</h:panelGroup>
+											</h:panelGroup>
+										</h:panelGrid>
+																		
+										<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0" styleClass="tabelaRowTop">
+											<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" id="pfTrabalhistaPago" >
+												<fieldset>
+													<legend>Trabalhista</legend>
+													<h:panelGroup id="grupoSalariosPagosTrabalhista" layout="block" styleClass="itemGrupoCorrecao" >
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="correcaoTrabalhistaDosSalariosPagosDoINSS" value="#{parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosPagosDoINSS}">
+																<a4j:support event="onchange" actionListener="#{apresentadorParametrosDeAtualizacao.mudarCorrecaoTrabalhistaDosSalariosPagos}" ajaxSingle="true" reRender="grupoLei11941Pago, grupoSalariosPagosTrabalhista,grupoSalariosPagosPrevidenciaria" limitToList="true" oncomplete="sugerirDataAplicarAtePagos();" />
+															</h:selectBooleanCheckbox>
+															<h:outputLabel value="Correção" for="correcaoTrabalhistaDosSalariosPagosDoINSS" />
+														</h:panelGroup>
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="jurosTrabalhistasDosSalariosPagosDoINSS" value="#{parametrosDeAtualizacao.jurosTrabalhistasDosSalariosPagosDoINSS}" disabled="#{not apresentadorParametrosDeAtualizacao.isHabilitadoJurosDeCorrecaoDosSalariosPagos()}">
+															</h:selectBooleanCheckbox>
+															<h:outputLabel value="Juros" for="jurosTrabalhistasDosSalariosPagosDoINSS" />
+														</h:panelGroup>
+														<br/>
+														<h:panelGroup id="grupoAplicarAteDosSalariosPagosDoINSS" layout="block" styleClass="itemGrupo" rendered="#{parametrosDeAtualizacao.correcaoTrabalhistaDosSalariosPagosDoINSS and parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+															<h:outputLabel value="Aplicar até #{apresentadorParametrosDeAtualizacao.isHabilitarAplicarAteDosSalariosPagos()?' *':''}" for="aplicarAteDosSalariosPagosDoINSS" style="padding:3px;" />
+															<br />
+															<rich:calendar id="aplicarAteDosSalariosPagosDoINSS" value="#{parametrosDeAtualizacao.aplicarAteDosSalariosPagosDoINSS}" 
+																		   label="Aplicar até" disabled="#{not apresentadorParametrosDeAtualizacao.isHabilitarAplicarAteDosSalariosPagos()}" 
+																		   required="#{apresentadorParametrosDeAtualizacao.isHabilitarAplicarAteDosSalariosPagos()}" inputSize="10" popup="true" 
+																		   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()" 
+																		   oninputblur="sugerirDataAplicarAteDevidos();" onchanged="sugerirDataAplicarAteDevidos();"> 
+																<f:facet name="footer">
+														        	<h:outputText value="" style="text-align:center" />
+														        </f:facet>
+															</rich:calendar>
+											    			<cobra:toolTip>
+											    				<rich:message for="aplicarAteDosSalariosPagosDoINSS" style="margin-left:5px;"/>
+											    			</cobra:toolTip>	    			
+														</h:panelGroup>
+													</h:panelGroup>
+												</fieldset>	
+											</h:panelGroup>
+											<h:panelGroup layout="block" styleClass="itemGrupoCorrecao" >
+												<fieldset>
+													<legend>Previdenciária</legend>
+													<h:panelGroup id="grupoSalariosPagosPrevidenciaria" layout="block" styleClass="itemGrupoCorrecao" >
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="correcaoPrevidenciariaDosSalariosPagosDoINSS" value="#{parametrosDeAtualizacao.correcaoPrevidenciariaDosSalariosPagosDoINSS}">
+																<a4j:support event="onchange" actionListener="#{apresentadorParametrosDeAtualizacao.mudarCorrecaoPrevidenciariaDosSalariosPagos}" ajaxSingle="true" process="grupoLei11941Pago, grupoSalariosPagosPrevidenciaria" reRender="grupoLei11941Pago, grupoSalariosPagosPrevidenciaria,grupoSalariosPagosTrabalhista" limitToList="true" oncomplete="sugerirDataAplicarAtePagos();"/>
+															</h:selectBooleanCheckbox>
+															<h:outputLabel value="Correção" for="correcaoPrevidenciariaDosSalariosPagosDoINSS" />
+														</h:panelGroup>
+														<h:panelGroup styleClass="itemGrupoCorrecao">
+															<h:selectBooleanCheckbox id="jurosPrevidenciariosDosSalariosPagosDoINSS" value="#{parametrosDeAtualizacao.jurosPrevidenciariosDosSalariosPagosDoINSS}" disabled="#{not apresentadorParametrosDeAtualizacao.isHabilitadoJurosPrevidenciarioDosSalariosPagos()}" />
+															<h:outputLabel value="Juros" for="jurosPrevidenciariosDosSalariosPagosDoINSS" />
+														</h:panelGroup>
+													</h:panelGroup>
+												</fieldset>	
+											</h:panelGroup>
+										</h:panelGrid>
+									</fieldset>
+								</h:panelGroup>
+							</h:panelGrid>	
+						</fieldset>
+					</h:panelGroup>	
+				</h:panelGrid>	
+				
+				<h:panelGrid columns="2">
+					<h:panelGroup>
+						<fieldset><legend>Dados de Imposto de Renda do Reclamante</legend>
+						
+							<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+								<h:panelGroup>
+									<a4j:region>
+										<h:selectBooleanCheckbox id="apurarImpostoRenda" value="#{irpf.apurarImpostoRenda}">
+											<a4j:support event="onchange" limitToList="true" actionListener="#{apresentadorIrpf.configurarValoresPadroes()}" ajaxSingle="true" reRender="painelDadosGerais,painelDadosDeducao"/>
+										</h:selectBooleanCheckbox>
+										<h:outputLabel value="Apurar Imposto de Renda" for="apurarImpostoRenda" style="margin-left:4px;" />					
+									</a4j:region>
+								</h:panelGroup>
+							</h:panelGrid>
+					
+							<h:panelGroup layout="block">
+								<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+									
+									<h:panelGroup id="painelDadosGerais">	
+										<h:outputLabel value="Quantidade de Meses: *" for="qtdMesesRendimento" style="margin-left:4px;" />
+										<h:inputText id="qtdMesesRendimento" value="#{irpf.qtdMesesRendimentoTributaveis}" label="Quantidade de Meses" onkeyup="somenteNumeros(this)" disabled="#{!irpf.apurarImpostoRenda}" size="3" maxlength="3" style="margin-left:8px;" />
+										<cobra:toolTip>
+						    				<rich:message for="qtdMesesRendimento" style="margin-left:5px;"/>
+						    			</cobra:toolTip>	  
+										<br/>		
+										<h:selectBooleanCheckbox id="incidirSobreJurosDeMora" value="#{irpf.incidirSobreJurosDeMora}" disabled="#{!irpf.apurarImpostoRenda}" />
+										<h:outputLabel value="Incidir sobre Juros de Mora" for="incidirSobreJurosDeMora" style="margin-left:4px;" />				
+										<br/>
+										<h:selectBooleanCheckbox id="cobrarDoReclamado" value="#{irpf.cobrarDoReclamado}" disabled="#{!irpf.apurarImpostoRenda}" />
+										<h:outputLabel value="Cobrar do Reclamado" for="cobrarDoReclamado" style="margin-left:4px;" />				
+									</h:panelGroup>
+										
+									<h:panelGroup id="painelDadosDeducao" layout="block">
+										<fieldset style="width: 290px;">
+											<legend>Deduzir da Base do Imposto de Renda</legend>
+											<h:panelGroup>
+												<h:selectBooleanCheckbox id="deduzirContribuicaoSocialDevidaPeloReclamante" value="#{irpf.deduzirContribuicaoSocialDevidaPeloReclamante}" disabled="#{!irpf.apurarImpostoRenda}" />
+												<h:outputLabel value="Contribuição Social devida pelo Reclamante" for="deduzirContribuicaoSocialDevidaPeloReclamante" style="margin-left:4px;" />
+												<br/>
+												<h:selectBooleanCheckbox id="deduzirPrevidenciaPrivada" value="#{irpf.deduzirPrevidenciaPrivada}" disabled="#{!irpf.apurarImpostoRenda}" />
+												<h:outputLabel value="Previdência Privada" for="deduzirPrevidenciaPrivada" style="margin-left:4px;" />
+												<br/>
+												<h:selectBooleanCheckbox id="deduzirPensaoAlimenticia" value="#{irpf.deduzirPensaoAlimenticia}" disabled="#{!irpf.apurarImpostoRenda}" />
+												<h:outputLabel value="Pensão Alimentícia" for="deduzirPensaoAlimenticia" style="margin-left:4px;" />
+												<br/>
+												<h:selectBooleanCheckbox id="deduzirHonorariosDevidosPeloReclamante" value="#{irpf.deduzirHonorariosDevidosPeloReclamante}" disabled="#{!irpf.apurarImpostoRenda}" />
+												<h:outputLabel value="Honorários devidos pelo Reclamante" for="deduzirHonorariosDevidosPeloReclamante" style="margin-left:4px;" />
+												<br/>
+												<h:selectBooleanCheckbox id="aposentadoMaiorQue65Anos" value="#{irpf.aposentadoMaiorQue65Anos}" disabled="#{!irpf.apurarImpostoRenda}" />
+												<h:outputLabel value="Aposentado maior de 65 Anos" for="aposentadoMaiorQue65Anos" style="margin-left:4px;" />				
+												<br/>
+												<a4j:region>
+													<h:selectBooleanCheckbox id="possuiDependentes" value="#{irpf.possuiDependentes}" disabled="#{!irpf.apurarImpostoRenda}">
+														<a4j:support event="onchange" actionListener="#{apresentadorIrpf.limparQuantidadeDependente()}" limitToList="true" ajaxSingle="true" reRender="quantidadeDependentes"/>
+													</h:selectBooleanCheckbox>						
+													<h:outputLabel value="Dependentes" for="possuiDependentes" style="margin-left:4px;" />
+												</a4j:region>						
+												<h:inputText id="quantidadeDependentes" label="Quantidade de Dependentes" disabled="#{!(irpf.possuiDependentes and irpf.apurarImpostoRenda)}"
+													value="#{irpf.quantidadeDependentes}" required="#{irpf.possuiDependentes and irpf.apurarImpostoRenda}" onkeyup="somenteNumeros(this)" size="3" maxlength="3" style="margin-left:8px;">
+												</h:inputText>
+												<cobra:toolTip>
+													<rich:message for="quantidadeDependentes"/>
+												</cobra:toolTip>
+											</h:panelGroup>
+										</fieldset>
+									</h:panelGroup>
+						
+								</h:panelGrid>
+							</h:panelGroup>
+						</fieldset>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<fieldset class="mb-10"><legend>Custas Judiciais</legend>
+							<h:panelGrid columns="1">
+								<h:panelGroup>
+									<h:outputLabel value="Base para Custas Calculadas" for="baseParaCustasCalculadas" style="display: block;" />
+									<h:selectOneMenu id="baseParaCustasCalculadas" label="Base para Custas Calculadas" value="#{registro.custasJudiciais.baseParaCustasCalculadas}">
+										<s:selectItems value="#{enumItems.baseParaCustasCalculadasEnum}" var="item" label="#{item.nome}"/>
+										<s:convertEnum />
+									</h:selectOneMenu>
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:selectBooleanCheckbox id="aplicarTetoCustas" value="#{registro.custasJudiciais.aplicarTetoCustasConhecimentoCalcExterno}" />
+									<h:outputLabel value="Aplicar Teto das Custas de Conhecimento" for="aplicarTetoCustas" />
+								</h:panelGroup>
+								<h:panelGroup>
+									<h:selectBooleanCheckbox id="aplicarJurosCustas" value="#{parametrosDeAtualizacao.jurosDeCustas}" />
+									<h:outputLabel value="Aplicar Juros" for="aplicarJurosCustas" />
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<h:selectBooleanCheckbox id="aplicarCorrecaoCustas" value="#{parametrosDeAtualizacao.correcaoDasCustas}">
+										<a4j:support event="onchange" ajaxSingle="true" reRender="pnlCorrecaoCustas" limitToList="true" />
+									</h:selectBooleanCheckbox>
+									<h:outputLabel value="Aplicar Correção" for="aplicarCorrecaoCustas" />
+								</h:panelGroup>
+								<h:panelGroup id="pnlCorrecaoCustas">
+									<h:panelGroup rendered="#{parametrosDeAtualizacao.correcaoDasCustas}">
+										<h:selectOneRadio id="indiceDeCorrecaoDasCustas" value="#{parametrosDeAtualizacao.indiceDeCorrecaoDasCustas}" styleClass="labelInput" layout="pageDirection" disabled="#{not parametrosDeAtualizacao.correcaoDasCustas}">
+											<s:selectItems value="#{enumItems.opcaoDeIndiceDeCorrecaoEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support event="onchange" actionListener="#{apresentadorParametrosDeAtualizacao.mudarCustas}" ajaxSingle="true" reRender="outroIndiceDeCorrecaoDasCustas" limitToList="true" />
+										</h:selectOneRadio>
+									</h:panelGroup>
+									<h:panelGroup rendered="#{parametrosDeAtualizacao.correcaoDasCustas}">
+										<h:selectOneMenu id="outroIndiceDeCorrecaoDasCustas" label="Outro índice" value="#{parametrosDeAtualizacao.outroIndiceDeCorrecaoDasCustas}" disabled="#{not apresentadorParametrosDeAtualizacao.isHabilitadoOutrasCustas()}" required="#{apresentadorParametrosDeAtualizacao.isHabilitadoOutrasCustas()}">
+											<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoEnum}" var="item" label="#{item.nome}" noSelectionLabel="" />
+											<s:convertEnum />
+										</h:selectOneMenu>
+						    			<cobra:toolTip>
+						    				<rich:message for="outroIndiceDeCorrecaoDasCustas" style="margin-left:5px;"/>
+						    			</cobra:toolTip>	  
+					    			</h:panelGroup>
+				    			</h:panelGroup>
+				    			
+							</h:panelGrid>
+						</fieldset>
+					</h:panelGroup>
+				</h:panelGrid>		
+			</rich:tab>
+			
+		</rich:tabPanel>
+		
+	</ui:define>	
+	
+	<ui:define name="script">
+		<script type="text/javascript">
+			function ativarAbaComErros(){
+				if (jQuery("td.primeiraAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabDadosProcesso_lbl").click();
+					return false;
+				}
+				if (jQuery("td.segundaAba").find(".linkErro").size() > 0 ){ 
+					$("formulario:tabParametrosCalculo_lbl").click();
+					return false;
+				}
+			}
+		</script>
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+	
+		<h:panelGroup id="painelBotoes">
+		
+		<a4j:commandButton id="buscar" value="Buscar" actionListener="#{apresentador.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentador.emModoListagem}" onclick="allToUpperCase()" />
+		<a4j:commandButton id="limpar" value="Limpar" actionListener="#{apresentador.limpar}" reRender="panelFiltroCampos" styleClass="botao" rendered="#{apresentador.emModoListagem}" />
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvarCalculoExterno}" styleClass="botao" rendered="#{apresentador.emModoFormulario}" oncomplete="ativarAbaComErros();"/>  
+		<a4j:commandButton id="cancelar" value="#{apresentador.operacao == 'ALTERACAO' ? 'Fechar' : 'Cancelar'}" action="#{apresentador.fechar}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoFormulario}"/>
+	
+		<h:panelGroup id="scriptAviso">
+			<script   type="text/javascript">
+				function checarValor(dataMenor, tipo) {
+					if (!(dataMenor &amp;&amp; tipo)) {
+						return true;
+					}else{
+						return confirma('#{mensagens.MSG0068}',$('formulario:salvar'));
+					}
+				}
+		    </script>
+		</h:panelGroup>
+		
+		</h:panelGroup>
+	    
+	</ui:define>
+	
+	<ui:define name="auxiliar">
+		<a4j:region>
+			<ui:include src="modal-processo-pje.xhtml">
+				<ui:param name="tipoCalculo" value="externo"></ui:param>
+			</ui:include>
+		</a4j:region>
+	</ui:define>
+	
+	
+</ui:composition>

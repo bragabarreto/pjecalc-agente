@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+	
+	
+		<div id="lateral">
+	
+			<div id="centro">
+	
+				<div id="boxlogin">
+				
+					<div id="boxcentral">
+					
+						<h:form id="loginInstanciaPjeOffice">
+							<h:panelGrid columns="2" cellpadding="0" border="0">
+								<h:selectOneRadio id="valor" immediate="true" style="display: inline-table; float:left; margin-left:14px; text-transform: uppercase; verticle-align:top; font-weight:bold; width:400px;" 
+													layout="lineDirection" value="#{identity.instancia}">
+									<s:selectItems value="#{enumItems.instanciaSetorEnum}" var="item" label="#{item.nome}"/>
+									<s:convertEnum />
+									<a4j:support limitToList="true" ajaxSingle="true" event="onchange" oncomplete="location.reload()" reRender="painelDocumentContent"/>
+								</h:selectOneRadio>
+							</h:panelGrid>
+						</h:form>
+						
+						
+						<ui:include src="pjeOffice.xhtml" />
+						
+						<h:outputText id="tokenAssinatura" value="#{identity.documentContent}" style="display: none;" />
+						 
+						<h:commandButton id="loginComCertificadoPjeOffice"  
+						value="Acessar com Certificado Digital" 
+						styleClass="bt_logond" 
+						action="#" 
+						onclick="PJeOffice.logar('#{identity.documentContent}', assinarPjeOffice()); " />
+			                
+				        <form method="post" action="#{identity.logarComCertificadoDigital()}" id="assinaturaForm">
+				           <h:inputHidden id="signatureOffice" />
+				           <h:inputHidden id="certChainOffice" />
+				   
+				           <script>
+				               function submitFormOffice() {
+				                   jQuery("#assinaturaForm").get(0).submit();
+				               }
+				           </script>
+				        </form>
+					        
+
+						<div id="boxAssign" style="float:left; margin-right: 80px;">
+								<a href="#" id="Ambiente" onclick="toggleDivAmb();testesAmbiente();">
+									Verificação de ambiente
+								</a>
+						</div>
+
+						<div id="boxAssign" style="float:left; margin-right: 80px;">
+								<a href="#" id="Requisitos" onclick="toggleDivReq();">
+									Pré-requisitos para utilização
+								</a> 
+						</div>
+						
+						<div id="boxAssign" style="float:left; margin-right: 80px;">
+								<a href="#" id="Assinador" onclick="toggleDivAssinador();">
+									Assinador Digital
+								</a> 
+						</div>
+						
+						<script type="text/javascript">
+							jQuery('#spanStatus').hide();
+						</script>
+
+					</div>
+
+				</div>
+				
+				
+				
+				<div id="botoescentral">
+					<h:outputLabel  value="Versão: #{mensagens.versao}" styleClass="labelVersao"/>
+				</div>
+				
+			</div>
+			
+		</div>
+		
+		
+		<ui:include src="logon-certificado-informacoes.xhtml"></ui:include>
+		<ui:include src="logon-certificado-scripts.xhtml"></ui:include>
+
+</ui:composition>

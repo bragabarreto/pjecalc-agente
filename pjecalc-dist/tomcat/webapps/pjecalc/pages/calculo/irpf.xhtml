@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Imposto de Renda do Reclamante" />
+	<ui:param name="apresentador" value="#{apresentadorIrpf}" />
+	<ui:param name="registro" value="#{irpf}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+		<br/>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+	
+		<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+			
+			<h:panelGroup>
+				<a4j:region>
+					<h:selectBooleanCheckbox id="apurarImpostoRenda" value="#{registro.apurarImpostoRenda}">
+						<a4j:support event="onchange" limitToList="true" actionListener="#{apresentadorIrpf.configurarValoresPadroes()}" ajaxSingle="true" reRender="painelDadosGerais,painelDadosDeducao"/>
+					</h:selectBooleanCheckbox>
+					<h:outputLabel value="Apurar Imposto de Renda" for="apurarImpostoRenda" style="margin-left:4px;" />					
+				</a4j:region>
+			</h:panelGroup>
+
+		</h:panelGrid>
+		
+		<h:panelGroup layout="block" style="width:530px;">
+		<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+			
+			<h:panelGroup id="painelDadosGerais">				
+				<h:selectBooleanCheckbox id="incidirSobreJurosDeMora" value="#{registro.incidirSobreJurosDeMora}" disabled="#{!registro.apurarImpostoRenda}" />
+				<h:outputLabel value="Incidir sobre Juros de Mora" for="incidirSobreJurosDeMora" style="margin-left:4px;" />				
+				<br/>
+				<h:selectBooleanCheckbox id="cobrarDoReclamado" value="#{registro.cobrarDoReclamado}" disabled="#{!registro.apurarImpostoRenda}" />
+				<h:outputLabel value="Cobrar do Reclamado" for="cobrarDoReclamado" style="margin-left:4px;" />				
+				<br/>
+				<h:selectBooleanCheckbox id="considerarTributacaoExclusiva" value="#{registro.considerarTributacaoExclusiva}" disabled="#{!registro.apurarImpostoRenda}" />
+				<h:outputLabel value="Tributação Exclusiva" for="considerarTributacaoExclusiva" style="margin-left:4px;" />				
+				<br/>
+				<h:selectBooleanCheckbox id="considerarTributacaoEmSeparado" value="#{registro.considerarTributacaoEmSeparado}" disabled="#{!registro.apurarImpostoRenda}" />
+				<h:outputLabel value="Tributação em Separado" for="considerarTributacaoEmSeparado" style="margin-left:4px;" />
+				<br/>
+				<h:selectBooleanCheckbox id="regimeDeCaixa" value="#{registro.regimeDeCaixa}" disabled="#{!registro.apurarImpostoRenda}" />
+				<h:outputLabel value="Aplicar Regime de Caixa" for="regimeDeCaixa" style="margin-left:4px;" />
+				<h:outputText class="linkHelp" id="regimeCaixaHelp" style="margin-left:1px">
+					<rich:toolTip for="regimeCaixaHelp" showEvent="mouseover" styleClass="tooltipHelp">
+					   	Marque esta opção para aplicar, sobre o valor total da base tributável, a tabela progressiva mensal vigente na data de liquidação do cálculo, independente da data de vencimento das verbas e da data de liquidação do cálculo.
+					</rich:toolTip>
+	     	    </h:outputText>
+			</h:panelGroup>
+				
+			<h:panelGroup id="painelDadosDeducao" layout="block">
+				<fieldset style="width: 290px;">
+					<legend>Deduzir da Base do Imposto de Renda</legend>
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="deduzirContribuicaoSocialDevidaPeloReclamante" value="#{registro.deduzirContribuicaoSocialDevidaPeloReclamante}" disabled="#{!registro.apurarImpostoRenda}" />
+						<h:outputLabel value="Contribuição Social devida pelo Reclamante" for="deduzirContribuicaoSocialDevidaPeloReclamante" style="margin-left:4px;" />
+						<br/>
+						<h:selectBooleanCheckbox id="deduzirPrevidenciaPrivada" value="#{registro.deduzirPrevidenciaPrivada}" disabled="#{!registro.apurarImpostoRenda}" />
+						<h:outputLabel value="Previdência Privada" for="deduzirPrevidenciaPrivada" style="margin-left:4px;" />
+						<br/>
+						<h:selectBooleanCheckbox id="deduzirPensaoAlimenticia" value="#{registro.deduzirPensaoAlimenticia}" disabled="#{!registro.apurarImpostoRenda}" />
+						<h:outputLabel value="Pensão Alimentícia" for="deduzirPensaoAlimenticia" style="margin-left:4px;" />
+						<br/>
+						<h:selectBooleanCheckbox id="deduzirHonorariosDevidosPeloReclamante" value="#{registro.deduzirHonorariosDevidosPeloReclamante}" disabled="#{!registro.apurarImpostoRenda}" />
+						<h:outputLabel value="Honorários devidos pelo Reclamante" for="deduzirHonorariosDevidosPeloReclamante" style="margin-left:4px;" />
+						<br/>
+						<h:selectBooleanCheckbox id="aposentadoMaiorQue65Anos" value="#{registro.aposentadoMaiorQue65Anos}" disabled="#{!registro.apurarImpostoRenda}" />
+						<h:outputLabel value="Aposentado maior de 65 Anos" for="aposentadoMaiorQue65Anos" style="margin-left:4px;" />				
+						<br/>
+						<a4j:region>
+							<h:selectBooleanCheckbox id="possuiDependentes" value="#{registro.possuiDependentes}" disabled="#{!registro.apurarImpostoRenda}">
+								<a4j:support event="onchange" actionListener="#{apresentador.limparQuantidadeDependente()}" limitToList="true" ajaxSingle="true" reRender="quantidadeDependentes"/>
+							</h:selectBooleanCheckbox>						
+							<h:outputLabel value="Dependentes" for="possuiDependentes" style="margin-left:4px;" />
+						</a4j:region>						
+						<h:inputText id="quantidadeDependentes" label="Quantidade de Dependentes" disabled="#{!(registro.possuiDependentes and registro.apurarImpostoRenda)}"
+							value="#{registro.quantidadeDependentes}" required="#{registro.possuiDependentes and registro.apurarImpostoRenda}" size="1" maxlength="3" style="margin-left:8px;">
+						</h:inputText>
+						<cobra:toolTip>
+							<rich:message for="quantidadeDependentes"/>
+						</cobra:toolTip>
+					</h:panelGroup>
+				</fieldset>
+			</h:panelGroup>
+
+		</h:panelGrid>
+	</h:panelGroup>
+	</ui:define>
+
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao" onclick="allToUpperCase()" />
+	</ui:define>
+	
+</ui:composition>
+
+</html>

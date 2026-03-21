@@ -1,0 +1,145 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+<body>
+<f:view>
+
+<h:panelGroup>
+
+			<h:panelGroup id="painelNovaAliquotaTUACDT" layout="block" style="width:800px;" rendered="#{identity.hasPermission('TABELAS_INDICES_GERAIS', 'MANUTENCAO')}">
+		    
+		    	<fieldset><legend><b>Nova Alíquota</b></legend>
+
+					<h:panelGrid columns="6" cellspacing="10" border="0">
+					
+						<h:panelGroup>
+							<h:outputLabel value="Início *" for="inicioTUACDT" /><br />
+							<rich:calendar id="inicioTUACDT" value="#{apresentadorTabelaUnicaDebitoTrabalhista.inicio}"
+										   label="Início *" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" 
+										   oninputfocus="$(this).dateMask()">
+								<f:facet name="footer">
+						        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+						        </f:facet>
+							</rich:calendar>
+							<rich:message showDetail="false" showSummary="false" for="inicioTUACDT">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="inicioTUACDTErro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="inicioTUACDT"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:outputLabel value="Término *" for="terminoTUACDT" /><br />
+							<rich:calendar id="terminoTUACDT" value="#{apresentadorTabelaUnicaDebitoTrabalhista.termino}"
+										   label="Término *" inputSize="10" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" 
+										   oninputfocus="$(this).dateMask()">
+								<f:facet name="footer">
+						        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+						        </f:facet>
+							</rich:calendar>
+							<rich:message showDetail="false" showSummary="false" for="terminoTUACDT">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="terminoTUACDTErro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="terminoTUACDT"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:outputLabel value="Taxa Diária do Período(%) *" for="taxaTUACDT"/><br />
+							<h:inputText id="taxaTUACDT" value="#{apresentadorTabelaUnicaDebitoTrabalhista.taxa}" 
+									label="Taxa Diária do Período(%) *" size="24" maxlength="12" onfocus="$(this).decimalMaskAllowNegative(9)">
+									<f:converter converterId="seisCasasDecimaisConverter"/>
+							</h:inputText>
+							<rich:message showDetail="false" showSummary="false" for="taxaTUACDT">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="taxaTUACDTErro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="taxaTUACDT"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+						<h:outputText class="linkHelp" id="TUACDTHelp" style="margin-left:1px;">
+							<rich:toolTip for="TUACDTHelp" showEvent="mouseover" styleClass="tooltipHelp">
+							   	Para cada dia do período selecionado, será lançado um registro com a taxa preenchida.
+							   	Se já houver registro para uma data do período selecionado, ele será sobrescrito.
+							   	Se a taxa for deixada em branco, os registros das dias contidos no período selecionado será excluído.
+							   	Quando a opção "Apenas Dias Úteis" estiver marcada, será lançada taxa 0% para sábados, domingos e feriados do período selecionado.
+							</rich:toolTip>
+			     	    </h:outputText>
+						
+						<h:panelGroup layout="block">
+							<a4j:commandLink id="cmdIncluirAliquotaTUACDT" value="Salvar"
+											 actionListener="#{apresentadorTabelaUnicaDebitoTrabalhista.salvar}" 
+											 styleClass="botaoAddSalvar" title="Salvar Nova Alíquota" reRender="painelNovaAliquotaTUACDT,listagemTUACDT,painelMensagens" />
+						</h:panelGroup>
+	
+					</h:panelGrid>
+
+				</fieldset>
+			
+			</h:panelGroup>
+			
+
+			<h:panelGroup id="listagemTUACDT" style="width: 100%;" rendered="#{apresentadorTabelaUnicaDebitoTrabalhista.listaTabelaUnicaDebito.size gt 0}">
+			
+				<rich:dataTable id="listagemTabelaUnica" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="60"
+							value="#{apresentadorTabelaUnicaDebitoTrabalhista.listaTabelaUnicaDebito}" var="indice">
+							
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Data"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.competencia}">
+			    				  <f:converter converterId="org.jboss.seam.faces.dateConverter"/>
+			    			</h:outputText>
+				    	</rich:column>
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Taxa do Dia(%)"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.taxa}">
+			    				<f:converter converterId="noveCasasDecimaisConverter"/>
+			    			</h:outputText>
+				    	</rich:column>	
+				    	
+				    	<rich:column>
+			    			<f:facet name="header">
+			    				<h:outputText value="Índice Acumulado(%)"/>
+			    			</f:facet>	
+			    			<h:outputText value="#{indice.valorAcumulado}">
+			    				<f:converter converterId="noveCasasDecimaisConverter"/>
+			    			</h:outputText>
+				    	</rich:column>		
+				    	
+				</rich:dataTable>
+				
+				<ui:include src="../comum/paginacao.xhtml">
+					<ui:param name="paramListagem" value="listagemTabelaUnica" />
+				 </ui:include>
+				 
+			</h:panelGroup>
+		
+</h:panelGroup>
+</f:view>
+</body>
+
+</html>

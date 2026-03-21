@@ -1,0 +1,274 @@
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:a="http://richfaces.org/a4j">
+
+	<style type="text/css">
+
+
+	    div, th, label{
+            font-size: #{skinZoom.skinZoom} !important; 
+        }
+
+
+		#main{
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgBgSubBorderPage}");
+			background-color:#{a4jSkin.bgColorSubBorderPage};		
+			background-position: right top;
+			background-repeat: repeat-y;	
+		}
+		
+		
+		select, input, textarea{
+			background-color:#{a4jSkin.bgColorSelect};
+		}		
+		
+		.botao, .botaoMedio, .botaoGrande, .botaoLivre {
+			background: #{a4jSkin.bgColorBtnEscuro};
+			background-image: -webkit-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro});
+			background-image: -moz-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro});
+			background-image: -ms-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro});
+			background-image: -o-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro});
+			background-image: linear-gradient(to bottom, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro});
+		}
+			
+		.modPesqEsq{ 
+		    width: 38px;
+			height: 25px;
+			margin-top:0px;
+		    background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgBgPesqCanto}");
+			background-repeat:no-repeat;
+		}
+		
+		#versaopesquisa input {
+			background-color: unset;
+			border: unset;
+		}
+		
+		#versaopesquisa input:focus {
+		    box-shadow: unset;
+		    -webkit-box-shadow: unset; 
+		    -moz-box-shadow: unset;
+		    border: unset; 
+		}
+		
+		.modPesqBg{
+		    background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgBgPesqMeio}");
+			background-repeat:repeat-x;
+			background-color: unset;
+		}
+		
+		.modPesqInputText{
+		    border: 0px;			    				    
+		    width:134px;
+		    height: 16px;		   
+		    background-color: transparent;
+		    background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgBgInputTextPesq}");
+		    background-repeat: no-repeat;
+		    background-position: unset;			    
+		    font-size: 11px; 
+		    color: white;
+		    padding-left:3px;			    
+		}	
+		
+		.required {
+			color: #{a4jSkin.bgColorRequired};
+			padding-left: 2px;
+		}
+		
+		#papeisUsuarioForm option {
+			background-color: #{a4jSkin.additionalBackgroundColor};
+			color: #{a4jSkin.headerTextColor};
+			text-align: left;
+		}
+		
+		.acessibilidade {
+			font-size: 0.1em;
+		    left: -10000px;
+		    line-height: 1%;
+		    position: absolute;
+		    top: -10000px;
+		}
+		
+		option {
+			background-color: #{a4jSkin.bgColorSelect};
+		}
+		
+		option:hover {
+			box-shadow: 0 0 10px 100px #{a4jSkin.optionHover} inset;
+		}
+		
+		option:checked {
+			box-shadow: 0 0 10px 100px #{a4jSkin.optionHover} inset;
+		}
+		
+		input[type='submit'],input[type='button'], .buttons {
+			border: solid 1px #{a4jSkin.borderColorButton};
+		}
+
+		textarea, select {
+			border: 1px solid #{a4jSkin.borderColorInputTextareaSelect};
+			background:#{a4jSkin.bgColorInputTextareaSelect};
+		}
+
+		.required {
+			color: #{a4jSkin.bgColorRequired};
+		}
+		
+		/*** lista de cálculos recentes ***/
+		.listaCalculosRecentes option{
+			color: #283D5B;
+		}
+
+		.listaCalculosRecentes option:hover{
+			background-color: #{a4jSkin.optionHover};
+		}
+		
+				
+		/*** TABELA ***/
+		.dr-table-caption{
+			background: #{a4jSkin.tableBackgroundColor};
+			border-bottom: 1px solid #{a4jSkin.tableBorderColor};
+		}	
+		
+		.dr-table-headercell {
+			border-bottom:0px solid #{a4jSkin.tableBorderColor};
+			border-left:0px solid #{a4jSkin.tableBorderColor};
+			border-top:0px solid #{a4jSkin.tableBorderColor};
+		}
+		
+		.dr-table{
+			border: #{a4jSkin.tableBorderColor};
+		}
+		
+		.dr-table-footer {
+		    background-color: #{a4jSkin.tableFooterBackgroundColor};
+		}
+				
+		.dr-table-cell{
+			border-bottom:	#{a4jSkin.tableBorderColor};
+			border-right:	#{a4jSkin.tableBorderColor};
+			border-left:	#{a4jSkin.tableBorderColor};
+			border-top:		#{a4jSkin.tableBorderColor};
+		}
+		
+		.dr-table-subheader {
+			background: #{a4jSkin.tableBackgroundColor};
+		}
+		
+		.gradeTabela {
+			border:	#{a4jSkin.tableBorderColor};
+		}
+		
+		.cabecalhoTabela {
+			background: #{a4jSkin.tableBackgroundColor};
+		}
+		
+		.linha-par:hover, .linha-impar:hover{ background: #{a4jSkin.optionHover}; }
+
+		#menupainel li ul li:hover {
+			background: #{a4jSkin.optionHover}; 
+		}
+		
+		#topo{
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgTopBackground}");
+		}
+
+		/* Botoes pagina PRINCIPAL */
+		.sprite-criar a { background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtNewCalc}") }
+		.sprite-criar a:hover { background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtNewCalcHover}") }
+		.sprite-criar a:focus { background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtNewCalcHover}") }
+		
+		.sprite-abrir a { background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtOpenCalc}") }
+		.sprite-abrir a:hover { background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtOpenCalcHover}") }
+		.sprite-abrir a:focus {background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtOpenCalcHover}") }
+		
+		.sprite-importar a { background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtImportCalc}") }
+		.sprite-importar a:hover {background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtImportCalcHover}") }
+		.sprite-importar a:focus {background: url("#{wiSkin.contextPath}#{a4jSkin.imgBtImportCalcHover}") }
+
+		.conteudoPrincipal { background: url("#{wiSkin.contextPath}#{a4jSkin.imgSplashBackgroundBrasao}") no-repeat; }
+		
+		/* Retirados do arquivo: logon.css */
+		#logon{
+		    background-color: #{a4jSkin.loginBackGroundColor}; 
+		}	
+		
+		#lateral, #lateralUS {
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgLoginScreen}")
+		}
+		
+		.bt_logon {
+			background: transparent url("#{wiSkin.contextPath}#{a4jSkin.imgLoginBtEntrar}");
+			border: 0px !important;
+		}
+		
+		.bt_logon:hover {
+			background: transparent url("#{wiSkin.contextPath}#{a4jSkin.imgLoginBtEntrarHover}");
+			border: 0px !important;
+		}
+		
+		.bt_logond {
+			background: #{a4jSkin.bgColorBtnClaro} !important;
+			background-image: -webkit-linear-gradient(top, #{a4jSkin.bgColorBtnClaro}, #{a4jSkin.bgColorBtnEscuro}) !important;
+			background-image: -moz-linear-gradient(top, #{a4jSkin.bgColorBtnClaro}, #{a4jSkin.bgColorBtnEscuro}) !important;
+			background-image: -ms-linear-gradient(top, #{a4jSkin.bgColorBtnClaro}, #{a4jSkin.bgColorBtnEscuro}) !important;
+			background-image: -o-linear-gradient(top, #{a4jSkin.bgColorBtnClaro}, #{a4jSkin.bgColorBtnEscuro}) !important;
+			background-image: linear-gradient(to bottom, #{a4jSkin.bgColorBtnClaro}, #{a4jSkin.bgColorBtnEscuro}) !important;
+			border: solid #{a4jSkin.bgColorBtnBorder} 2px !important;
+		}
+		
+		.bt_logond:hover {
+		  background: #{a4jSkin.bgColorBtnHoverClaro} !important;
+		  background-image: -webkit-linear-gradient(top, #{a4jSkin.bgColorBtnHoverClaro}, #{a4jSkin.bgColorBtnHoverEscuro}) !important;
+		  background-image: -moz-linear-gradient(top, #{a4jSkin.bgColorBtnHoverClaro}, #{a4jSkin.bgColorBtnHoverEscuro}) !important;
+		  background-image: -ms-linear-gradient(top, #{a4jSkin.bgColorBtnHoverClaro}, #{a4jSkin.bgColorBtnHoverEscuro}) !important;
+		  background-image: -o-linear-gradient(top, #{a4jSkin.bgColorBtnHoverClaro}, #{a4jSkin.bgColorBtnHoverEscuro}) !important;
+		  background-image: linear-gradient(to bottom, #{a4jSkin.bgColorBtnHoverClaro}, #{a4jSkin.bgColorBtnHoverEscuro}) !important;
+		}
+		
+		.bt_pequeno {
+		  background: #{a4jSkin.bgColorBtnEscuro} !important;
+		  background-image: -webkit-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro}) !important;
+		  background-image: -moz-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro}) !important;
+		  background-image: -ms-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro}) !important;
+		  background-image: -o-linear-gradient(top, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro}) !important;
+		  background-image: linear-gradient(to bottom, #{a4jSkin.bgColorBtnEscuro}, #{a4jSkin.bgColorBtnClaro}) !important;
+		}
+		
+		.bt_pequeno:hover {
+		  background: #{a4jSkin.bgColorBtnHoverEscuro} !important;
+		  background-image: -webkit-linear-gradient(top, #{a4jSkin.bgColorBtnHoverEscuro}, #{a4jSkin.bgColorBtnHoverClaro}) !important;
+		  background-image: -moz-linear-gradient(top, #{a4jSkin.bgColorBtnHoverEscuro}, #{a4jSkin.bgColorBtnHoverClaro}) !important;
+		  background-image: -ms-linear-gradient(top, #{a4jSkin.bgColorBtnHoverEscuro}, #{a4jSkin.bgColorBtnHoverClaro}) !important;
+		  background-image: -o-linear-gradient(top, #{a4jSkin.bgColorBtnHoverEscuro}, #{a4jSkin.bgColorBtnHoverClaro}) !important;
+		  background-image: linear-gradient(to bottom, #{a4jSkin.bgColorBtnHoverEscuro}, #{a4jSkin.bgColorBtnHoverClaro}) !important;
+		  text-decoration: none !important;
+		  border: solid #{a4jSkin.bgColorBtnBorder}; 2px !important;
+		}
+				
+		
+		#modalBoxAmb{
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgLoginBoxAmbiente}");
+		}
+
+		#modalBoxAssinador{
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgLoginBoxAmbiente}");
+			
+		}
+		
+		#modalBoxErroConexao{
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgLoginBoxAmbiente}");
+		}
+		
+		#modalBoxReq{
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgLoginBoxRequisitos}");
+		}	
+		
+		/* Link "Sobre" da página principal */
+		#modalBox{
+			background-image: url("#{wiSkin.contextPath}#{a4jSkin.imgModalBoxBack}");
+		}
+							
+		
+	</style>
+</ui:composition>

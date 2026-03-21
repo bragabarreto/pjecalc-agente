@@ -1,0 +1,68 @@
+
+
+.tipsy { padding: 5px; font-size: 10px; position: absolute; z-index: 100000; }
+
+
+/* com Icone de Fundo */
+.tipsy-inner { 
+	background-color: #f4f8fb; 
+	background-image: url(../images/info04.png);
+	color: #4a526f; 
+	font-weight:bold; 
+	max-width: 350px; 
+	text-align: left; 
+	border-top: 1px solid #edf1f4;
+	border-bottom: 1px solid #edf1f4;
+	padding:5px 5px 10px 45px;
+    background-repeat: no-repeat;
+    background-position: 7px center;
+    vertical-align: middle;
+    font-size: 10px;
+}
+
+/* SEM Icone de Fundo */
+.tipsy-inner2 { 
+	padding: 8px; 
+	background-color: #f4f8fb; 
+	color: #4a526f; 
+	font-weight:bold; 
+	max-width: 350px; 
+	min-height:25px;
+	text-align: left; 	
+	font-size: 10px;
+}
+
+/* BARRA DE RESUMO */
+.tipsy-inner3 { 
+	padding: 4px; 
+	background: url("../images/bgTpResumo.gif") repeat-x;
+	color: #125f31; 
+	font-weight:bold; 
+	max-width: 130px; 
+	min-height:15px;
+	text-align: left; 
+	border: 1px solid #aaaaaa; 
+	border-radius: 5px; 
+	-moz-border-radius:5px; 
+	-webkit-border-radius:5px; 
+	vertical-align: middle;
+	margin-bottom: 5px;
+}
+
+
+.tipsy-inner, .tipsy-inner2 { 	border: 2px solid #00b1eb; border-radius: 5px; -moz-border-radius:5px; -webkit-border-radius:5px; 	vertical-align: middle;}
+.tipsy-arrow { position: absolute; background: url('../images/tipsy2.gif') no-repeat top left; width: 9px; height: 5px; }
+
+.tipsy-arrow2 { position: absolute; background: url('../images/tipsy3.gif') no-repeat top left; width: 9px; height: 5px; }
+
+.tipsy-n .tipsy-arrow { top: 0; left: 50%; margin-left: -4px; }
+.tipsy-nw .tipsy-arrow { top: 0; left: 15px; }
+.tipsy-ne .tipsy-arrow { top: 0; right: 15px; }
+.tipsy-s .tipsy-arrow { bottom: 0; left: 50%; margin-left: -4px; background-position: bottom left; }
+/* BARRA DE RESUMO */
+.tipsy-s .tipsy-arrow2 { bottom: 0; left: 50%; margin-left: -4px; background-position: bottom left; margin-bottom: 5px; }
+
+.tipsy-sw .tipsy-arrow { bottom: 0; left: 10px; background-position: bottom left; }
+.tipsy-se .tipsy-arrow { bottom: 0; right: 10px; background-position: bottom left; }
+.tipsy-e .tipsy-arrow { top: 50%; margin-top: -4px; right: 0; width: 5px; height: 9px; background-position: top right; }
+.tipsy-w .tipsy-arrow { top: 50%; margin-top: -4px; left: 0; width: 5px; height: 9px; }

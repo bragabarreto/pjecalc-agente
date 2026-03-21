@@ -1,0 +1,339 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Ocorrências" />
+	<ui:param name="apresentador" value="#{apresentadorOcorrenciaDeFgts}" />
+	<ui:param name="fgtsSelecionado" value="#{apresentador.fgtsSelecionado}" />
+	<ui:param name="titulo" value="#{apresentador.titulo}" />
+
+	<ui:define name="filtroCampos">
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+	</ui:define>
+	
+	<!--  
+	
+		FORMULÁRIO
+	-->
+	
+	
+	<ui:define name="camposFormulario">
+	
+		<h:panelGrid columns="2" cellspacing="4" border="0">
+		
+			<h:panelGroup>
+				<fieldset><legend>Período</legend>
+				<h:panelGrid columns="2" cellspacing="3" border="0">
+					<h:panelGroup>
+						<h:outputLabel value="Data Inicial *" for="" /><br />
+						<rich:calendar id="periodoInicial" value="#{fgtsSelecionado.periodoInicial}" label="Período Inicial *"  inputSize="18" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()" disabled="#{apresentador.emOcorrencias}"> 
+							<f:facet name="footer">
+					        	<h:outputText value="" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<rich:message showDetail="false" showSummary="false" for="periodoInicial">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="periodoInicialErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="periodoInicial"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</h:panelGroup>
+								
+					<h:panelGroup>
+						<h:outputLabel value="Data Final *" for="" /><br />
+						<rich:calendar id="periodoFinal" value="#{fgtsSelecionado.periodoFinal}" label="Período Final *"  inputSize="18" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()" disabled="#{apresentador.emOcorrencias}"> 
+							<f:facet name="footer">
+					        	<h:outputText value="" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<rich:message showDetail="false" showSummary="false" for="periodoFinal">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="periodoFinalErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="periodoFinal"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>	
+					</h:panelGroup>
+				</h:panelGrid>
+				</fieldset>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<fieldset style="width: 71px;">
+						<legend>Alíquota</legend>
+						<h:selectOneRadio id="aliquota" value="#{fgtsSelecionado.aliquota}" styleClass="labelInput" layout="pageDirection" disabled="#{apresentador.emOcorrencias}">
+							<s:selectItems value="#{enumItems.aliquotaDoFgtsEnum}" var="item" label="#{item.nome}" />
+							<s:convertEnum />
+						</h:selectOneRadio>
+				</fieldset>
+			</h:panelGroup>
+			
+		</h:panelGrid>
+	
+		<!-- INICIO DO FILTRO PARA ALTERACAO EM LOTE -->
+		<a4j:region id="regionAlterarEmLote" rendered="#{apresentador.emOcorrencias}">
+		<rich:simpleTogglePanel switchType="client" label="Alteração em lote" style="padding-left: 5px; padding-right: 5px;">
+				<f:facet name="openMarker"><img src="../../images/sideopen.png" alt="" width="17" height="15"  /></f:facet>
+				<f:facet name="closeMarker"><img src="../../images/sideclose.png" alt="" width="17" height="15"  /></f:facet>
+				<h:panelGrid id="gridAlterarEmLote" columns="9" cellspacing="4" border="0">
+					<h:panelGroup>
+						<h:outputLabel value="Ocorrência Inicial" for="dataInicial" />
+						<br/>
+						<rich:calendar id="dataInicial" value="#{apresentador.filtroParaAlterarFgtsEmLote.dataInicial}"
+									   label="Ocorrência Inicial" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+									   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									   showWeekDaysBar="false" showFooter="false"  
+									   oninputfocus="$(this).monthYearMask()" styleClass="special" inputClass="maskDateCompetencia" 
+									   required="#{!param['formulario:isAlteracaoEmLote']}">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+							<f:converter converterId="dateConverter"/>
+						</rich:calendar>
+		    			<cobra:toolTip>
+		    				<rich:message for="dataInicial"/>
+		    			</cobra:toolTip>	    			
+					</h:panelGroup>
+					<h:panelGroup>
+						<h:outputLabel value="Ocorrência Final" for="dataFinal"/>
+						<br/>
+						<rich:calendar id="dataFinal" value="#{apresentador.filtroParaAlterarFgtsEmLote.dataFinal}"
+									   label="Ocorrência Final" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+									   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									   showWeekDaysBar="false" showFooter="false"  
+									   oninputfocus="$(this).monthYearMask()" styleClass="special" inputClass="maskDateCompetencia"
+									   required="#{!param['formulario:isAlteracaoEmLote']}">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+							<f:converter converterId="dateConverter"/>
+						</rich:calendar>
+		    			<cobra:toolTip>
+		    				<rich:message for="dataFinal"/>
+		    			</cobra:toolTip>	    			
+					</h:panelGroup>
+					<h:panelGroup>
+						<h:outputLabel value="Base (Histórico)" for="valorBase" />
+						<br/>
+		    			<h:inputText id="valorBase" label="Base (Histórico)" value="#{apresentador.filtroParaAlterarFgtsEmLote.valorBase}" size="16" style="text-align:right; width:144px;" onfocus="$(this).currencyMask()" maxlength="16" />
+		    			<cobra:toolTip>
+		    				<rich:message for="valorBase"/>
+		    			</cobra:toolTip>	    			
+					</h:panelGroup>
+					<h:panelGroup>
+						<h:outputLabel value="Recolhido" for="valorRecolhido" />
+						<br/>
+		    			<h:inputText id="valorRecolhido" label="Recolhido" value="#{apresentador.filtroParaAlterarFgtsEmLote.valorRecolhido}" size="16" style="text-align:right; width:144px;" onfocus="$(this).currencyMask()" maxlength="16" />
+		    			<cobra:toolTip>
+		    				<rich:message for="valorRecolhido"/>
+		    			</cobra:toolTip>	    			
+					</h:panelGroup>
+					<h:panelGroup>
+						<a4j:commandLink id="cmdVisualizar" styleClass="botaoAlterarItem" title="Alterar" value="" actionListener="#{apresentador.alterarEmLote}" onclick="AguardeShow();" oncomplete="AguardeHide();$('formulario:dataFinalInputDate').select();" limitToList="true" reRender="gridAlterarEmLote,listagem,painelMensagens" />
+					</h:panelGroup>
+				</h:panelGrid>	
+		</rich:simpleTogglePanel>
+		</a4j:region>
+		<!-- FINAL DO FILTRO PARA ALTERACAO EM LOTE -->
+	
+		<a4j:outputPanel rendered="#{apresentador.emOcorrencias}">
+		<div class="box_ocorrencias">
+		<div /><rich:spacer width="1" height="15"/><div />
+		<h:outputLabel styleClass="labelOcorrencia" value="Ocorrências do FGTS"/>
+		<a4j:commandButton id="recuperar" actionListener="#{apresentador.recuperarOriginal(fgtsSelecionado)}"  oncomplete="AguardeHide();" style="margin-top:-13px;"
+			styleClass="botaoRecuperar" immediate="true"
+			reRender="listagem"
+			onclick="if(!checkSelecao('checkDevido')) return false; allToUpperCase();if (!confirma('#{mensagens.MSG0016}',this)) return false; AguardeShow();"
+			/>
+		<rich:toolTip value="Recuperar Valores Originais" for="recuperar"/>
+		
+		<a4j:outputPanel id="painelListaDeOcorrencias" rendered="#{apresentador.emOcorrencias}">
+		<rich:dataTable id="listagem"  value="#{listaDeOcorrencias}" styleClass="tableWithCellNavigation" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" var="ocorrencia" style="border:solid 1px #ccc;"> 
+			    	
+		    	<rich:column style="text-align:center;">
+		    		<f:facet name="header">
+	    				<h:outputText value="Ocorrência"/>
+	    			</f:facet>	
+	    			<h:outputText id="ocorrencia" value="#{ocorrencia.ocorrencia}">
+	    				<f:converter converterId="competenciaConverter"/>
+	    			</h:outputText>
+		    	</rich:column>		
+		    	
+		    	<rich:column>
+	    			<f:facet name="header">
+	    				<h:outputText value="Base (Histórico) *"/>
+	    			</f:facet>	
+	    			<h:inputText id="baseHistorico" value="#{ocorrencia.baseHistorico}" size="16" maxlength="16" required="true" style="text-align:right;"
+	    					label="Base (Histórico)" onfocus="$(this).currencyMask()">
+	    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" 
+	    								actionListener="#{apresentador.baseHistoricoAlterada(ocorrencia)}" 
+	    								reRender="tipoDeBaseDoFgts" />
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="baseHistorico"/>
+	    			</cobra:toolTip>
+		    	</rich:column>
+		    	
+		    	<rich:column>
+	    			<f:facet name="header">
+	    				<h:outputText value="Tipo (Base)"/>
+	    			</f:facet>	
+	    			<h:outputText id="tipoDeBaseDoFgts" value="#{ocorrencia.tipoDeBaseDoFgts.nome}" />
+		    	</rich:column>	
+		    	
+		    	<rich:column>
+	    			<f:facet name="header">
+	    				<h:outputText value="Base (Verba)"/>
+	    			</f:facet>	
+	    			<h:inputText id="baseVerba" value="#{ocorrencia.baseVerba}" size="16" maxlength="16" label="Base (Verba)" disabled="true" style="text-align:right;" />
+		    	</rich:column>
+		    	
+		    	<rich:column>
+	    			<f:facet name="header">
+	    				<h:outputText value="Alíquota"/>
+	    			</f:facet>	
+	    			<h:outputText id="aliquotaDoFgtsEnum" value="#{ocorrencia.aliquotaDoFgtsEnum.valor}%" />
+		    	</rich:column>	
+		    	
+		    	<rich:column>
+	    			<f:facet name="header">
+	    				<h:outputText value="Recolhido"/>
+	    			</f:facet>	
+	    			<h:inputText id="depositado" value="#{ocorrencia.depositado}" size="16" maxlength="16" required="#{ocorrencia.isValorCalculado()}" style="text-align:right;"
+	    					label="Depositado" onfocus="$(this).currencyMask()">
+	    					<a4j:support event="onblur" ajaxSingle="true" limitToList="true" actionListener="#{apresentador.depositadoAlterado(ocorrencia)}" reRender="tipoDeDepositadoDoFgts" />
+	    			</h:inputText>
+	    			<cobra:toolTip>
+	    				<rich:message for="depositado"/>
+	    			</cobra:toolTip>
+		    	</rich:column>
+		    	
+		    	<rich:column>
+	    			<f:facet name="header">
+	    				<h:outputText value="Tipo (Recolhido)"/>
+	    			</f:facet>	
+	    			<h:outputText id="tipoDeDepositadoDoFgts" value="#{ocorrencia.tipoDeDepositadoDoFgts.nome}" />
+		    	</rich:column>	
+		    	
+		    	<rich:column id="rcheckSelecionar">
+				    	<f:facet name="header">
+			    			<h:panelGroup layout="block" style="margin-right:12px;">
+				    				<input id="selecionarTodos" type="checkbox" class="css-checkbox" onclick="jsfCheckTodos()"/>
+						    		<label for="selecionarTodos" id="selecionarTodosLabel" class="css-label" style="width: 0px; padding-left:18px;"></label>
+						    		<rich:toolTip value="Selecionar Todos" for="selecionarTodosLabel"/>					    	
+					    	</h:panelGroup>
+			    		</f:facet>
+			    		<h:selectBooleanCheckbox id="selecionar" label="Selecionar" value="#{ocorrencia.selecionada}" styleClass="labelInput checkDevido">
+			    			<a4j:support event="onclick" ajaxSingle="true" limitToList="true"/>
+			    		</h:selectBooleanCheckbox>
+			    </rich:column>
+				    	    				    				    	
+			</rich:dataTable>
+		</a4j:outputPanel>
+			
+		</div>
+		</a4j:outputPanel>
+		
+		<a4j:outputPanel id="painelScriptCheck">
+   			<script>
+				function checkSelecao(clazz) {
+					if (jQuery('.'+clazz+':checked').length == 0) {
+						jAlert('#{mensagens.MSG0015.replace("{0}","ao menos uma ocorrência")}', 'Erro');
+						return false;				
+					}
+					return true;
+				}
+			</script>
+    	
+    	</a4j:outputPanel>
+    	
+		<h:panelGroup id="panelScriptTable">
+			<!-- <script type="text/javascript">
+				/* <![CDATA[ */   
+			       jQuery(function() {
+						jQuery('#formulario:listagem').enableCellNavigation();
+					});
+			    /* ]]> */
+			</script> -->
+		</h:panelGroup>
+	
+	</ui:define>	
+	
+	<ui:define name="auxiliar">
+		    <h:form>
+	          <a4j:jsFunction name="jsfCheckTodos" immediate="true" limitToList="true" onbeforedomupdate="checkTodos()" oncomplete="AguardeHide()">
+	          </a4j:jsFunction>
+	        </h:form>
+			<script>
+				function checkTodos() {
+					AguardeShow();
+					elems = jQuery('.labelInput:enabled');
+					elems.attr('checked',jQuery('#selecionarTodos').attr('checked'));
+					for (i=0; i&lt;elems.size(); i++) {
+						elems[i].onclick();
+					}
+				}
+			</script>
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+		<h:inputHidden id="isAlteracaoEmLote" name="isAlteracaoEmLote" value="false"/>
+		
+		<h:panelGroup rendered="#{apresentador.emGeracao}">
+			<fieldset  style="width:315px;margin-left: 5px;"><legend>Opções de Regeração</legend>
+				<h:panelGrid columns="2" cellspacing="2" cellpadding="0" border="0" style="height:42px">
+					<h:panelGroup layout="block" style="padding-left:10px;">
+						<h:selectOneRadio id="tipoRegeracao" value="#{apresentador.manterAlteracoes}" styleClass="labelInput" layout="pageDirection">
+							<f:selectItem itemLabel="Manter alterações realizadas nas ocorrências" itemValue="#{true}" />
+							<f:selectItem itemLabel="Sobrescrever alterações realizadas nas ocorrências" itemValue="#{false}" />
+						</h:selectOneRadio>
+					</h:panelGroup>
+				</h:panelGrid>
+			</fieldset>
+		</h:panelGroup>	
+		
+	    <a4j:commandButton   id="regerar" styleClass="botao" 
+	                         value="Regerar" 
+	                         rendered="#{apresentador.emOcorrencias}"
+	                         action="#{apresentador.regerar}"
+	                         immediate="true"/>
+	    <a4j:commandButton   id="salvar" styleClass="botao" 
+	    					 value="Salvar"
+	                         rendered="#{apresentador.emOcorrencias}"
+	                         action="#{apresentador.salvar}"
+	                         onclick="allToUpperCase();$('formulario:isAlteracaoEmLote').value='true';"/>
+	    <a4j:commandButton   id="confirmarGeracao" styleClass="botao" 
+	                         value="Confirmar" style="margin-top: 15px;"
+	                         rendered="#{apresentador.emGeracao}"
+	                         action="#{apresentador.confirmarGeracao}"/>
+	    <a4j:commandButton   id="cancelar" styleClass="botao" 
+	                         value="Cancelar" 
+	                         rendered="#{apresentador.emOcorrencias}"
+	                         action="#{apresentador.cancelar}"
+	                         immediate="true"/>
+	    <a4j:commandButton   id="cancelarGeracao" styleClass="botao" 
+	                         value="Cancelar" 
+	                         rendered="#{apresentador.emGeracao}"
+	                         action="#{apresentador.cancelarGeracao}"
+	                         immediate="true"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

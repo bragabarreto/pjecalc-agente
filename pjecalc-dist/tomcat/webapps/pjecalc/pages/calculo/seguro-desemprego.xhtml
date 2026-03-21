@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Seguro-desemprego" />
+	<ui:param name="apresentador" value="#{apresentadorSeguroDesemprego}" />
+	<ui:param name="registro" value="#{seguroDesemprego}" />
+	
+	<ui:define name="nofiltroCampos">
+			<ui:include src="resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+			</ui:include>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+		
+		<div id="painelGeral" style="width:100%;">
+			
+			<h:panelGrid id="painelCheck" columns="2" cellspacing="4" cellpadding="2" border="0">
+				
+				<h:panelGrid id="painelSelecao" columns="1" cellspacing="4" cellpadding="4" border="0" width="199px">
+					<h:panelGroup >
+						<h:selectBooleanCheckbox id="apurarSeguroDesemprego" value="#{registro.apurarSeguroDesemprego}">
+							<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="outputFormulario, painelEmpregadoDomestico, painelSolicitacao, painelQtd, painelCompor, painelTipoValor, painelValorInformado" actionListener="#{apresentador.sugerirValores}"/>
+						</h:selectBooleanCheckbox>
+						<label for="apurarSeguroDesemprego">Apurar Seguro-desemprego</label>
+					</h:panelGroup>
+					
+					<h:panelGroup id="painelEmpregadoDomestico" rendered="#{apresentador.exibirCampoEmpregadoDomestico()}">
+						<h:selectBooleanCheckbox id="apurarEmpregadoDomestico" value="#{registro.empregadoDomestico}" disabled="#{not apresentador.permitidoAlteracao}">
+							<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelSelecao, outputFormulario, painelQtd, painelCompor, painelTipoValor, painelValorInformado" actionListener="#{apresentador.sugerirValores}"/>
+						</h:selectBooleanCheckbox>
+						<label for="apurarEmpregadoDomestico">Empregado Doméstico</label>
+					</h:panelGroup>
+					
+					<h:panelGroup id="painelSolicitacao" rendered="#{apresentador.exibirCampoTipoSolicitacao()}">
+						<h:outputLabel value="Tipo de Solicitação *" for="solicitacao"/>
+						<br/>
+						<h:selectOneMenu id="solicitacao" value="#{registro.tipoSolicitacao}" label="Integralizar" disabled="#{not apresentador.permitidoAlteracao}" style="width:174px;">
+						 	<s:selectItems value="#{enumItems.tipoSolicitacaoSeguroDesempregoEnum}" var="item" label="#{item.nome}"/>
+							<s:convertEnum />
+							<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelQtd" actionListener="#{apresentador.atualizarParcelas}"/>
+						</h:selectOneMenu>
+						<cobra:toolTip>
+		        			<rich:message for="solicitacao"/>
+			    		</cobra:toolTip>
+					</h:panelGroup>					
+				</h:panelGrid>
+				
+				<h:panelGroup id="painelTipoValor" layout="block" style="width:190px;">
+					<fieldset><legend>Valor *</legend>
+						<h:panelGroup>						
+							<h:selectOneRadio id="valor" immediate="true" disabled="#{not apresentador.permitidoAlteracao}" styleClass="labelInput" layout="lineDirection" value="#{registro.tipoValorDoSeguroDesemprego}">
+								<s:selectItems value="#{enumItems.tipoValorSeguroDesempregoEnum}" var="item" label="#{item.nome}" />
+								<s:convertEnum />
+								<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="painelCheck, outputFormulario" actionListener="#{apresentador.aoMudarTipoValor}" />
+							</h:selectOneRadio>
+						</h:panelGroup>
+					</fieldset>
+				</h:panelGroup>
+				
+				<h:panelGroup  id="painelCompor" >			
+					<fieldset><legend>Compor Principal *</legend>
+						<h:selectOneRadio id="comporPrincipal" value="#{registro.comporPrincipal}" styleClass="labelInput" 
+										disabled="#{!apresentador.permitidoAlteracao}" layout="lineDirection">
+							<s:selectItems value="#{enumItems.logicoEnum}" var="item" label="#{item.nome}"/>
+							<s:convertEnum />
+						</h:selectOneRadio>
+					</fieldset>
+				</h:panelGroup>
+				
+				<h:panelGroup id="painelValorInformado" layout="block" style="margin-left:10px;" rendered="#{registro.tipoValorDoSeguroDesemprego.valor eq 'I'}">
+					<h:outputLabel value="Valor Informado " for="valorInformado" />
+					<h:inputText id="valorInformado" label="Valor Informado" disabled="#{not apresentador.permitidoAlteracao}" onfocus="$(this).currencyMask()" size="16" maxlength="16" value="#{registro.valorSeguroDesemprego}">
+					</h:inputText>
+				    <cobra:toolTip>
+	                      <rich:message for="valorInformado"/>
+                   </cobra:toolTip>
+				</h:panelGroup>
+				
+				<h:panelGroup id="painelQtd" layout="block" style="margin-left:10px;" rendered="#{registro.tipoValorDoSeguroDesemprego.valor eq 'C'}">
+					<h:outputLabel value="Quantidade de Parcelas " for="numeroDeParcelas" />
+					<h:inputText id="numeroDeParcelas" label="Quantidade de Parcelas" onfocus="$(this).integerMask()" disabled="#{!apresentador.permitidoAlteracao}"
+						size="3" maxlength="10" value="#{registro.numeroDeParcelas}">
+					</h:inputText>
+				    <cobra:toolTip>
+	                      <rich:message for="numeroDeParcelas"/>
+                   </cobra:toolTip>
+				</h:panelGroup>
+				
+			</h:panelGrid>
+			
+			<a4j:outputPanel id="outputFormulario" ajaxRendered="true">
+			
+				<h:panelGroup rendered="#{registro.tipoValorDoSeguroDesemprego.valor eq 'C' and not registro.empregadoDomestico}">
+					<h:panelGroup layout="block;" style="float:left; width:250px;">
+					<fieldset style="min-height: 160px;">
+						<legend>Remuneração Mensal - Salários Pagos</legend>
+						<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+							
+								<h:panelGroup>						
+									<a4j:region>
+										<h:selectOneRadio id="tipoSalarioPago" disabled="#{!apresentador.permitidoAlteracao}" styleClass="labelInput" layout="pageDirection" value="#{registro.tipoSalarioPago}">
+											<s:selectItems value="#{enumItems.tipoSalarioPagoEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="painelFormularioHistoricoSalarial, painelListaHistoricoSalarial" />
+										</h:selectOneRadio>
+									</a4j:region>
+								</h:panelGroup>
+								
+								<h:panelGroup>
+									<a4j:outputPanel id="painelFormularioHistoricoSalarial">
+										<h:panelGrid columns="2" cellspacing="2" cellpadding="2" border="0" columnClasses=",verticalTop">
+											<h:panelGroup>
+												<h:outputLabel value="Histórico *" for="historicoSalarial" />
+												<br/>
+												<h:selectOneMenu id="historicoSalarial" label="Históricos" value="#{itemHistoricoSalarialDeSeguroDesemprego.historicoSalarial}" style="width:140px;" disabled="#{not (apresentador.permitidoAlteracao and registro.tipoSalarioPago=='HISTORICO_SALARIAL')}"> 
+										 			<s:selectItems value="#{apresentador.historicosSalarial}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+													<s:convertEntity/>
+												</h:selectOneMenu>
+												<cobra:toolTip>
+							        				<rich:message for="historicoSalarial"/>
+								    			</cobra:toolTip>
+											</h:panelGroup>
+											<h:panelGroup>
+												<a4j:commandLink id="cmdAdicionarHistoricoSalarial" actionListener="#{apresentador.adicionarHistoricoSalarial}" onclick="AguardeShow();" oncomplete="AguardeHide();" styleClass="botaoAddItem" title="Adicionar Histórico Salarial" reRender="painelFormularioHistoricoSalarial,painelListaHistoricoSalarial" disabled="#{not (apresentador.permitidoAlteracao and registro.tipoSalarioPago=='HISTORICO_SALARIAL')}"/>
+											</h:panelGroup>
+										</h:panelGrid>
+									</a4j:outputPanel>
+									
+									<a4j:outputPanel id="painelListaHistoricoSalarial">
+										<h:panelGroup style="width: 100%;" rendered="#{listaDeHistoricoSalarial.rowCount gt 0}">
+											<rich:dataTable id="listagemHistoricoSalarial" value="#{listaDeHistoricoSalarial}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="226px" rows="#{listaDeHistoricoSalarial.rowCount}" var="item"> 
+									    		<rich:column>
+											    	<f:facet name="header">
+										    			<h:outputText value="Ação"/>
+										    		</f:facet>
+												    <a4j:region>
+											    		<a4j:commandLink id="excluirHistoricoSalarial" immediate="true" actionListener="#{apresentador.removerHistoricoSalarial(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"  reRender="painelListaHistoricoSalarial" styleClass="linkExcluir" title="Excluir" disabled="#{not (apresentador.permitidoAlteracao and registro.tipoSalarioPago=='HISTORICO_SALARIAL')}"/>
+											    	</a4j:region>
+											    </rich:column>
+										    	<rich:column>
+									    			<f:facet name="header">
+									    				<h:outputText value="Histórico"/>
+									    			</f:facet>	
+									    			<h:outputText value="#{item.historicoSalarial.nome}" />
+										    	</rich:column>
+										    </rich:dataTable>							
+										</h:panelGroup>
+									</a4j:outputPanel>
+								</h:panelGroup>
+					    			
+								
+						</h:panelGrid>
+					
+					</fieldset>
+					</h:panelGroup>
+					
+					<h:panelGroup layout="block;" style="float:left;">
+						<fieldset style="min-height: 160px;">
+							<legend>Remuneração Mensal - Salários Devidos</legend>
+							<h:panelGrid columns="1" cellspacing="4" cellpadding="4" border="0">
+								<h:panelGroup>
+									<a4j:outputPanel id="painelFormularioSalarioDevido">
+										<h:panelGrid columns="3" cellspacing="2" cellpadding="2" border="0" columnClasses=",,verticalTop">
+											<h:panelGroup>
+												<h:outputLabel value="Verba *" for="verba" />
+												<br/>
+												<h:selectOneMenu id="verba" label="Verba" value="#{itemSalarioDevidoDeSeguroDesemprego.verbaDeCalculo}" disabled="#{not apresentador.permitidoAlteracao}" style="width:140px;"> 
+										 			<s:selectItems value="#{apresentador.verbas}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+													<s:convertEntity/>
+												</h:selectOneMenu>
+												<cobra:toolTip>
+							        				<rich:message for="verba"/>
+								    			</cobra:toolTip>
+											</h:panelGroup>
+											<h:panelGroup>
+												<h:outputLabel value="Integralizar *" for="integralizar"/>
+												<br/>
+												<h:selectOneMenu id="integralizar" value="#{itemSalarioDevidoDeSeguroDesemprego.integralizar}" label="Integralizar" disabled="#{not apresentador.permitidoAlteracao}" style="width:80px;">
+												 	<s:selectItems value="#{enumItems.logicoEnum}" var="item" label="#{item.nome}"/>
+													<s:convertEnum />
+												</h:selectOneMenu>
+												<cobra:toolTip>
+								        			<rich:message for="integralizar"/>
+									    		</cobra:toolTip>
+											</h:panelGroup>
+											<h:panelGroup>
+												<a4j:commandLink id="cmdAdicionarSalarioDevido" actionListener="#{apresentador.adicionarSalarioDevido}" onclick="AguardeShow();" oncomplete="AguardeHide();" styleClass="botaoAddItem" title="Adicionar Salário Devido" reRender="painelFormularioSalarioDevido,painelListaSalarioDevido" disabled="#{not apresentador.permitidoAlteracao}"/>
+											</h:panelGroup>
+										</h:panelGrid>
+									</a4j:outputPanel>
+									
+									<a4j:outputPanel id="painelListaSalarioDevido">
+										<h:panelGroup style="width: 100%;" rendered="#{listaDeSalarioDevido.rowCount gt 0}">
+											<rich:dataTable id="listagemSalarioDevido" value="#{listaDeSalarioDevido}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{listaDeSalarioDevido.rowCount}" var="item"> 
+									    		<rich:column>
+											    	<f:facet name="header">
+										    			<h:outputText value="Ação"/>
+										    		</f:facet>
+												    <a4j:region>
+											    		<a4j:commandLink id="excluirSalarioDevido" immediate="true" actionListener="#{apresentador.removerSalarioDevido(item)}" onclick="AguardeShow();" oncomplete="AguardeHide();"  reRender="painelListaSalarioDevido" styleClass="linkExcluir" title="Excluir" disabled="#{not apresentador.permitidoAlteracao}"/>
+											    	</a4j:region>
+											    </rich:column>
+										    	<rich:column>
+									    			<f:facet name="header">
+									    				<h:outputText value="Verba"/>
+									    			</f:facet>	
+									    			<h:outputText value="#{item.verbaDeCalculo.nome}"/>
+										    	</rich:column>
+										    	<rich:column>
+									    			<f:facet name="header">
+									    				<h:outputText value="Integralizar"/>
+									    			</f:facet>	
+									    			<h:outputText value="#{item.integralizar}"/>
+										    	</rich:column>
+										    </rich:dataTable>							
+										</h:panelGroup>
+									</a4j:outputPanel>
+								</h:panelGroup>
+								
+							</h:panelGrid>
+						</fieldset>				
+					</h:panelGroup>
+				
+				
+				</h:panelGroup>
+			
+			</a4j:outputPanel>
+		
+			
+		</div>
+	
+			
+	</ui:define>
+		
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao" onclick="allToUpperCase()" />  
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela" />
+	
+</ui:composition>
+
+</html>

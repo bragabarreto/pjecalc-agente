@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<ui:composition xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+	
+			
+	<script type="text/javascript">		
+
+	
+		function sucessoNAssinatura(ec) {
+			if (ec != '') {
+				salvarDadosAssinatura(ec);
+			}
+		}
+
+		function reloadwindow() {
+			window.location.reload(true);
+		}
+		
+		function assinarPjeOffice() {
+			submitFormOffice();
+	    }
+		
+		function assinar() {
+			
+	        var texto = '#{identity.documentContent}';
+	        AssinadorJT.assinarTexto([texto], function sucesso(retorno) {
+			        document.querySelector('#certChain').value = retorno.certchain;
+			        console.log(retorno.certchain);
+			        document.querySelector('#signature').value = retorno.assinaturas[texto];
+		            submitForm();
+		            setaEsperaAutenticacaoShodo();
+	        	},
+	        	function erro(codigo, mensagemHttp, response) {
+	        		var msg = response.responseText;
+	        		if(response.responseText.length == 0) {
+	        			msg = "Verifique se o aplicativo Shod" + String.fromCharCode(333) + " está sendo executado em sua máquina.";
+	        		}
+	        		alert('Erro: ' + msg);
+	        		setaFimEsperaAutenticacaoShodo();
+	        	}
+	        );
+	    }
+		
+		function setaEsperaAutenticacaoShodo() {
+			jQuery('#spanErro').hide();
+			jQuery('#spanStatus').show();
+			jQuery('#loginAplicacaoButton').hide();
+			jQuery('#login\\:Ambiente').hide();
+			jQuery('#login\\:Requisitos').hide();
+		}
+		
+		function setaFimEsperaAutenticacaoShodo() {
+			window.location.reload();
+ 			jQuery('#spanErro').show();
+ 			jQuery('#spanStatus').hide();
+ 			jQuery('#loginAplicacaoButton').show();
+ 			jQuery('#login\\:Ambiente').show();
+ 			jQuery('#login\\:Requisitos').show();
+ 			window.location.reload();
+		}
+		
+		function setaEsperaAutenticacao() {
+			jQuery('#spanErro').hide();
+			jQuery('#spanStatus').show();
+			jQuery('#login\\:loginComCertificado').hide();
+			jQuery('#login\\:Ambiente').hide();
+			jQuery('#login\\:Requisitos').hide();
+		}
+
+		function setaFimEsperaAutenticacao() {
+			window.location.reload();
+ 			jQuery('#spanErro').show();
+ 			jQuery('#spanStatus').hide();
+ 			jQuery('#login\\:loginComCertificado').show();
+ 			jQuery('#login\\:Ambiente').show();
+ 			jQuery('#login\\:Requisitos').show();
+ 			window.location.reload();
+		}
+		
+
+		function verificarAppletCarregado() {
+			var app = jQuery('#assinador');
+			if (app == null) {
+				self.setTimeout("verificarAppletCarregado()",200);
+			} else {
+				jQuery('#login\\:loginComCertificado').show();
+				jQuery('#spanLoginComCertificado').hide();
+			}
+		}
+
+		jQuery(document).ready(function() {
+			jQuery('#login\\:loginComCertificado').hide();
+			verificarAppletCarregado();
+			var functionClickAssinar = function (e) {
+				var app = document.getElementById('assinador');
+				if(app == null || !app.setJsCode) {
+					alert('Aguarde alguns instantes até o assinador digital ser carregado.');
+					e.preventDefault();
+					return;
+				}
+				var test=false;
+				var code = 6;
+				if(test) {
+					code += 256;
+				}
+				if(app) {
+					app.setJsCode(code);
+				}
+				e.preventDefault();
+			};
+			var link = jQuery('#login\\:loginComCertificado');
+			link.bind('click', functionClickAssinar);
+ 		});
+ 		
+	  	function toggleDivAmb()
+		 {
+
+	    	if(document.getElementById('modalBoxAmb').style.display == 'block')
+	    	{
+	    	document.getElementById('modalBoxAmb').style.display = 'none';
+	    	document.getElementById('lateral').style.display = 'block';
+	    	}
+
+	    	else
+	    	{  
+	    	document.getElementById('lateral').style.display = 'none';
+	    	document.getElementById('modalBoxAmb').style.display = 'block'
+	    	}
+		}
+	  	
+	  	function toggleDivReq()
+		 {
+
+	    	if(document.getElementById('modalBoxReq').style.display == 'block')
+	    	{
+	    	document.getElementById('modalBoxReq').style.display = 'none';
+	    	document.getElementById('lateral').style.display = 'block';
+	    	}
+
+	    	else
+	    	{  
+	    	document.getElementById('lateral').style.display = 'none';
+	    	document.getElementById('modalBoxReq').style.display = 'block'
+	    	}
+		}
+	  	
+	  	function toggleDivAssinador()
+		 {
+
+	    	if(document.getElementById('modalBoxAssinador').style.display == 'block')
+	    	{
+	    	document.getElementById('modalBoxAssinador').style.display = 'none';
+	    	document.getElementById('lateral').style.display = 'block';
+	    	}
+
+	    	else
+	    	{  
+	    	document.getElementById('lateral').style.display = 'none';
+	    	document.getElementById('modalBoxAssinador').style.display = 'block'
+	    	}
+		}
+	  	
+ 		
+ 		/* Scripts para testar o ambiente  */
+ 		function testesAmbiente(callbackPendencias) {
+ 				
+ 			testeNavegador(function(retorno) {
+ 				jQuery('.testeNavegador_' + retorno).show();
+ 				jQuery('.testeNavegador_' + !retorno).hide();
+ 						
+ 				if (callbackPendencias) {
+ 					if (!retorno) {
+ 						callbackPendencias();
+ 					}
+ 				}
+ 			});
+
+ 			testeJava(function(retorno) {
+ 						jQuery('.testeJava_' + retorno).show();
+ 						jQuery('.testeJava_' + !retorno).hide();
+ 						
+ 						if (callbackPendencias) {
+ 							if (!retorno) {
+ 								callbackPendencias();
+ 							}
+ 						}
+ 					});
+ 				
+ 			}
+
+ 			// Testa se plugin Java está habilitado no browser, usa o método 'navigator.javaEnabled()'
+ 			function testeJava(callback) {
+ 				callback(navigator.javaEnabled());
+ 			}
+
+ 			// Testa se o browser é Firefox
+ 			function testeNavegador(callback) {
+ 					if (jQuery.browser.mozilla == false) {
+ 						callback(false);
+ 						return;
+ 					} else {
+ 					if(jQuery.browser.version &lt; '30') {
+ 						callback(false);
+ 						return;
+ 						}
+ 					}
+ 					callback(true);
+ 			}
+ 			
+	</script>
+
+</ui:composition>

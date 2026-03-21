@@ -1,0 +1,395 @@
+/*-------------------------------------------------------------------------------//
+// CSS Document
+//-------------------------------------------------------------------------------//
+// 
+// Arquivo      : logon.css
+// Descri��oo    : Arquivo estruturador do tipo de janela LOGON
+//
+//-------------------------------------------------------------------------------*/
+
+#logon{
+    margin: 0;
+}	
+
+.logonInput {
+	font: 16px Arial,Helvetica,sans-serif;
+	color:#575757;
+	height: 33px;
+	 outline:none;
+    transition: all 0.25s ease-in-out;
+    -webkit-transition: all 0.25s ease-in-out;
+    -moz-transition: all 0.25s ease-in-out;
+    border-radius:3px;
+    -webkit-border-radius:3px;
+    -moz-border-radius:3px;
+    border:1px solid rgba(0,0,0, 0.5);
+}
+
+.logonInput:focus {
+    box-shadow: 0 0 5px rgba(070, 130, 180, 1);
+    -webkit-box-shadow: 0 0 5px rgba(070, 130, 180, 1); 
+    -moz-box-shadow: 0 0 5px rgba(070, 130, 180, 1);
+    border:1px solid rgba(070, 130, 180, 1); 
+}
+
+.logonLabel {
+	font: 18px Arial,Helvetica,sans-serif;
+	color:#606060;
+}
+
+.labelMsgErro {
+	font: 13px Arial,Helvetica,sans-serif;
+	color:#DF3030;
+	background-image: url("../images/icon/icoErro.png"); background-repeat: no-repeat;
+	margin-left: 2px;
+	padding-left: 15px;
+	font-weight: bold;
+}
+
+.labelMsg {
+	font: 18px Arial,Helvetica,sans-serif;
+	color:#333333;
+	background-image: url("../images/icon/icon_checked.png"); background-repeat: no-repeat;
+	padding-left: 18px;
+	font-weight: bold;
+	margin-left:79px;
+}
+
+.labelMsgUS {
+	font: 13px Arial,Helvetica,sans-serif;
+	color:#333333;
+	background-image: url("../images/icon/icon_checked.png"); background-repeat: no-repeat;
+	padding-left: 18px;
+	font-weight: bold;	
+}
+
+.bt_logond {
+  -webkit-border-radius: 5 !important;
+  -moz-border-radius: 5 !important;
+  border-radius: 5px !important;
+  text-shadow: 2px 1px 4px #292729 !important;
+  -webkit-box-shadow: 0px 1px 3px #666666 !important;
+  -moz-box-shadow: 0px 1px 3px #666666 !important;
+  box-shadow: 0px 1px 3px #666666 !important;
+  font-family: Arial !important;
+  color: #ffffff !important;
+  font-size: 20px !important;
+  padding: 10px 20px 10px 20px !important;
+  text-decoration: none !important;
+}
+
+.bt_logond:hover {
+  text-decoration: none !important;
+}
+
+.bt_pequeno {
+  -webkit-border-radius: 5 !important;
+  -moz-border-radius: 5 !important;
+  border-radius: 5px !important;
+  text-shadow: 2px 1px 4px #292729 !important;
+  -webkit-box-shadow: 0px 1px 3px #666666 !important;
+  -moz-box-shadow: 0px 1px 3px #666666 !important;
+  box-shadow: 0px 1px 3px #666666 !important;
+  font-family: Arial !important;
+  color: #ffffff !important;
+  font-size: 15px !important;
+  padding: 5px 10px 5px 10px !important;
+  text-decoration: none !important;
+  font-weight:bold;
+}
+
+.bt_pequeno:hover {
+  text-decoration: none !important;
+}
+
+.bt_logon {
+	height: 40px;
+	width: 100px;
+	margin-left: 12px;
+	cursor: pointer;
+	border:0;
+}
+
+.bt_logon:hover {
+	height: 40px;
+	width:100px;
+	margin-left: 12px;
+	cursor: pointer;
+	border:0;
+}
+
+div#boxAssign {
+	padding: 3px 0 0 6px;
+}
+
+div#boxAssign a, div#boxAssign span {
+    color: #575757;
+    font: 13px Arial,Helvetica,sans-serif;
+    font-weight: bold;
+    text-decoration: none !important;
+}	
+
+div#boxAssign a:hover {
+    color: #000000;
+}
+
+.ambienteNaoOficial {
+	background-color: red;
+	color: white;
+	font-weight: bold;
+	padding: 0 7px;
+	font-size: 24px;
+	text-decoration: none;
+}
+
+#lateral, #lateralUS {
+	position:absolute;
+	width:572px;
+	height:453px;
+	left: 50%;
+    top:50%;
+    margin-left: -300px;
+    margin-top: -230px;
+}
+
+
+#centro, #centroUS {
+	position:absolute;
+	background-repeat:no-repeat;
+	width:760px;
+	height:410px;
+	top:50%;
+	left:50%;
+	margin-top:-205px;
+	margin-left:-380px;
+}
+
+.boxlogin {
+	background: #FFFFFF; /* para browsers sem suporte a CSS 3 */
+ 	filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#FFFFFF', endColorstr='#C5C5C5'); /* IE */
+	background: -webkit-gradient(linear, left top, left bottom, from(#FFFFFF), to(#C5C5C5)); /* webkit browsers */
+	background: -moz-linear-gradient(top,  #FFFFFF,  #C5C5C5); /* Firefox 3.6+ */
+	width:361px;
+	height:214px;
+	margin-top:113px;
+	margin-left:195px;
+	display: block;
+}
+
+#boxAcessibilidade {
+	position:absolute;
+	top:80px;
+	left:475px;
+}
+
+#boxAcessibilidade input {
+	background-color: transparent;
+}
+
+
+#boxcentral, #boxcentralUS {
+	position:absolute;
+	width:287px;
+	height:103px;
+	top:130px;
+	left:195px;
+	padding:18px;
+}
+
+#boxcentrallogoncertificado {
+	position:absolute;
+	width:287px;
+	height:103px;
+	top:140px;
+	left:195px;
+	padding:18px;
+}
+
+#boxinstancias {
+	width: 360px;
+	position: relative;
+	float: left;
+}
+
+.selectoneinstancias {
+	display: inline-table; 
+	text-transform: uppeercase; 
+	verticle-align:top;
+	text-align: center; 
+	width:400px;"
+}
+
+#boxinstancias table {
+	width: 350px;
+}
+
+#boxAssinador{
+	position:absolute;
+	width:575px;
+	height:93px;
+	top:93px;
+	left:85px;
+}
+
+#boxAmb{
+	position:absolute;
+	width:575px;
+	height:93px;
+	top:93px;
+	left:85px;
+}
+
+#boxErroConexao{
+	position:absolute;
+	width:575px;
+	height:93px;
+	top:93px;
+	left:85px;
+}
+
+#boxReq{
+	position:absolute;
+	width:670px;
+	height:93px;
+	top:85px;
+	left:100px;
+}
+
+.modalboxDivAmb{
+	color: #3F6094; 
+	font-size:13px; 
+	font-style: italic; 
+	font-family: verdana;
+	width: 340px;
+	padding: 45px 0 0 22px;
+}
+
+#modalBoxAmb{
+	background-repeat:no-repeat;
+	height: 500px; 
+	width:850px;
+	position:absolute;
+	left: 50%;
+    top:50%;
+    margin-left: -380px;
+    margin-top: -210px;
+	
+}
+
+.modalboxDivAssinador{
+	color: #3F6094; 
+	font-size:13px; 
+	font-style: italic; 
+	font-family: verdana;
+	width: 340px;
+	padding: 45px 0 0 22px;
+}
+
+#modalBoxAssinador{
+	background-repeat:no-repeat;
+	height: 500px; 
+	width:850px;
+	position:absolute;
+	left: 50%;
+    top:50%;
+    margin-left: -380px;
+    margin-top: -210px;
+	
+}
+
+#modalBoxErroConexao{
+	background-repeat:no-repeat;
+	height: 500px; 
+	width:850px;
+	position:absolute;
+	left: 50%;
+    top:50%;
+    margin-left: -380px;
+    margin-top: -210px;
+	
+}
+
+#modalBoxReq{
+	background-repeat:no-repeat;
+	position:absolute;
+	width:900px;
+	height:1000px;
+	left: 50%;
+    top:50%;
+    margin-left: -400px;
+    margin-top: -430px;
+}
+
+.modalboxDivReq{
+	color: #3F6094; 
+	font-size:13px; 
+	font-style: italic; 
+	font-family: verdana;
+	width: 340px;
+	padding: 50px 0 0 10px;
+}
+
+body, th, td, p, div, span, input, button, label, select, textarea, form, strong, i, u, h1, h2, h3, h4, h5, h6, ol, dl, dd, dt, option, optgroup {
+	font-family: Tahoma, Verdana, Arial, Helvetica, sans-serif;
+	font-size: 11px;
+	color: #535353;
+	margin: 0px;
+}
+
+#botoescentral {
+	position:absolute;
+	top:305px;
+	left:430px;
+}
+
+#botoescentralUS {
+	position:absolute;
+	top:265px;
+	left:430px;
+}
+
+#boxMsg {
+	margin-top:18px;
+	width: 210px;
+	height: 25px
+}
+
+#boxMsgUS {
+	margin-top:18px;
+	width: 230px;
+	height: 25px
+}
+
+#boxMsg2 {
+	margin-top:15px;
+	width: 320px;
+}
+
+#spanLoginComCertificado {
+	font: 13px Arial,Helvetica,sans-serif;
+	color:#575757;
+	margin-left: 2px;
+	padding-left: 15px;
+	font-weight: bold;
+}
+
+.labelVersao {
+	position: absolute;
+	top: 300px;
+	left: 378px;
+	width: 160px;
+	
+	text-align: right;
+	
+	font: 10px Arial,Helvetica,sans-serif;
+	color:#575757;
+}
+
+.labelAmbiente {
+	position: absolute;
+	top: 290px;
+	left: 210px;
+	width: 200px;
+	
+	text-align: left;
+}

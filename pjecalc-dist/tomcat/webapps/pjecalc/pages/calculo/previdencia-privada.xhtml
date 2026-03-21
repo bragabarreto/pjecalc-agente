@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Previdência Privada" />
+	<ui:param name="apresentador" value="#{apresentadorPrevidenciaPrivada}" />
+	<ui:param name="previdenciaPrivada" value="#{previdenciaPrivada}" />
+	
+	<ui:define name="nofiltroCampos">
+			<ui:include src="resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+			</ui:include>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+		<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+			<h:panelGroup>
+				<a4j:region>
+					<h:selectBooleanCheckbox id="apurarPrevidenciaPrivada" value="#{previdenciaPrivada.apurarPrevidenciaPrivada}" >
+						<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelMinicrud,painelBotoes"/>
+					</h:selectBooleanCheckbox>
+					<label for="apurarPrevidenciaPrivada">Apurar Previdência Privada</label>
+				</a4j:region>						
+			</h:panelGroup>	
+		</h:panelGrid>
+	
+		<fieldset style="width:535px; clear:left; margin-left:6px;"><legend><b>Alíquota por Período</b></legend>
+															
+		<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+				
+				<h:panelGrid id="painelMinicrud" columns="4" cellspacing="3" border="0">
+				
+					<h:panelGroup>
+						<h:outputLabel value="Competência Inicial *" for="dataInicioPeriodo" /><br />
+						<rich:calendar id="dataInicioPeriodo" value="#{aliquotaDePrevidenciaPrivada.dataInicioPeriodo}"
+									   label="Competência Inicial" inputSize="16" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+									   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									   showWeekDaysBar="false" showFooter="false" disabled="#{!previdenciaPrivada.apurarPrevidenciaPrivada}" 
+									   styleClass="special" inputClass="maskDateCompetencia" oninputfocus="$(this).monthYearMask()">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<cobra:toolTip>
+		    				<rich:message for="dataInicioPeriodo"/>
+		    			</cobra:toolTip>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="Competência Final *" for="dataTerminoPeriodo" /><br />
+						<rich:calendar id="dataTerminoPeriodo" value="#{aliquotaDePrevidenciaPrivada.dataTerminoPeriodo}"
+									   label="Competência Final" inputSize="15" popup="true" datePattern="MM/yyyy" enableManualInput="true" 
+									   oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+									   showWeekDaysBar="false" showFooter="false" disabled="#{!previdenciaPrivada.apurarPrevidenciaPrivada}" 
+									   styleClass="special" inputClass="maskDateCompetencia" oninputfocus="$(this).monthYearMask()">
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+						<cobra:toolTip>
+		    				<rich:message for="dataTerminoPeriodo"/>
+		    			</cobra:toolTip>
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="Alíquota (%) *" for="aliquota" /><br />
+						<h:inputText id="aliquota" label="Alíquota (%) *" disabled="#{!previdenciaPrivada.apurarPrevidenciaPrivada}"  
+									 value="#{aliquotaDePrevidenciaPrivada.aliquota}"  style="width:80px;" onfocus="$(this).percentMask()">
+							<f:converter converterId="bigDecimalConverter"/>
+						</h:inputText>
+						<cobra:toolTip>
+	                       	<rich:message for="aliquota"/>
+	                   </cobra:toolTip>
+					</h:panelGroup>
+				
+					<h:panelGroup layout="block" style="margin-bottom:7px;">
+						<a4j:commandLink id="cmdIncluirAliquota"
+										 oncomplete="AguardeHide();$('formulario:faltaJustificada').checked=false; " disabled="#{!previdenciaPrivada.apurarPrevidenciaPrivada}" 
+										 actionListener="#{apresentadorPrevidenciaPrivada.adicionarAliquota}" onclick="AguardeShow();" 
+										 styleClass="botaoAddItem" title="Adicionar Nova Alíquota" reRender="painelMinicrud,painelListagem,painelBotoes"/>
+					</h:panelGroup>	
+					
+				</h:panelGrid>
+				
+				
+				<rich:spacer height="4" width="0" />
+				
+			</h:panelGrid>
+			
+			<a4j:outputPanel id="painelListagem" ajaxRendered="true">
+								
+					<h:panelGroup  style="width: 100%;"  rendered="#{aliquotas.rowCount gt 0}" >
+			
+							<rich:dataTable id="listagem" value="#{aliquotas}" rowClasses="linha-par, linha-impar" 
+											cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{aliquotas.rowCount}" var="item"> 
+					    		<rich:column style="width:10%;">
+								    	<f:facet name="header">
+							    			<h:outputText value="Ação"/>
+							    		</f:facet>
+									    <a4j:region>
+								    		<a4j:commandLink id="excluirAliquota" immediate="true" 
+								    						 actionListener="#{apresentadorPrevidenciaPrivada.removerAliquota}"  oncomplete="AguardeHide();"  reRender="painelListagem,painelBotoes"
+							    							 styleClass="linkExcluir" title="Excluir" 
+							    							 onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false; AguardeShow();">
+							    			</a4j:commandLink>
+								    	</a4j:region>
+							    </rich:column>
+					    	
+						    	<rich:column style="width:10%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Data Inicial"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{item.dataInicioPeriodo}" id="inicio">
+					    				<f:converter converterId="competenciaConverter"/>
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+						    	<rich:column style="width:10%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Data Final"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{item.dataTerminoPeriodo}" id="fim">
+					    				<f:converter converterId="competenciaConverter"/>
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+						    	<rich:column style="width:10%;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Alíquota (%)"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{item.aliquota}">
+					    				<f:converter converterId="bigDecimalConverter"/>
+					    			</h:outputText>
+						    	</rich:column>
+						    	
+							</rich:dataTable>
+					
+					</h:panelGroup>	
+							
+			</a4j:outputPanel>
+			
+			</fieldset>
+		
+	</ui:define>
+		
+	<ui:define name="filtroBotoes">
+		<a4j:outputPanel id="painelBotoes" ajaxRendered="true">
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorPrevidenciaPrivada.salvar}" styleClass="botao"/>
+		</a4j:outputPanel>
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela" />
+	
+</ui:composition>
+
+</html>

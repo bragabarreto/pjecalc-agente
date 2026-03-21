@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="pt" lang="pt"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+
+	<a4j:outputPanel ajaxRendered="true">
+	<ul id="menupainel"> 
+		<a4j:repeat value="#{gerenciadorDeMenus.menus}" var="instMenu">
+			<ui:fragment rendered="#{not instMenu.oculto and instMenu.isAutorizado(identity)}">
+	    	<li class="header #{instMenu.aberto ? 'item-aberto' : ''}"><span class="dock #{instMenu.aberto ? 'undock' : ''}"></span>#{instMenu.rotulo}</li>
+		    <li class="menu-item" style="#{instMenu.aberto ? '' : 'display:none;'}">
+			    <ul>
+				<a4j:repeat value="#{instMenu.itens}" var="instItem">
+					<ui:fragment rendered="#{not instItem.oculto and instItem.isAutorizado(identity)}">
+			    	<li id="li_#{instItem.item.toString().toLowerCase()}">
+						<ui:fragment rendered="#{not empty instItem.menuAction}">
+							<ui:param name="actionBean" value="#{instItem.actionBean}" />
+							<ui:param name="action" value="#{instItem.menuAction.actionName}" />
+							<ui:fragment rendered="#{not instItem.menuAction.actionListener}">
+					    		<a4j:commandLink action="#{actionBean[action]}" immediate="true" styleClass="#{instItem.item.styleClass}" onclick="#{instItem.confirmacao}">#{instItem.rotulo}</a4j:commandLink>
+					    	</ui:fragment>	
+							<ui:fragment rendered="#{instItem.menuAction.actionListener}">
+					    		<a4j:commandLink actionListener="#{actionBean[action]}" immediate="true" styleClass="#{instItem.item.styleClass}" onclick="#{instItem.confirmacao}">#{instItem.rotulo}</a4j:commandLink>
+					    	</ui:fragment>	
+				    	</ui:fragment>
+						<ui:fragment rendered="#{empty instItem.menuAction}">
+					    	<a href="#" class="#{instItem.item.styleClass}" onclick="alert('Módulo ainda não disponível')">#{instItem.rotulo}</a>	
+				    	</ui:fragment>
+				    </li>
+				    </ui:fragment>
+			    </a4j:repeat>
+				</ul>
+		    </li>
+		    </ui:fragment>
+		</a4j:repeat>	
+	</ul>
+	</a4j:outputPanel>
+ 
+</html>

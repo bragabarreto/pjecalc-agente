@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+	<ui:composition template="/templates/template-conteudo.xhtml">
+	
+		<ui:param name="titulo" value="Lançamento Expresso" />
+		<ui:param name="apresentador" value="#{apresentadorVerbasParaCalculo}" />
+	    <ui:param name="lista" value="#{verbasParaCalculo}"/>
+	    	
+		<ui:define name="nofiltroCampos">
+		
+			<a4j:loadScript src="resource://jquery.js"/>
+		
+			<script type="text/javascript">
+				jQuery(document).ready(function() {
+				    jQuery(".list-check").find(":checked").parent().toggleClass("checked");
+				    jQuery(".list-check").find(":disabled").parent().toggleClass("disabled");
+				    jQuery(".list-check :checkbox").click(function () {
+				    	jQuery(this).parent().toggleClass("checked");
+				    });
+				});
+			</script>
+			
+	
+			<rich:panel style="border:solid 1px #999;">
+				<f:facet name="header" style="border:1px solid #ccc;">Verbas Principais
+                   
+                </f:facet>
+				<table id="formulario:listagem" class="list-check">
+					<a4j:repeat value="#{verbasParaSelecao}" var="coluna">
+						<tr>
+							<a4j:repeat value="#{coluna}" var="linha">
+								<td class="panelCell">
+									<h:selectBooleanCheckbox id="selecionada" value="#{linha.selecionada}" rendered="#{not empty linha}"/>
+									<h:outputText id="nome" class="panelLabel" value="#{linha.getNome()}" rendered="#{not empty linha}"/>
+								</td>
+							</a4j:repeat>
+						</tr>
+					</a4j:repeat>
+				</table>
+			</rich:panel>
+		</ui:define>
+	
+	    <ui:define name="filtroBotoes">
+	        <a4j:commandButton id="salvar" value="Salvar" styleClass="botao" action="#{apresentador.copiar}" onclick="AguardeShow();"/>
+	        <a4j:commandButton id="cancelar" value="Cancelar" styleClass="botao" action="#{apresentador.cancelar}" immediate="true"/>
+	    </ui:define>
+	
+	</ui:composition>
+
+
+
+
+
+</html>

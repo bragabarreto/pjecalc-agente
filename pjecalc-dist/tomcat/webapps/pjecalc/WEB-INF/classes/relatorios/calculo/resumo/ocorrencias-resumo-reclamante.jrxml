@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="ocorrencias-resumo-credito-reclamante" language="groovy" pageWidth="421" pageHeight="595" orientation="Landscape" columnWidth="395" leftMargin="20" rightMargin="6" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" isDefault="true" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cellsemborda" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="0" rightPadding="0">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitle" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="2" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitlevalue" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="130" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="resumo" class="java.lang.Object"/>
+	<parameter name="jr_resumo_de_calculo_5" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_resumo_de_calculo_4" class="java.lang.Object" isForPrompting="false"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band splitType="Stretch"/>
+	</title>
+	<pageHeader>
+		<band splitType="Stretch"/>
+	</pageHeader>
+	<columnHeader>
+		<band height="14" splitType="Stretch">
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="315" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Descrição de Créditos e Descontos do Reclamante]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="315" y="0" width="80" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor]]></text>
+			</staticText>
+		</band>
+	</columnHeader>
+	<detail>
+		<band height="14" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{resumo}.ocorrenciasCreditoReclamante.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="421" height="14"/>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{resumo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumo}.ocorrenciasCreditoReclamante]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_de_calculo_4}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="14">
+			<frame>
+				<reportElement x="0" y="0" width="395" height="14" backcolor="#CCCCCC"/>
+				<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+					<reportElement style="cell" mode="Opaque" x="315" y="0" width="80" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{resumo}.valorTotalCreditoReclamante]]></textFieldExpression>
+				</textField>
+				<rectangle>
+					<reportElement x="0" y="0" width="315" height="14" backcolor="#CCCCCC"/>
+				</rectangle>
+				<staticText>
+					<reportElement style="cellsemborda" x="158" y="0" width="157" height="14"/>
+					<textElement verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<text><![CDATA[Bruto Devido ao Reclamante  ]]></text>
+				</staticText>
+			</frame>
+		</band>
+		<band height="14">
+			<printWhenExpression><![CDATA[$P{resumo}.ocorrenciasDebitoReclamante.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="421" height="14"/>
+				<subreportParameter name="resumo">
+					<subreportParameterExpression><![CDATA[$P{resumo}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{resumo}.ocorrenciasDebitoReclamante]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_resumo_de_calculo_5}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="14">
+			<frame>
+				<reportElement x="0" y="0" width="395" height="14" backcolor="#CCCCCC"/>
+				<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+					<reportElement style="cell" mode="Opaque" x="315" y="0" width="80" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{resumo}.valorTotalDebitoReclamante]]></textFieldExpression>
+				</textField>
+				<rectangle>
+					<reportElement x="0" y="0" width="315" height="14" backcolor="#CCCCCC"/>
+				</rectangle>
+				<staticText>
+					<reportElement style="cellsemborda" x="197" y="0" width="118" height="14"/>
+					<textElement verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<text><![CDATA[Total de Descontos]]></text>
+				</staticText>
+			</frame>
+		</band>
+	</detail>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band height="15">
+			<frame>
+				<reportElement x="0" y="0" width="395" height="14" backcolor="#CCCCCC"/>
+				<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+					<reportElement style="cell" mode="Opaque" x="315" y="0" width="80" height="14" backcolor="#CCCCCC"/>
+					<textElement textAlignment="Center" verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{resumo}.valorLiquidoReclamante]]></textFieldExpression>
+				</textField>
+				<rectangle>
+					<reportElement x="0" y="0" width="315" height="14" backcolor="#CCCCCC"/>
+				</rectangle>
+				<staticText>
+					<reportElement style="cellsemborda" x="150" y="0" width="165" height="14"/>
+					<textElement verticalAlignment="Middle">
+						<font size="9" isBold="true"/>
+					</textElement>
+					<text><![CDATA[Líquido Devido ao Reclamante   ]]></text>
+				</staticText>
+			</frame>
+		</band>
+	</summary>
+</jasperReport>

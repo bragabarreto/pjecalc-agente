@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Pensão Alimentícia" />
+	<ui:param name="apresentador" value="#{apresentadorPensaoAlimenticiaAtualizacao}" />
+	<ui:param name="lista" value="#{listaVerbasAtualizacao}"/>
+	<ui:param name="pensaoAlimenticia" value="#{pensaoAlimenticia}" />
+	<ui:param name="hideFieldset" value="#{pensaoAlimenticia.origemRegistro eq 'CALCULO'}" />
+
+	<ui:define name="nofiltroCampos">
+		<ui:include src="/pages/calculo/resumo-calculo.xhtml">
+			<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+	</ui:define>
+	
+	<ui:define name="script">
+		<a4j:outputPanel id="painelScript" ajaxRendered="true">
+			<script language="JavaScript">
+				jQuery(function() {
+					prepararCheckAll('.checkAllHead','.checkAll');
+				});
+			</script>
+		</a4j:outputPanel>
+	</ui:define>
+
+	<ui:define name="camposFormulario">
+		<h:panelGroup rendered="#{pensaoAlimenticia.origemRegistro eq 'ATUALIZACAO'}">
+		
+			<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+				<h:panelGroup>
+					<a4j:region>
+						<h:selectBooleanCheckbox id="apurarPensaoAlimenticia" value="#{pensaoAlimenticia.apurarPensaoAlimenticia}">
+							<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelIdentificacao,painelAliquota,painelIncidencia,painelDataEvento" />
+						</h:selectBooleanCheckbox>
+						<label for="apurarPensaoAlimenticia">Apurar Pensão Alimentícia</label>
+					</a4j:region>
+				</h:panelGroup>
+			</h:panelGrid>
+			<h:panelGrid columns="3" cellspacing="4" cellpadding="2" border="0">
+				
+				<h:panelGroup id="painelDataEvento">
+					<h:outputLabel value="Data do Evento #{pensaoAlimenticia.apurarPensaoAlimenticia ? '*' : ''}" for="dataEvento" />
+					<br />
+					<rich:calendar id="dataEvento" disabled="#{!pensaoAlimenticia.apurarPensaoAlimenticia}"
+								   label="Data do Evento" inputSize="15" popup="true"
+								   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+								   value="#{pensaoAlimenticia.dataEvento}">
+						<f:facet name="footer">
+				        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+				        </f:facet>
+					</rich:calendar>
+					<cobra:toolTip>
+						<rich:message for="dataEvento" />
+					</cobra:toolTip>
+				</h:panelGroup>
+				
+				<h:panelGroup id="painelAliquota">
+					<h:outputLabel value="Alíquota (%) #{pensaoAlimenticia.apurarPensaoAlimenticia ? '*' : ''}" for="aliquota" />
+					<br />
+					<h:inputText id="aliquota" label="Alíquota (%)" disabled="#{!pensaoAlimenticia.apurarPensaoAlimenticia}" value="#{pensaoAlimenticia.aliquota}" style="width:165px;" onfocus="$(this).percentMask()">
+						<f:converter converterId="bigDecimalConverter" />
+					</h:inputText>
+					<cobra:toolTip>
+						<rich:message for="aliquota" />
+					</cobra:toolTip>
+				</h:panelGroup>
+	
+				<h:panelGroup id="painelIncidencia" style="margin-top:15px; width:150px;" layout="block">
+					<h:selectBooleanCheckbox id="incidirSobreJuros" value="#{pensaoAlimenticia.incidirSobreJuros}" disabled="#{!pensaoAlimenticia.apurarPensaoAlimenticia}" />
+					<label for="incidirSobreJuros">Incidir sobre Juros</label>
+				</h:panelGroup>
+
+			</h:panelGrid>
+			
+			<h:panelGrid columns="1" cellspacing="4" cellpadding="2" border="0">
+
+				<h:panelGroup id="painelIdentificacao">
+					<h:outputLabel value="Identificação da Pensão Alimentícia" for="identificacaoPensao" /><br />
+					<h:inputText id="identificacaoPensao" label="Identificação da Pensão Alimentícia" value="#{pensaoAlimenticia.folhaDoEvento}" 
+					     			 size="68" maxlength="80" disabled="#{!pensaoAlimenticia.apurarPensaoAlimenticia}" />
+					<rich:message showDetail="false" showSummary="false" for="identificacaoPensao">
+					   <f:facet name="errorMarker">
+					  	   <h:outputLink class="linkErro" id="identificacaoPensaoErro">
+							   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+							        <rich:message showDetail="true" showSummary="false" for="identificacaoPensao"/>
+							   </rich:toolTip>
+					       </h:outputLink>
+					 </f:facet>
+					</rich:message>
+					<h:outputText class="linkHelp" id="identificacaoHelp" style="margin-left:1px">
+						<rich:toolTip for="identificacaoHelp" showEvent="mouseover" styleClass="tooltipHelp">
+						   	Informar os números dos ID's ou das folhas do processo. Exemplo: ID0000001/ID0000002 ou fls.001/003.
+						</rich:toolTip>
+			    	</h:outputText>
+				</h:panelGroup>	
+			</h:panelGrid>
+	
+
+		</h:panelGroup>
+		
+			<fieldset style="width:500px; margin-top: 10px; padding-top:10px; padding-bottom:15px; padding-right:13px;"><legend>Incidência de Pensão Alimentícia</legend>
+				
+				<a4j:outputPanel id="painelIncidenciaPensaoAlimenticia">
+					<h:panelGrid columns="2" rendered="#{calculoAberto.isCalculoExterno()}">
+						
+						<h:panelGroup>
+							<h:selectBooleanCheckbox id="incidenciaPrincipalTribPensaoAlimenticia" value="#{pensaoAlimenticia.incidirSobrePrincipalTributavel}" style="margin-left:16px">
+								<a4j:support event="onclick" limitToList="true" ajaxSingle="true" reRender="painelIncidenciaPensaoAlimenticia"/>
+							</h:selectBooleanCheckbox>
+							<h:outputLabel value=" Principal Tributável" for="incidenciaPrincipalTribPensaoAlimenticia" />
+						</h:panelGroup>
+						<h:panelGroup rendered="#{pensaoAlimenticia.incidirSobrePrincipalTributavel}">
+							<h:inputText id="percPrincipalTribPensaoAliment" required="true" label="Percentual de base para verbas não tributáveis" size="6" maxlength="6" value="#{pensaoAlimenticia.percPrincipalTributavel}" onfocus="$(this).currencyMask()" />
+							<h:outputText value=" (%)" />
+							<cobra:toolTip>
+		                      	<rich:message for="percPrincipalTribPensaoAliment"/>
+		                  	</cobra:toolTip>
+						</h:panelGroup>
+						<h:outputText rendered="#{not pensaoAlimenticia.incidirSobrePrincipalTributavel}" />
+						
+						<h:panelGroup>
+							<h:selectBooleanCheckbox id="incidenciaPrincipalNaoTribPensaoAlimenticia" value="#{pensaoAlimenticia.incidirSobrePrincipalNaoTributavel}" style="margin-top:5px; margin-left:16px;">
+								<a4j:support event="onclick" limitToList="true" ajaxSingle="true" reRender="painelIncidenciaPensaoAlimenticia"/>
+							</h:selectBooleanCheckbox>
+							<h:outputLabel value=" Principal Não Tributável" for="incidenciaPrincipalNaoTribPensaoAlimenticia" />
+						</h:panelGroup>
+						<h:panelGroup rendered="#{pensaoAlimenticia.incidirSobrePrincipalNaoTributavel}">
+							<h:inputText id="percPrincipalNaoTribPensaoAliment" required="true" label="Percentual de base para verbas não tributáveis" size="6" maxlength="6" value="#{pensaoAlimenticia.percPrincipalNaoTributavel}" onfocus="$(this).currencyMask()" />
+							<h:outputText value=" (%)" />
+							<cobra:toolTip>
+		                      	<rich:message for="percPrincipalNaoTribPensaoAliment"/>
+		                  	</cobra:toolTip>
+						</h:panelGroup>
+						<h:outputText rendered="#{not pensaoAlimenticia.incidirSobrePrincipalNaoTributavel}" />
+					</h:panelGrid>
+					
+					<h:panelGrid columns="1">
+						<h:panelGroup>
+							<a4j:region>
+								<h:selectBooleanCheckbox id="incidenciaPensaoAlimenticia" value="#{fgts.incidenciaPensaoAlimenticia}" style="margin-left:16px">
+									<a4j:support event="onclick" limitToList="true" actionListener="#{fgts.setIncidenciaPensaoAlimenticiaSobreMulta(false)}" ajaxSingle="true" reRender="painelIncidenciaPensaoAlimenticia"/>
+								</h:selectBooleanCheckbox>
+								<h:outputLabel value=" FGTS" for="incidenciaPensaoAlimenticia" />
+							</a4j:region>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:region rendered="#{fgts.incidenciaPensaoAlimenticia and fgts.multa}">
+								<h:selectBooleanCheckbox id="incidenciaPensaoAlimenticiaSobreMulta" value="#{fgts.incidenciaPensaoAlimenticiaSobreMulta}" style="margin-top:5px; margin-left:16px;">
+									<a4j:support event="onclick" ajaxSingle="true" limitToList="true" />
+								</h:selectBooleanCheckbox>
+								<h:outputLabel value=" Multa do FGTS" for="incidenciaPensaoAlimenticiaSobreMulta" />	
+							</a4j:region>
+						</h:panelGroup>
+					</h:panelGrid>
+				</a4j:outputPanel>	
+				
+				<script type="text/javascript">
+					jQuery(document).ready(function() {
+						 jQuery(function() {
+		                		exibirDetalhesTabela('.linkTitulo', '.linkDestinacoes');
+						});
+						jQuery(".list-check").find(":checked").parent().toggleClass("checked");
+						jQuery(".list-check").find(":disabled").parent().toggleClass("disabled");
+						jQuery(".list-check :checkbox").click(function () {
+							jQuery(this).parent().toggleClass("checked");
+						});
+					});
+				</script>
+				
+				<a4j:outputPanel id="painelListagem" rendered="#{not calculoAberto.isCalculoExterno()}">
+				
+					<rich:dataTable id="listagem" value="#{lista}" rows="#{listaVerbasAtualizacao.rowCount}" rowClasses="linha-par, linha-par-exibir, linha-impar, linha-impar-exibir" 
+		           				cellpadding="3" border="0" width="100%" var="item" style="min-width:800px; margin-top:5px; margin-bottom:8px; margin-left:5px;"> 
+		            
+		           <f:facet name="header">
+						<rich:columnGroup>
+							<rich:column style="width:2%; text-align:center">
+								<h:panelGrid columns="1">
+				    				<h:selectBooleanCheckbox id="selecionarTodos" styleClass="checkAllHead" onclick="jsfCheckTodos()"/>
+						    	</h:panelGrid>
+							</rich:column>
+							<rich:column>
+								<h:outputText value="Verba Principal" />
+							</rich:column>
+							<rich:column>
+								<h:outputText value="Verba Reflexa" styleClass="linkTitulo linkDetalhe" />
+							</rich:column>							
+						</rich:columnGroup>
+					</f:facet>
+		
+					<rich:columnGroup>
+						<rich:column>
+				             <h:panelGrid columns="1">
+					    		<h:selectBooleanCheckbox id="verbaSelecionada" value="#{item.incidenciaPensaoAlimenticia}" styleClass="checkAll selectBoolean">
+									<a4j:support event="onclick" process="verbaSelecionada"  ajaxSingle="true" limitToList="true" immediate="true"/>
+					    		</h:selectBooleanCheckbox>
+							</h:panelGrid>
+						</rich:column>
+						<rich:column>
+							<h:outputText value="#{item.nome}" />
+						</rich:column>										
+						<rich:column>
+							<h:panelGroup id="divDestinacoes">
+								<ui:param name="principalId" value="#{item.id}" />
+								<h:outputText value="Exibir" styleClass="linkDestinacoes linkDetalhe exibirItem#{principalId}"/>
+							</h:panelGroup>
+						</rich:column>							
+					</rich:columnGroup>
+		
+					<rich:column colspan="4">
+						<h:panelGroup layout="block" styleClass="detalhe3d">
+								<rich:dataTable id="listaReflexo" value="#{item.getReflexos()}" rowClasses="linha-par, linha-impar"
+								cellpadding="3" border="0" width="100%" rows="10" var="reflexo" styleClass="listaReflexo" 
+								rendered="#{item.getReflexos().size() > 0}">
+									<rich:columnGroup rowClasses="#{reflexo.ativo ? 'linhaReflexoAtivo' : ''}" rendered="#{reflexo.ativo}">
+										<rich:column styleClass="colunaReflexo" style="width:5%;">
+								             <h:panelGrid columns="1">
+									    		<h:selectBooleanCheckbox value="#{reflexo.incidenciaPensaoAlimenticia}" styleClass="checkAll selectBoolean" rendered="#{reflexo.ativo}">
+													<a4j:support event="onclick" ajaxSingle="true" limitToList="true" immediate="true"/>
+									    		</h:selectBooleanCheckbox>
+											</h:panelGrid>
+										</rich:column>
+										<rich:column styleClass="colunaReflexo" style="width:85%;"> 
+											<rich:spacer width="10px"/>								
+											<h:outputText class="panelLabel" value="#{reflexo.nome}" />
+										</rich:column>	
+									</rich:columnGroup>
+								</rich:dataTable>
+						</h:panelGroup>
+						</rich:column> 								 
+						</rich:dataTable>
+						<ui:include src="/pages/comum/paginacao.xhtml">
+					    	<ui:param name="lista" value="#{apresentador.lista}" />
+						</ui:include>
+				
+				</a4j:outputPanel>
+		
+			</fieldset>
+
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+		<h:panelGroup rendered="#{pensaoAlimenticia.origemRegistro eq 'ATUALIZACAO'}">
+			<a4j:outputPanel id="painelBotoes" ajaxRendered="true">
+				<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao"/>
+			</a4j:outputPanel>
+		</h:panelGroup>
+	</ui:define>
+	
+	<ui:define name="auxiliar">
+	    <h:form>
+          <a4j:jsFunction name="jsfCheckTodos" immediate="true" limitToList="true" onbeforedomupdate="checkTodos()" oncomplete="AguardeHide()">
+          </a4j:jsFunction>
+        </h:form>
+		<script>
+			function checkTodos() {
+				AguardeShow();
+				elems = jQuery('.selectBoolean:enabled');
+				elems.attr('checked',jQuery('#selecionarTodos').attr('checked'));
+				for (i=0; i&lt;elems.size(); i++) {
+					elems[i].onclick();
+				}
+			}
+		</script>
+	</ui:define>
+
+</ui:composition>
+
+</html>

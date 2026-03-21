@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Contribuição Social" />
+	<ui:param name="apresentador" value="#{apresentadorINSS}" />
+	<ui:param name="registro" value="#{inss}" />
+	
+	<ui:define name="nofiltroCampos">
+		<ui:include src="../resumo-calculo.xhtml">
+				<ui:param name="exibirDadosDoCalculo" value="true" />
+		</ui:include>
+		<br/>
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+			<h:panelGrid columns="1" cellspacing="0" cellpadding="0" border="0">
+				
+				<h:panelGroup id="painelFormularioInss">
+					<h:panelGrid columns="2" cellspacing="0" cellpadding="0" border="0">
+			        	<h:panelGroup>
+							<fieldset style="width:390px; height: 75px;"><legend>Contribuição Social sobre salários devidos</legend>
+						 		
+						 		
+					 			<h:panelGroup id="apurarSegurado" layout="block" style="float: left;">
+						       		<a4j:region>
+										<h:selectBooleanCheckbox id="apurarInssSeguradoDevido" value="#{inss.inssSobreSalariosDevidos.apurarInssSegurado}">
+											<a4j:support event="onchange" actionListener="#{apresentador.mudarApurarSegurado}" reRender="painelCobrarDoReclamanteDevido,painelCorrigirDesconto" limitToList="true" ajaxSingle="true"/>
+										</h:selectBooleanCheckbox>
+										<h:outputLabel for="apurarInssSeguradoDevido" value="Apurar Segurado"/>
+						       		</a4j:region>
+						       	</h:panelGroup>
+						       	
+						       	<div style="float:left; margin-left: 20px;">
+						       		<h:panelGroup id="painelCobrarDoReclamanteDevido" layout="block">
+										<a4j:region rendered="#{inss.inssSobreSalariosDevidos.apurarInssSegurado}">
+											<h:selectBooleanCheckbox id="cobrarDoReclamanteDevido" value="#{inss.inssSobreSalariosDevidos.cobrarInssDoReclamante}">
+												<a4j:support event="onchange" reRender="painelCorrigirDesconto" limitToList="true" ajaxSingle="true"/>
+											</h:selectBooleanCheckbox>
+											<h:outputLabel for="cobrarDoReclamanteDevido" value="Cobrar do Reclamante"/>
+										</a4j:region>
+									</h:panelGroup>
+								
+									<h:panelGroup id="painelCorrigirDesconto" layout="block">
+										<a4j:region rendered="#{inss.inssSobreSalariosDevidos.apurarInssSegurado and inss.inssSobreSalariosDevidos.cobrarInssDoReclamante}">
+											<h:selectBooleanCheckbox id="corrigirDescontoReclamante" value="#{inss.inssSobreSalariosDevidos.corrigirDescontoReclamante}" />
+											<h:outputLabel for="corrigirDescontoReclamante" value="Com Correção Trabalhista"/>
+										</a4j:region>
+									</h:panelGroup>
+								</div>
+								
+							</fieldset>
+				        </h:panelGroup>
+				          <h:panelGroup >
+								<fieldset style="width: 250px; height: 75px;"><legend>Contribuição Social sobre salários pagos</legend>
+									<h:panelGrid columns="2" border="0" cellspacing="4" cellpadding="4">
+										<a4j:region>
+											<h:selectBooleanCheckbox id="apurarSalariosPagos" value="#{inss.apurarInssSobreSalariosPagos}" style="margin-left:5px; vertical-align:bottom;"></h:selectBooleanCheckbox>
+											<h:outputLabel for="apurarSalariosPagos" value="Apurar"/>
+										</a4j:region>
+									</h:panelGrid>
+								
+								</fieldset>
+				         </h:panelGroup>
+			       	</h:panelGrid>
+											
+			    </h:panelGroup>
+			    
+				<h:panelGroup>
+					<ui:include src="regerar-inss.xhtml">
+						<ui:param name="inssSelecionado" value="#{inss}" />
+					</ui:include>
+				</h:panelGroup>
+		
+		
+			</h:panelGrid>
+		
+	
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentadorINSS.salvar}" styleClass="botao" onclick="allToUpperCase()"/>  
+		<a4j:commandButton id="ocorrencias" value="Ocorrências" immediate="true" styleClass="botaoMedio" action="#{apresentador.parametrizarOcorrencias}" />
+	</ui:define>
+	
+</ui:composition>
+
+</html>

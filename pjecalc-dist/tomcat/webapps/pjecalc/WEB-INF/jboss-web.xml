@@ -1,0 +1,3 @@
+<jboss-web>
+    <context-root>/pjecalc</context-root>
+</jboss-web>

@@ -1,0 +1,1227 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Cartão de Ponto" />
+	<ui:param name="titulo" value="#{apresentadorApuracaoCartaoDePonto.titulo}" />
+	<ui:param name="apresentador" value="#{apresentadorApuracaoCartaoDePonto}" />
+	<ui:param name="registro" value="#{apresentadorApuracaoCartaoDePonto.registro}" />
+	<ui:param name="filtro" value="#{apresentadorApuracaoCartaoDePonto.filtro}" />
+	<ui:param name="listaDeOcorrencias" value="#{apresentadorApuracaoCartaoDePonto.listaOcorrencias}" />
+	
+	<ui:define name="nofiltroCampos">
+	
+	<ui:include src="../calculo/resumo-calculo.xhtml" />
+
+	</ui:define>
+
+	<ui:define name="resultadoTabela">
+	
+			<h:panelGroup id="painelListagem" style="width: 600px;" >
+			
+				<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" 
+								cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{lista.size}" var="apuracao"> 
+		    		<rich:column style="width:20%;">
+				    	<f:facet name="header">
+			    			<h:outputText value="Ações"/>
+			    		</f:facet>
+					    <a4j:region>
+				    		<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+			    			<a4j:commandLink id="alterarApuracao" styleClass="linkAlterar" title="Alterar" actionListener="#{apresentador.alterar}" onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+							<a4j:commandLink id="excluirApuracao" styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" onclick="AguardeShow();" oncomplete="AguardeHide();" />
+				    	</a4j:region>
+				    </rich:column>
+		    	
+			    	<rich:column style="width:40%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Data Inicial"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{apuracao.dataInicial}" id="dataIni" size="35"></h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column style="width:40%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Data Final"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{apuracao.dataFinal}" id="dataFim" size="35"></h:outputText>
+			    	</rich:column>
+		    	
+		    	
+				</rich:dataTable>
+			
+			</h:panelGroup>	
+	
+	
+	</ui:define>
+	
+
+	<ui:define name="nocamposFormulario">
+	
+		<a4j:outputPanel id="painelNovo" ajaxRendered="true">
+		
+			<h:panelGroup rendered="#{apresentador.emModoFormulario}" >
+			
+					<fieldset style="width: 1100px;">
+							<legend>Critérios de Apuração </legend>
+							<h:panelGroup>
+							
+								<h:panelGrid columns="1" cellspacing="4" border="0">
+								
+								  <h:panelGroup>
+									<fieldset style="width: 300px;">
+										<legend>Período</legend>
+										
+										<h:panelGrid columns="2" cellspacing="4" border="0">
+										
+											<h:panelGroup>
+												
+												<h:outputLabel value="Data Inicial *"/><br />
+												     <rich:calendar id="competenciaInicial" value="#{apresentador.registro.dataInicial}" required="true"  
+												     				label="Competência Inicial" inputSize="14" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true"
+												     				showWeekDaysBar="false" showFooter="false" styleClass="special" 
+												     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												     				oninputfocus="$(this).dateMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+														<f:facet name="footer">
+															<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														</f:facet>		            
+												    </rich:calendar>
+												    <rich:message showDetail="false" showSummary="false" for="competenciaInicial">
+													     <f:facet name="errorMarker">
+													     	   <h:outputLink class="linkErro" id="competenciaInicialErro">
+																   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																        <rich:message showDetail="true" showSummary="false" for="competenciaInicial"/>
+																   </rich:toolTip>
+													     	   </h:outputLink>
+													     </f:facet>
+													</rich:message>
+											</h:panelGroup>	
+											
+											
+											<h:panelGroup>
+												<h:outputLabel value="Data Final *"/><br />
+												     <rich:calendar id="competenciaFinal" value="#{apresentador.registro.dataFinal}" required="true"
+												     				label="Competência Final" inputSize="14" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true"
+												     				showWeekDaysBar="false" showFooter="false" styleClass="special" 
+												     				oncurrentdateselected="event.rich.component.selectDate(event.rich.date)"
+												     				 oninputfocus="$(this).dateMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+														<f:facet name="footer">
+															<h:outputText value="{selectedDateControl}" style="text-align:center" />
+														</f:facet>		            
+												    </rich:calendar>
+												    <rich:message showDetail="false" showSummary="false" for="competenciaFinal">
+													     <f:facet name="errorMarker">
+													     	   <h:outputLink class="linkErro" id="competenciaFinalErro">
+																   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+																        <rich:message showDetail="true" showSummary="false" for="competenciaFinal"/>
+																   </rich:toolTip>
+													     	   </h:outputLink>
+													     </f:facet>
+													</rich:message>
+											</h:panelGroup>
+
+										</h:panelGrid>
+							
+									</fieldset>
+								</h:panelGroup>
+								
+								
+								<a4j:outputPanel id="painelFormularioFormaDeApuracao" ajaxRendered="true">
+									
+									<fieldset style="width: 900px;">
+										<legend>Formas de Apuração</legend>
+										
+										<h:panelGrid columns="3" cellspacing="4" border="0">
+											<h:panelGroup>
+												<h:selectOneRadio id="tipoApuracaoHorasExtras" value="#{registro.formaDeApuracaoCartao}" styleClass="labelOutput" layout="pageDirection" disabled="#{apresentador.emModoSomenteVisualizacao}">
+													<s:selectItems value="#{enumItems.formaDeApuracaoCartaoEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+													<a4j:support event="onchange" action="#{apresentador.mudarFormaDeApuracao()}" reRender="painelFormularioFormaDeApuracao, painelHoraExtraNoturna, painelExtraSeparado, painelExtraDescanso, painelExtraSabadoDomingo" limitToList="true" ajaxSingle="true"/>
+												</h:selectOneRadio>
+											</h:panelGroup>	
+											
+											<h:panelGrid columns="1" cellspacing="2" cellpadding="1" border="0">
+												<h:panelGroup id="painelHorasSumula">
+													<h:inputText id="qtsumulatst" label="Quantidade de Horas Extras" value="#{apresentador.registro.qtHorasExtasSumulaTST}" style="margin-top: 21px; margin-left: -5px;" required="#{registro.formaDeApuracaoCartao.valor == 'HST'}"
+																			  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or registro.formaDeApuracaoCartao.valor != 'HST'}">
+													</h:inputText>
+													<cobra:toolTip>
+		    											<rich:message for="qtsumulatst"/>
+		    										</cobra:toolTip>
+												</h:panelGroup>
+												
+												<h:panelGroup id="painelHorasPrimeirasSeparado">
+													<h:inputText id="qthoraseparado" label="Quantidade de Horas Extras" value="#{apresentador.registro.qtPrimeirasHorasExtrasSeparado}" style="margin-top: -4px; margin-left: -5px;" required="#{registro.formaDeApuracaoCartao.valor == 'APH'}"
+																			  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or registro.formaDeApuracaoCartao.valor != 'APH'}">
+													</h:inputText>
+													<cobra:toolTip>
+		    											<rich:message for="qthoraseparado"/>
+		    										</cobra:toolTip>
+												</h:panelGroup>
+											</h:panelGrid>
+											
+											<h:panelGroup>
+												<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+													<a4j:outputPanel id="painelFlags">
+														<h:panelGrid columns="1" cellspacing="2" cellpadding="2" border="0">
+														
+															<h:panelGroup id="painelConsiderarFeriado" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="considerarFeriado" value="#{registro.considerarFeriados}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+																		<a4j:support event="onchange" action="#{apresentador.mudarConsideracaoDeFeriado()}" limitToList="true" ajaxSingle="true"
+																					 reRender="painelConsiderarFeriado, painelExtraSeparado, painelJornadaDiariaFeriadoNaoTrabalhado, painelJornadaDiariaFeriadoTrabalhado, painelApurarFeriadosTrabalhados, painelFormularioPreenchimentoJornadas" />
+																	</h:selectBooleanCheckbox>
+																	<h:outputLabel value="Considerar Feriados" for="considerarFeriado" style="padding-left: 3px;"/>
+																</a4j:region>
+															</h:panelGroup>
+															
+															<h:panelGroup id="painelExtraSeparado" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="extraFeriadoSeparado" value="#{registro.extraFeriadoSeparado}" 
+																	disabled="#{apresentador.emModoSomenteVisualizacao or !registro.considerarFeriados or registro.formaDeApuracaoCartao.valor == 'NAP'}" />
+																	<h:outputLabel value="Extras aos feriados em separado" for="extraFeriadoSeparado" style="padding-left: 3px;"/>
+																</a4j:region>
+															</h:panelGroup>
+
+															<h:panelGroup id="painelExtraDescanso" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="extraDescansoSeparado" value="#{registro.extraDescansoSeparado}" 
+																							 disabled="#{apresentador.emModoSomenteVisualizacao or registro.formaDeApuracaoCartao.valor == 'NAP'}">
+																		<a4j:support event="onchange" action="#{apresentador.mudarHoraExtraDomingoSeparado()}" limitToList="true" ajaxSingle="true"
+																					 reRender="painelExtraSabadoDomingo" />
+																	</h:selectBooleanCheckbox>
+																	<h:outputLabel value="Extras aos domingos em separado" for="extraDescansoSeparado" style="padding-left: 3px"/>
+																</a4j:region>
+															</h:panelGroup>
+															
+															<h:panelGroup id="painelExtraSabadoDomingo" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="extraSabadoDomingoSeparado" value="#{registro.extraSabadoDomingoSeparado}" 
+																							 disabled="#{apresentador.emModoSomenteVisualizacao or registro.formaDeApuracaoCartao.valor == 'NAP'}">
+																		<a4j:support event="onchange" action="#{apresentador.mudarHoraExtraSabadoDomingoSeparado()}" limitToList="true" ajaxSingle="true"
+																					 reRender="painelExtraDescanso" />
+																	</h:selectBooleanCheckbox>
+																	<h:outputLabel value="Extras aos sábados e domingos em separado" for="extraSabadoDomingoSeparado" style="padding-left: 3px"/>
+																</a4j:region>
+															</h:panelGroup>
+
+															<a4j:outputPanel id="painelTolerancia" style="margin-left: 25px;">
+																	<h:selectBooleanCheckbox id="tolerancia" value="#{registro.tolerancia}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+																		<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelTolerancia"/>
+																	</h:selectBooleanCheckbox>
+																	
+																	<h:outputLabel value="Tolerância  |" for="tolerancia" style="padding-left: 3px;" />
+																	
+																	<h:outputLabel value=" Por turno: " for="toleranciaPorTurno"/>
+																	<h:inputText id="toleranciaPorTurno" label="Tolerância Por Turno" value="#{apresentador.registro.toleranciaPorTurno}" required="#{registro.tolerancia}" 
+																				  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.tolerancia}">
+																	</h:inputText>
+																	<cobra:toolTip>
+		    															<rich:message for="toleranciaPorTurno"/>
+		    														</cobra:toolTip>
+																	<h:outputLabel value=" | Por dia: " for="toleranciaPorDia"/>
+																	<h:inputText id="toleranciaPorDia" label="Tolerância Por Dia"  value="#{apresentador.registro.toleranciaPorDia}" required="#{registro.tolerancia}"
+																				  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.tolerancia}">
+																	</h:inputText>
+																	<cobra:toolTip>
+		    															<rich:message for="toleranciaPorDia"/>
+		    														</cobra:toolTip>
+															</a4j:outputPanel>	
+															
+														</h:panelGrid>
+													</a4j:outputPanel>
+												</h:panelGrid>		
+											</h:panelGroup>
+											
+											
+										</h:panelGrid>
+							
+									</fieldset>
+								</a4j:outputPanel>
+								
+								<a4j:outputPanel id="painelFormularioJornadaDeTrabalhoPadrao" ajaxRendered="true">
+								    
+									<fieldset style="width: 900px;">
+										<legend>Jornada de Trabalho Padrão</legend>
+										
+										<h:panelGrid columns="2" cellspacing="4" border="0">
+										 	     <h:panelGrid columns="2" cellspacing="0" border="0">
+											        
+											        <h:panelGroup>
+														<h:outputLabel value="Jornada diária (segunda-feira) *" for="valorJornadaSegunda"/>
+													</h:panelGroup>
+										
+											        <h:panelGroup>
+															<h:inputText id="valorJornadaSegunda" label="Jornada diária (segunda-feira)" required="true"  value="#{apresentador.registro.valorJornadaDiariaSegundaFeira}" 
+																		  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorJornadaSegunda"/>
+		    												</cobra:toolTip>
+													</h:panelGroup>
+													
+													<h:panelGroup>
+														<h:outputLabel value="Jornada diária (terça-feira) *" for="valorJornadaTerca"/>
+													</h:panelGroup>
+										
+											        <h:panelGroup>
+															<h:inputText id="valorJornadaTerca" label="Jornada diária (terça-feira)" required="true" value="#{apresentador.registro.valorJornadaDiariaTercaFeira}" 
+																		  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorJornadaTerca"/>
+		    												</cobra:toolTip>
+													</h:panelGroup>
+													
+													<h:panelGroup>
+														<h:outputLabel value="Jornada diária (quarta-feira) *" for="valorJornadaQuarta"/>
+													</h:panelGroup>
+										
+											        <h:panelGroup>
+															<h:inputText id="valorJornadaQuarta" label="Jornada diária (quarta-feira)" required="true" value="#{apresentador.registro.valorJornadaDiariaQuartaFeira}" 
+																		  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorJornadaQuarta"/>
+		    												</cobra:toolTip>
+													</h:panelGroup>
+													
+													<h:panelGroup>
+														<h:outputLabel value="Jornada diária (quinta-feira) *" for="valorJornadaQuinta"/>
+													</h:panelGroup>
+										
+											        <h:panelGroup>
+															<h:inputText id="valorJornadaQuinta" label="Jornada diária (quinta-feira)" required="true" value="#{apresentador.registro.valorJornadaDiariaQuintaFeira}" 
+																		  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorJornadaQuinta"/>
+		    												</cobra:toolTip>
+													</h:panelGroup>
+													
+													<h:panelGroup>
+														<h:outputLabel value="Jornada diária (sexta-feira) *" for="valorJornadaSexta"/>
+													</h:panelGroup>
+										
+											        <h:panelGroup>
+															<h:inputText id="valorJornadaSexta" label="Jornada diária (sexta-feira)" required="true" value="#{apresentador.registro.valorJornadaDiariaSextaFeira}" 
+																		  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorJornadaSexta"/>
+		    												</cobra:toolTip>
+													</h:panelGroup>	
+													
+	                                                <h:panelGroup>
+															<h:outputLabel value="Jornada diária (sábado) *" for="valorJornadaDiariaSabado"/>
+													</h:panelGroup>
+													<h:panelGroup>
+															<h:inputText id="valorJornadaDiariaSabado" label="Jornada diária (sábado)" required="true" value="#{apresentador.registro.valorJornadaDiariaSab}" 
+																		  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorJornadaDiariaSabado"/>
+		    												</cobra:toolTip>
+													</h:panelGroup>
+													
+													<h:panelGroup>
+															<h:outputLabel value="Jornada diária (domingo) *" for="valorJornadaDiariaDom"/>
+													</h:panelGroup>
+													<h:panelGroup>
+															<h:inputText id="valorJornadaDiariaDom" label="Jornada diária (domingo)" required="true" value="#{apresentador.registro.valorJornadaDiariaDom}" 
+																		  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorJornadaDiariaDom"/>
+		    												</cobra:toolTip>
+													</h:panelGroup>
+													
+												</h:panelGrid>
+												
+												<h:panelGrid columns="1" cellspacing="0" border="0">
+												
+													<h:panelGrid columns="2" cellspacing="0" border="0">	
+														<h:panelGroup style="margin-left: 35px;">
+															<h:outputLabel value="Jornada Semanal *" for="qtJornadaSemanal"/>
+														</h:panelGroup>
+														<h:panelGroup>
+															<h:inputText id="qtJornadaSemanal" label="Jornada Semanal" value="#{apresentador.registro.qtJornadaSemanal}" style="margin-left: 5px; text-align:right;"
+																		 size="7" maxlength="5" onfocus="$(this).currencyMask()" disabled="#{apresentador.emModoSomenteVisualizacao}" required="true">
+																<f:converter converterId="bigDecimalConverter" />
+															</h:inputText>
+															<cobra:toolTip>
+		    													<rich:message for="qtJornadaSemanal"/>
+		    												</cobra:toolTip>
+														</h:panelGroup>
+													
+														<h:panelGroup style="margin-left: 35px;">
+																<h:outputLabel value="Jornada Mensal Média *" for="qtJornadaMensal"/>
+														</h:panelGroup>
+														<h:panelGroup>
+																<h:inputText id="qtJornadaMensal" label="Jornada Mensal" value="#{apresentador.registro.qtJornadaMensal}" style="margin-left: 5px; text-align:right;"
+																			 size="7" maxlength="6" onfocus="$(this).currencyMask()" disabled="#{apresentador.emModoSomenteVisualizacao}" required="true">
+																	<f:converter converterId="bigDecimalConverter"/>
+																</h:inputText>
+																<cobra:toolTip>
+		    														<rich:message for="qtJornadaMensal"/>
+		    													</cobra:toolTip>
+		    													<h:outputText class="linkHelp" id="qtJornadaMensalHelp" style="margin-left:2px">
+																	<rich:toolTip for="qtJornadaMensalHelp" showEvent="mouseover" styleClass="tooltipHelp">
+																	   	Esse campo deve ser preenchido com a jornada mensal média, que é calculada dividindo a jornada semanal pelos 7 dias da semana e multiplicando o resultado pelos 30 dias do mês comercial. Não confundir esse valor com a carga horária padrão.<br /><br />
+																	   	Por exemplo: se a carga horária padrão for 192 horas, a jornada semanal será 38,40 horas e a jornada mensal média será 164,57 horas.<br /><br />
+																	   	Portanto, altere a jornada mensal média sugerida pelo sistema somente se houver períodos de exceção no valor da carga horária.
+																	</rich:toolTip>
+													     	    </h:outputText>
+														</h:panelGroup>
+														
+													</h:panelGrid>
+													
+													<h:panelGrid columns="1" cellspacing="2" border="0">
+														<h:panelGroup id="painelJornadaDiariaFeriadoTrabalhado" style="margin-left: 35px;">
+															<a4j:region >
+																<h:selectBooleanCheckbox id="jornadaDiariaFeriadoTrabalhado" value="#{registro.considerarJornadaDiariaFeriadoTrabalhado}" 
+																disabled="#{apresentador.emModoSomenteVisualizacao or !registro.considerarFeriados}" style="margin-top: 4px;" />
+																<h:outputLabel value="Considerar jornada diária nos feriados trabalhados" for="jornadaDiariaFeriadoTrabalhado" style="padding-left: 3px"/>
+															</a4j:region>
+														</h:panelGroup>
+													</h:panelGrid>
+													
+													<h:panelGrid columns="1" cellspacing="2" border="0">
+														<h:panelGroup id="painelJornadaDiariaFeriadoNaoTrabalhado" style="margin-left: 35px;">
+															<a4j:region >
+																<h:selectBooleanCheckbox id="jornadaDiariaFeriadoNaoTrabalhado" value="#{registro.considerarJornadaDiariaFeriadoNaoTrabalhado}" 
+																disabled="#{apresentador.emModoSomenteVisualizacao or !registro.considerarFeriados}" style="margin-top: 4px;" />
+																<h:outputLabel value="Considerar jornada diária nos feriados não trabalhados" for="jornadaDiariaFeriadoNaoTrabalhado" style="padding-left: 3px"/>
+															</a4j:region>
+														</h:panelGroup>
+													</h:panelGrid>
+												
+												</h:panelGrid>
+													
+										</h:panelGrid>
+											
+									</fieldset>
+								</a4j:outputPanel>
+								
+								<a4j:outputPanel id="painelFormularioPeriodoDescanso" ajaxRendered="true">
+									<fieldset style="width: 900px;">
+										<legend>Períodos de Descanso</legend>
+										
+										<h:panelGrid columns="2" cellspacing="0" border="0">
+										
+											 <h:panelGrid columns="1" cellspacing="0" border="0">
+
+												<h:panelGroup id="painelApurarFeriadosTrabalhados">
+													<h:selectBooleanCheckbox id="apurarFeriadosTrabalhados" value="#{registro.apurarFeriadosTrabalhados}" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.considerarFeriados}" />
+													<h:outputLabel value="Apurar feriados trabalhados" for="apurarFeriadosTrabalhados" style="padding-left: 3px;"/>
+												</h:panelGroup>
+												
+												<h:panelGroup id="painelApurarDomingoTrabalhado">
+													<a4j:region>
+														<h:selectBooleanCheckbox id="apurarDomingosTrabalhados" value="#{registro.apurarDomingosTrabalhados}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															<a4j:support event="onchange" action="#{apresentador.mudarApurarDomingoTrabalhado()}" limitToList="true" ajaxSingle="true"
+																		 reRender="painelApurarSabadoDomingoTrabalhado" />
+														</h:selectBooleanCheckbox>
+														<h:outputLabel value="Apurar domingos trabalhados" for="apurarDomingosTrabalhados" style="padding-left: 3px;"/>
+													</a4j:region>
+												</h:panelGroup>
+												
+												<h:panelGroup id="painelApurarSabadoDomingoTrabalhado">
+													<a4j:region>
+														<h:selectBooleanCheckbox id="apurarSabadosDomingosTrabalhados" value="#{registro.apurarSabadosDomingosTrabalhados}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															<a4j:support event="onchange" action="#{apresentador.mudarApurarSabadoDomingoTrabalhado()}" limitToList="true" ajaxSingle="true"
+																		 reRender="painelApurarDomingoTrabalhado" />
+														</h:selectBooleanCheckbox>
+														<h:outputLabel value="Apurar sábados e domingos trabalhados" for="apurarSabadosDomingosTrabalhados" style="padding-left: 3px;"/>
+													</a4j:region>
+												</h:panelGroup>
+												
+												<h:panelGroup>
+														<h:selectBooleanCheckbox id="apurarSupressaoIntervalo384" value="#{registro.apurarSupressaoIntervalo384}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														<h:outputLabel value="Apurar supressão do intervalo Art. 384 CLT" for="apurarSupressaoIntervalo384" style="padding-left: 3px;"/>
+												</h:panelGroup>
+												
+												<h:panelGroup>
+														<h:selectBooleanCheckbox id="apurarSupressaoIntervalo72" value="#{registro.apurarSupressaoIntervalo72}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														<h:outputLabel value="Apurar supressão do intervalo Art. 72 CLT" for="apurarSupressaoIntervalo72" style="padding-left: 3px;"/>
+												</h:panelGroup>
+												
+												<h:panelGroup>
+														<h:selectBooleanCheckbox id="apurarSupressaoIntervaloArt253" value="#{registro.apurarSupressaoIntervaloArt253}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelFormularioPeriodoDescanso"/>
+														</h:selectBooleanCheckbox>
+														<h:outputLabel value="Apurar supressão do intervalo da insalubridade" for="apurarSupressaoIntervaloArt253" style="padding-left: 3px;"/>
+												</h:panelGroup>
+												
+												<h:panelGroup>
+													<h:outputLabel value="Tempo Trabalho: " for="valorTrabalhoArt253"/>
+													<h:inputText id="valorTrabalhoArt253" label="Tempo Trabalho"  
+																 value="#{apresentador.registro.valorTrabalhoArt253}" required="#{registro.apurarSupressaoIntervaloArt253}"
+																 size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.apurarSupressaoIntervaloArt253}">
+													</h:inputText>
+													<cobra:toolTip>
+    													<rich:message for="valorTrabalhoArt253"/>
+    												</cobra:toolTip>
+													
+													<h:outputLabel value=" | Tempo Descanso: " for="valorDescansoArt253"/>															
+													<h:inputText id="valorDescansoArt253" label="Tempo Descanso"  
+																 value="#{apresentador.registro.valorDescansoArt253}" required="#{registro.apurarSupressaoIntervaloArt253}"
+																 size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.apurarSupressaoIntervaloArt253}">
+													</h:inputText>
+													<cobra:toolTip>
+    													<rich:message for="valorDescansoArt253"/>
+    												</cobra:toolTip>
+												</h:panelGroup>
+
+											</h:panelGrid>
+											
+											
+										     <h:panelGrid columns="1" cellspacing="0" border="0">
+										     
+										     	<h:panelGroup id="painelDescansoEntreJornadas" style="margin-left: 35px;">
+														<h:selectBooleanCheckbox id="descansoEntreJornadas" value="#{registro.descansoEntreJornadas}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															<a4j:support event="onchange" limitToList="true" ajaxSingle="true" reRender="painelDescansoEntreJornadas"/>
+														</h:selectBooleanCheckbox>
+														<h:outputLabel value="Intervalo Interjornadas | " for="descansoEntreJornadas" style="padding-left: 3px;" />
+														
+														<h:panelGroup id="pnlInterjornadas">
+															<h:outputLabel value=" Entre jornadas: " for="valorDescansoEntreJornadas"/>
+															<h:selectOneMenu id="valorDescansoEntreJornadas" label="Descanso Entre Jornadas" value="#{apresentador.registro.valorDescansoEntreJornadas}" required="#{registro.descansoEntreJornadas}" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.descansoEntreJornadas}">
+																<f:selectItem itemValue="10:00" itemLabel="10:00" />
+																<f:selectItem itemValue="11:00" itemLabel="11:00" />
+																<f:selectItem itemValue="12:00" itemLabel="12:00" />
+																<f:selectItem itemValue="14:00" itemLabel="14:00" />
+																<f:selectItem itemValue="17:00" itemLabel="17:00" />
+																<a4j:support event="onchange" actionListener="#{apresentador.executarAoAlterarDescansoEntreJornadas()}" limitToList="true" ajaxSingle="true" process="valorDescansoEntreJornadas" reRender="pnlInterjornadas" />
+															</h:selectOneMenu>
+															<cobra:toolTip>
+		    													<rich:message for="valorDescansoEntreJornadas"/>
+		    												</cobra:toolTip>
+															<h:outputLabel value=" | Entre semanas: " for="valorDescansoEntreSemanas"/>
+															
+															<h:selectOneMenu id="valorDescansoEntreSemanas" label="Descanso Entre Semanas" value="#{apresentador.registro.valorDescansoEntreSemanas}" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.descansoEntreJornadas}">
+																<f:selectItems value="#{apresentador.listaEntreSemanasInterjornadas}" />
+															</h:selectOneMenu>
+															<h:outputText class="linkHelp" id="entreSemanasHelp" style="margin-left:1px">
+																<rich:toolTip for="entreSemanasHelp" showEvent="mouseover" styleClass="tooltipHelp">
+																   	Se o valor do campo "entre semanas" for 24 horas superior ao valor do campo "entre jornadas", a apuração do intervalo entre semanas ocorrerá sempre entre o horário de saída do sábado e o horário de entrada da segunda, descontando as horas trabalhadas no domingo.<br /><br />
+																 	Se o valor do campo "entre semanas" for o mesmo do campo "entre jornadas", a apuração do intervalo entre semanas será feita em duas etapas (sábado para domingo e domingo para segunda) sempre que houver horas trabalhadas no domingo. Caso não haja jornada no domingo, a apuração será feita em etapa única, de sábado para segunda, considerando um valor "entre semanas" 24 horas superior ao valor "entre jornadas".<br /><br />
+																 	Se o valor do campo "entre semanas" estiver em branco, só haverá apuração do intervalo entre semanas quando houver jornada no domingo. Neste caso, será feita em duas etapas (sábado para domingo e domingo para segunda), considerando o descanso entre jornadas selecionado. 
+																</rich:toolTip>
+												     	    </h:outputText>
+															<cobra:toolTip>
+		    													<rich:message for="valorDescansoEntreSemanas"/>
+		    												</cobra:toolTip>
+														</h:panelGroup>
+														
+												</h:panelGroup>
+										     
+												<h:panelGroup id="painelIntervalQuatroSeis" style="margin-left: 35px;">
+														<h:selectBooleanCheckbox id="intervaloIntraJornadaSupQuatroSeis" value="#{registro.intervaloIntraJornadaSupQuatroSeis}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															<a4j:support event="onchange" action="#{apresentador.mudarIntraSupQuatroSeis()}" limitToList="true" ajaxSingle="true" reRender="painelFormularioPeriodoDescanso"/>
+														</h:selectBooleanCheckbox>
+														
+														<h:outputLabel value="Intervalo intrajornada em jornada superior a 4h e até 6h  " for="intervaloIntraJornadaSupQuatroSeis" style="padding-left: 3px;" />
+														<h:inputText id="valorIntervaloIntraJornadaSupQuatroSeis" label="Intervalo Intrajornada em Jornada de Quatro a Seis Horas"  
+																	  value="#{apresentador.registro.valorIntervaloIntraJornadaSupQuatroSeis}" required="#{registro.intervaloIntraJornadaSupQuatroSeis}"
+																	  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.intervaloIntraJornadaSupQuatroSeis}">
+														</h:inputText>
+														<cobra:toolTip>
+		    												<rich:message for="valorIntervaloIntraJornadaSupQuatroSeis"/>
+		    											</cobra:toolTip>
+												</h:panelGroup>
+												
+                                                <h:panelGroup id="painelaSuperiorSeis" style="margin-left: 35px;">
+														<h:selectBooleanCheckbox id="intervalorIntraJornadaSupSeis" value="#{registro.intervalorIntraJornadaSupSeis}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+															<a4j:support event="onchange" action="#{apresentador.mudarIntraSupSeis()}" limitToList="true" ajaxSingle="true" reRender="painelFormularioPeriodoDescanso"/>
+														</h:selectBooleanCheckbox>
+														
+														<h:outputLabel value="Intervalo intrajornada em jornada superior a 6h " for="intervalorIntraJornadaSupSeis" style="padding-left: 3px;" />
+														
+														<h:inputText id="valorIntervalorIntraJornadaSupSeis" label="Intervalo Intrajornada em Jornada Superior a Seis Horas"  
+															value="#{apresentador.registro.valorIntervalorIntraJornadaSupSeis}" required="#{registro.intervalorIntraJornadaSupSeis}"
+																	  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.intervalorIntraJornadaSupSeis}">
+														</h:inputText>
+														<cobra:toolTip>
+		    												<rich:message for="valorIntervalorIntraJornadaSupSeis"/>
+		    											</cobra:toolTip>
+		    											
+		    											<h:outputLabel value="| Tolerância: " for="toleranciaIntervaloIntraJornadaSupSeis" style="padding-left: 3px;" />
+		    											<h:inputText id="toleranciaIntervaloIntraJornadaSupSeis" label="Tolerância do Intervalo Intrajornada em Jornada Superior a Seis Horas"  
+															value="#{apresentador.registro.toleranciaIntervaloIntraJornadaSupSeis}" required="#{registro.intervalorIntraJornadaSupSeis}"
+																	  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.intervalorIntraJornadaSupSeis}">
+														</h:inputText>
+														<cobra:toolTip>
+		    												<rich:message for="toleranciaIntervaloIntraJornadaSupSeis"/>
+		    											</cobra:toolTip>
+												</h:panelGroup>
+												
+												<h:panelGroup id="painelConsiderarFracionamento" style="margin-left: 35px;">
+														<h:selectBooleanCheckbox id="considerarFracionamentoIntra" value="#{registro.considerarFracionamentoIntervaloIntra}" disabled="#{apresentador.emModoSomenteVisualizacao or (!registro.intervaloIntraJornadaSupQuatroSeis and !registro.intervalorIntraJornadaSupSeis)}" style="margin-top: 4px;" />
+														<h:outputLabel value="Considerar válido o fracionamento do intervalo intrajornada" for="considerarFracionamentoIntra" style="padding-left: 3px;"/>
+												</h:panelGroup>
+												
+												<h:panelGroup id="painelSupressaoIntraIntegral" style="margin-left: 35px;">
+													<a4j:region >
+														<h:selectBooleanCheckbox id="apurarSupressaoIntervaloIntraIntegral" value="#{registro.apurarSupressaoIntervaloIntraIntegral}" disabled="#{apresentador.emModoSomenteVisualizacao or (!registro.intervaloIntraJornadaSupQuatroSeis and !registro.intervalorIntraJornadaSupSeis)}" style="margin-top: 4px;">
+															<a4j:support event="onchange" action="#{apresentador.mudarSupressaoIntervaloIntraIntegral()}" limitToList="true" ajaxSingle="true" reRender="painelSupressaoIntraReforma" />
+														</h:selectBooleanCheckbox>
+														<h:outputLabel value="Apurar supressão do intervalo intrajornada integral" for="apurarSupressaoIntervaloIntraIntegral" style="padding-left: 3px;"/>
+													</a4j:region>
+												</h:panelGroup>
+												
+												<h:panelGroup id="painelSupressaoIntraReforma" style="margin-left: 35px;">
+													<a4j:region >
+														<h:selectBooleanCheckbox id="apurarSupressaoIntervaloIntraReforma" value="#{registro.apurarSupressaoIntervaloIntraReforma}" disabled="#{apresentador.emModoSomenteVisualizacao or (!registro.intervaloIntraJornadaSupQuatroSeis and !registro.intervalorIntraJornadaSupSeis)}" style="margin-top: 4px;">
+															<a4j:support event="onchange" action="#{apresentador.mudarSupressaoIntervaloIntraReforma()}" limitToList="true" ajaxSingle="true" reRender="painelSupressaoIntraIntegral" />
+														</h:selectBooleanCheckbox>
+														<h:outputLabel value="Apurar supressão do intervalo intrajornada conforme §4º do Art. 71 da CLT" for="apurarSupressaoIntervaloIntraReforma" style="padding-left: 3px;"/>
+													</a4j:region>
+												</h:panelGroup>
+
+												<h:panelGroup id="painelExcessoIntervaloIntra" style="margin-left: 35px;">
+													<a4j:region>
+														<h:selectBooleanCheckbox id="apurarExcessoIntervaloIntra" value="#{registro.apurarExcessoIntervaloIntra}" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.intervalorIntraJornadaSupSeis}" style="margin-top: 4px;">
+															<a4j:support event="onchange" action="#{apresentador.mudarApurarExcessoIntervaloIntrajornada()}" limitToList="true" ajaxSingle="true" reRender="painelApurarApenasExcessoAcimaJornada" />
+														</h:selectBooleanCheckbox>
+														<h:outputLabel value="Apurar excesso do intervalo intrajornada conforme súmula 118 do TST" for="apurarExcessoIntervaloIntra" style="padding-left: 3px;"/>
+														<h:inputText id="valorIntervaloIntrajornadaMaximo" label="Intervalo Intrajornada Máximo" style="margin-left: 5px;"  
+																	  value="#{registro.intervaloIntrajornadaMaximo}" required="#{registro.apurarExcessoIntervaloIntra}"
+																	  size="5" maxlength="5" onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.intervalorIntraJornadaSupSeis}">
+														</h:inputText>
+														<cobra:toolTip>
+		    												<rich:message for="valorIntervaloIntrajornadaMaximo"/>
+		    											</cobra:toolTip>
+		    										</a4j:region>
+												</h:panelGroup>
+												
+												<h:panelGroup id="painelApurarApenasExcessoAcimaJornada" style="margin-left: 35px;">
+													<a4j:region>
+														<h:selectBooleanCheckbox id="apurarApenasExcessoAcimaJornada" value="#{registro.apurarApenasExcessoAcimaJornada}" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.apurarExcessoIntervaloIntra}" style="margin-top: 4px;" />
+														<h:outputLabel value="Apurar apenas o excesso que ultrapassar a jornada diária" for="apurarApenasExcessoAcimaJornada" style="padding-left: 3px;"/>
+													</a4j:region>
+												</h:panelGroup>
+
+											</h:panelGrid>
+											
+										</h:panelGrid>
+							
+									</fieldset>
+								</a4j:outputPanel>
+							
+							   <h:panelGroup id="painelFormularioHorarioNoturno">
+									<fieldset style="width: 900px;">
+										<legend>Horário Noturno</legend>
+										
+										<h:panelGrid columns="2" cellspacing="4" border="0">
+											<h:panelGroup>
+												<h:selectOneRadio id="horarioNoturnoApuracaroCartao" value="#{registro.horarioNoturnoApuracaroCartao}" styleClass="labelOutput" layout="pageDirection" disabled="#{apresentador.emModoSomenteVisualizacao}">
+													<s:selectItems value="#{enumItems.horarioNoturnoApuracaroCartaoEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+													<a4j:support event="onchange" action="#{apresentador.atualizarHoraFicta()}" reRender="painelReducaoNoturna" limitToList="true" ajaxSingle="true"/>
+												</h:selectOneRadio>
+											</h:panelGroup>	
+											
+											
+											<h:panelGroup>
+												<h:panelGrid columns="2" cellspacing="4" cellpadding="2" border="0">
+													<a4j:outputPanel id="painelFlagsHorarioNoturno">
+														<h:panelGrid columns="1" cellspacing="2" cellpadding="2" border="0">
+														
+															<h:panelGroup id="painelHoraNoturna" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="apurarHorasNoturnas" value="#{registro.apurarHorasNoturnas}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+																	<h:outputLabel value="Apurar horas noturnas" for="apurarHorasNoturnas" style="padding-left: 3px;"/>
+																</a4j:region>
+															</h:panelGroup>
+														
+															<h:panelGroup id="painelHoraExtraNoturna" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="apurarHorasExtrasNoturnas" value="#{registro.apurarHorasExtrasNoturnas}" disabled="#{apresentador.emModoSomenteVisualizacao or registro.formaDeApuracaoCartao.valor != 'HJD'}" />
+																	<h:outputLabel value="Apurar horas extras noturnas" for="apurarHorasExtrasNoturnas" style="padding-left: 3px;"/>
+																</a4j:region>
+															</h:panelGroup>
+															
+															<h:panelGroup id="painelReducaoNoturna" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="considerarReducaoFictaDaHoraNoturna" value="#{registro.considerarReducaoFictaDaHoraNoturna}" disabled="#{apresentador.emModoSomenteVisualizacao or registro.horarioNoturnoApuracaroCartao.valor != 'AUR'}" />
+																	<h:outputLabel value="Considerar a redução ficta da hora noturna" for="considerarReducaoFictaDaHoraNoturna" style="padding-left: 3px;"/>
+																</a4j:region>
+															</h:panelGroup>
+															
+															<h:panelGroup id="painelSumulaTST" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="horarioProrrogadoSumula60" value="#{registro.horarioProrrogadoSumula60}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+																		<a4j:support event="onchange" action="#{apresentador.atualizarForcarProrrogacao()}" reRender="painelProrrogacao" limitToList="true" ajaxSingle="true"/>
+																	</h:selectBooleanCheckbox>
+																	<h:outputLabel value="Horário Prorrogado - Súmula 60 TST" for="horarioProrrogadoSumula60" style="padding-left: 3px"/>
+																</a4j:region>
+															</h:panelGroup>
+															
+															<h:panelGroup id="painelProrrogacao" style="margin-left: 25px;">
+																<a4j:region >
+																	<h:selectBooleanCheckbox id="forcarProrrogacao" value="#{registro.forcarProrrogacao}" disabled="#{apresentador.emModoSomenteVisualizacao or !registro.horarioProrrogadoSumula60}"/>
+																	<h:outputLabel value="Forçar prorrogação" for="forcarProrrogacao" style="padding-left: 3px;"/>
+																</a4j:region>
+															</h:panelGroup>
+															
+														</h:panelGrid>
+													</a4j:outputPanel>
+												</h:panelGrid>		
+											</h:panelGroup>
+											
+											
+										</h:panelGrid>
+							
+									</fieldset>
+								</h:panelGroup>
+								
+								<h:panelGroup id="painelFormularioPreenchimentoJornadas">
+									
+									
+									<fieldset style="width: 900px;">
+										<legend>Preenchimento de Jornadas</legend>
+										
+										<h:panelGrid columns="2" cellspacing="4" border="0">
+											<h:panelGroup>
+												<h:selectOneRadio id="preenchimentoJornadasCartao" value="#{apresentador.tipoPreenchimentoJornada}" styleClass="labelOutput" disabled="#{apresentador.emModoSomenteVisualizacao}">
+													<s:selectItems value="#{enumItems.preenchimentoJornadasCartaoEnum}" var="item" label="#{item.nome}" />
+													<s:convertEnum />
+													<a4j:support event="onchange" reRender="painelOcorrenciasProgramacao, painelOcorrenciasEscala, painelOcorrenciasEscalaSemanal" limitToList="true" ajaxSingle="true"/>
+												</h:selectOneRadio>
+												
+													<a4j:outputPanel id="painelOcorrenciasProgramacao" ajaxRendered="true">
+			
+														<h:panelGroup rendered="#{apresentador.tipoPreenchimentoJornada.valor == 'PRO'}" >
+														
+															<rich:dataTable id="listagemProgramacao" value="#{apresentador.listaOcorrenciasSemanal}" rowClasses="linha-par, linha-impar" 
+																			cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{apresentador.listaOcorrenciasSemanal.size}" var="preenchimento"> 
+																
+													    		<rich:column style="width:20%;">
+															    	<f:facet name="header">
+														    			<h:outputText value="Dia"/>
+														    		</f:facet>
+																    <h:outputText value="#{preenchimento.diaDaSemana}" id="sequencial" size="10"></h:outputText>
+															    </rich:column>
+													    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 1"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada1}" id="entrada1" size="6"
+													    			             onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 1"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida1}" id="saida1" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 2"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada2}" id="entrada2" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 2"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida2}" id="saida2" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 3"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada3}" id="entrada3" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 3"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida3}" id="saida3" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 4"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada4}" id="entrada4" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 4"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida4}" id="saida4" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 5"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada5}" id="entrada5" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 5"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida5}" id="saida5" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 6"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada6}" id="entrada6" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 6"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida6}" id="saida6" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+														    	</rich:column>
+													    	
+															</rich:dataTable>
+														
+														</h:panelGroup>
+														
+														<h:panelGroup id="panelScriptTableProgramacao">
+															 <script type="text/javascript">
+																/* <![CDATA[ */   
+															       jQuery(function() {
+																		jQuery('#formulario:listagemProgramacao').enableCellNavigation();
+																	});
+															    /* ]]> */
+															</script>
+														</h:panelGroup>
+													
+													</a4j:outputPanel>
+													
+													
+													<a4j:outputPanel id="painelOcorrenciasEscala" ajaxRendered="true">
+														
+														<h:panelGroup rendered="#{apresentador.tipoPreenchimentoJornada.valor == 'ESC'}" >
+														
+														  <h:panelGrid columns="4" cellspacing="3" border="0">
+														  
+														   <h:panelGroup>
+																<h:outputLabel for="escalas" value="Escala: " />
+																<a4j:region>
+																	<h:selectOneMenu id="escalas" label="Escala:" value="#{registro.tipoEscalaPreenchimentoJornadaCartaoEnum}" style="width:80px;">
+																		<s:selectItems value="#{apresentador.tiposEscalas}" var="item" label="#{item.nome}" /> 
+																		<a4j:support event="onchange" reRender="painelOcorrenciasEscala, painelOcorrenciasEscalaSemanal" limitToList="true" action="#{apresentador.mudarTipoEscala()}"/>
+																	</h:selectOneMenu>
+																</a4j:region>
+														    </h:panelGroup>
+												        	
+												        	<a4j:region>
+															    <h:panelGroup id="inicioEscala">
+																    <h:outputLabel value="Início Escala: " for="valorHoraInicioEscala"/>
+																	<h:inputText value="#{registro.valorHoraInicioEscala}" id="valorHoraInicioEscala" size="6"
+														    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or
+														    											   registro.tipoEscalaPreenchimentoJornadaCartaoEnum.valor == 'O' or
+														    											   registro.tipoEscalaPreenchimentoJornadaCartaoEnum.valor == 'C' or
+														    											   registro.tipoEscalaPreenchimentoJornadaCartaoEnum.valor == 'S' or
+														    											   registro.tipoEscalaPreenchimentoJornadaCartaoEnum.valor == 'T'}">
+														    		 	<a4j:support event="onkeyup" reRender="painelOcorrenciasEscalaSemanal" limitToList="true" action="#{apresentador.atualizarListaEscala()}"/>
+																	</h:inputText>
+																	<cobra:toolTip>
+		    															<rich:message for="valorHoraInicioEscala"/>
+		    														</cobra:toolTip>
+													        	</h:panelGroup>
+												        	</a4j:region>
+												        	
+												        	<a4j:region>
+													        	<h:panelGroup id="diasTrabalhados">
+																    <h:outputLabel value="Quantidade de Dias: " for="qtdDiasTrabalhados"/>
+																	<h:inputText id="qtdDiasTrabalhados" label="Quantidade de Dias: "  value="#{apresentador.diasTrabalhadosEscala}" 
+																				  size="5" maxlength="5" disabled="#{apresentador.emModoSomenteVisualizacao or registro.tipoEscalaPreenchimentoJornadaCartaoEnum.valor != 'O'}">
+																				  <a4j:support event="onkeyup" reRender="painelOcorrenciasEscalaSemanal" limitToList="true" action="#{apresentador.atualizarListaEscala()}"/>
+																	</h:inputText>
+																	<cobra:toolTip>
+		    															<rich:message for="qtdDiasTrabalhados"/>
+		    														</cobra:toolTip>
+													        	</h:panelGroup>
+												        	</a4j:region>
+														
+													      </h:panelGrid>
+													      
+													 </h:panelGroup>
+													      
+													 </a4j:outputPanel>
+												        	
+													<a4j:outputPanel id="painelOcorrenciasEscalaSemanal" ajaxRendered="true">
+														
+														<h:panelGroup rendered="#{apresentador.tipoPreenchimentoJornada.valor == 'ESC'}" >
+															<rich:dataTable id="listagemEscala" value="#{apresentador.listaOcorrenciasEscala}" rowClasses="linha-par, linha-impar" 
+																			cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{apresentador.listaOcorrenciasEscala.size}" 
+																			var="preenchimento" rendered="#{apresentador.listaOcorrenciasEscala.size > 0}"> 
+																
+													    		<rich:column style="width:20%;">
+															    	<f:facet name="header">
+														    			<h:outputText value="Dia"/>
+														    		</f:facet>
+																    <h:outputText value="#{preenchimento.sequencial}" id="sequencial" size="35"></h:outputText>
+															    </rich:column>
+													    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 1"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada1}" id="entrada1" size="6"
+													    			             onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 1"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida1}" id="saida1" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 2"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada2}" id="entrada2" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 2"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida2}" id="saida2" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 3"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada3}" id="entrada3" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 3"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida3}" id="saida3" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 4"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada4}" id="entrada4" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 4"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida4}" id="saida4" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 5"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada5}" id="entrada5" size="6" 
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 5"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida5}" id="saida5" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Entrada 6"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrEntrada6}" id="entrada6" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+														    	
+														    	<rich:column style="width:80%;">
+													    			<f:facet name="header">
+													    				<h:outputText value="Saida 6"/>
+													    			</f:facet>	
+													    			<h:inputText value="#{preenchimento.hrSaida6}" id="saida6" size="6"
+													    			onfocus="$(this).timeMask()" disabled="#{apresentador.emModoSomenteVisualizacao or preenchimento.editavel == false}"/>
+														    	</rich:column>
+													    	
+															</rich:dataTable>
+														
+													</h:panelGroup>
+													
+													<h:panelGroup id="panelScriptTableEscala">
+														 <script type="text/javascript">
+															/* <![CDATA[ */   
+														       jQuery(function() {
+																	jQuery('#formulario:listagemEscala').enableCellNavigation();
+																});
+														    /* ]]> */
+														</script>
+													</h:panelGroup>
+													
+												</a4j:outputPanel>
+													
+											</h:panelGroup>	
+											
+										</h:panelGrid>
+							
+									</fieldset>
+								</h:panelGroup>
+								
+							</h:panelGrid>
+							
+							</h:panelGroup>
+							
+						</fieldset>
+					
+			</h:panelGroup>
+		</a4j:outputPanel>
+		
+		<h:panelGroup rendered="#{apresentador.listaOcorrenciasCartao.size eq 0 and apresentador.operacao == 'OUTRO'}">
+			<h:outputLabel style="float:left; margin:14px 10px 5px 16px;" value="Não existem jornadas lançadas para o cálculo." />
+		</h:panelGroup>
+		
+		<h:panelGroup rendered="#{ apresentador.operacao == 'OUTRO' and apresentador.listaOcorrenciasCartao.size > 0}" >
+		    <rich:tabPanel switchType="client" immediate="true">
+		    
+		    <rich:tab id="tabDados" label="Jornada" styleClass="primeiraAba"> 	 
+		    	<a4j:outputPanel id="selectMesAno">
+					<h:panelGroup>
+						<h:outputLabel for="mesAno" value="Mês/Ano: " />
+						<a4j:region>
+							<h:selectOneMenu id="mesAno" label="Mês/Ano:" value="#{apresentador.mesAnoOcorrencias}" style="width:150px;">
+								<s:selectItems value="#{apresentador.periodos}" var="item" label="#{item}" /> 
+								<a4j:support event="onchange" reRender="painelOcorrenciasPorMes" actionListener="#{apresentador.mudarMes}" oncomplete="jQuery('#formulario:tabOcorrencias').enableCellNavigation()" />
+							</h:selectOneMenu>
+						</a4j:region>
+				    </h:panelGroup>
+				    
+				    
+				    <h:panelGroup>
+				    	<a4j:commandButton id="regerarOcorrencias" value="Sobrescrever Lançamentos Manuais" immediate="true" action="#{apresentador.regerarOcorrencias}" styleClass="botaoLivre" style="float:right" onclick="if (!confirma('#{mensagens.MSG0152}',this)) return false;" />
+				    </h:panelGroup>
+				    
+				    <br/><br/>
+				    
+				    <a4j:outputPanel  id="painelOcorrenciasPorMes" ajaxRendered="true">
+						<rich:dataTable value="#{apresentador.listaOcorrenciasCartao}" var="linha" width="100%" id="tabOcorrencias" rowClasses="linha-par, linha-impar" >
+							
+							
+						   <rich:column style="width:5%; text-align:center;">
+						    	<f:facet name="header">
+					    			<h:outputText value="Ocorrência"/>
+					    		</f:facet>
+							    <h:outputText value="#{linha.dataOcorrencia}" id="ocorrencia" size="12"></h:outputText>
+						    </rich:column>
+						    
+						   <rich:column style="width:5%; text-align:center;">
+						    	<f:facet name="header">
+					    			<h:outputText value="Dia da Semana"/>
+					    		</f:facet>
+							    <h:outputText value="#{linha.diaDaSemana}" id="diaDaSemana" size="10"></h:outputText>
+						    </rich:column>
+				    	
+					    	<rich:column style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Entrada 1"/>
+				    			</f:facet>	
+				    			<h:inputText  style="text-align:center;" value="#{linha.hrEntrada1}" id="entrada1" size="6" onfocus="$(this).timeMask()"/>
+				    			
+					    	</rich:column>
+					    	
+					    	<rich:column style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Saida 1"/>
+				    			</f:facet>	
+				    			<h:inputText  style="text-align:center;" value="#{linha.hrSaida1}" id="saida1" size="6" onfocus="$(this).timeMask()"/>
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoEntrada2" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:panelGrid id="headerES2" columns="2" cellpadding="2">
+					    				<h:selectBooleanCheckbox value="#{apresentador.habilitaES2}">
+					    					<a4j:support event="onclick" limitToList="true" ajaxSingle="true" actionListener="#{apresentador.controlarVisibilidadeES(2)}" process="painelOcorrenciasPorMes" reRender="headerES3,headerES4,headerES5,headerES6,ocorrenciasTurnoEntrada2,ocorrenciasTurnoSaida2,ocorrenciasTurnoEntrada3,ocorrenciasTurnoSaida3,ocorrenciasTurnoEntrada4,ocorrenciasTurnoSaida4,ocorrenciasTurnoEntrada5,ocorrenciasTurnoSaida5,ocorrenciasTurnoEntrada6,ocorrenciasTurnoSaida6" oncomplete="jQuery('#formulario:tabOcorrencias').enableCellNavigation()" />
+				    					</h:selectBooleanCheckbox>
+				    					<h:outputText value="Entrada 2"/>
+			    					</h:panelGrid>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrEntrada2}" id="entrada2" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES2}" />
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoSaida2" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Saida 2"/>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrSaida2}" id="saida2" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES2}" />
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoEntrada3" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:panelGrid id="headerES3" columns="2" cellpadding="2">
+					    				<h:selectBooleanCheckbox value="#{apresentador.habilitaES3}" disabled="#{not apresentador.habilitaES2}">
+					    					<a4j:support event="onclick" limitToList="true" ajaxSingle="true" actionListener="#{apresentador.controlarVisibilidadeES(3)}" process="painelOcorrenciasPorMes" reRender="headerES4,headerES5,headerES6,ocorrenciasTurnoEntrada3,ocorrenciasTurnoSaida3,ocorrenciasTurnoEntrada4,ocorrenciasTurnoSaida4,ocorrenciasTurnoEntrada5,ocorrenciasTurnoSaida5,ocorrenciasTurnoEntrada6,ocorrenciasTurnoSaida6" oncomplete="jQuery('#formulario:tabOcorrencias').enableCellNavigation()" />
+				    					</h:selectBooleanCheckbox>
+				    					<h:outputText value="Entrada 3"/>
+			    					</h:panelGrid>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrEntrada3}" id="entrada3" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES3}"/>
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoSaida3" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Saida 3"/>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrSaida3}" id="saida3" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES3}" />
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoEntrada4" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:panelGrid id="headerES4" columns="2" cellpadding="2">
+					    				<h:selectBooleanCheckbox value="#{apresentador.habilitaES4}" disabled="#{not apresentador.habilitaES3}">
+					    					<a4j:support event="onclick" limitToList="true" ajaxSingle="true" actionListener="#{apresentador.controlarVisibilidadeES(4)}" process="painelOcorrenciasPorMes" reRender="headerES5,headerES6,ocorrenciasTurnoEntrada4,ocorrenciasTurnoSaida4,ocorrenciasTurnoEntrada5,ocorrenciasTurnoSaida5,ocorrenciasTurnoEntrada6,ocorrenciasTurnoSaida6" oncomplete="jQuery('#formulario:tabOcorrencias').enableCellNavigation()" />
+				    					</h:selectBooleanCheckbox>
+				    					<h:outputText value="Entrada 4"/>
+			    					</h:panelGrid>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrEntrada4}" id="entrada4" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES4}" />
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoSaida4" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Saida 4"/>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrSaida4}" id="saida4" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES4}"/>
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoEntrada5" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:panelGrid id="headerES5" columns="2" cellpadding="2">
+					    				<h:selectBooleanCheckbox value="#{apresentador.habilitaES5}" disabled="#{not apresentador.habilitaES4}">
+					    					<a4j:support event="onclick" limitToList="true" ajaxSingle="true" actionListener="#{apresentador.controlarVisibilidadeES(5)}" process="painelOcorrenciasPorMes" reRender="headerES6,ocorrenciasTurnoEntrada5,ocorrenciasTurnoSaida5,ocorrenciasTurnoEntrada6,ocorrenciasTurnoSaida6" oncomplete="jQuery('#formulario:tabOcorrencias').enableCellNavigation()" />
+				    					</h:selectBooleanCheckbox>
+				    					<h:outputText value="Entrada 5"/>
+			    					</h:panelGrid>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrEntrada5}" id="entrada5" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES5}" />
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoSaida5" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Saida 5"/>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrSaida5}" id="saida5" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES5}" />
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoEntrada6" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:panelGrid id="headerES6" columns="2" cellpadding="2">
+					    				<h:selectBooleanCheckbox value="#{apresentador.habilitaES6}" disabled="#{not apresentador.habilitaES5}">
+					    					<a4j:support event="onclick" limitToList="true" ajaxSingle="true" actionListener="#{apresentador.controlarVisibilidadeES(6)}" process="painelOcorrenciasPorMes" reRender="ocorrenciasTurnoEntrada6,ocorrenciasTurnoSaida6" oncomplete="jQuery('#formulario:tabOcorrencias').enableCellNavigation()" />
+				    					</h:selectBooleanCheckbox>
+				    					<h:outputText value="Entrada 6"/>
+			    					</h:panelGrid>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrEntrada6}" id="entrada6" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES6}" />
+					    	</rich:column>
+					    	
+					    	<rich:column id="ocorrenciasTurnoSaida6" style="width:5%; text-align:center;">
+				    			<f:facet name="header">
+				    				<h:outputText value="Saida 6"/>
+				    			</f:facet>	
+				    			<h:inputText style="text-align:center;" value="#{linha.hrSaida6}" id="saida6" size="6" onfocus="$(this).timeMask()" disabled="#{not apresentador.habilitaES6}" />
+					    	</rich:column>
+						    
+						</rich:dataTable>
+					</a4j:outputPanel>
+					
+					<h:panelGroup id="panelScriptTableGrade">
+						 <script type="text/javascript">
+							/* <![CDATA[ */   
+						       jQuery(function() {
+									jQuery('#formulario:tabOcorrencias').enableCellNavigation();
+								});
+						    /* ]]> */
+						</script>
+					</h:panelGroup>
+				</a4j:outputPanel>
+				
+				</rich:tab>
+				
+				<rich:tab id="tabImportar" label="Importar Jornada" styleClass="segundaAba">
+					<h:panelGrid columns="1" cellpadding="15" cellspacing="3">
+							<h:outputLabel for="arquivo" value="Selecionar Arquivo CSV *"/><br />
+							<rich:fileUpload id="arquivo" fileUploadListener="#{apresentador.listenerUpload}"  locale="pt_BR" immediateUpload="true" 
+							addControlLabel="Escolher Arquivo..." clearAllControlLabel="Remover" cancelEntryControlLabel="Cancelar" clearControlLabel="" 
+							transferErrorLabel="Erro na transferência" stopControlLabel="Parar" doneLabel="Feito" stopEntryControlLabel="Parar" 
+							sizeErrorLabel="Tamanho do arquivo maior que o limite máximo permitido.">
+								<a4j:support event="onclear" reRender="pnlFileUpload" />
+							</rich:fileUpload>
+						<h:outputLink class="linkCartaoDePonto" value="#{facesContext.externalContext.requestContextPath}/templateCartaoDePonto/ExemploJornadaCartaoDePonto.csv">Para baixar um arquivo de exemplo preenchido, clique aqui.</h:outputLink>
+					</h:panelGrid>
+					<h:commandButton id="confirmarImportacao"  value="Confirmar" action="#{apresentador.importarCSV()}" styleClass="botaoGrande" onclick="AguardeShow(); return true;" />
+				</rich:tab>
+				
+			</rich:tabPanel>	
+		</h:panelGroup>
+		
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+		<div style="width:600px;">
+			<a4j:commandButton id="incluir" value="Novo"  actionListener="#{apresentador.novo}"  reRender="painelNovo" immediate="true" styleClass="botao" rendered="#{apresentador.emModoListagem}"/>
+			<a4j:commandButton id="visualizarOcorrencias" value="Grade de Ocorrências"  action="#{apresentador.visualizarOcorrenciasConsolidadas}"   styleClass="botaoGrande" rendered="#{apresentador.emModoListagem}"/>
+			<a4j:commandButton id="importarCartao" value="Visualizar Cartão" immediate="true"  action="#{apresentador.importarCartaoDePonto}"   styleClass="botaoGrande" rendered="#{apresentador.emModoListagem}"/>
+			<a4j:commandButton id="salvar" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botao" rendered="#{apresentador.emModoFormulario  and apresentador.operacao != 'VISUALIZACAO' and operacao!='EXCLUSAO' }" onclick="allToUpperCase()"/>
+			<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.remover}" immediate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />
+			<a4j:commandButton id="cancelar" value="Cancelar" actionListener="#{apresentador.cancelar}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoFormulario and apresentador.operacao != 'VISUALIZACAO'}"/>
+			<a4j:commandButton id="salvarEditavel" value="Salvar" action="#{apresentador.salvarEditavel}" reRender="selectMesAno" styleClass="botao" rendered="#{ (apresentador.operacao == 'OUTRO' or apresentador.operacao == 'VISUALIZACAO') and not empty apresentador.listaOcorrenciasCartao}" oncomplete="jQuery('#formulario:tabOcorrencias').enableCellNavigation()" />  
+			<a4j:commandButton id="voltar" value="Voltar" action="#{apresentador.pesquisar}" styleClass="botao" rendered="#{(apresentador.operacao == 'OUTRO' or apresentador.operacao == 'VISUALIZACAO')}"/>
+		</div>
+	</ui:define>
+	
+
+</ui:composition>
+
+</html>

@@ -1,0 +1,231 @@
+/*
+---------------
+Imagens
+---------------
+
+*/
+
+body {margin:0px; font-family:Arial, Sans-Serif; font-size:13px;}
+
+.expandirRecolher {
+	float: left;
+	height: 22px;
+	width: 100%;
+}
+
+.retrair{
+	font-family:Arial;
+	color: #525252;
+	font-size:12px;
+	float: right;
+	margin-top:3px;
+}
+
+.sprite-expandir a { outline: 0; display: block; background: url(../images/sprite-expandir.jpg) no-repeat scroll 0 0; width: 148px; height: 34px;}
+.sprite-expandir a:hover { background-position: 0 -34px;}
+
+#menupainel{
+	left: 16px;
+	float: left;
+	width: 230px; 
+	background-color: #FFF; /*#F1F1F1; */  
+	padding: 0px; 
+	list-style: none;
+	top: 135px;
+	list-style-type: inherit;
+}
+/*Item de tela principal*/
+.menuTelaPrincipal{background-image: url("../images/icon/home.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px;padding-left: 34px; text-decoration: none; padding-bottom: 6px;}
+/*Itens do menu pilares*/
+.menuImageNew{background-image: url("../images/icon/icon_application_add.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px;padding-left: 34px; text-decoration: none; padding-bottom: 10px;}
+.menuImageNewCalculoExterno{background-image: url("../images/icon/icon_application_get.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px;padding-left: 34px; text-decoration: none; padding-bottom: 10px;}
+.menuImageSearch{background-image: url("../images/icon/icon_search.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px;padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageOpen{background-image: url("../images/icon/icon_open.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 6px;}
+.menuImageClose{background-image: url("../images/icon/icon_close.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 6px;}
+.menuImageDelete{background-image: url("../images/icon/icon_application_delete.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 10px;}
+.menuImageImport{background-image: url("../images/icon/icon_import.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 10px;}
+.menuImageExport{background-image: url("../images/icon/icon_export.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 10px;}
+.menuImageDuplicate{background-image: url("../images/icon/icon_duplicate.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageTransmission{background-image: url("../images/icon/icon_transmission.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 10px; margin-bottom:5px;}
+.menuImageManual{background-image: url("../images/icon/icon_manual.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 6px;}
+.menuImageTutorial{background-image: url("../images/icon/icon_tutorial.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 6px;}
+.menuImageInfo{background-image: url("../images/icon/icon_info.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 12px;}
+.menuImagePrint{background-image: url("../images/icon/icon_print.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageVerba{background-image: url("../images/icon/icon_verba.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageAssociarVerba{background-image: url("../images/icon/icon_associar_verba.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageAssociarReflexo{background-image: url("../images/icon/icon_associar_reflexo.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageBase{background-image: url("../images/icon/icon_base.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageCalculo{background-image: url("../images/icon/icon_calculo.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageCartaoPonto{background-image: url("../images/icon/icon_cartao_ponto.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageCustasJudiciais{background-image: url("../images/icon/icon_custas_judiciais.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageIrpf{background-image: url("../images/icon/icon_irpf.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageFgts{background-image: url("../images/icon/icon_fgts.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageHonorarios{background-image: url("../images/icon/icon_honorarios.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageInss{background-image: url("../images/icon/icon_inss.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageMulta{background-image: url("../images/icon/icon_multa.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImagePensaoAlimenticia{background-image: url("../images/icon/icon_pensao_alimenticia.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImagePrevidenciaPrivada{background-image: url("../images/icon/icon_previdencia_privada.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageTabela{background-image: url("../images/icon/icon_verba.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.principalImageTutorial{background-image: url("../images/icon/icon_tutorial_large.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 38px; text-decoration: none; padding-bottom: 20px;}
+.principalImageInfo{background-image: url("../images/icon/icon_info_large.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.principalImageManual{background-image: url("../images/icon/icon_manual_large.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 30px; text-decoration: none; padding-bottom: 12px;}
+.menuImageLiquidar{background-image: url("../images/icon/icon_liquida.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px;padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.iconExit{background-image: url("../images/icon/icon_exit.png"); background-repeat: no-repeat; color: #FFF; padding-left: 22px; text-decoration: underline; font-weight: bold;}
+.menuImageFerias{background-image: url("../images/icon/icon_ferias.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageFaltas{background-image: url("../images/icon/icon_faltas.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageIndices{background-image: url("../images/icon/icon_indices.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageAliquotasInss{background-image: url("../images/icon/icon_inss.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageAliquotasImpostoRenda{background-image: url("../images/icon/icon_irpf.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageParamAtualizacao{background-image: url("../images/icon/icon_correcao.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageJuros{background-image: url("../images/icon/icon_juros.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuParametrosCustas{background-image: url("../images/icon/icon_custas_judiciais.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageSalarioCategoria{background-image: url("../images/icon/ico_salario.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageSalarioMinimo{background-image: url("../images/icon/icon_salario_minimo2.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageTabelaFamilia{background-image: url("../images/icon/ico_tabela_familia.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageFamilia{background-image: url("../images/icon/ico_familia.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageValeTransporte{background-image: url("../images/icon/icon_vale_transporte.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuSeguroDesemprego{background-image: url("../images/icon/icon_tabela_seguro_desemprego.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuTabelaSeguroDesemprego{background-image: url("../images/icon/icon_tabela_seguro_desemprego.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuTabelaFeriado{background-image: url("../images/icon/icon_feriado.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageUsuarios{background-image: url("../images/icon/icon_usuarios.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageLogInfra{background-image: url("../images/icon/icon_loginfra.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageSinc{background-image: url("../images/icon/icon_table_sync.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageValidar{background-image: url("../images/icon/icon_enviar_pje.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageDadosPagamento{background-image: url("../images/icon/icon_payment_medium.png"); background-repeat: no-repeat; background-size: 22px 22px; color: #345178; margin-left: 8px; padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+.menuImageLiquidarPagamento{background-image: url("../images/icon/icon_liquida.png"); background-repeat: no-repeat; color: #345178; margin-left: 8px;padding-left: 34px; text-decoration: none; padding-bottom: 8px;}
+
+
+#menupainel ul{
+	padding-left: 0px; 
+	margin-left: 0px;
+	list-style-position: inherit;
+	list-style-type: none;
+	margin: 0px;
+	padding: 0px;
+	display: list-item;
+}
+
+/* Hack para IE7 */
+* + html/*/ * /**/ body #menupainel ul{
+	margin-top: -15px;
+}
+
+#menupainel li{
+	list-style-type: none; 
+	display: list-item;
+}
+
+#menupainel li ul li{
+    height: 14px;
+    margin: 0px 0 3px 0;
+    padding: 4px 0 14px 0;
+}
+
+/* Hack para IE7 */
+* + html/*/ * /**/ body #menupainel li ul li {
+	margin-bottom: 1px;
+}
+
+div.bloco{
+	float: left;
+	margin-bottom: 4px;
+}
+
+#menupainel .label {
+	margin-left: 16px; 
+	color: #283D5B;
+	text-decoration: none;
+}
+
+#menupainel li ul li:hover {
+	/* background: #C8DCFB;  transferido para cssPage.xhtml */ 
+}
+
+#menupainel li ul li .label:hover {
+	cursor: pointer;
+	color: #283D5B;
+}
+
+#menupainel li.header {
+	background:#DDD url(../images/accordion_background.jpg) repeat-x; 
+	color: #345178;
+	font-size:12px;
+	font-weight: bold;
+	cursor: pointer;
+	padding: 4px 3px 4px 8px;
+	border-left: solid 1px #cccccc;
+	border-right: solid 1px #cccccc;
+	border-bottom: solid 1px #ABABAB;
+	border-top: solid 1px #ccc;
+	margin-bottom: 1px;
+	height: 13px;
+}
+
+/* Hack para IE7 */
+* + html/*/ * /**/ body #menupainel li.header {
+	margin-top: 4px;
+}
+
+#menupainel > .item { 
+	margin: 0px;
+	padding: 0px;
+	border-color: #FF0000;
+	border-width: 1px;
+	border-style: solid;
+}
+
+.dock, .undock {
+	float:right;
+	padding-top: 13px;
+	width: 17px; 
+}
+
+.dock { 
+	background: url(../images/sideopen.png) no-repeat scroll 0 65%;
+}
+
+.undock { 
+	background: url(../images/sideclose.png) no-repeat scroll 0 65%; 
+}
+
+/* Hack para IE7 */
+* + html/*/ * /**/ body .dock, * + html/*/ * /**/ body .undock {
+	padding-top: 2px; 
+}
+
+#linkSetaOn{
+	float:right; 
+	height: 20px;
+	width: 27px;
+	cursor: pointer;
+	background-image: url("../images/retract.png");
+}
+
+#linkSetaOff{
+	float:right; 
+	height: 20px;
+	width: 27px;
+	cursor: pointer;
+	background-image: url("../images/expand.png");
+}
+
+/* Estilo para Desabilitar Menu* -- INICIO */
+#menupainel li.disable a.disable{
+	color: #999999;
+	cursor: default;
+    margin-left: 16px;
+    text-decoration: none;
+}
+
+#menupainel li ul li.disable:hover {
+	background: #fff url(../images/bgmenu.png) repeat-x;  
+    border-color: transparent #EBEBEB #E6E6E6;
+    border-style: solid solid dashed;
+    border-width: 1px;
+}
+
+#menuesq{
+	width:230px;
+}
+
+/* Estilo para Desabilitar Menu* -- FIM */

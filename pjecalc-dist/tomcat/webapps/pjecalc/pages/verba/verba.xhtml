@@ -1,0 +1,673 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+	
+
+	<ui:param name="dadosDe" value="Verba" />
+	<ui:param name="apresentador" value="#{apresentadorVerba}" />
+	<ui:param name="registro" value="#{apresentadorVerba.registro}" />
+	<ui:param name="filtro" value="#{apresentadorVerba.filtro}" />
+	<ui:param name="titulo" value="#{apresentadorVerba.titulo}" />
+
+	<ui:define name="filtroCampos">
+	
+	<h:panelGrid columns="3" cellpadding="3" cellspacing="3">		
+			<h:panelGroup>
+					<h:panelGrid columns="6" cellpadding="2" cellspacing="2">
+						<h:panelGroup>
+							<h:outputLabel for="filtroNome" value="Nome" /><br/>
+							<h:inputText id="filtroNome" label="Nome" value="#{filtro.nome}" size="50" maxlength="100" />
+						</h:panelGroup>
+					</h:panelGrid>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="filtroValor" value="Valor" /><br />
+				<h:selectOneMenu id="filtroValor" label="Valor" value="#{filtro.valor}" style="width:150px;">
+					<s:selectItems value="#{enumItems.valorDaVerbaEnum}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+					<s:convertEnum />
+				</h:selectOneMenu>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="filtroTipo" value="Tipo" /><br />
+				<h:selectOneMenu id="filtroTipo" label="Tipo" value="#{filtro.tipo}" style="width:150px;">
+					<s:selectItems value="#{enumItems.tipoDeVerbaEnum}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+					<s:convertEnum />
+				</h:selectOneMenu>
+			</h:panelGroup>
+		</h:panelGrid>
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+
+		<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="10" var="item"> 
+		    	
+    		<rich:column style="width:10%;">
+			    	<f:facet name="header">
+		    			<h:outputText value="Ações"/>
+		    		</f:facet>
+	    			<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}"/>
+	    			<a4j:commandLink styleClass="linkAlterar" title="Alterar" ajaxSingle="true" actionListener="#{apresentador.alterar}" rendered="#{identity.hasPermission('TABELAS_VERBAS', 'MANUTENCAO')}"/>
+	    			<a4j:commandLink styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" rendered="#{identity.hasPermission('TABELAS_VERBAS', 'MANUTENCAO')}"/>	    			
+		    </rich:column>
+	    		    	
+	    	<rich:column style="width:50%; text-align:left;" >
+    			<f:facet name="header">
+    				<h:outputText value="Nome"/>
+    			</f:facet>	
+    			<h:outputText value="#{item.nome}" />
+	    	</rich:column>
+	    	
+	    	<rich:column style="width:20%;">
+    			<f:facet name="header">
+    				<h:outputText value="Valor"/>
+    			</f:facet>	
+    			<h:outputText value="#{item.valor}"/>
+	    	</rich:column>	
+	    	
+	    	<rich:column style="width:20%;">
+    			<f:facet name="header">
+    				<h:outputText value="Tipo"/>
+    			</f:facet>	
+    			<h:outputText value="#{item.tipo}" />
+	    	</rich:column>		
+	    				    				    	
+		</rich:dataTable>
+		    
+		<ui:include src="/pages/comum/paginacao.xhtml">
+	    	<ui:param name="lista" value="#{apresentador.lista}" />
+		</ui:include>
+	
+	</ui:define>
+	
+	<!--  
+		INICIO DO FORMULÁRIO	
+	-->
+		
+	<ui:define name="nocamposFormulario">
+	
+		<a4j:outputPanel ajaxRendered="true"><a4j:outputPanel rendered="#{apresentador.emModoFormulario}"><fieldset><legend>Dados da Verba</legend>
+			
+			<a4j:outputPanel id="painelNovo" rendered="#{apresentador.emModoFormulario}">
+			
+				<h:panelGrid columns="2" border="0">
+					 
+					<h:panelGroup>
+						<a4j:region>
+							<h:outputLabel value="Nome *" /><br />
+							<h:inputText id="descricao" size="88" label="Nome" maxlength="50" required="true" immediate="true" value="#{registro.descricao}"
+											disabled="#{apresentador.emModoSomenteVisualizacao}">
+								<a4j:support event="onblur" actionListener="#{apresentador.montarNomeCompleto}" reRender="painelNomeCompleto"  limitToList="true" ajaxSingle="true"/>
+							</h:inputText>	
+									
+							<rich:message showDetail="false" showSummary="false" for="descricao">
+							     <f:facet name="errorMarker">
+							     	   <h:outputLink class="linkErro" id="descricaoErro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="descricao"/>
+										   </rich:toolTip>
+							     	   </h:outputLink>
+							     </f:facet>
+							</rich:message>
+						</a4j:region>
+					</h:panelGroup>
+					
+				
+					<a4j:outputPanel>
+						<h:outputLabel for="assuntosCnj" value="Assuntos CNJ *" /><br />
+						<h:inputHidden id="codigoAssuntosCnj" value="#{apresentador.assuntoCNJId}" />
+						<h:inputText id="assuntosCnj" required="true" value="#{apresentador.assuntoCNJ}"
+									label="Assuntos CNJ" size="70" styleClass="leitura"
+									disabled="#{apresentador.emModoSomenteVisualizacao}"
+									onblur="if(#{rich:element('codigoAssuntosCnj')}.value==''){#{rich:element('assuntosCnj')}.value='';}" 
+									onkeydown="return campoLeitura(event);" onkeypress="return campoLeitura(event);"/>
+						<h:panelGroup style="margin-left:2px;" rendered="#{!apresentador.emModoSomenteVisualizacao}">
+							<a4j:commandLink id="linkModalAssunto" 
+											 styleClass="linkLov" 
+											 onclick="Richfaces.showModalPanel('modalCNJ'); return false;" 
+											 title="Selecionar Assunto CNJ"/>
+						</h:panelGroup>
+						<rich:message showDetail="false" showSummary="false" for="assuntosCnj">
+						     <f:facet name="errorMarker">
+						     	   <h:outputLink class="linkErro" id="assuntosCnjErro">
+									   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+									        <rich:message showDetail="true" showSummary="false" for="assuntosCnj"/>
+									   </rich:toolTip>
+						     	   </h:outputLink>
+						     </f:facet>
+						</rich:message>
+					</a4j:outputPanel>
+		  		</h:panelGrid>
+		  		
+		  		<h:panelGrid columns="1" border="0">
+			  		<h:panelGroup id="painelNomeCompleto">
+			  			<a4j:region rendered="#{apresentador.mostrarNomeCompleto}">
+							<h:outputLabel value="Nome completo do Reflexo" /><br />
+							<h:inputText id="nome" size="165" label="Nome Completo do Reflexo" maxlength="120" value="#{registro.nome}" 
+							onkeydown="return campoLeitura(event);" onkeypress="return campoLeitura(event);"
+							styleClass="leitura" disabled="#{apresentador.emModoSomenteVisualizacao}"/>	
+			  			</a4j:region>
+					</h:panelGroup>
+		  		</h:panelGrid>
+	 
+				<div style="float:left; width: 1000px;">
+				
+					<h:panelGroup>
+						<fieldset style="float:left; height: 90px;"><legend>Parcela</legend>
+							<h:panelGroup>						
+								<a4j:region>
+									<h:selectOneRadio id="tipoVariacaoDaParcela" disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" layout="pageDirection" value="#{registro.tipoVariacaoParcela}">
+										<s:selectItems value="#{enumItems.tipoVariacaoDaParcelaEnum}" var="item" label="#{item.nome}" />
+										<s:convertEnum />
+									</h:selectOneRadio>
+								</a4j:region>
+							</h:panelGroup>
+						</fieldset>
+					</h:panelGroup>
+
+					<h:panelGroup>
+					<fieldset style="float:left;"><legend>Valor *</legend>
+						<h:panelGroup>						
+							<a4j:region>
+								<h:selectOneRadio id="valor" value="#{registro.valor}" styleClass="labelInput" 
+												disabled="#{apresentador.emModoSomenteVisualizacao}" layout="pageDirection">
+									<s:selectItems value="#{enumItems.valorDaVerbaEnum}" var="item" label="#{item.nome}" />
+									<a4j:support event="onchange" reRender="painelTipoVerba, painelFormula, painelLabelFormula" limitToList="true"/>
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</a4j:region>
+						</h:panelGroup>
+					</fieldset>
+					</h:panelGroup>
+
+					<h:panelGroup id="painelIncidencias">
+					<fieldset style="float:left;"><legend>Incidência</legend>
+						<h:panelGrid columns="2" cellpadding="3" cellspacing="3" border="0">
+							<h:panelGroup>
+							<h:selectBooleanCheckbox id="irpf" label="IRPF" value="#{registro.incidenciaIRPF}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="IRPF" style="padding-left: 4px"/>
+							</h:panelGroup>
+							<h:panelGroup>
+							<h:selectBooleanCheckbox id="inss" label="Contribuição Social" value="#{registro.incidenciaINSS}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="Contribuição Social" style="padding-left: 4px"/>
+							</h:panelGroup>							
+							<h:panelGroup>
+							<h:selectBooleanCheckbox id="fgts" label="FGTS" value="#{registro.incidenciaFGTS}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="FGTS" style="padding-left: 4px"/>
+							</h:panelGroup>
+							<h:panelGroup>
+							<h:selectBooleanCheckbox id="previdenciaPrivada" label="Previdência Privada" value="#{registro.incidenciaPrevidenciaPrivada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="Previdência Privada" style="padding-left: 4px"/>
+							</h:panelGroup>
+							<h:panelGroup>
+							<h:selectBooleanCheckbox id="pensaoAlimenticia"  label="Pensão Alimentícia"  value="#{registro.incidenciaPensaoAlimenticia}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="Pensão Alimentícia" style="padding-left: 4px"/>
+							</h:panelGroup>
+						</h:panelGrid>
+					</fieldset>	
+					</h:panelGroup>	
+					
+					<h:panelGroup id="painelCaracteristica">
+						<fieldset style="float:left;"><legend>Característica *</legend>
+							<a4j:region>
+								<h:selectOneRadio id="caracteristicaVerba" value="#{registro.caracteristica}"
+												label="Característica" 
+												disabled="#{apresentador.emModoSomenteVisualizacao or apresentador.possuiBaseDeCalculoAdicionada}" styleClass="labelInput" 
+													layout="pageDirection" required="true" >
+									<s:selectItems value="#{enumItems.caracteristicaDaVerbaEnum}" var="item" label="#{item.nome}"/>
+									<a4j:support event="onchange" ajaxSingle="true" actionListener="#{apresentador.refletirMudancas(registro)}" reRender="painelOcorrenciaDePagamento, painelComportamentos,panelPeriodoDaMedia,panelTratamentoDaFracaoMensal, aplicarProporcionalidade, painelTipoDeQuantidade, panelDivisor, painelSelecionaVerbaReflexo, painelLabelFormula, painelExclusoes" limitToList="true"/>
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</a4j:region>
+						</fieldset>	
+					</h:panelGroup>	
+					
+					<h:panelGroup id="painelOcorrenciaDePagamento">
+					<fieldset style="float:left;"><legend>Ocorrência de Pagamento *</legend>
+						<a4j:region>	
+							<h:selectOneRadio id="ocorrenciaPagamento" value="#{registro.ocorrenciaDePagamento}"
+												label="Ocorrência de Pagamento" 
+												disabled="#{apresentador.emModoSomenteVisualizacao or apresentador.possuiBaseDeCalculoAdicionada or not registro.permiteAlterarOcorrenciaDePagamento()}" styleClass="labelInput" 
+												layout="pageDirection" required="true" >
+								<s:selectItems value="#{enumItems.ocorrenciaDePagamentoEnum}" var="item" label="#{item.nome}"/>
+								<a4j:support event="onchange" actionListener="#{apresentador.refletirMudancas(registro)}" reRender="painelTipoDeQuantidade, aplicarProporcionalidade, panelDivisor,painelComportamentos, panelPeriodoDaMedia,panelTratamentoDaFracaoMensal,painelSelecionaVerbaReflexo, painelLabelFormula, painelExclusoes" limitToList="true"/>
+								<s:convertEnum />
+							</h:selectOneRadio>
+						</a4j:region>
+					</fieldset>	
+					</h:panelGroup>	
+					<h:panelGrid columns="1" border="0">
+					<h:panelGroup>
+					<fieldset style="float:left; width:214px;"><legend>Juros a partir do Ajuizamento *</legend>	
+							<h:selectOneRadio id="ocorrenciaAjuizamento" value="#{registro.jurosDoAjuizamento}" styleClass="labelInput" 
+											disabled="#{apresentador.emModoSomenteVisualizacao}" layout="pageDirection" required="true">
+								<s:selectItems value="#{enumItems.jurosDoAjuizamentoEnum}" var="item" label="#{item.nome}"/>
+								<s:convertEnum />
+							</h:selectOneRadio>
+							</fieldset>	
+					</h:panelGroup>	
+					
+					<h:panelGroup>
+						<fieldset style="float:left; width:214px;"><legend>Compor Principal *</legend>
+							<a4j:region>
+								<h:panelGrid cellpadding="3" cellspacing="4" border="0">
+									<h:selectOneRadio id="comporPrincipal" value="#{registro.comporPrincipal}" styleClass="labelInput" 
+													  disabled="#{apresentador.emModoSomenteVisualizacao}" layout="lineDirection" required="true">
+										<s:selectItems value="#{enumItems.logicoEnum}" var="item" label="#{item.nome}"/>
+										<a4j:support event="onchange" reRender="painelIncidencias" limitToList="true" actionListener="#{apresentador.desmarcarIncidencias}"/>
+										<s:convertEnum />
+									</h:selectOneRadio>
+								</h:panelGrid>
+							</a4j:region>
+						</fieldset>
+					</h:panelGroup>
+					</h:panelGrid>
+			
+	 			</div>
+	    
+		    <!-- 
+		    	CAMPOS PARA VERBA CALCULADA
+		     -->
+	  <div class="floatField">
+	  <a4j:outputPanel id="painelTipoVerba">  
+	  <h:panelGrid columns="5" cellpadding="3" cellspacing="4" border="0" rendered="#{registro.isValorCalculado()}">  
+		    <h:panelGroup>
+				<fieldset style="margin-left:-5px;"><legend>Tipo *</legend>
+					<a4j:region>
+					<h:panelGrid cellpadding="3" cellspacing="4" border="0"> 
+					<h:panelGroup>
+						<h:selectOneRadio id="tipo" value="#{registro.tipo}" styleClass="labelInput" style="margin-right:5px;" 
+										disabled="#{apresentador.emModoSomenteVisualizacao or apresentador.emModoAlteracao}" layout="lineDirection">
+							 <s:selectItems value="#{enumItems.tipoDeVerbaEnum}" var="item" label="#{item.nome}" />
+							 <a4j:support event="onchange" reRender="painelTipoVerba, painelFormula, painelLabelFormula" limitToList="true"/>
+							 <s:convertEnum />
+						</h:selectOneRadio>
+					</h:panelGroup>
+					</h:panelGrid>
+					</a4j:region>
+				</fieldset>
+			</h:panelGroup>
+		
+				
+			<h:panelGroup rendered="#{registro.isPrincipal()}">
+				<fieldset style="margin-left:-8px;"><legend>Gerar Verba Reflexa *</legend>
+					<h:panelGrid cellpadding="3" cellspacing="4" border="0"> 
+					<h:panelGroup>
+						<h:selectOneRadio id="geraReflexo" value="#{registro.geracaoReflexo}" styleClass="labelInput" style="margin-right:5px;"
+										disabled="#{apresentador.emModoSomenteVisualizacao}" layout="lineDirection">
+							 <s:selectItems value="#{enumItems.geracaoDoReflexoEnum}" var="item" label="#{item.nome}"/>
+							 <s:convertEnum />
+						</h:selectOneRadio>
+					</h:panelGroup>
+					</h:panelGrid>
+				</fieldset>
+			</h:panelGroup>
+
+			<h:panelGroup rendered="#{registro.isPrincipal()}" id="painelExclusoes">
+				<a4j:outputPanel rendered="#{apresentador.mostrarExclusoes}">
+				<fieldset style="margin-left:-8px; float:left; height: 46px;">
+					<legend>Exclusões</legend>
+					<h:panelGrid columns="3" cellpadding="3" cellspacing="3" border="0">
+						<h:panelGroup>
+							<h:selectBooleanCheckbox id="excluirFaltaJustificada" label="Faltas Justificadas" value="#{registro.excluirFaltaJustificada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="Faltas Justificadas" style="padding-left: 4px"/>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:selectBooleanCheckbox id="excluirFaltaNaoJustificada" label="Faltas Não Justificadas" value="#{registro.excluirFaltaNaoJustificada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="Faltas Não Justificadas" style="padding-left: 4px"/>
+						</h:panelGroup>
+						<h:panelGroup>
+							<h:selectBooleanCheckbox id="excluirFeriasGozadas" label="Férias Gozadas" value="#{registro.excluirFeriasGozadas}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+							<h:outputText value="Férias Gozadas" style="padding-left: 4px"/>
+						</h:panelGroup>
+					</h:panelGrid>
+				</fieldset>	
+				</a4j:outputPanel>
+			</h:panelGroup>
+			
+			<h:panelGroup rendered="#{registro.isReflexo()}">			
+				<fieldset><legend>Comportamento *</legend>
+					<h:panelGrid columns="1" cellpadding="0" cellspacing="0" border="0"> 
+					<h:panelGroup id="painelComportamentos">
+						<a4j:region>
+							<h:selectOneRadio id="comportamento" value="#{registro.comportamentoDoReflexo}" styleClass="labelInput" 
+											disabled="#{apresentador.emModoSomenteVisualizacao}" layout="lineDirection">
+								<s:selectItems value="#{apresentador.listaDeComportamentosDoReflexo}" var="item" label="#{item.nome}"/>
+								<s:convertEnum />
+								<a4j:support event="onchange" reRender="panelPeriodoDaMedia,panelTratamentoDaFracaoMensal" limitToList="true"/>
+							</h:selectOneRadio>
+						</a4j:region>
+					</h:panelGroup>
+					<h:panelGrid columns="2" cellpadding="0" cellspacing="0" border="0"> 
+						<h:panelGroup id="panelTratamentoDaFracaoMensal">
+							<h:panelGroup rendered="#{registro.isReflexo()}">	
+								<h:outputLabel for="tratamentoFracaMes" value="Tratamento da Fração de Mês"/><br/>
+								<h:selectOneMenu id="tratamentoFracaMes" value="#{registro.tratamentoDaFracaoDeMesDoReflexo}" 
+												disabled="#{apresentador.emModoSomenteVisualizacao}" style="width:168px;">
+								 	<s:selectItems value="#{apresentador.listaTratamentoFracaoMes}" var="item" label="#{item.nome}"/>
+									<s:convertEnum />
+								</h:selectOneMenu>
+							</h:panelGroup>
+						</h:panelGroup>
+						<h:panelGroup id="panelPeriodoDaMedia" style="margin-left:10px;">
+							<h:panelGroup rendered="${not registro.isComportamentoValorMensal()}">
+								<h:outputLabel for="periodoMedia" value="Período da Média" /><br />
+								<h:selectOneMenu id="periodoMedia" value="#{registro.periodoMediaReflexo}" style="width:260px; margin-left:10px;"
+												disabled="#{apresentador.emModoSomenteVisualizacao}">
+								 	<s:selectItems value="#{apresentador.listaDePeriodosDaMedia}" var="item" label="#{item.nome}"/>
+									<s:convertEnum />
+								</h:selectOneMenu>
+							</h:panelGroup>
+					</h:panelGroup>
+					</h:panelGrid>
+				</h:panelGrid>
+				</fieldset>
+			</h:panelGroup>
+		</h:panelGrid>
+		</a4j:outputPanel>
+		
+		</div>
+		
+		<div class="floatField">
+		<a4j:outputPanel id="painelFormula">  
+		<h:panelGrid columns="3" cellpadding="3" cellspacing="4" border="0" rendered="#{registro.isValorCalculado()}">  
+		    
+		    <h:panelGroup>
+				<fieldset><legend>Fórmula</legend>
+				
+				<fieldset style="float:left;width:315px;height: 100%;"><legend>Base de Cálculo *</legend>
+					<h:panelGroup rendered="#{registro.isPrincipal()}">
+						<a4j:region>
+						<h:selectOneMenu id="baseCalculo" value="#{registro.baseDeCalculoDoPrincipal}" 
+											label="Base de Cálculo"
+											style="width:140px; margin-left:5px;" 
+											disabled="#{apresentador.emModoSomenteVisualizacao}">
+						 	<s:selectItems value="#{enumItems.baseDeCalculoDoPrincipalEnum}" var="item" label="#{item.nome}"  noSelectionLabel=""/>
+							<s:convertEnum />
+							<a4j:support event="onchange" reRender="painelLabelFormula" limitToList="true"/>
+						</h:selectOneMenu>
+						</a4j:region>
+						<rich:message showDetail="false" showSummary="false" for="baseCalculo">
+					     		<f:facet name="errorMarker">
+					     	   	<h:outputLink class="linkErro" id="baseCalculoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="baseCalculo"/>
+								   </rich:toolTip>
+					     	   	</h:outputLink>
+					    		 </f:facet>
+						</rich:message>
+					</h:panelGroup>
+					
+					<h:panelGroup id="painelSelecionaVerbaReflexo" rendered="#{registro.isReflexo()}">						
+							<a4j:region>
+							<h:selectOneMenu id="baseCalculoReflexo" label="Base de Cálculo" 
+											value="#{apresentador.verbaBaseReflexo}"
+											style="width:140px; margin-left:5px;"
+											disabled="#{apresentador.emModoSomenteVisualizacao}"> 
+										<a4j:support ajaxSingle="true" limitToList="true" event="onchange" />
+					 			<s:selectItems value="#{apresentador.listaTodasAsVerbas}" var="item" label="#{item.nome}" noSelectionLabel=""/>
+								<s:convertEntity/>
+							</h:selectOneMenu>
+							
+							<a4j:commandLink id="incluirItemProp" actionListener="#{apresentador.adicionarBaseReflexo}" 
+											immediate="true" limitToList="true" reRender="painelCaracteristica, painelOcorrenciaDePagamento, painelListaVerbaReflexo, painelLabelFormula,baseCalculoReflexo,painelComportamentos,painelNomeCompleto, panelTratamentoDaFracaoMensal" 
+											styleClass="botaoAddItem" title="Adicionar Base" 
+											rendered="#{!apresentador.emModoSomenteVisualizacao}"
+											onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+							
+							<rich:message showDetail="false" showSummary="false" for="baseCalculoReflexo">
+					     		<f:facet name="errorMarker">
+					     	   	<h:outputLink class="linkErro" id="baseCalculoReflexoErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="baseCalculoReflexo"/>
+								   </rich:toolTip>
+					     	   	</h:outputLink>
+					    		 </f:facet>
+							</rich:message>
+							</a4j:region>									
+											
+							<a4j:outputPanel id="painelListaVerbaReflexo" >
+								<rich:dataTable id="listagem2" value="#{verbasDeReflexo}" rowClasses="linha-par, linha-impar" rendered="#{verbasDeReflexo.rowCount gt 0}"
+												cellpadding="3" border="0" width="300px" rows="#{verbasDeReflexo.rowCount}" var="verba"
+												disabled="#{apresentador.emModoSomenteVisualizacao}"> 
+					    		<rich:column style="width:10px;">
+								    	<f:facet name="header">
+							    			<h:outputText value="Ação"/>
+							    		</f:facet>
+							   <a4j:region>
+						    			<a4j:commandLink id="excluirItem" actionListener="#{apresentador.excluirVerbaReflexo}"
+						    							immediate="true" limitToList="true" reRender="painelCaracteristica, painelOcorrenciaDePagamento, painelListaVerbaReflexo,baseCalculoReflexo, painelLabelFormula,painelComportamentos, painelNomeCompleto,panelTratamentoDaFracaoMensal"
+						    							styleClass="linkExcluir" title="Excluir"
+						    							rendered="#{!apresentador.emModoSomenteVisualizacao and ((verba.principal and verbasDeReflexo.rowCount == 1) or !verba.principal)}"
+						    							onclick="AguardeShow();" oncomplete="AguardeHide();"/>
+						    	</a4j:region>
+							    </rich:column>
+						    	<rich:column style="width:170px;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Verbas/Reflexo"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{verba.nome}" />
+						    	</rich:column>
+						    	
+						    	<rich:column style="width:20px;">
+					    			<f:facet name="header">
+					    				<h:outputText value="Tipo"/>
+					    			</f:facet>	
+					    			<h:outputText value="#{verba.tipo}" />
+						    	</rich:column>		
+							</rich:dataTable>
+							</a4j:outputPanel>
+					</h:panelGroup>
+					
+					<div /><rich:spacer width="1" height="10"/><div />
+					
+					<h:panelGroup rendered="#{registro.isPrincipal()}">
+						<div style="margin-left: 3px;">
+							<a4j:region>
+							<h:selectBooleanCheckbox id="aplicarProporcionalidade" value="#{registro.aplicarProporcionalidade}" 
+													layout="pageDirection" disabled="#{apresentador.emModoSomenteVisualizacao or not registro.isPermiteAplicarPropocionalidadeABase() or registro.aplicarProporcionalidadeAQuantidade}">
+								<a4j:support event="onclick" reRender="painelLabelFormula,aplicarProporcionalidadeAQuantidade" limitToList="true" />
+							</h:selectBooleanCheckbox>
+							<h:outputText value="Proporcionalizar" style="padding-left: 4px"/>
+							</a4j:region>
+						</div>
+					</h:panelGroup>
+				</fieldset>
+				
+			<h:panelGroup rendered="#{registro.isValorCalculado()}">
+			<fieldset  style="float:left;"><legend>Divisor *</legend>
+				  <h:panelGrid columns="2" border="0" cellpadding="3" cellspacing="3">
+						<h:panelGroup id="panelDivisor"> 
+					  		<a4j:region> 
+								<h:selectOneRadio id="divisor" value="#{registro.divisor}" label="Divisor" 
+													styleClass="labelInput" layout="pageDirection"
+													disabled="#{apresentador.emModoSomenteVisualizacao}">
+									 <s:selectItems value="#{apresentador.listaDeDivisoresDeVerba}" var="item" label="#{item.nome}"/>
+									 <a4j:support event="onclick" reRender="panelDivisorOutro,painelLabelFormula" actionListener="#{apresentador.mudarTipoDoDivisor()}" ajaxSingle="true" limitToList="true" />
+									 <s:convertEnum />
+								</h:selectOneRadio>
+							</a4j:region>
+						</h:panelGroup>
+						
+						<br/>
+						
+						<h:panelGroup id="panelDivisorOutro">
+							<a4j:region>
+								<h:inputText id="divisorOutro" size="15" label="Divisor" maxlength="100" style="text-align:right;"
+											value="#{registro.outroDivisor}"
+											required="#{registro.isInformarDivisor()}"
+											rendered="#{registro.isInformarDivisor()}" 
+											disabled="#{apresentador.emModoSomenteVisualizacao}" onkeypress="mascara_precisao_decimal(this,19,4)">
+									<f:converter converterId="quatroCasasDecimaisConverter"/>
+									<a4j:support event="onblur" reRender="painelLabelFormula" limitToList="true"/>
+								</h:inputText>
+							</a4j:region>
+							<rich:message showDetail="false" showSummary="false" for="divisorOutro">
+					     		<f:facet name="errorMarker">
+					     	   	<h:outputLink class="linkErro" id="divisorOutroErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="divisorOutro"/>
+								   </rich:toolTip>
+					     	   	</h:outputLink>
+					    		 </f:facet>
+							</rich:message>
+						</h:panelGroup>
+						
+					</h:panelGrid>
+				</fieldset>
+			
+				<fieldset style="float:left;"><legend>Multiplicador *</legend>
+				  	<h:panelGroup id="panelMultiplicadorOutro">
+							<a4j:region>
+								<h:inputText id="multiplicadorOutro" label="Multiplicador" size="15" maxlength="100" style="text-align:right;"
+											value="#{registro.multiplicador}"
+											required="true"
+											rendered="true" 
+											disabled="#{apresentador.emModoSomenteVisualizacao}" onkeypress="mascara_precisao_decimal(this,19,8)">
+									<f:converter converterId="oitoCasasDecimaisConverter"/>
+									<a4j:support event="onblur" reRender="painelLabelFormula" limitToList="true"/>										
+								</h:inputText>
+							</a4j:region>
+								
+							<rich:message showDetail="false" showSummary="false" for="multiplicadorOutro">
+					     		<f:facet name="errorMarker">
+					     	   	<h:outputLink class="linkErro" id="multiplicadorOutroErro">
+								   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+								        <rich:message showDetail="true" showSummary="false" for="multiplicadorOutro"/>
+								   </rich:toolTip>
+					     	   	</h:outputLink>
+					    		 </f:facet>
+							</rich:message>
+						</h:panelGroup>
+				</fieldset>
+
+				<fieldset style="float:left; height: 180px; width:220px;"><legend>Quantidade *</legend>
+				  <h:panelGrid columns="1" cellpadding="2" cellspacing="3" border="0">  
+					<h:panelGroup id="painelTipoDeQuantidade"><br/>
+						<a4j:region >
+						<h:selectOneRadio id="tipoDaQuantidade" value="#{registro.tipoDaQuantidade}" 
+										label="Tipo de Quantidade" 
+										styleClass="labelInput" layout="pageDirection"
+										disabled="#{apresentador.emModoSomenteVisualizacao}">
+							 <s:selectItems value="#{apresentador.listaDeTiposDeQuantidade}" var="item" label="#{item.nome}"/>
+							 <s:convertEnum />
+							 <a4j:support event="onchange" reRender="regiaoQuantidade, painelLabelFormula" actionListener="#{apresentador.mudarTipoDeQuantidade()}" ajaxSingle="true" limitToList="true" />
+						</h:selectOneRadio>
+						</a4j:region>
+						
+						
+						<h:panelGroup id="regiaoQuantidade"><br/>
+							<a4j:region >
+								<h:outputLabel value="Valor" rendered="#{!registro.isTipoDaQuantidadeAvos()}" style="padding-left: 4px;"/><br />
+								<h:inputText id="valorInformadoDaQuantidade" size="15" maxlength="100" style="text-align:right;"
+											label="Valor Informado da Quantidade"
+											value="#{registro.valorInformadoDaQuantidade}"										  
+											required="#{registro.isTipoDaQuantidadeInformada()}"
+											rendered="#{registro.isTipoDaQuantidadeInformada()}" 
+											disabled="#{apresentador.emModoSomenteVisualizacao}"
+											onkeypress="mascara_precisao_decimal(this,19,4)">
+									<f:converter converterId="quatroCasasDecimaisConverter"/>
+									<a4j:support event="onblur" reRender="painelLabelFormula" limitToList="true" />									
+								</h:inputText>
+								<rich:message showDetail="false" showSummary="false" for="valorInformadoDaQuantidade">
+						     		<f:facet name="errorMarker">
+							     	   	<h:outputLink class="linkErro" id="valorInformadoDaQuantidadeErro">
+										   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+										        <rich:message showDetail="true" showSummary="false" for="valorInformadoDaQuantidade"/>
+										   </rich:toolTip>
+							     	   	</h:outputLink>
+	  				    		    </f:facet>
+								</rich:message>
+								
+								<h:panelGroup style="padding-left: 5px" >
+								<a4j:region>
+								<h:selectBooleanCheckbox id="aplicarProporcionalidadeAQuantidade" 
+														value="#{registro.aplicarProporcionalidadeAQuantidade}"
+														layout="pageDirection"
+														disabled="#{apresentador.emModoSomenteVisualizacao or not registro.isPermiteAplicarPropocionalidadeABase() or registro.aplicarProporcionalidade}"
+														rendered="#{registro.isTipoDaQuantidadeInformada()}">
+										<a4j:support event="onchange" reRender="painelLabelFormula,aplicarProporcionalidade" limitToList="true"/>
+								</h:selectBooleanCheckbox>
+								</a4j:region>
+								<h:outputText value="Proporcional" style="padding-left: 4px;" rendered="#{registro.isTipoDaQuantidadeInformada()}"/>
+								</h:panelGroup>
+
+								<h:selectOneMenu id="tipoImportadaCalendario" 
+												value="#{registro.tipoImportadaCalendario}" 
+												label="Importado do Calendário"
+												rendered="#{registro.isTipoDaQuantidadeImportadaDoCalendario()}"
+												disabled="#{apresentador.emModoSomenteVisualizacao}">
+								 	<s:selectItems value="#{enumItems.tipoDeQuantidadeImportadaDoCalendarioEnum}" var="item" label="#{item.nome}"/>
+								 	<a4j:support event="onchange" reRender="painelLabelFormula" limitToList="true" />
+									<s:convertEnum />
+								</h:selectOneMenu>
+	
+								<h:selectOneMenu id="tipoImportadadoDoCartaoDePonto" 
+												value="#{registro.tipoImportadadoDoCartaoDePonto}" 
+												label="Importada do Cartão de Ponto"
+												rendered="#{registro.isTipoDaQuantidadeImportadaDoCartaoDePonto()}"
+												disabled="#{apresentador.emModoSomenteVisualizacao}">
+								 	<s:selectItems value="#{enumItems.tipoDeQuantidadeImportadaDoCartaoDePontoEnum}" var="item" label="#{item.nome}"/>
+								 	<a4j:support event="onchange" reRender="painelLabelFormula" limitToList="true" />
+									<s:convertEnum />
+								</h:selectOneMenu>
+							</a4j:region>
+						</h:panelGroup>
+
+					</h:panelGroup>			
+				</h:panelGrid>
+				</fieldset>
+				
+			</h:panelGroup>
+			
+			</fieldset>
+			</h:panelGroup>
+		</h:panelGrid>
+		</a4j:outputPanel>
+		
+		</div>
+		
+		<div>
+		<a4j:outputPanel id="painelLabelFormula">  	
+		<h:panelGroup rendered="#{registro.isValorCalculado()}">	
+			<div class="formula">
+				<h:outputLabel id="formulaVerba" value="#{apresentador.getFormula()}" /><br />
+			</div>
+		</h:panelGroup>
+		</a4j:outputPanel>
+		</div>
+		</a4j:outputPanel>
+		
+		</fieldset></a4j:outputPanel></a4j:outputPanel>
+	
+		
+	</ui:define>	
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="buscar" value="Buscar" 	actionListener="#{apresentador.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentador.emModoListagem}" onclick="allToUpperCase()"/>	
+		<a4j:commandButton id="incluir" value="Novo"  	actionListener="#{apresentador.novo}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoListagem and identity.hasPermission('TABELAS_VERBAS', 'MANUTENCAO')}" onclick="limpa(new Array('assuntosCnj'))"/>
+		<a4j:commandButton id="salvar" value="Salvar" 	actionListener="#{apresentador.salvar}" styleClass="botao" rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" onclick="allToUpperCase()"/>
+		<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.removerVerba}" imeddiate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />
+		<a4j:commandButton id="cancelar" value="#{apresentador.operacao=='VISUALIZACAO'?'Voltar':'Cancelar'}" actionListener="#{apresentador.cancelar}" ajaxSingle="true" styleClass="botao" rendered="#{apresentador.emModoFormulario}"/>
+	</ui:define>
+	
+	<ui:define name="auxiliar">
+		<a4j:region id="regiaoModalAssuntosCNJ">
+			<ui:include src="../comum/modal-assunto-cnj.xhtml"/>
+		</a4j:region>
+	</ui:define>
+		
+	
+</ui:composition>
+
+</html>

@@ -1,0 +1,525 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="calculo-fgts" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="66"/>
+	<style name="default" isDefault="true" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="fgts" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_fgts_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["/opt/jboss-eap-5.1/jboss-as/server/default/data/relatorios/calculo/"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_fgts_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="fgts_multa" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{fgts}.fgtsComMulta]]></defaultValueExpression>
+	</parameter>
+	<parameter name="fgts_multa_artigo467" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{fgts}.fgtsComMultaDoArtigo467]]></defaultValueExpression>
+	</parameter>
+	<parameter name="fgts_multa_lei110" class="java.lang.Object" isForPrompting="false">
+		<defaultValueExpression><![CDATA[$P{fgts}.fgtsComMultaDaLei110]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_fgts_4" class="java.lang.Object" isForPrompting="false"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="22">
+			<staticText>
+				<reportElement style="titulo" x="0" y="5" width="802" height="17"/>
+				<textElement textAlignment="Center"/>
+				<text><![CDATA[Demonstrativo de FGTS]]></text>
+			</staticText>
+		</band>
+	</title>
+	<pageHeader>
+		<band splitType="Stretch"/>
+	</pageHeader>
+	<detail>
+		<band height="50" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{fgts}.mostrarSecaoOcorrencias]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="fgts">
+					<subreportParameterExpression><![CDATA[$P{fgts}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{fgts}.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_fgts_2}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="51" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{fgts}.mostrarSecaoOperacoes]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="fgts">
+					<subreportParameterExpression><![CDATA[$P{fgts}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{fgts}.operacoes]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_fgts_3}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="82">
+			<printWhenExpression><![CDATA[$P{fgts}.mostrarSecaoComMulta && $P{fgts_multa}.mostrarCalculada]]></printWhenExpression>
+			<textField>
+				<reportElement style="default-bold" mode="Transparent" x="44" y="0" width="758" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa}.nome]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="300" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default-bold" positionType="Float" mode="Transparent" x="77" y="15" width="725" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa}.comentario]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="100" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" positionType="Float" mode="Transparent" x="3" y="15" width="74" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Comentário:]]></text>
+			</staticText>
+			<textField>
+				<reportElement style="header" mode="Opaque" x="0" y="32" width="802" height="14" forecolor="#000000" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa}.formula]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" mode="Transparent" x="3" y="0" width="41" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Nome:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="0" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Data Ocorrência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="200" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Percentual]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{fgts_multa}.dataDemissao]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="100" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa}.base]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="200" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa}.percentual]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="300" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa}.devido]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.000000000" isBlankWhenNull="true">
+				<reportElement style="cell" x="400" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa}.indiceCorrecao]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="500" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Corrigido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="400" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice Correção]]></text>
+			</staticText>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="500" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa}.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="600" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa}.juros)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="600" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="700" y="60" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa}.total)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="700" y="46" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+		</band>
+		<band height="68">
+			<printWhenExpression><![CDATA[$P{fgts}.mostrarSecaoComMulta && $P{fgts_multa}.mostrarInformada]]></printWhenExpression>
+			<textField>
+				<reportElement style="default-bold" mode="Transparent" x="44" y="0" width="758" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa}.nome]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="133" y="32" width="134" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Informado]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default-bold" positionType="Float" mode="Transparent" x="77" y="15" width="725" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa}.comentario]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" positionType="Float" mode="Transparent" x="3" y="15" width="74" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Comentário:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" mode="Transparent" x="3" y="0" width="41" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Nome:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="0" y="32" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Data Ocorrência]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="46" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{fgts_multa}.dataDemissao]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="133" y="46" width="134" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa}.devido]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.000000000" isBlankWhenNull="true">
+				<reportElement style="cell" x="267" y="46" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa}.indiceCorrecao]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="400" y="32" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Corrigido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="267" y="32" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice Correção]]></text>
+			</staticText>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="400" y="46" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa}.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="533" y="46" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa}.juros)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="533" y="32" width="133" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="666" y="46" width="136" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa}.total)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="666" y="32" width="136" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+		</band>
+		<band height="84">
+			<printWhenExpression><![CDATA[$P{fgts}.mostrarSecaoArtigo467]]></printWhenExpression>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="300" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_artigo467}.devido]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="0" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Data Ocorrência]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default-bold" positionType="Float" mode="Transparent" x="77" y="15" width="725" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_artigo467}.comentario]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" positionType="Float" mode="Transparent" x="3" y="15" width="74" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Comentário:]]></text>
+			</staticText>
+			<textField>
+				<reportElement style="default-bold" mode="Transparent" x="44" y="0" width="758" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_artigo467}.nome]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="200" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_artigo467}.percentual]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="100" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_artigo467}.base]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="100" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<textField>
+				<reportElement style="header" mode="Opaque" x="0" y="32" width="802" height="14" forecolor="#000000" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_artigo467}.formula]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" mode="Transparent" x="3" y="0" width="41" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Nome:]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{fgts_multa_artigo467}.dataDemissao]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="300" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="200" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Percentual ]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="500" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Corrigido]]></text>
+			</staticText>
+			<textField pattern="###0.000000000" isBlankWhenNull="true">
+				<reportElement style="cell" x="400" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_artigo467}.indiceCorrecao]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="500" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_artigo467}.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="400" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice Correção]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="600" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="600" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa_artigo467}.juros)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="700" y="46" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="700" y="60" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa_artigo467}.total)]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="49">
+			<printWhenExpression><![CDATA[$P{fgts}.mostrarSecaoOcorrenciasComContribuicaoSocial]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="841" height="42"/>
+				<subreportParameter name="fgts">
+					<subreportParameterExpression><![CDATA[$P{fgts}]]></subreportParameterExpression>
+				</subreportParameter>
+				<dataSourceExpression><![CDATA[$P{fgts}.ocorrenciasComContribuicaoSocial]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_fgts_4}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="81">
+			<printWhenExpression><![CDATA[$P{fgts}.mostrarSecaoLei110]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="100" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base]]></text>
+			</staticText>
+			<textField isStretchWithOverflow="true" isBlankWhenNull="true">
+				<reportElement style="default-bold" mode="Transparent" x="77" y="15" width="725" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_lei110}.comentario]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="100" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_lei110}.base]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="300" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="500" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_lei110}.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" mode="Transparent" x="3" y="0" width="41" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Nome:]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="500" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor Corrigido]]></text>
+			</staticText>
+			<textField pattern="###0.000000000" isBlankWhenNull="true">
+				<reportElement style="cell" x="400" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_lei110}.indiceCorrecao]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="200" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_lei110}.percentual]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="default-bold" positionType="Float" mode="Transparent" x="3" y="15" width="74" height="14"/>
+				<textElement verticalAlignment="Middle">
+					<font size="10"/>
+				</textElement>
+				<text><![CDATA[Comentário:]]></text>
+			</staticText>
+			<textField isBlankWhenNull="true">
+				<reportElement style="default-bold" mode="Transparent" x="44" y="0" width="758" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_lei110}.nome]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="0" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Data Ocorrência]]></text>
+			</staticText>
+			<textField pattern="#,###,##0.00;(#,###,##0.00)" isBlankWhenNull="true">
+				<reportElement style="cell" x="300" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{fgts_multa_lei110}.devido]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="200" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Percentual]]></text>
+			</staticText>
+			<textField>
+				<reportElement style="header" mode="Opaque" x="0" y="32" width="802" height="14" forecolor="#000000" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[$P{fgts_multa_lei110}.formula]]></textFieldExpression>
+			</textField>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{fgts_multa_lei110}.dataDemissao]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="400" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice Correção]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="600" y="46" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="600" y="60" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa_lei110}.juros)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" mode="Opaque" x="700" y="46" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="700" y="60" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{fgts_multa_lei110}.total)]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<columnFooter>
+		<band splitType="Stretch"/>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band splitType="Stretch"/>
+	</summary>
+</jasperReport>

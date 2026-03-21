@@ -1,0 +1,66 @@
+<html xmlns="http://www.w3.org/1999/xhtml"
+    xml:lang="pt" lang="pt" 
+    xmlns:ui="http://java.sun.com/jsf/facelets"
+    xmlns:h="http://java.sun.com/jsf/html"
+    xmlns:f="http://java.sun.com/jsf/core" 
+    xmlns:a4j="http://richfaces.org/a4j"
+    xmlns:rich="http://richfaces.org/rich">
+
+		<script type="text/javascript">
+			/*
+			 * Exibe o modalPanel para o usuario e seta no botao com id sim a funcao			 
+			 * de callback que sera executada quando for confirmada a exclusao
+			 */	    	
+		    function confirmaExclusao(idDiv){
+				Richfaces.showModalPanel('deleteConfirmPanel',{width:450, top:200});
+				jQuery("#btnSim").unbind('click');
+				jQuery("#btnSim").click(
+					function(event){
+						callbackModalPanel(idDiv);
+					}
+				);
+				jQuery("#btnSim").focus();
+		   	}
+		   	/*
+		   	 * Funcao de callback usada quando o usuario clica no botao #sim 
+		   	 */
+		   	function callbackModalPanel(idElem){
+				/* 
+		   		 * A partir do span com id igual a 'idElem' recupera o primeiro elemento 'A' na arvore DOM.
+		   		 * Precisa ser necessariamente o commandLink com a operacao excluir.
+		   		 */
+		   		selector = "#" + idElem + " > a:first";
+		   		link = jQuery.browser.msie == true ? jQuery(selector)[0] : jQuery(selector);
+		   		Richfaces.hideModalPanel("deleteConfirmPanel");
+		   		link.click();
+		   	}
+	 	</script>
+	    <rich:modalPanel id="deleteConfirmPanel" resizeable="false" moveable="false" autosized="true" zindex="2000" width="450">
+	         <f:facet name="header">
+	             	<h:outputText value="Confirma&#231;&#227;o de Exclus&#227;o" />
+	          </f:facet>
+	
+	          <f:facet name="controls">
+	          	<h:graphicImage url="/images/ico_fechar.gif" style="cursor: pointer;" onclick="Richfaces.hideModalPanel('deleteConfirmPanel')" alt="Fechar" />
+	          </f:facet>
+	          
+			<table border="0" width="100%">
+				<tr>
+					<td valign="top">
+		            	<h:graphicImage url="/images/icone_msg_alerta.gif" style="border: none;" alt="Alerta" />
+					</td>
+					<td valign="top">
+			            <h:outputText value="#{mensagens.operacaoConfirmacaoExclusao}" styleClass="msgAlerta"/>
+					</td>
+				</tr>
+				<tr>
+					<td colspan="2" align="center" style="width: 100%;">
+						<br/>
+						<input type="button" id="btnSim" value="Sim" class="botao" />
+						<input type="button" id="btnNao" value="N&#227;o" class="botao" onclick="Richfaces.hideModalPanel('deleteConfirmPanel');"/>
+					</td>
+				</tr>			
+			</table>			
+	    </rich:modalPanel>
+	    
+</html>                            

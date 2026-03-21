@@ -1,0 +1,793 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jasperReport xmlns="http://jasperreports.sourceforge.net/jasperreports" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jasperreports.sourceforge.net/jasperreports http://jasperreports.sourceforge.net/xsd/jasperreport.xsd" name="calculo-inss" language="groovy" pageWidth="842" pageHeight="595" orientation="Landscape" columnWidth="802" leftMargin="20" rightMargin="20" topMargin="0" bottomMargin="0">
+	<property name="ireport.zoom" value="1.0"/>
+	<property name="ireport.x" value="0"/>
+	<property name="ireport.y" value="0"/>
+	<style name="default" isDefault="true" fontName="SansSerif" fontSize="10" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false"/>
+	<style name="default-bold" style="default" fontSize="10" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="titulo" style="default" fontName="SansSerif" fontSize="12" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false"/>
+	<style name="header" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box>
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cell" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="cellsemborda" style="default" forecolor="#000000" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" isPdfEmbedded="false">
+		<box leftPadding="0" rightPadding="0">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitle" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="true" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="2" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="0.0" lineStyle="Solid"/>
+			<topPen lineWidth="0.0" lineStyle="Solid"/>
+			<leftPen lineWidth="0.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="0.0" lineStyle="Solid"/>
+			<rightPen lineWidth="0.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<style name="subtitlevalue" style="default" forecolor="#000000" backcolor="#CCCCCC" fill="Solid" fontName="SansSerif" fontSize="8" isBold="false" isItalic="false" isUnderline="false" isStrikeThrough="false" pdfFontName="Helvetica" isPdfEmbedded="false">
+		<box topPadding="2" leftPadding="38" bottomPadding="2" rightPadding="2">
+			<pen lineWidth="1.0" lineStyle="Solid"/>
+			<topPen lineWidth="1.0" lineStyle="Solid"/>
+			<leftPen lineWidth="1.0" lineStyle="Solid"/>
+			<bottomPen lineWidth="1.0" lineStyle="Solid"/>
+			<rightPen lineWidth="1.0" lineStyle="Solid"/>
+		</box>
+	</style>
+	<parameter name="custas" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="SUBREPORT_DIR" class="java.lang.String" isForPrompting="false">
+		<defaultValueExpression><![CDATA["/opt/jboss-eap-5.1/jboss-as/server/default/data/relatorios/calculo/"]]></defaultValueExpression>
+	</parameter>
+	<parameter name="jr_demonstrativo_custas_2" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_custas_3" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_custas_4" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_custas_5" class="java.lang.Object" isForPrompting="false"/>
+	<parameter name="jr_demonstrativo_custas_6" class="java.lang.Object" isForPrompting="false"/>
+	<background>
+		<band splitType="Stretch"/>
+	</background>
+	<title>
+		<band height="22">
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="5" width="799" height="17"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="12"/>
+				</textElement>
+				<text><![CDATA[Demonstrativo de Custas Judiciais]]></text>
+			</staticText>
+		</band>
+	</title>
+	<columnHeader>
+		<band splitType="Stretch"/>
+	</columnHeader>
+	<detail>
+		<band height="17">
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="800" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="11"/>
+				</textElement>
+				<text><![CDATA[Custas pelo Reclamado]]></text>
+			</staticText>
+		</band>
+		<band height="70" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.mostrarConhecimentoCalculada]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="160" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base (A)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="320" y="42" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Taxa (B)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="440" y="42" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Piso (C)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="682" y="42" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total (E)]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deConhecimento.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="160" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deConhecimento.baseOuValor]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" x="320" y="56" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deConhecimento.taxa]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="440" y="56" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deConhecimento.pisoOuTeto)]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="682" y="56" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deConhecimento.total]]></textFieldExpression>
+			</textField>
+			<frame>
+				<reportElement x="0" y="12" width="802" height="14"/>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="574" y="0" width="220" height="14" backcolor="#FFFFFF"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle"/>
+					<text><![CDATA[E = [(A x B) submetido a C e D]]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="589" height="14" backcolor="#FFFFFF"/>
+					<textElement verticalAlignment="Middle"/>
+					<text><![CDATA[ Nome: CUSTAS DE CONHECIMENTO ]]></text>
+				</staticText>
+			</frame>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="802" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[" Composição de Base: " + $P{custas}.custaPeloReclamado.devidas.deConhecimento.composicaoBase]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="560" y="56" width="122" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deConhecimento.teto)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="560" y="42" width="122" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Teto (D)]]></text>
+			</staticText>
+		</band>
+		<band height="56">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.mostrarConhecimentoInformada]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="402" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice correção (D)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="100" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor (A)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="502" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor corrigido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="602" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros (E)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="702" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total (F)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deConhecimento.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="100" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deConhecimento.baseOuValor]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="402" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deConhecimento.indiceDeCorrecao, 9)]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="502" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deConhecimento.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="602" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deConhecimento.juros)]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="702" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deConhecimento.total)]]></textFieldExpression>
+			</textField>
+			<frame>
+				<reportElement x="1" y="12" width="802" height="14"/>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="588" y="0" width="206" height="14" backcolor="#FFFFFF"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle"/>
+					<text><![CDATA[    F =  [((A submetido a B) x D) +E]]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="239" height="14" backcolor="#FFFFFF"/>
+					<textElement verticalAlignment="Middle"/>
+					<text><![CDATA[ Nome: CUSTAS DE CONHECIMENTO ]]></text>
+				</staticText>
+			</frame>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="200" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deConhecimento.pisoOuTeto)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="200" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Piso (B)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="300" y="28" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Teto (C)]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="300" y="42" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deConhecimento.teto)]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="70" splitType="Stretch">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.mostrarLiquidacaoCalculada]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="160" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base (A)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="320" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Taxa (B)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="480" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Teto (C)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="640" y="42" width="162" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total (D)]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deLiquidacao.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="160" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deLiquidacao.baseOuValor]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" x="320" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deLiquidacao.taxa]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="480" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deLiquidacao.pisoOuTeto)]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="640" y="56" width="162" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deLiquidacao.total]]></textFieldExpression>
+			</textField>
+			<frame>
+				<reportElement x="0" y="12" width="802" height="14"/>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="589" y="0" width="205" height="14" backcolor="#FFFFFF"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle"/>
+					<text><![CDATA[D = [(A x B) submetido a C]]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="600" height="14" backcolor="#FFFFFF"/>
+					<textElement verticalAlignment="Middle"/>
+					<text><![CDATA[ Nome: CUSTAS DE LIQUIDAÇÃO]]></text>
+				</staticText>
+			</frame>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="802" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[" Composição de Base: " + $P{custas}.custaPeloReclamado.devidas.deLiquidacao.composicaoBase]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="56">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.mostrarLiquidacaoInformada]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="346" y="28" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice correção (C)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="114" y="28" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor (A)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="460" y="28" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor corrigido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="574" y="28" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros (D)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="688" y="28" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total (E)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="42" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deLiquidacao.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="114" y="42" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deLiquidacao.baseOuValor]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="346" y="42" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deLiquidacao.indiceDeCorrecao,9)]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="460" y="42" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.devidas.deLiquidacao.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="574" y="42" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deLiquidacao.juros)]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="688" y="42" width="114" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deLiquidacao.total)]]></textFieldExpression>
+			</textField>
+			<frame>
+				<reportElement x="0" y="12" width="802" height="14"/>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="574" y="0" width="220" height="14" backcolor="#FFFFFF"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle"/>
+					<text><![CDATA[    E =  [((A submetido a B) x C) +D]]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="574" height="14" backcolor="#FFFFFF"/>
+					<textElement verticalAlignment="Middle"/>
+					<text><![CDATA[ Nome: CUSTAS DE LIQUIDAÇÃO]]></text>
+				</staticText>
+			</frame>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="228" y="42" width="118" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamado.devidas.deLiquidacao.pisoOuTeto)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="228" y="28" width="118" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Teto (B)]]></text>
+			</staticText>
+		</band>
+		<band height="42">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.fixas.ocorrencias.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="14" width="842" height="28"/>
+				<dataSourceExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.fixas.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_custas_2}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="42">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.deAutos.ocorrencias.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="14" width="842" height="28"/>
+				<dataSourceExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.deAutos.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_custas_3}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="42">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.deArmazenamento.ocorrencias.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="14" width="842" height="28"/>
+				<dataSourceExpression><![CDATA[$P{custas}.custaPeloReclamado.devidas.deArmazenamento.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_custas_4}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="26">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.recolhidas.ocorrencias.size() > 0]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="10" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<text><![CDATA[ CUSTAS RECOLHIDAS]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="624" y="10" width="171" height="14" backcolor="#FFFFFF"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle"/>
+				<text><![CDATA[      D = [(A x B) + C]]]></text>
+			</staticText>
+		</band>
+		<band height="28">
+			<printWhenExpression><![CDATA[$P{custas}.custaPeloReclamado.recolhidas.ocorrencias.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="28"/>
+				<dataSourceExpression><![CDATA[$P{custas}.custaPeloReclamado.recolhidas.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_custas_5}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="27">
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="11" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<text><![CDATA[ DIFERENÇA DE CUSTAS DO RECLAMADO]]></text>
+			</staticText>
+		</band>
+		<band height="29">
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="600" y="0" width="202" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Diferença]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="200" y="0" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="400" y="0" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Recolhido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="400" y="14" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.diferenca.recolhido]]></textFieldExpression>
+			</textField>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="14" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamado.diferenca.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="600" y="14" width="202" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.diferenca.diferenca]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="200" y="14" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamado.diferenca.devido]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="21">
+			<printWhenExpression><![CDATA[!$P{custas}.custaPeloReclamante.naoSeAplica]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="2" y="7" width="800" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle">
+					<font size="11"/>
+				</textElement>
+				<text><![CDATA[Custas pelo Reclamante]]></text>
+			</staticText>
+		</band>
+		<band height="70" splitType="Stretch">
+			<printWhenExpression><![CDATA[!$P{custas}.custaPeloReclamante.naoSeAplica && $P{custas}.custaPeloReclamante.mostrarCalculada]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="160" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Base (A)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="42" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="320" y="42" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Taxa (B)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="560" y="42" width="122" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Teto (D)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="682" y="42" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total (E)]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamante.devidas.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="160" y="56" width="160" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.devidas.baseOuValor]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00 %" isBlankWhenNull="true">
+				<reportElement style="cell" x="320" y="56" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.devidas.taxa]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="560" y="56" width="122" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamante.devidas.teto)]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="682" y="56" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.devidas.total]]></textFieldExpression>
+			</textField>
+			<frame>
+				<reportElement x="0" y="12" width="802" height="14"/>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="600" y="0" width="194" height="14" backcolor="#FFFFFF"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle"/>
+					<text><![CDATA[E = [(A x B) submetido a C e D]]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="600" height="14" backcolor="#FFFFFF"/>
+					<textElement verticalAlignment="Middle"/>
+					<text><![CDATA[ Nome: CUSTAS DE CONHECIMENTO ]]></text>
+				</staticText>
+			</frame>
+			<textField isStretchWithOverflow="true" pattern="" isBlankWhenNull="true">
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="802" height="14" backcolor="#CCCCCC"/>
+				<textElement verticalAlignment="Middle">
+					<font size="8"/>
+				</textElement>
+				<textFieldExpression class="java.lang.String"><![CDATA[" Composição de Base: " + $P{custas}.custaPeloReclamante.devidas.composicaoBase]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="440" y="56" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamante.devidas.pisoOuTeto)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="440" y="42" width="120" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Piso (C)]]></text>
+			</staticText>
+		</band>
+		<band height="56">
+			<printWhenExpression><![CDATA[!$P{custas}.custaPeloReclamante.naoSeAplica && $P{custas}.custaPeloReclamante.mostrarInformada]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="402" y="28" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Índice correção (D)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="100" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor (A)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="504" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Valor corrigido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="604" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Juros (E)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="703" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Total (F)]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamante.devidas.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="100" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.devidas.baseOuValor]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="402" y="42" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamante.devidas.indiceDeCorrecao,9)]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="504" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.devidas.valorCorrigido]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="604" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamante.devidas.juros)]]></textFieldExpression>
+			</textField>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="703" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamante.devidas.total)]]></textFieldExpression>
+			</textField>
+			<frame>
+				<reportElement x="0" y="12" width="802" height="14"/>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="589" y="0" width="205" height="14" backcolor="#FFFFFF"/>
+					<textElement textAlignment="Right" verticalAlignment="Middle"/>
+					<text><![CDATA[    F =  [((A submetido a B) x D) +E]]]></text>
+				</staticText>
+				<staticText>
+					<reportElement style="default-bold" mode="Opaque" x="0" y="0" width="589" height="14" backcolor="#FFFFFF"/>
+					<textElement verticalAlignment="Middle"/>
+					<text><![CDATA[ Nome: CUSTAS DE CONHECIMENTO ]]></text>
+				</staticText>
+			</frame>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="200" y="28" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Piso (B)]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="200" y="42" width="100" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamante.devidas.pisoOuTeto)]]></textFieldExpression>
+			</textField>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="300" y="28" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Teto (C)]]></text>
+			</staticText>
+			<textField pattern="" isBlankWhenNull="true">
+				<reportElement style="cell" x="300" y="42" width="102" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.lang.String"><![CDATA[br.jus.trt8.pjecalc.base.comum.Utils.formatarValor($P{custas}.custaPeloReclamante.devidas.teto)]]></textFieldExpression>
+			</textField>
+		</band>
+		<band height="28">
+			<printWhenExpression><![CDATA[!$P{custas}.custaPeloReclamante.naoSeAplica && $P{custas}.custaPeloReclamante.recolhidas.ocorrencias.size() > 0]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="13" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<text><![CDATA[ CUSTAS RECOLHIDAS]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="624" y="14" width="171" height="14" backcolor="#FFFFFF"/>
+				<textElement textAlignment="Right" verticalAlignment="Middle"/>
+				<text><![CDATA[      D = [(A x B) + C]]]></text>
+			</staticText>
+		</band>
+		<band height="28">
+			<printWhenExpression><![CDATA[!$P{custas}.custaPeloReclamante.naoSeAplica && $P{custas}.custaPeloReclamante.recolhidas.ocorrencias.size() > 0]]></printWhenExpression>
+			<subreport>
+				<reportElement x="-20" y="0" width="842" height="28"/>
+				<dataSourceExpression><![CDATA[$P{custas}.custaPeloReclamante.recolhidas.ocorrencias]]></dataSourceExpression>
+				<subreportExpression class="net.sf.jasperreports.engine.JasperReport"><![CDATA[$P{jr_demonstrativo_custas_5}]]></subreportExpression>
+			</subreport>
+		</band>
+		<band height="27">
+			<printWhenExpression><![CDATA[!$P{custas}.custaPeloReclamante.naoSeAplica]]></printWhenExpression>
+			<staticText>
+				<reportElement style="default-bold" mode="Opaque" x="0" y="12" width="802" height="14" backcolor="#FFFFFF"/>
+				<textElement verticalAlignment="Middle"/>
+				<text><![CDATA[ DIFERENÇA DE CUSTAS DO RECLAMANTE]]></text>
+			</staticText>
+		</band>
+		<band height="42">
+			<printWhenExpression><![CDATA[!$P{custas}.custaPeloReclamante.naoSeAplica]]></printWhenExpression>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="600" y="0" width="202" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Diferença]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="200" y="0" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Devido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="400" y="0" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Recolhido]]></text>
+			</staticText>
+			<staticText>
+				<reportElement style="header" positionType="Float" mode="Opaque" x="0" y="0" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<text><![CDATA[Ocorrência]]></text>
+			</staticText>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="400" y="14" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.diferenca.recolhido]]></textFieldExpression>
+			</textField>
+			<textField pattern="dd/MM/yyyy" isBlankWhenNull="true">
+				<reportElement style="cell" x="0" y="14" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.util.Date"><![CDATA[$P{custas}.custaPeloReclamante.diferenca.ocorrencia]]></textFieldExpression>
+			</textField>
+			<textField pattern="###0.00;-###0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="600" y="14" width="202" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.diferenca.diferenca]]></textFieldExpression>
+			</textField>
+			<textField pattern="#,##0.00" isBlankWhenNull="true">
+				<reportElement style="cell" x="200" y="14" width="200" height="14"/>
+				<textElement textAlignment="Center" verticalAlignment="Middle"/>
+				<textFieldExpression class="java.math.BigDecimal"><![CDATA[$P{custas}.custaPeloReclamante.diferenca.devido]]></textFieldExpression>
+			</textField>
+		</band>
+	</detail>
+	<columnFooter>
+		<band splitType="Stretch"/>
+	</columnFooter>
+	<pageFooter>
+		<band splitType="Stretch"/>
+	</pageFooter>
+	<summary>
+		<band splitType="Stretch"/>
+	</summary>
+</jasperReport>

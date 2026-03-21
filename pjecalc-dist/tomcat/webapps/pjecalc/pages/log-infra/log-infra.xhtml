@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+	
+	<ui:param name="dadosDe" value="Erro de Infra" />
+	<ui:param name="apresentador" value="#{apresentadorLogInfra}" />
+	<ui:param name="registro" value="#{apresentador.registro}" />
+	<ui:param name="filtro" value="#{apresentador.filtro}" />
+	<ui:param name="titulo" value="#{apresentador.titulo}" />
+
+	<ui:define name="filtroCampos">
+	
+		<h:panelGrid columns="3" cellpadding="3" cellspacing="3">		
+			<h:panelGroup>
+				<h:outputLabel for="filtroId" value="Código do Erro" /><br />
+				<h:inputText id="filtroId" label="Código do Erro" value="#{filtro.id}" size="20" maxlength="10" />
+				<rich:message showDetail="false" showSummary="false" for="filtroId">
+									     <f:facet name="errorMarker">
+									     	   <h:outputLink class="linkErro" id="filtroIdErro">
+												   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+												        <rich:message  showDetail="false" showSummary="true" for="filtroId"/>
+												   </rich:toolTip>
+									     	   </h:outputLink>
+									     </f:facet>
+									</rich:message>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel for="filtroOcorrencia" value="Data da Ocorrência"/><br />
+				<rich:calendar id="filtroOcorrencia" value="#{filtro.ocorrencia}" label="Data da Ocorrência" inputSize="16" popup="true" datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()">
+					<f:facet name="footer">
+			        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+			        </f:facet>
+				</rich:calendar>
+				<cobra:toolTip>
+		        		<rich:message for="filtroOcorrencia"/>
+			    </cobra:toolTip>
+			</h:panelGroup>	
+				
+			<h:panelGroup>
+				<h:outputLabel for="filtroUsuario" value="Usuário" /><br />
+				<h:inputText id="filtroUsuario" label="Usuário" value="#{filtro.usuario}" size="40" maxlength="11" style="text-transform: none;" />
+			</h:panelGroup>
+		</h:panelGrid>
+		
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+
+		<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" cellpadding="3" border="0" width="100%" rows="10" var="item"> 
+		    	
+    		<rich:column style="width:10%;">
+		    	<f:facet name="header">
+	    			<h:outputText value="Ações"/>
+	    		</f:facet>
+    			<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}"/>
+		    </rich:column>
+	    		    	
+	    	<rich:column style="width:30%; text-align:center;" >
+    			<f:facet name="header">
+    				<h:outputText value="Código do Erro"/>
+    			</f:facet>	
+    			<h:outputText value="#{item.id}" />
+	    	</rich:column>
+	    	
+	    	<rich:column style="width:30%; text-align:center;" >
+    			<f:facet name="header">
+    				<h:outputText value="Data da Ocorrência" />
+    			</f:facet>	
+    			<h:outputText value="#{item.ocorrencia}">
+    				<f:convertDateTime pattern="dd/MM/yyyy HH:mm" />
+    			</h:outputText>
+	    	</rich:column>
+	    	
+	    	<rich:column style="width:30%;">
+    			<f:facet name="header">
+    				<h:outputText value="Usuário"/>
+    			</f:facet>	
+    			<h:outputText value="#{item.cpf}"/>
+	    	</rich:column>
+	    				    				    	
+		</rich:dataTable>
+		    
+		<ui:include src="/pages/comum/paginacao.xhtml">
+	    	<ui:param name="lista" value="#{apresentador.lista}" />
+		</ui:include>
+	
+	</ui:define>
+	
+	<!--  
+		INICIO DO FORMULÁRIO	
+	-->
+	
+	<ui:define name="camposFormulario">
+		
+		<h:panelGrid columns="1" cellpadding="2" cellspacing="2" style="width:100%;">	
+		
+			<h:panelGroup>
+				<h:panelGrid columns="3" cellpadding="2" cellspacing="2">	
+					
+					<h:panelGroup>
+						<h:outputLabel for="id" value="Código do Erro" /><br />
+						<h:inputText id="id" label="Código do Erro" value="#{registro.id}" size="20" styleClass="leitura" disabled="true" />
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel for="ocorrencia" value="Data da Ocorrência"/><br />
+						<rich:calendar id="ocorrencia" value="#{registro.ocorrencia}" label="Data da Ocorrência" inputSize="20" popup="true" datePattern="dd/MM/yyyy HH:mm" enableManualInput="true" oninputfocus="$(this).dateMask()" styleClass="leitura" disabled="true" >
+							<f:facet name="footer">
+					        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+					        </f:facet>
+						</rich:calendar>
+					</h:panelGroup>	
+						
+					<h:panelGroup>
+						<h:outputLabel for="usuario" value="Usuário" /><br />
+						<h:inputText id="usuario" label="Usuário"  size="40" styleClass="leitura" disabled="true" style="text-transform: none;" />
+					</h:panelGroup>
+					
+				</h:panelGrid>
+			</h:panelGroup>
+			
+			<h:panelGroup style="padding-left: 6px;" layout="block">
+				<h:outputLabel for="descricao" value="Descrição" /><br />
+				<h:inputText id="descricao" label="Descrição" value="#{registro.descricao}" size="100" styleClass="leitura" disabled="true" style="text-transform: none;" />
+			</h:panelGroup>
+				
+			<h:panelGroup style="padding-left: 5px; padding-top: 8px;" layout="block">
+				<rich:simpleTogglePanel switchType="client" label="Detalhe do Erro" opened="false">
+					<f:facet name="openMarker"><img src="../../images/sideopen.png" alt="" width="17" height="15"  /></f:facet>
+					<f:facet name="closeMarker"><img src="../../images/sideclose.png" alt="" width="17" height="15"  /></f:facet>
+					<pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word;">
+						<h:outputText value="#{registro.detalhe}"/>
+					</pre>
+				</rich:simpleTogglePanel>
+			</h:panelGroup>
+			
+		</h:panelGrid>
+		
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+		<a4j:commandButton id="buscar" value="Buscar" 	actionListener="#{apresentador.pesquisar}" reRender="panelListagem" styleClass="botao" rendered="#{apresentador.emModoListagem}" onclick="allToUpperCase()"/>
+		<a4j:commandButton id="voltar" value="Voltar" actionListener="#{apresentador.cancelar}" ajaxSingle="true" styleClass="botao" rendered="#{apresentador.emModoFormulario}"/>
+	</ui:define>
+	
+</ui:composition>
+
+</html>

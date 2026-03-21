@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Perfis" />
+	<ui:param name="apresentador" value="#{apresentadorPerfil}" />
+	<ui:param name="registro" value="#{apresentadorPerfil.registro}" />
+
+	<ui:define name="nofiltroCampos"/>
+
+	<ui:define name="nocamposFormulario">
+		<h:panelGrid columns="1" cellpadding="0" border="0" width="100%">
+
+	<a4j:outputPanel id="painelNovoPerfil" ajaxRendered="true">
+	
+		<fieldset>
+				<legend>Novos Registros de Perfil</legend>
+				
+				<h:panelGrid columns="4" cellspacing="4" border="0">
+				
+					<h:panelGroup>
+						<h:outputLabel for="cpf" value="CPF *" /><br />
+						<h:inputText id="cpf" value="#{registro.cpf}" size="14" maxlength="14" label="CPF" onfocus="$(this).cpfMask()" required="true">
+							<f:validator validatorId="validadorDeCpf"/>
+							<f:converter converterId="cpfConverter" />
+						</h:inputText>
+		    			<cobra:toolTip>
+		    				<rich:message for="cpf"/>
+		    			</cobra:toolTip>	    			
+					</h:panelGroup>
+				
+					<h:panelGroup>
+						<h:outputLabel value="Perfil *"/><br />
+						<h:selectOneMenu id="papel" value="#{registro.papel}" label="Perfil" style="width:150px;" required="true">
+						 	<s:selectItems  noSelectionLabel="" value="#{enumItems.papelEnum}" var="item" label="#{item.nome}"/>
+							<s:convertEnum />
+						</h:selectOneMenu>
+		    			<cobra:toolTip>
+		    				<rich:message for="papel"/>
+		    			</cobra:toolTip>	    			
+					</h:panelGroup>
+					
+					<h:panelGroup layout="block">
+						<a4j:commandLink id="cmdSalvarPerfil" value="Salvar" actionListener="#{apresentador.salvar}" styleClass="botaoAddSalvar" title="Salvar Novo Perfil" reRender="painelDadosMiniCrudPerfil, painelNovoPerfil"/>
+					</h:panelGroup>	
+					
+				</h:panelGrid>
+				
+			</fieldset>
+			
+		</a4j:outputPanel>
+		
+		<a4j:outputPanel id="painelDadosMiniCrudPerfil" ajaxRendered="true">
+			
+			<h:panelGroup  style="width: 600px;"  rendered="#{listaDePerfis.size gt 0}" >
+
+					<rich:dataTable id="listagemPerfil" value="#{listaDePerfis}" rowClasses="linha-par, linha-impar" cellpadding="0" cellspacing="4" border="0" width="100%" rows="24" var="item">
+						<rich:column style="width:10%;">
+							<f:facet name="header">
+								<h:outputText value="Ações" />
+							</f:facet>
+							<a4j:region>
+								<a4j:commandLink id="excluirItem" 
+									limitToList="true"
+									actionListener="#{apresentador.excluir(item)}" 
+									reRender="painelDadosMiniCrudPerfil, painelMensagens" 
+									ajaxSingle="true" 
+									styleClass="linkExcluir" 
+									title="Excluir"
+									onclick="if (!confirma('#{mensagens.confirmaExcluir}',this)) return false;"/> 
+							</a4j:region>
+						</rich:column>
+
+						<rich:column style="width:40%;">
+							<f:facet name="header">
+								<h:outputText value="CPF" />
+							</f:facet>
+							<h:outputText value="#{item.cpf}">
+								<f:converter converterId="cpfConverter" />
+							</h:outputText>
+						</rich:column>
+
+						<rich:column style="width:50%;">
+							<f:facet name="header">
+								<h:outputText value="Perfil" />
+							</f:facet>
+							<h:outputText value="#{item.papel.nome}"/>
+						</rich:column>
+
+					</rich:dataTable>
+					
+					<ui:include src="../comum/paginacao.xhtml">
+						<ui:param name="paramListagem" value="listagemPerfil" />
+					 </ui:include>
+
+				</h:panelGroup>	
+
+		</a4j:outputPanel>									
+	 
+	 	</h:panelGrid>
+		
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes"/>
+	<ui:define name="noresultadoTabela"/>
+	
+</ui:composition>
+
+</html>

@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+	
+		
+<f:view encoding="ISO-8859-1" locale="pt_BR">
+	<f:loadBundle basename="messages" var="mensagens" />
+	<head>
+
+		<meta http-equiv="Content-Type" content="text/html; charset=iso-8859-1" />
+		<meta http-equiv="cache-control" content="no-cache" />
+		<meta http-equiv="pragma" content="no-cache" />
+		<meta http-equiv="expires" content="-1" />
+	
+		<link rel="SHORTCUT ICON" href="#{facesContext.externalContext.requestContextPath}/images/favi_icon.gif" />
+		<title><ui:insert name="title">PJe-Calc - Sistema de Cálculos Trabalhistas</ui:insert></title>
+	
+		<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/logon.css?#{mensagens.versao}" />
+		<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/principal.css?#{mensagens.versao}" />
+		<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/conteudo.css?#{mensagens.versao}" />
+		<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/jquery.alerts.css?#{mensagens.versao}" />
+		<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/tipsy.css?#{mensagens.versao}" />
+		<link rel="stylesheet" type="text/css" href="#{facesContext.externalContext.requestContextPath}/css/menuesquerdo.css?#{mensagens.versao}" />
+
+		<ui:include src="/templates/cssPage.xhtml" />
+		
+	</head>
+
+	<body>
+		<h:form id="formulario" enctype="#{enctype}">
+		
+			<a4j:outputPanel ajaxRendered="true" rendered="false">
+				id: #{conversation.id} <br/>
+				longRunning? #{conversation.longRunning} <br/>
+				Nested? #{conversation.nested} <br/>
+				root: #{conversation.root()} <br/>
+			</a4j:outputPanel>	
+		
+			<a name="irTopoPagina"></a>
+			<div id="main">
+				<div id="topo">								
+					<div id="logo">
+						<h:commandLink action="#{apresentadorPesquisaAcessibilidade.fechar}" immediate="true" accesskey="1">
+							<img src="#{facesContext.externalContext.requestContextPath}#{a4jSkin.imgTopLogo}" height="40" width="699" border="0" alt="imagem do topo da página"/>
+						</h:commandLink>
+					</div>
+					<div id="versaopesquisa">
+						<a4j:region>
+							<table id="tbPesquisa" cellspacing="0" cellpadding="0" style="vAlign: middle">
+								<tr>
+								    <td>
+										<h:commandLink action="#" value="NÃO OFICIAL" onclick="alert('Este é um ambiente dedicado a testes do PJe-Calc e possui dados não oficiais. Qualquer cálculo realizado neste ambiente será inválido.');return false;" class="ambienteNaoOficial" rendered="#{not aplicacao.isAmbienteProducao() and aplicacao.isVersaoOnline()}"></h:commandLink>
+								    </td>
+								    <td>
+								    	<h:outputText id="versaoSistema" value="Versão: #{mensagens.versao}" />
+								    </td>
+								    <td class="modPesqEsq">
+								    </td>		        
+							     	<td class="modPesqBg"> 
+								        <span style="font-size: 11px; color: #FFFFFF; font-weight: bold;">
+										    Pesquisar
+										</span>
+										<h:inputText
+											styleClass="modPesqInputText"
+											onkeyup="return saltaParaSelect(this,'selAcheFacil',event);"
+											onkeypress="return isResultadosPesquisaMenuVazio('selAcheFacil') || !isApertouEnter(event);"
+											onblur="escondeSelectPesquisa('selAcheFacil');"
+											onfocus="limpaCampoPesquisa(this,'selAcheFacil', event);"
+											id="searchText"
+											value="#{apresentadorPesquisaAcessibilidade.textoPesquisaAcessibilidade}"
+											tabindex="1000"
+											alt="Atalho: alt + 0 ou alt + shift + 0"
+											title="Pesquisa de menu"
+											accesskey="0" />
+										<select
+											tabindex="1001"
+											onkeydown="pressionouTeclaNoSelect(this,event);"
+											onclick="clicarItemMenu(this);"
+											style="z-index:1002; background-color: rgb(239, 239, 239); border: 1px solid rgb(187, 187, 187); color: rgb(31, 79, 119); left: -255px; font: 11px Arial; height: 104px; padding: 0pt 0pt 4px 3px; top: 27px; width: 529px; position: absolute; display: none;"
+											title="Selecione um dos itens do menu"
+											size="1"
+											name="selAcheFacil"
+											id="selAcheFacil" />
+								    </td>	          
+							     	<td class="modPesqBg">
+								        <a4j:commandButton style="top:0px;" id="searchTextBt"
+								        		action="#{apresentadorPesquisaAcessibilidade.pesquisarAcessibilidade}"
+								        		process="searchTextBt"
+								        	onclick="if (jQuery('.modPesqInputText').val().length == 0) {event.preventDefault(); return false;}"
+										    image="#{a4jSkin.imgBgButtonPesq}" 
+										    alt="Pesquisa de documento" 
+										    title="Pesquisa de documento" />
+					                </td> 
+							        <td class="modPesqBg" valign="top">
+									    <h:graphicImage id="paletaCoresBt"
+										    url="#{a4jSkin.imgIconPalette}" 
+										    style="cursor:pointer"
+											title="Alterar o esquema de cores" 
+											onclick="Richfaces.showModalPanel('skinPanel')" />	
+							 				 							
+										<a4j:commandButton id="zoomNormalBt"
+											action="#{skinZoom.setTmNormal()}"
+											ajaxSingle="true"
+											oncomplete="location.reload()"
+											image="#{a4jSkin.imgIconZoomNormal}"
+											style="width: 17px;	height: 21px;" />	
+											
+									    <a4j:commandButton id="zoomMedioBt"
+									    	action="#{skinZoom.setTmMedio()}"
+											ajaxSingle="true"
+											oncomplete="location.reload()"
+											image="#{a4jSkin.imgIconZoomMedio}"
+											style="width: 17px;	height: 21px;" />
+									    
+									    <a4j:commandButton id="zoomGdeBt"
+									    	action="#{skinZoom.setTmGrande()}"
+											ajaxSingle="true"
+											oncomplete="location.reload()"
+											image="#{a4jSkin.imgIconZoomGrande}"
+											style="width: 17px;	height: 21px;" />	
+						        	</td>      
+					    		</tr>
+							</table>	
+						</a4j:region>		
+					</div>
+					
+					<div id="logoBanco"></div>								
+					<div style="float: right; padding-right: 23px; margin-top:22px;">
+						<h:commandLink action="#{identity.logout}" immediate="true" value="Sair" styleClass="iconExit" rendered="#{aplicacao.isVersaoOnline() and aplicacao.isAmbienteDesenvolvimento()}" accesskey="9" />
+					</div>
+					<div id="bemVindo">
+						<div id="usuario">
+							<h:outputText style="color: #FFFFFF; font-size: 11px" id="identificacao" value="#{apresentadorPrincipal.obterSaudacaoUsuario()}" rendered="#{aplicacao.isVersaoOnline()}" />
+						</div>
+					</div>	
+				</div>
+				
+				<div id="divConfirm">
+				</div>
+	
+				<div id="conteudo" >
+					<a4j:status id="indicator" onstart="AguardeShow();" onstop="AguardeHide();" />
+					<ui:insert name="conteudo" />
+				</div>
+	
+				<ui:include src="/pages/comum/aguarde.xhtml" />
+				
+			</div>
+		</h:form>
+
+		<ui:insert name="auxiliar" />
+		
+		<ui:insert name="script" />
+
+
+	
+		<rich:modalPanel id="skinPanel" height="100">
+	        <f:facet name="header">Esquema de cores da aplicação</f:facet>
+	        <f:facet name="controls">
+	            <h:panelGroup>
+					<h:graphicImage value="/images/closeMP.gif" onclick="Richfaces.hideModalPanel('skinPanel')"/>
+	            </h:panelGroup>                                
+	        </f:facet>
+	        <s:decorate template="template-edit-skin.xhtml">
+	            <ui:define name="label">
+                	<h:outputText value="Escolha o esquema:" styleClass="label" />
+	            </ui:define>
+	            <a4j:form>
+	                <h:selectOneMenu value="#{wiSkin.skin}" style="width: 250px">
+	                    <a4j:support event="onchange" oncomplete="location.reload()"/>
+	                    <f:selectItems value="#{wiSkin.skinList}" />
+	                </h:selectOneMenu>
+	            </a4j:form>
+	        </s:decorate>
+		</rich:modalPanel>
+	
+	</body>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.maskfinancial-1.3.js?#{mensagens.versao}"	type="text/javascript" charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.maskMoney.js?#{mensagens.versao}"	type="text/javascript" charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.maskedinput.js?#{mensagens.versao}"	type="text/javascript" charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.alphanumeric.pack.js?#{mensagens.versao}"	type="text/javascript" charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/mascara/jquery.alphanumeric.custom.js?#{mensagens.versao}"	type="text/javascript" charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/geral.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/jquery.alerts.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/jquery.enableCellNavigation.js?#{mensagens.versao}" type="text/javascript"  charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/menuAcessibilidade.js?#{mensagens.versao}" type="text/javascript"  charset="iso-8859-1"/>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/assinador.js?#{mensagens.versao}" type="text/javascript"></script>
+	<script	src="#{facesContext.externalContext.requestContextPath}/js/utils.js?#{mensagens.versao}" type="text/javascript" charset="iso-8859-1"/>
+</f:view>
+</html>

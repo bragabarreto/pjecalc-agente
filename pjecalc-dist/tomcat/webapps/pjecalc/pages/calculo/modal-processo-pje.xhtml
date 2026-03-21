@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-modalPanel-principal.xhtml">
+
+	<ui:param name="tituloModal" value="Processo PJe" />
+	<ui:param name="modalID" value="PPJE" />
+	<ui:param name="widthModal" value="600" />
+	<ui:param name="heightModal" value="360" />
+	<ui:param name="apresentador" value="#{apresentadorProcessoPJE}" />
+	<ui:param name="onshow" value="focusNumero()" />
+
+	<ui:define name="camposComFormInterno">
+			<a4j:outputPanel id="panelModalBusca" ajaxRendered="true">
+				
+				<fieldset> <legend>Dados da Busca</legend>	
+					<h:panelGrid columns="12">
+					
+						<h:panelGroup>
+							<a4j:region>
+								<h:outputLabel value="Número" for="numero" /><br />
+								<h:inputText id="numero" label="Número" value="#{apresentadorProcessoPJE.numero}" required="true" size="10" style="text-align:right;" maxlength="7" onfocus="$(this).integerMask()">
+									<a4j:support event="onblur" oncomplete="$('formularioModal#{modalID}:numero').leftPad('0',7)" limitToList="true"/>
+								</h:inputText>
+								<script>
+									$('formularioModal#{modalID}:numero').leftPad('0',7);
+								</script>						
+							</a4j:region>
+							<cobra:toolTip>
+		       					<rich:message for="numero"/>
+		    				</cobra:toolTip>
+							<span class="digito">-</span>
+						</h:panelGroup>
+						
+						<h:panelGroup id="panelDigito">
+							<a4j:region>
+								<h:outputLabel value="Dígito" for="digito" /><br />
+								<h:inputText id="digito" label="Dígito" value="#{apresentadorProcessoPJE.digito}" required="true" style="text-align:right;" size="3" maxlength="2" onfocus="$(this).integerMask()">
+									<a4j:support event="onblur" oncomplete="$('formularioModal#{modalID}:digito').leftPad('0',2)" limitToList="true"/>
+								</h:inputText>
+								<script>
+									$('formularioModal#{modalID}:digito').leftPad('0',2)
+								</script>
+							</a4j:region>
+							<cobra:toolTip>
+		       					<rich:message for="digito"/>
+		    				</cobra:toolTip>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:region>
+								<h:outputLabel value="Ano" for="ano" /><br />
+								<h:inputText id="ano" label="Ano" value="#{apresentadorProcessoPJE.ano}" required="true" style="text-align:right;" size="4" maxlength="4" onfocus="$(this).integerMask()">
+									<a4j:support event="onblur" oncomplete="$('formularioModal#{modalID}:ano').leftPad('0',4)" limitToList="true"/>
+								</h:inputText>
+								<script>
+									$('formularioModal#{modalID}:ano').leftPad('0',4)
+								</script>
+							</a4j:region>
+							<cobra:toolTip>
+		       					<rich:message for="ano"/>
+		    				</cobra:toolTip>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:region>
+								<h:outputLabel value="Justiça" for="justica" /><br />
+								<h:inputText id="justica" label="Justiça" disabled="true" value="#{apresentadorProcessoPJE.justica}"  required="true" style="text-align:right;"  size="5" maxlength="1" onfocus="$(this).integerMask()" >
+									<a4j:support event="onblur" oncomplete="$('formularioModal#{modalID}:justica').leftPad('0',1)" limitToList="true"/>
+								</h:inputText>
+							</a4j:region>
+							<cobra:toolTip>
+		       					<rich:message for="justica"/>
+		    				</cobra:toolTip>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:region>
+								<h:outputLabel value="Tribunal" for="regiao" /><br />
+								<h:inputText id="regiao" label="Tribunal" value="#{apresentadorProcessoPJE.regiao}"  required="true" style="text-align:right;"  size="5" maxlength="2" onfocus="$(this).integerMask()">
+									<a4j:support event="onblur" oncomplete="$('formularioModal#{modalID}:regiao').leftPad('0',2)" limitToList="true"/>
+								</h:inputText>
+								<script>
+									$('formularioModal#{modalID}:regiao').leftPad('0',2)
+								</script>
+							</a4j:region>
+							<cobra:toolTip>
+		       					<rich:message for="regiao"/>
+		    				</cobra:toolTip>
+							<span class="ponto">.</span>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<a4j:region>
+								<h:outputLabel value="Vara" for="vara" /><br />
+								<h:inputText id="vara" label="Vara" value="#{apresentadorProcessoPJE.vara}" required="true" style="text-align:right;" size="4" maxlength="4" onfocus="$(this).integerMask()">
+									<a4j:support event="onblur" oncomplete="$('formularioModal#{modalID}:vara').leftPad('0',4)" limitToList="true"/>
+								</h:inputText>
+								<script>
+								$('formularioModal#{modalID}:vara').leftPad('0',4)
+								</script>
+							</a4j:region>
+							<cobra:toolTip>
+		       					<rich:message for="vara"/>
+		    				</cobra:toolTip>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+								<a4j:commandLink 
+									 id="cmdVisualizar#{modalID}"
+									 styleClass="botaoBuscar" 
+									 actionListener="#{apresentador.buscarProcesso()}" onclick="AguardeShow();" oncomplete="AguardeHide();"
+									 limitToList="true" title="Pesquisar" value="Pesquisar"
+									 reRender="formularioModal#{modalID}:panelModalBusca, panMsg#{modalID}, panelModalResultado, painelModalBotoes" 
+										 />
+					</h:panelGroup>
+						
+					</h:panelGrid>
+			</fieldset>
+				
+			</a4j:outputPanel>
+			
+	</ui:define>
+
+	<ui:define name="listagemFormModal">
+	
+		<a4j:outputPanel id="panelModalResultado" >
+			
+			<h:panelGroup layout="block" style="padding:15px 0px 15px 5px;" rendered="#{apresentador.processo == null and apresentador.pesquisando}">
+					<h:outputLabel value="Processo #{apresentador.numeroProcessoFormatado} não encontrado." styleClass="alerta"  /><br />
+			</h:panelGroup>
+
+			<fieldset> 
+				<legend>Resultado</legend>	
+				
+				<h:panelGrid  columns="1" styleClass="proClass">
+					
+					<h:panelGroup>
+						<h:outputLabel value="Reclamantes (Nome - Identificação)" style="margin-left:2px;"/><br />
+						<h:selectOneMenu id="reclamantes" label="Reclamantes" disabled="#{apresentador.processo == null}"
+										value="#{apresentador.reclamante}"  converter="#{reclamanteConverter}"
+										style="width:410px; margin-left:2px;" required="true" > 
+				 			<f:selectItems value="#{apresentador.listaReclamantes}" var="item" label="#{item.label}"/>
+						</h:selectOneMenu>
+						<cobra:toolTip>
+	        				<rich:message for="reclamantes"/>
+		    			</cobra:toolTip>
+					</h:panelGroup>	
+					
+					<h:panelGroup>
+						<h:outputLabel value="Reclamados (Nome - Identificação)" style="margin-left:2px;"/><br />
+						<h:selectOneMenu id="reclamados" label="Reclamados" disabled="#{apresentador.processo == null}"
+										value="#{apresentador.reclamado}" converter="#{reclamadoConverter}"
+										style="width:410px; margin-left:2px;" required="true"  > 
+				 			<f:selectItems value="#{apresentador.listaReclamados}" var="item" label="#{item.label}"/>
+						</h:selectOneMenu>
+						<cobra:toolTip>
+	        				<rich:message for="reclamados"/>
+		    			</cobra:toolTip>
+					</h:panelGroup>	
+
+					<h:panelGroup>
+						<h:selectBooleanCheckbox id="inverterPartes" selected="false" value="#{apresentador.indicadorDeInversaoDePartes}" style="margin-top: 6px; margin-left: 2px" />
+						<label for="inverterPartes" style="margin-left: 2px">Inverter Partes (Reclamante / Reclamado)</label>
+					</h:panelGroup>
+					
+				</h:panelGrid>
+			</fieldset>
+				
+		</a4j:outputPanel>
+	
+	
+	</ui:define>
+			
+	<ui:define name="botoesFormModal">
+		<a4j:outputPanel id="painelModalBotoes">
+			
+			<a4j:commandButton value="Confirmar" disabled="#{apresentador.processo == null}" 
+							   styleClass="botao" style="margin-top:10px;"
+							   actionListener="#{apresentadorCalculo.receberProcessoWS(apresentador.processoJudicial)}" reRender="formularioModal#{modalID}:panelModalResultado, panMsg#{modalID},formulario:painelIdentificacao, formulario:painelReclamante, formulario:painelReclamado, formulario:painelAjuizamento"  
+							   limitToList="true"  oncomplete="checarErro()" />	
+			
+			<a4j:commandButton id="btnSLimpar#{modalID}" immediate="true"
+							   value="Limpar" styleClass="botao" style="margin-top:10px;"
+							   actionListener="#{apresentador.limparDadosDoFormulario}" reRender="formularioModal#{modalID}:panelModalResultado, panMsg#{modalID}, formularioModal#{modalID}:panelModalBusca"  
+							   limitToList="true" oncomplete="apagarCampos()" />			
+			
+			<h:panelGroup id="scriptAviso">
+				<script >
+					function checarErro() {
+						if (jQuery("#formularioModal#{modalID}").find(".linkErro").size() > 0 ) {
+							return true;
+						}
+						else {
+							Richfaces.hideModalPanel('modal#{modalID}');
+						}
+					}
+
+					function focusNumero() {
+						$('formularioModal#{modalID}:numero').focus();
+					}
+
+					function apagarCampos() {
+						$('formularioModal#{modalID}:numero').value = "";
+						$('formularioModal#{modalID}:digito').value = "";
+						$('formularioModal#{modalID}:ano').value = "";
+						$('formularioModal#{modalID}:regiao').value = "";
+						$('formularioModal#{modalID}:vara').value = "";
+						focusNumero();
+					}
+					
+			    </script>
+			</h:panelGroup>
+		</a4j:outputPanel>
+		
+		&#160;
+	</ui:define>
+	
+</ui:composition>
+
+</html>

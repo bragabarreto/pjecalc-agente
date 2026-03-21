@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="titulo" value="Importação" />
+	<ui:param name="apresentador" value="#{apresentadorImportacao}" />
+	<ui:param name="enctype" value="multipart/form-data" />
+	<ui:param name="notWaitCancel" value="#{true}" />
+
+	<ui:define name="nofiltroCampos">
+	
+		<a4j:loadScript src="resource://jquery.js"/>
+    	
+    	<a4j:region>
+    		<fieldset>
+    			<legend>Dados da Importação</legend>
+				<h:panelGroup layout="block" style="width:100%;">
+					<h:panelGrid columns="1" cellpadding="3" cellspacing="3">		
+						<h:panelGroup id="pnlFileUpload" class="panelFileUpload" layout="block">
+							<h:outputLabel for="arquivo" value="Arquivo do PJe-Calc *"/><br />
+							<rich:fileUpload id="arquivo" fileUploadListener="#{apresentador.uploadListener}" locale="pt_BR" immediateUpload="true" addControlLabel="Escolher Arquivo..." clearAllControlLabel="Remover" cancelEntryControlLabel="Cancelar" clearControlLabel="" transferErrorLabel="Erro na transferência" stopControlLabel="Parar" doneLabel="Feito" stopEntryControlLabel="Parar" sizeErrorLabel="Tamanho do arquivo maior que o limite máximo permitido.">
+								<a4j:support event="onclear" reRender="pnlFileUpload" />
+							</rich:fileUpload>
+						</h:panelGroup>
+					</h:panelGrid>
+				</h:panelGroup>
+			</fieldset>
+   			<h:commandButton id="confirmarImportacao"  value="Confirmar" action="#{apresentador.importarZip()}" styleClass="botaoGrande" onclick="AguardeShow(); return true;" />
+		</a4j:region>
+		    
+	</ui:define>
+	
+	<ui:define name="noresultadoTabela">
+	</ui:define>
+	
+	<ui:define name="nocamposFormulario">
+	</ui:define>	
+	
+	<ui:define name="nofiltroBotoes">
+		
+	</ui:define>
+	
+</ui:composition>
+
+</html>

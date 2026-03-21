@@ -1,0 +1,430 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib"
+	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
+
+<ui:composition template="/templates/template-conteudo.xhtml">
+
+	<ui:param name="dadosDe" value="Honorários" />
+	<ui:param name="apresentador" value="#{apresentadorHonorarios}" />
+	<ui:param name="titulo" value="#{apresentadorHonorarios.titulo}" />
+	<ui:param name="registro" value="#{apresentadorHonorarios.registro}" />
+	
+	<ui:define name="nofiltroCampos">
+			<ui:include src="resumo-calculo.xhtml" />
+	</ui:define>
+	
+	<ui:define name="resultadoTabela">
+		<h:panelGroup  style="width: 100%;" >
+			
+				<rich:dataTable id="listagem" value="#{lista}" rowClasses="linha-par, linha-impar" 
+								cellpadding="0" cellspacing="4" border="0" width="100%" rows="#{lista.rowCount}" var="honorario"> 
+		    		<rich:column style="width:5%;">
+					    	<f:facet name="header">
+				    			<h:outputText value="Ação"/>
+				    		</f:facet>
+						    <a4j:region>
+					    		<a4j:commandLink styleClass="linkVisualizar" title="Visualizar" ajaxSingle="true" actionListener="#{apresentador.visualizar}" />
+				    			<a4j:commandLink styleClass="linkAlterar" title="Alterar" ajaxSingle="true" actionListener="#{apresentador.alterar}" />
+				    			<a4j:commandLink styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" />
+					    	</a4j:region>
+				    </rich:column>
+		    	
+			    	<rich:column style="width:10%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Descrição"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{honorario.descricao}"/>
+			    	</rich:column>
+			    	
+			    	<rich:column style="width:10%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Devedor"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{honorario.tipoDeDevedor.nome}">
+		    			</h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column style="width:10%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Credor"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{honorario.nomeCredor}">
+		    			</h:outputText>
+			    	</rich:column>
+			    	
+			    	<rich:column style="width:10%;">
+		    			<f:facet name="header">
+		    				<h:outputText value="Apurar Imposto de Renda"/>
+		    			</f:facet>	
+		    			<h:outputText value="#{honorario.apurarIRRF == true ? 'Sim' : 'Não'}">
+		    			</h:outputText>
+			    	</rich:column>
+			    				    	
+				</rich:dataTable>	
+				
+				<ui:include src="/pages/comum/paginacao.xhtml">
+			    	<ui:param name="lista" value="#{apresentador.lista}" />
+				</ui:include>
+		</h:panelGroup>	
+	</ui:define>
+	
+	<ui:define name="camposFormulario">
+	
+		<h:panelGroup layout="block" style="min-width:800px;">
+		<h:panelGrid columns="2" cellpadding="3"  cellspacing="3">
+		
+			<h:panelGroup>
+				<h:outputLabel value="Tipo de Honorário *" for="tpHonorario"/><br />
+				<h:selectOneMenu id="tpHonorario" label="Tipo de Honorário" value="#{registro.tipoHonorario}" required="true" disabled="#{apresentador.emModoSomenteVisualizacao}">
+					<s:selectItems value="#{enumItems.tipoHonorarioEnum}" var="item" label="#{item.nome}" />
+					<a4j:support event="onchange" process="tpHonorario" actionListener="#{apresentador.mudarTipoDeHonorario}" ajaxSingle="true" limitToList="true" reRender="pnlBaseParaApuracao,pnlVerbasNaoCompoemPrincipal,descricao" />
+				</h:selectOneMenu>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<h:outputLabel value="Descrição *" for="descricao"/><br />
+				<h:inputText id="descricao"  label="Descrição" value="#{registro.descricao}" size="71" maxlength="60" disabled="#{apresentador.emModoSomenteVisualizacao}">
+				</h:inputText>
+				<cobra:toolTip>
+					<rich:message for="descricao"/>
+				</cobra:toolTip>
+			</h:panelGroup>
+			
+			<h:panelGroup>
+				<fieldset><legend>Devedor *</legend>
+					<h:panelGroup>						
+						<a4j:region>
+							<h:selectOneRadio id="tipoDeDevedor" disabled="#{apresentador.emModoSomenteVisualizacao}" immediate="true" styleClass="labelInput" layout="lineDirection" value="#{registro.tipoDeDevedor}">
+								<s:selectItems value="#{enumItems.tipoDeDevedorDoHonorarioEnum}" var="item" label="#{item.nome}" />
+								<s:convertEnum />
+								<a4j:support event="onchange" process="tipoDeDevedor" actionListener="#{apresentador.mudarTipoDeDevedor}" ajaxSingle="true" limitToList="true" reRender="pnlBaseParaApuracao,pnlVerbasNaoCompoemPrincipal,pnlParametrosReclamante" />
+							</h:selectOneRadio>
+						</a4j:region>
+					</h:panelGroup>
+					<cobra:toolTip>
+					<rich:message for="tipoDeDevedor"/>
+				</cobra:toolTip>
+				</fieldset>
+			</h:panelGroup>
+			
+			<h:panelGroup id="pnlParametrosReclamante">
+				<h:selectOneRadio id="tipoCobrancaReclamante" value="#{registro.tipoCobrancaReclamante}" disabled="#{apresentador.emModoSomenteVisualizacao}" immediate="true" styleClass="labelInput" layout="lineDirection" rendered="#{registro.tipoDeDevedor eq 'RECLAMANTE'}">
+					<s:selectItems value="#{enumItems.tipoCobrancaReclamanteEnum}" var="item" label="#{item.nome}" />
+					<s:convertEnum />
+				</h:selectOneRadio>
+			</h:panelGroup>
+			
+		</h:panelGrid>
+		
+		<h:panelGrid columns="8" cellpadding="3"  cellspacing="3">
+			
+			<h:panelGroup>
+				<fieldset><legend>Tipo do Valor *</legend>
+					<h:panelGroup>						
+						<a4j:region>
+							<h:selectOneRadio id="tipoValor" disabled="#{apresentador.emModoSomenteVisualizacao}" immediate="true" styleClass="labelInput" layout="lineDirection" value="#{registro.tipoValor}">
+								<s:selectItems value="#{enumItems.tipoValorEnum}" var="item" label="#{item.nome}" />
+								<s:convertEnum />
+								<a4j:support limitToList="true" ajaxSingle="true" event="onchange" reRender="grupoCalculado, grupoInformado,grupoInformado2" />
+							</h:selectOneRadio>
+						</a4j:region>
+					</h:panelGroup>
+				</fieldset>
+			</h:panelGroup>
+			
+			<a4j:outputPanel id="grupoCalculado">
+			
+				<h:panelGroup rendered="#{registro.tipoValor == 'CALCULADO'}">
+					<h:panelGrid columns="3">
+						<h:panelGroup>
+								<h:outputLabel value="Alíquota (%) *" for="aliquota" /><br />
+								<h:inputText id="aliquota" label="Alíquota (%)" size="12"  value="#{registro.aliquota}" disabled="#{apresentador.emModoSomenteVisualizacao}" onfocus="$(this).percentMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>
+								<cobra:toolTip>
+				                      	<rich:message for="aliquota"/>
+				                 </cobra:toolTip>
+						</h:panelGroup>
+					
+						<h:panelGroup>
+							<h:panelGrid columns="1" cellspacing="4" border="0">
+								<h:panelGroup id="pnlBaseParaApuracao">
+									<h:outputLabel for="baseParaApuracao" value="Base para Apuração *" /><br />
+									<h:selectOneMenu id="baseParaApuracao" label="Base para Apuração" value="#{registro.baseParaApuracao}" disabled="#{apresentador.emModoSomenteVisualizacao}" style="width:290px;">
+										<s:selectItems value="#{registro.tipoDeDevedor == 'RECLAMANTE' and registro.tipoHonorario == 'SUCUMBENCIAIS' ? enumItems.baseParaApuracaoDeHonorarioReclamanteEnum : enumItems.baseParaApuracaoDeHonorarioReclamadoEnum}" var="item" label="#{item.nome}" noSelectionLabel="" />
+										<s:convertEnum />
+										<a4j:support limitToList="true" process="baseParaApuracao" ajaxSingle="true" event="onchange" reRender="pnlVerbasNaoCompoemPrincipal" />
+									</h:selectOneMenu>
+									<cobra:toolTip>
+					                      <rich:message for="baseParaApuracao"/>
+					                 </cobra:toolTip>
+								</h:panelGroup>
+							</h:panelGrid>
+						</h:panelGroup>
+						
+					</h:panelGrid>
+				</h:panelGroup>
+				
+				<h:panelGroup id="pnlVerbasNaoCompoemPrincipal" rendered="#{registro.tipoValor == 'CALCULADO'}">
+					<h:panelGroup rendered="#{registro.baseParaApuracao.valor eq 'VNP' and registro.tipoDeDevedor eq 'RECLAMANTE' and registro.tipoHonorario == 'SUCUMBENCIAIS'}">
+						<fieldset><legend>Verbas</legend>
+							<h:selectManyCheckbox layout="pageDirection" id="verbasNaoCompoemPrincipal" label="Verbas" value="#{registro.verbasQueNaoCompoemPrincipalSelecionadas}" disabled="#{apresentador.emModoSomenteVisualizacao}">
+								<s:selectItems value="#{apresentador.verbasNaoCompoemPrincipal}" var="item" itemValue="#{item}" label="#{item.descricao}" />
+								<s:convertEntity />
+							</h:selectManyCheckbox>
+							<h:outputText value="Nenhuma verba encontrada." rendered="#{empty apresentador.verbasNaoCompoemPrincipal}" />
+						</fieldset>
+					</h:panelGroup>	
+				</h:panelGroup>
+				
+			</a4j:outputPanel>
+			
+			<a4j:outputPanel id="grupoInformado">
+				<h:panelGroup rendered="#{registro.tipoValor == 'INFORMADO'}">
+					
+					<h:panelGrid columns="5">
+						<h:panelGrid columns="2">
+							
+							<h:panelGroup>
+								<h:outputLabel value="Vencimento *" for="dataVencimento" /><br />
+								<rich:calendar id="dataVencimento"
+											   label="Vencimento" inputSize="10" popup="true" disabled="#{apresentador.emModoSomenteVisualizacao}"
+											   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+											   value="#{registro.dataVencimento}">
+									<f:facet name="footer">
+							        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+							        </f:facet>
+								</rich:calendar>
+								<cobra:toolTip>
+				                      	<rich:message for="dataVencimento"/>
+				                 </cobra:toolTip>
+							</h:panelGroup>
+							
+							<h:panelGroup>
+								<h:outputLabel value="Valor *" for="valor" /><br />
+								<h:inputText id="valor" label="Valor" disabled="#{apresentador.emModoSomenteVisualizacao}" size="16" maxlength="16" value="#{registro.valor}" onfocus="$(this).currencyMask()">
+									<f:converter converterId="bigDecimalConverter"/>
+								</h:inputText>	
+								<cobra:toolTip>
+				                     <rich:message for="valor"/>
+				                </cobra:toolTip>
+							</h:panelGroup>
+							
+						</h:panelGrid>
+						
+						<h:panelGroup>
+							<fieldset style="float:left; width:180px;"><legend>Correção Monetária</legend>
+								<h:panelGrid columns="1" cellspacing="4" border="0" >
+									<h:panelGroup>
+										<h:selectOneRadio id="tipoDeIndiceDeCorrecao" disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" layout="pageDirection" value="#{registro.tipoDeIndiceDeCorrecao}">
+											<s:selectItems value="#{enumItems.opcaoDeIndiceDeCorrecaoEnum}" var="item" label="#{item.nome}" />
+											<s:convertEnum />
+											<a4j:support event="onchange" actionListener="#{apresentador.mudarIndiceCorrecao}" ajaxSingle="true" reRender="panelOutroIndice" limitToList="true" />
+										</h:selectOneRadio>
+									</h:panelGroup>
+										
+									<a4j:outputPanel id="panelOutroIndice">	
+										<h:panelGroup>
+											<h:selectOneMenu id="outroIndiceDeCorrecao" label="Outro Índice" value="#{registro.outroIndiceDeCorrecao}" disabled="#{apresentador.emModoSomenteVisualizacao or not apresentador.habilitadoOutroIndiceCorrecao}">
+												<s:selectItems value="#{enumItems.indiceMonetarioParaCalculoEnum}" var="item" label="#{item.nome}" noSelectionLabel="" />
+												<s:convertEnum />
+											</h:selectOneMenu>
+											<cobra:toolTip>
+							                	<rich:message for="outroIndiceDeCorrecao"/>
+							                </cobra:toolTip>
+										</h:panelGroup>
+									</a4j:outputPanel>
+								</h:panelGrid>
+								</fieldset>
+						</h:panelGroup>
+						
+						<h:panelGroup>
+							<h:panelGrid id="pnlAplicarJurosInformado" columns="1" cellspacing="0" border="0">
+								
+								<h:panelGroup layout="block">
+									<a4j:region>
+										<h:selectBooleanCheckbox id="aplicarJuros" disabled="#{apresentador.emModoSomenteVisualizacao}" value="#{registro.aplicarJuros}">
+											<a4j:support event="onchange" actionListener="#{registro.setApurarIRPFSobreJuros(false)}" limitToList="true" ajaxSingle="true" reRender="apurarIRPFSobreJuros,pnlAplicarJurosInformado" />
+										</h:selectBooleanCheckbox>
+										<label for="aplicarJuros">Aplicar Juros</label>
+									</a4j:region>
+								</h:panelGroup>
+								
+								<h:panelGroup layout="block" rendered="#{registro.aplicarJuros}">
+									<h:panelGroup>
+										<h:outputLabel value="A partir de" for="dataJurosAPartirDe" /><br />
+										<rich:calendar id="dataJurosAPartirDe"
+													   label="A partir de" inputSize="10" popup="true" disabled="#{apresentador.emModoSomenteVisualizacao}"
+													   datePattern="dd/MM/yyyy" enableManualInput="true" oninputfocus="$(this).dateMask()"
+													   value="#{registro.dataApartirDeAplicarJuros}">
+											<f:facet name="footer">
+									        	<h:outputText value="{selectedDateControl}" style="text-align:center" />
+									        </f:facet>
+										</rich:calendar>
+										<cobra:toolTip>
+						                 	<rich:message for="dataJurosAPartirDe"/>
+						                 </cobra:toolTip>
+									</h:panelGroup>
+									<h:outputText class="linkHelp" id="dataJurosAPartirDeHelp" style="margin-left:1px">
+										<rich:toolTip for="dataJurosAPartirDeHelp" showEvent="mouseover" styleClass="tooltipHelp">
+										   	Se a data "A partir de" não for informada e a data de vencimento for anterior ou igual à data do ajuizamento, os juros serão apurados a partir do ajuizamento. Caso contrário, os juros serão apurados a partir do vencimento.
+										</rich:toolTip>
+						     	    </h:outputText>
+								</h:panelGroup>
+								
+							</h:panelGrid>
+						</h:panelGroup>
+						
+				</h:panelGrid>
+			</h:panelGroup>
+			
+		</a4j:outputPanel>
+		
+		</h:panelGrid>
+		
+		<fieldset><legend>Dados do Credor</legend>
+		<h:panelGrid columns="1" cellpadding="3"  cellspacing="3">
+			<a4j:region>				
+				<h:panelGroup>
+					<h:outputLabel value="Credor" for="selecaoCredores"/><br />
+					<h:selectOneMenu id="selecaoCredores" value="#{apresentador.selecaoCredor}" label="Selecione o Credor" style="width:372px;" disabled="#{apresentador.emModoSomenteVisualizacao}" >
+						<s:selectItems value="#{apresentador.getListaCredoresDoCalculo()}" var="item" label="#{item}" noSelectionLabel="Preencher Dados..." />
+						<a4j:support event="onchange" actionListener="#{apresentador.atualizarCredor()}" reRender="dadosCredor" limitToList="true" ajaxSingle="true"/>
+					</h:selectOneMenu>
+				</h:panelGroup>
+			
+			
+			<h:panelGroup id="dadosCredor">
+				<h:panelGrid columns="1" cellpadding="0"  cellspacing="0">
+				
+				<h:panelGroup>
+					<h:outputLabel value="Nome Completo *" for="nomeCredor"/><br />
+					<h:inputText id="nomeCredor"  label="Nome Completo" value="#{registro.nomeCredor}" size="70" maxlength="100" disabled="#{apresentador.emModoSomenteVisualizacao}">
+					</h:inputText>
+					<cobra:toolTip>
+						<rich:message for="nomeCredor"/>
+					</cobra:toolTip>
+				</h:panelGroup>
+	
+				<h:panelGroup>				
+					<fieldset><legend>Documento Fiscal *</legend>
+						<h:panelGrid columns="2" cellspacing="4" border="0">
+							<a4j:region>
+								<h:panelGroup>
+									<h:outputLabel for="tipoDocumentoFiscalCredor" value="Tipo" /><br />
+									<h:selectOneRadio id="tipoDocumentoFiscalCredor" value="#{registro.tipoDocumentoFiscalCredor}"  disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" onclick="$('formulario:numeroDocumentoFiscalCredor').disable(false);">
+										<s:selectItems value="#{apresentadorCalculo.enumItems.tipoDocumentoFiscalEnum}" var="item" label="#{item}"/> 
+										<s:convertEnum />
+										<a4j:support event="onchange" limitToList="true" />
+									</h:selectOneRadio>
+									<cobra:toolTip>
+										<rich:message for="tipoDocumentoFiscalCredor"/>
+									</cobra:toolTip>
+								</h:panelGroup>
+							</a4j:region>
+								
+							<h:panelGroup id="painelCredorNumeroDocumentoFiscal">
+								<h:outputLabel value="Número" for="numeroDocumentoFiscalCredor" /><br />
+								<h:inputText id="numeroDocumentoFiscalCredor" label="Número"  
+												value="#{registro.numeroDocumentoFiscalCredor}" size="26"
+												onfocus="$(this).dynamicMask('formulario:tipoDocumentoFiscalCredor')" disabled="#{apresentador.emModoSomenteVisualizacao}">
+									<f:converter converterId="mascaraDinamicaConverter"/>
+									<f:validator validatorId="validadorDinamico"/>
+									<f:param name="seletor" value="tipoDocumentoFiscalCredor"/>
+								</h:inputText>
+								<rich:message showDetail="false" showSummary="false" for="numeroDocumentoFiscalCredor">
+								     <f:facet name="errorMarker">
+								     	   <h:outputLink class="linkErro" id="numeroDocumentoFiscalCredorErro">
+											   <rich:toolTip showEvent="mouseover" styleClass="tooltip">
+											        <rich:message showDetail="true" showSummary="false" for="numeroDocumentoFiscalCredor"/>
+											   </rich:toolTip>
+								     	   </h:outputLink>
+								     </f:facet>
+								</rich:message>
+								<h:panelGroup rendered="#{not apresentador.emModoSomenteVisualizacao}">
+									<script>
+										$('formulario:numeroDocumentoFiscalCredor').disable(!jQuery("table[id='formulario:tipoDocumentoFiscalCredor'] input").is(":checked"));
+									</script>
+								</h:panelGroup>
+							</h:panelGroup>
+						</h:panelGrid>
+					</fieldset>	
+				</h:panelGroup>
+				</h:panelGrid>
+			</h:panelGroup>
+
+			</a4j:region>
+		</h:panelGrid>
+
+		</fieldset>
+		
+		<fieldset><legend>Imposto de Renda </legend>
+		<h:panelGrid columns="2" cellpadding="3"  cellspacing="3">			
+			
+			<h:panelGroup layout="block" style="margin:15px 0 0 8px;">
+				<a4j:region>
+					<h:selectBooleanCheckbox id="apurarIRRF" disabled="#{apresentador.emModoSomenteVisualizacao}" value="#{registro.apurarIRRF}" >
+						<a4j:support event="onchange" actionListener="#{apresentador.atualizarApuracaoIR}" limitToList="true" ajaxSingle="true" reRender="aplicarJuros,apurarIRPFSobreJuros,tipoImpostoRendaPanel" />
+					</h:selectBooleanCheckbox>
+					<label for="apurarIRRF">Apurar Imposto de Renda</label>
+				</a4j:region>						
+			</h:panelGroup>
+			
+			<a4j:outputPanel id="tipoImpostoRendaPanel">
+				<h:panelGroup rendered="#{registro.apurarIRRF}">
+					<fieldset><legend>Tipo de Imposto de Renda *</legend>
+						<h:panelGroup>						
+							<a4j:region>
+								<h:selectOneRadio id="tipoDeImpostoDeRenda" disabled="#{apresentador.emModoSomenteVisualizacao}" immediate="true" styleClass="labelInput" layout="lineDirection" value="#{registro.tipoImpostoRenda}">
+									<s:selectItems value="#{enumItems.tipoDeImpostoDeRendaEnum}" var="item" label="#{item.nome}" />
+									<s:convertEnum />
+								</h:selectOneRadio>
+							</a4j:region>
+						</h:panelGroup>
+						<cobra:toolTip>
+							<rich:message for="tipoDeImpostoDeRenda"/>
+						</cobra:toolTip>
+					</fieldset>
+				</h:panelGroup>
+												
+			</a4j:outputPanel>
+			
+			<a4j:outputPanel id="grupoInformado2">
+				<h:panelGroup rendered="#{registro.tipoValor == 'INFORMADO'}">
+			      <h:panelGroup layout="block" style=" padding-left: 8px; margin:-9px 1 1 1;">
+					<h:selectBooleanCheckbox id="apurarIRPFSobreJuros" disabled="#{not (registro.apurarIRRF and registro.aplicarJuros)}" value="#{registro.apurarIRPFSobreJuros}">
+				    </h:selectBooleanCheckbox>
+					<label for="apurarIRPFSobreJuros">Incidir sobre Juros</label>
+				</h:panelGroup>	
+			</h:panelGroup>
+			</a4j:outputPanel>	
+						
+		</h:panelGrid>
+
+		</fieldset>
+		
+	
+	</h:panelGroup>												
+			
+	</ui:define>
+	
+	<ui:define name="script">
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">		
+			<a4j:commandButton id="incluir" value="Novo"  	actionListener="#{apresentador.novo}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoListagem}" />
+			<a4j:commandButton id="salvar" value="Salvar" 	actionListener="#{apresentador.salvar}" styleClass="botao" rendered="#{apresentador.emModoFormulario and operacao!='EXCLUSAO' and operacao!='VISUALIZACAO'}" onclick="allToUpperCase();"/>
+			<a4j:commandButton id="excluir" value="Excluir" actionListener="#{apresentador.remover}" imeddiate="true" styleClass="botao" rendered="#{apresentador.operacao=='EXCLUSAO'}" onclick="if (!confirma('#{mensagens.MSG0002}',this)) return false;" />
+			<a4j:commandButton id="cancelar" value="#{apresentador.operacao=='VISUALIZACAO'?'Voltar':'Cancelar'}" actionListener="#{apresentador.cancelar}" ajaxSingle="true" styleClass="botao" rendered="#{apresentador.emModoFormulario}"/>
+	</ui:define>
+		
+</ui:composition>
+
+</html>

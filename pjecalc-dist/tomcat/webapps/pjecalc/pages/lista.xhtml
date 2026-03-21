@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml"
+	xmlns:ui="http://java.sun.com/jsf/facelets"
+	xmlns:h="http://java.sun.com/jsf/html"
+	xmlns:f="http://java.sun.com/jsf/core"
+	xmlns:a4j="http://richfaces.org/a4j"
+	xmlns:rich="http://richfaces.org/rich"
+	xmlns:s="http://jboss.com/products/seam/taglib">
+
+<ui:composition template="/templates/template-pilares.xhtml">
+
+	<ui:define name="navegacao">
+		<div class="naveg">
+			<h:outputText styleClass="n1" value="#{mensagens.menuCadastrosProjetos}"/>
+			<a class="arrow" />
+			<h:outputText styleClass="n2" value="#{operacao.rotulo}" />
+		</div>
+	</ui:define>
+
+	<ui:define name="filtroCampos">
+			<h:panelGrid columns="5" cellpadding="3" cellspacing="3">
+					<h:panelGroup>
+						<h:outputLabel for="nomeProjeto" value="Nome do Projeto"  /><br />
+						<h:inputText id="nomeProjeto" label="Nome do Projeto" value="" 
+							 size="70" maxlength="70" />
+						 <script type="text/javascript">
+								mascara('nomeProjeto', 'TEXTONUMERO');
+						</script>	
+					</h:panelGroup>
+					
+					<h:panelGroup>
+						<h:outputLabel value="&#193;rea de Cr&#233;dito"  /><br />		
+						<h:selectOneRadio id="areaCredito" label="&#193;rea de Cr&#233;dito" value="RURAL"  disabled="true" styleClass="labelInput">
+							<f:selectItem itemLabel="NÃO RURAL" itemValue="NÃO RURAL" />
+							<f:selectItem itemLabel="RURAL" itemValue="RURAL" />
+						</h:selectOneRadio>
+					</h:panelGroup>						
+					
+					<h:panelGroup>
+						<h:outputLabel value="Tipo de Investimento"  /><br />
+						<h:selectOneMenu value="" label="Selecione"  id="tipoInvestimento" style="width:120px">
+							<f:selectItem itemLabel="Selecione" itemValue="Selecione"/>
+							<f:selectItem itemLabel="INVESTIMENTO" itemValue="INVESTIMENTO" />
+							<f:selectItem itemLabel="CUSTEIO" itemValue="CUSTEIO" />
+						</h:selectOneMenu>
+					</h:panelGroup>					
+					
+					<h:panelGroup>
+						<h:outputLabel for="atividade" value="Atividade"  /><br />
+						<h:selectOneMenu value="" label="Selecione"  id="atividade" style="width:120px">
+							<f:selectItem itemLabel="Selecione" itemValue="Selecione"/>
+							<f:selectItem itemLabel="PECUÁRIA" itemValue="PECUÁRIA" />
+							<f:selectItem itemLabel="AGRICULTURA" itemValue="AGRICULTURA" />
+						</h:selectOneMenu>
+					</h:panelGroup>					
+					
+					<h:panelGroup>
+		                <h:outputLabel value="Data Base da Elabora&#231;&#227;o"  /><br />
+		                    <rich:calendar id="dataBaseElaboracao" value=""  
+		                    	label="Data Base da Elabora&#231;&#227;o" popup="true" datePattern="dd/MM/yyyy"
+		                        enableManualInput="true">
+			                    <f:facet name="footer">
+									<h:outputText value="{selectedDateControl}"	styleClass="center" />
+								</f:facet>
+							</rich:calendar>	
+							<script type="text/javascript">
+										mascaraFormulario('formulario', 'dataBaseElaboracao', 'DATA');
+							</script>	
+		  			</h:panelGroup>		
+				</h:panelGrid>	
+		
+	</ui:define>
+	
+	
+	
+	<ui:define name="resultadoTabela">
+		<rich:dataTable
+						rowClasses="linha-par, linha-impar"
+	                   	cellpadding="3" border="0" width="100%"
+	                    id="listagem" rows="10" var="registro" value="#{lista}"> 
+		    	
+		    		<rich:column style="width:10%;">
+					    	<f:facet name="header">
+				    			<h:outputText value="Ações"/>
+				    		</f:facet>
+			    		
+			    			<a4j:commandLink styleClass="linkSelecionar" title="Selecionar" 
+				    						 ajaxSingle="true" action="pilares"/> 		    			
+			    			<a4j:commandLink styleClass="linkExcluir" title="Excluir" onclick="if(!confirma('#{mensagens.confirmaExcluir}',this)) return false;"
+			    							 ajaxSingle="true" />
+			    			<a4j:commandLink styleClass="linkExportar" title="Exportar" 
+				    						 ajaxSingle="true" /> 		    			
+			    					
+				    	</rich:column>
+			    	
+			    	
+			    	<rich:column style="width:25%;" sortBy="{registro.nome}">
+			    		<f:facet name="header">
+		    				<h:outputText value="Nome do Projeto"/>
+		    			</f:facet>	
+		    			<h:outputText value="{registro.nome}" />
+			    	</rich:column>			    	
+			    	<rich:column style="width:20%;" sortBy="{registro.areaCredito.rotulo}">
+		    			<f:facet name="header">
+		    				<h:outputText value="&#193;rea de Cr&#233;dito"/>
+		    			</f:facet>	
+		    			<h:outputText value="{registro.areaCredito.rotulo}" />
+			    	</rich:column>
+			    	<rich:column style="width:20%;" sortBy="{registro.tipoInvestimento.rotulo}">
+		    			<f:facet name="header">
+		    				<h:outputText value="Tipo de Investimento"/>
+		    			</f:facet>	
+		    			<h:outputText value="{registro.tipoInvestimento.rotulo}" />
+			    	</rich:column>		
+			    	
+			    	<rich:column style="width:20%;" sortBy="{registro.atividade.rotulo}">
+		    			<f:facet name="header">
+		    				<h:outputText value="Atividade"/>
+		    			</f:facet>	
+		    			<h:outputText value="{registro.atividade.rotulo}" />
+			    	</rich:column>		
+			    	
+			    	<rich:column style="width:20%;" sortBy="{registro.dataBaseElaboracao}">
+		    			<f:facet name="header">
+		    				<h:outputText value="Data Base de Elabora&#231;&#227;o"/>
+		    			</f:facet>	
+		    			<h:outputText value="{registro.dataBaseElaboracao}" />
+			    	</rich:column>
+			    	    				    				    	
+		    </rich:dataTable>
+		    
+		  <ui:include src="/pages/comum/paginacao.xhtml">
+	    	<ui:param name="lista" value="#{lista}" />
+		</ui:include>
+	
+	</ui:define>
+	
+	<ui:define name="filtroBotoes">
+				<a4j:commandButton id="buscar" value="Buscar" actionListener="#{prototipo.buscar}" limitToList="true" reRender="panelListagem" 
+								   styleClass="botao" rendered="#{isFiltrando or isListando}"/>	
+				<a4j:commandButton id="incluir" value="Novo"  action="dadosgerais" actionListener="#{prototipo.registrarEtapaSelecionada('Etapa_1', 'Incluir')}" styleClass="botao" rendered="#{isFiltrando or isListando}"/>
+				<a4j:commandButton id="salvar" value="Salvar" actionListener="#{prototipo.gravar}"
+								   styleClass="botao" rendered="#{isInserindo or isAlterando}"/>
+				<a4j:commandButton id="cancelar" value="#{isVisualizando ? 'Voltar' : 'Cancelar' }" actionListener="#{prototipo.cancelar}" immediate="true"  
+								   styleClass="botao" rendered="#{not isFiltrando and not isListando}"/>
+				
+	</ui:define>
+</ui:composition>
+
+</html>
