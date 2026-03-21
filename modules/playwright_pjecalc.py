@@ -76,13 +76,15 @@ def pjecalc_rodando() -> bool:
         return False
 
 
-def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 120) -> None:
+def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) -> None:
     """
     Inicia o PJE-Calc Cidadão via iniciarPjeCalc.bat se não estiver rodando.
     Aguarda:
       1) porta TCP 9257 abrir
       2) HTTP http://localhost:9257/pjecalc responder com 200/302
+    Emite mensagens de progresso via log_cb durante a espera.
     """
+    _log = log_cb or (lambda m: None)
     dir_path = Path(pjecalc_dir)
     bat = dir_path / "iniciarPjeCalc.bat"
     if not bat.exists():
@@ -93,11 +95,12 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 120) -> None:
 
     if pjecalc_rodando():
         logger.info("PJE-Calc já está rodando em localhost:9257.")
-        # Ainda verifica HTTP para garantir que o Tomcat terminou o deploy
-        _aguardar_http(timeout=30)
+        _log("PJE-Calc já está rodando. Aguardando Tomcat finalizar deploy…")
+        _aguardar_http(timeout=60, log_cb=log_cb)
         return
 
     logger.info(f"Iniciando PJE-Calc Cidadão a partir de {dir_path}…")
+    _log("Iniciando PJE-Calc Cidadão… (pode levar até 3 minutos)")
     subprocess.Popen(
         ["cmd", "/c", str(bat)],
         cwd=str(dir_path),
@@ -109,6 +112,7 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 120) -> None:
     while time.time() - inicio < timeout:
         if pjecalc_rodando():
             logger.info("PJE-Calc: porta TCP 9257 aberta.")
+            _log("PJE-Calc: porta TCP aberta. Aguardando deploy web…")
             break
         time.sleep(2)
     else:
@@ -118,22 +122,29 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 120) -> None:
         )
 
     # 2) Aguarda HTTP responder (Tomcat pode aceitar TCP antes de concluir deploy)
-    _aguardar_http(timeout=60)
+    _aguardar_http(timeout=180, log_cb=log_cb)
 
 
-def _aguardar_http(timeout: int = 60) -> None:
-    """Aguarda http://localhost:9257/pjecalc responder com status 200 ou 302."""
+def _aguardar_http(timeout: int = 60, log_cb=None) -> None:
+    """Aguarda http://localhost:9257/pjecalc responder. Emite progresso via log_cb."""
     url = "http://localhost:9257/pjecalc"
     inicio = time.time()
+    ultimo_log = -10  # força log imediato no primeiro ciclo
     while time.time() - inicio < timeout:
         try:
             with urllib.request.urlopen(url, timeout=5) as resp:
                 if resp.status in (200, 302):
                     logger.info("PJE-Calc HTTP respondendo — pronto.")
+                    if log_cb:
+                        log_cb("PJE-Calc pronto.")
                     time.sleep(2)  # margem para finalizar deploy Seam/JSF
                     return
         except Exception:
             pass
+        elapsed = int(time.time() - inicio)
+        if log_cb and elapsed - ultimo_log >= 10:
+            log_cb(f"⏳ Aguardando PJE-Calc inicializar… ({elapsed}s)")
+            ultimo_log = elapsed
         time.sleep(3)
     raise TimeoutError(f"PJE-Calc: porta aberta mas HTTP não respondeu em {timeout}s.")
 
@@ -478,16 +489,38 @@ class PJECalcPlaywright:
             return False
 
     def _clicar_menu_lateral(self, texto: str) -> None:
-        """Clica em link do menu lateral pelo texto (Playwright locator nativo)."""
+        """Clica em link do menu lateral. Se oculto, expande o nó pai antes."""
         self._page.wait_for_timeout(400)
-        # Tenta locator has-text primeiro, depois get_by_role
         loc = self._page.locator(f"a:has-text('{texto}')")
         if loc.count() == 0:
             loc = self._page.get_by_role("link", name=texto)
-        if loc.count() > 0:
+        if loc.count() == 0:
+            self._log(f"  ⚠ Menu '{texto}': link não encontrado.")
+            return
+        # Se invisível, tenta expandir o nó pai do menu RichFaces
+        try:
+            if not loc.first.is_visible():
+                self._log(f"  → Menu '{texto}' oculto — expandindo nó pai…")
+                pai = loc.first.locator(
+                    "xpath=ancestor::*[contains(@class,'rich-tree-node') "
+                    "or contains(@class,'menuGroup') "
+                    "or contains(@class,'rich-tree-handle')][1]"
+                )
+                if pai.count() > 0 and pai.first.is_visible():
+                    pai.first.click()
+                    self._page.wait_for_timeout(600)
+                else:
+                    loc.first.hover(force=True)
+                    self._page.wait_for_timeout(800)
+                loc.first.wait_for(state="visible", timeout=5000)
+        except Exception:
+            pass
+        try:
             loc.first.click()
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
+        except Exception as e:
+            self._log(f"  ⚠ Menu '{texto}': erro ao clicar — {e}")
             return
         # Fallback JavaScript
         self._page.evaluate(f"""
@@ -628,17 +661,15 @@ class PJECalcPlaywright:
     # ── Navegação principal ────────────────────────────────────────────────────
 
     def _ir_para_calculo_externo(self) -> None:
-        """Navega para a tela de Cálculo Externo (novo cálculo)."""
+        """Navega para a tela de Cálculo Externo via URL direta (mais confiável)."""
         self._log("Navegando para Cálculo Externo…")
-        self._clicar_menu_lateral("Cálculo Externo")
-        self._page.wait_for_timeout(1000)
-        if "calculo" not in self._page.url.lower():
-            self._page.goto(
-                f"{self.PJECALC_BASE}/pages/calculo/calculoExterno.jsf",
-                wait_until="domcontentloaded",
-                timeout=30000,
-            )
-            self._aguardar_ajax()
+        self._page.goto(
+            f"{self.PJECALC_BASE}/pages/calculo/calculoExterno.jsf",
+            wait_until="domcontentloaded",
+            timeout=30000,
+        )
+        self._aguardar_ajax()
+        self._log("  ✓ Tela de Cálculo Externo carregada.")
 
     # ── Fase 1: Dados do Processo + Parâmetros ─────────────────────────────────
 
@@ -1020,7 +1051,7 @@ def iniciar_e_preencher(
     cb = log_cb or (lambda m: None)
 
     cb("Verificando PJE-Calc Cidadão…")
-    iniciar_pjecalc(pjecalc_dir)
+    iniciar_pjecalc(pjecalc_dir, log_cb=cb)
     cb("PJE-Calc disponível.")
 
     agente = PJECalcPlaywright(log_cb=cb)

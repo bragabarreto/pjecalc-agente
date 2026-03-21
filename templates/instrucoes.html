@@ -364,8 +364,9 @@ O PJE-Calc será aberto automaticamente se necessário.
 const SESSAO_ID = "{{ sessao_id }}";
 let evtSource = null;
 let reconexoes = 0;
-const MAX_RECONEXOES = 5;
+const MAX_RECONEXOES = 2;   // apenas para erros de rede transitórios
 let modoOcultoAtual = false;
+let automacaoConcluida = false;
 
 async function verificarPjeCalc() {
   document.getElementById('btnVerificar').disabled = true;
@@ -388,9 +389,10 @@ async function verificarPjeCalc() {
 function executarAutomacao() {
   modoOcultoAtual = document.getElementById('modo_oculto').checked;
   reconexoes = 0;
+  automacaoConcluida = false;
   document.getElementById('btnExecutar').disabled = true;
   document.getElementById('btnEncerrar').disabled = false;
-  logMsg('Conectando ao servidor de automação…', 'wait');
+  logMsg('Iniciando automação…', 'wait');
   abrirSSE();
 }
 
@@ -401,19 +403,24 @@ function abrirSSE() {
   evtSource.onmessage = (e) => {
     const { msg } = JSON.parse(e.data);
     const tipo = msg.startsWith('ERRO') || msg.startsWith('Error') ? 'err'
-               : (msg.startsWith('AGUARDANDO') || msg.includes('⚠')) ? 'wait'
+               : (msg.startsWith('AGUARDANDO') || msg.includes('⚠') || msg.startsWith('⏳')) ? 'wait'
                : 'ok';
     logMsg(msg, tipo);
-    if (msg === '[FIM DA EXECUÇÃO]') finalizarAutomacao();
+    if (msg === '[FIM DA EXECUÇÃO]') {
+      automacaoConcluida = true;
+      finalizarAutomacao();
+    }
   };
   evtSource.onerror = () => {
     evtSource.close();
+    evtSource = null;
+    if (automacaoConcluida) return;  // encerramento normal — não reconectar
     if (reconexoes < MAX_RECONEXOES) {
       reconexoes++;
-      logMsg(`Reconectando (tentativa ${reconexoes}/${MAX_RECONEXOES})…`, 'wait');
-      setTimeout(() => abrirSSE(), 3000);
+      logMsg(`⚠ Conexão interrompida — reconectando (${reconexoes}/${MAX_RECONEXOES})…`, 'wait');
+      setTimeout(() => abrirSSE(), 4000);
     } else {
-      logMsg('Falha na conexão SSE após 5 tentativas.', 'err');
+      logMsg('Conexão perdida. Clique em Executar para tentar novamente.', 'err');
       finalizarAutomacao();
     }
   };
@@ -426,9 +433,10 @@ function encerrarAutomacao() {
 }
 
 function finalizarAutomacao() {
+  if (evtSource) { evtSource.close(); evtSource = null; }
   document.getElementById('btnExecutar').disabled = false;
   document.getElementById('btnEncerrar').disabled = true;
-  tocarConclusao();
+  if (automacaoConcluida) tocarConclusao();
 }
 
 function logMsg(msg, tipo = 'ok') {
