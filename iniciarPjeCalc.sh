@@ -32,7 +32,14 @@ if command -v Xvfb &>/dev/null; then
     rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
     Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &
     export DISPLAY=:99
-    sleep 2
+    sleep 1
+    # Iniciar window manager leve para gerenciar foco dos dialogs Java
+    # Sem WM, xdotool key vai ao vácuo (nenhuma janela tem foco no Xvfb)
+    if command -v matchbox-window-manager &>/dev/null; then
+        echo "[PJE-Calc] Iniciando matchbox-window-manager..."
+        DISPLAY=:99 matchbox-window-manager -use_titlebar no &
+        sleep 1
+    fi
 else
     echo "[PJE-Calc] Xvfb não encontrado — tentando sem display virtual..."
 fi
