@@ -29,8 +29,20 @@ for _dir in [LOGS_DIR, SESSIONS_DIR, SCREENSHOTS_DIR, OUTPUT_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
 # ── Modo cloud ───────────────────────────────────────────────────────────────
-# CLOUD_MODE=true desativa automação desktop (PyAutoGUI/pywinauto indisponíveis).
-CLOUD_MODE = os.environ.get("CLOUD_MODE", "false").lower() in ("true", "1", "yes")
+# CLOUD_MODE=true desativa automação (sem Playwright disponível).
+# Se não definido explicitamente, detecta automaticamente pela presença do Playwright.
+_cloud_env = os.environ.get("CLOUD_MODE", "").strip().lower()
+if _cloud_env in ("true", "1", "yes"):
+    CLOUD_MODE = True
+elif _cloud_env in ("false", "0", "no"):
+    CLOUD_MODE = False
+else:
+    # Auto-detecção: se Playwright estiver instalado, automação disponível
+    try:
+        import playwright  # noqa: F401
+        CLOUD_MODE = False
+    except ImportError:
+        CLOUD_MODE = True
 
 # Porta do servidor web (Railway injeta PORT automaticamente)
 PORT = int(os.environ.get("PORT", 8000))
