@@ -30,6 +30,7 @@ RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
 # ── Dependências de sistema para Playwright Chromium ────────────────────────
+# cache-bust: 2026-03-22-v4
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Playwright deps
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \

@@ -362,33 +362,20 @@ async def confirmar_previa(
     url_launcher = f"/download/{sessao_id}/launcher"
     url_script   = f"/download/{sessao_id}/script"
 
-    if CLOUD_MODE:
-        return JSONResponse({
-            "sucesso": True,
-            "mensagem": (
-                "Parâmetros confirmados. Clique em 'Baixar Automação' "
-                "e dê duplo-clique no arquivo .bat para preencher o PJE-Calc automaticamente."
-            ),
-            "cloud_mode": True,
-            "url_launcher":   url_launcher,
-            "url_script":     url_script,
-            "url_pjc":        url_pjc,
-            "url_parametros": f"/download/{sessao_id}/parametros",
-            "url_instrucoes": f"/instrucoes/{sessao_id}",
-            "url_status":     f"/status/{sessao_id}",
-        })
-    else:
-        background_tasks.add_task(_tarefa_automacao_pjecalc, sessao_id=sessao_id)
-        return JSONResponse({
-            "sucesso": True,
-            "mensagem": "Parâmetros confirmados. Baixe a automação e dê duplo-clique para preencher o PJE-Calc.",
-            "cloud_mode": False,
-            "url_launcher":   url_launcher,
-            "url_script":     url_script,
-            "url_pjc":        url_pjc,
-            "url_instrucoes": f"/instrucoes/{sessao_id}",
-            "url_status":     f"/status/{sessao_id}",
-        })
+    # Sempre redireciona para instrucoes — automação Playwright é disparada
+    # pelo botão "Executar Automação" nessa página (SSE /api/executar/{sessao_id}).
+    # O caminho antigo (pyautogui background task) não é usado no Railway.
+    return JSONResponse({
+        "sucesso": True,
+        "mensagem": "Parâmetros confirmados. Clique em 'Executar Automação' na próxima tela.",
+        "cloud_mode": CLOUD_MODE,
+        "url_launcher":   url_launcher,
+        "url_script":     url_script,
+        "url_pjc":        url_pjc,
+        "url_parametros": f"/download/{sessao_id}/parametros",
+        "url_instrucoes": f"/instrucoes/{sessao_id}",
+        "url_status":     f"/status/{sessao_id}",
+    })
 
 
 @app.get("/processo/{numero_processo}", response_class=HTMLResponse)
