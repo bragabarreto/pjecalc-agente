@@ -48,8 +48,8 @@ java \
     -Dfile.encoding=ISO-8859-1 \
     -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe \
     "-Dseguranca.pjekz.servico.contexto=https://pje.trtXX.jus.br/pje-seguranca" \
-    -Xms512m \
-    -Xmx1024m \
+    -Xms128m \
+    -Xmx512m \
     -XX:MaxPermSize=512m \
     -jar bin/pjecalc.jar \
     &

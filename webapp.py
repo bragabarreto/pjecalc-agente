@@ -734,8 +734,32 @@ async def executar_automacao_sse(
     verbas_mapeadas = calculo.verbas_mapeadas()
 
     async def gerador_sse():
+        import httpx
         from modules.playwright_pjecalc import preencher_como_generator
         from database import SessionLocal
+
+        # Aguardar Tomcat ficar pronto (pode estar ainda inicializando)
+        TOMCAT_TIMEOUT = 600
+        elapsed = 0
+        while elapsed < TOMCAT_TIMEOUT:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    r = await client.get("http://localhost:9257/pjecalc")
+                    if r.status_code in (200, 302, 404):
+                        break
+            except Exception:
+                pass
+            if elapsed == 0:
+                yield f"data: {json.dumps({'msg': 'PJE-Calc ainda inicializando — aguardando Tomcat ficar pronto...'})}\n\n"
+            elif elapsed % 30 == 0:
+                yield f"data: {json.dumps({'msg': f'Aguardando Tomcat... ({elapsed}s)'})}\n\n"
+            await asyncio.sleep(10)
+            elapsed += 10
+        else:
+            yield f"data: {json.dumps({'msg': 'ERRO: PJE-Calc não ficou disponível após 10 min. Verifique os logs do servidor.'})}\n\n"
+            yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+            return
+
         loop = asyncio.get_event_loop()
         gen = preencher_como_generator(dados, verbas_mapeadas, PJECALC_DIR, modo_oculto)
         while True:
