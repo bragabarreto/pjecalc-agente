@@ -37,6 +37,22 @@ else
     echo "[PJE-Calc] Xvfb não encontrado — tentando sem display virtual..."
 fi
 
+# Auto-dismiss de dialogs Swing do Lancador (JOptionPane bloqueia o startup)
+# xdotool envia Enter a cada 2s por 120s no display Xvfb :99
+if command -v xdotool &>/dev/null; then
+    echo "[PJE-Calc] Iniciando auto-dismiss de dialogs (xdotool)..."
+    (
+        sleep 5  # aguarda o dialog aparecer
+        for i in $(seq 1 60); do
+            DISPLAY=:99 xdotool key --clearmodifiers Return 2>/dev/null || true
+            DISPLAY=:99 xdotool key --clearmodifiers space  2>/dev/null || true
+            sleep 2
+        done
+    ) &
+else
+    echo "[PJE-Calc] xdotool não encontrado — dialogs não serão auto-dismissados."
+fi
+
 # Inicia PJE-Calc em background
 # Notas:
 #   -Dfile.encoding=ISO-8859-1  → preserva encoding original do PJE-Calc

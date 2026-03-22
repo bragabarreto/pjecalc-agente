@@ -713,6 +713,23 @@ async def verificar_pjecalc():
         return {"disponivel": False}
 
 
+@app.get("/api/logs/tomcat")
+async def logs_tomcat(linhas: int = 80):
+    """Retorna as últimas N linhas do catalina.out do Tomcat embarcado."""
+    import subprocess
+    catalina = Path("/opt/pjecalc/tomcat/logs/catalina.out")
+    if not catalina.exists():
+        return {"log": "(catalina.out não existe ainda — Tomcat ainda não iniciou)"}
+    try:
+        result = subprocess.run(
+            ["tail", f"-{linhas}", str(catalina)],
+            capture_output=True, text=True, timeout=5
+        )
+        return {"log": result.stdout or "(vazio)"}
+    except Exception as e:
+        return {"log": f"Erro ao ler log: {e}"}
+
+
 @app.get("/api/executar/{sessao_id}")
 async def executar_automacao_sse(
     sessao_id: str,

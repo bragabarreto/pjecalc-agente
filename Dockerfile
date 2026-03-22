@@ -37,6 +37,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 libasound2 libpango-1.0-0 libcairo2 libxshmfence1 \
     # Libs X11 exigidas pelo Java AWT (libawt_xawt.so)
     libxtst6 libxi6 libxrender1 \
+    # xdotool: auto-clica dialogs Swing do Lancador no Xvfb
+    xdotool \
     # Fontes para renderização correta do PJE-Calc
     fonts-liberation fonts-dejavu-core \
     # Utilitários
