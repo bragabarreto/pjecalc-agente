@@ -13,17 +13,23 @@ echo "=== PJE-Calc Agent — iniciando ==="
 echo "[1/3] Iniciando PJE-Calc Cidadão..."
 bash /opt/pjecalc/iniciarPjeCalc.sh
 
-# 2. Aguarda Tomcat responder (máximo 120s)
+# 2. Aguarda Tomcat responder (máximo 240s)
 echo "[2/3] Aguardando Tomcat na porta 9257..."
-TIMEOUT=120
+TIMEOUT=240
 ELAPSED=0
-until curl -sf "http://localhost:9257/pjecalc" -o /dev/null 2>&1; do
+until curl -sf "http://localhost:9257/pjecalc" -o /dev/null 2>&1 || \
+      curl -sf "http://localhost:9257/" -o /dev/null 2>&1; do
     if [ $ELAPSED -ge $TIMEOUT ]; then
         echo "ERRO: PJE-Calc não respondeu em ${TIMEOUT}s."
-        echo "Verifique os logs em /opt/pjecalc/tomcat/logs/"
+        echo "--- Últimas linhas do catalina.out ---"
+        tail -50 /opt/pjecalc/tomcat/logs/catalina.out 2>/dev/null || echo "(sem log)"
+        echo "--- Processos Java em execução ---"
+        ps aux | grep java || echo "(nenhum)"
+        echo "--- Xvfb ---"
+        ps aux | grep Xvfb || echo "(nenhum)"
         exit 1
     fi
-    echo "  Aguardando... (${ELAPSED}s)"
+    echo "  Aguardando Tomcat... (${ELAPSED}s)"
     sleep 5
     ELAPSED=$((ELAPSED + 5))
 done
