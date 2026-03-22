@@ -38,9 +38,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 libasound2 libpango-1.0-0 libcairo2 libxshmfence1 \
     # Libs X11 exigidas pelo Java AWT (libawt_xawt.so)
     libxtst6 libxi6 libxrender1 \
-    # xdotool + matchbox: auto-dismiss dialogs Java no Xvfb
-    # matchbox-window-manager gerencia foco (sem WM, xdotool key vai ao vácuo)
-    xdotool matchbox-window-manager \
+    # xdotool: auto-dismiss dialogs Java no Xvfb
+    # scrot: screenshots do display virtual para diagnóstico
+    xdotool scrot \
     # Fontes para renderização correta do PJE-Calc
     fonts-liberation fonts-dejavu-core \
     # Utilitários

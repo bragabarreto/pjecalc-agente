@@ -33,27 +33,42 @@ if command -v Xvfb &>/dev/null; then
     Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &
     export DISPLAY=:99
     sleep 1
-    # Iniciar window manager leve para gerenciar foco dos dialogs Java
-    # Sem WM, xdotool key vai ao vácuo (nenhuma janela tem foco no Xvfb)
-    if command -v matchbox-window-manager &>/dev/null; then
-        echo "[PJE-Calc] Iniciando matchbox-window-manager..."
-        DISPLAY=:99 matchbox-window-manager -use_titlebar no &
-        sleep 1
-    fi
 else
     echo "[PJE-Calc] Xvfb não encontrado — tentando sem display virtual..."
 fi
 
 # Auto-dismiss de dialogs Swing do Lancador (JOptionPane bloqueia o startup)
-# xdotool envia Enter a cada 2s por 120s no display Xvfb :99
+# Estratégia: busca explícita de janelas no Xvfb :99 e envia Enter/click
 if command -v xdotool &>/dev/null; then
-    echo "[PJE-Calc] Iniciando auto-dismiss de dialogs (xdotool)..."
+    echo "[PJE-Calc] Iniciando auto-dismiss de dialogs (xdotool com busca explícita)..."
     (
-        sleep 5  # aguarda o dialog aparecer
-        for i in $(seq 1 60); do
-            DISPLAY=:99 xdotool key --clearmodifiers Return 2>/dev/null || true
-            DISPLAY=:99 xdotool key --clearmodifiers space  2>/dev/null || true
-            sleep 2
+        sleep 4  # aguarda Java iniciar e dialog aparecer
+        for i in $(seq 1 150); do
+            # Buscar QUALQUER janela visível no display :99
+            WIDS=$(DISPLAY=:99 xdotool search --onlyvisible --name "" 2>/dev/null || true)
+            if [ -z "$WIDS" ]; then
+                # Fallback: qualquer janela (inclusive ocultas)
+                WIDS=$(DISPLAY=:99 xdotool search --name "" 2>/dev/null || true)
+            fi
+            if [ -n "$WIDS" ]; then
+                for WID in $WIDS; do
+                    # Focar e enviar Enter + Space + clique no centro
+                    DISPLAY=:99 xdotool windowfocus --sync "$WID" 2>/dev/null || true
+                    DISPLAY=:99 xdotool key --window "$WID" --clearmodifiers Return 2>/dev/null || true
+                    DISPLAY=:99 xdotool key --window "$WID" --clearmodifiers space 2>/dev/null || true
+                    # Também clicar no centro da janela (botão OK/Sim)
+                    GEOM=$(DISPLAY=:99 xdotool getwindowgeometry "$WID" 2>/dev/null || true)
+                    W=$(echo "$GEOM" | grep -oP 'Geometry: \K[0-9]+' | head -1)
+                    H=$(echo "$GEOM" | grep -oP 'Geometry: [0-9]+x\K[0-9]+' | head -1)
+                    if [ -n "$W" ] && [ -n "$H" ]; then
+                        CX=$((W / 2))
+                        CY=$((H * 3 / 4))
+                        DISPLAY=:99 xdotool mousemove --window "$WID" "$CX" "$CY" 2>/dev/null || true
+                        DISPLAY=:99 xdotool click --window "$WID" 1 2>/dev/null || true
+                    fi
+                done
+            fi
+            sleep 1
         done
     ) &
 else

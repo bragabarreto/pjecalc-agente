@@ -700,6 +700,41 @@ async def verificar_pjecalc():
         return {"disponivel": False}
 
 
+@app.get("/api/screenshot", response_class=HTMLResponse)
+async def screenshot_xvfb():
+    """Screenshot do display Xvfb :99 — mostra o que está na tela virtual."""
+    import subprocess, base64, shutil
+    tmp = "/tmp/xvfb_ss.png"
+    # Tentar scrot
+    if shutil.which("scrot"):
+        subprocess.run(["scrot", "--display", ":99", tmp],
+                       capture_output=True, timeout=8, env={**__import__("os").environ, "DISPLAY": ":99"})
+    # Fallback: xwd | convert
+    if not Path(tmp).exists() and shutil.which("xwd"):
+        xwd = subprocess.run(["xwd", "-root", "-display", ":99", "-silent"],
+                             capture_output=True, timeout=8)
+        if xwd.returncode == 0 and shutil.which("convert"):
+            subprocess.run(["convert", "xwd:-", tmp], input=xwd.stdout,
+                           capture_output=True, timeout=8)
+    if Path(tmp).exists():
+        data = base64.b64encode(Path(tmp).read_bytes()).decode()
+        Path(tmp).unlink(missing_ok=True)
+        return f'<html><body style="background:#111"><img src="data:image/png;base64,{data}" style="max-width:100%;border:1px solid #555"></body></html>'
+    return "<html><body>Screenshot não disponível — scrot não instalado ou display :99 sem janelas.</body></html>"
+
+
+@app.get("/api/xwininfo")
+async def xwininfo():
+    """Lista janelas abertas no Xvfb :99."""
+    import subprocess
+    try:
+        r = subprocess.run(["xwininfo", "-display", ":99", "-root", "-tree"],
+                           capture_output=True, text=True, timeout=8)
+        return {"janelas": r.stdout, "erro": r.stderr}
+    except Exception as e:
+        return {"janelas": "", "erro": str(e)}
+
+
 @app.get("/api/logs/tomcat")
 async def logs_tomcat(linhas: int = 80):
     """Retorna as últimas N linhas do catalina.out do Tomcat embarcado."""
