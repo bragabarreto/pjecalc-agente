@@ -216,6 +216,10 @@ class PJECalcPlaywright:
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
     def iniciar_browser(self, headless: bool = False) -> None:
+        import os, sys
+        # Em Linux sem display real (Railway/Docker), forçar headless
+        if sys.platform != "win32" and not os.environ.get("DISPLAY"):
+            headless = True
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
         self._browser = self._pw.chromium.launch(
