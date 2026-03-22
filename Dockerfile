@@ -59,9 +59,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /opt/pjecalc
 COPY pjecalc-dist/bin/ bin/
 COPY pjecalc-dist/tomcat/ tomcat/
+COPY pjecalc-dist/.dados/ .dados/
 COPY iniciarPjeCalc.sh .
 RUN chmod +x iniciarPjeCalc.sh \
-    && mkdir -p .dados \
     && mkdir -p tomcat/logs
 
 ENV PJECALC_DIR=/opt/pjecalc

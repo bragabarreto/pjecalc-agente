@@ -14,6 +14,8 @@ data/
 *.db
 *.sqlite
 *.sqlite3
+# Exceção: banco H2 inicial do PJE-Calc (necessário para startup no Railway)
+!pjecalc-dist/.dados/pjecalc.h2.db
 
 # ── Arquivos gerados ──────────────────────────────────────────────────────────
 output/
