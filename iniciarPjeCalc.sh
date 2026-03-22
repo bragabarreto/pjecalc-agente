@@ -28,9 +28,11 @@ echo "[PJE-Calc] Iniciando Tomcat na porta 9257..."
 # O Xvfb é instalado automaticamente pelo playwright install --with-deps.
 if command -v Xvfb &>/dev/null; then
     echo "[PJE-Calc] Iniciando Xvfb (display virtual :99)..."
+    # Limpar lock antigo (caso de restart do container)
+    rm -f /tmp/.X99-lock /tmp/.X11-unix/X99 2>/dev/null || true
     Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &
     export DISPLAY=:99
-    sleep 1
+    sleep 2
 else
     echo "[PJE-Calc] Xvfb não encontrado — tentando sem display virtual..."
 fi
