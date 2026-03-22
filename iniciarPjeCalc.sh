@@ -90,7 +90,7 @@ java \
     -Xmx512m \
     -XX:MaxPermSize=512m \
     -jar bin/pjecalc.jar \
-    &
+    > /opt/pjecalc/java.log 2>&1 &
 
 PJE_PID=$!
 echo "[PJE-Calc] Processo iniciado (PID: $PJE_PID)"

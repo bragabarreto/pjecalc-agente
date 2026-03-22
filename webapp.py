@@ -752,6 +752,29 @@ async def logs_tomcat(linhas: int = 80):
         return {"log": f"Erro ao ler log: {e}"}
 
 
+@app.get("/api/logs/java")
+async def logs_java(linhas: int = 100):
+    """Retorna stdout+stderr completo do processo Java (Lancador + Tomcat)."""
+    import subprocess
+    log = Path("/opt/pjecalc/java.log")
+    if not log.exists():
+        return {"log": "(java.log não existe — processo Java ainda não iniciou ou não está redirecionando saída)"}
+    try:
+        result = subprocess.run(["tail", f"-{linhas}", str(log)],
+                                capture_output=True, text=True, timeout=5)
+        return {"log": result.stdout or "(vazio)"}
+    except Exception as e:
+        return {"log": f"Erro: {e}"}
+
+
+@app.get("/api/ps")
+async def listar_processos():
+    """Lista processos em execução no container (diagnóstico)."""
+    import subprocess
+    result = subprocess.run(["ps", "aux"], capture_output=True, text=True, timeout=5)
+    return {"processos": result.stdout}
+
+
 @app.get("/api/executar/{sessao_id}")
 async def executar_automacao_sse(
     sessao_id: str,
