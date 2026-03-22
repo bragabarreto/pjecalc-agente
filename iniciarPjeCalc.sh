@@ -23,6 +23,18 @@ echo "[PJE-Calc] Java: $JAVA_VERSION"
 echo "[PJE-Calc] Diretório: $PJECALC_DIR"
 echo "[PJE-Calc] Iniciando Tomcat na porta 9257..."
 
+# Inicia Xvfb (display virtual) para que os diálogos Swing do Lancador
+# tenham um display X11 sem precisar de monitor físico.
+# O Xvfb é instalado automaticamente pelo playwright install --with-deps.
+if command -v Xvfb &>/dev/null; then
+    echo "[PJE-Calc] Iniciando Xvfb (display virtual :99)..."
+    Xvfb :99 -screen 0 1024x768x16 -nolisten tcp &
+    export DISPLAY=:99
+    sleep 1
+else
+    echo "[PJE-Calc] Xvfb não encontrado — tentando sem display virtual..."
+fi
+
 # Inicia PJE-Calc em background
 # Notas:
 #   -Dfile.encoding=ISO-8859-1  → preserva encoding original do PJE-Calc
@@ -30,7 +42,6 @@ echo "[PJE-Calc] Iniciando Tomcat na porta 9257..."
 #   -Xms512m -Xmx1024m          → heap reduzido para ambiente servidor (original: 1024/2048)
 #   -XX:MaxPermSize=512m        → apenas para Java 8 (ignorado no Java 11+)
 java \
-    -Djava.awt.headless=true \
     -Duser.timezone=GMT-3 \
     -Dfile.encoding=ISO-8859-1 \
     -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe \
