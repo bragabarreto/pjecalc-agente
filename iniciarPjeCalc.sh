@@ -147,3 +147,39 @@ echo "[PJE-Calc] Processo iniciado (PID: $PJE_PID)"
 echo "[PJE-Calc] Log: /opt/pjecalc/java.log"
 echo $PJE_PID > /tmp/pjecalc.pid
 echo "[PJE-Calc] Aguarde Tomcat finalizar deploy (~30-120s)..."
+
+# ── Watchdog: reinicia Java se o processo morrer ─────────────────────────────
+# O Lancador.java pode morrer (SplashScreen ISE, OutOfMemory, etc.)
+# enquanto o Tomcat ainda tinha threads ativas. O watchdog reinicia o Java
+# automaticamente, restaurando o Tomcat sem intervenção manual.
+(
+    echo "[Watchdog] Iniciado — monitora PID $PJE_PID a cada 30s (início em 90s)."
+    sleep 90  # aguarda Tomcat inicializar antes de começar a vigiar
+    while true; do
+        sleep 30
+        [ -f /tmp/pjecalc.pid ] || { echo "[Watchdog] PID file removido — encerrando."; break; }
+        CURRENT_PID=$(cat /tmp/pjecalc.pid)
+        if ! kill -0 "$CURRENT_PID" 2>/dev/null; then
+            echo "[Watchdog] Processo Java (PID $CURRENT_PID) morreu — reiniciando..."
+            cd "$PJECALC_DIR"
+            DISPLAY=:99 java \
+                $AGENT_FLAG \
+                -Djava.awt.headless=false \
+                -Duser.timezone=GMT-3 \
+                -Dfile.encoding=ISO-8859-1 \
+                -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe \
+                "-Dseguranca.pjekz.servico.contexto=https://pje.trt8.jus.br/pje-seguranca" \
+                -Xms128m \
+                -Xmx512m \
+                -XX:MaxPermSize=512m \
+                -jar bin/pjecalc.jar \
+                >> /opt/pjecalc/java.log 2>&1 &
+            NEW_PID=$!
+            echo $NEW_PID > /tmp/pjecalc.pid
+            echo "[Watchdog] Reiniciado com PID $NEW_PID — aguardando Tomcat (120s)..."
+            sleep 120  # aguarda Tomcat subir antes do próximo ciclo
+        fi
+    done
+) &
+WATCHDOG_PID=$!
+echo "[PJE-Calc] Watchdog iniciado (PID: $WATCHDOG_PID)"

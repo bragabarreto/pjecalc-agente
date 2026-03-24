@@ -420,8 +420,9 @@ class PJECalcPlaywright:
         label: str | None = None,
     ) -> bool:
         """
-        Preenche campo de data usando press_sequentially + Tab.
-        Mais confiável para campos JSF/RichFaces com máscara de data.
+        Preenche campo de data usando focus() + press_sequentially + Tab.
+        Usa focus() em vez de click() para evitar abrir o popup do RichFaces Calendar.
+        Fallback via JS direto se o método principal falhar.
         """
         if not data:
             return False
@@ -431,17 +432,30 @@ class PJECalcPlaywright:
             return False
         try:
             loc.wait_for(state="visible", timeout=8000)
-            loc.click()
-            loc.fill("")
+            # focus() em vez de click() — evita abrir calendar popup (RichFaces)
+            loc.focus()
+            loc.evaluate("el => { el.value = ''; }")
             loc.press_sequentially(data, delay=50)
+            loc.dispatch_event("input")
             loc.dispatch_event("change")
             loc.press("Tab")
             self._aguardar_ajax()
             self._log(f"  ✓ data {field_id}: {data}")
             return True
         except Exception as e:
-            self._log(f"  ⚠ data {field_id}: erro — {e}")
-            return False
+            # Fallback: setar valor diretamente via JS (ignora máscara mas garante preenchimento)
+            try:
+                loc.evaluate(
+                    f"el => {{ el.value = '{data}'; "
+                    "el.dispatchEvent(new Event('input',{bubbles:true})); "
+                    "el.dispatchEvent(new Event('change',{bubbles:true})); "
+                    "el.dispatchEvent(new Event('blur',{bubbles:true})); }}"
+                )
+                self._log(f"  ✓ data {field_id} (JS fallback): {data}")
+                return True
+            except Exception as e2:
+                self._log(f"  ⚠ data {field_id}: erro — {e} | fallback: {e2}")
+                return False
 
     def _selecionar(
         self,
@@ -718,6 +732,64 @@ class PJECalcPlaywright:
             "Faça o login no PJE-Calc e clique em <strong>Continuar</strong>."
         )
 
+    # ── Verificações de saúde (Tomcat + página) ────────────────────────────────
+
+    def _verificar_tomcat(self, timeout: int = 120) -> bool:
+        """Aguarda o Tomcat responder antes de prosseguir. Loga progresso a cada 15s."""
+        url = "http://localhost:9257/pjecalc"
+        inicio = time.time()
+        ultimo_log = -15
+        while time.time() - inicio < timeout:
+            try:
+                with urllib.request.urlopen(url, timeout=5) as r:
+                    if r.status in (200, 302, 404):
+                        return True
+            except Exception:
+                pass
+            elapsed = int(time.time() - inicio)
+            if elapsed > 5 and elapsed - ultimo_log >= 15:
+                self._log(f"  ⏳ Aguardando Tomcat... ({elapsed}s/{timeout}s)")
+                ultimo_log = elapsed
+            time.sleep(5)
+        self._log("  ⚠ Tomcat não respondeu — continuando mesmo assim.")
+        return False
+
+    def _verificar_pagina_pjecalc(self) -> bool:
+        """Garante que a página atual é válida (no PJE-Calc, sem erro 500, com conteúdo).
+        Renavega para home se necessário. Retorna True se OK."""
+        url = self._page.url
+        if "9257" not in url:
+            self._log("  ⚠ Página fora do PJE-Calc — renavegando para home…")
+            try:
+                self._page.goto(
+                    f"{self.PJECALC_BASE}/pages/principal.jsf",
+                    wait_until="domcontentloaded", timeout=30000,
+                )
+                self._page.wait_for_timeout(2000)
+            except Exception:
+                pass
+            return False
+        try:
+            body = self._page.locator("body").text_content(timeout=5000) or ""
+            if len(body.strip()) < 50:
+                self._log("  ⚠ Página com pouco conteúdo — recarregando…")
+                self._page.wait_for_timeout(2000)
+                self._page.reload()
+                self._page.wait_for_load_state("networkidle", timeout=15000)
+                return False
+            if "Erro interno do servidor" in body or ("500" in body and "Erro" in body):
+                self._log("  ⚠ Erro 500 detectado — voltando para home…")
+                home = self._page.locator(
+                    "a:has-text('Tela Inicial'), a:has-text('Página Inicial')"
+                )
+                if home.count() > 0:
+                    home.first.click()
+                    self._page.wait_for_timeout(2000)
+                return False
+        except Exception:
+            pass
+        return True
+
     # ── Navegação principal ────────────────────────────────────────────────────
 
     def _ir_para_calculo_externo(self) -> None:
@@ -764,8 +836,28 @@ class PJECalcPlaywright:
         # ── Campos do cabeçalho (Tipo e Data de Criação) ──
         self._preencher("tipo", "Trabalhista", False)
         hoje = datetime.date.today().strftime("%d/%m/%Y")
-        self._preencher_data("dataDeCriacao", hoje, False)
-        self._preencher_data("dataDeAbertura", hoje, False)
+        # Tentar múltiplos IDs alternativos para data de criação/abertura
+        _data_criacao_ids = ["dataDeCriacao", "dataCriacao", "dataCalculo", "dataDeAbertura", "dataAbertura"]
+        _data_abertura_ids = ["dataDeAbertura", "dataAbertura", "dataCalculo", "dataDeCriacao", "dataCriacao"]
+        _preencheu_criacao = any(self._preencher_data(fid, hoje, False) for fid in _data_criacao_ids)
+        _preencheu_abertura = any(self._preencher_data(fid, hoje, False) for fid in _data_abertura_ids)
+        # JS fallback: encontrar qualquer input de data no cabeçalho
+        if not _preencheu_criacao:
+            try:
+                self._page.evaluate(
+                    """(data) => {
+                        const inputs = document.querySelectorAll(
+                            'input[id*="dataDe"], input[id*="dataCria"], input[id*="dataCalc"]'
+                        );
+                        if (inputs.length > 0) {
+                            inputs[0].value = data;
+                            inputs[0].dispatchEvent(new Event('change',{bubbles:true}));
+                        }
+                    }""",
+                    hoje,
+                )
+            except Exception:
+                pass
 
         # ── Aba Dados do Processo ──
         self._clicar_aba("tabDadosProcesso")
@@ -922,6 +1014,8 @@ class PJECalcPlaywright:
             self._log("Fase 2 — Histórico Salarial: sem entradas extraídas — ignorado.")
             return
         self._log(f"Fase 2 — Histórico Salarial: {len(historico)} período(s) extraído(s)…")
+        self._verificar_tomcat(timeout=90)
+        self._verificar_pagina_pjecalc()
         navegou = self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
         if not navegou:
             self._log("  ⚠ Histórico Salarial não disponível no menu — listando para referência:")
@@ -964,6 +1058,8 @@ class PJECalcPlaywright:
     @retry(max_tentativas=3)
     def fase_verbas(self, verbas_mapeadas: dict) -> None:
         self._log("Fase 3 — Verbas…")
+        self._verificar_tomcat(timeout=90)
+        self._verificar_pagina_pjecalc()
         self._clicar_menu_lateral("Verbas")
         self.mapear_campos("fase3_verbas")
 
@@ -1052,6 +1148,8 @@ class PJECalcPlaywright:
     @retry(max_tentativas=3)
     def fase_fgts(self, fgts: dict) -> None:
         self._log("Fase 4 — FGTS…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
         # Tentar navegar para a seção FGTS no menu lateral
         navegou = self._clicar_menu_lateral("FGTS", obrigatorio=False)
         if not navegou:
@@ -1078,6 +1176,8 @@ class PJECalcPlaywright:
     @retry(max_tentativas=3)
     def fase_contribuicao_social(self, cs: dict) -> None:
         self._log("Fase 5 — Contribuição Social…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
         self._clicar_menu_lateral("Contribuição Social")
         self.mapear_campos("fase5_inss")
         # No Cálculo Externo os campos são automáticos — tentar preencher se existirem
@@ -1114,6 +1214,8 @@ class PJECalcPlaywright:
     @retry(max_tentativas=3)
     def fase_honorarios(self, hon: dict) -> None:
         self._log("Fase 8 — Honorários…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
         navegou = self._clicar_menu_lateral("Honorários", obrigatorio=False)
         if not navegou:
             navegou = self._clicar_menu_lateral("Honorarios", obrigatorio=False)

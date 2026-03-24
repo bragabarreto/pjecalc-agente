@@ -824,11 +824,44 @@ async def executar_automacao_sse(
             yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
             return
 
+        import queue as _queue
+
         loop = asyncio.get_event_loop()
         gen = preencher_como_generator(dados, verbas_mapeadas, PJECALC_DIR, modo_oculto)
+
+        # Fila para desacoplar a thread do gerador do loop assíncrono.
+        # Permite emitir keepalive SSE a cada 25s sem output do Playwright.
+        fila: _queue.Queue = _queue.Queue()
+
+        def _executar_gen():
+            """Roda em thread executor — coloca mensagens na fila."""
+            try:
+                while True:
+                    try:
+                        msg = next(gen)
+                        fila.put(("ok", msg))
+                        if msg == "[FIM DA EXECUÇÃO]":
+                            break
+                    except StopIteration:
+                        fila.put(("fim", None))
+                        break
+            except Exception as exc:
+                fila.put(("erro", str(exc)))
+
+        loop.run_in_executor(None, _executar_gen)
+
         while True:
             try:
-                msg = await loop.run_in_executor(None, next, gen)
+                kind, value = await loop.run_in_executor(
+                    None, lambda: fila.get(timeout=25)
+                )
+            except _queue.Empty:
+                # Heartbeat: evita timeout de proxy/browser em automações longas
+                yield ": keepalive\n\n"
+                continue
+
+            if kind == "ok":
+                msg = value
                 yield f"data: {json.dumps({'msg': msg})}\n\n"
                 # Detectar .PJC gerado e persistir no banco
                 if msg.startswith("PJC_GERADO:"):
@@ -842,7 +875,11 @@ async def executar_automacao_sse(
                     yield f"data: {json.dumps({'msg': 'DOWNLOAD_DISPONIVEL', 'url': f'/download/{sessao_id}/pjc'})}\n\n"
                 if msg == "[FIM DA EXECUÇÃO]":
                     break
-            except StopIteration:
+            elif kind == "fim":
+                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                break
+            elif kind == "erro":
+                yield f"data: {json.dumps({'msg': f'ERRO na automação: {value}'})}\n\n"
                 yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
                 break
 
