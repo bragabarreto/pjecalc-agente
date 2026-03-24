@@ -745,9 +745,10 @@ async def logs_tomcat(linhas: int = 80):
     try:
         result = subprocess.run(
             ["tail", f"-{linhas}", str(catalina)],
-            capture_output=True, text=True, timeout=5
+            capture_output=True, timeout=5
         )
-        return {"log": result.stdout or "(vazio)"}
+        texto = result.stdout.decode("iso-8859-1", errors="replace")
+        return {"log": texto or "(vazio)"}
     except Exception as e:
         return {"log": f"Erro ao ler log: {e}"}
 
@@ -761,8 +762,9 @@ async def logs_java(linhas: int = 100):
         return {"log": "(java.log não existe — processo Java ainda não iniciou ou não está redirecionando saída)"}
     try:
         result = subprocess.run(["tail", f"-{linhas}", str(log)],
-                                capture_output=True, text=True, timeout=5)
-        return {"log": result.stdout or "(vazio)"}
+                                capture_output=True, timeout=5)
+        texto = result.stdout.decode("iso-8859-1", errors="replace")
+        return {"log": texto or "(vazio)"}
     except Exception as e:
         return {"log": f"Erro: {e}"}
 
