@@ -70,7 +70,7 @@ public class DialogSuppressorAgent {
      *  - Permite System.exit(0) para desligamento limpo
      *  - Permite todas as outras permissões (não restritivo)
      */
-    public static final class NoExitSecurityManager extends java.security.SecurityManager {
+    public static final class NoExitSecurityManager extends SecurityManager {
 
         @Override
         public void checkExit(int status) {
