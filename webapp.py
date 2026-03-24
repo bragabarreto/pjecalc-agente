@@ -71,8 +71,8 @@ async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
     repo = RepositorioCalculo(db)
     processos = repo.listar_processos(limit=20)
     return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "processos": processos, "agora": datetime.now()},
+        request, "index.html",
+        {"processos": processos, "agora": datetime.now()},
     )
 
 
@@ -80,7 +80,7 @@ async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
 async def pagina_novo_calculo(request: Request):
     """Formulário para iniciar novo cálculo."""
     return templates.TemplateResponse(
-        "novo_calculo.html", {"request": request}
+        request, "novo_calculo.html", {}
     )
 
 
@@ -241,9 +241,8 @@ async def exibir_previa_web(
     previa_texto = calculo.previa_texto or gerar_previa(dados, verbas_mapeadas)
 
     return templates.TemplateResponse(
-        "previa.html",
+        request, "previa.html",
         {
-            "request": request,
             "sessao_id": sessao_id,
             "calculo": calculo,
             "processo": calculo.processo,
@@ -394,9 +393,8 @@ async def pagina_processo(
         raise HTTPException(status_code=404, detail="Processo não encontrado")
 
     return templates.TemplateResponse(
-        "processo.html",
+        request, "processo.html",
         {
-            "request": request,
             "numero_processo": numero_processo,
             "calculos": calculos,
             "processo": calculos[0].processo if calculos else None,
@@ -588,9 +586,8 @@ async def instrucoes_preenchimento(
 
     try:
         return templates.TemplateResponse(
-            "instrucoes.html",
+            request, "instrucoes.html",
             {
-                "request": request,
                 "sessao_id": sessao_id,
                 "calculo": calculo,
                 "processo": calculo.processo,
