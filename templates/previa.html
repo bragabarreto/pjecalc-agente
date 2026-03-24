@@ -68,6 +68,12 @@
 .verba-card {
   border: 1px solid #dee2e6; border-radius: 6px; margin-bottom: 10px; overflow: hidden;
 }
+.verba-card.conf-baixa-warn {
+  border-color: #ffc107; background: #fffdf0;
+}
+.verba-card.conf-baixa-warn .verba-header {
+  background: #fff9e6;
+}
 .verba-header {
   background: #f8f9fa; padding: 10px 14px; display: flex;
   justify-content: space-between; align-items: center; cursor: pointer;
@@ -136,6 +142,17 @@
   <ul style="margin-top:6px; padding-left:20px;">
     {% for alerta in alertas %}
     <li style="font-size:0.9rem;">{{ alerta }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% if inconsistencias_criticas %}
+<div id="bloco-inconsistencias" class="alerta-box"
+     style="margin-bottom:12px; background:#fdf3f3; border-color:#dc3545; border-width:2px;">
+  <strong style="color:#dc3545;">Inconsistencias criticas — corrija antes de confirmar:</strong>
+  <ul style="margin-top:6px; padding-left:20px;">
+    {% for inc in inconsistencias_criticas %}
+    <li style="font-size:0.9rem; color:#721c24;">{{ inc }}</li>
     {% endfor %}
   </ul>
 </div>
@@ -537,7 +554,7 @@
         <p style="color:#6c757d; font-size:0.9rem;">Nenhuma verba extraída. Verifique a sentença e os alertas acima.</p>
         {% endif %}
         {% for verba in verbas %}
-        <div class="verba-card">
+        <div class="verba-card{{ ' conf-baixa-warn' if verba.confianca and verba.confianca < 0.7 else '' }}">
           <div class="verba-header" onclick="toggleVerba({{ loop.index0 }})">
             <div>
               <div class="verba-nome">{{ verba.nome_pjecalc or verba.nome_sentenca }}</div>
@@ -666,9 +683,16 @@
         Após confirmar, você receberá o guia de preenchimento do PJE-Calc.
       </p>
       <button class="btn btn-success" style="width:100%; padding:12px;"
+              id="btn-confirmar"
+              {% if inconsistencias_criticas %}disabled title="Corrija as inconsistencias criticas antes de confirmar"{% endif %}
               onclick="confirmarPrevia()">
         Confirmar e Gerar Guia
       </button>
+      {% if inconsistencias_criticas %}
+      <div style="margin-top:8px; font-size:0.83rem; color:#dc3545; text-align:center;">
+        Resolva as inconsistencias acima para habilitar a confirmacao.
+      </div>
+      {% endif %}
       <div id="msg-confirmar" style="display:none; margin-top:8px; font-size:0.85rem;
            padding:8px; border-radius:4px;"></div>
     </div>

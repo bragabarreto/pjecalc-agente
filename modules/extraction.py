@@ -113,7 +113,23 @@ Regras absolutas:
 - Percentuais: float decimal (ex: 15% → 0.15; 8% → 0.08; 40% → 0.40)
 - Use null para campos genuinamente ausentes no texto
 - Quando a legislação define valor padrão e não há indicação contrária: aplique o padrão com confianca=0.85
-- confianca por seção: 0.95 = extraído diretamente | 0.85 = inferido por lógica jurídica | 0.6 = incerto"""
+- confianca por seção: 0.95 = extraído diretamente | 0.85 = inferido por lógica jurídica | 0.6 = incerto
+
+## Terminologia específica TRT7 (7ª Região — Ceará/CE):
+- "Vara do Trabalho de Fortaleza" / "VT de Fortaleza" / "1ª VT"... → estado="CE"
+- "rescisão indireta" → tipo_rescisao="sem_justa_causa" (equiparada art. 483 CLT)
+- "ruptura contratual por iniciativa do empregador" → "sem_justa_causa"
+- "justa causa comprovada" = "justa causa reconhecida" → "justa_causa"
+- "diferenças salariais" → verba COMUM, Mensal, incidencias salariais
+- "DSR sobre horas extras" / "repouso semanal remunerado" → verba Reflexa de horas extras
+- "multa normativa" / "multa art. 477 §8º" → verba COMUM Desligamento (sem incidências)
+
+## Regras de reflexos (gerar automaticamente):
+Se "horas extras" estiver nas verbas_deferidas → incluir também:
+  - "Reflexo em DSR" (tipo=Reflexa, COMUM, Mensal, verba_principal_ref=nome horas extras)
+  - "Reflexo em 13º Salário" (tipo=Reflexa, 13o Salario, Dezembro)
+  - "Reflexo em Férias + 1/3" (tipo=Reflexa, Ferias, Periodo Aquisitivo)
+  - incidência nas reflexas: fgts=true, inss=true, ir=true (exceto férias: fgts=false)"""
 
 _SYSTEM_PROMPT_RELATORIO = """Você é um especialista em Direito do Trabalho brasileiro e em conversão de dados jurídicos para o sistema PJE-Calc.
 Receberá um relatório estruturado de sentença trabalhista produzido pelo sistema Calc-Machine.
@@ -972,7 +988,11 @@ def _extrair_via_llm(
                 "Use-os para preencher ou corrigir campos ausentes ou com baixa confiança."
             )
 
-        content_blocks.append({"type": "text", "text": prompt_sentenca})
+        content_blocks.append({
+            "type": "text",
+            "text": prompt_sentenca,
+            "cache_control": {"type": "ephemeral"},
+        })
 
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
@@ -1276,5 +1296,57 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
 
     dados["campos_ausentes"] = list(set(campos_ausentes))
     dados["alertas"] = alertas
+
+    # ── Detecção de inconsistências críticas ──────────────────────────────────
+    inconsistencias: list[str] = []
+
+    cont = dados.get("contrato", {})
+    admissao = cont.get("admissao")
+    demissao = cont.get("demissao")
+    tipo_rescisao = cont.get("tipo_rescisao") or ""
+
+    # 1. Demissão anterior à admissão
+    if admissao and demissao:
+        try:
+            from datetime import datetime
+            fmt = "%d/%m/%Y"
+            dt_adm = datetime.strptime(admissao, fmt)
+            dt_dem = datetime.strptime(demissao, fmt)
+            if dt_dem < dt_adm:
+                inconsistencias.append(
+                    f"Data de demissão ({demissao}) é anterior à admissão ({admissao}). "
+                    "Verifique as datas na sentença."
+                )
+        except ValueError:
+            pass  # datas em formato inesperado — ignorar comparação
+
+    # 2. Justa causa + multa de 40% FGTS (incompatíveis juridicamente)
+    if tipo_rescisao == "justa_causa":
+        fgts = dados.get("fgts", {})
+        if fgts.get("multa_40") is True:
+            inconsistencias.append(
+                "Tipo de rescisão 'justa_causa' incompatível com multa de 40% do FGTS. "
+                "Multa 40% é devida apenas em dispensa sem justa causa (art. 18 §1º FGTS)."
+            )
+
+    # 3. Justa causa + aviso prévio indenizado (incompatíveis)
+    if tipo_rescisao == "justa_causa":
+        aviso = dados.get("aviso_previo", {})
+        if aviso.get("tipo") == "indenizado":
+            inconsistencias.append(
+                "Tipo de rescisão 'justa_causa' incompatível com aviso prévio indenizado. "
+                "Em justa causa, não há aviso prévio (art. 482 CLT)."
+            )
+
+    # 4. Pedido de demissão + multa de 40% FGTS (incompatíveis)
+    if tipo_rescisao == "pedido_demissao":
+        fgts = dados.get("fgts", {})
+        if fgts.get("multa_40") is True:
+            inconsistencias.append(
+                "Tipo de rescisão 'pedido_demissao' incompatível com multa de 40% do FGTS. "
+                "Multa 40% é devida apenas em dispensa sem justa causa."
+            )
+
+    dados["inconsistencias_criticas"] = inconsistencias
 
     return dados

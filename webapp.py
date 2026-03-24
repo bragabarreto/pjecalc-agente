@@ -252,6 +252,7 @@ async def exibir_previa_web(
             "previa_texto": previa_texto,
             "campos_ausentes": dados.get("campos_ausentes", []),
             "alertas": dados.get("alertas", []),
+            "inconsistencias_criticas": dados.get("inconsistencias_criticas", []),
             "verbas": calculo.verbas,
             "status": calculo.status,
         },
