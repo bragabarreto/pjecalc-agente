@@ -1,9 +1,13 @@
 *.bat text eol=crlf
 *.cmd text eol=crlf
 *.ps1 text eol=crlf
-*.py  text eol=lf
+*.py   text eol=lf
 *.html text eol=lf
 *.css  text eol=lf
 *.js   text eol=lf
 *.json text eol=lf
 *.md   text eol=lf
+*.sh   text eol=lf
+*.java text eol=lf
+Dockerfile text eol=lf
+docker-entrypoint.sh text eol=lf

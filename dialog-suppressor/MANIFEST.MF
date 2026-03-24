@@ -1,0 +1,5 @@
+Manifest-Version: 1.0
+Premain-Class: DialogSuppressorAgent
+Agent-Class: DialogSuppressorAgent
+Can-Redefine-Classes: true
+Can-Retransform-Classes: true

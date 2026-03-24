@@ -695,9 +695,11 @@ async def verificar_pjecalc():
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get("http://localhost:9257/pjecalc")
-            return {"disponivel": r.status_code in (200, 302, 404)}
-    except Exception:
-        return {"disponivel": False}
+            if r.status_code in (200, 302, 404):
+                return {"status": "ok", "codigo_http": r.status_code}
+            return {"status": "erro", "codigo_http": r.status_code}
+    except Exception as e:
+        return {"status": "indisponivel", "detalhe": str(e)}
 
 
 @app.get("/api/screenshot", response_class=HTMLResponse)

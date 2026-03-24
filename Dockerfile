@@ -2,6 +2,7 @@
 #
 # Contém tudo em um container:
 #   - PJE-Calc Cidadão (Tomcat 7 + H2 Java) na porta 9257
+#   - dialog-suppressor.jar (Java Agent: SecurityManager + xdotool)
 #   - Playwright Chromium (headless) para automação
 #   - Python Agent (FastAPI/uvicorn) na porta 8000
 #
@@ -13,7 +14,22 @@
 # Opcionais:
 #   PORT (padrão 8000), PJECALC_DIR (padrão /opt/pjecalc)
 
-# ── Base: OpenJDK 8 (necessário para PJE-Calc) + Python 3.11 ─────────────────
+# ── Stage 1: Compilar Java Agent ──────────────────────────────────────────────
+# Usa JDK para compilar DialogSuppressorAgent.java → dialog-suppressor.jar
+FROM eclipse-temurin:8-jdk-jammy AS agent-builder
+
+WORKDIR /build
+COPY dialog-suppressor/DialogSuppressorAgent.java .
+COPY dialog-suppressor/MANIFEST.MF META-INF/MANIFEST.MF
+
+# Compilar e empacotar (sem dependências externas)
+RUN javac DialogSuppressorAgent.java && \
+    jar cfm dialog-suppressor.jar META-INF/MANIFEST.MF DialogSuppressorAgent*.class && \
+    echo "dialog-suppressor.jar criado:" && jar tf dialog-suppressor.jar
+
+
+# ── Stage 2: Imagem final ─────────────────────────────────────────────────────
+# Base: OpenJDK 8 (necessário para PJE-Calc) + Python 3.11
 FROM eclipse-temurin:8-jre-jammy
 
 # Python 3.11 via deadsnakes
@@ -29,8 +45,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
-# ── Dependências de sistema para Playwright Chromium ────────────────────────
-# cache-bust: 2026-03-22-v4
+# ── Dependências de sistema para Playwright Chromium + Java AWT + xdotool ────
+# cache-bust: 2026-03-23-v5
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Playwright deps
     libnss3 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 \
@@ -41,19 +57,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # xdotool: auto-dismiss dialogs Java no Xvfb
     # scrot: screenshots do display virtual para diagnóstico
     xdotool scrot \
+    # fluxbox: window manager leve — necessário para xdotool windowfocus funcionar
+    fluxbox \
     # Fontes para renderização correta do PJE-Calc
     fonts-liberation fonts-dejavu-core \
     # Utilitários
-    curl wget bash \
+    curl wget bash procps \
     && rm -rf /var/lib/apt/lists/*
 
-# ── PJE-Calc Cidadão ─────────────────────────────────────────────────────────
+# ── Java Agent (copiado do stage builder) ─────────────────────────────────────
+COPY --from=agent-builder /build/dialog-suppressor.jar /opt/dialog-suppressor.jar
+
+# ── PJE-Calc Cidadão ──────────────────────────────────────────────────────────
 # IMPORTANTE: copiar de pjecalc-dist/ (criada manualmente sem jre/ e navegador/)
 # Estrutura esperada:
 #   pjecalc-dist/bin/pjecalc.jar
 #   pjecalc-dist/bin/lib/*.jar
 #   pjecalc-dist/tomcat/  (completo)
-#   pjecalc-dist/iniciarPjeCalc.sh
+#   pjecalc-dist/.dados/pjecalc.h2.db
 #
 # Se pjecalc-dist/ não existir, o build falhará com mensagem clara.
 WORKDIR /opt/pjecalc
@@ -62,11 +83,12 @@ COPY pjecalc-dist/tomcat/ tomcat/
 COPY pjecalc-dist/.dados/ .dados/
 COPY iniciarPjeCalc.sh .
 RUN chmod +x iniciarPjeCalc.sh \
-    && mkdir -p tomcat/logs
+    && mkdir -p tomcat/logs \
+    && touch /opt/pjecalc/java.log
 
 ENV PJECALC_DIR=/opt/pjecalc
 
-# ── Agente Python ─────────────────────────────────────────────────────────────
+# ── Agente Python ──────────────────────────────────────────────────────────────
 WORKDIR /app
 
 # Requirements primeiro (cache de camada Docker)
