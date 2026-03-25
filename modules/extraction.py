@@ -342,6 +342,8 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     "tipo_rescisao": "sem_justa_causa | justa_causa | pedido_demissao | distrato | morte | null",
     "regime": "Tempo Integral | Tempo Parcial | Trabalho Intermitente | null",
     "carga_horaria": "número inteiro (horas/mês) | null",
+    "jornada_diaria": "float (horas/dia) | null",
+    "jornada_semanal": "float (horas/semana) | null",
     "maior_remuneracao": "float | null",
     "ultima_remuneracao": "float | null",
     "ajuizamento": "DD/MM/AAAA | null",
@@ -465,6 +467,12 @@ seguindo rigorosamente o guia de extração e o schema JSON abaixo.
 - ajuizamento: data de distribuição/autuação/protocolo da reclamação trabalhista
 - regime: "Tempo Integral" (padrão), "Tempo Parcial" (jornada reduzida art. 58-A CLT), "Trabalho Intermitente"
 - carga_horaria: horas/mês se informado; null se omitido (não incluir em campos_ausentes)
+- jornada_diaria: horas por dia de trabalho (float) — extrair de "jornada de 8 horas", "8h diárias",
+  "8 horas por dia", "jornada diária de 8h". Ex: 8.0, 6.0, 7.3 (use null se não mencionado)
+- jornada_semanal: horas por semana (float) — extrair de "44 horas semanais", "44h/semana",
+  "jornada semanal de 40h". Ex: 44.0, 40.0, 36.0 (use null se não mencionado)
+  Se jornada_semanal não estiver explícita mas jornada_diaria sim: calcular como jornada_diaria × dias_por_semana
+  (padrão: 6 dias para 44h/sem, 5 dias para 40h/sem, proporcional para outros)
 
 **AVISO PRÉVIO** → preenche "aviso_previo":
 - Deferido calculado pela Lei 12.506/2011: tipo="Calculado", projetar=true
@@ -597,6 +605,8 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "tipo_rescisao": "sem_justa_causa | justa_causa | pedido_demissao | distrato | morte | null",
     "regime": "Tempo Integral | Tempo Parcial | Trabalho Intermitente | null",
     "carga_horaria": "número inteiro (horas/mês) | null",
+    "jornada_diaria": "float (horas/dia) | null",
+    "jornada_semanal": "float (horas/semana) | null",
     "maior_remuneracao": "float | null",
     "ultima_remuneracao": "float | null",
     "ajuizamento": "DD/MM/AAAA | null",

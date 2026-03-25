@@ -362,7 +362,7 @@ class PJECalcPlaywright:
         for sel in seletores:
             try:
                 loc = self._page.locator(sel)
-                if loc.count() > 0:
+                if loc.count() > 0 and loc.first.is_visible():
                     return loc.first
             except Exception:
                 continue
@@ -380,7 +380,7 @@ class PJECalcPlaywright:
         for sel in seletores_name:
             try:
                 loc = self._page.locator(sel)
-                if loc.count() > 0:
+                if loc.count() > 0 and loc.first.is_visible():
                     return loc.first
             except Exception:
                 continue
@@ -395,7 +395,7 @@ class PJECalcPlaywright:
         xpath = xpath_map.get(tipo, f"//*[contains(@id, '{sufixo}')]")
         try:
             loc = self._page.locator(xpath)
-            if loc.count() > 0:
+            if loc.count() > 0 and loc.first.is_visible():
                 return loc.first
         except Exception:
             pass
@@ -404,7 +404,7 @@ class PJECalcPlaywright:
         escaped = field_id.replace(":", "\\:")
         try:
             loc = self._page.locator(f"#{escaped}")
-            if loc.count() > 0:
+            if loc.count() > 0 and loc.first.is_visible():
                 return loc.first
         except Exception:
             pass
@@ -1199,11 +1199,12 @@ class PJECalcPlaywright:
 
             carac = carac_map.get(v.get("caracteristica", "Comum"), "COMUM")
             # Característica — tenta por ID sufixo, depois por label
+            # NOTA: "tipo" removido — bate em formulario:tipoDaBaseTabelada (hidden)
             _carac_ok = any(
                 self._selecionar(fid, carac, obrigatorio=False)
                 for fid in [
-                    "caracteristicaVerba", "caracteristica", "tipoVerba",
-                    "tipo", "naturezaVerba", "natureza",
+                    "caracteristicaVerba", "stpcaracteristicaverba",
+                    "caracteristica", "tipoVerba", "naturezaVerba",
                 ]
             )
             if not _carac_ok:
@@ -1252,10 +1253,21 @@ class PJECalcPlaywright:
                                 continue
 
             if v.get("valor_informado"):
-                self._marcar_radio("valor", "INFORMADO")
+                # Tenta campo valor com múltiplos IDs de radio (INFORMADO)
+                _val_ok = (
+                    self._marcar_radio("valor", "INFORMADO")
+                    or self._marcar_radio("tipoValor", "INFORMADO")
+                    or self._marcar_radio("stpvalor", "INFORMADO")
+                    or self._marcar_radio("valor", "I")
+                )
                 self._preencher("valorDevidoInformado", _fmt_br(v["valor_informado"]), False)
+                self._preencher("valorInformado", _fmt_br(v["valor_informado"]), False)
             else:
-                self._marcar_radio("valor", "CALCULADO")
+                # CALCULADO — tenta múltiplos IDs de radio
+                self._marcar_radio("valor", "CALCULADO") or \
+                self._marcar_radio("tipoValor", "CALCULADO") or \
+                self._marcar_radio("stpvalor", "CALCULADO") or \
+                self._marcar_radio("valor", "C")
 
             self._marcar_checkbox("fgts", bool(v.get("incidencia_fgts")))
             self._marcar_checkbox("inss", bool(v.get("incidencia_inss")))
@@ -1345,6 +1357,99 @@ class PJECalcPlaywright:
             except Exception:
                 continue
         self._log("Fase 5 concluída.")
+
+    # ── Fase 5b: Cartão de Ponto ──────────────────────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_cartao_ponto(self, dados: dict) -> None:
+        """
+        Preenche o Cartão de Ponto com a jornada extraída da sentença.
+        Necessário para cálculo correto de horas extras e reflexos.
+        Deriva horas/dia e dias/semana a partir de carga_horaria (horas/mês).
+        """
+        cont = dados.get("contrato", {})
+        carga_horaria = cont.get("carga_horaria")   # horas/mês (int)
+        jornada_diaria = cont.get("jornada_diaria")  # horas/dia (float, extraído diretamente)
+        jornada_semanal = cont.get("jornada_semanal")  # horas/semana (float)
+        data_inicio = cont.get("admissao")
+        data_fim = cont.get("demissao")
+
+        # Calcular jornada se não extraída diretamente
+        if not jornada_diaria and carga_horaria:
+            # Padrões CLT: 220h/mês = 8h/dia 44h/sem | 180h/mês = 6h/dia 36h/sem
+            # 160h/mês = 8h/dia 40h/sem (jornada reduzida)
+            if carga_horaria >= 210:
+                jornada_diaria = 8.0
+                jornada_semanal = jornada_semanal or 44.0
+            elif carga_horaria >= 175:
+                jornada_diaria = 8.0
+                jornada_semanal = jornada_semanal or 40.0
+            elif carga_horaria >= 155:
+                jornada_diaria = 6.0
+                jornada_semanal = jornada_semanal or 36.0
+            else:
+                jornada_diaria = carga_horaria / (4.5 * 5)  # aprox
+                jornada_semanal = jornada_semanal or round(jornada_diaria * 5, 1)
+
+        if not jornada_diaria:
+            self._log("Fase 5b — Cartão de Ponto: jornada não extraída — ignorado.")
+            return
+
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+
+        navegou = (
+            self._clicar_menu_lateral("Cartão de Ponto", obrigatorio=False)
+            or self._clicar_menu_lateral("Jornada", obrigatorio=False)
+            or self._clicar_menu_lateral("Ponto", obrigatorio=False)
+        )
+        if not navegou:
+            self._log(
+                f"  Fase 5b — Cartão de Ponto: menu não encontrado. "
+                f"Jornada extraída: {jornada_diaria}h/dia, {jornada_semanal}h/sem."
+            )
+            return
+
+        self.mapear_campos("fase5b_cartao_ponto")
+        self._clicar_novo()
+        self._page.wait_for_timeout(800)
+
+        # Período
+        if data_inicio:
+            self._preencher_data("dataInicio", data_inicio, False)
+            self._preencher_data("dataInicial", data_inicio, False)
+        if data_fim:
+            self._preencher_data("dataFim", data_fim, False)
+            self._preencher_data("dataFinal", data_fim, False)
+
+        # Jornada diária (horas)
+        _jd_str = _fmt_br(jornada_diaria)
+        self._preencher("jornadaDiaria", _jd_str, False)
+        self._preencher("horasDia", _jd_str, False)
+        self._preencher("jornada", _jd_str, False)
+        self._preencher("horasJornada", _jd_str, False)
+
+        # Jornada semanal
+        if jornada_semanal:
+            _js_str = _fmt_br(jornada_semanal)
+            self._preencher("jornadaSemanal", _js_str, False)
+            self._preencher("horasSemana", _js_str, False)
+            self._preencher("cargaHorariaSemanal", _js_str, False)
+
+        # Intervalo padrão (1h para jornadas ≥ 6h — art. 71 CLT)
+        intervalo = 1.0 if jornada_diaria >= 6 else 0.0
+        if intervalo:
+            self._preencher("intervalo", _fmt_br(intervalo), False)
+            self._preencher("horasIntervalo", _fmt_br(intervalo), False)
+            self._preencher("tempoIntervalo", _fmt_br(intervalo), False)
+
+        self._clicar_salvar()
+        self._aguardar_ajax()
+        self._log(
+            f"  ✓ Cartão de Ponto: {jornada_diaria}h/dia × "
+            f"{jornada_semanal}h/sem (intervalo {intervalo}h)"
+        )
+        self._log("Fase 5b concluída.")
 
     # ── Fase 6: Parâmetros de Atualização ─────────────────────────────────────
 
@@ -1490,6 +1595,7 @@ class PJECalcPlaywright:
         self.fase_verbas(verbas_mapeadas)
         self.fase_fgts(dados.get("fgts", {}))
         self.fase_contribuicao_social(dados.get("contribuicao_social", {}))
+        self.fase_cartao_ponto(dados)
         self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))
         self.fase_irpf(dados.get("imposto_renda", {}))
         self.fase_honorarios(dados.get("honorarios", {}))
