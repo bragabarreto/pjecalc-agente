@@ -693,8 +693,10 @@ class PJECalcPlaywright:
             try:
                 loc = self._page.locator(sel)
                 if loc.count() > 0:
+                    self._log(f"  → Salvar: clicando via '{sel}'")
                     loc.first.click(force=True)
                     self._aguardar_ajax()
+                    self._log(f"  ✓ Salvar: concluído (URL: {self._page.url})")
                     return
             except Exception:
                 continue
@@ -709,55 +711,62 @@ class PJECalcPlaywright:
             }""")
             if clicou:
                 self._aguardar_ajax()
+                self._log(f"  ✓ Salvar: concluído via JS fallback (URL: {self._page.url})")
                 return
         except Exception:
             pass
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
 
     def _clicar_novo(self) -> None:
-        """Clica no botão Novo — busca exata por texto 'Novo'."""
-        # Método 1: seletores CSS conhecidos
+        """Clica no botão Novo da seção atual — prioriza dentro de #formulario."""
+        url_pre = self._page.url
+
+        # Método 1: seletores CSS por ID (não ambíguos — sem button:has-text que pega top-nav)
         for sel in ["[id$='novo']", "[id$='novoBt']", "[id$='novoBtn']",
-                    "input[value='Novo']", "button:has-text('Novo')"]:
+                    "input[value='Novo']"]:
             try:
                 loc = self._page.locator(sel)
                 if loc.count() > 0:
+                    self._log(f"  → Novo: clicando via '{sel}'")
                     loc.first.click(); self._aguardar_ajax()
-                    self._page.wait_for_timeout(800); return
+                    self._page.wait_for_timeout(800)
+                    self._log(f"  → URL pós-Novo: {self._page.url} (mudou: {self._page.url != url_pre})")
+                    return
             except Exception:
                 continue
 
-        # Método 2: ARIA role (mais confiável para <a> com texto exato)
-        try:
-            loc = self._page.get_by_role("link", name="Novo", exact=True)
-            if loc.count() > 0:
-                loc.first.click(); self._aguardar_ajax()
-                self._page.wait_for_timeout(800); return
-        except Exception:
-            pass
-
-        # Método 3: JS sem filtro de menu, com normalização de \u00a0
+        # Método 2: JS — busca PRIMEIRO dentro de #formulario (seção atual),
+        # depois fallback global. Evita clicar no "Novo" do top-nav.
         clicou = self._page.evaluate("""() => {
-            const todos = [...document.querySelectorAll(
-                'a, input[type="submit"], input[type="button"], button')];
-            for (const el of todos) {
-                const txt = (el.textContent || el.value || el.title || '')
-                    .replace(/[\\s\\u00a0]+/g,' ').trim();
-                if (txt === 'Novo' || txt === 'Nova') { el.click(); return true; }
+            const form = document.getElementById('formulario');
+            const containers = form ? [form, document] : [document];
+            for (const container of containers) {
+                const els = [...container.querySelectorAll(
+                    'a, input[type="submit"], input[type="button"], button')];
+                for (const el of els) {
+                    const txt = (el.textContent || el.value || el.title || '')
+                        .replace(/[\\s\\u00a0]+/g,' ').trim();
+                    if (txt === 'Novo' || txt === 'Nova') {
+                        el.click(); return el.id || '(sem id)';
+                    }
+                }
             }
-            return false;
+            return null;
         }""")
         if clicou:
-            self._aguardar_ajax(); self._page.wait_for_timeout(800); return
+            self._log(f"  → Novo: clicado via JS (elem: {clicou})")
+            self._aguardar_ajax(); self._page.wait_for_timeout(800)
+            self._log(f"  → URL pós-Novo: {self._page.url} (mudou: {self._page.url != url_pre})")
+            return
 
         # Diagnóstico
         self._log("  ⚠ Botão Novo não encontrado — elementos clicáveis na página:")
         try:
-            items = self._page.evaluate("""() => {
-                return [...document.querySelectorAll('a, input[type="submit"], button')]
-                    .map(el => el.id + ' | ' + (el.textContent||el.value||'').trim())
-                    .filter(s => s.length > 3 && s.length < 80);
-            }""")
+            items = self._page.evaluate("""() =>
+                [...document.querySelectorAll('a, input[type="submit"], button')]
+                .map(el => el.id + ' | ' + (el.textContent||el.value||'').trim())
+                .filter(s => s.length > 3 && s.length < 80)
+            """)
             self._log(f"  {items[:25]}")
         except Exception:
             pass
@@ -1186,9 +1195,22 @@ class PJECalcPlaywright:
             "Desligamento": "DESLIGAMENTO",
         }
 
-        # IDs de cabeçalho do processo — sempre presentes, não indicam form de verba
-        _HEADER_IDS = {"numero", "digito", "ano", "vara", "justica", "regiao",
-                       "idCalculo", "dataCriacao", "tipo", "searchText"}
+        # Captura baseline dos campos visíveis na lista de verbas (antes de clicar Novo).
+        # Strategy 2 compara com este baseline para detectar campos NOVOS do form de verba.
+        # Isso evita falso positivo: filtroNome (campo de filtro da lista) estava sempre
+        # visível e era detectado erroneamente como "formulário aberto".
+        _JS_CAMPOS_VISIVEIS = """() =>
+            [...document.querySelectorAll(
+                'input:not([type="hidden"]):not([type="image"]):not([type="submit"]):not([type="button"]),select,textarea'
+            )]
+            .filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
+            .map(e => e.id || e.name || '').filter(Boolean)
+        """
+        _campos_lista_ids = set()
+        try:
+            _campos_lista_ids = set(self._page.evaluate(_JS_CAMPOS_VISIVEIS))
+        except Exception:
+            pass
 
         for i, v in enumerate(todas):
             self._clicar_novo()
@@ -1211,41 +1233,30 @@ class PJECalcPlaywright:
                 except Exception:
                     continue
 
-            # Estratégia 2 — qualquer input visível além dos campos de cabeçalho
-            # Nota: offsetParent===null não funciona em headless — usar getBoundingClientRect
+            # Estratégia 2 — campos novos vs. baseline da lista de verbas
             if not _form_abriu:
                 try:
-                    _campos_atuais = self._page.evaluate("""() =>
-                        [...document.querySelectorAll(
-                            'input:not([type="hidden"]):not([type="image"]):not([type="submit"]):not([type="button"]),select,textarea'
-                        )]
-                        .filter(e => {
-                            const r = e.getBoundingClientRect();
-                            return r.width > 0 && r.height > 0;
-                        })
-                        .map(e => e.id.split(':').pop())
-                    """)
-                    _novos = [c for c in _campos_atuais if c and c not in _HEADER_IDS]
+                    _campos_atuais = set(self._page.evaluate(_JS_CAMPOS_VISIVEIS))
+                    _novos = [c for c in _campos_atuais if c not in _campos_lista_ids]
                     if _novos:
                         _form_abriu = True
-                        self._log(f"  ✓ Formulário verba detectado (campos novos): {_novos[:10]}")
+                        self._log(f"  ✓ Formulário verba detectado (campos novos vs lista): {_novos[:10]}")
                 except Exception:
                     pass
 
             if not _form_abriu:
-                # Diagnóstico completo do estado da página
-                self._log("  ⚠ Formulário de verba não detectado após Novo")
+                # Diagnóstico: usar getBoundingClientRect (offsetParent quebrado em headless)
+                self._log(f"  ⚠ Formulário de verba não detectado — URL: {self._page.url}")
                 try:
-                    self._log(f"  📍 URL pós-Novo: {self._page.url}")
                     _campos_vis = self._page.evaluate("""() =>
                         [...document.querySelectorAll('input,select,textarea')]
-                        .filter(e => e.offsetParent !== null)
-                        .map(e => e.id + '|' + e.type + '|' + (e.name||''))
+                        .filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
+                        .map(e => e.id + '|' + e.type)
                     """)
-                    self._log(f"  📋 Campos visíveis pós-Novo: {_campos_vis[:30]}")
+                    self._log(f"  📋 Campos visíveis: {_campos_vis[:20]}")
                     _botoes_pos = self._page.evaluate("""() =>
                         [...document.querySelectorAll('a,input[type="submit"],button')]
-                        .map(el => (el.textContent||el.value||'').replace(/\s+/g,' ').trim())
+                        .map(el => (el.textContent||el.value||'').replace(/\\s+/g,' ').trim())
                         .filter(t => t.length > 1 && t.length < 50)
                     """)
                     self._log(f"  🔘 Botões pós-Novo: {list(dict.fromkeys(_botoes_pos))[:20]}")
