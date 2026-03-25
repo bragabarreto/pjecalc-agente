@@ -364,6 +364,24 @@ class PJECalcPlaywright:
             except Exception:
                 continue
 
+        # Nível 2.5: name attribute — JSF às vezes usa name= mais estável que id=
+        if tipo == "select":
+            seletores_name = [f"select[name$='{sufixo}']", f"select[name*='{sufixo}']"]
+        elif tipo == "checkbox":
+            seletores_name = [
+                f"input[type='checkbox'][name$='{sufixo}']",
+                f"input[type='checkbox'][name*='{sufixo}']",
+            ]
+        else:
+            seletores_name = [f"input[name$='{sufixo}']", f"input[name*='{sufixo}']"]
+        for sel in seletores_name:
+            try:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    return loc.first
+            except Exception:
+                continue
+
         # Nível 3: XPath contains(@id)
         xpath_map = {
             "input":    f"//input[contains(@id, '{sufixo}')]",
@@ -425,6 +443,7 @@ class PJECalcPlaywright:
         self,
         field_id: str,
         data: str,
+        obrigatorio: bool = True,
         label: str | None = None,
     ) -> bool:
         """
@@ -436,7 +455,8 @@ class PJECalcPlaywright:
             return False
         loc = self._localizar(field_id, label, tipo="input")
         if not loc:
-            self._log(f"  ⚠ data {field_id}: campo não encontrado — preencha manualmente.")
+            if obrigatorio:
+                self._log(f"  ⚠ data {field_id}: campo não encontrado — preencha manualmente.")
             return False
         try:
             loc.wait_for(state="visible", timeout=8000)
@@ -501,7 +521,9 @@ class PJECalcPlaywright:
             f"input[type='radio'][value='{valor}'][id$='{field_id}']",
             f"table[id$='{field_id}'] input[value='{valor}']",
             f"input[type='radio'][name$='{field_id}'][value='{valor}']",
+            f"input[type='radio'][name*='{field_id}'][value='{valor}']",
             f"//input[@type='radio' and @value='{valor}' and contains(@id, '{field_id}')]",
+            f"//input[@type='radio' and @value='{valor}' and contains(@name, '{field_id}')]",
         ]
         for sel in seletores:
             try:
@@ -1130,23 +1152,84 @@ class PJECalcPlaywright:
                 self.mapear_campos("verba_form")  # captura IDs reais após abrir formulário
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
 
-            # Tentar múltiplos IDs para campo de descrição da verba
+            # Descrição da verba — tenta por ID sufixo, depois por label visível
             _desc_ok = any(
                 self._preencher(fid, nome, obrigatorio=False)
-                for fid in ["descricao", "nome", "nomeVerba", "titulo", "descricaoVerba", "verba"]
+                for fid in [
+                    "descricao", "descricaoVerba", "nomeVerba", "nome",
+                    "titulo", "verba", "rubrica",
+                ]
             )
+            if not _desc_ok:
+                # Fallback por label (Level 1 — robusto a mudanças de ID JSF)
+                for _lbl in ["Descrição", "Descrição da Verba", "Nome da Verba",
+                              "Nome", "Verba", "Rubrica"]:
+                    _loc = self._page.get_by_label(_lbl, exact=False)
+                    if _loc.count() > 0:
+                        try:
+                            _loc.first.fill(nome)
+                            _loc.first.dispatch_event("change")
+                            _desc_ok = True
+                            self._log(f"  ✓ verba descrição (label '{_lbl}'): {nome}")
+                            break
+                        except Exception:
+                            continue
             if not _desc_ok:
                 self._log(f"  ⚠ Campo de descrição não encontrado para: {nome}")
 
             carac = carac_map.get(v.get("caracteristica", "Comum"), "COMUM")
-            # Tentar múltiplos IDs para select de característica
-            any(self._selecionar(fid, carac, obrigatorio=False)
-                for fid in ["caracteristicaVerba", "caracteristica", "tipoVerba", "tipo"])
+            # Característica — tenta por ID sufixo, depois por label
+            _carac_ok = any(
+                self._selecionar(fid, carac, obrigatorio=False)
+                for fid in [
+                    "caracteristicaVerba", "caracteristica", "tipoVerba",
+                    "tipo", "naturezaVerba", "natureza",
+                ]
+            )
+            if not _carac_ok:
+                for _lbl in ["Característica", "Caracteristica", "Tipo de Verba",
+                             "Tipo", "Natureza"]:
+                    _loc = self._page.get_by_label(_lbl, exact=False)
+                    if _loc.count() > 0:
+                        try:
+                            _loc.first.select_option(value=carac)
+                            _carac_ok = True
+                            self._log(f"  ✓ verba característica (label '{_lbl}'): {carac}")
+                            break
+                        except Exception:
+                            try:
+                                _loc.first.select_option(label=carac)
+                                _carac_ok = True
+                                break
+                            except Exception:
+                                continue
 
             ocorr = ocorr_map.get(v.get("ocorrencia", "Mensal"), "MENSAL")
-            # Tentar múltiplos IDs para select de ocorrência
-            any(self._selecionar(fid, ocorr, obrigatorio=False)
-                for fid in ["ocorrenciaPagto", "ocorrencia", "periodicidade", "frequencia"])
+            # Ocorrência — tenta por ID sufixo, depois por label
+            _ocorr_ok = any(
+                self._selecionar(fid, ocorr, obrigatorio=False)
+                for fid in [
+                    "ocorrenciaPagto", "ocorrenciaDePagamento", "ocorrencia",
+                    "periodicidade", "frequencia", "pagamento",
+                ]
+            )
+            if not _ocorr_ok:
+                for _lbl in ["Ocorrência de Pagamento", "Ocorrência", "Ocorrencia",
+                             "Periodicidade", "Frequência de Pagamento"]:
+                    _loc = self._page.get_by_label(_lbl, exact=False)
+                    if _loc.count() > 0:
+                        try:
+                            _loc.first.select_option(value=ocorr)
+                            _ocorr_ok = True
+                            self._log(f"  ✓ verba ocorrência (label '{_lbl}'): {ocorr}")
+                            break
+                        except Exception:
+                            try:
+                                _loc.first.select_option(label=ocorr)
+                                _ocorr_ok = True
+                                break
+                            except Exception:
+                                continue
 
             if v.get("valor_informado"):
                 self._marcar_radio("valor", "INFORMADO")
