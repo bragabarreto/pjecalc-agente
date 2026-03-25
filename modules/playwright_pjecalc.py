@@ -89,7 +89,20 @@ def retry(max_tentativas: int = 3, delay: int = 2):
 # ── Verificação e inicialização do PJE-Calc ───────────────────────────────────
 
 def pjecalc_rodando() -> bool:
-    """Retorna True se o Tomcat do PJE-Calc já está ouvindo na porta 9257."""
+    """
+    Retorna True se o PJE-Calc já está disponível via HTTP em localhost:9257.
+    Aceita 200, 302 e 404 — qualquer resposta HTTP indica Tomcat ativo.
+    404 = Tomcat up mas webapp ainda deployando; 200/302 = totalmente pronto.
+    Fallback para TCP se a checagem HTTP falhar (ex: timeout de rede).
+    """
+    try:
+        with urllib.request.urlopen(
+            "http://localhost:9257/pjecalc", timeout=2
+        ) as r:
+            return r.status in (200, 302, 404)
+    except Exception:
+        pass
+    # Fallback TCP: porta aberta sem resposta HTTP ainda
     try:
         s = socket.create_connection(("127.0.0.1", 9257), timeout=1)
         s.close()
@@ -103,7 +116,7 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
     Inicia o PJE-Calc Cidadão via iniciarPjeCalc.bat (Windows) ou iniciarPjeCalc.sh (Linux).
     Aguarda:
       1) porta TCP 9257 abrir
-      2) HTTP http://localhost:9257/pjecalc responder com 200/302
+      2) HTTP http://localhost:9257/pjecalc responder com 200/302/404
     Emite mensagens de progresso via log_cb durante a espera.
     """
     import platform
@@ -111,9 +124,10 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
     dir_path = Path(pjecalc_dir)
 
     if pjecalc_rodando():
-        logger.info("PJE-Calc já está rodando em localhost:9257.")
-        _log("PJE-Calc já está rodando. Aguardando Tomcat finalizar deploy…")
-        _aguardar_http(timeout=60, log_cb=log_cb)
+        # pjecalc_rodando() já confirmou HTTP — sem espera adicional.
+        # (O SSE em webapp.py faz a espera longa de 600s; aqui só confirmamos.)
+        logger.info("PJE-Calc HTTP disponível em localhost:9257 — iniciando automação.")
+        _log("PJE-Calc disponível — iniciando automação…")
         return
 
     logger.info(f"Iniciando PJE-Calc Cidadão a partir de {dir_path}…")
@@ -165,28 +179,37 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
     _aguardar_http(timeout=180, log_cb=log_cb)
 
 
-def _aguardar_http(timeout: int = 60, log_cb=None) -> None:
-    """Aguarda http://localhost:9257/pjecalc responder. Emite progresso via log_cb."""
+def _aguardar_http(timeout: int = 300, log_cb=None) -> None:
+    """
+    Aguarda http://localhost:9257/pjecalc responder com 200, 302 ou 404.
+    404 é aceito: indica que o Tomcat está ativo mas o war ainda está sendo
+    deployado. O Playwright consegue conectar assim que a página JSF responder.
+    Emite progresso via log_cb a cada 15s.
+    """
     url = "http://localhost:9257/pjecalc"
     inicio = time.time()
-    ultimo_log = -10  # força log imediato no primeiro ciclo
+    ultimo_log = -15  # força log no primeiro ciclo
     while time.time() - inicio < timeout:
         try:
             with urllib.request.urlopen(url, timeout=5) as resp:
-                if resp.status in (200, 302):
-                    logger.info("PJE-Calc HTTP respondendo — pronto.")
+                if resp.status in (200, 302, 404):
+                    logger.info(f"PJE-Calc HTTP respondendo (status {resp.status}) — pronto.")
                     if log_cb:
-                        log_cb("PJE-Calc pronto.")
-                    time.sleep(2)  # margem para finalizar deploy Seam/JSF
+                        log_cb(f"PJE-Calc pronto (HTTP {resp.status}).")
+                    if resp.status == 404:
+                        time.sleep(3)  # margem extra: 404 = war ainda deployando
                     return
         except Exception:
             pass
         elapsed = int(time.time() - inicio)
-        if log_cb and elapsed - ultimo_log >= 10:
-            log_cb(f"⏳ Aguardando PJE-Calc inicializar… ({elapsed}s)")
+        if log_cb and elapsed - ultimo_log >= 15:
+            log_cb(f"⏳ Aguardando PJE-Calc inicializar… ({elapsed}s/{timeout}s)")
             ultimo_log = elapsed
         time.sleep(3)
-    raise TimeoutError(f"PJE-Calc: porta aberta mas HTTP não respondeu em {timeout}s.")
+    raise TimeoutError(
+        f"PJE-Calc: porta aberta mas HTTP não respondeu em {timeout}s. "
+        "Verifique /api/logs/java para diagnóstico."
+    )
 
 
 # ── Utilitários de formatação ─────────────────────────────────────────────────

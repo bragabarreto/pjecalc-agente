@@ -872,25 +872,34 @@ async def executar_automacao_sse(
         from modules.playwright_pjecalc import preencher_como_generator
         from database import SessionLocal
 
-        # Aguardar Tomcat ficar pronto (pode estar ainda inicializando)
+        # Aguardar Tomcat + webapp PJE-Calc ficarem prontos.
+        # Critério: HTTP 200 ou 302 em /pjecalc → webapp deployada e pronta.
+        # HTTP 404 → Tomcat ouvindo mas war ainda sendo deployado → continuar aguardando.
+        # Sem resposta → Tomcat ainda inicializando → continuar aguardando.
         TOMCAT_TIMEOUT = 600
         elapsed = 0
+        _ultimo_status_log = -30
         while elapsed < TOMCAT_TIMEOUT:
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
                     r = await client.get("http://localhost:9257/pjecalc")
-                    if r.status_code in (200, 302, 404):
+                    if r.status_code in (200, 302):
+                        # Webapp pronta
+                        yield f"data: {json.dumps({'msg': f'PJE-Calc pronto (HTTP {r.status_code}) — iniciando Playwright…'})}\n\n"
                         break
+                    if r.status_code == 404:
+                        # Tomcat HTTP ativo mas war ainda deployando — aguardar
+                        if elapsed - _ultimo_status_log >= 30:
+                            yield f"data: {json.dumps({'msg': f'Tomcat ativo — aguardando deploy da webapp… ({elapsed}s)'})}\n\n"
+                            _ultimo_status_log = elapsed
             except Exception:
-                pass
-            if elapsed == 0:
-                yield f"data: {json.dumps({'msg': 'PJE-Calc ainda inicializando — aguardando Tomcat ficar pronto...'})}\n\n"
-            elif elapsed % 30 == 0:
-                yield f"data: {json.dumps({'msg': f'Aguardando Tomcat... ({elapsed}s)'})}\n\n"
+                if elapsed - _ultimo_status_log >= 30:
+                    yield f"data: {json.dumps({'msg': f'Aguardando Tomcat inicializar… ({elapsed}s)'})}\n\n"
+                    _ultimo_status_log = elapsed
             await asyncio.sleep(10)
             elapsed += 10
         else:
-            yield f"data: {json.dumps({'msg': 'ERRO: PJE-Calc não ficou disponível após 10 min. Verifique os logs do servidor.'})}\n\n"
+            yield f"data: {json.dumps({'msg': 'ERRO: PJE-Calc não ficou disponível após 10 min. Verifique /api/logs/java.'})}\n\n"
             yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
             return
 
