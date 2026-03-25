@@ -396,6 +396,7 @@
 
     <!-- ═══ 6. HONORÁRIOS ═══ -->
     {% set conf_hon = dados.get('honorarios', {}).get('confianca', 1.0) %}
+    {% set hon_parte = dados.get('honorarios', {}).get('parte_devedora') or '' %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-honorarios')">
         6. Honorários Advocatícios
@@ -406,26 +407,12 @@
       <div class="secao-corpo" id="s-honorarios">
         <div class="campos-grid">
           <div class="campo-form">
-            <label>Percentual de Honorários (%)</label>
-            <input type="number" step="0.01" min="0" max="100"
-                   value="{{ ((dados.get('honorarios', {}).get('percentual') or 0) * 100)|round(2) if dados.get('honorarios', {}).get('percentual') else '' }}"
-                   onchange="salvarCampo('honorarios.percentual', (parseFloat(this.value)/100).toString(), this)"
-                   placeholder="5">
-          </div>
-          <div class="campo-form">
-            <label>Valor Fixo de Honorários (R$)</label>
-            <input type="number" step="0.01" min="0"
-                   value="{{ dados.get('honorarios', {}).get('valor_fixo', '') or '' }}"
-                   onchange="salvarCampo('honorarios.valor_fixo', this.value, this)"
-                   placeholder="0,00">
-          </div>
-          <div class="campo-form">
             <label>Parte Devedora dos Honorários</label>
-            <select onchange="salvarCampo('honorarios.parte_devedora', this.value, this)">
+            <select id="hon-parte" onchange="salvarCampo('honorarios.parte_devedora', this.value, this); toggleHonorarios(this.value)">
               <option value="">— selecione —</option>
-              <option value="Reclamado" {{ 'selected' if dados.get('honorarios', {}).get('parte_devedora') == 'Reclamado' }}>Reclamado</option>
-              <option value="Reclamante" {{ 'selected' if dados.get('honorarios', {}).get('parte_devedora') == 'Reclamante' }}>Reclamante</option>
-              <option value="Ambos" {{ 'selected' if dados.get('honorarios', {}).get('parte_devedora') == 'Ambos' }}>Ambos</option>
+              <option value="Reclamado" {{ 'selected' if hon_parte == 'Reclamado' }}>Reclamado</option>
+              <option value="Reclamante" {{ 'selected' if hon_parte == 'Reclamante' }}>Reclamante</option>
+              <option value="Ambos" {{ 'selected' if hon_parte == 'Ambos' }}>Ambos (sucumbência recíproca)</option>
             </select>
           </div>
           <div class="campo-form">
@@ -434,6 +421,54 @@
                    value="{{ dados.get('honorarios', {}).get('periciais', '') or '' }}"
                    onchange="salvarCampo('honorarios.periciais', this.value, this)"
                    placeholder="0,00">
+          </div>
+        </div>
+
+        <!-- Parte única: Reclamado OU Reclamante -->
+        <div id="hon-unico" class="campos-grid" style="margin-top:10px;{{ ' display:none' if hon_parte == 'Ambos' else '' }}">
+          <div class="campo-form">
+            <label>Percentual de Honorários (%)</label>
+            <input type="number" step="0.01" min="0" max="100"
+                   value="{{ ((dados.get('honorarios', {}).get('percentual') or 0) * 100)|round(2) if dados.get('honorarios', {}).get('percentual') else '' }}"
+                   onchange="salvarCampo('honorarios.percentual', (parseFloat(this.value)/100).toString(), this)"
+                   placeholder="15">
+          </div>
+          <div class="campo-form">
+            <label>Valor Fixo de Honorários (R$)</label>
+            <input type="number" step="0.01" min="0"
+                   value="{{ dados.get('honorarios', {}).get('valor_fixo', '') or '' }}"
+                   onchange="salvarCampo('honorarios.valor_fixo', this.value, this)"
+                   placeholder="0,00">
+          </div>
+        </div>
+
+        <!-- Sucumbência recíproca: campos por parte -->
+        <div id="hon-ambos" style="margin-top:10px;{{ '' if hon_parte == 'Ambos' else ' display:none' }}">
+          <div style="background:#fff9e6; border:1px solid #ffc107; border-radius:5px; padding:8px 12px; margin-bottom:10px; font-size:0.82rem; color:#856404;">
+            Sucumbência recíproca — cada parte paga honorários ao advogado adverso. Compensação vedada (TST).
+          </div>
+          <div class="campos-grid col3">
+            <div class="campo-form">
+              <label>Reclamado — % s/ condenação</label>
+              <input type="number" step="0.01" min="0" max="100"
+                     value="{{ ((dados.get('honorarios', {}).get('percentual_reclamado') or dados.get('honorarios', {}).get('percentual') or 0) * 100)|round(2) if (dados.get('honorarios', {}).get('percentual_reclamado') or dados.get('honorarios', {}).get('percentual')) else '' }}"
+                     onchange="salvarCampo('honorarios.percentual_reclamado', (parseFloat(this.value)/100).toString(), this)"
+                     placeholder="15">
+            </div>
+            <div class="campo-form">
+              <label>Reclamante — % s/ pedidos indeferidos</label>
+              <input type="number" step="0.01" min="0" max="100"
+                     value="{{ ((dados.get('honorarios', {}).get('percentual_reclamante') or dados.get('honorarios', {}).get('percentual') or 0) * 100)|round(2) if (dados.get('honorarios', {}).get('percentual_reclamante') or dados.get('honorarios', {}).get('percentual')) else '' }}"
+                     onchange="salvarCampo('honorarios.percentual_reclamante', (parseFloat(this.value)/100).toString(), this)"
+                     placeholder="15">
+            </div>
+            <div class="campo-form">
+              <label>Valor do Crédito Líquido</label>
+              <div style="background:#f8f9fa; border:1px solid #ced4da; border-radius:5px; padding:8px 10px; font-size:0.82rem; color:#6c757d; line-height:1.5;">
+                Calculado pelo PJE-Calc após liquidação.<br>
+                Honorários deduzidos do crédito de cada parte.
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -487,6 +522,7 @@
     </div>
 
     <!-- ═══ 8. CONTRIBUIÇÃO SOCIAL ═══ -->
+    {% set inss_resp = dados.get('contribuicao_social', {}).get('responsabilidade') or '' %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-previdencia')">
         8. Contribuição Previdenciária (INSS)
@@ -495,24 +531,47 @@
         <div class="campos-grid">
           <div class="campo-form">
             <label>Responsabilidade pelo Recolhimento</label>
-            <select onchange="salvarCampo('contribuicao_social.responsabilidade', this.value, this)">
+            <select id="inss-resp" onchange="salvarCampo('contribuicao_social.responsabilidade', this.value, this); toggleInss(this.value)">
               <option value="">— selecione —</option>
-              <option value="Empregador" {{ 'selected' if dados.get('contribuicao_social', {}).get('responsabilidade') == 'Empregador' }}>Empregador</option>
-              <option value="Empregado" {{ 'selected' if dados.get('contribuicao_social', {}).get('responsabilidade') == 'Empregado' }}>Empregado</option>
-              <option value="Ambos" {{ 'selected' if dados.get('contribuicao_social', {}).get('responsabilidade') == 'Ambos' }}>Ambos</option>
+              <option value="Empregador" {{ 'selected' if inss_resp == 'Empregador' }}>Empregador (reclamado arca com tudo)</option>
+              <option value="Empregado" {{ 'selected' if inss_resp == 'Empregado' }}>Empregado (apenas cota do empregado)</option>
+              <option value="Ambos" {{ 'selected' if inss_resp == 'Ambos' }}>Ambos — cada um paga sua cota (padrão)</option>
             </select>
+          </div>
+        </div>
+        <!-- Painel por parte — visível quando "Ambos" -->
+        <div id="inss-ambos-info" style="margin-top:10px;{{ '' if inss_resp == 'Ambos' else ' display:none' }}">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <div style="background:#e8f4fd; border-left:3px solid #1a3a6b; padding:10px; border-radius:0 5px 5px 0; font-size:0.84rem; line-height:1.5;">
+              <strong style="color:#1a3a6b;">Reclamante (empregado)</strong><br>
+              Alíquota progressiva tabela INSS<br>
+              <small style="color:#6c757d;">7,5% a 14% s/ verbas salariais de cada mês</small>
+            </div>
+            <div style="background:#e8f4fd; border-left:3px solid #1a3a6b; padding:10px; border-radius:0 5px 5px 0; font-size:0.84rem; line-height:1.5;">
+              <strong style="color:#1a3a6b;">Reclamado (empregador)</strong><br>
+              20% RGPS + RAT/FAP + terceiros<br>
+              <small style="color:#6c757d;">Desconta cota do reclamante e recolhe ambas</small>
+            </div>
+          </div>
+        </div>
+        <!-- Painel parte única — visível quando Empregador ou Empregado -->
+        <div id="inss-unico-info" style="margin-top:10px;{{ '' if inss_resp in ('Empregador', 'Empregado') else ' display:none' }}">
+          <div style="background:#fff3cd; border-left:3px solid #ffc107; padding:10px; border-radius:0 5px 5px 0; font-size:0.84rem; color:#856404; line-height:1.5;">
+            <strong>Atenção:</strong> Responsabilidade exclusiva determinada na sentença.<br>
+            Verifique o dispositivo: apenas quando a sentença expressamente afasta a cota-parte padrão.
           </div>
         </div>
         <div class="checkbox-row" style="margin-top:8px;">
           <input type="checkbox" id="lei-11941"
                  {{ 'checked' if dados.get('contribuicao_social', {}).get('lei_11941') }}
                  onchange="salvarCampo('contribuicao_social.lei_11941', this.checked ? 'true' : 'false', this)">
-          <label for="lei-11941">Aplicar cálculo pela Lei 11.941/2009</label>
+          <label for="lei-11941">Aplicar cálculo pela Lei 11.941/2009 (regime de competência)</label>
         </div>
       </div>
     </div>
 
     <!-- ═══ 9. IMPOSTO DE RENDA ═══ -->
+    {% set ir_apurar = dados.get('imposto_renda', {}).get('apurar') %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-ir')">
         9. Imposto de Renda
@@ -520,9 +579,24 @@
       <div class="secao-corpo" id="s-ir">
         <div class="checkbox-row">
           <input type="checkbox" id="ir-apurar"
-                 {{ 'checked' if dados.get('imposto_renda', {}).get('apurar') }}
-                 onchange="salvarCampo('imposto_renda.apurar', this.checked ? 'true' : 'false', this)">
+                 {{ 'checked' if ir_apurar }}
+                 onchange="salvarCampo('imposto_renda.apurar', this.checked ? 'true' : 'false', this); toggleIr(this.checked)">
           <label for="ir-apurar">Apurar Imposto de Renda</label>
+        </div>
+        <!-- Painel por parte — aparece quando IR é apurado -->
+        <div id="ir-partes-info" style="margin-top:10px;{{ '' if ir_apurar else ' display:none' }}">
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+            <div style="background:#fff8e1; border-left:3px solid #e67700; padding:10px; border-radius:0 5px 5px 0; font-size:0.84rem; line-height:1.5;">
+              <strong style="color:#e67700;">Reclamante (contribuinte)</strong><br>
+              Suporta economicamente o IR<br>
+              <small style="color:#6c757d;">Tabela progressiva 0% a 27,5% por mês de competência</small>
+            </div>
+            <div style="background:#fff8e1; border-left:3px solid #e67700; padding:10px; border-radius:0 5px 5px 0; font-size:0.84rem; line-height:1.5;">
+              <strong style="color:#e67700;">Reclamado (fonte pagadora)</strong><br>
+              Retém e recolhe o IR na fonte (DARF)<br>
+              <small style="color:#6c757d;">Responsabilidade solidária por omissão de retenção</small>
+            </div>
+          </div>
         </div>
         <div class="campos-grid" style="margin-top:10px;">
           <div class="campo-form">
@@ -533,7 +607,7 @@
                    placeholder="0">
           </div>
           <div class="campo-form">
-            <label>Número de Dependentes</label>
+            <label>Número de Dependentes (Reclamante)</label>
             <input type="number" min="0"
                    value="{{ dados.get('imposto_renda', {}).get('dependentes', '') or '' }}"
                    onchange="salvarCampo('imposto_renda.dependentes', this.value, this)"
@@ -812,6 +886,34 @@ async function salvarVerba(indice, campo, valor, el) {
   } catch(err) {
     mostrarToast('Erro de comunicação', 'erro');
   }
+}
+
+// Toggle honorários: parte única ↔ sucumbência recíproca
+function toggleHonorarios(valor) {
+  const unico = document.getElementById('hon-unico');
+  const ambos = document.getElementById('hon-ambos');
+  if (!unico || !ambos) return;
+  if (valor === 'Ambos') {
+    unico.style.display = 'none';
+    ambos.style.display = 'block';
+  } else {
+    unico.style.display = 'grid';
+    ambos.style.display = 'none';
+  }
+}
+
+// Toggle INSS: painel por parte conforme responsabilidade
+function toggleInss(valor) {
+  const ambos = document.getElementById('inss-ambos-info');
+  const unico = document.getElementById('inss-unico-info');
+  if (ambos) ambos.style.display = valor === 'Ambos' ? 'block' : 'none';
+  if (unico) unico.style.display = (valor === 'Empregador' || valor === 'Empregado') ? 'block' : 'none';
+}
+
+// Toggle IR: painel por parte quando apurar ligado
+function toggleIr(checked) {
+  const info = document.getElementById('ir-partes-info');
+  if (info) info.style.display = checked ? 'block' : 'none';
 }
 
 // Confirmar prévia

@@ -171,17 +171,19 @@ def gerar_previa(
             linhas.append("     → Percentual/valor a apurar")
         linhas.append("   Reclamado  : isento de honorários sucumbenciais")
     elif parte_hon == "Ambos":
+        pct_reclamado = honorarios.get("percentual_reclamado") or pct_hon
+        pct_reclamante = honorarios.get("percentual_reclamante") or pct_hon
         linhas.append("   Sucumbência recíproca — ambas as partes devem honorários:")
         linhas.append("   Reclamante (pedidos indeferidos):")
-        if pct_hon:
-            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor dos pedidos indeferidos")
+        if pct_reclamante:
+            linhas.append(f"     → {_fmt_pct(pct_reclamante)} sobre o valor dos pedidos indeferidos")
         else:
-            linhas.append("     → Percentual a apurar sobre pedidos indeferidos")
+            linhas.append("     → Percentual a apurar — preencher campo na prévia")
         linhas.append("   Reclamado (pedidos deferidos):")
-        if pct_hon:
-            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor da condenação")
+        if pct_reclamado:
+            linhas.append(f"     → {_fmt_pct(pct_reclamado)} sobre o valor da condenação")
         else:
-            linhas.append("     → Percentual a apurar sobre o valor da condenação")
+            linhas.append("     → Percentual a apurar — preencher campo na prévia")
         linhas.append("   ⚠ Compensação vedada (cada parte paga ao advogado adverso)")
     else:
         linhas += [

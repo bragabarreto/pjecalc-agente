@@ -125,6 +125,32 @@ falhas de preenchimento no meio da automação.
 
 ---
 
+### D6 — Prévia com campos por parte (honorários, INSS, IR, custas)
+
+**Decisão:** quando a extração retorna `parte_devedora = "Ambos"` para honorários
+ou `responsabilidade = "Ambos"` para INSS, a prévia HTML exibe seções expandidas
+separadas por parte (Reclamante / Reclamado):
+
+- **Honorários Ambos**: `toggleHonorarios()` esconde os campos únicos e exibe
+  `honorarios.percentual_reclamado` (% s/ condenação) e
+  `honorarios.percentual_reclamante` (% s/ pedidos indeferidos) — editáveis independentemente.
+- **INSS Ambos**: painel informativo (não editável) com cota-parte de cada parte.
+  Valores calculados automaticamente pelo PJE-Calc.
+- **IR**: painel informativo sempre visível quando `apurar=true` — distingue
+  reclamante (contribuinte) de reclamado (fonte pagadora).
+- **Custas**: seção informativa nova em `preview.py` inferida da sucumbência.
+
+**Motivo:** "Ambos" como campo único era ambíguo — o usuário não conseguia verificar
+nem corrigir os parâmetros de cada parte antes de confirmar. Skill `calctrabalho-correcoes`
+reforçou que cada devedor precisa ter campo próprio editável.
+
+**Impacto na extração:** `honorarios.percentual_reclamado` e
+`honorarios.percentual_reclamante` são campos novos — o LLM não os extrai ainda.
+O usuário os preenche manualmente na prévia quando aplicável (sucumbência recíproca).
+Para extração automática, ver TODO em `extraction.py`.
+
+---
+
 ### D5 — Hospedagem e acionamento do PJE-Calc Cidadão
 
 **Decisão:** manter PJE-Calc como serviço persistente no container Docker/Railway,
