@@ -222,17 +222,39 @@ class PJECalcPlaywright:
             headless = True
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
+        # --no-sandbox e --disable-dev-shm-usage: obrigatórios em Docker/Railway
+        # --disable-gpu / --disable-software-rasterizer: headless sem GPU dedicada
+        base_args = ["--no-sandbox", "--disable-dev-shm-usage"]
+        if headless:
+            base_args += ["--disable-gpu", "--disable-software-rasterizer"]
+        else:
+            base_args += ["--start-maximized"]
         self._browser = self._pw.chromium.launch(
             headless=headless,
             slow_mo=0 if headless else 150,
-            args=[] if headless else ["--start-maximized"],
+            args=base_args,
         )
+        # viewport explícito: necessário para offsetParent e is_visible() funcionarem
+        # em modo headless — sem viewport, todos os elementos reportam offsetParent=null
         ctx = self._browser.new_context(
-            no_viewport=True,
+            viewport={"width": 1920, "height": 1080},
             locale="pt-BR",
         )
         self._page = ctx.new_page()
         self._page.set_default_timeout(30000)
+        # Interceptar erros HTTP e erros JS (diagnóstico em produção)
+        self._page.on(
+            "response",
+            lambda r: self._log(f"  ⚠ HTTP {r.status}: {r.url}")
+            if r.status >= 400 and "9257" in r.url
+            else None,
+        )
+        self._page.on(
+            "console",
+            lambda m: self._log(f"  [JS] {m.text}")
+            if m.type == "error"
+            else None,
+        )
 
     def fechar(self) -> None:
         try:
@@ -288,13 +310,15 @@ class PJECalcPlaywright:
             const campos = [];
             document.querySelectorAll('input, select, textarea').forEach(el => {
                 const lbl = document.querySelector(`label[for='${el.id}']`);
+                // getBoundingClientRect funciona em headless (offsetParent não)
+                const r = el.getBoundingClientRect();
                 campos.push({
                     id: el.id,
                     name: el.name || '',
                     type: el.type || el.tagName.toLowerCase(),
                     tag: el.tagName.toLowerCase(),
                     label: lbl ? lbl.textContent.trim() : '',
-                    visible: el.offsetParent !== null,
+                    visible: r.width > 0 && r.height > 0,
                     sufixo: el.id.includes(':') ? el.id.split(':').pop() : el.id
                 });
             });
@@ -1175,11 +1199,15 @@ class PJECalcPlaywright:
                     continue
 
             # Estratégia 2 — qualquer input visível além dos campos de cabeçalho
+            # Nota: offsetParent===null não funciona em headless — usar getBoundingClientRect
             if not _form_abriu:
                 try:
                     _campos_atuais = self._page.evaluate("""() =>
                         [...document.querySelectorAll('input:not([type="hidden"]):not([type="image"]),select,textarea')]
-                        .filter(e => e.offsetParent !== null)
+                        .filter(e => {
+                            const r = e.getBoundingClientRect();
+                            return r.width > 0 && r.height > 0;
+                        })
                         .map(e => e.id.split(':').pop())
                     """)
                     _novos = [c for c in _campos_atuais if c and c not in _HEADER_IDS]

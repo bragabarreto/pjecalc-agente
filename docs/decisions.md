@@ -45,3 +45,28 @@ quando o dialog é suprimido. O SecurityManager é instalado ANTES do Lancador.m
 
 **Risco aceitável:** SecurityManager pode bloquear operações legítimas. Monitorar via
 `GET /api/logs/java` após deploy.
+
+---
+
+## 2026-03-24 — FASE 3: Correções Playwright por Playwright JSF Automator Skill
+
+**Contexto:** Automação chegava na fase de verbas mas não detectava os campos do formulário.
+Log mostrava `_form_abriu = False` mesmo após clicar em "Novo".
+
+**Causa raiz identificada:** `no_viewport=True` em modo headless → elementos JSF reportam
+`offsetParent === null` e `getBoundingClientRect() = {width:0, height:0}` → filtro de
+visibilidade `e.offsetParent !== null` excluía TODOS os elementos → form nunca detectado.
+
+**Decisões:**
+
+1. Viewport explícito `{"width": 1920, "height": 1080}` substitui `no_viewport=True`
+   — garante layout correto e `getBoundingClientRect()` funcional em headless.
+2. Substituir `offsetParent !== null` por `getBoundingClientRect().width > 0 && height > 0`
+   em todos os lugares JS (mapear_campos, fase_verbas) — confiável em headless e headed.
+3. Adicionar `--no-sandbox --disable-dev-shm-usage` aos args do Chromium — obrigatórios
+   em Docker (Railway usa container sem privilégios SUID sandbox).
+4. Adicionar interceptores de rede (response ≥400 e console errors) para diagnóstico
+   automático em produção via SSE log.
+
+**Referência:** Playwright JSF Automator Skill §1 (setup), §2 (seleção robusta),
+§3 (mapeamento automático), troubleshooting "Timeout: waiting for selector".
