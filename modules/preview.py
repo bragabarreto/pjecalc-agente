@@ -104,12 +104,32 @@ def gerar_previa(
     ]
 
     # 5. Contribuição Social
-    linhas += [
-        "CONTRIBUIÇÃO SOCIAL (INSS)",
-        f"   Responsabilidade : {contrib.get('responsabilidade') or '—'}",
-        f"   Lei 11.941/2009  : {'Sim' if contrib.get('lei_11941') else 'Não'}",
-        "",
-    ]
+    resp_inss = contrib.get("responsabilidade") or "Ambos"
+    linhas.append("CONTRIBUIÇÃO SOCIAL (INSS)")
+    linhas.append(f"   Lei 11.941/2009  : {'Sim' if contrib.get('lei_11941') else 'Não'}")
+    if resp_inss == "Ambos":
+        linhas += [
+            "   Reclamante (empregado)",
+            "     → Cota-parte: alíquota progressiva tabela INSS (7,5% a 14%)",
+            "     → Base: verbas salariais — apuração mês a mês pelo PJE-Calc",
+            "   Reclamado (empregador)",
+            "     → Cota patronal: 20% RGPS + RAT/FAP + contribuições a terceiros",
+            "     → Base: mesmas verbas salariais",
+            "     → Recolhimento: reclamado desconta cota do reclamante e recolhe ambas",
+        ]
+    elif resp_inss == "Empregador":
+        linhas += [
+            "   Reclamante (empregado) : sem responsabilidade INSS neste cálculo",
+            "   Reclamado (empregador) : responsabilidade integral (patronal + cota do empregado)",
+        ]
+    elif resp_inss == "Empregado":
+        linhas += [
+            "   Reclamante (empregado) : recolhimento da cota-parte do empregado",
+            "   Reclamado (empregador) : sem responsabilidade INSS neste cálculo",
+        ]
+    else:
+        linhas.append(f"   Responsabilidade : {resp_inss}")
+    linhas.append("")
 
     # 6. Imposto de Renda
     if ir.get("apurar"):
@@ -118,18 +138,91 @@ def gerar_previa(
             f"   Apurar           : Sim",
             f"   Meses tributáveis: {ir.get('meses_tributaveis') or '—'}",
             f"   Dependentes      : {ir.get('dependentes') or '0'}",
+            "   Reclamante (contribuinte)",
+            "     → Suporta economicamente o IR sobre parcelas salariais tributáveis",
+            "     → Tabela progressiva (0% a 27,5%) sobre rendimento mensal apurado",
+            "   Reclamado (fonte pagadora)",
+            "     → Deve reter e recolher o IR na fonte (DIRF/DARF)",
+            "     → Responsabilidade solidária por omissão de retenção",
             "",
         ]
 
-    # 7. Honorários
-    linhas += [
-        "HONORÁRIOS ADVOCATÍCIOS",
-        f"   Parte devedora: {honorarios.get('parte_devedora') or '—'}",
-        f"   Percentual    : {_fmt_pct(honorarios.get('percentual'))}",
-        f"   Valor fixo    : {_fmt_valor(honorarios.get('valor_fixo'))}",
-        f"   Periciais     : {_fmt_valor(honorarios.get('periciais'))}",
-        "",
-    ]
+    # 7. Honorários Advocatícios
+    parte_hon = honorarios.get("parte_devedora") or "—"
+    pct_hon = honorarios.get("percentual")
+    val_hon = honorarios.get("valor_fixo")
+    linhas.append("HONORÁRIOS ADVOCATÍCIOS")
+    if parte_hon == "Reclamado":
+        linhas.append("   Reclamado (devedor — sucumbência integral ou parcial):")
+        if pct_hon:
+            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor da condenação")
+        if val_hon:
+            linhas.append(f"     → Valor fixo: {_fmt_valor(val_hon)}")
+        if not pct_hon and not val_hon:
+            linhas.append("     → Percentual/valor a apurar")
+        linhas.append("   Reclamante : isento de honorários sucumbenciais")
+    elif parte_hon == "Reclamante":
+        linhas.append("   Reclamante (devedor — sucumbência nos pedidos indeferidos):")
+        if pct_hon:
+            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor dos pedidos indeferidos")
+        if val_hon:
+            linhas.append(f"     → Valor fixo: {_fmt_valor(val_hon)}")
+        if not pct_hon and not val_hon:
+            linhas.append("     → Percentual/valor a apurar")
+        linhas.append("   Reclamado  : isento de honorários sucumbenciais")
+    elif parte_hon == "Ambos":
+        linhas.append("   Sucumbência recíproca — ambas as partes devem honorários:")
+        linhas.append("   Reclamante (pedidos indeferidos):")
+        if pct_hon:
+            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor dos pedidos indeferidos")
+        else:
+            linhas.append("     → Percentual a apurar sobre pedidos indeferidos")
+        linhas.append("   Reclamado (pedidos deferidos):")
+        if pct_hon:
+            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor da condenação")
+        else:
+            linhas.append("     → Percentual a apurar sobre o valor da condenação")
+        linhas.append("   ⚠ Compensação vedada (cada parte paga ao advogado adverso)")
+    else:
+        linhas += [
+            f"   Parte devedora: {parte_hon}",
+            f"   Percentual    : {_fmt_pct(pct_hon)}",
+            f"   Valor fixo    : {_fmt_valor(val_hon)}",
+        ]
+    if honorarios.get("periciais"):
+        linhas.append(f"   Periciais (laudo técnico): {_fmt_valor(honorarios.get('periciais'))}")
+    linhas.append("")
+
+    # 7a. Custas Processuais (CLT art. 789 — 2% do valor da condenação, mín. R$ 10,64)
+    linhas.append("CUSTAS PROCESSUAIS  (CLT art. 789)")
+    custas_resp = _inferir_responsavel_custas(honorarios)
+    if custas_resp == "Reclamado":
+        linhas += [
+            "   Reclamado : responsável pelo recolhimento das custas",
+            "   Reclamante: isento (CLT art. 790-A, I)",
+        ]
+    elif custas_resp == "Reclamante":
+        linhas += [
+            "   Reclamante: responsável pelo recolhimento das custas",
+            "   Reclamado : sem custas a recolher",
+        ]
+    elif custas_resp == "Ambos":
+        linhas += [
+            "   Sucumbência recíproca — custas divididas proporcionalmente:",
+            "   Reclamante: 2% sobre o valor dos pedidos indeferidos",
+            "   Reclamado : 2% sobre o valor da condenação",
+        ]
+    else:
+        linhas.append("   Responsabilidade: a definir conforme dispositivo da sentença")
+    valor_causa = processo.get("valor_causa")
+    if valor_causa:
+        try:
+            estimativa = max(10.64, float(valor_causa) * 0.02)
+            linhas.append(f"   Estimativa (base: valor da causa R$ {_fmt_valor(valor_causa)}): {_fmt_valor(estimativa)}")
+        except (TypeError, ValueError):
+            pass
+    linhas.append("   (valor exato calculado pelo PJE-Calc sobre o total liquidado)")
+    linhas.append("")
 
     # 8. Correção, Juros e Multa
     linhas += [
@@ -243,6 +336,18 @@ def _fmt_pct(valor: Any) -> str:
         return f"{float(valor) * 100:.1f}%"
     except (ValueError, TypeError):
         return str(valor)
+
+
+def _inferir_responsavel_custas(honorarios: dict[str, Any]) -> str:
+    """
+    Infere o responsável pelas custas processuais com base na parte devedora dos honorários.
+    Honorários e custas seguem a sucumbência: quem perdeu paga ambos.
+    Retorna "Reclamado", "Reclamante", "Ambos" ou "" (indefinido).
+    """
+    parte = honorarios.get("parte_devedora") or ""
+    if parte in ("Reclamado", "Reclamante", "Ambos"):
+        return parte
+    return ""
 
 
 def _formatar_verba(idx: int, verba: dict[str, Any], eh_reflexa: bool) -> list[str]:

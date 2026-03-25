@@ -149,11 +149,17 @@ _iniciar_java() {
 
     if [ -f "$TOMCAT_CONF" ]; then
         echo "[PJE-Calc] Iniciando via Bootstrap direto (bypassa Lancador)..."
+        # -Dcatalina.home e -Dcatalina.base são OBRIGATÓRIOS: o Bootstrap precisa desses
+        # system properties para localizar webapps/, conf/server.xml e libs do Tomcat.
+        # Sem eles o Tomcat sobe (porta ligada) mas nunca faz deploy da webapp → 404 eterno.
+        # -Dcaminho.instalacao é o mesmo path que o Lancador.java passa para TomCat.setCatalinaHome().
         DISPLAY=:99 java $JAVA_BASE_OPTS \
             -Djava.awt.headless=true \
+            -Dcatalina.home="$PJECALC_DIR/tomcat" \
+            -Dcatalina.base="$PJECALC_DIR/tomcat" \
+            -Dcaminho.instalacao="$PJECALC_DIR" \
             -cp "$CLASSPATH" \
-            org.apache.catalina.startup.Bootstrap \
-            -config "$TOMCAT_CONF" start \
+            org.apache.catalina.startup.Bootstrap start \
             >> /opt/pjecalc/java.log 2>&1 &
         echo $! > /tmp/pjecalc.pid
         echo "[PJE-Calc] Bootstrap iniciado (PID: $(cat /tmp/pjecalc.pid))"
