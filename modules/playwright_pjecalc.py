@@ -459,7 +459,7 @@ class PJECalcPlaywright:
             loc.fill(valor)
             loc.dispatch_event("input")
             loc.dispatch_event("change")
-            loc.dispatch_event("blur")
+            # Sem blur: JSF/RichFaces pode usar blur para AJAX postback → risco de HTTP 500
             self._log(f"  ✓ {field_id}: {valor}")
             return True
         except Exception as e:
@@ -498,8 +498,9 @@ class PJECalcPlaywright:
             loc.press_sequentially(digits_only, delay=60)
             loc.dispatch_event("input")
             loc.dispatch_event("change")
-            loc.press("Tab")
-            self._aguardar_ajax()
+            # Escape fecha popup do RichFaces Calendar sem disparar blur AJAX
+            # (Tab dispara blur → AJAX postback → HTTP 500 → Salvar some do DOM)
+            loc.press("Escape")
             self._log(f"  ✓ data {field_id}: {data}")
             return True
         except Exception as e:
@@ -509,19 +510,17 @@ class PJECalcPlaywright:
                 self._page.keyboard.press("Control+a")
                 self._page.keyboard.press("Delete")
                 loc.press_sequentially(data, delay=60)
-                loc.press("Tab")
-                self._aguardar_ajax()
+                loc.press("Escape")
                 self._log(f"  ✓ data {field_id} (fallback A - com barras): {data}")
                 return True
             except Exception:
                 pass
-            # Fallback B: JS direto (ignora máscara mas garante que o valor chegue ao servidor)
+            # Fallback B: JS direto (ignora máscara, sem blur para não disparar AJAX)
             try:
                 loc.evaluate(
                     f"el => {{ el.value = '{data}'; "
                     "el.dispatchEvent(new Event('input',{bubbles:true})); "
-                    "el.dispatchEvent(new Event('change',{bubbles:true})); "
-                    "el.dispatchEvent(new Event('blur',{bubbles:true})); }"
+                    "el.dispatchEvent(new Event('change',{bubbles:true})); }}"
                 )
                 self._log(f"  ✓ data {field_id} (JS fallback): {data}")
                 return True
@@ -694,11 +693,25 @@ class PJECalcPlaywright:
             try:
                 loc = self._page.locator(sel)
                 if loc.count() > 0:
-                    loc.first.click()
+                    loc.first.click(force=True)
                     self._aguardar_ajax()
                     return
             except Exception:
                 continue
+        # JS fallback: clica diretamente via DOM (contorna interceptores de visibilidade)
+        try:
+            clicou = self._page.evaluate("""() => {
+                const btn = document.querySelector('[id$=":salvar"]')
+                         || document.querySelector('input[value="Salvar"]')
+                         || document.querySelector('button');
+                if (btn) { btn.click(); return true; }
+                return false;
+            }""")
+            if clicou:
+                self._aguardar_ajax()
+                return
+        except Exception:
+            pass
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
 
     def _clicar_novo(self) -> None:
@@ -1203,7 +1216,9 @@ class PJECalcPlaywright:
             if not _form_abriu:
                 try:
                     _campos_atuais = self._page.evaluate("""() =>
-                        [...document.querySelectorAll('input:not([type="hidden"]):not([type="image"]),select,textarea')]
+                        [...document.querySelectorAll(
+                            'input:not([type="hidden"]):not([type="image"]):not([type="submit"]):not([type="button"]),select,textarea'
+                        )]
                         .filter(e => {
                             const r = e.getBoundingClientRect();
                             return r.width > 0 && r.height > 0;
