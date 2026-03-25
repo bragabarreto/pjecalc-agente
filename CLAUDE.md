@@ -82,6 +82,11 @@ O gerador SSE em `executar_automacao_sse()` faz polling de Tomcat (até 600s) an
 - **CLOUD_MODE**: auto-detectado pela presença do módulo `playwright`. Forçar via env `CLOUD_MODE=true|false`. Controla exibição do painel de automação em `instrucoes.html`.
 - **`requirements-cloud.txt`** vs **`requirements.txt`**: Docker usa `requirements-cloud.txt` (sem pyautogui/pywinauto/OCR). Local Windows usa `requirements.txt`.
 
+## Documentos de referência
+
+@docs/diagnostico-falhas-automacao.md
+@docs/analise-calc-machine-vs-agente.md
+
 ## Problema em aberto (Tomcat no Railway)
 
 O Tomcat embarcado (`pjecalc.jar`) não está subindo no Railway. O Lancador Java (`Lancador.java:42`) executa validações de startup e pode mostrar `JOptionPane` dialogs (GUI Swing) que bloqueiam o thread principal. O Xvfb + xdotool tenta auto-dismissar, mas o Java ainda não está iniciando o Tomcat.

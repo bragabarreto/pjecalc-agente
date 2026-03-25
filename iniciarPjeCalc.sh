@@ -121,38 +121,66 @@ else
 fi
 
 # ── Iniciar PJE-Calc ─────────────────────────────────────────────────────────
-# Notas:
+# Propriedades Java comuns a todas as estratégias de inicialização:
 #   -Dfile.encoding=ISO-8859-1  → preserva encoding original do PJE-Calc
 #   -Duser.timezone=GMT-3       → fuso horário Brasil (Brasília)
-#   -Xms128m -Xmx512m          → heap adequado para servidor
+#   -Xms128m -Xmx512m          → heap adequado para servidor Tomcat
 #   -XX:MaxPermSize=512m        → apenas Java 8 (ignorado no 11+)
-#   -Djava.awt.headless=false   → AWT usa DISPLAY=:99 (Xvfb)
-#   DISPLAY=:99                 → display virtual para Swing
-echo "[PJE-Calc] Iniciando processo Java (porta 9257)..."
-DISPLAY=:99 java \
-    $AGENT_FLAG \
-    -Djava.awt.headless=false \
-    -Duser.timezone=GMT-3 \
-    -Dfile.encoding=ISO-8859-1 \
-    -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe \
-    "-Dseguranca.pjekz.servico.contexto=https://pje.trt8.jus.br/pje-seguranca" \
-    -Xms128m \
-    -Xmx512m \
-    -XX:MaxPermSize=512m \
-    -jar bin/pjecalc.jar \
-    >> /opt/pjecalc/java.log 2>&1 &
+#   -Djava.awt.headless=true    → sem GUI Swing → sem JOptionPane bloqueante
+JAVA_BASE_OPTS="$AGENT_FLAG
+    -Duser.timezone=GMT-3
+    -Dfile.encoding=ISO-8859-1
+    -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe
+    -Dseguranca.pjekz.servico.contexto=https://pje.trt8.jus.br/pje-seguranca
+    -Xms128m
+    -Xmx512m
+    -XX:MaxPermSize=512m"
 
-PJE_PID=$!
-echo "[PJE-Calc] Processo iniciado (PID: $PJE_PID)"
+_iniciar_java() {
+    # Abordagem A — Bootstrap direto (bypassa Lancador.java e seus JOptionPane)
+    # O Tomcat é iniciado diretamente via org.apache.catalina.startup.Bootstrap,
+    # sem passar pelo Lancador que exibe diálogos GUI bloqueantes.
+    # -Djava.awt.headless=true desativa AWT inteiramente (sem necessidade de Xvfb).
+    CLASSPATH="$PJECALC_DIR/bin/pjecalc.jar"
+    for jar in "$PJECALC_DIR/bin/lib/"*.jar; do
+        [ -f "$jar" ] && CLASSPATH="$CLASSPATH:$jar"
+    done
+    TOMCAT_CONF="$PJECALC_DIR/tomcat/conf/server.xml"
+
+    if [ -f "$TOMCAT_CONF" ]; then
+        echo "[PJE-Calc] Iniciando via Bootstrap direto (bypassa Lancador)..."
+        DISPLAY=:99 java $JAVA_BASE_OPTS \
+            -Djava.awt.headless=true \
+            -cp "$CLASSPATH" \
+            org.apache.catalina.startup.Bootstrap \
+            -config "$TOMCAT_CONF" start \
+            >> /opt/pjecalc/java.log 2>&1 &
+        echo $! > /tmp/pjecalc.pid
+        echo "[PJE-Calc] Bootstrap iniciado (PID: $(cat /tmp/pjecalc.pid))"
+        return 0
+    fi
+
+    # Abordagem B — java -jar (Lancador completo) — fallback quando server.xml ausente
+    # Usa Xvfb + xdotool (já iniciados acima) para dispensar diálogos Swing.
+    echo "[PJE-Calc] server.xml não encontrado — usando java -jar pjecalc.jar (Lancador)..."
+    DISPLAY=:99 java $JAVA_BASE_OPTS \
+        -Djava.awt.headless=false \
+        -jar bin/pjecalc.jar \
+        >> /opt/pjecalc/java.log 2>&1 &
+    echo $! > /tmp/pjecalc.pid
+    echo "[PJE-Calc] Lancador iniciado (PID: $(cat /tmp/pjecalc.pid))"
+}
+
+echo "[PJE-Calc] Iniciando processo Java (porta 9257)..."
+_iniciar_java
 echo "[PJE-Calc] Log: /opt/pjecalc/java.log"
-echo $PJE_PID > /tmp/pjecalc.pid
 echo "[PJE-Calc] Aguarde Tomcat finalizar deploy (~30-120s)..."
 
 # ── Watchdog: reinicia Java se o processo morrer ─────────────────────────────
-# O Lancador.java pode morrer (SplashScreen ISE, OutOfMemory, etc.)
-# enquanto o Tomcat ainda tinha threads ativas. O watchdog reinicia o Java
-# automaticamente, restaurando o Tomcat sem intervenção manual.
+# Reinicia automaticamente usando a mesma estratégia (_iniciar_java),
+# restaurando o Tomcat sem intervenção manual.
 (
+    PJE_PID=$(cat /tmp/pjecalc.pid 2>/dev/null || echo 0)
     echo "[Watchdog] Iniciado — monitora PID $PJE_PID a cada 30s (início em 90s)."
     sleep 90  # aguarda Tomcat inicializar antes de começar a vigiar
     while true; do
@@ -162,20 +190,8 @@ echo "[PJE-Calc] Aguarde Tomcat finalizar deploy (~30-120s)..."
         if ! kill -0 "$CURRENT_PID" 2>/dev/null; then
             echo "[Watchdog] Processo Java (PID $CURRENT_PID) morreu — reiniciando..."
             cd "$PJECALC_DIR"
-            DISPLAY=:99 java \
-                $AGENT_FLAG \
-                -Djava.awt.headless=false \
-                -Duser.timezone=GMT-3 \
-                -Dfile.encoding=ISO-8859-1 \
-                -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe \
-                "-Dseguranca.pjekz.servico.contexto=https://pje.trt8.jus.br/pje-seguranca" \
-                -Xms128m \
-                -Xmx512m \
-                -XX:MaxPermSize=512m \
-                -jar bin/pjecalc.jar \
-                >> /opt/pjecalc/java.log 2>&1 &
-            NEW_PID=$!
-            echo $NEW_PID > /tmp/pjecalc.pid
+            _iniciar_java
+            NEW_PID=$(cat /tmp/pjecalc.pid)
             echo "[Watchdog] Reiniciado com PID $NEW_PID — aguardando Tomcat (120s)..."
             sleep 120  # aguarda Tomcat subir antes do próximo ciclo
         fi

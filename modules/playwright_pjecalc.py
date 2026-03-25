@@ -828,13 +828,19 @@ class PJECalcPlaywright:
             pass
 
     def _verificar_e_fazer_login(self) -> None:
-        """Verifica se está logado; se não, tenta credenciais padrão."""
+        """Verifica se está logado; se não, tenta credenciais via env vars ou padrão.
+        NUNCA bloqueia para aguardar interação manual — lança RuntimeError em falha.
+        """
         url = self._page.url
         if "logon" not in url.lower():
             return
 
-        self._log("Página de login detectada — tentando credenciais padrão…")
-        for usuario, senha in [
+        self._log("Página de login detectada — tentando credenciais automáticas…")
+        # Prioridade: env vars PJECALC_USER/PJECALC_PASS → credenciais padrão conhecidas
+        credenciais_env = []
+        if os.environ.get("PJECALC_USER") and os.environ.get("PJECALC_PASS"):
+            credenciais_env = [(os.environ["PJECALC_USER"], os.environ["PJECALC_PASS"])]
+        for usuario, senha in credenciais_env + [
             ("admin", "pjeadmin"),
             ("admin", "admin"),
             ("pjecalc", "pjecalc"),
@@ -852,8 +858,10 @@ class PJECalcPlaywright:
             except Exception:
                 continue
 
-        self._aguardar_usuario(
-            "Faça o login no PJE-Calc e clique em <strong>Continuar</strong>."
+        raise RuntimeError(
+            "Login automático falhou: nenhuma das credenciais padrão funcionou. "
+            "Configure as variáveis de ambiente PJECALC_USER e PJECALC_PASS com as "
+            "credenciais corretas do PJE-Calc Cidadão antes de iniciar a automação."
         )
 
     # ── Verificações de saúde (Tomcat + página) ────────────────────────────────
@@ -1495,9 +1503,11 @@ class PJECalcPlaywright:
         nao_rec = verbas_mapeadas.get("nao_reconhecidas", [])
         if nao_rec:
             nomes = ", ".join(v.get("nome_sentenca", "?") for v in nao_rec)
-            self._aguardar_usuario(
-                f"As verbas <strong>{nomes}</strong> não foram mapeadas. "
-                "Adicione-as manualmente e clique em <strong>Continuar</strong>."
+            # Verbas não mapeadas devem ser resolvidas na etapa de PRÉVIA (antes da automação).
+            # Durante a automação nunca aguardamos interação manual — apenas registramos o aviso.
+            self._log(
+                f"  ⚠ AVISO: {len(nao_rec)} verba(s) não mapeada(s) ignorada(s) na automação "
+                f"(deveriam ter sido corrigidas na prévia): {nomes}"
             )
 
         self._log("Fase 3 concluída.")
@@ -1695,66 +1705,131 @@ class PJECalcPlaywright:
     # ── Liquidar / captura do .PJC ─────────────────────────────────────────────
 
     def _clicar_liquidar(self) -> str | None:
-        """Clica Liquidar, aguarda geração e captura o arquivo .PJC gerado."""
-        self._log("Clicando Liquidar para gerar o .PJC…")
+        """
+        Clica Liquidar, aguarda geração do cálculo e captura o arquivo .PJC.
+        A automação NUNCA para aqui para interação manual:
+          — Tenta navegar para menu Operações se o botão não aparecer na página atual.
+          — Se o download direto não for detectado, varre a página por links de exportação.
+          — Lança RuntimeError apenas se absolutamente nenhuma estratégia funcionar,
+            para que o orquestrador registre a falha e ofereça o .PJC gerado pelo generator.
+        """
+        self._log("→ Liquidar: iniciando geração do cálculo…")
         from config import OUTPUT_DIR
         out_dir = Path(OUTPUT_DIR)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Localizar botão Liquidar
-        liq_sels = [
-            "[id$='liquidar']", "[id$='liquidarBt']",
-            "input[value='Liquidar']", "a:has-text('Liquidar')",
-            "button:has-text('Liquidar')",
-        ]
-        loc = None
-        for sel in liq_sels:
-            try:
-                candidate = self._page.locator(sel)
-                if candidate.count() > 0:
-                    loc = candidate.first; break
-            except Exception:
-                continue
+        def _localizar_botao_liquidar():
+            liq_sels = [
+                "[id$='liquidar']", "[id$='liquidarBt']", "[id$='liquidarBtn']",
+                "input[value='Liquidar']", "a:has-text('Liquidar')",
+                "button:has-text('Liquidar')",
+            ]
+            for sel in liq_sels:
+                try:
+                    candidate = self._page.locator(sel)
+                    if candidate.count() > 0:
+                        return candidate.first
+                except Exception:
+                    continue
+            return None
 
+        def _salvar_download(dl_info_value) -> str:
+            dest = out_dir / dl_info_value.suggested_filename
+            if not dest.suffix:
+                dest = dest.with_suffix(".pjc")
+            dl_info_value.save_as(str(dest))
+            self._log(f"PJC_GERADO:{dest}")
+            return str(dest)
+
+        # Estratégia 1: botão Liquidar na página atual
+        loc = _localizar_botao_liquidar()
+
+        # Estratégia 2: navegar para menu "Operações" e tentar novamente
         if loc is None:
-            # Fallback JS
-            self._page.evaluate("""() => {
+            self._log("  Botão Liquidar não encontrado — navegando para Operações…")
+            self._clicar_menu_lateral("Operações", obrigatorio=False)
+            self._clicar_menu_lateral("Operacoes", obrigatorio=False)
+            self._page.wait_for_timeout(1500)
+            loc = _localizar_botao_liquidar()
+
+        # Estratégia 3: JS global (varredura de todos os elementos)
+        if loc is None:
+            self._log("  Tentando Liquidar via JS global…")
+            clicou = self._page.evaluate("""() => {
                 const all = [...document.querySelectorAll('a, input[type="submit"], button')];
                 for (const el of all) {
                     const txt = (el.textContent||el.value||'').replace(/[\\s\\u00a0]+/g,' ').trim();
-                    if (txt.includes('Liquidar')) { el.click(); return; }
+                    if (txt === 'Liquidar' || txt.startsWith('Liquidar')) {
+                        el.click(); return true;
+                    }
                 }
+                return false;
             }""")
-            self._aguardar_ajax(60000)
-        else:
+            if clicou:
+                self._aguardar_ajax(90000)
+                self._page.wait_for_timeout(3000)
+                # Verificar se apareceu link de download após clique JS
+                for txt in ["Exportar", "Download", ".pjc", "Baixar"]:
+                    try:
+                        with self._page.expect_download(timeout=20000) as dl_info:
+                            if self._clicar_botao(txt, obrigatorio=False):
+                                return _salvar_download(dl_info.value)
+                    except Exception:
+                        continue
+                # Se não encontrou download, o JS clicou mas não gerou arquivo — continua
+            else:
+                raise RuntimeError(
+                    "Botão Liquidar não encontrado em nenhuma estratégia. "
+                    "Verifique se todos os campos obrigatórios foram preenchidos "
+                    "e se o PJE-Calc está na tela correta."
+                )
+
+        if loc is not None:
+            # Estratégia 4: expect_download com clique direto (captura automática)
             try:
                 with self._page.expect_download(timeout=120000) as dl_info:
                     loc.click()
-                d = dl_info.value
-                dest = out_dir / d.suggested_filename
-                d.save_as(str(dest))
-                self._log(f"PJC_GERADO:{dest}")
-                return str(dest)
+                return _salvar_download(dl_info.value)
             except Exception as e:
-                self._log(f"  ⚠ Download direto falhou ({e}) — procurando link de download…")
-                loc.click()
-                self._aguardar_ajax(60000)
+                self._log(f"  ⚠ Download direto falhou ({e}) — aguardando resultado na página…")
+                try:
+                    loc.click()
+                except Exception:
+                    pass
+                self._aguardar_ajax(90000)
 
-        # Liquidar gerou página de resultado — procurar link de download do .PJC
-        self._page.wait_for_timeout(3000)
-        for txt in ["Exportar", "Download", "Baixar .pjc", "Salvar"]:
+        # Estratégia 5: página de resultado após Liquidar — varrer links de download
+        self._page.wait_for_timeout(4000)
+        for txt in ["Exportar", "Download", "Baixar .pjc", "Baixar", "Salvar .PJC", "Salvar"]:
             try:
                 with self._page.expect_download(timeout=30000) as dl_info:
                     if self._clicar_botao(txt, obrigatorio=False):
-                        d = dl_info.value
-                        dest = out_dir / d.suggested_filename
-                        d.save_as(str(dest))
-                        self._log(f"PJC_GERADO:{dest}")
-                        return str(dest)
+                        return _salvar_download(dl_info.value)
             except Exception:
                 continue
 
-        self._log("  ⚠ .PJC não capturado automaticamente. Baixe manualmente no PJE-Calc.")
+        # Estratégia 6: procurar href de download diretamente no DOM
+        try:
+            href = self._page.evaluate("""() => {
+                const links = [...document.querySelectorAll('a[href]')];
+                const pjc = links.find(a =>
+                    a.href.includes('.pjc') || a.href.includes('exportar') ||
+                    a.textContent.toLowerCase().includes('exportar') ||
+                    a.textContent.toLowerCase().includes('download')
+                );
+                return pjc ? pjc.href : null;
+            }""")
+            if href:
+                with self._page.expect_download(timeout=30000) as dl_info:
+                    self._page.goto(href)
+                return _salvar_download(dl_info.value)
+        except Exception:
+            pass
+
+        self._log(
+            "  ⚠ .PJC não capturado via browser — automação concluiu o preenchimento. "
+            "O arquivo .PJC gerado pelo gerador nativo estará disponível para download."
+        )
         return None
 
     # ── Orquestrador principal ─────────────────────────────────────────────────
@@ -1800,9 +1875,14 @@ class PJECalcPlaywright:
 
         caminho_pjc = self._clicar_liquidar()
         if caminho_pjc:
-            self._log("CONCLUIDO: .PJC gerado com sucesso. Disponível para download.")
+            self._log("CONCLUIDO: Automação concluída — .PJC gerado e disponível para download.")
         else:
-            self._log("CONCLUIDO: Preencha manualmente e clique em Liquidar no PJE-Calc.")
+            # Preenchimento completo, mas download via browser não capturado.
+            # O gerador nativo (pjc_generator.py) já gerou o .PJC na etapa de confirmação.
+            self._log(
+                "CONCLUIDO: Campos preenchidos automaticamente. "
+                ".PJC do gerador nativo disponível para download na interface."
+            )
         self._log("[FIM DA EXECUÇÃO]")
 
 

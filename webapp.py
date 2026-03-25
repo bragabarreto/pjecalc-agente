@@ -338,18 +338,69 @@ async def confirmar_previa(
     db: Session = Depends(get_db),
 ):
     """
-    Confirma a prévia e inicia o preenchimento automatizado do PJE-Calc.
+    ÚNICO portão de entrada para a automação (padrão Calc Machine).
+    Valida todos os campos obrigatórios e verbas de baixa confiança ANTES de
+    confirmar. A automação só é liberada com dados completos e revisados.
+    Intervenção manual do usuário é permitida APENAS nesta etapa (prévia).
     """
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
+    # ── Validação HITL obrigatória ─────────────────────────────────────────────
+    dados = calculo.dados()
+    contrato = dados.get("contrato", {})
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    todas_verbas = (
+        verbas_mapeadas.get("predefinidas", [])
+        + verbas_mapeadas.get("personalizadas", [])
+    )
+
+    erros: list[str] = []
+
+    # Campos de contrato obrigatórios para o PJE-Calc calcular corretamente
+    if not contrato.get("admissao"):
+        erros.append("Data de admissão é obrigatória.")
+    if not contrato.get("demissao"):
+        erros.append("Data de rescisão (demissão) é obrigatória.")
+    if not contrato.get("tipo_rescisao"):
+        erros.append("Tipo de rescisão é obrigatório.")
+
+    # Pelo menos uma verba deve estar presente
+    if not todas_verbas:
+        erros.append("Nenhuma verba encontrada — revise a sentença antes de confirmar.")
+
+    # Verbas com confiança abaixo de 0.7 precisam ser corrigidas antes da automação
+    verbas_baixa_confianca = [
+        v.get("nome_sentenca") or v.get("nome_pjecalc", "?")
+        for v in todas_verbas
+        if v.get("confidence", 1.0) < 0.7
+    ]
+    if verbas_baixa_confianca:
+        erros.append(
+            f"Corrija as verbas com baixa confiança antes de confirmar: "
+            f"{', '.join(verbas_baixa_confianca)}"
+        )
+
+    if erros:
+        return JSONResponse(
+            {
+                "sucesso": False,
+                "erros": erros,
+                "mensagem": (
+                    "Dados incompletos ou com baixa confiança. "
+                    "Corrija os campos indicados na prévia antes de confirmar."
+                ),
+            },
+            status_code=422,
+        )
+
+    # ── Campos validados — confirmar e prosseguir ─────────────────────────────
     repo.confirmar_previa(sessao_id)
 
-    # Gerar .pjc (backup)
-    dados = calculo.dados()
-    verbas_mapeadas = calculo.verbas_mapeadas()
+    # Gerar .pjc (backup nativo) com os dados já validados
+    # dados e verbas_mapeadas já foram carregados na validação acima
     url_pjc = None
     try:
         from modules.pjc_generator import gerar_pjc
