@@ -777,6 +777,25 @@ async def listar_processos():
     return {"processos": result.stdout}
 
 
+@app.get("/api/campos_log/{filename}")
+async def ler_campos_log(filename: str):
+    """Retorna o JSON de campos mapeados pelo Playwright (diagnóstico remoto).
+    Uso: GET /api/campos_log/campos_verba_form  ou  /api/campos_log/campos_fase3_verbas
+    Permite inspecionar os IDs reais dos campos HTML após um run de automação.
+    """
+    log_dir = Path("data/logs")
+    safe = Path(filename).name  # bloqueia path traversal
+    if not safe.endswith(".json"):
+        safe += ".json"
+    arq = log_dir / safe
+    if not arq.exists():
+        return JSONResponse(
+            {"erro": f"{safe} não encontrado em data/logs/"},
+            status_code=404,
+        )
+    return JSONResponse(json.loads(arq.read_text(encoding="utf-8")))
+
+
 @app.get("/api/executar/{sessao_id}")
 async def executar_automacao_sse(
     sessao_id: str,
@@ -857,7 +876,7 @@ async def executar_automacao_sse(
                 )
             except _queue.Empty:
                 # Heartbeat: evita timeout de proxy/browser em automações longas
-                yield ": keepalive\n\n"
+                yield f"data: {json.dumps({'keepalive': True})}\n\n"
                 continue
 
             if kind == "ok":

@@ -402,6 +402,7 @@ function abrirSSE() {
   );
   evtSource.onmessage = (e) => {
     const dados = JSON.parse(e.data);
+    if (dados.keepalive) return;  // heartbeat silencioso — mantém conexão viva
     const msg = dados.msg;
     if (msg === 'DOWNLOAD_DISPONIVEL' && dados.url) {
       const btn = document.createElement('a');

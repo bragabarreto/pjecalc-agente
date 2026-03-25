@@ -336,17 +336,25 @@ class PJECalcPlaywright:
             if loc.count() > 0:
                 return loc.first
 
-        # Nível 2: sufixo de ID (tipo=input, select, ou qualquer)
+        # Nível 2: sufixo de ID, SEMPRE com prefixo de tag para evitar match em
+        # elementos errados (ex: <table class="rich-calendar-exterior"> ou <li>).
+        # Sem fallback sem prefixo aqui — o Nível 3 (XPath) cobre os edge cases.
         sufixo = field_id.split(":")[-1]  # extrai sufixo se vier com prefixo
-        seletores = [
-            f"[id$='{sufixo}_input']",   # RichFaces calendar
+        seletores_base = [
+            f"[id$='{sufixo}_input']",   # RichFaces 4.x: <input id="..._input">
             f"[id$=':{sufixo}']",
             f"[id$='{sufixo}']",
         ]
         if tipo == "select":
-            seletores = [f"select{s}" for s in seletores] + seletores
+            seletores = [f"select{s}" for s in seletores_base]
         elif tipo == "checkbox":
-            seletores = [f"input[type='checkbox']{s}" for s in seletores] + seletores
+            seletores = [f"input[type='checkbox']{s}" for s in seletores_base]
+        elif tipo == "input":
+            # Prefixar com "input" evita match em <table id="...:dataAdmissao">
+            # (popup oculto do RichFaces Calendar) que causava timeout no wait_for(visible)
+            seletores = [f"input{s}" for s in seletores_base]
+        else:
+            seletores = seletores_base
 
         for sel in seletores:
             try:
@@ -449,7 +457,7 @@ class PJECalcPlaywright:
                     f"el => {{ el.value = '{data}'; "
                     "el.dispatchEvent(new Event('input',{bubbles:true})); "
                     "el.dispatchEvent(new Event('change',{bubbles:true})); "
-                    "el.dispatchEvent(new Event('blur',{bubbles:true})); }}"
+                    "el.dispatchEvent(new Event('blur',{bubbles:true})); }"
                 )
                 self._log(f"  ✓ data {field_id} (JS fallback): {data}")
                 return True
@@ -836,13 +844,17 @@ class PJECalcPlaywright:
         # ── Campos do cabeçalho (Tipo e Data de Criação) ──
         self._preencher("tipo", "Trabalhista", False)
         hoje = datetime.date.today().strftime("%d/%m/%Y")
-        # Tentar múltiplos IDs alternativos para data de criação/abertura
-        _data_criacao_ids = ["dataDeCriacao", "dataCriacao", "dataCalculo", "dataDeAbertura", "dataAbertura"]
-        _data_abertura_ids = ["dataDeAbertura", "dataAbertura", "dataCalculo", "dataDeCriacao", "dataCriacao"]
-        _preencheu_criacao = any(self._preencher_data(fid, hoje, False) for fid in _data_criacao_ids)
-        _preencheu_abertura = any(self._preencher_data(fid, hoje, False) for fid in _data_abertura_ids)
+        # Tentar IDs em ordem — para no primeiro encontrado (evita duplo preenchimento)
+        _campos_data_cabecalho = [
+            "dataDeCriacao", "dataCriacao", "dataDeAbertura", "dataAbertura", "dataCalculo"
+        ]
+        _preencheu_data_cabecalho = False
+        for _fid in _campos_data_cabecalho:
+            if self._preencher_data(_fid, hoje, obrigatorio=False):
+                _preencheu_data_cabecalho = True
+                break
         # JS fallback: encontrar qualquer input de data no cabeçalho
-        if not _preencheu_criacao:
+        if not _preencheu_data_cabecalho:
             try:
                 self._page.evaluate(
                     """(data) => {
@@ -1083,26 +1095,58 @@ class PJECalcPlaywright:
 
         for i, v in enumerate(todas):
             self._clicar_novo()
-            # Aguardar formulário de verba (campo descricao deve aparecer)
-            try:
-                self._page.wait_for_selector(
-                    "[id$='descricao'], [name*='descricao']",
-                    state="visible", timeout=8000
-                )
-            except Exception:
-                self._log("  ⚠ Formulário de verba não apareceu — aguardando mais…")
+            # Aguardar formulário de verba — tentar múltiplos seletores conhecidos
+            _form_abriu = False
+            for _sel_form in [
+                "input[id$='descricao'], input[id$='nome'], input[id$='nomeVerba']",
+                "[id$='descricao'], [id$='nome'], [id$='nomeVerba']",
+                "input[name*='descricao'], input[name*='nome']",
+            ]:
                 try:
-                    self._page.wait_for_load_state("networkidle", timeout=6000)
+                    self._page.wait_for_selector(_sel_form, state="visible", timeout=4000)
+                    _form_abriu = True
+                    break
                 except Exception:
-                    self._page.wait_for_timeout(1500)
+                    continue
+
+            if not _form_abriu:
+                self._log("  ⚠ Formulário de verba não apareceu — aguardando mais…")
+                # Dump de todos os campos da página para diagnóstico (visível no SSE log)
+                try:
+                    ids_pg = self._page.evaluate("""() =>
+                        [...document.querySelectorAll('input,select,textarea')]
+                        .map(e => (e.id||e.name||'?') + '|' + e.type)
+                        .filter(s => s.length > 3 && !s.startsWith('hidden'))
+                    """)
+                    self._log(f"  📋 Campos na página agora: {ids_pg[:25]}")
+                except Exception:
+                    pass
+                try:
+                    self._page.wait_for_load_state("networkidle", timeout=4000)
+                except Exception:
+                    self._page.wait_for_timeout(1000)
+
             if i == 0:
                 self.mapear_campos("verba_form")  # captura IDs reais após abrir formulário
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
-            self._preencher("descricao", nome)
+
+            # Tentar múltiplos IDs para campo de descrição da verba
+            _desc_ok = any(
+                self._preencher(fid, nome, obrigatorio=False)
+                for fid in ["descricao", "nome", "nomeVerba", "titulo", "descricaoVerba", "verba"]
+            )
+            if not _desc_ok:
+                self._log(f"  ⚠ Campo de descrição não encontrado para: {nome}")
+
             carac = carac_map.get(v.get("caracteristica", "Comum"), "COMUM")
-            self._selecionar("caracteristicaVerba", carac)
+            # Tentar múltiplos IDs para select de característica
+            any(self._selecionar(fid, carac, obrigatorio=False)
+                for fid in ["caracteristicaVerba", "caracteristica", "tipoVerba", "tipo"])
+
             ocorr = ocorr_map.get(v.get("ocorrencia", "Mensal"), "MENSAL")
-            self._selecionar("ocorrenciaPagto", ocorr)
+            # Tentar múltiplos IDs para select de ocorrência
+            any(self._selecionar(fid, ocorr, obrigatorio=False)
+                for fid in ["ocorrenciaPagto", "ocorrencia", "periodicidade", "frequencia"])
 
             if v.get("valor_informado"):
                 self._marcar_radio("valor", "INFORMADO")
@@ -1116,8 +1160,10 @@ class PJECalcPlaywright:
 
             if v.get("periodo_inicio"):
                 self._preencher_data("periodoInicial", v["periodo_inicio"], False)
+                self._preencher_data("dtInicial", v["periodo_inicio"], False)
             if v.get("periodo_fim"):
                 self._preencher_data("periodoFinal", v["periodo_fim"], False)
+                self._preencher_data("dtFinal", v["periodo_fim"], False)
 
             self._clicar_salvar()
             self._aguardar_ajax()
@@ -1126,7 +1172,7 @@ class PJECalcPlaywright:
             try:
                 self._page.wait_for_selector(
                     "[id$='filtroNome'], [name*='filtroNome']",
-                    state="visible", timeout=5000
+                    state="visible", timeout=4000
                 )
             except Exception:
                 self._clicar_menu_lateral("Verbas")
