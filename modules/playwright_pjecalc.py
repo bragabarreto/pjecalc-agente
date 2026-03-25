@@ -337,11 +337,12 @@ class PJECalcPlaywright:
                 return loc.first
 
         # Nível 2: sufixo de ID, SEMPRE com prefixo de tag para evitar match em
-        # elementos errados (ex: <table class="rich-calendar-exterior"> ou <li>).
-        # Sem fallback sem prefixo aqui — o Nível 3 (XPath) cobre os edge cases.
+        # elementos errados (ex: <table class="rich-calendar-exterior"> ou <li>
+        # ou <input type="hidden"> — que NÃO são interagíveis).
         sufixo = field_id.split(":")[-1]  # extrai sufixo se vier com prefixo
         seletores_base = [
-            f"[id$='{sufixo}_input']",   # RichFaces 4.x: <input id="..._input">
+            f"[id*='{sufixo}InputDate']",  # RichFaces 3.x Calendar: formulario:dataXxxInputDate
+            f"[id$='{sufixo}_input']",      # RichFaces 4.x: <input id="..._input">
             f"[id$=':{sufixo}']",
             f"[id$='{sufixo}']",
         ]
@@ -350,9 +351,11 @@ class PJECalcPlaywright:
         elif tipo == "checkbox":
             seletores = [f"input[type='checkbox']{s}" for s in seletores_base]
         elif tipo == "input":
-            # Prefixar com "input" evita match em <table id="...:dataAdmissao">
-            # (popup oculto do RichFaces Calendar) que causava timeout no wait_for(visible)
-            seletores = [f"input{s}" for s in seletores_base]
+            # :not([type='hidden']) evita match em:
+            #   1. <table id="...:dataAdmissao" class="rich-calendar-exterior"> (popup)
+            #   2. <input id="...:dataAdmissao" type="hidden"> (campo oculto de valor)
+            # O campo visível do RichFaces Calendar tem id "...InputDate" (seletor 1 acima)
+            seletores = [f"input:not([type='hidden']){s}" for s in seletores_base]
         else:
             seletores = seletores_base
 
@@ -383,8 +386,9 @@ class PJECalcPlaywright:
                 continue
 
         # Nível 3: XPath contains(@id)
+        # Para "input": @type='text' exclui hidden inputs (ex: formulario:dataDemissao hidden)
         xpath_map = {
-            "input":    f"//input[contains(@id, '{sufixo}')]",
+            "input":    f"//input[@type='text' and contains(@id, '{sufixo}')]",
             "select":   f"//select[contains(@id, '{sufixo}')]",
             "checkbox": f"//input[@type='checkbox' and contains(@id, '{sufixo}')]",
         }
@@ -460,10 +464,14 @@ class PJECalcPlaywright:
             return False
         try:
             loc.wait_for(state="visible", timeout=8000)
-            # focus() em vez de click() — evita abrir calendar popup (RichFaces)
+            # focus() em vez de click() para não abrir o calendar popup (RichFaces)
             loc.focus()
-            loc.evaluate("el => { el.value = ''; }")
-            loc.press_sequentially(data, delay=50)
+            # Ctrl+A + Delete — limpa campos mascarados (RichFaces) que ignoram el.value=''
+            self._page.keyboard.press("Control+a")
+            self._page.keyboard.press("Delete")
+            # Digita apenas os dígitos — campos com máscara DD/MM/AAAA auto-inserem as barras
+            digits_only = data.replace("/", "").replace("-", "")
+            loc.press_sequentially(digits_only, delay=60)
             loc.dispatch_event("input")
             loc.dispatch_event("change")
             loc.press("Tab")
@@ -471,7 +479,19 @@ class PJECalcPlaywright:
             self._log(f"  ✓ data {field_id}: {data}")
             return True
         except Exception as e:
-            # Fallback: setar valor diretamente via JS (ignora máscara mas garante preenchimento)
+            # Fallback A: setar valor completo com barras (campos sem máscara)
+            try:
+                loc.focus()
+                self._page.keyboard.press("Control+a")
+                self._page.keyboard.press("Delete")
+                loc.press_sequentially(data, delay=60)
+                loc.press("Tab")
+                self._aguardar_ajax()
+                self._log(f"  ✓ data {field_id} (fallback A - com barras): {data}")
+                return True
+            except Exception:
+                pass
+            # Fallback B: JS direto (ignora máscara mas garante que o valor chegue ao servidor)
             try:
                 loc.evaluate(
                     f"el => {{ el.value = '{data}'; "
