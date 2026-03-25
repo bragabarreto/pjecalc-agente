@@ -1115,6 +1115,20 @@ class PJECalcPlaywright:
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
         self._clicar_menu_lateral("Verbas")
+        self._page.wait_for_timeout(1500)
+
+        # Diagnóstico da página de verbas (antes do Novo)
+        try:
+            self._log(f"  📍 URL pós-menu Verbas: {self._page.url}")
+            _botoes_verbas = self._page.evaluate("""() =>
+                [...document.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
+                .map(el => (el.textContent||el.value||el.title||'').replace(/\s+/g,' ').trim())
+                .filter(t => t.length > 1 && t.length < 50)
+            """)
+            self._log(f"  🔘 Botões na pág Verbas: {list(dict.fromkeys(_botoes_verbas))[:20]}")
+        except Exception:
+            pass
+
         self.mapear_campos("fase3_verbas")
 
         todas = (
@@ -1135,41 +1149,73 @@ class PJECalcPlaywright:
             "Desligamento": "DESLIGAMENTO",
         }
 
+        # IDs de cabeçalho do processo — sempre presentes, não indicam form de verba
+        _HEADER_IDS = {"numero", "digito", "ano", "vara", "justica", "regiao",
+                       "idCalculo", "dataCriacao", "tipo", "searchText"}
+
         for i, v in enumerate(todas):
             self._clicar_novo()
-            # Aguardar formulário de verba — tentar múltiplos seletores conhecidos
+            self._page.wait_for_timeout(2000)  # aguardar AJAX do panel/form
+
+            # Aguardar formulário de verba: qualquer input visível não-header
             _form_abriu = False
+            # Estratégia 1 — seletores específicos de verba
             for _sel_form in [
-                "input[id$='descricao'], input[id$='nome'], input[id$='nomeVerba']",
-                "[id$='descricao'], [id$='nome'], [id$='nomeVerba']",
-                "input[name*='descricao'], input[name*='nome']",
+                "input[id$='descricao']",
+                "input[id$='nome']",
+                "input[id$='nomeVerba']",
+                "input[name*='descricao']",
+                "input[name*='nomeVerba']",
             ]:
                 try:
-                    self._page.wait_for_selector(_sel_form, state="visible", timeout=4000)
+                    self._page.wait_for_selector(_sel_form, state="visible", timeout=3000)
                     _form_abriu = True
                     break
                 except Exception:
                     continue
 
+            # Estratégia 2 — qualquer input visível além dos campos de cabeçalho
             if not _form_abriu:
-                self._log("  ⚠ Formulário de verba não apareceu — aguardando mais…")
-                # Dump de todos os campos da página para diagnóstico (visível no SSE log)
                 try:
-                    ids_pg = self._page.evaluate("""() =>
-                        [...document.querySelectorAll('input,select,textarea')]
-                        .map(e => (e.id||e.name||'?') + '|' + e.type)
-                        .filter(s => s.length > 3 && !s.startsWith('hidden'))
+                    _campos_atuais = self._page.evaluate("""() =>
+                        [...document.querySelectorAll('input:not([type="hidden"]):not([type="image"]),select,textarea')]
+                        .filter(e => e.offsetParent !== null)
+                        .map(e => e.id.split(':').pop())
                     """)
-                    self._log(f"  📋 Campos na página agora: {ids_pg[:25]}")
+                    _novos = [c for c in _campos_atuais if c and c not in _HEADER_IDS]
+                    if _novos:
+                        _form_abriu = True
+                        self._log(f"  ✓ Formulário verba detectado (campos novos): {_novos[:10]}")
                 except Exception:
                     pass
+
+            if not _form_abriu:
+                # Diagnóstico completo do estado da página
+                self._log("  ⚠ Formulário de verba não detectado após Novo")
                 try:
-                    self._page.wait_for_load_state("networkidle", timeout=4000)
+                    self._log(f"  📍 URL pós-Novo: {self._page.url}")
+                    _campos_vis = self._page.evaluate("""() =>
+                        [...document.querySelectorAll('input,select,textarea')]
+                        .filter(e => e.offsetParent !== null)
+                        .map(e => e.id + '|' + e.type + '|' + (e.name||''))
+                    """)
+                    self._log(f"  📋 Campos visíveis pós-Novo: {_campos_vis[:30]}")
+                    _botoes_pos = self._page.evaluate("""() =>
+                        [...document.querySelectorAll('a,input[type="submit"],button')]
+                        .map(el => (el.textContent||el.value||'').replace(/\s+/g,' ').trim())
+                        .filter(t => t.length > 1 && t.length < 50)
+                    """)
+                    self._log(f"  🔘 Botões pós-Novo: {list(dict.fromkeys(_botoes_pos))[:20]}")
                 except Exception:
-                    self._page.wait_for_timeout(1000)
+                    pass
+                # Tentar aguardar mais
+                try:
+                    self._page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    self._page.wait_for_timeout(2000)
 
             if i == 0:
-                self.mapear_campos("verba_form")  # captura IDs reais após abrir formulário
+                self.mapear_campos("verba_form")  # captura IDs reais do formulário de verba
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
 
             # Descrição da verba — tenta por ID sufixo, depois por label visível
