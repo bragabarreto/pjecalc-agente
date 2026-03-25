@@ -775,11 +775,17 @@ def extrair_dados_sentenca(
 
     if is_relatorio:
         resultado = _extrair_de_relatorio_estruturado(texto, sessao_id)
-        # Se o mapeamento do relatório falhou, fazer fallback para extração normal
-        if "_erro_llm" in resultado:
-            logger.warning("Falha no relatório estruturado — iniciando extração direta como fallback")
-        else:
+        if "_erro_llm" not in resultado:
             return resultado
+        # Falhou — retorna estrutura parcial com alerta; NÃO executa extração completa
+        # (relatório é dado estruturado — prompts de sentença bruta produziriam lixo)
+        logger.warning("Falha no mapeamento do relatório — retornando estrutura vazia com alerta")
+        estrutura = _estrutura_vazia_com_regex({})
+        estrutura.setdefault("alertas", []).extend(resultado.get("alertas", []))
+        estrutura["alertas"].append(
+            "ATENÇÃO: falha ao processar o relatório. Verifique o formato e reenvie."
+        )
+        return estrutura
 
     # Segmentar sentença para focar no dispositivo
     blocos = segmentar_sentenca(texto)
@@ -965,20 +971,29 @@ def _extrair_de_relatorio_estruturado(
     if not ANTHROPIC_API_KEY:
         return _estrutura_vazia_com_regex({})
 
-    # Timeout explícito: 120s evita travar indefinidamente no Railway
-    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
+    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=90.0)
 
     try:
-        resposta = cliente.messages.create(
+        kwargs: dict = dict(
             model=CLAUDE_MODEL,
-            max_tokens=6000,  # 6000 evita truncação de JSON grandes sem timeout
-            temperature=0.0,  # mapeamento determinístico
+            max_tokens=4096,
+            temperature=0.0,
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{
                 "role": "user",
                 "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:25000]),
             }],
         )
+        # Structured Outputs: garante JSON válido sem parsing tolerante
+        try:
+            resposta = cliente.messages.create(
+                **kwargs,
+                output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
+            )
+        except (TypeError, ValueError, AttributeError):
+            # SDK não suporta output_config — sem retry de timeout
+            resposta = cliente.messages.create(**kwargs)
+
         conteudo = resposta.content[0].text.strip()
         dados = _limpar_e_parsear_json(conteudo)
         dados = _validar_e_completar(dados)
@@ -988,8 +1003,8 @@ def _extrair_de_relatorio_estruturado(
         return dados
 
     except json.JSONDecodeError as e:
-        logger.warning(f"JSON inválido no relatório estruturado: {e} — fazendo fallback para extração direta")
-        return {"_erro_llm": str(e), "alertas": [f"Relatório com JSON inválido; usando extração direta: {e}"]}
+        logger.warning(f"JSON inválido no relatório estruturado: {e}")
+        return {"_erro_llm": str(e), "alertas": [f"Relatório com JSON inválido: {e}"]}
     except Exception as e:
         logger.warning(f"Falha ao mapear relatório: {e}")
         return {"_erro_llm": str(e), "alertas": [f"Falha ao mapear relatório: {e}"]}
@@ -1188,24 +1203,21 @@ def _extrair_via_llm(
         })
 
         # Structured Outputs: garante JSON válido sem parsing tolerante
+        _call_kwargs = dict(
+            model=CLAUDE_MODEL,
+            max_tokens=4096,
+            temperature=CLAUDE_EXTRACTION_TEMPERATURE,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content_blocks}],
+        )
         try:
             resposta = cliente.messages.create(
-                model=CLAUDE_MODEL,
-                max_tokens=4096,
-                temperature=CLAUDE_EXTRACTION_TEMPERATURE,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": content_blocks}],
+                **_call_kwargs,
                 output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
             )
-        except Exception:
-            # Fallback: sem output_config (versão do SDK pode não suportar)
-            resposta = cliente.messages.create(
-                model=CLAUDE_MODEL,
-                max_tokens=4096,
-                temperature=CLAUDE_EXTRACTION_TEMPERATURE,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": content_blocks}],
-            )
+        except (TypeError, ValueError, AttributeError):
+            # SDK não suporta output_config — fallback sem retry de timeout
+            resposta = cliente.messages.create(**_call_kwargs)
         conteudo = resposta.content[0].text.strip()
         return _limpar_e_parsear_json(conteudo)
 
