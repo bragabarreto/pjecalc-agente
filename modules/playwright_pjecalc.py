@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 # ── Decorator de retry ────────────────────────────────────────────────────────
 
 def retry(max_tentativas: int = 3, delay: int = 2):
-    """Retry automático com screenshot em falha e detecção de ViewExpiredException."""
+    """Retry automático com screenshot em falha, detecção de ViewExpiredException e crash recovery."""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(self: "PJECalcPlaywright", *args, **kwargs):
@@ -48,6 +48,28 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                         )
                     except Exception:
                         pass
+                    # Recuperar crash do Chromium (Target crashed / context destruído)
+                    exc_str = str(exc)
+                    if any(k in exc_str for k in ("Target crashed", "Target page, context or browser has been closed",
+                                                    "Execution context was destroyed")):
+                        self._log("  🔄 Chromium crashou — reiniciando browser…")
+                        try:
+                            self.fechar()
+                        except Exception:
+                            pass
+                        try:
+                            import sys
+                            headless = getattr(self, "_headless", sys.platform != "win32")
+                            self.iniciar_browser(headless=headless)
+                            self._instalar_monitor_ajax()
+                            self._page.goto(
+                                "http://localhost:9257/pjecalc/pages/principal.jsf",
+                                wait_until="domcontentloaded", timeout=30000
+                            )
+                            self._page.wait_for_timeout(2000)
+                            self._log("  ✓ Browser reiniciado — retentando fase…")
+                        except Exception as re_exc:
+                            self._log(f"  ⚠ Falha ao reiniciar browser: {re_exc}")
                     # Recupera ViewState expirado
                     try:
                         body = self._page.locator("body").text_content() or ""
@@ -212,6 +234,7 @@ class PJECalcPlaywright:
         self._pw = None
         self._browser = None
         self._page = None
+        self._headless = False  # stored by iniciar_browser() para crash recovery
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
@@ -220,6 +243,7 @@ class PJECalcPlaywright:
         # Em Linux sem display real (Railway/Docker), forçar headless
         if sys.platform != "win32" and not os.environ.get("DISPLAY"):
             headless = True
+        self._headless = headless  # salva para crash recovery no retry
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
         # --no-sandbox e --disable-dev-shm-usage: obrigatórios em Docker/Railway
@@ -243,10 +267,14 @@ class PJECalcPlaywright:
         self._page = ctx.new_page()
         self._page.set_default_timeout(30000)
         # Interceptar erros HTTP e erros JS (diagnóstico em produção)
+        # Excluir arquivos estáticos/fontes que geram 404 inofensivos (tahoma.ttf, etc.)
+        _STATIC_EXTS = ('.ttf', '.woff', '.woff2', '.otf', '.eot',
+                        '.ico', '.png', '.gif', '.jpg', '.svg')
         self._page.on(
             "response",
             lambda r: self._log(f"  ⚠ HTTP {r.status}: {r.url}")
             if r.status >= 400 and "9257" in r.url
+                and not r.url.split('?')[0].lower().endswith(_STATIC_EXTS)
             else None,
         )
         self._page.on(
@@ -1164,14 +1192,18 @@ class PJECalcPlaywright:
         self._page.wait_for_timeout(1500)
 
         # Diagnóstico da página de verbas (antes do Novo)
+        _url_verbas_original = self._page.url
         try:
-            self._log(f"  📍 URL pós-menu Verbas: {self._page.url}")
+            self._log(f"  📍 URL pós-menu Verbas: {_url_verbas_original}")
             _botoes_verbas = self._page.evaluate("""() =>
                 [...document.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
-                .map(el => (el.textContent||el.value||el.title||'').replace(/\s+/g,' ').trim())
-                .filter(t => t.length > 1 && t.length < 50)
+                .map(el => ({id: el.id, txt: (el.textContent||el.value||el.title||'').replace(/\s+/g,' ').trim()}))
+                .filter(o => o.txt.length > 1 && o.txt.length < 50)
+                .map(o => o.txt + (o.id ? ' [' + o.id + ']' : ''))
             """)
-            self._log(f"  🔘 Botões na pág Verbas: {list(dict.fromkeys(_botoes_verbas))[:20]}")
+            self._log(f"  🔘 Botões na pág Verbas: {list(dict.fromkeys(_botoes_verbas))[:25]}")
+            _titulo_verbas = self._page.title()
+            self._log(f"  📄 Título da pág Verbas: '{_titulo_verbas}'")
         except Exception:
             pass
 
@@ -1197,8 +1229,6 @@ class PJECalcPlaywright:
 
         # Captura baseline dos campos visíveis na lista de verbas (antes de clicar Novo).
         # Strategy 2 compara com este baseline para detectar campos NOVOS do form de verba.
-        # Isso evita falso positivo: filtroNome (campo de filtro da lista) estava sempre
-        # visível e era detectado erroneamente como "formulário aberto".
         _JS_CAMPOS_VISIVEIS = """() =>
             [...document.querySelectorAll(
                 'input:not([type="hidden"]):not([type="image"]):not([type="submit"]):not([type="button"]),select,textarea'
@@ -1213,8 +1243,75 @@ class PJECalcPlaywright:
             pass
 
         for i, v in enumerate(todas):
-            self._clicar_novo()
-            self._page.wait_for_timeout(2000)  # aguardar AJAX do panel/form
+            # --- Garantir que estamos sempre na lista de verbas do calculo ORIGINAL ---
+            # Impede acumulação de calculadoras aninhadas (cada Novo criava calculo novo)
+            if self._page.url != _url_verbas_original:
+                self._log(f"  🔄 Navegando de volta para verbas originais: {_url_verbas_original}")
+                try:
+                    self._page.goto(_url_verbas_original, wait_until="domcontentloaded", timeout=20000)
+                    self._page.wait_for_timeout(1000)
+                    self._aguardar_ajax()
+                except Exception as _nav_err:
+                    self._log(f"  ⚠ Falha ao navegar de volta: {_nav_err} — usando menu lateral")
+                    self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                    self._page.wait_for_timeout(800)
+
+            # --- Clicar "Novo" da área de conteúdo (não o do nav lateral) ---
+            # Estratégia: encontrar o "Novo" próximo ao campo filtroNome (na area de listagem)
+            _clicou_novo = self._page.evaluate("""() => {
+                // Procura o "Novo" próximo ao filtroNome (conteúdo da lista de verbas)
+                const filtro = document.querySelector('[id*="filtroNome"]');
+                if (filtro) {
+                    let el = filtro;
+                    for (let nivel = 0; nivel < 15; nivel++) {
+                        el = el.parentElement;
+                        if (!el || el.tagName === 'BODY' || el.tagName === 'FORM') break;
+                        const novos = [...el.querySelectorAll('a, input[type="submit"], input[type="button"], button')]
+                            .filter(e => {
+                                const t = (e.textContent || e.value || e.title || '').replace(/\s+/g,' ').trim();
+                                return t === 'Novo' || t === 'Nova';
+                            });
+                        if (novos.length > 0) {
+                            novos[0].click();
+                            return 'PROX_FILTRO:' + novos[0].id + ':nivel' + nivel;
+                        }
+                    }
+                }
+                // Fallback: qualquer botão/link com texto "Novo" (excluindo top-nav por heurística)
+                // — procura em elementos com classe/id que sugerem conteúdo, não nav
+                const all = [...document.querySelectorAll('a, input[type="submit"], input[type="button"], button')]
+                    .filter(e => {
+                        const t = (e.textContent || e.value || e.title || '').replace(/\s+/g,' ').trim();
+                        if (t !== 'Novo' && t !== 'Nova') return false;
+                        // Excluir elementos em nav/menu lateral (IDs curtos como j_id5 sugerem nav)
+                        const id = e.id || '';
+                        const parentId = (e.parentElement && e.parentElement.id) || '';
+                        const cls = (e.className || '') + ' ' + parentId;
+                        return !cls.toLowerCase().includes('nav') && !cls.toLowerCase().includes('menu');
+                    });
+                if (all.length > 0) {
+                    all[0].click();
+                    return 'FALLBACK:' + all[0].id;
+                }
+                return null;
+            }""")
+            self._log(f"  → Novo verba: clicado via '{_clicou_novo}'")
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(2000)
+
+            # Diagnóstico: capturar o que abriu após o Novo
+            _url_pos_novo = self._page.url
+            try:
+                _titulo_pos = self._page.title()
+                _h1_pos = self._page.evaluate(
+                    "() => (document.querySelector('h1,h2,h3,legend,.titulo,.tituloPagina') || {}).textContent?.replace(/\\s+/g,' ').trim() || ''"
+                )
+                _campos_pos = self._page.evaluate(_JS_CAMPOS_VISIVEIS)
+                self._log(f"  📍 Pós-Novo: URL={_url_pos_novo}")
+                self._log(f"  📄 Título='{_titulo_pos}' | heading='{_h1_pos}'")
+                self._log(f"  📋 Campos visíveis pós-Novo: {_campos_pos[:15]}")
+            except Exception:
+                pass
 
             # Aguardar formulário de verba: qualquer input visível não-header
             _form_abriu = False
@@ -1238,6 +1335,10 @@ class PJECalcPlaywright:
                 try:
                     _campos_atuais = set(self._page.evaluate(_JS_CAMPOS_VISIVEIS))
                     _novos = [c for c in _campos_atuais if c not in _campos_lista_ids]
+                    # Excluir campos de cabeçalho fixo (idCalculo, tipo, dataCriacao)
+                    _CABECALHO = {"formulario:idCalculo", "formulario:tipo", "formulario:dataCriacao",
+                                  "formulario:searchText"}
+                    _novos = [c for c in _novos if c not in _CABECALHO]
                     if _novos:
                         _form_abriu = True
                         self._log(f"  ✓ Formulário verba detectado (campos novos vs lista): {_novos[:10]}")
@@ -1245,24 +1346,18 @@ class PJECalcPlaywright:
                     pass
 
             if not _form_abriu:
-                # Diagnóstico: usar getBoundingClientRect (offsetParent quebrado em headless)
                 self._log(f"  ⚠ Formulário de verba não detectado — URL: {self._page.url}")
-                try:
-                    _campos_vis = self._page.evaluate("""() =>
-                        [...document.querySelectorAll('input,select,textarea')]
-                        .filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
-                        .map(e => e.id + '|' + e.type)
-                    """)
-                    self._log(f"  📋 Campos visíveis: {_campos_vis[:20]}")
-                    _botoes_pos = self._page.evaluate("""() =>
-                        [...document.querySelectorAll('a,input[type="submit"],button')]
-                        .map(el => (el.textContent||el.value||'').replace(/\\s+/g,' ').trim())
-                        .filter(t => t.length > 1 && t.length < 50)
-                    """)
-                    self._log(f"  🔘 Botões pós-Novo: {list(dict.fromkeys(_botoes_pos))[:20]}")
-                except Exception:
-                    pass
-                # Tentar aguardar mais
+                # Se URL mudou para calculo.jsf (novo calc criado por engano), tentar
+                # navegar para a seção "Dados do Processo" onde pode estar o form de verba
+                if "calculo.jsf" in self._page.url and "verba.jsf" not in _url_verbas_original:
+                    self._log("  → Detectado calculo.jsf — tentando seção 'Dados do Processo'…")
+                    self._clicar_menu_lateral("Dados do Processo", obrigatorio=False)
+                    self._page.wait_for_timeout(1000)
+                    try:
+                        _campos_dados = self._page.evaluate(_JS_CAMPOS_VISIVEIS)
+                        self._log(f"  📋 Campos em 'Dados do Processo': {_campos_dados[:15]}")
+                    except Exception:
+                        pass
                 try:
                     self._page.wait_for_load_state("networkidle", timeout=5000)
                 except Exception:
@@ -1383,15 +1478,18 @@ class PJECalcPlaywright:
             self._clicar_salvar()
             self._aguardar_ajax()
             self._page.wait_for_timeout(600)
-            # Após salvar, garantir retorno à lista de verbas
-            try:
-                self._page.wait_for_selector(
-                    "[id$='filtroNome'], [name*='filtroNome']",
-                    state="visible", timeout=4000
-                )
-            except Exception:
-                self._clicar_menu_lateral("Verbas")
-                self._page.wait_for_timeout(800)
+            # Após salvar, retornar EXPLICITAMENTE à lista de verbas do calculo original
+            # (evita acumular calculadoras aninhadas nas próximas iterações)
+            _url_pos_salvar = self._page.url
+            if _url_pos_salvar != _url_verbas_original:
+                self._log(f"  🔄 Pós-Salvar: URL={_url_pos_salvar} → retornando a {_url_verbas_original}")
+                try:
+                    self._page.goto(_url_verbas_original, wait_until="domcontentloaded", timeout=20000)
+                    self._page.wait_for_timeout(1000)
+                    self._aguardar_ajax()
+                except Exception:
+                    self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                    self._page.wait_for_timeout(800)
             self._log(f"  ✓ Verba: {nome}")
 
         nao_rec = verbas_mapeadas.get("nao_reconhecidas", [])
