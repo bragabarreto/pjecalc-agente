@@ -40,8 +40,9 @@ from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
 from modules.ingestion import ler_documento
-from modules.extraction import extrair_dados_sentenca
+from modules.extraction import extrair_dados_sentenca, extrair_dados_sentenca_pdf
 from modules.classification import mapear_para_pjecalc
+from modules.parametrizacao import gerar_parametrizacao
 from modules.preview import gerar_previa, aplicar_edicao_usuario, aplicar_edicao_verba
 
 # ── Configuração da aplicação ─────────────────────────────────────────────────
@@ -906,7 +907,11 @@ async def executar_automacao_sse(
         import queue as _queue
 
         loop = asyncio.get_event_loop()
-        gen = preencher_como_generator(dados, verbas_mapeadas, PJECALC_DIR, modo_oculto)
+        parametrizacao_sse = dados.get("_parametrizacao") or {}
+        gen = preencher_como_generator(
+            dados, verbas_mapeadas, PJECALC_DIR, modo_oculto,
+            parametrizacao=parametrizacao_sse,
+        )
 
         # Fila para desacoplar a thread do gerador do loop assíncrono.
         # Permite emitir keepalive SSE a cada 25s sem output do Playwright.
@@ -1087,10 +1092,6 @@ def _tarefa_processar_sentenca(
     try:
         repo = RepositorioCalculo(db)
 
-        # Fase 1: Ingestão da sentença principal
-        resultado = ler_documento(caminho)
-        texto = resultado["texto"]
-
         # Fase 1b: Processar documentos extras
         extras_processados: list[dict] = []
         for extra in (extras or []):
@@ -1122,14 +1123,44 @@ def _tarefa_processar_sentenca(
                     f"Falha ao processar documento extra: {e_extra}"
                 )
 
-        # Fase 2: Extração
-        dados = extrair_dados_sentenca(
-            texto,
-            sessao_id=sessao_id,
-            extras=extras_processados,
-            is_relatorio=is_relatorio,
-            usar_gemini=usar_gemini,
-        )
+        # Fase 2: Extração — PDF nativo (sem conversão para texto) ou fallback via texto
+        if formato == "pdf" and not is_relatorio:
+            # Envia o PDF diretamente ao Claude via base64 (mais rápido e preciso)
+            dados = extrair_dados_sentenca_pdf(
+                str(caminho),
+                sessao_id=sessao_id,
+                extras=extras_processados,
+            )
+        else:
+            # DOCX, TXT ou relatório estruturado: extrai texto primeiro
+            resultado = ler_documento(caminho)
+            texto = resultado["texto"]
+            dados = extrair_dados_sentenca(
+                texto,
+                sessao_id=sessao_id,
+                extras=extras_processados,
+                is_relatorio=is_relatorio,
+                usar_gemini=usar_gemini,
+            )
+
+        # Fase 2b: Parametrização — converte dados brutos → instruções módulo a módulo
+        try:
+            parametrizacao = gerar_parametrizacao(dados)
+            # Propagar alertas da parametrização para os dados
+            for alerta in parametrizacao.get("alertas", []):
+                dados.setdefault("alertas", [])
+                if alerta not in dados["alertas"]:
+                    dados["alertas"].append(alerta)
+        except Exception as e_param:
+            import logging
+            logging.getLogger("pjecalc_agent.webapp").warning(
+                f"Parametrização falhou (não crítico): {e_param}"
+            )
+            parametrizacao = {}
+
+        # Persistir parametrização incorporando em dados (salvo via dados_json)
+        if parametrizacao:
+            dados["_parametrizacao"] = parametrizacao
 
         # Fase 3: Classificação
         verbas_mapeadas = mapear_para_pjecalc(dados.get("verbas_deferidas", []))

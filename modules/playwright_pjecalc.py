@@ -993,7 +993,7 @@ class PJECalcPlaywright:
 
     # ── Navegação principal ────────────────────────────────────────────────────
 
-    def _ir_para_calculo_externo(self) -> None:
+    def _ir_para_novo_calculo(self) -> None:
         """Navega para o formulário de Novo Cálculo via menu 'Novo'.
 
         Usa o fluxo 'Novo' (primeira liquidação de sentença), NÃO 'Cálculo Externo'
@@ -1209,6 +1209,52 @@ class PJECalcPlaywright:
 
         self._clicar_salvar()
         self._log("Fase 1 concluída.")
+
+    # ── Utilitário de screenshot por fase ──────────────────────────────────────
+
+    def _screenshot_fase(self, nome_fase: str) -> None:
+        """Captura screenshot após conclusão de uma fase (diagnóstico não-crítico)."""
+        try:
+            from config import SCREENSHOTS_DIR
+            import time as _t
+            ts = int(_t.time())
+            Path(SCREENSHOTS_DIR).mkdir(parents=True, exist_ok=True)
+            path = Path(SCREENSHOTS_DIR) / f"{ts}_{nome_fase}.png"
+            self._page.screenshot(path=str(path), full_page=False)
+            self._log(f"  📸 {path.name}")
+        except Exception as e_ss:
+            logger.debug(f"Screenshot falhou (não crítico): {e_ss}")
+
+    # ── Fase 2a: Parâmetros Gerais ─────────────────────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_parametros_gerais(self, parametros: dict) -> None:
+        """Preenche Parâmetros Gerais (Passo 2): data inicial de apuração, carga horária.
+
+        Chamado com `passo_2_parametros_gerais` do parametrizacao.json.
+        """
+        self._log("Fase 2a — Parâmetros Gerais…")
+
+        data_inicial = parametros.get("data_inicial_apuracao")
+        data_final = parametros.get("data_final_apuracao")
+        carga_diaria = parametros.get("carga_horaria_diaria")
+        carga_semanal = parametros.get("carga_horaria_semanal")
+        zerar_negativos = parametros.get("zerar_valores_negativos", True)
+
+        if data_inicial:
+            self._preencher_data("dataInicialApuracao", data_inicial, False)
+            self._preencher_data("dataInicio", data_inicial, False)
+        if data_final:
+            self._preencher_data("dataFinalApuracao", data_final, False)
+            self._preencher_data("dataFim", data_final, False)
+        if carga_diaria:
+            self._preencher("cargaHorariaDiaria", str(int(carga_diaria)), False)
+        if carga_semanal:
+            self._preencher("cargaHorariaSemanal", str(int(carga_semanal)), False)
+        if zerar_negativos is not None:
+            self._marcar_checkbox("zerarValoresNegativos", bool(zerar_negativos))
+
+        self._log("  Fase 2a concluída.")
 
     # ── Fase 2: Histórico Salarial ─────────────────────────────────────────────
 
@@ -2041,8 +2087,20 @@ class PJECalcPlaywright:
 
     # ── Orquestrador principal ─────────────────────────────────────────────────
 
-    def preencher_calculo(self, dados: dict, verbas_mapeadas: dict) -> None:
-        """Executa todas as fases de preenchimento do cálculo."""
+    def preencher_calculo(
+        self,
+        dados: dict,
+        verbas_mapeadas: dict,
+        parametrizacao: dict | None = None,
+    ) -> None:
+        """Executa todas as fases de preenchimento do cálculo.
+
+        Args:
+            dados: output da extraction.py (dados brutos da sentença).
+            verbas_mapeadas: output da classification.py.
+            parametrizacao: output de parametrizacao.gerar_parametrizacao() — opcional.
+                           Se presente, instrui fases específicas com dados pré-calculados.
+        """
         base = f"{self.PJECALC_BASE}/pages/principal.jsf"
         self._log("Abrindo PJE-Calc…")
         self._page.goto(base, wait_until="domcontentloaded", timeout=60000)
@@ -2068,17 +2126,45 @@ class PJECalcPlaywright:
 
         self._verificar_e_fazer_login()
 
-        self._ir_para_calculo_externo()
+        self._ir_para_novo_calculo()
 
         self.fase_dados_processo(dados)
+        self._screenshot_fase("01_dados_processo")
+
+        # Parâmetros Gerais — usa passo_2 do parametrizacao.json se disponível
+        params_gerais = (parametrizacao or {}).get("passo_2_parametros_gerais", {})
+        if not params_gerais:
+            cont = dados.get("contrato", {})
+            params_gerais = {
+                "carga_horaria_diaria": cont.get("carga_horaria"),
+                "zerar_valores_negativos": True,
+            }
+        self.fase_parametros_gerais(params_gerais)
+        self._screenshot_fase("02a_parametros_gerais")
+
         self.fase_historico_salarial(dados)
+        self._screenshot_fase("02_historico_salarial")
+
         self.fase_verbas(verbas_mapeadas)
+        self._screenshot_fase("03_verbas")
+
         self.fase_fgts(dados.get("fgts", {}))
+        self._screenshot_fase("04_fgts")
+
         self.fase_contribuicao_social(dados.get("contribuicao_social", {}))
+        self._screenshot_fase("05_contribuicao_social")
+
         self.fase_cartao_ponto(dados)
+        self._screenshot_fase("06_cartao_ponto")
+
         self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))
+        self._screenshot_fase("07_correcao_juros")
+
         self.fase_irpf(dados.get("imposto_renda", {}))
+        self._screenshot_fase("08_irpf")
+
         self.fase_honorarios(dados.get("honorarios", []))
+        self._screenshot_fase("09_honorarios")
 
         caminho_pjc = self._clicar_liquidar()
         if caminho_pjc:
@@ -2101,6 +2187,7 @@ def iniciar_e_preencher(
     pjecalc_dir: str | Path,
     log_cb: Callable[[str], None] | None = None,
     headless: bool = False,
+    parametrizacao: dict | None = None,
 ) -> None:
     """
     Ponto de entrada público (modo callback).
@@ -2117,7 +2204,7 @@ def iniciar_e_preencher(
     agente = PJECalcPlaywright(log_cb=cb)
     try:
         agente.iniciar_browser(headless=headless)
-        agente.preencher_calculo(dados, verbas_mapeadas)
+        agente.preencher_calculo(dados, verbas_mapeadas, parametrizacao=parametrizacao)
         # Browser permanece aberto para o usuário revisar e clicar Liquidar
     except Exception as exc:
         cb(f"ERRO: {exc}")
@@ -2130,6 +2217,7 @@ def preencher_como_generator(
     verbas_mapeadas: dict[str, Any],
     pjecalc_dir: str | Path,
     modo_oculto: bool = False,
+    parametrizacao: dict | None = None,
 ):
     """
     Generator que faz yield de mensagens de log para SSE streaming direto.
@@ -2155,6 +2243,7 @@ def preencher_como_generator(
                 pjecalc_dir=pjecalc_dir,
                 log_cb=_cb,
                 headless=modo_oculto,
+                parametrizacao=parametrizacao,
             )
         except Exception as exc:
             log_queue.put(f"ERRO: {exc}")

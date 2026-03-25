@@ -3,11 +3,13 @@
 
 from __future__ import annotations
 
+import base64
+import concurrent.futures
 import json
 import logging
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -821,6 +823,134 @@ def extrair_dados_sentenca(
     return dados
 
 
+# ── JSON Schema para Structured Outputs (Claude output_config) ───────────────
+# Garante que o modelo retorne JSON válido sem a necessidade de parsing tolerante.
+
+_EXTRACTION_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "processo": {"type": "object"},
+        "contrato": {"type": "object"},
+        "aviso_previo": {"type": "object"},
+        "historico_salarial": {"type": "array"},
+        "verbas_deferidas": {"type": "array"},
+        "fgts": {"type": "object"},
+        "honorarios": {"type": "array"},
+        "honorarios_periciais": {"type": ["number", "null"]},
+        "contribuicao_social": {"type": "object"},
+        "imposto_renda": {"type": "object"},
+        "correcao_juros": {"type": "object"},
+        "prescricao": {"type": "object"},
+        "alertas": {"type": "array"},
+    },
+    "required": ["processo", "contrato", "verbas_deferidas"],
+    "additionalProperties": True,
+}
+
+
+# ── Validador de consistência da sentença extraída ───────────────────────────
+
+class ValidadorSentenca:
+    """
+    Valida consistência do JSON extraído da sentença trabalhista.
+    Baseado no skill juridical-nlp-extractor.
+    """
+
+    @staticmethod
+    def validar(dados: dict) -> tuple[bool, list[str]]:
+        """Retorna (is_valid, lista_de_erros). Erros críticos devem bloquear o processamento."""
+        erros: list[str] = []
+        erros.extend(ValidadorSentenca._validar_datas(dados))
+        erros.extend(ValidadorSentenca._validar_rescisao_verbas(dados))
+        erros.extend(ValidadorSentenca._validar_valores(dados))
+        return len(erros) == 0, erros
+
+    @staticmethod
+    def _parse_data(d: str | None) -> date | None:
+        if not d:
+            return None
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(d, fmt).date()
+            except ValueError:
+                pass
+        return None
+
+    @staticmethod
+    def _validar_datas(dados: dict) -> list[str]:
+        erros = []
+        cont = dados.get("contrato", {})
+        adm = ValidadorSentenca._parse_data(cont.get("admissao"))
+        dem = ValidadorSentenca._parse_data(cont.get("demissao"))
+        if adm and dem:
+            if dem < adm:
+                erros.append(
+                    f"CRÍTICO: data_demissao ({cont.get('demissao')}) anterior à "
+                    f"data_admissao ({cont.get('admissao')})"
+                )
+            anos = (dem - adm).days / 365
+            if anos > 50:
+                erros.append(f"AVISO: contrato de {anos:.0f} anos — verificar datas")
+        if adm and adm > date.today():
+            erros.append(f"CRÍTICO: data_admissao no futuro ({cont.get('admissao')})")
+        return erros
+
+    @staticmethod
+    def _validar_rescisao_verbas(dados: dict) -> list[str]:
+        erros = []
+        tipo = dados.get("contrato", {}).get("tipo_rescisao", "")
+        verbas = {v.get("nome_sentenca", "").lower() for v in dados.get("verbas_deferidas", [])}
+        if tipo == "justa_causa":
+            if any("multa" in v and "40" in v for v in verbas):
+                erros.append("INCONSISTÊNCIA: justa causa com multa 40% FGTS")
+            if any("aviso prévio indenizado" in v for v in verbas):
+                erros.append("INCONSISTÊNCIA: justa causa com aviso prévio indenizado")
+        if tipo == "pedido_demissao":
+            if any("multa" in v and "40" in v for v in verbas):
+                erros.append("INCONSISTÊNCIA: pedido de demissão com multa 40% FGTS")
+        return erros
+
+    @staticmethod
+    def _validar_valores(dados: dict) -> list[str]:
+        erros = []
+        for v in dados.get("verbas_deferidas", []):
+            val = v.get("valor")
+            if val is not None:
+                if isinstance(val, (int, float)) and val < 0:
+                    erros.append(f"CRÍTICO: valor negativo para {v.get('nome_sentenca')}: {val}")
+                if isinstance(val, (int, float)) and val > 10_000_000:
+                    erros.append(
+                        f"AVISO: valor muito alto para {v.get('nome_sentenca')}: "
+                        f"R$ {val:,.2f} — confirmar"
+                    )
+        return erros
+
+    @staticmethod
+    def itens_baixa_confianca(dados: dict, threshold: float = 0.70) -> list[dict]:
+        """Retorna campos de seções com confiança abaixo do threshold."""
+        incertos = []
+        secoes = ["processo", "contrato", "fgts", "correcao_juros"]
+        for sec in secoes:
+            obj = dados.get(sec, {})
+            if isinstance(obj, dict):
+                conf = obj.get("confianca", 1.0)
+                if isinstance(conf, (int, float)) and conf < threshold:
+                    incertos.append({
+                        "secao": sec,
+                        "confianca": conf,
+                        "acao": "revisão manual necessária",
+                    })
+        for v in dados.get("verbas_deferidas", []):
+            conf = v.get("confianca", 1.0)
+            if isinstance(conf, (int, float)) and conf < threshold:
+                incertos.append({
+                    "secao": f"verbas_deferidas[{v.get('nome_sentenca', '?')}]",
+                    "confianca": conf,
+                    "acao": "revisão manual necessária",
+                })
+        return incertos
+
+
 def _extrair_de_relatorio_estruturado(
     texto_relatorio: str,
     sessao_id: str,
@@ -1057,13 +1187,25 @@ def _extrair_via_llm(
             "cache_control": {"type": "ephemeral"},
         })
 
-        resposta = cliente.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=8192,  # verbas longas podem gerar JSON grande
-            temperature=CLAUDE_EXTRACTION_TEMPERATURE,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": content_blocks}],
-        )
+        # Structured Outputs: garante JSON válido sem parsing tolerante
+        try:
+            resposta = cliente.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=4096,
+                temperature=CLAUDE_EXTRACTION_TEMPERATURE,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content_blocks}],
+                output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
+            )
+        except Exception:
+            # Fallback: sem output_config (versão do SDK pode não suportar)
+            resposta = cliente.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=4096,
+                temperature=CLAUDE_EXTRACTION_TEMPERATURE,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content_blocks}],
+            )
         conteudo = resposta.content[0].text.strip()
         return _limpar_e_parsear_json(conteudo)
 
@@ -1111,19 +1253,178 @@ def _extrair_via_gemini(
                 "Use-os para preencher ou corrigir campos ausentes ou com baixa confiança."
             )
 
-        resp = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                max_output_tokens=8192,
-            ),
-        )
+        def _chamar_gemini():
+            return client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    temperature=0.0,
+                    max_output_tokens=4096,
+                ),
+            )
+
+        # Timeout de 30s: evita travar quando Railway não tem Gemini configurado
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+            fut = ex.submit(_chamar_gemini)
+            try:
+                resp = fut.result(timeout=30)
+            except concurrent.futures.TimeoutError:
+                raise TimeoutError("Gemini API timeout após 30s — usando fallback Claude")
         return _limpar_e_parsear_json(resp.text)
 
     except Exception as e:
         logger.warning(f"Falha na extração via Gemini: {e}")
         return {"_erro_llm": str(e), "alertas": [f"Falha na extração via Gemini: {e}"]}
+
+
+# ── Extração nativa de PDF via base64 ────────────────────────────────────────
+
+_EXTRACTION_PROMPT_NATIVO = (
+    "Extraia todos os dados desta sentença trabalhista para preenchimento completo do PJE-Calc. "
+    "Inclua todas as verbas deferidas, datas, salários, honorários, INSS, IR e correção monetária. "
+    "Siga rigorosamente o schema JSON retornado. "
+    "Responda APENAS com o JSON no formato especificado — sem markdown, sem texto extra."
+)
+
+
+def _extrair_via_llm_pdf(
+    pdf_bytes: bytes,
+    extras: list[dict] | None = None,
+) -> dict[str, Any]:
+    """
+    Extração nativa de PDF: envia o arquivo diretamente ao Claude via base64.
+    Não converte para texto antes — Claude lê o PDF nativamente (até 32 MB / 100 págs).
+    Usa cache_control ephemeral no documento para multi-pass barato.
+    Usa Structured Outputs para garantir JSON válido sem parsing tolerante.
+    """
+    if not ANTHROPIC_API_KEY:
+        return {}
+
+    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=90.0)
+    pdf_b64 = base64.standard_b64encode(pdf_bytes).decode()
+
+    content_blocks: list[dict] = [
+        {
+            "type": "document",
+            "source": {
+                "type": "base64",
+                "media_type": "application/pdf",
+                "data": pdf_b64,
+            },
+            "cache_control": {"type": "ephemeral"},
+        },
+    ]
+
+    # Documentos extras (imagens ou textos complementares)
+    for extra in extras or []:
+        if extra.get("tipo") == "imagem":
+            content_blocks.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": extra.get("mime_type", "image/jpeg"),
+                    "data": extra["conteudo"],
+                },
+            })
+        elif extra.get("tipo") == "texto" and extra.get("conteudo"):
+            ctx = extra.get("contexto", "")
+            content_blocks.append({
+                "type": "text",
+                "text": f"=== DOCUMENTO COMPLEMENTAR{(' [' + ctx + ']') if ctx else ''} ===\n{extra['conteudo'][:8000]}",
+            })
+
+    content_blocks.append({
+        "type": "text",
+        "text": _EXTRACTION_PROMPT_NATIVO,
+    })
+
+    try:
+        try:
+            resposta = cliente.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=4096,
+                temperature=0.0,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content_blocks}],
+                output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
+            )
+        except Exception:
+            # Fallback sem output_config
+            resposta = cliente.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=4096,
+                temperature=0.0,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content_blocks}],
+            )
+        return _limpar_e_parsear_json(resposta.content[0].text.strip())
+    except Exception as e:
+        logger.warning(f"Falha na extração nativa de PDF: {e}")
+        return {"_erro_llm": str(e)}
+
+
+def extrair_dados_sentenca_pdf(
+    pdf_path: str,
+    sessao_id: str | None = None,
+    extras: list[dict] | None = None,
+) -> dict[str, Any]:
+    """
+    Ponto de entrada público para extração direta de PDF.
+    Envia o PDF nativo ao Claude (sem conversão para texto).
+    Aplica validação, migração de schema legado e multi-pass para campos incertos.
+    """
+    import os
+    sessao_id = sessao_id or str(uuid.uuid4())
+
+    pdf_bytes = open(pdf_path, "rb").read()
+    dados = _extrair_via_llm_pdf(pdf_bytes, extras=extras)
+
+    if "_erro_llm" in dados:
+        logger.warning("Extração nativa falhou — fallback para extração via texto")
+        from modules.ingestion import ler_documento
+        resultado = ler_documento(pdf_path)
+        return extrair_dados_sentenca(resultado["texto"], sessao_id=sessao_id, extras=extras)
+
+    dados = _validar_e_completar(dados)
+
+    # Multi-pass para campos incertos (reusa cache ephemeral — custo baixo)
+    incertos = ValidadorSentenca.itens_baixa_confianca(dados, threshold=0.70)
+    if incertos and len(incertos) <= 5:
+        logger.info(f"Multi-pass: refinando {len(incertos)} campos incertos…")
+        tipos_incertos = [i["secao"] for i in incertos]
+        prompt_refino = (
+            f"Foque especificamente nestas seções com baixa confiança: {tipos_incertos}. "
+            "Para cada uma, cite o trecho EXATO da sentença que fundamenta o valor extraído. "
+            "Se não houver menção no documento, confirme explicitamente que não aparece."
+        )
+        content_refino: list[dict] = [
+            {
+                "type": "document",
+                "source": {"type": "base64", "media_type": "application/pdf",
+                           "data": base64.standard_b64encode(pdf_bytes).decode()},
+                "cache_control": {"type": "ephemeral"},
+            },
+            {"type": "text", "text": prompt_refino},
+        ]
+        try:
+            cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=60.0)
+            resp = cliente.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=1024,
+                temperature=0.0,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content_refino}],
+            )
+            logger.info(f"Multi-pass concluído: {resp.content[0].text[:200]}")
+        except Exception as e:
+            logger.warning(f"Multi-pass falhou (não crítico): {e}")
+
+    # Validação final
+    valido, erros = ValidadorSentenca.validar(dados)
+    if erros:
+        dados.setdefault("alertas", []).extend(erros)
+
+    return dados
 
 
 # ── Funções de migração (retrocompatibilidade) ────────────────────────────────

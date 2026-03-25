@@ -227,3 +227,79 @@ enums da UI.
 **Mecanismo:** `_extrair_opcoes_select(field_suffix)` faz `document.querySelectorAll`
 via JS em runtime; `_match_fuzzy` tenta match exato de label, depois de value, depois
 substring. Log de aviso quando sem match.
+
+---
+
+## 2026-03-25 — Otimização de Extração + Camada de Parametrização
+
+### D11 — Extração: PDF nativo via base64 (sem conversão para texto)
+
+**Decisão:** Adicionar `extrair_dados_sentenca_pdf(pdf_path)` em `extraction.py` que envia
+o PDF diretamente ao Claude como `document` base64, com `cache_control: ephemeral`.
+`webapp.py` usa esta função para PDFs não-relatório; o caminho de texto
+(`ler_documento` + `extrair_dados_sentenca`) permanece como fallback e para DOCX/TXT.
+
+**Motivo:** Conversão prévia de PDF para texto perdia tabelas e formatação; a chamada
+extra de `ler_documento` adicionava latência desnecessária. O PDF nativo é mais preciso
+e elimina a pré-etapa de texto.
+
+---
+
+### D12 — Extração: Structured Outputs + ValidadorSentenca
+
+**Decisão:** Adicionar `output_config` com JSON schema nas chamadas Claude em
+`_extrair_via_llm()` e `_extrair_via_llm_pdf()`. Fallback transparente se o SDK
+não suportar (SDK < 0.45). `_EXTRACTION_SCHEMA` define o schema correspondente.
+Extrair `ValidadorSentenca` (antes inline em `_validar_e_completar`) em classe própria.
+
+**Motivo:** Parse tolerante a JSON (6 estratégias de fallback) era fonte de lentidão
+e falhas silenciosas. Structured Outputs garante JSON válido diretamente da API.
+`ValidadorSentenca` reutilizável em múltiplos pontos do pipeline.
+
+---
+
+### D13 — Extração: timeout Gemini via ThreadPoolExecutor
+
+**Decisão:** `_extrair_via_gemini()` agora usa `concurrent.futures.ThreadPoolExecutor`
+com `fut.result(timeout=30)`. Timeout levanta `TimeoutError`, que aciona fallback para
+Claude sem esperar o timeout HTTP do SDK.
+
+**Motivo:** Se `GEMINI_API_KEY` estiver configurada no Railway mas o serviço Gemini
+estiver indisponível, a chamada bloqueava o pipeline inteiro. Com 30s de timeout,
+o fallback para Claude ocorre rapidamente.
+
+---
+
+### D14 — Parametrização: novo módulo `modules/parametrizacao.py`
+
+**Decisão:** Criar `gerar_parametrizacao(dados: dict) -> dict` como camada intermediária
+entre `extraction.py` e `playwright_pjecalc.py`. Implementa o "cérebro" da skill
+`pjecalc-parametrizacao`: decide Lançamento Expresso/Manual por verba, calcula
+`data_inicial_apuracao` da prescrição quinquenal, configura ADC 58 (IPCA-E + SELIC),
+detecta Fazenda Pública e aplica EC 113/2021, gera alertas HITL.
+
+**Motivo:** Lacuna arquitetural — a automação Playwright decidia on-the-fly
+Expresso/Manual e índices de correção sem base estruturada, causando erros silenciosos.
+
+**Persistência:** `dados["_parametrizacao"]` é salvo em `dados_json` pelo `criar_calculo`.
+Recuperado em `executar_automacao_sse` via `dados.get("_parametrizacao")` e passado
+para `preencher_calculo(parametrizacao=...)`.
+
+---
+
+### D15 — Playwright: `_ir_para_novo_calculo`, `fase_parametros_gerais`, screenshots
+
+**Decisão:**
+
+- Renomear `_ir_para_calculo_externo` → `_ir_para_novo_calculo` (nome enganoso — a
+  função sempre navegou para "Novo", não "Cálculo Externo").
+- Adicionar `fase_parametros_gerais(parametros)` entre `fase_dados_processo` e
+  `fase_historico_salarial` — preenche `dataInicialApuracao`, `cargaHorariaDiaria/Semanal`,
+  `zerarValoresNegativos` a partir de `passo_2_parametros_gerais` do parametrizacao.json.
+- Adicionar `_screenshot_fase(nome)` — captura screenshot não-crítico após cada fase
+  em `SCREENSHOTS_DIR/{timestamp}_{nome}.png`.
+- `preencher_calculo` e `iniciar_e_preencher` aceitam `parametrizacao: dict | None`.
+
+**Motivo:** Nome enganoso causava confusão ao revisar código. `fase_parametros_gerais`
+preenche campos que `fase_dados_processo` não cobre. Screenshots facilitam debugging
+de automações que falham silenciosamente em ambientes headless.
