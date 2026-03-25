@@ -159,3 +159,71 @@ iniciado uma vez no `docker-entrypoint.sh`, acessado via `http://localhost:9257/
 **Motivo:** esse é exatamente o modelo do Calc Machine. O Playwright conecta ao Tomcat
 local já em execução — não inicia/para o PJE-Calc por sessão. Bootstrap direto (D1)
 torna esse startup muito mais confiável que `java -jar` + xdotool.
+
+---
+
+## 2026-03-25 — Paralelismo Total Prévia ↔ PJE-Calc Cidadão
+
+### D7 — Honorários: schema dict → list de registros
+
+**Decisão:** substituir `honorarios: {percentual, parte_devedora}` por
+`honorarios: [{tipo, devedor, tipo_valor, base_apuracao, percentual, valor_informado, apurar_ir}]`.
+
+**Motivo:** o PJE-Calc Cidadão (`honorarios.xhtml`) não tem campo "Ambos" — cada
+honorário é um registro separado com `tipoDeDevedor=RECLAMANTE|RECLAMADO`. O campo
+`baseParaApuracao` tem enums distintos por devedor+tipo (ex: RECLAMANTE+SUCUMBENCIAIS
+aceita "Verbas Não Compõem Principal"; RECLAMADO não). O schema antigo tornava a prévia
+e a automação incompatíveis com a UI real.
+
+**Retrocompatibilidade:** `_migrar_honorarios_legado()` converte dicts antigos
+(inclusive `parte_devedora="Ambos"`) em dois registros separados. Aplicada em
+`_merge_extracao()`, `_validar_e_completar()` e `fase_honorarios()`.
+
+**Impacto na automação:** `fase_honorarios` agora itera sobre a lista, clicando "Novo"
+para cada registro adicional; usa `_extrair_opcoes_select("baseParaApuracao")` +
+`_match_fuzzy()` para descobrir o enum real em runtime.
+
+---
+
+### D8 — INSS: responsabilidade dropdown → checkboxes individuais
+
+**Decisão:** substituir `contribuicao_social.responsabilidade: "Ambos|Empregador|Empregado"`
+por quatro booleans: `apurar_segurado_salarios_devidos`, `cobrar_do_reclamante`,
+`com_correcao_trabalhista`, `apurar_sobre_salarios_pagos`.
+
+**Motivo:** a aba "Contribuição Previdenciária" do PJE-Calc usa checkboxes individuais,
+não um dropdown. O dropdown `responsabilidade` era abstração sem correspondência direta
+na UI. Os checkboxes booleanos permitem prévia e automação idênticas ao formulário real.
+
+**Retrocompatibilidade:** `_migrar_inss_legado()` converte o campo `responsabilidade`
+para o conjunto de booleans equivalente. Padrão: todos `true` exceto `apurar_sobre_salarios_pagos`.
+
+---
+
+### D9 — IRPF: implementação completa de `fase_irpf`
+
+**Decisão:** expandir o schema `imposto_renda` com os campos reais do PJE-Calc
+(`tributacao_exclusiva`, `regime_de_caixa`, `tributacao_em_separado`, `deducao_inss`,
+`deducao_honorarios_reclamante`, `deducao_pensao_alimenticia`, `valor_pensao`) e
+implementar `fase_irpf` em `playwright_pjecalc.py` (era stub).
+
+**Motivo:** o stub `"IRPF — ignorado"` significava que o IR nunca era preenchido,
+produzindo cálculos incorretos para processos com verbas tributáveis. A prévia HTML
+agora espelha exatamente os campos de `irpf.xhtml`.
+
+---
+
+### D10 — Verbas: preenchimento de `baseCalculo` via fuzzy match
+
+**Decisão:** em `fase_verbas`, após preencher incidências, chamar
+`_extrair_opcoes_select("baseCalculo")` + `_match_fuzzy(v["base_calculo"], opcoes)`
+para selecionar a base de cálculo extraída da sentença no select real do PJE-Calc.
+
+**Motivo:** o campo `base_calculo` era extraído pela IA (ex: "Historico Salarial",
+"Maior Remuneracao") mas nunca preenchido na automação. O fuzzy match normaliza
+strings (lower + sem acento) para tolerar variações de nomenclatura entre extração e
+enums da UI.
+
+**Mecanismo:** `_extrair_opcoes_select(field_suffix)` faz `document.querySelectorAll`
+via JS em runtime; `_match_fuzzy` tenta match exato de label, depois de value, depois
+substring. Log de aviso quando sem match.

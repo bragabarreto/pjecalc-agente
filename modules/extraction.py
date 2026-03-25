@@ -255,20 +255,26 @@ Se não mencionado → ferias = []
 - "Multa art. 467 CLT — Deferida" → fgts.multa_467 = true (campo opcional)
 - "Multa art. 467 CLT — Indeferida" → fgts.multa_467 = false
 
-**SEÇÃO 6 — HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios":
-- "Percentual total fixado:" → honorarios.percentual (ex: 15% → 0.15; 20% → 0.20)
-  Reconhecer formatos variados: "15%", "15 (quinze) por cento", "vinte por cento (20%)",
-  "no percentual de 15%", "à razão de 15%", "correspondente a 15% do valor"
-- Se houver faixa ("de 5 a 15%"), usar o valor máximo
-- Se indeferidos ou não mencionados: honorarios.percentual = null, honorarios.parte_devedora = null
-- Sucumbência → parte devedora:
-    "Sucumbência integral da reclamada" / "sucumbe integralmente a reclamada" → "Reclamado"
-    "Sucumbência recíproca" / "ambas as partes sucumbiram" → "Ambos"
-    "Sucumbência integral da reclamante" → "Reclamante"
-    Quando não há menção de sucumbência recíproca → padrão "Reclamado"
-- Honorários advocatícios do reclamante vencedor → parte_devedora = "Reclamado"
-- honorarios.periciais: valor dos honorários periciais (distinto dos advocatícios)
-- honorarios.valor_fixo: quando fixado em valor, não percentual
+**SEÇÃO 6 — HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
+⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
+- Sucumbência recíproca → gerar DOIS registros na lista:
+    [{{"devedor": "RECLAMADO", "base_apuracao": "Condenação", ...}},
+     {{"devedor": "RECLAMANTE", "base_apuracao": "Verbas Não Compõem Principal", ...}}]
+- Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
+- Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
+- Se indeferidos ou não mencionados → honorarios = []
+- tipo: "SUCUMBENCIAIS" (padrão — condenação em honorários pelo juiz) | "CONTRATUAIS" (raro)
+- tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
+- base_apuracao — depende do devedor + tipo:
+    RECLAMADO + SUCUMBENCIAIS: "Condenação" (padrão — % sobre o valor da condenação) | "Renda Mensal"
+    RECLAMANTE + SUCUMBENCIAIS: "Verbas Não Compõem Principal" (padrão — % sobre pedidos indeferidos) | "Condenação" | "Renda Mensal"
+    CONTRATUAIS: "Condenação" | "Renda Mensal"
+  ⚠️ Quando a sentença diz "sobre o valor da condenação" para AMBAS as partes →
+     usar "Condenação" para os dois registros
+- percentual: float decimal (ex: 0.15 para 15%); null se tipo_valor=INFORMADO
+- valor_informado: float; null se tipo_valor=CALCULADO
+- apurar_ir: true quando os honorários forem tributáveis (advogado pessoa física)
+- honorarios_periciais: valor dos honorários periciais (distinto dos advocatícios)
 
 **SEÇÃO 7 — CORREÇÃO MONETÁRIA E JUROS** → preenche "correcao_juros":
 Mapeamento dos critérios da sentença para os enums do PJE-Calc:
@@ -305,21 +311,26 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
 - correcao_juros.jam_fgts: true se a sentença mencionar "JAM" ou "juros sobre atraso de FGTS"
 
 **CONTRIBUIÇÕES PREVIDENCIÁRIAS** → preenche "contribuicao_social":
-- contribuicao_social.responsabilidade:
-    "Ambos" → padrão em contratos normais de emprego (empregador e empregado recolhem cada qual sua parte)
-             → também quando mencionado "cada parte arcará com sua quota-parte"
-             → também quando há "dedução na fonte" (implica responsabilidade de ambos)
-    "Empregador" → apenas quando a sentença determina que "a responsabilidade é exclusivamente do empregador"
-                   ou "o empregador arcará com toda a contribuição"
-    "Empregado" → raramente usado isoladamente; só quando explicitado
-    ⚠️ Quando não mencionado explicitamente → usar "Ambos" (padrão da legislação trabalhista)
-- contribuicao_social.lei_11941: true se a sentença mencionar "Lei 11.941/2009" ou "regime de
-  competência" no contexto previdenciário (define forma de apuração das contribuições)
-  Omitir (null) se não mencionado explicitamente
+⚠️ PJE-Calc usa checkboxes individuais — NÃO um campo "responsabilidade":
+- apurar_segurado_salarios_devidos: true quando há salários devidos com incidência de INSS (padrão true)
+- cobrar_do_reclamante: true quando a cota do empregado deve ser descontada do crédito do reclamante
+    → true quando "dedução na fonte", "cada parte arcará com sua quota", omissão (padrão legal)
+    → false apenas quando sentença determina expressamente que "o empregador arcará com toda a contribuição"
+- com_correcao_trabalhista: true para aplicar correção trabalhista ao INSS (padrão true)
+- apurar_sobre_salarios_pagos: true quando há salários pagos a menor durante o contrato (raro — apenas se explícito)
+- lei_11941: true se mencionar "Lei 11.941/2009" ou "regime de competência" previdenciário
+  ⚠️ Padrão quando omitido: apurar_segurado_salarios_devidos=true, cobrar_do_reclamante=true, com_correcao_trabalhista=true, apurar_sobre_salarios_pagos=false
 
 **IMPOSTO DE RENDA** → preenche "imposto_renda":
-- imposto_renda.apurar: true se a sentença determinar apuração de IR; false se não mencionar
-- Campos dependentes/meses_tributaveis: opcionais, só preencher se explícitos
+- apurar: true se há verbas tributáveis (salariais) ou sentença determina apuração de IR
+- tributacao_exclusiva: true se a sentença mencionar "tributação exclusiva na fonte" / "RRA" / "rendimentos recebidos acumuladamente"
+- regime_de_caixa: true se mencionar "regime de caixa" / "tributação mês a mês" / "pro rata"
+- tributacao_em_separado: true se mencionar "tributação em separado" (raro)
+- deducao_inss: true quando deve deduzir INSS da base do IR (padrão true quando apurar=true e há INSS)
+- deducao_honorarios_reclamante: true quando honorários do reclamante deduzem da base do IR
+- deducao_pensao_alimenticia: true se sentença mencionar pensão alimentícia como dedução do IR
+- valor_pensao: float com o valor da pensão se deducao_pensao_alimenticia=true
+- meses_tributaveis: número de meses tributáveis, se informado
 
 === SCHEMA JSON ESPERADO ===
 {{
@@ -385,13 +396,18 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     "multa_467": "true | false | null",
     "confianca": 0.95
   }},
-  "honorarios": {{
-    "percentual": "float | null",
-    "valor_fixo": "float | null",
-    "parte_devedora": "Reclamado | Reclamante | Ambos | null",
-    "periciais": "float | null",
-    "confianca": 0.95
-  }},
+  "honorarios": [
+    {{
+      "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
+      "devedor": "RECLAMANTE | RECLAMADO",
+      "tipo_valor": "CALCULADO | INFORMADO",
+      "base_apuracao": "Condenação | Verbas Não Compõem Principal | Renda Mensal",
+      "percentual": "float | null",
+      "valor_informado": "float | null",
+      "apurar_ir": "true | false"
+    }}
+  ],
+  "honorarios_periciais": "float | null",
   "correcao_juros": {{
     "indice_correcao": "Tabela JT Unica Mensal | IPCA-E | Selic | TRCT | null",
     "base_juros": "Verbas | Credito Total | null",
@@ -400,12 +416,22 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     "confianca": 0.95
   }},
   "contribuicao_social": {{
-    "responsabilidade": "Empregador | Empregado | Ambos | null",
+    "apurar_segurado_salarios_devidos": "true | false",
+    "cobrar_do_reclamante": "true | false",
+    "com_correcao_trabalhista": "true | false",
+    "apurar_sobre_salarios_pagos": "true | false",
     "lei_11941": "true | false | null",
     "confianca": 0.95
   }},
   "imposto_renda": {{
     "apurar": "true | false",
+    "tributacao_exclusiva": "true | false | null",
+    "regime_de_caixa": "true | false | null",
+    "tributacao_em_separado": "true | false | null",
+    "deducao_inss": "true | false | null",
+    "deducao_honorarios_reclamante": "true | false | null",
+    "deducao_pensao_alimenticia": "true | false | null",
+    "valor_pensao": "float | null",
     "meses_tributaveis": "número inteiro | null",
     "dependentes": "número inteiro | null",
     "confianca": 0.95
@@ -524,19 +550,24 @@ verba_principal_ref: para verbas reflexas, informar o nome_sentenca da verba pri
 - multa_40: true quando deferida "multa de 40%" / "multa rescisória" / "art. 18 §1º da Lei 8.036"
 - multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
 
-**HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios":
-- percentual: extrair de qualquer forma que indique porcentagem:
-    "honorários de 15%", "15 (quinze) por cento", "vinte por cento (20%)",
-    "no percentual de 15%", "à razão de 15%", "de 5 a 15%" (usar valor máximo em faixas)
-    Converter sempre para decimal: 15% → 0.15, 20% → 0.20
-- valor_fixo: quando fixado em valor monetário (não percentual)
-- parte_devedora:
-    "Reclamado" → sucumbência da reclamada / reclamante venceu (caso mais comum)
-    "Ambos" → sucumbência recíproca / ambas as partes sucumbiram parcialmente
-    "Reclamante" → reclamante condenado em honorários (raro, em improcedências)
-    Padrão quando não especificado: "Reclamado"
-- Se honorários indeferidos ou não mencionados: percentual=null, parte_devedora=null
-- periciais: honorários periciais (laudo técnico), distinto dos advocatícios
+**HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
+⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
+- Sucumbência recíproca → gerar DOIS registros na lista:
+    [{{"devedor": "RECLAMADO", "base_apuracao": "Condenação", ...}},
+     {{"devedor": "RECLAMANTE", "base_apuracao": "Verbas Não Compõem Principal", ...}}]
+- Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
+- Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
+- Se indeferidos ou não mencionados → honorarios = []
+- tipo: "SUCUMBENCIAIS" (padrão) | "CONTRATUAIS" (raro)
+- tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
+- base_apuracao:
+    RECLAMADO + SUCUMBENCIAIS: "Condenação" (padrão) | "Renda Mensal"
+    RECLAMANTE + SUCUMBENCIAIS: "Verbas Não Compõem Principal" (padrão) | "Condenação" | "Renda Mensal"
+    ⚠️ Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → "Condenação" nos dois
+- percentual: decimal (15% → 0.15); null se tipo_valor=INFORMADO
+- valor_informado: float; null se tipo_valor=CALCULADO
+- apurar_ir: true quando honorários são tributáveis
+- honorarios_periciais: valor dos honorários periciais (distinto dos advocatícios)
 
 **CORREÇÃO MONETÁRIA E JUROS** → preenche "correcao_juros":
 Mapear EXATAMENTE para os enums disponíveis no PJE-Calc:
@@ -569,20 +600,27 @@ base_juros: "Verbas" (padrão — juros calculados verba a verba) ou
 jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
 
 **CONTRIBUIÇÕES PREVIDENCIÁRIAS** → preenche "contribuicao_social":
-- responsabilidade:
-    "Ambos" → padrão legal (cada parte recolhe sua quota — empregador e empregado)
-             Usar quando: não especificado, "cada parte arcará com sua quota",
-             "dedução na fonte", "regime de competência"
-    "Empregador" → APENAS quando explicitamente "só o empregador recolherá"
-    "Empregado" → raramente isolado; somente se explicitado
-    Padrão quando omitido: "Ambos"
-- lei_11941: true se mencionar "Lei 11.941/2009" ou "regime de competência" (forma de apuração)
+⚠️ PJE-Calc usa checkboxes individuais — NÃO um campo "responsabilidade":
+- apurar_segurado_salarios_devidos: true quando há salários devidos com incidência de INSS (padrão true)
+- cobrar_do_reclamante: true quando a cota do empregado deve ser descontada do crédito do reclamante
+    → true quando: omissão (padrão legal), "dedução na fonte", "cada parte arcará com sua quota"
+    → false APENAS quando: sentença diz expressamente "empregador arcará com toda a contribuição"
+- com_correcao_trabalhista: true para aplicar correção trabalhista ao INSS (padrão true)
+- apurar_sobre_salarios_pagos: true apenas quando há salários pagos a menor (explícito; padrão false)
+- lei_11941: true se mencionar "Lei 11.941/2009" ou "regime de competência" previdenciário
+- ⚠️ Padrão quando omitido: todos os campos true exceto apurar_sobre_salarios_pagos=false
 
 **IMPOSTO DE RENDA** → preenche "imposto_renda":
-- apurar=true quando: sentença determina apuração de IR, ou há verbas tributáveis (salários,
-  horas extras, 13º, férias) com valores expressivos
-- apurar=false quando: apenas verbas indenizatórias (danos morais, aviso prévio indenizado, multas)
-- meses_tributaveis: número de meses de competência tributável, se informado
+- apurar: true quando há verbas tributáveis (salários, horas extras, 13º, férias) ou sentença determina IR
+    false apenas quando somente verbas indenizatórias (danos morais, aviso prévio indenizado, multas)
+- tributacao_exclusiva: true se mencionar "tributação exclusiva na fonte" / "RRA" / "rendimentos recebidos acumuladamente"
+- regime_de_caixa: true se mencionar "regime de caixa" / "tributação mês a mês" / "pro rata temporis do IR"
+- tributacao_em_separado: true se mencionar "tributação em separado" (raro)
+- deducao_inss: true quando deve deduzir INSS da base do IR (padrão true quando apurar=true e há INSS)
+- deducao_honorarios_reclamante: true quando honorários sucumbenciais do reclamante deduzem da base do IR
+- deducao_pensao_alimenticia: true se mencionar pensão alimentícia como dedução do IR
+- valor_pensao: float com o valor da pensão alimentícia se deducao_pensao_alimenticia=true
+- meses_tributaveis: número de meses tributáveis, se explicitado
 
 === SCHEMA JSON ESPERADO ===
 {{
@@ -648,13 +686,18 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "multa_467": "true | false | null",
     "confianca": 0.0-1.0
   }},
-  "honorarios": {{
-    "percentual": "float | null",
-    "valor_fixo": "float | null",
-    "parte_devedora": "Reclamado | Reclamante | Ambos | null",
-    "periciais": "float | null",
-    "confianca": 0.0-1.0
-  }},
+  "honorarios": [
+    {{
+      "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
+      "devedor": "RECLAMANTE | RECLAMADO",
+      "tipo_valor": "CALCULADO | INFORMADO",
+      "base_apuracao": "Condenação | Verbas Não Compõem Principal | Renda Mensal",
+      "percentual": "float | null",
+      "valor_informado": "float | null",
+      "apurar_ir": "true | false"
+    }}
+  ],
+  "honorarios_periciais": "float | null",
   "correcao_juros": {{
     "indice_correcao": "Tabela JT Unica Mensal | IPCA-E | Selic | TRCT | null",
     "base_juros": "Verbas | Credito Total | null",
@@ -663,12 +706,22 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "confianca": 0.0-1.0
   }},
   "contribuicao_social": {{
-    "responsabilidade": "Empregador | Empregado | Ambos | null",
+    "apurar_segurado_salarios_devidos": "true | false",
+    "cobrar_do_reclamante": "true | false",
+    "com_correcao_trabalhista": "true | false",
+    "apurar_sobre_salarios_pagos": "true | false",
     "lei_11941": "true | false | null",
     "confianca": 0.0-1.0
   }},
   "imposto_renda": {{
-    "apurar": true,
+    "apurar": "true | false",
+    "tributacao_exclusiva": "true | false | null",
+    "regime_de_caixa": "true | false | null",
+    "tributacao_em_separado": "true | false | null",
+    "deducao_inss": "true | false | null",
+    "deducao_honorarios_reclamante": "true | false | null",
+    "deducao_pensao_alimenticia": "true | false | null",
+    "valor_pensao": "float | null",
     "meses_tributaveis": "número inteiro | null",
     "dependentes": "número inteiro | null",
     "confianca": 0.0-1.0
@@ -1073,6 +1126,67 @@ def _extrair_via_gemini(
         return {"_erro_llm": str(e), "alertas": [f"Falha na extração via Gemini: {e}"]}
 
 
+# ── Funções de migração (retrocompatibilidade) ────────────────────────────────
+
+def _migrar_honorarios_legado(hon: dict) -> list[dict]:
+    """
+    Converte o schema antigo {percentual, parte_devedora, valor_fixo} para a lista de registros
+    compatível com o PJE-Calc (sem opção "Ambos" — cada devedor é um registro separado).
+    """
+    if not hon or not isinstance(hon, dict):
+        return []
+    percentual = hon.get("percentual")
+    valor_fixo = hon.get("valor_informado") or hon.get("valor_fixo")
+    parte = (hon.get("parte_devedora") or "Reclamado").strip()
+    tipo_valor = "CALCULADO" if percentual is not None else "INFORMADO"
+
+    def _registro(devedor: str, base: str) -> dict:
+        return {
+            "tipo": hon.get("tipo") or "SUCUMBENCIAIS",
+            "devedor": devedor,
+            "tipo_valor": tipo_valor,
+            "base_apuracao": base,
+            "percentual": percentual,
+            "valor_informado": valor_fixo,
+            "apurar_ir": hon.get("apurar_ir", False),
+        }
+
+    if parte in ("Ambos", "ambos", "AMBOS"):
+        return [
+            _registro("RECLAMADO", "Condenação"),
+            _registro("RECLAMANTE", "Verbas Não Compõem Principal"),
+        ]
+    if parte in ("Reclamante", "RECLAMANTE"):
+        return [_registro("RECLAMANTE", "Verbas Não Compõem Principal")]
+    # Padrão: Reclamado
+    return [_registro("RECLAMADO", "Condenação")]
+
+
+def _migrar_inss_legado(cs: dict) -> dict:
+    """
+    Converte o schema antigo {responsabilidade: "Ambos|Empregador|Empregado"}
+    para booleans individuais compatíveis com os checkboxes do PJE-Calc.
+    """
+    resp = (cs.get("responsabilidade") or "Ambos").strip()
+    novo = {k: v for k, v in cs.items() if k != "responsabilidade"}
+    if resp in ("Ambos", "ambos"):
+        novo.setdefault("apurar_segurado_salarios_devidos", True)
+        novo.setdefault("cobrar_do_reclamante", True)
+        novo.setdefault("com_correcao_trabalhista", True)
+        novo.setdefault("apurar_sobre_salarios_pagos", False)
+    elif resp in ("Empregador",):
+        novo.setdefault("apurar_segurado_salarios_devidos", True)
+        novo.setdefault("cobrar_do_reclamante", False)
+        novo.setdefault("com_correcao_trabalhista", True)
+        novo.setdefault("apurar_sobre_salarios_pagos", False)
+    else:  # Empregado
+        novo.setdefault("apurar_segurado_salarios_devidos", True)
+        novo.setdefault("cobrar_do_reclamante", True)
+        novo.setdefault("com_correcao_trabalhista", True)
+        novo.setdefault("apurar_sobre_salarios_pagos", False)
+    return novo
+
+
 # ── Merge e Validação ─────────────────────────────────────────────────────────
 
 def _merge_extracao(
@@ -1114,13 +1228,18 @@ def _merge_extracao(
         fgts["multa_40"] = regex.get("multa_40")
     llm["fgts"] = fgts
 
-    # Honorários
-    hon = llm.get("honorarios", {})
-    if hon.get("percentual") is None and regex.get("honorarios_percentual") is not None:
-        hon["percentual"] = regex["honorarios_percentual"]
-    if hon.get("parte_devedora") is None and regex.get("honorarios_parte_devedora") is not None:
-        hon["parte_devedora"] = regex["honorarios_parte_devedora"]
-    llm["honorarios"] = hon
+    # Honorários — migrar legado dict → list se necessário
+    hon = llm.get("honorarios", [])
+    if isinstance(hon, dict):
+        hon = _migrar_honorarios_legado(hon)
+        llm["honorarios"] = hon
+    # Fallback regex: se LLM retornou lista vazia e regex detectou honorários
+    if not hon and regex.get("honorarios_percentual") is not None:
+        parte = regex.get("honorarios_parte_devedora") or "Reclamado"
+        llm["honorarios"] = _migrar_honorarios_legado({
+            "percentual": regex["honorarios_percentual"],
+            "parte_devedora": parte,
+        })
 
     # Correção monetária e juros — regex como fallback
     cj = llm.get("correcao_juros", {})
@@ -1132,10 +1251,10 @@ def _merge_extracao(
         cj["jam_fgts"] = True
     llm["correcao_juros"] = cj
 
-    # Contribuição social
+    # Contribuição social — migrar legado "responsabilidade" → booleans se necessário
     cs = llm.get("contribuicao_social", {})
-    if cs.get("responsabilidade") is None and regex.get("contrib_responsabilidade") is not None:
-        cs["responsabilidade"] = regex["contrib_responsabilidade"]
+    if "responsabilidade" in cs:
+        cs = _migrar_inss_legado(cs)
     if not cs.get("lei_11941") and regex.get("lei_11941"):
         cs["lei_11941"] = True
     llm["contribuicao_social"] = cs
@@ -1177,13 +1296,11 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
             "multa_467": None,
             "confianca": 0.5,
         },
-        "honorarios": {
+        "honorarios": _migrar_honorarios_legado({
             "percentual": regex.get("honorarios_percentual"),
-            "valor_fixo": None,
             "parte_devedora": regex.get("honorarios_parte_devedora"),
-            "periciais": None,
-            "confianca": 0.5,
-        },
+        }) if regex.get("honorarios_percentual") else [],
+        "honorarios_periciais": None,
         "correcao_juros": {
             "indice_correcao": regex.get("indice_correcao"),
             "base_juros": "Verbas",
@@ -1192,11 +1309,26 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
             "confianca": 0.5,
         },
         "contribuicao_social": {
-            "responsabilidade": regex.get("contrib_responsabilidade") or "Ambos",
+            "apurar_segurado_salarios_devidos": True,
+            "cobrar_do_reclamante": True,
+            "com_correcao_trabalhista": True,
+            "apurar_sobre_salarios_pagos": False,
             "lei_11941": regex.get("lei_11941") or None,
             "confianca": 0.5,
         },
-        "imposto_renda": {"apurar": False, "meses_tributaveis": None, "dependentes": None, "confianca": 0.5},
+        "imposto_renda": {
+            "apurar": False,
+            "tributacao_exclusiva": None,
+            "regime_de_caixa": None,
+            "tributacao_em_separado": None,
+            "deducao_inss": None,
+            "deducao_honorarios_reclamante": None,
+            "deducao_pensao_alimenticia": None,
+            "valor_pensao": None,
+            "meses_tributaveis": None,
+            "dependentes": None,
+            "confianca": 0.5,
+        },
         "historico_salarial": [],
         "faltas": [],
         "ferias": [],
@@ -1225,7 +1357,7 @@ _CAMPOS_CONDICIONAIS = [
 _CAMPOS_OPCIONAIS = {
     "prescricao.quinquenal",
     "prescricao.fgts",
-    "honorarios.periciais",
+    "honorarios_periciais",
     "contrato.carga_horaria",
     "imposto_renda.dependentes",
     "imposto_renda.meses_tributaveis",
@@ -1264,8 +1396,8 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
         if not valor and chave not in campos_ausentes:
             campos_ausentes.append(chave)
 
-    # Verificar confiança abaixo do limiar
-    for secao in ["processo", "contrato", "fgts", "honorarios", "correcao_juros"]:
+    # Verificar confiança abaixo do limiar (honorarios é lista — não tem confianca própria)
+    for secao in ["processo", "contrato", "fgts", "correcao_juros"]:
         conf = dados.get(secao, {}).get("confianca", 1.0)
         if conf is not None and conf < CONFIDENCE_THRESHOLD_AUTO:
             alertas.append(
@@ -1283,11 +1415,20 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
 
     # Aplicar padrões inteligentes para campos frequentemente não extraídos
 
-    # Contribuição social: padrão legal é "Ambos" quando não especificado
+    # Contribuição social: migrar legado "responsabilidade" → booleans; aplicar padrão legal
     cs = dados.get("contribuicao_social", {})
-    if not cs.get("responsabilidade"):
-        cs["responsabilidade"] = "Ambos"
-        dados["contribuicao_social"] = cs
+    if "responsabilidade" in cs:
+        cs = _migrar_inss_legado(cs)
+    # Aplicar padrão legal (empregado e empregador cada qual sua quota)
+    cs.setdefault("apurar_segurado_salarios_devidos", True)
+    cs.setdefault("cobrar_do_reclamante", True)
+    cs.setdefault("com_correcao_trabalhista", True)
+    cs.setdefault("apurar_sobre_salarios_pagos", False)
+    dados["contribuicao_social"] = cs
+    # Migrar honorários legado se necessário
+    hon = dados.get("honorarios", {})
+    if isinstance(hon, dict):
+        dados["honorarios"] = _migrar_honorarios_legado(hon)
 
     # Correção/juros: se ausentes e há verbas deferidas, aplicar padrão ADC 58 com alerta
     cj = dados.get("correcao_juros", {})

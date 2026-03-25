@@ -23,7 +23,7 @@ def gerar_previa(
     prescricao = dados.get("prescricao", {})
     aviso = dados.get("aviso_previo", {})
     fgts = dados.get("fgts", {})
-    honorarios = dados.get("honorarios", {})
+    honorarios = dados.get("honorarios", [])
     correcao = dados.get("correcao_juros", {})
     contrib = dados.get("contribuicao_social", {})
     ir = dados.get("imposto_renda", {})
@@ -104,100 +104,61 @@ def gerar_previa(
     ]
 
     # 5. Contribuição Social
-    resp_inss = contrib.get("responsabilidade") or "Ambos"
     linhas.append("CONTRIBUIÇÃO SOCIAL (INSS)")
-    linhas.append(f"   Lei 11.941/2009  : {'Sim' if contrib.get('lei_11941') else 'Não'}")
-    if resp_inss == "Ambos":
-        linhas += [
-            "   Reclamante (empregado)",
-            "     → Cota-parte: alíquota progressiva tabela INSS (7,5% a 14%)",
-            "     → Base: verbas salariais — apuração mês a mês pelo PJE-Calc",
-            "   Reclamado (empregador)",
-            "     → Cota patronal: 20% RGPS + RAT/FAP + contribuições a terceiros",
-            "     → Base: mesmas verbas salariais",
-            "     → Recolhimento: reclamado desconta cota do reclamante e recolhe ambas",
-        ]
-    elif resp_inss == "Empregador":
-        linhas += [
-            "   Reclamante (empregado) : sem responsabilidade INSS neste cálculo",
-            "   Reclamado (empregador) : responsabilidade integral (patronal + cota do empregado)",
-        ]
-    elif resp_inss == "Empregado":
-        linhas += [
-            "   Reclamante (empregado) : recolhimento da cota-parte do empregado",
-            "   Reclamado (empregador) : sem responsabilidade INSS neste cálculo",
-        ]
-    else:
-        linhas.append(f"   Responsabilidade : {resp_inss}")
+    linhas.append(f"   Lei 11.941/2009                   : {'Sim' if contrib.get('lei_11941') else 'Não'}")
+    linhas.append(f"   Apurar s/ salários devidos (seg.) : {'Sim' if contrib.get('apurar_segurado_salarios_devidos', True) else 'Não'}")
+    linhas.append(f"   Cobrar do reclamante (cota empr.) : {'Sim' if contrib.get('cobrar_do_reclamante', True) else 'Não'}")
+    linhas.append(f"   Com correção trabalhista           : {'Sim' if contrib.get('com_correcao_trabalhista', True) else 'Não'}")
+    linhas.append(f"   Apurar s/ salários pagos          : {'Sim' if contrib.get('apurar_sobre_salarios_pagos', False) else 'Não'}")
     linhas.append("")
 
     # 6. Imposto de Renda
     if ir.get("apurar"):
         linhas += [
             "IMPOSTO DE RENDA",
-            f"   Apurar           : Sim",
-            f"   Meses tributáveis: {ir.get('meses_tributaveis') or '—'}",
-            f"   Dependentes      : {ir.get('dependentes') or '0'}",
-            "   Reclamante (contribuinte)",
-            "     → Suporta economicamente o IR sobre parcelas salariais tributáveis",
-            "     → Tabela progressiva (0% a 27,5%) sobre rendimento mensal apurado",
-            "   Reclamado (fonte pagadora)",
-            "     → Deve reter e recolher o IR na fonte (DIRF/DARF)",
-            "     → Responsabilidade solidária por omissão de retenção",
+            f"   Apurar                       : Sim",
+            f"   Tributação exclusiva (RRA)   : {'Sim' if ir.get('tributacao_exclusiva') else 'Não'}",
+            f"   Regime de caixa              : {'Sim' if ir.get('regime_de_caixa') else 'Não'}",
+            f"   Tributação em separado       : {'Sim' if ir.get('tributacao_em_separado') else 'Não'}",
+            f"   Dedução INSS                 : {'Sim' if ir.get('deducao_inss', True) else 'Não'}",
+            f"   Dedução hon. reclamante      : {'Sim' if ir.get('deducao_honorarios_reclamante') else 'Não'}",
+            f"   Dedução pensão alimentícia   : {'Sim' if ir.get('deducao_pensao_alimenticia') else 'Não'}",
+        ]
+        if ir.get("deducao_pensao_alimenticia") and ir.get("valor_pensao"):
+            linhas.append(f"   Valor da pensão              : {_fmt_valor(ir.get('valor_pensao'))}")
+        linhas += [
+            f"   Meses tributáveis            : {ir.get('meses_tributaveis') or '—'}",
+            f"   Dependentes                  : {ir.get('dependentes') or '0'}",
             "",
         ]
 
     # 7. Honorários Advocatícios
-    parte_hon = honorarios.get("parte_devedora") or "—"
-    pct_hon = honorarios.get("percentual")
-    val_hon = honorarios.get("valor_fixo")
     linhas.append("HONORÁRIOS ADVOCATÍCIOS")
-    if parte_hon == "Reclamado":
-        linhas.append("   Reclamado (devedor — sucumbência integral ou parcial):")
-        if pct_hon:
-            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor da condenação")
-        if val_hon:
-            linhas.append(f"     → Valor fixo: {_fmt_valor(val_hon)}")
-        if not pct_hon and not val_hon:
-            linhas.append("     → Percentual/valor a apurar")
-        linhas.append("   Reclamante : isento de honorários sucumbenciais")
-    elif parte_hon == "Reclamante":
-        linhas.append("   Reclamante (devedor — sucumbência nos pedidos indeferidos):")
-        if pct_hon:
-            linhas.append(f"     → {_fmt_pct(pct_hon)} sobre o valor dos pedidos indeferidos")
-        if val_hon:
-            linhas.append(f"     → Valor fixo: {_fmt_valor(val_hon)}")
-        if not pct_hon and not val_hon:
-            linhas.append("     → Percentual/valor a apurar")
-        linhas.append("   Reclamado  : isento de honorários sucumbenciais")
-    elif parte_hon == "Ambos":
-        pct_reclamado = honorarios.get("percentual_reclamado") or pct_hon
-        pct_reclamante = honorarios.get("percentual_reclamante") or pct_hon
-        linhas.append("   Sucumbência recíproca — ambas as partes devem honorários:")
-        linhas.append("   Reclamante (pedidos indeferidos):")
-        if pct_reclamante:
-            linhas.append(f"     → {_fmt_pct(pct_reclamante)} sobre o valor dos pedidos indeferidos")
-        else:
-            linhas.append("     → Percentual a apurar — preencher campo na prévia")
-        linhas.append("   Reclamado (pedidos deferidos):")
-        if pct_reclamado:
-            linhas.append(f"     → {_fmt_pct(pct_reclamado)} sobre o valor da condenação")
-        else:
-            linhas.append("     → Percentual a apurar — preencher campo na prévia")
-        linhas.append("   ⚠ Compensação vedada (cada parte paga ao advogado adverso)")
+    if not honorarios:
+        linhas.append("   Nenhum honorário identificado / indeferidos")
     else:
-        linhas += [
-            f"   Parte devedora: {parte_hon}",
-            f"   Percentual    : {_fmt_pct(pct_hon)}",
-            f"   Valor fixo    : {_fmt_valor(val_hon)}",
-        ]
-    if honorarios.get("periciais"):
-        linhas.append(f"   Periciais (laudo técnico): {_fmt_valor(honorarios.get('periciais'))}")
+        for i, hon in enumerate(honorarios, start=1):
+            devedor = hon.get("devedor") or "—"
+            tipo = hon.get("tipo") or "SUCUMBENCIAIS"
+            base = hon.get("base_apuracao") or "—"
+            pct = hon.get("percentual")
+            val = hon.get("valor_informado")
+            ir_hon = hon.get("apurar_ir", False)
+            linhas.append(f"   [{i}] Devedor: {devedor} | Tipo: {tipo}")
+            linhas.append(f"       Base de apuração: {base}")
+            if pct is not None:
+                linhas.append(f"       Percentual: {_fmt_pct(pct)}")
+            if val is not None:
+                linhas.append(f"       Valor informado: {_fmt_valor(val)}")
+            linhas.append(f"       Apurar IR: {'Sim' if ir_hon else 'Não'}")
+    periciais = dados.get("honorarios_periciais")
+    if periciais:
+        linhas.append(f"   Periciais (laudo técnico): {_fmt_valor(periciais)}")
     linhas.append("")
 
     # 7a. Custas Processuais (CLT art. 789 — 2% do valor da condenação, mín. R$ 10,64)
     linhas.append("CUSTAS PROCESSUAIS  (CLT art. 789)")
-    custas_resp = _inferir_responsavel_custas(honorarios)
+    custas_resp = _inferir_responsavel_custas(honorarios, dados)
     if custas_resp == "Reclamado":
         linhas += [
             "   Reclamado : responsável pelo recolhimento das custas",
@@ -284,8 +245,53 @@ def aplicar_edicao_usuario(
 ) -> dict[str, Any]:
     """
     Aplica a edição de um campo na estrutura de dados.
-    campo no formato 'secao.subcampo' (ex: 'contrato.admissao').
+
+    Formatos suportados:
+    - 'secao.subcampo'              → dados["secao"]["subcampo"] = novo_valor
+    - 'honorarios[N].subcampo'      → dados["honorarios"][N]["subcampo"] = novo_valor
+    - 'honorarios.add'              → append registro vazio à lista
+    - 'honorarios.remove[N]'        → remove índice N da lista
+    - 'campo_simples'               → dados["campo_simples"] = novo_valor
     """
+    import re as _re
+
+    # honorarios[N].campo
+    m = _re.match(r'^honorarios\[(\d+)\]\.(.+)$', campo)
+    if m:
+        idx = int(m.group(1))
+        subcampo = m.group(2)
+        lista = dados.get("honorarios", [])
+        if 0 <= idx < len(lista):
+            lista[idx][subcampo] = novo_valor
+            dados["honorarios"] = lista
+        return dados
+
+    # honorarios.add
+    if campo == "honorarios.add":
+        lista = dados.get("honorarios", [])
+        lista.append({
+            "tipo": "SUCUMBENCIAIS",
+            "devedor": novo_valor or "RECLAMADO",
+            "tipo_valor": "CALCULADO",
+            "base_apuracao": "Condenação",
+            "percentual": None,
+            "valor_informado": None,
+            "apurar_ir": False,
+        })
+        dados["honorarios"] = lista
+        return dados
+
+    # honorarios.remove[N]
+    m = _re.match(r'^honorarios\.remove\[(\d+)\]$', campo)
+    if m:
+        idx = int(m.group(1))
+        lista = dados.get("honorarios", [])
+        if 0 <= idx < len(lista):
+            lista.pop(idx)
+            dados["honorarios"] = lista
+        return dados
+
+    # secao.subcampo padrão
     partes = campo.split(".", 1)
     if len(partes) == 2:
         secao, subcampo = partes
@@ -340,12 +346,23 @@ def _fmt_pct(valor: Any) -> str:
         return str(valor)
 
 
-def _inferir_responsavel_custas(honorarios: dict[str, Any]) -> str:
+def _inferir_responsavel_custas(honorarios: list | dict, dados: dict[str, Any] | None = None) -> str:
     """
-    Infere o responsável pelas custas processuais com base na parte devedora dos honorários.
+    Infere o responsável pelas custas processuais com base nos honorários.
     Honorários e custas seguem a sucumbência: quem perdeu paga ambos.
     Retorna "Reclamado", "Reclamante", "Ambos" ou "" (indefinido).
     """
+    # Schema novo: lista de registros
+    if isinstance(honorarios, list):
+        devedores = {h.get("devedor", "").upper() for h in honorarios}
+        if "RECLAMADO" in devedores and "RECLAMANTE" in devedores:
+            return "Ambos"
+        if "RECLAMADO" in devedores:
+            return "Reclamado"
+        if "RECLAMANTE" in devedores:
+            return "Reclamante"
+        return ""
+    # Schema legado: dict com parte_devedora
     parte = honorarios.get("parte_devedora") or ""
     if parte in ("Reclamado", "Reclamante", "Ambos"):
         return parte

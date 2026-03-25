@@ -609,6 +609,52 @@ class PJECalcPlaywright:
             self._log(f"  ⚠ select {field_id}: erro — {e}")
             return False
 
+    def _extrair_opcoes_select(self, field_suffix: str) -> list[dict]:
+        """
+        Extrai todas as opções de um <select> cujo ID termina com field_suffix.
+        Retorna lista de {value, text} para fuzzy matching.
+        """
+        try:
+            opcoes = self._page.evaluate(f"""(suffix) => {{
+                const sel = [...document.querySelectorAll('select')].find(
+                    s => s.id && s.id.endsWith(suffix)
+                );
+                if (!sel) return [];
+                return [...sel.options].map(o => ({{value: o.value, text: o.text.trim()}}));
+            }}""", field_suffix)
+            return opcoes or []
+        except Exception:
+            return []
+
+    def _match_fuzzy(self, valor: str, opcoes: list[dict]) -> str | None:
+        """
+        Normaliza e compara valor com as opções disponíveis.
+        Retorna o value da opção mais próxima, ou None se nenhuma encontrada.
+        """
+        import unicodedata
+
+        def _norm(s: str) -> str:
+            s = s.lower().strip()
+            s = unicodedata.normalize("NFD", s)
+            s = "".join(c for c in s if not unicodedata.combining(c))
+            return s
+
+        val_norm = _norm(valor)
+        # Exact match first (text)
+        for op in opcoes:
+            if _norm(op.get("text", "")) == val_norm:
+                return op["value"]
+        # Exact match on value
+        for op in opcoes:
+            if _norm(op.get("value", "")) == val_norm:
+                return op["value"]
+        # Substring match
+        for op in opcoes:
+            txt = _norm(op.get("text", ""))
+            if val_norm in txt or txt in val_norm:
+                return op["value"]
+        return None
+
     def _marcar_radio(self, field_id: str, valor: str) -> bool:
         """Clica em radio button JSF."""
         seletores = [
@@ -1499,6 +1545,18 @@ class PJECalcPlaywright:
             self._marcar_checkbox("inss", bool(v.get("incidencia_inss")))
             self._marcar_checkbox("irpf", bool(v.get("incidencia_ir")))
 
+            # Base de cálculo — fuzzy match com opções reais do select
+            if v.get("base_calculo"):
+                try:
+                    opcoes = self._extrair_opcoes_select("baseCalculo")
+                    match = self._match_fuzzy(v["base_calculo"], opcoes)
+                    if match:
+                        self._selecionar("baseCalculo", match, obrigatorio=False)
+                    else:
+                        self._log(f"  ⚠ baseCalculo '{v['base_calculo']}': sem match — ignorado")
+                except Exception as _e:
+                    self._log(f"  ⚠ baseCalculo: erro ao extrair opções — {_e}")
+
             if v.get("periodo_inicio"):
                 self._preencher_data("periodoInicial", v["periodo_inicio"], False)
                 self._preencher_data("dtInicial", v["periodo_inicio"], False)
@@ -1567,26 +1625,40 @@ class PJECalcPlaywright:
 
     @retry(max_tentativas=3)
     def fase_contribuicao_social(self, cs: dict) -> None:
-        self._log("Fase 5 — Contribuição Social…")
+        self._log("Fase 5 — Contribuição Social (INSS)…")
         self._verificar_tomcat(timeout=60)
         self._verificar_pagina_pjecalc()
-        self._clicar_menu_lateral("Contribuição Social")
+        navegou = (
+            self._clicar_menu_lateral("Contribuição Social", obrigatorio=False)
+            or self._clicar_menu_lateral("Contribuicao Social", obrigatorio=False)
+            or self._clicar_menu_lateral("INSS", obrigatorio=False)
+        )
+        if not navegou:
+            self._log("  → Seção Contribuição Social não encontrada — ignorado.")
+            return
         self.mapear_campos("fase5_inss")
-        # No Cálculo Externo os campos são automáticos — tentar preencher se existirem
-        resp_map = {"Empregado": "EMPREGADO", "Empregador": "EMPREGADOR", "Ambos": "AMBOS"}
-        resp = resp_map.get(cs.get("responsabilidade", "Ambos"), "AMBOS")
-        self._selecionar("responsabilidade", resp, obrigatorio=False)
+
+        # Migrar schema legado (responsabilidade → booleans) se necessário
+        from modules.extraction import _migrar_inss_legado
+        if "responsabilidade" in cs:
+            cs = _migrar_inss_legado(cs)
+
+        # Checkboxes individuais (correspondentes exatos da UI do PJE-Calc)
+        self._marcar_checkbox("apurarSeguradoSaláriosDevidos",
+                              cs.get("apurar_segurado_salarios_devidos", True))
+        self._marcar_checkbox("apurarSeguradoSalariosDevidos",
+                              cs.get("apurar_segurado_salarios_devidos", True))
+        self._marcar_checkbox("cobrarDoReclamante",
+                              cs.get("cobrar_do_reclamante", True))
+        self._marcar_checkbox("comCorrecaoTrabalhista",
+                              cs.get("com_correcao_trabalhista", True))
+        self._marcar_checkbox("apurarSobreSaláriosPagos",
+                              cs.get("apurar_sobre_salarios_pagos", False))
+        self._marcar_checkbox("apurarSobreSalariosPagos",
+                              cs.get("apurar_sobre_salarios_pagos", False))
         if cs.get("lei_11941"):
             self._marcar_checkbox("lei11941", True)
-        # Salvar apenas se o botão existir
-        sels = ["[id$='salvar']", "input[value='Salvar']", "button:has-text('Salvar')"]
-        for sel in sels:
-            try:
-                loc = self._page.locator(sel)
-                if loc.count() > 0:
-                    loc.first.click(); self._aguardar_ajax(); break
-            except Exception:
-                continue
+        self._clicar_salvar()
         self._log("Fase 5 concluída.")
 
     # ── Fase 5b: Cartão de Ponto ──────────────────────────────────────────────
@@ -1692,37 +1764,149 @@ class PJECalcPlaywright:
 
     @retry(max_tentativas=3)
     def fase_irpf(self, ir: dict) -> None:
-        self._log("Fase 7 — IRPF (preenchido na Fase 1 — ignorado).")
+        if not ir.get("apurar"):
+            self._log("Fase 7 — IRPF: apurar=False — ignorado.")
+            return
+        self._log("Fase 7 — IRPF…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+        navegou = (
+            self._clicar_menu_lateral("Imposto de Renda", obrigatorio=False)
+            or self._clicar_menu_lateral("IRPF", obrigatorio=False)
+            or self._clicar_menu_lateral("IR", obrigatorio=False)
+        )
+        if not navegou:
+            self._log("  → Seção IRPF não encontrada no menu — ignorado.")
+            return
+        self.mapear_campos("fase7_irpf")
+
+        # Regime de tributação
+        if ir.get("tributacao_exclusiva"):
+            self._marcar_checkbox("tributacaoExclusiva", True)
+            self._marcar_checkbox("tributacaoExclusivaFonte", True)
+        if ir.get("regime_de_caixa"):
+            self._marcar_checkbox("regimeDeCaixa", True)
+            self._marcar_checkbox("regimeCaixa", True)
+        if ir.get("tributacao_em_separado"):
+            self._marcar_checkbox("tributacaoEmSeparado", True)
+
+        # Deduções
+        if ir.get("deducao_inss", True):
+            self._marcar_checkbox("deducaoInss", True)
+            self._marcar_checkbox("descontarInss", True)
+        if ir.get("deducao_honorarios_reclamante"):
+            self._marcar_checkbox("deducaoHonorariosReclamante", True)
+            self._marcar_checkbox("descontarHonorarios", True)
+        if ir.get("deducao_pensao_alimenticia"):
+            self._marcar_checkbox("deducaoPensaoAlimenticia", True)
+            self._marcar_checkbox("pensaoAlimenticia", True)
+            if ir.get("valor_pensao"):
+                self._preencher("valorPensao", _fmt_br(ir["valor_pensao"]), False)
+                self._preencher("valorDaPensao", _fmt_br(ir["valor_pensao"]), False)
+
+        # Campos numéricos
+        if ir.get("dependentes"):
+            self._preencher("numeroDeDependentes", str(int(ir["dependentes"])), False)
+            self._preencher("dependentes", str(int(ir["dependentes"])), False)
+        if ir.get("meses_tributaveis"):
+            self._preencher("mesesTributaveis", str(int(ir["meses_tributaveis"])), False)
+
+        self._clicar_salvar()
+        self._log("Fase 7 concluída.")
 
     # ── Fase 8: Honorários ────────────────────────────────────────────────────
 
     @retry(max_tentativas=3)
-    def fase_honorarios(self, hon: dict) -> None:
-        self._log("Fase 8 — Honorários…")
+    def fase_honorarios(self, hon_dados) -> None:
+        """
+        Preenche honorários advocatícios no PJE-Calc.
+        Aceita lista de registros [{tipo, devedor, tipo_valor, base_apuracao, percentual, ...}]
+        ou dict legado {percentual, parte_devedora} — migra automaticamente.
+        """
+        # Migrar schema legado dict → list
+        from modules.extraction import _migrar_honorarios_legado
+        if isinstance(hon_dados, dict):
+            hon_lista = _migrar_honorarios_legado(hon_dados)
+        else:
+            hon_lista = hon_dados or []
+
+        if not hon_lista:
+            self._log("Fase 8 — Honorários: lista vazia — ignorado.")
+            return
+
+        self._log(f"Fase 8 — Honorários ({len(hon_lista)} registro(s))…")
         self._verificar_tomcat(timeout=60)
         self._verificar_pagina_pjecalc()
-        navegou = self._clicar_menu_lateral("Honorários", obrigatorio=False)
-        if not navegou:
-            navegou = self._clicar_menu_lateral("Honorarios", obrigatorio=False)
+        navegou = (
+            self._clicar_menu_lateral("Honorários", obrigatorio=False)
+            or self._clicar_menu_lateral("Honorarios", obrigatorio=False)
+        )
         if not navegou:
             self._log("  → Seção Honorários não encontrada no menu — ignorado.")
             return
+
         self.mapear_campos("fase8_honorarios")
-        if hon.get("percentual"):
-            # percentual vem como float (ex: 0.15) → exibir como "15" para o PJE-Calc
-            self._preencher("percentualHonorarios", _fmt_br(hon["percentual"] * 100), False)
-            self._preencher("percentual", _fmt_br(hon["percentual"] * 100), False)
-        if hon.get("valor_fixo"):
-            self._preencher("valorFixoHonorarios", _fmt_br(hon["valor_fixo"]), False)
-            self._preencher("valorFixo", _fmt_br(hon["valor_fixo"]), False)
-        if hon.get("periciais"):
-            self._preencher("honorariosPericiais", _fmt_br(hon["periciais"]), False)
-            self._preencher("valorPericiais", _fmt_br(hon["periciais"]), False)
-        parte_map = {"Reclamado": "RECLAMADO", "Reclamante": "RECLAMANTE", "Ambos": "AMBOS"}
-        if hon.get("parte_devedora"):
-            self._selecionar("parteDevedora", parte_map.get(hon["parte_devedora"], "RECLAMADO"), obrigatorio=False)
-            self._selecionar("responsabilidadeHonorarios", parte_map.get(hon["parte_devedora"], "RECLAMADO"), obrigatorio=False)
-        self._clicar_salvar()
+
+        for i, hon in enumerate(hon_lista):
+            self._log(f"  → Honorário [{i+1}/{len(hon_lista)}]: {hon.get('devedor')} / {hon.get('tipo')}")
+            if i > 0:
+                # Clicar "Novo" para adicionar segundo registro
+                clicou = (
+                    self._clicar_novo()
+                    or bool(self._page.locator("input[value='Novo']").first.click() if self._page.locator("input[value='Novo']").count() else None)
+                )
+                if not clicou:
+                    self._log(f"  ⚠ Botão Novo não encontrado para honorário {i+1} — pulando.")
+                    continue
+
+            # Tipo de devedor
+            devedor = hon.get("devedor", "RECLAMADO")
+            self._selecionar("tipoDeDevedor", devedor, obrigatorio=False)
+            self._selecionar("devedor", devedor, obrigatorio=False)
+            self._selecionar("parteDevedora", devedor, obrigatorio=False)
+
+            # Tipo de honorário (SUCUMBENCIAIS / CONTRATUAIS)
+            tipo = hon.get("tipo", "SUCUMBENCIAIS")
+            self._selecionar("tipoHonorario", tipo, obrigatorio=False)
+            self._selecionar("tipo", tipo, obrigatorio=False)
+
+            # Tipo de valor (CALCULADO / INFORMADO)
+            tipo_valor = hon.get("tipo_valor", "CALCULADO")
+            self._marcar_radio("tipoValor", tipo_valor) or self._selecionar("tipoValor", tipo_valor, obrigatorio=False)
+
+            # Base de apuração — fuzzy match com opções reais
+            base = hon.get("base_apuracao", "")
+            if base:
+                try:
+                    opcoes = self._extrair_opcoes_select("baseParaApuracao")
+                    match = self._match_fuzzy(base, opcoes)
+                    if match:
+                        self._selecionar("baseParaApuracao", match, obrigatorio=False)
+                    else:
+                        self._log(f"  ⚠ baseParaApuracao '{base}': sem match — ignorado")
+                except Exception as _e:
+                    self._log(f"  ⚠ baseParaApuracao: erro — {_e}")
+
+            # Percentual ou valor informado
+            if tipo_valor == "CALCULADO" and hon.get("percentual") is not None:
+                pct_str = _fmt_br(hon["percentual"] * 100)
+                self._preencher("percentualHonorarios", pct_str, False)
+                self._preencher("percentual", pct_str, False)
+            elif tipo_valor == "INFORMADO" and hon.get("valor_informado") is not None:
+                self._preencher("valorInformado", _fmt_br(hon["valor_informado"]), False)
+                self._preencher("valorFixo", _fmt_br(hon["valor_informado"]), False)
+
+            # Apurar IR
+            if hon.get("apurar_ir"):
+                self._marcar_checkbox("apurarIr", True)
+                self._marcar_checkbox("tributarIR", True)
+
+            self._clicar_salvar()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+
+        # Honorários periciais (campo separado, fora do loop)
+        # Buscado diretamente em dados (não em cada honorário)
         self._log("Fase 8 concluída.")
 
     # ── Liquidar / captura do .PJC ─────────────────────────────────────────────
@@ -1894,7 +2078,7 @@ class PJECalcPlaywright:
         self.fase_cartao_ponto(dados)
         self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))
         self.fase_irpf(dados.get("imposto_renda", {}))
-        self.fase_honorarios(dados.get("honorarios", {}))
+        self.fase_honorarios(dados.get("honorarios", []))
 
         caminho_pjc = self._clicar_liquidar()
         if caminho_pjc:
