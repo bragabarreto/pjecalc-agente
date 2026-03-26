@@ -262,11 +262,21 @@ class PJECalcPlaywright:
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
     def iniciar_browser(self, headless: bool = False) -> None:
+        import asyncio
         import os, sys
         # Em Linux sem display real (Railway/Docker), forçar headless
         if sys.platform != "win32" and not os.environ.get("DISPLAY"):
             headless = True
         self._headless = headless  # salva para crash recovery no retry
+        # sync_playwright().__enter__() verifica asyncio.get_event_loop().is_running().
+        # Em threads filhas, asyncio pode retornar o loop do uvicorn (que está rodando),
+        # causando RuntimeError. Garantir loop próprio e não-rodando para este thread.
+        try:
+            _loop = asyncio.get_event_loop()
+            if _loop.is_running():
+                asyncio.set_event_loop(asyncio.new_event_loop())
+        except RuntimeError:
+            asyncio.set_event_loop(asyncio.new_event_loop())
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
         # --no-sandbox e --disable-dev-shm-usage: obrigatórios em Docker/Railway
@@ -1003,7 +1013,14 @@ class PJECalcPlaywright:
         self._log("Navegando para Novo Cálculo via menu…")
 
         self._clicar_menu_lateral("Novo")
-        self._page.wait_for_timeout(1200)
+        # Aguardar a navegação JSF estabilizar antes de interagir com a página.
+        # wait_for_timeout fixo é insuficiente; networkidle garante que todos os
+        # requests AJAX do JSF terminaram antes de evaluate() ser chamado.
+        try:
+            self._page.wait_for_load_state("networkidle", timeout=12000)
+        except Exception:
+            self._page.wait_for_timeout(2500)
+        self._aguardar_ajax()
 
         # Recuperação: se página de erro, volta para home e tenta novamente
         try:
@@ -1015,7 +1032,10 @@ class PJECalcPlaywright:
                     link.first.click()
                     self._page.wait_for_timeout(1500)
                 self._clicar_menu_lateral("Novo")
-                self._page.wait_for_timeout(1200)
+                try:
+                    self._page.wait_for_load_state("networkidle", timeout=10000)
+                except Exception:
+                    self._page.wait_for_timeout(2000)
         except Exception:
             pass
 
@@ -1027,6 +1047,14 @@ class PJECalcPlaywright:
     def fase_dados_processo(self, dados: dict) -> None:
         import datetime
         self._log("Fase 1 — Dados do processo…")
+        # Garantir que a página terminou de navegar antes de chamar evaluate().
+        # "Execution context was destroyed" ocorre quando a página ainda está
+        # em navegação JSF e evaluate() é chamado prematuramente.
+        try:
+            self._page.wait_for_load_state("domcontentloaded", timeout=8000)
+        except Exception:
+            pass
+        self._aguardar_ajax()
         self.mapear_campos("fase1_dados_processo")
 
         proc = dados.get("processo", {})
