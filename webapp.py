@@ -278,32 +278,40 @@ async def editar_campo_previa(
     dados = calculo.dados()
     verbas_mapeadas = calculo.verbas_mapeadas()
 
-    # Aplicar edição
-    dados = aplicar_edicao_usuario(dados, campo, valor)
+    try:
+        # Aplicar edição
+        dados = aplicar_edicao_usuario(dados, campo, valor)
 
-    # Registrar rastreabilidade
-    repo.registrar_rastreabilidade(sessao_id, {
-        "campo_pjecalc": campo,
-        "valor": valor,
-        "fonte": "USUARIO",
-        "confirmado_usuario": True,
-        "pergunta_formulada": f"Edição manual via interface web: {campo}",
-        "resposta_usuario": valor,
-    })
+        # Registrar rastreabilidade
+        repo.registrar_rastreabilidade(sessao_id, {
+            "campo_pjecalc": campo,
+            "valor": valor,
+            "fonte": "USUARIO",
+            "confirmado_usuario": True,
+            "pergunta_formulada": f"Edição manual via interface web: {campo}",
+            "resposta_usuario": valor,
+        })
 
-    # Regenerar prévia
-    nova_previa = gerar_previa(dados, verbas_mapeadas)
-    nova_previa_html = _previa_para_html(nova_previa)
+        # Regenerar prévia
+        nova_previa = gerar_previa(dados, verbas_mapeadas)
+        nova_previa_html = _previa_para_html(nova_previa)
 
-    repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
-    repo.salvar_previa(sessao_id, nova_previa, nova_previa_html)
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        repo.salvar_previa(sessao_id, nova_previa, nova_previa_html)
 
-    return JSONResponse({
-        "sucesso": True,
-        "campo": campo,
-        "valor": valor,
-        "previa_atualizada": nova_previa,
-    })
+        return JSONResponse({
+            "sucesso": True,
+            "campo": campo,
+            "valor": valor,
+            "previa_atualizada": nova_previa,
+        })
+    except Exception as exc:
+        import logging, traceback
+        logging.error("Erro ao editar campo '%s': %s\n%s", campo, exc, traceback.format_exc())
+        return JSONResponse(
+            {"sucesso": False, "erro": str(exc), "campo": campo},
+            status_code=500,
+        )
 
 
 @app.post("/previa/{sessao_id}/editar-verba")
@@ -322,13 +330,22 @@ async def editar_verba(
 
     dados = calculo.dados()
     verbas_mapeadas = calculo.verbas_mapeadas()
-    verbas_mapeadas = aplicar_edicao_verba(verbas_mapeadas, indice, campo, valor)
 
-    nova_previa = gerar_previa(dados, verbas_mapeadas)
-    repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
-    repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+    try:
+        verbas_mapeadas = aplicar_edicao_verba(verbas_mapeadas, indice, campo, valor)
 
-    return JSONResponse({"sucesso": True, "indice": indice, "campo": campo, "valor": valor})
+        nova_previa = gerar_previa(dados, verbas_mapeadas)
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+
+        return JSONResponse({"sucesso": True, "indice": indice, "campo": campo, "valor": valor})
+    except Exception as exc:
+        import logging, traceback
+        logging.error("Erro ao editar verba %d campo '%s': %s\n%s", indice, campo, exc, traceback.format_exc())
+        return JSONResponse(
+            {"sucesso": False, "erro": str(exc), "indice": indice, "campo": campo},
+            status_code=500,
+        )
 
 
 @app.post("/previa/{sessao_id}/confirmar")

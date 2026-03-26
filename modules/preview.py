@@ -255,6 +255,12 @@ def aplicar_edicao_usuario(
     """
     import re as _re
 
+    # Coerção de booleanos enviados como string pelo HTML (deve vir antes de tudo)
+    if novo_valor == "true":
+        novo_valor = True
+    elif novo_valor == "false":
+        novo_valor = False
+
     # honorarios[N].campo
     m = _re.match(r'^honorarios\[(\d+)\]\.(.+)$', campo)
     if m:
@@ -295,8 +301,9 @@ def aplicar_edicao_usuario(
     partes = campo.split(".", 1)
     if len(partes) == 2:
         secao, subcampo = partes
-        if secao in dados and isinstance(dados[secao], dict):
-            dados[secao][subcampo] = novo_valor
+        if secao not in dados or not isinstance(dados[secao], dict):
+            dados[secao] = {}
+        dados[secao][subcampo] = novo_valor
     else:
         dados[campo] = novo_valor
     return dados
