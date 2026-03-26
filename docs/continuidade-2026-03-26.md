@@ -1,14 +1,13 @@
 # Continuidade da Sessão — 2026-03-26
 
 Este documento registra o estado exato do projeto ao final da sessão de trabalho de 26/03/2026.
-Para retomar amanhã: `git pull origin main` e leia este arquivo primeiro.
+Para retomar: `git pull origin main` e leia este arquivo primeiro.
 
 ---
 
 ## Estado do repositório
 
-Commit atual: `6ff8461`
-Branch: `main` — sincronizado com GitHub (`bragabarreto/pjecalc-agente`)
+Commit atual: `HEAD` — branch `main` sincronizado com GitHub (`bragabarreto/pjecalc-agente`)
 
 ### Commits desta sessão (do mais antigo ao mais recente)
 
@@ -19,39 +18,48 @@ Branch: `main` — sincronizado com GitHub (`bragabarreto/pjecalc-agente`)
 | `99158eb` | fix: bloquear processamento sem IA + corrigir schema Structured Outputs |
 | `cd9b78d` | fix: remover output_config + bloquear relatório sem IA |
 | `6ff8461` | fix: remover gerar_pjc() síncrono de confirmar_previa() — **resolve Service Unavailable** |
+| `6a308c4` | feat: skill pjecalc-preenchimento + docs continuidade (pull de outra máquina) |
+| *(sessão atual)* | fix: Dockerfile add xvfb + iniciarPjeCalc.sh readiness check correto |
 
 ---
 
-## O que foi implementado nesta sessão
+## O que foi implementado (acumulado)
 
 ### 1. Regra IA-only (bloqueante)
-- Processamento SEM IA agora retorna `_erro_ia: True` e encerra sem gerar prévia
-- Documentado em `CLAUDE.md` como "Regra de negócio obrigatória — IA-only"
-- `extraction.py`: todos os 3 caminhos (`_extrair_via_llm`, `_extrair_via_llm_pdf`, `_extrair_de_relatorio_estruturado`) bloqueiam em falha
-- `webapp.py`: detecta `_erro_ia`, cria cálculo com `status="erro_ia"` e encerra
-- `novo_calculo.html`: exibe mensagem com link para adicionar créditos na Anthropic
+- `extraction.py`: `_erro_ia=True` em qualquer falha de LLM
+- `webapp.py`: detecta e bloqueia com `status="erro_ia"`
+- `novo_calculo.html`: mensagem clara ao usuário
 
 ### 2. Camada de parametrização (`modules/parametrizacao.py`)
-- Implementa o "cérebro" do pipeline (skill `pjecalc-parametrizacao`)
-- `gerar_parametrizacao(dados)` → 11 passos: dados_processo, parametros_gerais, historico_salarial, verbas, fgts, contribuicao_social, imposto_renda, correcao_juros, honorarios, alertas
-- `_passo_parametros_gerais`: calcula prescrição quinquenal (ajuizamento - 5 anos), jornada, prescrição FGTS
-- `_passo_verbas`: Lançamento EXPRESSO vs MANUAL por verba, reflexos automáticos
-- `_passo_correcao_juros`: ADC 58 — IPCA-E pré-judicial + SELIC judicial; detecta réu público (EC 113/2021)
-- `_gerar_alertas`: campos confiança < 0.7, inconsistências rescisão×verbas, etc.
-- Integrado em `webapp.py` como Fase 2c — resultado salvo em `dados["_parametrizacao"]`
+- 11 passos: dados_processo, parametros_gerais, historico_salarial, verbas, fgts,
+  contribuicao_social, imposto_renda, correcao_juros, honorarios, alertas
+- ADC 58 — IPCA-E pré-judicial + SELIC judicial; detecta réu público (EC 113/2021)
 
-### 3. Fix database crash (honorários D7)
-- `database.py` `criar_calculo()`: normaliza `honorarios` de `list[dict]` → `dict` antes de chamar `.get()`
-- D7 mudou `honorarios` para lista de registros; `database.py` não havia sido atualizado
+### 3. D1 — Bootstrap bypass do Lancador Java
+- `iniciarPjeCalc.sh` usa `org.apache.catalina.startup.Bootstrap` como Abordagem A
+  (quando `tomcat/conf/server.xml` existe — sempre verdadeiro no container)
+- `-Djava.awt.headless=true` elimina dependência de display virtual para o Java
+- Fallback: `java -jar pjecalc.jar` (Lancador) se server.xml ausente
 
-### 4. Fix output_config Anthropic (union types)
-- Tentativa de usar Structured Outputs (`output_config`) falhou: limite de 16 union types, schema tinha 53
-- Removido `output_config` de todos os 3 call sites — parser `_limpar_e_parsear_json()` é suficiente
+### 4. D2 — Automação sem intervenção manual (`playwright_pjecalc.py`)
+- Login automático ou RuntimeError; verbas não reconhecidas → log de aviso (não bloqueia)
 
-### 5. Fix "Service Unavailable" após confirmar prévia (CRÍTICO)
-- **Causa**: `gerar_pjc()` chamado sincronamente em `confirmar_previa()` → OOM no Railway
-- **Fix**: Removido o bloco síncrono; `url_pjc` aponta para `/download/{sessao_id}/pjc` (geração lazy já existia no download route)
-- **Fix template**: `instrucoes.html` linha 106 — `hon` agora normaliza `list[dict]` → `dict` (D7)
+### 5. D4 — Validação HITL em `confirmar_previa` (`webapp.py`)
+- HTTP 422 se: admissão/demissão/tipo_rescisão ausentes, zero verbas, confiança < 0.7
+
+### 6. D7–D10 — Schema alinhado com UI real do PJE-Calc
+- D7: honorários como lista de registros; D8: INSS como 4 checkboxes individuais
+- D9: IRPF com campos reais; D10: baseCalculo via fuzzy match em runtime
+
+### 7. Fix extraction pipeline
+- Timeout 90s, max_tokens 4096; `output_config` removido (schema >16 union types)
+- Relatório estruturado: falha retorna estrutura vazia, nunca cai em pipeline de sentença bruta
+
+### 8. Fixes desta sessão (2026-03-26 retomada)
+- **Dockerfile**: `xvfb` adicionado ao `apt-get install` (estava AUSENTE)
+  → endpoint `/api/screenshot` agora funciona; fallback xdotool tem display válido
+- **iniciarPjeCalc.sh**: readiness check corrigido de `xset q` (não instalado) para
+  `xdotool getmouselocation` — Xvfb confirma disponibilidade em 1-2s em vez de 20s
 
 ---
 
@@ -61,98 +69,72 @@ Branch: `main` — sincronizado com GitHub (`bragabarreto/pjecalc-agente`)
 PDF/DOCX → ingestion.py → extraction.py (Claude API) → parametrizacao.py → prévia web → confirmar → /instrucoes
 ```
 
-- **Ingestão**: OK
-- **Extração via IA**: OK — Claude API com prompt estruturado, confidence scores por campo
-- **Regra IA-only**: OK — bloqueia quando API indisponível
-- **Parametrização**: OK — gera passo_1..passo_10 + alertas
-- **Prévia web** (`/previa/{sessao_id}`): OK — campos editáveis inline, salvo no banco
-- **Confirmação** (`POST /previa/{sessao_id}/confirmar`): OK (corrigido nesta sessão) — redireciona para `/instrucoes/{sessao_id}`
-- **Página instrucoes** (`/instrucoes/{sessao_id}`): OK — mostra parâmetros + botão "Executar Automação"
-- **Automação SSE** (`GET /api/executar/{sessao_id}`): EM ABERTO — veja seção "Próximos passos"
+| Fase | Status |
+|---|---|
+| Ingestão | ✅ OK |
+| Extração via IA (PDF nativo + texto) | ✅ OK |
+| Regra IA-only | ✅ OK |
+| Parametrização (11 passos) | ✅ OK |
+| Prévia web (campos editáveis inline) | ✅ OK |
+| Confirmação + validação HITL | ✅ OK |
+| Página instrucoes + botão "Executar Automação" | ✅ OK |
+| Automação SSE (Playwright) | ⏳ EM ABERTO — Tomcat precisa subir no Railway |
+| Download .PJC (lazy, gerador nativo) | ✅ OK (funcional como fallback) |
 
 ---
 
 ## Problemas em aberto
 
-### A) Tomcat não inicializa no Railway (problema principal)
+### A) Tomcat no Railway (problema principal)
 
-O Tomcat embarcado (`pjecalc.jar`) não está subindo no Railway.
+**Status atual:** Bootstrap bypass implementado e no ar. Ainda não testado após o fix do Xvfb.
 
-**Diagnóstico atual** (`docs/lancador-analysis.md`):
-- Log para em `[TRT8] Configurando variaveis basicas.`
-- Lancador Java pode exibir `JOptionPane` (GUI Swing) que bloqueia o thread principal
-- `iniciarPjeCalc.sh` usa Xvfb + xdotool para auto-dismiss, mas não está funcionando
+**O que fazer:**
+1. Fazer deploy para Railway: `git push origin main`
+2. Aguardar 2-3 min e acessar `GET /api/logs/java` e `GET /api/logs/tomcat`
+3. Se Tomcat subiu → acessar `GET /api/verificar_pjecalc` → deve retornar `{"status":"ok"}`
+4. Se ainda falha → copiar log para `docs/java-log-baseline.txt` e analisar
 
-**Abordagens a tentar** (em ordem de preferência):
-1. Java Agent (`dialog-suppressor.jar`) — intercepta `JOptionPane` via Javassist sem modificar o JAR
-2. Bootstrap bypass — iniciar Tomcat diretamente via `org.apache.catalina.startup.Bootstrap`
-3. xdotool aprimorado — adicionar `fluxbox`, aumentar polling, alternar Enter/Escape
-
-**Como diagnosticar**:
+**Diagnóstico:**
 ```
-GET /api/logs/java    # stdout+stderr completo do Java
-GET /api/screenshot   # screenshot do Xvfb :99
-GET /api/ps           # processos em execução
+GET /api/logs/java      # stdout+stderr do Java (erros de startup do Bootstrap)
+GET /api/logs/tomcat    # catalina.out (deploy da webapp pjecalc/)
+GET /api/screenshot     # screenshot do Xvfb :99 (agora funciona com xvfb instalado)
+GET /api/ps             # processos em execução
+GET /api/verificar_pjecalc  # testa se localhost:9257 responde
 ```
 
-### B) Automação Playwright (fases incompletas)
+**Causa provável de falha:** Se o log ainda mostrar `[TRT8]` prefixes, o Bootstrap
+não está sendo executado — verificar se `server.xml` existe e se o `_iniciar_java`
+está caindo no fallback (java -jar).
 
-O módulo `modules/playwright_pjecalc.py` existe e tem 9 fases, mas:
-- Depende do Tomcat estar rodando (problema A acima)
-- Não foi testado end-to-end (Tomcat nunca subiu no Railway)
-- Seletores JSF ainda não foram mapeados com PJE-Calc real rodando
+### B) Automação Playwright (depende do Tomcat)
 
-**Fases implementadas** (a verificar quando Tomcat subir):
-1. `fase_dados_processo` — número, vara, município, datas
-2. `fase_parametros_gerais` — prescrição, data inicial apuração, jornada
-3. `fase_historico_salarial` — salários por período
-4. `fase_verbas` — verbas deferidas (EXPRESSO/MANUAL por verba via parametrizacao)
-5. `fase_fgts` — multa 40%, saldo depositado
-6. `fase_contribuicao_social` — INSS 4 checkboxes individuais
-7. `fase_cartao_ponto` — (pode não existir em todas as versões)
-8. `fase_irpf` — imposto de renda RRA
-9. `fase_honorarios` — percentual, base, por parte
-10. Liquidar → exportar → download `.PJC`
-
-### C) Gerador `.PJC` (fallback)
-
-`modules/pjc_generator.py` existe mas tem simplificações (valorDaCausa=0, dataAutuacao=null).
-Não foi validado com round-trip no PJE-Calc real.
-Deve ser calibrado após a automação Playwright funcionar (comparar XML gerado vs. exportado pelo PJE-Calc).
+- 9 fases implementadas em `playwright_pjecalc.py`
+- Não testado end-to-end (Tomcat nunca confirmado no Railway)
+- Assim que Tomcat subir, testar via botão "Executar Automação" na página /instrucoes
 
 ---
 
-## Como retomar amanhã
+## Como retomar
 
-### Setup na outra máquina
+### Próximo passo imediato
 
 ```bash
-git clone https://github.com/bragabarreto/pjecalc-agente.git
-cd pjecalc-agente/pjecalc_agent
-# ou, se já clonou:
-git pull origin main
+git push origin main   # deploy para Railway
+# aguardar 3-5 min, então:
+# curl https://<seu-app>.railway.app/api/verificar_pjecalc
+# curl https://<seu-app>.railway.app/api/logs/tomcat
 ```
 
-**Variáveis de ambiente necessárias** (Railway já tem, local precisa de .env):
-```
-ANTHROPIC_API_KEY=...     # obrigatório — sem créditos bloqueia tudo
-GEMINI_API_KEY=...        # opcional — fallback (tem timeout longo se falhar)
-DATABASE_URL=...          # opcional — sem isso usa SQLite local
-```
-
-### Próximo passo recomendado: resolver Tomcat (Problema A)
-
-1. Fazer deploy no Railway e acessar `GET /api/logs/java`
-2. Copiar log completo para `docs/java-log-baseline.txt`
-3. Escolher abordagem: Java Agent (preferida) ou Bootstrap bypass
-4. Referência: `docs/lancador-analysis.md` + skill `pjecalc-orchestrate` (Fase 2)
+Se Tomcat responder → testar automação completa (upload PDF → prévia → confirmar → executar).
+Se Tomcat falhar → trazer o log para a sessão e diagnosticar.
 
 ### Contexto para o Claude Code na próxima sessão
 
-Diga ao Claude Code:
-> "Continua o projeto PJE-Calc agente. Leia `docs/continuidade-2026-03-26.md` e o CLAUDE.md.
-> O Tomcat não está subindo no Railway — o log para em '[TRT8] Configurando variaveis basicas.'.
-> Preciso resolver isso para que a automação Playwright funcione. Use a skill /pjecalc-orchestrate Fase 2."
+> "Continua o projeto PJE-Calc agente. Leia `docs/continuidade-2026-03-26.md`.
+> O deploy foi feito — trago os logs de `/api/logs/java` e `/api/logs/tomcat`.
+> [colar logs aqui]"
 
 ---
 
@@ -162,12 +144,14 @@ Diga ao Claude Code:
 |---|---|
 | `CLAUDE.md` | Contexto completo do projeto — **ler primeiro** |
 | `modules/extraction.py` | Extração via Claude API + regra IA-only |
-| `modules/parametrizacao.py` | Cérebro do pipeline — skill pjecalc-parametrizacao |
+| `modules/parametrizacao.py` | Cérebro do pipeline — 11 passos |
 | `modules/playwright_pjecalc.py` | Automação PJE-Calc via Playwright (9 fases) |
 | `modules/pjc_generator.py` | Gerador nativo .PJC (fallback) |
 | `database.py` | ORM SQLAlchemy — entidades Processo, Calculo, InteracaoHITL |
 | `webapp.py` | FastAPI — rotas principais + SSE executor |
-| `iniciarPjeCalc.sh` | Startup do PJE-Calc no Railway (Xvfb + xdotool) |
+| `iniciarPjeCalc.sh` | Startup do PJE-Calc no Railway (Bootstrap + Xvfb) |
 | `docker-entrypoint.sh` | Ordem de inicialização: PJE-Calc bg → uvicorn imediato |
-| `docs/lancador-analysis.md` | Análise do Lancador Java (bloqueio no Railway) |
-| `docs/diagnostico-falhas-automacao.md` | Diagnóstico de falhas na automação |
+| `Dockerfile` | Build do container (xvfb agora incluído) |
+| `docs/lancador-analysis.md` | Análise do Lancador Java (pontos de bloqueio) |
+| `docs/decisions.md` | Registro de todas as decisões técnicas da sessão |
+| `skills/pjecalc-preenchimento/` | Skill com guia campo-a-campo do PJE-Calc |

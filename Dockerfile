@@ -54,6 +54,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgbm1 libasound2 libpango-1.0-0 libcairo2 libxshmfence1 \
     # Libs X11 exigidas pelo Java AWT (libawt_xawt.so)
     libxtst6 libxi6 libxrender1 \
+    # Xvfb: display virtual para GUI Swing do Lancador + xdotool + screenshot
+    xvfb \
     # xdotool: auto-dismiss dialogs Java no Xvfb
     # scrot: screenshots do display virtual para diagnóstico
     xdotool scrot \

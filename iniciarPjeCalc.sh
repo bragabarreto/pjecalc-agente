@@ -43,10 +43,9 @@ if command -v Xvfb &>/dev/null; then
     Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
     XVFB_PID=$!
     export DISPLAY=:99
-    # Aguardar Xvfb ficar pronto (testar conexão)
+    # Aguardar Xvfb ficar pronto — getmouselocation retorna 0 assim que X aceita conexões
     for i in $(seq 1 20); do
-        if DISPLAY=:99 xdotool getactivewindow &>/dev/null 2>&1 || \
-           DISPLAY=:99 xset q &>/dev/null 2>&1; then
+        if DISPLAY=:99 xdotool getmouselocation &>/dev/null 2>&1; then
             echo "[PJE-Calc] Xvfb pronto após ${i}s."
             break
         fi
