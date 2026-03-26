@@ -400,16 +400,9 @@ async def confirmar_previa(
     # ── Campos validados — confirmar e prosseguir ─────────────────────────────
     repo.confirmar_previa(sessao_id)
 
-    # Gerar .pjc (backup nativo) com os dados já validados
-    # dados e verbas_mapeadas já foram carregados na validação acima
-    url_pjc = None
-    try:
-        from modules.pjc_generator import gerar_pjc
-        caminho_pjc = gerar_pjc(dados, verbas_mapeadas, sessao_id)
-        repo.marcar_exportado(sessao_id, str(caminho_pjc))
-        url_pjc = f"/download/{sessao_id}/pjc"
-    except Exception as exc:
-        logger.warning(f"Não foi possível gerar .pjc: {exc}")
+    # .pjc gerado sob demanda via /download/{sessao_id}/pjc (lazy generation)
+    # Não gerar aqui — evita OOM no Railway durante o request HTTP de confirmação.
+    url_pjc = f"/download/{sessao_id}/pjc"
 
     url_launcher = f"/download/{sessao_id}/launcher"
     url_script   = f"/download/{sessao_id}/script"

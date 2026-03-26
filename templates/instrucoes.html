@@ -103,7 +103,8 @@ O PJE-Calc será aberto automaticamente se necessário.
 {% set pres = dados.get('prescricao', {}) %}
 {% set avp  = dados.get('aviso_previo', {}) %}
 {% set fgts = dados.get('fgts', {}) %}
-{% set hon  = dados.get('honorarios', {}) %}
+{% set _hon_raw = dados.get('honorarios', {}) %}
+{% set hon = _hon_raw[0] if (_hon_raw is iterable and _hon_raw is not mapping and _hon_raw | length > 0) else (_hon_raw if _hon_raw is mapping else {}) %}
 {% set cj   = dados.get('correcao_juros', {}) %}
 {% set cs   = dados.get('contribuicao_social', {}) %}
 {% set ir   = dados.get('imposto_renda', {}) %}
