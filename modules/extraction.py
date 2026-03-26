@@ -820,6 +820,23 @@ def extrair_dados_sentenca(
     else:
         dados_llm = _extrair_via_llm(texto_para_llm, extras=extras)
 
+    # IA indisponível → bloquear; prévia NÃO pode ser gerada sem extração por IA
+    if "_erro_llm" in dados_llm:
+        logger.error("IA indisponível — processamento bloqueado conforme regra de negócio")
+        return {
+            "_erro_ia": True,
+            "alertas": dados_llm.get("alertas", []) + [
+                "BLOQUEADO: extração via IA indisponível. "
+                "Verifique créditos da API Anthropic e reprocesse o documento."
+            ],
+            "campos_ausentes": [],
+            "verbas_deferidas": [],
+            "historico_salarial": [],
+            "faltas": [],
+            "ferias": [],
+            "honorarios": [],
+        }
+
     # Fase 3: merge (LLM prevalece; regex preenche onde LLM retornou null)
     dados = _merge_extracao(dados_regex, dados_llm)
 
@@ -834,23 +851,211 @@ def extrair_dados_sentenca(
 
 _EXTRACTION_SCHEMA: dict = {
     "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "processo", "contrato", "prescricao", "aviso_previo",
+        "verbas_deferidas", "fgts", "honorarios", "honorarios_periciais",
+        "correcao_juros", "contribuicao_social", "imposto_renda",
+        "historico_salarial", "faltas", "ferias", "campos_ausentes", "alertas",
+    ],
     "properties": {
-        "processo": {"type": "object"},
-        "contrato": {"type": "object"},
-        "aviso_previo": {"type": "object"},
-        "historico_salarial": {"type": "array"},
-        "verbas_deferidas": {"type": "array"},
-        "fgts": {"type": "object"},
-        "honorarios": {"type": "array"},
-        "honorarios_periciais": {"type": ["number", "null"]},
-        "contribuicao_social": {"type": "object"},
-        "imposto_renda": {"type": "object"},
-        "correcao_juros": {"type": "object"},
-        "prescricao": {"type": "object"},
-        "alertas": {"type": "array"},
+        "processo": {
+            "type": "object", "additionalProperties": False,
+            "required": ["numero","reclamante","cpf_reclamante","reclamado","cnpj_reclamado",
+                         "estado","municipio","vara","valor_causa","autuado_em","confianca"],
+            "properties": {
+                "numero":         {"type": ["string","null"]},
+                "reclamante":     {"type": ["string","null"]},
+                "cpf_reclamante": {"type": ["string","null"]},
+                "reclamado":      {"type": ["string","null"]},
+                "cnpj_reclamado": {"type": ["string","null"]},
+                "estado":         {"type": ["string","null"]},
+                "municipio":      {"type": ["string","null"]},
+                "vara":           {"type": ["string","null"]},
+                "valor_causa":    {"type": ["number","null"]},
+                "autuado_em":     {"type": ["string","null"]},
+                "confianca":      {"type": "number"},
+            },
+        },
+        "contrato": {
+            "type": "object", "additionalProperties": False,
+            "required": ["admissao","demissao","tipo_rescisao","regime","carga_horaria",
+                         "jornada_diaria","jornada_semanal","maior_remuneracao",
+                         "ultima_remuneracao","ajuizamento","confianca"],
+            "properties": {
+                "admissao":          {"type": ["string","null"]},
+                "demissao":          {"type": ["string","null"]},
+                "tipo_rescisao":     {"type": ["string","null"]},
+                "regime":            {"type": ["string","null"]},
+                "carga_horaria":     {"type": ["integer","null"]},
+                "jornada_diaria":    {"type": ["number","null"]},
+                "jornada_semanal":   {"type": ["number","null"]},
+                "maior_remuneracao": {"type": ["number","null"]},
+                "ultima_remuneracao":{"type": ["number","null"]},
+                "ajuizamento":       {"type": ["string","null"]},
+                "confianca":         {"type": "number"},
+            },
+        },
+        "prescricao": {
+            "type": "object", "additionalProperties": False,
+            "required": ["quinquenal","fgts","confianca"],
+            "properties": {
+                "quinquenal": {"type": ["boolean","null"]},
+                "fgts":       {"type": ["boolean","null"]},
+                "confianca":  {"type": "number"},
+            },
+        },
+        "aviso_previo": {
+            "type": "object", "additionalProperties": False,
+            "required": ["tipo","prazo_dias","projetar","confianca"],
+            "properties": {
+                "tipo":       {"type": ["string","null"]},
+                "prazo_dias": {"type": ["integer","null"]},
+                "projetar":   {"type": ["boolean","null"]},
+                "confianca":  {"type": "number"},
+            },
+        },
+        "verbas_deferidas": {
+            "type": "array",
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["nome_sentenca","texto_original","tipo","caracteristica","ocorrencia",
+                             "periodo_inicio","periodo_fim","percentual","base_calculo",
+                             "valor_informado","incidencia_fgts","incidencia_inss","incidencia_ir",
+                             "verba_principal_ref","confianca"],
+                "properties": {
+                    "nome_sentenca":     {"type": "string"},
+                    "texto_original":    {"type": ["string","null"]},
+                    "tipo":              {"type": "string"},
+                    "caracteristica":    {"type": "string"},
+                    "ocorrencia":        {"type": "string"},
+                    "periodo_inicio":    {"type": ["string","null"]},
+                    "periodo_fim":       {"type": ["string","null"]},
+                    "percentual":        {"type": ["number","null"]},
+                    "base_calculo":      {"type": ["string","null"]},
+                    "valor_informado":   {"type": ["number","null"]},
+                    "incidencia_fgts":   {"type": "boolean"},
+                    "incidencia_inss":   {"type": "boolean"},
+                    "incidencia_ir":     {"type": "boolean"},
+                    "verba_principal_ref":{"type": ["string","null"]},
+                    "confianca":         {"type": "number"},
+                },
+            },
+        },
+        "fgts": {
+            "type": "object", "additionalProperties": False,
+            "required": ["aliquota","multa_40","multa_467","confianca"],
+            "properties": {
+                "aliquota":   {"type": ["number","null"]},
+                "multa_40":   {"type": ["boolean","null"]},
+                "multa_467":  {"type": ["boolean","null"]},
+                "confianca":  {"type": "number"},
+            },
+        },
+        "honorarios": {
+            "type": "array",
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["tipo","devedor","tipo_valor","base_apuracao",
+                             "percentual","valor_informado","apurar_ir"],
+                "properties": {
+                    "tipo":           {"type": "string"},
+                    "devedor":        {"type": "string"},
+                    "tipo_valor":     {"type": "string"},
+                    "base_apuracao":  {"type": "string"},
+                    "percentual":     {"type": ["number","null"]},
+                    "valor_informado":{"type": ["number","null"]},
+                    "apurar_ir":      {"type": "boolean"},
+                },
+            },
+        },
+        "honorarios_periciais": {"type": ["number","null"]},
+        "correcao_juros": {
+            "type": "object", "additionalProperties": False,
+            "required": ["indice_correcao","base_juros","taxa_juros","jam_fgts","confianca"],
+            "properties": {
+                "indice_correcao": {"type": ["string","null"]},
+                "base_juros":      {"type": ["string","null"]},
+                "taxa_juros":      {"type": ["string","null"]},
+                "jam_fgts":        {"type": ["boolean","null"]},
+                "confianca":       {"type": "number"},
+            },
+        },
+        "contribuicao_social": {
+            "type": "object", "additionalProperties": False,
+            "required": ["apurar_segurado_salarios_devidos","cobrar_do_reclamante",
+                         "com_correcao_trabalhista","apurar_sobre_salarios_pagos",
+                         "lei_11941","confianca"],
+            "properties": {
+                "apurar_segurado_salarios_devidos": {"type": "boolean"},
+                "cobrar_do_reclamante":             {"type": "boolean"},
+                "com_correcao_trabalhista":         {"type": "boolean"},
+                "apurar_sobre_salarios_pagos":      {"type": "boolean"},
+                "lei_11941":                        {"type": ["boolean","null"]},
+                "confianca":                        {"type": "number"},
+            },
+        },
+        "imposto_renda": {
+            "type": "object", "additionalProperties": False,
+            "required": ["apurar","tributacao_exclusiva","regime_de_caixa","tributacao_em_separado",
+                         "deducao_inss","deducao_honorarios_reclamante","deducao_pensao_alimenticia",
+                         "valor_pensao","meses_tributaveis","dependentes","confianca"],
+            "properties": {
+                "apurar":                         {"type": "boolean"},
+                "tributacao_exclusiva":            {"type": ["boolean","null"]},
+                "regime_de_caixa":                {"type": ["boolean","null"]},
+                "tributacao_em_separado":          {"type": ["boolean","null"]},
+                "deducao_inss":                   {"type": ["boolean","null"]},
+                "deducao_honorarios_reclamante":   {"type": ["boolean","null"]},
+                "deducao_pensao_alimenticia":      {"type": ["boolean","null"]},
+                "valor_pensao":                   {"type": ["number","null"]},
+                "meses_tributaveis":              {"type": ["integer","null"]},
+                "dependentes":                    {"type": ["integer","null"]},
+                "confianca":                      {"type": "number"},
+            },
+        },
+        "historico_salarial": {
+            "type": "array",
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["data_inicio","data_fim","valor"],
+                "properties": {
+                    "data_inicio": {"type": "string"},
+                    "data_fim":    {"type": "string"},
+                    "valor":       {"type": "number"},
+                },
+            },
+        },
+        "faltas": {
+            "type": "array",
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["data_inicial","data_final","justificada","descricao"],
+                "properties": {
+                    "data_inicial": {"type": "string"},
+                    "data_final":   {"type": "string"},
+                    "justificada":  {"type": "boolean"},
+                    "descricao":    {"type": ["string","null"]},
+                },
+            },
+        },
+        "ferias": {
+            "type": "array",
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["situacao","periodo_inicio","periodo_fim","abono","dobra"],
+                "properties": {
+                    "situacao":       {"type": "string"},
+                    "periodo_inicio": {"type": "string"},
+                    "periodo_fim":    {"type": "string"},
+                    "abono":          {"type": "boolean"},
+                    "dobra":          {"type": "boolean"},
+                },
+            },
+        },
+        "campos_ausentes": {"type": "array", "items": {"type": "string"}},
+        "alertas":         {"type": "array", "items": {"type": "string"}},
     },
-    "required": ["processo", "contrato", "verbas_deferidas"],
-    "additionalProperties": True,
 }
 
 
@@ -1360,8 +1565,8 @@ def _extrair_via_llm_pdf(
                 messages=[{"role": "user", "content": content_blocks}],
                 output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
             )
-        except Exception:
-            # Fallback sem output_config
+        except (TypeError, ValueError, AttributeError):
+            # SDK não suporta output_config — apenas erros de assinatura fazem retry
             resposta = cliente.messages.create(
                 model=CLAUDE_MODEL,
                 max_tokens=4096,
@@ -1372,7 +1577,7 @@ def _extrair_via_llm_pdf(
         return _limpar_e_parsear_json(resposta.content[0].text.strip())
     except Exception as e:
         logger.warning(f"Falha na extração nativa de PDF: {e}")
-        return {"_erro_llm": str(e)}
+        return {"_erro_llm": str(e), "alertas": [str(e)]}
 
 
 def extrair_dados_sentenca_pdf(
@@ -1391,11 +1596,22 @@ def extrair_dados_sentenca_pdf(
     pdf_bytes = open(pdf_path, "rb").read()
     dados = _extrair_via_llm_pdf(pdf_bytes, extras=extras)
 
-    if "_erro_llm" in dados:
-        logger.warning("Extração nativa falhou — fallback para extração via texto")
-        from modules.ingestion import ler_documento
-        resultado = ler_documento(pdf_path)
-        return extrair_dados_sentenca(resultado["texto"], sessao_id=sessao_id, extras=extras)
+    if "_erro_llm" in dados or dados.get("_erro_ia"):
+        # IA indisponível → bloquear; não cair em extração via texto (produziria dados incompletos)
+        logger.error("Extração nativa de PDF falhou — processamento bloqueado")
+        return {
+            "_erro_ia": True,
+            "alertas": dados.get("alertas", []) + [
+                "BLOQUEADO: extração via IA indisponível. "
+                "Verifique créditos da API Anthropic e reprocesse o documento."
+            ],
+            "campos_ausentes": [],
+            "verbas_deferidas": [],
+            "historico_salarial": [],
+            "faltas": [],
+            "ferias": [],
+            "honorarios": [],
+        }
 
     dados = _validar_e_completar(dados)
 

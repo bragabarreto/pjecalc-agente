@@ -434,6 +434,10 @@ async function aguardarProcessamento(sessaoId, urlPrevia) {
         return;
       }
       if (status.status === 'erro') throw new Error('Erro durante o processamento da sentença.');
+      if (status.status === 'erro_ia') throw new Error(
+        'IA indisponível: sem créditos na API Anthropic. ' +
+        'Adicione créditos em console.anthropic.com e reenvie o documento.'
+      );
       document.getElementById('mensagem-status').textContent =
         'Processando com IA... (' + (tentativas * 5) + 's)';
     } catch(err) {

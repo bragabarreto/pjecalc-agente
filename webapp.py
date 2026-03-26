@@ -1143,7 +1143,23 @@ def _tarefa_processar_sentenca(
                 usar_gemini=usar_gemini,
             )
 
-        # Fase 2b: Parametrização — converte dados brutos → instruções módulo a módulo
+        # Fase 2b: IA bloqueada → salvar calculo com status erro_ia e encerrar
+        if dados.get("_erro_ia"):
+            numero = f"SESS-{sessao_id[:8]}"
+            repo.criar_calculo(
+                sessao_id=sessao_id,
+                numero_processo=numero,
+                dados=dados,
+                verbas_mapeadas={},
+            )
+            calculo = db.query(Calculo).filter_by(sessao_id=sessao_id).first()
+            if calculo:
+                calculo.status = "erro_ia"
+                db.commit()
+            logger.error(f"Sessão {sessao_id}: IA indisponível — processamento encerrado")
+            return
+
+        # Fase 2c: Parametrização — converte dados brutos → instruções módulo a módulo
         try:
             parametrizacao = gerar_parametrizacao(dados)
             # Propagar alertas da parametrização para os dados

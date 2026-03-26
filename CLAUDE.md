@@ -74,6 +74,20 @@ O gerador SSE em `executar_automacao_sse()` faz polling de Tomcat (até 600s) an
 - **PJE-Calc headless** (`iniciarPjeCalc.sh`): Xvfb `:99` + `xdotool` para auto-dismiss de dialogs Swing do Lancador. Java redireciona para `/opt/pjecalc/java.log`.
 - **pjecalc-dist/**: distribuição do PJE-Calc Cidadão sem JRE e sem navegador. Contém `bin/pjecalc.jar` + `tomcat/webapps/pjecalc/`. Commitado no repositório (91MB).
 
+## Regra de negócio obrigatória — IA-only
+
+> **A prévia do cálculo NÃO pode ser gerada sem extração via IA.**
+>
+> Extração somente via regex produz dados incompletos e não confiáveis para fins de liquidação
+> trabalhista. Quando a IA (Claude API) estiver indisponível (sem créditos, timeout, erro 400/500),
+> o processamento deve ser BLOQUEADO imediatamente com status `erro_ia`.
+>
+> - `extraction.py`: `_erro_ia=True` retornado quando `_extrair_via_llm` ou `_extrair_via_llm_pdf` falham
+> - `webapp.py`: ao receber `_erro_ia`, cria calculo com `status="erro_ia"` e encerra sem gerar prévia
+> - `novo_calculo.html`: exibe mensagem clara ao usuário com link para adicionar créditos
+>
+> **Nunca remover este comportamento.** A confiabilidade da liquidação depende da extração por IA.
+
 ## Convenções críticas
 
 - **Datas no PJE-Calc**: sempre `DD/MM/AAAA` (barras). Nunca ISO.
