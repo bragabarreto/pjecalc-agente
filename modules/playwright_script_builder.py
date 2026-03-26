@@ -320,19 +320,18 @@ def _novo(page) -> bool:
     return False
 
 
-# ── FASE 1 — CRIAR NOVO CÁLCULO EXTERNO ──────────────────────────────────────
+# ── FASE 1 — CRIAR NOVO CÁLCULO ───────────────────────────────────────────────
 
 def fase_01_novo_calculo(page) -> bool:
-    _log("\n[FASE 1] Criando novo Cálculo Externo...")
+    _log("\n[FASE 1] Criando Novo Cálculo...")
 
-    # Navegar para lista de Cálculos Externos
-    page.goto(PJECALC_BASE + "/pages/calculo/calculo-externo.xhtml")
+    # Navegar via menu lateral "Novo" (primeira liquidação de sentença).
+    # NÃO usar "Cálculo Externo" — só serve para atualizar cálculos existentes.
+    # NÃO navegar por URL direta — ViewState do JSF seria inválido.
+    if not _clicar_menu(page, "Novo"):
+        _pausar("Clique no menu lateral 'Novo' e pressione Enter")
     page.wait_for_load_state("networkidle", timeout=T_NAV)
     time.sleep(1.0)
-
-    # Clicar em "Novo"
-    if not _novo(page):
-        _pausar("Clique em 'Novo' para criar um cálculo externo e pressione Enter")
 
     time.sleep(0.8)
 
@@ -374,7 +373,7 @@ def fase_01_novo_calculo(page) -> bool:
         _fill(page, "reclamadoNumeroDocumentoFiscal",
               proc.get("cnpj_reclamado"), "CNPJ Reclamado", obrigatorio=False)
 
-    # ── Aba: Parâmetros do Cálculo Externo ───────────────────────────────────
+    # ── Aba: Parâmetros do Cálculo ───────────────────────────────────────────
     _clicar_aba(page, "tabParametrosCalculo")
     time.sleep(0.3)
 
@@ -696,7 +695,7 @@ def main():
         _log("  ✓  PJE-Calc carregado — iniciando preenchimento\n")
 
         fases = [
-            ("01 — Novo Cálculo Externo",  fase_01_novo_calculo),
+            ("01 — Novo Cálculo",          fase_01_novo_calculo),
             ("02 — Histórico Salarial",    fase_02_historico_salarial),
             ("03 — Verbas",                fase_03_verbas),
             ("04 — FGTS",                  fase_04_fgts),
