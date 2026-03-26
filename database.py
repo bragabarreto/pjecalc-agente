@@ -293,7 +293,12 @@ class RepositorioCalculo:
         # Preencher campos
         cont = dados.get("contrato", {})
         fgts = dados.get("fgts", {})
-        hon = dados.get("honorarios", {})
+        _hon_raw = dados.get("honorarios", {})
+        # D7: honorarios pode ser lista ou dict — normaliza para dict
+        if isinstance(_hon_raw, list):
+            hon = _hon_raw[0] if _hon_raw else {}
+        else:
+            hon = _hon_raw if isinstance(_hon_raw, dict) else {}
         cj = dados.get("correcao_juros", {})
         presc = dados.get("prescricao", {})
         ap = dados.get("aviso_previo", {})
