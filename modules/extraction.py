@@ -777,15 +777,21 @@ def extrair_dados_sentenca(
         resultado = _extrair_de_relatorio_estruturado(texto, sessao_id)
         if "_erro_llm" not in resultado:
             return resultado
-        # Falhou — retorna estrutura parcial com alerta; NÃO executa extração completa
-        # (relatório é dado estruturado — prompts de sentença bruta produziriam lixo)
-        logger.warning("Falha no mapeamento do relatório — retornando estrutura vazia com alerta")
-        estrutura = _estrutura_vazia_com_regex({})
-        estrutura.setdefault("alertas", []).extend(resultado.get("alertas", []))
-        estrutura["alertas"].append(
-            "ATENÇÃO: falha ao processar o relatório. Verifique o formato e reenvie."
-        )
-        return estrutura
+        # IA falhou no relatório — bloquear conforme regra de negócio
+        logger.error("IA falhou no mapeamento do relatório — processamento bloqueado")
+        return {
+            "_erro_ia": True,
+            "alertas": resultado.get("alertas", []) + [
+                "BLOQUEADO: falha ao processar o relatório via IA. "
+                "Verifique créditos da API Anthropic e reenvie o documento."
+            ],
+            "campos_ausentes": [],
+            "verbas_deferidas": [],
+            "historico_salarial": [],
+            "faltas": [],
+            "ferias": [],
+            "honorarios": [],
+        }
 
     # Segmentar sentença para focar no dispositivo
     blocos = segmentar_sentenca(texto)
@@ -1174,7 +1180,8 @@ def _extrair_de_relatorio_estruturado(
     ao schema, preservando a classificação original.
     """
     if not ANTHROPIC_API_KEY:
-        return _estrutura_vazia_com_regex({})
+        return {"_erro_llm": "ANTHROPIC_API_KEY não configurada",
+                "alertas": ["ANTHROPIC_API_KEY não configurada — processamento impossível"]}
 
     cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=90.0)
 
@@ -1189,15 +1196,9 @@ def _extrair_de_relatorio_estruturado(
                 "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:25000]),
             }],
         )
-        # Structured Outputs: garante JSON válido sem parsing tolerante
-        try:
-            resposta = cliente.messages.create(
-                **kwargs,
-                output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
-            )
-        except (TypeError, ValueError, AttributeError):
-            # SDK não suporta output_config — sem retry de timeout
-            resposta = cliente.messages.create(**kwargs)
+        # Nota: output_config removido — schema de extração tem >16 union types (limite API Anthropic)
+        # O parser tolerante _limpar_e_parsear_json cobre todos os casos de JSON malformado.
+        resposta = cliente.messages.create(**kwargs)
 
         conteudo = resposta.content[0].text.strip()
         dados = _limpar_e_parsear_json(conteudo)
@@ -1407,22 +1408,14 @@ def _extrair_via_llm(
             "cache_control": {"type": "ephemeral"},
         })
 
-        # Structured Outputs: garante JSON válido sem parsing tolerante
-        _call_kwargs = dict(
+        # Nota: output_config removido — schema tem >16 union types (limite API Anthropic)
+        resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=4096,
             temperature=CLAUDE_EXTRACTION_TEMPERATURE,
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content_blocks}],
         )
-        try:
-            resposta = cliente.messages.create(
-                **_call_kwargs,
-                output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
-            )
-        except (TypeError, ValueError, AttributeError):
-            # SDK não suporta output_config — fallback sem retry de timeout
-            resposta = cliente.messages.create(**_call_kwargs)
         conteudo = resposta.content[0].text.strip()
         return _limpar_e_parsear_json(conteudo)
 
@@ -1556,24 +1549,14 @@ def _extrair_via_llm_pdf(
     })
 
     try:
-        try:
-            resposta = cliente.messages.create(
-                model=CLAUDE_MODEL,
-                max_tokens=4096,
-                temperature=0.0,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": content_blocks}],
-                output_config={"format": {"type": "json_schema", "schema": _EXTRACTION_SCHEMA}},
-            )
-        except (TypeError, ValueError, AttributeError):
-            # SDK não suporta output_config — apenas erros de assinatura fazem retry
-            resposta = cliente.messages.create(
-                model=CLAUDE_MODEL,
-                max_tokens=4096,
-                temperature=0.0,
-                system=_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": content_blocks}],
-            )
+        # Nota: output_config removido — schema tem >16 union types (limite API Anthropic)
+        resposta = cliente.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=4096,
+            temperature=0.0,
+            system=_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": content_blocks}],
+        )
         return _limpar_e_parsear_json(resposta.content[0].text.strip())
     except Exception as e:
         logger.warning(f"Falha na extração nativa de PDF: {e}")
