@@ -713,13 +713,47 @@ class PJECalcPlaywright:
         diretamente sem depender de Playwright ver o elemento.
         Retorna True se clicou com sucesso, False se não encontrou.
         """
+        # Tentativa 1: seletor de ID específico do sidebar (robusto, sem ambiguidade)
+        _MENU_ID_MAP = {
+            "Histórico Salarial": "a[id*='menuHistoricoSalarial']",
+            "Verbas":             "a[id*='menuVerbas']",
+            "FGTS":               "a[id*='menuFGTS']",
+            "Honorários":         "a[id*='menuHonorarios']",
+            "Liquidar":           "a[id*='menuLiquidar']",
+            "Faltas":             "a[id*='menuFaltas']",
+            "Férias":             "a[id*='menuFerias']",
+            "Dados do Cálculo":   "a[id*='menuCalculo']",
+            "Novo":               "a[id*='menuNovo']",
+            "Operações":          "a[id*='menuOperacoes']",
+            "Imprimir":           "a[id*='menuImprimir']",
+            "Contribuição Social": "a[id*='menuContribuicaoSocial']",
+            "Contribuicao Social": "a[id*='menuContribuicaoSocial']",
+            "Imposto de Renda":   "a[id*='menuImpostoRenda']",
+            "Multas":             "a[id*='menuMultas']",
+            "Cartão de Ponto":    "a[id*='menuCartaoPonto']",
+            "Salário Família":    "a[id*='menuSalarioFamilia']",
+            "Seguro Desemprego":  "a[id*='menuSeguroDesemprego']",
+            "Pensão Alimentícia": "a[id*='menuPensaoAlimenticia']",
+            "Previdência Privada": "a[id*='menuPrevidenciaPrivada']",
+        }
+        sel_id = _MENU_ID_MAP.get(texto)
+        if sel_id:
+            loc = self._page.locator(sel_id)
+            if loc.count() > 0:
+                try:
+                    loc.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    return True
+                except Exception:
+                    pass  # fallback para busca por texto abaixo
         self._page.wait_for_timeout(400)
         # Método primário: JS click — bypassa visibilidade, funciona em menus colapsados
         clicou = self._page.evaluate(
             """(texto) => {
                 const links = [...document.querySelectorAll('a')];
                 const el = links.find(a =>
-                    a.textContent.replace(/\s+/g, ' ').trim().includes(texto)
+                    a.textContent.replace(/\\s+/g, ' ').trim().includes(texto)
                 );
                 if (el) { el.click(); return true; }
                 return false;
@@ -755,6 +789,30 @@ class PJECalcPlaywright:
         except Exception as e:
             if obrigatorio:
                 self._log(f"  ⚠ Menu '{texto}': erro ao clicar — {e}")
+            return False
+
+    def _clicar_botao_id(self, id_suffix: str) -> bool:
+        """Clica em botão/input pelo sufixo de ID (seletor específico, menos ambíguo que texto)."""
+        loc = self._page.locator(f"input[id*='{id_suffix}'], button[id*='{id_suffix}']")
+        if loc.count() > 0:
+            try:
+                loc.first.click()
+                return True
+            except Exception:
+                return False
+        return False
+
+    def _verificar_secao_ativa(self, secao_esperada: str) -> bool:
+        """Verifica se a seção atual (URL ou heading) corresponde à seção esperada."""
+        try:
+            url = self._page.url
+            heading = self._page.evaluate(
+                "() => (document.querySelector('h1,h2,h3,legend,.tituloPagina')||{}).textContent?.trim()||''"
+            )
+            self._log(f"  ℹ Seção: '{heading[:60]}' | url: ...{url[-50:]}")
+            return (secao_esperada.lower() in heading.lower()
+                    or secao_esperada.lower() in url.lower())
+        except Exception:
             return False
 
     def _clicar_aba(self, aba_id: str) -> None:
@@ -1282,6 +1340,8 @@ class PJECalcPlaywright:
         if zerar_negativos is not None:
             self._marcar_checkbox("zerarValoresNegativos", bool(zerar_negativos))
 
+        self._clicar_salvar()
+        self._aguardar_ajax()
         self._log("  Fase 2a concluída.")
 
     # ── Fase 2: Histórico Salarial ─────────────────────────────────────────────
@@ -1296,6 +1356,8 @@ class PJECalcPlaywright:
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
         navegou = self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+        if navegou:
+            navegou = self._verificar_secao_ativa("Histórico")
         if not navegou:
             self._log("  ⚠ Histórico Salarial não disponível no menu — listando para referência:")
             for h in historico:
@@ -1303,27 +1365,58 @@ class PJECalcPlaywright:
             return
         self.mapear_campos("fase2_historico_salarial")
         for h in historico:
-            self._clicar_novo()
+            # Abrir formulário de novo histórico (seletor específico primeiro)
+            _abriu = self._clicar_botao_id("btnNovoHistorico") or self._clicar_novo()
             try:
                 self._page.wait_for_selector(
-                    "[id$='dataInicio'], [id$='dataInicial'], [name*='dataInicio']",
+                    "input[id*='competenciaInicial'], input[id*='dataInicio'], input[id*='dataInicial']",
                     state="visible", timeout=6000
                 )
             except Exception:
                 self._page.wait_for_timeout(1000)
+
+            # Nome da entrada (ex: "Salário", "Adicional Noturno Pago")
+            nome_hist = h.get("nome", "Salário")
+            self._preencher("historico:nome", nome_hist, False)
+            self._preencher("nomeHistorico", nome_hist, False)
+
+            # Competências (mês/ano de início e fim)
+            self._preencher_data("competenciaInicial", h.get("data_inicio", ""), False)
+            self._preencher_data("competenciaFinal", h.get("data_fim", ""), False)
+            # Fallback: nomes alternativos de campo
             self._preencher_data("dataInicio", h.get("data_inicio", ""), False)
             self._preencher_data("dataFim", h.get("data_fim", ""), False)
-            # Tentar também nomes alternativos de campo
             self._preencher_data("dataInicial", h.get("data_inicio", ""), False)
             self._preencher_data("dataFinal", h.get("data_fim", ""), False)
-            self._preencher("salario", _fmt_br(h.get("valor", "")), False)
-            self._preencher("valor", _fmt_br(h.get("valor", "")), False)
-            self._clicar_salvar()
+
+            # Valor base (valor mensal completo — sistema proporcionaliza)
+            _val = _fmt_br(h.get("valor", ""))
+            self._preencher("valorBase", _val, False)
+            self._preencher("salario", _val, False)
+            self._preencher("valor", _val, False)
+
+            # Incidências FGTS e CS (usar valores do histórico se fornecidos)
+            if h.get("incidencia_fgts") is not None:
+                self._marcar_checkbox("incidenciaFGTS", bool(h["incidencia_fgts"]))
+            if h.get("incidencia_cs") is not None:
+                self._marcar_checkbox("incidenciaCS", bool(h["incidencia_cs"]))
+
+            # Gerar ocorrências (cria a grade mensal de valores)
+            _gerou = self._clicar_botao_id("btnGerarOcorrencias")
+            if _gerou:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+                # Scroll para baixo — botão Salvar fica após a lista de ocorrências
+                self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                self._log(f"  ✓ Ocorrências geradas: {nome_hist}")
+
+            # Salvar (seletor específico prioritário)
+            self._clicar_botao_id("btnSalvarHistorico") or self._clicar_salvar()
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
             try:
                 self._page.wait_for_selector(
-                    "[id$='filtroNome'], [id$='dataInicio'], [name*='filtroNome']",
+                    "[id$='filtroNome'], input[id*='competenciaInicial'], [name*='filtroNome']",
                     state="visible", timeout=5000
                 )
             except Exception:
@@ -1340,6 +1433,7 @@ class PJECalcPlaywright:
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
         self._clicar_menu_lateral("Verbas")
+        self._verificar_secao_ativa("Verba")
         self._page.wait_for_timeout(1500)
 
         predefinidas = verbas_mapeadas.get("predefinidas", [])
@@ -1429,25 +1523,16 @@ class PJECalcPlaywright:
 
                 if _marcadas:
                     self._log(f"  ✓ Marcadas: {_marcadas}")
-                    # Salvar verbas Expresso
-                    _salvou_expresso = False
-                    for _sel in [
-                        "input[id*='btnSalvarExpresso']",
-                        "input[value='Salvar']",
-                        "input[value*='Salvar']",
-                    ]:
-                        try:
-                            _loc = self._page.locator(_sel)
-                            if _loc.count() > 0:
-                                _loc.first.click()
-                                self._aguardar_ajax()
-                                self._page.wait_for_timeout(1500)
-                                _salvou_expresso = True
-                                self._log(f"  ✓ Verbas Expresso salvas via '{_sel}'")
-                                break
-                        except Exception:
-                            continue
-                    if not _salvou_expresso:
+                    # Salvar verbas Expresso (seletor específico prioritário)
+                    _salvou_expresso = (
+                        self._clicar_botao_id("btnSalvarExpresso")
+                        or self._clicar_salvar()
+                    )
+                    if _salvou_expresso:
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(1500)
+                        self._log("  ✓ Verbas Expresso salvas")
+                    else:
                         self._log("  ⚠ btnSalvarExpresso não encontrado — tentando Enter")
                         try:
                             self._page.keyboard.press("Enter")
@@ -1716,10 +1801,21 @@ class PJECalcPlaywright:
                 return null;
             }""")
             self._log(f"  → Manual Novo: '{_clicou_novo}'")
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(2000)
-
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
+            if _clicou_novo is None:
+                # Tentativa 2: _clicar_novo() via seletor de ID
+                self._clicar_novo()
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1500)
+                _form_abriu = self._page.locator(
+                    "[id$='descricao'], [id$='descricaoVerba'], [id$='nomeVerba']"
+                ).count() > 0
+                if not _form_abriu:
+                    self._log(f"  ⚠ Verba '{nome}': formulário Novo não abriu — ignorada.")
+                    continue
+            else:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(2000)
             if i == 0:
                 self.mapear_campos("verba_form_manual")
 
@@ -1794,21 +1890,47 @@ class PJECalcPlaywright:
         navegou = self._clicar_menu_lateral("FGTS", obrigatorio=False)
         if not navegou:
             navegou = self._clicar_menu_lateral("Fundo de Garantia", obrigatorio=False)
+        if navegou:
+            navegou = self._verificar_secao_ativa("FGTS")
         if not navegou:
             self._log("  → Seção FGTS não encontrada no menu — incidência já configurada por verba.")
             return
         self.mapear_campos("fase4_fgts")
+        # Destino do FGTS (para reclamante ou depósito em conta)
+        if fgts.get("destino"):
+            self._selecionar("destinoFGTS", fgts["destino"], obrigatorio=False)
+
         # Alíquota FGTS (padrão 8%)
         aliquota = fgts.get("aliquota", 0.08)
         self._preencher("aliquotaFgts", _fmt_br(aliquota * 100), False)
         self._preencher("percentualFgts", _fmt_br(aliquota * 100), False)
         self._preencher("aliquota", _fmt_br(aliquota * 100), False)
-        # Multas
-        self._marcar_checkbox("multa40", bool(fgts.get("multa_40", True)))
-        self._marcar_checkbox("multaFgts40", bool(fgts.get("multa_40", True)))
-        self._marcar_checkbox("multa467", bool(fgts.get("multa_467", False)))
-        self._marcar_checkbox("multaFgts467", bool(fgts.get("multa_467", False)))
-        self._clicar_salvar()
+
+        # Multa: checkbox apurarMulta + select tipoMulta (40% ou 50%)
+        multa_40 = fgts.get("multa_40", True)
+        multa_467 = fgts.get("multa_467", False)
+        if multa_40 or multa_467:
+            self._marcar_checkbox("apurarMulta", True)
+            tipo_multa = "CINQUENTA" if multa_467 else "QUARENTA"
+            self._selecionar("tipoMulta", tipo_multa, obrigatorio=False)
+        # Fallback para checkboxes específicos (versões antigas do PJE-Calc)
+        self._marcar_checkbox("multa40", bool(multa_40))
+        self._marcar_checkbox("multaFgts40", bool(multa_40))
+        self._marcar_checkbox("multa467", bool(multa_467))
+        self._marcar_checkbox("multaFgts467", bool(multa_467))
+
+        # Saldos FGTS já depositados (dedução dos valores devidos)
+        for saldo in fgts.get("saldos", []):
+            if saldo.get("data") and saldo.get("valor"):
+                self._preencher_data("saldoData", saldo["data"], False)
+                self._preencher("saldoValor", _fmt_br(saldo["valor"]), False)
+                if self._clicar_botao_id("btnAdicionarSaldo"):
+                    self._aguardar_ajax()
+                    self._log(f"  ✓ Saldo FGTS adicionado: {saldo['data']} R$ {saldo['valor']}")
+
+        # Salvar (seletor específico prioritário)
+        self._clicar_botao_id("btnSalvarFGTS") or self._clicar_salvar()
+        self._aguardar_ajax()
         self._log("Fase 4 concluída.")
 
     # ── Fase 5: Contribuição Social (INSS) ────────────────────────────────────
@@ -2031,6 +2153,8 @@ class PJECalcPlaywright:
             self._clicar_menu_lateral("Honorários", obrigatorio=False)
             or self._clicar_menu_lateral("Honorarios", obrigatorio=False)
         )
+        if navegou:
+            navegou = self._verificar_secao_ativa("Honorár")
         if not navegou:
             self._log("  → Seção Honorários não encontrada no menu — ignorado.")
             return
@@ -2143,6 +2267,8 @@ class PJECalcPlaywright:
 
         def _localizar_botao_liquidar():
             liq_sels = [
+                # Seletores específicos do PJE-Calc (skill /pjecalc-preenchimento)
+                "input[id*='btnLiquidar']", "button[id*='btnLiquidar']",
                 "[id$='liquidar']", "[id$='liquidarBt']", "[id$='liquidarBtn']",
                 "input[value='Liquidar']", "a:has-text('Liquidar')",
                 "button:has-text('Liquidar')",
@@ -2156,6 +2282,18 @@ class PJECalcPlaywright:
                     continue
             return None
 
+        def _verificar_alertas_liquidar():
+            """Loga alertas/erros presentes na página antes de liquidar."""
+            try:
+                alertas = self._page.locator(".alertaLiquidacao, [class*='alerta']")
+                if alertas.count() > 0:
+                    self._log(f"  ⚠ Alerta antes de liquidar: {alertas.first.text_content()[:120]}")
+                erros = self._page.locator(".erroLiquidacao, [class*='erro']")
+                if erros.count() > 0:
+                    self._log(f"  ⚠ Erro antes de liquidar: {erros.first.text_content()[:120]}")
+            except Exception:
+                pass
+
         def _salvar_download(dl_info_value) -> str:
             dest = out_dir / dl_info_value.suggested_filename
             if not dest.suffix:
@@ -2164,7 +2302,21 @@ class PJECalcPlaywright:
             self._log(f"PJC_GERADO:{dest}")
             return str(dest)
 
-        # Estratégia 1: botão Liquidar na página atual
+        # Estratégia 1: navegar diretamente para menu Liquidar
+        _nav_liquidar = self._clicar_menu_lateral("Liquidar", obrigatorio=False)
+        if _nav_liquidar:
+            self._verificar_secao_ativa("Liquidar")
+            self._page.wait_for_timeout(1000)
+            # Preencher data de liquidação se campo disponível
+            try:
+                _dt_campo = self._page.locator("input[id*='dataLiquidacao']")
+                if _dt_campo.count() > 0 and not _dt_campo.first.input_value():
+                    from datetime import date
+                    self._preencher_data("dataLiquidacao",
+                                        date.today().strftime("%d/%m/%Y"), False)
+            except Exception:
+                pass
+            _verificar_alertas_liquidar()
         loc = _localizar_botao_liquidar()
 
         # Estratégia 2: navegar para menu "Operações" e tentar novamente
@@ -2173,6 +2325,7 @@ class PJECalcPlaywright:
             self._clicar_menu_lateral("Operações", obrigatorio=False)
             self._clicar_menu_lateral("Operacoes", obrigatorio=False)
             self._page.wait_for_timeout(1500)
+            _verificar_alertas_liquidar()
             loc = _localizar_botao_liquidar()
 
         # Estratégia 3: JS global (varredura de todos os elementos)
