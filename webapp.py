@@ -31,6 +31,23 @@ import logging
 
 logger = logging.getLogger("pjecalc_agent.webapp")
 
+# Buffer de log in-memory para diagnóstico em produção (GET /api/logs/python)
+_python_log_buffer: list[str] = []
+_MAX_LOG_LINES = 300
+
+class _BufferHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            _python_log_buffer.append(self.format(record))
+            if len(_python_log_buffer) > _MAX_LOG_LINES:
+                del _python_log_buffer[:-_MAX_LOG_LINES]
+        except Exception:
+            pass
+
+_buf_handler = _BufferHandler()
+_buf_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+logging.getLogger().addHandler(_buf_handler)
+
 import time as _time
 from config import OUTPUT_DIR, CLOUD_MODE, PJECALC_DIR
 
@@ -296,7 +313,10 @@ async def editar_campo_previa(
         nova_previa = gerar_previa(dados, verbas_mapeadas)
         nova_previa_html = _previa_para_html(nova_previa)
 
-        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        # Só sincroniza verbas (delete-all + re-insert) quando o campo editado é de verba.
+        # Evita timeout no Railway causado por operação cara em todo edit de honorários/parâmetros.
+        _verbas_mudaram = campo.startswith("verba")
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas if _verbas_mudaram else None)
         repo.salvar_previa(sessao_id, nova_previa, nova_previa_html)
 
         return JSONResponse({
@@ -829,6 +849,12 @@ async def logs_java(linhas: int = 100):
         return {"log": texto or "(vazio)"}
     except Exception as e:
         return {"log": f"Erro: {e}"}
+
+
+@app.get("/api/logs/python")
+async def logs_python(linhas: int = 100):
+    """Últimos N logs do processo uvicorn/Python (exceções, erros, warnings)."""
+    return {"log": "\n".join(_python_log_buffer[-linhas:]) or "(sem logs registrados ainda)"}
 
 
 @app.get("/api/ps")

@@ -276,9 +276,13 @@ Se não mencionado → ferias = []
 - percentual: float decimal (ex: 0.15 para 15%); null se tipo_valor=INFORMADO
 - valor_informado: float; null se tipo_valor=CALCULADO
 - apurar_ir: true quando os honorários forem tributáveis (advogado pessoa física)
-- honorarios_periciais: valor dos honorários periciais (distinto dos advocatícios)
 
-**SEÇÃO 7 — CORREÇÃO MONETÁRIA E JUROS** → preenche "correcao_juros":
+**SEÇÃO 7 — HONORÁRIOS PERICIAIS** → preenche "honorarios_periciais" (campo top-level — NÃO colocar dentro do array "honorarios"):
+- Buscar "honorários periciais", "honorário do perito", "laudo pericial", "assistente técnico"
+- Se deferidos com valor explícito: honorarios_periciais = float (ex: 5000.00)
+- Se indeferidos ou não mencionados: honorarios_periciais = null
+
+**SEÇÃO 8 — CORREÇÃO MONETÁRIA E JUROS** → preenche "correcao_juros":
 Mapeamento dos critérios da sentença para os enums do PJE-Calc:
 
 CASOS MAIS COMUNS:
@@ -569,7 +573,10 @@ verba_principal_ref: para verbas reflexas, informar o nome_sentenca da verba pri
 - percentual: decimal (15% → 0.15); null se tipo_valor=INFORMADO
 - valor_informado: float; null se tipo_valor=CALCULADO
 - apurar_ir: true quando honorários são tributáveis
-- honorarios_periciais: valor dos honorários periciais (distinto dos advocatícios)
+
+**HONORÁRIOS PERICIAIS** → preenche "honorarios_periciais" (campo top-level, SEPARADO da lista "honorarios"):
+- Buscar "honorários periciais", "honorário do perito", "laudo pericial", "assistente técnico"
+- Valor float ou null. NÃO colocar dentro de honorarios[].
 
 **CORREÇÃO MONETÁRIA E JUROS** → preenche "correcao_juros":
 Mapear EXATAMENTE para os enums disponíveis no PJE-Calc:

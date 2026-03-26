@@ -1863,7 +1863,7 @@ class PJECalcPlaywright:
     # ── Fase 8: Honorários ────────────────────────────────────────────────────
 
     @retry(max_tentativas=3)
-    def fase_honorarios(self, hon_dados) -> None:
+    def fase_honorarios(self, hon_dados, periciais: float | None = None) -> None:
         """
         Preenche honorários advocatícios no PJE-Calc.
         Aceita lista de registros [{tipo, devedor, tipo_valor, base_apuracao, percentual, ...}]
@@ -1952,7 +1952,33 @@ class PJECalcPlaywright:
             self._page.wait_for_timeout(500)
 
         # Honorários periciais (campo separado, fora do loop)
-        # Buscado diretamente em dados (não em cada honorário)
+        if periciais is not None:
+            self._log(f"  → Honorários periciais: {_fmt_br(periciais)}")
+            preencheu = (
+                self._preencher("honorariosPericiais", _fmt_br(periciais), False)
+                or self._preencher("valorPericiais", _fmt_br(periciais), False)
+                or self._preencher("honorariosPerito", _fmt_br(periciais), False)
+            )
+            if not preencheu:
+                for lbl in ["Honorários Periciais", "Honorários do Perito", "Periciais"]:
+                    loc = self._page.get_by_label(lbl, exact=False)
+                    if loc.count() > 0:
+                        try:
+                            loc.first.fill(_fmt_br(periciais))
+                            loc.first.dispatch_event("change")
+                            self._aguardar_ajax()
+                            preencheu = True
+                            self._log(f"  ✓ Periciais via label '{lbl}'")
+                            break
+                        except Exception:
+                            continue
+            if preencheu:
+                self._clicar_salvar()
+                self._aguardar_ajax()
+            else:
+                self._log(
+                    f"  ⚠ Campo periciais não encontrado — preencher manualmente: {_fmt_br(periciais)}"
+                )
         self._log("Fase 8 concluída.")
 
     # ── Liquidar / captura do .PJC ─────────────────────────────────────────────
@@ -2163,7 +2189,10 @@ class PJECalcPlaywright:
         self.fase_irpf(dados.get("imposto_renda", {}))
         self._screenshot_fase("08_irpf")
 
-        self.fase_honorarios(dados.get("honorarios", []))
+        self.fase_honorarios(
+            dados.get("honorarios", []),
+            periciais=dados.get("honorarios_periciais"),
+        )
         self._screenshot_fase("09_honorarios")
 
         caminho_pjc = self._clicar_liquidar()
