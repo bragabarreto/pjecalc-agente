@@ -1314,29 +1314,319 @@ class PJECalcPlaywright:
         self._clicar_menu_lateral("Verbas")
         self._page.wait_for_timeout(1500)
 
-        # Diagnóstico da página de verbas (antes do Novo)
-        _url_verbas_original = self._page.url
+        predefinidas = verbas_mapeadas.get("predefinidas", [])
+        personalizadas = verbas_mapeadas.get("personalizadas", [])
+
+        # Diagnóstico: listar botões disponíveis na página de verbas
         try:
-            self._log(f"  📍 URL pós-menu Verbas: {_url_verbas_original}")
             _botoes_verbas = self._page.evaluate("""() =>
                 [...document.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
-                .map(el => ({id: el.id, txt: (el.textContent||el.value||el.title||'').replace(/\s+/g,' ').trim()}))
+                .map(el => ({id: el.id, txt: (el.textContent||el.value||el.title||'').replace(/\\s+/g,' ').trim()}))
                 .filter(o => o.txt.length > 1 && o.txt.length < 50)
                 .map(o => o.txt + (o.id ? ' [' + o.id + ']' : ''))
             """)
-            self._log(f"  🔘 Botões na pág Verbas: {list(dict.fromkeys(_botoes_verbas))[:25]}")
-            _titulo_verbas = self._page.title()
-            self._log(f"  📄 Título da pág Verbas: '{_titulo_verbas}'")
+            self._log(f"  🔘 Botões pág Verbas: {list(dict.fromkeys(_botoes_verbas))[:20]}")
         except Exception:
             pass
 
         self.mapear_campos("fase3_verbas")
 
-        todas = (
-            verbas_mapeadas.get("predefinidas", [])
-            + verbas_mapeadas.get("personalizadas", [])
-        )
+        # ── 3A: Lançamento Expresso (verbas predefinidas) ─────────────────────
+        if predefinidas:
+            self._log(f"  → Expresso: {len(predefinidas)} verba(s) predefinida(s)")
 
+            # Clicar botão "Expresso"
+            _clicou_expresso = False
+            for _sel in [
+                "input[id*='btnExpresso']",
+                "input[value='Expresso']",
+                "input[value*='Expresso']",
+                "a[id*='Expresso']",
+            ]:
+                try:
+                    _loc = self._page.locator(_sel)
+                    if _loc.count() > 0:
+                        _loc.first.click()
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(800)
+                        _clicou_expresso = True
+                        self._log(f"  ✓ Botão Expresso via '{_sel}'")
+                        break
+                except Exception:
+                    continue
+
+            if not _clicou_expresso:
+                try:
+                    _res = self._page.evaluate("""() => {
+                        const el = [...document.querySelectorAll('input,button,a')]
+                            .find(e => (e.value||e.textContent||'').trim().toUpperCase() === 'EXPRESSO');
+                        if (el) { el.click(); return el.id || el.tagName; }
+                        return null;
+                    }""")
+                    if _res:
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(800)
+                        _clicou_expresso = True
+                        self._log(f"  ✓ Botão Expresso via JS: {_res}")
+                except Exception as _e:
+                    self._log(f"  ⚠ Botão Expresso não encontrado: {_e}")
+
+            if _clicou_expresso:
+                # Listar verbas disponíveis no Expresso (diagnóstico)
+                try:
+                    _labels_exp = self._page.evaluate("""() =>
+                        [...document.querySelectorAll('input[type="checkbox"]')]
+                        .map(cb => {
+                            const l = document.querySelector('label[for="' + cb.id + '"]');
+                            return l ? l.textContent.replace(/\\s+/g,' ').trim() : '';
+                        })
+                        .filter(Boolean)
+                    """)
+                    self._log(f"  📋 Verbas Expresso disponíveis: {_labels_exp[:30]}")
+                except Exception:
+                    pass
+
+                # Marcar checkboxes por nome (case-insensitive, normalizado)
+                _marcadas: list[str] = []
+                _nao_encontradas: list[str] = []
+                for v in predefinidas:
+                    nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
+                    if not nome:
+                        continue
+                    if self._marcar_checkbox_expresso(nome):
+                        _marcadas.append(nome)
+                    else:
+                        _nao_encontradas.append(nome)
+                        self._log(f"  ⚠ Verba não encontrada no Expresso: {nome}")
+
+                if _marcadas:
+                    self._log(f"  ✓ Marcadas: {_marcadas}")
+                    # Salvar verbas Expresso
+                    _salvou_expresso = False
+                    for _sel in [
+                        "input[id*='btnSalvarExpresso']",
+                        "input[value='Salvar']",
+                        "input[value*='Salvar']",
+                    ]:
+                        try:
+                            _loc = self._page.locator(_sel)
+                            if _loc.count() > 0:
+                                _loc.first.click()
+                                self._aguardar_ajax()
+                                self._page.wait_for_timeout(1500)
+                                _salvou_expresso = True
+                                self._log(f"  ✓ Verbas Expresso salvas via '{_sel}'")
+                                break
+                        except Exception:
+                            continue
+                    if not _salvou_expresso:
+                        self._log("  ⚠ btnSalvarExpresso não encontrado — tentando Enter")
+                        try:
+                            self._page.keyboard.press("Enter")
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(1500)
+                        except Exception:
+                            pass
+
+                    # Configurar reflexos após salvar
+                    self._configurar_reflexos_expresso(predefinidas)
+                else:
+                    self._log("  ⚠ Nenhuma verba marcada no Expresso")
+
+                if _nao_encontradas:
+                    self._log(
+                        f"  → {len(_nao_encontradas)} verba(s) não encontrada(s) no Expresso "
+                        f"— adicionando ao fluxo Manual: {_nao_encontradas}"
+                    )
+                    personalizadas = [
+                        v for v in predefinidas
+                        if (v.get("nome_pjecalc") or v.get("nome_sentenca") or "") in _nao_encontradas
+                    ] + personalizadas
+            else:
+                self._log("  ⚠ Modo Expresso indisponível — todas as verbas via Manual")
+                personalizadas = predefinidas + personalizadas
+
+        # ── 3B: Verbas personalizadas (Manual/Novo) ────────────────────────
+        if personalizadas:
+            self._log(f"  → Manual: {len(personalizadas)} verba(s) personalizada(s)")
+            self._clicar_menu_lateral("Verbas", obrigatorio=False)
+            self._page.wait_for_timeout(1000)
+            self._lancar_verbas_manual(personalizadas)
+
+        nao_rec = verbas_mapeadas.get("nao_reconhecidas", [])
+        if nao_rec:
+            nomes = ", ".join(v.get("nome_sentenca", "?") for v in nao_rec)
+            self._log(
+                f"  ⚠ AVISO: {len(nao_rec)} verba(s) não mapeada(s) ignorada(s) na automação "
+                f"(deveriam ter sido corrigidas na prévia): {nomes}"
+            )
+
+        self._log("Fase 3 concluída.")
+
+    def _marcar_checkbox_expresso(self, nome: str) -> bool:
+        """Localiza e marca o checkbox do Expresso cujo label contém 'nome' (case-insensitive)."""
+        try:
+            _resultado = self._page.evaluate(
+                """(nome) => {
+                    function norm(s) {
+                        return s.toLowerCase()
+                            .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    }
+                    const nomeLower = norm(nome);
+                    const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
+                    // 1ª tentativa: label exato ou contém o nome completo
+                    for (const cb of checkboxes) {
+                        const lbl = document.querySelector('label[for="' + cb.id + '"]');
+                        if (!lbl) continue;
+                        const lblNorm = norm(lbl.textContent.trim());
+                        if (lblNorm === nomeLower || lblNorm.includes(nomeLower)
+                                || nomeLower.includes(lblNorm.substring(0, Math.min(lblNorm.length, 12)))) {
+                            if (!cb.checked) cb.click();
+                            return lbl.textContent.trim();
+                        }
+                    }
+                    // 2ª tentativa: primeiras 2 palavras do nome
+                    const palavras = nomeLower.split(' ').slice(0, 2).join(' ');
+                    if (palavras.length >= 5) {
+                        for (const cb of checkboxes) {
+                            const lbl = document.querySelector('label[for="' + cb.id + '"]');
+                            if (!lbl) continue;
+                            const lblNorm = norm(lbl.textContent.trim());
+                            if (lblNorm.includes(palavras)) {
+                                if (!cb.checked) cb.click();
+                                return lbl.textContent.trim();
+                            }
+                        }
+                    }
+                    return null;
+                }""",
+                nome,
+            )
+            if _resultado:
+                self._log(f"  ✓ Expresso checkbox: {nome} → '{_resultado}'")
+                self._page.wait_for_timeout(200)
+                return True
+            return False
+        except Exception as _e:
+            self._log(f"  ⚠ _marcar_checkbox_expresso({nome}): {_e}")
+            return False
+
+    def _configurar_reflexos_expresso(self, verbas: list) -> None:
+        """Expande os reflexos de cada verba salva via Expresso e marca os necessários."""
+        try:
+            _exibir_count = self._page.evaluate("""() =>
+                [...document.querySelectorAll('a')].filter(
+                    a => (a.textContent || '').trim().toLowerCase().includes('exibir')
+                ).length
+            """)
+            if not _exibir_count:
+                self._log("  → Nenhum link 'Exibir' encontrado — reflexos não configurados")
+                return
+            self._log(f"  → Configurando reflexos ({_exibir_count} link(s) 'Exibir')…")
+
+            # Mapa nome_pjecalc → reflexas_tipicas
+            _reflexos_map: dict[str, list[str]] = {}
+            for v in verbas:
+                nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
+                reflexas = v.get("reflexas_tipicas", [])
+                if nome and reflexas:
+                    _reflexos_map[nome] = reflexas
+
+            if not _reflexos_map:
+                return
+
+            _linhas = self._page.evaluate("""() => {
+                const rows = [...document.querySelectorAll(
+                    'tr[id*="listagem"], tr.rich-table-row, tbody tr'
+                )];
+                return rows.map((tr, i) => ({
+                    index: i,
+                    texto: tr.textContent.replace(/\\s+/g,' ').trim().substring(0, 100),
+                    temExibir: [...tr.querySelectorAll('a')]
+                        .some(a => (a.textContent||'').trim().toLowerCase().includes('exibir')),
+                }));
+            }""")
+
+            for row in _linhas:
+                if not row.get("temExibir"):
+                    continue
+                _texto_row = row.get("texto", "").lower()
+
+                _reflexas_needed: list[str] = []
+                for nome_v, reflexas in _reflexos_map.items():
+                    _kw = " ".join(nome_v.lower().split()[:2])
+                    if _kw and _kw in _texto_row:
+                        _reflexas_needed = reflexas
+                        self._log(f"  → Reflexos de '{nome_v}': {reflexas}")
+                        break
+
+                if not _reflexas_needed:
+                    continue
+
+                row_idx = row["index"]
+                try:
+                    _clicou = self._page.evaluate(
+                        """(idx) => {
+                            const rows = [...document.querySelectorAll(
+                                'tr[id*="listagem"], tr.rich-table-row, tbody tr'
+                            )];
+                            if (idx >= rows.length) return false;
+                            const link = [...rows[idx].querySelectorAll('a')]
+                                .find(a => (a.textContent||'').trim().toLowerCase().includes('exibir'));
+                            if (!link) return false;
+                            link.click();
+                            return true;
+                        }""",
+                        row_idx,
+                    )
+                    if not _clicou:
+                        continue
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                except Exception as _e:
+                    self._log(f"  ⚠ Exibir row {row_idx}: {_e}")
+                    continue
+
+                for reflexo_nome in _reflexas_needed:
+                    try:
+                        _marcou = self._page.evaluate(
+                            """(rNome) => {
+                                function norm(s) {
+                                    return s.toLowerCase()
+                                        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                                }
+                                const rLower = norm(rNome).substring(0, 10);
+                                const cbs = [...document.querySelectorAll(
+                                    'input[type="checkbox"][id*="listaReflexo"],' +
+                                    'input[type="checkbox"][id*="reflexo"]'
+                                )].filter(cb => {
+                                    const r = cb.getBoundingClientRect();
+                                    return r.width > 0 && r.height > 0;
+                                });
+                                for (const cb of cbs) {
+                                    const ctx = cb.closest('td') || cb.parentElement;
+                                    const txt = norm((ctx && ctx.textContent) || '');
+                                    if (txt.includes(rLower)) {
+                                        if (!cb.checked) cb.click();
+                                        return (ctx && ctx.textContent.trim().substring(0, 60)) || 'ok';
+                                    }
+                                }
+                                return null;
+                            }""",
+                            reflexo_nome,
+                        )
+                        if _marcou:
+                            self._log(f"  ✓ Reflexo: {reflexo_nome} → '{_marcou}'")
+                        else:
+                            self._log(f"  ⚠ Reflexo não encontrado: {reflexo_nome}")
+                    except Exception as _e:
+                        self._log(f"  ⚠ Reflexo {reflexo_nome}: {_e}")
+
+        except Exception as _e:
+            self._log(f"  ⚠ _configurar_reflexos_expresso: {_e}")
+
+    def _lancar_verbas_manual(self, verbas: list) -> None:
+        """Lança verbas individualmente via botão 'Novo' (para verbas personalizadas)."""
         carac_map = {
             "Comum": "COMUM",
             "13o Salario": "DECIMO_TERCEIRO_SALARIO",
@@ -1349,259 +1639,100 @@ class PJECalcPlaywright:
             "Periodo Aquisitivo": "PERIODO_AQUISITIVO",
             "Desligamento": "DESLIGAMENTO",
         }
-
-        # Captura baseline dos campos visíveis na lista de verbas (antes de clicar Novo).
-        # Strategy 2 compara com este baseline para detectar campos NOVOS do form de verba.
-        _JS_CAMPOS_VISIVEIS = """() =>
+        _url_verbas = self._page.url
+        _JS_CAMPOS = """() =>
             [...document.querySelectorAll(
                 'input:not([type="hidden"]):not([type="image"]):not([type="submit"]):not([type="button"]),select,textarea'
             )]
             .filter(e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
             .map(e => e.id || e.name || '').filter(Boolean)
         """
-        _campos_lista_ids = set()
+        _campos_lista = set()
         try:
-            _campos_lista_ids = set(self._page.evaluate(_JS_CAMPOS_VISIVEIS))
+            _campos_lista = set(self._page.evaluate(_JS_CAMPOS))
         except Exception:
             pass
 
-        for i, v in enumerate(todas):
-            # --- Garantir que estamos sempre na lista de verbas do calculo ORIGINAL ---
-            # Impede acumulação de calculadoras aninhadas (cada Novo criava calculo novo)
-            if self._page.url != _url_verbas_original:
-                self._log(f"  🔄 Navegando de volta para verbas originais: {_url_verbas_original}")
+        for i, v in enumerate(verbas):
+            if self._page.url != _url_verbas:
                 try:
-                    self._page.goto(_url_verbas_original, wait_until="domcontentloaded", timeout=20000)
+                    self._page.goto(_url_verbas, wait_until="domcontentloaded", timeout=20000)
                     self._page.wait_for_timeout(1000)
                     self._aguardar_ajax()
-                except Exception as _nav_err:
-                    self._log(f"  ⚠ Falha ao navegar de volta: {_nav_err} — usando menu lateral")
+                except Exception:
                     self._clicar_menu_lateral("Verbas", obrigatorio=False)
                     self._page.wait_for_timeout(800)
 
-            # --- Clicar "Novo" da área de conteúdo (não o do nav lateral) ---
-            # Estratégia: encontrar o "Novo" próximo ao campo filtroNome (na area de listagem)
             _clicou_novo = self._page.evaluate("""() => {
-                // Procura o "Novo" próximo ao filtroNome (conteúdo da lista de verbas)
                 const filtro = document.querySelector('[id*="filtroNome"]');
                 if (filtro) {
                     let el = filtro;
-                    for (let nivel = 0; nivel < 15; nivel++) {
+                    for (let n = 0; n < 15; n++) {
                         el = el.parentElement;
                         if (!el || el.tagName === 'BODY' || el.tagName === 'FORM') break;
-                        const novos = [...el.querySelectorAll('a, input[type="submit"], input[type="button"], button')]
+                        const novos = [...el.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
                             .filter(e => {
-                                const t = (e.textContent || e.value || e.title || '').replace(/\s+/g,' ').trim();
+                                const t = (e.textContent||e.value||'').replace(/\\s+/g,' ').trim();
                                 return t === 'Novo' || t === 'Nova';
                             });
-                        if (novos.length > 0) {
-                            novos[0].click();
-                            return 'PROX_FILTRO:' + novos[0].id + ':nivel' + nivel;
-                        }
+                        if (novos.length > 0) { novos[0].click(); return 'FILTRO:' + novos[0].id; }
                     }
                 }
-                // Fallback: qualquer botão/link com texto "Novo" (excluindo top-nav por heurística)
-                // — procura em elementos com classe/id que sugerem conteúdo, não nav
-                const all = [...document.querySelectorAll('a, input[type="submit"], input[type="button"], button')]
+                const all = [...document.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
                     .filter(e => {
-                        const t = (e.textContent || e.value || e.title || '').replace(/\s+/g,' ').trim();
-                        if (t !== 'Novo' && t !== 'Nova') return false;
-                        // Excluir elementos em nav/menu lateral (IDs curtos como j_id5 sugerem nav)
-                        const id = e.id || '';
-                        const parentId = (e.parentElement && e.parentElement.id) || '';
-                        const cls = (e.className || '') + ' ' + parentId;
-                        return !cls.toLowerCase().includes('nav') && !cls.toLowerCase().includes('menu');
+                        const t = (e.textContent||e.value||'').replace(/\\s+/g,' ').trim();
+                        return (t === 'Novo' || t === 'Nova')
+                            && !(e.className||'').toLowerCase().includes('menu');
                     });
-                if (all.length > 0) {
-                    all[0].click();
-                    return 'FALLBACK:' + all[0].id;
-                }
+                if (all.length > 0) { all[0].click(); return 'FB:' + all[0].id; }
                 return null;
             }""")
-            self._log(f"  → Novo verba: clicado via '{_clicou_novo}'")
+            self._log(f"  → Manual Novo: '{_clicou_novo}'")
             self._aguardar_ajax()
             self._page.wait_for_timeout(2000)
 
-            # Diagnóstico: capturar o que abriu após o Novo
-            _url_pos_novo = self._page.url
-            try:
-                _titulo_pos = self._page.title()
-                _h1_pos = self._page.evaluate(
-                    "() => (document.querySelector('h1,h2,h3,legend,.titulo,.tituloPagina') || {}).textContent?.replace(/\\s+/g,' ').trim() || ''"
-                )
-                _campos_pos = self._page.evaluate(_JS_CAMPOS_VISIVEIS)
-                self._log(f"  📍 Pós-Novo: URL={_url_pos_novo}")
-                self._log(f"  📄 Título='{_titulo_pos}' | heading='{_h1_pos}'")
-                self._log(f"  📋 Campos visíveis pós-Novo: {_campos_pos[:15]}")
-            except Exception:
-                pass
-
-            # Aguardar formulário de verba: qualquer input visível não-header
-            _form_abriu = False
-            # Estratégia 1 — seletores específicos de verba
-            for _sel_form in [
-                "input[id$='descricao']",
-                "input[id$='nome']",
-                "input[id$='nomeVerba']",
-                "input[name*='descricao']",
-                "input[name*='nomeVerba']",
-            ]:
-                try:
-                    self._page.wait_for_selector(_sel_form, state="visible", timeout=3000)
-                    _form_abriu = True
-                    break
-                except Exception:
-                    continue
-
-            # Estratégia 2 — campos novos vs. baseline da lista de verbas
-            if not _form_abriu:
-                try:
-                    _campos_atuais = set(self._page.evaluate(_JS_CAMPOS_VISIVEIS))
-                    _novos = [c for c in _campos_atuais if c not in _campos_lista_ids]
-                    # Excluir campos de cabeçalho fixo (idCalculo, tipo, dataCriacao)
-                    _CABECALHO = {"formulario:idCalculo", "formulario:tipo", "formulario:dataCriacao",
-                                  "formulario:searchText"}
-                    _novos = [c for c in _novos if c not in _CABECALHO]
-                    if _novos:
-                        _form_abriu = True
-                        self._log(f"  ✓ Formulário verba detectado (campos novos vs lista): {_novos[:10]}")
-                except Exception:
-                    pass
-
-            if not _form_abriu:
-                self._log(f"  ⚠ Formulário de verba não detectado — URL: {self._page.url}")
-                # Se URL mudou para calculo.jsf (novo calc criado por engano), tentar
-                # navegar para a seção "Dados do Processo" onde pode estar o form de verba
-                if "calculo.jsf" in self._page.url and "verba.jsf" not in _url_verbas_original:
-                    self._log("  → Detectado calculo.jsf — tentando seção 'Dados do Processo'…")
-                    self._clicar_menu_lateral("Dados do Processo", obrigatorio=False)
-                    self._page.wait_for_timeout(1000)
-                    try:
-                        _campos_dados = self._page.evaluate(_JS_CAMPOS_VISIVEIS)
-                        self._log(f"  📋 Campos em 'Dados do Processo': {_campos_dados[:15]}")
-                    except Exception:
-                        pass
-                try:
-                    self._page.wait_for_load_state("networkidle", timeout=5000)
-                except Exception:
-                    self._page.wait_for_timeout(2000)
-
-            if i == 0:
-                self.mapear_campos("verba_form")  # captura IDs reais do formulário de verba
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
+            if i == 0:
+                self.mapear_campos("verba_form_manual")
 
-            # Descrição da verba — tenta por ID sufixo, depois por label visível
             _desc_ok = any(
                 self._preencher(fid, nome, obrigatorio=False)
-                for fid in [
-                    "descricao", "descricaoVerba", "nomeVerba", "nome",
-                    "titulo", "verba", "rubrica",
-                ]
+                for fid in ["descricao", "descricaoVerba", "nomeVerba", "nome", "titulo", "verba"]
             )
             if not _desc_ok:
-                # Fallback por label (Level 1 — robusto a mudanças de ID JSF)
-                for _lbl in ["Descrição", "Descrição da Verba", "Nome da Verba",
-                              "Nome", "Verba", "Rubrica"]:
+                for _lbl in ["Descrição", "Descrição da Verba", "Nome da Verba", "Nome", "Verba"]:
                     _loc = self._page.get_by_label(_lbl, exact=False)
                     if _loc.count() > 0:
                         try:
                             _loc.first.fill(nome)
                             _loc.first.dispatch_event("change")
                             _desc_ok = True
-                            self._log(f"  ✓ verba descrição (label '{_lbl}'): {nome}")
                             break
                         except Exception:
                             continue
-            if not _desc_ok:
-                self._log(f"  ⚠ Campo de descrição não encontrado para: {nome}")
 
             carac = carac_map.get(v.get("caracteristica", "Comum"), "COMUM")
-            # Característica — tenta por ID sufixo, depois por label
-            # NOTA: "tipo" removido — bate em formulario:tipoDaBaseTabelada (hidden)
-            _carac_ok = any(
-                self._selecionar(fid, carac, obrigatorio=False)
-                for fid in [
-                    "caracteristicaVerba", "stpcaracteristicaverba",
-                    "caracteristica", "tipoVerba", "naturezaVerba",
-                ]
-            )
-            if not _carac_ok:
-                for _lbl in ["Característica", "Caracteristica", "Tipo de Verba",
-                             "Tipo", "Natureza"]:
-                    _loc = self._page.get_by_label(_lbl, exact=False)
-                    if _loc.count() > 0:
-                        try:
-                            _loc.first.select_option(value=carac)
-                            _carac_ok = True
-                            self._log(f"  ✓ verba característica (label '{_lbl}'): {carac}")
-                            break
-                        except Exception:
-                            try:
-                                _loc.first.select_option(label=carac)
-                                _carac_ok = True
-                                break
-                            except Exception:
-                                continue
+            any(self._selecionar(fid, carac, obrigatorio=False)
+                for fid in ["caracteristicaVerba", "stpcaracteristicaverba",
+                             "caracteristica", "tipoVerba"])
 
             ocorr = ocorr_map.get(v.get("ocorrencia", "Mensal"), "MENSAL")
-            # Ocorrência — tenta por ID sufixo, depois por label
-            _ocorr_ok = any(
-                self._selecionar(fid, ocorr, obrigatorio=False)
-                for fid in [
-                    "ocorrenciaPagto", "ocorrenciaDePagamento", "ocorrencia",
-                    "periodicidade", "frequencia", "pagamento",
-                ]
-            )
-            if not _ocorr_ok:
-                for _lbl in ["Ocorrência de Pagamento", "Ocorrência", "Ocorrencia",
-                             "Periodicidade", "Frequência de Pagamento"]:
-                    _loc = self._page.get_by_label(_lbl, exact=False)
-                    if _loc.count() > 0:
-                        try:
-                            _loc.first.select_option(value=ocorr)
-                            _ocorr_ok = True
-                            self._log(f"  ✓ verba ocorrência (label '{_lbl}'): {ocorr}")
-                            break
-                        except Exception:
-                            try:
-                                _loc.first.select_option(label=ocorr)
-                                _ocorr_ok = True
-                                break
-                            except Exception:
-                                continue
+            any(self._selecionar(fid, ocorr, obrigatorio=False)
+                for fid in ["ocorrenciaPagto", "ocorrenciaDePagamento",
+                             "ocorrencia", "periodicidade"])
 
             if v.get("valor_informado"):
-                # Tenta campo valor com múltiplos IDs de radio (INFORMADO)
-                _val_ok = (
-                    self._marcar_radio("valor", "INFORMADO")
-                    or self._marcar_radio("tipoValor", "INFORMADO")
-                    or self._marcar_radio("stpvalor", "INFORMADO")
-                    or self._marcar_radio("valor", "I")
-                )
+                self._marcar_radio("valor", "INFORMADO") or \
+                    self._marcar_radio("tipoValor", "INFORMADO")
                 self._preencher("valorDevidoInformado", _fmt_br(v["valor_informado"]), False)
                 self._preencher("valorInformado", _fmt_br(v["valor_informado"]), False)
             else:
-                # CALCULADO — tenta múltiplos IDs de radio
                 self._marcar_radio("valor", "CALCULADO") or \
-                self._marcar_radio("tipoValor", "CALCULADO") or \
-                self._marcar_radio("stpvalor", "CALCULADO") or \
-                self._marcar_radio("valor", "C")
+                    self._marcar_radio("tipoValor", "CALCULADO")
 
             self._marcar_checkbox("fgts", bool(v.get("incidencia_fgts")))
             self._marcar_checkbox("inss", bool(v.get("incidencia_inss")))
             self._marcar_checkbox("irpf", bool(v.get("incidencia_ir")))
-
-            # Base de cálculo — fuzzy match com opções reais do select
-            if v.get("base_calculo"):
-                try:
-                    opcoes = self._extrair_opcoes_select("baseCalculo")
-                    match = self._match_fuzzy(v["base_calculo"], opcoes)
-                    if match:
-                        self._selecionar("baseCalculo", match, obrigatorio=False)
-                    else:
-                        self._log(f"  ⚠ baseCalculo '{v['base_calculo']}': sem match — ignorado")
-                except Exception as _e:
-                    self._log(f"  ⚠ baseCalculo: erro ao extrair opções — {_e}")
 
             if v.get("periodo_inicio"):
                 self._preencher_data("periodoInicial", v["periodo_inicio"], False)
@@ -1613,31 +1744,16 @@ class PJECalcPlaywright:
             self._clicar_salvar()
             self._aguardar_ajax()
             self._page.wait_for_timeout(600)
-            # Após salvar, retornar EXPLICITAMENTE à lista de verbas do calculo original
-            # (evita acumular calculadoras aninhadas nas próximas iterações)
-            _url_pos_salvar = self._page.url
-            if _url_pos_salvar != _url_verbas_original:
-                self._log(f"  🔄 Pós-Salvar: URL={_url_pos_salvar} → retornando a {_url_verbas_original}")
+
+            if self._page.url != _url_verbas:
                 try:
-                    self._page.goto(_url_verbas_original, wait_until="domcontentloaded", timeout=20000)
+                    self._page.goto(_url_verbas, wait_until="domcontentloaded", timeout=20000)
                     self._page.wait_for_timeout(1000)
                     self._aguardar_ajax()
                 except Exception:
                     self._clicar_menu_lateral("Verbas", obrigatorio=False)
                     self._page.wait_for_timeout(800)
-            self._log(f"  ✓ Verba: {nome}")
-
-        nao_rec = verbas_mapeadas.get("nao_reconhecidas", [])
-        if nao_rec:
-            nomes = ", ".join(v.get("nome_sentenca", "?") for v in nao_rec)
-            # Verbas não mapeadas devem ser resolvidas na etapa de PRÉVIA (antes da automação).
-            # Durante a automação nunca aguardamos interação manual — apenas registramos o aviso.
-            self._log(
-                f"  ⚠ AVISO: {len(nao_rec)} verba(s) não mapeada(s) ignorada(s) na automação "
-                f"(deveriam ter sido corrigidas na prévia): {nomes}"
-            )
-
-        self._log("Fase 3 concluída.")
+            self._log(f"  ✓ Verba manual: {nome}")
 
     # ── Fase 4: FGTS ──────────────────────────────────────────────────────────
 
