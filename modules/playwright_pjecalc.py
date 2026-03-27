@@ -848,7 +848,8 @@ class PJECalcPlaywright:
             self._log(f"  ⚠ Botão '{texto}' não encontrado.")
         return False
 
-    def _clicar_salvar(self) -> None:
+    def _clicar_salvar(self) -> bool:
+        """Clica no botão Salvar da seção atual. Retorna True se salvou, False se não encontrou."""
         seletores = [
             "[id$='salvar']",
             "input[value='Salvar']",
@@ -862,25 +863,32 @@ class PJECalcPlaywright:
                     loc.first.click(force=True)
                     self._aguardar_ajax()
                     self._log(f"  ✓ Salvar: concluído (URL: {self._page.url})")
-                    return
+                    return True
             except Exception:
                 continue
-        # JS fallback: clica diretamente via DOM (contorna interceptores de visibilidade)
+        # JS fallback: clica via DOM (seletores específicos — sem querySelector('button') genérico)
         try:
             clicou = self._page.evaluate("""() => {
-                const btn = document.querySelector('[id$=":salvar"]')
-                         || document.querySelector('input[value="Salvar"]')
-                         || document.querySelector('button');
-                if (btn) { btn.click(); return true; }
-                return false;
+                const candidates = [
+                    document.querySelector('[id$=":salvar"]'),
+                    document.querySelector('[id*="btnSalvar"]'),
+                    document.querySelector('input[value="Salvar"]'),
+                    document.querySelector('input[value*="Salvar"]'),
+                    ...[...document.querySelectorAll('button')]
+                        .filter(b => (b.textContent||'').trim().toLowerCase() === 'salvar'),
+                ];
+                const btn = candidates.find(b => b != null);
+                if (btn) { btn.click(); return btn.id || btn.value || 'ok'; }
+                return null;
             }""")
             if clicou:
                 self._aguardar_ajax()
-                self._log(f"  ✓ Salvar: concluído via JS fallback (URL: {self._page.url})")
-                return
+                self._log(f"  ✓ Salvar: concluído via JS fallback '{clicou}' (URL: {self._page.url})")
+                return True
         except Exception:
             pass
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
+        return False
 
     def _clicar_novo(self) -> None:
         """Clica no botão Novo da seção atual — prioriza dentro de #formulario."""
@@ -1293,7 +1301,8 @@ class PJECalcPlaywright:
                 self._marcar_checkbox("possuiDependentes", True)
                 self._preencher("quantidadeDependentes", str(ir["dependentes"]), False)
 
-        self._clicar_salvar()
+        if not self._clicar_salvar():
+            self._log("  ⚠ Fase 1: Salvar não confirmado — dados do processo podem não ter persistido.")
         self._log("Fase 1 concluída.")
 
     # ── Utilitário de screenshot por fase ──────────────────────────────────────
@@ -1340,7 +1349,8 @@ class PJECalcPlaywright:
         if zerar_negativos is not None:
             self._marcar_checkbox("zerarValoresNegativos", bool(zerar_negativos))
 
-        self._clicar_salvar()
+        if not self._clicar_salvar():
+            self._log("  ⚠ Fase 2a: Salvar não confirmado — parâmetros gerais podem não ter persistido.")
         self._aguardar_ajax()
         self._log("  Fase 2a concluída.")
 
@@ -1929,7 +1939,8 @@ class PJECalcPlaywright:
                     self._log(f"  ✓ Saldo FGTS adicionado: {saldo['data']} R$ {saldo['valor']}")
 
         # Salvar (seletor específico prioritário)
-        self._clicar_botao_id("btnSalvarFGTS") or self._clicar_salvar()
+        if not (self._clicar_botao_id("btnSalvarFGTS") or self._clicar_salvar()):
+            self._log("  ⚠ Fase 4: Salvar FGTS não confirmado.")
         self._aguardar_ajax()
         self._log("Fase 4 concluída.")
 
@@ -1945,6 +1956,8 @@ class PJECalcPlaywright:
             or self._clicar_menu_lateral("Contribuicao Social", obrigatorio=False)
             or self._clicar_menu_lateral("INSS", obrigatorio=False)
         )
+        if navegou:
+            navegou = self._verificar_secao_ativa("Contribui")
         if not navegou:
             self._log("  → Seção Contribuição Social não encontrada — ignorado.")
             return
@@ -1970,7 +1983,8 @@ class PJECalcPlaywright:
                               cs.get("apurar_sobre_salarios_pagos", False))
         if cs.get("lei_11941"):
             self._marcar_checkbox("lei11941", True)
-        self._clicar_salvar()
+        if not self._clicar_salvar():
+            self._log("  ⚠ Fase 5: Salvar INSS não confirmado.")
         self._log("Fase 5 concluída.")
 
     # ── Fase 5b: Cartão de Ponto ──────────────────────────────────────────────
@@ -2087,6 +2101,8 @@ class PJECalcPlaywright:
             or self._clicar_menu_lateral("IRPF", obrigatorio=False)
             or self._clicar_menu_lateral("IR", obrigatorio=False)
         )
+        if navegou:
+            navegou = self._verificar_secao_ativa("Imposto")
         if not navegou:
             self._log("  → Seção IRPF não encontrada no menu — ignorado.")
             return
@@ -2123,7 +2139,8 @@ class PJECalcPlaywright:
         if ir.get("meses_tributaveis"):
             self._preencher("mesesTributaveis", str(int(ir["meses_tributaveis"])), False)
 
-        self._clicar_salvar()
+        if not self._clicar_salvar():
+            self._log("  ⚠ Fase 7: Salvar IRPF não confirmado.")
         self._log("Fase 7 concluída.")
 
     # ── Fase 8: Honorários ────────────────────────────────────────────────────
