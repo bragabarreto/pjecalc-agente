@@ -49,7 +49,7 @@ _buf_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s:
 logging.getLogger().addHandler(_buf_handler)
 
 import time as _time
-from config import OUTPUT_DIR, CLOUD_MODE, PJECALC_DIR
+from config import OUTPUT_DIR, CLOUD_MODE, PJECALC_DIR, PJECALC_LOCAL_URL, PJECALC_TOMCAT_TIMEOUT
 
 # Sessões em processamento (em memória) — evita 404 enquanto background task roda
 _sessoes_processando: dict[str, float] = {}  # sessao_id → timestamp de início
@@ -661,7 +661,7 @@ async def instrucoes_preenchimento(
 
     base_url = str(request.base_url).rstrip("/").replace("http://", "https://")
     pjecalc_url = (
-        "http://localhost:9257/pjecalc/pages/principal.jsf"
+        f"{PJECALC_LOCAL_URL}/pages/principal.jsf"
         f"#agente-sessao={sessao_id}"
         f"&agente-server={url_quote(base_url, safe='')}"
     )
@@ -763,11 +763,11 @@ async def download_extensao():
 
 @app.get("/api/verificar_pjecalc")
 async def verificar_pjecalc():
-    """Verifica se localhost:9257 está respondendo (apenas checagem, sem iniciar)."""
+    """Verifica se o PJE-Calc está respondendo (apenas checagem, sem iniciar)."""
     import httpx
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get("http://localhost:9257/pjecalc")
+            r = await client.get(PJECALC_LOCAL_URL)
             if r.status_code in (200, 302, 404):
                 return {"status": "ok", "codigo_http": r.status_code}
             return {"status": "erro", "codigo_http": r.status_code}
@@ -902,34 +902,39 @@ async def executar_automacao_sse(
         from modules.playwright_pjecalc import preencher_como_generator
         from database import SessionLocal
 
-        # Aguardar Tomcat + webapp PJE-Calc ficarem prontos.
-        # Critério: HTTP 200 ou 302 em /pjecalc → webapp deployada e pronta.
-        # HTTP 404 → Tomcat ouvindo mas war ainda sendo deployado → continuar aguardando.
-        # Sem resposta → Tomcat ainda inicializando → continuar aguardando.
-        TOMCAT_TIMEOUT = 600
+        # Aguardar PJE-Calc ficar disponível.
+        # Modo local (PJECALC_TOMCAT_TIMEOUT=30): usuário já abriu o PJE-Calc → falha rápida.
+        # Modo Railway/Docker (PJECALC_TOMCAT_TIMEOUT=600): Tomcat sobe junto em background.
+        _tomcat_timeout = PJECALC_TOMCAT_TIMEOUT
+        _pjecalc_url = PJECALC_LOCAL_URL
         elapsed = 0
         _ultimo_status_log = -30
-        while elapsed < TOMCAT_TIMEOUT:
+        while elapsed < _tomcat_timeout:
             try:
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    r = await client.get("http://localhost:9257/pjecalc")
+                    r = await client.get(_pjecalc_url)
                     if r.status_code in (200, 302):
-                        # Webapp pronta
                         yield f"data: {json.dumps({'msg': f'PJE-Calc pronto (HTTP {r.status_code}) — iniciando Playwright…'})}\n\n"
                         break
                     if r.status_code == 404:
-                        # Tomcat HTTP ativo mas war ainda deployando — aguardar
                         if elapsed - _ultimo_status_log >= 30:
                             yield f"data: {json.dumps({'msg': f'Tomcat ativo — aguardando deploy da webapp… ({elapsed}s)'})}\n\n"
                             _ultimo_status_log = elapsed
             except Exception:
                 if elapsed - _ultimo_status_log >= 30:
-                    yield f"data: {json.dumps({'msg': f'Aguardando Tomcat inicializar… ({elapsed}s)'})}\n\n"
+                    yield f"data: {json.dumps({'msg': f'Aguardando PJE-Calc… ({elapsed}s/{_tomcat_timeout}s)'})}\n\n"
                     _ultimo_status_log = elapsed
             await asyncio.sleep(10)
             elapsed += 10
         else:
-            yield f"data: {json.dumps({'msg': 'ERRO: PJE-Calc não ficou disponível após 10 min. Verifique /api/logs/java.'})}\n\n"
+            _msg_erro = (
+                f"ERRO: PJE-Calc não respondeu em {_pjecalc_url} após {_tomcat_timeout}s. "
+            )
+            if _tomcat_timeout <= 60:
+                _msg_erro += "Abra o PJE-Calc Cidadão e aguarde carregar antes de iniciar a automação."
+            else:
+                _msg_erro += "Verifique /api/logs/java para diagnóstico."
+            yield f"data: {json.dumps({'msg': _msg_erro})}\n\n"
             yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
             return
 

@@ -69,11 +69,26 @@ AUTOMATION_BACKEND = "pyautogui"    # "pyautogui" | "playwright"
 PJECALC_WINDOW_TITLE = "PJE-Calc"  # título da janela desktop
 PJECALC_URL = os.environ.get("PJECALC_URL", "https://pje.trt7.jus.br/pjecalc")
 
+# URL do PJE-Calc Cidadão local (Tomcat embutido).
+# Instalação padrão (TRT): http://localhost:8080/pje-calc
+# Versão bundled (pjecalc-dist/): http://localhost:9257/pjecalc  ← padrão
+# Sobrescrever com PJECALC_LOCAL_URL=http://localhost:8080/pje-calc se necessário.
+PJECALC_LOCAL_URL = os.environ.get(
+    "PJECALC_LOCAL_URL",
+    "http://localhost:9257/pjecalc",
+)
+
+# Timeout (segundos) para aguardar o Tomcat inicializar antes da automação.
+# Local (usuário já abriu o PJE-Calc): 30s é suficiente.
+# Railway/Docker (Tomcat sobe junto): 600s.
+# Sobrescrever com PJECALC_TOMCAT_TIMEOUT=30 para modo local.
+PJECALC_TOMCAT_TIMEOUT = int(os.environ.get("PJECALC_TOMCAT_TIMEOUT", 600))
+
 # Diretório local do PJE-Calc Cidadão (para automação Playwright local).
 # Pode ser sobrescrito via env var PJECALC_DIR.
 PJECALC_DIR = Path(os.environ.get(
     "PJECALC_DIR",
-    str(BASE_DIR.parent / "pjecalc-windows64-2.14.0"),
+    str(BASE_DIR / "pjecalc-dist"),
 ))
 
 # Tempos de espera (segundos)

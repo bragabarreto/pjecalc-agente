@@ -25,6 +25,23 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# URL base do PJE-Calc — lida de config/env uma vez no import do módulo
+try:
+    from config import PJECALC_LOCAL_URL as _PJECALC_LOCAL_URL
+except ImportError:
+    _PJECALC_LOCAL_URL = os.environ.get(
+        "PJECALC_LOCAL_URL", "http://localhost:9257/pjecalc"
+    )
+
+# Porta extraída da URL base (para checagem TCP de fallback)
+def _porta_local() -> int:
+    try:
+        import urllib.parse as _p
+        return int(_p.urlparse(_PJECALC_LOCAL_URL).port or 9257)
+    except Exception:
+        return 9257
+
+
 # ── Decorator de retry ────────────────────────────────────────────────────────
 
 def retry(max_tentativas: int = 3, delay: int = 2):
@@ -63,7 +80,7 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                             self.iniciar_browser(headless=headless)
                             self._instalar_monitor_ajax()
                             self._page.goto(
-                                "http://localhost:9257/pjecalc/pages/principal.jsf",
+                                f"{self.PJECALC_BASE}/pages/principal.jsf",
                                 wait_until="domcontentloaded", timeout=30000
                             )
                             self._page.wait_for_timeout(2000)
@@ -90,21 +107,19 @@ def retry(max_tentativas: int = 3, delay: int = 2):
 
 def pjecalc_rodando() -> bool:
     """
-    Retorna True se o PJE-Calc já está disponível via HTTP em localhost:9257.
+    Retorna True se o PJE-Calc já está disponível via HTTP.
     Aceita 200, 302 e 404 — qualquer resposta HTTP indica Tomcat ativo.
     404 = Tomcat up mas webapp ainda deployando; 200/302 = totalmente pronto.
     Fallback para TCP se a checagem HTTP falhar (ex: timeout de rede).
     """
     try:
-        with urllib.request.urlopen(
-            "http://localhost:9257/pjecalc", timeout=2
-        ) as r:
+        with urllib.request.urlopen(_PJECALC_LOCAL_URL, timeout=2) as r:
             return r.status in (200, 302, 404)
     except Exception:
         pass
     # Fallback TCP: porta aberta sem resposta HTTP ainda
     try:
-        s = socket.create_connection(("127.0.0.1", 9257), timeout=1)
+        s = socket.create_connection(("127.0.0.1", _porta_local()), timeout=1)
         s.close()
         return True
     except OSError:
@@ -115,8 +130,8 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
     """
     Inicia o PJE-Calc Cidadão via iniciarPjeCalc.bat (Windows) ou iniciarPjeCalc.sh (Linux).
     Aguarda:
-      1) porta TCP 9257 abrir
-      2) HTTP http://localhost:9257/pjecalc responder com 200/302/404
+      1) porta TCP abrir
+      2) HTTP responder com 200/302/404
     Emite mensagens de progresso via log_cb durante a espera.
     """
     import platform
@@ -126,7 +141,7 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
     if pjecalc_rodando():
         # pjecalc_rodando() já confirmou HTTP — sem espera adicional.
         # (O SSE em webapp.py faz a espera longa de 600s; aqui só confirmamos.)
-        logger.info("PJE-Calc HTTP disponível em localhost:9257 — iniciando automação.")
+        logger.info(f"PJE-Calc HTTP disponível em {_PJECALC_LOCAL_URL} — iniciando automação.")
         _log("PJE-Calc disponível — iniciando automação…")
         return
 
@@ -146,6 +161,24 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
             cwd=str(dir_path),
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
+    elif sistema == "Darwin":
+        # macOS: tenta .sh com bash; se não existir, tenta abrir o .app
+        launcher = dir_path / "iniciarPjeCalc.sh"
+        app_bundle = dir_path / "PJE-Calc.app"
+        if launcher.exists():
+            subprocess.Popen(
+                ["bash", str(launcher)],
+                cwd=str(dir_path),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        elif app_bundle.exists():
+            subprocess.Popen(["open", str(app_bundle)])
+        else:
+            raise FileNotFoundError(
+                f"Launcher não encontrado em {dir_path}. "
+                "Inicie o PJE-Calc Cidadão manualmente e tente novamente."
+            )
     else:
         # Linux / Docker: usa iniciarPjeCalc.sh
         launcher = dir_path / "iniciarPjeCalc.sh"
@@ -165,7 +198,7 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
     inicio = time.time()
     while time.time() - inicio < timeout:
         if pjecalc_rodando():
-            logger.info("PJE-Calc: porta TCP 9257 aberta.")
+            logger.info(f"PJE-Calc: porta TCP aberta ({_porta_local()}).")
             _log("PJE-Calc: porta TCP aberta. Aguardando deploy web…")
             break
         time.sleep(2)
@@ -181,12 +214,12 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
 
 def _aguardar_http(timeout: int = 300, log_cb=None) -> None:
     """
-    Aguarda http://localhost:9257/pjecalc responder com 200, 302 ou 404.
+    Aguarda o PJE-Calc responder com 200, 302 ou 404.
     404 é aceito: indica que o Tomcat está ativo mas o war ainda está sendo
     deployado. O Playwright consegue conectar assim que a página JSF responder.
     Emite progresso via log_cb a cada 15s.
     """
-    url = "http://localhost:9257/pjecalc"
+    url = _PJECALC_LOCAL_URL
     inicio = time.time()
     ultimo_log = -15  # força log no primeiro ciclo
     while time.time() - inicio < timeout:
@@ -249,7 +282,17 @@ class PJECalcPlaywright:
     Implementa as recomendações do Manual Técnico v2.0.
     """
 
-    PJECALC_BASE = "http://localhost:9257/pjecalc"
+    # URL base do PJE-Calc local — lida de PJECALC_LOCAL_URL (config/env).
+    # Padrão: http://localhost:9257/pjecalc (bundled pjecalc-dist/).
+    # Instalação padrão TRT: http://localhost:8080/pje-calc
+    try:
+        from config import PJECALC_LOCAL_URL as _LOCAL_URL
+        PJECALC_BASE = _LOCAL_URL
+    except ImportError:
+        import os as _os
+        PJECALC_BASE = _os.environ.get(
+            "PJECALC_LOCAL_URL", "http://localhost:9257/pjecalc"
+        )
     LOG_DIR = Path("data/logs")
 
     def __init__(self, log_cb: Callable[[str], None] | None = None):
@@ -1072,7 +1115,7 @@ class PJECalcPlaywright:
 
     def _verificar_tomcat(self, timeout: int = 120) -> bool:
         """Aguarda o Tomcat responder antes de prosseguir. Loga progresso a cada 15s."""
-        url = "http://localhost:9257/pjecalc"
+        url = self.PJECALC_BASE
         inicio = time.time()
         ultimo_log = -15
         while time.time() - inicio < timeout:
