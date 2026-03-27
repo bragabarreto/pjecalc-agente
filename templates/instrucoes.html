@@ -60,31 +60,51 @@
   </div>
 </div>
 
-<!-- Painel de automação CalcMachine -->
+<!-- Painel de automação -->
 {% if not cloud_mode %}
 <div class="no-print" style="margin-bottom:20px;">
-  <div style="background:#1a3a6b; color:#fff; padding:10px 16px; border-radius:6px 6px 0 0;">
+  <div style="background:#1a3a6b; color:#fff; padding:10px 16px; border-radius:6px 6px 0 0; display:flex; align-items:center; gap:12px;">
     <strong>Automação PJE-Calc</strong>
+    <span id="statusBadge" style="font-size:0.8rem; padding:2px 10px; border-radius:20px; background:#6c757d; color:#fff;">
+      verificando…
+    </span>
   </div>
-  <div style="background:#f8f9fa; border:1px solid #dee2e6; border-top:none; padding:12px 16px; border-radius:0;">
-    <div class="controles-automacao">
-      <button id="btnVerificar" class="btn btn-outline-primary btn-sm" onclick="verificarPjeCalc()">
-        🔍 Verificar PJE-Calc
+
+  <!-- Etapa 1: PJE-Calc -->
+  <div id="painelPjeCalc" style="background:#f8f9fa; border:1px solid #dee2e6; border-top:none; padding:14px 16px;">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <span style="font-size:0.9rem; color:#495057; flex:1;">
+        <strong>Passo 1:</strong> PJE-Calc Cidadão deve estar aberto antes de iniciar a automação.
+      </span>
+      <button id="btnIniciarPjeCalc" class="btn btn-warning btn-sm" onclick="iniciarPjeCalc()" style="display:none;">
+        ▶ Abrir PJE-Calc
       </button>
+      <button id="btnVerificar" class="btn btn-outline-secondary btn-sm" onclick="verificarPjeCalc()">
+        🔄 Verificar
+      </button>
+    </div>
+    <div id="msgPjeCalc" style="margin-top:8px; font-size:0.85rem; color:#6c757d;"></div>
+  </div>
+
+  <!-- Etapa 2: Automação -->
+  <div style="background:#fff; border:1px solid #dee2e6; border-top:none; padding:12px 16px;">
+    <div class="controles-automacao">
       <div class="form-check form-check-inline">
         <input type="checkbox" id="modo_oculto" class="form-check-input">
-        <label for="modo_oculto" class="form-check-label" style="font-size:0.9rem;">Modo oculto</label>
+        <label for="modo_oculto" class="form-check-label" style="font-size:0.9rem;">
+          Modo oculto <span style="color:#999;">(sem abrir janela do browser)</span>
+        </label>
       </div>
-      <button id="btnExecutar" class="btn btn-success btn-sm" onclick="executarAutomacao()">
+      <button id="btnExecutar" class="btn btn-success" onclick="executarAutomacao()" disabled>
         ▶ Executar Automação
       </button>
       <button id="btnEncerrar" class="btn btn-danger btn-sm" onclick="encerrarAutomacao()" disabled>
-        ⏹ Encerrar
+        ⏹ Parar
       </button>
     </div>
   </div>
-  <pre id="log-automacao">Pronto. Clique em "▶ Executar Automação" para iniciar.
-O PJE-Calc será aberto automaticamente se necessário.
+
+  <pre id="log-automacao">Aguardando verificação do PJE-Calc…
 </pre>
 </div>
 {% else %}
@@ -365,27 +385,107 @@ O PJE-Calc será aberto automaticamente se necessário.
 const SESSAO_ID = "{{ sessao_id }}";
 let evtSource = null;
 let reconexoes = 0;
-const MAX_RECONEXOES = 2;   // apenas para erros de rede transitórios
+const MAX_RECONEXOES = 2;
 let modoOcultoAtual = false;
 let automacaoConcluida = false;
+let pjeCalcDisponivel = false;
+let verificandoPjeCalc = false;
+let pollingHandle = null;
 
-async function verificarPjeCalc() {
+// ── Status do PJE-Calc ────────────────────────────────────────────────────────
+
+function setBadge(texto, cor) {
+  const b = document.getElementById('statusBadge');
+  b.textContent = texto;
+  b.style.background = cor;
+}
+
+function setMsgPjeCalc(texto, cor) {
+  const m = document.getElementById('msgPjeCalc');
+  m.textContent = texto;
+  m.style.color = cor || '#6c757d';
+}
+
+async function verificarPjeCalc(silencioso) {
+  if (verificandoPjeCalc) return;
+  verificandoPjeCalc = true;
   document.getElementById('btnVerificar').disabled = true;
-  logMsg('Verificando PJE-Calc em localhost:9257…', 'wait');
+  if (!silencioso) setBadge('verificando…', '#6c757d');
+
   try {
     const resp = await fetch('/api/verificar_pjecalc');
-    const { disponivel } = await resp.json();
-    if (disponivel) {
-      logMsg('✅ PJE-Calc já está rodando em localhost:9257', 'ok');
-    } else {
-      logMsg('ℹ️ PJE-Calc não está rodando — será iniciado automaticamente ao Executar', 'wait');
-    }
+    const dados = await resp.json();
+    pjeCalcDisponivel = dados.disponivel === true;
+    atualizarUiPjeCalc();
   } catch(e) {
-    logMsg('⚠ Erro ao verificar: ' + e, 'wait');
+    pjeCalcDisponivel = false;
+    setBadge('erro de rede', '#dc3545');
+    setMsgPjeCalc('Não foi possível verificar: ' + e, '#dc3545');
   } finally {
+    verificandoPjeCalc = false;
     document.getElementById('btnVerificar').disabled = false;
   }
 }
+
+function atualizarUiPjeCalc() {
+  const btnIniciar = document.getElementById('btnIniciarPjeCalc');
+  const btnExecutar = document.getElementById('btnExecutar');
+
+  if (pjeCalcDisponivel) {
+    setBadge('PJE-Calc: rodando ✓', '#198754');
+    setMsgPjeCalc('PJE-Calc está aberto e pronto. Clique em "Executar Automação".', '#198754');
+    btnIniciar.style.display = 'none';
+    btnExecutar.disabled = false;
+    if (pollingHandle) { clearInterval(pollingHandle); pollingHandle = null; }
+  } else {
+    setBadge('PJE-Calc: parado', '#dc3545');
+    setMsgPjeCalc('PJE-Calc não está rodando. Clique em "Abrir PJE-Calc" para iniciar.', '#dc3545');
+    btnIniciar.style.display = '';
+    btnExecutar.disabled = true;
+  }
+}
+
+async function iniciarPjeCalc() {
+  const btn = document.getElementById('btnIniciarPjeCalc');
+  btn.disabled = true;
+  btn.textContent = '⏳ Abrindo PJE-Calc…';
+  setBadge('iniciando…', '#fd7e14');
+  setMsgPjeCalc('Abrindo PJE-Calc Cidadão, aguarde…', '#856404');
+  logMsg('Iniciando PJE-Calc Cidadão…', 'wait');
+
+  try {
+    const resp = await fetch('/api/iniciar_pjecalc', { method: 'POST' });
+    const dados = await resp.json();
+    logMsg(dados.msg, 'wait');
+    if (dados.status === 'ja_rodando') {
+      pjeCalcDisponivel = true;
+      atualizarUiPjeCalc();
+    } else {
+      // Polling a cada 5s até ficar disponível (máx. 3 min)
+      let tentativas = 0;
+      pollingHandle = setInterval(async () => {
+        tentativas++;
+        await verificarPjeCalc(true);
+        if (pjeCalcDisponivel || tentativas >= 36) {
+          clearInterval(pollingHandle);
+          pollingHandle = null;
+          btn.disabled = false;
+          btn.textContent = '▶ Abrir PJE-Calc';
+          if (!pjeCalcDisponivel) {
+            logMsg('PJE-Calc não respondeu em 3 min. Verifique a instalação.', 'err');
+            setBadge('PJE-Calc: erro', '#dc3545');
+          }
+        }
+      }, 5000);
+    }
+  } catch(e) {
+    logMsg('Erro ao iniciar PJE-Calc: ' + e, 'err');
+    btn.disabled = false;
+    btn.textContent = '▶ Abrir PJE-Calc';
+  }
+}
+
+// ── Automação SSE ─────────────────────────────────────────────────────────────
 
 function executarAutomacao() {
   modoOcultoAtual = document.getElementById('modo_oculto').checked;
@@ -403,7 +503,7 @@ function abrirSSE() {
   );
   evtSource.onmessage = (e) => {
     const dados = JSON.parse(e.data);
-    if (dados.keepalive) return;  // heartbeat silencioso — mantém conexão viva
+    if (dados.keepalive) return;
     const msg = dados.msg;
     if (msg === 'DOWNLOAD_DISPONIVEL' && dados.url) {
       const btn = document.createElement('a');
@@ -426,7 +526,7 @@ function abrirSSE() {
   evtSource.onerror = () => {
     evtSource.close();
     evtSource = null;
-    if (automacaoConcluida) return;  // encerramento normal — não reconectar
+    if (automacaoConcluida) return;
     if (reconexoes < MAX_RECONEXOES) {
       reconexoes++;
       logMsg(`⚠ Conexão interrompida — reconectando (${reconexoes}/${MAX_RECONEXOES})…`, 'wait');
@@ -440,13 +540,13 @@ function abrirSSE() {
 
 function encerrarAutomacao() {
   if (evtSource) { evtSource.close(); evtSource = null; }
-  logMsg('Conexão encerrada pelo usuário.', 'wait');
+  logMsg('Automação encerrada pelo usuário.', 'wait');
   finalizarAutomacao();
 }
 
 function finalizarAutomacao() {
   if (evtSource) { evtSource.close(); evtSource = null; }
-  document.getElementById('btnExecutar').disabled = false;
+  document.getElementById('btnExecutar').disabled = !pjeCalcDisponivel;
   document.getElementById('btnEncerrar').disabled = true;
   if (automacaoConcluida) tocarConclusao();
 }
@@ -475,6 +575,9 @@ function tocarConclusao() {
     });
   } catch(e) {}
 }
+
+// Verificar automaticamente ao carregar a página
+window.addEventListener('DOMContentLoaded', () => verificarPjeCalc());
 </script>
 {% endif %}
 {% endblock %}

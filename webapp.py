@@ -769,10 +769,54 @@ async def verificar_pjecalc():
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(PJECALC_LOCAL_URL)
             if r.status_code in (200, 302, 404):
-                return {"status": "ok", "codigo_http": r.status_code}
-            return {"status": "erro", "codigo_http": r.status_code}
+                return {"disponivel": True, "status": "ok", "codigo_http": r.status_code}
+            return {"disponivel": False, "status": "erro", "codigo_http": r.status_code}
     except Exception as e:
-        return {"status": "indisponivel", "detalhe": str(e)}
+        return {"disponivel": False, "status": "indisponivel", "detalhe": str(e)}
+
+
+_pjecalc_iniciando: bool = False  # flag global simples para evitar duplo start
+
+
+@app.post("/api/iniciar_pjecalc")
+async def iniciar_pjecalc_endpoint(background_tasks: BackgroundTasks):
+    """
+    Inicia o PJE-Calc Cidadão em background (sem bloquear a resposta HTTP).
+    Retorna imediatamente; o cliente deve chamar /api/verificar_pjecalc para
+    acompanhar quando estiver pronto.
+    """
+    global _pjecalc_iniciando
+    import httpx
+    # Checar se já está rodando
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(PJECALC_LOCAL_URL)
+            if r.status_code in (200, 302, 404):
+                return {"status": "ja_rodando", "msg": "PJE-Calc já está disponível."}
+    except Exception:
+        pass
+
+    if _pjecalc_iniciando:
+        return {"status": "iniciando", "msg": "PJE-Calc já está sendo iniciado, aguarde."}
+
+    _pjecalc_iniciando = True
+
+    def _start():
+        global _pjecalc_iniciando
+        try:
+            from modules.playwright_pjecalc import iniciar_pjecalc
+            iniciar_pjecalc(PJECALC_DIR, timeout=180, log_cb=None)
+        except Exception as exc:
+            logger.warning(f"iniciar_pjecalc em background: {exc}")
+        finally:
+            _pjecalc_iniciando = False
+
+    background_tasks.add_task(_start)
+    return {
+        "status": "iniciando",
+        "msg": f"PJE-Calc sendo iniciado a partir de {PJECALC_DIR}. "
+               "Aguarde ~30s e clique em Verificar.",
+    }
 
 
 @app.get("/api/screenshot", response_class=HTMLResponse)
