@@ -258,6 +258,9 @@ class PJECalcPlaywright:
         self._browser = None
         self._page = None
         self._headless = False  # stored by iniciar_browser() para crash recovery
+        # Capturados após criar um novo cálculo — usados para URL-based navigation
+        self._calculo_url_base: str | None = None
+        self._calculo_conversation_id: str | None = None
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
@@ -748,12 +751,68 @@ class PJECalcPlaywright:
                 except Exception:
                     pass  # fallback para busca por texto abaixo
         self._page.wait_for_timeout(400)
-        # Método primário: JS click — bypassa visibilidade, funciona em menus colapsados
+
+        # Tentativa 2: navegação por URL com conversationId do cálculo ativo
+        # (mais confiável que busca textual quando IDs do menu são dinâmicos)
+        _URL_SECTION_MAP = {
+            "Histórico Salarial": "historicoSalarial.jsf",
+            "Verbas":             "verba.jsf",
+            "FGTS":               "fgts.jsf",
+            "Honorários":         "honorarios.jsf",
+            "Liquidar":           "liquidar.jsf",
+            "Faltas":             "falta.jsf",
+            "Férias":             "ferias.jsf",
+            "Contribuição Social": "contribuicaoSocial.jsf",
+            "Contribuicao Social": "contribuicaoSocial.jsf",
+            "Imposto de Renda":   "impostoRenda.jsf",
+            "Multas":             "multas.jsf",
+            "Dados do Cálculo":   "calculo.jsf",
+            "Imprimir":           "imprimir.jsf",
+        }
+        if self._calculo_url_base and self._calculo_conversation_id:
+            jsf_page = _URL_SECTION_MAP.get(texto)
+            if jsf_page:
+                try:
+                    _url = (
+                        f"{self._calculo_url_base}{jsf_page}"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    self._log(f"  → URL nav: {jsf_page}?conversationId={self._calculo_conversation_id}")
+                    self._page.goto(_url, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    return True
+                except Exception as _e:
+                    self._log(f"  ⚠ URL nav falhou para '{texto}': {_e}")
+
+        # Tentativa 3: JS click com escopo no container do menu lateral
+        # Ancora-se em "Histórico Salarial" (exclusivo do menu de cálculo) para evitar
+        # clicar em links homônimos do menu de referência (Tabelas).
         clicou = self._page.evaluate(
             """(texto) => {
-                const links = [...document.querySelectorAll('a')];
-                const el = links.find(a =>
-                    a.textContent.replace(/\\s+/g, ' ').trim().includes(texto)
+                const allLinks = [...document.querySelectorAll('a')];
+                // Tenta encontrar o link no mesmo container do menu de cálculo
+                const anchors = ['Histórico Salarial', 'FGTS', 'Faltas'];
+                const anchor = anchors.find(t => t !== texto);
+                if (anchor) {
+                    const anchorEl = allLinks.find(
+                        a => a.textContent.replace(/\\s+/g, ' ').trim().includes(anchor)
+                    );
+                    if (anchorEl) {
+                        let parent = anchorEl.parentElement;
+                        for (let i = 0; i < 8 && parent && parent.tagName !== 'BODY'; i++) {
+                            const found = [...parent.querySelectorAll('a')].find(
+                                a => a !== anchorEl &&
+                                     a.textContent.replace(/\\s+/g, ' ').trim().includes(texto)
+                            );
+                            if (found) { found.click(); return true; }
+                            parent = parent.parentElement;
+                        }
+                    }
+                }
+                // Fallback: primeiro link com texto exato
+                const el = allLinks.find(
+                    a => a.textContent.replace(/\\s+/g, ' ').trim() === texto
                 );
                 if (el) { el.click(); return true; }
                 return false;
@@ -1069,6 +1128,22 @@ class PJECalcPlaywright:
 
     # ── Navegação principal ────────────────────────────────────────────────────
 
+    def _capturar_base_calculo(self) -> None:
+        """Captura a URL base e conversationId do cálculo ativo para navegação por URL."""
+        import re as _re
+        try:
+            url = self._page.url
+            m_base = _re.match(r'(https?://.+/)[^/?]+\.jsf', url)
+            m_conv = _re.search(r'conversationId=(\d+)', url)
+            if m_base and m_conv:
+                self._calculo_url_base = m_base.group(1)
+                self._calculo_conversation_id = m_conv.group(1)
+                self._log(
+                    f"  ℹ URL base: {self._calculo_url_base} | conversationId={self._calculo_conversation_id}"
+                )
+        except Exception:
+            pass
+
     def _ir_para_novo_calculo(self) -> None:
         """Navega para o formulário de Novo Cálculo via menu 'Novo'.
 
@@ -1105,6 +1180,7 @@ class PJECalcPlaywright:
         except Exception:
             pass
 
+        self._capturar_base_calculo()
         self._log("  ✓ Formulário de Novo Cálculo aberto.")
 
     # ── Fase 1: Dados do Processo + Parâmetros ─────────────────────────────────
@@ -1352,6 +1428,8 @@ class PJECalcPlaywright:
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 2a: Salvar não confirmado — parâmetros gerais podem não ter persistido.")
         self._aguardar_ajax()
+        # Captura/atualiza URL base após salvar (URL pode ter mudado com novo conversationId)
+        self._capturar_base_calculo()
         self._log("  Fase 2a concluída.")
 
     # ── Fase 2: Histórico Salarial ─────────────────────────────────────────────
