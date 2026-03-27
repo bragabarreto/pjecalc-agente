@@ -876,8 +876,13 @@ async def logs_tomcat(linhas: int = 80):
 async def logs_java(linhas: int = 100):
     """Retorna stdout+stderr completo do processo Java (Lancador + Tomcat)."""
     import subprocess
-    log = Path("/opt/pjecalc/java.log")
-    if not log.exists():
+    # Candidatos: Docker (/opt/pjecalc/java.log) ou local macOS (pjecalc-dist/pjecalc.log)
+    candidatos = [
+        Path("/opt/pjecalc/java.log"),
+        Path(__file__).parent / "pjecalc-dist" / "pjecalc.log",
+    ]
+    log = next((p for p in candidatos if p.exists()), None)
+    if log is None:
         return {"log": "(java.log não existe — processo Java ainda não iniciou ou não está redirecionando saída)"}
     try:
         result = subprocess.run(["tail", f"-{linhas}", str(log)],

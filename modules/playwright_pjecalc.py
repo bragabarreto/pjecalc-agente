@@ -162,12 +162,21 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
             creationflags=subprocess.CREATE_NEW_CONSOLE,
         )
     elif sistema == "Darwin":
-        # macOS: tenta .sh com bash; se não existir, tenta abrir o .app
-        launcher = dir_path / "iniciarPjeCalc.sh"
+        # macOS: usa iniciarPjeCalc-macos.sh (Bootstrap direto, sem Xvfb/xdotool)
+        # Fallback: iniciarPjeCalc.sh genérico, depois .app bundle
+        macos_launcher = Path(__file__).parent.parent / "iniciarPjeCalc-macos.sh"
+        generic_launcher = dir_path / "iniciarPjeCalc.sh"
         app_bundle = dir_path / "PJE-Calc.app"
-        if launcher.exists():
+        if macos_launcher.exists():
             subprocess.Popen(
-                ["bash", str(launcher)],
+                ["bash", str(macos_launcher)],
+                env={**os.environ, "PJECALC_DIR": str(dir_path)},
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+        elif generic_launcher.exists():
+            subprocess.Popen(
+                ["bash", str(generic_launcher)],
                 cwd=str(dir_path),
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
@@ -176,8 +185,9 @@ def iniciar_pjecalc(pjecalc_dir: str | Path, timeout: int = 180, log_cb=None) ->
             subprocess.Popen(["open", str(app_bundle)])
         else:
             raise FileNotFoundError(
-                f"Launcher não encontrado em {dir_path}. "
-                "Inicie o PJE-Calc Cidadão manualmente e tente novamente."
+                f"Launcher macOS não encontrado. "
+                "Inicie o PJE-Calc Cidadão manualmente e tente novamente.\n"
+                "Para instalar Java 8: brew install --cask temurin@8"
             )
     else:
         # Linux / Docker: usa iniciarPjeCalc.sh
