@@ -808,19 +808,19 @@ class PJECalcPlaywright:
         # Tentativa 2: navegação por URL com conversationId do cálculo ativo
         # (mais confiável que busca textual quando IDs do menu são dinâmicos)
         _URL_SECTION_MAP = {
-            "Histórico Salarial": "historicoSalarial.jsf",
-            "Verbas":             "verba.jsf",
-            "FGTS":               "fgts.jsf",
-            "Honorários":         "honorarios.jsf",
-            "Liquidar":           "liquidar.jsf",
-            "Faltas":             "falta.jsf",
-            "Férias":             "ferias.jsf",
-            "Contribuição Social": "contribuicaoSocial.jsf",
-            "Contribuicao Social": "contribuicaoSocial.jsf",
-            "Imposto de Renda":   "impostoRenda.jsf",
-            "Multas":             "multas.jsf",
-            "Dados do Cálculo":   "calculo.jsf",
-            "Imprimir":           "imprimir.jsf",
+            "Histórico Salarial":  "historico-salarial.jsf",        # era historicoSalarial.jsf
+            "Verbas":              "verba/verbas-para-calculo.jsf",  # era verba.jsf → 404
+            "FGTS":                "fgts.jsf",
+            "Honorários":          "honorarios.jsf",
+            "Liquidar":            "liquidacao.jsf",                 # era liquidar.jsf → 404
+            "Faltas":              "falta.jsf",
+            "Férias":              "ferias.jsf",
+            "Contribuição Social": "inss/inss.jsf",                  # era contribuicaoSocial.jsf → 404
+            "Contribuicao Social": "inss/inss.jsf",
+            "Imposto de Renda":    "irpf.jsf",                       # era impostoRenda.jsf
+            "Multas":              "multas-indenizacoes.jsf",         # era multas.jsf
+            "Dados do Cálculo":    "calculo.jsf",
+            "Imprimir":            "imprimir.jsf",
         }
         if self._calculo_url_base and self._calculo_conversation_id:
             jsf_page = _URL_SECTION_MAP.get(texto)
@@ -834,6 +834,24 @@ class PJECalcPlaywright:
                     self._page.goto(_url, wait_until="domcontentloaded", timeout=15000)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(500)
+                    # Detectar página de erro do Seam (apenas formulario:fechar visível,
+                    # sem botões de ação — indica 404 ou conversação inválida)
+                    _so_fechar = (
+                        self._page.locator("input[id='formulario:fechar']").count() > 0
+                        and self._page.locator(
+                            "input[id*='btnExpresso'], input[id*='btnNovo'], "
+                            "input[id*='btnSalvar'], input[id*='btnLiquidar']"
+                        ).count() == 0
+                    )
+                    if _so_fechar:
+                        self._log(f"  ⚠ URL nav: página de erro para '{texto}' — recuperando para calculo.jsf")
+                        _calculo_url = (
+                            f"{self._calculo_url_base}calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        self._page.goto(_calculo_url, wait_until="domcontentloaded", timeout=10000)
+                        self._aguardar_ajax()
+                        raise Exception("erro-page-recovery")
                     return True
                 except Exception as _e:
                     self._log(f"  ⚠ URL nav falhou para '{texto}': {_e}")
@@ -915,15 +933,26 @@ class PJECalcPlaywright:
         return False
 
     def _verificar_secao_ativa(self, secao_esperada: str) -> bool:
-        """Verifica se a seção atual (URL ou heading) corresponde à seção esperada."""
+        """Verifica se a seção atual (URL ou heading) corresponde à seção esperada.
+        Normaliza acentos antes de comparar para evitar falsos-negativos
+        (ex: 'Honorár' vs 'honorarios', 'Contribuição' vs 'contribuicao').
+        """
+        import unicodedata
+
+        def _sem_acento(s: str) -> str:
+            return "".join(
+                c for c in unicodedata.normalize("NFD", s)
+                if unicodedata.category(c) != "Mn"
+            ).lower()
+
         try:
             url = self._page.url
             heading = self._page.evaluate(
                 "() => (document.querySelector('h1,h2,h3,legend,.tituloPagina')||{}).textContent?.trim()||''"
             )
             self._log(f"  ℹ Seção: '{heading[:60]}' | url: ...{url[-50:]}")
-            return (secao_esperada.lower() in heading.lower()
-                    or secao_esperada.lower() in url.lower())
+            _esp = _sem_acento(secao_esperada)
+            return _esp in _sem_acento(heading) or _esp in _sem_acento(url)
         except Exception:
             return False
 
@@ -2301,11 +2330,13 @@ class PJECalcPlaywright:
             self._clicar_menu_lateral("Honorários", obrigatorio=False)
             or self._clicar_menu_lateral("Honorarios", obrigatorio=False)
         )
-        if navegou:
-            navegou = self._verificar_secao_ativa("Honorár")
         if not navegou:
-            self._log("  → Seção Honorários não encontrada no menu — ignorado.")
+            self._log("  → Honorários: navegação falhou — ignorado.")
             return
+        # Verificar via URL (heading pode ser "Dados do Cálculo" pelo template compartilhado)
+        self._verificar_secao_ativa("Honorár")  # só loga, não bloqueia
+        if "honorarios" not in self._page.url.lower():
+            self._log(f"  ⚠ Honorários: URL inesperada ({self._page.url[-60:]}) — tentando continuar")
 
         self.mapear_campos("fase8_honorarios")
 
