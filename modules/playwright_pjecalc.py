@@ -324,15 +324,10 @@ class PJECalcPlaywright:
         if sys.platform != "win32" and not os.environ.get("DISPLAY"):
             headless = True
         self._headless = headless  # salva para crash recovery no retry
-        # sync_playwright().__enter__() verifica asyncio.get_event_loop().is_running().
-        # Em threads filhas, asyncio pode retornar o loop do uvicorn (que está rodando),
-        # causando RuntimeError. Garantir loop próprio e não-rodando para este thread.
-        try:
-            _loop = asyncio.get_event_loop()
-            if _loop.is_running():
-                asyncio.set_event_loop(asyncio.new_event_loop())
-        except RuntimeError:
-            asyncio.set_event_loop(asyncio.new_event_loop())
+        # Sempre criar loop isolado — sync_playwright() falha se get_event_loop().is_running().
+        # Necessário também no crash recovery (segunda chamada): o loop anterior pode estar
+        # em estado inválido após pw.__exit__().
+        asyncio.set_event_loop(asyncio.new_event_loop())
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
         # --no-sandbox e --disable-dev-shm-usage: obrigatórios em Docker/Railway
@@ -1689,13 +1684,21 @@ class PJECalcPlaywright:
                     self._log(f"  ⚠ Botão Expresso não encontrado: {_e}")
 
             if _clicou_expresso:
+                # lancamentoExpresso faz action= (navegação completa) para verbas-para-calculo.jsf
+                # Aguardar a nova página antes de qualquer query
+                try:
+                    self._page.wait_for_url("**/verbas-para-calculo**", timeout=10000)
+                except Exception:
+                    self._page.wait_for_timeout(2000)
+
                 # Listar verbas disponíveis no Expresso (diagnóstico)
+                # verbas-para-calculo.xhtml: checkbox id="selecionada", nome id="nome" no mesmo <tr>
                 try:
                     _labels_exp = self._page.evaluate("""() =>
-                        [...document.querySelectorAll('input[type="checkbox"]')]
-                        .map(cb => {
-                            const l = document.querySelector('label[for="' + cb.id + '"]');
-                            return l ? l.textContent.replace(/\\s+/g,' ').trim() : '';
+                        [...document.querySelectorAll('tr')]
+                        .map(row => {
+                            const nome = row.querySelector('[id*=":nome"]');
+                            return nome ? nome.textContent.replace(/\\s+/g,' ').trim() : '';
                         })
                         .filter(Boolean)
                     """)
@@ -1772,7 +1775,10 @@ class PJECalcPlaywright:
         self._log("Fase 3 concluída.")
 
     def _marcar_checkbox_expresso(self, nome: str) -> bool:
-        """Localiza e marca o checkbox do Expresso cujo label contém 'nome' (case-insensitive)."""
+        """Localiza e marca o checkbox do Expresso cujo nome contém 'nome' (case-insensitive).
+        verbas-para-calculo.xhtml: checkbox id="selecionada" e nome id="nome" no mesmo <tr>.
+        Não há <label for="..."> — percorre as linhas da tabela pelo id*=':nome'.
+        """
         try:
             _resultado = self._page.evaluate(
                 """(nome) => {
@@ -1781,28 +1787,34 @@ class PJECalcPlaywright:
                             .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                     }
                     const nomeLower = norm(nome);
-                    const checkboxes = [...document.querySelectorAll('input[type="checkbox"]')];
-                    // 1ª tentativa: label exato ou contém o nome completo
-                    for (const cb of checkboxes) {
-                        const lbl = document.querySelector('label[for="' + cb.id + '"]');
-                        if (!lbl) continue;
-                        const lblNorm = norm(lbl.textContent.trim());
-                        if (lblNorm === nomeLower || lblNorm.includes(nomeLower)
-                                || nomeLower.includes(lblNorm.substring(0, Math.min(lblNorm.length, 12)))) {
-                            if (!cb.checked) cb.click();
-                            return lbl.textContent.trim();
+                    const rows = [...document.querySelectorAll('tr')];
+                    // 1ª tentativa: exato ou contém o nome completo
+                    for (const row of rows) {
+                        const nomeEl = row.querySelector('[id*=":nome"]');
+                        if (!nomeEl) continue;
+                        const nomeNorm = norm(nomeEl.textContent.trim());
+                        if (nomeNorm === nomeLower || nomeNorm.includes(nomeLower)
+                                || nomeLower.includes(nomeNorm.substring(0, Math.min(nomeNorm.length, 12)))) {
+                            const cb = row.querySelector('input[type="checkbox"]');
+                            if (cb) {
+                                if (!cb.checked) cb.click();
+                                return nomeEl.textContent.trim();
+                            }
                         }
                     }
                     // 2ª tentativa: primeiras 2 palavras do nome
                     const palavras = nomeLower.split(' ').slice(0, 2).join(' ');
                     if (palavras.length >= 5) {
-                        for (const cb of checkboxes) {
-                            const lbl = document.querySelector('label[for="' + cb.id + '"]');
-                            if (!lbl) continue;
-                            const lblNorm = norm(lbl.textContent.trim());
-                            if (lblNorm.includes(palavras)) {
-                                if (!cb.checked) cb.click();
-                                return lbl.textContent.trim();
+                        for (const row of rows) {
+                            const nomeEl = row.querySelector('[id*=":nome"]');
+                            if (!nomeEl) continue;
+                            const nomeNorm = norm(nomeEl.textContent.trim());
+                            if (nomeNorm.includes(palavras)) {
+                                const cb = row.querySelector('input[type="checkbox"]');
+                                if (cb) {
+                                    if (!cb.checked) cb.click();
+                                    return nomeEl.textContent.trim();
+                                }
                             }
                         }
                     }
