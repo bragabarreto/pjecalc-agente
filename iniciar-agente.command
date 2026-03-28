@@ -48,7 +48,7 @@ fi
 echo "Iniciando PJECalc Agente na porta $PORT…"
 
 # Iniciar uvicorn em background
-python3 -m uvicorn webapp:app --host 127.0.0.1 --port "$PORT" &
+python3 -m uvicorn webapp:app --host 127.0.0.1 --port "$PORT" --reload &
 UVICORN_PID=$!
 
 # Aguardar o servidor subir (máx 15s)

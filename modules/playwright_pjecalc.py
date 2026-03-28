@@ -922,11 +922,13 @@ class PJECalcPlaywright:
             return False
 
     def _clicar_botao_id(self, id_suffix: str) -> bool:
-        """Clica em botão/input pelo sufixo de ID (seletor específico, menos ambíguo que texto)."""
-        loc = self._page.locator(f"input[id*='{id_suffix}'], button[id*='{id_suffix}']")
+        """Clica em botão/input/link pelo sufixo de ID. force=True necessário para a4j:commandButton."""
+        loc = self._page.locator(
+            f"input[id*='{id_suffix}'], button[id*='{id_suffix}'], a[id*='{id_suffix}']"
+        )
         if loc.count() > 0:
             try:
-                loc.first.click()
+                loc.first.click(force=True)
                 return True
             except Exception:
                 return False
@@ -1644,23 +1646,31 @@ class PJECalcPlaywright:
 
             # Clicar botão "Expresso"
             _clicou_expresso = False
-            for _sel in [
-                "input[id*='btnExpresso']",
-                "input[value='Expresso']",
-                "input[value*='Expresso']",
-                "a[id*='Expresso']",
-            ]:
-                try:
-                    _loc = self._page.locator(_sel)
-                    if _loc.count() > 0:
-                        _loc.first.click()
-                        self._aguardar_ajax()
-                        self._page.wait_for_timeout(800)
-                        _clicou_expresso = True
-                        self._log(f"  ✓ Botão Expresso via '{_sel}'")
-                        break
-                except Exception:
-                    continue
+            # Tentativa primária via _clicar_botao_id (id real: lancamentoExpresso)
+            if self._clicar_botao_id("lancamentoExpresso"):
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(800)
+                _clicou_expresso = True
+                self._log("  ✓ Botão Expresso via _clicar_botao_id('lancamentoExpresso')")
+
+            if not _clicou_expresso:
+                for _sel in [
+                    "input[id*='btnExpresso']",
+                    "input[value='Expresso']",
+                    "input[value*='Expresso']",
+                    "a[id*='Expresso']",
+                ]:
+                    try:
+                        _loc = self._page.locator(_sel)
+                        if _loc.count() > 0:
+                            _loc.first.click(force=True)
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(800)
+                            _clicou_expresso = True
+                            self._log(f"  ✓ Botão Expresso via '{_sel}'")
+                            break
+                    except Exception:
+                        continue
 
             if not _clicou_expresso:
                 try:

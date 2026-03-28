@@ -946,6 +946,22 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
     proc = dados.get("processo", {})
     fgts = dados.get("fgts", {})
     hon  = dados.get("honorarios", {})
+    # parametrizacao.py retorna honorarios como lista; converter para dict legado
+    if isinstance(hon, list):
+        hon_dict: dict = {}
+        for _h in hon:
+            _tipo = _h.get("tipo", "SUCUMBENCIAIS")
+            if _tipo in ("SUCUMBENCIAIS", "CONTRATUAIS"):
+                hon_dict["percentual"]      = _h.get("percentual")
+                hon_dict["valor_fixo"]      = _h.get("valor_informado")
+                hon_dict["parte_devedora"]  = {
+                    "RECLAMADO":  "Reclamado",
+                    "RECLAMANTE": "Reclamante",
+                    "AMBOS":      "Ambos",
+                }.get(_h.get("devedor", "RECLAMADO"), "Reclamado")
+            elif _tipo == "PERICIAIS":
+                hon_dict["periciais"] = _h.get("valor_informado") or _h.get("percentual")
+        hon = hon_dict
     cj   = dados.get("correcao_juros", {})
     cs   = dados.get("contribuicao_social", {})
     ir   = dados.get("imposto_renda", {})
