@@ -75,9 +75,22 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                         except Exception:
                             pass
                         try:
-                            import sys
+                            import sys, threading
                             headless = getattr(self, "_headless", sys.platform != "win32")
-                            self.iniciar_browser(headless=headless)
+                            # iniciar_browser usa sync_playwright() que falha se
+                            # asyncio.get_running_loop() detectar o loop herdado da thread.
+                            # Solução: reiniciar em thread 100% nova (sem contexto asyncio).
+                            _exc_restart: list = []
+                            def _restart_in_fresh_thread():
+                                try:
+                                    self.iniciar_browser(headless=headless)
+                                except Exception as _e:
+                                    _exc_restart.append(_e)
+                            _t = threading.Thread(target=_restart_in_fresh_thread, daemon=True)
+                            _t.start()
+                            _t.join(timeout=30)
+                            if _exc_restart:
+                                raise _exc_restart[0]
                             self._instalar_monitor_ajax()
                             self._page.goto(
                                 f"{self.PJECALC_BASE}/pages/principal.jsf",
