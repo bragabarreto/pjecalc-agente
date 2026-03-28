@@ -809,7 +809,7 @@ class PJECalcPlaywright:
         # (mais confiável que busca textual quando IDs do menu são dinâmicos)
         _URL_SECTION_MAP = {
             "Histórico Salarial":  "historico-salarial.jsf",        # era historicoSalarial.jsf
-            "Verbas":              "verba/verbas-para-calculo.jsf",  # era verba.jsf → 404
+            "Verbas":              "verba/verba-calculo.jsf",         # era verba/verbas-para-calculo.jsf (é subpágina do Expresso)
             "FGTS":                "fgts.jsf",
             "Honorários":          "honorarios.jsf",
             "Liquidar":            "liquidacao.jsf",                 # era liquidar.jsf → 404
@@ -1535,8 +1535,12 @@ class PJECalcPlaywright:
             return
         self.mapear_campos("fase2_historico_salarial")
         for h in historico:
-            # Abrir formulário de novo histórico (seletor específico primeiro)
-            _abriu = self._clicar_botao_id("btnNovoHistorico") or self._clicar_novo()
+            # Abrir formulário de novo histórico
+            # id="incluir" = a4j:commandButton "Novo" em historico-salarial.xhtml
+            _abriu = (self._clicar_botao_id("incluir")
+                      or self._clicar_botao_id("btnNovoHistorico")
+                      or self._clicar_novo())
+            self._aguardar_ajax()
             try:
                 self._page.wait_for_selector(
                     "input[id*='competenciaInicial'], input[id*='dataInicio'], input[id*='dataInicial']",
@@ -1550,17 +1554,22 @@ class PJECalcPlaywright:
             self._preencher("historico:nome", nome_hist, False)
             self._preencher("nomeHistorico", nome_hist, False)
 
-            # Competências (mês/ano de início e fim)
-            self._preencher_data("competenciaInicial", h.get("data_inicio", ""), False)
-            self._preencher_data("competenciaFinal", h.get("data_fim", ""), False)
-            # Fallback: nomes alternativos de campo
-            self._preencher_data("dataInicio", h.get("data_inicio", ""), False)
-            self._preencher_data("dataFim", h.get("data_fim", ""), False)
-            self._preencher_data("dataInicial", h.get("data_inicio", ""), False)
-            self._preencher_data("dataFinal", h.get("data_fim", ""), False)
+            # Competências: campo aceita MM/yyyy (datePattern="MM/yyyy" no RichFaces Calendar)
+            # Converter dd/mm/yyyy → MM/yyyy se necessário
+            def _para_competencia(d: str) -> str:
+                partes = d.split("/")
+                if len(partes) == 3 and len(partes[2]) == 4:
+                    return f"{partes[1]}/{partes[2]}"  # dd/mm/yyyy → MM/yyyy
+                return d
+            _comp_ini = _para_competencia(h.get("data_inicio", ""))
+            _comp_fim = _para_competencia(h.get("data_fim", ""))
+            self._preencher_data("competenciaInicial", _comp_ini, False)
+            self._preencher_data("competenciaFinal", _comp_fim, False)
 
             # Valor base (valor mensal completo — sistema proporcionaliza)
+            # id="valorParaBaseDeCalculo" em historico-salarial.xhtml
             _val = _fmt_br(h.get("valor", ""))
+            self._preencher("valorParaBaseDeCalculo", _val, False)
             self._preencher("valorBase", _val, False)
             self._preencher("salario", _val, False)
             self._preencher("valor", _val, False)
@@ -1572,7 +1581,13 @@ class PJECalcPlaywright:
                 self._marcar_checkbox("incidenciaCS", bool(h["incidencia_cs"]))
 
             # Gerar ocorrências (cria a grade mensal de valores)
-            _gerou = self._clicar_botao_id("btnGerarOcorrencias")
+            # id="cmdGerarOcorrencias" = a4j:commandLink → renderiza como <a>, não <input>
+            _gerou = self._clicar_botao_id("cmdGerarOcorrencias") or self._clicar_botao_id("btnGerarOcorrencias")
+            if not _gerou:
+                _anc = self._page.locator("a[id*='cmdGerarOcorrencias'], a[id*='btnGerarOcorrencias']")
+                if _anc.count() > 0:
+                    _anc.first.click()
+                    _gerou = True
             if _gerou:
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
@@ -2116,11 +2131,12 @@ class PJECalcPlaywright:
             or self._clicar_menu_lateral("Contribuicao Social", obrigatorio=False)
             or self._clicar_menu_lateral("INSS", obrigatorio=False)
         )
-        if navegou:
-            navegou = self._verificar_secao_ativa("Contribui")
         if not navegou:
             self._log("  → Seção Contribuição Social não encontrada — ignorado.")
             return
+        # Verificar via URL (heading pode ser "Dados do Cálculo" pelo template compartilhado)
+        if "inss" not in self._page.url.lower():
+            self._log(f"  ⚠ INSS: URL inesperada ({self._page.url[-60:]}) — tentando continuar")
         self.mapear_campos("fase5_inss")
 
         # Migrar schema legado (responsabilidade → booleans) se necessário
@@ -2261,11 +2277,12 @@ class PJECalcPlaywright:
             or self._clicar_menu_lateral("IRPF", obrigatorio=False)
             or self._clicar_menu_lateral("IR", obrigatorio=False)
         )
-        if navegou:
-            navegou = self._verificar_secao_ativa("Imposto")
         if not navegou:
             self._log("  → Seção IRPF não encontrada no menu — ignorado.")
             return
+        # Verificar via URL (heading pode ser "Dados do Cálculo" pelo template compartilhado)
+        if "irpf" not in self._page.url.lower():
+            self._log(f"  ⚠ IRPF: URL inesperada ({self._page.url[-60:]}) — tentando continuar")
         self.mapear_campos("fase7_irpf")
 
         # Regime de tributação
@@ -2342,15 +2359,18 @@ class PJECalcPlaywright:
 
         for i, hon in enumerate(hon_lista):
             self._log(f"  → Honorário [{i+1}/{len(hon_lista)}]: {hon.get('devedor')} / {hon.get('tipo')}")
-            if i > 0:
-                # Clicar "Novo" para adicionar segundo registro
-                clicou = (
-                    self._clicar_novo()
-                    or bool(self._page.locator("input[value='Novo']").first.click() if self._page.locator("input[value='Novo']").count() else None)
-                )
-                if not clicou:
-                    self._log(f"  ⚠ Botão Novo não encontrado para honorário {i+1} — pulando.")
-                    continue
+            # Clicar "Novo" (id="incluir" em honorarios.xhtml) para abrir formulário
+            # Necessário para TODOS os registros, incluindo o primeiro
+            clicou = (
+                self._clicar_botao_id("incluir")
+                or self._clicar_novo()
+                or bool(self._page.locator("input[value='Novo']").first.click() if self._page.locator("input[value='Novo']").count() else None)
+            )
+            if not clicou:
+                self._log(f"  ⚠ Botão Novo não encontrado para honorário {i+1} — pulando.")
+                continue
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
 
             # Tipo de devedor
             devedor = hon.get("devedor", "RECLAMADO")
@@ -2432,46 +2452,20 @@ class PJECalcPlaywright:
 
     def _clicar_liquidar(self) -> str | None:
         """
-        Clica Liquidar, aguarda geração do cálculo e captura o arquivo .PJC.
+        Executa liquidação e exportação do .PJC no PJE-Calc.
+
+        Fluxo correto (dois passos distintos):
+          1. Clicar botão Liquidar (AJAX, reRender="listagem" — SEM download)
+          2. Navegar para exportacao.jsf → clicar Exportar → capturar download .PJC
+
         A automação NUNCA para aqui para interação manual:
-          — Tenta navegar para menu Operações se o botão não aparecer na página atual.
-          — Se o download direto não for detectado, varre a página por links de exportação.
-          — Lança RuntimeError apenas se absolutamente nenhuma estratégia funcionar,
-            para que o orquestrador registre a falha e ofereça o .PJC gerado pelo generator.
+          — Lança RuntimeError apenas se o botão Liquidar não for encontrado,
+            para que o orquestrador ofereça o .PJC gerado pelo generator.
         """
         self._log("→ Liquidar: iniciando geração do cálculo…")
         from config import OUTPUT_DIR
         out_dir = Path(OUTPUT_DIR)
         out_dir.mkdir(parents=True, exist_ok=True)
-
-        def _localizar_botao_liquidar():
-            liq_sels = [
-                # Seletores específicos do PJE-Calc (skill /pjecalc-preenchimento)
-                "input[id*='btnLiquidar']", "button[id*='btnLiquidar']",
-                "[id$='liquidar']", "[id$='liquidarBt']", "[id$='liquidarBtn']",
-                "input[value='Liquidar']", "a:has-text('Liquidar')",
-                "button:has-text('Liquidar')",
-            ]
-            for sel in liq_sels:
-                try:
-                    candidate = self._page.locator(sel)
-                    if candidate.count() > 0:
-                        return candidate.first
-                except Exception:
-                    continue
-            return None
-
-        def _verificar_alertas_liquidar():
-            """Loga alertas/erros presentes na página antes de liquidar."""
-            try:
-                alertas = self._page.locator(".alertaLiquidacao, [class*='alerta']")
-                if alertas.count() > 0:
-                    self._log(f"  ⚠ Alerta antes de liquidar: {alertas.first.text_content()[:120]}")
-                erros = self._page.locator(".erroLiquidacao, [class*='erro']")
-                if erros.count() > 0:
-                    self._log(f"  ⚠ Erro antes de liquidar: {erros.first.text_content()[:120]}")
-            except Exception:
-                pass
 
         def _salvar_download(dl_info_value) -> str:
             dest = out_dir / dl_info_value.suggested_filename
@@ -2481,10 +2475,9 @@ class PJECalcPlaywright:
             self._log(f"PJC_GERADO:{dest}")
             return str(dest)
 
-        # Estratégia 1: navegar diretamente para menu Liquidar
+        # ── Passo 1: Navegar para Liquidar e clicar (AJAX — sem download) ───────
         _nav_liquidar = self._clicar_menu_lateral("Liquidar", obrigatorio=False)
         if _nav_liquidar:
-            self._verificar_secao_ativa("Liquidar")
             self._page.wait_for_timeout(1000)
             # Preencher data de liquidação se campo disponível
             try:
@@ -2495,20 +2488,37 @@ class PJECalcPlaywright:
                                         date.today().strftime("%d/%m/%Y"), False)
             except Exception:
                 pass
-            _verificar_alertas_liquidar()
-        loc = _localizar_botao_liquidar()
 
-        # Estratégia 2: navegar para menu "Operações" e tentar novamente
+        # Localizar botão Liquidar
+        loc = None
+        for sel in ["[id$='liquidar']", "[id$='liquidarBt']", "[id$='liquidarBtn']",
+                    "input[id*='btnLiquidar']", "button[id*='btnLiquidar']",
+                    "input[value='Liquidar']", "a:has-text('Liquidar')"]:
+            try:
+                candidate = self._page.locator(sel)
+                if candidate.count() > 0:
+                    loc = candidate.first
+                    break
+            except Exception:
+                continue
+
         if loc is None:
-            self._log("  Botão Liquidar não encontrado — navegando para Operações…")
+            # Tentar via Operações
+            self._log("  Botão Liquidar não encontrado — tentando via Operações…")
             self._clicar_menu_lateral("Operações", obrigatorio=False)
             self._clicar_menu_lateral("Operacoes", obrigatorio=False)
-            self._page.wait_for_timeout(1500)
-            _verificar_alertas_liquidar()
-            loc = _localizar_botao_liquidar()
+            self._page.wait_for_timeout(1000)
+            for sel in ["[id$='liquidar']", "input[value='Liquidar']"]:
+                try:
+                    candidate = self._page.locator(sel)
+                    if candidate.count() > 0:
+                        loc = candidate.first
+                        break
+                except Exception:
+                    continue
 
-        # Estratégia 3: JS global (varredura de todos os elementos)
         if loc is None:
+            # JS global fallback
             self._log("  Tentando Liquidar via JS global…")
             clicou = self._page.evaluate("""() => {
                 const all = [...document.querySelectorAll('a, input[type="submit"], button')];
@@ -2520,50 +2530,57 @@ class PJECalcPlaywright:
                 }
                 return false;
             }""")
-            if clicou:
-                self._aguardar_ajax(90000)
-                self._page.wait_for_timeout(3000)
-                # Verificar se apareceu link de download após clique JS
-                for txt in ["Exportar", "Download", ".pjc", "Baixar"]:
-                    try:
-                        with self._page.expect_download(timeout=20000) as dl_info:
-                            if self._clicar_botao(txt, obrigatorio=False):
-                                return _salvar_download(dl_info.value)
-                    except Exception:
-                        continue
-                # Se não encontrou download, o JS clicou mas não gerou arquivo — continua
-            else:
+            if not clicou:
                 raise RuntimeError(
                     "Botão Liquidar não encontrado em nenhuma estratégia. "
-                    "Verifique se todos os campos obrigatórios foram preenchidos "
-                    "e se o PJE-Calc está na tela correta."
+                    "Verifique se todos os campos obrigatórios foram preenchidos."
                 )
+            self._aguardar_ajax(90000)
+        else:
+            self._log("  ✓ Botão Liquidar clicado (AJAX)…")
+            loc.click()
+            self._aguardar_ajax(90000)
 
-        if loc is not None:
-            # Estratégia 4: expect_download com clique direto (captura automática)
+        self._page.wait_for_timeout(2000)
+        self._log("  ✓ Liquidação AJAX concluída — navegando para Exportação…")
+
+        # ── Passo 2: Exportação → capturar .PJC ──────────────────────────────────
+        # A exportação fica em página separada (exportacao.jsf)
+        # O botão Exportar dispara AJAX que seta href em linkDownloadArquivo + JS auto-clica
+        _exportou = False
+        if self._calculo_url_base and self._calculo_conversation_id:
+            _exp_url = (
+                f"{self._calculo_url_base}exportacao.jsf"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
             try:
-                with self._page.expect_download(timeout=120000) as dl_info:
-                    loc.click()
-                return _salvar_download(dl_info.value)
+                self._page.goto(_exp_url, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+                _exportou = True
             except Exception as e:
-                self._log(f"  ⚠ Download direto falhou ({e}) — aguardando resultado na página…")
-                try:
-                    loc.click()
-                except Exception:
-                    pass
-                self._aguardar_ajax(90000)
+                self._log(f"  ⚠ Navegação exportacao.jsf: {e}")
 
-        # Estratégia 5: página de resultado após Liquidar — varrer links de download
-        self._page.wait_for_timeout(4000)
-        for txt in ["Exportar", "Download", "Baixar .pjc", "Baixar", "Salvar .PJC", "Salvar"]:
+        # Clicar botão Exportar (id="exportar" em exportacao.xhtml)
+        for sel in ["[id$='exportar']", "input[value='Exportar']",
+                    "input[id*='btnExportar']", "button:has-text('Exportar')"]:
             try:
-                with self._page.expect_download(timeout=30000) as dl_info:
-                    if self._clicar_botao(txt, obrigatorio=False):
+                loc_exp = self._page.locator(sel)
+                if loc_exp.count() > 0:
+                    try:
+                        with self._page.expect_download(timeout=30000) as dl_info:
+                            loc_exp.first.click()
                         return _salvar_download(dl_info.value)
+                    except Exception as e:
+                        self._log(f"  ⚠ Exportar ({sel}): {e} — tentando próximo")
+                        # Aguardar JS auto-click em linkDownloadArquivo
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(2000)
+                        continue
             except Exception:
                 continue
 
-        # Estratégia 6: procurar href de download diretamente no DOM
+        # Procurar linkDownloadArquivo ou href .pjc diretamente no DOM
         try:
             href = self._page.evaluate("""() => {
                 const links = [...document.querySelectorAll('a[href]')];
