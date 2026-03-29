@@ -23,7 +23,19 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
-logger = logging.getLogger(__name__)
+# structlog preferido; fallback para stdlib logging se não disponível
+try:
+    import structlog
+    logger = structlog.get_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)  # type: ignore[assignment]
+
+# tenacity disponível para retries futuros via BrowserManager
+try:
+    from tenacity import retry as _tenacity_retry, stop_after_attempt, wait_exponential  # noqa: F401
+    _TENACITY_AVAILABLE = True
+except ImportError:
+    _TENACITY_AVAILABLE = False
 
 # URL base do PJE-Calc — lida de config/env uma vez no import do módulo
 try:

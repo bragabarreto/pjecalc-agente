@@ -104,7 +104,7 @@ RUN playwright install chromium --with-deps
 COPY . .
 
 # Diretórios de dados
-RUN mkdir -p data/logs/sessions data/logs/screenshots data/output static
+RUN mkdir -p data/logs/sessions data/logs/screenshots data/output data/learning static
 
 # ── Variáveis de ambiente ──────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1 \

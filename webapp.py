@@ -51,6 +51,14 @@ logging.getLogger().addHandler(_buf_handler)
 import time as _time
 from config import OUTPUT_DIR, CLOUD_MODE, PJECALC_DIR, PJECALC_LOCAL_URL, PJECALC_TOMCAT_TIMEOUT
 
+# ── Learning Engine (opcional — não bloqueia se módulo ausente) ───────────────
+try:
+    from learning.correction_tracker import CorrectionTracker
+    from learning.rule_injector import RuleInjector
+    _LEARNING_AVAILABLE = True
+except ImportError:
+    _LEARNING_AVAILABLE = False
+
 # Sessões em processamento (em memória) — evita 404 enquanto background task roda
 _sessoes_processando: dict[str, float] = {}  # sessao_id → timestamp de início
 from database import (
@@ -296,6 +304,9 @@ async def editar_campo_previa(
     verbas_mapeadas = calculo.verbas_mapeadas()
 
     try:
+        # Capturar valor anterior para rastreamento de aprendizado
+        valor_antes = _get_campo_valor(dados, campo)
+
         # Aplicar edição
         dados = aplicar_edicao_usuario(dados, campo, valor)
 
@@ -318,6 +329,23 @@ async def editar_campo_previa(
         _verbas_mudaram = campo.startswith("verba")
         repo.atualizar_dados(sessao_id, dados, verbas_mapeadas if _verbas_mudaram else None)
         repo.salvar_previa(sessao_id, nova_previa, nova_previa_html)
+
+        # Registrar correção para aprendizado contínuo
+        if _LEARNING_AVAILABLE:
+            try:
+                secao = campo.split(".")[0] if "." in campo else campo
+                confianca_ia = dados.get(secao, {}).get("confianca") if isinstance(dados.get(secao), dict) else None
+                tracker = CorrectionTracker(db)
+                tracker.record_field_correction(
+                    sessao_id=sessao_id,
+                    campo=campo,
+                    valor_antes=valor_antes,
+                    valor_depois=valor,
+                    confianca_ia=confianca_ia,
+                    contexto={"processo": dados.get("processo", {}).get("numero")},
+                )
+            except Exception as _e:
+                logger.warning(f"learning_record_failed: {_e}")
 
         return JSONResponse({
             "sucesso": True,
@@ -352,11 +380,35 @@ async def editar_verba(
     verbas_mapeadas = calculo.verbas_mapeadas()
 
     try:
+        # Capturar valor anterior para aprendizado
+        todas_verbas = (
+            verbas_mapeadas.get("predefinidas", []) + verbas_mapeadas.get("personalizadas", [])
+        )
+        verba_atual = todas_verbas[indice] if 0 <= indice < len(todas_verbas) else {}
+        valor_antes = verba_atual.get(campo)
+        verba_nome = verba_atual.get("nome_sentenca") or verba_atual.get("nome_pjecalc", "")
+
         verbas_mapeadas = aplicar_edicao_verba(verbas_mapeadas, indice, campo, valor)
 
         nova_previa = gerar_previa(dados, verbas_mapeadas)
         repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
         repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+
+        # Registrar correção de verba para aprendizado contínuo
+        if _LEARNING_AVAILABLE:
+            try:
+                tracker = CorrectionTracker(db)
+                tracker.record_verba_correction(
+                    sessao_id=sessao_id,
+                    verba_index=indice,
+                    campo=campo,
+                    valor_antes=valor_antes,
+                    valor_depois=valor,
+                    verba_nome=verba_nome,
+                    confianca_ia=verba_atual.get("confidence"),
+                )
+            except Exception as _e:
+                logger.warning(f"learning_verba_record_failed: {_e}")
 
         return JSONResponse({"sucesso": True, "indice": indice, "campo": campo, "valor": valor})
     except Exception as exc:
@@ -1057,7 +1109,126 @@ async def executar_automacao_sse(
     )
 
 
+def _get_campo_valor(dados: dict, campo: str) -> Any:
+    """Retorna o valor atual de um campo pelo dotted path (ex: 'contrato.admissao')."""
+    partes = campo.split(".", 1)
+    if len(partes) == 1:
+        return dados.get(campo)
+    secao, resto = partes
+    sub = dados.get(secao)
+    if isinstance(sub, dict):
+        return _get_campo_valor(sub, resto)
+    return None
+
+
+# ── Learning Dashboard ────────────────────────────────────────────────────────
+
+@app.get("/admin/aprendizado", response_class=HTMLResponse)
+async def admin_aprendizado(request: Request, db: Session = Depends(get_db)):
+    """Dashboard de aprendizado: sessões e regras ativas."""
+    if not _LEARNING_AVAILABLE:
+        return HTMLResponse("<h1>Módulo de aprendizado não disponível</h1>", status_code=503)
+
+    try:
+        from infrastructure.database import SessaoAprendizado, RegrasAprendidas
+        sessoes = (
+            db.query(SessaoAprendizado)
+            .order_by(SessaoAprendizado.iniciada_em.desc())
+            .limit(20)
+            .all()
+        )
+        regras = (
+            db.query(RegrasAprendidas)
+            .filter(RegrasAprendidas.ativa == True)
+            .order_by(RegrasAprendidas.confianca.desc())
+            .all()
+        )
+        tracker = CorrectionTracker(db)
+        correcoes_pendentes = tracker.get_unincorporated_count()
+    except Exception as exc:
+        return HTMLResponse(f"<h1>Erro ao carregar aprendizado: {exc}</h1>", status_code=500)
+
+    return templates.TemplateResponse(
+        request, "aprendizado.html",
+        {
+            "sessoes": sessoes,
+            "regras": regras,
+            "correcoes_pendentes": correcoes_pendentes,
+        },
+    )
+
+
+@app.post("/api/aprendizado/executar")
+async def executar_aprendizado(background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """Dispara uma sessão de aprendizado manualmente."""
+    if not _LEARNING_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Módulo de aprendizado não disponível")
+
+    tracker = CorrectionTracker(db)
+    count = tracker.get_unincorporated_count()
+    background_tasks.add_task(_executar_sessao_aprendizado)
+
+    return JSONResponse({
+        "iniciado": True,
+        "correcoes_pendentes": count,
+        "mensagem": f"Sessão de aprendizado iniciada com {count} correção(ões) pendente(s).",
+    })
+
+
+@app.get("/api/aprendizado/status")
+async def status_aprendizado(db: Session = Depends(get_db)):
+    """Retorna contagem de correções pendentes e threshold para UI do painel."""
+    if not _LEARNING_AVAILABLE:
+        return JSONResponse({"pendentes": 0, "threshold": 10})
+    try:
+        from infrastructure.config import settings
+        threshold = settings.learning_feedback_threshold
+    except Exception:
+        threshold = 10
+    try:
+        tracker = CorrectionTracker(db)
+        pendentes = tracker.get_unincorporated_count()
+    except Exception:
+        pendentes = 0
+    return JSONResponse({"pendentes": pendentes, "threshold": threshold})
+
+
+@app.delete("/api/aprendizado/regra/{rule_id}")
+async def desativar_regra(rule_id: int, db: Session = Depends(get_db)):
+    """Desativa uma regra aprendida."""
+    if not _LEARNING_AVAILABLE:
+        raise HTTPException(status_code=503, detail="Módulo de aprendizado não disponível")
+
+    injector = RuleInjector(db)
+    ok = injector.deactivate_rule(rule_id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Regra não encontrada")
+    return JSONResponse({"desativada": True, "rule_id": rule_id})
+
+
 # ── Tarefas em Background ─────────────────────────────────────────────────────
+
+def _executar_sessao_aprendizado() -> None:
+    """Tarefa background: executa uma sessão de aprendizado via LearningEngine."""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        from learning.learning_engine import LearningEngine
+        from core.llm_orchestrator import LLMOrchestrator
+        from infrastructure.config import settings
+        orchestrator = LLMOrchestrator(settings)
+        engine = LearningEngine(db, orchestrator)
+        session = engine.run_learning_session()
+        logger.info(
+            "learning_session_completed_background",
+            session_id=getattr(session, "id", None),
+            new_rules=getattr(session, "num_regras_geradas", 0),
+        )
+    except Exception as exc:
+        logger.error(f"Sessão de aprendizado em background falhou: {exc}", exc_info=True)
+    finally:
+        db.close()
+
 
 def _tarefa_processar_sentenca(
     sessao_id: str,

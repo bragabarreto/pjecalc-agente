@@ -44,6 +44,16 @@ jinja2>=3.1.0
 # ── Logging estruturado ──────────────────────────────────────────────────────
 structlog>=23.0.0
 
+# ── Config Pydantic v2 ────────────────────────────────────────────────────────
+pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# ── Retry (Playwright + automação) ───────────────────────────────────────────
+tenacity>=8.2.0
+
+# ── Watchdog de processo (launcher local) ────────────────────────────────────
+psutil>=5.9.0
+
 # ── Utilitários ──────────────────────────────────────────────────────────────
 python-dateutil>=2.8.2
 python-dotenv>=1.0.0

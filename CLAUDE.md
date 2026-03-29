@@ -96,6 +96,48 @@ O gerador SSE em `executar_automacao_sse()` faz polling de Tomcat (até 600s) an
 - **CLOUD_MODE**: auto-detectado pela presença do módulo `playwright`. Forçar via env `CLOUD_MODE=true|false`. Controla exibição do painel de automação em `instrucoes.html`.
 - **`requirements-cloud.txt`** vs **`requirements.txt`**: Docker usa `requirements-cloud.txt` (sem pyautogui/pywinauto/OCR). Local Windows usa `requirements.txt`.
 
+## Nova estrutura de diretórios (refatoração 2026)
+
+```
+infrastructure/   # Infraestrutura base (config Pydantic v2, DB ORM, logging structlog, launcher psutil)
+core/             # Núcleo do agente (LLMOrchestrator, BrowserManager, StateManager)
+knowledge/        # Knowledge base oficial PJE-Calc (manual, tutorial, catálogo de verbas)
+learning/         # Learning Engine — auto-aprimoramento via correções do usuário
+```
+
+`config.py` e `database.py` na raiz são shims de backward compatibility (1 linha cada) que reexportam de `infrastructure/`. Todos os imports existentes continuam funcionando sem mudança.
+
+## LLM Routing (Claude vs Gemini)
+
+| TaskType | Modelo primário | Motivo |
+|----------|----------------|--------|
+| `LEGAL_EXTRACTION` | Claude Sonnet 4.6 | Raciocínio jurídico, contexto longo |
+| `LEGAL_EXTRACTION_PDF` | Claude Sonnet 4.6 | Visão multimodal + parsing |
+| `VERBA_CLASSIFICATION` | Claude Sonnet 4.6 | Domínio trabalhista |
+| `LEARNING_ANALYSIS` | Claude Sonnet 4.6 | Raciocínio complexo sobre padrões |
+| `SCREENSHOT_ANALYSIS` | Gemini 2.5 Flash | Visão nativa, rápido |
+| `CRASH_RECOVERY` | Gemini 2.5 Flash | Decisão rápida a partir de screenshot |
+| `QUICK_VALIDATION` | Gemini 2.5 Flash | Baixa latência |
+
+Implementado em `core/llm_orchestrator.py`. O orquestrador também injeta automaticamente o conteúdo de `knowledge/pje_calc_official/` e as `RegrasAprendidas` ativas nos system prompts.
+
+## Learning Engine
+
+A cada edição bem-sucedida na tela de Prévia:
+1. `learning/correction_tracker.py` → `CorrectionTracker.record_field_correction()` salva a correção no DB (`CorrecaoUsuario`)
+2. Ao atingir `LEARNING_FEEDBACK_THRESHOLD` (padrão: 10) correções não incorporadas → dispara `LearningEngine.run_learning_session()` como background task
+3. O `LearningEngine` envia os pares (extração_original, correção) ao Claude → gera `RegrasAprendidas`
+4. As regras são injetadas nos prompts futuros via `learning/rule_injector.py`
+
+Dashboard em `/admin/aprendizado`. Trigger manual via `POST /api/aprendizado/executar`.
+
+## Banco de dados — novos modelos (infrastructure/database.py)
+
+Além dos 5 modelos existentes, 3 novos para o Learning Engine:
+- `CorrecaoUsuario` — cada correção do usuário na prévia (campo, valor_antes, valor_depois, confiança_ia)
+- `RegrasAprendidas` — regras geradas pelo LLM (condição, ação, confiança, aplicações/acertos)
+- `SessaoAprendizado` — sessões periódicas de análise (status, N correções, N regras, resumo)
+
 ## Documentos de referência
 
 @docs/diagnostico-falhas-automacao.md

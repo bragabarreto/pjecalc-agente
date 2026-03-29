@@ -1,15 +1,26 @@
-# config.py — Configurações globais do Agente PJE-Calc
-# Manual Técnico v1.0 — 2026
+# config.py — Shim de backward compatibility → infrastructure/config.py
+# Todos os imports existentes continuam funcionando sem alteração.
+# Nova funcionalidade: use infrastructure.config diretamente.
 
-import os
-from pathlib import Path
-
-# Carrega variáveis do arquivo .env (se existir) — útil na instalação local
+# Tenta importar a versão Pydantic v2; se falhar (pydantic-settings não instalado),
+# cai de volta para a implementação legada abaixo.
 try:
-    from dotenv import load_dotenv
-    load_dotenv(Path(__file__).parent / ".env", override=False)
-except ImportError:
-    pass  # python-dotenv não instalado ainda (primeira execução)
+    from infrastructure.config import settings  # noqa: F401
+    from infrastructure.config import *  # noqa: F401, F403
+    _INFRASTRUCTURE_LOADED = True
+except Exception:
+    _INFRASTRUCTURE_LOADED = False
+
+if not _INFRASTRUCTURE_LOADED:
+    # ── Fallback legado (sem pydantic-settings) ────────────────────────────────
+    import os
+    from pathlib import Path
+
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(Path(__file__).parent / ".env", override=False)
+    except ImportError:
+        pass  # python-dotenv não instalado ainda (primeira execução)
 
 # ── Diretórios base ──────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent

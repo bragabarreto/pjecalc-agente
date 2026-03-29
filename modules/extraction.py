@@ -10,9 +10,16 @@ import logging
 import re
 import uuid
 from datetime import datetime, date
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-logger = logging.getLogger(__name__)
+try:
+    import structlog
+    logger = structlog.get_logger(__name__)
+except ImportError:
+    logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from core.llm_orchestrator import LLMOrchestrator
 
 import anthropic
 
@@ -763,6 +770,7 @@ def extrair_dados_sentenca(
     extras: list[dict] | None = None,
     is_relatorio: bool = False,
     usar_gemini: bool | None = None,
+    orchestrator: "LLMOrchestrator | None" = None,
 ) -> dict[str, Any]:
     """
     Extrai todos os dados necessários para preenchimento do PJE-Calc.
@@ -773,10 +781,14 @@ def extrair_dados_sentenca(
     - is_relatorio=True: o texto já é um relatório estruturado (ex: saída do Projeto Claude)
         Pula regex; usa prompt especializado de mapeamento direto ao schema
 
-    Parâmetros:
-        extras: documentos complementares {"tipo", "conteudo", "contexto", "mime_type"}
-        is_relatorio: True se o texto for um relatório pré-estruturado
-        usar_gemini: True=forçar Gemini, False=forçar Claude, None=usar config global USE_GEMINI
+    Args:
+        texto: Texto da sentença ou relatório estruturado.
+        sessao_id: UUID da sessão (gerado se não fornecido).
+        extras: Documentos complementares {"tipo", "conteudo", "contexto", "mime_type"}.
+        is_relatorio: True se o texto for um relatório pré-estruturado.
+        usar_gemini: True=forçar Gemini, False=forçar Claude, None=usar config global USE_GEMINI.
+        orchestrator: LLMOrchestrator opcional. Se fornecido, injeta knowledge base e regras
+            aprendidas no prompt via orchestrator.complete(). Se None, usa a lógica direta atual.
     """
     sessao_id = sessao_id or str(uuid.uuid4())
 
@@ -823,7 +835,22 @@ def extrair_dados_sentenca(
     # usar_gemini: True=forçar Gemini, False=forçar Claude, None=usar config global
     _usar_gemini = USE_GEMINI if usar_gemini is None else usar_gemini
 
-    if _usar_gemini and GEMINI_API_KEY:
+    if orchestrator is not None:
+        # Orchestrator injeta knowledge base oficial + regras aprendidas no sistema
+        try:
+            from core.llm_orchestrator import TaskType
+            dados_llm = orchestrator.complete(
+                TaskType.LEGAL_EXTRACTION,
+                texto_para_llm,
+                inject_knowledge=True,
+                inject_learned_rules=True,
+            )
+            if isinstance(dados_llm, str):
+                dados_llm = {"_erro_llm": "resposta não-JSON do orchestrator"}
+        except Exception as e:
+            logger.warning("orchestrator_extraction_failed", error=str(e))
+            dados_llm = {"_erro_llm": str(e)}
+    elif _usar_gemini and GEMINI_API_KEY:
         logger.info("Extração via Gemini (%s)", GEMINI_MODEL)
         dados_llm = _extrair_via_gemini(texto_para_llm, extras=extras)
         # Fallback para Claude se Gemini falhar
@@ -1507,12 +1534,17 @@ _EXTRACTION_PROMPT_NATIVO = (
 def _extrair_via_llm_pdf(
     pdf_bytes: bytes,
     extras: list[dict] | None = None,
+    system_prompt_override: str | None = None,
 ) -> dict[str, Any]:
     """
     Extração nativa de PDF: envia o arquivo diretamente ao Claude via base64.
     Não converte para texto antes — Claude lê o PDF nativamente (até 32 MB / 100 págs).
     Usa cache_control ephemeral no documento para multi-pass barato.
     Usa Structured Outputs para garantir JSON válido sem parsing tolerante.
+
+    Args:
+        system_prompt_override: System prompt alternativo (ex: com knowledge base injetada).
+            Se None, usa o _SYSTEM_PROMPT padrão do módulo.
     """
     if not ANTHROPIC_API_KEY:
         return {}
@@ -1555,13 +1587,14 @@ def _extrair_via_llm_pdf(
         "text": _EXTRACTION_PROMPT_NATIVO,
     })
 
+    _system = system_prompt_override if system_prompt_override else _SYSTEM_PROMPT
     try:
         # Nota: output_config removido — schema tem >16 union types (limite API Anthropic)
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
             max_tokens=4096,
             temperature=0.0,
-            system=_SYSTEM_PROMPT,
+            system=_system,
             messages=[{"role": "user", "content": content_blocks}],
         )
         return _limpar_e_parsear_json(resposta.content[0].text.strip())
@@ -1574,17 +1607,38 @@ def extrair_dados_sentenca_pdf(
     pdf_path: str,
     sessao_id: str | None = None,
     extras: list[dict] | None = None,
+    orchestrator: "LLMOrchestrator | None" = None,
 ) -> dict[str, Any]:
     """
     Ponto de entrada público para extração direta de PDF.
     Envia o PDF nativo ao Claude (sem conversão para texto).
     Aplica validação, migração de schema legado e multi-pass para campos incertos.
+
+    Args:
+        pdf_path: Caminho para o arquivo PDF da sentença.
+        sessao_id: UUID da sessão (gerado se não fornecido).
+        extras: Documentos complementares {"tipo", "conteudo", "contexto", "mime_type"}.
+        orchestrator: LLMOrchestrator opcional. Se fornecido, enriquece o system prompt
+            com knowledge base oficial e regras aprendidas antes de chamar o Claude.
     """
-    import os
     sessao_id = sessao_id or str(uuid.uuid4())
 
+    # Enriquecer system prompt via orchestrator quando disponível
+    _system_override: str | None = None
+    if orchestrator is not None:
+        try:
+            from core.llm_orchestrator import TaskType
+            _system_override = orchestrator._build_system_prompt(
+                TaskType.LEGAL_EXTRACTION_PDF,
+                _SYSTEM_PROMPT,
+                inject_knowledge=True,
+                inject_learned_rules=True,
+            )
+        except Exception as e:
+            logger.warning("orchestrator_system_prompt_failed", error=str(e))
+
     pdf_bytes = open(pdf_path, "rb").read()
-    dados = _extrair_via_llm_pdf(pdf_bytes, extras=extras)
+    dados = _extrair_via_llm_pdf(pdf_bytes, extras=extras, system_prompt_override=_system_override)
 
     if "_erro_llm" in dados or dados.get("_erro_ia"):
         # IA indisponível → bloquear; não cair em extração via texto (produziria dados incompletos)

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Aprendizado Contínuo — Agente PJE-Calc{% endblock %}
+
+{% block extra_style %}
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.metric-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 20px; text-align: center; }
+.metric-card .valor { font-size: 2rem; font-weight: 700; color: #1a3a6b; }
+.metric-card .label { font-size: 0.85rem; color: #6c757d; margin-top: 4px; }
+.confianca-bar { height: 8px; border-radius: 4px; background: #e9ecef; position: relative; }
+.confianca-fill { height: 100%; border-radius: 4px; background: #28a745; }
+.taxa-fill { height: 100%; border-radius: 4px; background: #1a3a6b; }
+.session-row td { vertical-align: top; }
+.regra-condicao { font-style: italic; color: #495057; font-size: 0.88rem; }
+.regra-acao { color: #1a3a6b; font-size: 0.9rem; }
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+  <h1 style="color:#1a3a6b; font-size:1.5rem;">Motor de Aprendizado Contínuo</h1>
+  <div>
+    <button class="btn btn-success" onclick="executarAprendizado()" id="btn-executar">
+      Executar Sessão Agora
+    </button>
+    <a href="/" class="btn btn-secondary" style="margin-left:8px;">Voltar</a>
+  </div>
+</div>
+
+<div id="msg-flash" style="display:none;" class="sucesso-box"></div>
+
+<!-- Métricas resumo -->
+<div class="metric-grid">
+  <div class="metric-card">
+    <div class="valor">{{ correcoes_pendentes }}</div>
+    <div class="label">Correções pendentes</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ regras | length }}</div>
+    <div class="label">Regras ativas</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ sessoes | length }}</div>
+    <div class="label">Sessões realizadas</div>
+  </div>
+  <div class="metric-card">
+    {% set total_acertos = regras | map(attribute='acertos') | sum %}
+    {% set total_aplicacoes = regras | map(attribute='aplicacoes') | sum %}
+    <div class="valor">{% if total_aplicacoes > 0 %}{{ ((total_acertos / total_aplicacoes) * 100) | round | int }}%{% else %}—{% endif %}</div>
+    <div class="label">Taxa média de acerto</div>
+  </div>
+</div>
+
+<!-- Regras ativas -->
+<div class="card">
+  <h2>Regras Aprendidas Ativas ({{ regras | length }})</h2>
+  {% if regras %}
+  <table>
+    <thead>
+      <tr>
+        <th>Tipo</th>
+        <th>Condição / Ação</th>
+        <th>Confiança</th>
+        <th>Aplicações</th>
+        <th>Taxa acerto</th>
+        <th>Ação</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for regra in regras %}
+      <tr>
+        <td>
+          <span class="badge badge-azul">{{ regra.tipo_regra }}</span>
+        </td>
+        <td>
+          <div class="regra-condicao">Se: {{ regra.condicao }}</div>
+          <div class="regra-acao">Então: {{ regra.acao }}</div>
+        </td>
+        <td>
+          <div class="confianca-bar" title="{{ (regra.confianca * 100) | round | int }}%">
+            <div class="confianca-fill" style="width:{{ (regra.confianca * 100) | round | int }}%"></div>
+          </div>
+          <small>{{ (regra.confianca * 100) | round | int }}%</small>
+        </td>
+        <td>{{ regra.aplicacoes }}</td>
+        <td>
+          {% if regra.aplicacoes > 0 %}
+            <div class="confianca-bar" title="{{ regra.taxa_acerto }}%">
+              <div class="taxa-fill" style="width:{{ regra.taxa_acerto }}%"></div>
+            </div>
+            <small>{{ regra.taxa_acerto }}%</small>
+          {% else %}
+            <small style="color:#6c757d;">—</small>
+          {% endif %}
+        </td>
+        <td>
+          <button class="btn btn-danger" style="padding:4px 10px;font-size:0.8rem;"
+                  onclick="desativarRegra({{ regra.id }})">
+            Desativar
+          </button>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#6c757d; text-align:center; padding:20px;">
+    Nenhuma regra aprendida ainda. Execute uma sessão de aprendizado após acumular {{ 10 }} ou mais correções.
+  </p>
+  {% endif %}
+</div>
+
+<!-- Histórico de sessões -->
+<div class="card">
+  <h2>Histórico de Sessões (últimas {{ sessoes | length }})</h2>
+  {% if sessoes %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Início</th>
+        <th>Status</th>
+        <th>Correções</th>
+        <th>Novas regras</th>
+        <th>Regras atualizadas</th>
+        <th>Resumo</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for s in sessoes %}
+      <tr class="session-row">
+        <td>#{{ s.id }}</td>
+        <td><small>{{ s.iniciada_em.strftime('%d/%m/%Y %H:%M') if s.iniciada_em else '—' }}</small></td>
+        <td>
+          {% if s.status == 'concluida' %}
+            <span class="badge badge-verde">Concluída</span>
+          {% elif s.status == 'em_andamento' %}
+            <span class="badge badge-azul">Em andamento</span>
+          {% elif s.status == 'erro' %}
+            <span class="badge badge-vermelho">Erro</span>
+          {% else %}
+            <span class="badge badge-cinza">{{ s.status }}</span>
+          {% endif %}
+        </td>
+        <td>{{ s.num_correcoes_analisadas or 0 }}</td>
+        <td>{{ s.num_regras_geradas or 0 }}</td>
+        <td>{{ s.num_regras_atualizadas or 0 }}</td>
+        <td style="max-width:320px;"><small>{{ s.resumo or (s.erro_msg if s.status == 'erro' else '—') }}</small></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#6c757d; text-align:center; padding:20px;">Nenhuma sessão de aprendizado executada ainda.</p>
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_script %}
+<script>
+async function executarAprendizado() {
+  const btn = document.getElementById('btn-executar');
+  btn.disabled = true;
+  btn.textContent = 'Iniciando…';
+  try {
+    const r = await fetch('/api/aprendizado/executar', { method: 'POST' });
+    const data = await r.json();
+    const flash = document.getElementById('msg-flash');
+    flash.textContent = data.mensagem || 'Sessão iniciada em background.';
+    flash.style.display = 'block';
+    setTimeout(() => location.reload(), 3000);
+  } catch (e) {
+    alert('Erro ao iniciar sessão: ' + e);
+    btn.disabled = false;
+    btn.textContent = 'Executar Sessão Agora';
+  }
+}
+
+async function desativarRegra(ruleId) {
+  if (!confirm('Desativar esta regra? A ação não pode ser desfeita pela interface.')) return;
+  try {
+    const r = await fetch('/api/aprendizado/regra/' + ruleId, { method: 'DELETE' });
+    if (r.ok) {
+      location.reload();
+    } else {
+      const d = await r.json();
+      alert('Erro: ' + (d.detail || 'Falha ao desativar regra'));
+    }
+  } catch (e) {
+    alert('Erro: ' + e);
+  }
+}
+</script>
+{% endblock %}
