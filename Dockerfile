@@ -107,8 +107,8 @@ COPY . .
 # Diretórios de dados
 RUN mkdir -p data/logs/sessions data/logs/screenshots data/output data/learning data/calculations static
 
-# Volume persistente para resultados por processo
-VOLUME ["/app/data/calculations"]
+# Persistência por processo — usar Railway Volumes em produção
+# (VOLUME não é permitido no Railway)
 
 # ── Variáveis de ambiente ──────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1 \
