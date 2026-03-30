@@ -33,6 +33,12 @@
   display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.85rem; }
 .passo-txt { flex: 1; padding-top: 4px; }
 .acoes-topo { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 24px; }
+/* Barra de progresso */
+.progress-container { background:#e9ecef; border-radius:4px; height:24px; margin:8px 0 12px; overflow:hidden; position:relative; }
+.progress-bar { background: linear-gradient(90deg, #198754, #20c997); height:100%; border-radius:4px;
+  transition: width 0.6s ease; min-width:0; }
+.progress-label { position:absolute; top:0; left:0; right:0; height:100%; display:flex;
+  align-items:center; justify-content:center; font-size:0.78rem; font-weight:600; color:#333; }
 /* Log de progresso da automação — CalcMachine style */
 #log-automacao { background:#1a1a2e; color:#00ff88; border-radius:0 0 6px 6px;
   padding:12px 16px; font-family:monospace; font-size:0.82rem; height:300px;
@@ -101,6 +107,14 @@
       <button id="btnEncerrar" class="btn btn-danger btn-sm" onclick="encerrarAutomacao()" disabled>
         ⏹ Parar
       </button>
+    </div>
+  </div>
+
+  <!-- Barra de progresso -->
+  <div id="progressWrapper" style="display:none; padding:0 16px;">
+    <div class="progress-container">
+      <div class="progress-bar" id="progressBar" style="width:0%"></div>
+      <div class="progress-label" id="progressLabel">0%</div>
     </div>
   </div>
 
@@ -504,6 +518,13 @@ function abrirSSE() {
   evtSource.onmessage = (e) => {
     const dados = JSON.parse(e.data);
     if (dados.keepalive) return;
+
+    // Typed progress event
+    if (dados.type === 'progress') {
+      atualizarProgresso(dados.current, dados.total);
+      return;
+    }
+
     const msg = dados.msg;
     if (msg === 'DOWNLOAD_DISPONIVEL' && dados.url) {
       const btn = document.createElement('a');
@@ -520,6 +541,7 @@ function abrirSSE() {
     logMsg(msg, tipo);
     if (msg === '[FIM DA EXECUÇÃO]') {
       automacaoConcluida = true;
+      atualizarProgresso(1, 1);  // 100%
       finalizarAutomacao();
     }
   };
@@ -576,8 +598,33 @@ function tocarConclusao() {
   } catch(e) {}
 }
 
-// Verificar automaticamente ao carregar a página
-window.addEventListener('DOMContentLoaded', () => verificarPjeCalc());
+function atualizarProgresso(current, total) {
+  const wrapper = document.getElementById('progressWrapper');
+  const bar = document.getElementById('progressBar');
+  const label = document.getElementById('progressLabel');
+  wrapper.style.display = 'block';
+  const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+  bar.style.width = pct + '%';
+  label.textContent = pct + '%';
+}
+
+// Verificar automaticamente ao carregar a página + autostart
+window.addEventListener('DOMContentLoaded', () => {
+  verificarPjeCalc();
+
+  // Autostart: se ?autostart=true na URL, iniciar automação assim que PJE-Calc estiver pronto
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('autostart') === 'true') {
+    const tentarAutostart = setInterval(() => {
+      if (pjeCalcDisponivel && !automacaoConcluida) {
+        clearInterval(tentarAutostart);
+        executarAutomacao();
+      }
+    }, 1000);
+    // Timeout de 5 min para autostart
+    setTimeout(() => clearInterval(tentarAutostart), 300000);
+  }
+});
 </script>
 {% endif %}
 {% endblock %}

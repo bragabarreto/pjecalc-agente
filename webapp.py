@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import shutil
 import tempfile
 import uuid
@@ -280,6 +281,7 @@ async def exibir_previa_web(
             "inconsistencias_criticas": dados.get("inconsistencias_criticas", []),
             "verbas": calculo.verbas,
             "status": calculo.status,
+            "cloud_mode": CLOUD_MODE,
         },
     )
 
@@ -509,6 +511,32 @@ async def confirmar_previa(
         "url_parametros": f"/download/{sessao_id}/parametros",
         "url_instrucoes": f"/instrucoes/{sessao_id}",
         "url_status":     f"/status/{sessao_id}",
+    })
+
+
+@app.post("/previa/{sessao_id}/aceitar-e-executar")
+async def aceitar_e_executar(
+    request: Request,
+    sessao_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Confirma prévia + redireciona para instrucoes com autostart=true.
+
+    Atalho que combina confirmação + início imediato da automação.
+    Reutiliza a validação de confirmar_previa().
+    """
+    # Reusa a lógica de validação de confirmar_previa
+    result = await confirmar_previa(request, sessao_id, background_tasks, db)
+    data = json.loads(result.body.decode())
+
+    if not data.get("sucesso"):
+        return result
+
+    # Redireciona para instrucoes com autostart
+    return JSONResponse({
+        **data,
+        "url_instrucoes": f"/instrucoes/{sessao_id}?autostart=true",
     })
 
 
@@ -1003,9 +1031,33 @@ async def executar_automacao_sse(
         from modules.playwright_pjecalc import preencher_como_generator
         from database import SessionLocal
 
+        # ── Persistência por processo ──────────────────────────────
+        _exec_dir = None
+        _log_acumulado: list[str] = []
+        _persist_enabled = os.environ.get("CALCULATION_PERSISTENCE", "true").lower() == "true"
+        if _persist_enabled:
+            try:
+                from infrastructure.calculation_store import CalculationStore
+                _store = CalculationStore()
+                _num_proc = dados.get("processo", {}).get("numero", sessao_id)
+                _exec_dir = _store.criar_execucao(_num_proc, sessao_id)
+                _store.salvar_extracao_llm(_exec_dir, dados)
+                _store.salvar_parametros_enviados(_exec_dir, verbas_mapeadas)
+                _store.salvar_metadados(_exec_dir, {**dados, "_status": "automacao_iniciada"})
+                # Salvar referência no banco
+                db3 = SessionLocal()
+                try:
+                    _calc = RepositorioCalculo(db3).buscar_sessao(sessao_id)
+                    if _calc:
+                        _calc.diretorio_calculo = str(_exec_dir)
+                        db3.commit()
+                finally:
+                    db3.close()
+            except Exception as _e:
+                logger.warning(f"calculation_store_init_failed: {_e}")
+                _exec_dir = None
+
         # Aguardar PJE-Calc ficar disponível.
-        # Modo local (PJECALC_TOMCAT_TIMEOUT=30): usuário já abriu o PJE-Calc → falha rápida.
-        # Modo Railway/Docker (PJECALC_TOMCAT_TIMEOUT=600): Tomcat sobe junto em background.
         _tomcat_timeout = PJECALC_TOMCAT_TIMEOUT
         _pjecalc_url = PJECALC_LOCAL_URL
         elapsed = 0
@@ -1046,10 +1098,9 @@ async def executar_automacao_sse(
         gen = preencher_como_generator(
             dados, verbas_mapeadas, PJECALC_DIR, modo_oculto,
             parametrizacao=parametrizacao_sse,
+            exec_dir=_exec_dir,
         )
 
-        # Fila para desacoplar a thread do gerador do loop assíncrono.
-        # Permite emitir keepalive SSE a cada 25s sem output do Playwright.
         fila: _queue.Queue = _queue.Queue()
 
         def _executar_gen():
@@ -1075,14 +1126,23 @@ async def executar_automacao_sse(
                     None, lambda: fila.get(timeout=25)
                 )
             except _queue.Empty:
-                # Heartbeat: evita timeout de proxy/browser em automações longas
                 yield f"data: {json.dumps({'keepalive': True})}\n\n"
                 continue
 
             if kind == "ok":
                 msg = value
+                _log_acumulado.append(msg)
                 yield f"data: {json.dumps({'msg': msg})}\n\n"
-                # Detectar .PJC gerado e persistir no banco
+
+                # Parse PROGRESS messages para barra de progresso
+                if msg.startswith("PROGRESS:"):
+                    try:
+                        parts = msg.split(":")[1].split("/")
+                        yield f"data: {json.dumps({'type': 'progress', 'current': int(parts[0]), 'total': int(parts[1])})}\n\n"
+                    except (IndexError, ValueError):
+                        pass
+
+                # Detectar .PJC gerado e persistir
                 if msg.startswith("PJC_GERADO:"):
                     caminho = msg.split(":", 1)[1].strip()
                     db2 = SessionLocal()
@@ -1091,6 +1151,14 @@ async def executar_automacao_sse(
                         db2.commit()
                     finally:
                         db2.close()
+                    # Copiar PJC para diretório de persistência
+                    if _exec_dir and _persist_enabled:
+                        try:
+                            from infrastructure.calculation_store import CalculationStore
+                            CalculationStore().copiar_pjc(_exec_dir, caminho)
+                            CalculationStore().atualizar_status(_exec_dir, "pjc_exportado")
+                        except Exception:
+                            pass
                     yield f"data: {json.dumps({'msg': 'DOWNLOAD_DISPONIVEL', 'url': f'/download/{sessao_id}/pjc'})}\n\n"
                 if msg == "[FIM DA EXECUÇÃO]":
                     break
@@ -1099,8 +1167,17 @@ async def executar_automacao_sse(
                 break
             elif kind == "erro":
                 yield f"data: {json.dumps({'msg': f'ERRO na automação: {value}'})}\n\n"
+                _log_acumulado.append(f"ERRO: {value}")
                 yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
                 break
+
+        # Salvar log acumulado no diretório de persistência
+        if _exec_dir and _persist_enabled and _log_acumulado:
+            try:
+                from infrastructure.calculation_store import CalculationStore
+                CalculationStore().salvar_log(_exec_dir, _log_acumulado)
+            except Exception:
+                pass
 
     return StreamingResponse(
         gerador_sse(),

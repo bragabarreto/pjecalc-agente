@@ -126,6 +126,12 @@ OCR_LANG = "por"                    # tesseract: português
 OCR_CONFIDENCE_MIN = 80             # % mínimo; abaixo → alertar usuário
 OCR_DPI = 300                       # resolução para pdf2image
 
+# ── Feature flags ────────────────────────────────────────────────────────────
+# Permitem desabilitar funcionalidades novas via env var sem alterar código.
+EXPRESSO_CRASH_PROTECTION = os.environ.get("EXPRESSO_CRASH_PROTECTION", "true").lower() == "true"
+H2_CLEANUP_ENABLED = os.environ.get("H2_CLEANUP_ENABLED", "true").lower() == "true"
+CALCULATION_PERSISTENCE = os.environ.get("CALCULATION_PERSISTENCE", "true").lower() == "true"
+
 # ── Logging ──────────────────────────────────────────────────────────────────
 LOG_LEVEL = "INFO"
 LOG_FORMAT = "json"                 # "json" | "text"

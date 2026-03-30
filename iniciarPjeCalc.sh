@@ -123,7 +123,8 @@ fi
 # Propriedades Java comuns a todas as estratégias de inicialização:
 #   -Dfile.encoding=ISO-8859-1  → preserva encoding original do PJE-Calc
 #   -Duser.timezone=GMT-3       → fuso horário Brasil (Brasília)
-#   -Xms128m -Xmx512m          → heap adequado para servidor Tomcat
+#   -Xms1536m -Xmx3072m        → heap 3GB (Expresso fazia OOM com 512m)
+#   -XX:+UseG1GC               → GC moderno para heaps > 1GB
 #   -XX:MaxPermSize=512m        → apenas Java 8 (ignorado no 11+)
 #   -Djava.awt.headless=true    → sem GUI Swing → sem JOptionPane bloqueante
 JAVA_BASE_OPTS="$AGENT_FLAG
@@ -131,9 +132,13 @@ JAVA_BASE_OPTS="$AGENT_FLAG
     -Dfile.encoding=ISO-8859-1
     -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe
     -Dseguranca.pjekz.servico.contexto=https://pje.trt8.jus.br/pje-seguranca
-    -Xms128m
-    -Xmx512m
-    -XX:MaxPermSize=512m"
+    -Xms1536m
+    -Xmx3072m
+    -XX:MaxPermSize=512m
+    -XX:+UseG1GC
+    -XX:+HeapDumpOnOutOfMemoryError
+    -XX:HeapDumpPath=/opt/pjecalc/java_heapdump.hprof
+    -XX:+ExitOnOutOfMemoryError"
 
 _iniciar_java() {
     # Abordagem A — Bootstrap direto (bypassa Lancador.java e seus JOptionPane)
@@ -176,6 +181,14 @@ _iniciar_java() {
     echo "[PJE-Calc] Lancador iniciado (PID: $(cat /tmp/pjecalc.pid))"
 }
 
+# Restaurar template H2 se foi removido por limpar_h2_database()
+H2_DB="$PJECALC_DIR/.dados/pjecalc.h2.db"
+H2_TEMPLATE="$PJECALC_DIR/.dados/pjecalc.h2.db.template"
+if [ ! -f "$H2_DB" ] && [ -f "$H2_TEMPLATE" ]; then
+    echo "[PJE-Calc] Restaurando template H2..."
+    cp "$H2_TEMPLATE" "$H2_DB"
+fi
+
 echo "[PJE-Calc] Iniciando processo Java (porta 9257)..."
 _iniciar_java
 echo "[PJE-Calc] Log: /opt/pjecalc/java.log"
@@ -184,21 +197,38 @@ echo "[PJE-Calc] Aguarde Tomcat finalizar deploy (~30-120s)..."
 # ── Watchdog: reinicia Java se o processo morrer ─────────────────────────────
 # Reinicia automaticamente usando a mesma estratégia (_iniciar_java),
 # restaurando o Tomcat sem intervenção manual.
+# Polling a cada 10s (rápido: detecta crash do Expresso em <15s).
+# Suporta signal file /tmp/pjecalc_restart_request para restart sob demanda.
 (
     PJE_PID=$(cat /tmp/pjecalc.pid 2>/dev/null || echo 0)
-    echo "[Watchdog] Iniciado — monitora PID $PJE_PID a cada 30s (início em 90s)."
-    sleep 90  # aguarda Tomcat inicializar antes de começar a vigiar
+    echo "[Watchdog] Iniciado — monitora PID $PJE_PID a cada 10s (início em 60s)."
+    sleep 60  # aguarda Tomcat inicializar antes de começar a vigiar
     while true; do
-        sleep 30
+        sleep 10
         [ -f /tmp/pjecalc.pid ] || { echo "[Watchdog] PID file removido — encerrando."; break; }
         CURRENT_PID=$(cat /tmp/pjecalc.pid)
+
+        # Signal file: Playwright solicita restart imediato
+        if [ -f /tmp/pjecalc_restart_request ]; then
+            echo "[Watchdog] Restart solicitado via signal file"
+            rm -f /tmp/pjecalc_restart_request
+            kill "$CURRENT_PID" 2>/dev/null || true
+            sleep 5
+            cd "$PJECALC_DIR"
+            _iniciar_java
+            NEW_PID=$(cat /tmp/pjecalc.pid)
+            echo "[Watchdog] Reiniciado (signal) com PID $NEW_PID — aguardando 90s..."
+            sleep 90
+            continue
+        fi
+
         if ! kill -0 "$CURRENT_PID" 2>/dev/null; then
             echo "[Watchdog] Processo Java (PID $CURRENT_PID) morreu — reiniciando..."
             cd "$PJECALC_DIR"
             _iniciar_java
             NEW_PID=$(cat /tmp/pjecalc.pid)
-            echo "[Watchdog] Reiniciado com PID $NEW_PID — aguardando Tomcat (120s)..."
-            sleep 120  # aguarda Tomcat subir antes do próximo ciclo
+            echo "[Watchdog] Reiniciado com PID $NEW_PID — aguardando Tomcat (90s)..."
+            sleep 90  # aguarda Tomcat subir antes do próximo ciclo
         fi
     done
 ) &

@@ -814,12 +814,23 @@
         Verifique todos os campos antes de confirmar.
         Após confirmar, você receberá o guia de preenchimento do PJE-Calc.
       </p>
-      <button class="btn btn-success" style="width:100%; padding:12px;"
+      <button class="btn btn-success" style="width:100%; padding:12px; margin-bottom:8px;"
               id="btn-confirmar"
               {% if inconsistencias_criticas %}disabled title="Corrija as inconsistencias criticas antes de confirmar"{% endif %}
               onclick="confirmarPrevia()">
         Confirmar e Gerar Guia
       </button>
+      {% if not cloud_mode %}
+      <button class="btn" style="width:100%; padding:12px; background:#0d6efd; color:#fff; font-weight:700;"
+              id="btn-aceitar-executar"
+              {% if inconsistencias_criticas %}disabled{% endif %}
+              onclick="aceitarEExecutar()">
+        Aceitar e Executar
+      </button>
+      <div style="font-size:0.78rem; color:#6c757d; text-align:center; margin-top:4px;">
+        Confirma + inicia a automacao automaticamente
+      </div>
+      {% endif %}
       {% if inconsistencias_criticas %}
       <div style="margin-top:8px; font-size:0.83rem; color:#dc3545; text-align:center;">
         Resolva as inconsistencias acima para habilitar a confirmacao.
@@ -1057,6 +1068,41 @@ function togglePensao(checked) {
     document.getElementById('aprendizado-contador').textContent = '';
   }
 })();
+
+// Aceitar e executar (confirma + autostart)
+async function aceitarEExecutar() {
+  if (!confirm(
+    'Aceitar os parametros e iniciar a automacao imediatamente?\n\n' +
+    'A automacao sera iniciada automaticamente apos a confirmacao.'
+  )) return;
+
+  const msg = document.getElementById('msg-confirmar');
+  msg.style.display = 'block';
+  msg.style.background = '#cce5ff';
+  msg.style.color = '#004085';
+  msg.textContent = 'Confirmando e iniciando automacao...';
+
+  try {
+    const resp = await fetch('/previa/' + SESSAO_ID + '/aceitar-e-executar', { method: 'POST' });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      msg.style.background = '#d4edda';
+      msg.style.color = '#155724';
+      msg.textContent = 'Confirmado! Iniciando automacao...';
+      if (dados.url_instrucoes) {
+        setTimeout(() => window.location.href = dados.url_instrucoes, 800);
+      }
+    } else {
+      msg.style.background = '#f8d7da';
+      msg.style.color = '#721c24';
+      msg.textContent = (dados.erros || []).join(' ') || dados.mensagem || 'Erro na validacao.';
+    }
+  } catch(err) {
+    msg.style.background = '#f8d7da';
+    msg.style.color = '#721c24';
+    msg.textContent = 'Erro: ' + err.message;
+  }
+}
 
 // Confirmar prévia
 async function confirmarPrevia() {

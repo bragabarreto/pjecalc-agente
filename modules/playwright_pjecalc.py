@@ -14,6 +14,7 @@ from __future__ import annotations
 import functools
 import json
 import re
+import signal
 import socket
 import subprocess
 import time
@@ -280,6 +281,72 @@ def _aguardar_http(timeout: int = 300, log_cb=None) -> None:
     )
 
 
+# ── H2 cleanup e controle do Tomcat ──────────────────────────────────────────
+
+def limpar_h2_database(pjecalc_dir: str | Path, log_cb=None) -> bool:
+    """
+    Remove arquivos H2 (.h2.db, .lock.db, .mv.db, .trace.db) do diretório .dados/.
+    NÃO remove JSONs, PJCs ou outros arquivos do usuário.
+    Deve ser chamada ANTES de iniciar o Tomcat (ou após pará-lo).
+    Restaura template .h2.db.template se disponível.
+    """
+    _log = log_cb or (lambda m: None)
+    dados_dir = Path(pjecalc_dir) / ".dados"
+
+    if not dados_dir.exists():
+        _log("H2 cleanup: diretório .dados/ não encontrado — ignorado")
+        return False
+
+    h2_patterns = ["*.h2.db", "*.lock.db", "*.mv.db", "*.trace.db"]
+    removed = []
+    for pattern in h2_patterns:
+        for f in dados_dir.glob(pattern):
+            if f.name.endswith(".template"):
+                continue  # nunca remover o template
+            try:
+                f.unlink()
+                removed.append(f.name)
+            except OSError as e:
+                _log(f"H2 cleanup: erro ao remover {f.name}: {e}")
+
+    if removed:
+        _log(f"H2 cleanup: removidos {removed}")
+    else:
+        _log("H2 cleanup: nenhum arquivo H2 encontrado")
+
+    # Restaurar template se H2 foi removido e template existe
+    template = dados_dir / "pjecalc.h2.db.template"
+    h2_db = dados_dir / "pjecalc.h2.db"
+    if not h2_db.exists() and template.exists():
+        import shutil
+        shutil.copy2(str(template), str(h2_db))
+        _log("H2 cleanup: template restaurado → pjecalc.h2.db")
+
+    return bool(removed)
+
+
+def _parar_tomcat(timeout: int = 15) -> None:
+    """Para o Tomcat via SIGTERM ao PID em /tmp/pjecalc.pid. SIGKILL após timeout."""
+    pid_file = Path("/tmp/pjecalc.pid")
+    if not pid_file.exists():
+        return
+    try:
+        pid = int(pid_file.read_text().strip())
+        os.kill(pid, signal.SIGTERM)
+        for _ in range(timeout):
+            try:
+                os.kill(pid, 0)
+                time.sleep(1)
+            except OSError:
+                break  # processo morreu
+        else:
+            os.kill(pid, signal.SIGKILL)
+    except (ValueError, ProcessLookupError, PermissionError):
+        pass
+    finally:
+        pid_file.unlink(missing_ok=True)
+
+
 # ── Utilitários de formatação ─────────────────────────────────────────────────
 
 def _fmt_br(valor: float | str | None) -> str:
@@ -330,12 +397,17 @@ class PJECalcPlaywright:
         )
     LOG_DIR = Path("data/logs")
 
-    def __init__(self, log_cb: Callable[[str], None] | None = None):
+    def __init__(
+        self,
+        log_cb: Callable[[str], None] | None = None,
+        exec_dir: Path | None = None,
+    ):
         self._log_cb = log_cb or (lambda msg: None)
         self._pw = None
         self._browser = None
         self._page = None
         self._headless = False  # stored by iniciar_browser() para crash recovery
+        self._exec_dir = exec_dir  # diretório de persistência por cálculo
         # Capturados após criar um novo cálculo — usados para URL-based navigation
         self._calculo_url_base: str | None = None
         self._calculo_conversation_id: str | None = None
@@ -1488,7 +1560,8 @@ class PJECalcPlaywright:
     # ── Utilitário de screenshot por fase ──────────────────────────────────────
 
     def _screenshot_fase(self, nome_fase: str) -> None:
-        """Captura screenshot após conclusão de uma fase (diagnóstico não-crítico)."""
+        """Captura screenshot após conclusão de uma fase (diagnóstico não-crítico).
+        Salva em SCREENSHOTS_DIR (global) e em exec_dir/screenshots/ (por cálculo)."""
         try:
             from config import SCREENSHOTS_DIR
             import time as _t
@@ -1497,6 +1570,13 @@ class PJECalcPlaywright:
             path = Path(SCREENSHOTS_DIR) / f"{ts}_{nome_fase}.png"
             self._page.screenshot(path=str(path), full_page=False)
             self._log(f"  📸 {path.name}")
+
+            # Salvar cópia no diretório de persistência do cálculo
+            if self._exec_dir:
+                import shutil
+                calc_ss = self._exec_dir / "screenshots" / f"{nome_fase}.png"
+                calc_ss.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(path), str(calc_ss))
         except Exception as e_ss:
             logger.debug(f"Screenshot falhou (não crítico): {e_ss}")
 
@@ -1632,10 +1712,201 @@ class PJECalcPlaywright:
             self._log(f"  ✓ Período: {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
         self._log("Fase 2 concluída.")
 
+    # ── Probes de saúde do Tomcat ────────────────────────────────────────────
+
+    def _tomcat_esta_vivo(self) -> bool:
+        """Probe rápido HTTP+TCP do Tomcat (< 2s). Retorna True se responde."""
+        try:
+            with urllib.request.urlopen(self.PJECALC_BASE, timeout=2) as r:
+                return r.status in (200, 302, 404)
+        except Exception:
+            pass
+        try:
+            s = socket.create_connection(("127.0.0.1", _porta_local()), timeout=1)
+            s.close()
+            return True
+        except OSError:
+            return False
+
+    def _aguardar_tomcat_restart(self, timeout: int = 180) -> bool:
+        """Aguarda watchdog reiniciar o Tomcat após crash.
+        Cria signal file para restart imediato. Retorna True se recuperou."""
+        self._log(f"  ⚠ Tomcat morreu — aguardando watchdog reiniciar (até {timeout}s)…")
+        # Signal file: watchdog detecta e reinicia imediatamente
+        try:
+            Path("/tmp/pjecalc_restart_request").touch()
+        except OSError:
+            pass
+        inicio = time.time()
+        while time.time() - inicio < timeout:
+            if self._tomcat_esta_vivo():
+                # Esperar mais 10s para webapp terminar deploy
+                time.sleep(10)
+                if self._tomcat_esta_vivo():
+                    elapsed = int(time.time() - inicio)
+                    self._log(f"  ✓ Tomcat reiniciado em {elapsed}s")
+                    return True
+            time.sleep(5)
+        self._log(f"  ✗ Tomcat não reiniciou em {timeout}s")
+        return False
+
+    def _renavegar_apos_crash(self) -> None:
+        """Após Tomcat reiniciar, navega de volta ao cálculo usando conversationId."""
+        self._log("  → Renavegando para o cálculo após restart…")
+        if self._calculo_url_base and self._calculo_conversation_id:
+            target = (f"{self._calculo_url_base}verba/verba-calculo.jsf"
+                      f"?conversationId={self._calculo_conversation_id}")
+        else:
+            target = f"{self.PJECALC_BASE}/pages/principal.jsf"
+        try:
+            self._page.goto(target, wait_until="domcontentloaded", timeout=30000)
+            self._page.wait_for_timeout(2000)
+            self._instalar_monitor_ajax()
+        except Exception as e:
+            self._log(f"  ⚠ Falha ao renavegar: {e} — tentando home")
+            self._page.goto(
+                f"{self.PJECALC_BASE}/pages/principal.jsf",
+                wait_until="domcontentloaded", timeout=30000,
+            )
+            self._page.wait_for_timeout(2000)
+
     # ── Fase 3: Verbas ─────────────────────────────────────────────────────────
 
-    @retry(max_tentativas=3)
+    def _tentar_expresso(self, predefinidas: list) -> tuple[bool, list[str]]:
+        """Tenta Lançamento Expresso com health checks após cada passo.
+
+        Retorna (sucesso, nao_encontradas).
+        Raises RuntimeError se Tomcat morrer durante a operação.
+        """
+        _nao_encontradas: list[str] = []
+
+        # Clicar botão "Expresso"
+        _clicou_expresso = False
+        if self._clicar_botao_id("lancamentoExpresso"):
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+            _clicou_expresso = True
+            self._log("  ✓ Botão Expresso via _clicar_botao_id('lancamentoExpresso')")
+
+        if not _clicou_expresso:
+            for _sel in [
+                "input[id*='btnExpresso']",
+                "input[value='Expresso']",
+                "input[value*='Expresso']",
+                "a[id*='Expresso']",
+            ]:
+                try:
+                    _loc = self._page.locator(_sel)
+                    if _loc.count() > 0:
+                        _loc.first.click(force=True)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(800)
+                        _clicou_expresso = True
+                        self._log(f"  ✓ Botão Expresso via '{_sel}'")
+                        break
+                except Exception:
+                    continue
+
+        if not _clicou_expresso:
+            try:
+                _res = self._page.evaluate("""() => {
+                    const el = [...document.querySelectorAll('input,button,a')]
+                        .find(e => (e.value||e.textContent||'').trim().toUpperCase() === 'EXPRESSO');
+                    if (el) { el.click(); return el.id || el.tagName; }
+                    return null;
+                }""")
+                if _res:
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(800)
+                    _clicou_expresso = True
+                    self._log(f"  ✓ Botão Expresso via JS: {_res}")
+            except Exception as _e:
+                self._log(f"  ⚠ Botão Expresso não encontrado: {_e}")
+
+        if not _clicou_expresso:
+            return False, [v.get("nome_pjecalc") or v.get("nome_sentenca") or "" for v in predefinidas]
+
+        # HEALTH CHECK: Tomcat pode morrer logo após o clique
+        time.sleep(1)
+        if not self._tomcat_esta_vivo():
+            raise RuntimeError("Tomcat morreu após clique no Expresso")
+
+        # Aguardar navegação para verbas-para-calculo.jsf
+        try:
+            self._page.wait_for_url("**/verbas-para-calculo**", timeout=10000)
+        except Exception:
+            self._page.wait_for_timeout(2000)
+
+        # HEALTH CHECK pós-navegação
+        if not self._tomcat_esta_vivo():
+            raise RuntimeError("Tomcat morreu após navegação Expresso")
+
+        # Listar verbas disponíveis (diagnóstico)
+        try:
+            _labels_exp = self._page.evaluate("""() =>
+                [...document.querySelectorAll('tr')]
+                .map(row => {
+                    const nome = row.querySelector('[id*=":nome"]');
+                    return nome ? nome.textContent.replace(/\\s+/g,' ').trim() : '';
+                })
+                .filter(Boolean)
+            """)
+            self._log(f"  📋 Verbas Expresso disponíveis: {_labels_exp[:30]}")
+        except Exception:
+            pass
+
+        # Marcar checkboxes
+        _marcadas: list[str] = []
+        for v in predefinidas:
+            nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
+            if not nome:
+                continue
+            if self._marcar_checkbox_expresso(nome):
+                _marcadas.append(nome)
+            else:
+                _nao_encontradas.append(nome)
+                self._log(f"  ⚠ Verba não encontrada no Expresso: {nome}")
+
+        if _marcadas:
+            self._log(f"  ✓ Marcadas: {_marcadas}")
+            _salvou = (
+                self._clicar_botao_id("btnSalvarExpresso")
+                or self._clicar_salvar()
+            )
+            if _salvou:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1500)
+                self._log("  ✓ Verbas Expresso salvas")
+            else:
+                self._log("  ⚠ btnSalvarExpresso não encontrado — tentando Enter")
+                try:
+                    self._page.keyboard.press("Enter")
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1500)
+                except Exception:
+                    pass
+
+            # HEALTH CHECK pós-salvamento
+            if not self._tomcat_esta_vivo():
+                raise RuntimeError("Tomcat morreu após salvar Expresso")
+
+            # Configurar reflexos
+            self._configurar_reflexos_expresso(predefinidas)
+        else:
+            self._log("  ⚠ Nenhuma verba marcada no Expresso")
+
+        return bool(_marcadas), _nao_encontradas
+
+    @retry(max_tentativas=2)
     def fase_verbas(self, verbas_mapeadas: dict) -> None:
+        """Fase 3 — Verbas: Expresso com proteção contra crash + fallback Manual.
+
+        Estratégia:
+        1. PRE-CHECK: verifica se Tomcat está vivo
+        2. Tenta Expresso com health checks após cada passo
+        3. Se Tomcat morrer: aguarda watchdog reiniciar, retenta uma vez
+        4. Se falhar 2x: fallback 100% Manual
+        """
         self._log("Fase 3 — Verbas…")
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
@@ -1646,7 +1917,7 @@ class PJECalcPlaywright:
         predefinidas = verbas_mapeadas.get("predefinidas", [])
         personalizadas = verbas_mapeadas.get("personalizadas", [])
 
-        # Diagnóstico: listar botões disponíveis na página de verbas
+        # Diagnóstico: listar botões disponíveis
         try:
             _botoes_verbas = self._page.evaluate("""() =>
                 [...document.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
@@ -1660,127 +1931,59 @@ class PJECalcPlaywright:
 
         self.mapear_campos("fase3_verbas")
 
+        _expresso_protection = os.environ.get("EXPRESSO_CRASH_PROTECTION", "true").lower() == "true"
+
         # ── 3A: Lançamento Expresso (verbas predefinidas) ─────────────────────
         if predefinidas:
             self._log(f"  → Expresso: {len(predefinidas)} verba(s) predefinida(s)")
 
-            # Clicar botão "Expresso"
-            _clicou_expresso = False
-            # Tentativa primária via _clicar_botao_id (id real: lancamentoExpresso)
-            if self._clicar_botao_id("lancamentoExpresso"):
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(800)
-                _clicou_expresso = True
-                self._log("  ✓ Botão Expresso via _clicar_botao_id('lancamentoExpresso')")
-
-            if not _clicou_expresso:
-                for _sel in [
-                    "input[id*='btnExpresso']",
-                    "input[value='Expresso']",
-                    "input[value*='Expresso']",
-                    "a[id*='Expresso']",
-                ]:
-                    try:
-                        _loc = self._page.locator(_sel)
-                        if _loc.count() > 0:
-                            _loc.first.click(force=True)
-                            self._aguardar_ajax()
-                            self._page.wait_for_timeout(800)
-                            _clicou_expresso = True
-                            self._log(f"  ✓ Botão Expresso via '{_sel}'")
-                            break
-                    except Exception:
-                        continue
-
-            if not _clicou_expresso:
-                try:
-                    _res = self._page.evaluate("""() => {
-                        const el = [...document.querySelectorAll('input,button,a')]
-                            .find(e => (e.value||e.textContent||'').trim().toUpperCase() === 'EXPRESSO');
-                        if (el) { el.click(); return el.id || el.tagName; }
-                        return null;
-                    }""")
-                    if _res:
-                        self._aguardar_ajax()
-                        self._page.wait_for_timeout(800)
-                        _clicou_expresso = True
-                        self._log(f"  ✓ Botão Expresso via JS: {_res}")
-                except Exception as _e:
-                    self._log(f"  ⚠ Botão Expresso não encontrado: {_e}")
-
-            if _clicou_expresso:
-                # lancamentoExpresso faz action= (navegação completa) para verbas-para-calculo.jsf
-                # Aguardar a nova página antes de qualquer query
-                try:
-                    self._page.wait_for_url("**/verbas-para-calculo**", timeout=10000)
-                except Exception:
-                    self._page.wait_for_timeout(2000)
-
-                # Listar verbas disponíveis no Expresso (diagnóstico)
-                # verbas-para-calculo.xhtml: checkbox id="selecionada", nome id="nome" no mesmo <tr>
-                try:
-                    _labels_exp = self._page.evaluate("""() =>
-                        [...document.querySelectorAll('tr')]
-                        .map(row => {
-                            const nome = row.querySelector('[id*=":nome"]');
-                            return nome ? nome.textContent.replace(/\\s+/g,' ').trim() : '';
-                        })
-                        .filter(Boolean)
-                    """)
-                    self._log(f"  📋 Verbas Expresso disponíveis: {_labels_exp[:30]}")
-                except Exception:
-                    pass
-
-                # Marcar checkboxes por nome (case-insensitive, normalizado)
-                _marcadas: list[str] = []
-                _nao_encontradas: list[str] = []
-                for v in predefinidas:
-                    nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
-                    if not nome:
-                        continue
-                    if self._marcar_checkbox_expresso(nome):
-                        _marcadas.append(nome)
-                    else:
-                        _nao_encontradas.append(nome)
-                        self._log(f"  ⚠ Verba não encontrada no Expresso: {nome}")
-
-                if _marcadas:
-                    self._log(f"  ✓ Marcadas: {_marcadas}")
-                    # Salvar verbas Expresso (seletor específico prioritário)
-                    _salvou_expresso = (
-                        self._clicar_botao_id("btnSalvarExpresso")
-                        or self._clicar_salvar()
-                    )
-                    if _salvou_expresso:
-                        self._aguardar_ajax()
-                        self._page.wait_for_timeout(1500)
-                        self._log("  ✓ Verbas Expresso salvas")
-                    else:
-                        self._log("  ⚠ btnSalvarExpresso não encontrado — tentando Enter")
-                        try:
-                            self._page.keyboard.press("Enter")
-                            self._aguardar_ajax()
-                            self._page.wait_for_timeout(1500)
-                        except Exception:
-                            pass
-
-                    # Configurar reflexos após salvar
-                    self._configurar_reflexos_expresso(predefinidas)
-                else:
-                    self._log("  ⚠ Nenhuma verba marcada no Expresso")
-
-                if _nao_encontradas:
-                    self._log(
-                        f"  → {len(_nao_encontradas)} verba(s) não encontrada(s) no Expresso "
-                        f"— adicionando ao fluxo Manual: {_nao_encontradas}"
-                    )
-                    personalizadas = [
-                        v for v in predefinidas
-                        if (v.get("nome_pjecalc") or v.get("nome_sentenca") or "") in _nao_encontradas
-                    ] + personalizadas
-            else:
-                self._log("  ⚠ Modo Expresso indisponível — todas as verbas via Manual")
+            if not self._tomcat_esta_vivo():
+                self._log("  ⚠ Tomcat não responde — todas as verbas via Manual")
                 personalizadas = predefinidas + personalizadas
+                predefinidas = []
+            else:
+                self._screenshot_fase("03_pre_expresso")
+                _expresso_ok = False
+                _nao_encontradas: list[str] = []
+
+                try:
+                    _expresso_ok, _nao_encontradas = self._tentar_expresso(predefinidas)
+                except RuntimeError as crash_err:
+                    self._log(f"  ☠ {crash_err}")
+                    _expresso_ok = False
+                except Exception as exc:
+                    self._log(f"  ⚠ Expresso falhou: {exc}")
+                    _expresso_ok = False
+
+                # Se crash: aguardar restart e retentar UMA vez
+                if not _expresso_ok and _expresso_protection and not self._tomcat_esta_vivo():
+                    self._log("  ☠ Tomcat morreu após Expresso — aguardando restart…")
+                    if self._aguardar_tomcat_restart(timeout=180):
+                        self._renavegar_apos_crash()
+                        try:
+                            self._clicar_menu_lateral("Verbas")
+                            self._page.wait_for_timeout(1500)
+                            _expresso_ok, _nao_encontradas = self._tentar_expresso(predefinidas)
+                        except Exception as exc2:
+                            self._log(f"  ⚠ Expresso falhou na 2ª tentativa: {exc2}")
+                            _expresso_ok = False
+                    else:
+                        raise RuntimeError("Tomcat não reiniciou após crash do Expresso")
+
+                if not _expresso_ok:
+                    self._log("  → Expresso falhou — 100% Manual")
+                    personalizadas = predefinidas + personalizadas
+                else:
+                    # Verbas não encontradas no Expresso → Manual
+                    if _nao_encontradas:
+                        self._log(
+                            f"  → {len(_nao_encontradas)} verba(s) não encontrada(s) no Expresso "
+                            f"— adicionando ao fluxo Manual: {_nao_encontradas}"
+                        )
+                        personalizadas = [
+                            v for v in predefinidas
+                            if (v.get("nome_pjecalc") or v.get("nome_sentenca") or "") in _nao_encontradas
+                        ] + personalizadas
 
         # ── 3B: Verbas personalizadas (Manual/Novo) ────────────────────────
         if personalizadas:
@@ -2667,6 +2870,26 @@ class PJECalcPlaywright:
             parametrizacao: output de parametrizacao.gerar_parametrizacao() — opcional.
                            Se presente, instrui fases específicas com dados pré-calculados.
         """
+        # ── Estimativas de progresso (segundos acumulados) ─────────────────────
+        _PHASE_ESTIMATES = [
+            ("dados_processo", 15),
+            ("parametros_gerais", 25),
+            ("historico_salarial", 45),
+            ("verbas", 90),
+            ("fgts", 100),
+            ("contribuicao_social", 110),
+            ("cartao_ponto", 125),
+            ("parametros_atualizacao", 130),
+            ("irpf", 140),
+            ("honorarios", 155),
+            ("liquidar", 185),
+        ]
+        _TOTAL = 185
+
+        def _progress(idx: int) -> None:
+            elapsed = _PHASE_ESTIMATES[idx][1] if idx > 0 else 0
+            self._log(f"PROGRESS:{elapsed}/{_TOTAL}")
+
         base = f"{self.PJECALC_BASE}/pages/principal.jsf"
         self._log("Abrindo PJE-Calc…")
         self._page.goto(base, wait_until="domcontentloaded", timeout=60000)
@@ -2694,10 +2917,12 @@ class PJECalcPlaywright:
 
         self._ir_para_novo_calculo()
 
+        _progress(0)
         self.fase_dados_processo(dados)
         self._screenshot_fase("01_dados_processo")
 
         # Parâmetros Gerais — usa passo_2 do parametrizacao.json se disponível
+        _progress(1)
         params_gerais = (parametrizacao or {}).get("passo_2_parametros_gerais", {})
         if not params_gerais:
             cont = dados.get("contrato", {})
@@ -2708,34 +2933,44 @@ class PJECalcPlaywright:
         self.fase_parametros_gerais(params_gerais)
         self._screenshot_fase("02a_parametros_gerais")
 
+        _progress(2)
         self.fase_historico_salarial(dados)
         self._screenshot_fase("02_historico_salarial")
 
+        _progress(3)
         self.fase_verbas(verbas_mapeadas)
         self._screenshot_fase("03_verbas")
 
+        _progress(4)
         self.fase_fgts(dados.get("fgts", {}))
         self._screenshot_fase("04_fgts")
 
+        _progress(5)
         self.fase_contribuicao_social(dados.get("contribuicao_social", {}))
         self._screenshot_fase("05_contribuicao_social")
 
+        _progress(6)
         self.fase_cartao_ponto(dados)
         self._screenshot_fase("06_cartao_ponto")
 
+        _progress(7)
         self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))
         self._screenshot_fase("07_correcao_juros")
 
+        _progress(8)
         self.fase_irpf(dados.get("imposto_renda", {}))
         self._screenshot_fase("08_irpf")
 
+        _progress(9)
         self.fase_honorarios(
             dados.get("honorarios", []),
             periciais=dados.get("honorarios_periciais"),
         )
         self._screenshot_fase("09_honorarios")
 
+        _progress(10)
         caminho_pjc = self._clicar_liquidar()
+        self._log(f"PROGRESS:{_TOTAL}/{_TOTAL}")
         if caminho_pjc:
             self._log("CONCLUIDO: Automação concluída — .PJC gerado e disponível para download.")
         else:
@@ -2757,24 +2992,37 @@ def iniciar_e_preencher(
     log_cb: Callable[[str], None] | None = None,
     headless: bool = False,
     parametrizacao: dict | None = None,
+    limpar_h2: bool = True,
+    exec_dir: Path | None = None,
 ) -> None:
     """
     Ponto de entrada público (modo callback).
-    1. Inicia PJE-Calc Cidadão (se não estiver rodando), verificando TCP + HTTP.
-    2. Abre Playwright browser.
-    3. Preenche todos os campos do cálculo seguindo as 8 fases.
+    1. (Opcional) Limpa H2 antes de iniciar (banco fresco para cada cálculo).
+    2. Inicia PJE-Calc Cidadão (se não estiver rodando), verificando TCP + HTTP.
+    3. Abre Playwright browser.
+    4. Preenche todos os campos do cálculo seguindo as 8 fases.
     """
     cb = log_cb or (lambda m: None)
+
+    # H2 cleanup: banco fresco antes de cada cálculo
+    _h2_cleanup_enabled = os.environ.get("H2_CLEANUP_ENABLED", "true").lower() == "true"
+    if limpar_h2 and _h2_cleanup_enabled:
+        if pjecalc_rodando():
+            cb("Parando Tomcat para limpeza H2…")
+            _parar_tomcat()
+            limpar_h2_database(pjecalc_dir, log_cb=cb)
+            cb("Reiniciando Tomcat…")
+        else:
+            limpar_h2_database(pjecalc_dir, log_cb=cb)
 
     cb("Verificando PJE-Calc Cidadão…")
     iniciar_pjecalc(pjecalc_dir, log_cb=cb)
     cb("PJE-Calc disponível.")
 
-    agente = PJECalcPlaywright(log_cb=cb)
+    agente = PJECalcPlaywright(log_cb=cb, exec_dir=exec_dir)
     try:
         agente.iniciar_browser(headless=headless)
         agente.preencher_calculo(dados, verbas_mapeadas, parametrizacao=parametrizacao)
-        # Browser permanece aberto para o usuário revisar e clicar Liquidar
     except Exception as exc:
         cb(f"ERRO: {exc}")
         logger.exception(f"Erro na automação Playwright: {exc}")
@@ -2787,6 +3035,7 @@ def preencher_como_generator(
     pjecalc_dir: str | Path,
     modo_oculto: bool = False,
     parametrizacao: dict | None = None,
+    exec_dir: Path | None = None,
 ):
     """
     Generator que faz yield de mensagens de log para SSE streaming direto.
@@ -2813,6 +3062,7 @@ def preencher_como_generator(
                 log_cb=_cb,
                 headless=modo_oculto,
                 parametrizacao=parametrizacao,
+                exec_dir=exec_dir,
             )
         except Exception as exc:
             log_queue.put(f"ERRO: {exc}")

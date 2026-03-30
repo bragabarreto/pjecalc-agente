@@ -86,7 +86,8 @@ COPY pjecalc-dist/.dados/ .dados/
 COPY iniciarPjeCalc.sh .
 RUN chmod +x iniciarPjeCalc.sh \
     && mkdir -p tomcat/logs \
-    && touch /opt/pjecalc/java.log
+    && touch /opt/pjecalc/java.log \
+    && cp .dados/pjecalc.h2.db .dados/pjecalc.h2.db.template
 
 ENV PJECALC_DIR=/opt/pjecalc
 
@@ -104,7 +105,10 @@ RUN playwright install chromium --with-deps
 COPY . .
 
 # Diretórios de dados
-RUN mkdir -p data/logs/sessions data/logs/screenshots data/output data/learning static
+RUN mkdir -p data/logs/sessions data/logs/screenshots data/output data/learning data/calculations static
+
+# Volume persistente para resultados por processo
+VOLUME ["/app/data/calculations"]
 
 # ── Variáveis de ambiente ──────────────────────────────────────────────────────
 ENV PYTHONUNBUFFERED=1 \
@@ -116,6 +120,11 @@ ENV PYTHONUNBUFFERED=1 \
 # ── Portas expostas ───────────────────────────────────────────────────────────
 EXPOSE 8000
 # 9257 é interno (PJE-Calc): não precisa ser exposto externamente
+
+# ── Healthcheck ───────────────────────────────────────────────────────────────
+# Start period cobre inicialização do Tomcat (~5 min)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=300s --retries=3 \
+    CMD curl -f http://localhost:8000/ || exit 1
 
 # ── Script de inicialização ───────────────────────────────────────────────────
 COPY docker-entrypoint.sh /usr/local/bin/

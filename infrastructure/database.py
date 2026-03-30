@@ -117,6 +117,7 @@ class Calculo(Base):
     arquivo_sentenca = Column(String(500))
     formato_sentenca = Column(String(20))
     arquivo_pjc = Column(String(500))
+    diretorio_calculo = Column(String(500))  # /data/calculations/{proc}/{ts}/
     relatorio_pdf = Column(String(500))
 
     criado_em = Column(DateTime, default=datetime.utcnow)
