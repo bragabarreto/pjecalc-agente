@@ -35,7 +35,7 @@ services:
       # Banco de dados
       DATABASE_URL: postgresql://pjecalc:${POSTGRES_PASSWORD:-pjecalc_secret}@postgres:5432/pjecalc
       # Modo
-      CLOUD_MODE: "true"
+      CLOUD_MODE: "false"
       # Feature flags
       EXPRESSO_CRASH_PROTECTION: "true"
       H2_CLEANUP_ENABLED: "true"

@@ -244,6 +244,7 @@ async def verificar_status(sessao_id: str, db: Session = Depends(get_db)):
         "atualizado_em": calculo.atualizado_em.isoformat() if calculo.atualizado_em else None,
         "tem_previa": calculo.previa_texto is not None,
         "url_previa": f"/previa/{sessao_id}" if calculo.previa_texto else None,
+        "alertas": calculo.dados().get("alertas", []),
     })
 
 
@@ -1364,6 +1365,15 @@ def _tarefa_processar_sentenca(
                 sessao_id=sessao_id,
                 extras=extras_processados,
             )
+            # Se Claude falhou e usuário escolheu Gemini, extrair texto e tentar via Gemini
+            if (dados.get("_erro_llm") or dados.get("_erro_ia")) and usar_gemini:
+                resultado_txt = ler_documento(caminho)
+                dados = extrair_dados_sentenca(
+                    resultado_txt["texto"],
+                    sessao_id=sessao_id,
+                    extras=extras_processados,
+                    usar_gemini=True,
+                )
         else:
             # DOCX, TXT ou relatório estruturado: extrai texto primeiro
             resultado = ler_documento(caminho)

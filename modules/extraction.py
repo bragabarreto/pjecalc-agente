@@ -802,7 +802,7 @@ def extrair_dados_sentenca(
             "_erro_ia": True,
             "alertas": resultado.get("alertas", []) + [
                 "BLOQUEADO: falha ao processar o relatório via IA. "
-                "Verifique créditos da API Anthropic e reenvie o documento."
+                "Verifique créditos/chave da API e reenvie o documento."
             ],
             "campos_ausentes": [],
             "verbas_deferidas": [],
@@ -863,11 +863,12 @@ def extrair_dados_sentenca(
     # IA indisponível → bloquear; prévia NÃO pode ser gerada sem extração por IA
     if "_erro_llm" in dados_llm:
         logger.error("IA indisponível — processamento bloqueado conforme regra de negócio")
+        _api_nome = "Gemini" if _usar_gemini else "Anthropic"
         return {
             "_erro_ia": True,
             "alertas": dados_llm.get("alertas", []) + [
-                "BLOQUEADO: extração via IA indisponível. "
-                "Verifique créditos da API Anthropic e reprocesse o documento."
+                f"BLOQUEADO: extração via IA indisponível ({_api_nome}). "
+                "Verifique créditos/chave da API e reprocesse o documento."
             ],
             "campos_ausentes": [],
             "verbas_deferidas": [],

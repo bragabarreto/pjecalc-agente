@@ -434,10 +434,14 @@ async function aguardarProcessamento(sessaoId, urlPrevia) {
         return;
       }
       if (status.status === 'erro') throw new Error('Erro durante o processamento da sentença.');
-      if (status.status === 'erro_ia') throw new Error(
-        'IA indisponível: sem créditos na API Anthropic. ' +
-        'Adicione créditos em console.anthropic.com e reenvie o documento.'
-      );
+      if (status.status === 'erro_ia') {
+        const alertas = status.alertas || [];
+        const detalhe = alertas.find(a => a && !a.startsWith('BLOQUEADO')) || alertas[0] || '';
+        const msg = detalhe
+          ? 'IA indisponível: ' + detalhe
+          : 'IA indisponível: verifique créditos da API e reenvie o documento.';
+        throw new Error(msg);
+      }
       document.getElementById('mensagem-status').textContent =
         'Processando com IA... (' + (tentativas * 5) + 's)';
     } catch(err) {
