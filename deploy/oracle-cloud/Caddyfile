@@ -1,0 +1,16 @@
+# Caddyfile — Reverse proxy com HTTPS automático
+#
+# Uso SEM domínio (HTTP direto, IP público):
+#   Não precisa do Caddy — acesse http://<IP>:8000 diretamente
+#
+# Uso COM domínio customizado:
+#   1. Aponte DNS do seu domínio para o IP da VM
+#   2. Substitua "pjecalc.seudominio.com" abaixo
+#   3. Copie para /etc/caddy/Caddyfile
+#   4. sudo systemctl reload caddy
+#
+# O Caddy obtém certificado HTTPS automaticamente via Let's Encrypt.
+
+pjecalc.seudominio.com {
+    reverse_proxy localhost:8000
+}

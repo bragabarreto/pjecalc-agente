@@ -8,6 +8,8 @@ env/
 # ── Segredos e configuração local ────────────────────────────────────────────
 .env
 *.env.local
+*.pem
+*.key
 
 # ── Banco de dados local ──────────────────────────────────────────────────────
 data/

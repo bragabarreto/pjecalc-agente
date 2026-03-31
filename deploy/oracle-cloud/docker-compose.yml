@@ -1,0 +1,48 @@
+# docker-compose.yml — pjecalc-agente (Oracle Cloud)
+#
+# Uso:
+#   cp .env.example .env   # edite com suas chaves
+#   docker compose up -d
+#   docker compose logs -f pjecalc
+#
+# Volumes persistentes em /opt/pjecalc-data/
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pjecalc
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pjecalc_secret}
+      POSTGRES_DB: pjecalc
+    volumes:
+      - /opt/pjecalc-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pjecalc"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  pjecalc:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Chaves de API (obrigatórias)
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # Banco de dados
+      DATABASE_URL: postgresql://pjecalc:${POSTGRES_PASSWORD:-pjecalc_secret}@postgres:5432/pjecalc
+      # Modo
+      CLOUD_MODE: "true"
+      # Feature flags
+      EXPRESSO_CRASH_PROTECTION: "true"
+      H2_CLEANUP_ENABLED: "true"
+      CALCULATION_PERSISTENCE: "true"
+    volumes:
+      - /opt/pjecalc-data/calculations:/app/data/calculations
+      - /opt/pjecalc-data/pjecalc-dados:/opt/pjecalc/.dados
+    depends_on:
+      postgres:
+        condition: service_healthy

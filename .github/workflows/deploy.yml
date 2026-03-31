@@ -1,0 +1,53 @@
+# deploy.yml — Auto-deploy para Oracle Cloud via SSH
+#
+# Trigger: push na branch main
+#
+# Secrets necessários no GitHub (Settings → Secrets → Actions):
+#   ORACLE_SSH_KEY     — chave privada SSH (.pem) da VM
+#   ORACLE_HOST        — IP público da VM
+#   ORACLE_USER        — usuário SSH (padrão: opc)
+#   ANTHROPIC_API_KEY  — chave da API Anthropic
+#   GEMINI_API_KEY     — chave da API Gemini (opcional)
+#   POSTGRES_PASSWORD  — senha do Postgres
+
+name: Deploy to Oracle Cloud
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.ORACLE_HOST }}
+          username: ${{ secrets.ORACLE_USER }}
+          key: ${{ secrets.ORACLE_SSH_KEY }}
+          script: |
+            cd ~/pjecalc-agente
+
+            # Criar .env com secrets
+            cat > .env << 'ENVEOF'
+            ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            ENVEOF
+
+            # Pull do código mais recente
+            git pull origin main
+
+            # Copiar docker-compose do diretório deploy
+            cp deploy/oracle-cloud/docker-compose.yml .
+
+            # Build e restart
+            docker compose build --no-cache pjecalc
+            docker compose up -d
+
+            # Verificar status
+            echo "=== Containers ==="
+            docker compose ps
+            echo "=== Últimas 20 linhas de log ==="
+            docker compose logs --tail=20 pjecalc
