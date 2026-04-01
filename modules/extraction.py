@@ -460,7 +460,7 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     "confianca": 0.95
   }},
   "historico_salarial": [
-    {{"data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00}}
+    {{"nome": "Salário", "data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00, "incidencia_fgts": true, "incidencia_cs": true}}
   ],
   "faltas": [
     {{"data_inicial": "DD/MM/AAAA", "data_final": "DD/MM/AAAA", "justificada": false, "descricao": ""}}
@@ -761,7 +761,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "confianca": 0.0-1.0
   }},
   "historico_salarial": [
-    {{"data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00}}
+    {{"nome": "Salário", "data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00, "incidencia_fgts": true, "incidencia_cs": true}}
   ],
   "faltas": [],
   "ferias": [],
