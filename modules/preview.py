@@ -106,8 +106,8 @@ def gerar_previa(
         linhas.append("   Nenhuma falta identificada")
     else:
         for i, falta in enumerate(faltas):
-            dt_inicio = _fmt(falta.get("data_inicio"))
-            dt_fim = _fmt(falta.get("data_fim"))
+            dt_inicio = _fmt(falta.get("data_inicial") or falta.get("data_inicio"))
+            dt_fim = _fmt(falta.get("data_final") or falta.get("data_fim"))
             justificada = "Justificada" if falta.get("justificada") else "Injustificada"
             dias = falta.get("dias") or "—"
             linhas.append(f"   [{i}] {dt_inicio} a {dt_fim} — {dias} dia(s), {justificada}")
@@ -120,8 +120,8 @@ def gerar_previa(
         linhas.append("   Nenhum período de férias identificado")
     else:
         for i, fer in enumerate(ferias):
-            dt_inicio = _fmt(fer.get("data_inicio"))
-            dt_fim = _fmt(fer.get("data_fim"))
+            dt_inicio = _fmt(fer.get("periodo_inicio") or fer.get("data_inicio"))
+            dt_fim = _fmt(fer.get("periodo_fim") or fer.get("data_fim"))
             situacao = fer.get("situacao") or "—"
             dias = fer.get("dias") or "—"
             linhas.append(f"   [{i}] {dt_inicio} a {dt_fim} — {dias} dia(s), {situacao}")
@@ -363,16 +363,17 @@ def aplicar_edicao_usuario(
             "incidencia_cs": True,
         },
         "faltas": {
-            "data_inicio": None,
-            "data_fim": None,
-            "dias": None,
+            "data_inicial": None,
+            "data_final": None,
             "justificada": False,
+            "descricao": "",
         },
         "ferias": {
-            "data_inicio": None,
-            "data_fim": None,
-            "dias": None,
             "situacao": None,
+            "periodo_inicio": None,
+            "periodo_fim": None,
+            "abono": False,
+            "dobra": False,
         },
     }
 

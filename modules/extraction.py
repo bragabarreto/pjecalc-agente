@@ -529,9 +529,17 @@ seguindo rigorosamente o guia de extração e o schema JSON abaixo.
 - Indeferido ou ausente: tipo="Nao Apurar", projetar=false
 
 **HISTÓRICO SALARIAL** → preenche "historico_salarial":
-- Preencher SOMENTE quando o salário mudou ao longo do contrato (evolução salarial)
-- Cada entrada: data_inicio (DD/MM/AAAA), data_fim (DD/MM/AAAA), valor (float)
-- Salário único durante todo o contrato → historico_salarial = []
+Extrair SEMPRE o histórico salarial — é a base de cálculo do PJE-Calc.
+Cada entrada representa uma BASE DE CÁLCULO com nome, período e valor mensal.
+
+- Se salário único durante todo o contrato → 1 entrada com período completo (admissão a demissão)
+- Se salário mudou ao longo do contrato → N entradas, uma por faixa salarial
+- Se equiparação salarial, desvio de função ou piso normativo → criar bases SEPARADAS com nomes
+  distintos (ex: "Salário Pago" e "Salário Devido", "Adicional Noturno Pago")
+- Campos por entrada:
+  - nome: tipo da base ("Salário", "Salário Pago", "Salário Devido", etc.) — default "Salário"
+  - data_inicio (DD/MM/AAAA), data_fim (DD/MM/AAAA), valor (float mensal completo)
+  - incidencia_fgts (bool, default true), incidencia_cs (bool, default true)
 
 **VERBAS DEFERIDAS** → preenche "verbas_deferidas" (SEÇÃO MAIS CRÍTICA):
 Listar cada parcela condenada. Para cada verba:

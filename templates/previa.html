@@ -319,6 +319,8 @@
         <div class="verba-card" style="margin-bottom:10px;">
           <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
             <strong style="font-size:0.9rem; color:#1a3a6b;">Base {{ loop.index }}: {{ hs.get('nome', 'Salário') or 'Salário' }}</strong>
+            <button type="button" onclick="if(confirm('Remover este período?')) salvarCampo('historico_salarial.remove[{{ hi }}]', '', this)"
+                    style="background:#dc3545; color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.8rem;">✕</button>
           </div>
           <div style="padding:12px;">
             <!-- Nome/Tipo + Incidências -->
@@ -372,6 +374,10 @@
         {% else %}
         <p style="color:#6c757d; font-size:0.9rem;">Nenhum registro de histórico salarial extraído.</p>
         {% endif %}
+        <button type="button" onclick="salvarCampo('historico_salarial.add', 'Salário', this)"
+                style="margin-top:8px; background:#1a3a6b; color:#fff; border:none; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:0.85rem;">
+          + Adicionar Período Salarial
+        </button>
       </div>
     </div>
 
@@ -389,6 +395,8 @@
         <div class="verba-card" style="margin-bottom:10px;">
           <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
             <strong style="font-size:0.9rem; color:#1a3a6b;">Falta {{ loop.index }}</strong>
+            <button type="button" onclick="if(confirm('Remover esta falta?')) salvarCampo('faltas.remove[{{ fi }}]', '', this)"
+                    style="background:#dc3545; color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.8rem;">✕</button>
           </div>
           <div style="padding:12px;">
             <div class="campos-grid">
@@ -424,6 +432,10 @@
         {% else %}
         <p style="color:#6c757d; font-size:0.9rem;">Nenhuma falta registrada.</p>
         {% endif %}
+        <button type="button" onclick="salvarCampo('faltas.add', '', this)"
+                style="margin-top:8px; background:#1a3a6b; color:#fff; border:none; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:0.85rem;">
+          + Adicionar Falta
+        </button>
       </div>
     </div>
 
@@ -441,6 +453,8 @@
         <div class="verba-card" style="margin-bottom:10px;">
           <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
             <strong style="font-size:0.9rem; color:#1a3a6b;">Férias {{ loop.index }}</strong>
+            <button type="button" onclick="if(confirm('Remover este registro?')) salvarCampo('ferias.remove[{{ fri }}]', '', this)"
+                    style="background:#dc3545; color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.8rem;">✕</button>
           </div>
           <div style="padding:12px;">
             <div class="campos-grid">
@@ -486,6 +500,10 @@
         {% else %}
         <p style="color:#6c757d; font-size:0.9rem;">Nenhum registro de férias extraído.</p>
         {% endif %}
+        <button type="button" onclick="salvarCampo('ferias.add', '', this)"
+                style="margin-top:8px; background:#1a3a6b; color:#fff; border:none; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:0.85rem;">
+          + Adicionar Férias
+        </button>
       </div>
     </div>
 
@@ -1134,6 +1152,12 @@ async function salvarCampo(campo, valor, el) {
     const resp = await fetch('/previa/' + SESSAO_ID + '/editar', { method: 'POST', body: form });
     const dados = await resp.json();
     if (dados.sucesso) {
+      // Operações add/remove precisam reload para renderizar novos cards
+      if (campo.includes('.add') || campo.includes('.remove')) {
+        mostrarToast('Salvo — atualizando…', 'ok');
+        setTimeout(() => location.reload(), 300);
+        return;
+      }
       if (el) {
         el.classList.add('campo-salvo');
         setTimeout(() => el.classList.remove('campo-salvo'), 1500);
