@@ -38,7 +38,7 @@ services:
       CLOUD_MODE: "false"
       # Feature flags
       EXPRESSO_CRASH_PROTECTION: "true"
-      H2_CLEANUP_ENABLED: "true"
+      H2_CLEANUP_ENABLED: "false"
       CALCULATION_PERSISTENCE: "true"
     volumes:
       - /opt/pjecalc-data/calculations:/app/data/calculations
