@@ -26,8 +26,8 @@ services:
   pjecalc:
     build: .
     restart: unless-stopped
-    mem_limit: 5632m
-    memswap_limit: 5632m
+    mem_limit: 4608m
+    memswap_limit: 6144m
     shm_size: 256m
     ports:
       - "8000:8000"
