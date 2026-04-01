@@ -481,6 +481,12 @@ REGRAS FINAIS:
   imposto_renda.dependentes, imposto_renda.meses_tributaveis, aviso_previo.prazo_dias,
   contribuicao_social.lei_11941, fgts.multa_467
 - alertas: copiar todos os ⚠️ ALERTAS do relatório como strings no array
+- historico_salarial: NUNCA retornar array vazio se o relatório contiver tabela de salários,
+  "Histórico Salarial", faixas salariais, ou salários por período. Extrair CADA faixa como uma
+  entrada com nome, data_inicio, data_fim, valor, incidencia_fgts, incidencia_cs.
+  Mesmo que haja um único salário durante o contrato, criar 1 entrada com período completo.
+- ferias: se o relatório mencionar "Períodos Aquisitivos de Férias" ou "férias proporcionais",
+  extrair cada período com situacao, periodo_inicio, periodo_fim, abono e dobra.
 - Retornar APENAS JSON puro, sem markdown, sem texto antes ou depois"""
 
 _EXTRACTION_PROMPT = """Analise o conteúdo abaixo (sentença trabalhista e/ou documentos complementares) \
@@ -776,6 +782,14 @@ NÃO incluir campos opcionais: carga_horaria, cpf_reclamante, cnpj_reclamado,
   honorarios.periciais, imposto_renda.dependentes, imposto_renda.meses_tributaveis,
   aviso_previo.prazo_dias, contribuicao_social.lei_11941, fgts.multa_467,
   prescricao.*, processo.municipio, processo.vara
+
+REGRA historico_salarial — NUNCA retornar array vazio:
+- Se há salário mencionado (qualquer valor salarial), criar pelo menos 1 entrada
+- Extrair CADA faixa salarial com nome, data_inicio, data_fim, valor, incidencia_fgts=true, incidencia_cs=true
+- Se salário uniforme: 1 entrada com data_admissao a data_demissao e o valor salarial
+
+REGRA ferias — se a sentença deferir férias (proporcionais, vencidas ou dobra):
+- Extrair com situacao, periodo_inicio, periodo_fim, abono e dobra
 
 Retorne APENAS o JSON, sem markdown, sem explicações."""
 
@@ -1244,7 +1258,7 @@ def _extrair_de_relatorio_estruturado(
     try:
         kwargs: dict = dict(
             model=CLAUDE_MODEL,
-            max_tokens=4096,
+            max_tokens=8192,
             temperature=0.0,
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{
