@@ -318,9 +318,33 @@
         {% set hi = loop.index0 %}
         <div class="verba-card" style="margin-bottom:10px;">
           <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
-            <strong style="font-size:0.9rem; color:#1a3a6b;">Período {{ loop.index }}</strong>
+            <strong style="font-size:0.9rem; color:#1a3a6b;">Base {{ loop.index }}: {{ hs.get('nome', 'Salário') or 'Salário' }}</strong>
           </div>
           <div style="padding:12px;">
+            <!-- Nome/Tipo + Incidências -->
+            <div class="campos-grid col3" style="margin-bottom:8px;">
+              <div class="campo-form">
+                <label>Nome/Tipo da Base</label>
+                <input type="text" placeholder="Salário"
+                       value="{{ hs.get('nome', '') or '' }}"
+                       onchange="salvarCampo('historico_salarial[{{ hi }}].nome', this.value, this)">
+              </div>
+              <div class="campo-form" style="display:flex; align-items:center; gap:8px; padding-top:18px;">
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                  <input type="checkbox" {{ 'checked' if hs.get('incidencia_fgts', true) else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].incidencia_fgts', this.checked, this)">
+                  Incide FGTS
+                </label>
+              </div>
+              <div class="campo-form" style="display:flex; align-items:center; gap:8px; padding-top:18px;">
+                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                  <input type="checkbox" {{ 'checked' if hs.get('incidencia_cs', true) else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].incidencia_cs', this.checked, this)">
+                  Incide CS/INSS
+                </label>
+              </div>
+            </div>
+            <!-- Datas + Valor -->
             <div class="campos-grid col3">
               <div class="campo-form">
                 <label>Data Início</label>
@@ -335,7 +359,7 @@
                        onchange="salvarCampo('historico_salarial[{{ hi }}].data_fim', this.value, this)">
               </div>
               <div class="campo-form">
-                <label>Valor (R$)</label>
+                <label>Valor Mensal (R$)</label>
                 <input type="number" step="0.01" min="0"
                        value="{{ hs.get('valor', '') or '' }}"
                        onchange="salvarCampo('historico_salarial[{{ hi }}].valor', this.value, this)"

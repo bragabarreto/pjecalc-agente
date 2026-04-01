@@ -89,11 +89,14 @@ def gerar_previa(
         linhas.append("   Nenhum registro de histórico salarial identificado")
     else:
         for i, reg in enumerate(historico_salarial):
+            nome = reg.get("nome") or "Salário"
             dt_inicio = _fmt(reg.get("data_inicio"))
             dt_fim = _fmt(reg.get("data_fim"))
-            salario = _fmt_valor(reg.get("salario"))
-            motivo = reg.get("motivo") or "—"
-            linhas.append(f"   [{i}] {dt_inicio} a {dt_fim} — {salario} ({motivo})")
+            valor = _fmt_valor(reg.get("valor") or reg.get("salario"))
+            fgts = "FGTS" if reg.get("incidencia_fgts", True) else ""
+            cs = "CS" if reg.get("incidencia_cs", True) else ""
+            incid = " | ".join(filter(None, [fgts, cs]))
+            linhas.append(f"   [{i}] {nome}: {dt_inicio} a {dt_fim} — {valor} [{incid}]")
     linhas.append("")
 
     # 2b. Faltas
@@ -352,10 +355,12 @@ def aplicar_edicao_usuario(
 
     _ARRAY_DEFAULTS: dict[str, dict[str, Any]] = {
         "historico_salarial": {
+            "nome": "Salário",
             "data_inicio": None,
             "data_fim": None,
-            "salario": None,
-            "motivo": None,
+            "valor": None,
+            "incidencia_fgts": True,
+            "incidencia_cs": True,
         },
         "faltas": {
             "data_inicio": None,

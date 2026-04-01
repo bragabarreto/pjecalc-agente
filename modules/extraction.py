@@ -197,12 +197,22 @@ _RELATORIO_PROMPT = """Converta o relatório abaixo para o schema JSON do PJE-Ca
     → Preencher historico_salarial como lista de entradas por período
 
 **HISTÓRICO SALARIAL DETALHADO** → preenche "historico_salarial":
-Se houver tabela de evolução salarial (salários diferentes em períodos distintos):
+Cada entrada representa uma BASE DE CÁLCULO no PJE-Calc com nome, período e valor mensal.
+Pode haver MÚLTIPLOS históricos no mesmo processo (ex: "Salário" + "Salário Devido" para
+equiparação salarial, "Adicional Noturno Pago" para diferenças, piso salarial da norma coletiva).
+
   historico_salarial: [
-    {{"data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 1518.00}},
-    {{"data_inicio": "01/09/2024", "data_fim": "28/02/2025", "valor": 1800.00}}
+    {{"nome": "Salário", "data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 1518.00, "incidencia_fgts": true, "incidencia_cs": true}},
+    {{"nome": "Salário", "data_inicio": "01/09/2024", "data_fim": "28/02/2025", "valor": 1800.00, "incidencia_fgts": true, "incidencia_cs": true}}
   ]
-Se houver apenas um salário uniforme durante todo o contrato → historico_salarial = []
+
+- "nome": tipo da base ("Salário", "Salário Pago", "Salário Devido", "Adicional Noturno Pago", etc.)
+  Se não especificado na sentença, usar "Salário".
+- "incidencia_fgts": true se a parcela incide para fins de FGTS (default: true para salário)
+- "incidencia_cs": true se incide para Contribuição Social/INSS (default: true para salário)
+- Se salário uniforme durante todo o contrato → historico_salarial com UMA entrada do período completo
+- Se houver equiparação salarial, desvio de função ou piso normativo: criar entradas SEPARADAS
+  com nomes distintos (ex: "Salário Pago" e "Salário Devido")
 
 **FALTAS** → preenche "faltas":
 Se a sentença mencionar faltas injustificadas ou justificadas, extrair:
@@ -1061,9 +1071,12 @@ _EXTRACTION_SCHEMA: dict = {
                 "type": "object", "additionalProperties": False,
                 "required": ["data_inicio","data_fim","valor"],
                 "properties": {
-                    "data_inicio": {"type": "string"},
-                    "data_fim":    {"type": "string"},
-                    "valor":       {"type": "number"},
+                    "data_inicio":     {"type": "string"},
+                    "data_fim":        {"type": "string"},
+                    "valor":           {"type": "number"},
+                    "nome":            {"type": ["string", "null"]},
+                    "incidencia_fgts": {"type": ["boolean", "null"]},
+                    "incidencia_cs":   {"type": ["boolean", "null"]},
                 },
             },
         },
