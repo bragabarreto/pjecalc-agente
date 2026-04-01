@@ -123,7 +123,7 @@ fi
 # Propriedades Java comuns a todas as estratégias de inicialização:
 #   -Dfile.encoding=ISO-8859-1  → preserva encoding original do PJE-Calc
 #   -Duser.timezone=GMT-3       → fuso horário Brasil (Brasília)
-#   -Xms256m -Xmx1536m           → heap 1.5GB (VM com 6GB RAM; 50% para JVM)
+#   -Xms256m -Xmx2048m           → heap 2GB (VM com 6GB RAM)
 #   -XX:+UseG1GC               → GC moderno para heaps > 1GB
 #   -XX:MaxPermSize=512m        → apenas Java 8 (ignorado no 11+)
 #   -Djava.awt.headless=true    → sem GUI Swing → sem JOptionPane bloqueante
@@ -133,7 +133,7 @@ JAVA_BASE_OPTS="$AGENT_FLAG
     -Dseguranca.pjecalc.tokenServicos=pW4jZ4g9VM5MCy6FnB5pEfQe
     -Dseguranca.pjekz.servico.contexto=https://pje.trt8.jus.br/pje-seguranca
     -Xms256m
-    -Xmx1536m
+    -Xmx2048m
     -XX:MaxPermSize=512m
     -XX:+UseG1GC
     -XX:+HeapDumpOnOutOfMemoryError

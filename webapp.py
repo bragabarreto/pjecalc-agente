@@ -1124,7 +1124,7 @@ async def executar_automacao_sse(
         while True:
             try:
                 kind, value = await loop.run_in_executor(
-                    None, lambda: fila.get(timeout=25)
+                    None, lambda: fila.get(timeout=90)
                 )
             except _queue.Empty:
                 yield f"data: {json.dumps({'keepalive': True})}\n\n"

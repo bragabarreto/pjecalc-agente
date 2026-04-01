@@ -101,7 +101,7 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                                     _exc_restart.append(_e)
                             _t = threading.Thread(target=_restart_in_fresh_thread, daemon=True)
                             _t.start()
-                            _t.join(timeout=30)
+                            _t.join(timeout=90)
                             if _exc_restart:
                                 raise _exc_restart[0]
                             self._instalar_monitor_ajax()
@@ -429,7 +429,11 @@ class PJECalcPlaywright:
         self._pw = sync_playwright().__enter__()
         # --no-sandbox e --disable-dev-shm-usage: obrigatórios em Docker/Railway
         # --disable-gpu / --disable-software-rasterizer: headless sem GPU dedicada
-        base_args = ["--no-sandbox", "--disable-dev-shm-usage"]
+        base_args = [
+            "--no-sandbox", "--disable-dev-shm-usage",
+            "--disable-extensions", "--disable-background-networking",
+            "--disable-default-apps", "--no-first-run",
+        ]
         if headless:
             base_args += ["--disable-gpu", "--disable-software-rasterizer"]
         else:
@@ -446,7 +450,7 @@ class PJECalcPlaywright:
             locale="pt-BR",
         )
         self._page = ctx.new_page()
-        self._page.set_default_timeout(30000)
+        self._page.set_default_timeout(60000)
         # Interceptar erros HTTP e erros JS (diagnóstico em produção)
         # Excluir arquivos estáticos/fontes que geram 404 inofensivos (tahoma.ttf, etc.)
         _STATIC_EXTS = ('.ttf', '.woff', '.woff2', '.otf', '.eot',
