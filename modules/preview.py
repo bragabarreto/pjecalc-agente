@@ -23,6 +23,12 @@ def gerar_previa(
     prescricao = dados.get("prescricao", {})
     aviso = dados.get("aviso_previo", {})
     fgts = dados.get("fgts", {})
+    if isinstance(fgts, str):
+        try:
+            import json as _json
+            fgts = _json.loads(fgts)
+        except Exception:
+            fgts = {}
     honorarios = dados.get("honorarios", [])
     correcao = dados.get("correcao_juros", {})
     contrib = dados.get("contribuicao_social", {})
