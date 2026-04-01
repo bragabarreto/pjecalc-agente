@@ -82,6 +82,48 @@ def gerar_previa(
         "",
     ]
 
+    # 2a. Histórico Salarial
+    historico_salarial = dados.get("historico_salarial", [])
+    linhas.append(f"HISTÓRICO SALARIAL ({len(historico_salarial)} registro(s))")
+    if not historico_salarial:
+        linhas.append("   Nenhum registro de histórico salarial identificado")
+    else:
+        for i, reg in enumerate(historico_salarial):
+            dt_inicio = _fmt(reg.get("data_inicio"))
+            dt_fim = _fmt(reg.get("data_fim"))
+            salario = _fmt_valor(reg.get("salario"))
+            motivo = reg.get("motivo") or "—"
+            linhas.append(f"   [{i}] {dt_inicio} a {dt_fim} — {salario} ({motivo})")
+    linhas.append("")
+
+    # 2b. Faltas
+    faltas = dados.get("faltas", [])
+    linhas.append(f"FALTAS ({len(faltas)} registro(s))")
+    if not faltas:
+        linhas.append("   Nenhuma falta identificada")
+    else:
+        for i, falta in enumerate(faltas):
+            dt_inicio = _fmt(falta.get("data_inicio"))
+            dt_fim = _fmt(falta.get("data_fim"))
+            justificada = "Justificada" if falta.get("justificada") else "Injustificada"
+            dias = falta.get("dias") or "—"
+            linhas.append(f"   [{i}] {dt_inicio} a {dt_fim} — {dias} dia(s), {justificada}")
+    linhas.append("")
+
+    # 2c. Férias
+    ferias = dados.get("ferias", [])
+    linhas.append(f"FÉRIAS ({len(ferias)} registro(s))")
+    if not ferias:
+        linhas.append("   Nenhum período de férias identificado")
+    else:
+        for i, fer in enumerate(ferias):
+            dt_inicio = _fmt(fer.get("data_inicio"))
+            dt_fim = _fmt(fer.get("data_fim"))
+            situacao = fer.get("situacao") or "—"
+            dias = fer.get("dias") or "—"
+            linhas.append(f"   [{i}] {dt_inicio} a {dt_fim} — {dias} dia(s), {situacao}")
+    linhas.append("")
+
     # 3. Verbas
     total_verbas = len(todas_verbas) + len(reflexas)
     linhas.append(f"VERBAS ({total_verbas} identificadas)")
@@ -251,6 +293,15 @@ def aplicar_edicao_usuario(
     - 'honorarios[N].subcampo'      → dados["honorarios"][N]["subcampo"] = novo_valor
     - 'honorarios.add'              → append registro vazio à lista
     - 'honorarios.remove[N]'        → remove índice N da lista
+    - 'historico_salarial[N].campo' → dados["historico_salarial"][N]["campo"] = novo_valor
+    - 'historico_salarial.add'      → append registro vazio
+    - 'historico_salarial.remove[N]'→ remove índice N
+    - 'faltas[N].campo'             → dados["faltas"][N]["campo"] = novo_valor
+    - 'faltas.add'                  → append registro vazio
+    - 'faltas.remove[N]'            → remove índice N
+    - 'ferias[N].campo'             → dados["ferias"][N]["campo"] = novo_valor
+    - 'ferias.add'                  → append registro vazio
+    - 'ferias.remove[N]'            → remove índice N
     - 'campo_simples'               → dados["campo_simples"] = novo_valor
     """
     import re as _re
@@ -295,6 +346,63 @@ def aplicar_edicao_usuario(
         if 0 <= idx < len(lista):
             lista.pop(idx)
             dados["honorarios"] = lista
+        return dados
+
+    # ── Arrays genéricos: historico_salarial, faltas, ferias ─────────────────
+
+    _ARRAY_DEFAULTS: dict[str, dict[str, Any]] = {
+        "historico_salarial": {
+            "data_inicio": None,
+            "data_fim": None,
+            "salario": None,
+            "motivo": None,
+        },
+        "faltas": {
+            "data_inicio": None,
+            "data_fim": None,
+            "dias": None,
+            "justificada": False,
+        },
+        "ferias": {
+            "data_inicio": None,
+            "data_fim": None,
+            "dias": None,
+            "situacao": None,
+        },
+    }
+
+    _ARRAY_NAMES = "|".join(_ARRAY_DEFAULTS.keys())
+
+    # array[N].campo
+    m = _re.match(rf'^({_ARRAY_NAMES})\[(\d+)\]\.(.+)$', campo)
+    if m:
+        arr_name = m.group(1)
+        idx = int(m.group(2))
+        subcampo = m.group(3)
+        lista = dados.get(arr_name, [])
+        if 0 <= idx < len(lista):
+            lista[idx][subcampo] = novo_valor
+            dados[arr_name] = lista
+        return dados
+
+    # array.add
+    m = _re.match(rf'^({_ARRAY_NAMES})\.add$', campo)
+    if m:
+        arr_name = m.group(1)
+        lista = dados.get(arr_name, [])
+        lista.append(dict(_ARRAY_DEFAULTS[arr_name]))
+        dados[arr_name] = lista
+        return dados
+
+    # array.remove[N]
+    m = _re.match(rf'^({_ARRAY_NAMES})\.remove\[(\d+)\]$', campo)
+    if m:
+        arr_name = m.group(1)
+        idx = int(m.group(2))
+        lista = dados.get(arr_name, [])
+        if 0 <= idx < len(lista):
+            lista.pop(idx)
+            dados[arr_name] = lista
         return dados
 
     # secao.subcampo padrão

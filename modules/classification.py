@@ -205,6 +205,25 @@ VERBAS_PREDEFINIDAS: dict[str, dict[str, Any]] = {
     },
 }
 
+# ── Tabela normalizada para lookup robusto ────────────────────────────────────
+# _normalizar_chave() remove preposições ("de", "do", "da"), mas as chaves acima
+# contêm essas preposições. Sem normalização, "saldo salario" (normalizado da
+# sentença) não encontra a chave "saldo de salario". Solução: manter ambas formas.
+_VERBAS_NORMALIZADAS: dict[str, dict[str, Any]] = {}
+for _k, _v in VERBAS_PREDEFINIDAS.items():
+    _VERBAS_NORMALIZADAS[_k] = _v  # chave original
+    import unicodedata as _ud
+    _norm = _ud.normalize("NFD", _k.lower())
+    _norm = "".join(c for c in _norm if _ud.category(c) != "Mn")
+    _norm = _norm.replace("º", "").replace("°", "").replace(".", "")
+    for _stop in [" da ", " de ", " do ", " das ", " dos ", " a ", " o "]:
+        _norm = _norm.replace(_stop, " ")
+    _norm = _norm.strip()
+    if _norm != _k:
+        _VERBAS_NORMALIZADAS[_norm] = _v
+del _k, _v, _norm, _ud
+
+
 # Mapeamento de reflexas típicas (Manual, Seção 3.4)
 REFLEXAS_TIPICAS: dict[str, list[dict[str, Any]]] = {
     "Horas Extras": [
@@ -297,8 +316,8 @@ def classificar_verba(verba: dict[str, Any]) -> dict[str, Any]:
     nome = verba.get("nome_sentenca", "")
     chave = _normalizar_chave(nome)
 
-    # Busca direta
-    config_pjec = VERBAS_PREDEFINIDAS.get(chave)
+    # Busca direta (tabela normalizada cobre ambas formas)
+    config_pjec = _VERBAS_NORMALIZADAS.get(chave)
 
     # Busca por similaridade (substrings)
     if not config_pjec:
@@ -341,7 +360,7 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
     for verba in verbas:
         nome = verba.get("nome_sentenca", "")
         chave = _normalizar_chave(nome)
-        config_pjec = VERBAS_PREDEFINIDAS.get(chave) or _buscar_por_similaridade(chave)
+        config_pjec = _VERBAS_NORMALIZADAS.get(chave) or _buscar_por_similaridade(chave)
         if config_pjec:
             resultado = {**verba, **config_pjec}
             resultado["lancamento"] = "Expresso"
@@ -397,25 +416,31 @@ def _normalizar_chave(nome: str) -> str:
 
 
 def _buscar_por_similaridade(chave: str) -> dict[str, Any] | None:
-    """Busca por substring nas chaves do dicionário de verbas."""
-    # Palavras-chave relevantes presentes na chave buscada
-    palavras = chave.split()
+    """Busca por similaridade de string (SequenceMatcher) nas verbas predefinidas."""
+    from difflib import SequenceMatcher
 
     melhor_match: dict[str, Any] | None = None
-    melhor_score = 0
+    melhor_score = 0.0
+    segundo_score = 0.0
 
-    for chave_ref, config in VERBAS_PREDEFINIDAS.items():
-        palavras_ref = set(chave_ref.split())
-        palavras_busca = set(palavras)
-        intersecao = palavras_ref & palavras_busca
-        if not intersecao:
-            continue
-        score = len(intersecao) / max(len(palavras_ref), len(palavras_busca))
-        if score > melhor_score and score >= 0.5:
+    for chave_ref, config in _VERBAS_NORMALIZADAS.items():
+        # Prefixo exato (ex: "ferias proporcionais" casa com "ferias proporcionais 1/3")
+        if chave_ref.startswith(chave) or chave.startswith(chave_ref):
+            score = 0.95
+        else:
+            score = SequenceMatcher(None, chave, chave_ref).ratio()
+
+        if score > melhor_score:
+            segundo_score = melhor_score
             melhor_score = score
             melhor_match = config
+        elif score > segundo_score:
+            segundo_score = score
 
-    return melhor_match
+    # Exigir alta similaridade E diferença clara do segundo candidato (sem ambiguidade)
+    if melhor_score >= 0.75 and (melhor_score - segundo_score) >= 0.10:
+        return melhor_match
+    return None
 
 
 def _classificar_lote_via_llm(verbas_nao_reconhecidas: list[dict[str, Any]]) -> list[dict[str, Any]]:

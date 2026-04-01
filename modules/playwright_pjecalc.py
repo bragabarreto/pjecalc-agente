@@ -1911,6 +1911,7 @@ class PJECalcPlaywright:
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
         self._clicar_menu_lateral("Verbas")
+        self._verificar_pagina_pjecalc()  # detectar HTTP 500 pós-navegação
         self._verificar_secao_ativa("Verba")
         self._page.wait_for_timeout(1500)
 
@@ -2022,7 +2023,7 @@ class PJECalcPlaywright:
                         if (!nomeEl) continue;
                         const nomeNorm = norm(nomeEl.textContent.trim());
                         if (nomeNorm === nomeLower || nomeNorm.includes(nomeLower)
-                                || nomeLower.includes(nomeNorm.substring(0, Math.min(nomeNorm.length, 12)))) {
+                                || nomeNorm.includes(nomeLower.substring(0, Math.min(nomeLower.length, 12)))) {
                             const cb = row.querySelector('input[type="checkbox"]');
                             if (cb) {
                                 if (!cb.checked) cb.click();
@@ -2237,20 +2238,28 @@ class PJECalcPlaywright:
             }""")
             self._log(f"  → Manual Novo: '{_clicou_novo}'")
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
-            if _clicou_novo is None:
-                # Tentativa 2: _clicar_novo() via seletor de ID
-                self._clicar_novo()
+            # Aguardar formulário com retry (AJAX pode demorar)
+            _form_abriu = False
+            _form_selector = "[id$='descricao'], [id$='descricaoVerba'], [id$='nomeVerba']"
+            for _tentativa in range(3):
+                if _clicou_novo is None and _tentativa == 0:
+                    self._clicar_novo()
                 self._aguardar_ajax()
-                self._page.wait_for_timeout(1500)
-                _form_abriu = self._page.locator(
-                    "[id$='descricao'], [id$='descricaoVerba'], [id$='nomeVerba']"
-                ).count() > 0
-                if not _form_abriu:
-                    self._log(f"  ⚠ Verba '{nome}': formulário Novo não abriu — ignorada.")
-                    continue
-            else:
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(2000)
+                try:
+                    self._page.wait_for_selector(
+                        _form_selector, state="visible", timeout=5000
+                    )
+                    _form_abriu = True
+                    break
+                except Exception:
+                    if _tentativa < 2:
+                        self._log(f"  → Retentando abrir formulário Novo ({_tentativa+2}/3)…")
+                        # Re-clicar Novo
+                        self._clicar_novo()
+                    else:
+                        self._log(f"  ⚠ Verba '{nome}': formulário não abriu após 3 tentativas — ignorada.")
+            if not _form_abriu:
+                continue
             if i == 0:
                 self.mapear_campos("verba_form_manual")
 
@@ -2326,6 +2335,7 @@ class PJECalcPlaywright:
         if not navegou:
             navegou = self._clicar_menu_lateral("Fundo de Garantia", obrigatorio=False)
         if navegou:
+            self._verificar_pagina_pjecalc()
             navegou = self._verificar_secao_ativa("FGTS")
         if not navegou:
             self._log("  → Seção FGTS não encontrada no menu — incidência já configurada por verba.")
@@ -2384,6 +2394,7 @@ class PJECalcPlaywright:
         if not navegou:
             self._log("  → Seção Contribuição Social não encontrada — ignorado.")
             return
+        self._verificar_pagina_pjecalc()
         # Verificar via URL (heading pode ser "Dados do Cálculo" pelo template compartilhado)
         if "inss" not in self._page.url.lower():
             self._log(f"  ⚠ INSS: URL inesperada ({self._page.url[-60:]}) — tentando continuar")
@@ -2506,6 +2517,155 @@ class PJECalcPlaywright:
         )
         self._log("Fase 5b concluída.")
 
+    # ── Fase 5c: Faltas ───────────────────────────────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_faltas(self, dados: dict) -> None:
+        """
+        Preenche faltas (ausências) do reclamante no PJE-Calc.
+        Dados esperados em dados["faltas"]: lista de dicts com
+        data_inicial, data_final, tipo (ou justificada).
+        """
+        faltas = dados.get("faltas", [])
+        if not faltas:
+            self._log("Fase 5c — Faltas: sem entradas extraídas — ignorado.")
+            return
+
+        self._log(f"Fase 5c — Faltas: {len(faltas)} falta(s) extraída(s)…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+
+        navegou = self._clicar_menu_lateral("Faltas", obrigatorio=False)
+        if not navegou:
+            self._log("  → Seção Faltas não encontrada no menu — ignorado.")
+            return
+
+        self._verificar_pagina_pjecalc()
+        self.mapear_campos("fase5c_faltas")
+
+        for i, falta in enumerate(faltas):
+            self._clicar_novo()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+
+            # Data inicial
+            dt_ini = falta.get("data_inicial", "")
+            if dt_ini:
+                self._preencher_data("dataInicial", dt_ini, False)
+                self._preencher_data("dataInicio", dt_ini, False)
+
+            # Data final
+            dt_fim = falta.get("data_final", "")
+            if dt_fim:
+                self._preencher_data("dataFinal", dt_fim, False)
+                self._preencher_data("dataFim", dt_fim, False)
+
+            # Tipo / justificada
+            tipo = falta.get("tipo", falta.get("justificada", ""))
+            if isinstance(tipo, bool):
+                tipo = "JUSTIFICADA" if tipo else "INJUSTIFICADA"
+            if tipo:
+                self._selecionar("tipo", tipo, obrigatorio=False)
+                self._selecionar("tipoFalta", tipo, obrigatorio=False)
+
+            # Motivo (campo opcional)
+            motivo = falta.get("motivo", "")
+            if motivo:
+                self._preencher("motivo", motivo, False)
+                self._preencher("descricao", motivo, False)
+
+            self._clicar_salvar()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            self._log(f"  ✓ Falta {i+1}: {dt_ini} a {dt_fim} ({tipo})")
+
+        self._log("Fase 5c concluída.")
+
+    # ── Fase 5d: Férias ───────────────────────────────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_ferias(self, dados: dict) -> None:
+        """
+        Preenche períodos de férias do reclamante no PJE-Calc.
+        Dados esperados em dados["ferias"]: lista de dicts com
+        situacao, periodo_inicio, periodo_fim, abono, dobra.
+        """
+        ferias = dados.get("ferias", [])
+        if not ferias:
+            self._log("Fase 5d — Férias: sem entradas extraídas — ignorado.")
+            return
+
+        self._log(f"Fase 5d — Férias: {len(ferias)} período(s) extraído(s)…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+
+        navegou = self._clicar_menu_lateral("Férias", obrigatorio=False)
+        if not navegou:
+            self._log("  → Seção Férias não encontrada no menu — ignorado.")
+            return
+
+        self._verificar_pagina_pjecalc()
+        self.mapear_campos("fase5d_ferias")
+
+        for i, entrada in enumerate(ferias):
+            self._clicar_novo()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+
+            # Situação (ex: "VENCIDAS", "PROPORCIONAIS", "SIMPLES")
+            situacao = entrada.get("situacao", "")
+            if situacao:
+                self._selecionar("situacao", situacao, obrigatorio=False)
+                self._selecionar("tipoFerias", situacao, obrigatorio=False)
+
+            # Período aquisitivo — início
+            per_ini = entrada.get("periodo_inicio", "")
+            if per_ini:
+                self._preencher_data("periodoInicio", per_ini, False)
+                self._preencher_data("dataInicio", per_ini, False)
+                self._preencher_data("dataInicial", per_ini, False)
+
+            # Período aquisitivo — fim
+            per_fim = entrada.get("periodo_fim", "")
+            if per_fim:
+                self._preencher_data("periodoFim", per_fim, False)
+                self._preencher_data("dataFim", per_fim, False)
+                self._preencher_data("dataFinal", per_fim, False)
+
+            # Abono pecuniário (1/3 constitucional convertido em dinheiro)
+            abono = entrada.get("abono", False)
+            if isinstance(abono, bool):
+                self._marcar_checkbox("abono", abono)
+                self._marcar_checkbox("abonoPecuniario", abono)
+            elif abono:
+                self._marcar_checkbox("abono", True)
+                self._marcar_checkbox("abonoPecuniario", True)
+
+            # Férias em dobro (art. 137 CLT — pagas fora do prazo)
+            dobra = entrada.get("dobra", False)
+            if isinstance(dobra, bool):
+                self._marcar_checkbox("dobra", dobra)
+                self._marcar_checkbox("feriasDobro", dobra)
+            elif dobra:
+                self._marcar_checkbox("dobra", True)
+                self._marcar_checkbox("feriasDobro", True)
+
+            # Dias de férias (campo opcional)
+            dias = entrada.get("dias", "")
+            if dias:
+                self._preencher("dias", str(dias), False)
+                self._preencher("diasFerias", str(dias), False)
+
+            self._clicar_salvar()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            self._log(
+                f"  ✓ Férias {i+1}: {per_ini} a {per_fim}"
+                f" (situação={situacao}, abono={abono}, dobra={dobra})"
+            )
+
+        self._log("Fase 5d concluída.")
+
     # ── Fase 6: Parâmetros de Atualização ─────────────────────────────────────
 
     @retry(max_tentativas=3)
@@ -2530,6 +2690,7 @@ class PJECalcPlaywright:
         if not navegou:
             self._log("  → Seção IRPF não encontrada no menu — ignorado.")
             return
+        self._verificar_pagina_pjecalc()
         # Verificar via URL (heading pode ser "Dados do Cálculo" pelo template compartilhado)
         if "irpf" not in self._page.url.lower():
             self._log(f"  ⚠ IRPF: URL inesperada ({self._page.url[-60:]}) — tentando continuar")
@@ -2600,6 +2761,7 @@ class PJECalcPlaywright:
         if not navegou:
             self._log("  → Honorários: navegação falhou — ignorado.")
             return
+        self._verificar_pagina_pjecalc()
         # Verificar via URL (heading pode ser "Dados do Cálculo" pelo template compartilhado)
         self._verificar_secao_ativa("Honorár")  # só loga, não bloqueia
         if "honorarios" not in self._page.url.lower():
@@ -2668,27 +2830,33 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
-        # Honorários periciais (campo separado, fora do loop)
+        # Honorários periciais — criar via fluxo Novo (não é campo standalone)
         if periciais is not None:
             self._log(f"  → Honorários periciais: {_fmt_br(periciais)}")
+            # Tentar campo standalone primeiro (versões antigas do PJE-Calc)
             preencheu = (
                 self._preencher("honorariosPericiais", _fmt_br(periciais), False)
                 or self._preencher("valorPericiais", _fmt_br(periciais), False)
-                or self._preencher("honorariosPerito", _fmt_br(periciais), False)
             )
             if not preencheu:
-                for lbl in ["Honorários Periciais", "Honorários do Perito", "Periciais"]:
-                    loc = self._page.get_by_label(lbl, exact=False)
-                    if loc.count() > 0:
-                        try:
-                            loc.first.fill(_fmt_br(periciais))
-                            loc.first.dispatch_event("change")
-                            self._aguardar_ajax()
-                            preencheu = True
-                            self._log(f"  ✓ Periciais via label '{lbl}'")
-                            break
-                        except Exception:
-                            continue
+                # Fluxo padrão: criar novo honorário do tipo Periciais
+                _clicou = (
+                    self._clicar_botao_id("incluir")
+                    or self._clicar_botao_id("novo")
+                )
+                if not _clicou:
+                    self._clicar_novo()
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(800)
+                # Selecionar tipo periciais
+                for _tipo_opt in ["PERICIAIS", "Periciais", "HONORARIOS_PERICIAIS"]:
+                    if self._selecionar("tipoHonorario", _tipo_opt, obrigatorio=False):
+                        break
+                self._marcar_radio("tipoValor", "INFORMADO")
+                preencheu = (
+                    self._preencher("valorInformado", _fmt_br(periciais), False)
+                    or self._preencher("valorFixo", _fmt_br(periciais), False)
+                )
             if preencheu:
                 self._clicar_salvar()
                 self._aguardar_ajax()
@@ -2792,6 +2960,18 @@ class PJECalcPlaywright:
             self._aguardar_ajax(90000)
 
         self._page.wait_for_timeout(2000)
+
+        # Validar resultado da liquidação antes de exportar
+        try:
+            body_text = self._page.locator("body").text_content(timeout=5000) or ""
+            for indicador in ["Não foi possível", "inconsistente", "pendente", "Erro interno"]:
+                if indicador.lower() in body_text.lower():
+                    self._log(f"  ⚠ Liquidação pode ter falhado: '{indicador}' detectado na página")
+                    self._screenshot_fase("liquidacao_erro")
+                    break
+        except Exception:
+            pass
+
         self._log("  ✓ Liquidação AJAX concluída — navegando para Exportação…")
 
         # ── Passo 2: Exportação → capturar .PJC ──────────────────────────────────
@@ -2952,6 +3132,12 @@ class PJECalcPlaywright:
         _progress(6)
         self.fase_cartao_ponto(dados)
         self._screenshot_fase("06_cartao_ponto")
+
+        self.fase_faltas(dados)
+        self._screenshot_fase("06b_faltas")
+
+        self.fase_ferias(dados)
+        self._screenshot_fase("06c_ferias")
 
         _progress(7)
         self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))

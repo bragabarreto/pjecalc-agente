@@ -305,10 +305,170 @@
       </div>
     </div>
 
-    <!-- ═══ 3. PRESCRIÇÃO ═══ -->
+    <!-- ═══ 3. HISTÓRICO SALARIAL ═══ -->
+    {% set hist_sal = dados.get('historico_salarial', []) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-hist-salarial')">
+        3. Histórico Salarial
+        <span class="confianca-badge conf-alta">{{ hist_sal|length }} registro(s)</span>
+      </div>
+      <div class="secao-corpo recolhido" id="s-hist-salarial">
+        {% if hist_sal %}
+        {% for hs in hist_sal %}
+        {% set hi = loop.index0 %}
+        <div class="verba-card" style="margin-bottom:10px;">
+          <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
+            <strong style="font-size:0.9rem; color:#1a3a6b;">Período {{ loop.index }}</strong>
+          </div>
+          <div style="padding:12px;">
+            <div class="campos-grid col3">
+              <div class="campo-form">
+                <label>Data Início</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ hs.get('data_inicio', '') or '' }}"
+                       onchange="salvarCampo('historico_salarial[{{ hi }}].data_inicio', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Data Fim</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ hs.get('data_fim', '') or '' }}"
+                       onchange="salvarCampo('historico_salarial[{{ hi }}].data_fim', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Valor (R$)</label>
+                <input type="number" step="0.01" min="0"
+                       value="{{ hs.get('valor', '') or '' }}"
+                       onchange="salvarCampo('historico_salarial[{{ hi }}].valor', this.value, this)"
+                       placeholder="0,00">
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="color:#6c757d; font-size:0.9rem;">Nenhum registro de histórico salarial extraído.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ═══ 4. FALTAS ═══ -->
+    {% set faltas_lista = dados.get('faltas', []) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-faltas')">
+        4. Faltas
+        <span class="confianca-badge conf-alta">{{ faltas_lista|length }} registro(s)</span>
+      </div>
+      <div class="secao-corpo recolhido" id="s-faltas">
+        {% if faltas_lista %}
+        {% for falta in faltas_lista %}
+        {% set fi = loop.index0 %}
+        <div class="verba-card" style="margin-bottom:10px;">
+          <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
+            <strong style="font-size:0.9rem; color:#1a3a6b;">Falta {{ loop.index }}</strong>
+          </div>
+          <div style="padding:12px;">
+            <div class="campos-grid">
+              <div class="campo-form">
+                <label>Data Inicial</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ falta.get('data_inicial', '') or '' }}"
+                       onchange="salvarCampo('faltas[{{ fi }}].data_inicial', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Data Final</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ falta.get('data_final', '') or '' }}"
+                       onchange="salvarCampo('faltas[{{ fi }}].data_final', this.value, this)">
+              </div>
+              <div class="campo-form campo-col2">
+                <label>Descrição</label>
+                <input type="text"
+                       value="{{ falta.get('descricao', '') or '' }}"
+                       onchange="salvarCampo('faltas[{{ fi }}].descricao', this.value, this)"
+                       placeholder="Ex: Falta injustificada">
+              </div>
+            </div>
+            <div class="checkbox-row" style="margin-top:8px;">
+              <input type="checkbox" id="falta-just-{{ fi }}"
+                     {{ 'checked' if falta.get('justificada') }}
+                     onchange="salvarCampo('faltas[{{ fi }}].justificada', this.checked ? 'true' : 'false', this)">
+              <label for="falta-just-{{ fi }}">Justificada</label>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="color:#6c757d; font-size:0.9rem;">Nenhuma falta registrada.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ═══ 5. FÉRIAS ═══ -->
+    {% set ferias_lista = dados.get('ferias', []) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-ferias')">
+        5. Férias
+        <span class="confianca-badge conf-alta">{{ ferias_lista|length }} registro(s)</span>
+      </div>
+      <div class="secao-corpo recolhido" id="s-ferias">
+        {% if ferias_lista %}
+        {% for fer in ferias_lista %}
+        {% set fri = loop.index0 %}
+        <div class="verba-card" style="margin-bottom:10px;">
+          <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
+            <strong style="font-size:0.9rem; color:#1a3a6b;">Férias {{ loop.index }}</strong>
+          </div>
+          <div style="padding:12px;">
+            <div class="campos-grid">
+              <div class="campo-form">
+                <label>Situação</label>
+                <select onchange="salvarCampo('ferias[{{ fri }}].situacao', this.value, this)">
+                  <option value="">— selecione —</option>
+                  <option value="Vencidas" {{ 'selected' if fer.get('situacao') == 'Vencidas' }}>Vencidas</option>
+                  <option value="Proporcionais" {{ 'selected' if fer.get('situacao') == 'Proporcionais' }}>Proporcionais</option>
+                  <option value="Gozadas" {{ 'selected' if fer.get('situacao') == 'Gozadas' }}>Gozadas</option>
+                </select>
+              </div>
+              <div class="campo-form">
+                <label>Período Início</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ fer.get('periodo_inicio', '') or '' }}"
+                       onchange="salvarCampo('ferias[{{ fri }}].periodo_inicio', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Período Fim</label>
+                <input type="text" placeholder="DD/MM/AAAA"
+                       value="{{ fer.get('periodo_fim', '') or '' }}"
+                       onchange="salvarCampo('ferias[{{ fri }}].periodo_fim', this.value, this)">
+              </div>
+            </div>
+            <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:8px;">
+              <div class="checkbox-row">
+                <input type="checkbox" id="fer-abono-{{ fri }}"
+                       {{ 'checked' if fer.get('abono') }}
+                       onchange="salvarCampo('ferias[{{ fri }}].abono', this.checked ? 'true' : 'false', this)">
+                <label for="fer-abono-{{ fri }}">Abono Pecuniário</label>
+              </div>
+              <div class="checkbox-row">
+                <input type="checkbox" id="fer-dobra-{{ fri }}"
+                       {{ 'checked' if fer.get('dobra') }}
+                       onchange="salvarCampo('ferias[{{ fri }}].dobra', this.checked ? 'true' : 'false', this)">
+                <label for="fer-dobra-{{ fri }}">Dobra (art. 137 CLT)</label>
+              </div>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="color:#6c757d; font-size:0.9rem;">Nenhum registro de férias extraído.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ═══ 6. PRESCRIÇÃO ═══ -->
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-prescricao')">
-        3. Prescrição
+        6. Prescrição
       </div>
       <div class="secao-corpo" id="s-prescricao">
         <div class="checkbox-row">
@@ -326,10 +486,10 @@
       </div>
     </div>
 
-    <!-- ═══ 4. AVISO PRÉVIO ═══ -->
+    <!-- ═══ 7. AVISO PRÉVIO ═══ -->
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-aviso')">
-        4. Aviso Prévio
+        7. Aviso Prévio
       </div>
       <div class="secao-corpo" id="s-aviso">
         <div class="campos-grid">
@@ -359,11 +519,11 @@
       </div>
     </div>
 
-    <!-- ═══ 5. FGTS ═══ -->
+    <!-- ═══ 8. FGTS ═══ -->
     {% set conf_fgts = dados.get('fgts', {}).get('confianca', 1.0) %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-fgts')">
-        5. FGTS
+        8. FGTS
         <span class="confianca-badge {{ 'conf-alta' if conf_fgts >= 0.8 else ('conf-media' if conf_fgts >= 0.5 else 'conf-baixa') }}">
           {{ (conf_fgts * 100)|int }}% confiança
         </span>
@@ -394,11 +554,11 @@
       </div>
     </div>
 
-    <!-- ═══ 6. HONORÁRIOS ═══ -->
+    <!-- ═══ 9. HONORÁRIOS ═══ -->
     {% set honorarios_lista = dados.get('honorarios', []) %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-honorarios')">
-        6. Honorários Advocatícios
+        9. Honorários Advocatícios
         <span class="confianca-badge conf-alta">{{ honorarios_lista|length }} registro(s)</span>
       </div>
       <div class="secao-corpo" id="s-honorarios">
@@ -490,11 +650,11 @@
       </div>
     </div>
 
-    <!-- ═══ 7. CORREÇÃO E JUROS ═══ -->
+    <!-- ═══ 10. CORREÇÃO E JUROS ═══ -->
     {% set conf_cj = dados.get('correcao_juros', {}).get('confianca', 1.0) %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-correcao')">
-        7. Correção Monetária e Juros
+        10. Correção Monetária e Juros
         <span class="confianca-badge {{ 'conf-alta' if conf_cj >= 0.8 else ('conf-media' if conf_cj >= 0.5 else 'conf-baixa') }}">
           {{ (conf_cj * 100)|int }}% confiança
         </span>
@@ -537,11 +697,11 @@
       </div>
     </div>
 
-    <!-- ═══ 8. CONTRIBUIÇÃO SOCIAL ═══ -->
+    <!-- ═══ 11. CONTRIBUIÇÃO SOCIAL ═══ -->
     {% set inss = dados.get('contribuicao_social', {}) %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-previdencia')">
-        8. Contribuição Previdenciária (INSS)
+        11. Contribuição Previdenciária (INSS)
       </div>
       <div class="secao-corpo" id="s-previdencia">
         <p style="font-size:0.84rem; color:#6c757d; margin:0 0 10px;">
@@ -584,12 +744,12 @@
       </div>
     </div>
 
-    <!-- ═══ 9. IMPOSTO DE RENDA ═══ -->
+    <!-- ═══ 12. IMPOSTO DE RENDA ═══ -->
     {% set ir = dados.get('imposto_renda', {}) %}
     {% set ir_apurar = ir.get('apurar') %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-ir')">
-        9. Imposto de Renda
+        12. Imposto de Renda
       </div>
       <div class="secao-corpo" id="s-ir">
         <div class="checkbox-row">
@@ -675,10 +835,10 @@
       </div>
     </div>
 
-    <!-- ═══ 10. VERBAS DEFERIDAS ═══ -->
+    <!-- ═══ 13. VERBAS DEFERIDAS ═══ -->
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-verbas')">
-        10. Verbas Deferidas
+        13. Verbas Deferidas
         <span class="confianca-badge conf-alta">{{ verbas|length }} verba(s)</span>
       </div>
       <div class="secao-corpo" id="s-verbas">
