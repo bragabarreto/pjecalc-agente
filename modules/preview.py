@@ -99,9 +99,9 @@ def gerar_previa(
             dt_inicio = _fmt(reg.get("data_inicio"))
             dt_fim = _fmt(reg.get("data_fim"))
             valor = _fmt_valor(reg.get("valor") or reg.get("salario"))
-            fgts = "FGTS" if reg.get("incidencia_fgts", True) else ""
-            cs = "CS" if reg.get("incidencia_cs", True) else ""
-            incid = " | ".join(filter(None, [fgts, cs]))
+            _fgts_flag = "FGTS" if reg.get("incidencia_fgts", True) else ""
+            _cs_flag = "CS" if reg.get("incidencia_cs", True) else ""
+            incid = " | ".join(filter(None, [_fgts_flag, _cs_flag]))
             linhas.append(f"   [{i}] {nome}: {dt_inicio} a {dt_fim} — {valor} [{incid}]")
     linhas.append("")
 
