@@ -1841,6 +1841,22 @@ class PJECalcPlaywright:
         if not self._tomcat_esta_vivo():
             raise RuntimeError("Tomcat morreu após navegação Expresso")
 
+        # Scroll para carregar TODAS as verbas (tabela <a4j:repeat> renderiza sob demanda)
+        try:
+            self._page.evaluate("""() => {
+                // Scroll em todos os containers possíveis para forçar renderização completa
+                const containers = document.querySelectorAll(
+                    '#formulario\\\\:listagem, table.list-check, .rich-table, .panelGrid, form'
+                );
+                for (const c of containers) {
+                    if (c.scrollHeight > c.clientHeight) c.scrollTop = c.scrollHeight;
+                }
+                window.scrollTo(0, document.body.scrollHeight);
+            }""")
+            self._page.wait_for_timeout(800)
+        except Exception:
+            pass
+
         # Listar verbas disponíveis (diagnóstico)
         try:
             _labels_exp = self._page.evaluate("""() =>
@@ -1851,7 +1867,7 @@ class PJECalcPlaywright:
                 })
                 .filter(Boolean)
             """)
-            self._log(f"  📋 Verbas Expresso disponíveis: {_labels_exp[:30]}")
+            self._log(f"  📋 Verbas Expresso disponíveis: {_labels_exp}")
         except Exception:
             pass
 
@@ -2017,33 +2033,39 @@ class PJECalcPlaywright:
                     }
                     const nomeLower = norm(nome);
                     const rows = [...document.querySelectorAll('tr')];
-                    // 1ª tentativa: exato ou contém o nome completo
+                    // Scroll para ver todas as linhas
+                    window.scrollTo(0, document.body.scrollHeight);
+
+                    // 1ª tentativa: match EXATO
                     for (const row of rows) {
                         const nomeEl = row.querySelector('[id*=":nome"]');
                         if (!nomeEl) continue;
                         const nomeNorm = norm(nomeEl.textContent.trim());
-                        if (nomeNorm === nomeLower || nomeNorm.includes(nomeLower)
-                                || nomeNorm.includes(nomeLower.substring(0, Math.min(nomeLower.length, 12)))) {
+                        if (nomeNorm === nomeLower) {
                             const cb = row.querySelector('input[type="checkbox"]');
-                            if (cb) {
-                                if (!cb.checked) cb.click();
-                                return nomeEl.textContent.trim();
-                            }
+                            if (cb) { if (!cb.checked) cb.click(); return nomeEl.textContent.trim(); }
                         }
                     }
-                    // 2ª tentativa: primeiras 2 palavras do nome
-                    const palavras = nomeLower.split(' ').slice(0, 2).join(' ');
-                    if (palavras.length >= 5) {
+                    // 2ª tentativa: célula CONTÉM o nome completo
+                    for (const row of rows) {
+                        const nomeEl = row.querySelector('[id*=":nome"]');
+                        if (!nomeEl) continue;
+                        const nomeNorm = norm(nomeEl.textContent.trim());
+                        if (nomeNorm.includes(nomeLower) || nomeLower.includes(nomeNorm)) {
+                            const cb = row.querySelector('input[type="checkbox"]');
+                            if (cb) { if (!cb.checked) cb.click(); return nomeEl.textContent.trim(); }
+                        }
+                    }
+                    // 3ª tentativa: todas as palavras-chave presentes (sem prefixo genérico)
+                    const palavras = nomeLower.split(' ').filter(p => p.length > 2);
+                    if (palavras.length >= 2) {
                         for (const row of rows) {
                             const nomeEl = row.querySelector('[id*=":nome"]');
                             if (!nomeEl) continue;
                             const nomeNorm = norm(nomeEl.textContent.trim());
-                            if (nomeNorm.includes(palavras)) {
+                            if (palavras.every(p => nomeNorm.includes(p))) {
                                 const cb = row.querySelector('input[type="checkbox"]');
-                                if (cb) {
-                                    if (!cb.checked) cb.click();
-                                    return nomeEl.textContent.trim();
-                                }
+                                if (cb) { if (!cb.checked) cb.click(); return nomeEl.textContent.trim(); }
                             }
                         }
                     }
@@ -2213,6 +2235,13 @@ class PJECalcPlaywright:
                     self._page.wait_for_timeout(800)
 
             _clicou_novo = self._page.evaluate("""() => {
+                // Prioridade 1: botão "Manual" (id="incluir") — cria verba manual
+                const btnManual = document.querySelector(
+                    '[id$="incluir"], input[value="Manual"], input[value="manual"]'
+                );
+                if (btnManual) { btnManual.click(); return 'MANUAL:' + btnManual.id; }
+
+                // Prioridade 2: botão "Novo" próximo ao filtro de nome
                 const filtro = document.querySelector('[id*="filtroNome"]');
                 if (filtro) {
                     let el = filtro;
@@ -2227,13 +2256,6 @@ class PJECalcPlaywright:
                         if (novos.length > 0) { novos[0].click(); return 'FILTRO:' + novos[0].id; }
                     }
                 }
-                const all = [...document.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
-                    .filter(e => {
-                        const t = (e.textContent||e.value||'').replace(/\\s+/g,' ').trim();
-                        return (t === 'Novo' || t === 'Nova')
-                            && !(e.className||'').toLowerCase().includes('menu');
-                    });
-                if (all.length > 0) { all[0].click(); return 'FB:' + all[0].id; }
                 return null;
             }""")
             self._log(f"  → Manual Novo: '{_clicou_novo}'")
