@@ -264,6 +264,10 @@ Se não mencionado → ferias = []
     incidencia_fgts: true para parcelas salariais; false para indenizatórias (férias + 1/3, aviso prévio indenizado, danos morais, multas)
     incidencia_inss: true para parcelas salariais; false para indenizatórias
     incidencia_ir: false para parcelas indenizatórias; true para salariais tributáveis
+    sumula_439: true se a sentença determinar juros desde o ajuizamento (Súmula 439 TST);
+                false (padrão) se juros desde o arbitramento/vencimento (danos morais sem Súmula 439,
+                danos materiais mensais, etc.). Aplicar apenas quando a sentença mencionar
+                explicitamente a Súmula 439 ou "juros desde o ajuizamento".
 
 **SEÇÃO 4 — FGTS E MULTA DE 40%** → preenche "fgts":
 - "Alíquota FGTS:" → fgts.aliquota (ex: 8% → 0.08)
@@ -1010,6 +1014,7 @@ _EXTRACTION_SCHEMA: dict = {
                     "incidencia_fgts":   {"type": "boolean"},
                     "incidencia_inss":   {"type": "boolean"},
                     "incidencia_ir":     {"type": "boolean"},
+                    "sumula_439":        {"type": ["boolean","null"]},
                     "verba_principal_ref":{"type": ["string","null"]},
                     "confianca":         {"type": "number"},
                 },

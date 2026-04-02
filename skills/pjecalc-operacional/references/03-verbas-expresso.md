@@ -220,3 +220,70 @@ Ambas as verbas devem ter reflexos em: **DSR/RSR, 13o Salário, Férias + 1/3, A
 - **Proporcionalização:** Garantir que o campo "Proporcionalizar" esteja marcado para meses "quebrados"
 - **Base de Cálculo Insuficiente:** Se a liquidação gerar alerta, retornar ao Histórico Salarial e conferir valores nas competências exatas da transferência
 - **Conferência em Relatório:** No "Resumo da Liquidação", validar se o adicional de 25% incidiu mensalmente sobre o salário base e se os reflexos aparecem proporcionalmente
+
+---
+
+## Configuração de Reflexos — Arquitetura Obrigatória
+
+> **Regra crítica:** Reflexos NÃO são verbas manuais autônomas. São configurados dentro de cada verba principal na listagem de verbas do cálculo.
+
+### O que são reflexos
+
+Reflexos são a repercussão de uma verba principal sobre outras verbas (ex: horas extras refletem no 13o salário, nas férias e no aviso prévio). No PJE-Calc, cada verba lançada tem um botão que abre sua lista de reflexos configuráveis.
+
+### Fluxo de configuração (pós-Expresso)
+
+| Passo | Ação | Observação |
+|---|---|---|
+| 1 | Salvar verbas no modo Expresso | As verbas aparecem na listagem |
+| 2 | Navegar para a listagem `verbas-para-calculo.jsf` | Menu lateral > Verbas |
+| 3 | Para cada verba principal: clicar no botão **"Verba Reflexa"** (à direita) | Ou link "Exibir" que expande os reflexos inline |
+| 4 | Marcar apenas os checkboxes dos reflexos **deferidos na sentença** | Não marcar reflexos não concedidos |
+| 5 | Salvar / confirmar | Alguns sistemas salvam automaticamente |
+| 6 | Repetir para cada verba que tem reflexos | |
+
+### Reflexos típicos por verba
+
+| Verba Principal | Reflexos Comuns |
+|---|---|
+| Hora Extra (50%, 75%, 100%) | DSR/RSR, 13o Salário, Férias + 1/3, Aviso Prévio, FGTS |
+| Adicional Noturno | DSR/RSR, 13o Salário, Férias + 1/3, Aviso Prévio |
+| Adicional de Insalubridade | 13o Salário, Férias + 1/3, Aviso Prévio |
+| Adicional de Periculosidade | 13o Salário, Férias + 1/3, Aviso Prévio |
+| Adicional de Transferência | 13o Salário, Férias + 1/3, Aviso Prévio, Multa 40% FGTS |
+| Diferença Salarial | 13o Salário, Férias + 1/3, Aviso Prévio, FGTS, Multa 477 |
+| Saldo de Salário | Multa Art. 467 CLT (quando aplicável) |
+
+### Verbas que NÃO devem ser criadas manualmente
+
+- **DSR/RSR** — Quando oriundo de verbas variáveis (HE, adicional noturno), configurar como reflexo da verba geradora, não como verba manual separada.
+
+### Multa FGTS 40% e Multa Art. 467 CLT
+
+Ambas são **checkboxes na aba FGTS** (Cálculo > FGTS), não verbas:
+
+| Verba | Onde fica | Como configurar |
+|---|---|---|
+| **Multa FGTS 40%** | Aba FGTS | Checkbox "Incluir multa rescisória de 40%" |
+| **Multa Art. 467 CLT** | Dentro da seção Multa 40% na aba FGTS | Sub-checkbox visível após marcar a multa 40% |
+
+Nunca criar estas como verbas manuais nem como reflexos via botão "Verba Reflexa". A extração JSON deve preencher `fgts.multa_40` e `fgts.multa_467` para que a automação as configure na fase de FGTS.
+
+### Automação Playwright — seletor do botão "Verba Reflexa"
+
+```javascript
+// Na linha da verba na listagem, buscar botão de reflexos
+const link = [...row.querySelectorAll('a, input[type="button"]')]
+    .find(a => {
+        const t = (a.textContent || a.value || '').trim().toLowerCase();
+        return t.includes('exibir') || t.includes('verba reflexa') || t.includes('reflexa');
+    });
+```
+
+Após clicar, aguardar AJAX e marcar checkboxes:
+```javascript
+// Checkboxes de reflexos ficam em elementos com id*="listaReflexo" ou id*="reflexo"
+const cbs = [...document.querySelectorAll(
+    'input[type="checkbox"][id*="listaReflexo"], input[type="checkbox"][id*="reflexo"]'
+)].filter(cb => cb.getBoundingClientRect().width > 0);
+```

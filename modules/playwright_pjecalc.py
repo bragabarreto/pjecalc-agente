@@ -892,19 +892,28 @@ class PJECalcPlaywright:
         # Tentativa 2: navegação por URL com conversationId do cálculo ativo
         # (mais confiável que busca textual quando IDs do menu são dinâmicos)
         _URL_SECTION_MAP = {
-            "Histórico Salarial":  "historico-salarial.jsf",        # era historicoSalarial.jsf
-            "Verbas":              "verba/verba-calculo.jsf",         # era verba/verbas-para-calculo.jsf (é subpágina do Expresso)
-            "FGTS":                "fgts.jsf",
-            "Honorários":          "honorarios.jsf",
-            "Liquidar":            "liquidacao.jsf",                 # era liquidar.jsf → 404
-            "Faltas":              "falta.jsf",
-            "Férias":              "ferias.jsf",
-            "Contribuição Social": "inss/inss.jsf",                  # era contribuicaoSocial.jsf → 404
-            "Contribuicao Social": "inss/inss.jsf",
-            "Imposto de Renda":    "irpf.jsf",                       # era impostoRenda.jsf
-            "Multas":              "multas-indenizacoes.jsf",         # era multas.jsf
-            "Dados do Cálculo":    "calculo.jsf",
-            "Imprimir":            "imprimir.jsf",
+            # URLs confirmadas por inspeção DOM (v2.15.1, TRT7)
+            "Dados do Cálculo":        "calculo.jsf",
+            "Faltas":                  "falta.jsf",
+            "Férias":                  "ferias.jsf",
+            "Histórico Salarial":      "historico-salarial.jsf",
+            "Verbas":                  "verba/verba-calculo.jsf",
+            "Cartão de Ponto":         "cartaodeponto/apuracao-cartaodeponto.jsf",
+            "Salário-família":         "salario-familia.jsf",
+            "Seguro-desemprego":       "seguro-desemprego.jsf",
+            "FGTS":                    "fgts.jsf",
+            "Contribuição Social":     "inss/inss.jsf",
+            "Contribuicao Social":     "inss/inss.jsf",
+            "Previdência Privada":     "previdencia-privada.jsf",
+            "Pensão Alimentícia":      "pensao-alimenticia.jsf",
+            "Imposto de Renda":        "irpf.jsf",
+            "Multas e Indenizações":   "multas-indenizacoes.jsf",
+            "Multas":                  "multas-indenizacoes.jsf",
+            "Honorários":              "honorarios.jsf",
+            "Custas Judiciais":        "custas.jsf",
+            "Correção, Juros e Multa": "correcao-juros.jsf",
+            "Liquidar":                "liquidacao.jsf",
+            "Imprimir":                "imprimir.jsf",
         }
         if self._calculo_url_base and self._calculo_conversation_id:
             jsf_page = _URL_SECTION_MAP.get(texto)
@@ -1060,7 +1069,8 @@ class PJECalcPlaywright:
                 continue
 
     def _clicar_botao(self, texto: str, obrigatorio: bool = True) -> bool:
-        """Clica em botão pelo texto visível."""
+        """Clica em botão pelo texto visível, com fallback de busca por proximidade."""
+        # Tentativa 1: match exato via Playwright
         loc = self._page.locator(
             f"input[type='submit'][value='{texto}'], "
             f"input[type='button'][value='{texto}'], "
@@ -1071,6 +1081,50 @@ class PJECalcPlaywright:
             loc.first.click()
             self._aguardar_ajax()
             return True
+        # Tentativa 2: busca por proximidade via JS (token-overlap ≥ 0.5)
+        try:
+            _clicou = self._page.evaluate(
+                """(texto) => {
+                    function norm(s) {
+                        return (s || '').toLowerCase()
+                            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+                            .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+                    }
+                    function score(a, b) {
+                        const ta = norm(a).split(' ').filter(t => t.length >= 2);
+                        const tb = norm(b).split(' ').filter(t => t.length >= 2);
+                        if (!ta.length || !tb.length) return 0;
+                        const setA = new Set(ta);
+                        let shared = 0;
+                        for (const t of setA) { if (tb.some(u => u.includes(t) || t.includes(u))) shared++; }
+                        return shared / Math.max(ta.length, tb.length);
+                    }
+                    const candidates = [
+                        ...document.querySelectorAll('input[type="submit"], input[type="button"], button, a[href]')
+                    ].filter(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0;
+                    });
+                    let best = null, bestScore = 0;
+                    for (const el of candidates) {
+                        const t = (el.value || el.textContent || '').trim();
+                        const s = score(texto, t);
+                        if (s > bestScore) { bestScore = s; best = el; }
+                    }
+                    if (bestScore >= 0.50 && best) {
+                        best.click();
+                        return (best.value || best.textContent || '').trim().substring(0, 60);
+                    }
+                    return null;
+                }""",
+                texto,
+            )
+            if _clicou:
+                self._log(f"  ✓ Botão '{texto}' → fuzzy match: '{_clicou}'")
+                self._aguardar_ajax()
+                return True
+        except Exception:
+            pass
         if obrigatorio:
             self._log(f"  ⚠ Botão '{texto}' não encontrado.")
         return False
@@ -1465,16 +1519,65 @@ class PJECalcPlaywright:
         self._page.wait_for_timeout(600)
         self.mapear_campos("fase1_parametros")
 
+        # Estado + Município (IDs confirmados por inspeção DOM: formulario:estado, formulario:municipio)
+        # Estado usa índice numérico (0=AC, 1=AL, ..., 5=CE, ...) — NÃO a sigla como value
+        _UF_INDEX = {
+            "AC": "0", "AL": "1", "AP": "2", "AM": "3", "BA": "4", "CE": "5",
+            "DF": "6", "ES": "7", "GO": "8", "MA": "9", "MT": "10", "MS": "11",
+            "MG": "12", "PA": "13", "PB": "14", "PR": "15", "PE": "16", "PI": "17",
+            "RJ": "18", "RN": "19", "RS": "20", "RO": "21", "RR": "22", "SC": "23",
+            "SP": "24", "SE": "25", "TO": "26",
+        }
+        # Mapa TRT → UF (para inferir estado a partir do número do processo quando uf não vier explícito)
+        _TRT_UF = {
+            "1": "RJ", "2": "SP", "3": "MG", "4": "RS", "5": "BA", "6": "PE",
+            "7": "CE", "8": "PA", "9": "PR", "10": "DF", "11": "AM", "12": "SC",
+            "13": "PB", "14": "RO", "15": "SP", "16": "MA", "17": "ES", "18": "GO",
+            "19": "AL", "20": "SE", "21": "RN", "22": "PI", "23": "MT", "24": "MS",
+        }
+        _uf = proc.get("uf") or proc.get("estado") or _TRT_UF.get(str(proc.get("regiao", "")), "")
+        if _uf:
+            _idx_estado = _UF_INDEX.get(_uf.upper())
+            if _idx_estado and self._selecionar("estado", _idx_estado, obrigatorio=False):
+                self._log(f"  ✓ estado: {_uf} (value={_idx_estado})")
+                self._aguardar_ajax()  # municipio é carregado via AJAX após estado
+                self._page.wait_for_timeout(800)
+                # Município — tentar pelo nome da cidade do processo
+                _cidade = proc.get("municipio") or proc.get("cidade") or ""
+                if _cidade:
+                    _municipio_selecionado = self._page.evaluate(
+                        """(cidade) => {
+                            function norm(s) {
+                                return (s||'').toLowerCase()
+                                    .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
+                            }
+                            const sel = document.getElementById('formulario:municipio');
+                            if (!sel) return null;
+                            const c = norm(cidade);
+                            for (const o of sel.options) {
+                                if (norm(o.text).includes(c) || c.includes(norm(o.text))) {
+                                    sel.value = o.value;
+                                    sel.dispatchEvent(new Event('change',{bubbles:true}));
+                                    return o.text;
+                                }
+                            }
+                            return null;
+                        }""",
+                        _cidade,
+                    )
+                    if _municipio_selecionado:
+                        self._log(f"  ✓ municipio: '{_municipio_selecionado}'")
+                    else:
+                        self._log(f"  ⚠ municipio '{_cidade}' não encontrado na lista")
+
         # Dados do contrato
+        # Datas: _localizar() busca [id*='InputDate'] primeiro, cobrindo formulario:dataAdmissaoInputDate etc.
         if cont.get("admissao"):
             self._preencher_data("dataAdmissao", cont["admissao"], False)
-            self._preencher_data("dtAdmissao", cont["admissao"], False)
         if cont.get("demissao"):
             self._preencher_data("dataDemissao", cont["demissao"], False)
-            self._preencher_data("dtDemissao", cont["demissao"], False)
         if cont.get("ajuizamento"):
             self._preencher_data("dataAjuizamento", cont["ajuizamento"], False)
-            self._preencher_data("dtAjuizamento", cont["ajuizamento"], False)
 
         rescisao_map = {
             "sem_justa_causa": "SEM_JUSTA_CAUSA",
@@ -1487,35 +1590,38 @@ class PJECalcPlaywright:
             self._selecionar("tipoRescisao", rescisao_map.get(cont["tipo_rescisao"], "SEM_JUSTA_CAUSA"), obrigatorio=False)
             self._selecionar("motivoDesligamento", rescisao_map.get(cont["tipo_rescisao"], "SEM_JUSTA_CAUSA"), obrigatorio=False)
 
-        regime_map = {
-            "Tempo Integral": "TEMPO_INTEGRAL",
-            "Tempo Parcial": "TEMPO_PARCIAL",
-            "Trabalho Intermitente": "INTERMITENTE",
+        # Regime de trabalho — ID confirmado: formulario:tipoDaBaseTabelada
+        # Values: INTEGRAL (padrão), PARCIAL, INTERMITENTE
+        _regime_map = {
+            "Tempo Integral": "INTEGRAL", "tempo integral": "INTEGRAL",
+            "Tempo Parcial": "PARCIAL", "tempo parcial": "PARCIAL",
+            "Trabalho Intermitente": "INTERMITENTE", "intermitente": "INTERMITENTE",
         }
         if cont.get("regime"):
-            self._selecionar("regimeTrabalho", regime_map.get(cont["regime"], "TEMPO_INTEGRAL"), obrigatorio=False)
-            self._selecionar("regimeDoContrato", regime_map.get(cont["regime"], "TEMPO_INTEGRAL"), obrigatorio=False)
+            _regime_val = _regime_map.get(cont["regime"], "INTEGRAL")
+            self._selecionar("tipoDaBaseTabelada", _regime_val, obrigatorio=False)
 
+        # Carga horária padrão — ID confirmado: formulario:valorCargaHorariaPadrao (padrão 220)
         if cont.get("carga_horaria"):
-            self._preencher("cargaHoraria", str(int(cont["carga_horaria"])), False)
-            self._preencher("cargaHorariaMensal", str(int(cont["carga_horaria"])), False)
+            _ch = _fmt_br(float(cont["carga_horaria"]))
+            self._preencher("valorCargaHorariaPadrao", _ch, False)
 
+        # Maior remuneração e última remuneração — IDs confirmados por inspeção DOM
         if cont.get("maior_remuneracao"):
-            self._preencher("maiorRemuneracao", _fmt_br(cont["maior_remuneracao"]), False)
-            self._preencher("maiorSalario", _fmt_br(cont["maior_remuneracao"]), False)
+            self._preencher("valorMaiorRemuneracao", _fmt_br(cont["maior_remuneracao"]), False)
         if cont.get("ultima_remuneracao"):
-            self._preencher("ultimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]), False)
-            self._preencher("ultimoSalario", _fmt_br(cont["ultima_remuneracao"]), False)
+            self._preencher("valorUltimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]), False)
 
-        # Aviso prévio
-        ap_tipo_map = {
-            "Calculado": "CALCULADO",
-            "Informado": "INFORMADO",
+        # Aviso prévio — ID confirmado: formulario:apuracaoPrazoDoAvisoPrevio
+        # Values: NAO_APURAR, APURACAO_CALCULADA, APURACAO_INFORMADA
+        _ap_map = {
+            "Calculado": "APURACAO_CALCULADA",
+            "Informado": "APURACAO_INFORMADA",
             "Nao Apurar": "NAO_APURAR",
+            "nao_apurar": "NAO_APURAR",
         }
-        if ap.get("tipo"):
-            self._selecionar("tipoAvisoPrevio", ap_tipo_map.get(ap["tipo"], "CALCULADO"), obrigatorio=False)
-            self._selecionar("avisoPrevio", ap_tipo_map.get(ap["tipo"], "CALCULADO"), obrigatorio=False)
+        _ap_val = _ap_map.get(ap.get("tipo", "Calculado"), "APURACAO_CALCULADA")
+        self._selecionar("apuracaoPrazoDoAvisoPrevio", _ap_val, obrigatorio=False)
         if ap.get("prazo_dias"):
             self._preencher("diasAvisoPrevio", str(int(ap["prazo_dias"])), False)
 
@@ -1656,36 +1762,42 @@ class PJECalcPlaywright:
             except Exception:
                 self._page.wait_for_timeout(1000)
 
-            # Nome da entrada (ex: "Salário", "Adicional Noturno Pago")
+            # Nome da entrada — ID confirmado: formulario:nome
             nome_hist = h.get("nome", "Salário")
-            self._preencher("historico:nome", nome_hist, False)
-            self._preencher("nomeHistorico", nome_hist, False)
+            self._preencher("nome", nome_hist, False)
 
-            # Competências: campo aceita MM/yyyy (datePattern="MM/yyyy" no RichFaces Calendar)
-            # Converter dd/mm/yyyy → MM/yyyy se necessário
+            # Tipo de variação: FIXA (valor fixo) ou VARIAVEL (muda mês a mês)
+            # ID confirmado: formulario:tipoVariacaoDaParcela
+            _tipo_var = "VARIAVEL" if h.get("variavel") else "FIXA"
+            self._marcar_radio("tipoVariacaoDaParcela", _tipo_var)
+
+            # Tipo de valor: INFORMADO (preenchido manualmente) ou CALCULADO
+            self._marcar_radio("tipoValor", "INFORMADO")
+
+            # Competências: campo aceita MM/yyyy — ID confirmados:
+            # formulario:competenciaInicialInputDate / formulario:competenciaFinalInputDate
             def _para_competencia(d: str) -> str:
                 partes = d.split("/")
                 if len(partes) == 3 and len(partes[2]) == 4:
                     return f"{partes[1]}/{partes[2]}"  # dd/mm/yyyy → MM/yyyy
+                if len(partes) == 2 and len(partes[1]) == 4:
+                    return d  # já MM/yyyy
                 return d
             _comp_ini = _para_competencia(h.get("data_inicio", ""))
             _comp_fim = _para_competencia(h.get("data_fim", ""))
+            # _localizar("competenciaInicial") encontra formulario:competenciaInicialInputDate via [id*='InputDate']
             self._preencher_data("competenciaInicial", _comp_ini, False)
             self._preencher_data("competenciaFinal", _comp_fim, False)
 
-            # Valor base (valor mensal completo — sistema proporcionaliza)
-            # id="valorParaBaseDeCalculo" em historico-salarial.xhtml
+            # Valor base — ID confirmado: formulario:valorParaBaseDeCalculo
             _val = _fmt_br(h.get("valor", ""))
             self._preencher("valorParaBaseDeCalculo", _val, False)
-            self._preencher("valorBase", _val, False)
-            self._preencher("salario", _val, False)
-            self._preencher("valor", _val, False)
 
-            # Incidências FGTS e CS (usar valores do histórico se fornecidos)
-            if h.get("incidencia_fgts") is not None:
-                self._marcar_checkbox("incidenciaFGTS", bool(h["incidencia_fgts"]))
-            if h.get("incidencia_cs") is not None:
-                self._marcar_checkbox("incidenciaCS", bool(h["incidencia_cs"]))
+            # Incidências — IDs confirmados: formulario:fgts, formulario:inss
+            _inc_fgts = h.get("incidencia_fgts", True)
+            _inc_inss = h.get("incidencia_cs", h.get("incidencia_inss", True))
+            self._marcar_checkbox("fgts", bool(_inc_fgts))
+            self._marcar_checkbox("inss", bool(_inc_inss))
 
             # Gerar ocorrências (cria a grade mensal de valores)
             # id="cmdGerarOcorrencias" = a4j:commandLink → renderiza como <a>, não <input>
@@ -2026,53 +2138,94 @@ class PJECalcPlaywright:
 
     def _marcar_checkbox_expresso(self, nome: str) -> bool:
         """Localiza e marca o checkbox do Expresso cujo nome contém 'nome' (case-insensitive).
-        verbas-para-calculo.xhtml: checkbox id="selecionada" e nome id="nome" no mesmo <tr>.
-        Não há <label for="..."> — percorre as linhas da tabela pelo id*=':nome'.
+
+        Estrutura confirmada DOM v2.15.1 (verbas-para-calculo.jsf):
+        - Grade de 3 colunas com IDs dinâmicos: formulario:j_id82:ROW:j_id84:COL:selecionada
+        - NÃO existe elemento [id*=":nome"] — o nome é o texto da célula <td> pai
+        - Cada <td> contém: checkbox + label/span com o nome da verba
+        Busca pelo texto da célula individual (não da linha inteira).
         """
         try:
             _resultado = self._page.evaluate(
                 """(nome) => {
                     function norm(s) {
-                        return s.toLowerCase()
+                        s = s.toLowerCase()
                             .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        s = s.replace(/\\bart\\.?\\s*/g, 'artigo ')
+                             .replace(/[^a-z0-9 %]/g, ' ')
+                             .replace(/\\s+/g, ' ').trim();
+                        return s;
                     }
-                    const nomeLower = norm(nome);
-                    const rows = [...document.querySelectorAll('tr')];
-                    // Scroll para ver todas as linhas
+                    function tokens(s) {
+                        return norm(s).split(' ').filter(t => t.length >= 2);
+                    }
+                    function score(a, b) {
+                        const ta = new Set(tokens(a));
+                        const tb = new Set(tokens(b));
+                        if (ta.size === 0 || tb.size === 0) return 0;
+                        let shared = 0;
+                        for (const t of ta) {
+                            if (tb.has(t)) shared++;
+                            else { for (const u of tb) { if (t.length >= 3 && (u.includes(t)||t.includes(u))) shared += 0.4; } }
+                        }
+                        return shared / Math.max(ta.size, tb.size);
+                    }
+
+                    // Scroll para revelar itens abaixo do fold
                     window.scrollTo(0, document.body.scrollHeight);
 
-                    // 1ª tentativa: match EXATO
-                    for (const row of rows) {
-                        const nomeEl = row.querySelector('[id*=":nome"]');
-                        if (!nomeEl) continue;
-                        const nomeNorm = norm(nomeEl.textContent.trim());
-                        if (nomeNorm === nomeLower) {
-                            const cb = row.querySelector('input[type="checkbox"]');
-                            if (cb) { if (!cb.checked) cb.click(); return nomeEl.textContent.trim(); }
+                    // Coletar pares (checkbox, textoCell) — texto da célula individual, não da linha
+                    const pairs = [];
+                    document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]').forEach(cb => {
+                        const r = cb.getBoundingClientRect();
+                        if (r.width === 0 && r.height === 0) return;  // hidden
+                        // Pegar texto do container mais próximo que seja <td>, <li> ou <label>
+                        const cell = cb.closest('td') || cb.closest('li') || cb.closest('label') || cb.parentElement;
+                        if (!cell) return;
+                        // Excluir texto de scripts/menus (>200 chars é menu lateral)
+                        const txt = cell.textContent.replace(/\\s+/g, ' ').trim();
+                        if (txt.length > 0 && txt.length <= 80) {
+                            pairs.push({cb, txt});
+                        }
+                    });
+
+                    const nomeLower = norm(nome);
+                    const nomeTok = tokens(nome);
+
+                    // 1ª: match exato
+                    for (const {cb, txt} of pairs) {
+                        if (norm(txt) === nomeLower) {
+                            if (!cb.checked) cb.click();
+                            return txt;
                         }
                     }
-                    // 2ª tentativa: célula CONTÉM o nome completo
-                    for (const row of rows) {
-                        const nomeEl = row.querySelector('[id*=":nome"]');
-                        if (!nomeEl) continue;
-                        const nomeNorm = norm(nomeEl.textContent.trim());
-                        if (nomeNorm.includes(nomeLower) || nomeLower.includes(nomeNorm)) {
-                            const cb = row.querySelector('input[type="checkbox"]');
-                            if (cb) { if (!cb.checked) cb.click(); return nomeEl.textContent.trim(); }
+                    // 2ª: substring
+                    for (const {cb, txt} of pairs) {
+                        const t = norm(txt);
+                        if (t.includes(nomeLower) || nomeLower.includes(t)) {
+                            if (!cb.checked) cb.click();
+                            return txt;
                         }
                     }
-                    // 3ª tentativa: todas as palavras-chave presentes (sem prefixo genérico)
-                    const palavras = nomeLower.split(' ').filter(p => p.length > 2);
-                    if (palavras.length >= 2) {
-                        for (const row of rows) {
-                            const nomeEl = row.querySelector('[id*=":nome"]');
-                            if (!nomeEl) continue;
-                            const nomeNorm = norm(nomeEl.textContent.trim());
-                            if (palavras.every(p => nomeNorm.includes(p))) {
-                                const cb = row.querySelector('input[type="checkbox"]');
-                                if (cb) { if (!cb.checked) cb.click(); return nomeEl.textContent.trim(); }
+                    // 3ª: todos os tokens presentes
+                    if (nomeTok.length >= 2) {
+                        for (const {cb, txt} of pairs) {
+                            const t = norm(txt);
+                            if (nomeTok.every(p => t.includes(p))) {
+                                if (!cb.checked) cb.click();
+                                return txt;
                             }
                         }
+                    }
+                    // 4ª: token-overlap Jaccard ≥ 0.40
+                    let best = 0, bestCb = null, bestTxt = null;
+                    for (const {cb, txt} of pairs) {
+                        const s = score(nome, txt);
+                        if (s > best) { best = s; bestCb = cb; bestTxt = txt; }
+                    }
+                    if (best >= 0.40 && bestCb) {
+                        if (!bestCb.checked) bestCb.click();
+                        return '~' + bestTxt + ' (score=' + best.toFixed(2) + ')';
                     }
                     return null;
                 }""",
@@ -2088,28 +2241,45 @@ class PJECalcPlaywright:
             return False
 
     def _configurar_reflexos_expresso(self, verbas: list) -> None:
-        """Expande os reflexos de cada verba salva via Expresso e marca os necessários."""
+        """Configura reflexos de verbas Expresso via botão 'Verba Reflexa' ou link 'Exibir' na listagem.
+
+        Arquitetura: reflexos NÃO são verbas manuais autônomas. Após salvar verbas no Expresso,
+        navegar para a listagem de verbas (verbas-para-calculo.jsf), clicar em 'Verba Reflexa'
+        (ou 'Exibir') à direita de cada verba principal e marcar os checkboxes dos reflexos deferidos.
+        """
         try:
-            _exibir_count = self._page.evaluate("""() =>
-                [...document.querySelectorAll('a')].filter(
-                    a => (a.textContent || '').trim().toLowerCase().includes('exibir')
-                ).length
-            """)
-            if not _exibir_count:
-                self._log("  → Nenhum link 'Exibir' encontrado — reflexos não configurados")
-                return
-            self._log(f"  → Configurando reflexos ({_exibir_count} link(s) 'Exibir')…")
+            # Garantir que estamos na página de listagem de verbas (verbas-para-calculo)
+            _url_atual = self._page.url
+            if "verbas-para-calculo" not in _url_atual and "expresso" in _url_atual.lower():
+                self._log("  → Navegando para listagem de verbas (verbas-para-calculo)…")
+                self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
 
             # Mapa nome_pjecalc → reflexas_tipicas
             _reflexos_map: dict[str, list[str]] = {}
             for v in verbas:
-                nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
-                reflexas = v.get("reflexas_tipicas", [])
-                if nome and reflexas:
-                    _reflexos_map[nome] = reflexas
+                _nome_v = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
+                _reflexas = v.get("reflexas_tipicas", [])
+                # Não configurar reflexas de verbas que são elas mesmas reflexas
+                if _nome_v and _reflexas and not v.get("eh_reflexa") and "reflexo" not in _nome_v.lower():
+                    _reflexos_map[_nome_v] = _reflexas
 
             if not _reflexos_map:
+                self._log("  → Nenhuma verba com reflexos para configurar")
                 return
+
+            # Verificar se há botões de reflexo na página
+            _btn_count = self._page.evaluate("""() =>
+                [...document.querySelectorAll('a, input[type="button"], input[type="submit"]')].filter(el => {
+                    const t = (el.textContent || el.value || '').trim().toLowerCase();
+                    return t.includes('exibir') || t.includes('verba reflexa') || t.includes('reflexa');
+                }).length
+            """)
+            if not _btn_count:
+                self._log("  → Nenhum botão 'Verba Reflexa'/'Exibir' encontrado — reflexos não configurados")
+                return
+            self._log(f"  → Configurando reflexos ({_btn_count} botão(ões) encontrado(s))…")
 
             _linhas = self._page.evaluate("""() => {
                 const rows = [...document.querySelectorAll(
@@ -2117,23 +2287,31 @@ class PJECalcPlaywright:
                 )];
                 return rows.map((tr, i) => ({
                     index: i,
-                    texto: tr.textContent.replace(/\\s+/g,' ').trim().substring(0, 100),
-                    temExibir: [...tr.querySelectorAll('a')]
-                        .some(a => (a.textContent||'').trim().toLowerCase().includes('exibir')),
+                    texto: tr.textContent.replace(/\\s+/g,' ').trim().substring(0, 120),
+                    temBotaoReflexo: [...tr.querySelectorAll('a, input[type="button"], input[type="submit"]')]
+                        .some(el => {
+                            const t = (el.textContent || el.value || '').trim().toLowerCase();
+                            return t.includes('exibir') || t.includes('verba reflexa') || t.includes('reflexa');
+                        }),
                 }));
             }""")
 
             for row in _linhas:
-                if not row.get("temExibir"):
+                if not row.get("temBotaoReflexo"):
                     continue
                 _texto_row = row.get("texto", "").lower()
 
                 _reflexas_needed: list[str] = []
                 for nome_v, reflexas in _reflexos_map.items():
-                    _kw = " ".join(nome_v.lower().split()[:2])
-                    if _kw and _kw in _texto_row:
-                        _reflexas_needed = reflexas
-                        self._log(f"  → Reflexos de '{nome_v}': {reflexas}")
+                    # Testar as 3 primeiras palavras do nome para match
+                    _palavras = nome_v.lower().split()
+                    for _n_words in (3, 2, 1):
+                        _kw = " ".join(_palavras[:_n_words])
+                        if _kw and _kw in _texto_row:
+                            _reflexas_needed = reflexas
+                            self._log(f"  → Reflexos de '{nome_v}': {reflexas}")
+                            break
+                    if _reflexas_needed:
                         break
 
                 if not _reflexas_needed:
@@ -2147,20 +2325,25 @@ class PJECalcPlaywright:
                                 'tr[id*="listagem"], tr.rich-table-row, tbody tr'
                             )];
                             if (idx >= rows.length) return false;
-                            const link = [...rows[idx].querySelectorAll('a')]
-                                .find(a => (a.textContent||'').trim().toLowerCase().includes('exibir'));
+                            const link = [...rows[idx].querySelectorAll(
+                                'a, input[type="button"], input[type="submit"]'
+                            )].find(el => {
+                                const t = (el.textContent || el.value || '').trim().toLowerCase();
+                                return t.includes('exibir') || t.includes('verba reflexa') || t.includes('reflexa');
+                            });
                             if (!link) return false;
                             link.click();
-                            return true;
+                            return link.textContent || link.value || 'ok';
                         }""",
                         row_idx,
                     )
                     if not _clicou:
                         continue
+                    self._log(f"  → Clicou botão reflexo: '{_clicou}'")
                     self._aguardar_ajax()
-                    self._page.wait_for_timeout(500)
+                    self._page.wait_for_timeout(600)
                 except Exception as _e:
-                    self._log(f"  ⚠ Exibir row {row_idx}: {_e}")
+                    self._log(f"  ⚠ Botão reflexo row {row_idx}: {_e}")
                     continue
 
                 for reflexo_nome in _reflexas_needed:
@@ -2171,16 +2354,17 @@ class PJECalcPlaywright:
                                     return s.toLowerCase()
                                         .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                                 }
-                                const rLower = norm(rNome).substring(0, 10);
+                                const rLower = norm(rNome).substring(0, 12);
                                 const cbs = [...document.querySelectorAll(
                                     'input[type="checkbox"][id*="listaReflexo"],' +
-                                    'input[type="checkbox"][id*="reflexo"]'
+                                    'input[type="checkbox"][id*="reflexo"],' +
+                                    'input[type="checkbox"][id*="Reflexo"]'
                                 )].filter(cb => {
                                     const r = cb.getBoundingClientRect();
                                     return r.width > 0 && r.height > 0;
                                 });
                                 for (const cb of cbs) {
-                                    const ctx = cb.closest('td') || cb.parentElement;
+                                    const ctx = cb.closest('td,tr,li,div') || cb.parentElement;
                                     const txt = norm((ctx && ctx.textContent) || '');
                                     if (txt.includes(rLower)) {
                                         if (!cb.checked) cb.click();
@@ -2203,17 +2387,26 @@ class PJECalcPlaywright:
 
     def _lancar_verbas_manual(self, verbas: list) -> None:
         """Lança verbas individualmente via botão 'Novo' (para verbas personalizadas)."""
+        import unicodedata as _ud_m
+
+        def _norm_key(s: str) -> str:
+            """Normaliza chave para lookup nos mapas (sem acentos, minúsculas)."""
+            return _ud_m.normalize("NFD", s.lower()).encode("ascii", "ignore").decode().strip()
+
+        # Valores enum do PJE-Calc — chaves normalizadas para tolerância a acentos/case
         carac_map = {
-            "Comum": "COMUM",
-            "13o Salario": "DECIMO_TERCEIRO_SALARIO",
-            "Ferias": "FERIAS",
-            "Aviso Previo": "AVISO_PREVIO",
+            "comum": "COMUM",
+            "13o salario": "DECIMO_TERCEIRO_SALARIO",
+            "decimo terceiro salario": "DECIMO_TERCEIRO_SALARIO",
+            "13 salario": "DECIMO_TERCEIRO_SALARIO",
+            "ferias": "FERIAS",
+            "aviso previo": "AVISO_PREVIO",
         }
         ocorr_map = {
-            "Mensal": "MENSAL",
-            "Dezembro": "DEZEMBRO",
-            "Periodo Aquisitivo": "PERIODO_AQUISITIVO",
-            "Desligamento": "DESLIGAMENTO",
+            "mensal": "MENSAL",
+            "dezembro": "DEZEMBRO",
+            "periodo aquisitivo": "PERIODO_AQUISITIVO",
+            "desligamento": "DESLIGAMENTO",
         }
         _url_verbas = self._page.url
         _JS_CAMPOS = """() =>
@@ -2229,7 +2422,29 @@ class PJECalcPlaywright:
         except Exception:
             pass
 
+        # Verbas configuradas via checkboxes na aba FGTS — nunca criar como verba manual autônoma
+        # Multa 40% FGTS e Multa Art. 467 CLT são checkboxes em Cálculo > FGTS,
+        # tratados em fase_fgts() com fgts.multa_40 e fgts.multa_467.
+        _VERBAS_APENAS_FGTS = {
+            "multa art. 467", "multa art 467", "multa 467",
+            "multa artigo 467", "multa do art. 467",
+            "multa 40%", "multa fgts 40", "multa rescisória fgts",
+        }
+
         for i, v in enumerate(verbas):
+            nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
+            _nome_lower = nome.lower()
+
+            # Pular verbas reflexas — configuradas via botão "Verba Reflexa" na listagem
+            if v.get("eh_reflexa") or "reflexo" in _nome_lower:
+                self._log(f"  → '{nome}' é reflexo — será configurado via botão Verba Reflexa (pulando criação manual)")
+                continue
+
+            # Pular verbas configuradas via checkboxes na aba FGTS (tratadas em fase_fgts)
+            if any(k in _nome_lower for k in _VERBAS_APENAS_FGTS):
+                self._log(f"  → '{nome}' é checkbox da aba FGTS — configurada em fase_fgts(), ignorando criação manual")
+                continue
+
             if self._page.url != _url_verbas:
                 try:
                     self._page.goto(_url_verbas, wait_until="domcontentloaded", timeout=20000)
@@ -2264,14 +2479,21 @@ class PJECalcPlaywright:
                 return null;
             }""")
             self._log(f"  → Manual Novo: '{_clicou_novo}'")
-            nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or "Verba"
-            # Aguardar formulário com retry (AJAX pode demorar)
+            # nome já definido no início do loop (após filtros)
+            if not nome:
+                nome = "Verba"
+            # Aguardar formulário — navega para verba-calculo.jsf (página inteira).
+            # ID confirmado DOM v2.15.1: formulario:descricao (campo "Nome *")
             _form_abriu = False
-            _form_selector = "[id$='descricao'], [id$='descricaoVerba'], [id$='nomeVerba']"
+            _form_selector = "[id$=':descricao'], [id$=':nome'], [id$='descricaoVerba'], [id$='nomeVerba']"
             for _tentativa in range(3):
                 if _clicou_novo is None and _tentativa == 0:
                     self._clicar_novo()
                 self._aguardar_ajax()
+                # Aceitar também navegação de página (verba-calculo.jsf)
+                if "verba-calculo" in self._page.url:
+                    _form_abriu = True
+                    break
                 try:
                     self._page.wait_for_selector(
                         _form_selector, state="visible", timeout=5000
@@ -2281,7 +2503,6 @@ class PJECalcPlaywright:
                 except Exception:
                     if _tentativa < 2:
                         self._log(f"  → Retentando abrir formulário Novo ({_tentativa+2}/3)…")
-                        # Re-clicar Novo
                         self._clicar_novo()
                     else:
                         self._log(f"  ⚠ Verba '{nome}': formulário não abriu após 3 tentativas — ignorada.")
@@ -2290,12 +2511,13 @@ class PJECalcPlaywright:
             if i == 0:
                 self.mapear_campos("verba_form_manual")
 
+            # Nome da verba — ID confirmado DOM v2.15.1: formulario:descricao
             _desc_ok = any(
                 self._preencher(fid, nome, obrigatorio=False)
-                for fid in ["descricao", "descricaoVerba", "nomeVerba", "nome", "titulo", "verba"]
+                for fid in ["descricao", "nome", "descricaoVerba", "nomeVerba", "titulo", "verba"]
             )
             if not _desc_ok:
-                for _lbl in ["Descrição", "Descrição da Verba", "Nome da Verba", "Nome", "Verba"]:
+                for _lbl in ["Descrição", "Nome", "Descrição da Verba", "Nome da Verba", "Verba"]:
                     _loc = self._page.get_by_label(_lbl, exact=False)
                     if _loc.count() > 0:
                         try:
@@ -2306,99 +2528,191 @@ class PJECalcPlaywright:
                         except Exception:
                             continue
 
-            # ── Característica (obrigatória para liquidação) ──
-            carac = carac_map.get(v.get("caracteristica", "Comum"), "COMUM")
-            carac_label = v.get("caracteristica", "Comum")  # texto legível para fallback
-            _carac_ok = False
-            for fid in ["caracteristicaVerba", "stpcaracteristicaverba",
-                         "caracteristica", "tipoVerba"]:
-                if self._selecionar(fid, carac, obrigatorio=False):
-                    _carac_ok = True
-                    break
-                # Fallback: tentar pelo texto legível (ex: "Comum" em vez de "COMUM")
-                if self._selecionar(fid, carac_label, obrigatorio=False):
-                    _carac_ok = True
-                    break
-                # Fallback: fuzzy match nas opções do select
-                _opcoes = self._extrair_opcoes_select(fid)
-                if _opcoes:
-                    _match = self._match_fuzzy(carac_label, _opcoes)
-                    if _match and self._selecionar(fid, _match, obrigatorio=False):
-                        _carac_ok = True
-                        break
+            # ── Identificar selects visíveis por conteúdo das opções ──
+            # O formulário manual de verbas no PJE-Calc tem IDs gerados pelo JSF
+            # que variam (ex: formulario:j_id_xxx:caracteristicaVerba). A estratégia
+            # mais robusta é identificar cada select pelo conjunto de opções que ele contém.
+            _JS_SELECTS_INFO = """() => {
+                function norm(s) {
+                    return (s || '').toLowerCase().normalize('NFD')
+                        .replace(/[\\u0300-\\u036f]/g,'').trim();
+                }
+                return [...document.querySelectorAll('select')].filter(s => {
+                    const r = s.getBoundingClientRect();
+                    return r.width > 0 && r.height > 0;
+                }).map(s => ({
+                    id: s.id,
+                    name: s.name,
+                    options: [...s.options].map(o => ({
+                        value: o.value,
+                        text: o.text.trim(),
+                        normText: norm(o.text),
+                    })),
+                }));
+            }"""
+            _selects_info = []
+            try:
+                _selects_info = self._page.evaluate(_JS_SELECTS_INFO)
+            except Exception:
+                pass
+
+            def _sel_por_opcoes(palavras_chave: list[str], valor_desejado: str, campo_log: str) -> bool:
+                """Encontra e preenche um select identificando-o pelas opções que contém."""
+                import unicodedata as _ud
+                def _norm(s: str) -> str:
+                    return _ud.normalize("NFD", s.lower()).encode("ascii", "ignore").decode()
+
+                _val_norm = _norm(valor_desejado)
+                for _si in _selects_info:
+                    # Verificar se este select tem as opções esperadas (palavras-chave nas opções)
+                    _textos_norm = [_norm(o["text"]) for o in _si.get("options", [])]
+                    if not all(any(kw in t for t in _textos_norm) for kw in palavras_chave):
+                        continue
+                    # Encontrar a opção mais próxima do valor desejado
+                    _sid = _si.get("id") or _si.get("name") or ""
+                    _sufixo = _sid.split(":")[-1] if ":" in _sid else _sid
+                    _opcoes = _si.get("options", [])
+                    _match_value = None
+                    # Exact text match
+                    for _o in _opcoes:
+                        if _norm(_o["text"]) == _val_norm or _norm(_o["value"]) == _val_norm:
+                            _match_value = _o["value"]
+                            break
+                    # Substring match
+                    if not _match_value:
+                        for _o in _opcoes:
+                            if _val_norm in _norm(_o["text"]) or _norm(_o["text"]) in _val_norm:
+                                _match_value = _o["value"]
+                                break
+                    if not _match_value and _opcoes:
+                        _match_value = _opcoes[0]["value"]  # fallback: primeira opção não-vazia
+
+                    if _match_value is not None:
+                        # Selecionar via JS diretamente (mais confiável para JSF)
+                        try:
+                            _resultado = self._page.evaluate(
+                                """([selId, selName, val]) => {
+                                    let sel = selId ? document.getElementById(selId) : null;
+                                    if (!sel && selName) {
+                                        sel = document.querySelector('select[name="' + selName + '"]');
+                                    }
+                                    if (!sel) return null;
+                                    sel.value = val;
+                                    sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return sel.value;
+                                }""",
+                                [_si.get("id", ""), _si.get("name", ""), _match_value],
+                            )
+                            if _resultado is not None:
+                                self._aguardar_ajax()
+                                self._log(f"  ✓ {campo_log}: '{_match_value}' (id={_sid})")
+                                return True
+                        except Exception as _e:
+                            self._log(f"  ⚠ {campo_log} JS set: {_e}")
+                return False
+
+            # ── Súmula 439 TST (formulario:ocorrenciaAjuizamento, confirmado DOM v2.15.1) ──
+            # Sim (juros desde ajuizamento) = OCORRENCIAS_VENCIDAS_E_VINCENDAS
+            # Não (juros desde arbitramento/vencimento) = OCORRENCIAS_VENCIDAS (padrão)
+            _sumula_439 = v.get("sumula_439", False)
+            _ocorr_ajuiz = "OCORRENCIAS_VENCIDAS_E_VINCENDAS" if _sumula_439 else "OCORRENCIAS_VENCIDAS"
+            self._marcar_radio("ocorrenciaAjuizamento", _ocorr_ajuiz)
+
+            # ── Característica (RADIO, ID confirmado DOM v2.15.1: formulario:caracteristicaVerba) ──
+            # Valores: COMUM / DECIMO_TERCEIRO_SALARIO / AVISO_PREVIO / FERIAS
+            carac_label = v.get("caracteristica", "Comum")
+            carac_enum = carac_map.get(_norm_key(carac_label), "COMUM")
+            _carac_ok = any(
+                self._marcar_radio(fid, carac_enum)
+                for fid in ["caracteristicaVerba", "caracteristica", "caracteristicaDaVerba"]
+            )
             if not _carac_ok:
-                self._log(f"  ⚠ Verba '{nome}': característica '{carac_label}' NÃO preenchida — pode causar erro na liquidação")
+                self._log(f"  ⚠ Verba '{nome}': característica '{carac_label}' ({carac_enum}) NÃO preenchida — pode causar erro na liquidação")
 
-            # ── Ocorrência de pagamento (obrigatória para liquidação) ──
-            ocorr = ocorr_map.get(v.get("ocorrencia", "Mensal"), "MENSAL")
-            ocorr_label = v.get("ocorrencia", "Mensal")  # texto legível para fallback
-            _ocorr_ok = False
-            for fid in ["ocorrenciaPagto", "ocorrenciaDePagamento",
-                         "ocorrencia", "periodicidade"]:
-                if self._selecionar(fid, ocorr, obrigatorio=False):
-                    _ocorr_ok = True
-                    break
-                # Fallback: tentar pelo texto legível
-                if self._selecionar(fid, ocorr_label, obrigatorio=False):
-                    _ocorr_ok = True
-                    break
-                # Fallback: fuzzy match nas opções do select
-                _opcoes = self._extrair_opcoes_select(fid)
-                if _opcoes:
-                    _match = self._match_fuzzy(ocorr_label, _opcoes)
-                    if _match and self._selecionar(fid, _match, obrigatorio=False):
-                        _ocorr_ok = True
-                        break
+            # ── Ocorrência de pagamento (RADIO, ID confirmado DOM v2.15.1: formulario:ocorrenciaPagto) ──
+            # Valores: DESLIGAMENTO / DEZEMBRO / MENSAL / PERIODO_AQUISITIVO
+            ocorr_label = v.get("ocorrencia", "Mensal")
+            ocorr_enum = ocorr_map.get(_norm_key(ocorr_label), "MENSAL")
+            _ocorr_ok = any(
+                self._marcar_radio(fid, ocorr_enum)
+                for fid in ["ocorrenciaPagto", "ocorrencia", "ocorrenciaDePagamento", "periodicidade"]
+            )
             if not _ocorr_ok:
-                self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' NÃO preenchida — pode causar erro na liquidação")
+                self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' ({ocorr_enum}) NÃO preenchida — pode causar erro na liquidação")
 
-            # ── Base de Cálculo (obrigatório para liquidação) ──
-            _base = v.get("base_calculo") or "Historico Salarial"
-            _base_ok = False
-            for _bid in ["baseCalculo", "baseDaVerba", "baseParaCalculo", "base"]:
-                if self._selecionar(_bid, _base, obrigatorio=False):
-                    _base_ok = True
-                    self._log(f"  ✓ base_calculo: {_base}")
+            # ── Base de Cálculo (SELECT confirmado DOM v2.15.1: formulario:tipoDaBaseTabelada) ──
+            # Valores: MAIOR_REMUNERACAO / HISTORICO_SALARIAL / SALARIO_DA_CATEGORIA / SALARIO_MINIMO
+            _base_label = v.get("base_calculo") or "Historico Salarial"
+            # Mapeamento de valores humanos → enum
+            _BASE_ENUM = {
+                "historico": "HISTORICO_SALARIAL",
+                "maior remuneracao": "MAIOR_REMUNERACAO",
+                "maior remuneração": "MAIOR_REMUNERACAO",
+                "salario minimo": "SALARIO_MINIMO",
+                "salário mínimo": "SALARIO_MINIMO",
+                "piso salarial": "SALARIO_DA_CATEGORIA",
+                "salario categoria": "SALARIO_DA_CATEGORIA",
+            }
+            _base_enum_val = None
+            for _k, _bv in _BASE_ENUM.items():
+                if _k in _norm_key(_base_label):
+                    _base_enum_val = _bv
                     break
+            if not _base_enum_val:
+                _base_enum_val = "HISTORICO_SALARIAL"  # padrão seguro
+
+            _base_ok = self._selecionar("tipoDaBaseTabelada", _base_enum_val, obrigatorio=False)
             if not _base_ok:
-                self._log(f"  ⚠ Verba '{nome}': base_calculo '{_base}' não preenchida")
+                # Fallback: usar _sel_por_opcoes buscando select com "histórico salarial"
+                _base_ok = _sel_por_opcoes(["historico"], _base_label, "base_calculo")
+            if not _base_ok:
+                self._log(f"  ⚠ Verba '{nome}': base_calculo '{_base_label}' não preenchida")
 
             if v.get("valor_informado"):
-                self._marcar_radio("valor", "INFORMADO") or \
-                    self._marcar_radio("tipoValor", "INFORMADO")
-                self._preencher("valorDevidoInformado", _fmt_br(v["valor_informado"]), False)
-                self._preencher("valorInformado", _fmt_br(v["valor_informado"]), False)
+                # formulario:valor (radio CALCULADO/INFORMADO) — confirmado DOM v2.15.1
+                self._marcar_radio("valor", "INFORMADO")
+                # formulario:outroValorDoMultiplicador — campo Multiplicador confirmado
+                self._preencher("outroValorDoMultiplicador", _fmt_br(v["valor_informado"]), False)
             else:
-                self._marcar_radio("valor", "CALCULADO") or \
-                    self._marcar_radio("tipoValor", "CALCULADO")
+                self._marcar_radio("valor", "CALCULADO")
 
-            # ── Incidências (checkboxes) — tentar múltiplos IDs do formulário manual ──
+            # Multiplicador explícito (ex: acúmulo de função 0,30 = 30%)
+            if v.get("multiplicador") is not None:
+                self._preencher("outroValorDoMultiplicador", _fmt_br(float(v["multiplicador"])), False)
+            # Divisor explícito
+            if v.get("divisor") is not None:
+                self._preencher("outroValorDoDivisor", _fmt_br(float(v["divisor"])), False)
+
+            # ── Incidências (checkboxes, confirmados DOM v2.15.1) ──
+            # Incidência: IRPF / Contribuição Social / FGTS / Previdência Privada / Pensão Alimentícia
             _fgts = bool(v.get("incidencia_fgts"))
             if not any(self._marcar_checkbox(fid, _fgts) for fid in [
-                "incidenciaFGTS", "incideFgts", "fgts", "incidenciaFgts",
-                "incidenciaDoFGTS", "incideNoFGTS",
+                "fgts", "incidenciaFGTS", "incideFgts", "incidenciaFgts", "incidenciaDoFGTS",
             ]):
                 self._log(f"  ⚠ Verba '{nome}': checkbox FGTS não encontrado (desejado={_fgts})")
 
             _inss = bool(v.get("incidencia_inss"))
+            # ID confirmado DOM v2.15.1: formulario:inss (label visual: "Contribuição Social")
             if not any(self._marcar_checkbox(fid, _inss) for fid in [
-                "incidenciaINSS", "incideInss", "inss", "incidenciaInss",
-                "incidenciaDoINSS", "incideNoINSS",
+                "inss", "contribuicaoSocial", "incidenciaINSS", "incidenciaInss",
             ]):
-                self._log(f"  ⚠ Verba '{nome}': checkbox INSS não encontrado (desejado={_inss})")
+                self._log(f"  ⚠ Verba '{nome}': checkbox INSS/CS não encontrado (desejado={_inss})")
 
             _irpf = bool(v.get("incidencia_ir"))
             if not any(self._marcar_checkbox(fid, _irpf) for fid in [
-                "incidenciaIRPF", "incideIrpf", "irpf", "incidenciaIr",
-                "incidenciaDoIRPF", "incideNoIRPF", "ir",
+                "irpf", "ir", "incidenciaIRPF", "incidenciaIr", "incidenciaDoIRPF",
             ]):
                 self._log(f"  ⚠ Verba '{nome}': checkbox IRPF não encontrado (desejado={_irpf})")
 
+            # Período — IDs confirmados DOM v2.15.1:
+            # formulario:periodoInicialInputDate / formulario:periodoFinalInputDate
             if v.get("periodo_inicio"):
-                self._preencher_data("periodoInicial", v["periodo_inicio"], False)
+                self._preencher_data("periodoInicialInputDate", v["periodo_inicio"], False) or \
+                self._preencher_data("periodoInicial", v["periodo_inicio"], False) or \
                 self._preencher_data("dtInicial", v["periodo_inicio"], False)
             if v.get("periodo_fim"):
-                self._preencher_data("periodoFinal", v["periodo_fim"], False)
+                self._preencher_data("periodoFinalInputDate", v["periodo_fim"], False) or \
+                self._preencher_data("periodoFinal", v["periodo_fim"], False) or \
                 self._preencher_data("dtFinal", v["periodo_fim"], False)
 
             self._clicar_salvar()
@@ -2433,6 +2747,85 @@ class PJECalcPlaywright:
                     self._page.wait_for_timeout(800)
             self._log(f"  ✓ Verba manual: {nome}")
 
+    # ── Fase 3B: Multas e Indenizações ────────────────────────────────────────
+
+    def fase_multas_indenizacoes(self, multas: list) -> None:
+        """Lança multas e indenizações na aba 'Multas e Indenizações'.
+
+        Campos confirmados DOM v2.15.1 (multas-indenizacoes.jsf — formulário Novo):
+        - formulario:descricao (text) — nome
+        - formulario:valor (radio) — INFORMADO / CALCULADO
+        - formulario:aliquota (text) — valor ou percentual
+        - formulario:credorDevedor (select) — RECLAMANTE_RECLAMADO / RECLAMADO_RECLAMANTE / ...
+        - formulario:tipoBaseMulta (select) — PRINCIPAL / VALOR_CAUSA / ...
+        - formulario:salvar (button) — Salvar
+
+        Chamada somente se dados['multas_indenizacoes'] for não-vazio.
+        """
+        if not multas:
+            return
+        self._log("Fase 3B — Multas e Indenizações…")
+        self._verificar_tomcat(timeout=60)
+        navegou = self._clicar_menu_lateral("Multas e Indenizações", obrigatorio=False) or \
+                  self._clicar_menu_lateral("Multas", obrigatorio=False)
+        if not navegou:
+            self._log("  → Seção Multas e Indenizações não encontrada no menu — pulando.")
+            return
+
+        _url_multas = self._page.url
+
+        for multa in multas:
+            nome_m = multa.get("nome") or multa.get("descricao") or "Multa/Indenização"
+            self._log(f"  → Lançando: {nome_m}")
+
+            # Voltar para listagem se necessário
+            if self._page.url != _url_multas:
+                try:
+                    self._page.goto(_url_multas, wait_until="domcontentloaded", timeout=20000)
+                    self._aguardar_ajax()
+                except Exception:
+                    self._clicar_menu_lateral("Multas e Indenizações", obrigatorio=False)
+                    self._page.wait_for_timeout(800)
+
+            # Clicar "Novo"
+            self._clicar_novo()
+            self._aguardar_ajax()
+            try:
+                self._page.wait_for_selector("[id$=':descricao']", state="visible", timeout=5000)
+            except Exception:
+                self._log(f"  ⚠ '{nome_m}': formulário Novo não abriu — ignorada.")
+                continue
+
+            # Nome/Descrição — ID confirmado: formulario:descricao
+            self._preencher("descricao", nome_m, obrigatorio=False)
+
+            # Valor: INFORMADO (valor fixo) ou CALCULADO (percentual sobre base)
+            _valor_fixo = multa.get("valor")
+            _percentual = multa.get("percentual") or multa.get("aliquota")
+            if _valor_fixo is not None:
+                self._marcar_radio("valor", "INFORMADO")
+                self._preencher("aliquota", _fmt_br(float(_valor_fixo)), False)
+            elif _percentual is not None:
+                self._marcar_radio("valor", "CALCULADO")
+                self._preencher("aliquota", _fmt_br(float(_percentual)), False)
+            else:
+                self._marcar_radio("valor", "CALCULADO")
+
+            # Credor/Devedor — padrão: Reclamante e Reclamado
+            _credor = multa.get("credor_devedor", "RECLAMANTE_RECLAMADO")
+            self._selecionar("credorDevedor", _credor, obrigatorio=False)
+
+            # Base da multa — padrão: PRINCIPAL
+            _base = multa.get("base", "PRINCIPAL")
+            self._selecionar("tipoBaseMulta", _base, obrigatorio=False)
+
+            self._clicar_salvar()
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            self._log(f"  ✓ Multa/Indenização: {nome_m}")
+
+        self._log("Fase 3B concluída.")
+
     # ── Fase 4: FGTS ──────────────────────────────────────────────────────────
 
     @retry(max_tentativas=3)
@@ -2451,40 +2844,84 @@ class PJECalcPlaywright:
             self._log("  → Seção FGTS não encontrada no menu — incidência já configurada por verba.")
             return
         self.mapear_campos("fase4_fgts")
-        # Destino do FGTS (para reclamante ou depósito em conta)
-        if fgts.get("destino"):
-            self._selecionar("destinoFGTS", fgts["destino"], obrigatorio=False)
 
-        # Alíquota FGTS (padrão 8%)
+        # IDs confirmados por inspeção DOM (fgts.jsf v2.15.1):
+        # formulario:tipoDeVerba (radio PAGAR/DEPOSITAR)
+        # formulario:comporPrincipal (radio SIM/NAO)
+        # formulario:multa (checkbox — ativa a multa rescisória 40%)
+        # formulario:multaDoFgts (radio VINTE_POR_CENTO/QUARENTA_POR_CENTO)
+        # formulario:multaDoArtigo467 (checkbox — Multa Art. 467 CLT)
+        # formulario:multa10 (checkbox — multa 10% rescisão antecipada)
+        # formulario:aliquota (radio OITO_POR_CENTO/DOIS_POR_CENTO)
+        # formulario:incidenciaDoFgts (select)
+        # formulario:excluirAvisoDaMulta (checkbox)
+        # formulario:deduzirDoFGTS (checkbox)
+        # formulario:competenciaInputDate + formulario:valor (saldo depositado)
+
+        # Destino: PAGAR (ao reclamante) ou DEPOSITAR (em conta vinculada)
+        _destino = fgts.get("destino", "PAGAR")
+        self._marcar_radio("tipoDeVerba", _destino)
+
+        # Compor principal
+        _compor = "SIM" if fgts.get("compor_principal", True) else "NAO"
+        self._marcar_radio("comporPrincipal", _compor)
+
+        # Alíquota — radio com valores enum (não percentual numérico)
         aliquota = fgts.get("aliquota", 0.08)
-        self._preencher("aliquotaFgts", _fmt_br(aliquota * 100), False)
-        self._preencher("percentualFgts", _fmt_br(aliquota * 100), False)
-        self._preencher("aliquota", _fmt_br(aliquota * 100), False)
+        _aliq_radio = "DOIS_POR_CENTO" if aliquota <= 0.02 else "OITO_POR_CENTO"
+        self._marcar_radio("aliquota", _aliq_radio)
 
-        # Multa: checkbox apurarMulta + select tipoMulta (40% ou 50%)
+        # Incidência do FGTS (select) — padrão: sobre o total devido
+        _incidencia_map = {
+            "total_devido": "SOBRE_O_TOTAL_DEVIDO",
+            "depositado_sacado": "SOBRE_DEPOSITADO_SACADO",
+            "diferenca": "SOBRE_DIFERENCA",
+            "total_mais_saque": "SOBRE_TOTAL_DEVIDO_MAIS_SAQUE_E_OU_SALDO",
+            "total_menos_saque": "SOBRE_TOTAL_DEVIDO_MENOS_SAQUE_E_OU_SALDO",
+        }
+        _incidencia = _incidencia_map.get(
+            fgts.get("incidencia", "total_devido"), "SOBRE_O_TOTAL_DEVIDO"
+        )
+        self._selecionar("incidenciaDoFgts", _incidencia, obrigatorio=False)
+
+        # Multa rescisória — checkbox formulario:multa + radio formulario:multaDoFgts
         multa_40 = fgts.get("multa_40", True)
         multa_467 = fgts.get("multa_467", False)
-        if multa_40 or multa_467:
-            self._marcar_checkbox("apurarMulta", True)
-            tipo_multa = "CINQUENTA" if multa_467 else "QUARENTA"
-            self._selecionar("tipoMulta", tipo_multa, obrigatorio=False)
-        # Fallback para checkboxes específicos (versões antigas do PJE-Calc)
-        self._marcar_checkbox("multa40", bool(multa_40))
-        self._marcar_checkbox("multaFgts40", bool(multa_40))
-        self._marcar_checkbox("multa467", bool(multa_467))
-        self._marcar_checkbox("multaFgts467", bool(multa_467))
+        self._marcar_checkbox("multa", bool(multa_40))
+        if multa_40:
+            # Percentual: 40% padrão; 20% para estabilidade provisória (CIPA, gestante etc.)
+            _pct_multa = "VINTE_POR_CENTO" if fgts.get("multa_20") else "QUARENTA_POR_CENTO"
+            self._marcar_radio("multaDoFgts", _pct_multa)
+            # Tipo do valor da multa (calculada pelo sistema ou informada)
+            self._marcar_radio("tipoDoValorDaMulta", "CALCULADA")
+            # Excluir aviso indenizado da base da multa (checkbox)
+            _excl_aviso = fgts.get("excluir_aviso_multa", False)
+            self._marcar_checkbox("excluirAvisoDaMulta", _excl_aviso)
 
-        # Saldos FGTS já depositados (dedução dos valores devidos)
+        # Multa Art. 467 CLT — checkbox formulario:multaDoArtigo467
+        self._marcar_checkbox("multaDoArtigo467", bool(multa_467))
+
+        # Multa 10% (rescisão antecipada de contrato a prazo)
+        if fgts.get("multa_10"):
+            self._marcar_checkbox("multa10", True)
+
+        # Saldos FGTS já depositados (para dedução)
         for saldo in fgts.get("saldos", []):
             if saldo.get("data") and saldo.get("valor"):
-                self._preencher_data("saldoData", saldo["data"], False)
-                self._preencher("saldoValor", _fmt_br(saldo["valor"]), False)
-                if self._clicar_botao_id("btnAdicionarSaldo"):
+                self._marcar_checkbox("deduzirDoFGTS", True)
+                self._preencher_data("competencia", saldo["data"], False)
+                self._preencher("valor", _fmt_br(saldo["valor"]), False)
+                # Adicionar linha via botão "+" ou Enter
+                _adicionou = (
+                    self._clicar_botao_id("btnAdicionarSaldo")
+                    or self._clicar_botao_id("adicionarSaldo")
+                )
+                if _adicionou:
                     self._aguardar_ajax()
-                    self._log(f"  ✓ Saldo FGTS adicionado: {saldo['data']} R$ {saldo['valor']}")
+                    self._log(f"  ✓ Saldo FGTS deduzido: {saldo['data']} R$ {saldo['valor']}")
 
-        # Salvar (seletor específico prioritário)
-        if not (self._clicar_botao_id("btnSalvarFGTS") or self._clicar_salvar()):
+        # Salvar — ID confirmado: formulario:salvar
+        if not self._clicar_salvar():
             self._log("  ⚠ Fase 4: Salvar FGTS não confirmado.")
         self._aguardar_ajax()
         self._log("Fase 4 concluída.")
@@ -3072,13 +3509,23 @@ class PJECalcPlaywright:
         self._page.wait_for_timeout(2000)
 
         # Validar resultado da liquidação antes de exportar
+        # Mensagem de sucesso: "Não foram encontradas pendências para a liquidação"
         try:
             body_text = self._page.locator("body").text_content(timeout=5000) or ""
-            for indicador in ["Não foi possível", "inconsistente", "pendente", "Erro interno"]:
-                if indicador.lower() in body_text.lower():
-                    self._log(f"  ⚠ Liquidação pode ter falhado: '{indicador}' detectado na página")
-                    self._screenshot_fase("liquidacao_erro")
-                    break
+            _body_lower = body_text.lower()
+            # Verificar sucesso explícito
+            if "não foram encontradas pendências" in _body_lower or \
+               "liquidação realizada" in _body_lower or \
+               "cálculo liquidado" in _body_lower:
+                self._log("  ✓ Liquidação concluída sem pendências")
+            else:
+                # Verificar erros — "pendente" sozinho é falso positivo (aparece na msg de sucesso)
+                for indicador in ["não foi possível", "inconsistente", "erro interno",
+                                  "existem pendências", "campos obrigatórios"]:
+                    if indicador in _body_lower:
+                        self._log(f"  ⚠ Liquidação pode ter falhado: '{indicador}' detectado")
+                        self._screenshot_fase("liquidacao_erro")
+                        break
         except Exception:
             pass
 
@@ -3230,6 +3677,12 @@ class PJECalcPlaywright:
         _progress(3)
         self.fase_verbas(verbas_mapeadas)
         self._screenshot_fase("03_verbas")
+
+        # Multas e Indenizações — apenas se houver itens extraídos
+        _multas = dados.get("multas_indenizacoes", [])
+        if _multas:
+            self.fase_multas_indenizacoes(_multas)
+            self._screenshot_fase("03b_multas_indenizacoes")
 
         _progress(4)
         self.fase_fgts(dados.get("fgts", {}))

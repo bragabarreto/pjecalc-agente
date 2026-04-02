@@ -1,7 +1,6 @@
 ---
 name: pjecalc-operacional
 description: Regras operacionais para automação do PJE-Calc Cidadão — roteiros executáveis por parcela, regras de dependência entre módulos, fichas técnicas de cada verba com passo a passo de preenchimento, armadilhas e validação. Baseado em 11 videoaulas do Prof. Jorge Penna + manual CSJT.
-allowed-tools: browser, shell, file
 ---
 
 # Skill: PJE-Calc Operacional — Regras para Processamento e Automação
@@ -23,6 +22,9 @@ Complementa a skill `/pjecalc-preenchimento` (manual genérico) com **roteiros o
 5. **Campos obrigatórios em verbas manuais** — Preencher `caracteristica`, `ocorrencia`, `base_calculo`. Sem eles, liquidação HTTP 500.
 6. **Gerar Ocorrências antes de Salvar** — No histórico salarial e em verbas com ocorrências mensais.
 7. **Regerar após alterações estruturais** — Mudanças de período, base ou incidência exigem regeração.
+8. **Reflexos NÃO são verbas manuais** — Reflexos (13o, férias, aviso, DSR, FGTS) são configurados clicando no botão **"Verba Reflexa"** à direita de cada verba principal na listagem `verbas-para-calculo.jsf`. NUNCA criar reflexo como verba manual autônoma.
+9. **Multa FGTS 40% = checkbox na aba FGTS** — Em Cálculo > FGTS, existe um checkbox para incluir a multa rescisória de 40% sobre o FGTS. Não é verba.
+10. **Multa Art. 467 CLT = checkbox dentro da seção de Multa 40% no FGTS** — Aparece como sub-opção/checkbox dentro da seção "Multa 40%" da aba FGTS (Cálculo > FGTS). Não é verba manual nem reflexo via botão "Verba Reflexa". A extração JSON deve preencher `fgts.multa_467: true` quando a sentença deferir esta multa.
 
 ---
 
