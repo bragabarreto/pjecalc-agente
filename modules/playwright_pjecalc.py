@@ -1294,7 +1294,20 @@ class PJECalcPlaywright:
                 self._page.wait_for_load_state("networkidle", timeout=15000)
                 return False
             if "Erro interno do servidor" in body or ("500" in body and "Erro" in body):
-                self._log("  ⚠ Erro 500 detectado — voltando para home…")
+                self._log("  ⚠ Erro 500 detectado — aguardando 5s e retentando…")
+                self._page.wait_for_timeout(5000)
+                # Recarregar a página atual antes de voltar para home
+                try:
+                    self._page.reload(wait_until="domcontentloaded", timeout=15000)
+                    self._page.wait_for_timeout(2000)
+                    body2 = self._page.locator("body").text_content(timeout=5000) or ""
+                    if "Erro interno" not in body2 and "500" not in body2:
+                        self._log("  ✓ Erro 500 resolvido após reload")
+                        return True
+                except Exception:
+                    pass
+                # Ainda com erro — voltar para home
+                self._log("  ⚠ Erro 500 persistente — voltando para home…")
                 home = self._page.locator(
                     "a:has-text('Tela Inicial'), a:has-text('Página Inicial')"
                 )
@@ -3261,9 +3274,17 @@ def preencher_como_generator(
     import threading
 
     log_queue: queue.Queue[str | None] = queue.Queue()
+    _stop_keepalive = threading.Event()
 
     def _cb(msg: str) -> None:
         log_queue.put(msg)
+
+    def _keepalive() -> None:
+        """Envia heartbeat a cada 10s para manter SSE vivo durante operações longas."""
+        while not _stop_keepalive.is_set():
+            _stop_keepalive.wait(10)
+            if not _stop_keepalive.is_set():
+                log_queue.put("⏳ Processando…")
 
     def _run() -> None:
         try:
@@ -3280,8 +3301,10 @@ def preencher_como_generator(
             log_queue.put(f"ERRO: {exc}")
             logger.exception(f"Erro na automação (generator): {exc}")
         finally:
+            _stop_keepalive.set()
             log_queue.put(None)  # sentinela de fim
 
+    threading.Thread(target=_keepalive, daemon=True).start()
     threading.Thread(target=_run, daemon=True).start()
 
     while True:
