@@ -2352,6 +2352,17 @@ class PJECalcPlaywright:
             if not _ocorr_ok:
                 self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' NÃO preenchida — pode causar erro na liquidação")
 
+            # ── Base de Cálculo (obrigatório para liquidação) ──
+            _base = v.get("base_calculo") or "Historico Salarial"
+            _base_ok = False
+            for _bid in ["baseCalculo", "baseDaVerba", "baseParaCalculo", "base"]:
+                if self._selecionar(_bid, _base, obrigatorio=False):
+                    _base_ok = True
+                    self._log(f"  ✓ base_calculo: {_base}")
+                    break
+            if not _base_ok:
+                self._log(f"  ⚠ Verba '{nome}': base_calculo '{_base}' não preenchida")
+
             if v.get("valor_informado"):
                 self._marcar_radio("valor", "INFORMADO") or \
                     self._marcar_radio("tipoValor", "INFORMADO")
@@ -3252,6 +3263,11 @@ class PJECalcPlaywright:
             periciais=dados.get("honorarios_periciais"),
         )
         self._screenshot_fase("09_honorarios")
+
+        # Checklist pré-liquidação
+        self._log("→ Verificação pré-liquidação…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
 
         _progress(10)
         caminho_pjc = self._clicar_liquidar()
