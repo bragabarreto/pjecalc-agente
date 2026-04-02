@@ -50,7 +50,7 @@ PDF/DOCX → ingestion.py → extraction.py → classification.py → prévia we
 2. **Extração** (`modules/extraction.py`): Prompt estruturado ao Claude API (temperature=0). Parse tolerante a JSON inválido. Fallback regex para datas/valores. Retorna confidence scores 0–1 por campo.
 3. **Classificação** (`modules/classification.py`): Tabela `VERBAS_PREDEFINIDAS` com 40+ verbas trabalhistas mapeadas para PJE-Calc (nome exato, incidências FGTS/INSS/IR, reflexas). Claude resolve verbas não reconhecidas.
 4. **Prévia web** (`templates/previa.html` + `webapp.py`): Todos os campos editáveis via `salvarCampo()` com PATCH inline. Estado persiste em banco antes de qualquer automação.
-5. **Automação** (`modules/playwright_pjecalc.py`): Playwright Chromium headless conecta ao Tomcat local (`:9257`). Navega pelo menu **"Novo"** (não "Cálculo Externo") para primeira liquidação de sentença. Fases: dados processo → histórico salarial → verbas → FGTS → INSS → honorários → liquidar.
+5. **Automação** (`modules/playwright_pjecalc.py`): Playwright **Firefox** headless conecta ao Tomcat local (`:9257`). Firefox é o navegador nativo do PJE-Calc Cidadão (RichFaces/JSF). Navega pelo menu **"Novo"** (não "Cálculo Externo") para primeira liquidação de sentença. Fases: dados processo → histórico salarial → verbas → FGTS → INSS → honorários → liquidar.
 6. **Export** (`modules/pjc_generator.py`): Gerador nativo de `.PJC` = ZIP com XML ISO-8859-1. Timestamps em ms BRT (UTC-3). IDs determinísticos via hash da sessão.
 
 ### Banco de dados (`database.py`)
@@ -137,6 +137,38 @@ Além dos 5 modelos existentes, 3 novos para o Learning Engine:
 - `CorrecaoUsuario` — cada correção do usuário na prévia (campo, valor_antes, valor_depois, confiança_ia)
 - `RegrasAprendidas` — regras geradas pelo LLM (condição, ação, confiança, aplicações/acertos)
 - `SessaoAprendizado` — sessões periódicas de análise (status, N correções, N regras, resumo)
+
+## Descobertas críticas (abril/2026)
+
+### Arquivo .PJC — gerador nativo vs exportação PJE-Calc
+O `pjc_generator.py` gera um template **pré-liquidação** (~52KB) que o PJE-Calc **rejeita** na importação.
+Arquivos válidos são **pós-liquidação** (~60-560KB) exportados pelo próprio PJE-Calc via botão Exportar.
+**Regra:** nunca usar o gerador nativo como resultado final. A automação deve completar a liquidação
+e exportar via interface do PJE-Calc.
+
+### Browser — Firefox obrigatório
+O PJE-Calc Cidadão é desenvolvido para Firefox. Playwright usa Firefox (`self._pw.firefox.launch()`).
+Chromium causa incompatibilidades em eventos AJAX do RichFaces, calendários e popups JSF.
+
+### Verbas manuais — campos obrigatórios
+Verbas criadas via botão "Manual" (`id="incluir"`) precisam ter `caracteristica`, `ocorrencia` e
+`base_calculo` preenchidos. Sem eles, a liquidação falha com HTTP 500. O modo Expresso preenche
+automaticamente esses campos.
+
+### Expresso — tabela paginada
+A tabela do Lançamento Expresso (`verbas-para-calculo.xhtml`) usa `<a4j:repeat>` em layout de colunas.
+Apenas ~27 das 60+ verbas são visíveis no viewport. Verbas como "Saldo de Salário", "Férias 
+Proporcionais + 1/3", "Multa 477/467" ficam abaixo do scroll. Scroll via JS + re-enumeração necessários.
+
+### SSE stream — keepalive obrigatório
+O SSE stream (endpoint `/api/executar/{sessao_id}`) precisa de keepalive a cada 10-15s para evitar
+que o frontend (EventSource) desconecte durante operações longas (browser restart, AJAX pesado).
+Thread de keepalive dedicada envia `"⏳ Processando…"` via queue.
+
+### Histórico Salarial — extração obrigatória
+O prompt de extração deve extrair histórico salarial SEMPRE (mesmo salário uniforme = 1 entrada).
+Campos: nome, data_inicio, data_fim, valor, incidencia_fgts, incidencia_cs. O usuário pode
+adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 
 ## Documentos de referência
 

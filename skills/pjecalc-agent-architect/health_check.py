@@ -8,7 +8,7 @@ Verifica todos os componentes necessários para o agente funcionar:
 - Tomcat (porta 9257)
 - Banco de dados (SQLite/PostgreSQL)
 - APIs externas (Claude/Gemini)
-- Playwright e Chromium
+- Playwright e Firefox
 - Xvfb (se em ambiente headless)
 
 Uso:
@@ -234,25 +234,25 @@ def check_api_keys() -> CheckResult:
 
 
 def check_playwright() -> CheckResult:
-    """Verifica Playwright e Chromium."""
+    """Verifica Playwright e Firefox."""
     try:
         import playwright
     except ImportError:
         return CheckResult(
             "playwright", "warning",
             "Playwright não instalado — automação indisponível",
-            details="pip install playwright && playwright install chromium"
+            details="pip install playwright && playwright install firefox"
         )
 
     try:
         result = subprocess.run(
-            ["playwright", "install", "--dry-run", "chromium"],
+            ["playwright", "install", "--dry-run", "firefox"],
             capture_output=True, text=True, timeout=10
         )
-        # Se dry-run não tem saída, chromium já está instalado
-        return CheckResult("playwright", "ok", "Playwright + Chromium instalados")
+        # Se dry-run não tem saída, firefox já está instalado
+        return CheckResult("playwright", "ok", "Playwright + Firefox instalados")
     except Exception:
-        return CheckResult("playwright", "warning", "Playwright instalado, Chromium status desconhecido")
+        return CheckResult("playwright", "warning", "Playwright instalado, Firefox status desconhecido")
 
 
 def check_xvfb() -> CheckResult:

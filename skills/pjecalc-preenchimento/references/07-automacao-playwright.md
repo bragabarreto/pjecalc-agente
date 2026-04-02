@@ -2,6 +2,17 @@
 
 Este arquivo documenta seletores, estratégias e armadilhas para automação do PJE-Calc Cidadão via Playwright (Python), com base na estrutura da aplicação JSF/RichFaces rodando em Tomcat.
 
+> **IMPORTANTE (abril/2026):** Usar **Firefox** (`pw.firefox.launch()`), não Chromium. O PJE-Calc é
+> desenvolvido para Firefox e RichFaces gera HTML com quirks específicos para Gecko. Chromium causa
+> incompatibilidades em eventos AJAX, calendários RichFaces e popups JSF.
+
+> **ARQUIVO .PJC:** O gerador nativo (`pjc_generator.py`) produz templates pré-liquidação que o PJE-Calc
+> **rejeita** na importação. Sempre usar o fluxo: Preencher → Liquidar → Exportar (via PJE-Calc).
+
+> **BOTÃO MANUAL:** Para criar verbas manuais na página de verbas, clicar `id="incluir"` (value="Manual"),
+> NÃO o botão "Novo" (que cria um novo cálculo). Após criar, preencher `caracteristica`, `ocorrencia`
+> e `base_calculo` obrigatoriamente — sem eles a liquidação falha com HTTP 500.
+
 ---
 
 ## Arquitetura da Aplicação

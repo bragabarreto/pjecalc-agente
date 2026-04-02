@@ -78,11 +78,11 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                         )
                     except Exception:
                         pass
-                    # Recuperar crash do Chromium (Target crashed / context destruído)
+                    # Recuperar crash do Firefox (Target crashed / context destruído)
                     exc_str = str(exc)
                     if any(k in exc_str for k in ("Target crashed", "Target page, context or browser has been closed",
                                                     "Execution context was destroyed")):
-                        self._log("  🔄 Chromium crashou — reiniciando browser…")
+                        self._log("  🔄 Firefox crashou — reiniciando browser…")
                         try:
                             self.fechar()
                         except Exception:
@@ -427,21 +427,9 @@ class PJECalcPlaywright:
         asyncio.set_event_loop(asyncio.new_event_loop())
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
-        # --no-sandbox e --disable-dev-shm-usage: obrigatórios em Docker/Railway
-        # --disable-gpu / --disable-software-rasterizer: headless sem GPU dedicada
-        base_args = [
-            "--no-sandbox", "--disable-dev-shm-usage",
-            "--disable-extensions", "--disable-background-networking",
-            "--disable-default-apps", "--no-first-run",
-        ]
-        if headless:
-            base_args += ["--disable-gpu", "--disable-software-rasterizer"]
-        else:
-            base_args += ["--start-maximized"]
-        self._browser = self._pw.chromium.launch(
+        self._browser = self._pw.firefox.launch(
             headless=headless,
             slow_mo=0 if headless else 150,
-            args=base_args,
         )
         # viewport explícito: necessário para offsetParent e is_visible() funcionarem
         # em modo headless — sem viewport, todos os elementos reportam offsetParent=null
@@ -2318,15 +2306,51 @@ class PJECalcPlaywright:
                         except Exception:
                             continue
 
+            # ── Característica (obrigatória para liquidação) ──
             carac = carac_map.get(v.get("caracteristica", "Comum"), "COMUM")
-            any(self._selecionar(fid, carac, obrigatorio=False)
-                for fid in ["caracteristicaVerba", "stpcaracteristicaverba",
-                             "caracteristica", "tipoVerba"])
+            carac_label = v.get("caracteristica", "Comum")  # texto legível para fallback
+            _carac_ok = False
+            for fid in ["caracteristicaVerba", "stpcaracteristicaverba",
+                         "caracteristica", "tipoVerba"]:
+                if self._selecionar(fid, carac, obrigatorio=False):
+                    _carac_ok = True
+                    break
+                # Fallback: tentar pelo texto legível (ex: "Comum" em vez de "COMUM")
+                if self._selecionar(fid, carac_label, obrigatorio=False):
+                    _carac_ok = True
+                    break
+                # Fallback: fuzzy match nas opções do select
+                _opcoes = self._extrair_opcoes_select(fid)
+                if _opcoes:
+                    _match = self._match_fuzzy(carac_label, _opcoes)
+                    if _match and self._selecionar(fid, _match, obrigatorio=False):
+                        _carac_ok = True
+                        break
+            if not _carac_ok:
+                self._log(f"  ⚠ Verba '{nome}': característica '{carac_label}' NÃO preenchida — pode causar erro na liquidação")
 
+            # ── Ocorrência de pagamento (obrigatória para liquidação) ──
             ocorr = ocorr_map.get(v.get("ocorrencia", "Mensal"), "MENSAL")
-            any(self._selecionar(fid, ocorr, obrigatorio=False)
-                for fid in ["ocorrenciaPagto", "ocorrenciaDePagamento",
-                             "ocorrencia", "periodicidade"])
+            ocorr_label = v.get("ocorrencia", "Mensal")  # texto legível para fallback
+            _ocorr_ok = False
+            for fid in ["ocorrenciaPagto", "ocorrenciaDePagamento",
+                         "ocorrencia", "periodicidade"]:
+                if self._selecionar(fid, ocorr, obrigatorio=False):
+                    _ocorr_ok = True
+                    break
+                # Fallback: tentar pelo texto legível
+                if self._selecionar(fid, ocorr_label, obrigatorio=False):
+                    _ocorr_ok = True
+                    break
+                # Fallback: fuzzy match nas opções do select
+                _opcoes = self._extrair_opcoes_select(fid)
+                if _opcoes:
+                    _match = self._match_fuzzy(ocorr_label, _opcoes)
+                    if _match and self._selecionar(fid, _match, obrigatorio=False):
+                        _ocorr_ok = True
+                        break
+            if not _ocorr_ok:
+                self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' NÃO preenchida — pode causar erro na liquidação")
 
             if v.get("valor_informado"):
                 self._marcar_radio("valor", "INFORMADO") or \
@@ -2337,9 +2361,27 @@ class PJECalcPlaywright:
                 self._marcar_radio("valor", "CALCULADO") or \
                     self._marcar_radio("tipoValor", "CALCULADO")
 
-            self._marcar_checkbox("fgts", bool(v.get("incidencia_fgts")))
-            self._marcar_checkbox("inss", bool(v.get("incidencia_inss")))
-            self._marcar_checkbox("irpf", bool(v.get("incidencia_ir")))
+            # ── Incidências (checkboxes) — tentar múltiplos IDs do formulário manual ──
+            _fgts = bool(v.get("incidencia_fgts"))
+            if not any(self._marcar_checkbox(fid, _fgts) for fid in [
+                "incidenciaFGTS", "incideFgts", "fgts", "incidenciaFgts",
+                "incidenciaDoFGTS", "incideNoFGTS",
+            ]):
+                self._log(f"  ⚠ Verba '{nome}': checkbox FGTS não encontrado (desejado={_fgts})")
+
+            _inss = bool(v.get("incidencia_inss"))
+            if not any(self._marcar_checkbox(fid, _inss) for fid in [
+                "incidenciaINSS", "incideInss", "inss", "incidenciaInss",
+                "incidenciaDoINSS", "incideNoINSS",
+            ]):
+                self._log(f"  ⚠ Verba '{nome}': checkbox INSS não encontrado (desejado={_inss})")
+
+            _irpf = bool(v.get("incidencia_ir"))
+            if not any(self._marcar_checkbox(fid, _irpf) for fid in [
+                "incidenciaIRPF", "incideIrpf", "irpf", "incidenciaIr",
+                "incidenciaDoIRPF", "incideNoIRPF", "ir",
+            ]):
+                self._log(f"  ⚠ Verba '{nome}': checkbox IRPF não encontrado (desejado={_irpf})")
 
             if v.get("periodo_inicio"):
                 self._preencher_data("periodoInicial", v["periodo_inicio"], False)
@@ -2351,6 +2393,24 @@ class PJECalcPlaywright:
             self._clicar_salvar()
             self._aguardar_ajax()
             self._page.wait_for_timeout(600)
+
+            # Verificar se o salvamento gerou erro (HTTP 500 / mensagem de erro JSF)
+            try:
+                _erro_msgs = self._page.evaluate("""() => {
+                    const erros = [...document.querySelectorAll(
+                        '.rf-msgs-err, .rich-messages-marker, .rf-msg-err, ' +
+                        '[class*="error"], [class*="Error"], [class*="erro"]'
+                    )].map(e => e.textContent.trim()).filter(Boolean);
+                    // Verificar também se a página retornou erro HTTP
+                    if (document.title && document.title.match(/500|erro|error/i)) {
+                        erros.push('Página de erro HTTP: ' + document.title);
+                    }
+                    return erros;
+                }""")
+                if _erro_msgs:
+                    self._log(f"  ⚠ Verba '{nome}': ERRO ao salvar — {'; '.join(_erro_msgs[:3])}")
+            except Exception:
+                pass
 
             if self._page.url != _url_verbas:
                 try:

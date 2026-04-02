@@ -685,7 +685,7 @@ def main():
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=HEADLESS, slow_mo=SLOW_MO)
+        browser = p.firefox.launch(headless=HEADLESS, slow_mo=SLOW_MO)
         ctx  = browser.new_context(viewport={"width": 1440, "height": 900})
         page = ctx.new_page()
 
@@ -768,10 +768,10 @@ if %errorlevel% neq 0 (
         pause
         exit /b 1
     )
-    python -m playwright install chromium
+    python -m playwright install firefox
     if %errorlevel% neq 0 (
-        echo  [ERRO] Falha ao instalar o browser Chromium.
-        echo  Tente manualmente: python -m playwright install chromium
+        echo  [ERRO] Falha ao instalar o browser Firefox.
+        echo  Tente manualmente: python -m playwright install firefox
         pause
         exit /b 1
     )

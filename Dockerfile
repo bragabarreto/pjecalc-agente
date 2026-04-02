@@ -3,7 +3,7 @@
 # Contém tudo em um container:
 #   - PJE-Calc Cidadão (Tomcat 7 + H2 Java) na porta 9257
 #   - dialog-suppressor.jar (Java Agent: SecurityManager + xdotool)
-#   - Playwright Chromium (headless) para automação
+#   - Playwright Firefox (headless) para automação
 #   - Python Agent (FastAPI/uvicorn) na porta 8000
 #
 # Build:  docker build -t pjecalc-agent .
@@ -45,7 +45,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 \
     && update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1
 
-# ── Dependências de sistema para Playwright Chromium + Java AWT + xdotool ────
+# ── Dependências de sistema para Playwright Firefox + Java AWT + xdotool ─────
 # cache-bust: 2026-03-23-v5
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Playwright deps
@@ -98,8 +98,8 @@ WORKDIR /app
 COPY requirements-cloud.txt .
 RUN pip install --no-cache-dir -r requirements-cloud.txt
 
-# Instalar Playwright Chromium
-RUN playwright install chromium --with-deps
+# Instalar Playwright Firefox
+RUN playwright install firefox --with-deps
 
 # Código fonte
 COPY . .

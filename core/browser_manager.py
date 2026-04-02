@@ -34,7 +34,7 @@ if TYPE_CHECKING:
 # ── Exceções customizadas ─────────────────────────────────────────────────────
 
 class PJECalcCrashError(Exception):
-    """Chromium ou contexto Playwright crashou."""
+    """Firefox ou contexto Playwright crashou."""
 
 
 class PJECalcViewExpiredError(Exception):
@@ -58,7 +58,7 @@ def pjecalc_retry(
     Comportamento:
     - 3 tentativas com backoff exponencial (2s, 4s, 8s)
     - Log de aviso antes de cada nova tentativa
-    - Detecta crash do Chromium e ViewExpiredException para retry específico
+    - Detecta crash do Firefox e ViewExpiredException para retry específico
 
     Args:
         max_attempts: Número máximo de tentativas
@@ -87,7 +87,7 @@ class BrowserManager:
 
     Responsabilidades:
     - Inicializar e fechar o browser corretamente
-    - Detectar crashes do Chromium e reiniciar em thread limpa
+    - Detectar crashes do Firefox e reiniciar em thread limpa
     - Detectar ViewExpiredException e recarregar a página
     - Capturar screenshot em caso de erro
     - Consultar LLMOrchestrator (Gemini) para decisões de recovery
@@ -142,7 +142,7 @@ class BrowserManager:
         """Inicia Playwright, browser, context e page."""
         from playwright.sync_api import sync_playwright
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=self._headless)
+        self._browser = self._playwright.firefox.launch(headless=self._headless)
         self._context = self._browser.new_context()
         self._page = self._context.new_page()
         logger.info("browser_started", headless=self._headless)
@@ -174,7 +174,7 @@ class BrowserManager:
 
     def handle_crash(self, exc: Exception, func_name: str, attempt: int) -> bool:
         """
-        Tenta recuperar de um crash do Chromium.
+        Tenta recuperar de um crash do Firefox.
 
         Args:
             exc: Exceção capturada
@@ -208,10 +208,10 @@ class BrowserManager:
                 pass
             return False
 
-        # Crash do Chromium → screenshot + reiniciar
+        # Crash do Firefox → screenshot + reiniciar
         screenshot_path = self._take_screenshot(f"crash_{func_name}_{attempt}")
         logger.warning(
-            "chromium_crash",
+            "firefox_crash",
             func=func_name,
             attempt=attempt,
             screenshot=str(screenshot_path),
