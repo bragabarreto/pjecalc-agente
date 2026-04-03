@@ -494,6 +494,12 @@ class PJECalcPlaywright:
                 "() => window.__ajaxCompleto === true",
                 timeout=timeout,
             )
+            # Reset obrigatório: sem isso a próxima espera retorna imediatamente
+            # com o true da operação anterior (falso positivo em cascata AJAX).
+            try:
+                self._page.evaluate("() => { window.__ajaxCompleto = false; }")
+            except Exception:
+                pass
         except Exception:
             try:
                 self._page.wait_for_load_state("networkidle", timeout=5000)
@@ -3506,6 +3512,26 @@ class PJECalcPlaywright:
             if not dest.suffix:
                 dest = dest.with_suffix(".pjc")
             dl_info_value.save_as(str(dest))
+            # Verificar integridade do .PJC (deve ser ZIP com calculo.xml)
+            try:
+                tamanho = dest.stat().st_size
+                if tamanho < 1024:
+                    self._log(f"  ⚠ .PJC suspeito: apenas {tamanho} bytes — pode estar corrompido")
+                else:
+                    import zipfile as _zf
+                    try:
+                        with _zf.ZipFile(str(dest), 'r') as _z:
+                            _nomes = _z.namelist()
+                            if "calculo.xml" not in _nomes:
+                                self._log(f"  ⚠ .PJC sem calculo.xml — conteúdo: {_nomes[:5]}")
+                            elif _z.testzip() is not None:
+                                self._log(f"  ⚠ .PJC ZIP corrompido (testzip falhou)")
+                            else:
+                                self._log(f"  ✓ .PJC válido ({tamanho//1024}KB, calculo.xml presente)")
+                    except _zf.BadZipFile:
+                        self._log(f"  ⚠ .PJC não é ZIP válido ({tamanho} bytes)")
+            except Exception as _ie:
+                self._log(f"  ⚠ Não foi possível verificar integridade do .PJC: {_ie}")
             self._log(f"PJC_GERADO:{dest}")
             return str(dest)
 
@@ -3655,8 +3681,9 @@ class PJECalcPlaywright:
             pass
 
         self._log(
-            "  ⚠ .PJC não capturado via browser — automação concluiu o preenchimento. "
-            "O arquivo .PJC gerado pelo gerador nativo estará disponível para download."
+            "  ⚠ .PJC não capturado via browser — exportação falhou. "
+            "Verifique o PJe-Calc e clique Exportar manualmente, ou reinicie a automação. "
+            "ATENÇÃO: o gerador nativo NÃO produz .PJC válido para importação no PJe-Calc Institucional."
         )
         return None
 
@@ -3797,11 +3824,12 @@ class PJECalcPlaywright:
         if caminho_pjc:
             self._log("CONCLUIDO: Automação concluída — .PJC gerado e disponível para download.")
         else:
-            # Preenchimento completo, mas download via browser não capturado.
-            # O gerador nativo (pjc_generator.py) já gerou o .PJC na etapa de confirmação.
+            # Campos preenchidos mas exportação não capturada.
+            # O gerador nativo produz .PJC INVÁLIDO — não usar como resultado final.
             self._log(
-                "CONCLUIDO: Campos preenchidos automaticamente. "
-                ".PJC do gerador nativo disponível para download na interface."
+                "CONCLUIDO: Campos preenchidos no PJe-Calc. "
+                "Exportação .PJC não capturada — verifique o PJe-Calc e clique Exportar manualmente, "
+                "ou reinicie a automação."
             )
         self._log("[FIM DA EXECUÇÃO]")
 

@@ -62,6 +62,8 @@ except ImportError:
 
 # Sessões em processamento (em memória) — evita 404 enquanto background task roda
 _sessoes_processando: dict[str, float] = {}  # sessao_id → timestamp de início
+# Lock de automação — impede execuções paralelas para o mesmo sessao_id
+_sessoes_automacao: set[str] = set()
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
@@ -1019,18 +1021,63 @@ async def executar_automacao_sse(
     """
     from fastapi.responses import StreamingResponse
 
+    from fastapi.responses import StreamingResponse as _SR
+
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
+    # Fix 5: Check 6 — impedir execuções paralelas para o mesmo sessao_id
+    if sessao_id in _sessoes_automacao:
+        async def _lock_sse():
+            yield "data: ERRO_EXPORTAVEL::Automação já em andamento para esta sessão. Aguarde o término.\n\n"
+            yield "data: [FIM DA EXECUÇÃO]\n\n"
+        return _SR(_lock_sse(), media_type="text/event-stream",
+                   headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
     dados = calculo.dados()
     verbas_mapeadas = calculo.verbas_mapeadas()
+
+    # Fix 4: validação dos dados antes de iniciar automação
+    from modules.extraction import ValidadorSentenca
+    _resultado_val = ValidadorSentenca(dados).validar()
+    if not _resultado_val.valido:
+        _erros_str = "; ".join(_resultado_val.erros[:3])
+        async def _val_sse():
+            yield f"data: ERRO_EXPORTAVEL::Dados inválidos — {_erros_str}\n\n"
+            yield "data: [FIM DA EXECUÇÃO]\n\n"
+        return _SR(_val_sse(), media_type="text/event-stream",
+                   headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    # Fix 6: validação CNJ módulo 97 (aviso não bloqueante)
+    def _validar_cnj(numero: str, digito: str, ano: str, regiao: str, vara: str) -> bool:
+        try:
+            num = numero + ano + "5" + regiao + vara + "00"
+            resto = int(num) % 97
+            return int(digito) == (97 - resto)
+        except Exception:
+            return True
+    _processo = dados.get("processo", {})
+    _cnj_aviso = None
+    if all(_processo.get(c) for c in ["numero", "digito_verificador", "ano", "regiao", "vara"]):
+        if not _validar_cnj(
+            str(_processo["numero"]), str(_processo.get("digito_verificador", "")),
+            str(_processo["ano"]), str(_processo["regiao"]), str(_processo["vara"])
+        ):
+            _cnj_aviso = "CNJ: dígito verificador inválido — verifique o número do processo"
 
     async def gerador_sse():
         import httpx
         from modules.playwright_pjecalc import preencher_como_generator
         from database import SessionLocal
+
+        # Fix 5: registrar lock de automação — liberado no finally
+        _sessoes_automacao.add(sessao_id)
+
+        # Fix 6: emitir aviso CNJ se inválido
+        if _cnj_aviso:
+            yield f"data: {json.dumps({'msg': f'⚠ {_cnj_aviso}'})}\n\n"
 
         # ── Persistência por processo ──────────────────────────────
         _exec_dir = None
@@ -1161,14 +1208,16 @@ async def executar_automacao_sse(
                             CalculationStore().atualizar_status(_exec_dir, "pjc_exportado")
                         except Exception:
                             pass
-                    yield f"data: {json.dumps({'msg': 'DOWNLOAD_DISPONIVEL', 'url': f'/download/{sessao_id}/pjc'})}\n\n"
+                    # Fix 7: protocolo SSE CalcMACHINE
+                    yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
                 if msg == "[FIM DA EXECUÇÃO]":
                     break
             elif kind == "fim":
                 yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
                 break
             elif kind == "erro":
-                yield f"data: {json.dumps({'msg': f'ERRO na automação: {value}'})}\n\n"
+                # Fix 7: usar ERRO_EXPORTAVEL para erros com contexto
+                yield f"data: ERRO_EXPORTAVEL::Automação: {value}\n\n"
                 _log_acumulado.append(f"ERRO: {value}")
                 yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
                 break
@@ -1180,6 +1229,9 @@ async def executar_automacao_sse(
                 CalculationStore().salvar_log(_exec_dir, _log_acumulado)
             except Exception:
                 pass
+
+        # Fix 5: liberar lock de automação
+        _sessoes_automacao.discard(sessao_id)
 
     return StreamingResponse(
         gerador_sse(),

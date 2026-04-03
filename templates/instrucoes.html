@@ -516,7 +516,33 @@ function abrirSSE() {
     `/api/executar/${SESSAO_ID}?modo_oculto=${modoOcultoAtual}`
   );
   evtSource.onmessage = (e) => {
-    const dados = JSON.parse(e.data);
+    const raw = e.data;
+
+    // Protocolo CalcMACHINE: mensagens texto puro
+    if (raw.startsWith('DOWNLOAD_LINK_CALC:')) {
+      const url = raw.slice('DOWNLOAD_LINK_CALC:'.length).trim();
+      const btn = document.createElement('a');
+      btn.href = url;
+      btn.className = 'btn btn-success';
+      btn.style = 'margin-top:12px; display:block; text-align:center; font-weight:700;';
+      btn.textContent = '⬇ Baixar .PJC Gerado';
+      document.getElementById('log-automacao').parentElement.appendChild(btn);
+      return;
+    }
+    if (raw.startsWith('ERRO_EXPORTAVEL::')) {
+      logMsg(raw.slice('ERRO_EXPORTAVEL::'.length), 'err');
+      return;
+    }
+    if (raw === '[FIM DA EXECUÇÃO]') {
+      automacaoConcluida = true;
+      atualizarProgresso(1, 1);
+      finalizarAutomacao();
+      return;
+    }
+
+    // Protocolo legado JSON
+    let dados;
+    try { dados = JSON.parse(raw); } catch { logMsg(raw, 'ok'); return; }
     if (dados.keepalive) return;
 
     // Typed progress event
@@ -526,15 +552,7 @@ function abrirSSE() {
     }
 
     const msg = dados.msg;
-    if (msg === 'DOWNLOAD_DISPONIVEL' && dados.url) {
-      const btn = document.createElement('a');
-      btn.href = dados.url;
-      btn.className = 'btn btn-success';
-      btn.style = 'margin-top:12px; display:block; text-align:center; font-weight:700;';
-      btn.textContent = '⬇ Baixar .PJC Gerado';
-      document.getElementById('log-automacao').parentElement.appendChild(btn);
-      return;
-    }
+    if (!msg) return;
     const tipo = msg.startsWith('ERRO') || msg.startsWith('Error') ? 'err'
                : (msg.startsWith('AGUARDANDO') || msg.includes('⚠') || msg.startsWith('⏳')) ? 'wait'
                : 'ok';
