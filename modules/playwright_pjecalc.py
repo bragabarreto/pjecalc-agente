@@ -827,6 +827,41 @@ class PJECalcPlaywright:
         self._log(f"  ⚠ radio {field_id}={valor}: não encontrado")
         return False
 
+    def _marcar_radio_js(self, sufixo_id: str, valor: str) -> bool:
+        """Fallback JS puro para radio buttons JSF — busca por contains() no id/name.
+
+        Usado quando _marcar_radio() falha (ex: table wrapper com ID dinâmico).
+        Dispara click + change event para garantir atualização do ViewState.
+        """
+        try:
+            clicou = self._page.evaluate(f"""() => {{
+                const radios = [...document.querySelectorAll('input[type="radio"]')];
+                // Busca por sufixo no id (ex: 'tipoDeVerba' em 'formulario:tipoDeVerba:0')
+                let r = radios.find(el =>
+                    (el.id || '').includes('{sufixo_id}') && el.value === '{valor}'
+                );
+                // Fallback: busca por sufixo no name
+                if (!r) {{
+                    r = radios.find(el =>
+                        (el.name || '').includes('{sufixo_id}') && el.value === '{valor}'
+                    );
+                }}
+                if (r) {{
+                    r.click();
+                    r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return true;
+                }}
+                return false;
+            }}""")
+            if clicou:
+                self._aguardar_ajax()
+                self._log(f"  ✓ radio JS {sufixo_id}: {valor}")
+                return True
+        except Exception:
+            pass
+        self._log(f"  ⚠ radio JS {sufixo_id}={valor}: não encontrado")
+        return False
+
     def _marcar_checkbox(
         self,
         field_id: str,
@@ -2023,6 +2058,10 @@ class PJECalcPlaywright:
             if not self._tomcat_esta_vivo():
                 raise RuntimeError("Tomcat morreu após salvar Expresso")
 
+            # Atualizar conversationId — o Expresso save pode mudar a conversação JSF.
+            # Sem isso, navegações subsequentes (Manual, FGTS, etc.) usam ID expirado → HTTP 500.
+            self._capturar_base_calculo()
+
             # Configurar reflexos
             self._configurar_reflexos_expresso(predefinidas)
         else:
@@ -2715,7 +2754,7 @@ class PJECalcPlaywright:
                 self._preencher_data("periodoFinal", v["periodo_fim"], False) or \
                 self._preencher_data("dtFinal", v["periodo_fim"], False)
 
-            self._clicar_salvar()
+            _salvou = self._clicar_salvar()
             self._aguardar_ajax()
             self._page.wait_for_timeout(600)
 
@@ -2734,10 +2773,20 @@ class PJECalcPlaywright:
                 }""")
                 if _erro_msgs:
                     self._log(f"  ⚠ Verba '{nome}': ERRO ao salvar — {'; '.join(_erro_msgs[:3])}")
+                    _salvou = False
             except Exception:
                 pass
 
-            if self._page.url != _url_verbas:
+            # Após salvar, atualizar conversationId (pode ter mudado) e voltar para listagem
+            self._capturar_base_calculo()
+            # Recalcular _url_verbas com o conversationId atual para próximas iterações
+            if self._calculo_url_base and self._calculo_conversation_id:
+                _url_verbas = (
+                    f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+
+            if "verbas-para-calculo" not in self._page.url:
                 try:
                     self._page.goto(_url_verbas, wait_until="domcontentloaded", timeout=20000)
                     self._page.wait_for_timeout(1000)
@@ -2745,7 +2794,11 @@ class PJECalcPlaywright:
                 except Exception:
                     self._clicar_menu_lateral("Verbas", obrigatorio=False)
                     self._page.wait_for_timeout(800)
-            self._log(f"  ✓ Verba manual: {nome}")
+
+            if _salvou:
+                self._log(f"  ✓ Verba manual: {nome}")
+            else:
+                self._log(f"  ✗ Verba '{nome}': Salvar falhou — VERBA NÃO REGISTRADA")
 
     # ── Fase 3B: Multas e Indenizações ────────────────────────────────────────
 
@@ -2860,16 +2913,19 @@ class PJECalcPlaywright:
 
         # Destino: PAGAR (ao reclamante) ou DEPOSITAR (em conta vinculada)
         _destino = fgts.get("destino", "PAGAR")
-        self._marcar_radio("tipoDeVerba", _destino)
+        self._marcar_radio("tipoDeVerba", _destino) or \
+            self._marcar_radio_js("tipoDeVerba", _destino)
 
         # Compor principal
         _compor = "SIM" if fgts.get("compor_principal", True) else "NAO"
-        self._marcar_radio("comporPrincipal", _compor)
+        self._marcar_radio("comporPrincipal", _compor) or \
+            self._marcar_radio_js("comporPrincipal", _compor)
 
         # Alíquota — radio com valores enum (não percentual numérico)
         aliquota = fgts.get("aliquota", 0.08)
         _aliq_radio = "DOIS_POR_CENTO" if aliquota <= 0.02 else "OITO_POR_CENTO"
-        self._marcar_radio("aliquota", _aliq_radio)
+        self._marcar_radio("aliquota", _aliq_radio) or \
+            self._marcar_radio_js("aliquota", _aliq_radio)
 
         # Incidência do FGTS (select) — padrão: sobre o total devido
         _incidencia_map = {
@@ -2891,9 +2947,11 @@ class PJECalcPlaywright:
         if multa_40:
             # Percentual: 40% padrão; 20% para estabilidade provisória (CIPA, gestante etc.)
             _pct_multa = "VINTE_POR_CENTO" if fgts.get("multa_20") else "QUARENTA_POR_CENTO"
-            self._marcar_radio("multaDoFgts", _pct_multa)
+            self._marcar_radio("multaDoFgts", _pct_multa) or \
+                self._marcar_radio_js("multaDoFgts", _pct_multa)
             # Tipo do valor da multa (calculada pelo sistema ou informada)
-            self._marcar_radio("tipoDoValorDaMulta", "CALCULADA")
+            self._marcar_radio("tipoDoValorDaMulta", "CALCULADA") or \
+                self._marcar_radio_js("tipoDoValorDaMulta", "CALCULADA")
             # Excluir aviso indenizado da base da multa (checkbox)
             _excl_aviso = fgts.get("excluir_aviso_multa", False)
             self._marcar_checkbox("excluirAvisoDaMulta", _excl_aviso)
