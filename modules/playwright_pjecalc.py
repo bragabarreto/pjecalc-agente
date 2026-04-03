@@ -2140,6 +2140,10 @@ class PJECalcPlaywright:
 
             # Configurar reflexos
             self._configurar_reflexos_expresso(predefinidas)
+
+            # Configurar Parâmetros + Ocorrências de cada verba
+            # (período, percentual, base de cálculo — dados extraídos da sentença)
+            self._pos_expresso_parametros_ocorrencias(predefinidas)
         else:
             self._log("  ⚠ Nenhuma verba marcada no Expresso")
 
@@ -2354,6 +2358,238 @@ class PJECalcPlaywright:
         except Exception as _e:
             self._log(f"  ⚠ _marcar_checkbox_expresso({nome}): {_e}")
             return False
+
+    # ── Mapeamento base_calculo → enum do select tipoDaBaseTabelada ────────────
+    _BASE_CALCULO_MAP: dict[str, str] = {
+        "maior remuneracao":  "MAIOR_REMUNERACAO",
+        "maior remuneração":  "MAIOR_REMUNERACAO",
+        "historico salarial": "HISTORICO_SALARIAL",
+        "histórico salarial": "HISTORICO_SALARIAL",
+        "salario minimo":     "SALARIO_MINIMO",
+        "salário mínimo":     "SALARIO_MINIMO",
+        "piso salarial":      "SALARIO_DA_CATEGORIA",
+        "salario categoria":  "SALARIO_DA_CATEGORIA",
+    }
+
+    def _configurar_parametros_verba(self, verba: dict, nome_na_lista: str) -> bool:
+        """Abre 'Parâmetros da Verba' para a linha que contém nome_na_lista e preenche
+        todos os campos disponíveis na extração (período, percentual, base, quantidade).
+
+        Retorna True se salvou com sucesso.
+        """
+        import re as _re
+
+        # 1. Clicar botão "Parâmetros da Verba" na linha correspondente
+        _kw = nome_na_lista.lower()[:18]
+        _clicou = self._page.evaluate(f"""() => {{
+            const rows = document.querySelectorAll('tr');
+            for (const tr of rows) {{
+                if (!tr.textContent.toLowerCase().includes({repr(_kw)})) continue;
+                const btns = [...tr.querySelectorAll('a, input[type="button"], input[type="submit"]')];
+                for (const btn of btns) {{
+                    const t = (btn.title || btn.value || btn.textContent || '').toLowerCase();
+                    if (t.includes('par') && (t.includes('metro') || t.includes('metro'))) {{
+                        btn.click();
+                        return true;
+                    }}
+                }}
+                // fallback: segundo ícone de ação na linha (ordem: incluir, parâmetros, excluir)
+                const acoes = [...tr.querySelectorAll('a[id*="acao"], input[id*="acao"], a[id*="editar"], input[id*="editar"], a[id*="parametro"], a[id*="alterar"]')];
+                if (acoes.length >= 1) {{
+                    acoes[0].click();
+                    return true;
+                }}
+            }}
+            return false;
+        }}""")
+        if not _clicou:
+            self._log(f"  ⚠ Parâmetros '{nome_na_lista}': botão não encontrado na listagem")
+            return False
+
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(800)
+
+        # Verificar se navegou para verba-calculo.jsf
+        _url_atual = self._page.url
+        if "verba-calculo" not in _url_atual and "verba" not in _url_atual:
+            self._log(f"  ⚠ Parâmetros '{nome_na_lista}': navegação inesperada → {_url_atual}")
+            return False
+
+        # 2. Preencher campos disponíveis
+        _preencheu = False
+
+        # Período De
+        _pini = verba.get("periodo_inicio")
+        if _pini:
+            self._preencher_data("periodoInicialInputDate", _pini, obrigatorio=False)
+            _preencheu = True
+
+        # Período Até
+        _pfim = verba.get("periodo_fim")
+        if _pfim:
+            self._preencher_data("periodoFinalInputDate", _pfim, obrigatorio=False)
+            _preencheu = True
+
+        # Multiplicador (percentual) — só se extraído
+        _perc = verba.get("percentual")
+        _confianca = verba.get("confianca", 1.0)
+        if _perc is not None and _confianca >= 0.7:
+            # Converter 0.5 → "50" (o campo espera percentual direto, não fração)
+            _perc_val = _perc * 100 if _perc <= 1.0 else _perc
+            self._preencher("outroValorDoMultiplicador", _fmt_br(_perc_val), obrigatorio=False)
+            _preencheu = True
+
+        # Base de cálculo
+        _base_raw = (verba.get("base_calculo") or "").lower().strip()
+        _base_enum = self._BASE_CALCULO_MAP.get(_base_raw)
+        if _base_enum:
+            self._marcar_radio("tipoDaBaseTabelada", _base_enum)
+            _preencheu = True
+
+        # Quantidade (se informada na sentença)
+        _qtd = verba.get("quantidade") or verba.get("valor_informado_quantidade")
+        if _qtd is not None:
+            self._marcar_radio("tipoDaQuantidade", "INFORMADA")
+            self._preencher("valorInformadoDaQuantidade", _fmt_br(_qtd), obrigatorio=False)
+            _preencheu = True
+
+        if not _preencheu:
+            self._log(f"  → Parâmetros '{nome_na_lista}': sem dados a preencher — cancelando")
+            # Voltar sem salvar
+            _btn_cancelar = self._page.locator("[id$='cancelar']")
+            if _btn_cancelar.count() > 0:
+                _btn_cancelar.first.click()
+                self._aguardar_ajax()
+            return False
+
+        # 3. Salvar
+        self._clicar_salvar()
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(600)
+
+        # 4. Garantir retorno à listagem
+        if "verbas-para-calculo" not in self._page.url:
+            self._clicar_menu_lateral("Verbas", obrigatorio=False)
+            self._aguardar_ajax()
+
+        self._log(
+            f"  ✓ Parâmetros '{nome_na_lista}': "
+            f"período {_pini or '?'}→{_pfim or '?'}"
+            + (f", {_perc_val:.0f}%" if _perc is not None and _confianca >= 0.7 else "")
+        )
+        return True
+
+    def _configurar_ocorrencias_verba(self, nome_na_lista: str) -> bool:
+        """Abre 'Ocorrências da Verba' para a linha que contém nome_na_lista,
+        gera as ocorrências automáticas e salva.
+
+        Retorna True se salvou com sucesso.
+        """
+        _kw = nome_na_lista.lower()[:18]
+
+        # Garantir que estamos na listagem
+        if "verbas-para-calculo" not in self._page.url:
+            self._clicar_menu_lateral("Verbas", obrigatorio=False)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+
+        # 1. Clicar botão "Ocorrências da Verba" na linha correspondente
+        _clicou = self._page.evaluate(f"""() => {{
+            const rows = document.querySelectorAll('tr');
+            for (const tr of rows) {{
+                if (!tr.textContent.toLowerCase().includes({repr(_kw)})) continue;
+                const btns = [...tr.querySelectorAll('a, input[type="button"], input[type="submit"]')];
+                for (const btn of btns) {{
+                    const t = (btn.title || btn.value || btn.textContent || '').toLowerCase();
+                    if (t.includes('ocorr')) {{
+                        btn.click();
+                        return true;
+                    }}
+                }}
+            }}
+            return false;
+        }}""")
+        if not _clicou:
+            self._log(f"  ⚠ Ocorrências '{nome_na_lista}': botão não encontrado")
+            return False
+
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(800)
+
+        # 2. Gerar ocorrências automáticas (mesmo padrão do histórico salarial)
+        _gerou = (
+            self._clicar_botao_id("cmdGerarOcorrencias")
+            or self._clicar_botao_id("btnGerarOcorrencias")
+        )
+        if not _gerou:
+            _anc = self._page.locator(
+                "a[id*='cmdGerarOcorrencias'], a[id*='btnGerarOcorrencias'], "
+                "input[value*='Gerar'], a:has-text('Gerar')"
+            )
+            if _anc.count() > 0:
+                _anc.first.click()
+                _gerou = True
+        if _gerou:
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+            self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
+        # 3. Salvar
+        self._clicar_salvar()
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(600)
+
+        # 4. Garantir retorno à listagem
+        if "verbas-para-calculo" not in self._page.url:
+            self._clicar_menu_lateral("Verbas", obrigatorio=False)
+            self._aguardar_ajax()
+
+        self._log(f"  ✓ Ocorrências '{nome_na_lista}': {'geradas e ' if _gerou else ''}salvas")
+        return True
+
+    def _pos_expresso_parametros_ocorrencias(self, predefinidas: list) -> None:
+        """Após salvar o Expresso: configura Parâmetros e Ocorrências de cada verba principal.
+
+        Iteração sobre a listagem verbas-para-calculo.jsf:
+        para cada verba principal (não reflexa) com dados disponíveis →
+        abre Parâmetros da Verba, preenche, salva → abre Ocorrências, gera, salva.
+        """
+        if not predefinidas:
+            return
+
+        # Garantir listagem
+        if "verbas-para-calculo" not in self._page.url:
+            self._clicar_menu_lateral("Verbas", obrigatorio=False)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+
+        for v in predefinidas:
+            # Pular verbas reflexas — não têm linha própria na listagem
+            if v.get("eh_reflexa") or (v.get("tipo") or "").lower() == "reflexa":
+                continue
+            nome = (v.get("nome_pjecalc") or v.get("nome_sentenca") or "").strip()
+            if not nome:
+                continue
+
+            # Parâmetros — apenas se há dado útil para preencher
+            _tem_dado = any([
+                v.get("periodo_inicio"),
+                v.get("periodo_fim"),
+                v.get("percentual") is not None,
+                v.get("base_calculo"),
+                v.get("quantidade") is not None,
+            ])
+            if _tem_dado:
+                try:
+                    self._configurar_parametros_verba(v, nome)
+                except Exception as _e:
+                    self._log(f"  ⚠ _configurar_parametros_verba('{nome}'): {_e}")
+
+            # Ocorrências — sempre tentar (gerar + salvar confirma o período)
+            try:
+                self._configurar_ocorrencias_verba(nome)
+            except Exception as _e:
+                self._log(f"  ⚠ _configurar_ocorrencias_verba('{nome}'): {_e}")
 
     def _configurar_reflexos_expresso(self, verbas: list) -> None:
         """Configura reflexos de verbas Expresso via botão 'Verba Reflexa' ou link 'Exibir' na listagem.
