@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import uuid
+from dataclasses import dataclass, field as _dc_field
 from datetime import datetime, date
 from typing import Any, TYPE_CHECKING
 
@@ -273,6 +274,7 @@ Se não mencionado → ferias = []
 - "Alíquota FGTS:" → fgts.aliquota (ex: 8% → 0.08)
 - "Multa de 40%: Sim" → fgts.multa_40 = true
 - "Multa de 40%: Não" → fgts.multa_40 = false
+- saldo_fgts: saldo das contas FGTS do empregado, se informado na sentença (float; null se não mencionado)
 
 **SEÇÃO 5 — MULTAS TRABALHISTAS**:
 - "Multa art. 467 CLT — Deferida" → fgts.multa_467 = true (campo opcional)
@@ -421,6 +423,7 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     "aliquota": "float | null",
     "multa_40": "true | false | null",
     "multa_467": "true | false | null",
+    "saldo_fgts": "float | null",
     "confianca": 0.95
   }},
   "honorarios": [
@@ -590,6 +593,8 @@ verba_principal_ref: para verbas reflexas, informar o nome_sentenca da verba pri
   Buscar "alíquota de X%" ou "FGTS à alíquota de X%"
 - multa_40: true quando deferida "multa de 40%" / "multa rescisória" / "art. 18 §1º da Lei 8.036"
 - multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
+- saldo_fgts: saldo das contas FGTS do trabalhador, se informado (ex: "saldo FGTS de R$ 1.200,00");
+  null se não mencionado — NÃO inferir, apenas extrair se explícito
 
 **HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
@@ -1022,11 +1027,12 @@ _EXTRACTION_SCHEMA: dict = {
         },
         "fgts": {
             "type": "object", "additionalProperties": False,
-            "required": ["aliquota","multa_40","multa_467","confianca"],
+            "required": ["aliquota","multa_40","multa_467","saldo_fgts","confianca"],
             "properties": {
                 "aliquota":   {"type": ["number","null"]},
                 "multa_40":   {"type": ["boolean","null"]},
                 "multa_467":  {"type": ["boolean","null"]},
+                "saldo_fgts": {"type": ["number","null"]},
                 "confianca":  {"type": "number"},
             },
         },
@@ -1142,20 +1148,33 @@ _EXTRACTION_SCHEMA: dict = {
 
 # ── Validador de consistência da sentença extraída ───────────────────────────
 
+@dataclass
+class ResultadoValidacao:
+    """Resultado da validação — compatível com webapp.py Fix 4 (`.valido`, `.erros`)."""
+    erros: list[str] = _dc_field(default_factory=list)
+    avisos: list[str] = _dc_field(default_factory=list)
+
+    @property
+    def valido(self) -> bool:
+        return len(self.erros) == 0
+
+
 class ValidadorSentenca:
     """
     Valida consistência do JSON extraído da sentença trabalhista.
-    Baseado no skill juridical-nlp-extractor.
+    Uso: ValidadorSentenca(dados).validar() → ResultadoValidacao
     """
 
-    @staticmethod
-    def validar(dados: dict) -> tuple[bool, list[str]]:
-        """Retorna (is_valid, lista_de_erros). Erros críticos devem bloquear o processamento."""
-        erros: list[str] = []
-        erros.extend(ValidadorSentenca._validar_datas(dados))
-        erros.extend(ValidadorSentenca._validar_rescisao_verbas(dados))
-        erros.extend(ValidadorSentenca._validar_valores(dados))
-        return len(erros) == 0, erros
+    def __init__(self, dados: dict):
+        self._dados = dados
+
+    def validar(self) -> ResultadoValidacao:
+        """Valida e retorna ResultadoValidacao com .valido, .erros e .avisos."""
+        r = ResultadoValidacao()
+        r.erros.extend(self._validar_datas(self._dados))
+        r.erros.extend(self._validar_rescisao_verbas(self._dados))
+        r.erros.extend(self._validar_valores(self._dados))
+        return r
 
     @staticmethod
     def _parse_data(d: str | None) -> date | None:
@@ -1215,6 +1234,10 @@ class ValidadorSentenca:
                         f"AVISO: valor muito alto para {v.get('nome_sentenca')}: "
                         f"R$ {val:,.2f} — confirmar"
                     )
+        # saldo_fgts não pode ser negativo
+        saldo_fgts = dados.get("fgts", {}).get("saldo_fgts")
+        if saldo_fgts is not None and isinstance(saldo_fgts, (int, float)) and saldo_fgts < 0:
+            erros.append(f"CRÍTICO: saldo_fgts negativo ({saldo_fgts}) — verificar sentença")
         return erros
 
     @staticmethod
@@ -1241,6 +1264,27 @@ class ValidadorSentenca:
                     "acao": "revisão manual necessária",
                 })
         return incertos
+
+
+def _desmembrar_cnj(numero_completo: str) -> dict | None:
+    """
+    Desmembra número CNJ completo (NNNNNNN-DD.AAAA.J.TT.OOOO) nos componentes
+    necessários para validação módulo 97 e preenchimento no PJe-Calc.
+
+    Retorna dict com chaves: numero, digito_verificador, ano, segmento, regiao, vara.
+    Retorna None se o formato não bater.
+    """
+    m = re.match(r"^(\d{7})-(\d{2})\.(\d{4})\.(\d)\.(\d{2})\.(\d{4})$", (numero_completo or "").strip())
+    if not m:
+        return None
+    return {
+        "numero":             m.group(1),
+        "digito_verificador": m.group(2),
+        "ano":                m.group(3),
+        "segmento":           m.group(4),
+        "regiao":             m.group(5),
+        "vara":               m.group(6),
+    }
 
 
 def _extrair_de_relatorio_estruturado(
@@ -1733,9 +1777,9 @@ def extrair_dados_sentenca_pdf(
             logger.warning(f"Multi-pass falhou (não crítico): {e}")
 
     # Validação final
-    valido, erros = ValidadorSentenca.validar(dados)
-    if erros:
-        dados.setdefault("alertas", []).extend(erros)
+    _v = ValidadorSentenca(dados).validar()
+    if _v.erros:
+        dados.setdefault("alertas", []).extend(_v.erros)
 
     return dados
 
@@ -1908,6 +1952,7 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
             "aliquota": regex.get("aliquota_fgts"),
             "multa_40": regex.get("multa_40"),
             "multa_467": None,
+            "saldo_fgts": None,
             "confianca": 0.5,
         },
         "honorarios": _migrar_honorarios_legado({
@@ -1999,6 +2044,14 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     Identifica campos obrigatórios ausentes e campos com baixa confiança.
     Preenche 'campos_ausentes' e 'alertas'.
     """
+    # Desmembrar CNJ se número completo disponível e partes ainda não extraídas
+    _proc = dados.get("processo", {})
+    if _proc.get("numero") and not _proc.get("digito_verificador"):
+        _cnj_partes = _desmembrar_cnj(_proc["numero"])
+        if _cnj_partes:
+            _proc.update(_cnj_partes)
+            dados["processo"] = _proc
+
     # Filtrar campos_ausentes recebidos do LLM: manter apenas os que realmente estão vazios
     campos_ausentes_llm = dados.get("campos_ausentes", [])
     campos_ausentes = [c for c in campos_ausentes_llm if not _campo_tem_valor(dados, c)]
@@ -2111,6 +2164,29 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
                 "Tipo de rescisão 'pedido_demissao' incompatível com multa de 40% do FGTS. "
                 "Multa 40% é devida apenas em dispensa sem justa causa."
             )
+
+    # ── HITL triggers obrigatórios (skill pjecalc-transformacao §6) ──────────
+
+    # Trigger 6: tipo rescisão ausente ou ambíguo
+    if not cont.get("tipo_rescisao"):
+        inconsistencias.append(
+            "Tipo de rescisão ausente — automação requer revisão humana antes de prosseguir."
+        )
+
+    # Trigger 7: múltiplos reclamados (ex: "Empresa S/A e outros")
+    reclamado_str = (dados.get("processo", {}).get("reclamado") or "").lower()
+    if any(t in reclamado_str for t in ["e outros", "et al", "e outra", "e outr", " e cia", " e ltda"]):
+        alertas.append(
+            "Processo com possíveis múltiplos reclamados — verifique qual reclamado deve "
+            "ser selecionado no PJe-Calc antes de automatizar."
+        )
+
+    # Trigger 8: "critério diverso" para FGTS/INSS mencionado em alertas da extração
+    _alertas_texto = " ".join(dados.get("alertas", []) + alertas).lower()
+    if "critério diverso" in _alertas_texto or "criterio diverso" in _alertas_texto:
+        alertas.append(
+            "Sentença menciona critério diverso para FGTS/INSS — revisar cálculo antes de automatizar."
+        )
 
     dados["inconsistencias_criticas"] = inconsistencias
 
