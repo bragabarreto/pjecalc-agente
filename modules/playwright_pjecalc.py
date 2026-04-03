@@ -1165,11 +1165,18 @@ class PJECalcPlaywright:
         return False
 
     def _clicar_salvar(self) -> bool:
-        """Clica no botão Salvar da seção atual. Retorna True se salvou, False se não encontrou."""
+        """Clica no botão Salvar da seção atual. Retorna True se salvou, False se não encontrou.
+
+        DOM v2.15.1: o botão Salvar NÃO é input[type='submit'] nem <button>.
+        É input[type='button'] com id='formulario:salvar'. Seletor [id$='salvar']
+        cobre ambos os casos. submits:[] confirma que não há submit buttons.
+        """
         seletores = [
-            "[id$='salvar']",
-            "input[value='Salvar']",
-            "button:has-text('Salvar')",
+            "[id$='salvar']",            # cobre formulario:salvar (qualquer tipo)
+            "input[value='Salvar']",     # fallback por valor do botão
+            "input[type='button'][value*='Salvar']",  # input type=button explícito
+            "button:has-text('Salvar')", # botão HTML5
+            "a:has-text('Salvar')",      # link estilizado como botão
         ]
         for sel in seletores:
             try:
@@ -1182,7 +1189,7 @@ class PJECalcPlaywright:
                     return True
             except Exception:
                 continue
-        # JS fallback: clica via DOM (seletores específicos — sem querySelector('button') genérico)
+        # JS fallback: busca por id/value/textContent — inclui input[type='button']
         try:
             clicou = self._page.evaluate("""() => {
                 const candidates = [
@@ -1190,11 +1197,15 @@ class PJECalcPlaywright:
                     document.querySelector('[id*="btnSalvar"]'),
                     document.querySelector('input[value="Salvar"]'),
                     document.querySelector('input[value*="Salvar"]'),
+                    ...[...document.querySelectorAll('input[type="button"]')]
+                        .filter(b => (b.value||'').trim().toLowerCase() === 'salvar'),
                     ...[...document.querySelectorAll('button')]
                         .filter(b => (b.textContent||'').trim().toLowerCase() === 'salvar'),
+                    ...[...document.querySelectorAll('a')]
+                        .filter(a => (a.textContent||'').trim().toLowerCase() === 'salvar'),
                 ];
                 const btn = candidates.find(b => b != null);
-                if (btn) { btn.click(); return btn.id || btn.value || 'ok'; }
+                if (btn) { btn.click(); return btn.id || btn.value || btn.textContent.trim() || 'ok'; }
                 return null;
             }""")
             if clicou:
