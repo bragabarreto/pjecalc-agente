@@ -492,8 +492,22 @@ REGRAS FINAIS:
   "Histórico Salarial", faixas salariais, ou salários por período. Extrair CADA faixa como uma
   entrada com nome, data_inicio, data_fim, valor, incidencia_fgts, incidencia_cs.
   Mesmo que haja um único salário durante o contrato, criar 1 entrada com período completo.
-- ferias: se o relatório mencionar "Períodos Aquisitivos de Férias" ou "férias proporcionais",
-  extrair cada período com situacao, periodo_inicio, periodo_fim, abono e dobra.
+- ferias: OBRIGATÓRIO extrair se o relatório listar períodos aquisitivos de férias, férias
+  vencidas ou proporcionais. Para CADA período listado criar uma entrada com:
+    situacao: "Vencidas" (período completo não gozado) | "Proporcionais" (período incompleto)
+    periodo_inicio / periodo_fim: datas do período aquisitivo (DD/MM/AAAA)
+    abono: true se a sentença defere abono pecuniário / conversão de 1/3
+    dobra: true se a sentença defere férias em dobro
+  Exemplo: relatório lista "01/03/2022 a 28/02/2023 (Vencidas)" e "01/03/2023 a 28/02/2024 (Vencidas)"
+  → ferias = [{situacao:"Vencidas", periodo_inicio:"01/03/2022", periodo_fim:"28/02/2023", abono:false, dobra:false},
+              {situacao:"Vencidas", periodo_inicio:"01/03/2023", periodo_fim:"28/02/2024", abono:false, dobra:false}]
+  NÃO deixar ferias=[] se houver qualquer menção a períodos de férias no relatório.
+- honorarios: OBRIGATÓRIO capturar o percentual de honorários advocatícios como float decimal.
+  Exemplos: "15%" → 0.15 | "10%" → 0.10 | "20%" → 0.20
+  Se o relatório diz "10% a 15%" usar o menor valor (0.10). Se diz "sobre a condenação" → base_apuracao="Condenação".
+  NUNCA omitir honorarios se o relatório listar "Honorários Advocatícios" com percentual ou valor.
+- processo.numero: copiar o número EXATAMENTE como aparece no relatório (formato NNNNNNN-DD.AAAA.J.TT.OOOO),
+  sem truncar nem alterar os 7 dígitos da sequência.
 - Retornar APENAS JSON puro, sem markdown, sem texto antes ou depois"""
 
 _EXTRACTION_PROMPT = """Analise o conteúdo abaixo (sentença trabalhista e/ou documentos complementares) \
