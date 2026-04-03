@@ -836,7 +836,9 @@ def extrair_dados_sentenca(
     sessao_id = sessao_id or str(uuid.uuid4())
 
     if is_relatorio:
-        resultado = _extrair_de_relatorio_estruturado(texto, sessao_id)
+        # Passar usar_gemini para que o modelo escolhido pelo usuário seja respeitado
+        _usar_gemini_rel = USE_GEMINI if usar_gemini is None else usar_gemini
+        resultado = _extrair_de_relatorio_estruturado(texto, sessao_id, usar_gemini=_usar_gemini_rel)
         if "_erro_llm" not in resultado:
             return resultado
         # IA falhou no relatório — bloquear conforme regra de negócio
@@ -1293,6 +1295,7 @@ def _desmembrar_cnj(numero_completo: str) -> dict | None:
 def _extrair_de_relatorio_estruturado(
     texto_relatorio: str,
     sessao_id: str,
+    usar_gemini: bool = False,
 ) -> dict[str, Any]:
     """
     Converte um relatório já estruturado (ex: saída do Projeto Claude) diretamente
@@ -1300,12 +1303,50 @@ def _extrair_de_relatorio_estruturado(
 
     O relatório já identificou verbas, parâmetros e reflexos — o LLM apenas mapeia
     ao schema, preservando a classificação original.
+
+    usar_gemini: se True, usa Gemini (com fallback para Claude se falhar).
     """
+    prompt_usuario = _RELATORIO_PROMPT.format(texto=texto_relatorio[:25000])
+
+    # ── Caminho Gemini ────────────────────────────────────────────────────────
+    if usar_gemini and GEMINI_API_KEY:
+        logger.info("Mapeamento de relatório via Gemini")
+        try:
+            from google import genai
+            from google.genai import types
+            import concurrent.futures
+
+            client = genai.Client(api_key=GEMINI_API_KEY)
+            prompt_completo = f"{_SYSTEM_PROMPT_RELATORIO}\n\n{prompt_usuario}"
+
+            def _chamar_gemini():
+                return client.models.generate_content(
+                    model=GEMINI_MODEL,
+                    contents=prompt_completo,
+                    config=types.GenerateContentConfig(temperature=0.0),
+                )
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
+                fut = ex.submit(_chamar_gemini)
+                resp = fut.result(timeout=60)
+
+            dados = _limpar_e_parsear_json(resp.text)
+            dados = _validar_e_completar(dados)
+            if "alertas" not in dados:
+                dados["alertas"] = []
+            dados["alertas"].insert(0, "Dados extraídos de relatório estruturado via Gemini.")
+            return dados
+
+        except Exception as _ge:
+            logger.warning(f"Gemini falhou no relatório — tentando Claude: {_ge}")
+            # Fallback para Claude abaixo
+
+    # ── Caminho Claude (padrão / fallback) ───────────────────────────────────
     if not ANTHROPIC_API_KEY:
         return {"_erro_llm": "ANTHROPIC_API_KEY não configurada",
                 "alertas": ["ANTHROPIC_API_KEY não configurada — processamento impossível"]}
 
-    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=90.0)
+    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
 
     try:
         kwargs: dict = dict(
@@ -1315,7 +1356,7 @@ def _extrair_de_relatorio_estruturado(
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{
                 "role": "user",
-                "content": _RELATORIO_PROMPT.format(texto=texto_relatorio[:25000]),
+                "content": prompt_usuario,
             }],
         )
         # Nota: output_config removido — schema de extração tem >16 union types (limite API Anthropic)
