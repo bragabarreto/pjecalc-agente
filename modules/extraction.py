@@ -1271,16 +1271,17 @@ class ValidadorSentenca:
 def _desmembrar_cnj(numero_completo: str) -> dict | None:
     """
     Desmembra número CNJ completo (NNNNNNN-DD.AAAA.J.TT.OOOO) nos componentes
-    necessários para validação módulo 97 e preenchimento no PJe-Calc.
+    necessários para validação módulo 97.
 
-    Retorna dict com chaves: numero, digito_verificador, ano, segmento, regiao, vara.
+    Retorna dict com chaves: numero_seq (7 dígitos), digito_verificador, ano, segmento, regiao, vara.
+    NÃO inclui "numero" para não sobrescrever o número completo em processo.numero.
     Retorna None se o formato não bater.
     """
     m = re.match(r"^(\d{7})-(\d{2})\.(\d{4})\.(\d)\.(\d{2})\.(\d{4})$", (numero_completo or "").strip())
     if not m:
         return None
     return {
-        "numero":             m.group(1),
+        "numero_seq":         m.group(1),   # 7 dígitos — usado apenas na validação módulo 97
         "digito_verificador": m.group(2),
         "ano":                m.group(3),
         "segmento":           m.group(4),

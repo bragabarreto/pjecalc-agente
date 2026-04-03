@@ -1060,9 +1060,9 @@ async def executar_automacao_sse(
             return True
     _processo = dados.get("processo", {})
     _cnj_aviso = None
-    if all(_processo.get(c) for c in ["numero", "digito_verificador", "ano", "regiao", "vara"]):
+    if all(_processo.get(c) for c in ["numero_seq", "digito_verificador", "ano", "regiao", "vara"]):
         if not _validar_cnj(
-            str(_processo["numero"]), str(_processo.get("digito_verificador", "")),
+            str(_processo["numero_seq"]), str(_processo.get("digito_verificador", "")),
             str(_processo["ano"]), str(_processo["regiao"]), str(_processo["vara"])
         ):
             _cnj_aviso = "CNJ: dígito verificador inválido — verifique o número do processo"
