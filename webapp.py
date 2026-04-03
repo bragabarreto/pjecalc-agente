@@ -1036,6 +1036,14 @@ async def executar_automacao_sse(
         return _SR(_lock_sse(), media_type="text/event-stream",
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    # Verificar que o usuário confirmou a prévia (HITL obrigatório)
+    if not calculo.confirmado_em:
+        async def _nao_confirmado_sse():
+            yield "data: ERRO_EXPORTAVEL::Prévia não confirmada — revise os dados e clique Confirmar antes de executar.\n\n"
+            yield "data: [FIM DA EXECUÇÃO]\n\n"
+        return _SR(_nao_confirmado_sse(), media_type="text/event-stream",
+                   headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
     dados = calculo.dados()
     verbas_mapeadas = calculo.verbas_mapeadas()
 

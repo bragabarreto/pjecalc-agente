@@ -603,6 +603,12 @@ def _buscar_por_similaridade(chave: str) -> dict[str, Any] | None:
     return None
 
 
+def _classificar_via_llm(verba: dict[str, Any]) -> dict[str, Any]:
+    """Classifica uma única verba via LLM — wrapper de _classificar_lote_via_llm."""
+    resultado = _classificar_lote_via_llm([verba])
+    return resultado[0] if resultado else verba
+
+
 def _classificar_lote_via_llm(verbas_nao_reconhecidas: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
     Classifica todas as verbas não reconhecidas em UMA única chamada ao Claude.
