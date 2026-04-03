@@ -1320,7 +1320,7 @@ def _extrair_de_relatorio_estruturado(
 
     usar_gemini: se True, usa Gemini (com fallback para Claude se falhar).
     """
-    prompt_usuario = _RELATORIO_PROMPT.format(texto=texto_relatorio[:25000])
+    prompt_usuario = _RELATORIO_PROMPT.replace("{texto}", texto_relatorio[:25000])
 
     # ── Caminho Gemini ────────────────────────────────────────────────────────
     if usar_gemini and GEMINI_API_KEY:
