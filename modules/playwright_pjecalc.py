@@ -1423,7 +1423,14 @@ class PJECalcPlaywright:
             m_base = _re.match(r'(https?://.+/)[^/?]+\.jsf', url)
             m_conv = _re.search(r'conversationId=(\d+)', url)
             if m_base and m_conv:
-                self._calculo_url_base = m_base.group(1)
+                base = m_base.group(1)
+                # Normalizar para sempre parar em calculo/ — sem isto, URLs como
+                # .../calculo/verba/verbas-para-calculo.jsf geram base ".../calculo/verba/"
+                # e os paths do _URL_SECTION_MAP ficam dobrados (ex: verba/verba/verba-calculo.jsf)
+                m_calculo = _re.search(r'(https?://.+/calculo/)', base)
+                if m_calculo:
+                    base = m_calculo.group(1)
+                self._calculo_url_base = base
                 self._calculo_conversation_id = m_conv.group(1)
                 self._log(
                     f"  ℹ URL base: {self._calculo_url_base} | conversationId={self._calculo_conversation_id}"
