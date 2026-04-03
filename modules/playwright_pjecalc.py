@@ -1527,6 +1527,20 @@ class PJECalcPlaywright:
 
         # Número do processo (campos separados na interface)
         num = _parsear_numero_processo(proc.get("numero"))
+        if not num:
+            # Fallback: usar campos desmembrados armazenados no processo
+            # (cobre sessões gravadas quando processo.numero foi truncado para 7 dígitos)
+            _seq = proc.get("numero_seq") or (proc.get("numero", "") if len(proc.get("numero", "")) == 7 else "")
+            if _seq and proc.get("digito_verificador") and proc.get("ano"):
+                num = {
+                    "numero":  _seq,
+                    "digito":  proc.get("digito_verificador", ""),
+                    "ano":     proc.get("ano", ""),
+                    "justica": proc.get("segmento", "5"),
+                    "regiao":  proc.get("regiao", ""),
+                    "vara":    proc.get("vara", ""),
+                }
+                self._log(f"  ℹ numero processo: reconstruído dos campos desmembrados ({_seq})")
         if num:
             self._preencher("numero", num.get("numero", ""), False)
             self._preencher("digito", num.get("digito", ""), False)
@@ -1534,6 +1548,8 @@ class PJECalcPlaywright:
             self._preencher("justica", num.get("justica", ""), False)
             self._preencher("regiao", num.get("regiao", ""), False)
             self._preencher("vara", num.get("vara", ""), False)
+        else:
+            self._log(f"  ⚠ numero processo não disponível — preencher manualmente")
 
         # Valor da causa e data de autuação
         if proc.get("valor_causa"):

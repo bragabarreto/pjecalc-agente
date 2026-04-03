@@ -1052,8 +1052,10 @@ async def executar_automacao_sse(
 
     # Fix 6: validação CNJ módulo 97 (aviso não bloqueante)
     def _validar_cnj(numero: str, digito: str, ano: str, regiao: str, vara: str) -> bool:
+        # Fórmula CNJ Res. 65/2008: NNNNNNN + "00" + AAAA + J(5) + TT + OOOO
+        # O "00" substitui o DD e fica logo após os 7 dígitos de sequência
         try:
-            num = numero + ano + "5" + regiao + vara + "00"
+            num = numero + "00" + ano + "5" + regiao + vara
             resto = int(num) % 97
             return int(digito) == (97 - resto)
         except Exception:
