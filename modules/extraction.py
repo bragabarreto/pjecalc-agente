@@ -162,7 +162,7 @@ _RELATORIO_PROMPT = """Converta o relatório abaixo para o schema JSON do PJE-Ca
 **SEÇÃO 1 — INFORMAÇÕES PROCESSUAIS** → preenche "processo":
 - "Processo nº:" → processo.numero (formato: NNNNNNN-DD.AAAA.J.RR.VVVV)
 - "Vara/Juízo:" → processo.vara
-- "Cidade/Comarca:" → processo.municipio
+- "Cidade/Comarca:" → processo.municipio (APENAS nome da cidade, sem UF e sem sufixo de vara)
 - "Estado:" → processo.estado (2 letras, ex: CE)
 - "Reclamante:" → processo.reclamante (apenas nome, sem CPF)
 - CPF do reclamante se explicitado → processo.cpf_reclamante (formato: "000.000.000-00")
@@ -512,6 +512,8 @@ seguindo rigorosamente o guia de extração e o schema JSON abaixo.
 - reclamado: razão social/nome do empregador (sem CNPJ inline)
 - cnpj_reclamado: CNPJ se explicitado, formato "00.000.000/0000-00"
 - estado: UF de 2 letras da vara — buscar em "Vara do Trabalho de [cidade] - UF" ou cabeçalho
+- municipio: APENAS o nome da cidade, sem UF, sem sufixo, sem número de vara
+  (ex: "Fortaleza" e não "Fortaleza/CE", "Fortaleza - 3ª VT" ou "Fortaleza-CE")
 - vara: descrição da vara/juízo
 
 **CONTRATO DE TRABALHO** → preenche "contrato":
