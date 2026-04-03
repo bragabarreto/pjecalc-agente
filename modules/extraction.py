@@ -1346,24 +1346,30 @@ def _extrair_de_relatorio_estruturado(
         return {"_erro_llm": "ANTHROPIC_API_KEY não configurada",
                 "alertas": ["ANTHROPIC_API_KEY não configurada — processamento impossível"]}
 
-    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=120.0)
+    # httpx_client com timeout por chunk (não por requisição total) — evita o erro
+    # "Request timed out or interrupted" em relatórios longos (docs.anthropic.com/errors#long-requests)
+    import httpx as _httpx
+    _http = _httpx.Client(timeout=_httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=5.0))
+    cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, http_client=_http)
 
     try:
-        kwargs: dict = dict(
+        # Usar streaming para evitar timeout em respostas longas (relatório → JSON pode ser 4000+ tokens)
+        # stream=True mantém a conexão viva durante toda a geração — sem timeout por inatividade
+        conteudo_parts: list[str] = []
+        with cliente.messages.stream(
             model=CLAUDE_MODEL,
-            max_tokens=8192,
+            max_tokens=6000,  # reduzido de 8192 — JSON do schema raramente passa de 5000 tokens
             temperature=0.0,
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{
                 "role": "user",
                 "content": prompt_usuario,
             }],
-        )
-        # Nota: output_config removido — schema de extração tem >16 union types (limite API Anthropic)
-        # O parser tolerante _limpar_e_parsear_json cobre todos os casos de JSON malformado.
-        resposta = cliente.messages.create(**kwargs)
+        ) as stream:
+            for chunk in stream.text_stream:
+                conteudo_parts.append(chunk)
 
-        conteudo = resposta.content[0].text.strip()
+        conteudo = "".join(conteudo_parts).strip()
         dados = _limpar_e_parsear_json(conteudo)
         dados = _validar_e_completar(dados)
         if "alertas" not in dados:
