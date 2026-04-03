@@ -1593,24 +1593,58 @@ class PJECalcPlaywright:
             if _idx_estado and self._selecionar("estado", _idx_estado, obrigatorio=False):
                 self._log(f"  ✓ estado: {_uf} (value={_idx_estado})")
                 self._aguardar_ajax()  # municipio é carregado via AJAX após estado
-                self._page.wait_for_timeout(800)
-                # Município — tentar pelo nome da cidade do processo
+                # Aguardar opções de município carregarem (mais robusto que timeout fixo)
+                try:
+                    self._page.wait_for_function(
+                        """() => {
+                            const s = document.getElementById('formulario:municipio');
+                            return s && s.options.length > 1;
+                        }""",
+                        timeout=10000,
+                    )
+                except Exception:
+                    self._page.wait_for_timeout(2000)  # fallback
+
+                # Município — 3 estratégias em cascata: exato → startsWith → includes
                 _cidade = proc.get("municipio") or proc.get("cidade") or ""
                 if _cidade:
                     _municipio_selecionado = self._page.evaluate(
                         """(cidade) => {
                             function norm(s) {
-                                return (s||'').toLowerCase()
+                                return (s||'').toUpperCase()
                                     .normalize('NFD').replace(/[\u0300-\u036f]/g,'').trim();
                             }
                             const sel = document.getElementById('formulario:municipio');
-                            if (!sel) return null;
+                            if (!sel || sel.options.length <= 1) return null;
                             const c = norm(cidade);
+                            // Log primeiras opções para diagnóstico
+                            const opts = Array.from(sel.options).slice(0,5)
+                                .map(o => o.value + ':' + o.text).join(' | ');
+                            console.log('[municipio] cidade=' + c + ' opts=' + opts);
+                            // Estratégia 1: match exato normalizado
                             for (const o of sel.options) {
-                                if (norm(o.text).includes(c) || c.includes(norm(o.text))) {
+                                if (norm(o.text) === c) {
                                     sel.value = o.value;
                                     sel.dispatchEvent(new Event('change',{bubbles:true}));
-                                    return o.text;
+                                    return '1:' + o.text;
+                                }
+                            }
+                            // Estratégia 2: option começa com nome da cidade
+                            for (const o of sel.options) {
+                                const ot = norm(o.text);
+                                if (ot.startsWith(c + ' ') || ot.startsWith(c + '-') || ot === c) {
+                                    sel.value = o.value;
+                                    sel.dispatchEvent(new Event('change',{bubbles:true}));
+                                    return '2:' + o.text;
+                                }
+                            }
+                            // Estratégia 3: includes bidirecional
+                            for (const o of sel.options) {
+                                const ot = norm(o.text);
+                                if (ot.includes(c) || c.includes(ot)) {
+                                    sel.value = o.value;
+                                    sel.dispatchEvent(new Event('change',{bubbles:true}));
+                                    return '3:' + o.text;
                                 }
                             }
                             return null;
@@ -1618,9 +1652,11 @@ class PJECalcPlaywright:
                         _cidade,
                     )
                     if _municipio_selecionado:
-                        self._log(f"  ✓ municipio: '{_municipio_selecionado}'")
+                        estrategia, nome = _municipio_selecionado.split(":", 1) if ":" in _municipio_selecionado else ("?", _municipio_selecionado)
+                        self._log(f"  ✓ municipio: '{nome}' (estratégia {estrategia})")
+                        self._aguardar_ajax()  # aguardar AJAX pós-seleção município
                     else:
-                        self._log(f"  ⚠ municipio '{_cidade}' não encontrado na lista")
+                        self._log(f"  ⚠ municipio '{_cidade}' não encontrado — verifique o nome na sentença")
 
         # Dados do contrato
         # Datas: _localizar() busca [id*='InputDate'] primeiro, cobrindo formulario:dataAdmissaoInputDate etc.
