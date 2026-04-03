@@ -168,8 +168,9 @@ _RELATORIO_PROMPT = """Converta o relatório abaixo para o schema JSON do PJE-Ca
 - CPF do reclamante se explicitado → processo.cpf_reclamante (formato: "000.000.000-00")
 - "Reclamada:" ou "Reclamado:" → processo.reclamado (apenas razão social/nome, sem CNPJ)
 - CNPJ da reclamada se explicitado → processo.cnpj_reclamado (formato: "00.000.000/0000-00")
-- "Data de Distribuição/Autuação:" ou "Data de Ajuizamento:" → contrato.ajuizamento
+- "Data de Distribuição/Autuação:" ou "Data de Ajuizamento:" → contrato.ajuizamento E processo.autuado_em
 - "Autuado em:" / "Data de autuação:" / "Data de distribuição:" → processo.autuado_em (DD/MM/AAAA)
+  ⚠️ Se não houver campo "Autuado em" separado, usar a mesma data de ajuizamento para processo.autuado_em
 - "Valor da causa:" / "Valor atribuído à causa:" → processo.valor_causa (float; extrair de qualquer
   seção do documento, inclusive cabeçalho do processo, petição inicial ou relatório)
 
@@ -502,10 +503,19 @@ REGRAS FINAIS:
   → ferias = [{situacao:"Vencidas", periodo_inicio:"01/03/2022", periodo_fim:"28/02/2023", abono:false, dobra:false},
               {situacao:"Vencidas", periodo_inicio:"01/03/2023", periodo_fim:"28/02/2024", abono:false, dobra:false}]
   NÃO deixar ferias=[] se houver qualquer menção a períodos de férias no relatório.
-- honorarios: OBRIGATÓRIO capturar o percentual de honorários advocatícios como float decimal.
-  Exemplos: "15%" → 0.15 | "10%" → 0.10 | "20%" → 0.20
-  Se o relatório diz "10% a 15%" usar o menor valor (0.10). Se diz "sobre a condenação" → base_apuracao="Condenação".
-  NUNCA omitir honorarios se o relatório listar "Honorários Advocatícios" com percentual ou valor.
+- honorarios: OBRIGATÓRIO extrair. Padrões do CalcMachine:
+    "Honorários Advocatícios - Devedor: Reclamado - Percentual: X%"
+    "Honorários: X% sobre o valor da condenação"
+    "Honorários sucumbenciais de X%"
+    "Honorários advocatícios: X%"
+  Se o relatório tiver QUALQUER menção a honorários com percentual ou devedor identificado → incluir no array.
+  Honorários do RECLAMADO com percentual: tipo="SUCUMBENCIAIS", tipo_valor="CALCULADO", base_apuracao="Condenação".
+  Percentual: "15%" → 0.15 | "10%" → 0.10 | "20%" → 0.20. Faixa "10% a 15%" → usar 0.10.
+  NUNCA retornar honorarios=[] se o relatório listar "Honorários Advocatícios" com percentual ou valor.
+- FGTS NÃO é verba_deferida: quando o relatório listar "DEPÓSITOS DE FGTS + MULTA DE 40%",
+  "FGTS + Multa 40%", "FGTS + MULTA DE 40%" como condenação → NÃO incluir em verbas_deferidas;
+  em vez disso definir fgts.multa_40 = true. Reflexos de FGTS (ex: "Reflexo em FGTS + Multa 40%")
+  também NÃO são verbas — ignorar. FGTS tem aba própria no PJE-Calc.
 - processo.numero: copiar o número EXATAMENTE como aparece no relatório (formato NNNNNNN-DD.AAAA.J.TT.OOOO),
   sem truncar nem alterar os 7 dígitos da sequência.
 - Retornar APENAS JSON puro, sem markdown, sem texto antes ou depois"""
@@ -603,11 +613,14 @@ incidências (aplicar a lógica trabalhista):
   Aviso prévio indenizado, danos morais, danos materiais, multas (art. 467, 477, 40%):
     incidencia_fgts=false, incidencia_inss=false, incidencia_ir=false
 verba_principal_ref: para verbas reflexas, informar o nome_sentenca da verba principal
+⚠️ FGTS NÃO é verba: "DEPÓSITOS DE FGTS + MULTA DE 40%", "FGTS + Multa 40%" → NÃO incluir em
+verbas_deferidas; em vez disso definir fgts.multa_40 = true. Reflexos de FGTS também NÃO são verbas.
 
 **FGTS** → preenche "fgts":
 - aliquota: 0.08 (8%) para a maioria dos contratos; 0.02 (2%) para aprendizes
   Buscar "alíquota de X%" ou "FGTS à alíquota de X%"
 - multa_40: true quando deferida "multa de 40%" / "multa rescisória" / "art. 18 §1º da Lei 8.036"
+  Também true quando condenação em "FGTS + Multa 40%" aparecer na lista de verbas
 - multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
 - saldo_fgts: saldo das contas FGTS do trabalhador, se informado (ex: "saldo FGTS de R$ 1.200,00");
   null se não mencionado — NÃO inferir, apenas extrair se explícito
