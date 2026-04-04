@@ -42,8 +42,8 @@ jobs:
             # Copiar docker-compose do diretório deploy
             cp deploy/oracle-cloud/docker-compose.yml .
 
-            # Build e restart
-            docker compose build --no-cache pjecalc
+            # Build e restart (usar cache para acelerar deploys)
+            docker compose build pjecalc
             docker compose up -d
 
             # Verificar status
