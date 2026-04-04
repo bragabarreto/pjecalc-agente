@@ -3309,8 +3309,23 @@ class PJECalcPlaywright:
             or self._clicar_menu_lateral("INSS", obrigatorio=False)
         )
         if not navegou:
-            self._log("  → Seção Contribuição Social não encontrada — ignorado.")
-            return
+            # CRÍTICO: Mesmo sem navegar, NÃO retornar sem salvar.
+            # O PJE-Calc exige que o objeto INSS exista no banco H2 para exportar.
+            # Se consolidarDadosParaExportacao() tentar acessar calculo.getInss()
+            # e retornar null, gera NullPointerException na exportação.
+            self._log("  ⚠ Seção Contribuição Social não encontrada — tentando via URL direta…")
+            if self._calculo_url_base and self._calculo_conversation_id:
+                try:
+                    _url = (f"{self._calculo_url_base}inss/inss.jsf"
+                            f"?conversationId={self._calculo_conversation_id}")
+                    self._page.goto(_url, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax()
+                    navegou = True
+                except Exception as e:
+                    self._log(f"  ⚠ URL direta INSS falhou: {e}")
+            if not navegou:
+                self._log("  ⚠ INSS: navegação falhou — exportação pode falhar com NPE.")
+                return
         self._verificar_pagina_pjecalc()
         # Verificar via URL (heading pode ser "Dados do Cálculo" pelo template compartilhado)
         if "inss" not in self._page.url.lower():
@@ -3924,8 +3939,27 @@ class PJECalcPlaywright:
         # ── Passo 2: Exportação → capturar .PJC ──────────────────────────────────
         # A exportação fica em página separada (exportacao.jsf)
         # O botão Exportar dispara AJAX que seta href em linkDownloadArquivo + JS auto-clica
+        #
+        # IMPORTANTE: Antes de exportar, navegar para calculo.jsf para garantir
+        # que "calculoAberto" esteja ativo na sessão Seam. Sem isso,
+        # ServicoDeCalculo.obterCalculoAberto() retorna null → NPE na exportação.
         _exportou = False
         if self._calculo_url_base and self._calculo_conversation_id:
+            # Re-abrir o cálculo na sessão Seam antes de exportar
+            _calc_url = (
+                f"{self._calculo_url_base}calculo.jsf"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
+            try:
+                self._log("  → Re-abrindo cálculo na sessão Seam (previne NPE no exportar)…")
+                self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+                # Recapturar conversationId (pode ter mudado após liquidação)
+                self._capturar_base_calculo()
+            except Exception as e:
+                self._log(f"  ⚠ Re-abertura calculo.jsf: {e}")
+
             _exp_url = (
                 f"{self._calculo_url_base}exportacao.jsf"
                 f"?conversationId={self._calculo_conversation_id}"

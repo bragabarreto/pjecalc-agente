@@ -63,7 +63,9 @@ except ImportError:
 # Sessões em processamento (em memória) — evita 404 enquanto background task roda
 _sessoes_processando: dict[str, float] = {}  # sessao_id → timestamp de início
 # Lock de automação — impede execuções paralelas para o mesmo sessao_id
-_sessoes_automacao: set[str] = set()
+# Agora com timestamp para auto-expiração (evita lock travado por crash)
+_sessoes_automacao: dict[str, float] = {}  # sessao_id → timestamp de início
+_LOCK_TIMEOUT_S = 900  # 15 minutos — automação não deve levar mais que isso
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
@@ -1029,12 +1031,19 @@ async def executar_automacao_sse(
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
     # Fix 5: Check 6 — impedir execuções paralelas para o mesmo sessao_id
+    # Auto-expiração: se o lock tem mais de _LOCK_TIMEOUT_S segundos, libera automaticamente
+    import time as _time_mod
     if sessao_id in _sessoes_automacao:
-        async def _lock_sse():
-            yield "data: ERRO_EXPORTAVEL::Automação já em andamento para esta sessão. Aguarde o término.\n\n"
-            yield "data: [FIM DA EXECUÇÃO]\n\n"
-        return _SR(_lock_sse(), media_type="text/event-stream",
-                   headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        _lock_age = _time_mod.time() - _sessoes_automacao[sessao_id]
+        if _lock_age < _LOCK_TIMEOUT_S:
+            async def _lock_sse():
+                yield "data: ERRO_EXPORTAVEL::Automação já em andamento para esta sessão. Aguarde o término.\n\n"
+                yield "data: [FIM DA EXECUÇÃO]\n\n"
+            return _SR(_lock_sse(), media_type="text/event-stream",
+                       headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        else:
+            # Lock expirado — liberar e continuar
+            _sessoes_automacao.pop(sessao_id, None)
 
     # Verificar que o usuário confirmou a prévia (HITL obrigatório)
     if not calculo.confirmado_em:
@@ -1083,7 +1092,7 @@ async def executar_automacao_sse(
         from database import SessionLocal
 
         # Fix 5: registrar lock de automação — liberado no finally
-        _sessoes_automacao.add(sessao_id)
+        _sessoes_automacao[sessao_id] = _time_mod.time()
 
         # Fix 6: emitir aviso CNJ se inválido
         if _cnj_aviso:
@@ -1241,7 +1250,7 @@ async def executar_automacao_sse(
                 pass
 
         # Fix 5: liberar lock de automação
-        _sessoes_automacao.discard(sessao_id)
+        _sessoes_automacao.pop(sessao_id, None)
 
     return StreamingResponse(
         gerador_sse(),
@@ -1260,6 +1269,17 @@ def _get_campo_valor(dados: dict, campo: str) -> Any:
     if isinstance(sub, dict):
         return _get_campo_valor(sub, resto)
     return None
+
+
+# ── Admin: reset lock de automação ────────────────────────────────────────────
+
+@app.post("/api/reset-lock/{sessao_id}")
+async def reset_lock_automacao(sessao_id: str):
+    """Libera lock de automação travado (para recuperação de falhas)."""
+    if sessao_id in _sessoes_automacao:
+        _sessoes_automacao.pop(sessao_id, None)
+        return {"sucesso": True, "msg": f"Lock liberado para {sessao_id}"}
+    return {"sucesso": True, "msg": "Nenhum lock ativo para esta sessão"}
 
 
 # ── Learning Dashboard ────────────────────────────────────────────────────────
