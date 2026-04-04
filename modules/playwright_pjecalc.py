@@ -488,8 +488,35 @@ class PJECalcPlaywright:
         }""")
 
     def _aguardar_ajax(self, timeout: int = 15000) -> None:
-        """Aguarda conclusão do AJAX JSF; fallback para networkidle."""
+        """Aguarda conclusão do AJAX JSF; fallback para networkidle.
+
+        Se o monitor AJAX não está instalado (ex: após page.goto()),
+        reinstala automaticamente. Timeout reduzido a 5s quando monitor
+        ausente para evitar hangs de 15s em páginas sem AJAX pendente.
+        """
         try:
+            # Verificar se monitor está instalado; reinstalar se necessário
+            _monitor_ok = False
+            try:
+                _monitor_ok = self._page.evaluate(
+                    "() => typeof window.__ajaxCompleto !== 'undefined'"
+                )
+            except Exception:
+                pass
+            if not _monitor_ok:
+                try:
+                    self._instalar_monitor_ajax()
+                    # Após goto, AJAX inicial já completou — marcar como completo
+                    self._page.evaluate("() => { window.__ajaxCompleto = true; }")
+                except Exception:
+                    pass
+                # Sem monitor + recém-instalado → networkidle é mais confiável
+                try:
+                    self._page.wait_for_load_state("networkidle", timeout=5000)
+                except Exception:
+                    self._page.wait_for_timeout(1000)
+                return
+
             self._page.wait_for_function(
                 "() => window.__ajaxCompleto === true",
                 timeout=timeout,
@@ -966,6 +993,11 @@ class PJECalcPlaywright:
                     )
                     self._log(f"  → URL nav: {jsf_page}?conversationId={self._calculo_conversation_id}")
                     self._page.goto(_url, wait_until="domcontentloaded", timeout=15000)
+                    # Reinstalar monitor AJAX após goto (contexto JS é perdido na navegação)
+                    try:
+                        self._instalar_monitor_ajax()
+                    except Exception:
+                        pass
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(500)
                     # Detectar página de erro do Seam (apenas formulario:fechar visível,
