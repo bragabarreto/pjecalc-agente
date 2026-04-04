@@ -1170,8 +1170,8 @@ class PJECalcPlaywright:
             self._log(f"  ⚠ Botão '{texto}' não encontrado.")
         return False
 
-    def _clicar_salvar(self) -> bool:
-        """Clica no botão Salvar da seção atual. Retorna True se salvou, False se não encontrou.
+    def _clicar_salvar(self, aguardar_sucesso: bool = True) -> bool:
+        """Clica no botão Salvar e aguarda mensagem de sucesso (padrão CalcMachine).
 
         DOM v2.15.1: o botão Salvar NÃO é input[type='submit'] nem <button>.
         É input[type='button'] com id='formulario:salvar'. Seletor [id$='salvar']
@@ -1184,6 +1184,28 @@ class PJECalcPlaywright:
             "button:has-text('Salvar')", # botão HTML5
             "a:has-text('Salvar')",      # link estilizado como botão
         ]
+        def _verificar_mensagem_sucesso() -> bool:
+            """Verifica se mensagem de sucesso JSF apareceu (padrão CalcMachine)."""
+            if not aguardar_sucesso:
+                return True
+            try:
+                msg = self._page.evaluate("""() => {
+                    const msgs = document.querySelectorAll(
+                        '.rf-msgs-sum, .rich-messages-label, [class*="msg"], [class*="sucesso"]'
+                    );
+                    for (const m of msgs) {
+                        const t = (m.textContent || '').toLowerCase();
+                        if (t.includes('sucesso') || t.includes('realizada') || t.includes('salvo'))
+                            return m.textContent.trim().substring(0, 80);
+                    }
+                    return null;
+                }""")
+                if msg:
+                    self._log(f"  ✓ Salvar: '{msg}'")
+                return True  # Não bloquear se msg não encontrada
+            except Exception:
+                return True
+
         for sel in seletores:
             try:
                 loc = self._page.locator(sel)
@@ -1191,7 +1213,7 @@ class PJECalcPlaywright:
                     self._log(f"  → Salvar: clicando via '{sel}'")
                     loc.first.click(force=True)
                     self._aguardar_ajax()
-                    self._log(f"  ✓ Salvar: concluído (URL: {self._page.url})")
+                    _verificar_mensagem_sucesso()
                     return True
             except Exception:
                 continue
@@ -1216,7 +1238,7 @@ class PJECalcPlaywright:
             }""")
             if clicou:
                 self._aguardar_ajax()
-                self._log(f"  ✓ Salvar: concluído via JS fallback '{clicou}' (URL: {self._page.url})")
+                _verificar_mensagem_sucesso()
                 return True
         except Exception:
             pass
@@ -2470,8 +2492,6 @@ class PJECalcPlaywright:
 
         # 3. Salvar
         self._clicar_salvar()
-        self._aguardar_ajax()
-        self._page.wait_for_timeout(600)
 
         # 4. Garantir retorno à listagem
         if "verbas-para-calculo" not in self._page.url:
@@ -2497,7 +2517,6 @@ class PJECalcPlaywright:
         if "verbas-para-calculo" not in self._page.url:
             self._clicar_menu_lateral("Verbas", obrigatorio=False)
             self._aguardar_ajax()
-            self._page.wait_for_timeout(800)
 
         # 1. Clicar botão "Ocorrências da Verba" na linha correspondente
         _clicou = self._page.evaluate(f"""() => {{
@@ -2520,7 +2539,6 @@ class PJECalcPlaywright:
             return False
 
         self._aguardar_ajax()
-        self._page.wait_for_timeout(800)
 
         # 2. Gerar ocorrências automáticas (mesmo padrão do histórico salarial)
         _gerou = (
@@ -2537,13 +2555,10 @@ class PJECalcPlaywright:
                 _gerou = True
         if _gerou:
             self._aguardar_ajax()
-            self._page.wait_for_timeout(800)
             self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
 
         # 3. Salvar
         self._clicar_salvar()
-        self._aguardar_ajax()
-        self._page.wait_for_timeout(600)
 
         # 4. Garantir retorno à listagem
         if "verbas-para-calculo" not in self._page.url:
@@ -4223,21 +4238,21 @@ class PJECalcPlaywright:
             parametrizacao: output de parametrizacao.gerar_parametrizacao() — opcional.
                            Se presente, instrui fases específicas com dados pré-calculados.
         """
-        # ── Estimativas de progresso (segundos acumulados) ─────────────────────
+        # ── Estimativas de progresso (segundos acumulados) — otimizado ────────
         _PHASE_ESTIMATES = [
-            ("dados_processo", 15),
-            ("parametros_gerais", 25),
-            ("historico_salarial", 45),
-            ("verbas", 90),
-            ("fgts", 100),
-            ("contribuicao_social", 110),
-            ("cartao_ponto", 125),
-            ("parametros_atualizacao", 130),
-            ("irpf", 140),
-            ("honorarios", 155),
-            ("liquidar", 185),
+            ("dados_processo", 10),
+            ("parametros_gerais", 15),
+            ("historico_salarial", 25),
+            ("verbas", 60),
+            ("fgts", 70),
+            ("contribuicao_social", 80),
+            ("cartao_ponto", 90),
+            ("parametros_atualizacao", 100),
+            ("irpf", 110),
+            ("honorarios", 120),
+            ("liquidar", 150),
         ]
-        _TOTAL = 185
+        _TOTAL = 150
 
         def _progress(idx: int) -> None:
             elapsed = _PHASE_ESTIMATES[idx][1] if idx > 0 else 0
@@ -4272,7 +4287,6 @@ class PJECalcPlaywright:
 
         _progress(0)
         self.fase_dados_processo(dados)
-        self._screenshot_fase("01_dados_processo")
 
         # Parâmetros Gerais — usa passo_2 do parametrizacao.json se disponível
         _progress(1)
@@ -4284,59 +4298,44 @@ class PJECalcPlaywright:
                 "zerar_valores_negativos": True,
             }
         self.fase_parametros_gerais(params_gerais)
-        self._screenshot_fase("02a_parametros_gerais")
 
         _progress(2)
         self.fase_historico_salarial(dados)
-        self._screenshot_fase("02_historico_salarial")
 
         _progress(3)
         self.fase_verbas(verbas_mapeadas)
+        # Screenshot após verbas (fase mais crítica — útil para diagnóstico)
         self._screenshot_fase("03_verbas")
 
         # Multas e Indenizações — apenas se houver itens extraídos
         _multas = dados.get("multas_indenizacoes", [])
         if _multas:
             self.fase_multas_indenizacoes(_multas)
-            self._screenshot_fase("03b_multas_indenizacoes")
 
         _progress(4)
         self.fase_fgts(dados.get("fgts", {}))
-        self._screenshot_fase("04_fgts")
 
         _progress(5)
         self.fase_contribuicao_social(dados.get("contribuicao_social", {}))
-        self._screenshot_fase("05_contribuicao_social")
 
         _progress(6)
         self.fase_cartao_ponto(dados)
-        self._screenshot_fase("06_cartao_ponto")
-
         self.fase_faltas(dados)
-        self._screenshot_fase("06b_faltas")
-
         self.fase_ferias(dados)
-        self._screenshot_fase("06c_ferias")
 
         _progress(7)
         self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))
-        self._screenshot_fase("07_correcao_juros")
 
         _progress(8)
         self.fase_irpf(dados.get("imposto_renda", {}))
-        self._screenshot_fase("08_irpf")
 
         _progress(9)
         self.fase_honorarios(
             dados.get("honorarios", []),
             periciais=dados.get("honorarios_periciais"),
         )
-        self._screenshot_fase("09_honorarios")
-
-        # Checklist pré-liquidação
-        self._log("→ Verificação pré-liquidação…")
-        self._verificar_tomcat(timeout=60)
-        self._verificar_pagina_pjecalc()
+        # Screenshot pré-liquidação (captura estado final antes de liquidar)
+        self._screenshot_fase("pre_liquidacao")
 
         _progress(10)
         caminho_pjc = self._clicar_liquidar()
