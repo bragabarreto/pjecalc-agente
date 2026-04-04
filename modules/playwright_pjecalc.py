@@ -3982,6 +3982,28 @@ class PJECalcPlaywright:
         out_dir = Path(OUTPUT_DIR)
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        # Restaurar sessão Seam ANTES da liquidação — navegar para calculo.jsf
+        # para garantir que o cálculo está aberto na conversação.
+        # Sem isso, liquidacao.xhtml falha com "identifier 'registro' resolved to null"
+        # porque os backing beans perdem o estado após 404/500 em fases anteriores.
+        if self._calculo_url_base and self._calculo_conversation_id:
+            try:
+                _calc_url = (
+                    f"{self._calculo_url_base}calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                self._log("  → Restaurando sessão Seam via calculo.jsf…")
+                self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+                self._capturar_base_calculo()
+            except Exception as _e:
+                self._log(f"  ⚠ Restauração sessão Seam: {_e}")
+
         def _salvar_download(dl_info_value) -> str:
             dest = out_dir / dl_info_value.suggested_filename
             if not dest.suffix:
