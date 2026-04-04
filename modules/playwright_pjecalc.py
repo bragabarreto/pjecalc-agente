@@ -1758,8 +1758,14 @@ class PJECalcPlaywright:
         self._selecionar("indiceTrabalhista", indice, obrigatorio=False)
         self._selecionar("indiceCorrecao", indice, obrigatorio=False)
 
-        juros_map = {"Selic": "SELIC", "Juros Padrão": "TRD_SIMPLES", "Juros Padrao": "TRD_SIMPLES"}
-        juros = juros_map.get(cj.get("taxa_juros", ""), "SELIC")
+        juros_map = {
+            "Taxa Legal": "TAXA_LEGAL",
+            "Selic": "SELIC",
+            "Juros Padrão": "TRD_SIMPLES",
+            "Juros Padrao": "TRD_SIMPLES",
+            "1% ao mês": "TRD_SIMPLES",
+        }
+        juros = juros_map.get(cj.get("taxa_juros", ""), "TAXA_LEGAL")
         self._selecionar("juros", juros, obrigatorio=False)
         self._selecionar("taxaJuros", juros, obrigatorio=False)
 
@@ -2605,35 +2611,37 @@ class PJECalcPlaywright:
                 self._log(f"  ⚠ _configurar_ocorrencias_verba('{nome}'): {_e}")
 
     def _configurar_reflexos_expresso(self, verbas: list) -> None:
-        """Configura reflexos de verbas Expresso via botão 'Verba Reflexa' ou link 'Exibir' na listagem.
+        """Configura reflexos de verbas Expresso via link 'Exibir' na listagem de verbas.
 
         Arquitetura: reflexos NÃO são verbas manuais autônomas. Após salvar verbas no Expresso,
-        navegar para a listagem de verbas (verbas-para-calculo.jsf), clicar em 'Verba Reflexa'
-        (ou 'Exibir') à direita de cada verba principal e marcar os checkboxes dos reflexos deferidos.
+        navegar para a listagem de verbas (verba-calculo.jsf — NÃO verbas-para-calculo.jsf),
+        clicar em 'Exibir' à direita de cada verba principal e marcar os checkboxes dos reflexos.
         """
         try:
-            # Garantir que estamos na página de listagem de verbas (verbas-para-calculo)
+            # Garantir que estamos na página de listagem de verbas (verba-calculo.jsf)
+            # IMPORTANTE: Os botões 'Exibir'/'Verba Reflexa' ficam em verba-calculo.jsf,
+            # NÃO em verbas-para-calculo.jsf (que é a página do Lançamento Expresso).
             _url_atual = self._page.url
-            if "verbas-para-calculo" not in _url_atual:
-                self._log("  → Navegando para listagem de verbas (verbas-para-calculo)…")
+            if "verba-calculo" not in _url_atual or "verbas-para-calculo" in _url_atual:
+                self._log("  → Navegando para listagem de verbas (verba-calculo.jsf)…")
                 # Tentar via menu lateral primeiro
                 _nav_ok = self._clicar_menu_lateral("Verbas", obrigatorio=False)
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
-                # Se menu lateral falhou ou não levou à listagem, usar URL direta
-                if not _nav_ok or "verbas-para-calculo" not in self._page.url:
+                # Se menu lateral falhou ou não levou à listagem correta, usar URL direta
+                if not _nav_ok or "verba-calculo" not in self._page.url or "verbas-para-calculo" in self._page.url:
                     if self._calculo_url_base and self._calculo_conversation_id:
                         _url_verbas = (
-                            f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                            f"{self._calculo_url_base}verba/verba-calculo.jsf"
                             f"?conversationId={self._calculo_conversation_id}"
                         )
-                        self._log("  → URL direta para listagem de verbas…")
+                        self._log("  → URL direta para verba-calculo.jsf…")
                         try:
                             self._page.goto(_url_verbas, wait_until="domcontentloaded", timeout=15000)
                             self._aguardar_ajax()
                             self._page.wait_for_timeout(1000)
                         except Exception as _e:
-                            self._log(f"  ⚠ URL direta verbas-para-calculo: {_e}")
+                            self._log(f"  ⚠ URL direta verba-calculo: {_e}")
 
             # Mapa nome_pjecalc → reflexas_tipicas
             _reflexos_map: dict[str, list[str]] = {}
@@ -3626,11 +3634,93 @@ class PJECalcPlaywright:
 
         self._log("Fase 5d concluída.")
 
-    # ── Fase 6: Parâmetros de Atualização ─────────────────────────────────────
+    # ── Fase 6: Parâmetros de Atualização (Correção, Juros e Multa) ──────────
 
     @retry(max_tentativas=3)
     def fase_parametros_atualizacao(self, cj: dict) -> None:
-        self._log("Fase 6 — Parâmetros de atualização (preenchidos na Fase 1 — ignorado).")
+        """Configura correção monetária, juros e multa na página correcao-juros.jsf.
+
+        Lógica de juros pós-Lei 14.905/2024 (vigência 30/08/2024):
+        - Correção: IPCA-E (índice trabalhista padrão)
+        - Juros: Taxa Legal (SELIC - IPCA = taxa real)
+        - Data marco: 30/08/2024 — a partir dessa data aplica-se Taxa Legal
+        """
+        self._log("Fase 6 — Parâmetros de atualização (Correção, Juros e Multa)…")
+
+        # Navegar para correcao-juros.jsf
+        _nav_ok = self._clicar_menu_lateral("Correção, Juros e Multa", obrigatorio=False)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(1000)
+
+        if not _nav_ok or "correcao-juros" not in self._page.url:
+            if self._calculo_url_base and self._calculo_conversation_id:
+                _url_cj = (
+                    f"{self._calculo_url_base}correcao-juros.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                try:
+                    self._page.goto(_url_cj, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1000)
+                except Exception as _e:
+                    self._log(f"  ⚠ Navegação correcao-juros.jsf: {_e}")
+                    return
+
+        # --- Índice de correção monetária ---
+        _indice = cj.get("indice_correcao", "IPCA-E")
+        _indice_map = {
+            "IPCA-E": "IPCAE",
+            "Tabela JT Única Mensal": "IPCAE",
+            "Tabela JT Unica Mensal": "IPCAE",
+            "Selic": "SELIC",
+            "TRCT": "TRCT",
+            "TR": "TRD",
+        }
+        _val_indice = _indice_map.get(_indice, "IPCAE")
+        self._selecionar("indiceCorrecao", _val_indice, obrigatorio=False)
+        self._selecionar("indiceTrabalhista", _val_indice, obrigatorio=False)
+        self._log(f"  ✓ Índice de correção: {_val_indice}")
+
+        # --- Taxa de juros ---
+        _taxa = cj.get("taxa_juros", "Taxa Legal")
+        _juros_map = {
+            "Taxa Legal": "TAXA_LEGAL",
+            "Selic": "SELIC",
+            "Juros Padrão": "TRD_SIMPLES",
+            "Juros Padrao": "TRD_SIMPLES",
+            "1% ao mês": "TRD_SIMPLES",
+        }
+        _val_juros = _juros_map.get(_taxa, "TAXA_LEGAL")
+        self._selecionar("taxaJuros", _val_juros, obrigatorio=False)
+        self._selecionar("juros", _val_juros, obrigatorio=False)
+        self._log(f"  ✓ Taxa de juros: {_val_juros}")
+
+        # --- Data marco da Taxa Legal (Lei 14.905/2024 → 30/08/2024) ---
+        if _val_juros == "TAXA_LEGAL":
+            _data_marco = cj.get("data_taxa_legal", "30/08/2024")
+            self._preencher("dataInicioTaxaLegal", _data_marco, obrigatorio=False)
+            self._preencher("dataMarcoTaxaLegal", _data_marco, obrigatorio=False)
+            self._log(f"  ✓ Data marco Taxa Legal: {_data_marco}")
+
+        # --- Base de juros ---
+        _base = cj.get("base_juros", "Verbas")
+        _base_map = {"Verbas": "VERBA_INSS", "Credito Total": "CREDITO_TOTAL"}
+        _val_base = _base_map.get(_base, "VERBA_INSS")
+        self._selecionar("baseDeJurosDasVerbas", _val_base, obrigatorio=False)
+        self._log(f"  ✓ Base de juros: {_val_base}")
+
+        # --- Multa do art. 523 CPC (se aplicável) ---
+        _multa_523 = cj.get("multa_523", False)
+        if _multa_523:
+            self._marcar_checkbox("aplicarMulta523", True)
+            self._log("  ✓ Multa art. 523 CPC: aplicar")
+
+        # Salvar
+        try:
+            self._clicar_salvar()
+            self._log("  ✓ Parâmetros de atualização salvos")
+        except Exception as _e:
+            self._log(f"  ⚠ Salvar parâmetros atualização: {_e}")
 
     # ── Fase 7: IRPF ──────────────────────────────────────────────────────────
 
@@ -4080,7 +4170,7 @@ class PJECalcPlaywright:
                 loc_exp = self._page.locator(sel)
                 if loc_exp.count() > 0:
                     try:
-                        with self._page.expect_download(timeout=30000) as dl_info:
+                        with self._page.expect_download(timeout=90000) as dl_info:
                             loc_exp.first.click()
                         return _salvar_download(dl_info.value)
                     except Exception as e:
@@ -4104,7 +4194,7 @@ class PJECalcPlaywright:
                 return pjc ? pjc.href : null;
             }""")
             if href:
-                with self._page.expect_download(timeout=30000) as dl_info:
+                with self._page.expect_download(timeout=90000) as dl_info:
                     self._page.goto(href)
                 return _salvar_download(dl_info.value)
         except Exception:
