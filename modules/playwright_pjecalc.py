@@ -2562,6 +2562,19 @@ class PJECalcPlaywright:
             self._clicar_menu_lateral("Verbas", obrigatorio=False)
             self._aguardar_ajax()
             self._page.wait_for_timeout(800)
+            # Fallback: URL direta se menu lateral não navegou para a listagem
+            if "verbas-para-calculo" not in self._page.url:
+                if self._calculo_url_base and self._calculo_conversation_id:
+                    try:
+                        _url_vl = (
+                            f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        self._page.goto(_url_vl, wait_until="domcontentloaded", timeout=15000)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(800)
+                    except Exception:
+                        pass
 
         for v in predefinidas:
             # Pular verbas reflexas — não têm linha própria na listagem
@@ -2601,11 +2614,26 @@ class PJECalcPlaywright:
         try:
             # Garantir que estamos na página de listagem de verbas (verbas-para-calculo)
             _url_atual = self._page.url
-            if "verbas-para-calculo" not in _url_atual and "expresso" in _url_atual.lower():
+            if "verbas-para-calculo" not in _url_atual:
                 self._log("  → Navegando para listagem de verbas (verbas-para-calculo)…")
-                self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                # Tentar via menu lateral primeiro
+                _nav_ok = self._clicar_menu_lateral("Verbas", obrigatorio=False)
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
+                # Se menu lateral falhou ou não levou à listagem, usar URL direta
+                if not _nav_ok or "verbas-para-calculo" not in self._page.url:
+                    if self._calculo_url_base and self._calculo_conversation_id:
+                        _url_verbas = (
+                            f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        self._log("  → URL direta para listagem de verbas…")
+                        try:
+                            self._page.goto(_url_verbas, wait_until="domcontentloaded", timeout=15000)
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(1000)
+                        except Exception as _e:
+                            self._log(f"  ⚠ URL direta verbas-para-calculo: {_e}")
 
             # Mapa nome_pjecalc → reflexas_tipicas
             _reflexos_map: dict[str, list[str]] = {}
@@ -3915,6 +3943,8 @@ class PJECalcPlaywright:
 
         # Validar resultado da liquidação antes de exportar
         # Mensagem de sucesso: "Não foram encontradas pendências para a liquidação"
+        _liquidacao_ok = False
+        _liquidacao_erro_msg = None
         try:
             body_text = self._page.locator("body").text_content(timeout=5000) or ""
             _body_lower = body_text.lower()
@@ -3923,16 +3953,87 @@ class PJECalcPlaywright:
                "liquidação realizada" in _body_lower or \
                "cálculo liquidado" in _body_lower:
                 self._log("  ✓ Liquidação concluída sem pendências")
+                _liquidacao_ok = True
             else:
                 # Verificar erros — "pendente" sozinho é falso positivo (aparece na msg de sucesso)
                 for indicador in ["não foi possível", "inconsistente", "erro interno",
                                   "existem pendências", "campos obrigatórios"]:
                     if indicador in _body_lower:
                         self._log(f"  ⚠ Liquidação pode ter falhado: '{indicador}' detectado")
+                        _liquidacao_erro_msg = indicador
                         self._screenshot_fase("liquidacao_erro")
+                        # Capturar mensagem de erro JSF detalhada
+                        try:
+                            _msgs = self._page.evaluate("""() => {
+                                const sels = ['.rf-msgs-sum', '.rf-msgs-det', '.rich-messages',
+                                              '[class*="msg-error"]', '[class*="erro"]',
+                                              '.mensagem-erro', '.ui-messages-error'];
+                                for (const sel of sels) {
+                                    const els = document.querySelectorAll(sel);
+                                    if (els.length > 0) {
+                                        return [...els].map(e => e.textContent.trim()).join(' | ');
+                                    }
+                                }
+                                return null;
+                            }""")
+                            if _msgs:
+                                self._log(f"  ⚠ Mensagem JSF: {_msgs[:300]}")
+                        except Exception:
+                            pass
                         break
+                if not _liquidacao_erro_msg:
+                    _liquidacao_ok = True  # Sem erro explícito = OK
         except Exception:
-            pass
+            _liquidacao_ok = True  # Se não conseguiu verificar, assume OK
+
+        # Retry: se liquidação falhou, re-navegar pelo cálculo e tentar novamente
+        if not _liquidacao_ok and _liquidacao_erro_msg:
+            self._log("  → Retentando liquidação: re-abrindo cálculo para estabilizar sessão…")
+            try:
+                # Re-abrir cálculo principal para restaurar sessão Seam
+                if self._calculo_url_base and self._calculo_conversation_id:
+                    _calc_url = (
+                        f"{self._calculo_url_base}calculo.jsf"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1000)
+                    self._capturar_base_calculo()
+
+                # Re-navegar para liquidação
+                _liq_url = (
+                    f"{self._calculo_url_base}liquidacao.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                self._page.goto(_liq_url, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+
+                # Clicar Liquidar novamente
+                for sel in ["[id$='liquidar']", "[id$='liquidarBt']", "input[value='Liquidar']"]:
+                    _loc2 = self._page.locator(sel)
+                    if _loc2.count() > 0:
+                        self._log("  → Retry: clicando Liquidar…")
+                        _loc2.first.click()
+                        self._aguardar_ajax(90000)
+                        self._page.wait_for_timeout(2000)
+                        # Verificar resultado do retry
+                        _body2 = (self._page.locator("body").text_content(timeout=5000) or "").lower()
+                        if "não foram encontradas pendências" in _body2 or \
+                           "liquidação realizada" in _body2 or \
+                           "cálculo liquidado" in _body2:
+                            self._log("  ✓ Retry liquidação: sucesso!")
+                            _liquidacao_ok = True
+                        elif "erro interno" not in _body2 and "não foi possível" not in _body2:
+                            self._log("  ✓ Retry liquidação: sem erro detectado")
+                            _liquidacao_ok = True
+                        else:
+                            self._log("  ⚠ Retry liquidação: ainda com erro")
+                            self._screenshot_fase("liquidacao_erro_retry")
+                        break
+            except Exception as _retry_err:
+                self._log(f"  ⚠ Retry liquidação falhou: {_retry_err}")
 
         self._log("  ✓ Liquidação AJAX concluída — navegando para Exportação…")
 
