@@ -943,6 +943,8 @@ class PJECalcPlaywright:
             "Seguro Desemprego":  "a[id*='menuSeguroDesemprego']",
             "Pensão Alimentícia": "a[id*='menuPensaoAlimenticia']",
             "Previdência Privada": "a[id*='menuPrevidenciaPrivada']",
+            "Exportar":           "a[id*='menuExport']",
+            "Exportação":         "a[id*='menuExport']",
         }
         sel_id = _MENU_ID_MAP.get(texto)
         if sel_id:
@@ -982,6 +984,8 @@ class PJECalcPlaywright:
             "Correção, Juros e Multa": "correcao-juros.jsf",
             "Liquidar":                "liquidacao.jsf",
             "Imprimir":                "imprimir.jsf",
+            "Exportar":                "exportacao.jsf",
+            "Exportação":              "exportacao.jsf",
         }
         if self._calculo_url_base and self._calculo_conversation_id:
             jsf_page = _URL_SECTION_MAP.get(texto)
@@ -4194,43 +4198,103 @@ class PJECalcPlaywright:
             except Exception as _retry_err:
                 self._log(f"  ⚠ Retry liquidação falhou: {_retry_err}")
 
+        # ── Abortar se liquidação falhou ────────────────────────────────────────
+        if not _liquidacao_ok:
+            self._log("  ✗ Liquidação FALHOU — abortando exportação.")
+            self._log(
+                "ERRO_LIQUIDACAO: Não é possível exportar .PJC sem liquidação bem-sucedida. "
+                "Verifique pendências no PJE-Calc e tente novamente."
+            )
+            return None
+
         self._log("  ✓ Liquidação AJAX concluída — navegando para Exportação…")
 
         # ── Passo 2: Exportação → capturar .PJC ──────────────────────────────────
-        # A exportação fica em página separada (exportacao.jsf)
-        # O botão Exportar dispara AJAX que seta href em linkDownloadArquivo + JS auto-clica
-        #
-        # IMPORTANTE: Antes de exportar, navegar para calculo.jsf para garantir
-        # que "calculoAberto" esteja ativo na sessão Seam. Sem isso,
-        # ServicoDeCalculo.obterCalculoAberto() retorna null → NPE na exportação.
+        # ESTRATÉGIA: Navegar via menu lateral JSF (não via page.goto direto).
+        # O goto direto para exportacao.jsf perde o backing bean "calculoAberto"
+        # na sessão Seam, causando NPE em ServicoDeCalculo.exportarCalculo().
+        # A navegação via sidebar mantém o contexto JSF corretamente.
         _exportou = False
-        if self._calculo_url_base and self._calculo_conversation_id:
-            # Re-abrir o cálculo na sessão Seam antes de exportar
-            _calc_url = (
-                f"{self._calculo_url_base}calculo.jsf"
-                f"?conversationId={self._calculo_conversation_id}"
-            )
-            try:
-                self._log("  → Re-abrindo cálculo na sessão Seam (previne NPE no exportar)…")
+
+        # Tentativa 1: Navegar via menu lateral (mantém backing beans Seam)
+        try:
+            self._log("  → Navegando para Exportação via menu lateral JSF…")
+            # Primeiro voltar para calculo.jsf para garantir contexto ativo
+            if self._calculo_url_base and self._calculo_conversation_id:
+                _calc_url = (
+                    f"{self._calculo_url_base}calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
                 self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
-                # Recapturar conversationId (pode ter mudado após liquidação)
                 self._capturar_base_calculo()
-            except Exception as e:
-                self._log(f"  ⚠ Re-abertura calculo.jsf: {e}")
 
+            # Clicar no link "Exportar" do sidebar via JS (mesmo padrão de _clicar_menu_lateral)
+            _clicou_export_menu = self._page.evaluate("""() => {
+                // Buscar link no sidebar pelo texto "Exportar"
+                const links = [...document.querySelectorAll('a')];
+                for (const a of links) {
+                    const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
+                    if (txt === 'Exportar' || txt === 'Exportação') {
+                        a.click();
+                        return true;
+                    }
+                }
+                // Buscar por ID do menu
+                const byId = document.querySelector("a[id*='menuExport']") ||
+                             document.querySelector("a[id*='menuExporta']");
+                if (byId) { byId.click(); return true; }
+                return false;
+            }""")
+
+            if _clicou_export_menu:
+                self._log("  ✓ Link Exportar encontrado no menu — aguardando navegação…")
+                try:
+                    self._page.wait_for_load_state("domcontentloaded", timeout=10000)
+                except Exception:
+                    pass
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+                _exportou = True
+            else:
+                self._log("  ⚠ Link Exportar não encontrado no menu lateral")
+        except Exception as _menu_err:
+            self._log(f"  ⚠ Navegação via menu lateral falhou: {_menu_err}")
+
+        # Tentativa 2 (fallback): goto direto com conversationId
+        if not _exportou and self._calculo_url_base and self._calculo_conversation_id:
             _exp_url = (
                 f"{self._calculo_url_base}exportacao.jsf"
                 f"?conversationId={self._calculo_conversation_id}"
             )
             try:
+                self._log("  → Fallback: goto direto exportacao.jsf…")
                 self._page.goto(_exp_url, wait_until="domcontentloaded", timeout=15000)
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
                 _exportou = True
             except Exception as e:
                 self._log(f"  ⚠ Navegação exportacao.jsf: {e}")
+
+        # Debug: capturar estado da página de exportação
+        try:
+            self._log(f"  → Página atual: {self._page.url}")
+            self._screenshot_fase("pre_exportacao")
+        except Exception:
+            pass
 
         # Clicar botão Exportar (id="exportar" em exportacao.xhtml)
         for sel in ["[id$='exportar']", "input[value='Exportar']",
