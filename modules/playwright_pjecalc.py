@@ -4397,6 +4397,12 @@ def iniciar_e_preencher(
         cb(f"ERRO: {exc}")
         logger.exception(f"Erro na automação Playwright: {exc}")
         raise
+    finally:
+        # Cleanup obrigatório: fecha browser/Playwright para evitar processos órfãos
+        try:
+            agente.fechar()
+        except Exception:
+            pass
 
 
 def preencher_como_generator(

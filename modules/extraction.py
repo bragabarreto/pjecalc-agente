@@ -863,8 +863,10 @@ def extrair_dados_sentenca(
     sessao_id = sessao_id or str(uuid.uuid4())
 
     if is_relatorio:
-        # Passar usar_gemini para que o modelo escolhido pelo usuário seja respeitado
-        _usar_gemini_rel = USE_GEMINI if usar_gemini is None else usar_gemini
+        # LEGAL_EXTRACTION → Claude obrigatório (cf. LLM Routing em CLAUDE.md).
+        # Gemini perde verbas críticas em relatórios estruturados (ex: Saldo de Salário,
+        # Aviso Prévio, Multa 477, FGTS+40%). Só usar Gemini se explicitamente forçado.
+        _usar_gemini_rel = usar_gemini if usar_gemini is not None else False
         resultado = _extrair_de_relatorio_estruturado(texto, sessao_id, usar_gemini=_usar_gemini_rel)
         if "_erro_llm" not in resultado:
             return resultado
@@ -904,8 +906,9 @@ def extrair_dados_sentenca(
     else:
         texto_para_llm = texto_completo[:_LIMITE_TOTAL]
 
-    # usar_gemini: True=forçar Gemini, False=forçar Claude, None=usar config global
-    _usar_gemini = USE_GEMINI if usar_gemini is None else usar_gemini
+    # LEGAL_EXTRACTION → Claude obrigatório (cf. LLM Routing em CLAUDE.md).
+    # Gemini só se explicitamente forçado pelo chamador.
+    _usar_gemini = usar_gemini if usar_gemini is not None else False
 
     if orchestrator is not None:
         # Orchestrator injeta knowledge base oficial + regras aprendidas no sistema
