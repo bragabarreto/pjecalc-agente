@@ -3889,41 +3889,61 @@ class PJECalcPlaywright:
             if btn_inc.count() > 0:
                 btn_inc.first.click(force=True)
                 self._aguardar_ajax()
-                self._page.wait_for_timeout(2000)
+                self._page.wait_for_timeout(3000)
                 _novo_ok = True
                 self._log("  ✓ Clicou 'Novo' (incluir) no Cartão de Ponto")
+                self._screenshot_fase("05b_cartao_ponto_apos_novo")
             else:
                 self._log("  ⚠ Botão 'incluir' não encontrado na página Cartão de Ponto")
         except Exception as e:
             self._log(f"  ⚠ Erro ao clicar incluir: {e}")
 
         # Verificar se formulário de apuração abriu (emModoFormulario renderiza os campos)
-        # Aguardar até 5s para o AJAX renderizar os campos
+        # Aguardar até 15s para o AJAX renderizar os campos — o JSF pode demorar
+        # após criar o registro de apuração no backend.
         _form_open = False
-        for _wait in range(5):
+        for _wait in range(15):
             if self._page.locator("input[id$='valorJornadaSegunda']").count() > 0:
                 _form_open = True
                 break
             if self._page.locator("input[name$='tipoApuracaoHorasExtras']").count() > 0:
                 _form_open = True
                 break
+            # Verificar se um popup/dialog de erro apareceu (formulario:fechar sem campos)
+            if self._page.locator("input[id$='fechar']").count() > 0 and _wait >= 3:
+                # fechar button without form fields = error popup
+                _has_fields = self._page.locator("input[id$='valorJornadaSegunda']").count() > 0
+                if not _has_fields:
+                    _body_txt = self._page.locator("body").text_content(timeout=2000) or ""
+                    _first100 = _body_txt.strip()[:200]
+                    self._log(f"  ⚠ Cartão de Ponto: popup/dialog apareceu sem campos do formulário")
+                    self._log(f"    Conteúdo: {_first100}")
+                    self._screenshot_fase("05b_cartao_ponto_erro")
+                    # Tentar fechar o dialog e retornar
+                    try:
+                        self._page.locator("input[id$='fechar']").first.click(force=True)
+                        self._aguardar_ajax()
+                    except Exception:
+                        pass
+                    return
             self._page.wait_for_timeout(1000)
 
         if not _form_open:
             # Verificar se houve erro HTTP 500
             _body = self._page.locator("body").text_content(timeout=2000) or ""
             if "Erro" in _body or "erro" in _body.lower():
-                self._log(f"  ⚠ Cartão de Ponto: erro após clicar Novo — {_body[:100]}")
+                self._log(f"  ⚠ Cartão de Ponto: erro após clicar Novo — {_body[:200]}")
             else:
-                self._log("  ⚠ Formulário de apuração não abriu após clicar Novo")
+                self._log("  �� Formulário de apuração não abriu após clicar Novo (15s timeout)")
                 # Diagnóstico: quais campos existem?
                 _diag_fields = self._page.evaluate("""() => {
-                    return [...document.querySelectorAll("input,select")]
-                        .filter(e => e.id.includes('formulario') && e.type !== 'hidden')
-                        .map(e => e.id.split(':').pop())
-                        .slice(0, 15);
+                    return [...document.querySelectorAll("input,select,table")]
+                        .filter(e => (e.id||'').includes('formulario') && e.type !== 'hidden')
+                        .map(e => ({tag: e.tagName, id: (e.id||'').split(':').pop(), type: e.type||''}))
+                        .slice(0, 20);
                 }""")
                 self._log(f"    Campos disponíveis: {_diag_fields}")
+            self._screenshot_fase("05b_cartao_ponto_noform")
             return
 
         # Re-mapear campos APÓS formulário aberto
@@ -5285,22 +5305,22 @@ class PJECalcPlaywright:
         _progress(2)
         self.fase_historico_salarial(dados)
 
-        # Cartão de Ponto: preencher ANTES das verbas quando há apuração por jornada (HJD).
-        # No PJE-Calc, o cartão de ponto com "Jornada Diária" gera as horas extras
-        # automaticamente via botão "Apurar" — as verbas de HE dependem dele.
+        _progress(3)
+        self.fase_verbas(verbas_mapeadas)
+        # Screenshot após verbas (fase mais crítica — útil para diagnóstico)
+        self._screenshot_fase("03_verbas")
+
+        # Cartão de Ponto: preencher DEPOIS das verbas.
+        # O manual oficial confirma a ordem: Verbas → Cartão de Ponto → FGTS.
+        # Os campos de jornada são "sugeridos a partir dos Parâmetros do Cálculo" (carga horária).
+        # Pré-requisitos: Dados do Cálculo + Parâmetros Gerais (carga horária) + Verbas salvos.
         _dur = dados.get("duracao_trabalho") or {}
         _tem_cartao = _dur.get("tipo_apuracao") or any(
             "hora" in (v.get("nome_sentenca") or "").lower() and "extra" in (v.get("nome_sentenca") or "").lower()
             for v in dados.get("verbas_deferidas", [])
         )
         if _tem_cartao:
-            _progress(3)
             self.fase_cartao_ponto(dados)
-
-        _progress(3)
-        self.fase_verbas(verbas_mapeadas)
-        # Screenshot após verbas (fase mais crítica — útil para diagnóstico)
-        self._screenshot_fase("03_verbas")
 
         # Multas e Indenizações — apenas se houver itens extraídos
         _multas = dados.get("multas_indenizacoes", [])
