@@ -271,15 +271,25 @@ Se não mencionado → ferias = []
                 danos materiais mensais, etc.). Aplicar apenas quando a sentença mencionar
                 explicitamente a Súmula 439 ou "juros desde o ajuizamento".
 
-**SEÇÃO 4 — FGTS E MULTA DE 40%** → preenche "fgts":
+**SEÇÃO 4 — FGTS E MULTA RESCISÓRIA** → preenche "fgts":
 - "Alíquota FGTS:" → fgts.aliquota (ex: 8% → 0.08)
-- "Multa de 40%: Sim" → fgts.multa_40 = true
+- "Multa de 40%: Sim" → fgts.multa_40 = true (demissão sem justa causa — padrão)
 - "Multa de 40%: Não" → fgts.multa_40 = false
+- "Multa de 20%" → fgts.multa_40 = true, fgts.multa_20 = true (estabilidade provisória: CIPA, gestante, acidentário, etc.)
+  ATENÇÃO: quando a sentença determina multa de 20% (não 40%), marcar AMBOS multa_40=true (habilita a seção de multa no PJE-Calc) e multa_20=true (seleciona 20% em vez de 40%).
 - saldo_fgts: saldo das contas FGTS do empregado, se informado na sentença (float; null se não mencionado)
 
 **SEÇÃO 5 — MULTAS TRABALHISTAS**:
 - "Multa art. 467 CLT — Deferida" → fgts.multa_467 = true (campo opcional)
 - "Multa art. 467 CLT — Indeferida" → fgts.multa_467 = false
+
+**SEÇÃO 5B — JUSTIÇA GRATUITA** → preenche "justica_gratuita":
+- Buscar "benefício da justiça gratuita", "gratuidade judiciária", "assistência judiciária gratuita"
+- justica_gratuita_reclamante: true quando deferida ao reclamante (autor)
+- justica_gratuita_reclamado: true quando deferida ao reclamado (réu) — raro mas possível
+- Se não mencionada ou indeferida: false
+- IMPORTANTE para honorários: quando uma parte tem justiça gratuita, a exigibilidade dos
+  honorários advocatícios a que ela foi condenada fica SUSPENSA (art. 791-A, §4º, CLT).
 
 **SEÇÃO 6 — HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
@@ -423,6 +433,7 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
   "fgts": {{
     "aliquota": "float | null",
     "multa_40": "true | false | null",
+    "multa_20": "true | false | null",
     "multa_467": "true | false | null",
     "saldo_fgts": "float | null",
     "confianca": 0.95
@@ -439,6 +450,10 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     }}
   ],
   "honorarios_periciais": "float | null",
+  "justica_gratuita": {{
+    "reclamante": "true | false",
+    "reclamado": "true | false"
+  }},
   "correcao_juros": {{
     "indice_correcao": "Tabela JT Unica Mensal | IPCA-E | Selic | TRCT | null",
     "base_juros": "Verbas | Credito Total | null",
@@ -686,7 +701,11 @@ verbas_deferidas; em vez disso definir fgts.multa_40 = true. Reflexos de FGTS ta
 - aliquota: 0.08 (8%) para a maioria dos contratos; 0.02 (2%) para aprendizes
   Buscar "alíquota de X%" ou "FGTS à alíquota de X%"
 - multa_40: true quando deferida "multa de 40%" / "multa rescisória" / "art. 18 §1º da Lei 8.036"
-  Também true quando condenação em "FGTS + Multa 40%" aparecer na lista de verbas
+  Também true quando condenação em "FGTS + Multa 40%" aparecer na lista de verbas.
+  TAMBÉM true quando multa de 20% é deferida (habilita a seção de multa no PJE-Calc).
+- multa_20: true SOMENTE quando a sentença determina multa de 20% (estabilidade provisória:
+  CIPA, gestante, acidentário, etc.). Quando multa_20=true, multa_40 TAMBÉM deve ser true.
+  Se a sentença não menciona 20%, multa_20=false (default).
 - multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
 - saldo_fgts: saldo das contas FGTS do trabalhador, se informado (ex: "saldo FGTS de R$ 1.200,00");
   null se não mencionado — NÃO inferir, apenas extrair se explícito
@@ -827,6 +846,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
   "fgts": {{
     "aliquota": "float | null",
     "multa_40": "true | false | null",
+    "multa_20": "true | false | null",
     "multa_467": "true | false | null",
     "confianca": 0.0-1.0
   }},
@@ -842,6 +862,10 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     }}
   ],
   "honorarios_periciais": "float | null",
+  "justica_gratuita": {{
+    "reclamante": "true | false",
+    "reclamado": "true | false"
+  }},
   "correcao_juros": {{
     "indice_correcao": "Tabela JT Unica Mensal | IPCA-E | Selic | TRCT | null",
     "base_juros": "Verbas | Credito Total | null",
@@ -1165,6 +1189,7 @@ _EXTRACTION_SCHEMA: dict = {
             "properties": {
                 "aliquota":   {"type": ["number","null"]},
                 "multa_40":   {"type": ["boolean","null"]},
+                "multa_20":   {"type": ["boolean","null"]},
                 "multa_467":  {"type": ["boolean","null"]},
                 "saldo_fgts": {"type": ["number","null"]},
                 "confianca":  {"type": "number"},
@@ -1188,6 +1213,13 @@ _EXTRACTION_SCHEMA: dict = {
             },
         },
         "honorarios_periciais": {"type": ["number","null"]},
+        "justica_gratuita": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "reclamante": {"type": "boolean"},
+                "reclamado":  {"type": "boolean"},
+            },
+        },
         "correcao_juros": {
             "type": "object", "additionalProperties": False,
             "required": ["indice_correcao","base_juros","taxa_juros","jam_fgts","confianca"],
@@ -2167,6 +2199,7 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
         "fgts": {
             "aliquota": regex.get("aliquota_fgts"),
             "multa_40": regex.get("multa_40"),
+            "multa_20": None,
             "multa_467": None,
             "saldo_fgts": None,
             "confianca": 0.5,
@@ -2176,6 +2209,7 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
             "parte_devedora": regex.get("honorarios_parte_devedora"),
         }) if regex.get("honorarios_percentual") else [],
         "honorarios_periciais": None,
+        "justica_gratuita": {"reclamante": False, "reclamado": False},
         "correcao_juros": {
             "indice_correcao": regex.get("indice_correcao"),
             "base_juros": "Verbas",

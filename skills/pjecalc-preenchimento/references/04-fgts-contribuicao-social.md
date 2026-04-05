@@ -19,10 +19,10 @@
 |---|---|
 | Apurar Multa | Checkbox |
 | Tipo | Calculada / Informada |
-| Percentual (se Calculada) | 20% ou 40% |
+| Percentual (se Calculada) | 40% (padrão — demissão sem justa causa) ou 20% (estabilidade provisória: CIPA, gestante, acidentário). Na extração: `fgts.multa_40=true` sempre; `fgts.multa_20=true` somente quando sentença determina 20%. |
 | Base (se Calculada) | Devido / Diferença / Saldo e/ou Saque / Devido (-) Saldo / Devido (+) Saldo |
 | Valor (se Informada) | Valor na data da demissão |
-| Multa Art. 467 CLT sobre Multa FGTS | Checkbox (50% sobre a multa) |
+| Multa Art. 467 CLT | Checkbox `multaDoArtigo467` (50% sobre verbas incontroversas). **Dependente** do checkbox `multa` estar marcado. Além do checkbox FGTS, a Multa 467 também aparece como **reflexa automática** sob cada verba principal na aba Verbas (ex: "MULTA DO ARTIGO 467 DA CLT SOBRE SALDO DE SALÁRIO", "... SOBRE FÉRIAS + 1/3", etc.). |
 
 ### Saldo e/ou Saque
 

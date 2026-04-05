@@ -1,0 +1,16 @@
+{
+  "servers": [
+    {
+      "name": "FastAPI (webapp)",
+      "command": "uvicorn webapp:app --host 0.0.0.0 --port 8000 --reload",
+      "port": 8000,
+      "description": "Web app principal — prévia, SSE, admin"
+    },
+    {
+      "name": "PJE-Calc Tomcat",
+      "command": "./iniciarPjeCalc-macos.sh",
+      "port": 9257,
+      "description": "PJE-Calc Cidadão (Tomcat embarcado, Java 8)"
+    }
+  ]
+}

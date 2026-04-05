@@ -170,7 +170,8 @@ automaticamente esses campos.
 ### Expresso — tabela paginada
 A tabela do Lançamento Expresso (`verbas-para-calculo.xhtml`) usa `<a4j:repeat>` em layout de colunas.
 Apenas ~27 das 60+ verbas são visíveis no viewport. Verbas como "Saldo de Salário", "Férias 
-Proporcionais + 1/3", "Multa 477/467" ficam abaixo do scroll. Scroll via JS + re-enumeração necessários.
+Proporcionais + 1/3", "Multa 477" ficam abaixo do scroll. Scroll via JS + re-enumeração necessários.
+(Nota: Multa 467 NÃO é verba Expresso — é checkbox FGTS `multaDoArtigo467` + reflexa automática na aba Verbas.)
 
 ### SSE stream — keepalive obrigatório
 O SSE stream (endpoint `/api/executar/{sessao_id}`) precisa de keepalive a cada 10-15s para evitar

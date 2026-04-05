@@ -16,7 +16,7 @@ Fonte: `modules/classification.py` → `VERBAS_PREDEFINIDAS` + Manual Oficial PJ
 | Adicional de Insalubridade | adicional de insalubridade | Principal | Comum | Mensal | ✓ | ✓ | ✓ | 13º, Férias |
 | Adicional de Periculosidade | adicional de periculosidade | Principal | Comum | Mensal | ✓ | ✓ | ✓ | — |
 | Multa Art. 477 CLT | multa art 477 | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
-| Multa Art. 467 CLT | multa art 467 | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
+| Multa Art. 467 CLT | multa art 467 | **NÃO é verba Expresso** | — | — | ✗ | ✗ | ✗ | Checkbox FGTS (`multaDoArtigo467`) + reflexa automática sob cada verba principal na aba Verbas |
 | Vale Transporte | vale transporte | Principal | Comum | Mensal | ✗ | ✗ | ✗ | — |
 | Salário-Família | salario familia | Principal | Comum | Mensal | ✗ | ✗ | ✗ | — |
 | Indenização por Dano Moral | dano moral / indenizacao por dano moral | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
@@ -58,7 +58,7 @@ Estas verbas não estão no catálogo Expresso mas são frequentemente deferidas
 
 **Não incidem FGTS, INSS ou IR:**
 - Dano moral / material
-- Multa art. 477, art. 467, normativa/cláusula penal
+- Multa art. 477 (verba Expresso), art. 467 (checkbox FGTS + reflexa, NÃO é verba Expresso), normativa/cláusula penal
 - Vale transporte
 - Reembolso de despesas
 - Honorários periciais (campo próprio)
