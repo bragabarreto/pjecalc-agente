@@ -234,6 +234,21 @@ Possui 3 botões principais: **Novo**, **Grade de Ocorrências**, **Visualizar C
 - `formulario:visualizarOcorrencias`: botão Grade de Ocorrências
 - `formulario:importarCartao`: botão Visualizar Cartão
 
+### Distinção Crítica: Jornada Padrão vs Jornada Praticada
+
+**"Jornada de Trabalho Padrão"** (campos `valorJornadaSegunda` a `valorJornadaDiariaDom`):
+- É a jornada **CONTRATADA** (ex: 8h/dia para CLT 220h/mês, 6h para tempo parcial)
+- Serve como **referência** para o cálculo de horas extras
+- NÃO é a jornada efetivamente praticada
+
+**"Grade de Ocorrências"** (aba separada, dia a dia):
+- É a jornada **EFETIVAMENTE PRATICADA** (ex: 10h/dia, conforme cartão de ponto)
+- Preenchida via Programação Semanal, Escala ou Livre
+
+**Cálculo de Horas Extras**: `HE = praticada − padrão`
+- Se a jornada padrão for preenchida com 10h e a praticada também for 10h → HE = 0 (ERRO!)
+- Correto: padrão = 8h, praticada = 10h → HE = 2h por dia
+
 ### Preenchimento de Jornadas (Modalidades)
 - **Programação Semanal**: define semana modelo, replica para todo período (mais comum)
 - **Escala**: para regimes 12x36, 6x1 etc. (ciclo de dias trabalhados/folgas)

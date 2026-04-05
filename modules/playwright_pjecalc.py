@@ -4111,9 +4111,50 @@ class PJECalcPlaywright:
             self._preencher("qtsumulatst", f"{hh_he:02d}:{mm_he:02d}", False)
             self._log(f"    HST: {hh_he:02d}:{mm_he:02d} HE/mês")
 
-        # ── 4. Jornada diária por dia da semana (HJD/APH) ──
-        # Campos usam timeMask() — formato HH:MM
+        # ── 4. Jornada de Trabalho PADRÃO (contratada) — NÃO a efetivamente praticada ──
+        # CONCEITO CRÍTICO (manual PJE-Calc seção 10.1):
+        # "Jornada de Trabalho Padrão" = jornada CONTRATADA (ex: 8h/dia CLT).
+        # A jornada EFETIVAMENTE PRATICADA (ex: 10h/dia) vai na Grade de Ocorrências.
+        # O PJE-Calc calcula: Horas Extras = praticada − padrão.
+        # Se preenchermos a padrão com a praticada, o sistema NÃO calcula HE!
+        #
+        # Fonte dos dados CORRETOS:
+        # - contrato.jornada_diaria / contrato.jornada_semanal = jornada CONTRATUAL
+        # - duracao_trabalho.jornada_seg..dom = jornada PRATICADA (do que diz a sentença)
+        #
+        # Aqui usamos a jornada contratual (Parâmetros do Cálculo / cargaHorariaDiaria).
         if forma in ("HJD", "APH"):
+            # Determinar jornada PADRÃO (contratual) — NÃO a praticada
+            _jornada_padrao_diaria = cont.get("jornada_diaria") or cont.get("carga_horaria_diaria")
+            _jornada_padrao_semanal = cont.get("jornada_semanal") or cont.get("carga_horaria_semanal")
+
+            # Se contrato não tem jornada explícita, usar carga horária para inferir
+            _ch = cont.get("carga_horaria")
+            if not _jornada_padrao_diaria:
+                if _ch and _ch >= 210:
+                    _jornada_padrao_diaria = 8.0
+                elif _ch and _ch >= 155:
+                    _jornada_padrao_diaria = 6.0
+                else:
+                    _jornada_padrao_diaria = 8.0  # CLT padrão
+
+            if not _jornada_padrao_semanal:
+                _jornada_padrao_semanal = _jornada_padrao_diaria * 5
+                if _jornada_padrao_diaria == 8.0:
+                    _jornada_padrao_semanal = 44.0  # CLT: 8h × 5 + 4h sáb = 44h
+
+            # Montar dias com jornada PADRÃO (não a praticada!)
+            _jornada_padrao_dias = {}
+            for d in ("seg", "ter", "qua", "qui", "sex"):
+                _jornada_padrao_dias[d] = _jornada_padrao_diaria
+            # Sábado: se jornada semanal > diária × 5, há expediente parcial no sábado
+            _sab_padrao = _jornada_padrao_semanal - (_jornada_padrao_diaria * 5)
+            _jornada_padrao_dias["sab"] = max(0.0, _sab_padrao)
+            _jornada_padrao_dias["dom"] = 0.0
+
+            self._log(f"    Jornada PADRÃO (contratual): {_jornada_padrao_diaria}h/dia, "
+                       f"{_jornada_padrao_semanal}h/sem, sáb={_jornada_padrao_dias['sab']}h")
+
             _CAMPO_DIA = {
                 "seg": "valorJornadaSegunda",
                 "ter": "valorJornadaTerca",
@@ -4124,13 +4165,10 @@ class PJECalcPlaywright:
                 "dom": "valorJornadaDiariaDom",
             }
             for dia, campo_id in _CAMPO_DIA.items():
-                horas = jornada_dias.get(dia)
-                if horas is not None and horas > 0:
-                    hh = int(horas)
-                    mm = int((horas - hh) * 60)
-                    valor_hhmm = f"{hh:02d}:{mm:02d}"
-                else:
-                    valor_hhmm = "00:00"
+                horas = _jornada_padrao_dias.get(dia, 0.0)
+                hh = int(horas)
+                mm = int((horas - hh) * 60)
+                valor_hhmm = f"{hh:02d}:{mm:02d}"
                 # Usar press_sequentially para campos com timeMask
                 try:
                     loc = self._page.locator(f"input[id$='{campo_id}']")
@@ -4144,6 +4182,10 @@ class PJECalcPlaywright:
                         self._log(f"    ⚠ {dia.upper()}: campo '{campo_id}' não encontrado")
                 except Exception as e:
                     self._log(f"    ⚠ {dia.upper()}: erro {e}")
+
+            # Usar jornada PADRÃO para semanal/mensal também
+            jornada_semanal = _jornada_padrao_semanal
+            jornada_mensal = round(_jornada_padrao_semanal * 30 / 7, 1)
 
         # ── 5. Jornada semanal e mensal ──
         # qtJornadaSemanal usa currencyMask() — formato decimal BR (ex: "50,00")
