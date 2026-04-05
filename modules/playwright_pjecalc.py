@@ -5006,6 +5006,167 @@ class PJECalcPlaywright:
         except Exception as _e:
             self._log(f"  ⚠ Salvar parâmetros atualização: {_e}")
 
+    # ── Salário-família (passo 7 do manual) ──────────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_salario_familia(self, dados: dict) -> None:
+        """Passo 7 do manual: Salário-família.
+
+        Manual: Checkbox "Apurar Salário-família", Compor Principal,
+        Competências, Remuneração Mensal, Quantidade de filhos menores de 14.
+        """
+        sf = dados.get("salario_familia", {})
+        if not sf or not sf.get("apurar"):
+            self._log("Salário-família: sem dados ou apurar=False — ignorado.")
+            return
+        self._log("Salário-família…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+        self._clicar_menu_lateral("Salário-família", obrigatorio=False)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(1000)
+
+        # Checkbox "Apurar Salário-família"
+        self._marcar_checkbox("apurar", True)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(500)
+
+        # Compor Principal
+        _compor = sf.get("compor_principal", "SIM")
+        self._marcar_radio("comporPrincipal", _compor)
+
+        # Quantidade de filhos menores de 14 anos
+        _qtd = sf.get("qtd_filhos", "")
+        if _qtd:
+            self._preencher("quantidadeDeFilhos", str(_qtd), False)
+
+        # Salvar
+        if not self._clicar_salvar():
+            self._log("  ⚠ Salário-família: Salvar não confirmado.")
+        self._log("Salário-família concluído.")
+
+    # ── Seguro-desemprego (passo 8 do manual) ─────────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_seguro_desemprego(self, dados: dict) -> None:
+        """Passo 8 do manual: Seguro-desemprego.
+
+        Manual: Checkbox "Apurar Seguro-desemprego", Tipo de solicitação,
+        Empregado Doméstico, Compor Principal, Quantidade de Parcelas.
+        """
+        sd = dados.get("seguro_desemprego", {})
+        if not sd or not sd.get("apurar"):
+            self._log("Seguro-desemprego: sem dados ou apurar=False — ignorado.")
+            return
+        self._log("Seguro-desemprego…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+        self._clicar_menu_lateral("Seguro-desemprego", obrigatorio=False)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(1000)
+
+        # Checkbox "Apurar Seguro-desemprego"
+        self._marcar_checkbox("apurar", True)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(500)
+
+        # Tipo de solicitação (primeira, segunda, demais)
+        _tipo = sd.get("tipo_solicitacao", "")
+        if _tipo:
+            self._marcar_radio("tipoSolicitacao", _tipo)
+
+        # Empregado doméstico
+        if sd.get("empregado_domestico"):
+            self._marcar_checkbox("empregadoDomestico", True)
+
+        # Compor Principal
+        _compor = sd.get("compor_principal", "SIM")
+        self._marcar_radio("comporPrincipal", _compor)
+
+        # Quantidade de parcelas
+        _parcelas = sd.get("qtd_parcelas", "")
+        if _parcelas:
+            self._preencher("quantidadeDeParcelas", str(_parcelas), False)
+
+        # Salvar
+        if not self._clicar_salvar():
+            self._log("  ⚠ Seguro-desemprego: Salvar não confirmado.")
+        self._log("Seguro-desemprego concluído.")
+
+    # ── Previdência Privada (passo 11 do manual) ──────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_previdencia_privada(self, dados: dict) -> None:
+        """Passo 11 do manual: Previdência Privada.
+
+        Manual: Checkbox "Apurar Previdência Privada",
+        Alíquota por Período (competência Inicial/Final + alíquota %).
+        """
+        pp = dados.get("previdencia_privada", {})
+        if not pp or not pp.get("apurar"):
+            self._log("Previdência Privada: sem dados ou apurar=False — ignorado.")
+            return
+        self._log("Previdência Privada…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+        self._clicar_menu_lateral("Previdência Privada", obrigatorio=False)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(1000)
+
+        # Checkbox "Apurar Previdência Privada"
+        self._marcar_checkbox("apurar", True)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(500)
+
+        # Alíquota
+        _aliquota = pp.get("aliquota", "")
+        if _aliquota:
+            self._preencher("aliquota", _fmt_br(str(_aliquota)), False)
+
+        # Salvar
+        if not self._clicar_salvar():
+            self._log("  ⚠ Previdência Privada: Salvar não confirmado.")
+        self._log("Previdência Privada concluído.")
+
+    # ── Pensão Alimentícia (passo 12 do manual) ──────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_pensao_alimenticia(self, dados: dict) -> None:
+        """Passo 12 do manual: Pensão Alimentícia.
+
+        Manual: Checkbox "Apurar Pensão Alimentícia",
+        Alíquota, Incidir sobre Juros.
+        """
+        pa = dados.get("pensao_alimenticia", {})
+        if not pa or not pa.get("apurar"):
+            self._log("Pensão Alimentícia: sem dados ou apurar=False — ignorado.")
+            return
+        self._log("Pensão Alimentícia…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+        self._clicar_menu_lateral("Pensão Alimentícia", obrigatorio=False)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(1000)
+
+        # Checkbox "Apurar Pensão Alimentícia"
+        self._marcar_checkbox("apurar", True)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(500)
+
+        # Alíquota
+        _aliquota = pa.get("aliquota", "")
+        if _aliquota:
+            self._preencher("aliquota", _fmt_br(str(_aliquota)), False)
+
+        # Incidir sobre juros
+        if pa.get("incidir_juros"):
+            self._marcar_checkbox("incidirSobreJuros", True)
+
+        # Salvar
+        if not self._clicar_salvar():
+            self._log("  ⚠ Pensão Alimentícia: Salvar não confirmado.")
+        self._log("Pensão Alimentícia concluído.")
+
     # ── Fase 7: IRPF ──────────────────────────────────────────────────────────
 
     @retry(max_tentativas=3)
@@ -5926,20 +6087,21 @@ class PJECalcPlaywright:
         self._dados = dados
 
         # ── Estimativas de progresso (segundos acumulados) — otimizado ────────
+        # Estimativas atualizadas conforme ordem do manual (19 passos)
         _PHASE_ESTIMATES = [
-            ("dados_processo", 10),
-            ("parametros_gerais", 15),
-            ("historico_salarial", 25),
-            ("verbas", 60),
-            ("fgts", 70),
-            ("contribuicao_social", 80),
-            ("cartao_ponto", 90),
-            ("parametros_atualizacao", 100),
-            ("irpf", 110),
-            ("honorarios", 120),
-            ("liquidar", 150),
+            ("dados_processo", 10),       # passo 1
+            ("parametros_gerais", 15),     # passo 1b
+            ("faltas_ferias", 25),         # passos 2-3
+            ("historico_salarial", 35),    # passo 4
+            ("verbas", 70),               # passo 5
+            ("fgts", 85),                 # passo 9
+            ("contribuicao_social", 95),  # passo 10
+            ("irpf", 110),               # passo 13
+            ("honorarios", 120),         # passo 15
+            ("correcao_juros", 135),     # passo 17
+            ("liquidar", 160),           # passos 18-19
         ]
-        _TOTAL = 150
+        _TOTAL = 160
 
         def _progress(idx: int) -> None:
             elapsed = _PHASE_ESTIMATES[idx][1] if idx > 0 else 0
@@ -6012,16 +6174,27 @@ class PJECalcPlaywright:
             }
         self.fase_parametros_gerais(params_gerais)
 
+        # ── Sequência conforme Manual PJE-Calc (19 passos) ─────────────────────
+        # 1. Dados do Cálculo > Salvar        ← fase_dados_processo (acima)
+        # 1b. Parâmetros Gerais > Salvar      ← fase_parametros_gerais (acima)
+
+        # 2. Faltas > Salvar
         _progress(2)
+        self.fase_faltas(dados)
+
+        # 3. Férias > Salvar
+        self.fase_ferias(dados)
+
+        # 4. Histórico Salarial > Salvar
+        _progress(3)
         self.fase_historico_salarial(dados)
 
-        _progress(3)
+        # 5. Verbas (Expresso e/ou Manual) > Salvar
+        _progress(4)
         self.fase_verbas(verbas_mapeadas)
-        # Screenshot após verbas (fase mais crítica — útil para diagnóstico)
-        self._screenshot_fase("03_verbas")
+        self._screenshot_fase("05_verbas")
 
         # Recuperar de erros pós-verbas (NPE em verba-calculo.jsf é comum)
-        # Garantir que o PJE-Calc está em estado navegável antes de prosseguir
         try:
             _body = self._page.evaluate("""() => {
                 const t = (document.body ? document.body.textContent : '').substring(0, 500);
@@ -6035,7 +6208,6 @@ class PJECalcPlaywright:
                 )
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
-                # Reabrir o cálculo via URL base + conversationId
                 if self._calculo_url_base and self._calculo_conversation_id:
                     _url_dados = (
                         f"{self._calculo_url_base}parametros-do-calculo.jsf"
@@ -6047,10 +6219,7 @@ class PJECalcPlaywright:
         except Exception as _e_rec:
             self._log(f"  ⚠ Recuperação pós-verbas: {_e_rec}")
 
-        # Cartão de Ponto: preencher DEPOIS das verbas.
-        # O manual oficial confirma a ordem: Verbas → Cartão de Ponto → FGTS.
-        # Os campos de jornada são "sugeridos a partir dos Parâmetros do Cálculo" (carga horária).
-        # Pré-requisitos: Dados do Cálculo + Parâmetros Gerais (carga horária) + Verbas salvos.
+        # 6. Cartão de Ponto > Salvar (condicional)
         _dur = dados.get("duracao_trabalho") or {}
         _tem_cartao = _dur.get("tipo_apuracao") or any(
             "hora" in (v.get("nome_sentenca") or "").lower() and "extra" in (v.get("nome_sentenca") or "").lower()
@@ -6059,35 +6228,48 @@ class PJECalcPlaywright:
         if _tem_cartao:
             self.fase_cartao_ponto(dados)
 
-        # Multas e Indenizações — apenas se houver itens extraídos
+        # 7. Salário-família > Salvar (condicional)
+        self.fase_salario_familia(dados)
+
+        # 8. Seguro-desemprego > Salvar (condicional)
+        self.fase_seguro_desemprego(dados)
+
+        # 9. FGTS > Salvar
+        _progress(5)
+        self.fase_fgts(dados.get("fgts", {}))
+
+        # 10. Contribuição Social > Salvar
+        _progress(6)
+        self.fase_contribuicao_social(dados.get("contribuicao_social", {}))
+
+        # 11. Previdência Privada > Salvar (condicional)
+        self.fase_previdencia_privada(dados)
+
+        # 12. Pensão Alimentícia > Salvar (condicional)
+        self.fase_pensao_alimenticia(dados)
+
+        # 13. Imposto de Renda > Salvar
+        _progress(7)
+        self.fase_irpf(dados.get("imposto_renda", {}))
+
+        # 14. Multas e Indenizações > Salvar (condicional)
         _multas = dados.get("multas_indenizacoes", [])
         if _multas:
             self.fase_multas_indenizacoes(_multas)
 
-        _progress(4)
-        self.fase_fgts(dados.get("fgts", {}))
-
-        _progress(5)
-        self.fase_contribuicao_social(dados.get("contribuicao_social", {}))
-
-        _progress(6)
-        self.fase_faltas(dados)
-        self.fase_ferias(dados)
-
-        _progress(7)
-        self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))
-
+        # 15. Honorários > Salvar
         _progress(8)
-        self.fase_irpf(dados.get("imposto_renda", {}))
-
-        _progress(9)
         self.fase_honorarios(
             dados.get("honorarios", []),
             periciais=dados.get("honorarios_periciais"),
         )
 
-        # Custas Judiciais — passo 16 do manual
+        # 16. Custas Judiciais > Salvar
         self.fase_custas_judiciais(dados.get("custas_judiciais", {}))
+
+        # 17. Correção, Juros e Multa > Salvar
+        _progress(9)
+        self.fase_parametros_atualizacao(dados.get("correcao_juros", {}))
 
         # Regerar ocorrências das verbas — obrigatório após alterações nos
         # Parâmetros do Cálculo (carga horária, período, prescrição, etc.)
@@ -6098,6 +6280,7 @@ class PJECalcPlaywright:
         # Screenshot pré-liquidação (captura estado final antes de liquidar)
         self._screenshot_fase("pre_liquidacao")
 
+        # 18-19. Liquidar + Exportar
         _progress(10)
         caminho_pjc = self._clicar_liquidar()
         self._log(f"PROGRESS:{_TOTAL}/{_TOTAL}")
