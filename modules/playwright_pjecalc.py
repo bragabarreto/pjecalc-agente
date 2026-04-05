@@ -1898,10 +1898,12 @@ class PJECalcPlaywright:
         if not _ch_mensal_padrao:
             _jd = cont.get("jornada_diaria")
             _js = cont.get("jornada_semanal")
+            # Fórmula PJE-Calc: carga mensal = jornada_semanal × 5
+            # Ex: 44h/sem → 220h/mês, 40h/sem → 200h/mês, 36h/sem → 180h/mês
             if _js:
-                _ch_mensal_padrao = round(_js * 30 / 7, 2)  # semanal → mensal
+                _ch_mensal_padrao = round(_js * 5, 2)
             elif _jd:
-                _ch_mensal_padrao = round(_jd * 5 * 30 / 7, 2)  # diaria * 5 dias → mensal
+                _ch_mensal_padrao = round(_jd * 5 * 5, 2)  # diária × 5 dias × 5 semanas
             else:
                 _ch_mensal_padrao = 220  # CLT padrão
         _ch = _fmt_br(float(_ch_mensal_padrao))
