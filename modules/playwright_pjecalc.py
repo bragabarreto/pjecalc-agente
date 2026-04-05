@@ -1890,10 +1890,23 @@ class PJECalcPlaywright:
             _regime_val = _regime_map.get(cont["regime"], "INTEGRAL")
             self._selecionar("tipoDaBaseTabelada", _regime_val, obrigatorio=False)
 
-        # Carga horária padrão — ID confirmado: formulario:valorCargaHorariaPadrao (padrão 220)
-        if cont.get("carga_horaria"):
-            _ch = _fmt_br(float(cont["carga_horaria"]))
-            self._preencher("valorCargaHorariaPadrao", _ch, False)
+        # Carga horária padrão — ID confirmado: formulario:valorCargaHorariaPadrao
+        # Este campo é OBRIGATÓRIO (required=true) e usado pelo Cartão de Ponto.
+        # Valor MENSAL em horas (ex: 220, 180, 150). Formato: currencyMask BR.
+        # Se carga_horaria não foi extraída, calcular a partir de jornada_diaria/semanal.
+        _ch_mensal_padrao = cont.get("carga_horaria")
+        if not _ch_mensal_padrao:
+            _jd = cont.get("jornada_diaria")
+            _js = cont.get("jornada_semanal")
+            if _js:
+                _ch_mensal_padrao = round(_js * 30 / 7, 2)  # semanal → mensal
+            elif _jd:
+                _ch_mensal_padrao = round(_jd * 5 * 30 / 7, 2)  # diaria * 5 dias → mensal
+            else:
+                _ch_mensal_padrao = 220  # CLT padrão
+        _ch = _fmt_br(float(_ch_mensal_padrao))
+        self._preencher("valorCargaHorariaPadrao", _ch, False)
+        self._log(f"  ✓ valorCargaHorariaPadrao: {_ch}")
 
         # Maior remuneração e última remuneração — IDs confirmados por inspeção DOM
         if cont.get("maior_remuneracao"):
