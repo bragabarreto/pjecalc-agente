@@ -3706,23 +3706,38 @@ class PJECalcPlaywright:
         self._selecionar("incidenciaDoFgts", _incidencia, obrigatorio=False)
 
         # Multa rescisória — checkbox formulario:multa + radio formulario:multaDoFgts
+        # IMPORTANTE (fgts.xhtml): o checkbox "multa" controla disabled de TODOS os
+        # campos de multa (tipoDoValorDaMulta, multaDoFgts, multaDoArtigo467).
+        # Tem a4j:support onchange que re-renderiza esses campos via AJAX.
+        # DEVE aguardar AJAX antes de tentar preencher os radios dependentes.
         multa_40 = fgts.get("multa_40", True)
         multa_467 = fgts.get("multa_467", False)
         self._marcar_checkbox("multa", bool(multa_40))
+        # Aguardar AJAX do onchange do checkbox multa (re-renderiza campos dependentes)
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(1000)
+
         if multa_40:
+            # Tipo do valor da multa — DEVE ser selecionado ANTES do percentual
+            # pois o radio multaDoFgts só aparece quando tipoDoValorDaMulta == CALCULADA
+            self._marcar_radio("tipoDoValorDaMulta", "CALCULADA") or \
+                self._marcar_radio_js("tipoDoValorDaMulta", "CALCULADA")
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+
             # Percentual: 40% padrão; 20% para estabilidade provisória (CIPA, gestante etc.)
             _pct_multa = "VINTE_POR_CENTO" if fgts.get("multa_20") else "QUARENTA_POR_CENTO"
             self._marcar_radio("multaDoFgts", _pct_multa) or \
                 self._marcar_radio_js("multaDoFgts", _pct_multa)
-            # Tipo do valor da multa (calculada pelo sistema ou informada)
-            self._marcar_radio("tipoDoValorDaMulta", "CALCULADA") or \
-                self._marcar_radio_js("tipoDoValorDaMulta", "CALCULADA")
+
             # Excluir aviso indenizado da base da multa (checkbox)
             _excl_aviso = fgts.get("excluir_aviso_multa", False)
             self._marcar_checkbox("excluirAvisoDaMulta", _excl_aviso)
 
         # Multa Art. 467 CLT — checkbox formulario:multaDoArtigo467
-        self._marcar_checkbox("multaDoArtigo467", bool(multa_467))
+        # Dependente de checkbox "multa" estar marcado (disabled se multa=false)
+        if multa_467 and multa_40:
+            self._marcar_checkbox("multaDoArtigo467", True)
 
         # Multa 10% (rescisão antecipada de contrato a prazo)
         if fgts.get("multa_10"):

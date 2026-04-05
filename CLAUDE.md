@@ -2,6 +2,18 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Regra obrigatória — Consultar manual antes de qualquer alteração
+
+> **ANTES de corrigir, ajustar ou implementar qualquer funcionalidade relacionada ao PJE-Calc,
+> SEMPRE consultar o manual oficial em `knowledge/pje_calc_official/manual_completo.md` e os
+> excerpts em `knowledge/pje_calc_official/manual_excerpts.md`.**
+>
+> Isso inclui: preenchimento de campos, ordem de fases, fórmulas de cálculo, IDs de DOM,
+> regras de salvamento, regeração de ocorrências, e qualquer aspecto operacional do PJE-Calc.
+>
+> Razão: muitos bugs foram causados por suposições incorretas que poderiam ter sido evitadas
+> consultando a documentação oficial. O manual é a fonte da verdade.
+
 ## Commands
 
 ### Local development (Windows)
