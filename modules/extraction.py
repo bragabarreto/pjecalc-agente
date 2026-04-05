@@ -361,6 +361,16 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
 - lei_11941: true se mencionar "Lei 11.941/2009" ou "regime de competência" previdenciário
   ⚠️ Padrão quando omitido: apurar_segurado_salarios_devidos=true, cobrar_do_reclamante=true, com_correcao_trabalhista=true, apurar_sobre_salarios_pagos=false
 
+**CUSTAS JUDICIAIS** → preenche "custas_judiciais":
+- base: "Bruto Devido ao Reclamante" (padrão) ou "Bruto Devido ao Reclamante + Outros Débitos"
+- reclamado_conhecimento: "CALCULADA" (padrão 2%) | "INFORMADA" | "NAO_SE_APLICA"
+- reclamado_liquidacao: "NAO_SE_APLICA" (padrão) | "CALCULADA" (0,5%) | "INFORMADA"
+- reclamante_conhecimento: "NAO_SE_APLICA" (padrão) | "CALCULADA" | "INFORMADA"
+- percentual: float (ex: 0.02 para 2%)
+- devedor: "RECLAMADO" (padrão) ou "RECLAMANTE"
+  ⚠️ Padrão quando omitido: base="Bruto Devido ao Reclamante", reclamado_conhecimento="CALCULADA",
+  reclamado_liquidacao="NAO_SE_APLICA", reclamante_conhecimento="NAO_SE_APLICA", percentual=0.02
+
 **IMPOSTO DE RENDA** → preenche "imposto_renda":
 - apurar: true se há verbas tributáveis (salariais) ou sentença determina apuração de IR
 - tributacao_exclusiva: true se a sentença mencionar "tributação exclusiva na fonte" / "RRA" / "rendimentos recebidos acumuladamente"
@@ -492,6 +502,14 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     {{"situacao": "Vencidas | Proporcionais | Gozadas", "periodo_inicio": "DD/MM/AAAA",
       "periodo_fim": "DD/MM/AAAA", "abono": false, "dobra": false}}
   ],
+  "custas_judiciais": {{
+    "base": "Bruto Devido ao Reclamante | Bruto Devido ao Reclamante + Outros Débitos | null",
+    "reclamado_conhecimento": "CALCULADA | INFORMADA | NAO_SE_APLICA",
+    "reclamado_liquidacao": "NAO_SE_APLICA | CALCULADA | INFORMADA",
+    "reclamante_conhecimento": "NAO_SE_APLICA | CALCULADA | INFORMADA",
+    "percentual": "float | null",
+    "devedor": "RECLAMADO | RECLAMANTE | null"
+  }},
   "campos_ausentes": [],
   "alertas": []
 }}

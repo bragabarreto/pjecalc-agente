@@ -1481,8 +1481,8 @@ class PJECalcPlaywright:
             except Exception as e:
                 self._log(f"    ⚠ Radio tipoRegeracao: {e}")
 
-            # Auto-confirmar o window.confirm do Regerar
-            self._page.on("dialog", lambda d: d.accept())
+            # Auto-confirmar o window.confirm do Regerar (once handler via expect_event)
+            self._page.once("dialog", lambda d: d.accept())
 
             # Scroll para garantir que o botão Regerar fique visível
             self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -2272,10 +2272,11 @@ class PJECalcPlaywright:
             _comp_ini = _para_competencia(h.get("data_inicio", ""))
             _comp_fim = _para_competencia(h.get("data_fim", ""))
             # Competência fields (MM/yyyy): rich:calendar with jQuery mask('99/9999').
+            # DOM IDs confirmados v2.15.1: formulario:dataInicioInputDate / formulario:dataFinalInputDate
             # Strategy: type into InputDate field, then use RichFaces Calendar API
             # to parse and set the date. Finally Tab to trigger blur + server update.
-            for _cfield, _cval in [("competenciaInicial", _comp_ini),
-                                    ("competenciaFinal", _comp_fim)]:
+            for _cfield, _cval in [("dataInicio", _comp_ini),
+                                    ("dataFinal", _comp_fim)]:
                 _cloc = self._localizar(_cfield, tipo="input")
                 if _cloc and _cval:
                     try:
@@ -2332,11 +2333,15 @@ class PJECalcPlaywright:
                 self._log(f"  ⚠ Checkboxes FGTS/INSS: {_e_chk} — continuando")
 
             # Diagnostic: check actual field values before generating occurrences
+            # DOM IDs confirmados: dataInicioInputDate, dataFinalInputDate, nome, valorParaBaseDeCalculo
             try:
                 _diag = self._page.evaluate("""() => {
                     const fields = {};
-                    document.querySelectorAll('input[id*="competencia"], input[id*="nome"], input[id*="valorPara"]').forEach(el => {
-                        if (el.type !== 'hidden' || el.id.includes('competencia'))
+                    document.querySelectorAll(
+                        'input[id*="dataInicio"], input[id*="dataFinal"], ' +
+                        'input[id*="nome"], input[id*="valorPara"]'
+                    ).forEach(el => {
+                        if (el.type !== 'hidden')
                             fields[el.id.split(':').pop()] = el.value;
                     });
                     return fields;
@@ -2345,58 +2350,106 @@ class PJECalcPlaywright:
             except Exception:
                 pass
 
-            # Gerar ocorrências (cria a grade mensal de valores)
-            # a4j:commandLink id="cmdGerarOcorrencias" renders as <a> with onclick
-            # that calls A4J.AJAX.Submit(formId, event, params).
-            # Strategy: use Playwright click (not force=True) so the event object
-            # is properly created. Scroll into view first.
+            # Gerar Ocorrências (ícone "+" verde ao lado do campo Valor)
+            # Manual PJE-Calc: "Clicar icone 'Gerar Ocorrencias'" após preencher
+            # Competência Inicial, Final e Valor.
+            # O botão é um ícone (a4j:commandButton ou h:commandButton) com imagem "+".
+            # Pode ter IDs variados: cmdGerarOcorrencias, cmdAdicionarOcorrencia,
+            # cmdAdicionar, ou um j_id gerado. Busca ampla necessária.
             _gerou = False
-            _gen_loc = self._page.locator(
-                "a[id*='cmdGerarOcorrencias'], a[id*='GerarOcorrencias']"
-            )
-            if _gen_loc.count() > 0:
-                try:
-                    _gen_loc.first.scroll_into_view_if_needed()
-                    self._page.wait_for_timeout(300)
-                    _gen_loc.first.click()  # normal click — triggers proper event
-                    _gerou = True
-                except Exception:
-                    # force=True fallback
+
+            # Estratégia 1: seletores conhecidos de ícone "+" / "adicionar" / "gerar"
+            _gen_seletores = [
+                "a[id*='cmdGerarOcorrencias'], a[id*='GerarOcorrencias']",
+                "a[id*='cmdAdicionarOcorrencia'], a[id*='Adicionar']",
+                "input[id*='cmdGerarOcorrencias'], input[id*='GerarOcorrencias']",
+                "input[id*='cmdAdicionarOcorrencia'], input[id*='Adicionar']",
+            ]
+            for _sel_gen in _gen_seletores:
+                if _gerou:
+                    break
+                _gen_loc = self._page.locator(_sel_gen)
+                if _gen_loc.count() > 0:
                     try:
-                        _gen_loc.first.click(force=True)
+                        _gen_loc.first.scroll_into_view_if_needed()
+                        self._page.wait_for_timeout(300)
+                        _gen_loc.first.click()
                         _gerou = True
+                        self._log(f"  ✓ Gerar Ocorrências via '{_sel_gen}'")
                     except Exception:
-                        pass
+                        try:
+                            _gen_loc.first.click(force=True)
+                            _gerou = True
+                            self._log(f"  ✓ Gerar Ocorrências via '{_sel_gen}' (force)")
+                        except Exception:
+                            pass
+
+            # Estratégia 2: buscar ícone "+" (img com src contendo "add" ou "plus")
+            # ou qualquer <a>/<input> com ícone próximo ao campo Valor
             if not _gerou:
-                # Input fallback
-                _gen_inp = self._page.locator(
-                    "input[id*='cmdGerarOcorrencias'], input[id*='GerarOcorrencias']"
-                )
-                if _gen_inp.count() > 0:
-                    try:
-                        _gen_inp.first.click(force=True)
-                        _gerou = True
-                    except Exception:
-                        pass
-            if not _gerou:
-                # Last resort: find onclick attr and call A4J.AJAX.Submit directly
                 try:
                     _gerou = self._page.evaluate("""() => {
-                        const el = document.querySelector(
-                            'a[id*="cmdGerarOcorrencias"], a[id*="GerarOcorrencias"]'
+                        // Buscar botão com imagem de "+" ou "add"
+                        const candidates = [
+                            ...document.querySelectorAll('a[onclick*="AJAX"], input[type="image"], a img'),
+                        ];
+                        // Buscar elemento <a> ou <input> que seja irmão/próximo de valorParaBaseDeCalculo
+                        const valorField = document.querySelector('[id*="valorParaBaseDeCalculo"]');
+                        if (valorField) {
+                            const parent = valorField.closest('td, div, span, fieldset');
+                            if (parent) {
+                                const nearby = parent.querySelectorAll('a[onclick], input[type="image"], a:has(img)');
+                                for (const el of nearby) {
+                                    el.click();
+                                    return true;
+                                }
+                                // Tentar próximo <td> irmão
+                                const nextTd = parent.nextElementSibling;
+                                if (nextTd) {
+                                    const btn = nextTd.querySelector('a[onclick], input[type="image"], a:has(img)');
+                                    if (btn) { btn.click(); return true; }
+                                }
+                            }
+                        }
+                        // Fallback: qualquer link/botão com onclick A4J na seção de ocorrências
+                        const section = document.querySelector('[id*="ocorrencia"], [id*="Ocorrencia"]');
+                        if (section) {
+                            const btn = section.querySelector('a[onclick*="AJAX"], input[onclick*="AJAX"]');
+                            if (btn) { btn.click(); return true; }
+                        }
+                        return false;
+                    }""")
+                    if _gerou:
+                        self._log("  ✓ Gerar Ocorrências via ícone '+' próximo ao Valor")
+                except Exception as _e_ger2:
+                    self._log(f"  ⚠ Gerar Ocorrências (ícone): {_e_ger2}")
+
+            # Estratégia 3: último recurso — buscar qualquer elemento clicável
+            # com onclick contendo AJAX na página inteira (exceto Salvar/Cancelar)
+            if not _gerou:
+                try:
+                    _gerou = self._page.evaluate("""() => {
+                        const allClickable = document.querySelectorAll(
+                            'a[onclick*="AJAX"], input[type="image"][onclick]'
                         );
-                        if (!el) return false;
-                        const oc = el.getAttribute('onclick');
-                        if (oc) {
-                            // Execute onclick content directly
-                            eval(oc);
+                        for (const el of allClickable) {
+                            const id = el.id || '';
+                            const val = el.value || el.textContent || '';
+                            // Excluir Salvar, Cancelar, menu links
+                            if (id.includes('salvar') || id.includes('cancelar') ||
+                                val.includes('Salvar') || val.includes('Cancelar') ||
+                                id.includes('j_id38')) continue;
+                            // Excluir links de navegação do menu lateral
+                            if (el.closest('[class*="menu"], [class*="painelMenu"]')) continue;
+                            el.click();
                             return true;
                         }
-                        el.click();
-                        return true;
+                        return false;
                     }""")
-                except Exception as _e_ger:
-                    self._log(f"  ⚠ Gerar Ocorrências: {_e_ger}")
+                    if _gerou:
+                        self._log("  ✓ Gerar Ocorrências via fallback AJAX")
+                except Exception as _e_ger3:
+                    self._log(f"  ⚠ Gerar Ocorrências (fallback): {_e_ger3}")
             if _gerou:
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(2000)
@@ -2419,8 +2472,21 @@ class PJECalcPlaywright:
             else:
                 self._log(f"  ⚠ Botão Gerar Ocorrências não encontrado")
 
-            # Salvar (seletor específico prioritário)
-            self._clicar_botao_id("btnSalvarHistorico") or self._clicar_salvar()
+            # Salvar — DOM v2.15.1: formulario:salvar (input type="button")
+            # Scroll para baixo para garantir visibilidade do botão Salvar
+            self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            self._page.wait_for_timeout(300)
+            _salvou = self._clicar_salvar()
+            if not _salvou:
+                # Tentar via JS direto no formulario:salvar
+                try:
+                    _salvou = self._page.evaluate("""() => {
+                        const btn = document.querySelector('[id$=":salvar"], input[value="Salvar"]');
+                        if (btn) { btn.click(); return true; }
+                        return false;
+                    }""")
+                except Exception:
+                    pass
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
@@ -2458,13 +2524,14 @@ class PJECalcPlaywright:
 
             try:
                 self._page.wait_for_selector(
-                    "[id$='filtroNome'], input[id*='competenciaInicial'], [name*='filtroNome']",
+                    "[id$='filtroNome'], [id*='incluir'], [name*='filtroNome']",
                     state="visible", timeout=5000
                 )
             except Exception:
                 self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
                 self._page.wait_for_timeout(800)
-            self._log(f"  ✓ Período {idx_h+1}/{len(historico)}: {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
+            _status_icon = "✓" if (_gerou and _salvou) else "⚠"
+            self._log(f"  {_status_icon} Período {idx_h+1}/{len(historico)}: {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
           except Exception as _e_hist:
             self._log(f"  ⚠ Erro no período {idx_h+1}: {_e_hist} — tentando recuperar")
             try:
@@ -2673,12 +2740,18 @@ class PJECalcPlaywright:
             # Sem isso, navegações subsequentes (Manual, FGTS, etc.) usam ID expirado → HTTP 500.
             self._capturar_base_calculo()
 
-            # Configurar reflexos
-            self._configurar_reflexos_expresso(predefinidas)
+            # Configurar reflexos (tolerante a NPE em verba-calculo.jsf)
+            try:
+                self._configurar_reflexos_expresso(predefinidas)
+            except Exception as _e_refl:
+                self._log(f"  ⚠ Reflexos: {_e_refl} — continuando sem reflexos")
 
             # Configurar Parâmetros + Ocorrências de cada verba
             # (período, percentual, base de cálculo — dados extraídos da sentença)
-            self._pos_expresso_parametros_ocorrencias(predefinidas)
+            try:
+                self._pos_expresso_parametros_ocorrencias(predefinidas)
+            except Exception as _e_pos:
+                self._log(f"  ⚠ Pós-expresso parâmetros: {_e_pos} — continuando")
         else:
             self._log("  ⚠ Nenhuma verba marcada no Expresso")
 
@@ -3184,6 +3257,24 @@ class PJECalcPlaywright:
                             self._page.wait_for_timeout(1000)
                         except Exception as _e:
                             self._log(f"  ⚠ URL direta verba-calculo: {_e}")
+
+            # Detectar HTTP 500 / NPE na listagem de verbas
+            # Bug conhecido: ApresentadorVerbaDeCalculo.carregarBasesParaPrincipal
+            # lança NullPointerException após Expresso, impedindo renderização da página.
+            try:
+                _is_500 = self._page.evaluate("""() => {
+                    const body = document.body ? document.body.textContent : '';
+                    return body.includes('HTTP Status 500') ||
+                           body.includes('NullPointerException') ||
+                           body.includes('Erro inesperado') ||
+                           body.includes('ViewExpiredException') ||
+                           document.title.includes('500');
+                }""")
+                if _is_500:
+                    self._log("  ⚠ verba-calculo.jsf retornou erro 500 (NPE conhecida) — pulando reflexos")
+                    return
+            except Exception:
+                pass
 
             # Mapa nome_pjecalc → reflexas_tipicas
             _reflexos_map: dict[str, list[str]] = {}
@@ -5116,6 +5207,92 @@ class PJECalcPlaywright:
                 )
         self._log("Fase 8 concluída.")
 
+    # ── Fase 9: Custas Judiciais ─────────────────────────────────────────────
+
+    @retry(max_tentativas=2)
+    def fase_custas_judiciais(self, custas: dict) -> None:
+        """Preenche Custas Judiciais no PJE-Calc.
+
+        Página com duas abas: Custas Devidas e Custas Recolhidas.
+
+        DOM v2.15.1 (custas.jsf):
+        - formulario:baseCustas (select) — Base das custas
+        - formulario:custasReclamadoConhecimento (radio) — Calculada 2% / Informada / Não se aplica
+        - formulario:custasReclamadoLiquidacao (radio) — Calculada 0,5% / Informada / Não se aplica
+        - formulario:custasReclamanteConhecimento (radio) — idem
+        - formulario:salvar (button) — Salvar
+
+        Manual: "CRITICO: Clicar 'Salvar' após preencher ambas as abas."
+        """
+        if not custas:
+            self._log("Fase 9 — Custas Judiciais: sem dados extraídos — ignorado.")
+            return
+        self._log("Fase 9 — Custas Judiciais…")
+        self._verificar_tomcat(timeout=60)
+        self._verificar_pagina_pjecalc()
+
+        navegou = (
+            self._clicar_menu_lateral("Custas Judiciais", obrigatorio=False)
+            or self._clicar_menu_lateral("Custas", obrigatorio=False)
+        )
+        if not navegou:
+            self._log("  ⚠ Custas Judiciais: menu não encontrado — tentando URL direta")
+            if self._calculo_url_base and self._calculo_conversation_id:
+                try:
+                    _url = (f"{self._calculo_url_base}custas/custas.jsf"
+                            f"?conversationId={self._calculo_conversation_id}")
+                    self._page.goto(_url, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax()
+                    navegou = True
+                except Exception as e:
+                    self._log(f"  ⚠ URL direta custas falhou: {e}")
+            if not navegou:
+                self._log("  ⚠ Custas Judiciais: navegação falhou — ignorado.")
+                return
+
+        self._verificar_pagina_pjecalc()
+        self.mapear_campos("fase9_custas")
+
+        # Base das custas
+        _base = custas.get("base", "")
+        if _base:
+            _base_map = {
+                "Bruto Devido ao Reclamante": "BRUTO_RECLAMANTE",
+                "Bruto Devido ao Reclamante + Outros Débitos": "BRUTO_RECLAMANTE_OUTROS",
+            }
+            _val = _base_map.get(_base, _base)
+            self._selecionar("baseCustas", _val, obrigatorio=False)
+            self._selecionar("baseParaApuracao", _val, obrigatorio=False)
+            self._log(f"  ✓ Base custas: {_val}")
+
+        # Custas do Reclamado — Conhecimento (padrão: Calculada 2%)
+        _reclamado_conhecimento = custas.get("reclamado_conhecimento", "CALCULADA")
+        self._marcar_radio("custasReclamadoConhecimento", _reclamado_conhecimento)
+        self._log(f"  ✓ Custas reclamado conhecimento: {_reclamado_conhecimento}")
+
+        # Custas do Reclamado — Liquidação
+        _reclamado_liq = custas.get("reclamado_liquidacao", "NAO_SE_APLICA")
+        self._marcar_radio("custasReclamadoLiquidacao", _reclamado_liq)
+
+        # Custas do Reclamante — Conhecimento (padrão: não se aplica)
+        _reclamante_conhecimento = custas.get("reclamante_conhecimento", "NAO_SE_APLICA")
+        self._marcar_radio("custasReclamanteConhecimento", _reclamante_conhecimento)
+
+        # Percentual (se informado e diferente do padrão 2%)
+        _pct = custas.get("percentual")
+        if _pct is not None:
+            self._preencher("percentualCustas", _fmt_br(float(_pct) * 100), obrigatorio=False)
+            self._preencher("aliquota", _fmt_br(float(_pct) * 100), obrigatorio=False)
+
+        # Devedor
+        _devedor = custas.get("devedor", "")
+        if _devedor:
+            self._selecionar("devedor", _devedor, obrigatorio=False)
+
+        if not self._clicar_salvar():
+            self._log("  ⚠ Fase 9: Salvar Custas não confirmado.")
+        self._log("Fase 9 concluída.")
+
     # ── Verificação de cálculo correto ──────────────────────────────────────────
 
     def _verificar_calculo_correto(self) -> bool:
@@ -5843,6 +6020,33 @@ class PJECalcPlaywright:
         # Screenshot após verbas (fase mais crítica — útil para diagnóstico)
         self._screenshot_fase("03_verbas")
 
+        # Recuperar de erros pós-verbas (NPE em verba-calculo.jsf é comum)
+        # Garantir que o PJE-Calc está em estado navegável antes de prosseguir
+        try:
+            _body = self._page.evaluate("""() => {
+                const t = (document.body ? document.body.textContent : '').substring(0, 500);
+                return t;
+            }""")
+            if "500" in _body or "NullPointer" in _body or "Erro inesperado" in _body:
+                self._log("  ⚠ Página em estado de erro pós-verbas — recuperando via home…")
+                self._page.goto(
+                    f"{self.PJECALC_BASE}/pages/principal.jsf",
+                    wait_until="domcontentloaded", timeout=15000
+                )
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+                # Reabrir o cálculo via URL base + conversationId
+                if self._calculo_url_base and self._calculo_conversation_id:
+                    _url_dados = (
+                        f"{self._calculo_url_base}parametros-do-calculo.jsf"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    self._page.goto(_url_dados, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax()
+                    self._log("  ✓ Cálculo reaberto via conversationId")
+        except Exception as _e_rec:
+            self._log(f"  ⚠ Recuperação pós-verbas: {_e_rec}")
+
         # Cartão de Ponto: preencher DEPOIS das verbas.
         # O manual oficial confirma a ordem: Verbas → Cartão de Ponto → FGTS.
         # Os campos de jornada são "sugeridos a partir dos Parâmetros do Cálculo" (carga horária).
@@ -5881,6 +6085,10 @@ class PJECalcPlaywright:
             dados.get("honorarios", []),
             periciais=dados.get("honorarios_periciais"),
         )
+
+        # Custas Judiciais — passo 16 do manual
+        self.fase_custas_judiciais(dados.get("custas_judiciais", {}))
+
         # Regerar ocorrências das verbas — obrigatório após alterações nos
         # Parâmetros do Cálculo (carga horária, período, prescrição, etc.)
         # Manual: "TODA alteração de parâmetro estrutural exige regeração"

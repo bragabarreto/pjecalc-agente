@@ -324,5 +324,6 @@ def gerar_parametrizacao(dados: dict) -> dict:
         "passo_8_imposto_renda":     dados.get("imposto_renda", {}),
         "passo_9_correcao_juros":    _passo_correcao_juros(dados),
         "passo_10_honorarios":       dados.get("honorarios", []),
+        "passo_11_custas_judiciais": dados.get("custas_judiciais", {}),
         "alertas":                   _gerar_alertas(dados),
     }

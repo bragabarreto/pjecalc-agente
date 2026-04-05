@@ -29,12 +29,21 @@ python main.py --sentenca path/to/sentenca.pdf
 python main.py --sessao <UUID>
 ```
 
-### Deploy (Railway)
+### Deploy (Oracle Cloud)
 ```bash
-# Push to main triggers auto-deploy
+# Push to main triggers auto-deploy via GitHub Actions
 git push origin main
 
-# Diagnostic endpoints (Railway)
+# Manual deploy
+./deploy/oracle-cloud/deploy.sh 163.176.44.221 ~/Downloads/ssh-key-2026-03-31.key
+
+# SSH into VM
+ssh -i ~/Downloads/ssh-key-2026-03-31.key opc@163.176.44.221
+
+# Production URL
+http://163.176.44.221:8000
+
+# Diagnostic endpoints (produção)
 GET /api/logs/java      # stdout+stderr do processo Java (Lancador + Tomcat)
 GET /api/logs/tomcat    # catalina.out do Tomcat embarcado
 GET /api/screenshot     # screenshot do display Xvfb :99
@@ -78,13 +87,18 @@ FastAPI com Jinja2. Fluxo principal:
 - `GET /api/executar/{sessao_id}` → **SSE stream** que executa `playwright_pjecalc.py` e transmite logs linha a linha
 - `GET /api/verificar_pjecalc` → verifica disponibilidade do Tomcat local (polling antes de iniciar automação)
 
-O gerador SSE em `executar_automacao_sse()` faz polling de Tomcat (até 600s) antes de iniciar o Playwright — necessário porque o Tomcat demora 2–5 min para subir no Railway.
+O gerador SSE em `executar_automacao_sse()` faz polling de Tomcat (até 600s) antes de iniciar o Playwright — necessário porque o Tomcat demora 2–5 min para subir.
 
-### Infraestrutura Docker / Railway
+### Infraestrutura Docker / Oracle Cloud
+- **VM**: Oracle Cloud Free Tier ARM64, 5.5GB RAM, Oracle Linux 9
+- **IP**: `163.176.44.221` — porta 8000 (app) + opcionalmente Caddy nas 80/443
 - **Base**: `eclipse-temurin:8-jre-jammy` (Java 8 obrigatório para PJE-Calc).
-- **Sequência de inicialização** (`docker-entrypoint.sh`): PJE-Calc em background → uvicorn **imediatamente** (Railway healthcheck passa) → Tomcat inicializa em background (~3–5 min).
+- **Sequência de inicialização** (`docker-entrypoint.sh`): PJE-Calc em background → uvicorn **imediatamente** → Tomcat inicializa em background (~3–5 min).
 - **PJE-Calc headless** (`iniciarPjeCalc.sh`): Xvfb `:99` + `xdotool` para auto-dismiss de dialogs Swing do Lancador. Java redireciona para `/opt/pjecalc/java.log`.
 - **pjecalc-dist/**: distribuição do PJE-Calc Cidadão sem JRE e sem navegador. Contém `bin/pjecalc.jar` + `tomcat/webapps/pjecalc/`. Commitado no repositório (91MB).
+- **Deploy**: GitHub Actions (push to main) ou manual via `deploy/oracle-cloud/deploy.sh`.
+- **Secrets GitHub Actions**: `ORACLE_SSH_KEY`, `ORACLE_HOST`, `ORACLE_USER`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `POSTGRES_PASSWORD`.
+- **Volumes persistentes**: `/opt/pjecalc-data/calculations`, `/opt/pjecalc-data/pjecalc-dados`, `/opt/pjecalc-data/postgres`.
 
 ## Regra de negócio obrigatória — IA-only
 
@@ -188,11 +202,11 @@ adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 @docs/diagnostico-falhas-automacao.md
 @docs/analise-calc-machine-vs-agente.md
 
-## Problema em aberto (Tomcat no Railway)
+## Problema em aberto (Tomcat headless)
 
-O Tomcat embarcado (`pjecalc.jar`) não está subindo no Railway. O Lancador Java (`Lancador.java:42`) executa validações de startup e pode mostrar `JOptionPane` dialogs (GUI Swing) que bloqueiam o thread principal. O Xvfb + xdotool tenta auto-dismissar, mas o Java ainda não está iniciando o Tomcat.
+O Tomcat embarcado (`pjecalc.jar`) pode ter dificuldade para subir em ambientes headless. O Lancador Java (`Lancador.java:42`) executa validações de startup e pode mostrar `JOptionPane` dialogs (GUI Swing) que bloqueiam o thread principal. O Xvfb + xdotool tenta auto-dismissar, mas o Java pode não iniciar o Tomcat corretamente.
 
-**Diagnóstico**: acessar `/api/logs/java` após deploy para ver o stdout/stderr completo do Java (capturado em `/opt/pjecalc/java.log`). O log para em `[TRT8] Configurando variaveis basicas.` — o que acontece depois é o que precisa ser descoberto.
+**Diagnóstico**: acessar `http://163.176.44.221:8000/api/logs/java` após deploy para ver o stdout/stderr completo do Java (capturado em `/opt/pjecalc/java.log`).
 
 **Abordagens alternativas a considerar**:
 1. Iniciar Tomcat diretamente (bypassar Lancador) usando `org.apache.catalina.startup.Bootstrap` com as JARs de `bin/lib/`
