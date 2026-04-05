@@ -2879,7 +2879,7 @@ class PJECalcPlaywright:
                         for (const {cb, txt} of pairs) {
                             const s = score(nome, txt);
                             const t = norm(txt);
-                            if (s >= 0.35 && (t.includes(pctNum + '%') || t.includes(pctNum + ' %') || t.includes(pctNum + ' por'))) {
+                            if (s >= 0.50 && (t.includes(pctNum + '%') || t.includes(pctNum + ' %') || t.includes(pctNum + ' por'))) {
                                 if (s > bestPctScore || !bestPct) {
                                     bestPctScore = s; bestPct = {cb, txt};
                                 }
@@ -3344,7 +3344,16 @@ class PJECalcPlaywright:
             "periodo aquisitivo": "PERIODO_AQUISITIVO",
             "desligamento": "DESLIGAMENTO",
         }
+        # URL da listagem de verbas (verba-calculo.jsf) — onde fica o botão "Manual"
         _url_verbas = self._page.url
+        # Garantir que temos a URL base correta para navegar de volta
+        if self._calculo_url_base and self._calculo_conversation_id:
+            _url_verbas_listing = (
+                f"{self._calculo_url_base}calculo/verba/verba-calculo.jsf"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
+        else:
+            _url_verbas_listing = _url_verbas
         _JS_CAMPOS = """() =>
             [...document.querySelectorAll(
                 'input:not([type="hidden"]):not([type="image"]):not([type="submit"]):not([type="button"]),select,textarea'
@@ -3388,9 +3397,11 @@ class PJECalcPlaywright:
                 self._log(f"  → '{nome}' é checkbox da aba FGTS — configurada em fase_fgts(), ignorando criação manual")
                 continue
 
-            if self._page.url != _url_verbas:
+            # Navegar para listagem de verbas se não estiver lá
+            _cur_url = self._page.url
+            if "verba-calculo" not in _cur_url or "conversationId" not in _cur_url:
                 try:
-                    self._page.goto(_url_verbas, wait_until="domcontentloaded", timeout=20000)
+                    self._page.goto(_url_verbas_listing, wait_until="domcontentloaded", timeout=20000)
                     self._page.wait_for_timeout(1000)
                     self._aguardar_ajax()
                 except Exception:
