@@ -413,6 +413,7 @@ class PJECalcPlaywright:
         self._calculo_url_base: str | None = None
         self._calculo_conversation_id: str | None = None
         self._dados: dict | None = None  # dados da sentença (armazenado em preencher_calculo)
+        self._reflexos_configurados: set[str] = set()  # nomes de verbas principais cujos reflexos foram configurados via botão
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
@@ -3205,7 +3206,7 @@ class PJECalcPlaywright:
                 }).length
             """)
             if not _btn_count:
-                self._log("  → Nenhum botão 'Verba Reflexa'/'Exibir' encontrado — reflexos não configurados")
+                self._log("  → Nenhum botão 'Verba Reflexa'/'Exibir' encontrado — reflexos serão criados manualmente")
                 return
             self._log(f"  → Configurando reflexos ({_btn_count} botão(ões) encontrado(s))…")
 
@@ -3230,6 +3231,7 @@ class PJECalcPlaywright:
                 _texto_row = row.get("texto", "").lower()
 
                 _reflexas_needed: list[str] = []
+                _nome_principal: str = ""
                 for nome_v, reflexas in _reflexos_map.items():
                     # Testar as 3 primeiras palavras do nome para match
                     _palavras = nome_v.lower().split()
@@ -3237,6 +3239,7 @@ class PJECalcPlaywright:
                         _kw = " ".join(_palavras[:_n_words])
                         if _kw and _kw in _texto_row:
                             _reflexas_needed = reflexas
+                            _nome_principal = nome_v
                             self._log(f"  → Reflexos de '{nome_v}': {reflexas}")
                             break
                     if _reflexas_needed:
@@ -3274,6 +3277,7 @@ class PJECalcPlaywright:
                     self._log(f"  ⚠ Botão reflexo row {row_idx}: {_e}")
                     continue
 
+                _algum_reflexo_marcado = False
                 for reflexo_nome in _reflexas_needed:
                     try:
                         _marcou = self._page.evaluate(
@@ -3305,10 +3309,14 @@ class PJECalcPlaywright:
                         )
                         if _marcou:
                             self._log(f"  ✓ Reflexo: {reflexo_nome} → '{_marcou}'")
+                            _algum_reflexo_marcado = True
                         else:
                             self._log(f"  ⚠ Reflexo não encontrado: {reflexo_nome}")
                     except Exception as _e:
                         self._log(f"  ⚠ Reflexo {reflexo_nome}: {_e}")
+
+                if _algum_reflexo_marcado and _nome_principal:
+                    self._reflexos_configurados.add(_nome_principal)
 
         except Exception as _e:
             self._log(f"  ⚠ _configurar_reflexos_expresso: {_e}")
@@ -3363,10 +3371,17 @@ class PJECalcPlaywright:
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
             _nome_lower = nome.lower()
 
-            # Pular verbas reflexas — configuradas via botão "Verba Reflexa" na listagem
-            if v.get("eh_reflexa") or "reflexo" in _nome_lower:
-                self._log(f"  → '{nome}' é reflexo — será configurado via botão Verba Reflexa (pulando criação manual)")
-                continue
+            # Verbas reflexas: só pular se o reflexo foi configurado via botão "Verba Reflexa"
+            _eh_reflexa = v.get("eh_reflexa") or "reflexo" in _nome_lower
+            if _eh_reflexa:
+                # Inferir nome da verba principal a partir do nome do reflexo
+                import re as _re_ref
+                _m_principal = _re_ref.match(r'(?i)reflexo\s+(?:de\s+)?(.+?)\s+em\s+', nome)
+                _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
+                if _nome_principal_ref and _nome_principal_ref in self._reflexos_configurados:
+                    self._log(f"  → '{nome}' reflexo já configurado via botão Verba Reflexa — pulando")
+                    continue
+                self._log(f"  → '{nome}' reflexo NÃO configurado via botão — criando manualmente como REFLEXO")
 
             # Pular verbas configuradas via checkboxes na aba FGTS (tratadas em fase_fgts)
             if any(k in _nome_lower for k in _VERBAS_APENAS_FGTS):
@@ -3455,6 +3470,64 @@ class PJECalcPlaywright:
                             break
                         except Exception:
                             continue
+
+            # ── Para verbas reflexas: marcar tipo REFLEXO e selecionar verba base ──
+            if _eh_reflexa:
+                # Radio tipoDeVerba = REFLEXO (DOM: formulario:tipoDeVerba com sufixo numérico)
+                _reflexo_ok = any(
+                    self._marcar_radio(fid, "REFLEXO")
+                    for fid in ["tipoDeVerba", "tipoVerba", "tipo"]
+                )
+                if not _reflexo_ok:
+                    # Fallback: buscar via name/table
+                    self._marcar_radio_js("tipoDeVerba", "REFLEXO")
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+                # Select baseVerbaDeCalculo — selecionar a verba principal pelo nome
+                _principal_ref = v.get("verba_principal_ref") or ""
+                if not _principal_ref and _m_principal:
+                    _principal_ref = _m_principal.group(1).strip()
+                if _principal_ref:
+                    # Tentar selecionar pelo texto da opção que contém o nome da principal
+                    try:
+                        self._page.evaluate(
+                            """(nomePrincipal) => {
+                                const sels = [...document.querySelectorAll('select')].filter(s => {
+                                    return s.id.includes('baseVerba') || s.id.includes('verbaDeCalculo')
+                                        || s.name.includes('baseVerba');
+                                });
+                                if (!sels.length) {
+                                    // Fallback: qualquer select visível que não seja os já conhecidos
+                                    sels.push(...[...document.querySelectorAll('select')].filter(s => {
+                                        const r = s.getBoundingClientRect();
+                                        return r.width > 0 && r.height > 0
+                                            && !s.id.includes('tipoDaBase') && !s.id.includes('caracteristica');
+                                    }));
+                                }
+                                const norm = s => s.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                                const target = norm(nomePrincipal);
+                                for (const sel of sels) {
+                                    for (const opt of sel.options) {
+                                        if (norm(opt.text).includes(target)) {
+                                            sel.value = opt.value;
+                                            sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                            return opt.text;
+                                        }
+                                    }
+                                    // Se não encontrou por nome, selecionar a primeira opção válida (índice 0)
+                                    if (sel.options.length > 1) {
+                                        sel.value = sel.options[1].value;  // pular noSelectionValue
+                                        sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                        return sel.options[1].text;
+                                    }
+                                }
+                                return null;
+                            }""",
+                            _principal_ref,
+                        )
+                        self._aguardar_ajax()
+                    except Exception as _e_base:
+                        self._log(f"  ⚠ baseVerbaDeCalculo: {_e_base}")
 
             # ── Identificar selects visíveis por conteúdo das opções ──
             # O formulário manual de verbas no PJE-Calc tem IDs gerados pelo JSF
@@ -4974,6 +5047,60 @@ class PJECalcPlaywright:
                 )
         self._log("Fase 8 concluída.")
 
+    # ── Verificação de cálculo correto ──────────────────────────────────────────
+
+    def _verificar_calculo_correto(self) -> bool:
+        """Verifica se o cálculo atualmente aberto pertence ao processo correto.
+
+        Compara o número do processo exibido na página com o número em self._dados.
+        Retorna True se correto ou se a verificação não for possível.
+        """
+        if not self._dados:
+            return True  # sem dados para comparar — assumir correto
+        _num_esperado = self._dados.get("processo", {}).get("numero", "")
+        if not _num_esperado:
+            return True
+
+        # Extrair número do processo da página atual
+        try:
+            _num_pagina = self._page.evaluate("""() => {
+                // Buscar número CNJ no sidebar, header ou campos hidden
+                const seletores = [
+                    '[id*="numero"][id*="rocesso"]',
+                    '[id*="identificador"]',
+                    '.rf-p-hdr', '.rich-panel-header',
+                    'td.texto', '.subtitle', 'h2', 'h3',
+                ];
+                for (const sel of seletores) {
+                    for (const el of document.querySelectorAll(sel)) {
+                        const txt = (el.textContent || el.value || '').trim();
+                        const m = txt.match(/\\d{7}-\\d{2}\\.\\d{4}\\.\\d\\.\\d{2}\\.\\d{4}/);
+                        if (m) return m[0];
+                    }
+                }
+                // Buscar em qualquer texto da página
+                const body = document.body.innerText || '';
+                const m2 = body.match(/\\d{7}-\\d{2}\\.\\d{4}\\.\\d\\.\\d{2}\\.\\d{4}/);
+                return m2 ? m2[0] : null;
+            }""")
+        except Exception:
+            return True  # não conseguiu verificar — assumir correto
+
+        if not _num_pagina:
+            self._log("  ℹ Verificação de cálculo: número do processo não visível na página")
+            return True
+
+        # Comparar apenas dígitos
+        import re as _re_vc
+        _esperado_limpo = _re_vc.sub(r"[^\d]", "", _num_esperado)
+        _pagina_limpo = _re_vc.sub(r"[^\d]", "", _num_pagina)
+        if _esperado_limpo == _pagina_limpo:
+            self._log(f"  ✓ Cálculo correto: {_num_pagina}")
+            return True
+        else:
+            self._log(f"  ⚠ CÁLCULO ERRADO! Esperado: {_num_esperado}, encontrado: {_num_pagina}")
+            return False
+
     # ── Liquidar / captura do .PJC ─────────────────────────────────────────────
 
     def _clicar_liquidar(self) -> str | None:
@@ -5034,20 +5161,41 @@ class PJECalcPlaywright:
                                 break
                         else:
                             self._log(f"  ℹ Processo '{_num_proc}' não encontrado nos recentes — usando primeiro item")
-                    _target_opt.click()
-                    self._page.wait_for_timeout(300)
-                    # Double-click dispara a4j:support event="ondblclick" → abrirCalculo()
-                    _target_opt.dblclick()
-                    self._aguardar_ajax(30000)
-                    self._page.wait_for_timeout(2000)
-                    # Verificar se navegou para o cálculo
-                    _url_after = self._page.url
-                    if "calculo" in _url_after and "conversationId" in _url_after:
-                        self._capturar_base_calculo()
-                        self._log(f"  ✓ Cálculo re-aberto com nova conversação: {self._calculo_conversation_id}")
-                        _sessao_restaurada = True
-                    else:
-                        self._log(f"  ⚠ URL inesperada após dblclick: {_url_after}")
+                    # Determinar quais índices tentar
+                    _found_idx = None
+                    if _num_proc:
+                        for _idx in range(_n_opts):
+                            _opt_text_chk = (_options.nth(_idx).text_content() or "").replace(".", "").replace("-", "").replace("/", "")
+                            if _num_clean in _opt_text_chk or _num_clean[:7] in _opt_text_chk:
+                                _found_idx = _idx
+                                break
+                    _indices_tentar = [_found_idx] if _found_idx is not None else list(range(min(_n_opts, 3)))
+
+                    for _opt_idx in _indices_tentar:
+                        # Re-localizar a listbox (pode ser página nova após goto _home)
+                        _lb = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
+                        if _lb.count() == 0:
+                            break
+                        _opt_el = _lb.first.locator("option").nth(_opt_idx)
+                        _opt_el.click()
+                        self._page.wait_for_timeout(300)
+                        _opt_el.dblclick()
+                        self._aguardar_ajax(30000)
+                        self._page.wait_for_timeout(2000)
+                        _url_after = self._page.url
+                        if "calculo" in _url_after and "conversationId" in _url_after:
+                            self._capturar_base_calculo()
+                            if self._verificar_calculo_correto():
+                                self._log(f"  ✓ Cálculo re-aberto com nova conversação: {self._calculo_conversation_id}")
+                                _sessao_restaurada = True
+                                break
+                            else:
+                                self._log("  → Cálculo errado — tentando próximo item…")
+                                self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+                                self._page.wait_for_timeout(1000)
+                                continue
+                        else:
+                            self._log(f"  ⚠ URL inesperada após dblclick: {_url_after}")
             else:
                 self._log("  ⚠ Lista de cálculos recentes não encontrada")
 
