@@ -1401,6 +1401,68 @@ class PJECalcPlaywright:
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
         return False
 
+    def _regerar_ocorrencias_verbas(self) -> bool:
+        """Clica em 'Regerar' na aba Verbas para atualizar ocorrências.
+
+        QUANDO USAR: Após alterações nos Parâmetros do Cálculo (carga horária,
+        período, prescrição, etc.) que afetam a grade de ocorrências das verbas.
+        O manual oficial exige: "Regerar Ocorrências: Necessário quando parâmetros
+        que afetam ocorrências são modificados."
+
+        DOM v2.15.1 (verba-calculo.xhtml):
+        - formulario:tipoRegeracao (radio) — Manter / Sobrescrever
+        - formulario:regerarOcorrencias (commandButton) — "Regerar"
+        - Confirma via window.confirm (MSG0017)
+        """
+        self._log("  → Regerar ocorrências das verbas…")
+        try:
+            # Navegar para aba Verbas
+            _nav = self._clicar_menu_lateral("Verbas", obrigatorio=False)
+            if not _nav:
+                self._log("  ⚠ Regerar: não conseguiu navegar para Verbas")
+                return False
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(1000)
+
+            # Selecionar "Manter alterações realizadas nas ocorrências" (padrão seguro)
+            try:
+                radio_manter = self._page.locator(
+                    "input[id$='tipoRegeracao'][type='radio']"
+                )
+                if radio_manter.count() >= 1:
+                    # O primeiro radio é "Manter" (itemValue=true)
+                    radio_manter.first.click(force=True)
+                    self._page.wait_for_timeout(300)
+                    self._log("    ✓ Opção: Manter alterações")
+            except Exception as e:
+                self._log(f"    ⚠ Radio tipoRegeracao: {e}")
+
+            # Auto-confirmar o window.confirm do Regerar
+            self._page.on("dialog", lambda d: d.accept())
+
+            # Clicar botão Regerar
+            btn_regerar = self._page.locator("[id$='regerarOcorrencias']")
+            if btn_regerar.count() > 0:
+                btn_regerar.first.click(force=True)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(2000)
+                self._log("  ✓ Regerar ocorrências executado com sucesso")
+                return True
+            else:
+                # Fallback: buscar botão por valor
+                btn_alt = self._page.locator("input[value='Regerar']")
+                if btn_alt.count() > 0:
+                    btn_alt.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(2000)
+                    self._log("  ✓ Regerar ocorrências executado (fallback)")
+                    return True
+                self._log("  ⚠ Botão Regerar não encontrado na página de Verbas")
+                return False
+        except Exception as e:
+            self._log(f"  ⚠ Regerar ocorrências: erro {e}")
+            return False
+
     def _clicar_novo(self) -> None:
         """Clica no botão Novo da seção atual — prioriza dentro de #formulario."""
         url_pre = self._page.url
@@ -5372,6 +5434,12 @@ class PJECalcPlaywright:
             dados.get("honorarios", []),
             periciais=dados.get("honorarios_periciais"),
         )
+        # Regerar ocorrências das verbas — obrigatório após alterações nos
+        # Parâmetros do Cálculo (carga horária, período, prescrição, etc.)
+        # Manual: "TODA alteração de parâmetro estrutural exige regeração"
+        self._log("Fase pré-liquidação — Regerar ocorrências…")
+        self._regerar_ocorrencias_verbas()
+
         # Screenshot pré-liquidação (captura estado final antes de liquidar)
         self._screenshot_fase("pre_liquidacao")
 

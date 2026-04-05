@@ -214,6 +214,12 @@ Possui 3 botões principais: **Novo**, **Grade de Ocorrências**, **Visualizar C
 - `tipoApuracaoHorasExtras`: radio com enum Java
 - `valorJornadaSegunda` a `valorJornadaDiariaDom`: jornada diária HH:MM
 - `qtJornadaSemanal` / `qtJornadaMensal`: totais (decimal BR)
+  **ATENÇÃO**: `qtJornadaMensal` = "Jornada Mensal Média", NÃO é a mesma coisa que
+  `valorCargaHorariaPadrao` (Carga Horária Padrão, na aba Parâmetros do Cálculo).
+  - **Jornada Mensal Média** = `jornada_semanal / 7 × 30` (ex: 44h/sem → 188,57; 36h/sem → 154,29)
+  - **Carga Horária Padrão** = `jornada_semanal × 5` (ex: 44h/sem → 220; 36h/sem → 180)
+  Tooltip oficial: "calculada dividindo a jornada semanal pelos 7 dias da semana
+  e multiplicando o resultado pelos 30 dias do mês comercial. Não confundir com a carga horária padrão."
 - `qtsumulatst`: quantidade HE para Súmula 85 (HH:MM)
 - `intervalorIntraJornadaSupSeis` (checkbox) + `valorIntervalorIntraJornadaSupSeis`: intervalo >6h
 - `intervalorIntraJornadaInfSeis` (checkbox) + `valorIntervalorIntraJornadaInfSeis`: intervalo ≤6h
@@ -250,3 +256,40 @@ Possui 3 botões principais: **Novo**, **Grade de Ocorrências**, **Visualizar C
 - Intervalo interjornadas (11h)
 - Jornada entre semanas (35h)
 - Intervalo intrajornada (almoço)
+
+---
+
+## Seção 10 — Regras Críticas de Salvamento e Regeração
+
+### Salvar obrigatório após cada aba
+- **TODA** página requer clique explícito no botão "Salvar" após preenchimento
+- Navegar para outra aba sem salvar = **PERDA TOTAL** dos dados preenchidos
+- Após salvar, aguardar mensagem de sucesso ("Operação realizada com sucesso")
+
+### Regerar Ocorrências (aba Verbas)
+- **Quando**: Após alterar qualquer parâmetro que afeta as ocorrências (período, carga horária,
+  prescrição, base de cálculo, divisor, multiplicador)
+- **Botão**: `formulario:regerarOcorrencias` na listagem de verbas
+- **Opções** (radio `tipoRegeracao`):
+  - "Manter alterações realizadas nas ocorrências" (padrão seguro)
+  - "Sobrescrever alterações realizadas nas ocorrências" (resetar tudo)
+- **Confirma** via `window.confirm` antes de executar
+- **Obrigatório antes de liquidar** quando houve alterações nos parâmetros
+
+### Sequência de Preenchimento Recomendada
+1. Dados do Cálculo (Dados do Processo + Parâmetros) > Salvar
+2. Faltas > Salvar
+3. Férias > Salvar
+4. Histórico Salarial > Salvar
+5. Verbas (Expresso e/ou Manual) > Salvar
+6. Cartão de Ponto > Salvar
+7. FGTS > Salvar
+8. Contribuição Social > Salvar
+9. Imposto de Renda > Salvar
+10. Multas e Indenizações > Salvar
+11. Honorários > Salvar
+12. Custas Judiciais > Salvar
+13. Correção, Juros e Multa > Salvar
+14. **Regerar Ocorrências** (aba Verbas) — se houve alterações nos parâmetros
+15. Operações > Liquidar
+16. Operações > Exportar
