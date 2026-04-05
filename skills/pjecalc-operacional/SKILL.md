@@ -23,26 +23,35 @@ Complementa a skill `/pjecalc-preenchimento` (manual genérico) com **roteiros o
 6. **Gerar Ocorrências antes de Salvar** — No histórico salarial e em verbas com ocorrências mensais.
 7. **Regerar após alterações estruturais** — Mudanças de período, base ou incidência exigem regeração.
 8. **Reflexos NÃO são verbas manuais** — Reflexos (13o, férias, aviso, DSR, FGTS) são configurados clicando no botão **"Verba Reflexa"** à direita de cada verba principal na listagem `verbas-para-calculo.jsf`. NUNCA criar reflexo como verba manual autônoma.
-9. **Multa FGTS 40% = checkbox na aba FGTS** — Em Cálculo > FGTS, existe um checkbox para incluir a multa rescisória de 40% sobre o FGTS. Não é verba.
-10. **Multa Art. 467 CLT = checkbox dentro da seção de Multa 40% no FGTS** — Aparece como sub-opção/checkbox dentro da seção "Multa 40%" da aba FGTS (Cálculo > FGTS). Não é verba manual nem reflexo via botão "Verba Reflexa". A extração JSON deve preencher `fgts.multa_467: true` quando a sentença deferir esta multa.
+9. **Multa FGTS 40% = checkbox na aba FGTS** — Em Cálculo > FGTS, o checkbox `multa` habilita a seção de multa. **Sequência obrigatória:** clicar checkbox `multa` → **aguardar AJAX** (o onchange re-renderiza campos) → selecionar `tipoDoValorDaMulta` (CALCULADA) → aguardar AJAX → selecionar `multaDoFgts` (QUARENTA_POR_CENTO). Sem o AJAX wait, os radios ficam `disabled`.
+10. **Multa Art. 467 CLT = checkbox dentro da seção de Multa 40% no FGTS** — Aparece como sub-opção (`multaDoArtigo467`) dentro da seção de multa. **Dependente do checkbox `multa` estar marcado** (disabled se multa=false). Não é verba manual nem reflexo. A extração JSON deve preencher `fgts.multa_467: true`.
+11. **Jornada Padrão ≠ Jornada Praticada no Cartão de Ponto** — "Jornada de Trabalho Padrão" = jornada CONTRATUAL (ex: 8h/dia CLT). A jornada efetivamente praticada (ex: 10h) vai na Grade de Ocorrências. HE = praticada − padrão. Se preencher padrão com praticada, HE = 0 (ERRO).
+12. **valorCargaHorariaPadrao ≠ qtJornadaMensal** — São campos diferentes: `valorCargaHorariaPadrao` (Parâmetros do Cálculo) = `semanal × 5` (ex: 44h→220). `qtJornadaMensal` (Cartão de Ponto) = `semanal / 7 × 30` (ex: 44h→188,57). Não confundir.
+13. **valorCargaHorariaPadrao obrigatório ANTES do Cartão de Ponto** — Sem este campo salvo, clicar "Novo" no Cartão de Ponto causa NPE (HTTP 500). Deve ser preenchido na aba Parâmetros do Cálculo.
 
 ---
 
 ## Fluxo Macro (Sequência de Dependências)
 
 ```
-1. Dados do Processo + Parâmetros do Cálculo
-2. Histórico Salarial (bases remuneratórias)
-3. Faltas e Férias (bases auxiliares)
-4. Verbas (Expresso + Manual + Reflexos)
-5. Cartão de Ponto (se houver jornada)
-6. FGTS + Contribuição Social + IR
-7. Honorários + Custas
-8. Correção Monetária e Juros
-9. Operações → Liquidar → Validar → Exportar .PJC
+1.  Dados do Processo + Parâmetros do Cálculo > Salvar
+2.  Faltas > Salvar
+3.  Férias > Salvar
+4.  Histórico Salarial (bases remuneratórias) > Salvar
+5.  Verbas (Expresso + Manual + Reflexos) > Salvar
+6.  Cartão de Ponto (se houver jornada) > Salvar
+7.  FGTS > Salvar
+8.  Contribuição Social > Salvar
+9.  Imposto de Renda > Salvar
+10. Multas e Indenizações > Salvar
+11. Honorários + Custas > Salvar
+12. Correção Monetária e Juros > Salvar
+13. Regerar Ocorrências (aba Verbas — se houve alterações nos parâmetros)
+14. Operações → Liquidar → Validar → Exportar .PJC
 ```
 
-> Cada etapa depende das anteriores. Não liquidar sem revisar histórico e verbas.
+> **Regra de ouro:** Clicar **Salvar** após CADA página. Sair sem salvar = perda total.
+> Cada etapa depende das anteriores. Não liquidar sem revisar histórico, verbas e regerar.
 
 ---
 

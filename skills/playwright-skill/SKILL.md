@@ -25,7 +25,7 @@ await page.wait_for_function("typeof jsf !== 'undefined'")
 await page.locator("[id$='dataAdmissao']").fill("01/01/2020")
 
 # Viewport explícito obrigatório em headless (evita offsetParent=null)
-browser = await playwright.chromium.launch(args=["--no-sandbox"])
+browser = await playwright.firefox.launch()  # OBRIGATÓRIO Firefox — Chromium causa incompatibilidades
 context = await browser.new_context(viewport={"width": 1920, "height": 1080})
 
 # Detectar visibilidade via bounding box (não offsetParent)

@@ -37,11 +37,12 @@ Execute as etapas **na ordem abaixo**. Cada etapa corresponde a uma página do m
 16. Honorários                             ← se houver honorários
 17. Custas Judiciais                       ← se houver custas
 18. Correção, Juros e Multa                ← conferir índices (padrão já sugerido)
-19. Operações → Liquidar
-20. Operações → Imprimir
+19. **Regerar Ocorrências** (aba Verbas)   ← se houve alterações nos parâmetros
+20. Operações → Liquidar
+21. Operações → Imprimir / Exportar
 ```
 
-> **Regra de ouro:** Sempre clicar em **Salvar** ao final de cada página. Sair sem salvar descarta todas as alterações da página atual.
+> **Regra de ouro:** Clicar **Salvar** após CADA página. Sair sem salvar = **PERDA TOTAL** dos dados preenchidos. Aguardar mensagem "Operação realizada com sucesso" antes de navegar.
 
 ---
 
@@ -237,9 +238,24 @@ Clicar no ícone **Ocorrências** para visualizar/editar mês a mês:
 
 Usado para calcular horas extras, intervalos e adicional noturno a partir de jornadas registradas.
 
+**Pré-requisitos OBRIGATÓRIOS (antes de criar cartão):**
+1. **Dados do Cálculo** salvos: admissão, demissão, prescrição
+2. **`valorCargaHorariaPadrao`** salvo em Parâmetros do Cálculo (220h, 180h, 150h mensal). Sem ele, clicar "Novo" causa HTTP 500 (NPE).
+3. Histórico Salarial preenchido (recomendável)
+
+**DISTINÇÃO CRÍTICA — Jornada Padrão vs Praticada:**
+- **"Jornada de Trabalho Padrão"** (campos `valorJornadaSegunda` a `Dom`) = jornada **CONTRATUAL** (ex: 8h/dia CLT). Serve como referência para cálculo de HE.
+- **"Grade de Ocorrências"** = jornada **EFETIVAMENTE PRATICADA** (ex: 10h/dia). Preenchida via Programação Semanal, Escala ou Livre.
+- **HE = praticada − padrão**. Se preencher padrão com praticada → HE = 0 (ERRO!)
+
+**Fórmulas (NÃO confundir):**
+- `valorCargaHorariaPadrao` (Parâmetros do Cálculo) = `semanal × 5` (ex: 44h→220)
+- `qtJornadaMensal` (Cartão de Ponto, "Jornada Mensal Média") = `semanal / 7 × 30` (ex: 44h→188,57)
+
 | Campo | Instrução |
 |---|---|
 | Critérios de Apuração | Data Inicial/Final do período, critério mais favorável |
+| Jornada de Trabalho Padrão | Preencher com jornada **CONTRATUAL** (NÃO a praticada!) |
 | Intervalos | Marcar checkboxes de Intrajornada e Interjornadas se deferidos |
 | Programação Semanal | Preencher grade com horários de entrada e saída por dia da semana |
 | Dia do Fechamento Mensal | Informar o dia de fechamento do cartão (ex.: 20) |
@@ -288,9 +304,11 @@ Clicar em **Salvar**.
 |---|---|
 | Destino | `Pagar ao reclamante` ou `Recolher em conta vinculada` |
 | Compor Principal | `Sim` (padrão) ou `Não` |
-| Multa | Marcar para apurar; escolher `Calculada` (20% ou 40%) ou `Informada` |
+| Multa (checkbox) | Marcar para habilitar seção de multa. **AGUARDAR AJAX** após marcar (onchange re-renderiza campos dependentes). Só depois preencher tipo e percentual. |
+| Tipo do Valor da Multa | `Calculada` (20% ou 40%) ou `Informada`. **Selecionar ANTES do percentual** (o radio multaDoFgts só aparece quando tipo=CALCULADA). Aguardar AJAX. |
+| Percentual (multaDoFgts) | `QUARENTA_POR_CENTO` (padrão demissão sem justa causa) ou `VINTE_POR_CENTO` (estabilidade provisória) |
 | Base da Multa | `Devido`, `Diferença`, `Saldo e/ou Saque`, `Devido (-) Saldo`, `Devido (+) Saldo` |
-| Multa Art. 467 CLT | Marcar para aplicar 50% sobre a multa do FGTS |
+| Multa Art. 467 CLT | Checkbox `multaDoArtigo467`. **Dependente do checkbox `multa` estar marcado** (disabled se multa=false). |
 | Pensão Alimentícia sobre FGTS | Marcar se a pensão deve incidir sobre o FGTS |
 | Saldo e/ou Saque | Informar Data e Valor; clicar em Adicionar; marcar `Deduzir do FGTS` se aplicável |
 | Contribuição Social LC 110/2001 | Marcar 10% e/ou 0,5% se devidas |
@@ -482,7 +500,21 @@ Clicar em **Salvar**.
 
 ---
 
-## 19. Operações → Liquidar
+## 19. Regerar Ocorrências (se aplicável)
+
+**Quando:** Após alterar qualquer parâmetro que afeta as ocorrências (período, carga horária, prescrição, base de cálculo, divisor, multiplicador). **Obrigatório antes de liquidar** quando houve alterações nos parâmetros.
+
+1. Navegar para aba **Verbas** (listagem principal).
+2. Na seção "Regeração de Ocorrências", selecionar **"Manter alterações realizadas nas ocorrências"** (padrão seguro) ou **"Sobrescrever"** (resetar tudo).
+3. Clicar em **Regerar** (`formulario:regerarOcorrencias`).
+4. Confirmar no `window.confirm` que aparece.
+5. Aguardar AJAX completar a regeneração.
+
+> **Armadilha:** Não regerar após alterações estruturais → ocorrências antigas permanecem ativas com valores desatualizados → liquidação com valores incorretos.
+
+---
+
+## 20. Operações → Liquidar
 
 1. Clicar em **Operações** → **Liquidar**.
 2. Informar a **Data da Liquidação**.

@@ -29,7 +29,7 @@ A pagina de FGTS deve ser tratada como modulo autonomo, dotado de parametros e o
 | Salvar | Comando explicitamente mostrado/narrado | [Aula 3] |
 | Regerar | Necessario quando alteracoes estruturais afetarem o periodo ou a base | [Aula 3] [Aula 4] |
 | Checkbox **Recolher** | Deve ser marcado quando o FGTS e obrigacao de deposito e nao pagamento em pecunia | [Video complementar -- FGTS nao depositado] |
-| Multa de 40% -- passo a passo | **[NAO COBERTO NAS AULAS COM SUFICIENCIA OPERACIONAL]** | [NAO COBERTO NAS AULAS] |
+| Multa de 40% -- passo a passo | Checkbox `multa` → **AGUARDAR AJAX** → `tipoDoValorDaMulta`=CALCULADA → AJAX → `multaDoFgts`=QUARENTA_POR_CENTO. Sem AJAX wait, radios ficam disabled. `multaDoArtigo467` depende de `multa` marcado. | [Confirmado por inspeção DOM fgts.xhtml] |
 | 13o no FGTS -- passo a passo | **[NAO COBERTO NAS AULAS]** | [NAO COBERTO NAS AULAS] |
 
 ### 2.1 Roteiro Operacional -- FGTS Nao Depositado

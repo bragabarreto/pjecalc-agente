@@ -275,52 +275,96 @@ page.locator("input[id*='btnSalvarHistorico']").click()
 
 ## Fluxo de Automação Recomendado
 
+> **ATENÇÃO:** Este é um esqueleto simplificado. A implementação real deve seguir a sequência
+> completa do Fluxo Macro (ver `pjecalc-operacional/SKILL.md`), incluindo TODAS as etapas
+> intermediárias listadas abaixo. **SALVAR é OBRIGATÓRIO após cada página** — sair sem salvar
+> perde todos os dados preenchidos.
+
 ```python
 from playwright.sync_api import sync_playwright
 
 def preencher_calculo(dados: dict):
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False)  # headless=True em produção
-        context = browser.new_context()
+        browser = p.firefox.launch(headless=False)  # headless=True em produção; OBRIGATÓRIO Firefox
+        context = browser.new_context(viewport={"width": 1920, "height": 1080})
         page = context.new_page()
-        
+
         # 1. Acessar o sistema
-        page.goto("http://localhost:8080/pje-calc")
+        page.goto("http://localhost:9257/pjecalc")
         page.wait_for_load_state("networkidle")
-        
-        # 2. Login (versão desktop não requer certificado)
-        # (verificar se há tela de login na versão cidadão)
-        
-        # 3. Novo Cálculo
+
+        # 2. Novo Cálculo (NUNCA usar "Cálculo Externo" para primeira liquidação)
         page.locator("a[id*='menuNovo']").click()
         page.wait_for_load_state("networkidle")
-        
-        # 4. Parâmetros do Cálculo
+
+        # 3. Parâmetros do Cálculo
+        # IMPORTANTE: valorCargaHorariaPadrao DEVE ser salvo aqui ANTES de criar Cartão de Ponto
+        # Sem ele, clicar "Novo" no Cartão de Ponto causa NPE (HTTP 500)
         preencher_parametros(page, dados["parametros"])
-        
-        # 5. Faltas
+        salvar_e_aguardar(page)  # OBRIGATÓRIO
+
+        # 4. Faltas
         if dados.get("faltas"):
             page.locator("a[id*='menuFaltas']").click()
             for falta in dados["faltas"]:
                 lancar_falta(page, falta)
-        
+            salvar_e_aguardar(page)  # OBRIGATÓRIO
+
+        # 5. Férias
+        if dados.get("ferias"):
+            page.locator("a[id*='menuFerias']").click()
+            lancar_ferias(page, dados["ferias"])
+            salvar_e_aguardar(page)  # OBRIGATÓRIO
+
         # 6. Histórico Salarial
         page.locator("a[id*='menuHistoricoSalarial']").click()
         for historico in dados["historicos"]:
             lancar_historico(page, historico)
-        
-        # 7. Verbas
+        salvar_e_aguardar(page)  # OBRIGATÓRIO
+
+        # 7. Verbas (Expresso + Manual + Reflexos)
         page.locator("a[id*='menuVerbas']").click()
         lancar_verbas_expresso(page, dados["verbas"])
-        
-        # 8. FGTS
+        salvar_e_aguardar(page)  # OBRIGATÓRIO
+
+        # 8. Cartão de Ponto (se houver jornada)
+        # DISTINÇÃO CRÍTICA: "Jornada de Trabalho Padrão" = CONTRATUAL (ex: 8h/dia)
+        # Grade de Ocorrências = EFETIVAMENTE PRATICADA (ex: 10h/dia)
+        # HE = praticada − padrão. Se preencher padrão com praticada → HE = 0 (ERRO!)
+        if dados.get("cartao_ponto"):
+            page.locator("a[id*='menuCartaoPonto']").click()
+            configurar_cartao_ponto(page, dados["cartao_ponto"])
+            salvar_e_aguardar(page)  # OBRIGATÓRIO
+
+        # 9. FGTS
+        # SEQUÊNCIA AJAX OBRIGATÓRIA para multa 40%:
+        # checkbox multa → AGUARDAR AJAX → tipoDoValorDaMulta=CALCULADA → AGUARDAR AJAX → multaDoFgts=QUARENTA_POR_CENTO
+        # Sem AJAX wait, os radios ficam disabled!
         page.locator("a[id*='menuFGTS']").click()
         configurar_fgts(page, dados["fgts"])
-        
-        # 9. Liquidar
+        salvar_e_aguardar(page)  # OBRIGATÓRIO
+
+        # 10. Contribuição Social (INSS)
+        page.locator("a[id*='menuContribuicaoSocial']").click()
+        configurar_contribuicao_social(page, dados.get("contribuicao_social"))
+        salvar_e_aguardar(page)  # OBRIGATÓRIO
+
+        # 11. Imposto de Renda
+        # 12. Multas e Indenizações
+        # 13. Honorários + Custas
+        # 14. Correção Monetária e Juros
+        # (implementar conforme dados disponíveis, sempre salvando após cada página)
+
+        # 15. Regerar Ocorrências (aba Verbas — se houve alterações nos parâmetros)
+        regerar_ocorrencias(page)
+
+        # 16. Liquidar
         page.locator("a[id*='menuLiquidar']").click()
         liquidar(page, dados["data_liquidacao"])
-        
+
+        # 17. Exportar .PJC
+        exportar_pjc(page)
+
         browser.close()
 ```
 

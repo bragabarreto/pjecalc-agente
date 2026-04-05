@@ -7,6 +7,21 @@
 
 O Cartao de Ponto nao e um relatorio passivo; ele e um **modulo de configuracao da jornada**, replicacao das marcacoes ao longo do contrato, edicao de excecoes e posterior validacao por espelho diario [2] [7].
 
+### DISTINCAO CRITICA: Jornada Padrao vs Jornada Praticada
+
+- **"Jornada de Trabalho Padrao"** (campos valorJornadaSegunda a valorJornadaDiariaDom) = jornada **CONTRATUAL** (ex: 8h/dia para CLT 220h/mes). Serve como **referencia** para calculo de horas extras.
+- **"Grade de Ocorrencias"** = jornada **EFETIVAMENTE PRATICADA** (ex: 10h/dia conforme cartao de ponto real).
+- **HE = praticada - padrao**. Se preencher padrao com praticada, HE = 0 (ERRO!)
+
+### Pre-requisitos OBRIGATORIOS (antes de criar cartao):
+1. `valorCargaHorariaPadrao` salvo em Parametros do Calculo (ex: 220, 180). Sem ele, "Novo" causa NPE (HTTP 500).
+2. Dados do Calculo salvos (admissao, demissao).
+3. Historico Salarial preenchido (necessario para apuracao do valor da HE).
+
+### Formulas (NAO confundir):
+- `valorCargaHorariaPadrao` (Parametros do Calculo) = `semanal x 5` (ex: 44h -> 220)
+- `qtJornadaMensal` (Cartao de Ponto, "Jornada Mensal Media") = `semanal / 7 x 30` (ex: 44h -> 188,57)
+
 A maquina deve aprender que o cartao nao produz credito sozinho; ele produz **quantidades** que precisam encontrar verbas ja compativeis na pagina de Verbas [1] [2] [3] [4] [6].
 
 ---
