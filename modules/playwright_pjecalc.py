@@ -1733,7 +1733,7 @@ class PJECalcPlaywright:
                 # Normalizar para sempre parar em calculo/ — sem isto, URLs como
                 # .../calculo/verba/verbas-para-calculo.jsf geram base ".../calculo/verba/"
                 # e os paths do _URL_SECTION_MAP ficam dobrados (ex: verba/verba/verba-calculo.jsf)
-                m_calculo = _re.search(r'(https?://.+/calculo/)', base)
+                m_calculo = _re.search(r'(https?://.+?/calculo/)', base)
                 if m_calculo:
                     base = m_calculo.group(1)
                 self._calculo_url_base = base
@@ -3349,7 +3349,7 @@ class PJECalcPlaywright:
         # Garantir que temos a URL base correta para navegar de volta
         if self._calculo_url_base and self._calculo_conversation_id:
             _url_verbas_listing = (
-                f"{self._calculo_url_base}calculo/verba/verba-calculo.jsf"
+                f"{self._calculo_url_base}verba/verba-calculo.jsf"
                 f"?conversationId={self._calculo_conversation_id}"
             )
         else:
@@ -3752,10 +3752,14 @@ class PJECalcPlaywright:
 
             # Após salvar, atualizar conversationId (pode ter mudado) e voltar para listagem
             self._capturar_base_calculo()
-            # Recalcular _url_verbas com o conversationId atual para próximas iterações
+            # Recalcular URLs com o conversationId atual para próximas iterações
             if self._calculo_url_base and self._calculo_conversation_id:
                 _url_verbas = (
                     f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                _url_verbas_listing = (
+                    f"{self._calculo_url_base}verba/verba-calculo.jsf"
                     f"?conversationId={self._calculo_conversation_id}"
                 )
 
@@ -5075,7 +5079,23 @@ class PJECalcPlaywright:
         # Extrair número do processo da página atual
         try:
             _num_pagina = self._page.evaluate("""() => {
-                // Buscar número CNJ no sidebar, header ou campos hidden
+                // Estratégia 1: reconstruir CNJ a partir dos campos individuais do formulário
+                // calculo.jsf tem campos separados: numero, digito, ano, justica, regiao, varaProcesso
+                const f = (id) => {
+                    const el = document.querySelector('[id$="' + id + '"]');
+                    return el ? (el.value || el.textContent || '').trim() : '';
+                };
+                const num = f(':numero') || f('numero');
+                const dig = f(':digito') || f('digito');
+                const ano = f(':ano') || f('ano');
+                const jus = f(':justica') || f('justica');
+                const reg = f(':regiao') || f('regiao');
+                const vara = f(':varaProcesso') || f('vara') || f('varaProcesso');
+                if (num && num.length >= 5 && dig && ano) {
+                    return num + '-' + dig + '.' + ano + '.' + (jus||'5') + '.' + (reg||'00') + '.' + (vara||'0000');
+                }
+
+                // Estratégia 2: buscar número CNJ formatado em textos da página
                 const seletores = [
                     '[id*="numero"][id*="rocesso"]',
                     '[id*="identificador"]',
@@ -5089,7 +5109,7 @@ class PJECalcPlaywright:
                         if (m) return m[0];
                     }
                 }
-                // Buscar em qualquer texto da página
+                // Estratégia 3: buscar em qualquer texto da página
                 const body = document.body.innerText || '';
                 const m2 = body.match(/\\d{7}-\\d{2}\\.\\d{4}\\.\\d\\.\\d{2}\\.\\d{4}/);
                 return m2 ? m2[0] : null;
