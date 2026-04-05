@@ -97,7 +97,7 @@ Campos com `*` são obrigatórios.
 | Considerar Feriado Municipal | Checkbox | Para verbas com divisor "Dias Úteis" |
 | Sábado como Dia Útil | Checkbox | Padrão: marcado |
 | Carga Horária | Número | Padrão: 220h/mês |
-| Comentários | Texto | Até 255 caracteres (aparece no Resumo do Cálculo) |
+| Comentários | Texto | Até 255 caracteres (aparece no Resumo do Cálculo). **Justiça Gratuita:** quando deferida a qualquer parte, inserir: "Honorários advocatícios devidos [parte(s)] com exigibilidade suspensa, ante a gratuidade judiciária deferida, nos termos do art. 791-A, parágrafo 4o, da CLT." |
 
 **Após preencher → clicar em Salvar.**
 
@@ -216,6 +216,7 @@ Parâmetros disponíveis conforme a combinação Característica × Ocorrência 
 - Clicar no ícone **Exibir** ao lado de cada verba principal.
 - Marcar os checkboxes das verbas reflexas deferidas (ex.: Aviso Prévio sobre HE, 13º sobre HE).
 - **Atenção:** O FGTS + 40% não aparece como verba reflexa — é configurado diretamente na página FGTS via campo "incidência no FGTS" dos Parâmetros da Verba.
+- **Multa Art. 467 CLT:** Aparece como **reflexa automática** sob cada verba principal (ex: "MULTA DO ARTIGO 467 DA CLT SOBRE SALDO DE SALÁRIO", "... SOBRE FÉRIAS + 1/3", "... SOBRE AVISO PRÉVIO"). Essas reflexas são geradas automaticamente quando o checkbox `multaDoArtigo467` está marcado na aba FGTS. **NÃO criar Multa 467 como verba Expresso nem Manual** — ela não existe no catálogo Expresso.
 
 ### 6.5 Parâmetros da Verba (ajuste pós-lançamento)
 
@@ -306,9 +307,9 @@ Clicar em **Salvar**.
 | Compor Principal | `Sim` (padrão) ou `Não` |
 | Multa (checkbox) | Marcar para habilitar seção de multa. **AGUARDAR AJAX** após marcar (onchange re-renderiza campos dependentes). Só depois preencher tipo e percentual. |
 | Tipo do Valor da Multa | `Calculada` (20% ou 40%) ou `Informada`. **Selecionar ANTES do percentual** (o radio multaDoFgts só aparece quando tipo=CALCULADA). Aguardar AJAX. |
-| Percentual (multaDoFgts) | `QUARENTA_POR_CENTO` (padrão demissão sem justa causa) ou `VINTE_POR_CENTO` (estabilidade provisória) |
+| Percentual (multaDoFgts) | `QUARENTA_POR_CENTO` (padrão demissão sem justa causa) ou `VINTE_POR_CENTO` (estabilidade provisória: CIPA, gestante, acidentário). Na extração, quando sentença determina 20%, preencher `fgts.multa_40=true` (habilita seção) **E** `fgts.multa_20=true` (seleciona 20%). |
 | Base da Multa | `Devido`, `Diferença`, `Saldo e/ou Saque`, `Devido (-) Saldo`, `Devido (+) Saldo` |
-| Multa Art. 467 CLT | Checkbox `multaDoArtigo467`. **Dependente do checkbox `multa` estar marcado** (disabled se multa=false). |
+| Multa Art. 467 CLT | Checkbox `multaDoArtigo467`. **Dependente do checkbox `multa` estar marcado** (disabled se multa=false). Ao marcar, o sistema gera reflexas automáticas na aba Verbas: "MULTA DO ARTIGO 467 DA CLT SOBRE [verba principal]" para cada verba. NÃO é verba Expresso. |
 | Pensão Alimentícia sobre FGTS | Marcar se a pensão deve incidir sobre o FGTS |
 | Saldo e/ou Saque | Informar Data e Valor; clicar em Adicionar; marcar `Deduzir do FGTS` se aplicável |
 | Contribuição Social LC 110/2001 | Marcar 10% e/ou 0,5% se devidas |

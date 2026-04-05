@@ -158,7 +158,7 @@ Estas armadilhas foram identificadas durante o desenvolvimento e testes do pjeca
 
 ### 12.2 Tabela Paginada do Lancamento Expresso
 **Problema:** A tabela do Lancamento Expresso (`verbas-para-calculo.xhtml`) usa `<a4j:repeat>` em layout de colunas. Apenas ~27 das 60+ verbas sao visiveis no viewport.
-**Verbas ocultas tipicas:** "Saldo de Salario", "Ferias Proporcionais + 1/3", "Multa 477/467" ficam abaixo do scroll.
+**Verbas ocultas tipicas:** "Saldo de Salario", "Ferias Proporcionais + 1/3", "Multa 477" ficam abaixo do scroll. (Nota: Multa 467 NÃO é verba Expresso — é checkbox FGTS + reflexa automática na aba Verbas.)
 **Solucao:** Scroll via JavaScript + re-enumeracao dos elementos apos scroll.
 
 ### 12.3 Botao "Manual" vs "Novo" — Confusao de Interface

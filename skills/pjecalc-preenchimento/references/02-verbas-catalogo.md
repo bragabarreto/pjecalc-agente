@@ -62,7 +62,7 @@ Verbas disponíveis no Lançamento Expresso, com seus parâmetros padrão sugeri
 
 | Verba | Base | Alíquota | Observações |
 |---|---|---|---|
-| Multa Art. 467 CLT | Verbas rescisórias não pagas | 50% | Sobre verbas incontroversas não pagas na rescisão |
+| Multa Art. 467 CLT | Verbas rescisórias não pagas | 50% | **NÃO é verba Expresso/Manual.** Aparece como: (1) checkbox `multaDoArtigo467` na aba FGTS (sub-checkbox da Multa 40%); (2) reflexa automática sob cada verba principal na aba Verbas (ex: "MULTA DO ARTIGO 467 DA CLT SOBRE SALDO DE SALÁRIO"). Mapear via `fgts.multa_467 = true`. |
 | Multa Art. 477 CLT | Maior Remuneração | 100% | Atraso no pagamento das verbas rescisórias |
 | Multa Art. 479 CLT | Remuneração | 50% | Rescisão antecipada de contrato por prazo determinado |
 

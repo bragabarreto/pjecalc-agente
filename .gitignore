@@ -41,6 +41,15 @@ build/
 Thumbs.db
 desktop.ini
 
+# ── PJE-Calc runtime (gerados em execução) ───────────────────────────────────
+pjecalc-dist/pjecalc.log
+pjecalc-dist/pjecalc.pid
+pjecalc-dist/tomcat/work/
+
+# ── Claude Code (configuração local — não compartilhar) ──────────────────────
+.claude/settings.json
+.claude/settings.local.json
+
 # ── IDE ───────────────────────────────────────────────────────────────────────
 .vscode/settings.json
 .idea/

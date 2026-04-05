@@ -33,13 +33,23 @@ O sistema deve preencher **rigorosamente** o percentual (aliquota) descrito na s
     *   A opcao **Apurar Imposto de Renda** deve ser marcada apenas se houver orientacao para retencao na fonte.
     *   Caso marcada, o preenchimento do **CPF/Documento Fiscal** torna-se obrigatorio para a liquidacao.
 
-### 8.4. Parametros Especificos e Justica Gratuita
-Caso o processamento dos dados da sentenca (via arquivo JSON) identifique que o **Reclamante e beneficiario da justica gratuita**, a automacao deve realizar o seguinte procedimento adicional:
+### 8.4. Justica Gratuita e Exigibilidade Suspensa (art. 791-A, §4o, CLT)
 
-1.  Navegar ate a aba **Dados do Calculo**.
-2.  Acessar a sub-aba **Parametros do Calculo**.
-3.  No campo **Comentarios**, inserir obrigatoriamente o texto:
-    > *"SUSPENSA A EXIGIBILIDADE DA COBRANCA DOS HONORARIOS DEVIDOS PELA PARTE BENEFICIARIA DA GRATUIDADE JUDICIARIA, POR FORCA DO ART. 791-A, Par.4o DA CLT E ADI 5.766."*
+Quando a sentença defere justiça gratuita a qualquer das partes, a exigibilidade dos honorários advocatícios aos quais essa parte foi condenada fica **suspensa**.
+
+**Extração:** O campo `justica_gratuita` deve ser extraído com:
+- `justica_gratuita.reclamante`: true/false
+- `justica_gratuita.reclamado`: true/false
+
+**Automação:** Na Fase 1 (Dados do Processo > Parâmetros do Cálculo), ANTES de salvar, inserir no campo **Comentários** (`formulario:comentarios`):
+
+> "Honorários advocatícios devidos [descrição da(s) parte(s) beneficiária(s)] com exigibilidade suspensa, ante a gratuidade judiciária deferida, nos termos do art. 791-A, parágrafo 4o, da CLT."
+
+Exemplos:
+- Reclamante com JG: "Honorários advocatícios devidos pelo(a) reclamante (FULANO DE TAL) com exigibilidade suspensa..."
+- Ambas as partes: "Honorários advocatícios devidos pelo(a) reclamante (FULANO) e pelo(a) reclamado(a) (EMPRESA X) com exigibilidade suspensa..."
+
+**Implementação:** O campo é preenchido automaticamente em `fase_dados_processo()` quando `justica_gratuita.reclamante` ou `justica_gratuita.reclamado` é true.
 
 ### 8.5. Finalizacao e Liquidacao
 1.  Apos o preenchimento, clicar em **Salvar**.

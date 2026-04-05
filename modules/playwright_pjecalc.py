@@ -898,6 +898,49 @@ class PJECalcPlaywright:
         self._log(f"  ⚠ radio JS {sufixo_id}={valor}: não encontrado")
         return False
 
+    def _preencher_radio_ou_select(
+        self,
+        field_id: str,
+        valor: str,
+        obrigatorio: bool = True,
+    ) -> bool:
+        """Tenta preencher campo como select primeiro, depois como radio (JSF pode usar qualquer um)."""
+        # Try select (by option value or text)
+        if self._selecionar(field_id, valor, obrigatorio=False):
+            return True
+        # Try radio (Playwright locator)
+        if self._marcar_radio(field_id, valor):
+            return True
+        # Try radio (JS fallback)
+        if self._marcar_radio_js(field_id, valor):
+            return True
+        # JS fallback: search selects by option text containing valor
+        try:
+            _found = self._page.evaluate(f"""() => {{
+                const sels = [...document.querySelectorAll('select')];
+                const target = '{valor}'.toLowerCase();
+                for (const sel of sels) {{
+                    if (!(sel.id || '').toLowerCase().includes('{field_id}'.toLowerCase())) continue;
+                    for (const opt of sel.options) {{
+                        if (opt.value.toLowerCase() === target || opt.text.toLowerCase().includes(target)) {{
+                            sel.value = opt.value;
+                            sel.dispatchEvent(new Event('change', {{bubbles: true}}));
+                            return sel.id + '=' + opt.value;
+                        }}
+                    }}
+                }}
+                return null;
+            }}""")
+            if _found:
+                self._aguardar_ajax()
+                self._log(f"  ✓ select JS {field_id}: {_found}")
+                return True
+        except Exception:
+            pass
+        if obrigatorio:
+            self._log(f"  ⚠ {field_id}={valor}: não encontrado como select nem radio")
+        return False
+
     def _marcar_checkbox(
         self,
         field_id: str,
@@ -1440,25 +1483,47 @@ class PJECalcPlaywright:
             # Auto-confirmar o window.confirm do Regerar
             self._page.on("dialog", lambda d: d.accept())
 
-            # Clicar botão Regerar
-            btn_regerar = self._page.locator("[id$='regerarOcorrencias']")
-            if btn_regerar.count() > 0:
-                btn_regerar.first.click(force=True)
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(2000)
-                self._log("  ✓ Regerar ocorrências executado com sucesso")
-                return True
-            else:
-                # Fallback: buscar botão por valor
-                btn_alt = self._page.locator("input[value='Regerar']")
-                if btn_alt.count() > 0:
-                    btn_alt.first.click(force=True)
+            # Scroll para garantir que o botão Regerar fique visível
+            self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            self._page.wait_for_timeout(300)
+
+            # Clicar botão Regerar — tentar múltiplos seletores
+            _REGERAR_SELS = [
+                "[id$='regerarOcorrencias']",
+                "input[value='Regerar']",
+                "input[value='Regerar Ocorrências']",
+                "input[type='submit'][value*='egerar']",
+                "button:has-text('Regerar')",
+            ]
+            for _sel in _REGERAR_SELS:
+                _btn = self._page.locator(_sel)
+                if _btn.count() > 0:
+                    _btn.first.click(force=True)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(2000)
-                    self._log("  ✓ Regerar ocorrências executado (fallback)")
+                    self._log(f"  ✓ Regerar ocorrências executado ({_sel})")
                     return True
-                self._log("  ⚠ Botão Regerar não encontrado na página de Verbas")
-                return False
+
+            # Fallback JS: buscar qualquer input/button com texto "Regerar"
+            _js_clicked = self._page.evaluate("""() => {
+                const els = [...document.querySelectorAll('input[type="submit"], input[type="button"], button')];
+                for (const el of els) {
+                    const txt = (el.value || el.textContent || '').toLowerCase();
+                    if (txt.includes('regerar')) {
+                        el.click();
+                        return el.id || el.value || 'found';
+                    }
+                }
+                return null;
+            }""")
+            if _js_clicked:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(2000)
+                self._log(f"  ✓ Regerar ocorrências executado via JS ({_js_clicked})")
+                return True
+
+            self._log("  ⚠ Botão Regerar não encontrado na página de Verbas — pode não ser necessário se verbas não foram alteradas")
+            return False
         except Exception as e:
             self._log(f"  ⚠ Regerar ocorrências: erro {e}")
             return False
@@ -2036,6 +2101,28 @@ class PJECalcPlaywright:
                 self._marcar_checkbox("possuiDependentes", True)
                 self._preencher("quantidadeDependentes", str(ir["dependentes"]), False)
 
+        # ── Comentários: Justiça Gratuita → exigibilidade suspensa (art. 791-A, §4º, CLT) ──
+        jg = dados.get("justica_gratuita", {})
+        _jg_reclamante = jg.get("reclamante", False)
+        _jg_reclamado = jg.get("reclamado", False)
+        if _jg_reclamante or _jg_reclamado:
+            # Montar descrição da(s) parte(s) beneficiária(s)
+            _partes_jg = []
+            if _jg_reclamante:
+                _nome_reclamante = proc.get("reclamante", "pelo(a) reclamante")
+                _partes_jg.append(f"pelo(a) reclamante ({_nome_reclamante})")
+            if _jg_reclamado:
+                _nome_reclamado = proc.get("reclamado", "pelo(a) reclamado(a)")
+                _partes_jg.append(f"pelo(a) reclamado(a) ({_nome_reclamado})")
+            _desc_partes = " e ".join(_partes_jg)
+            _comentario_jg = (
+                f"Honorários advocatícios devidos {_desc_partes} com exigibilidade "
+                f"suspensa, ante a gratuidade judiciária deferida, nos termos do "
+                f"art. 791-A, parágrafo 4o, da CLT."
+            )
+            self._preencher("comentarios", _comentario_jg, False)
+            self._log(f"  ✓ Comentários: justiça gratuita — {_desc_partes}")
+
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 1: Salvar não confirmado — dados do processo podem não ter persistido.")
         self._log("Fase 1 concluída.")
@@ -2154,6 +2241,22 @@ class PJECalcPlaywright:
                 if _nm:
                     _nm.dispatch_event("blur")
                     self._page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+            # Fechar autocomplete/suggestion box do RichFaces para não bloquear
+            # checkboxes abaixo (SALÁRIO PAGO intercepta pointer events)
+            try:
+                self._page.keyboard.press("Escape")
+                self._page.wait_for_timeout(200)
+                self._page.evaluate("""() => {
+                    document.querySelectorAll(
+                        '.rf-au-lst, .rf-su-lst, [id*="suggestionBox"], ' +
+                        '.rich-sb-ext-decor, .rich-sb-common-container'
+                    ).forEach(el => { el.style.display = 'none'; });
+                }""")
+                self._page.locator("body").click(position={"x": 10, "y": 10}, force=True)
+                self._page.wait_for_timeout(200)
             except Exception:
                 pass
 
@@ -2535,7 +2638,8 @@ class PJECalcPlaywright:
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
             if not nome:
                 continue
-            if self._marcar_checkbox_expresso(nome):
+            _pct = v.get("percentual")
+            if self._marcar_checkbox_expresso(nome, percentual=_pct):
                 _marcadas.append(nome)
             else:
                 _nao_encontradas.append(nome)
@@ -2685,7 +2789,7 @@ class PJECalcPlaywright:
 
         self._log("Fase 3 concluída.")
 
-    def _marcar_checkbox_expresso(self, nome: str) -> bool:
+    def _marcar_checkbox_expresso(self, nome: str, percentual: float | None = None) -> bool:
         """Localiza e marca o checkbox do Expresso cujo nome contém 'nome' (case-insensitive).
 
         Estrutura confirmada DOM v2.15.1 (verbas-para-calculo.jsf):
@@ -2693,10 +2797,11 @@ class PJECalcPlaywright:
         - NÃO existe elemento [id*=":nome"] — o nome é o texto da célula <td> pai
         - Cada <td> contém: checkbox + label/span com o nome da verba
         Busca pelo texto da célula individual (não da linha inteira).
+        Se percentual fornecido, prefere match com percentual correto (ex: 40% vs 10%).
         """
         try:
             _resultado = self._page.evaluate(
-                """(nome) => {
+                """([nome, percentual]) => {
                     function norm(s) {
                         s = s.toLowerCase()
                             .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -2766,6 +2871,25 @@ class PJECalcPlaywright:
                             }
                         }
                     }
+                    // 3.5ª: percentual-aware — se percentual fornecido, prefere match com %
+                    if (percentual !== null && percentual !== undefined) {
+                        const pctNum = Math.round(percentual * 100).toString();
+                        let bestPct = null, bestPctScore = 0;
+                        for (const {cb, txt} of pairs) {
+                            const s = score(nome, txt);
+                            const t = norm(txt);
+                            if (s >= 0.35 && (t.includes(pctNum + '%') || t.includes(pctNum + ' %') || t.includes(pctNum + ' por'))) {
+                                if (s > bestPctScore || !bestPct) {
+                                    bestPctScore = s; bestPct = {cb, txt};
+                                }
+                            }
+                        }
+                        if (bestPct) {
+                            if (!bestPct.cb.checked) bestPct.cb.click();
+                            return bestPct.txt + ' (pct-match ' + pctNum + '%)';
+                        }
+                    }
+
                     // 4ª: token-overlap Jaccard ≥ 0.40
                     let best = 0, bestCb = null, bestTxt = null;
                     for (const {cb, txt} of pairs) {
@@ -2778,7 +2902,7 @@ class PJECalcPlaywright:
                     }
                     return null;
                 }""",
-                nome,
+                [nome, percentual],
             )
             if _resultado:
                 self._log(f"  ✓ Expresso checkbox: {nome} → '{_resultado}'")
@@ -3427,7 +3551,7 @@ class PJECalcPlaywright:
             carac_label = v.get("caracteristica", "Comum")
             carac_enum = carac_map.get(_norm_key(carac_label), "COMUM")
             _carac_ok = any(
-                self._marcar_radio(fid, carac_enum)
+                self._preencher_radio_ou_select(fid, carac_enum, obrigatorio=False)
                 for fid in ["caracteristicaVerba", "caracteristica", "caracteristicaDaVerba"]
             )
             if not _carac_ok:
@@ -3438,7 +3562,7 @@ class PJECalcPlaywright:
             ocorr_label = v.get("ocorrencia", "Mensal")
             ocorr_enum = ocorr_map.get(_norm_key(ocorr_label), "MENSAL")
             _ocorr_ok = any(
-                self._marcar_radio(fid, ocorr_enum)
+                self._preencher_radio_ou_select(fid, ocorr_enum, obrigatorio=False)
                 for fid in ["ocorrenciaPagto", "ocorrencia", "ocorrenciaDePagamento", "periodicidade"]
             )
             if not _ocorr_ok:
@@ -3474,11 +3598,11 @@ class PJECalcPlaywright:
 
             if v.get("valor_informado"):
                 # formulario:valor (radio CALCULADO/INFORMADO) — confirmado DOM v2.15.1
-                self._marcar_radio("valor", "INFORMADO")
+                self._preencher_radio_ou_select("valor", "INFORMADO", obrigatorio=False)
                 # formulario:outroValorDoMultiplicador — campo Multiplicador confirmado
                 self._preencher("outroValorDoMultiplicador", _fmt_br(v["valor_informado"]), False)
             else:
-                self._marcar_radio("valor", "CALCULADO")
+                self._preencher_radio_ou_select("valor", "CALCULADO", obrigatorio=False)
 
             # Multiplicador explícito (ex: acúmulo de função 0,30 = 30%)
             if v.get("multiplicador") is not None:
@@ -3676,21 +3800,37 @@ class PJECalcPlaywright:
         # formulario:deduzirDoFGTS (checkbox)
         # formulario:competenciaInputDate + formulario:valor (saldo depositado)
 
+        # DOM probe: detectar tipos reais dos elementos FGTS
+        try:
+            _fgts_types = self._page.evaluate("""() => {
+                const fields = ['tipoDeVerba','comporPrincipal','aliquota',
+                                'multaDoFgts','tipoDoValorDaMulta','multa',
+                                'multaDoArtigo467','incidenciaDoFgts'];
+                const result = {};
+                for (const f of fields) {
+                    const sel = document.querySelector(`select[id*="${f}"]`);
+                    const rad = document.querySelector(`input[type="radio"][id*="${f}"]`);
+                    const chk = document.querySelector(`input[type="checkbox"][id*="${f}"]`);
+                    result[f] = (sel ? 'select' : rad ? 'radio' : chk ? 'checkbox' : 'unknown');
+                }
+                return result;
+            }""")
+            self._log(f"  ℹ FGTS DOM types: {_fgts_types}")
+        except Exception:
+            pass
+
         # Destino: PAGAR (ao reclamante) ou DEPOSITAR (em conta vinculada)
         _destino = fgts.get("destino", "PAGAR")
-        self._marcar_radio("tipoDeVerba", _destino) or \
-            self._marcar_radio_js("tipoDeVerba", _destino)
+        self._preencher_radio_ou_select("tipoDeVerba", _destino)
 
         # Compor principal
         _compor = "SIM" if fgts.get("compor_principal", True) else "NAO"
-        self._marcar_radio("comporPrincipal", _compor) or \
-            self._marcar_radio_js("comporPrincipal", _compor)
+        self._preencher_radio_ou_select("comporPrincipal", _compor)
 
         # Alíquota — radio com valores enum (não percentual numérico)
         aliquota = fgts.get("aliquota", 0.08)
         _aliq_radio = "DOIS_POR_CENTO" if aliquota <= 0.02 else "OITO_POR_CENTO"
-        self._marcar_radio("aliquota", _aliq_radio) or \
-            self._marcar_radio_js("aliquota", _aliq_radio)
+        self._preencher_radio_ou_select("aliquota", _aliq_radio)
 
         # Incidência do FGTS (select) — padrão: sobre o total devido
         _incidencia_map = {
@@ -3720,15 +3860,13 @@ class PJECalcPlaywright:
         if multa_40:
             # Tipo do valor da multa — DEVE ser selecionado ANTES do percentual
             # pois o radio multaDoFgts só aparece quando tipoDoValorDaMulta == CALCULADA
-            self._marcar_radio("tipoDoValorDaMulta", "CALCULADA") or \
-                self._marcar_radio_js("tipoDoValorDaMulta", "CALCULADA")
+            self._preencher_radio_ou_select("tipoDoValorDaMulta", "CALCULADA")
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
             # Percentual: 40% padrão; 20% para estabilidade provisória (CIPA, gestante etc.)
             _pct_multa = "VINTE_POR_CENTO" if fgts.get("multa_20") else "QUARENTA_POR_CENTO"
-            self._marcar_radio("multaDoFgts", _pct_multa) or \
-                self._marcar_radio_js("multaDoFgts", _pct_multa)
+            self._preencher_radio_ou_select("multaDoFgts", _pct_multa)
 
             # Excluir aviso indenizado da base da multa (checkbox)
             _excl_aviso = fgts.get("excluir_aviso_multa", False)
@@ -4548,24 +4686,43 @@ class PJECalcPlaywright:
         """
         self._log("Fase 6 — Parâmetros de atualização (Correção, Juros e Multa)…")
 
-        # Navegar para correcao-juros.jsf
+        # Navegar para correção/juros — prioriza sidebar click (não depende de URL exata)
         _nav_ok = self._clicar_menu_lateral("Correção, Juros e Multa", obrigatorio=False)
         self._aguardar_ajax()
         self._page.wait_for_timeout(1000)
 
-        if not _nav_ok or "correcao-juros" not in self._page.url:
+        # Verificar se chegou na página (URL pode ser correcao-juros.jsf, atualizacao.jsf, etc.)
+        _url_atual = self._page.url.lower()
+        _na_pagina = any(p in _url_atual for p in ["correcao", "atualizacao", "juros"])
+
+        if not _nav_ok or not _na_pagina:
+            # Fallback: tentar variantes de URL conhecidas
+            _url_tentativas = [
+                "correcao-juros.jsf",
+                "atualizacao.jsf",
+                "correcao-juros-e-multa.jsf",
+            ]
+            _navegou = False
             if self._calculo_url_base and self._calculo_conversation_id:
-                _url_cj = (
-                    f"{self._calculo_url_base}correcao-juros.jsf"
-                    f"?conversationId={self._calculo_conversation_id}"
-                )
-                try:
-                    self._page.goto(_url_cj, wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(1000)
-                except Exception as _e:
-                    self._log(f"  ⚠ Navegação correcao-juros.jsf: {_e}")
-                    return
+                for _jsf in _url_tentativas:
+                    _url_cj = (
+                        f"{self._calculo_url_base}{_jsf}"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    try:
+                        self._page.goto(_url_cj, wait_until="domcontentloaded", timeout=10000)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
+                        # Verificar se não caiu em página de erro
+                        if self._page.locator("[id$='indiceCorrecao'], [id$='indiceTrabalhista'], [id$='taxaJuros']").count() > 0:
+                            _navegou = True
+                            self._log(f"  ✓ Navegou para {_jsf}")
+                            break
+                    except Exception:
+                        continue
+            if not _navegou:
+                self._log("  ⚠ Correção/Juros: página não encontrada — pulando configuração de índices")
+                return
 
         # --- Índice de correção monetária ---
         _indice = cj.get("indice_correcao", "IPCA-E")

@@ -392,7 +392,7 @@ Substitui Base, Divisor, Multiplicador, Quantidade por campo unico "Devido". Opc
 
 Lista verbas Principais da tabela de Verbas do sistema. Usuario marca checkboxes das verbas desejadas e clica "Salvar".
 
-**IMPORTANTE para automacao**: A tabela do Lancamento Expresso usa `<a4j:repeat>` em layout paginado. Apenas ~27 das 60+ verbas sao visiveis no viewport. Verbas como "Saldo de Salario", "Ferias Proporcionais + 1/3", "Multa 477/467" ficam abaixo do scroll. Scroll via JS + re-enumeracao necessarios.
+**IMPORTANTE para automacao**: A tabela do Lancamento Expresso usa `<a4j:repeat>` em layout paginado. Apenas ~27 das 60+ verbas sao visiveis no viewport. Verbas como "Saldo de Salario", "Ferias Proporcionais + 1/3", "Multa 477" ficam abaixo do scroll. Scroll via JS + re-enumeracao necessarios. (Nota: Multa 467 NAO e verba Expresso — e checkbox FGTS `multaDoArtigo467` + reflexa automatica na aba Verbas.)
 
 ### 9.8 Listagem de Verbas
 

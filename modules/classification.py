@@ -190,6 +190,14 @@ VERBAS_PREDEFINIDAS: dict[str, dict[str, Any]] = {
         "compor_principal": True,
         "campos_criticos": ["maior_remuneracao"],
     },
+    # ATENÇÃO: Multa Art. 467 CLT NÃO é verba Expresso nem Manual.
+    # No PJE-Calc ela aparece em DOIS lugares:
+    #   1. Aba FGTS: checkbox `multaDoArtigo467` (sub-checkbox da Multa 40%)
+    #   2. Aba Verbas: reflexa automática sob cada verba principal
+    #      (ex: "MULTA DO ARTIGO 467 DA CLT SOBRE SALDO DE SALÁRIO")
+    # A extração deve mapear para fgts.multa_467 = true/false.
+    # Mantido aqui APENAS para reconhecimento na classificação — o campo
+    # `_apenas_fgts` impede criação como verba na automação.
     "multa art 467": {
         "nome_pjecalc": "Multa Art. 467 CLT",
         "caracteristica": "Comum",
@@ -200,6 +208,7 @@ VERBAS_PREDEFINIDAS: dict[str, dict[str, Any]] = {
         "tipo": "Principal",
         "compor_principal": True,
         "campos_criticos": [],
+        "_apenas_fgts": True,  # NÃO criar como verba — é checkbox FGTS + reflexa automática
     },
     "vale transporte": {
         "nome_pjecalc": "Vale Transporte",
