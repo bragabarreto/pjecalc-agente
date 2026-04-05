@@ -1081,7 +1081,7 @@ class PJECalcPlaywright:
             "Multas":                  "multas-indenizacoes.jsf",
             "Honorários":              "honorarios.jsf",
             "Custas Judiciais":        "custas.jsf",
-            "Correção, Juros e Multa": "correcao-juros.jsf",
+            "Correção, Juros e Multa": "parametros-atualizacao/parametros-atualizacao.jsf",
             "Liquidar":                "liquidacao.jsf",
             "Imprimir":                "imprimir.jsf",
             "Exportar":                "exportacao.jsf",
@@ -3889,6 +3889,7 @@ class PJECalcPlaywright:
         # formulario:competenciaInputDate + formulario:valor (saldo depositado)
 
         # DOM probe: detectar tipos reais dos elementos FGTS
+        _fgts_types = {}
         try:
             _fgts_types = self._page.evaluate("""() => {
                 const fields = ['tipoDeVerba','comporPrincipal','aliquota',
@@ -3906,6 +3907,52 @@ class PJECalcPlaywright:
             self._log(f"  ℹ FGTS DOM types: {_fgts_types}")
         except Exception:
             pass
+
+        # Se TODOS os campos são unknown, o formulário FGTS não renderizou —
+        # provavelmente a conversação Seam foi invalidada. Re-abrir o cálculo
+        # e navegar para FGTS via sidebar.
+        if _fgts_types and all(v == "unknown" for v in _fgts_types.values()):
+            self._log("  ⚠ FGTS: formulário não renderizou — re-abrindo cálculo via Home…")
+            try:
+                _home = f"{self.PJECALC_BASE}/pages/principal.jsf"
+                self._page.goto(_home, wait_until="networkidle", timeout=15000)
+                self._page.wait_for_timeout(1500)
+                _lb = self._page.locator(
+                    "select[class*='listaCalculosRecentes'], "
+                    "select[name*='listaCalculosRecentes']"
+                )
+                if _lb.count() > 0:
+                    _lb.first.locator("option").first.click()
+                    _lb.first.dblclick()
+                    self._page.wait_for_timeout(3000)
+                    self._capturar_base_calculo()
+                    self._log(f"  ✓ Cálculo re-aberto (conv={self._calculo_conversation_id})")
+                    # Navegar para FGTS via sidebar (nova conversação Seam)
+                    _nav2 = self._clicar_menu_lateral("FGTS", obrigatorio=False)
+                    if _nav2:
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(2000)
+                        self.mapear_campos("fase4_fgts_retry")
+                        # Re-probe
+                        try:
+                            _fgts_types = self._page.evaluate("""() => {
+                                const fields = ['tipoDeVerba','comporPrincipal','aliquota',
+                                                'multaDoFgts','tipoDoValorDaMulta','multa',
+                                                'multaDoArtigo467','incidenciaDoFgts'];
+                                const result = {};
+                                for (const f of fields) {
+                                    const sel = document.querySelector(`select[id*="${f}"]`);
+                                    const rad = document.querySelector(`input[type="radio"][id*="${f}"]`);
+                                    const chk = document.querySelector(`input[type="checkbox"][id*="${f}"]`);
+                                    result[f] = (sel ? 'select' : rad ? 'radio' : chk ? 'checkbox' : 'unknown');
+                                }
+                                return result;
+                            }""")
+                            self._log(f"  ℹ FGTS DOM types (retry): {_fgts_types}")
+                        except Exception:
+                            pass
+            except Exception as _e:
+                self._log(f"  ⚠ FGTS re-open falhou: {_e}")
 
         # Destino: PAGAR (ao reclamante) ou DEPOSITAR (em conta vinculada)
         _destino = fgts.get("destino", "PAGAR")
@@ -4994,9 +5041,14 @@ class PJECalcPlaywright:
             # Tipo de valor (CALCULADO / INFORMADO)
             tipo_valor = hon.get("tipo_valor", "CALCULADO")
             self._marcar_radio("tipoValor", tipo_valor) or self._selecionar("tipoValor", tipo_valor, obrigatorio=False)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
 
             # Base de apuração — fuzzy match com opções reais
-            base = hon.get("base_apuracao", "")
+            base = hon.get("base_apuracao", "") or ""
+            # Default: se tipo_valor é CALCULADO e base vazia, usar "Condenação"
+            if not base and tipo_valor == "CALCULADO":
+                base = "CONDENACAO"
             if base:
                 try:
                     opcoes = self._extrair_opcoes_select("baseParaApuracao")
@@ -5004,7 +5056,9 @@ class PJECalcPlaywright:
                     if match:
                         self._selecionar("baseParaApuracao", match, obrigatorio=False)
                     else:
-                        self._log(f"  ⚠ baseParaApuracao '{base}': sem match — ignorado")
+                        # Fallback: tentar valor direto (ex: CONDENACAO como option value)
+                        if not self._selecionar("baseParaApuracao", base, obrigatorio=False):
+                            self._log(f"  ⚠ baseParaApuracao '{base}': sem match — ignorado")
                 except Exception as _e:
                     self._log(f"  ⚠ baseParaApuracao: erro — {_e}")
 
