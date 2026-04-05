@@ -2010,8 +2010,10 @@ class PJECalcPlaywright:
             self._preencher_data("dataFim", data_final, False)
         if carga_diaria:
             self._preencher("cargaHorariaDiaria", str(int(carga_diaria)), False)
+            self._log(f"  ✓ cargaHorariaDiaria: {int(carga_diaria)}")
         if carga_semanal:
             self._preencher("cargaHorariaSemanal", str(int(carga_semanal)), False)
+            self._log(f"  ✓ cargaHorariaSemanal: {int(carga_semanal)}")
         if zerar_negativos is not None:
             self._marcar_checkbox("zerarValoresNegativos", bool(zerar_negativos))
 
@@ -5279,22 +5281,29 @@ class PJECalcPlaywright:
             cont = dados.get("contrato", {})
             # carga_horaria do contrato é MENSAL (ex: 220, 180).
             # PJE-Calc Parâmetros Gerais espera carga diária (8, 6) e semanal (44, 40).
+            # Fallback: usar jornada_diaria/jornada_semanal se carga_horaria não foi extraída.
             _ch_mensal = cont.get("carga_horaria")
-            _ch_diaria = None
-            _ch_semanal = None
-            if _ch_mensal:
+            _ch_diaria = cont.get("jornada_diaria")
+            _ch_semanal = cont.get("jornada_semanal")
+            if _ch_mensal and not _ch_diaria:
                 if _ch_mensal >= 210:
                     _ch_diaria = 8
-                    _ch_semanal = 44
+                    _ch_semanal = _ch_semanal or 44
                 elif _ch_mensal >= 175:
                     _ch_diaria = 8
-                    _ch_semanal = 40
+                    _ch_semanal = _ch_semanal or 40
                 elif _ch_mensal >= 155:
                     _ch_diaria = 6
-                    _ch_semanal = 36
+                    _ch_semanal = _ch_semanal or 36
                 else:
                     _ch_diaria = round(_ch_mensal / (4.5 * 5))
-                    _ch_semanal = round(_ch_diaria * 5)
+                    _ch_semanal = _ch_semanal or round(_ch_diaria * 5)
+            # Default: 8h diária / 44h semanal (CLT padrão) se nada foi extraído
+            if not _ch_diaria:
+                _ch_diaria = 8
+            if not _ch_semanal:
+                _ch_semanal = 44
+            self._log(f"  Carga horária: {_ch_diaria}h/dia, {_ch_semanal}h/semana")
             params_gerais = {
                 "carga_horaria_diaria": _ch_diaria,
                 "carga_horaria_semanal": _ch_semanal,
