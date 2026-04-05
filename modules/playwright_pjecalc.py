@@ -4186,7 +4186,135 @@ class PJECalcPlaywright:
             self._marcar_checkbox("lei11941", True)
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 5: Salvar INSS não confirmado.")
+        self._aguardar_ajax()
+
+        # ── Parâmetros das Ocorrências (manual linhas 590-608) ────────────────
+        # Após salvar parâmetros principais, acessar Parâmetros das Ocorrências
+        # para configurar alíquotas e clicar Confirmar (regera ocorrências).
+        self._configurar_parametros_ocorrencias_cs(cs)
+
         self._log("Fase 5 concluída.")
+
+    def _configurar_parametros_ocorrencias_cs(self, cs: dict) -> None:
+        """Acessa Parâmetros das Ocorrências da CS e clica Confirmar para regerar.
+
+        Manual PJE-Calc (linhas 590-608):
+        - Acessar via ícone Ocorrências (link/botão na página CS)
+        - Configurar Alíquota Segurado (Empregado/Doméstico/Fixa)
+        - Configurar Alíquota Empregador (Atividade Econômica/Período/Fixa)
+        - Clicar "Confirmar" para regerar ocorrências
+
+        Na maioria dos casos os defaults do PJE-Calc são adequados (Segurado Empregado
+        + Empresa padrão). Basta acessar e clicar Confirmar.
+        """
+        self._log("  → Parâmetros das Ocorrências CS…")
+        try:
+            # Procurar link/botão para acessar Parâmetros das Ocorrências
+            _OCORR_SELS = [
+                "[id$='cmdParametrosOcorrencias']",
+                "[id$='parametrosOcorrencias']",
+                "a:has-text('Parâmetros das Ocorrências')",
+                "a:has-text('Parametros das Ocorrencias')",
+                "a:has-text('Ocorrências')",
+                # Ícone de engrenagem/config típico do PJE-Calc
+                "a[title*='corrências']",
+                "a[title*='correncias']",
+                "img[title*='corrências']",
+                "img[title*='correncias']",
+            ]
+            _clicou = False
+            for _sel in _OCORR_SELS:
+                _el = self._page.locator(_sel)
+                if _el.count() > 0:
+                    _el.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1500)
+                    self._log(f"    ✓ Acessou Parâmetros das Ocorrências ({_sel})")
+                    _clicou = True
+                    break
+
+            if not _clicou:
+                # Fallback: procurar qualquer link que contenha "ocorrencias" na URL
+                _js_nav = self._page.evaluate("""() => {
+                    const links = [...document.querySelectorAll('a[href]')];
+                    for (const a of links) {
+                        const h = a.href.toLowerCase();
+                        if (h.includes('ocorrencia') || h.includes('parametros-ocorrencia')) {
+                            a.click();
+                            return a.href;
+                        }
+                    }
+                    return null;
+                }""")
+                if _js_nav:
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1500)
+                    self._log(f"    ✓ Acessou Parâmetros via JS: …{_js_nav[-40:]}")
+                    _clicou = True
+
+            if not _clicou:
+                self._log("    ⚠ Link Parâmetros das Ocorrências não encontrado — usando defaults")
+                return
+
+            # ── Configurar Alíquota Segurado (se especificado) ──
+            _aliq_seg = cs.get("aliquota_segurado", "")
+            if _aliq_seg:
+                # Opções: SEGURADO_EMPREGADO, EMPREGADO_DOMESTICO, FIXA
+                self._marcar_radio("aliquotaSegurado", _aliq_seg)
+                self._marcar_radio("tipoAliquotaSegurado", _aliq_seg)
+                if _aliq_seg.upper() == "FIXA" and cs.get("aliquota_segurado_valor"):
+                    self._preencher("aliquotaSeguradoFixa",
+                                    _fmt_br(str(cs["aliquota_segurado_valor"])), False)
+                self._log(f"    ✓ Alíquota Segurado: {_aliq_seg}")
+
+            # ── Configurar Alíquota Empregador (se especificado) ──
+            _aliq_emp = cs.get("aliquota_empregador", "")
+            if _aliq_emp:
+                self._marcar_radio("tipoAliquotaEmpregador", _aliq_emp)
+                self._log(f"    ✓ Alíquota Empregador: {_aliq_emp}")
+
+            # ── Clicar Confirmar para regerar ocorrências ──
+            # Auto-confirmar possível dialog
+            self._page.once("dialog", lambda d: d.accept())
+
+            _CONFIRMAR_SELS = [
+                "[id$='confirmar']",
+                "input[value='Confirmar']",
+                "input[type='submit'][value='Confirmar']",
+                "input[type='button'][value='Confirmar']",
+                "button:has-text('Confirmar')",
+            ]
+            for _sel in _CONFIRMAR_SELS:
+                _btn = self._page.locator(_sel)
+                if _btn.count() > 0:
+                    _btn.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(2000)
+                    self._log(f"    ✓ Confirmar CS ocorrências executado ({_sel})")
+                    return
+
+            # Fallback JS
+            _js_conf = self._page.evaluate("""() => {
+                const els = [...document.querySelectorAll('input[type="submit"], input[type="button"], button')];
+                for (const el of els) {
+                    const txt = (el.value || el.textContent || '').toLowerCase();
+                    if (txt.includes('confirmar')) {
+                        el.click();
+                        return el.id || el.value || 'found';
+                    }
+                }
+                return null;
+            }""")
+            if _js_conf:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(2000)
+                self._log(f"    ✓ Confirmar CS via JS: {_js_conf}")
+                return
+
+            self._log("    ⚠ Botão Confirmar não encontrado — ocorrências CS mantidas com defaults")
+
+        except Exception as e:
+            self._log(f"    ⚠ Parâmetros Ocorrências CS: {e}")
 
     # ── Fase 5b: Cartão de Ponto ──────────────────────────────────────────────
 
@@ -4897,7 +5025,70 @@ class PJECalcPlaywright:
                 f" (situação={situacao}, abono={abono}, dobra={dobra})"
             )
 
+        # ── Regerar Férias (manual: "Clicar 'Regerar Férias' após alteração") ──
+        # Necessário especialmente para férias coletivas e quando há alteração de status
+        self._regerar_ferias()
+
         self._log("Fase 5d concluída.")
+
+    def _regerar_ferias(self) -> bool:
+        """Clica em 'Regerar Férias' na aba Férias para atualizar ocorrências.
+
+        Manual PJE-Calc (Férias Coletivas, linha 248):
+        "Informar data de inicio para indicar ferias proporcionais.
+         Clicar 'Regerar Ferias' apos alteracao."
+
+        Também necessário após alterações de status (Indenizadas, Gozadas Parcialmente).
+        """
+        self._log("  → Regerar férias…")
+        try:
+            # Auto-confirmar dialog de confirmação (similar ao Regerar Verbas)
+            self._page.once("dialog", lambda d: d.accept())
+
+            # Scroll para garantir visibilidade
+            self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            self._page.wait_for_timeout(300)
+
+            _REGERAR_SELS = [
+                "[id$='regerarFerias']",
+                "input[value='Regerar Férias']",
+                "input[value='Regerar Ferias']",
+                "input[type='submit'][value*='egerar']",
+                "input[type='button'][value*='egerar']",
+                "button:has-text('Regerar')",
+            ]
+            for _sel in _REGERAR_SELS:
+                _btn = self._page.locator(_sel)
+                if _btn.count() > 0:
+                    _btn.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(2000)
+                    self._log(f"  ✓ Regerar férias executado ({_sel})")
+                    return True
+
+            # Fallback JS
+            _js_clicked = self._page.evaluate("""() => {
+                const els = [...document.querySelectorAll('input[type="submit"], input[type="button"], button')];
+                for (const el of els) {
+                    const txt = (el.value || el.textContent || '').toLowerCase();
+                    if (txt.includes('regerar')) {
+                        el.click();
+                        return el.id || el.value || 'found';
+                    }
+                }
+                return null;
+            }""")
+            if _js_clicked:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(2000)
+                self._log(f"  ✓ Regerar férias via JS: {_js_clicked}")
+                return True
+
+            self._log("  ⚠ Botão 'Regerar Férias' não encontrado — pode ser desnecessário se não há férias coletivas")
+            return False
+        except Exception as e:
+            self._log(f"  ⚠ Regerar férias: {e}")
+            return False
 
     # ── Fase 6: Parâmetros de Atualização (Correção, Juros e Multa) ──────────
 
