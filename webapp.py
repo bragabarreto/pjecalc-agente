@@ -1094,163 +1094,172 @@ async def executar_automacao_sse(
         # Fix 5: registrar lock de automação — liberado no finally
         _sessoes_automacao[sessao_id] = _time_mod.time()
 
-        # Fix 6: emitir aviso CNJ se inválido
-        if _cnj_aviso:
-            yield f"data: {json.dumps({'msg': f'⚠ {_cnj_aviso}'})}\n\n"
-
-        # ── Persistência por processo ──────────────────────────────
         _exec_dir = None
         _log_acumulado: list[str] = []
         _persist_enabled = os.environ.get("CALCULATION_PERSISTENCE", "true").lower() == "true"
-        if _persist_enabled:
-            try:
-                from infrastructure.calculation_store import CalculationStore
-                _store = CalculationStore()
-                _num_proc = dados.get("processo", {}).get("numero", sessao_id)
-                _exec_dir = _store.criar_execucao(_num_proc, sessao_id)
-                _store.salvar_extracao_llm(_exec_dir, dados)
-                _store.salvar_parametros_enviados(_exec_dir, verbas_mapeadas)
-                _store.salvar_metadados(_exec_dir, {**dados, "_status": "automacao_iniciada"})
-                # Salvar referência no banco
-                db3 = SessionLocal()
+
+        try:
+
+            # Fix 6: emitir aviso CNJ se inválido
+            if _cnj_aviso:
+                yield f"data: {json.dumps({'msg': f'⚠ {_cnj_aviso}'})}\n\n"
+
+            # ── Persistência por processo ──────────────────────────────
+            if _persist_enabled:
                 try:
-                    _calc = RepositorioCalculo(db3).buscar_sessao(sessao_id)
-                    if _calc:
-                        _calc.diretorio_calculo = str(_exec_dir)
-                        db3.commit()
-                finally:
-                    db3.close()
-            except Exception as _e:
-                logger.warning(f"calculation_store_init_failed: {_e}")
-                _exec_dir = None
-
-        # Aguardar PJE-Calc ficar disponível.
-        _tomcat_timeout = PJECALC_TOMCAT_TIMEOUT
-        _pjecalc_url = PJECALC_LOCAL_URL
-        elapsed = 0
-        _ultimo_status_log = -30
-        while elapsed < _tomcat_timeout:
-            try:
-                async with httpx.AsyncClient(timeout=5.0) as client:
-                    r = await client.get(_pjecalc_url)
-                    if r.status_code in (200, 302):
-                        yield f"data: {json.dumps({'msg': f'PJE-Calc pronto (HTTP {r.status_code}) — iniciando Playwright…'})}\n\n"
-                        break
-                    if r.status_code == 404:
-                        if elapsed - _ultimo_status_log >= 30:
-                            yield f"data: {json.dumps({'msg': f'Tomcat ativo — aguardando deploy da webapp… ({elapsed}s)'})}\n\n"
-                            _ultimo_status_log = elapsed
-            except Exception:
-                if elapsed - _ultimo_status_log >= 30:
-                    yield f"data: {json.dumps({'msg': f'Aguardando PJE-Calc… ({elapsed}s/{_tomcat_timeout}s)'})}\n\n"
-                    _ultimo_status_log = elapsed
-            await asyncio.sleep(10)
-            elapsed += 10
-        else:
-            _msg_erro = (
-                f"ERRO: PJE-Calc não respondeu em {_pjecalc_url} após {_tomcat_timeout}s. "
-            )
-            if _tomcat_timeout <= 60:
-                _msg_erro += "Abra o PJE-Calc Cidadão e aguarde carregar antes de iniciar a automação."
-            else:
-                _msg_erro += "Verifique /api/logs/java para diagnóstico."
-            yield f"data: {json.dumps({'msg': _msg_erro})}\n\n"
-            yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
-            return
-
-        import queue as _queue
-
-        loop = asyncio.get_event_loop()
-        parametrizacao_sse = dados.get("_parametrizacao") or {}
-        gen = preencher_como_generator(
-            dados, verbas_mapeadas, PJECALC_DIR, modo_oculto,
-            parametrizacao=parametrizacao_sse,
-            exec_dir=_exec_dir,
-        )
-
-        fila: _queue.Queue = _queue.Queue()
-
-        def _executar_gen():
-            """Roda em thread executor — coloca mensagens na fila."""
-            try:
-                while True:
+                    from infrastructure.calculation_store import CalculationStore
+                    _store = CalculationStore()
+                    _num_proc = dados.get("processo", {}).get("numero", sessao_id)
+                    _exec_dir = _store.criar_execucao(_num_proc, sessao_id)
+                    _store.salvar_extracao_llm(_exec_dir, dados)
+                    _store.salvar_parametros_enviados(_exec_dir, verbas_mapeadas)
+                    _store.salvar_metadados(_exec_dir, {**dados, "_status": "automacao_iniciada"})
+                    # Salvar referência no banco
+                    db3 = SessionLocal()
                     try:
-                        msg = next(gen)
-                        fila.put(("ok", msg))
-                        if msg == "[FIM DA EXECUÇÃO]":
-                            break
-                    except StopIteration:
-                        fila.put(("fim", None))
-                        break
-            except Exception as exc:
-                fila.put(("erro", str(exc)))
-
-        loop.run_in_executor(None, _executar_gen)
-
-        while True:
-            try:
-                kind, value = await loop.run_in_executor(
-                    None, lambda: fila.get(timeout=15)
-                )
-            except _queue.Empty:
-                # SSE comment keepalive — mantém conexão HTTP viva sem disparar onmessage
-                yield ": keepalive\n\n"
-                continue
-
-            if kind == "ok":
-                msg = value
-                _log_acumulado.append(msg)
-                yield f"data: {json.dumps({'msg': msg})}\n\n"
-
-                # Parse PROGRESS messages para barra de progresso
-                if msg.startswith("PROGRESS:"):
-                    try:
-                        parts = msg.split(":")[1].split("/")
-                        yield f"data: {json.dumps({'type': 'progress', 'current': int(parts[0]), 'total': int(parts[1])})}\n\n"
-                    except (IndexError, ValueError):
-                        pass
-
-                # Detectar .PJC gerado e persistir
-                if msg.startswith("PJC_GERADO:"):
-                    caminho = msg.split(":", 1)[1].strip()
-                    db2 = SessionLocal()
-                    try:
-                        RepositorioCalculo(db2).marcar_exportado(sessao_id, caminho)
-                        db2.commit()
+                        _calc = RepositorioCalculo(db3).buscar_sessao(sessao_id)
+                        if _calc:
+                            _calc.diretorio_calculo = str(_exec_dir)
+                            db3.commit()
                     finally:
-                        db2.close()
-                    # Copiar PJC para diretório de persistência
-                    if _exec_dir and _persist_enabled:
+                        db3.close()
+                except Exception as _e:
+                    logger.warning(f"calculation_store_init_failed: {_e}")
+                    _exec_dir = None
+
+            # Aguardar PJE-Calc ficar disponível.
+            _tomcat_timeout = PJECALC_TOMCAT_TIMEOUT
+            _pjecalc_url = PJECALC_LOCAL_URL
+            elapsed = 0
+            _ultimo_status_log = -30
+            while elapsed < _tomcat_timeout:
+                try:
+                    async with httpx.AsyncClient(timeout=5.0) as client:
+                        r = await client.get(_pjecalc_url)
+                        if r.status_code in (200, 302):
+                            yield f"data: {json.dumps({'msg': f'PJE-Calc pronto (HTTP {r.status_code}) — iniciando Playwright…'})}\n\n"
+                            break
+                        if r.status_code == 404:
+                            if elapsed - _ultimo_status_log >= 30:
+                                yield f"data: {json.dumps({'msg': f'Tomcat ativo — aguardando deploy da webapp… ({elapsed}s)'})}\n\n"
+                                _ultimo_status_log = elapsed
+                except Exception:
+                    if elapsed - _ultimo_status_log >= 30:
+                        yield f"data: {json.dumps({'msg': f'Aguardando PJE-Calc… ({elapsed}s/{_tomcat_timeout}s)'})}\n\n"
+                        _ultimo_status_log = elapsed
+                await asyncio.sleep(10)
+                elapsed += 10
+            else:
+                _msg_erro = (
+                    f"ERRO: PJE-Calc não respondeu em {_pjecalc_url} após {_tomcat_timeout}s. "
+                )
+                if _tomcat_timeout <= 60:
+                    _msg_erro += "Abra o PJE-Calc Cidadão e aguarde carregar antes de iniciar a automação."
+                else:
+                    _msg_erro += "Verifique /api/logs/java para diagnóstico."
+                yield f"data: {json.dumps({'msg': _msg_erro})}\n\n"
+                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                return
+
+            import queue as _queue
+
+            loop = asyncio.get_event_loop()
+            parametrizacao_sse = dados.get("_parametrizacao") or {}
+            gen = preencher_como_generator(
+                dados, verbas_mapeadas, PJECALC_DIR, modo_oculto,
+                parametrizacao=parametrizacao_sse,
+                exec_dir=_exec_dir,
+            )
+
+            fila: _queue.Queue = _queue.Queue()
+
+            def _executar_gen():
+                """Roda em thread executor — coloca mensagens na fila."""
+                try:
+                    while True:
                         try:
-                            from infrastructure.calculation_store import CalculationStore
-                            CalculationStore().copiar_pjc(_exec_dir, caminho)
-                            CalculationStore().atualizar_status(_exec_dir, "pjc_exportado")
-                        except Exception:
+                            msg = next(gen)
+                            fila.put(("ok", msg))
+                            if msg == "[FIM DA EXECUÇÃO]":
+                                break
+                        except StopIteration:
+                            fila.put(("fim", None))
+                            break
+                except Exception as exc:
+                    fila.put(("erro", str(exc)))
+
+            loop.run_in_executor(None, _executar_gen)
+
+            while True:
+                try:
+                    kind, value = await loop.run_in_executor(
+                        None, lambda: fila.get(timeout=15)
+                    )
+                except _queue.Empty:
+                    # SSE comment keepalive — mantém conexão HTTP viva sem disparar onmessage
+                    yield ": keepalive\n\n"
+                    continue
+
+                if kind == "ok":
+                    msg = value
+                    _log_acumulado.append(msg)
+                    yield f"data: {json.dumps({'msg': msg})}\n\n"
+
+                    # Parse PROGRESS messages para barra de progresso
+                    if msg.startswith("PROGRESS:"):
+                        try:
+                            parts = msg.split(":")[1].split("/")
+                            yield f"data: {json.dumps({'type': 'progress', 'current': int(parts[0]), 'total': int(parts[1])})}\n\n"
+                        except (IndexError, ValueError):
                             pass
-                    # Fix 7: protocolo SSE CalcMACHINE
-                    yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
-                if msg == "[FIM DA EXECUÇÃO]":
+
+                    # Detectar .PJC gerado e persistir
+                    if msg.startswith("PJC_GERADO:"):
+                        caminho = msg.split(":", 1)[1].strip()
+                        db2 = SessionLocal()
+                        try:
+                            RepositorioCalculo(db2).marcar_exportado(sessao_id, caminho)
+                            db2.commit()
+                        finally:
+                            db2.close()
+                        # Copiar PJC para diretório de persistência
+                        if _exec_dir and _persist_enabled:
+                            try:
+                                from infrastructure.calculation_store import CalculationStore
+                                CalculationStore().copiar_pjc(_exec_dir, caminho)
+                                CalculationStore().atualizar_status(_exec_dir, "pjc_exportado")
+                            except Exception:
+                                pass
+                        # Fix 7: protocolo SSE CalcMACHINE
+                        yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
+                    if msg == "[FIM DA EXECUÇÃO]":
+                        break
+                elif kind == "fim":
+                    yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
                     break
-            elif kind == "fim":
-                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
-                break
-            elif kind == "erro":
-                # Fix 7: usar ERRO_EXPORTAVEL para erros com contexto
-                yield f"data: ERRO_EXPORTAVEL::Automação: {value}\n\n"
-                _log_acumulado.append(f"ERRO: {value}")
-                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
-                break
+                elif kind == "erro":
+                    # Fix 7: usar ERRO_EXPORTAVEL para erros com contexto
+                    yield f"data: ERRO_EXPORTAVEL::Automação: {value}\n\n"
+                    _log_acumulado.append(f"ERRO: {value}")
+                    yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                    break
 
-        # Salvar log acumulado no diretório de persistência
-        if _exec_dir and _persist_enabled and _log_acumulado:
-            try:
-                from infrastructure.calculation_store import CalculationStore
-                CalculationStore().salvar_log(_exec_dir, _log_acumulado)
-            except Exception:
-                pass
+        except Exception as _exc_sse:
+            logger.exception(f"SSE gerador_sse exception [{sessao_id}]: {_exc_sse}")
+            yield f"data: ERRO_EXPORTAVEL::Erro interno da automação: {_exc_sse}\n\n"
+            yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
 
-        # Fix 5: liberar lock de automação
-        _sessoes_automacao.pop(sessao_id, None)
+        finally:
+            # Salvar log acumulado no diretório de persistência
+            if _exec_dir and _persist_enabled and _log_acumulado:
+                try:
+                    from infrastructure.calculation_store import CalculationStore
+                    CalculationStore().salvar_log(_exec_dir, _log_acumulado)
+                except Exception:
+                    pass
+
+            # Fix 5: liberar lock de automação — SEMPRE, mesmo em exceção
+            _sessoes_automacao.pop(sessao_id, None)
 
     return StreamingResponse(
         gerador_sse(),
@@ -1526,17 +1535,31 @@ def _tarefa_processar_sentenca(
         repo.salvar_previa(sessao_id, previa_texto, previa_html)
 
     except Exception as e:
-        import logging
-        logging.getLogger("pjecalc_agent.webapp").error(
+        logger.error(
             f"Erro no processamento da sentença [{sessao_id}]: {e}", exc_info=True
         )
         try:
             calculo = db.query(Calculo).filter_by(sessao_id=sessao_id).first()
             if calculo:
                 calculo.status = "erro"
+                calculo.previa_texto = f"ERRO: {str(e)[:500]}"
                 db.commit()
-        except Exception:
-            pass
+            else:
+                # Calculo ainda não existia — criar registro de erro para o usuário ver
+                numero = f"SESS-{sessao_id[:8]}"
+                repo.criar_calculo(
+                    sessao_id=sessao_id,
+                    numero_processo=numero,
+                    dados={"_erro": str(e)[:500]},
+                    verbas_mapeadas={},
+                )
+                calculo = db.query(Calculo).filter_by(sessao_id=sessao_id).first()
+                if calculo:
+                    calculo.status = "erro"
+                    calculo.previa_texto = f"ERRO: {str(e)[:500]}"
+                    db.commit()
+        except Exception as db_err:
+            logger.error(f"Falha ao salvar erro no banco [{sessao_id}]: {db_err}")
     finally:
         db.close()
         # Remover da lista de sessões em processamento

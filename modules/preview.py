@@ -133,6 +133,43 @@ def gerar_previa(
             linhas.append(f"   [{i}] {dt_inicio} a {dt_fim} — {dias} dia(s), {situacao}")
     linhas.append("")
 
+    # 2d. Duração do Trabalho / Cartão de Ponto
+    dur = dados.get("duracao_trabalho") or {}
+    tipo_ap = dur.get("tipo_apuracao")
+    if tipo_ap:
+        forma = dur.get("forma_apuracao_pjecalc") or "—"
+        adicional = dur.get("adicional_he_percentual")
+        adic_str = f"{int(adicional * 100)}%" if adicional else "—"
+        linhas += [
+            "DURAÇÃO DO TRABALHO / CARTÃO DE PONTO",
+            f"   Tipo Apuração   : {tipo_ap}",
+            f"   Forma PJE-Calc  : {forma}",
+            f"   Adicional HE    : {adic_str}",
+        ]
+        if tipo_ap == "apuracao_jornada":
+            entrada = dur.get("jornada_entrada") or "—"
+            saida = dur.get("jornada_saida") or "���"
+            interv = dur.get("intervalo_minutos")
+            interv_str = f"{interv} min" if interv else "—"
+            linhas.append(f"   Horário         : {entrada} às {saida} (intervalo {interv_str})")
+            dias_semana = []
+            for d, label in [("seg","Seg"),("ter","Ter"),("qua","Qua"),
+                             ("qui","Qui"),("sex","Sex"),("sab","Sáb"),("dom","Dom")]:
+                v = dur.get(f"jornada_{d}")
+                dias_semana.append(f"{label}={v}h" if v else f"{label}=���")
+            linhas.append(f"   Jornada/dia     : {', '.join(dias_semana)}")
+            linhas.append(f"   Semanal/Mensal  : {dur.get('jornada_semanal_cartao') or '—'}h / {dur.get('jornada_mensal_cartao') or '—'}h")
+        elif tipo_ap == "quantidade_fixa":
+            linhas.append(f"   HE/Mês          : {dur.get('qt_horas_extras_mes') or '—'}")
+            linhas.append(f"   HE/Dia          : {dur.get('qt_horas_extras_dia') or '—'}")
+        linhas.append("")
+    else:
+        linhas += [
+            "DURAÇÃO DO TRABALHO / CARTÃO DE PONTO",
+            "   Não extraído (sem condenação em horas extras ou dados insuficientes)",
+            "",
+        ]
+
     # 3. Verbas
     total_verbas = len(todas_verbas) + len(reflexas)
     linhas.append(f"VERBAS ({total_verbas} identificadas)")

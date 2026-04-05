@@ -507,6 +507,221 @@
       </div>
     </div>
 
+    <!-- ═══ 5B. DURAÇÃO DO TRABALHO / CARTÃO DE PONTO ═══ -->
+    {% set dur = dados.get('duracao_trabalho', {}) or {} %}
+    {% set has_dur = dur.get('tipo_apuracao') %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-duracao-trabalho')">
+        5B. Duração do Trabalho / Cartão de Ponto
+        {% if has_dur %}
+        <span class="confianca-badge {{ 'conf-alta' if (dur.get('confianca', 0) or 0) >= 0.8 else ('conf-media' if (dur.get('confianca', 0) or 0) >= 0.5 else 'conf-baixa') }}">
+          {{ ((dur.get('confianca', 0) or 0) * 100)|int }}% confiança
+        </span>
+        {% else %}
+        <span class="confianca-badge conf-media">Não extraído</span>
+        {% endif %}
+      </div>
+      <div class="secao-corpo {{ 'recolhido' if not has_dur }}" id="s-duracao-trabalho">
+
+        <!-- Tipo de apuração -->
+        <div class="campos-grid">
+          <div class="campo-form campo-col2">
+            <label>Tipo de Apuração de Horas Extras</label>
+            <select onchange="salvarCampo('duracao_trabalho.tipo_apuracao', this.value, this); toggleApuracao(this.value)">
+              <option value="">— sem horas extras —</option>
+              <option value="apuracao_jornada" {{ 'selected' if dur.get('tipo_apuracao') == 'apuracao_jornada' }}>Apuração por Jornada (horário entrada/saída)</option>
+              <option value="quantidade_fixa" {{ 'selected' if dur.get('tipo_apuracao') == 'quantidade_fixa' }}>Quantidade Fixa de HE (mensal/diária)</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Forma PJE-Calc</label>
+            <select onchange="salvarCampo('duracao_trabalho.forma_apuracao_pjecalc', this.value, this)">
+              <option value="NAP" {{ 'selected' if dur.get('forma_apuracao_pjecalc', 'NAP') == 'NAP' }}>NAP — Não Apurar</option>
+              <option value="HJD" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HJD' }}>HJD — Jornada Diária</option>
+              <option value="HST" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HST' }}>HST — Súmula TST (qtd fixa)</option>
+              <option value="APH" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'APH' }}>APH — Horas Separadas</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Adicional HE (%)</label>
+            <input type="number" step="0.01" min="0" max="2"
+                   value="{{ dur.get('adicional_he_percentual', '') or '' }}"
+                   onchange="salvarCampo('duracao_trabalho.adicional_he_percentual', this.value, this)"
+                   placeholder="0.50 = 50%">
+          </div>
+        </div>
+
+        <!-- Bloco: Apuração por Jornada -->
+        <div id="bloco-apuracao-jornada" style="{{ '' if dur.get('tipo_apuracao') == 'apuracao_jornada' else 'display:none;' }}">
+          <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px;">
+            <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Horário e Intervalo</legend>
+            <div class="campos-grid">
+              <div class="campo-form">
+                <label>Entrada (HH:MM)</label>
+                <input type="text" placeholder="07:00"
+                       value="{{ dur.get('jornada_entrada', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_entrada', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Saída (HH:MM)</label>
+                <input type="text" placeholder="17:00"
+                       value="{{ dur.get('jornada_saida', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_saida', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Intervalo (min)</label>
+                <input type="number" min="0" max="180"
+                       value="{{ dur.get('intervalo_minutos', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.intervalo_minutos', this.value, this)"
+                       placeholder="60">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px;">
+            <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Horas por Dia da Semana (horas brutas no local)</legend>
+            <div class="campos-grid" style="grid-template-columns: repeat(7, 1fr);">
+              <div class="campo-form">
+                <label>Seg</label>
+                <input type="number" step="0.5" min="0" max="24"
+                       value="{{ dur.get('jornada_seg', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_seg', this.value, this); recalcJornadas()">
+              </div>
+              <div class="campo-form">
+                <label>Ter</label>
+                <input type="number" step="0.5" min="0" max="24"
+                       value="{{ dur.get('jornada_ter', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_ter', this.value, this); recalcJornadas()">
+              </div>
+              <div class="campo-form">
+                <label>Qua</label>
+                <input type="number" step="0.5" min="0" max="24"
+                       value="{{ dur.get('jornada_qua', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_qua', this.value, this); recalcJornadas()">
+              </div>
+              <div class="campo-form">
+                <label>Qui</label>
+                <input type="number" step="0.5" min="0" max="24"
+                       value="{{ dur.get('jornada_qui', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_qui', this.value, this); recalcJornadas()">
+              </div>
+              <div class="campo-form">
+                <label>Sex</label>
+                <input type="number" step="0.5" min="0" max="24"
+                       value="{{ dur.get('jornada_sex', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_sex', this.value, this); recalcJornadas()">
+              </div>
+              <div class="campo-form">
+                <label>Sáb</label>
+                <input type="number" step="0.5" min="0" max="24"
+                       value="{{ dur.get('jornada_sab', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_sab', this.value, this); recalcJornadas()">
+              </div>
+              <div class="campo-form">
+                <label>Dom</label>
+                <input type="number" step="0.5" min="0" max="24"
+                       value="{{ dur.get('jornada_dom', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_dom', this.value, this); recalcJornadas()">
+              </div>
+            </div>
+            <div class="campos-grid" style="margin-top:8px;">
+              <div class="campo-form">
+                <label>Jornada Semanal (h)</label>
+                <input type="number" step="0.1" min="0" id="dur-semanal"
+                       value="{{ dur.get('jornada_semanal_cartao', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_semanal_cartao', this.value, this)">
+              </div>
+              <div class="campo-form">
+                <label>Jornada Mensal (h)</label>
+                <input type="number" step="0.1" min="0" id="dur-mensal"
+                       value="{{ dur.get('jornada_mensal_cartao', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.jornada_mensal_cartao', this.value, this)">
+              </div>
+            </div>
+          </fieldset>
+
+          <!-- Flags -->
+          <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:12px;">
+            <div class="checkbox-row">
+              <input type="checkbox" id="dur-feriados"
+                     {{ 'checked' if dur.get('trabalha_feriados') }}
+                     onchange="salvarCampo('duracao_trabalho.trabalha_feriados', this.checked ? 'true' : 'false', this)">
+              <label for="dur-feriados">Trabalha em Feriados</label>
+            </div>
+            <div class="checkbox-row">
+              <input type="checkbox" id="dur-domingos"
+                     {{ 'checked' if dur.get('trabalha_domingos') }}
+                     onchange="salvarCampo('duracao_trabalho.trabalha_domingos', this.checked ? 'true' : 'false', this)">
+              <label for="dur-domingos">Trabalha aos Domingos</label>
+            </div>
+          </div>
+
+          <!-- Horário Noturno -->
+          <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px;">
+            <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Horário Noturno</legend>
+            <div style="display:flex; gap:20px; flex-wrap:wrap;">
+              <div class="checkbox-row">
+                <input type="checkbox" id="dur-noturno"
+                       {{ 'checked' if dur.get('apurar_hora_noturna') }}
+                       onchange="salvarCampo('duracao_trabalho.apurar_hora_noturna', this.checked ? 'true' : 'false', this); document.getElementById('noturno-campos').style.display = this.checked ? '' : 'none';">
+                <label for="dur-noturno">Apurar Horas Noturnas</label>
+              </div>
+              <div class="checkbox-row">
+                <input type="checkbox" id="dur-reducao-ficta"
+                       {{ 'checked' if dur.get('reducao_ficta', True) }}
+                       onchange="salvarCampo('duracao_trabalho.reducao_ficta', this.checked ? 'true' : 'false', this)">
+                <label for="dur-reducao-ficta">Redução Ficta (52m30s)</label>
+              </div>
+              <div class="checkbox-row">
+                <input type="checkbox" id="dur-prorrogacao"
+                       {{ 'checked' if dur.get('prorrogacao_horario_noturno') }}
+                       onchange="salvarCampo('duracao_trabalho.prorrogacao_horario_noturno', this.checked ? 'true' : 'false', this)">
+                <label for="dur-prorrogacao">Prorrogação Noturno (Súm. 60)</label>
+              </div>
+            </div>
+            <div id="noturno-campos" class="campos-grid" style="{{ '' if dur.get('apurar_hora_noturna') else 'display:none;' }} margin-top:8px;">
+              <div class="campo-form">
+                <label>Início Noturno</label>
+                <input type="text" value="{{ dur.get('hora_inicio_noturno', '22:00') or '22:00' }}"
+                       onchange="salvarCampo('duracao_trabalho.hora_inicio_noturno', this.value, this)"
+                       placeholder="22:00" maxlength="5">
+              </div>
+              <div class="campo-form">
+                <label>Fim Noturno</label>
+                <input type="text" value="{{ dur.get('hora_fim_noturno', '05:00') or '05:00' }}"
+                       onchange="salvarCampo('duracao_trabalho.hora_fim_noturno', this.value, this)"
+                       placeholder="05:00" maxlength="5">
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- Bloco: Quantidade Fixa -->
+        <div id="bloco-quantidade-fixa" style="{{ '' if dur.get('tipo_apuracao') == 'quantidade_fixa' else 'display:none;' }}">
+          <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px;">
+            <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Quantidade Fixa de Horas Extras</legend>
+            <div class="campos-grid">
+              <div class="campo-form">
+                <label>HE por Mês</label>
+                <input type="number" step="0.5" min="0"
+                       value="{{ dur.get('qt_horas_extras_mes', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.qt_horas_extras_mes', this.value, this)"
+                       placeholder="50">
+              </div>
+              <div class="campo-form">
+                <label>HE por Dia</label>
+                <input type="number" step="0.5" min="0"
+                       value="{{ dur.get('qt_horas_extras_dia', '') or '' }}"
+                       onchange="salvarCampo('duracao_trabalho.qt_horas_extras_dia', this.value, this)"
+                       placeholder="2">
+              </div>
+            </div>
+          </fieldset>
+        </div>
+
+      </div>
+    </div>
+
     <!-- ═══ 6. PRESCRIÇÃO ═══ -->
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-prescricao')">
@@ -1126,6 +1341,43 @@ const SESSAO_ID = "{{ sessao_id }}";
 function toggleSecao(id) {
   const corpo = document.getElementById(id);
   if (corpo) corpo.classList.toggle('recolhido');
+}
+
+// Toggle Duração do Trabalho: mostrar/esconder blocos conforme tipo de apuração
+function toggleApuracao(tipo) {
+  const blocoJornada = document.getElementById('bloco-apuracao-jornada');
+  const blocoFixa = document.getElementById('bloco-quantidade-fixa');
+  if (blocoJornada) blocoJornada.style.display = (tipo === 'apuracao_jornada') ? '' : 'none';
+  if (blocoFixa) blocoFixa.style.display = (tipo === 'quantidade_fixa') ? '' : 'none';
+  // Auto-ajustar forma PJE-Calc
+  const formaSel = document.querySelector('select[onchange*="forma_apuracao_pjecalc"]');
+  if (formaSel) {
+    if (tipo === 'apuracao_jornada') formaSel.value = 'HJD';
+    else if (tipo === 'quantidade_fixa') formaSel.value = 'HST';
+    else formaSel.value = 'NAP';
+    salvarCampo('duracao_trabalho.forma_apuracao_pjecalc', formaSel.value, formaSel);
+  }
+}
+
+// Recalcular jornada semanal/mensal a partir dos campos diários
+function recalcJornadas() {
+  const dias = ['seg','ter','qua','qui','sex','sab','dom'];
+  let total = 0;
+  for (const d of dias) {
+    const inp = document.querySelector('input[onchange*="jornada_' + d + '"]');
+    if (inp && inp.value) total += parseFloat(inp.value) || 0;
+  }
+  const semEl = document.getElementById('dur-semanal');
+  const menEl = document.getElementById('dur-mensal');
+  if (semEl) {
+    semEl.value = total.toFixed(1);
+    salvarCampo('duracao_trabalho.jornada_semanal_cartao', semEl.value, semEl);
+  }
+  if (menEl) {
+    const mensal = (total * 30 / 7).toFixed(1);
+    menEl.value = mensal;
+    salvarCampo('duracao_trabalho.jornada_mensal_cartao', menEl.value, menEl);
+  }
 }
 
 // Recolher/expandir verbas

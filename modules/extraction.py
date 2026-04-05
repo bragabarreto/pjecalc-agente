@@ -562,6 +562,72 @@ seguindo rigorosamente o guia de extração e o schema JSON abaixo.
   Se jornada_semanal não estiver explícita mas jornada_diaria sim: calcular como jornada_diaria × dias_por_semana
   (padrão: 6 dias para 44h/sem, 5 dias para 40h/sem, proporcional para outros)
 
+**DURAÇÃO DO TRABALHO / CARTÃO DE PONTO** → preenche "duracao_trabalho":
+Extrair SEMPRE que houver condenação em horas extras. Esta seção alimenta o Cartão de Ponto do PJE-Calc.
+
+- tipo_apuracao: como a sentença define a jornada para apuração de horas extras:
+    "apuracao_jornada" → a sentença fixa horários de entrada/saída por dia da semana
+      (ex: "07h às 17h, seg a sex", "jornada das 08:00 às 18:00 com 1h de intervalo")
+    "quantidade_fixa" → a sentença fixa quantidade mensal/diária de HE sem detalhar jornada
+      (ex: "50 horas extras mensais", "2h extras por dia")
+    null → não há condenação em horas extras ou informação insuficiente
+
+- forma_apuracao_pjecalc: mapear para o enum do PJE-Calc:
+    "HST" → Horas Extras por Súmula/TST (quantidade fixa mensal)
+    "HJD" → Jornada Diária (apuração por horário de entrada/saída)
+    "APH" → Apuração por Horas Separadas (1ª e 2ª faixas de adicional separadas)
+    "NAP" → Não Apurar (sem horas extras)
+    Regra: "apuracao_jornada" → "HJD" | "quantidade_fixa" → "HST" | null → "NAP"
+
+- jornada_entrada: horário de início (string "HH:MM", ex: "07:00") — extrair de "das 07h às", "entrada às 7h"
+- jornada_saida: horário de término (string "HH:MM", ex: "17:00") — extrair de "às 17h", "saída às 17:00"
+- intervalo_minutos: duração do intervalo intrajornada em MINUTOS (int, ex: 60 para 1h)
+  Extrair de "com 1h de intervalo", "intervalo de 30 minutos", "1 hora de almoço"
+  Se não explícito: inferir 60 min para jornada ≥ 6h (art. 71 CLT), 15 min para 4h-6h
+
+- jornada_seg: horas de trabalho na segunda-feira (float, ex: 9.0 = 9 horas no local)
+- jornada_ter: idem terça
+- jornada_qua: idem quarta
+- jornada_qui: idem quinta
+- jornada_sex: idem sexta
+- jornada_sab: idem sábado (0.0 se não trabalha)
+- jornada_dom: idem domingo (0.0 se não trabalha)
+  Calcular: (horario_saida - horario_entrada) para cada dia mencionado.
+  Ex: "07h às 17h com 1h intervalo, seg a sex" → seg=10.0, ter=10.0, ..., sex=10.0, sab=0.0, dom=0.0
+  ⚠️ Esses valores são horas BRUTAS no local (sem descontar intervalo) — o PJE-Calc desconta o intervalo
+
+- qt_horas_extras_mes: para tipo="quantidade_fixa", total de HE mensais (float, ex: 50.0)
+- qt_horas_extras_dia: para tipo="quantidade_fixa", HE diárias (float, ex: 1.0)
+
+- jornada_semanal_cartao: total de horas semanais para o cartão de ponto (float)
+  Calcular: soma de jornada_seg a jornada_dom (ex: 10×5 = 50.0)
+- jornada_mensal_cartao: média mensal de horas (float)
+  Calcular: jornada_semanal_cartao × 4.5 ou jornada_semanal_cartao × (30/7)
+
+- adicional_he_percentual: percentual do adicional de horas extras (float, ex: 0.50 para 50%)
+  Extrair de "adicional de 50%", "horas extras com adicional de 70%"
+  Default: 0.50 (50%) se não especificado
+
+- trabalha_feriados: bool — true se sentença indica labor em feriados
+- trabalha_domingos: bool — true se jornada_dom > 0 ou sentença menciona trabalho dominical
+- sabados_trabalhados: lista de datas específicas de sábados trabalhados (DD/MM/AAAA), se mencionados
+  Ex: ["29/11/2025", "13/12/2025"] — extrair de "sábados 29/11 e 13/12" ou similar
+
+- apurar_hora_noturna: bool — true se sentença condena em adicional noturno ou menciona trabalho noturno
+  Extrair de "adicional noturno", "horas noturnas", "labor noturno", "22h às 05h"
+- hora_inicio_noturno: string "HH:MM" — início do período noturno (default "22:00" para urbano)
+  Rural: varia conforme atividade (pecuária "20:00", lavoura "21:00")
+- hora_fim_noturno: string "HH:MM" — fim do período noturno (default "05:00" para urbano)
+- reducao_ficta: bool — true se deve aplicar redução ficta (hora noturna = 52m30s). Default true
+  Extrair de "sem redução ficta" → false, "com hora reduzida" → true
+- prorrogacao_horario_noturno: bool — true se sentença menciona prorrogação do horário noturno
+  (Súmula 60 TST: labor após 05h em continuidade a jornada noturna mantém adicional)
+  Extrair de "prorrogação noturna", "Súmula 60", "trabalho após 05h"
+- dias_especiais: lista de objetos para dias com jornada diferenciada:
+  Ex: [{{"data": "23/12/2025", "horas_extras": 6.0, "descricao": "labor até 23h"}}]
+
+- confianca: 0.0-1.0
+
 **AVISO PRÉVIO** → preenche "aviso_previo":
 - Deferido calculado pela Lei 12.506/2011: tipo="Calculado", projetar=true
 - Deferido com dias fixos (ex: "aviso prévio de 30 dias"): tipo="Informado", prazo_dias=30, projetar=true
@@ -972,7 +1038,8 @@ _EXTRACTION_SCHEMA: dict = {
         "processo", "contrato", "prescricao", "aviso_previo",
         "verbas_deferidas", "fgts", "honorarios", "honorarios_periciais",
         "correcao_juros", "contribuicao_social", "imposto_renda",
-        "historico_salarial", "faltas", "ferias", "campos_ausentes", "alertas",
+        "historico_salarial", "faltas", "ferias", "duracao_trabalho",
+        "campos_ausentes", "alertas",
     ],
     "properties": {
         "processo": {
@@ -1010,6 +1077,39 @@ _EXTRACTION_SCHEMA: dict = {
                 "ultima_remuneracao":{"type": ["number","null"]},
                 "ajuizamento":       {"type": ["string","null"]},
                 "confianca":         {"type": "number"},
+            },
+        },
+        "duracao_trabalho": {
+            "type": ["object","null"],
+            "additionalProperties": False,
+            "properties": {
+                "tipo_apuracao":          {"type": ["string","null"]},
+                "forma_apuracao_pjecalc": {"type": ["string","null"]},
+                "jornada_entrada":        {"type": ["string","null"]},
+                "jornada_saida":          {"type": ["string","null"]},
+                "intervalo_minutos":      {"type": ["integer","null"]},
+                "jornada_seg":            {"type": ["number","null"]},
+                "jornada_ter":            {"type": ["number","null"]},
+                "jornada_qua":            {"type": ["number","null"]},
+                "jornada_qui":            {"type": ["number","null"]},
+                "jornada_sex":            {"type": ["number","null"]},
+                "jornada_sab":            {"type": ["number","null"]},
+                "jornada_dom":            {"type": ["number","null"]},
+                "qt_horas_extras_mes":    {"type": ["number","null"]},
+                "qt_horas_extras_dia":    {"type": ["number","null"]},
+                "jornada_semanal_cartao": {"type": ["number","null"]},
+                "jornada_mensal_cartao":  {"type": ["number","null"]},
+                "adicional_he_percentual":{"type": ["number","null"]},
+                "trabalha_feriados":      {"type": ["boolean","null"]},
+                "trabalha_domingos":      {"type": ["boolean","null"]},
+                "sabados_trabalhados":    {"type": ["array","null"], "items": {"type": "string"}},
+                "dias_especiais":         {"type": ["array","null"], "items": {"type": "object"}},
+                "apurar_hora_noturna":    {"type": ["boolean","null"]},
+                "hora_inicio_noturno":    {"type": ["string","null"]},
+                "hora_fim_noturno":       {"type": ["string","null"]},
+                "reducao_ficta":          {"type": ["boolean","null"]},
+                "prorrogacao_horario_noturno": {"type": ["boolean","null"]},
+                "confianca":              {"type": "number"},
             },
         },
         "prescricao": {
@@ -1618,6 +1718,24 @@ def _extrair_via_llm(
         conteudo = resposta.content[0].text.strip()
         return _limpar_e_parsear_json(conteudo)
 
+    except anthropic.AuthenticationError as e:
+        logger.error(f"Autenticação falhou (API key inválida): {e}")
+        return {
+            "_erro_llm": str(e), "_erro_ia": True, "_tipo_erro": "auth",
+            "alertas": ["API key Anthropic inválida ou expirada. Verifique ANTHROPIC_API_KEY."],
+        }
+    except anthropic.RateLimitError as e:
+        logger.warning(f"Rate limit atingido: {e}")
+        return {
+            "_erro_llm": str(e), "_tipo_erro": "rate_limited",
+            "alertas": ["Limite de requisições atingido. Aguarde alguns minutos e tente novamente."],
+        }
+    except anthropic.APIConnectionError as e:
+        logger.warning(f"Erro de conexão com API: {e}")
+        return {
+            "_erro_llm": str(e), "_tipo_erro": "transient",
+            "alertas": [f"Erro de conexão com a API Anthropic: {e}"],
+        }
     except Exception as e:
         logger.warning(f"Falha na extração via IA: {e}")
         return {"_erro_llm": str(e), "alertas": [f"Falha na extração via IA: {e}"]}
@@ -1763,6 +1881,24 @@ def _extrair_via_llm_pdf(
             messages=[{"role": "user", "content": content_blocks}],
         )
         return _limpar_e_parsear_json(resposta.content[0].text.strip())
+    except anthropic.AuthenticationError as e:
+        logger.error(f"PDF extração — API key inválida: {e}")
+        return {
+            "_erro_llm": str(e), "_erro_ia": True, "_tipo_erro": "auth",
+            "alertas": ["API key Anthropic inválida ou expirada. Verifique ANTHROPIC_API_KEY."],
+        }
+    except anthropic.RateLimitError as e:
+        logger.warning(f"PDF extração — rate limit: {e}")
+        return {
+            "_erro_llm": str(e), "_tipo_erro": "rate_limited",
+            "alertas": ["Limite de requisições atingido. Aguarde e tente novamente."],
+        }
+    except anthropic.APIConnectionError as e:
+        logger.warning(f"PDF extração — erro de conexão: {e}")
+        return {
+            "_erro_llm": str(e), "_tipo_erro": "transient",
+            "alertas": [f"Erro de conexão com API Anthropic: {e}"],
+        }
     except Exception as e:
         logger.warning(f"Falha na extração nativa de PDF: {e}")
         return {"_erro_llm": str(e), "alertas": [str(e)]}

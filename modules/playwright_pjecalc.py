@@ -115,15 +115,16 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                             self._log(f"  ⚠ Falha ao reiniciar browser: {re_exc}")
                     # Recupera ViewState expirado
                     try:
-                        body = self._page.locator("body").text_content() or ""
+                        body = self._page.locator("body").text_content(timeout=3000) or ""
                         if "ViewExpired" in body or "expired" in body.lower():
                             self._log("  ↻ ViewState expirado — recarregando página…")
                             self._page.reload()
-                            self._page.wait_for_load_state("networkidle")
-                    except Exception:
-                        pass
+                            self._page.wait_for_load_state("networkidle", timeout=10000)
+                    except Exception as view_exc:
+                        logger.debug(f"retry: ViewExpired check failed: {view_exc}")
                     if tentativa < max_tentativas:
-                        time.sleep(delay * tentativa)
+                        # Backoff exponencial: 2s, 4s, 8s
+                        time.sleep(delay * (2 ** (tentativa - 1)))
             raise ultima_exc
         return wrapper
     return decorator
@@ -411,6 +412,7 @@ class PJECalcPlaywright:
         # Capturados após criar um novo cálculo — usados para URL-based navigation
         self._calculo_url_base: str | None = None
         self._calculo_conversation_id: str | None = None
+        self._dados: dict | None = None  # dados da sentença (armazenado em preencher_calculo)
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
@@ -463,8 +465,8 @@ class PJECalcPlaywright:
                 self._browser.close()
             if self._pw:
                 self._pw.__exit__(None, None, None)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"fechar(): {e}")
 
     # ── Logging ────────────────────────────────────────────────────────────────
 
@@ -501,15 +503,15 @@ class PJECalcPlaywright:
                 _monitor_ok = self._page.evaluate(
                     "() => typeof window.__ajaxCompleto !== 'undefined'"
                 )
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"_aguardar_ajax: check monitor failed: {e}")
             if not _monitor_ok:
                 try:
                     self._instalar_monitor_ajax()
                     # Após goto, AJAX inicial já completou — marcar como completo
                     self._page.evaluate("() => { window.__ajaxCompleto = true; }")
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.debug(f"_aguardar_ajax: reinstall monitor failed: {e}")
                 # Sem monitor + recém-instalado → networkidle é mais confiável
                 try:
                     self._page.wait_for_load_state("networkidle", timeout=5000)
@@ -525,9 +527,10 @@ class PJECalcPlaywright:
             # com o true da operação anterior (falso positivo em cascata AJAX).
             try:
                 self._page.evaluate("() => { window.__ajaxCompleto = false; }")
-            except Exception:
-                pass
-        except Exception:
+            except Exception as e:
+                logger.debug(f"_aguardar_ajax: reset flag failed: {e}")
+        except Exception as e:
+            logger.debug(f"_aguardar_ajax: wait_for_function failed ({e}), fallback networkidle")
             try:
                 self._page.wait_for_load_state("networkidle", timeout=5000)
             except Exception:
@@ -906,12 +909,15 @@ class PJECalcPlaywright:
         if not loc:
             return False
         try:
-            loc.wait_for(state="visible", timeout=5000)
+            loc.wait_for(state="visible", timeout=3000)
             if loc.is_checked() != marcar:
                 loc.click()
-                self._aguardar_ajax()
+                # Short AJAX wait — checkbox clicks can trigger server errors
+                # (e.g. NPE in ApresentadorHonorarios) that hang the monitor
+                self._aguardar_ajax(timeout=5000)
             return True
-        except Exception:
+        except Exception as e:
+            logger.debug(f"_marcar_checkbox({field_id}): {e}")
             return False
 
     def _clicar_menu_lateral(self, texto: str, obrigatorio: bool = True) -> bool:
@@ -922,6 +928,8 @@ class PJECalcPlaywright:
         Retorna True se clicou com sucesso, False se não encontrou.
         """
         # Tentativa 1: seletor de ID específico do sidebar (robusto, sem ambiguidade)
+        # O menu PJE-Calc usa li[id='li_XXX'] (menu-pilares.xhtml) e a4j:commandLink
+        # com IDs gerados. Tentamos ambos padrões: a[id*='menuXXX'] e li[id*='xxx'] > a
         _MENU_ID_MAP = {
             "Histórico Salarial": "a[id*='menuHistoricoSalarial']",
             "Verbas":             "a[id*='menuVerbas']",
@@ -938,13 +946,42 @@ class PJECalcPlaywright:
             "Contribuicao Social": "a[id*='menuContribuicaoSocial']",
             "Imposto de Renda":   "a[id*='menuImpostoRenda']",
             "Multas":             "a[id*='menuMultas']",
-            "Cartão de Ponto":    "a[id*='menuCartaoPonto']",
+            "Cartão de Ponto":    "a[id*='menuCartao'], a[id*='CartaoPonto'], a[id*='cartaoDePonto']",
             "Salário Família":    "a[id*='menuSalarioFamilia']",
             "Seguro Desemprego":  "a[id*='menuSeguroDesemprego']",
             "Pensão Alimentícia": "a[id*='menuPensaoAlimenticia']",
             "Previdência Privada": "a[id*='menuPrevidenciaPrivada']",
             "Exportar":           "a[id*='menuExport']",
             "Exportação":         "a[id*='menuExport']",
+        }
+        # Mapa de IDs reais de <li> do menu-pilares (confirmados por inspeção DOM v2.15.1)
+        # Padrão: li_calculo_XXX (dentro de cálculo) ou li_tabelas_XXX (tabelas)
+        _LI_ID_MAP = {
+            "Cartão de Ponto":     ["calculo_cartao_ponto"],
+            "Dados do Cálculo":    ["calculo_dados_do_calculo"],
+            "Faltas":              ["calculo_faltas"],
+            "Férias":              ["calculo_ferias"],
+            "Histórico Salarial":  ["calculo_historico_salarial"],
+            "Verbas":              ["calculo_verbas"],
+            "Salário Família":     ["calculo_salario_familia"],
+            "Salário-família":     ["calculo_salario_familia"],
+            "Seguro Desemprego":   ["calculo_seguro_desemprego"],
+            "Seguro-desemprego":   ["calculo_seguro_desemprego"],
+            "FGTS":                ["calculo_fgts"],
+            "Contribuição Social": ["calculo_inss"],
+            "Contribuicao Social": ["calculo_inss"],
+            "Previdência Privada": ["calculo_previdencia_privada"],
+            "Pensão Alimentícia":  ["calculo_pensao_alimenticia"],
+            "Imposto de Renda":    ["calculo_irpf"],
+            "Multas":              ["calculo_multas_e_indenizacoes"],
+            "Multas e Indenizações": ["calculo_multas_e_indenizacoes"],
+            "Honorários":          ["calculo_honorarios"],
+            "Custas Judiciais":    ["calculo_custas_judiciais"],
+            "Correção, Juros e Multa": ["calculo_correcao_juros_e_multa"],
+            "Liquidar":            ["calculo_liquidar"],
+            "Exportar":            ["calculo_exportar"],
+            "Exportação":          ["calculo_exportar"],
+            "Imprimir":            ["calculo_imprimir"],
         }
         sel_id = _MENU_ID_MAP.get(texto)
         if sel_id:
@@ -957,6 +994,25 @@ class PJECalcPlaywright:
                     return True
                 except Exception:
                     pass  # fallback para busca por texto abaixo
+
+        # Tentativa 1b: buscar <li> pelo padrão de ID do menu-pilares (li_XXX > a)
+        li_ids = _LI_ID_MAP.get(texto)
+        if li_ids:
+            for li_id in li_ids:
+                # Primeiro: ID exato (li#li_calculo_xxx a)
+                loc = self._page.locator(f"li#li_{li_id} a")
+                if loc.count() == 0:
+                    # Fallback: busca parcial
+                    loc = self._page.locator(f"li[id*='{li_id}'] a")
+                if loc.count() > 0:
+                    try:
+                        loc.first.click(force=True)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
+                        self._log(f"  → Menu '{texto}' via li#{li_id}")
+                        return True
+                    except Exception:
+                        pass
         self._page.wait_for_timeout(400)
 
         # Tentativa 2: navegação por URL com conversationId do cálculo ativo
@@ -968,7 +1024,7 @@ class PJECalcPlaywright:
             "Férias":                  "ferias.jsf",
             "Histórico Salarial":      "historico-salarial.jsf",
             "Verbas":                  "verba/verba-calculo.jsf",
-            "Cartão de Ponto":         "cartaodeponto/apuracao-cartaodeponto.jsf",
+            "Cartão de Ponto":         "../cartaodeponto/apuracao-cartaodeponto.jsf",
             "Salário-família":         "salario-familia.jsf",
             "Seguro-desemprego":       "seguro-desemprego.jsf",
             "FGTS":                    "fgts.jsf",
@@ -987,7 +1043,11 @@ class PJECalcPlaywright:
             "Exportar":                "exportacao.jsf",
             "Exportação":              "exportacao.jsf",
         }
-        if self._calculo_url_base and self._calculo_conversation_id:
+        # NÃO usar URL direta para "Liquidar" e "Exportar" — a navegação via URL
+        # não inicializa os backing beans Seam, causando NPE em registro.data.
+        # Essas páginas DEVEM ser acessadas via sidebar JSF click.
+        _SKIP_URL_NAV = {"Liquidar", "Exportar", "Exportação"}
+        if self._calculo_url_base and self._calculo_conversation_id and texto not in _SKIP_URL_NAV:
             jsf_page = _URL_SECTION_MAP.get(texto)
             if jsf_page:
                 try:
@@ -1026,36 +1086,84 @@ class PJECalcPlaywright:
                 except Exception as _e:
                     self._log(f"  ⚠ URL nav falhou para '{texto}': {_e}")
 
+        # Diagnóstico: listar sidebar links para Cartão de Ponto (debug)
+        if texto == "Cartão de Ponto":
+            try:
+                _diag = self._page.evaluate("""() => {
+                    const links = [...document.querySelectorAll('#menupainel a, [id*="menu"] a')];
+                    const allLinks = [...document.querySelectorAll('a')];
+                    const lis = [...document.querySelectorAll('#menupainel li')];
+                    return {
+                        menuLinks: links.map(a => ({
+                            txt: (a.textContent||'').replace(/\\s+/g,' ').trim().substring(0,50),
+                            id: a.id||'',
+                            liId: a.closest('li') ? a.closest('li').id : ''
+                        })).filter(x => x.txt.length > 0).slice(0, 30),
+                        menuLis: lis.map(li => ({id: li.id, cls: li.className, txt: li.textContent.replace(/\\s+/g,' ').trim().substring(0,50)})).filter(x => x.id || x.txt.length < 30).slice(0, 30),
+                        totalLinks: allLinks.length,
+                        menuPainelExists: !!document.querySelector('#menupainel'),
+                        cartaoMatches: allLinks.filter(a => {
+                            const t = (a.textContent||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toLowerCase();
+                            return t.includes('cartao') || t.includes('ponto');
+                        }).map(a => ({
+                            txt: (a.textContent||'').replace(/\\s+/g,' ').trim().substring(0,60),
+                            id: a.id||'',
+                            href: a.href||''
+                        })).slice(0, 10)
+                    };
+                }""")
+                self._log(f"  🔍 Diagnóstico sidebar para Cartão de Ponto:")
+                self._log(f"     menuPainel existe: {_diag.get('menuPainelExists')}")
+                self._log(f"     Total links: {_diag.get('totalLinks')}")
+                self._log(f"     Menu links: {[(x['txt'], x['id'][:20]) for x in _diag.get('menuLinks',[])[:20]]}")
+                self._log(f"     Menu LIs: {[(x['id'], x['txt'][:25]) for x in _diag.get('menuLis',[])[:20]]}")
+                self._log(f"     Matches 'cartao'/'ponto': {_diag.get('cartaoMatches',[])}")
+            except Exception as _de:
+                self._log(f"  🔍 Diagnóstico erro: {_de}")
+
         # Tentativa 3: JS click com escopo no container do menu lateral
         # Ancora-se em "Histórico Salarial" (exclusivo do menu de cálculo) para evitar
         # clicar em links homônimos do menu de referência (Tabelas).
+        # Usa normalização de acentos para evitar falhas com ã/á/é/ó.
         clicou = self._page.evaluate(
             """(texto) => {
+                // Normalizar removendo acentos para comparação tolerante
+                function norm(s) {
+                    return s.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+                            .replace(/[\\s\\u00a0]+/g, ' ').trim().toLowerCase();
+                }
+                const textoNorm = norm(texto);
                 const allLinks = [...document.querySelectorAll('a')];
                 // Tenta encontrar o link no mesmo container do menu de cálculo
                 const anchors = ['Histórico Salarial', 'FGTS', 'Faltas'];
                 const anchor = anchors.find(t => t !== texto);
                 if (anchor) {
+                    const anchorNorm = norm(anchor);
                     const anchorEl = allLinks.find(
-                        a => a.textContent.replace(/\\s+/g, ' ').trim().includes(anchor)
+                        a => norm(a.textContent || '').includes(anchorNorm)
                     );
                     if (anchorEl) {
                         let parent = anchorEl.parentElement;
                         for (let i = 0; i < 8 && parent && parent.tagName !== 'BODY'; i++) {
                             const found = [...parent.querySelectorAll('a')].find(
                                 a => a !== anchorEl &&
-                                     a.textContent.replace(/\\s+/g, ' ').trim().includes(texto)
+                                     norm(a.textContent || '').includes(textoNorm)
                             );
                             if (found) { found.click(); return true; }
                             parent = parent.parentElement;
                         }
                     }
                 }
-                // Fallback: primeiro link com texto exato
+                // Fallback: primeiro link com texto exato (normalizado)
                 const el = allLinks.find(
-                    a => a.textContent.replace(/\\s+/g, ' ').trim() === texto
+                    a => norm(a.textContent || '') === textoNorm
                 );
                 if (el) { el.click(); return true; }
+                // Fallback 2: link contendo o texto (normalizado)
+                const el2 = allLinks.find(
+                    a => norm(a.textContent || '').includes(textoNorm)
+                );
+                if (el2) { el2.click(); return true; }
                 return false;
             }""",
             texto,
@@ -1069,15 +1177,27 @@ class PJECalcPlaywright:
         if loc.count() == 0:
             loc = self._page.get_by_role("link", name=texto)
         if loc.count() == 0:
-            if obrigatorio:
+            if obrigatorio or texto == "Cartão de Ponto":
                 self._log(f"  ⚠ Menu '{texto}': link não encontrado.")
                 try:
-                    todos = self._page.evaluate("""() => {
-                        return [...document.querySelectorAll('a')]
-                            .map(a => a.textContent.replace(/\\s+/g, ' ').trim())
-                            .filter(t => t.length > 1 && t.length < 80);
+                    diag = self._page.evaluate("""() => {
+                        const links = [...document.querySelectorAll('a')]
+                            .map(a => ({
+                                txt: a.textContent.replace(/\\s+/g, ' ').trim(),
+                                id: a.id || '',
+                                liId: a.closest('li') ? a.closest('li').id : ''
+                            }))
+                            .filter(x => x.txt.length > 1 && x.txt.length < 80);
+                        // Also get all li IDs in menupainel
+                        const menuLis = [...document.querySelectorAll('#menupainel li')]
+                            .map(li => ({id: li.id, txt: li.textContent.replace(/\\s+/g, ' ').trim().substring(0, 50)}));
+                        return {
+                            links: links.slice(0, 40),
+                            menuLis: menuLis.slice(0, 40)
+                        };
                     }""")
-                    self._log(f"  ℹ Links disponíveis: {list(dict.fromkeys(todos))[:30]}")
+                    self._log(f"  ℹ Links (texto|id|liId): {[(x['txt'][:30], x['id'][:30], x['liId'][:30]) for x in diag.get('links',[])[:25]]}")
+                    self._log(f"  ℹ Menu LIs: {[(x['id'], x['txt'][:30]) for x in diag.get('menuLis',[]) if x['id']]}")
                 except Exception:
                     pass
             return False
@@ -1161,7 +1281,7 @@ class PJECalcPlaywright:
         # Tentativa 2: busca por proximidade via JS (token-overlap ≥ 0.5)
         try:
             _clicou = self._page.evaluate(
-                """(texto) => {
+                r"""(texto) => {
                     function norm(s) {
                         return (s || '').toLowerCase()
                             .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
@@ -1922,7 +2042,16 @@ class PJECalcPlaywright:
                 self._log(f"    {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
             return
         self.mapear_campos("fase2_historico_salarial")
-        for h in historico:
+        def _para_competencia(d: str) -> str:
+            partes = d.split("/")
+            if len(partes) == 3 and len(partes[2]) == 4:
+                return f"{partes[1]}/{partes[2]}"  # dd/mm/yyyy → MM/yyyy
+            if len(partes) == 2 and len(partes[1]) == 4:
+                return d  # já MM/yyyy
+            return d
+
+        for idx_h, h in enumerate(historico):
+          try:
             # Abrir formulário de novo histórico
             # id="incluir" = a4j:commandButton "Novo" em historico-salarial.xhtml
             _abriu = (self._clicar_botao_id("incluir")
@@ -1940,6 +2069,14 @@ class PJECalcPlaywright:
             # Nome da entrada — ID confirmado: formulario:nome
             nome_hist = h.get("nome", "Salário")
             self._preencher("nome", nome_hist, False)
+            # Dispatch blur to submit to JSF server model
+            try:
+                _nm = self._localizar("nome", tipo="input")
+                if _nm:
+                    _nm.dispatch_event("blur")
+                    self._page.wait_for_timeout(300)
+            except Exception:
+                pass
 
             # Tipo de variação: FIXA (valor fixo) ou VARIAVEL (muda mês a mês)
             # ID confirmado: formulario:tipoVariacaoDaParcela
@@ -1949,50 +2086,193 @@ class PJECalcPlaywright:
             # Tipo de valor: INFORMADO (preenchido manualmente) ou CALCULADO
             self._marcar_radio("tipoValor", "INFORMADO")
 
-            # Competências: campo aceita MM/yyyy — ID confirmados:
-            # formulario:competenciaInicialInputDate / formulario:competenciaFinalInputDate
-            def _para_competencia(d: str) -> str:
-                partes = d.split("/")
-                if len(partes) == 3 and len(partes[2]) == 4:
-                    return f"{partes[1]}/{partes[2]}"  # dd/mm/yyyy → MM/yyyy
-                if len(partes) == 2 and len(partes[1]) == 4:
-                    return d  # já MM/yyyy
-                return d
             _comp_ini = _para_competencia(h.get("data_inicio", ""))
             _comp_fim = _para_competencia(h.get("data_fim", ""))
-            # _localizar("competenciaInicial") encontra formulario:competenciaInicialInputDate via [id*='InputDate']
-            self._preencher_data("competenciaInicial", _comp_ini, False)
-            self._preencher_data("competenciaFinal", _comp_fim, False)
+            # Competência fields (MM/yyyy): rich:calendar with jQuery mask('99/9999').
+            # Strategy: type into InputDate field, then use RichFaces Calendar API
+            # to parse and set the date. Finally Tab to trigger blur + server update.
+            for _cfield, _cval in [("competenciaInicial", _comp_ini),
+                                    ("competenciaFinal", _comp_fim)]:
+                _cloc = self._localizar(_cfield, tipo="input")
+                if _cloc and _cval:
+                    try:
+                        _cloc.focus()
+                        self._page.keyboard.press("Control+a")
+                        self._page.keyboard.press("Delete")
+                        _cdigits = _cval.replace("/", "")
+                        _cloc.press_sequentially(_cdigits, delay=80)
+                        self._page.wait_for_timeout(200)
+                        # Set the hidden field value too (rich:calendar stores
+                        # the date in the hidden input without InputDate suffix)
+                        self._page.evaluate(f"""(val) => {{
+                            // Find the InputDate field and its hidden sibling
+                            const inputs = document.querySelectorAll('input[id*="{_cfield}"]');
+                            for (const inp of inputs) {{
+                                if (inp.id.endsWith('InputDate')) {{
+                                    inp.value = val;
+                                    inp.dispatchEvent(new Event('change', {{bubbles:true}}));
+                                }}
+                                if (inp.type === 'hidden' && !inp.id.endsWith('InputDate')) {{
+                                    // Hidden field stores value in the same format
+                                    inp.value = val;
+                                }}
+                            }}
+                        }}""", _cval)
+                        # Tab to trigger blur + server model update
+                        _cloc.press("Tab")
+                        self._page.wait_for_timeout(500)
+                        self._log(f"  ✓ data {_cfield}: {_cval}")
+                    except Exception as _e_comp:
+                        self._log(f"  ⚠ {_cfield}: {_e_comp}")
+                        self._preencher_data(_cfield, _cval, False)
 
             # Valor base — ID confirmado: formulario:valorParaBaseDeCalculo
             _val = _fmt_br(h.get("valor", ""))
             self._preencher("valorParaBaseDeCalculo", _val, False)
+            # Dispatch blur to submit value to JSF server model
+            try:
+                _vl = self._localizar("valorParaBaseDeCalculo", tipo="input")
+                if _vl:
+                    _vl.dispatch_event("blur")
+                    self._page.wait_for_timeout(500)
+            except Exception:
+                pass
 
-            # Incidências — IDs confirmados: formulario:fgts, formulario:inss
-            _inc_fgts = h.get("incidencia_fgts", True)
-            _inc_inss = h.get("incidencia_cs", h.get("incidencia_inss", True))
-            self._marcar_checkbox("fgts", bool(_inc_fgts))
-            self._marcar_checkbox("inss", bool(_inc_inss))
+            # Incidências — checkboxes may trigger AJAX that errors on server side
+            # (known NPE in ApresentadorHonorarios). Use short timeout and don't block.
+            try:
+                _inc_fgts = h.get("incidencia_fgts", True)
+                _inc_inss = h.get("incidencia_cs", h.get("incidencia_inss", True))
+                self._marcar_checkbox("fgts", bool(_inc_fgts))
+                self._marcar_checkbox("inss", bool(_inc_inss))
+            except Exception as _e_chk:
+                self._log(f"  ⚠ Checkboxes FGTS/INSS: {_e_chk} — continuando")
+
+            # Diagnostic: check actual field values before generating occurrences
+            try:
+                _diag = self._page.evaluate("""() => {
+                    const fields = {};
+                    document.querySelectorAll('input[id*="competencia"], input[id*="nome"], input[id*="valorPara"]').forEach(el => {
+                        if (el.type !== 'hidden' || el.id.includes('competencia'))
+                            fields[el.id.split(':').pop()] = el.value;
+                    });
+                    return fields;
+                }""")
+                self._log(f"  ℹ Campos antes de Gerar: {_diag}")
+            except Exception:
+                pass
 
             # Gerar ocorrências (cria a grade mensal de valores)
-            # id="cmdGerarOcorrencias" = a4j:commandLink → renderiza como <a>, não <input>
-            _gerou = self._clicar_botao_id("cmdGerarOcorrencias") or self._clicar_botao_id("btnGerarOcorrencias")
-            if not _gerou:
-                _anc = self._page.locator("a[id*='cmdGerarOcorrencias'], a[id*='btnGerarOcorrencias']")
-                if _anc.count() > 0:
-                    _anc.first.click()
+            # a4j:commandLink id="cmdGerarOcorrencias" renders as <a> with onclick
+            # that calls A4J.AJAX.Submit(formId, event, params).
+            # Strategy: use Playwright click (not force=True) so the event object
+            # is properly created. Scroll into view first.
+            _gerou = False
+            _gen_loc = self._page.locator(
+                "a[id*='cmdGerarOcorrencias'], a[id*='GerarOcorrencias']"
+            )
+            if _gen_loc.count() > 0:
+                try:
+                    _gen_loc.first.scroll_into_view_if_needed()
+                    self._page.wait_for_timeout(300)
+                    _gen_loc.first.click()  # normal click — triggers proper event
                     _gerou = True
+                except Exception:
+                    # force=True fallback
+                    try:
+                        _gen_loc.first.click(force=True)
+                        _gerou = True
+                    except Exception:
+                        pass
+            if not _gerou:
+                # Input fallback
+                _gen_inp = self._page.locator(
+                    "input[id*='cmdGerarOcorrencias'], input[id*='GerarOcorrencias']"
+                )
+                if _gen_inp.count() > 0:
+                    try:
+                        _gen_inp.first.click(force=True)
+                        _gerou = True
+                    except Exception:
+                        pass
+            if not _gerou:
+                # Last resort: find onclick attr and call A4J.AJAX.Submit directly
+                try:
+                    _gerou = self._page.evaluate("""() => {
+                        const el = document.querySelector(
+                            'a[id*="cmdGerarOcorrencias"], a[id*="GerarOcorrencias"]'
+                        );
+                        if (!el) return false;
+                        const oc = el.getAttribute('onclick');
+                        if (oc) {
+                            // Execute onclick content directly
+                            eval(oc);
+                            return true;
+                        }
+                        el.click();
+                        return true;
+                    }""")
+                except Exception as _e_ger:
+                    self._log(f"  ⚠ Gerar Ocorrências: {_e_ger}")
             if _gerou:
                 self._aguardar_ajax()
-                self._page.wait_for_timeout(1000)
-                # Scroll para baixo — botão Salvar fica após a lista de ocorrências
+                self._page.wait_for_timeout(2000)
+                # Verify occurrences were generated via listagemMC table
+                try:
+                    _has_occ = self._page.evaluate("""() => {
+                        const tbl = document.querySelector(
+                            'table[id*="listagemMC"], table[id*="listagem"]'
+                        );
+                        if (!tbl) return 0;
+                        return tbl.querySelectorAll('tr').length;
+                    }""")
+                    if _has_occ and _has_occ > 0:
+                        self._log(f"  ✓ Ocorrências geradas: {nome_hist} ({_has_occ} linhas)")
+                    else:
+                        self._log(f"  ⚠ Gerar Ocorrências: tabela sem linhas")
+                except Exception:
+                    self._log(f"  ✓ Ocorrências geradas: {nome_hist}")
                 self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                self._log(f"  ✓ Ocorrências geradas: {nome_hist}")
+            else:
+                self._log(f"  ⚠ Botão Gerar Ocorrências não encontrado")
 
             # Salvar (seletor específico prioritário)
             self._clicar_botao_id("btnSalvarHistorico") or self._clicar_salvar()
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
+
+            # Check for form error messages after save
+            # Note: "Erro inesperado" from PJE-Calc often means the RENDERING
+            # of the page after save failed (e.g. NPE in ApresentadorHonorarios),
+            # but the database save may have succeeded. Check for validation errors
+            # specifically (like "Deve haver pelo menos um registro de Ocorrências")
+            # as those actually mean the save failed.
+            try:
+                _err_msg = self._page.evaluate("""() => {
+                    const msgs = document.querySelectorAll('.rf-msgs-sum, .rich-messages-label, [class*="erro"], [class*="error"]');
+                    for (const m of msgs) {
+                        const t = (m.textContent || '').trim();
+                        if (t && (t.toLowerCase().includes('erro') || t.toLowerCase().includes('error')))
+                            return t.substring(0, 200);
+                    }
+                    return null;
+                }""")
+                if _err_msg:
+                    _is_validation = any(s in _err_msg.lower() for s in [
+                        "ocorrências", "obrigatório", "preenchimento", "inválid",
+                        "deve haver", "não pode"
+                    ])
+                    if _is_validation:
+                        self._log(f"  ⚠ Erro validação período {idx_h+1}: {_err_msg}")
+                        self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+                        self._page.wait_for_timeout(1000)
+                        continue
+                    else:
+                        # "Erro inesperado" = likely rendering error, save may have succeeded
+                        self._log(f"  ⚠ Erro servidor período {idx_h+1} (save pode ter sucedido): {_err_msg}")
+            except Exception:
+                pass
+
             try:
                 self._page.wait_for_selector(
                     "[id$='filtroNome'], input[id*='competenciaInicial'], [name*='filtroNome']",
@@ -2001,7 +2281,14 @@ class PJECalcPlaywright:
             except Exception:
                 self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
                 self._page.wait_for_timeout(800)
-            self._log(f"  ✓ Período: {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
+            self._log(f"  ✓ Período {idx_h+1}/{len(historico)}: {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
+          except Exception as _e_hist:
+            self._log(f"  ⚠ Erro no período {idx_h+1}: {_e_hist} — tentando recuperar")
+            try:
+                self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+                self._page.wait_for_timeout(1000)
+            except Exception:
+                pass
         self._log("Fase 2 concluída.")
 
     # ── Probes de saúde do Tomcat ────────────────────────────────────────────
@@ -3448,91 +3735,498 @@ class PJECalcPlaywright:
     @retry(max_tentativas=2)
     def fase_cartao_ponto(self, dados: dict) -> None:
         """
-        Preenche o Cartão de Ponto com a jornada extraída da sentença.
-        Necessário para cálculo correto de horas extras e reflexos.
-        Deriva horas/dia e dias/semana a partir de carga_horaria (horas/mês).
+        Preenche o Cartão de Ponto do PJE-Calc com a jornada extraída da sentença.
+        Usa dados de 'duracao_trabalho' (novo) com fallback para 'contrato' (legado).
+
+        Campos reais do PJE-Calc (apuracao-cartaodeponto.xhtml):
+        - tipoApuracaoHorasExtras: radio (HST/HJD/APH/NAP)
+        - valorJornadaSegunda..Dom: horas brutas por dia (HH:MM)
+        - qtJornadaSemanal, qtJornadaMensal: totais
+        - intervaloIntraJornada configs
+        - competenciaInicial, competenciaFinal: período
         """
+        dur = dados.get("duracao_trabalho") or {}
         cont = dados.get("contrato", {})
-        carga_horaria = cont.get("carga_horaria")   # horas/mês (int)
-        jornada_diaria = cont.get("jornada_diaria")  # horas/dia (float, extraído diretamente)
-        jornada_semanal = cont.get("jornada_semanal")  # horas/semana (float)
+
+        # ── Verificar se há condenação em horas extras (sem HE → não preencher cartão) ──
+        verbas = dados.get("verbas_deferidas", [])
+        _tem_he = any(
+            "hora" in (v.get("nome_sentenca") or "").lower() and "extra" in (v.get("nome_sentenca") or "").lower()
+            for v in verbas
+        )
+        if not _tem_he and not dur.get("tipo_apuracao"):
+            self._log("Fase 5b — Cartão de Ponto: sem condenação em horas extras — ignorado.")
+            return
+
+        # ── Determinar dados da jornada (duracao_trabalho tem prioridade) ──
+        tipo_apuracao = dur.get("tipo_apuracao")
+        forma_pjecalc = dur.get("forma_apuracao_pjecalc")
+
+        # Jornada por dia da semana
+        jornada_dias = {
+            "seg": dur.get("jornada_seg"),
+            "ter": dur.get("jornada_ter"),
+            "qua": dur.get("jornada_qua"),
+            "qui": dur.get("jornada_qui"),
+            "sex": dur.get("jornada_sex"),
+            "sab": dur.get("jornada_sab"),
+            "dom": dur.get("jornada_dom"),
+        }
+        jornada_semanal = dur.get("jornada_semanal_cartao")
+        jornada_mensal = dur.get("jornada_mensal_cartao")
+        intervalo_min = dur.get("intervalo_minutos")
+        qt_he_mes = dur.get("qt_horas_extras_mes")
+
+        # Datas do período
         data_inicio = cont.get("admissao")
         data_fim = cont.get("demissao")
 
-        # Calcular jornada se não extraída diretamente
-        if not jornada_diaria and carga_horaria:
-            # Padrões CLT: 220h/mês = 8h/dia 44h/sem | 180h/mês = 6h/dia 36h/sem
-            # 160h/mês = 8h/dia 40h/sem (jornada reduzida)
-            if carga_horaria >= 210:
-                jornada_diaria = 8.0
-                jornada_semanal = jornada_semanal or 44.0
-            elif carga_horaria >= 175:
-                jornada_diaria = 8.0
-                jornada_semanal = jornada_semanal or 40.0
-            elif carga_horaria >= 155:
-                jornada_diaria = 6.0
-                jornada_semanal = jornada_semanal or 36.0
-            else:
-                jornada_diaria = carga_horaria / (4.5 * 5)  # aprox
-                jornada_semanal = jornada_semanal or round(jornada_diaria * 5, 1)
+        # ── Fallback legado: calcular a partir de contrato se duracao_trabalho não foi extraído ──
+        if not tipo_apuracao:
+            jornada_diaria = cont.get("jornada_diaria")
+            carga_horaria = cont.get("carga_horaria")
+            jornada_semanal_cont = cont.get("jornada_semanal")
 
-        if not jornada_diaria:
-            self._log("Fase 5b — Cartão de Ponto: jornada não extraída — ignorado.")
+            if not jornada_diaria and carga_horaria:
+                if carga_horaria >= 210:
+                    jornada_diaria = 8.0
+                    jornada_semanal_cont = jornada_semanal_cont or 44.0
+                elif carga_horaria >= 175:
+                    jornada_diaria = 8.0
+                    jornada_semanal_cont = jornada_semanal_cont or 40.0
+                elif carga_horaria >= 155:
+                    jornada_diaria = 6.0
+                    jornada_semanal_cont = jornada_semanal_cont or 36.0
+                else:
+                    jornada_diaria = carga_horaria / (4.5 * 5)
+                    jornada_semanal_cont = jornada_semanal_cont or round(jornada_diaria * 5, 1)
+
+            if not jornada_diaria:
+                self._log("Fase 5b — Cartão de Ponto: jornada não extraída — ignorado.")
+                return
+
+            # Converter para formato por dia (assume seg-sex uniforme)
+            for d in ("seg", "ter", "qua", "qui", "sex"):
+                jornada_dias[d] = jornada_diaria
+            jornada_dias["sab"] = 0.0
+            jornada_dias["dom"] = 0.0
+            jornada_semanal = jornada_semanal_cont or round(jornada_diaria * 5, 1)
+            jornada_mensal = round(jornada_semanal * 30 / 7, 1) if jornada_semanal else None
+            intervalo_min = intervalo_min or (60 if jornada_diaria >= 6 else 15)
+            forma_pjecalc = "HJD"  # default: jornada diária
+            tipo_apuracao = "apuracao_jornada"
+
+        # Se ainda não há dados suficientes, sair
+        if not any(v for v in jornada_dias.values() if v) and not qt_he_mes:
+            self._log("Fase 5b — Cartão de Ponto: sem dados de jornada — ignorado.")
             return
 
         self._verificar_tomcat(timeout=60)
         self._verificar_pagina_pjecalc()
 
-        navegou = (
-            self._clicar_menu_lateral("Cartão de Ponto", obrigatorio=False)
-            or self._clicar_menu_lateral("Jornada", obrigatorio=False)
-            or self._clicar_menu_lateral("Ponto", obrigatorio=False)
-        )
+        # ── Navegar para Cartão de Ponto ──
+        # Usar _clicar_menu_lateral que tenta URL navigation primeiro (funciona para Cartão de Ponto)
+        # e fallback sidebar JSF.
+        navegou = self._clicar_menu_lateral("Cartão de Ponto", obrigatorio=False)
         if not navegou:
             self._log(
                 f"  Fase 5b — Cartão de Ponto: menu não encontrado. "
-                f"Jornada extraída: {jornada_diaria}h/dia, {jornada_semanal}h/sem."
+                f"Forma={forma_pjecalc}, Semanal={jornada_semanal}h."
             )
             return
 
-        self.mapear_campos("fase5b_cartao_ponto")
-        self._clicar_novo()
-        self._page.wait_for_timeout(800)
+        # Verificar se a página carregou sem erro
+        try:
+            body_text = self._page.locator("body").text_content(timeout=3000) or ""
+            if "Erro Interno" in body_text or "erro interno" in body_text.lower():
+                self._log("  ⚠ Cartão de Ponto: Erro Interno — navegação JSF não funcionou")
+                try:
+                    link = self._page.locator("a:has-text('Página Inicial')")
+                    if link.count() > 0:
+                        link.first.click()
+                        self._aguardar_ajax()
+                except Exception:
+                    pass
+                return
+        except Exception:
+            pass
 
-        # Período
+        # Verificar que estamos na página CORRETA (não em Feriados/Pontos Facultativos)
+        _url_atual = self._page.url or ""
+        _na_pagina_errada = False
+        if "feriado" in _url_atual.lower() or "pontos-facultativos" in _url_atual.lower():
+            _na_pagina_errada = True
+        else:
+            # Checar campos da página: se tipoBusca existe, estamos em Feriados
+            _tem_campo_feriado = self._page.locator("input[id$='tipoBusca'], input[id$='nomeFeriadoBusca']").count() > 0
+            if _tem_campo_feriado:
+                _na_pagina_errada = True
+
+        if _na_pagina_errada:
+            self._log("  ⚠ Cartão de Ponto: navegou para página errada (Feriados/Pontos Facultativos)")
+            self._log(f"    URL atual: {_url_atual}")
+            # Tentar voltar e buscar o link correto
+            try:
+                self._page.go_back()
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+            except Exception:
+                pass
+            return
+
+        self._log("  ✓ Página Cartão de Ponto carregada")
+        self._log(f"    URL: {_url_atual}")
+        self.mapear_campos("fase5b_cartao_ponto_pre")
+
+        # Clicar "Novo" (formulario:incluir) para abrir o formulário de apuração
+        # NÃO usar _clicar_novo() genérico — ele pega o "Novo" do menu lateral (cria cálculo!)
+        # O botão correto nesta página é input[id$='incluir'] com value='Novo'
+        _novo_ok = False
+        try:
+            btn_inc = self._page.locator("input[id$='incluir'][value='Novo']")
+            if btn_inc.count() == 0:
+                btn_inc = self._page.locator("input[id$='incluir']")
+            if btn_inc.count() > 0:
+                btn_inc.first.click(force=True)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(2000)
+                _novo_ok = True
+                self._log("  ✓ Clicou 'Novo' (incluir) no Cartão de Ponto")
+            else:
+                self._log("  ⚠ Botão 'incluir' não encontrado na página Cartão de Ponto")
+        except Exception as e:
+            self._log(f"  ⚠ Erro ao clicar incluir: {e}")
+
+        # Verificar se formulário de apuração abriu (emModoFormulario renderiza os campos)
+        # Aguardar até 5s para o AJAX renderizar os campos
+        _form_open = False
+        for _wait in range(5):
+            if self._page.locator("input[id$='valorJornadaSegunda']").count() > 0:
+                _form_open = True
+                break
+            if self._page.locator("input[name$='tipoApuracaoHorasExtras']").count() > 0:
+                _form_open = True
+                break
+            self._page.wait_for_timeout(1000)
+
+        if not _form_open:
+            # Verificar se houve erro HTTP 500
+            _body = self._page.locator("body").text_content(timeout=2000) or ""
+            if "Erro" in _body or "erro" in _body.lower():
+                self._log(f"  ⚠ Cartão de Ponto: erro após clicar Novo — {_body[:100]}")
+            else:
+                self._log("  ⚠ Formulário de apuração não abriu após clicar Novo")
+                # Diagnóstico: quais campos existem?
+                _diag_fields = self._page.evaluate("""() => {
+                    return [...document.querySelectorAll("input,select")]
+                        .filter(e => e.id.includes('formulario') && e.type !== 'hidden')
+                        .map(e => e.id.split(':').pop())
+                        .slice(0, 15);
+                }""")
+                self._log(f"    Campos disponíveis: {_diag_fields}")
+            return
+
+        # Re-mapear campos APÓS formulário aberto
+        self.mapear_campos("fase5b_cartao_ponto_form")
+
+        # ── 1. Período (competências) ──
         if data_inicio:
-            self._preencher_data("dataInicio", data_inicio, False)
-            self._preencher_data("dataInicial", data_inicio, False)
+            self._preencher_data("competenciaInicial", data_inicio, False)
         if data_fim:
-            self._preencher_data("dataFim", data_fim, False)
-            self._preencher_data("dataFinal", data_fim, False)
+            self._preencher_data("competenciaFinal", data_fim, False)
 
-        # Jornada diária (horas)
-        _jd_str = _fmt_br(jornada_diaria)
-        self._preencher("jornadaDiaria", _jd_str, False)
-        self._preencher("horasDia", _jd_str, False)
-        self._preencher("jornada", _jd_str, False)
-        self._preencher("horasJornada", _jd_str, False)
+        # ── 2. Tipo de Apuração (radio tipoApuracaoHorasExtras) ──
+        # O radio usa enum Java (s:convertEnum). Os labels/values possíveis:
+        # HST = "Horas por Súmula do TST" (label contém "mula" ou value index)
+        # HJD = "Jornada Diária" (label contém "ornada")
+        # APH = "Apuração por Horas Separadas" (label contém "eparad")
+        # NAP = "Não Apurar" (label contém "ão Apur")
+        forma = forma_pjecalc or "HJD"
+        self._log(f"  Cartão de Ponto: selecionando forma de apuração = {forma}")
 
-        # Jornada semanal
+        # Mapa de forma abreviada → valor real do enum Java (confirmados por inspeção DOM v2.15.1)
+        _FORMA_TO_ENUM = {
+            "HJD": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA",
+            "HST": "HORAS_EXTRAS_CONFORME_SUMULA_85",
+            "APH": "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO",
+            "NAP": "NAO_APURAR_HORAS_EXTRAS",
+            "FAV": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
+            "SEM": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL",
+            "MEN": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL",
+        }
+        _enum_value = _FORMA_TO_ENUM.get(forma, forma)
+
+        _radio_clicked = self._page.evaluate(f"""() => {{
+            const radios = document.querySelectorAll("input[name$='tipoApuracaoHorasExtras']");
+            if (radios.length === 0) return 'NO_RADIOS';
+
+            const info = [...radios].map(r => ({{
+                id: r.id, value: r.value, checked: r.checked,
+                label: r.parentElement ? r.parentElement.textContent.trim().substring(0, 50) : ''
+            }}));
+
+            // Match por value exato do enum Java
+            for (const r of radios) {{
+                if (r.value === '{_enum_value}') {{
+                    r.click();
+                    r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return 'VALUE:' + r.value;
+                }}
+            }}
+
+            // Fallback: match por índice (HJD=1, HST=3, APH=4, NAP=0)
+            const idx_map = {{'NAP': 0, 'HJD': 1, 'FAV': 2, 'HST': 3, 'APH': 4, 'SEM': 5, 'MEN': 6}};
+            const idx = idx_map['{forma}'];
+            if (idx !== undefined && idx < radios.length) {{
+                radios[idx].click();
+                radios[idx].dispatchEvent(new Event('change', {{bubbles: true}}));
+                return 'INDEX:' + idx + ':' + radios[idx].value;
+            }}
+
+            return 'NOT_FOUND:' + JSON.stringify(info);
+        }}""")
+        self._log(f"    Radio resultado: {_radio_clicked}")
+        if _radio_clicked and not _radio_clicked.startswith("NOT_FOUND") and _radio_clicked != "NO_RADIOS":
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+
+        # ── 3. Quantidade fixa (HST) ──
+        if forma == "HST" and qt_he_mes:
+            hh_he = int(qt_he_mes)
+            mm_he = int((qt_he_mes - hh_he) * 60)
+            self._preencher("qtsumulatst", f"{hh_he:02d}:{mm_he:02d}", False)
+            self._log(f"    HST: {hh_he:02d}:{mm_he:02d} HE/mês")
+
+        # ── 4. Jornada diária por dia da semana (HJD/APH) ──
+        # Campos usam timeMask() — formato HH:MM
+        if forma in ("HJD", "APH"):
+            _CAMPO_DIA = {
+                "seg": "valorJornadaSegunda",
+                "ter": "valorJornadaTerca",
+                "qua": "valorJornadaQuarta",
+                "qui": "valorJornadaQuinta",
+                "sex": "valorJornadaSexta",
+                "sab": "valorJornadaDiariaSabado",
+                "dom": "valorJornadaDiariaDom",
+            }
+            for dia, campo_id in _CAMPO_DIA.items():
+                horas = jornada_dias.get(dia)
+                if horas is not None and horas > 0:
+                    hh = int(horas)
+                    mm = int((horas - hh) * 60)
+                    valor_hhmm = f"{hh:02d}:{mm:02d}"
+                else:
+                    valor_hhmm = "00:00"
+                # Usar press_sequentially para campos com timeMask
+                try:
+                    loc = self._page.locator(f"input[id$='{campo_id}']")
+                    if loc.count() > 0:
+                        loc.first.click()
+                        loc.first.fill("")
+                        loc.first.press_sequentially(valor_hhmm, delay=50)
+                        loc.first.press("Tab")
+                        self._log(f"    {dia.upper()}: {valor_hhmm}")
+                    else:
+                        self._log(f"    ⚠ {dia.upper()}: campo '{campo_id}' não encontrado")
+                except Exception as e:
+                    self._log(f"    ⚠ {dia.upper()}: erro {e}")
+
+        # ── 5. Jornada semanal e mensal ──
+        # qtJornadaSemanal usa currencyMask() — formato decimal BR (ex: "50,00")
         if jornada_semanal:
-            _js_str = _fmt_br(jornada_semanal)
-            self._preencher("jornadaSemanal", _js_str, False)
-            self._preencher("horasSemana", _js_str, False)
-            self._preencher("cargaHorariaSemanal", _js_str, False)
+            _js_val = _fmt_br(jornada_semanal)
+            try:
+                loc_sem = self._page.locator("input[id$='qtJornadaSemanal']")
+                if loc_sem.count() > 0:
+                    loc_sem.first.click()
+                    loc_sem.first.fill("")
+                    loc_sem.first.press_sequentially(_js_val, delay=50)
+                    loc_sem.first.press("Tab")
+                    self._log(f"    Semanal: {_js_val}")
+            except Exception as e:
+                self._log(f"    ⚠ Semanal: erro {e}")
 
-        # Intervalo padrão (1h para jornadas ≥ 6h — art. 71 CLT)
-        intervalo = 1.0 if jornada_diaria >= 6 else 0.0
-        if intervalo:
-            self._preencher("intervalo", _fmt_br(intervalo), False)
-            self._preencher("horasIntervalo", _fmt_br(intervalo), False)
-            self._preencher("tempoIntervalo", _fmt_br(intervalo), False)
+        if jornada_mensal:
+            _jm_val = _fmt_br(jornada_mensal)
+            try:
+                loc_men = self._page.locator("input[id$='qtJornadaMensal']")
+                if loc_men.count() > 0:
+                    loc_men.first.click()
+                    loc_men.first.fill("")
+                    loc_men.first.press_sequentially(_jm_val, delay=50)
+                    loc_men.first.press("Tab")
+                    self._log(f"    Mensal: {_jm_val}")
+            except Exception as e:
+                self._log(f"    ⚠ Mensal: erro {e}")
 
-        self._clicar_salvar()
-        self._aguardar_ajax()
+        # ── 6. Intervalo intrajornada ──
+        if intervalo_min and intervalo_min > 0:
+            hh_int = int(intervalo_min // 60)
+            mm_int = int(intervalo_min % 60)
+            valor_intervalo = f"{hh_int:02d}:{mm_int:02d}"
+
+            # Marcar e preencher intervalo para jornadas > 6h
+            try:
+                cb = self._page.locator("input[id$='intervalorIntraJornadaSupSeis']")
+                if cb.count() > 0 and not cb.first.is_checked():
+                    cb.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+            try:
+                loc_iv = self._page.locator("input[id$='valorIntervalorIntraJornadaSupSeis']")
+                if loc_iv.count() > 0:
+                    loc_iv.first.click()
+                    loc_iv.first.fill("")
+                    loc_iv.first.press_sequentially(valor_intervalo, delay=50)
+                    loc_iv.first.press("Tab")
+                    self._log(f"    Intervalo >6h: {valor_intervalo}")
+            except Exception as e:
+                self._log(f"    ⚠ Intervalo: erro {e}")
+
+        # ── 7. Flags: feriados, domingos ──
+        trabalha_feriados = dur.get("trabalha_feriados", False)
+        trabalha_domingos = dur.get("trabalha_domingos", False)
+
+        if trabalha_feriados:
+            try:
+                cb_fer = self._page.locator("input[id$='considerarFeriado']")
+                if cb_fer.count() > 0 and not cb_fer.first.is_checked():
+                    cb_fer.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._log("    ✓ Considerar Feriados: marcado")
+            except Exception:
+                pass
+
+        if trabalha_domingos:
+            try:
+                cb_dom = self._page.locator("input[id$='extraDescansoSeparado']")
+                if cb_dom.count() > 0 and not cb_dom.first.is_checked():
+                    cb_dom.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._log("    ✓ Extras domingos separado: marcado")
+            except Exception:
+                pass
+
+        # ── 7b. Intervalo intrajornada ≤ 6h (campo separado do > 6h) ──
+        if intervalo_min and intervalo_min > 0:
+            try:
+                # Intervalo para jornadas ≤ 6h (15 min padrão)
+                cb_inf6 = self._page.locator("input[id$='intervalorIntraJornadaInfSeis']")
+                if cb_inf6.count() > 0:
+                    jornada_max = max((v or 0) for v in jornada_dias.values()) if jornada_dias else 0
+                    if jornada_max <= 6 and not cb_inf6.first.is_checked():
+                        cb_inf6.first.click(force=True)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(300)
+                        # Preencher valor do intervalo ≤ 6h
+                        loc_iv6 = self._page.locator("input[id$='valorIntervalorIntraJornadaInfSeis']")
+                        if loc_iv6.count() > 0:
+                            hh_i6 = int(intervalo_min // 60)
+                            mm_i6 = int(intervalo_min % 60)
+                            loc_iv6.first.click()
+                            loc_iv6.first.fill("")
+                            loc_iv6.first.press_sequentially(f"{hh_i6:02d}:{mm_i6:02d}", delay=50)
+                            loc_iv6.first.press("Tab")
+                            self._log(f"    Intervalo ≤6h: {hh_i6:02d}:{mm_i6:02d}")
+            except Exception as e:
+                self._log(f"    ⚠ Intervalo ≤6h: erro {e}")
+
+        # ── 7c. Horário Noturno ──
+        # Conforme vídeo: marcar "Apurar horas noturnas", definir horário (Urbano: 22h-05h),
+        # configurar Redução Ficta (52m30s) e Prorrogação do Horário Noturno (Súmula 60 TST)
+        apurar_noturno = dur.get("apurar_hora_noturna", False)
+        if apurar_noturno:
+            try:
+                cb_noturno = self._page.locator("input[id$='apurarHorasNoturnas']")
+                if cb_noturno.count() > 0 and not cb_noturno.first.is_checked():
+                    cb_noturno.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    self._log("    ✓ Apurar horas noturnas: marcado")
+
+                    # Horário noturno início/fim (urbano padrão: 22:00 - 05:00)
+                    hora_inicio_noturno = dur.get("hora_inicio_noturno", "22:00")
+                    hora_fim_noturno = dur.get("hora_fim_noturno", "05:00")
+
+                    loc_inicio_not = self._page.locator("input[id$='inicioHorarioNoturno']")
+                    if loc_inicio_not.count() > 0:
+                        loc_inicio_not.first.click()
+                        loc_inicio_not.first.fill("")
+                        loc_inicio_not.first.press_sequentially(hora_inicio_noturno, delay=50)
+                        loc_inicio_not.first.press("Tab")
+
+                    loc_fim_not = self._page.locator("input[id$='fimHorarioNoturno']")
+                    if loc_fim_not.count() > 0:
+                        loc_fim_not.first.click()
+                        loc_fim_not.first.fill("")
+                        loc_fim_not.first.press_sequentially(hora_fim_noturno, delay=50)
+                        loc_fim_not.first.press("Tab")
+
+                    self._log(f"    Horário noturno: {hora_inicio_noturno} - {hora_fim_noturno}")
+
+                    # Redução ficta (hora noturna = 52m30s)
+                    reducao_ficta = dur.get("reducao_ficta", True)
+                    if reducao_ficta:
+                        cb_red = self._page.locator("input[id$='reducaoFicta']")
+                        if cb_red.count() > 0 and not cb_red.first.is_checked():
+                            cb_red.first.click(force=True)
+                            self._aguardar_ajax()
+                            self._log("    ✓ Redução ficta: marcada")
+
+                    # Prorrogação horário noturno (Súmula 60 TST)
+                    prorrogacao_noturno = dur.get("prorrogacao_horario_noturno", False)
+                    if prorrogacao_noturno:
+                        cb_prorr = self._page.locator("input[id$='horarioProrrogado']")
+                        if cb_prorr.count() > 0 and not cb_prorr.first.is_checked():
+                            cb_prorr.first.click(force=True)
+                            self._aguardar_ajax()
+                            self._log("    ✓ Prorrogação horário noturno: marcada")
+
+            except Exception as e:
+                self._log(f"    ⚠ Horário noturno: erro {e}")
+
+        # ── 8. Salvar ──
+        # No cartão de ponto, o botão pode ser "Salvar" ou "salvar"
+        _saved = False
+        for _sel in ["input[id$='salvar']", "input[value='Salvar']",
+                     "input[id$='btnSalvar']", "a4j\\:commandButton[id$='salvar']"]:
+            try:
+                btn = self._page.locator(_sel)
+                if btn.count() > 0 and btn.first.is_visible():
+                    btn.first.click()
+                    self._aguardar_ajax()
+                    _saved = True
+                    self._log(f"    ✓ Salvar via '{_sel}'")
+                    break
+            except Exception:
+                continue
+
+        if not _saved:
+            # Fallback: clicar via JS qualquer botão com texto "Salvar"
+            _saved = self._page.evaluate("""() => {
+                const btns = document.querySelectorAll("input[type='submit'], input[type='button']");
+                for (const b of btns) {
+                    if ((b.value || '').includes('Salvar') && b.offsetParent !== null) {
+                        b.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""")
+            if _saved:
+                self._aguardar_ajax()
+                self._log("    ✓ Salvar via JS")
+            else:
+                self._log("    ⚠ Salvar não encontrado — cartão pode não ter sido gravado")
+
+        self._page.wait_for_timeout(1000)
+        self._screenshot_fase("05b_cartao_ponto")
         self._log(
-            f"  ✓ Cartão de Ponto: {jornada_diaria}h/dia × "
-            f"{jornada_semanal}h/sem (intervalo {intervalo}h)"
+            f"  ✓ Cartão de Ponto: forma={forma}, "
+            f"semanal={jornada_semanal}h, intervalo={intervalo_min}min"
         )
         self._log("Fase 5b concluída.")
 
@@ -3986,17 +4680,95 @@ class PJECalcPlaywright:
         out_dir = Path(OUTPUT_DIR)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Restaurar sessão Seam ANTES da liquidação — navegar para calculo.jsf
-        # para garantir que o cálculo está aberto na conversação.
-        # Sem isso, liquidacao.xhtml falha com "identifier 'registro' resolved to null"
-        # porque os backing beans perdem o estado após 404/500 em fases anteriores.
-        if self._calculo_url_base and self._calculo_conversation_id:
+        # Restaurar sessão Seam ANTES da liquidação.
+        # A conversação original fica corrompida por NPEs acumulados durante a automação
+        # (ex: ApresentadorHonorarios.getListaCredoresDoCalculo causando NPE a cada render).
+        # Navegar para calculo.jsf?conversationId=X com conversação morta causa
+        # "identifier 'registro' resolved to null" em liquidacao.xhtml.
+        #
+        # Solução: voltar para principal.jsf e re-abrir o cálculo da lista de "Recentes".
+        # Isso cria uma NOVA conversação Seam limpa com o backing bean corretamente injetado.
+        _sessao_restaurada = False
+        try:
+            self._log("  → Re-abrindo cálculo via Tela Inicial (nova conversação Seam)…")
+            _home = f"{self.PJECALC_BASE}/pages/principal.jsf"
+            self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+            self._page.wait_for_timeout(2000)
+            try:
+                self._instalar_monitor_ajax()
+            except Exception:
+                pass
+
+            # Clicar no cálculo correto da lista de "Cálculos Recentes" (double-click abre)
+            _listbox = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
+            if _listbox.count() > 0:
+                _options = _listbox.first.locator("option")
+                _n_opts = _options.count()
+                self._log(f"  ℹ Cálculos recentes: {_n_opts} itens")
+                if _n_opts > 0:
+                    # Tentar encontrar o cálculo correto pelo número do processo
+                    _target_opt = _options.first  # default: primeiro
+                    _num_proc = (self._dados or {}).get("processo", {}).get("numero", "")
+                    if _num_proc:
+                        # Normalizar: remover pontos e traços para busca textual
+                        _num_clean = _num_proc.replace(".", "").replace("-", "").replace("/", "")
+                        for i in range(_n_opts):
+                            _opt_text = _options.nth(i).text_content() or ""
+                            _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
+                            if _num_clean in _opt_clean or (_num_clean[:7] in _opt_clean):
+                                _target_opt = _options.nth(i)
+                                self._log(f"  ✓ Encontrado cálculo correto: '{_opt_text[:60]}' (item {i+1})")
+                                break
+                        else:
+                            self._log(f"  ℹ Processo '{_num_proc}' não encontrado nos recentes — usando primeiro item")
+                    _target_opt.click()
+                    self._page.wait_for_timeout(300)
+                    # Double-click dispara a4j:support event="ondblclick" → abrirCalculo()
+                    _target_opt.dblclick()
+                    self._aguardar_ajax(30000)
+                    self._page.wait_for_timeout(2000)
+                    # Verificar se navegou para o cálculo
+                    _url_after = self._page.url
+                    if "calculo" in _url_after and "conversationId" in _url_after:
+                        self._capturar_base_calculo()
+                        self._log(f"  ✓ Cálculo re-aberto com nova conversação: {self._calculo_conversation_id}")
+                        _sessao_restaurada = True
+                    else:
+                        self._log(f"  ⚠ URL inesperada após dblclick: {_url_after}")
+            else:
+                self._log("  ⚠ Lista de cálculos recentes não encontrada")
+
+            if not _sessao_restaurada:
+                # Fallback: tentar "Buscar Cálculo" (sprite-abrir) → abre lista de cálculos
+                self._log("  → Tentando via Buscar Cálculo…")
+                _buscar_link = self._page.locator("div.sprite-abrir a, a[title*='Buscar']")
+                if _buscar_link.count() > 0:
+                    _buscar_link.first.click()
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+                    # Na lista de cálculos, clicar no primeiro "Selecionar"
+                    _sel_link = self._page.locator("a[class*='linkSelecionar'], a[title*='Selecionar']")
+                    if _sel_link.count() > 0:
+                        _sel_link.first.click()
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(2000)
+                        _url_after2 = self._page.url
+                        if "calculo" in _url_after2 and "conversationId" in _url_after2:
+                            self._capturar_base_calculo()
+                            self._log(f"  ✓ Cálculo aberto via Buscar: {self._calculo_conversation_id}")
+                            _sessao_restaurada = True
+
+        except Exception as _e:
+            self._log(f"  ⚠ Re-abertura do cálculo falhou: {_e}")
+
+        # Último fallback: tentar conversação antiga (pode falhar)
+        if not _sessao_restaurada and self._calculo_url_base and self._calculo_conversation_id:
             try:
                 _calc_url = (
                     f"{self._calculo_url_base}calculo.jsf"
                     f"?conversationId={self._calculo_conversation_id}"
                 )
-                self._log("  → Restaurando sessão Seam via calculo.jsf…")
+                self._log("  → Fallback: tentando conversação antiga via calculo.jsf…")
                 self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
                 try:
                     self._instalar_monitor_ajax()
@@ -4006,7 +4778,7 @@ class PJECalcPlaywright:
                 self._page.wait_for_timeout(1000)
                 self._capturar_base_calculo()
             except Exception as _e:
-                self._log(f"  ⚠ Restauração sessão Seam: {_e}")
+                self._log(f"  ⚠ Fallback conversação antiga: {_e}")
 
         def _salvar_download(dl_info_value) -> str:
             dest = out_dir / dl_info_value.suggested_filename
@@ -4036,56 +4808,108 @@ class PJECalcPlaywright:
             self._log(f"PJC_GERADO:{dest}")
             return str(dest)
 
-        # ── Passo 1: Navegar para Liquidar e clicar (AJAX — sem download) ───────
-        _nav_liquidar = self._clicar_menu_lateral("Liquidar", obrigatorio=False)
-        if _nav_liquidar:
-            self._page.wait_for_timeout(1000)
-            # Preencher data de liquidação se campo disponível
-            try:
-                _dt_campo = self._page.locator("input[id*='dataLiquidacao']")
-                if _dt_campo.count() > 0 and not _dt_campo.first.input_value():
+        # ── Passo 1: Navegar para Liquidar via sidebar JSF (NÃO via URL) ────────
+        # IMPORTANTE: A página /pages/calculo/liquidacao.xhtml precisa que
+        # apresentadorLiquidacao.liquidacao não seja null. Isso só acontece quando
+        # a navegação é feita via sidebar JSF (que chama a action do menu) —
+        # navegar direto via URL não inicializa o bean, causando NPE.
+        #
+        # O sidebar "Operações > Liquidar" é um link JSF que dispara a navegação.
+        # Precisamos clicar nele via JS (force=True) para que o JSF processe a action.
+        self._log("  → Navegando para Liquidar via sidebar JSF…")
+        _nav_ok = False
+
+        # Tentar clicar no sidebar via JS — buscar link com texto "Liquidar" na sidebar
+        try:
+            _nav_ok = self._page.evaluate("""() => {
+                // Buscar todos os links na sidebar (div com class "menu" ou similar)
+                const links = [...document.querySelectorAll('a')];
+                for (const a of links) {
+                    const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
+                    // Procurar link "Liquidar" (não o botão "Liquidar" no formulário)
+                    if (txt === 'Liquidar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) {
+                        a.click();
+                        return true;
+                    }
+                }
+                // Fallback: qualquer link com "Liquidar" que pareça do sidebar
+                for (const a of links) {
+                    const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
+                    const parentLi = a.closest('li');
+                    if (txt === 'Liquidar' && parentLi && parentLi.id && parentLi.id.includes('operacoes')) {
+                        a.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""")
+        except Exception as _e_nav:
+            self._log(f"  ⚠ Sidebar click JS: {_e_nav}")
+
+        if _nav_ok:
+            self._log("  ✓ Sidebar Liquidar clicado via JS")
+            self._aguardar_ajax(30000)
+            self._page.wait_for_timeout(2000)
+        else:
+            # Tentar _clicar_menu_lateral que pode usar force=True
+            self._log("  ⚠ Sidebar JS não encontrou — tentando _clicar_menu_lateral…")
+            _nav_ok = self._clicar_menu_lateral("Liquidar", obrigatorio=False)
+            if _nav_ok:
+                self._page.wait_for_timeout(1000)
+
+        # Verificar se chegou na página de liquidação corretamente
+        _na_liquidacao = False
+        try:
+            _body_liq = self._page.locator("body").text_content(timeout=5000) or ""
+            if "Erro Interno" in _body_liq or "identifier" in _body_liq:
+                self._log("  ⚠ Erro ao carregar página de liquidação — bean não inicializado")
+                self._screenshot_fase("liquidacao_erro")
+            elif "Liquidar" in _body_liq or "liquidação" in _body_liq.lower() or "pendências" in _body_liq.lower():
+                _na_liquidacao = True
+                self._log("  ✓ Página de liquidação carregada")
+        except Exception:
+            pass
+
+        if not _na_liquidacao:
+            self._log("  ⚠ Não na página de liquidação — tentando preencher data e liquidar direto")
+
+        # Preencher data de liquidação se campo disponível
+        try:
+            _dt_campo = self._page.locator("input[id*='dataLiquidacao'], input[id*='dataDeLiquidacao']")
+            if _dt_campo.count() > 0:
+                _val = _dt_campo.first.input_value()
+                if not _val:
                     from datetime import date
-                    self._preencher_data("dataLiquidacao",
+                    self._preencher_data("dataDeLiquidacao",
                                         date.today().strftime("%d/%m/%Y"), False)
-            except Exception:
-                pass
+                    self._log(f"  ✓ Data liquidação: {date.today().strftime('%d/%m/%Y')}")
+        except Exception:
+            pass
 
         # Localizar botão Liquidar
+        # /pages/calculo/liquidacao.xhtml: <a4j:commandButton id="liquidar" value="Liquidar">
+        # /pages/verba/liquidacao.xhtml: <a4j:commandButton id="incluir" value="Liquidar">
         loc = None
-        for sel in ["[id$='liquidar']", "[id$='liquidarBt']", "[id$='liquidarBtn']",
-                    "input[id*='btnLiquidar']", "button[id*='btnLiquidar']",
-                    "input[value='Liquidar']", "a:has-text('Liquidar')"]:
+        for sel in ["input[id$='liquidar'][value='Liquidar']",
+                    "input[value='Liquidar']",
+                    "[id$='incluir'][value='Liquidar']"]:
             try:
                 candidate = self._page.locator(sel)
-                if candidate.count() > 0:
+                if candidate.count() > 0 and candidate.first.is_visible():
                     loc = candidate.first
+                    self._log(f"  ℹ Botão encontrado: {sel}")
                     break
             except Exception:
                 continue
 
         if loc is None:
-            # Tentar via Operações
-            self._log("  Botão Liquidar não encontrado — tentando via Operações…")
-            self._clicar_menu_lateral("Operações", obrigatorio=False)
-            self._clicar_menu_lateral("Operacoes", obrigatorio=False)
-            self._page.wait_for_timeout(1000)
-            for sel in ["[id$='liquidar']", "input[value='Liquidar']"]:
-                try:
-                    candidate = self._page.locator(sel)
-                    if candidate.count() > 0:
-                        loc = candidate.first
-                        break
-                except Exception:
-                    continue
-
-        if loc is None:
-            # JS global fallback
+            # JS global fallback — click visible input/button with value "Liquidar"
             self._log("  Tentando Liquidar via JS global…")
             clicou = self._page.evaluate("""() => {
-                const all = [...document.querySelectorAll('a, input[type="submit"], button')];
+                const all = [...document.querySelectorAll('input[type="submit"], button')];
                 for (const el of all) {
-                    const txt = (el.textContent||el.value||'').replace(/[\\s\\u00a0]+/g,' ').trim();
-                    if (txt === 'Liquidar' || txt.startsWith('Liquidar')) {
+                    const val = (el.value || el.textContent || '').trim();
+                    if (val === 'Liquidar' && el.offsetParent !== null) {
                         el.click(); return true;
                     }
                 }
@@ -4149,52 +4973,85 @@ class PJECalcPlaywright:
         except Exception:
             _liquidacao_ok = True  # Se não conseguiu verificar, assume OK
 
-        # Retry: se liquidação falhou, re-navegar pelo cálculo e tentar novamente
+        # Retry: se liquidação falhou, re-abrir cálculo via Tela Inicial (nova conversação)
         if not _liquidacao_ok and _liquidacao_erro_msg:
-            self._log("  → Retentando liquidação: re-abrindo cálculo para estabilizar sessão…")
+            self._log("  → Retry: re-abrindo cálculo via Tela Inicial para nova conversação…")
             try:
-                # Re-abrir cálculo principal para restaurar sessão Seam
-                if self._calculo_url_base and self._calculo_conversation_id:
-                    _calc_url = (
-                        f"{self._calculo_url_base}calculo.jsf"
-                        f"?conversationId={self._calculo_conversation_id}"
-                    )
-                    self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(1000)
-                    self._capturar_base_calculo()
+                # Navegar para principal.jsf e re-abrir via Cálculos Recentes
+                _home = f"{self.PJECALC_BASE}/pages/principal.jsf"
+                self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+                self._page.wait_for_timeout(2000)
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
 
-                # Re-navegar para liquidação
-                _liq_url = (
-                    f"{self._calculo_url_base}liquidacao.jsf"
-                    f"?conversationId={self._calculo_conversation_id}"
-                )
-                self._page.goto(_liq_url, wait_until="domcontentloaded", timeout=15000)
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(1000)
-
-                # Clicar Liquidar novamente
-                for sel in ["[id$='liquidar']", "[id$='liquidarBt']", "input[value='Liquidar']"]:
-                    _loc2 = self._page.locator(sel)
-                    if _loc2.count() > 0:
-                        self._log("  → Retry: clicando Liquidar…")
-                        _loc2.first.click()
-                        self._aguardar_ajax(90000)
+                _reabriu = False
+                _listbox = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
+                if _listbox.count() > 0:
+                    _options = _listbox.first.locator("option")
+                    if _options.count() > 0:
+                        _options.first.click()
+                        self._page.wait_for_timeout(300)
+                        _options.first.dblclick()
+                        self._aguardar_ajax(30000)
                         self._page.wait_for_timeout(2000)
-                        # Verificar resultado do retry
-                        _body2 = (self._page.locator("body").text_content(timeout=5000) or "").lower()
-                        if "não foram encontradas pendências" in _body2 or \
-                           "liquidação realizada" in _body2 or \
-                           "cálculo liquidado" in _body2:
-                            self._log("  ✓ Retry liquidação: sucesso!")
-                            _liquidacao_ok = True
-                        elif "erro interno" not in _body2 and "não foi possível" not in _body2:
-                            self._log("  ✓ Retry liquidação: sem erro detectado")
-                            _liquidacao_ok = True
-                        else:
-                            self._log("  ⚠ Retry liquidação: ainda com erro")
-                            self._screenshot_fase("liquidacao_erro_retry")
-                        break
+                        _url_r = self._page.url
+                        if "calculo" in _url_r and "conversationId" in _url_r:
+                            self._capturar_base_calculo()
+                            self._log(f"  ✓ Retry: nova conversação {self._calculo_conversation_id}")
+                            _reabriu = True
+
+                if _reabriu:
+                    # Navegar para Liquidar via sidebar JSF (não via URL — URL causa NPE)
+                    _nav_retry = self._page.evaluate("""() => {
+                        const links = [...document.querySelectorAll('a')];
+                        for (const a of links) {
+                            const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
+                            if (txt === 'Liquidar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) {
+                                a.click(); return true;
+                            }
+                        }
+                        for (const a of links) {
+                            const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
+                            const li = a.closest('li');
+                            if (txt === 'Liquidar' && li && li.id && li.id.includes('operacoes')) {
+                                a.click(); return true;
+                            }
+                        }
+                        return false;
+                    }""")
+                    if _nav_retry:
+                        self._log("  ✓ Retry: sidebar Liquidar clicado")
+                        self._aguardar_ajax(30000)
+                        self._page.wait_for_timeout(2000)
+                    else:
+                        self._log("  ⚠ Retry: sidebar Liquidar não encontrado")
+                        self._clicar_menu_lateral("Liquidar", obrigatorio=False)
+                        self._page.wait_for_timeout(1000)
+
+                    # Clicar botão Liquidar no formulário
+                    for sel in ["input[id$='liquidar'][value='Liquidar']",
+                                "input[value='Liquidar']"]:
+                        _loc2 = self._page.locator(sel)
+                        if _loc2.count() > 0 and _loc2.first.is_visible():
+                            self._log("  → Retry: clicando Liquidar…")
+                            _loc2.first.click()
+                            self._aguardar_ajax(90000)
+                            self._page.wait_for_timeout(2000)
+                            _body2 = (self._page.locator("body").text_content(timeout=5000) or "").lower()
+                            if "não foram encontradas pendências" in _body2 or \
+                               "liquidação realizada" in _body2 or \
+                               "cálculo liquidado" in _body2:
+                                self._log("  ✓ Retry liquidação: sucesso!")
+                                _liquidacao_ok = True
+                            elif "erro interno" not in _body2 and "não foi possível" not in _body2:
+                                self._log("  ✓ Retry liquidação: sem erro detectado")
+                                _liquidacao_ok = True
+                            else:
+                                self._log("  ⚠ Retry liquidação: ainda com erro")
+                                self._screenshot_fase("liquidacao_erro_retry")
+                            break
             except Exception as _retry_err:
                 self._log(f"  ⚠ Retry liquidação falhou: {_retry_err}")
 
@@ -4219,21 +5076,7 @@ class PJECalcPlaywright:
         # Tentativa 1: Navegar via menu lateral (mantém backing beans Seam)
         try:
             self._log("  → Navegando para Exportação via menu lateral JSF…")
-            # Primeiro voltar para calculo.jsf para garantir contexto ativo
-            if self._calculo_url_base and self._calculo_conversation_id:
-                _calc_url = (
-                    f"{self._calculo_url_base}calculo.jsf"
-                    f"?conversationId={self._calculo_conversation_id}"
-                )
-                self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
-                try:
-                    self._instalar_monitor_ajax()
-                except Exception:
-                    pass
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(1000)
-                self._capturar_base_calculo()
-
+            # Usar _clicar_menu_lateral para navegar (mantém backing beans)
             # Clicar no link "Exportar" do sidebar via JS (mesmo padrão de _clicar_menu_lateral)
             _clicou_export_menu = self._page.evaluate("""() => {
                 // Buscar link no sidebar pelo texto "Exportar"
@@ -4356,6 +5199,9 @@ class PJECalcPlaywright:
             parametrizacao: output de parametrizacao.gerar_parametrizacao() — opcional.
                            Se presente, instrui fases específicas com dados pré-calculados.
         """
+        # Armazenar dados para uso posterior (ex: re-abrir cálculo correto na liquidação)
+        self._dados = dados
+
         # ── Estimativas de progresso (segundos acumulados) — otimizado ────────
         _PHASE_ESTIMATES = [
             ("dados_processo", 10),
@@ -4411,14 +5257,45 @@ class PJECalcPlaywright:
         params_gerais = (parametrizacao or {}).get("passo_2_parametros_gerais", {})
         if not params_gerais:
             cont = dados.get("contrato", {})
+            # carga_horaria do contrato é MENSAL (ex: 220, 180).
+            # PJE-Calc Parâmetros Gerais espera carga diária (8, 6) e semanal (44, 40).
+            _ch_mensal = cont.get("carga_horaria")
+            _ch_diaria = None
+            _ch_semanal = None
+            if _ch_mensal:
+                if _ch_mensal >= 210:
+                    _ch_diaria = 8
+                    _ch_semanal = 44
+                elif _ch_mensal >= 175:
+                    _ch_diaria = 8
+                    _ch_semanal = 40
+                elif _ch_mensal >= 155:
+                    _ch_diaria = 6
+                    _ch_semanal = 36
+                else:
+                    _ch_diaria = round(_ch_mensal / (4.5 * 5))
+                    _ch_semanal = round(_ch_diaria * 5)
             params_gerais = {
-                "carga_horaria_diaria": cont.get("carga_horaria"),
+                "carga_horaria_diaria": _ch_diaria,
+                "carga_horaria_semanal": _ch_semanal,
                 "zerar_valores_negativos": True,
             }
         self.fase_parametros_gerais(params_gerais)
 
         _progress(2)
         self.fase_historico_salarial(dados)
+
+        # Cartão de Ponto: preencher ANTES das verbas quando há apuração por jornada (HJD).
+        # No PJE-Calc, o cartão de ponto com "Jornada Diária" gera as horas extras
+        # automaticamente via botão "Apurar" — as verbas de HE dependem dele.
+        _dur = dados.get("duracao_trabalho") or {}
+        _tem_cartao = _dur.get("tipo_apuracao") or any(
+            "hora" in (v.get("nome_sentenca") or "").lower() and "extra" in (v.get("nome_sentenca") or "").lower()
+            for v in dados.get("verbas_deferidas", [])
+        )
+        if _tem_cartao:
+            _progress(3)
+            self.fase_cartao_ponto(dados)
 
         _progress(3)
         self.fase_verbas(verbas_mapeadas)
@@ -4437,7 +5314,6 @@ class PJECalcPlaywright:
         self.fase_contribuicao_social(dados.get("contribuicao_social", {}))
 
         _progress(6)
-        self.fase_cartao_ponto(dados)
         self.fase_faltas(dados)
         self.fase_ferias(dados)
 

@@ -169,3 +169,84 @@ Para União, Estados, Municípios, autarquias, fundações públicas:
 - Operações > Exportar: gera arquivo .PJC
 - .PJC = ZIP contendo XML ISO-8859-1
 - Importar no PJE integrado: Cálculos > Importar Cálculo Externo
+
+---
+
+## Seção 8 — Cartão de Ponto
+
+Fonte: Manual oficial PJE-Calc (pje.csjt.jus.br/manual) + Vídeo "Introdução ao Cartão de Ponto" (Fernanda Araujo)
+
+### Visão Geral
+O Cartão de Ponto é o módulo para apuração de horas extras, noturnas e intervalos.
+Possui 3 botões principais: **Novo**, **Grade de Ocorrências**, **Visualizar Cartão**.
+
+### Pré-requisitos (OBRIGATÓRIO antes de criar cartão)
+1. **Dados do Cálculo** salvos: admissão, demissão, prescrição
+2. **Carga Horária** definida em Parâmetros do Cálculo (220h, 180h, 150h mensal)
+   - Isso altera automaticamente os limites diários (8h ou 6h) no cartão
+3. Recomendável ter Histórico Salarial preenchido
+
+### Fluxo de Preenchimento
+1. Clicar **Novo** → abre formulário de Critérios de Apuração
+2. Definir **Período** (datas início/fim que o cartão abrange)
+3. Selecionar **Forma de Apuração** de horas extras
+4. Preencher **Jornada de Trabalho Padrão** (seg-dom)
+5. Configurar **Períodos de Descanso** (feriados, intervalos)
+6. Configurar **Horário Noturno** (se aplicável)
+7. Escolher modalidade de **Preenchimento de Jornadas**
+8. Clicar **Salvar**
+9. Ir para **Grade de Ocorrências** para editar jornadas dia a dia
+10. Ir para **Visualizar Cartão** > **Apurar** para gerar quantidades mensais
+
+### Formas de Apuração (radio tipoApuracaoHorasExtras)
+| Código | Enum Java | Descrição |
+|--------|-----------|-----------|
+| NAP | NAO_APURAR_HORAS_EXTRAS | Não apurar horas extras |
+| HJD | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA | Excedentes da jornada diária (ex: 8ª hora) |
+| FAV | HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL | Critério mais favorável ao trabalhador |
+| HST | HORAS_EXTRAS_CONFORME_SUMULA_85 | Conforme Súmula 85 do TST |
+| APH | APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO | Primeiras HE em separado |
+| SEM | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL | Excedentes da jornada semanal (ex: 44ª hora) |
+| MEN | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL | Excedentes da jornada mensal (ex: 220h) |
+
+### Campos do Formulário (IDs confirmados)
+- `competenciaInicial` / `competenciaFinal`: período do cartão (datas)
+- `tipoApuracaoHorasExtras`: radio com enum Java
+- `valorJornadaSegunda` a `valorJornadaDiariaDom`: jornada diária HH:MM
+- `qtJornadaSemanal` / `qtJornadaMensal`: totais (decimal BR)
+- `qtsumulatst`: quantidade HE para Súmula 85 (HH:MM)
+- `intervalorIntraJornadaSupSeis` (checkbox) + `valorIntervalorIntraJornadaSupSeis`: intervalo >6h
+- `intervalorIntraJornadaInfSeis` (checkbox) + `valorIntervalorIntraJornadaInfSeis`: intervalo ≤6h
+- `considerarFeriado`: checkbox feriados
+- `extraDescansoSeparado`: checkbox extras domingos separado
+- `apurarHorasNoturnas`: checkbox horário noturno
+- `inicioHorarioNoturno` / `fimHorarioNoturno`: horários (HH:MM)
+- `reducaoFicta`: checkbox (hora noturna = 52m30s)
+- `horarioProrrogado`: checkbox prorrogação noturna (Súmula 60 TST)
+- `formulario:incluir`: botão Novo
+- `formulario:salvar`: botão Salvar
+- `formulario:visualizarOcorrencias`: botão Grade de Ocorrências
+- `formulario:importarCartao`: botão Visualizar Cartão
+
+### Preenchimento de Jornadas (Modalidades)
+- **Programação Semanal**: define semana modelo, replica para todo período (mais comum)
+- **Escala**: para regimes 12x36, 6x1 etc. (ciclo de dias trabalhados/folgas)
+- **Livre**: preenchimento dia a dia, usado com cartões de ponto físicos
+
+### Horário Noturno
+- Urbano: 22h às 05h
+- Rural (pecuária): 20h às 04h
+- Rural (lavoura): 21h às 05h
+- Redução Ficta: hora noturna = 52 minutos e 30 segundos
+- Prorrogação (Súmula 60 TST): labor após 05h em continuidade mantém adicional noturno
+
+### Períodos de Descanso (checkboxes)
+- Considerar feriados (dias ou horas)
+- Extras ao feriado em separado
+- Apurar horas noturnas
+- Intervalo do Art. 384 CLT (mulher)
+- Intervalos para digitadores (Art. 72 CLT)
+- Supressão de intervalo de insalubridade (Art. 253 CLT - frigoríficos)
+- Intervalo interjornadas (11h)
+- Jornada entre semanas (35h)
+- Intervalo intrajornada (almoço)
