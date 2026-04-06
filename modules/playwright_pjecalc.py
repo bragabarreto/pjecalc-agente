@@ -3597,33 +3597,116 @@ class PJECalcPlaywright:
                         except Exception:
                             continue
 
-            # ── Assuntos CNJ (SELECT obrigatório *) — formulario:assuntosCnj ──
-            # Campo obrigatório no formulário Manual. Não vem da extração, então
-            # selecionamos a primeira opção disponível (após noSelectionValue).
+            # ── Assuntos CNJ (obrigatório *) — formulario:assuntosCnj ──
+            # Usar código 2581 = "Remuneração, Verbas indenizatórias e benefícios"
+            # O campo pode ser um <select> ou um botão que abre popup de seleção.
             try:
                 _cnj_ok = self._page.evaluate("""() => {
-                    // Buscar select pelo ID exato ou sufixo
+                    // Estratégia 1: select simples
                     let sel = document.querySelector('[id$="assuntosCnj"]')
                            || document.querySelector('select[id*="assunto"]');
-                    if (!sel) return null;
-                    // Pular a primeira opção (noSelectionValue / "Selecione...")
-                    for (let i = 0; i < sel.options.length; i++) {
-                        const opt = sel.options[i];
-                        if (opt.value && !opt.value.includes('noSelection') && opt.value !== '') {
-                            sel.value = opt.value;
-                            sel.dispatchEvent(new Event('change', {bubbles: true}));
-                            return opt.text.trim();
+                    if (sel && sel.tagName === 'SELECT') {
+                        // Buscar opção 2581 ou "Remuneração"
+                        for (const opt of sel.options) {
+                            if (opt.text.includes('2581') || opt.text.includes('Remunera')
+                                || opt.value.includes('2581')) {
+                                sel.value = opt.value;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                return 'select:' + opt.text.trim();
+                            }
                         }
+                        // Fallback: primeira opção válida
+                        for (const opt of sel.options) {
+                            if (opt.value && !opt.value.includes('noSelection') && opt.value !== '') {
+                                sel.value = opt.value;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                return 'select-fallback:' + opt.text.trim();
+                            }
+                        }
+                    }
+
+                    // Estratégia 2: botão/link que abre popup de seleção
+                    const btnAssunto = [...document.querySelectorAll(
+                        'a[id*="assunto"], input[id*="assunto"], button[id*="assunto"], ' +
+                        'img[id*="assunto"], a[id*="Assunto"], input[id*="Assunto"]'
+                    )].find(el => {
+                        const r = el.getBoundingClientRect();
+                        return r.width > 0 && r.height > 0;
+                    });
+                    if (btnAssunto) {
+                        btnAssunto.click();
+                        return 'popup-opened';
                     }
                     return null;
                 }""")
-                if _cnj_ok:
+                if _cnj_ok and _cnj_ok.startswith('popup-opened'):
+                    # Popup abriu — aguardar e selecionar item 2581
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1000)
+                    _selecionou = self._page.evaluate("""() => {
+                        // Buscar link/item com "2581" ou "Remuneração" no popup
+                        const items = [...document.querySelectorAll(
+                            'a, td, span, li, option, tr'
+                        )];
+                        let target = null;
+                        for (const el of items) {
+                            const txt = (el.textContent || '').trim();
+                            if ((txt.includes('2581') || txt.includes('Remunera'))
+                                && txt.length < 200) {
+                                // Preferir links clicáveis
+                                if (el.tagName === 'A' || el.tagName === 'INPUT') {
+                                    target = el;
+                                    break;
+                                }
+                                // Se é td/span, buscar link dentro
+                                const link = el.querySelector('a, input[type="button"]');
+                                if (link) { target = link; break; }
+                                if (!target) target = el;
+                            }
+                        }
+                        if (target) {
+                            target.click();
+                            return target.textContent.trim().substring(0, 80);
+                        }
+                        return null;
+                    }""")
+                    if _selecionou:
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
+                        # Clicar "Selecionar" se houver botão de confirmação
+                        try:
+                            self._page.evaluate("""() => {
+                                const btns = [...document.querySelectorAll(
+                                    'input[value="Selecionar"], button:has-text("Selecionar"), ' +
+                                    'a:has-text("Selecionar"), input[value*="elecionar"]'
+                                )];
+                                for (const b of btns) {
+                                    const r = b.getBoundingClientRect();
+                                    if (r.width > 0 && r.height > 0) { b.click(); return; }
+                                }
+                            }""")
+                            self._aguardar_ajax()
+                        except Exception:
+                            pass
+                        self._log(f"  ✓ Assunto CNJ (popup): '{_selecionou}'")
+                    else:
+                        self._log(f"  ⚠ Assunto CNJ: popup abriu mas item 2581 não encontrado")
+                elif _cnj_ok:
                     self._aguardar_ajax()
                     self._log(f"  ✓ Assunto CNJ: '{_cnj_ok}'")
                 else:
-                    self._log(f"  ⚠ Verba '{nome}': Assuntos CNJ select não encontrado ou vazio")
+                    self._log(f"  ⚠ Verba '{nome}': Assuntos CNJ não encontrado")
             except Exception as _e_cnj:
                 self._log(f"  ⚠ Assuntos CNJ: {_e_cnj}")
+
+            # ── Tipo de Verba: PRINCIPAL ou REFLEXO ──
+            # Configurar ANTES de preencher reflexo-specific fields
+            if not _eh_reflexa:
+                # Verba principal — marcar tipo PRINCIPAL explicitamente
+                if not self._marcar_radio("tipoDeVerba", "PRINCIPAL"):
+                    self._marcar_radio_js("tipoDeVerba", "PRINCIPAL")
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(300)
 
             # ── Para verbas reflexas: marcar tipo REFLEXO e selecionar verba base ──
             if _eh_reflexa:
