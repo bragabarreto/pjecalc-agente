@@ -2347,11 +2347,12 @@ class PJECalcPlaywright:
                 self.mapear_campos("fase2_historico_salario_form")
 
             # Aguardar carregamento do formulário (inline ou navegação)
+            # IDs confirmados: nome, tipoVariacaoDaParcela:0, tipoValor:0,
+            #   competenciaInicialInputDate, competenciaFinalInputDate, valorParaBaseDeCalculo
             try:
                 self._page.wait_for_selector(
-                    "input[id*='dataInicio'], input[id*='nome'], "
-                    "input[id*='tipoVariacao'], table[id*='tipoVariacao'], "
-                    "input[id*='tipoValor'], select[id*='tipoValor'], "
+                    "input[id*='competenciaInicial'], input[id*='nome'], "
+                    "input[id*='tipoVariacao'], input[id*='tipoValor'], "
                     "input[id*='valorPara']",
                     state="visible", timeout=10000
                 )
@@ -2407,11 +2408,12 @@ class PJECalcPlaywright:
             _comp_ini = _para_competencia(h.get("data_inicio", ""))
             _comp_fim = _para_competencia(h.get("data_fim", ""))
             # Competência fields (MM/yyyy): rich:calendar with jQuery mask('99/9999').
-            # DOM IDs confirmados v2.15.1: formulario:dataInicioInputDate / formulario:dataFinalInputDate
+            # DOM IDs confirmados v2.15.1:
+            #   formulario:competenciaInicialInputDate / formulario:competenciaFinalInputDate
             # Strategy: type into InputDate field, then use RichFaces Calendar API
             # to parse and set the date. Finally Tab to trigger blur + server update.
-            for _cfield, _cval in [("dataInicio", _comp_ini),
-                                    ("dataFinal", _comp_fim)]:
+            for _cfield, _cval in [("competenciaInicial", _comp_ini),
+                                    ("competenciaFinal", _comp_fim)]:
                 _cloc = self._localizar(_cfield, tipo="input")
                 if _cloc and _cval:
                     try:
@@ -2468,12 +2470,13 @@ class PJECalcPlaywright:
                 self._log(f"  ⚠ Checkboxes FGTS/INSS: {_e_chk} — continuando")
 
             # Diagnostic: check actual field values before generating occurrences
-            # DOM IDs confirmados: dataInicioInputDate, dataFinalInputDate, nome, valorParaBaseDeCalculo
+            # DOM IDs confirmados: competenciaInicialInputDate, competenciaFinalInputDate,
+            #   nome, valorParaBaseDeCalculo
             try:
                 _diag = self._page.evaluate("""() => {
                     const fields = {};
                     document.querySelectorAll(
-                        'input[id*="dataInicio"], input[id*="dataFinal"], ' +
+                        'input[id*="competenciaInicial"], input[id*="competenciaFinal"], ' +
                         'input[id*="nome"], input[id*="valorPara"]'
                     ).forEach(el => {
                         if (el.type !== 'hidden')
