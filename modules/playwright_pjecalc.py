@@ -3837,8 +3837,20 @@ class PJECalcPlaywright:
                                 "[id$='assuntosCnjCNJ'], [id*='modalCNJ'] input[type='text']"
                             )
                             if _modal_field.count() > 0:
-                                _modal_field.first.fill("2581")
-                                _modal_field.first.dispatch_event("change")
+                                # Campo pode ser readonly — usar JS se necessário
+                                _is_readonly = _modal_field.first.evaluate(
+                                    "el => el.readOnly || el.classList.contains('leitura')"
+                                )
+                                if _is_readonly:
+                                    _modal_field.first.evaluate("""el => {
+                                        el.readOnly = false;
+                                        el.value = '2581';
+                                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                                        el.dispatchEvent(new Event('blur', {bubbles: true}));
+                                    }""")
+                                else:
+                                    _modal_field.first.fill("2581")
+                                    _modal_field.first.dispatch_event("change")
                                 self._page.wait_for_timeout(1000)
                                 # Buscar e clicar no nó da árvore com "2581"
                                 _found_tree = self._page.evaluate("""() => {
@@ -3924,26 +3936,35 @@ class PJECalcPlaywright:
                 self._log(f"  ⚠ Assuntos CNJ: {_e_cnj}")
 
             # ── Tipo de Verba: PRINCIPAL ou REFLEXO ──
-            # Configurar ANTES de preencher reflexo-specific fields
-            if not _eh_reflexa:
-                # Verba principal — marcar tipo PRINCIPAL explicitamente
-                if not self._marcar_radio("tipoDeVerba", "PRINCIPAL"):
-                    self._marcar_radio_js("tipoDeVerba", "PRINCIPAL")
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(300)
+            # Aguardar estado estável após interação CNJ (modal pode ter alterado AJAX)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
 
-            # ── Para verbas reflexas: marcar tipo REFLEXO e selecionar verba base ──
+            # Configurar ANTES de preencher reflexo-specific fields
+            _tipo_valor = "PRINCIPAL" if not _eh_reflexa else "REFLEXO"
+            # Tentativa 1: _marcar_radio com label matching
+            _tipo_ok = self._marcar_radio("tipoDeVerba", _tipo_valor)
+            if not _tipo_ok:
+                # Tentativa 2: JS direto com label matching
+                _tipo_ok = self._marcar_radio_js("tipoDeVerba", _tipo_valor)
+            if not _tipo_ok:
+                # Tentativa 3: click direto por índice (0=Principal, 1=Reflexa)
+                _idx = "1" if _eh_reflexa else "0"
+                try:
+                    _radio_direto = self._page.locator(f"input[id$='tipoDeVerba:{_idx}']")
+                    if _radio_direto.count() > 0:
+                        _radio_direto.first.click()
+                        _tipo_ok = True
+                        self._log(f"  ✓ radio tipoDeVerba: {_tipo_valor} (click direto :{_idx})")
+                except Exception:
+                    pass
+            if not _tipo_ok:
+                self._log(f"  ⚠ tipoDeVerba={_tipo_valor}: todas tentativas falharam")
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+
+            # ── Para verbas reflexas: selecionar verba base ──
             if _eh_reflexa:
-                # Radio tipoDeVerba = REFLEXO (DOM: formulario:tipoDeVerba com sufixo numérico)
-                _reflexo_ok = any(
-                    self._marcar_radio(fid, "REFLEXO")
-                    for fid in ["tipoDeVerba", "tipoVerba", "tipo"]
-                )
-                if not _reflexo_ok:
-                    # Fallback: buscar via name/table
-                    self._marcar_radio_js("tipoDeVerba", "REFLEXO")
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(500)
                 # Select baseVerbaDeCalculo — selecionar a verba principal pelo nome
                 _principal_ref = v.get("verba_principal_ref") or ""
                 if not _principal_ref and _m_principal:
