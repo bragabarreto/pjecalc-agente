@@ -66,6 +66,8 @@ _sessoes_processando: dict[str, float] = {}  # sessao_id → timestamp de iníci
 # Agora com timestamp para auto-expiração (evita lock travado por crash)
 _sessoes_automacao: dict[str, float] = {}  # sessao_id → timestamp de início
 _LOCK_TIMEOUT_S = 900  # 15 minutos — automação não deve levar mais que isso
+# Lock GLOBAL — apenas uma automação por vez (compartilha Firefox headless)
+_automacao_global_lock: dict[str, float | str] = {}  # "ts" → timestamp, "sessao" → sessao_id
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
@@ -1045,6 +1047,19 @@ async def executar_automacao_sse(
             # Lock expirado — liberar e continuar
             _sessoes_automacao.pop(sessao_id, None)
 
+    # Lock GLOBAL — apenas uma automação por vez (Firefox headless é single-instance)
+    if _automacao_global_lock.get("ts"):
+        _global_age = _time_mod.time() - _automacao_global_lock["ts"]
+        _global_sessao = _automacao_global_lock.get("sessao", "?")
+        if _global_age < _LOCK_TIMEOUT_S and _global_sessao != sessao_id:
+            async def _global_lock_sse():
+                yield f"data: ERRO_EXPORTAVEL::Outra automação já em andamento (sessão {_global_sessao}). Aguarde o término.\n\n"
+                yield "data: [FIM DA EXECUÇÃO]\n\n"
+            return _SR(_global_lock_sse(), media_type="text/event-stream",
+                       headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        elif _global_age >= _LOCK_TIMEOUT_S:
+            _automacao_global_lock.clear()
+
     # Verificar que o usuário confirmou a prévia (HITL obrigatório)
     if not calculo.confirmado_em:
         async def _nao_confirmado_sse():
@@ -1093,6 +1108,19 @@ async def executar_automacao_sse(
 
         # Fix 5: registrar lock de automação — liberado no finally
         _sessoes_automacao[sessao_id] = _time_mod.time()
+        _automacao_global_lock["ts"] = _time_mod.time()
+        _automacao_global_lock["sessao"] = sessao_id
+
+        # Atualizar status no DB: confirmado → em_automacao
+        try:
+            _db_status = SessionLocal()
+            _calc_status = RepositorioCalculo(_db_status).buscar_sessao(sessao_id)
+            if _calc_status:
+                _calc_status.status = "em_automacao"
+                _db_status.commit()
+            _db_status.close()
+        except Exception:
+            pass
 
         _exec_dir = None
         _log_acumulado: list[str] = []
@@ -1260,6 +1288,22 @@ async def executar_automacao_sse(
 
             # Fix 5: liberar lock de automação — SEMPRE, mesmo em exceção
             _sessoes_automacao.pop(sessao_id, None)
+            _automacao_global_lock.clear()
+
+            # Atualizar status no DB: em_automacao → concluido ou erro_automacao
+            try:
+                _db_final = SessionLocal()
+                _calc_final = RepositorioCalculo(_db_final).buscar_sessao(sessao_id)
+                if _calc_final and _calc_final.status == "em_automacao":
+                    _has_pjc = any("PJC_GERADO:" in m for m in _log_acumulado)
+                    _has_error = any("ERRO" in m.upper() for m in _log_acumulado[-5:])
+                    _calc_final.status = "pjc_exportado" if _has_pjc else (
+                        "erro_automacao" if _has_error else "concluido"
+                    )
+                    _db_final.commit()
+                _db_final.close()
+            except Exception:
+                pass
 
     return StreamingResponse(
         gerador_sse(),

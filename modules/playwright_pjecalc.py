@@ -2670,19 +2670,33 @@ class PJECalcPlaywright:
         if not self._tomcat_esta_vivo():
             raise RuntimeError("Tomcat morreu após navegação Expresso")
 
-        # Scroll para carregar TODAS as verbas (tabela <a4j:repeat> renderiza sob demanda)
+        # Scroll progressivo para carregar TODAS as verbas (tabela <a4j:repeat> em 3 colunas)
+        # A tabela tem ~60+ verbas mas só ~27 são visíveis no viewport.
+        # Scroll múltiplo para forçar o browser a computar layout de todos os elementos.
         try:
             self._page.evaluate("""() => {
-                // Scroll em todos os containers possíveis para forçar renderização completa
+                // Scroll em todos os containers possíveis
                 const containers = document.querySelectorAll(
-                    '#formulario\\\\:listagem, table.list-check, .rich-table, .panelGrid, form'
+                    '[id*="listagem"], table.list-check, .rich-table, .panelGrid, form'
                 );
                 for (const c of containers) {
-                    if (c.scrollHeight > c.clientHeight) c.scrollTop = c.scrollHeight;
+                    if (c.scrollHeight > c.clientHeight) {
+                        // Scroll progressivo em 4 passos
+                        for (let i = 1; i <= 4; i++) {
+                            c.scrollTop = (c.scrollHeight / 4) * i;
+                        }
+                    }
                 }
-                window.scrollTo(0, document.body.scrollHeight);
+                // Scroll da janela em passos
+                const h = document.body.scrollHeight;
+                for (let i = 1; i <= 4; i++) {
+                    window.scrollTo(0, (h / 4) * i);
+                }
             }""")
-            self._page.wait_for_timeout(800)
+            self._page.wait_for_timeout(500)
+            # Voltar ao topo para que o salvamento funcione
+            self._page.evaluate("() => window.scrollTo(0, 0)")
+            self._page.wait_for_timeout(300)
         except Exception:
             pass
 
@@ -2899,14 +2913,11 @@ class PJECalcPlaywright:
                         return shared / Math.max(ta.size, tb.size);
                     }
 
-                    // Scroll para revelar itens abaixo do fold
-                    window.scrollTo(0, document.body.scrollHeight);
-
                     // Coletar pares (checkbox, textoCell) — texto da célula individual, não da linha
+                    // NÃO filtrar por getBoundingClientRect — checkboxes abaixo do fold têm
+                    // dimensão 0x0 mas são perfeitamente clicáveis via JS.
                     const pairs = [];
                     document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]').forEach(cb => {
-                        const r = cb.getBoundingClientRect();
-                        if (r.width === 0 && r.height === 0) return;  // hidden
                         // Pegar texto do container mais próximo que seja <td>, <li> ou <label>
                         const cell = cb.closest('td') || cb.closest('li') || cb.closest('label') || cb.parentElement;
                         if (!cell) return;
@@ -3377,19 +3388,23 @@ class PJECalcPlaywright:
                                     return s.toLowerCase()
                                         .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
                                 }
-                                const rLower = norm(rNome).substring(0, 12);
+                                const rLower = norm(rNome);
+                                // NÃO filtrar por getBoundingClientRect — checkboxes podem
+                                // estar abaixo do fold mas são clicáveis via JS
                                 const cbs = [...document.querySelectorAll(
                                     'input[type="checkbox"][id*="listaReflexo"],' +
                                     'input[type="checkbox"][id*="reflexo"],' +
                                     'input[type="checkbox"][id*="Reflexo"]'
-                                )].filter(cb => {
-                                    const r = cb.getBoundingClientRect();
-                                    return r.width > 0 && r.height > 0;
-                                });
+                                )];
+                                // Tokenizar para matching flexível
+                                const rTokens = rLower.split(/\\s+/).filter(t => t.length >= 3);
                                 for (const cb of cbs) {
                                     const ctx = cb.closest('td,tr,li,div') || cb.parentElement;
                                     const txt = norm((ctx && ctx.textContent) || '');
-                                    if (txt.includes(rLower)) {
+                                    // Match por substring ou por todos os tokens presentes
+                                    const tokenMatch = rTokens.length >= 2
+                                        && rTokens.every(t => txt.includes(t));
+                                    if (txt.includes(rLower) || tokenMatch) {
                                         if (!cb.checked) cb.click();
                                         return (ctx && ctx.textContent.trim().substring(0, 60)) || 'ok';
                                     }
@@ -3572,6 +3587,34 @@ class PJECalcPlaywright:
                             break
                         except Exception:
                             continue
+
+            # ── Assuntos CNJ (SELECT obrigatório *) — formulario:assuntosCnj ──
+            # Campo obrigatório no formulário Manual. Não vem da extração, então
+            # selecionamos a primeira opção disponível (após noSelectionValue).
+            try:
+                _cnj_ok = self._page.evaluate("""() => {
+                    // Buscar select pelo ID exato ou sufixo
+                    let sel = document.querySelector('[id$="assuntosCnj"]')
+                           || document.querySelector('select[id*="assunto"]');
+                    if (!sel) return null;
+                    // Pular a primeira opção (noSelectionValue / "Selecione...")
+                    for (let i = 0; i < sel.options.length; i++) {
+                        const opt = sel.options[i];
+                        if (opt.value && !opt.value.includes('noSelection') && opt.value !== '') {
+                            sel.value = opt.value;
+                            sel.dispatchEvent(new Event('change', {bubbles: true}));
+                            return opt.text.trim();
+                        }
+                    }
+                    return null;
+                }""")
+                if _cnj_ok:
+                    self._aguardar_ajax()
+                    self._log(f"  ✓ Assunto CNJ: '{_cnj_ok}'")
+                else:
+                    self._log(f"  ⚠ Verba '{nome}': Assuntos CNJ select não encontrado ou vazio")
+            except Exception as _e_cnj:
+                self._log(f"  ⚠ Assuntos CNJ: {_e_cnj}")
 
             # ── Para verbas reflexas: marcar tipo REFLEXO e selecionar verba base ──
             if _eh_reflexa:
