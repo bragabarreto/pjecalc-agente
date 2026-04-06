@@ -2221,17 +2221,24 @@ class PJECalcPlaywright:
           try:
             # Abrir formulário de novo histórico
             # id="incluir" = a4j:commandButton "Novo" em historico-salarial.xhtml
+            # IMPORTANTE: NÃO usar _clicar_novo() — ele pega o "Novo" do top-nav
+            # que cria um novo cálculo em branco e corrompe o estado JSF.
             _abriu = (self._clicar_botao_id("incluir")
-                      or self._clicar_botao_id("btnNovoHistorico")
-                      or self._clicar_novo())
+                      or self._clicar_botao_id("btnNovoHistorico"))
+            if not _abriu:
+                self._log(f"  ⚠ Botão 'incluir' não encontrado no Histórico Salarial")
+                continue
             self._aguardar_ajax()
+            # O "incluir" pode navegar para historico-salario.jsf (form page)
+            # Aguardar carregamento da página de formulário
             try:
                 self._page.wait_for_selector(
-                    "input[id*='competenciaInicial'], input[id*='dataInicio'], input[id*='dataInicial']",
-                    state="visible", timeout=6000
+                    "input[id*='dataInicio'], input[id*='nome'], "
+                    "table[id*='tipoVariacao'], table[id*='tipoValor']",
+                    state="visible", timeout=10000
                 )
             except Exception:
-                self._page.wait_for_timeout(1000)
+                self._page.wait_for_timeout(2000)
 
             # Nome da entrada — ID confirmado: formulario:nome
             nome_hist = h.get("nome", "Salário")
@@ -2262,12 +2269,14 @@ class PJECalcPlaywright:
                 pass
 
             # Tipo de variação: FIXA (valor fixo) ou VARIAVEL (muda mês a mês)
-            # ID confirmado: formulario:tipoVariacaoDaParcela
+            # ID confirmado: formulario:tipoVariacaoDaParcela (radio com sufixo :0/:1)
             _tipo_var = "VARIAVEL" if h.get("variavel") else "FIXA"
-            self._marcar_radio("tipoVariacaoDaParcela", _tipo_var)
+            if not self._marcar_radio("tipoVariacaoDaParcela", _tipo_var):
+                self._marcar_radio_js("tipoVariacaoDaParcela", _tipo_var)
 
             # Tipo de valor: INFORMADO (preenchido manualmente) ou CALCULADO
-            self._marcar_radio("tipoValor", "INFORMADO")
+            if not self._marcar_radio("tipoValor", "INFORMADO"):
+                self._marcar_radio_js("tipoValor", "INFORMADO")
 
             _comp_ini = _para_competencia(h.get("data_inicio", ""))
             _comp_fim = _para_competencia(h.get("data_fim", ""))
@@ -4990,9 +4999,17 @@ class PJECalcPlaywright:
     @retry(max_tentativas=2)
     def fase_ferias(self, dados: dict) -> None:
         """
-        Preenche períodos de férias do reclamante no PJE-Calc.
-        Dados esperados em dados["ferias"]: lista de dicts com
-        situacao, periodo_inicio, periodo_fim, abono, dobra.
+        Configura férias no PJE-Calc.
+
+        IMPORTANTE (manual seção 7): O PJE-Calc gera AUTOMATICAMENTE os períodos
+        de férias a partir das datas de admissão/demissão e regime de trabalho.
+        NÃO existe botão "Novo" para criar entradas individuais.
+
+        A página ferias.jsf contém:
+        - prazoFeriasProporcionais: prazo para férias proporcionais
+        - inicioFeriasColetivasInputDate: data para férias coletivas
+        - regerarFeriasColetivas: botão para regerar após alterações
+        - Tabela auto-gerada com períodos aquisitivos e status
         """
         ferias = dados.get("ferias", [])
         if not ferias:
@@ -5011,66 +5028,47 @@ class PJECalcPlaywright:
         self._verificar_pagina_pjecalc()
         self.mapear_campos("fase5d_ferias")
 
+        # O PJE-Calc auto-gera férias a partir das datas do contrato.
+        # Verificar quantas linhas a tabela já possui (períodos auto-gerados).
+        try:
+            _linhas_ferias = self._page.evaluate("""() => {
+                const rows = document.querySelectorAll(
+                    'tr[id*="listagem"], tr.rich-table-row, tbody tr'
+                );
+                return [...rows].filter(tr => {
+                    const txt = tr.textContent || '';
+                    return txt.includes('/') && txt.length > 10 && txt.length < 500;
+                }).length;
+            }""")
+            self._log(f"  ℹ Períodos de férias auto-gerados: {_linhas_ferias}")
+        except Exception:
+            _linhas_ferias = 0
+
+        # Configurar prazo de férias proporcionais (se extraído da sentença)
+        for entrada in ferias:
+            _prazo = entrada.get("prazo_proporcional", "")
+            if _prazo:
+                self._preencher("prazoFeriasProporcionais", str(_prazo), False)
+                self._log(f"  ✓ prazoFeriasProporcionais: {_prazo}")
+                break
+
+        # Configurar férias coletivas (se houver)
+        _ferias_coletivas = dados.get("ferias_coletivas", {})
+        _inicio_coletivas = _ferias_coletivas.get("data_inicio", "")
+        if _inicio_coletivas:
+            self._preencher_data("inicioFeriasColetivasInputDate", _inicio_coletivas, False)
+            self._log(f"  ✓ Férias coletivas: {_inicio_coletivas}")
+            # Regerar após informar férias coletivas
+            self._regerar_ferias()
+
+        # Log de referência dos dados extraídos
         for i, entrada in enumerate(ferias):
-            self._clicar_novo()
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(800)
-
-            # Situação (ex: "VENCIDAS", "PROPORCIONAIS", "SIMPLES")
-            situacao = entrada.get("situacao", "")
-            if situacao:
-                self._selecionar("situacao", situacao, obrigatorio=False)
-                self._selecionar("tipoFerias", situacao, obrigatorio=False)
-
-            # Período aquisitivo — início
             per_ini = entrada.get("periodo_inicio", "")
-            if per_ini:
-                self._preencher_data("periodoInicio", per_ini, False)
-                self._preencher_data("dataInicio", per_ini, False)
-                self._preencher_data("dataInicial", per_ini, False)
-
-            # Período aquisitivo — fim
             per_fim = entrada.get("periodo_fim", "")
-            if per_fim:
-                self._preencher_data("periodoFim", per_fim, False)
-                self._preencher_data("dataFim", per_fim, False)
-                self._preencher_data("dataFinal", per_fim, False)
-
-            # Abono pecuniário (1/3 constitucional convertido em dinheiro)
-            abono = entrada.get("abono", False)
-            if isinstance(abono, bool):
-                self._marcar_checkbox("abono", abono)
-                self._marcar_checkbox("abonoPecuniario", abono)
-            elif abono:
-                self._marcar_checkbox("abono", True)
-                self._marcar_checkbox("abonoPecuniario", True)
-
-            # Férias em dobro (art. 137 CLT — pagas fora do prazo)
-            dobra = entrada.get("dobra", False)
-            if isinstance(dobra, bool):
-                self._marcar_checkbox("dobra", dobra)
-                self._marcar_checkbox("feriasDobro", dobra)
-            elif dobra:
-                self._marcar_checkbox("dobra", True)
-                self._marcar_checkbox("feriasDobro", True)
-
-            # Dias de férias (campo opcional)
-            dias = entrada.get("dias", "")
-            if dias:
-                self._preencher("dias", str(dias), False)
-                self._preencher("diasFerias", str(dias), False)
-
-            self._clicar_salvar()
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(500)
+            situacao = entrada.get("situacao", "auto")
             self._log(
-                f"  ✓ Férias {i+1}: {per_ini} a {per_fim}"
-                f" (situação={situacao}, abono={abono}, dobra={dobra})"
+                f"  ℹ Férias {i+1}: {per_ini} a {per_fim} (situação={situacao})"
             )
-
-        # ── Regerar Férias (manual: "Clicar 'Regerar Férias' após alteração") ──
-        # Necessário especialmente para férias coletivas e quando há alteração de status
-        self._regerar_ferias()
 
         self._log("Fase 5d concluída.")
 
