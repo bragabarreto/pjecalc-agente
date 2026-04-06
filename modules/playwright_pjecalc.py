@@ -2301,22 +2301,58 @@ class PJECalcPlaywright:
 
         for idx_h, h in enumerate(historico):
           try:
-            # Abrir formulário de novo histórico
-            # id="incluir" = a4j:commandButton "Novo" em historico-salarial.xhtml
-            # IMPORTANTE: NÃO usar _clicar_novo() — ele pega o "Novo" do top-nav
-            # que cria um novo cálculo em branco e corrompe o estado JSF.
+            # O PJE-Calc pode auto-gerar um histórico a partir da Última Remuneração.
+            # Verificar se já existe uma entrada antes de criar nova.
+            # Fluxo: clicar "incluir"/"Novo" → preencher formulário inline ou navegar
+            # IMPORTANTE: NÃO usar _clicar_novo() — pega "Novo" do top-nav e cria novo cálculo.
+            #
+            # O formulário do Histórico pode ser:
+            # (a) página separada historico-salario.jsf (navegação completa)
+            # (b) formulário inline na listagem (AJAX parcial)
+            # Em ambos os casos, o "incluir" abre o form.
+
             _abriu = (self._clicar_botao_id("incluir")
-                      or self._clicar_botao_id("btnNovoHistorico"))
+                      or self._clicar_botao_id("btnNovoHistorico")
+                      or self._clicar_botao_id("novo"))
             if not _abriu:
-                self._log(f"  ⚠ Botão 'incluir' não encontrado no Histórico Salarial")
+                # Se não encontrou "incluir", pode ser que a página já tenha entradas
+                # e o botão tenha outro ID. Tentar via JS.
+                _abriu = self._page.evaluate("""() => {
+                    const btns = [...document.querySelectorAll(
+                        'input[type="button"], input[type="submit"], a[onclick]'
+                    )];
+                    for (const btn of btns) {
+                        const t = ((btn.value || '') + ' ' + (btn.textContent || '') +
+                                   ' ' + (btn.title || '')).trim().toLowerCase();
+                        if (t === 'novo' || t === 'incluir' || t === 'nova base'
+                            || t.includes('novo hist')) {
+                            btn.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }""")
+            if not _abriu:
+                self._log(f"  ⚠ Botão 'incluir'/'Novo' não encontrado no Histórico Salarial")
                 continue
             self._aguardar_ajax()
-            # O "incluir" pode navegar para historico-salario.jsf (form page)
-            # Aguardar carregamento da página de formulário
+            self._page.wait_for_timeout(1500)
+
+            # Verificar se navegou para outra página ou se o form é inline
+            _url_after = self._page.url
+            _is_form_page = "historico-salario" in _url_after and "historico-salarial" not in _url_after
+
+            # Diagnóstico: mapear campos IMEDIATAMENTE após abrir o form (antes de qualquer fill)
+            if idx_h == 0:
+                self.mapear_campos("fase2_historico_salario_form")
+
+            # Aguardar carregamento do formulário (inline ou navegação)
             try:
                 self._page.wait_for_selector(
                     "input[id*='dataInicio'], input[id*='nome'], "
-                    "table[id*='tipoVariacao'], table[id*='tipoValor']",
+                    "input[id*='tipoVariacao'], table[id*='tipoVariacao'], "
+                    "input[id*='tipoValor'], select[id*='tipoValor'], "
+                    "input[id*='valorPara']",
                     state="visible", timeout=10000
                 )
             except Exception:
@@ -2325,47 +2361,38 @@ class PJECalcPlaywright:
             # Nome da entrada — ID confirmado: formulario:nome
             nome_hist = h.get("nome", "Salário")
             self._preencher("nome", nome_hist, False)
-            # Dispatch blur to submit to JSF server model
+            # Tab (not blur) to move to next field without closing inline form
             try:
                 _nm = self._localizar("nome", tipo="input")
                 if _nm:
-                    _nm.dispatch_event("blur")
-                    self._page.wait_for_timeout(300)
+                    _nm.press("Tab")
+                    self._page.wait_for_timeout(500)
             except Exception:
                 pass
 
-            # Fechar autocomplete/suggestion box do RichFaces para não bloquear
-            # checkboxes abaixo (SALÁRIO PAGO intercepta pointer events)
+            # Fechar ONLY suggestion popups (NOT the form itself!)
+            # Use targeted CSS hide instead of Escape/body click which closes inline forms
             try:
-                self._page.keyboard.press("Escape")
-                self._page.wait_for_timeout(200)
                 self._page.evaluate("""() => {
                     document.querySelectorAll(
                         '.rf-au-lst, .rf-su-lst, [id*="suggestionBox"], ' +
                         '.rich-sb-ext-decor, .rich-sb-common-container'
                     ).forEach(el => { el.style.display = 'none'; });
                 }""")
-                self._page.locator("body").click(position={"x": 10, "y": 10}, force=True)
                 self._page.wait_for_timeout(200)
             except Exception:
                 pass
 
-            # Diagnóstico: mapear campos do formulário de histórico salarial
-            if idx_h == 0:
-                self.mapear_campos("fase2_historico_salario_form")
-
             # Tipo de variação: FIXA (valor fixo) ou VARIAVEL (muda mês a mês)
-            # ID confirmado: formulario:tipoVariacaoDaParcela (radio com sufixo :0/:1)
-            # Label "Fixa" = :0, Label "Variável" = :1
+            # ID: formulario:tipoVariacaoDaParcela (radio :0=Fixa, :1=Variável)
             _tipo_var = "VARIAVEL" if h.get("variavel") else "FIXA"
             if not self._marcar_radio("tipoVariacaoDaParcela", _tipo_var):
                 if not self._marcar_radio_js("tipoVariacaoDaParcela", _tipo_var):
-                    # Tentar campo alternativo "parcela" (pode existir em algumas versões)
                     self._marcar_radio("parcela", _tipo_var) or \
                         self._marcar_radio_js("parcela", _tipo_var)
 
             # Tipo de valor: INFORMADO (preenchido manualmente) ou CALCULADO
-            # Campo pode ser "tipoValor" (select) ou "valor" (radio) dependendo da versão
+            # Campo pode ser "tipoValor" (select), "valor" (radio), ou outro
             _tipo_valor_ok = (
                 self._marcar_radio("tipoValor", "INFORMADO")
                 or self._marcar_radio("valor", "INFORMADO")
