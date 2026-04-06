@@ -861,6 +861,52 @@ class PJECalcPlaywright:
                     return True
             except Exception:
                 continue
+        # Fallback: match by label text (JSF radios often have enum value != display label)
+        # Maps common enum values to their label text variants
+        import unicodedata as _ud_radio
+        _norm = lambda s: _ud_radio.normalize("NFD", s.lower()).encode("ascii", "ignore").decode().strip()
+        _valor_norm = _norm(valor)
+        _label_map = {
+            "fixa": ["fixa"], "variavel": ["variavel", "variável"],
+            "informado": ["informado", "informada"], "calculado": ["calculado", "calculada"],
+            "principal": ["principal"], "reflexo": ["reflexa", "reflexo"],
+            "comum": ["comum"], "mensal": ["mensal"],
+            "decimo_terceiro_salario": ["13o salario", "13º salário", "décimo terceiro"],
+            "ferias": ["ferias", "férias"], "aviso_previo": ["aviso previo", "aviso prévio"],
+            "desligamento": ["desligamento"], "dezembro": ["dezembro"],
+            "periodo_aquisitivo": ["periodo aquisitivo", "período aquisitivo"],
+            "ocorrencias_vencidas": ["sim", "vencidas"],
+            "ocorrencias_vincendas": ["nao", "não", "vincendas"],
+        }
+        _labels_to_try = _label_map.get(_valor_norm, [_valor_norm])
+        try:
+            loc_all = self._page.locator(
+                f"input[type='radio'][id*='{field_id}'], "
+                f"input[type='radio'][name*='{field_id}']"
+            )
+            for idx in range(loc_all.count()):
+                _r = loc_all.nth(idx)
+                # Get label text from adjacent element
+                _label_text = ""
+                try:
+                    _label_text = _r.evaluate("""el => {
+                        const lbl = el.parentElement?.querySelector('label')
+                            || document.querySelector('label[for="' + el.id + '"]');
+                        if (lbl) return lbl.textContent.trim();
+                        const next = el.nextSibling;
+                        if (next && next.nodeType === 3) return next.textContent.trim();
+                        return '';
+                    }""")
+                except Exception:
+                    continue
+                _label_norm = _norm(_label_text)
+                for _try_label in _labels_to_try:
+                    if _label_norm == _norm(_try_label) or _label_norm.startswith(_norm(_try_label)):
+                        _r.click()
+                        self._log(f"  ✓ radio {field_id}: {valor} (label='{_label_text}')")
+                        return True
+        except Exception:
+            pass
         self._log(f"  ⚠ radio {field_id}={valor}: não encontrado")
         return False
 
@@ -873,15 +919,51 @@ class PJECalcPlaywright:
         try:
             clicou = self._page.evaluate(f"""() => {{
                 const radios = [...document.querySelectorAll('input[type="radio"]')];
-                // Busca por sufixo no id (ex: 'tipoDeVerba' em 'formulario:tipoDeVerba:0')
+                const sufixo = '{sufixo_id}';
+                const valor = '{valor}';
+                const valorLower = valor.toLowerCase();
+
+                // 1. Busca exata por value + id contains
                 let r = radios.find(el =>
-                    (el.id || '').includes('{sufixo_id}') && el.value === '{valor}'
+                    (el.id || '').includes(sufixo) && el.value === valor
                 );
-                // Fallback: busca por sufixo no name
+                // 2. Busca exata por value + name contains
                 if (!r) {{
                     r = radios.find(el =>
-                        (el.name || '').includes('{sufixo_id}') && el.value === '{valor}'
+                        (el.name || '').includes(sufixo) && el.value === valor
                     );
+                }}
+                // 3. Busca por LABEL text (JSF radios podem ter value != enum name)
+                if (!r) {{
+                    for (const radio of radios) {{
+                        if (!(radio.id || '').includes(sufixo) && !(radio.name || '').includes(sufixo))
+                            continue;
+                        // Check adjacent label element
+                        const labelEl = radio.parentElement?.querySelector('label')
+                            || document.querySelector('label[for="' + radio.id + '"]');
+                        if (labelEl) {{
+                            const labelText = labelEl.textContent.trim().toLowerCase()
+                                .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                            const targetNorm = valorLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                            if (labelText === targetNorm || labelText.startsWith(targetNorm)
+                                || targetNorm.startsWith(labelText)) {{
+                                r = radio;
+                                break;
+                            }}
+                        }}
+                        // Check text node sibling
+                        const nextText = radio.nextSibling;
+                        if (nextText && nextText.nodeType === 3) {{
+                            const txt = nextText.textContent.trim().toLowerCase()
+                                .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                            const targetNorm = valorLower.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                            if (txt === targetNorm || txt.startsWith(targetNorm)
+                                || targetNorm.startsWith(txt)) {{
+                                r = radio;
+                                break;
+                            }}
+                        }}
+                    }}
                 }}
                 if (r) {{
                     r.click();
@@ -2268,15 +2350,32 @@ class PJECalcPlaywright:
             except Exception:
                 pass
 
+            # Diagnóstico: mapear campos do formulário de histórico salarial
+            if idx_h == 0:
+                self.mapear_campos("fase2_historico_salario_form")
+
             # Tipo de variação: FIXA (valor fixo) ou VARIAVEL (muda mês a mês)
             # ID confirmado: formulario:tipoVariacaoDaParcela (radio com sufixo :0/:1)
+            # Label "Fixa" = :0, Label "Variável" = :1
             _tipo_var = "VARIAVEL" if h.get("variavel") else "FIXA"
             if not self._marcar_radio("tipoVariacaoDaParcela", _tipo_var):
-                self._marcar_radio_js("tipoVariacaoDaParcela", _tipo_var)
+                if not self._marcar_radio_js("tipoVariacaoDaParcela", _tipo_var):
+                    # Tentar campo alternativo "parcela" (pode existir em algumas versões)
+                    self._marcar_radio("parcela", _tipo_var) or \
+                        self._marcar_radio_js("parcela", _tipo_var)
 
             # Tipo de valor: INFORMADO (preenchido manualmente) ou CALCULADO
-            if not self._marcar_radio("tipoValor", "INFORMADO"):
-                self._marcar_radio_js("tipoValor", "INFORMADO")
+            # Campo pode ser "tipoValor" (select) ou "valor" (radio) dependendo da versão
+            _tipo_valor_ok = (
+                self._marcar_radio("tipoValor", "INFORMADO")
+                or self._marcar_radio("valor", "INFORMADO")
+                or self._selecionar("tipoValor", "INFORMADO", obrigatorio=False)
+                or self._selecionar("tipoValor", "Informado", obrigatorio=False)
+                or self._marcar_radio_js("tipoValor", "INFORMADO")
+                or self._marcar_radio_js("valor", "INFORMADO")
+            )
+            if not _tipo_valor_ok:
+                self._log("  ⚠ tipoValor/valor: nenhum seletor funcionou")
 
             _comp_ini = _para_competencia(h.get("data_inicio", ""))
             _comp_fim = _para_competencia(h.get("data_fim", ""))
@@ -3030,21 +3129,40 @@ class PJECalcPlaywright:
         # 1. Clicar botão "Parâmetros da Verba" na linha correspondente
         _kw = nome_na_lista.lower()[:18]
         _clicou = self._page.evaluate(f"""() => {{
+            const kw = {repr(_kw)};
             const rows = document.querySelectorAll('tr');
             for (const tr of rows) {{
-                if (!tr.textContent.toLowerCase().includes({repr(_kw)})) continue;
-                const btns = [...tr.querySelectorAll('a, input[type="button"], input[type="submit"]')];
+                if (!tr.textContent.toLowerCase().includes(kw)) continue;
+                // Buscar por texto/title/alt em links e botões
+                const btns = [...tr.querySelectorAll(
+                    'a, input[type="button"], input[type="submit"], input[type="image"]'
+                )];
                 for (const btn of btns) {{
-                    const t = (btn.title || btn.value || btn.textContent || '').toLowerCase();
-                    if (t.includes('par') && (t.includes('metro') || t.includes('metro'))) {{
+                    const t = ((btn.title || '') + ' ' + (btn.value || '') + ' ' +
+                               (btn.textContent || '') + ' ' + (btn.alt || '')).toLowerCase();
+                    if (t.includes('par') && t.includes('metro')) {{
                         btn.click();
                         return true;
                     }}
                 }}
-                // fallback: segundo ícone de ação na linha (ordem: incluir, parâmetros, excluir)
-                const acoes = [...tr.querySelectorAll('a[id*="acao"], input[id*="acao"], a[id*="editar"], input[id*="editar"], a[id*="parametro"], a[id*="alterar"]')];
+                // Buscar por ID contendo "parametro" ou "alterar" ou "editar"
+                const acoes = [...tr.querySelectorAll(
+                    'a[id*="parametro"], a[id*="alterar"], a[id*="editar"], ' +
+                    'input[id*="parametro"], input[id*="alterar"], input[id*="editar"], ' +
+                    'a[id*="acao"], input[id*="acao"]'
+                )];
                 if (acoes.length >= 1) {{
                     acoes[0].click();
+                    return true;
+                }}
+                // Fallback: buscar ícones de ação (links com img) — o segundo é normalmente "Parâmetros"
+                const iconLinks = [...tr.querySelectorAll('a:has(img), a[onclick]')]
+                    .filter(a => !a.textContent.trim().toLowerCase().includes('exclu'));
+                if (iconLinks.length >= 2) {{
+                    iconLinks[1].click();  // Parâmetros é geralmente o 2o ícone
+                    return true;
+                }} else if (iconLinks.length === 1) {{
+                    iconLinks[0].click();
                     return true;
                 }}
             }}
@@ -3310,14 +3428,21 @@ class PJECalcPlaywright:
                 return
 
             # Verificar se há botões de reflexo na página
-            _btn_count = self._page.evaluate("""() =>
-                [...document.querySelectorAll('a, input[type="button"], input[type="submit"]')].filter(el => {
-                    const t = (el.textContent || el.value || '').trim().toLowerCase();
-                    return t.includes('exibir') || t.includes('verba reflexa') || t.includes('reflexa');
-                }).length
-            """)
+            # PJE-Calc usa ícones (img) ou links com título "Exibir"/"Verba Reflexa"
+            _btn_count = self._page.evaluate("""() => {
+                const all = [...document.querySelectorAll(
+                    'a, input[type="button"], input[type="submit"], input[type="image"]'
+                )];
+                return all.filter(el => {
+                    const t = ((el.textContent || '') + ' ' + (el.value || '') + ' ' +
+                               (el.title || '') + ' ' + (el.alt || '')).trim().toLowerCase();
+                    return t.includes('exibir') || t.includes('verba reflexa')
+                        || t.includes('reflexa') || t.includes('reflexo');
+                }).length;
+            }""")
             if not _btn_count:
-                self._log("  → Nenhum botão 'Verba Reflexa'/'Exibir' encontrado — reflexos serão criados manualmente")
+                # Verbas Expresso incluem reflexos automaticamente — não é erro crítico
+                self._log("  → Nenhum botão 'Verba Reflexa'/'Exibir' encontrado — reflexos Expresso já pré-configurados")
                 return
             self._log(f"  → Configurando reflexos ({_btn_count} botão(ões) encontrado(s))…")
 
@@ -3523,58 +3648,58 @@ class PJECalcPlaywright:
                     self._clicar_menu_lateral("Verbas", obrigatorio=False)
                     self._page.wait_for_timeout(800)
 
-            _clicou_novo = self._page.evaluate("""() => {
-                // Prioridade 1: botão "Manual" (id="incluir") — cria verba manual
-                const btnManual = document.querySelector(
-                    '[id$="incluir"], input[value="Manual"], input[value="manual"]'
-                );
-                if (btnManual) { btnManual.click(); return 'MANUAL:' + btnManual.id; }
-
-                // Prioridade 2: botão "Novo" próximo ao filtro de nome
-                const filtro = document.querySelector('[id*="filtroNome"]');
-                if (filtro) {
-                    let el = filtro;
-                    for (let n = 0; n < 15; n++) {
-                        el = el.parentElement;
-                        if (!el || el.tagName === 'BODY' || el.tagName === 'FORM') break;
-                        const novos = [...el.querySelectorAll('a,input[type="submit"],input[type="button"],button')]
-                            .filter(e => {
-                                const t = (e.textContent||e.value||'').replace(/\\s+/g,' ').trim();
-                                return t === 'Novo' || t === 'Nova';
-                            });
-                        if (novos.length > 0) { novos[0].click(); return 'FILTRO:' + novos[0].id; }
-                    }
-                }
-                return null;
-            }""")
-            self._log(f"  → Manual Novo: '{_clicou_novo}'")
+            # Clicar botão "Manual" (id="incluir") na listagem de verbas
+            # NUNCA usar _clicar_novo() — ele pega o "Novo" do top-nav que cria novo cálculo
+            _clicou_manual = self._clicar_botao_id("incluir")
+            if not _clicou_manual:
+                # Fallback: buscar por value="Manual"
+                try:
+                    _btn = self._page.locator("input[value='Manual'], input[value='manual']")
+                    if _btn.count() > 0:
+                        _btn.first.click()
+                        _clicou_manual = True
+                except Exception:
+                    pass
+            self._log(f"  → Manual: {'formulario:incluir' if _clicou_manual else 'NÃO encontrado'}")
             # nome já definido no início do loop (após filtros)
             if not nome:
                 nome = "Verba"
-            # Aguardar formulário — navega para verba-calculo.jsf (página inteira).
+            # Aguardar formulário de dados da verba
             # ID confirmado DOM v2.15.1: formulario:descricao (campo "Nome *")
             _form_abriu = False
             _form_selector = "[id$=':descricao'], [id$=':nome'], [id$='descricaoVerba'], [id$='nomeVerba']"
-            for _tentativa in range(3):
-                if _clicou_novo is None and _tentativa == 0:
-                    self._clicar_novo()
+            if _clicou_manual:
                 self._aguardar_ajax()
-                # Aceitar também navegação de página (verba-calculo.jsf)
-                if "verba-calculo" in self._page.url:
-                    _form_abriu = True
-                    break
                 try:
                     self._page.wait_for_selector(
-                        _form_selector, state="visible", timeout=5000
+                        _form_selector, state="visible", timeout=8000
                     )
                     _form_abriu = True
-                    break
                 except Exception:
-                    if _tentativa < 2:
-                        self._log(f"  → Retentando abrir formulário Novo ({_tentativa+2}/3)…")
-                        self._clicar_novo()
-                    else:
-                        self._log(f"  ⚠ Verba '{nome}': formulário não abriu após 3 tentativas — ignorada.")
+                    self._page.wait_for_timeout(2000)
+                    # Verificar se estamos na página de dados da verba
+                    if "verba" in self._page.url and "verba-calculo" not in self._page.url:
+                        _form_abriu = True
+            if not _form_abriu:
+                # Tentar navegar de volta para listagem e clicar Manual novamente
+                try:
+                    self._page.goto(_url_verbas_listing, wait_until="domcontentloaded", timeout=15000)
+                    self._page.wait_for_timeout(1000)
+                    self._aguardar_ajax()
+                    _clicou_manual = self._clicar_botao_id("incluir")
+                    if _clicou_manual:
+                        self._aguardar_ajax()
+                        try:
+                            self._page.wait_for_selector(_form_selector, state="visible", timeout=8000)
+                            _form_abriu = True
+                        except Exception:
+                            self._page.wait_for_timeout(2000)
+                            if "verba" in self._page.url and "verba-calculo" not in self._page.url:
+                                _form_abriu = True
+                except Exception:
+                    pass
+            if not _form_abriu:
+                self._log(f"  ⚠ Verba '{nome}': formulário Manual não abriu — ignorada.")
             if not _form_abriu:
                 continue
             if i == 0:
@@ -3598,77 +3723,172 @@ class PJECalcPlaywright:
                             continue
 
             # ── Assuntos CNJ (obrigatório *) ──
-            # Campo: formulario:assuntosCnj (text input com RichFaces suggestionbox)
-            # Campo oculto: formulario:codigoAssuntosCnj (armazena o código)
-            # Procedimento: digitar "2581" → aguardar sugestão → clicar na opção
-            # Item desejado: 2581 = "Remuneração, Verbas indenizatórias e benefícios"
+            # Código desejado: 2581 = "Remuneração, Verbas indenizatórias e benefícios"
+            # Abordagem 1: digitar no campo suggestion + clicar sugestão
+            # Abordagem 2: abrir modal CNJ, buscar na árvore, clicar "Selecionar"
+            # Abordagem 3 (fallback): setar valor diretamente via JS
+            _cnj_ok = False
             try:
                 _cnj_field = self._localizar("assuntosCnj", tipo="input")
                 if _cnj_field:
+                    # --- Abordagem 1: RichFaces suggestionbox inline ---
                     _cnj_field.focus()
                     self._page.keyboard.press("Control+a")
                     self._page.keyboard.press("Delete")
-                    _cnj_field.press_sequentially("2581", delay=100)
-                    self._page.wait_for_timeout(1500)  # aguardar sugestão RichFaces
+                    _cnj_field.press_sequentially("2581", delay=120)
+                    self._page.wait_for_timeout(2000)  # aguardar sugestão RichFaces
 
-                    # Clicar na sugestão que contém "2581"
-                    _sugestao_ok = self._page.evaluate("""() => {
-                        // RichFaces suggestion popups: .rf-su-lst, .rf-au-lst,
-                        // .rich-sb-ext-decor, ou table dentro de popup
-                        const candidates = [...document.querySelectorAll(
-                            '.rf-su-itm, .rf-au-itm, .rich-sb-int, ' +
-                            'td.rf-su-inp, tr.rf-su-inp, ' +
-                            '[class*="suggest"] td, [class*="suggest"] tr, ' +
-                            '[id*="suggest"] td, [id*="suggest"] tr, ' +
-                            '.rich-sb-cell-padding, .rich-sb-int-decor-sel, ' +
-                            'div[id*="assunto"] td, div[id*="Assunto"] td'
-                        )];
-                        // Buscar item com "2581" ou "Remunera"
-                        for (const el of candidates) {
-                            const txt = (el.textContent || '').trim();
-                            if (txt.includes('2581') && txt.length < 200) {
-                                el.click();
-                                return txt.substring(0, 80);
+                    # Buscar APENAS na popup de sugestão (evitar clicar em outros elementos)
+                    _cnj_ok = self._page.evaluate("""() => {
+                        // RichFaces 3.x suggestion: table inside div[id*='assuntosCnj'][class*='suggest']
+                        const popups = document.querySelectorAll(
+                            '[id*="assuntosCnj"][class*="suggest"], ' +
+                            '[id*="assuntosCnj"].rich-sb-ext-decor, ' +
+                            'div.rich-sb-common-container'
+                        );
+                        for (const popup of popups) {
+                            const rows = popup.querySelectorAll('tr, td, div.rich-sb-int');
+                            for (const row of rows) {
+                                const txt = (row.textContent || '').trim();
+                                if (txt.includes('2581') && txt.includes('Remunera') && txt.length < 200) {
+                                    row.click();
+                                    return true;
+                                }
                             }
                         }
-                        // Fallback: buscar em QUALQUER elemento visível no popup
-                        const allVisible = [...document.querySelectorAll('td, tr, div, span, a')]
-                            .filter(el => {
-                                const r = el.getBoundingClientRect();
-                                const txt = (el.textContent || '').trim();
-                                return r.width > 0 && r.height > 0 && r.top > 0
-                                    && txt.includes('2581') && txt.length < 200;
-                            });
-                        if (allVisible.length > 0) {
-                            // Clicar no menor (mais específico)
-                            allVisible.sort((a, b) =>
-                                a.textContent.length - b.textContent.length);
-                            allVisible[0].click();
-                            return allVisible[0].textContent.trim().substring(0, 80);
-                        }
-                        return null;
+                        return false;
                     }""")
-                    if _sugestao_ok:
+                    if _cnj_ok:
                         self._aguardar_ajax()
                         self._page.wait_for_timeout(500)
-                        self._log(f"  ✓ Assunto CNJ: '{_sugestao_ok}'")
+                        self._log(f"  ✓ Assunto CNJ: 2581 (sugestão inline)")
                     else:
-                        # Fallback: setar valor diretamente via JS nos campos
-                        self._page.evaluate("""() => {
-                            const txt = document.querySelector('[id$="assuntosCnj"]');
-                            const cod = document.querySelector('[id$="codigoAssuntosCnj"]');
-                            if (txt) {
-                                txt.value = '2581 - Remuneração, Verbas Indenizatórias e Benefícios';
-                                txt.dispatchEvent(new Event('change', {bubbles: true}));
+                        # Fechar sugestão se aberta
+                        self._page.keyboard.press("Escape")
+                        self._page.wait_for_timeout(300)
+
+                if not _cnj_ok:
+                    # --- Abordagem 2: Modal CNJ com árvore + botão Selecionar ---
+                    # O modal é aberto clicando num botão/link perto do campo assuntosCnj
+                    # DOM confirmado: modalCNJOpenedState, formularioModalCNJ:assuntosCnjCNJ,
+                    #   btnSelecionarCNJ
+                    _modal_opened = self._page.evaluate("""() => {
+                        // Buscar botão que abre o modal (pode ser link com onclick ou ícone)
+                        const field = document.querySelector('[id$="assuntosCnj"]');
+                        if (!field) return false;
+                        // Procurar botão/link irmão ou próximo
+                        const parent = field.closest('td, div, span');
+                        if (parent) {
+                            const openers = parent.querySelectorAll(
+                                'a[onclick], img[onclick], input[type="image"], ' +
+                                'a:has(img), span[onclick]'
+                            );
+                            for (const opener of openers) {
+                                opener.click();
+                                return true;
                             }
-                            if (cod) {
-                                cod.value = '2581';
-                                cod.dispatchEvent(new Event('change', {bubbles: true}));
+                            // Tentar no próximo td irmão
+                            const nextTd = parent.nextElementSibling;
+                            if (nextTd) {
+                                const btn = nextTd.querySelector(
+                                    'a[onclick], img[onclick], input[type="image"]'
+                                );
+                                if (btn) { btn.click(); return true; }
                             }
-                        }""")
+                        }
+                        return false;
+                    }""")
+                    if _modal_opened:
+                        self._page.wait_for_timeout(1500)
                         self._aguardar_ajax()
-                        self._log(f"  ✓ Assunto CNJ: '2581' (fallback direto)")
-                else:
+                        # Digitar "2581" no campo de busca do modal
+                        try:
+                            _modal_field = self._page.locator(
+                                "[id$='assuntosCnjCNJ'], [id*='modalCNJ'] input[type='text']"
+                            )
+                            if _modal_field.count() > 0:
+                                _modal_field.first.fill("2581")
+                                _modal_field.first.dispatch_event("change")
+                                self._page.wait_for_timeout(1000)
+                                # Buscar e clicar no nó da árvore com "2581"
+                                _found_tree = self._page.evaluate("""() => {
+                                    // RichFaces tree nodes
+                                    const nodes = document.querySelectorAll(
+                                        '[id*="modalCNJ"] .rich-tree-node-text, ' +
+                                        '[id*="modalCNJ"] span[class*="tree"], ' +
+                                        '[id*="modalCNJ"] td[class*="tree"]'
+                                    );
+                                    for (const node of nodes) {
+                                        const txt = (node.textContent || '').trim();
+                                        if (txt.includes('2581')) {
+                                            node.click();
+                                            return txt.substring(0, 80);
+                                        }
+                                    }
+                                    // Fallback: qualquer texto visível no modal com 2581
+                                    const allInModal = document.querySelectorAll(
+                                        '[id*="modalCNJ"] span, [id*="modalCNJ"] td, ' +
+                                        '.rich-modalpanel span, .rich-modalpanel td'
+                                    );
+                                    for (const el of allInModal) {
+                                        const txt = (el.textContent || '').trim();
+                                        if (txt.includes('2581') && txt.length < 200) {
+                                            el.click();
+                                            return txt.substring(0, 80);
+                                        }
+                                    }
+                                    return null;
+                                }""")
+                                if _found_tree:
+                                    self._page.wait_for_timeout(500)
+                                    # Clicar botão "Selecionar" do modal
+                                    try:
+                                        _btn_sel = self._page.locator(
+                                            "[id$='btnSelecionarCNJ'], "
+                                            "[id*='modalCNJ'] input[value='Selecionar'], "
+                                            "[id*='modalCNJ'] button:has-text('Selecionar'), "
+                                            "input[id*='Selecionar'][id*='CNJ']"
+                                        )
+                                        if _btn_sel.count() > 0:
+                                            _btn_sel.first.click()
+                                            self._aguardar_ajax()
+                                            self._page.wait_for_timeout(500)
+                                            _cnj_ok = True
+                                            self._log(f"  ✓ Assunto CNJ: 2581 (modal + Selecionar)")
+                                    except Exception as _e_sel:
+                                        self._log(f"  ⚠ Selecionar CNJ: {_e_sel}")
+                        except Exception as _e_modal:
+                            self._log(f"  ⚠ Modal CNJ: {_e_modal}")
+                        # Fechar modal se ainda aberto e CNJ não ok
+                        if not _cnj_ok:
+                            try:
+                                self._page.keyboard.press("Escape")
+                                self._page.wait_for_timeout(300)
+                            except Exception:
+                                pass
+
+                if not _cnj_ok:
+                    # --- Abordagem 3 (fallback): setar valor direto via JS ---
+                    self._page.evaluate("""() => {
+                        const txt = document.querySelector(
+                            'input[id$="assuntosCnj"]:not([id*="modalCNJ"])'
+                        );
+                        const cod = document.querySelector('[id$="codigoAssuntosCnj"]');
+                        if (txt) {
+                            txt.value = '2581 - Remuneração, Verbas Indenizatórias e Benefícios';
+                            txt.dispatchEvent(new Event('change', {bubbles: true}));
+                            txt.dispatchEvent(new Event('blur', {bubbles: true}));
+                        }
+                        if (cod) {
+                            cod.value = '2581';
+                            cod.dispatchEvent(new Event('change', {bubbles: true}));
+                        }
+                    }""")
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    self._log(f"  ✓ Assunto CNJ: 2581 (fallback JS direto)")
+                    _cnj_ok = True
+                if not _cnj_field:
                     self._log(f"  ⚠ Verba '{nome}': campo assuntosCnj não encontrado")
             except Exception as _e_cnj:
                 self._log(f"  ⚠ Assuntos CNJ: {_e_cnj}")
