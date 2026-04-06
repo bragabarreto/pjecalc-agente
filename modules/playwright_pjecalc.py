@@ -3597,105 +3597,79 @@ class PJECalcPlaywright:
                         except Exception:
                             continue
 
-            # ── Assuntos CNJ (obrigatório *) — formulario:assuntosCnj ──
-            # Usar código 2581 = "Remuneração, Verbas indenizatórias e benefícios"
-            # O campo pode ser um <select> ou um botão que abre popup de seleção.
+            # ── Assuntos CNJ (obrigatório *) ──
+            # Campo: formulario:assuntosCnj (text input com RichFaces suggestionbox)
+            # Campo oculto: formulario:codigoAssuntosCnj (armazena o código)
+            # Procedimento: digitar "2581" → aguardar sugestão → clicar na opção
+            # Item desejado: 2581 = "Remuneração, Verbas indenizatórias e benefícios"
             try:
-                _cnj_ok = self._page.evaluate("""() => {
-                    // Estratégia 1: select simples
-                    let sel = document.querySelector('[id$="assuntosCnj"]')
-                           || document.querySelector('select[id*="assunto"]');
-                    if (sel && sel.tagName === 'SELECT') {
-                        // Buscar opção 2581 ou "Remuneração"
-                        for (const opt of sel.options) {
-                            if (opt.text.includes('2581') || opt.text.includes('Remunera')
-                                || opt.value.includes('2581')) {
-                                sel.value = opt.value;
-                                sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                return 'select:' + opt.text.trim();
-                            }
-                        }
-                        // Fallback: primeira opção válida
-                        for (const opt of sel.options) {
-                            if (opt.value && !opt.value.includes('noSelection') && opt.value !== '') {
-                                sel.value = opt.value;
-                                sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                return 'select-fallback:' + opt.text.trim();
-                            }
-                        }
-                    }
+                _cnj_field = self._localizar("assuntosCnj", tipo="input")
+                if _cnj_field:
+                    _cnj_field.focus()
+                    self._page.keyboard.press("Control+a")
+                    self._page.keyboard.press("Delete")
+                    _cnj_field.press_sequentially("2581", delay=100)
+                    self._page.wait_for_timeout(1500)  # aguardar sugestão RichFaces
 
-                    // Estratégia 2: botão/link que abre popup de seleção
-                    const btnAssunto = [...document.querySelectorAll(
-                        'a[id*="assunto"], input[id*="assunto"], button[id*="assunto"], ' +
-                        'img[id*="assunto"], a[id*="Assunto"], input[id*="Assunto"]'
-                    )].find(el => {
-                        const r = el.getBoundingClientRect();
-                        return r.width > 0 && r.height > 0;
-                    });
-                    if (btnAssunto) {
-                        btnAssunto.click();
-                        return 'popup-opened';
-                    }
-                    return null;
-                }""")
-                if _cnj_ok and _cnj_ok.startswith('popup-opened'):
-                    # Popup abriu — aguardar e selecionar item 2581
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(1000)
-                    _selecionou = self._page.evaluate("""() => {
-                        // Buscar link/item com "2581" ou "Remuneração" no popup
-                        const items = [...document.querySelectorAll(
-                            'a, td, span, li, option, tr'
+                    # Clicar na sugestão que contém "2581"
+                    _sugestao_ok = self._page.evaluate("""() => {
+                        // RichFaces suggestion popups: .rf-su-lst, .rf-au-lst,
+                        // .rich-sb-ext-decor, ou table dentro de popup
+                        const candidates = [...document.querySelectorAll(
+                            '.rf-su-itm, .rf-au-itm, .rich-sb-int, ' +
+                            'td.rf-su-inp, tr.rf-su-inp, ' +
+                            '[class*="suggest"] td, [class*="suggest"] tr, ' +
+                            '[id*="suggest"] td, [id*="suggest"] tr, ' +
+                            '.rich-sb-cell-padding, .rich-sb-int-decor-sel, ' +
+                            'div[id*="assunto"] td, div[id*="Assunto"] td'
                         )];
-                        let target = null;
-                        for (const el of items) {
+                        // Buscar item com "2581" ou "Remunera"
+                        for (const el of candidates) {
                             const txt = (el.textContent || '').trim();
-                            if ((txt.includes('2581') || txt.includes('Remunera'))
-                                && txt.length < 200) {
-                                // Preferir links clicáveis
-                                if (el.tagName === 'A' || el.tagName === 'INPUT') {
-                                    target = el;
-                                    break;
-                                }
-                                // Se é td/span, buscar link dentro
-                                const link = el.querySelector('a, input[type="button"]');
-                                if (link) { target = link; break; }
-                                if (!target) target = el;
+                            if (txt.includes('2581') && txt.length < 200) {
+                                el.click();
+                                return txt.substring(0, 80);
                             }
                         }
-                        if (target) {
-                            target.click();
-                            return target.textContent.trim().substring(0, 80);
+                        // Fallback: buscar em QUALQUER elemento visível no popup
+                        const allVisible = [...document.querySelectorAll('td, tr, div, span, a')]
+                            .filter(el => {
+                                const r = el.getBoundingClientRect();
+                                const txt = (el.textContent || '').trim();
+                                return r.width > 0 && r.height > 0 && r.top > 0
+                                    && txt.includes('2581') && txt.length < 200;
+                            });
+                        if (allVisible.length > 0) {
+                            // Clicar no menor (mais específico)
+                            allVisible.sort((a, b) =>
+                                a.textContent.length - b.textContent.length);
+                            allVisible[0].click();
+                            return allVisible[0].textContent.trim().substring(0, 80);
                         }
                         return null;
                     }""")
-                    if _selecionou:
+                    if _sugestao_ok:
                         self._aguardar_ajax()
                         self._page.wait_for_timeout(500)
-                        # Clicar "Selecionar" se houver botão de confirmação
-                        try:
-                            self._page.evaluate("""() => {
-                                const btns = [...document.querySelectorAll(
-                                    'input[value="Selecionar"], button:has-text("Selecionar"), ' +
-                                    'a:has-text("Selecionar"), input[value*="elecionar"]'
-                                )];
-                                for (const b of btns) {
-                                    const r = b.getBoundingClientRect();
-                                    if (r.width > 0 && r.height > 0) { b.click(); return; }
-                                }
-                            }""")
-                            self._aguardar_ajax()
-                        except Exception:
-                            pass
-                        self._log(f"  ✓ Assunto CNJ (popup): '{_selecionou}'")
+                        self._log(f"  ✓ Assunto CNJ: '{_sugestao_ok}'")
                     else:
-                        self._log(f"  ⚠ Assunto CNJ: popup abriu mas item 2581 não encontrado")
-                elif _cnj_ok:
-                    self._aguardar_ajax()
-                    self._log(f"  ✓ Assunto CNJ: '{_cnj_ok}'")
+                        # Fallback: setar valor diretamente via JS nos campos
+                        self._page.evaluate("""() => {
+                            const txt = document.querySelector('[id$="assuntosCnj"]');
+                            const cod = document.querySelector('[id$="codigoAssuntosCnj"]');
+                            if (txt) {
+                                txt.value = '2581 - Remuneração, Verbas Indenizatórias e Benefícios';
+                                txt.dispatchEvent(new Event('change', {bubbles: true}));
+                            }
+                            if (cod) {
+                                cod.value = '2581';
+                                cod.dispatchEvent(new Event('change', {bubbles: true}));
+                            }
+                        }""")
+                        self._aguardar_ajax()
+                        self._log(f"  ✓ Assunto CNJ: '2581' (fallback direto)")
                 else:
-                    self._log(f"  ⚠ Verba '{nome}': Assuntos CNJ não encontrado")
+                    self._log(f"  ⚠ Verba '{nome}': campo assuntosCnj não encontrado")
             except Exception as _e_cnj:
                 self._log(f"  ⚠ Assuntos CNJ: {_e_cnj}")
 
