@@ -3754,169 +3754,57 @@ class PJECalcPlaywright:
 
             # ── Assuntos CNJ (obrigatório *) ──
             # Código desejado: 2581 = "Remuneração, Verbas indenizatórias e benefícios"
-            # Abordagem 1: digitar no campo suggestion + clicar sugestão
-            # Abordagem 2: abrir modal CNJ, buscar na árvore, clicar "Selecionar"
-            # Abordagem 3 (fallback): setar valor diretamente via JS
+            # Estratégia: tentar suggestion inline rápida, depois JS direto.
+            # Modal CNJ desabilitado: campo readonly + btnSelecionarCNJ disabled = 120s perdidos.
             _cnj_ok = False
             try:
                 _cnj_field = self._localizar("assuntosCnj", tipo="input")
                 if _cnj_field:
-                    # --- Abordagem 1: RichFaces suggestionbox inline ---
-                    _cnj_field.focus()
-                    self._page.keyboard.press("Control+a")
-                    self._page.keyboard.press("Delete")
-                    _cnj_field.press_sequentially("2581", delay=120)
-                    self._page.wait_for_timeout(2000)  # aguardar sugestão RichFaces
+                    # --- Tentativa rápida: RichFaces suggestionbox inline ---
+                    try:
+                        _cnj_field.focus()
+                        self._page.keyboard.press("Control+a")
+                        self._page.keyboard.press("Delete")
+                        _cnj_field.press_sequentially("2581", delay=120)
+                        self._page.wait_for_timeout(2000)
 
-                    # Buscar APENAS na popup de sugestão (evitar clicar em outros elementos)
-                    _cnj_ok = self._page.evaluate("""() => {
-                        // RichFaces 3.x suggestion: table inside div[id*='assuntosCnj'][class*='suggest']
-                        const popups = document.querySelectorAll(
-                            '[id*="assuntosCnj"][class*="suggest"], ' +
-                            '[id*="assuntosCnj"].rich-sb-ext-decor, ' +
-                            'div.rich-sb-common-container'
-                        );
-                        for (const popup of popups) {
-                            const rows = popup.querySelectorAll('tr, td, div.rich-sb-int');
-                            for (const row of rows) {
-                                const txt = (row.textContent || '').trim();
-                                if (txt.includes('2581') && txt.includes('Remunera') && txt.length < 200) {
-                                    row.click();
-                                    return true;
+                        _cnj_ok = self._page.evaluate("""() => {
+                            const popups = document.querySelectorAll(
+                                '[id*="assuntosCnj"][class*="suggest"], ' +
+                                '[id*="assuntosCnj"].rich-sb-ext-decor, ' +
+                                'div.rich-sb-common-container'
+                            );
+                            for (const popup of popups) {
+                                const rows = popup.querySelectorAll('tr, td, div.rich-sb-int');
+                                for (const row of rows) {
+                                    const txt = (row.textContent || '').trim();
+                                    if (txt.includes('2581') && txt.includes('Remunera') && txt.length < 200) {
+                                        row.click();
+                                        return true;
+                                    }
                                 }
                             }
-                        }
-                        return false;
-                    }""")
-                    if _cnj_ok:
-                        self._aguardar_ajax()
-                        self._page.wait_for_timeout(500)
-                        self._log(f"  ✓ Assunto CNJ: 2581 (sugestão inline)")
-                    else:
-                        # Fechar sugestão se aberta
-                        self._page.keyboard.press("Escape")
-                        self._page.wait_for_timeout(300)
+                            return false;
+                        }""")
+                        if _cnj_ok:
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(500)
+                            self._log(f"  ✓ Assunto CNJ: 2581 (sugestão inline)")
+                        else:
+                            self._page.keyboard.press("Escape")
+                            self._page.wait_for_timeout(300)
+                    except Exception:
+                        pass
 
                 if not _cnj_ok:
-                    # --- Abordagem 2: Modal CNJ com árvore + botão Selecionar ---
-                    # O modal é aberto clicando num botão/link perto do campo assuntosCnj
-                    # DOM confirmado: modalCNJOpenedState, formularioModalCNJ:assuntosCnjCNJ,
-                    #   btnSelecionarCNJ
-                    _modal_opened = self._page.evaluate("""() => {
-                        // Buscar botão que abre o modal (pode ser link com onclick ou ícone)
-                        const field = document.querySelector('[id$="assuntosCnj"]');
-                        if (!field) return false;
-                        // Procurar botão/link irmão ou próximo
-                        const parent = field.closest('td, div, span');
-                        if (parent) {
-                            const openers = parent.querySelectorAll(
-                                'a[onclick], img[onclick], input[type="image"], ' +
-                                'a:has(img), span[onclick]'
-                            );
-                            for (const opener of openers) {
-                                opener.click();
-                                return true;
-                            }
-                            // Tentar no próximo td irmão
-                            const nextTd = parent.nextElementSibling;
-                            if (nextTd) {
-                                const btn = nextTd.querySelector(
-                                    'a[onclick], img[onclick], input[type="image"]'
-                                );
-                                if (btn) { btn.click(); return true; }
-                            }
-                        }
-                        return false;
-                    }""")
-                    if _modal_opened:
-                        self._page.wait_for_timeout(1500)
-                        self._aguardar_ajax()
-                        # Digitar "2581" no campo de busca do modal
-                        try:
-                            _modal_field = self._page.locator(
-                                "[id$='assuntosCnjCNJ'], [id*='modalCNJ'] input[type='text']"
-                            )
-                            if _modal_field.count() > 0:
-                                # Campo pode ser readonly — usar JS se necessário
-                                _is_readonly = _modal_field.first.evaluate(
-                                    "el => el.readOnly || el.classList.contains('leitura')"
-                                )
-                                if _is_readonly:
-                                    _modal_field.first.evaluate("""el => {
-                                        el.readOnly = false;
-                                        el.value = '2581';
-                                        el.dispatchEvent(new Event('change', {bubbles: true}));
-                                        el.dispatchEvent(new Event('blur', {bubbles: true}));
-                                    }""")
-                                else:
-                                    _modal_field.first.fill("2581")
-                                    _modal_field.first.dispatch_event("change")
-                                self._page.wait_for_timeout(1000)
-                                # Buscar e clicar no nó da árvore com "2581"
-                                _found_tree = self._page.evaluate("""() => {
-                                    // RichFaces tree nodes
-                                    const nodes = document.querySelectorAll(
-                                        '[id*="modalCNJ"] .rich-tree-node-text, ' +
-                                        '[id*="modalCNJ"] span[class*="tree"], ' +
-                                        '[id*="modalCNJ"] td[class*="tree"]'
-                                    );
-                                    for (const node of nodes) {
-                                        const txt = (node.textContent || '').trim();
-                                        if (txt.includes('2581')) {
-                                            node.click();
-                                            return txt.substring(0, 80);
-                                        }
-                                    }
-                                    // Fallback: qualquer texto visível no modal com 2581
-                                    const allInModal = document.querySelectorAll(
-                                        '[id*="modalCNJ"] span, [id*="modalCNJ"] td, ' +
-                                        '.rich-modalpanel span, .rich-modalpanel td'
-                                    );
-                                    for (const el of allInModal) {
-                                        const txt = (el.textContent || '').trim();
-                                        if (txt.includes('2581') && txt.length < 200) {
-                                            el.click();
-                                            return txt.substring(0, 80);
-                                        }
-                                    }
-                                    return null;
-                                }""")
-                                if _found_tree:
-                                    self._page.wait_for_timeout(500)
-                                    # Clicar botão "Selecionar" do modal
-                                    try:
-                                        _btn_sel = self._page.locator(
-                                            "[id$='btnSelecionarCNJ'], "
-                                            "[id*='modalCNJ'] input[value='Selecionar'], "
-                                            "[id*='modalCNJ'] button:has-text('Selecionar'), "
-                                            "input[id*='Selecionar'][id*='CNJ']"
-                                        )
-                                        if _btn_sel.count() > 0:
-                                            _btn_sel.first.click()
-                                            self._aguardar_ajax()
-                                            self._page.wait_for_timeout(500)
-                                            _cnj_ok = True
-                                            self._log(f"  ✓ Assunto CNJ: 2581 (modal + Selecionar)")
-                                    except Exception as _e_sel:
-                                        self._log(f"  ⚠ Selecionar CNJ: {_e_sel}")
-                        except Exception as _e_modal:
-                            self._log(f"  ⚠ Modal CNJ: {_e_modal}")
-                        # Fechar modal se ainda aberto e CNJ não ok
-                        if not _cnj_ok:
-                            try:
-                                self._page.keyboard.press("Escape")
-                                self._page.wait_for_timeout(300)
-                            except Exception:
-                                pass
-
-                if not _cnj_ok:
-                    # --- Abordagem 3 (fallback): setar valor direto via JS ---
+                    # --- JS direto: setar valor + código nos campos hidden ---
                     self._page.evaluate("""() => {
                         const txt = document.querySelector(
                             'input[id$="assuntosCnj"]:not([id*="modalCNJ"])'
                         );
                         const cod = document.querySelector('[id$="codigoAssuntosCnj"]');
                         if (txt) {
+                            txt.readOnly = false;
                             txt.value = '2581 - Remuneração, Verbas Indenizatórias e Benefícios';
                             txt.dispatchEvent(new Event('change', {bubbles: true}));
                             txt.dispatchEvent(new Event('blur', {bubbles: true}));
@@ -3928,7 +3816,7 @@ class PJECalcPlaywright:
                     }""")
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(500)
-                    self._log(f"  ✓ Assunto CNJ: 2581 (fallback JS direto)")
+                    self._log(f"  ✓ Assunto CNJ: 2581 (JS direto)")
                     _cnj_ok = True
                 if not _cnj_field:
                     self._log(f"  ⚠ Verba '{nome}': campo assuntosCnj não encontrado")
