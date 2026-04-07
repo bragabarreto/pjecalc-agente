@@ -140,13 +140,17 @@ def gerar_previa(
         forma = dur.get("forma_apuracao_pjecalc") or "—"
         adicional = dur.get("adicional_he_percentual")
         adic_str = f"{int(adicional * 100)}%" if adicional else "—"
+        preen = dur.get("preenchimento_jornada") or "livre"
+        escala = dur.get("escala_tipo") or ""
+        preen_label = {"livre": "Livre", "programacao_semanal": "Programação Semanal", "escala": f"Escala ({escala})"}.get(preen, preen)
         linhas += [
             "DURAÇÃO DO TRABALHO / CARTÃO DE PONTO",
             f"   Tipo Apuração   : {tipo_ap}",
             f"   Forma PJE-Calc  : {forma}",
             f"   Adicional HE    : {adic_str}",
+            f"   Preenchimento   : {preen_label}",
         ]
-        if tipo_ap == "apuracao_jornada":
+        if tipo_ap == "apuracao_jornada" and preen in ("programacao_semanal", "escala"):
             entrada = dur.get("jornada_entrada") or "—"
             saida = dur.get("jornada_saida") or "���"
             interv = dur.get("intervalo_minutos")
@@ -159,6 +163,8 @@ def gerar_previa(
                 dias_semana.append(f"{label}={v}h" if v else f"{label}=���")
             linhas.append(f"   Jornada/dia     : {', '.join(dias_semana)}")
             linhas.append(f"   Semanal/Mensal  : {dur.get('jornada_semanal_cartao') or '—'}h / {dur.get('jornada_mensal_cartao') or '—'}h")
+        elif tipo_ap == "apuracao_jornada":
+            linhas.append("   (Modo Livre — jornada será preenchida manualmente após importação PJC)")
         elif tipo_ap == "quantidade_fixa":
             linhas.append(f"   HE/Mês          : {dur.get('qt_horas_extras_mes') or '—'}")
             linhas.append(f"   HE/Dia          : {dur.get('qt_horas_extras_dia') or '—'}")

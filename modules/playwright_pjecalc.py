@@ -5045,14 +5045,95 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(800)
 
+        # ── 2b. Preenchimento de Jornadas (Manual seção 10.1) ──
+        # Livre / Programação Semanal / Escala
+        preenchimento = dur.get("preenchimento_jornada") or "programacao_semanal"
+        escala_tipo = dur.get("escala_tipo") or "outra"
+        self._log(f"  Cartão de Ponto: preenchimento = {preenchimento}" +
+                  (f" (escala: {escala_tipo})" if preenchimento == "escala" else ""))
+
+        # Selecionar radio de preenchimento via JS
+        # PJE-Calc tem radios: tipoPreenchimentoJornada com values LIVRE / PROGRAMACAO_SEMANAL / ESCALA
+        _PREEN_MAP = {
+            "livre": "LIVRE",
+            "programacao_semanal": "PROGRAMACAO_SEMANAL",
+            "escala": "ESCALA",
+        }
+        _preen_enum = _PREEN_MAP.get(preenchimento, "PROGRAMACAO_SEMANAL")
+        _preen_res = self._page.evaluate(f"""() => {{
+            const radios = document.querySelectorAll("input[name$='tipoPreenchimentoJornada']");
+            if (radios.length === 0) return 'NO_RADIOS';
+            for (const r of radios) {{
+                if (r.value === '{_preen_enum}' || r.value.toUpperCase().includes('{_preen_enum}')) {{
+                    r.click();
+                    r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return 'OK:' + r.value;
+                }}
+            }}
+            // Fallback: match by label text
+            for (const r of radios) {{
+                const lbl = r.parentElement ? r.parentElement.textContent.trim().toLowerCase() : '';
+                if ('{preenchimento}' === 'livre' && lbl.includes('livre')) {{ r.click(); return 'LABEL:' + lbl; }}
+                if ('{preenchimento}' === 'programacao_semanal' && lbl.includes('semanal')) {{ r.click(); return 'LABEL:' + lbl; }}
+                if ('{preenchimento}' === 'escala' && lbl.includes('escala')) {{ r.click(); return 'LABEL:' + lbl; }}
+            }}
+            return 'NOT_FOUND:' + [...radios].map(r => r.value).join(',');
+        }}""")
+        self._log(f"    Preenchimento radio: {_preen_res}")
+        if _preen_res and not _preen_res.startswith("NOT_FOUND") and _preen_res != "NO_RADIOS":
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+
+        # Se Escala: selecionar o tipo de escala no dropdown
+        if preenchimento == "escala":
+            _ESCALA_MAP = {
+                "12x12": "12X12", "12x24": "12X24", "12x36": "12X36", "12x48": "12X48",
+                "5x1": "5X1", "6x1": "6X1", "8x2": "8X2", "outra": "OUTRA",
+            }
+            _esc_value = _ESCALA_MAP.get(escala_tipo, "OUTRA")
+            try:
+                sel_esc = self._page.locator("select[id$='tipoEscala']")
+                if sel_esc.count() > 0:
+                    sel_esc.first.select_option(value=_esc_value)
+                    self._aguardar_ajax()
+                    self._log(f"    Escala tipo: {_esc_value}")
+                else:
+                    # Tentar via JS
+                    self._page.evaluate(f"""() => {{
+                        const sel = document.querySelector("select[id$='tipoEscala']");
+                        if (sel) {{
+                            for (const opt of sel.options) {{
+                                if (opt.value.toUpperCase().includes('{_esc_value}') ||
+                                    opt.text.toUpperCase().includes('{_esc_value}')) {{
+                                    sel.value = opt.value;
+                                    sel.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                    break;
+                                }}
+                            }}
+                        }}
+                    }}""")
+                    self._aguardar_ajax()
+            except Exception as e:
+                self._log(f"    ⚠ Escala tipo: erro {e}")
+
+        # Se LIVRE: pular preenchimento de jornada — usuário preencherá manualmente após importação PJC
+        if preenchimento == "livre":
+            self._log("    → Modo Livre: pulando preenchimento de jornada (será feito após importação PJC)")
+            # Ir direto para Salvar (seção 8)
+            # Fall through to save section below (skip steps 3-7)
+            pass
+        else:
+            pass  # Continue with steps 3+ below
+
         # ── 3. Quantidade fixa (HST) ──
-        if forma == "HST" and qt_he_mes:
+        if forma == "HST" and qt_he_mes and preenchimento != "livre":
             hh_he = int(qt_he_mes)
             mm_he = int((qt_he_mes - hh_he) * 60)
             self._preencher("qtsumulatst", f"{hh_he:02d}:{mm_he:02d}", False)
             self._log(f"    HST: {hh_he:02d}:{mm_he:02d} HE/mês")
 
         # ── 4. Jornada de Trabalho PADRÃO (contratada) — NÃO a efetivamente praticada ──
+        # (Pular se modo Livre — usuário preencherá depois)
         # CONCEITO CRÍTICO (manual PJE-Calc seção 10.1):
         # "Jornada de Trabalho Padrão" = jornada CONTRATADA (ex: 8h/dia CLT).
         # A jornada EFETIVAMENTE PRATICADA (ex: 10h/dia) vai na Grade de Ocorrências.
@@ -5064,7 +5145,7 @@ class PJECalcPlaywright:
         # - duracao_trabalho.jornada_seg..dom = jornada PRATICADA (do que diz a sentença)
         #
         # Aqui usamos a jornada contratual (Parâmetros do Cálculo / cargaHorariaDiaria).
-        if forma in ("HJD", "APH"):
+        if forma in ("HJD", "APH", "FAV", "SEM", "MEN") and preenchimento != "livre":
             # Determinar jornada PADRÃO (contratual) — NÃO a praticada
             _jornada_padrao_diaria = cont.get("jornada_diaria") or cont.get("carga_horaria_diaria")
             _jornada_padrao_semanal = cont.get("jornada_semanal") or cont.get("carga_horaria_semanal")
@@ -5130,7 +5211,7 @@ class PJECalcPlaywright:
 
         # ── 5. Jornada semanal e mensal ──
         # qtJornadaSemanal usa currencyMask() — formato decimal BR (ex: "50,00")
-        if jornada_semanal:
+        if jornada_semanal and preenchimento != "livre":
             _js_val = _fmt_br(jornada_semanal)
             try:
                 loc_sem = self._page.locator("input[id$='qtJornadaSemanal']")
@@ -5143,7 +5224,7 @@ class PJECalcPlaywright:
             except Exception as e:
                 self._log(f"    ⚠ Semanal: erro {e}")
 
-        if jornada_mensal:
+        if jornada_mensal and preenchimento != "livre":
             _jm_val = _fmt_br(jornada_mensal)
             try:
                 loc_men = self._page.locator("input[id$='qtJornadaMensal']")
@@ -5157,7 +5238,7 @@ class PJECalcPlaywright:
                 self._log(f"    ⚠ Mensal: erro {e}")
 
         # ── 6. Intervalo intrajornada ──
-        if intervalo_min and intervalo_min > 0:
+        if intervalo_min and intervalo_min > 0 and preenchimento != "livre":
             hh_int = int(intervalo_min // 60)
             mm_int = int(intervalo_min % 60)
             valor_intervalo = f"{hh_int:02d}:{mm_int:02d}"

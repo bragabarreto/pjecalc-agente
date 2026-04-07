@@ -526,20 +526,11 @@
         <!-- Tipo de apuração -->
         <div class="campos-grid">
           <div class="campo-form campo-col2">
-            <label>Tipo de Apuração de Horas Extras</label>
+            <label>Tipo de Condenação em HE</label>
             <select onchange="salvarCampo('duracao_trabalho.tipo_apuracao', this.value, this); toggleApuracao(this.value)">
               <option value="">— sem horas extras —</option>
-              <option value="apuracao_jornada" {{ 'selected' if dur.get('tipo_apuracao') == 'apuracao_jornada' }}>Apuração por Jornada (horário entrada/saída)</option>
-              <option value="quantidade_fixa" {{ 'selected' if dur.get('tipo_apuracao') == 'quantidade_fixa' }}>Quantidade Fixa de HE (mensal/diária)</option>
-            </select>
-          </div>
-          <div class="campo-form">
-            <label>Forma PJE-Calc</label>
-            <select onchange="salvarCampo('duracao_trabalho.forma_apuracao_pjecalc', this.value, this)">
-              <option value="NAP" {{ 'selected' if dur.get('forma_apuracao_pjecalc', 'NAP') == 'NAP' }}>NAP — Não Apurar</option>
-              <option value="HJD" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HJD' }}>HJD — Jornada Diária</option>
-              <option value="HST" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HST' }}>HST — Súmula TST (qtd fixa)</option>
-              <option value="APH" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'APH' }}>APH — Horas Separadas</option>
+              <option value="apuracao_jornada" {{ 'selected' if dur.get('tipo_apuracao') == 'apuracao_jornada' }}>Jornada fixada na sentença → Cartão de Ponto</option>
+              <option value="quantidade_fixa" {{ 'selected' if dur.get('tipo_apuracao') == 'quantidade_fixa' }}>Quantidade fixa de HE (mensal/diária)</option>
             </select>
           </div>
           <div class="campo-form">
@@ -549,6 +540,59 @@
                    onchange="salvarCampo('duracao_trabalho.adicional_he_percentual', this.value, this)"
                    placeholder="0.50 = 50%">
           </div>
+        </div>
+
+        <!-- Forma de Apuração (PJE-Calc manual seção 10.1) -->
+        <div class="campos-grid" style="margin-top:8px;">
+          <div class="campo-form campo-col2">
+            <label>Forma de Apuração de HE (PJE-Calc)</label>
+            <select onchange="salvarCampo('duracao_trabalho.forma_apuracao_pjecalc', this.value, this)">
+              <option value="NAP" {{ 'selected' if dur.get('forma_apuracao_pjecalc', 'NAP') == 'NAP' }}>Não apurar horas extras</option>
+              <option value="HJD" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HJD' }}>Excedentes da jornada diária</option>
+              <option value="SEM" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'SEM' }}>Excedentes da jornada semanal</option>
+              <option value="FAV" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'FAV' }}>Critério mais favorável (diário vs semanal)</option>
+              <option value="MEN" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'MEN' }}>Excedentes da jornada mensal</option>
+              <option value="HST" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HST' }}>Súmula 85 TST</option>
+              <option value="APH" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'APH' }}>Primeiras HE em separado</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Considerar Feriados</label>
+            <select onchange="salvarCampo('duracao_trabalho.considerar_feriados_apuracao', this.value, this)">
+              <option value="" {{ 'selected' if not dur.get('considerar_feriados_apuracao') }}>Não</option>
+              <option value="sim" {{ 'selected' if dur.get('considerar_feriados_apuracao') == 'sim' }}>Sim</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Preenchimento de Jornadas (PJE-Calc manual seção 10.1) -->
+        <div id="bloco-preenchimento-jornada" style="{{ '' if dur.get('tipo_apuracao') == 'apuracao_jornada' else 'display:none;' }}">
+          <div class="campos-grid" style="margin-top:8px;">
+            <div class="campo-form campo-col2">
+              <label>Preenchimento de Jornadas</label>
+              <select id="sel-preenchimento-jornada" onchange="salvarCampo('duracao_trabalho.preenchimento_jornada', this.value, this); togglePreenchimentoJornada(this.value)">
+                <option value="livre" {{ 'selected' if dur.get('preenchimento_jornada', 'livre') == 'livre' }}>Livre (preencher manualmente após importação PJC)</option>
+                <option value="programacao_semanal" {{ 'selected' if dur.get('preenchimento_jornada') == 'programacao_semanal' }}>Programação Semanal (grade por dia)</option>
+                <option value="escala" {{ 'selected' if dur.get('preenchimento_jornada') == 'escala' }}>Escala</option>
+              </select>
+            </div>
+            <div class="campo-form" id="campo-escala-tipo" style="{{ '' if dur.get('preenchimento_jornada') == 'escala' else 'display:none;' }}">
+              <label>Tipo de Escala</label>
+              <select onchange="salvarCampo('duracao_trabalho.escala_tipo', this.value, this)">
+                <option value="outra" {{ 'selected' if dur.get('escala_tipo', 'outra') == 'outra' }}>Outra</option>
+                <option value="12x12" {{ 'selected' if dur.get('escala_tipo') == '12x12' }}>12x12</option>
+                <option value="12x24" {{ 'selected' if dur.get('escala_tipo') == '12x24' }}>12x24</option>
+                <option value="12x36" {{ 'selected' if dur.get('escala_tipo') == '12x36' }}>12x36</option>
+                <option value="12x48" {{ 'selected' if dur.get('escala_tipo') == '12x48' }}>12x48</option>
+                <option value="5x1" {{ 'selected' if dur.get('escala_tipo') == '5x1' }}>5x1</option>
+                <option value="6x1" {{ 'selected' if dur.get('escala_tipo') == '6x1' }}>6x1</option>
+                <option value="8x2" {{ 'selected' if dur.get('escala_tipo') == '8x2' }}>8x2</option>
+              </select>
+            </div>
+          </div>
+          <p id="aviso-livre" style="font-size:0.8rem; color:#666; margin:8px 0 0; {{ '' if dur.get('preenchimento_jornada', 'livre') == 'livre' else 'display:none;' }}">
+            <em>Modo Livre: a automação marcará esta opção no PJE-Calc. A jornada deverá ser preenchida manualmente ou por importação de arquivo após a geração do PJC.</em>
+          </p>
         </div>
 
         <!-- Bloco: Apuração por Jornada -->
@@ -1345,18 +1389,37 @@ function toggleSecao(id) {
 
 // Toggle Duração do Trabalho: mostrar/esconder blocos conforme tipo de apuração
 function toggleApuracao(tipo) {
+  const blocoPreench = document.getElementById('bloco-preenchimento-jornada');
   const blocoJornada = document.getElementById('bloco-apuracao-jornada');
   const blocoFixa = document.getElementById('bloco-quantidade-fixa');
-  if (blocoJornada) blocoJornada.style.display = (tipo === 'apuracao_jornada') ? '' : 'none';
+  if (blocoPreench) blocoPreench.style.display = (tipo === 'apuracao_jornada') ? '' : 'none';
   if (blocoFixa) blocoFixa.style.display = (tipo === 'quantidade_fixa') ? '' : 'none';
+  // Mostrar/ocultar bloco de jornada conforme preenchimento selecionado
+  if (tipo === 'apuracao_jornada') {
+    const selPreen = document.getElementById('sel-preenchimento-jornada');
+    const mode = selPreen ? selPreen.value : 'livre';
+    togglePreenchimentoJornada(mode);
+  } else {
+    if (blocoJornada) blocoJornada.style.display = 'none';
+  }
   // Auto-ajustar forma PJE-Calc
   const formaSel = document.querySelector('select[onchange*="forma_apuracao_pjecalc"]');
   if (formaSel) {
-    if (tipo === 'apuracao_jornada') formaSel.value = 'HJD';
-    else if (tipo === 'quantidade_fixa') formaSel.value = 'HST';
+    if (tipo === 'apuracao_jornada') formaSel.value = 'FAV';
+    else if (tipo === 'quantidade_fixa') formaSel.value = 'NAP';
     else formaSel.value = 'NAP';
     salvarCampo('duracao_trabalho.forma_apuracao_pjecalc', formaSel.value, formaSel);
   }
+}
+
+function togglePreenchimentoJornada(mode) {
+  const blocoJornada = document.getElementById('bloco-apuracao-jornada');
+  const campoEscala = document.getElementById('campo-escala-tipo');
+  const avisoLivre = document.getElementById('aviso-livre');
+  // Jornada detail block: show for programacao_semanal and escala, hide for livre
+  if (blocoJornada) blocoJornada.style.display = (mode === 'programacao_semanal' || mode === 'escala') ? '' : 'none';
+  if (campoEscala) campoEscala.style.display = (mode === 'escala') ? '' : 'none';
+  if (avisoLivre) avisoLivre.style.display = (mode === 'livre') ? '' : 'none';
 }
 
 // Recalcular jornada semanal/mensal a partir dos campos diários

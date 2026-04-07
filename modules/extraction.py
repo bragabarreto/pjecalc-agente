@@ -605,12 +605,26 @@ Extrair SEMPRE que houver condenação em horas extras. Esta seção alimenta o 
       (ex: "50 horas extras mensais", "2h extras por dia")
     null → não há condenação em horas extras ou informação insuficiente
 
-- forma_apuracao_pjecalc: mapear para o enum do PJE-Calc:
-    "HST" → Horas Extras por Súmula/TST (quantidade fixa mensal)
-    "HJD" → Jornada Diária (apuração por horário de entrada/saída)
-    "APH" → Apuração por Horas Separadas (1ª e 2ª faixas de adicional separadas)
-    "NAP" → Não Apurar (sem horas extras)
-    Regra: "apuracao_jornada" → "HJD" | "quantidade_fixa" → "HST" | null → "NAP"
+- forma_apuracao_pjecalc: mapear para o enum do PJE-Calc (Manual seção 10.1):
+    "NAP" → Não apurar horas extras
+    "HJD" → Excedentes da jornada diária
+    "SEM" → Excedentes da jornada semanal
+    "FAV" → Critério mais favorável (compara diário vs semanal, usa maior)
+    "MEN" → Excedentes da jornada mensal
+    "HST" → Súmula 85 TST (com limite de compensação)
+    "APH" → Primeiras HE em separado
+    Regra: "apuracao_jornada" → "FAV" (default) | "quantidade_fixa" → "NAP" | null → "NAP"
+
+- preenchimento_jornada: como preencher a grade de jornadas no PJE-Calc (Manual seção 10.1):
+    "livre" → campos em branco para preenchimento manual posterior (default quando jornada vaga)
+    "programacao_semanal" → grade fixa por dia da semana (quando sentença fixa horários claros seg-dom)
+    "escala" → escala de trabalho pré-definida (12x36, 6x1, etc.)
+    Regra: se sentença diz "escala 12x36" → "escala" | se fixa horários por dia → "programacao_semanal" | senão → "livre"
+
+- escala_tipo: se preenchimento_jornada="escala", qual escala:
+    "12x12" | "12x24" | "12x36" | "12x48" | "5x1" | "6x1" | "8x2" | "outra"
+    Extrair de "escala 12x36", "regime 6x1", "escala de revezamento 5x1"
+    null se preenchimento_jornada != "escala"
 
 - jornada_entrada: horário de início (string "HH:MM", ex: "07:00") — extrair de "das 07h às", "entrada às 7h"
 - jornada_saida: horário de término (string "HH:MM", ex: "17:00") — extrair de "às 17h", "saída às 17:00"
@@ -1127,6 +1141,8 @@ _EXTRACTION_SCHEMA: dict = {
             "properties": {
                 "tipo_apuracao":          {"type": ["string","null"]},
                 "forma_apuracao_pjecalc": {"type": ["string","null"]},
+                "preenchimento_jornada":  {"type": ["string","null"]},
+                "escala_tipo":            {"type": ["string","null"]},
                 "jornada_entrada":        {"type": ["string","null"]},
                 "jornada_saida":          {"type": ["string","null"]},
                 "intervalo_minutos":      {"type": ["integer","null"]},
