@@ -117,9 +117,9 @@
     {% else %}
     <span class="badge badge-cinza">{{ status }}</span>
     {% endif %}
-    {% if calculo.arquivo_pjc %}
+    {% if calculo.arquivo_pjc and status == 'pjc_exportado' %}
     <a href="/download/{{ sessao_id }}/pjc" class="btn btn-success" style="padding:7px 14px; font-size:0.88rem;">
-      Download .pjc
+      Download .pjc (exportado pelo PJE-Calc)
     </a>
     {% endif %}
   </div>
@@ -1311,9 +1311,15 @@
       <a href="/instrucoes/{{ sessao_id }}" class="btn btn-primary" style="width:100%; padding:10px; text-align:center; display:block; margin-bottom:8px;">
         Ver Guia de Preenchimento
       </a>
-      <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-secondary" style="width:100%; padding:8px; text-align:center; display:block; margin-bottom:6px; font-size:0.85rem;">
-        ⬇ Baixar .pjc (alternativa)
+      {% if calculo.arquivo_pjc and status == 'pjc_exportado' %}
+      <a href="/download/{{ sessao_id }}/pjc" class="btn btn-outline-success" style="width:100%; padding:8px; text-align:center; display:block; margin-bottom:6px; font-size:0.85rem;">
+        ⬇ Baixar .pjc (exportado pelo PJE-Calc)
       </a>
+      {% else %}
+      <div style="width:100%; padding:8px; text-align:center; display:block; margin-bottom:6px; font-size:0.82rem; color:#856404; background:#fff3cd; border:1px solid #ffc107; border-radius:4px;">
+        .PJC disponível após executar a automação
+      </div>
+      {% endif %}
       <a href="/download/{{ sessao_id }}/parametros" class="btn btn-outline-secondary" style="width:100%; padding:8px; text-align:center; display:block; font-size:0.85rem;">
         Baixar Parâmetros JSON
       </a>

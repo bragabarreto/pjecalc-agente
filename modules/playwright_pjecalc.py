@@ -6170,12 +6170,15 @@ class PJECalcPlaywright:
         """Verifica se o cálculo atualmente aberto pertence ao processo correto.
 
         Compara o número do processo exibido na página com o número em self._dados.
-        Retorna True se correto ou se a verificação não for possível.
+        Retorna True se correto. Retorna False se errado ou se a verificação falhar
+        (fail-safe: melhor abortar do que exportar processo errado).
         """
         if not self._dados:
+            self._log("  ⚠ Verificação: sem dados para comparar")
             return True  # sem dados para comparar — assumir correto
         _num_esperado = self._dados.get("processo", {}).get("numero", "")
         if not _num_esperado:
+            self._log("  ⚠ Verificação: número do processo não informado nos dados")
             return True
 
         # Extrair número do processo da página atual
@@ -6216,12 +6219,13 @@ class PJECalcPlaywright:
                 const m2 = body.match(/\\d{7}-\\d{2}\\.\\d{4}\\.\\d\\.\\d{2}\\.\\d{4}/);
                 return m2 ? m2[0] : null;
             }""")
-        except Exception:
-            return True  # não conseguiu verificar — assumir correto
+        except Exception as _exc:
+            self._log(f"  ⚠ Verificação falhou (erro JS): {_exc}")
+            return False  # fail-safe: não arriscar exportar processo errado
 
         if not _num_pagina:
-            self._log("  ℹ Verificação de cálculo: número do processo não visível na página")
-            return True
+            self._log("  ⚠ Verificação de cálculo: número do processo não visível na página")
+            return False  # fail-safe: sem número visível, não é seguro prosseguir
 
         # Comparar apenas dígitos
         import re as _re_vc
@@ -6279,56 +6283,48 @@ class PJECalcPlaywright:
                 _n_opts = _options.count()
                 self._log(f"  ℹ Cálculos recentes: {_n_opts} itens")
                 if _n_opts > 0:
-                    # Tentar encontrar o cálculo correto pelo número do processo
-                    _target_opt = _options.first  # default: primeiro
                     _num_proc = (self._dados or {}).get("processo", {}).get("numero", "")
-                    if _num_proc:
-                        # Normalizar: remover pontos e traços para busca textual
-                        _num_clean = _num_proc.replace(".", "").replace("-", "").replace("/", "")
-                        for i in range(_n_opts):
-                            _opt_text = _options.nth(i).text_content() or ""
-                            _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
-                            if _num_clean in _opt_clean or (_num_clean[:7] in _opt_clean):
-                                _target_opt = _options.nth(i)
-                                self._log(f"  ✓ Encontrado cálculo correto: '{_opt_text[:60]}' (item {i+1})")
-                                break
-                        else:
-                            self._log(f"  ℹ Processo '{_num_proc}' não encontrado nos recentes — usando primeiro item")
-                    # Determinar quais índices tentar
-                    _found_idx = None
-                    if _num_proc:
-                        for _idx in range(_n_opts):
-                            _opt_text_chk = (_options.nth(_idx).text_content() or "").replace(".", "").replace("-", "").replace("/", "")
-                            if _num_clean in _opt_text_chk or _num_clean[:7] in _opt_text_chk:
-                                _found_idx = _idx
-                                break
-                    _indices_tentar = [_found_idx] if _found_idx is not None else list(range(min(_n_opts, 3)))
+                    # Normalizar: remover pontos e traços para busca textual
+                    _num_clean = _num_proc.replace(".", "").replace("-", "").replace("/", "") if _num_proc else ""
 
-                    for _opt_idx in _indices_tentar:
-                        # Re-localizar a listbox (pode ser página nova após goto _home)
-                        _lb = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
-                        if _lb.count() == 0:
-                            break
-                        _opt_el = _lb.first.locator("option").nth(_opt_idx)
-                        _opt_el.click()
-                        self._page.wait_for_timeout(300)
-                        _opt_el.dblclick()
-                        self._aguardar_ajax(30000)
-                        self._page.wait_for_timeout(2000)
-                        _url_after = self._page.url
-                        if "calculo" in _url_after and "conversationId" in _url_after:
-                            self._capturar_base_calculo()
-                            if self._verificar_calculo_correto():
-                                self._log(f"  ✓ Cálculo re-aberto com nova conversação: {self._calculo_conversation_id}")
-                                _sessao_restaurada = True
+                    # Buscar EXATAMENTE o processo correto — NUNCA usar fallback para outro
+                    _found_idx = None
+                    if _num_clean:
+                        for _idx in range(_n_opts):
+                            _opt_text = (_options.nth(_idx).text_content() or "")
+                            _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
+                            # Match exato: todos os dígitos do CNJ devem estar presentes
+                            if _num_clean in _opt_clean:
+                                _found_idx = _idx
+                                self._log(f"  ✓ Encontrado cálculo correto: '{_opt_text.strip()[:60]}' (item {_idx+1})")
                                 break
+
+                    if _found_idx is None:
+                        # Log todos os itens disponíveis para diagnóstico
+                        for _idx in range(_n_opts):
+                            _opt_text = (_options.nth(_idx).text_content() or "").strip()
+                            self._log(f"    item {_idx+1}: '{_opt_text[:80]}'")
+                        self._log(f"  ⚠ Processo '{_num_proc}' NÃO encontrado nos recentes — NÃO usar outro processo!")
+                    else:
+                        # Abrir apenas o cálculo que corresponde ao processo correto
+                        _lb = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
+                        if _lb.count() > 0:
+                            _opt_el = _lb.first.locator("option").nth(_found_idx)
+                            _opt_el.click()
+                            self._page.wait_for_timeout(300)
+                            _opt_el.dblclick()
+                            self._aguardar_ajax(30000)
+                            self._page.wait_for_timeout(2000)
+                            _url_after = self._page.url
+                            if "calculo" in _url_after and "conversationId" in _url_after:
+                                self._capturar_base_calculo()
+                                if self._verificar_calculo_correto():
+                                    self._log(f"  ✓ Cálculo re-aberto com nova conversação: {self._calculo_conversation_id}")
+                                    _sessao_restaurada = True
+                                else:
+                                    self._log("  ⚠ CÁLCULO ERRADO após re-abertura! Abortando para evitar exportar processo incorreto.")
                             else:
-                                self._log("  → Cálculo errado — tentando próximo item…")
-                                self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
-                                self._page.wait_for_timeout(1000)
-                                continue
-                        else:
-                            self._log(f"  ⚠ URL inesperada após dblclick: {_url_after}")
+                                self._log(f"  ⚠ URL inesperada após dblclick: {_url_after}")
             else:
                 self._log("  ⚠ Lista de cálculos recentes não encontrada")
 
@@ -6349,8 +6345,12 @@ class PJECalcPlaywright:
                         _url_after2 = self._page.url
                         if "calculo" in _url_after2 and "conversationId" in _url_after2:
                             self._capturar_base_calculo()
-                            self._log(f"  ✓ Cálculo aberto via Buscar: {self._calculo_conversation_id}")
-                            _sessao_restaurada = True
+                            # SEMPRE verificar se é o processo correto
+                            if self._verificar_calculo_correto():
+                                self._log(f"  ✓ Cálculo aberto via Buscar: {self._calculo_conversation_id}")
+                                _sessao_restaurada = True
+                            else:
+                                self._log("  ⚠ CÁLCULO ERRADO via Buscar! Não usar.")
 
         except Exception as _e:
             self._log(f"  ⚠ Re-abertura do cálculo falhou: {_e}")
@@ -6371,8 +6371,21 @@ class PJECalcPlaywright:
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
                 self._capturar_base_calculo()
+                # Verificar processo correto mesmo no fallback
+                if self._verificar_calculo_correto():
+                    _sessao_restaurada = True
+                else:
+                    self._log("  ⚠ CÁLCULO ERRADO no fallback conversação antiga!")
             except Exception as _e:
                 self._log(f"  ⚠ Fallback conversação antiga: {_e}")
+
+        # REGRA DE SEGURANÇA: verificar processo correto ANTES de liquidar.
+        # Se a sessão foi restaurada mas o processo está errado, abortar.
+        if _sessao_restaurada and not self._verificar_calculo_correto():
+            raise RuntimeError(
+                "ABORTADO: o cálculo aberto pertence a um processo diferente do solicitado. "
+                "Não é seguro prosseguir com liquidação/exportação."
+            )
 
         def _salvar_download(dl_info_value) -> str:
             dest = out_dir / dl_info_value.suggested_filename

@@ -591,28 +591,31 @@ async def previa_atual_processo(
 
 @app.get("/download/{sessao_id}/pjc")
 async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
-    """Download do arquivo .pjc gerado."""
+    """Download do arquivo .pjc exportado pelo PJE-Calc Cidadão.
+
+    REGRA DE OURO: Apenas arquivos .PJC gerados pelo próprio PJE-Calc Cidadão
+    (via Liquidar + Exportar na automação) são válidos. Arquivos gerados pelo
+    pjc_generator.py nativo são SEMPRE rejeitados pelo PJE-Calc institucional.
+    Por isso, este endpoint NÃO gera PJC sob demanda — só serve arquivos que
+    já foram exportados pela automação.
+    """
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    # Gerar sob demanda se ainda não foi gerado
     if not calculo.arquivo_pjc or not Path(calculo.arquivo_pjc).exists():
-        try:
-            from modules.pjc_generator import gerar_pjc
-            dados = calculo.dados()
-            verbas_mapeadas = calculo.verbas_mapeadas()
-            caminho_pjc = gerar_pjc(dados, verbas_mapeadas, sessao_id)
-            repo.marcar_exportado(sessao_id, str(caminho_pjc))
-            calculo = repo.buscar_sessao(sessao_id)
-        except Exception as exc:
-            raise HTTPException(status_code=500, detail=f"Erro ao gerar .pjc: {exc}")
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Arquivo .PJC ainda não disponível. "
+                "O arquivo .PJC válido só é gerado após a automação completar "
+                "a liquidação no PJE-Calc Cidadão e exportar o resultado. "
+                "Execute a automação primeiro em Instruções > Executar Automação."
+            ),
+        )
 
     caminho = Path(calculo.arquivo_pjc)
-    if not caminho.exists():
-        raise HTTPException(status_code=404, detail="Arquivo .pjc não encontrado no servidor")
-
     return FileResponse(
         path=str(caminho),
         filename=caminho.name,
