@@ -1112,6 +1112,17 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
             else:
                 nao_reconhecidas.append(resultado)
 
+    # Deduplicar predefinidas por nome_pjecalc (ex: duas extrações "férias proporcionais"
+    # e "férias + 1/3" ambas mapeiam para "FÉRIAS + 1/3" — só precisa 1 checkbox Expresso)
+    _nomes_pjecalc_vistos: set[str] = set()
+    predefinidas_dedup: list[dict] = []
+    for p in predefinidas:
+        _npj = (p.get("nome_pjecalc") or "").upper()
+        if _npj and _npj in _nomes_pjecalc_vistos:
+            continue
+        _nomes_pjecalc_vistos.add(_npj)
+        predefinidas_dedup.append(p)
+
     # Deduplicar reflexas
     nomes_reflexas_vistos: set[str] = set()
     reflexas_unicas = []
@@ -1121,7 +1132,7 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
             reflexas_unicas.append(r)
 
     return {
-        "predefinidas": predefinidas,
+        "predefinidas": predefinidas_dedup,
         "personalizadas": personalizadas,
         "nao_reconhecidas": nao_reconhecidas,
         "reflexas_sugeridas": reflexas_unicas,

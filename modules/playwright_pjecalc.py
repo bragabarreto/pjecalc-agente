@@ -3779,6 +3779,14 @@ class PJECalcPlaywright:
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
             _nome_lower = nome.lower()
 
+            # ── REGRA: Pular verbas já criadas via Expresso ──
+            # Férias+1/3, 13º Salário e outras verbas Expresso nunca devem ser
+            # duplicadas como verbas manuais. A configuração de proporcionais vs
+            # vencidas é feita via ocorrências, não via verbas separadas.
+            if nome.upper() in self._verbas_expresso_ok:
+                self._log(f"  → '{nome}' já registrada via Expresso — pulando criação manual")
+                continue
+
             # ── REGRA: Pular reflexas cujo principal foi criado via Expresso ──
             # Parcelas Expresso geram reflexos automaticamente (Aviso Prévio, Férias+1/3,
             # 13º, RSR, Multa 477). Criar reflexo manual duplica e causa erro.
