@@ -3787,6 +3787,20 @@ class PJECalcPlaywright:
                 self._log(f"  → '{nome}' já registrada via Expresso — pulando criação manual")
                 continue
 
+            # ── REGRA: Pular férias/13º manuais se já registrados via Expresso ──
+            # A extração pode gerar "FÉRIAS PROPORCIONAIS + 1/3" como verba separada,
+            # mas no PJE-Calc é a mesma verba "FÉRIAS + 1/3" do Expresso com ocorrências
+            # configuradas para proporcional. Idem para 13º Salário Proporcional.
+            _carac = _norm_key(v.get("caracteristica") or "")
+            _is_ferias = "ferias" in _nome_lower or "férias" in _nome_lower or _carac == "ferias"
+            _is_13 = "13" in _nome_lower or "decimo" in _nome_lower or "décimo" in _nome_lower or _carac in ("13o salario", "decimo terceiro salario")
+            if _is_ferias and any("FÉRIAS" in e or "FERIAS" in e for e in self._verbas_expresso_ok):
+                self._log(f"  → '{nome}' é férias — já registrada via Expresso 'FÉRIAS + 1/3', pulando")
+                continue
+            if _is_13 and any("13" in e for e in self._verbas_expresso_ok):
+                self._log(f"  → '{nome}' é 13º — já registrado via Expresso '13º SALÁRIO', pulando")
+                continue
+
             # ── REGRA: Pular reflexas cujo principal foi criado via Expresso ──
             # Parcelas Expresso geram reflexos automaticamente (Aviso Prévio, Férias+1/3,
             # 13º, RSR, Multa 477). Criar reflexo manual duplica e causa erro.
@@ -3805,9 +3819,9 @@ class PJECalcPlaywright:
 
                 # Verificar se o principal foi criado via Expresso (reflexos auto-gerados)
                 if _nome_principal_ref:
-                    _ref_upper = _nome_principal_ref.upper()
+                    _ref_upper = _norm_key(_nome_principal_ref)
                     _skip_expresso = any(
-                        _ref_upper in exp_name or exp_name in _ref_upper
+                        _ref_upper in _norm_key(exp_name) or _norm_key(exp_name) in _ref_upper
                         for exp_name in self._verbas_expresso_ok
                     )
                     if _skip_expresso:
@@ -3816,6 +3830,23 @@ class PJECalcPlaywright:
                             f"— reflexos auto-gerados pelo PJE-Calc, pulando criação manual"
                         )
                         continue
+
+                # Também verificar se a verba-alvo (após "EM") é Expresso
+                if not _skip_expresso:
+                    import re as _re_em
+                    _m_alvo = _re_em.search(r'(?i)\bem\s+(.+?)$', nome)
+                    if _m_alvo:
+                        _alvo_norm = _norm_key(_m_alvo.group(1))
+                        _skip_expresso = any(
+                            _alvo_norm in _norm_key(e) or _norm_key(e) in _alvo_norm
+                            for e in self._verbas_expresso_ok
+                        )
+                        if _skip_expresso:
+                            self._log(
+                                f"  → '{nome}' reflexo para verba Expresso '{_m_alvo.group(1)}' "
+                                f"— auto-gerado pelo PJE-Calc, pulando"
+                            )
+                            continue
 
                 if _nome_principal_ref and _nome_principal_ref in self._reflexos_configurados:
                     self._log(f"  → '{nome}' reflexo já configurado via botão Verba Reflexa — pulando")
