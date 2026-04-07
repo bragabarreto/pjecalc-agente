@@ -1193,6 +1193,7 @@ async def executar_automacao_sse(
                 return
 
             import queue as _queue
+            import threading as _threading
 
             loop = asyncio.get_event_loop()
             parametrizacao_sse = dados.get("_parametrizacao") or {}
@@ -1203,6 +1204,7 @@ async def executar_automacao_sse(
             )
 
             fila: _queue.Queue = _queue.Queue()
+            _gen_finished = _threading.Event()
 
             def _executar_gen():
                 """Roda em thread executor — coloca mensagens na fila."""
@@ -1218,8 +1220,11 @@ async def executar_automacao_sse(
                             break
                 except Exception as exc:
                     fila.put(("erro", str(exc)))
+                finally:
+                    _gen_finished.set()
 
-            loop.run_in_executor(None, _executar_gen)
+            _gen_thread = _threading.Thread(target=_executar_gen, daemon=True)
+            _gen_thread.start()
 
             while True:
                 try:
@@ -1281,6 +1286,17 @@ async def executar_automacao_sse(
             yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
 
         finally:
+            # Fix 8: forçar cleanup do browser/generator ao desconectar SSE.
+            # Sem isso, cada SSE que desconecta deixa um Firefox órfão (~500MB).
+            try:
+                gen.close()  # dispara GeneratorExit → fecha browser via _agente_ref
+            except Exception:
+                pass
+            # Aguardar thread terminar (max 30s) para garantir cleanup do browser
+            if not _gen_finished.is_set():
+                logger.info(f"SSE desconectou [{sessao_id}] — aguardando cleanup do browser…")
+                _gen_finished.wait(timeout=30)
+
             # Salvar log acumulado no diretório de persistência
             if _exec_dir and _persist_enabled and _log_acumulado:
                 try:

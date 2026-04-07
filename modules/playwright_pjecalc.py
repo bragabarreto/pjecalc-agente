@@ -7031,6 +7031,7 @@ def iniciar_e_preencher(
     parametrizacao: dict | None = None,
     limpar_h2: bool = True,
     exec_dir: Path | None = None,
+    _agente_ref: list | None = None,
 ) -> None:
     """
     Ponto de entrada público (modo callback).
@@ -7038,6 +7039,9 @@ def iniciar_e_preencher(
     2. Inicia PJE-Calc Cidadão (se não estiver rodando), verificando TCP + HTTP.
     3. Abre Playwright browser.
     4. Preenche todos os campos do cálculo seguindo as 8 fases.
+
+    _agente_ref: se fornecido, lista onde o agente será armazenado para
+    permitir cleanup externo (ex: SSE disconnect).
     """
     cb = log_cb or (lambda m: None)
 
@@ -7057,6 +7061,10 @@ def iniciar_e_preencher(
     cb("PJE-Calc disponível.")
 
     agente = PJECalcPlaywright(log_cb=cb, exec_dir=exec_dir)
+    # Expor agente para cleanup externo (SSE disconnect)
+    if _agente_ref is not None:
+        _agente_ref.clear()
+        _agente_ref.append(agente)
     try:
         agente.iniciar_browser(headless=headless)
         agente.preencher_calculo(dados, verbas_mapeadas, parametrizacao=parametrizacao)
@@ -7070,6 +7078,8 @@ def iniciar_e_preencher(
             agente.fechar()
         except Exception:
             pass
+        if _agente_ref is not None:
+            _agente_ref.clear()
 
 
 def preencher_como_generator(
@@ -7084,8 +7094,14 @@ def preencher_como_generator(
     Generator que faz yield de mensagens de log para SSE streaming direto.
     Padrão CalcMachine: thread separada + queue.Queue como bridge.
 
+    O atributo `_agente_ref` (list) permite cleanup externo:
+    se o SSE desconectar, o caller pode chamar `agente.fechar()` no
+    primeiro elemento da lista para forçar o encerramento do browser.
+
     Uso:
-        for msg in preencher_como_generator(dados, verbas, pjecalc_dir):
+        gen = preencher_como_generator(dados, verbas, pjecalc_dir)
+        # gen._agente_ref[0].fechar()  para cleanup externo
+        for msg in gen:
             # transmitir msg via SSE
     """
     import queue
@@ -7093,6 +7109,7 @@ def preencher_como_generator(
 
     log_queue: queue.Queue[str | None] = queue.Queue()
     _stop_keepalive = threading.Event()
+    _agente_ref: list = []  # exposto para cleanup externo
 
     def _cb(msg: str) -> None:
         log_queue.put(msg)
@@ -7114,6 +7131,7 @@ def preencher_como_generator(
                 headless=modo_oculto,
                 parametrizacao=parametrizacao,
                 exec_dir=exec_dir,
+                _agente_ref=_agente_ref,
             )
         except Exception as exc:
             log_queue.put(f"ERRO: {exc}")
@@ -7123,12 +7141,29 @@ def preencher_como_generator(
             log_queue.put(None)  # sentinela de fim
 
     threading.Thread(target=_keepalive, daemon=True).start()
-    threading.Thread(target=_run, daemon=True).start()
+    _run_thread = threading.Thread(target=_run, daemon=True)
+    _run_thread.start()
 
-    while True:
-        msg = log_queue.get()
-        if msg is None:
-            break
-        yield msg
+    # Expor referências para cleanup externo pelo caller (webapp SSE)
+    # Hack: armazenar como atributos do generator object não é possível,
+    # então usamos uma variável de closure acessível via gen._agente_ref
+    # O caller deve acessar via a variável local no closure
+
+    try:
+        while True:
+            msg = log_queue.get()
+            if msg is None:
+                break
+            yield msg
+    except GeneratorExit:
+        # SSE desconectou — forçar cleanup do browser
+        _stop_keepalive.set()
+        if _agente_ref:
+            try:
+                _agente_ref[0].fechar()
+                logger.info("Browser fechado por GeneratorExit (SSE disconnect)")
+            except Exception:
+                pass
+        return
 
     yield "[FIM DA EXECUÇÃO]"
