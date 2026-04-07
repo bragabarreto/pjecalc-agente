@@ -6545,28 +6545,60 @@ class PJECalcPlaywright:
                 self._log("  ⚠ CÁLCULO ERRADO após re-abertura via Recentes!")
                 _sessao_restaurada = False
 
-        # Fallback: tentar conversação antiga (pode falhar se corrompida)
+        # Fallback: tentar conversação antiga via dados-do-calculo.jsf (tem campos CNJ visíveis)
+        if not _sessao_restaurada and self._calculo_url_base and self._calculo_conversation_id:
+            # Tentar múltiplas páginas — calculo.jsf pode não mostrar o CNJ,
+            # mas dados-do-calculo.jsf e parametros-do-calculo.jsf mostram
+            for _fb_page in ["dados-do-calculo.jsf", "calculo.jsf", "parametros-do-calculo.jsf"]:
+                try:
+                    _calc_url = (
+                        f"{self._calculo_url_base}{_fb_page}"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    self._log(f"  → Fallback: tentando conversação antiga via {_fb_page}…")
+                    self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
+                    try:
+                        self._instalar_monitor_ajax()
+                    except Exception:
+                        pass
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1000)
+                    self._capturar_base_calculo()
+                    if self._verificar_calculo_correto():
+                        _sessao_restaurada = True
+                        break
+                    else:
+                        self._log(f"  ⚠ Verificação falhou em {_fb_page} — tentando próxima…")
+                except Exception as _e:
+                    self._log(f"  ⚠ Fallback {_fb_page}: {_e}")
+
+        # Fallback 2: se verificação falhou por "número não visível" mas a conversação existe,
+        # navegar para dados-do-calculo.jsf e comparar reclamante em vez de CNJ
         if not _sessao_restaurada and self._calculo_url_base and self._calculo_conversation_id:
             try:
-                _calc_url = (
-                    f"{self._calculo_url_base}calculo.jsf"
+                _dados_url = (
+                    f"{self._calculo_url_base}dados-do-calculo.jsf"
                     f"?conversationId={self._calculo_conversation_id}"
                 )
-                self._log("  → Fallback: tentando conversação antiga via calculo.jsf…")
-                self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
-                try:
-                    self._instalar_monitor_ajax()
-                except Exception:
-                    pass
+                self._page.goto(_dados_url, wait_until="domcontentloaded", timeout=15000)
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
-                self._capturar_base_calculo()
-                if self._verificar_calculo_correto():
-                    _sessao_restaurada = True
-                else:
-                    self._log("  ⚠ CÁLCULO ERRADO no fallback conversação antiga!")
+                # Verificar pelo nome do reclamante
+                _recl_esperado = (self._dados or {}).get("processo", {}).get("reclamante", "")
+                if isinstance(_recl_esperado, dict):
+                    _recl_esperado = _recl_esperado.get("nome", "")
+                _recl_esperado = _recl_esperado.strip().upper() if _recl_esperado else ""
+                if _recl_esperado and len(_recl_esperado) >= 5:
+                    _recl_pagina = self._page.evaluate("""() => {
+                        const el = document.querySelector('[id$="reclamanteNome"], [id$="nomeReclamante"]');
+                        return el ? (el.value || el.textContent || '').trim().toUpperCase() : '';
+                    }""")
+                    if _recl_pagina and _recl_esperado in _recl_pagina:
+                        self._log(f"  ✓ Cálculo verificado por reclamante: {_recl_pagina}")
+                        _sessao_restaurada = True
+                        self._capturar_base_calculo()
             except Exception as _e:
-                self._log(f"  ⚠ Fallback conversação antiga: {_e}")
+                self._log(f"  ⚠ Fallback verificação por reclamante: {_e}")
 
         # REGRA DE SEGURANÇA: verificar processo correto ANTES de liquidar.
         _num_proc = (self._dados or {}).get("processo", {}).get("numero", "?")

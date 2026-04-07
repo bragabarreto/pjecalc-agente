@@ -127,6 +127,40 @@ VERBAS_PREDEFINIDAS: dict[str, dict[str, Any]] = {
         "compor_principal": True,
         "campos_criticos": ["avos", "situacao", "dobra"],
     },
+    # Aliases para variantes comuns de férias que a extração pode gerar
+    "ferias proporcionais + 1/3": {
+        "nome_pjecalc": "FÉRIAS + 1/3",
+        "caracteristica": "Ferias",
+        "ocorrencia": "Periodo Aquisitivo",
+        "incidencia_fgts": False,
+        "incidencia_inss": True,
+        "incidencia_ir": True,
+        "tipo": "Principal",
+        "compor_principal": True,
+        "campos_criticos": ["avos", "situacao", "dobra"],
+    },
+    "ferias vencidas + 1/3": {
+        "nome_pjecalc": "FÉRIAS + 1/3",
+        "caracteristica": "Ferias",
+        "ocorrencia": "Periodo Aquisitivo",
+        "incidencia_fgts": False,
+        "incidencia_inss": True,
+        "incidencia_ir": True,
+        "tipo": "Principal",
+        "compor_principal": True,
+        "campos_criticos": ["avos", "situacao", "dobra"],
+    },
+    "ferias + 1/3": {
+        "nome_pjecalc": "FÉRIAS + 1/3",
+        "caracteristica": "Ferias",
+        "ocorrencia": "Periodo Aquisitivo",
+        "incidencia_fgts": False,
+        "incidencia_inss": True,
+        "incidencia_ir": True,
+        "tipo": "Principal",
+        "compor_principal": True,
+        "campos_criticos": ["avos", "situacao", "dobra"],
+    },
     "horas extras": {
         "nome_pjecalc": "HORAS EXTRAS 50%",
         "caracteristica": "Comum",
@@ -1115,7 +1149,7 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
         for resultado in classificadas:
             # Se o LLM classificou como uma verba que existe no Expresso,
             # promover para predefinidas (não criar manual para Férias, 13º, etc.)
-            _nome_pjc = resultado.get("nome_pjecalc") or resultado.get("sugestao_llm", {}).get("nome_pjecalc", "")
+            _nome_pjc = resultado.get("nome_pjecalc") or (resultado.get("sugestao_llm") or {}).get("nome_pjecalc", "")
             _nome_pjc_norm = _normalizar_chave(_nome_pjc) if _nome_pjc else ""
             _carac = _normalizar_chave(resultado.get("caracteristica", ""))
             _is_expresso_verba = (
@@ -1189,29 +1223,42 @@ def _normalizar_chave(nome: str) -> str:
 
 
 def _buscar_por_similaridade(chave: str) -> dict[str, Any] | None:
-    """Busca por similaridade de string (SequenceMatcher) nas verbas predefinidas."""
+    """Busca por similaridade de string (SequenceMatcher) nas verbas predefinidas.
+
+    Para prefix matches (ex: "ferias proporcionais + 1/3" ↔ "ferias proporcionais"),
+    o score é proporcional ao comprimento do match, evitando empates entre
+    "ferias" (0.90) e "ferias proporcionais" (0.95).
+    """
     from difflib import SequenceMatcher
 
     melhor_match: dict[str, Any] | None = None
     melhor_score = 0.0
+    melhor_len = 0  # comprimento da chave que gerou melhor_score (desempate)
     segundo_score = 0.0
 
     for chave_ref, config in _VERBAS_NORMALIZADAS.items():
-        # Prefixo exato (ex: "ferias proporcionais" casa com "ferias proporcionais 1/3")
-        if chave_ref.startswith(chave) or chave.startswith(chave_ref):
-            score = 0.95
+        # Prefixo exato — score proporcional ao comprimento do match
+        # "ferias proporcionais" (20 chars) vence "ferias" (6 chars) quando
+        # ambas são prefixo de "ferias proporcionais + 1/3"
+        if chave.startswith(chave_ref):
+            # chave_ref é prefixo de chave → score = 0.90 + 0.09*(len_ref/len_chave)
+            score = 0.90 + 0.09 * (len(chave_ref) / max(len(chave), 1))
+        elif chave_ref.startswith(chave):
+            # chave é prefixo de chave_ref
+            score = 0.90 + 0.09 * (len(chave) / max(len(chave_ref), 1))
         else:
             score = SequenceMatcher(None, chave, chave_ref).ratio()
 
-        if score > melhor_score:
+        if score > melhor_score or (score == melhor_score and len(chave_ref) > melhor_len):
             segundo_score = melhor_score
             melhor_score = score
             melhor_match = config
+            melhor_len = len(chave_ref)
         elif score > segundo_score:
             segundo_score = score
 
     # Exigir alta similaridade E diferença clara do segundo candidato (sem ambiguidade)
-    if melhor_score >= 0.75 and (melhor_score - segundo_score) >= 0.10:
+    if melhor_score >= 0.75 and (melhor_score - segundo_score) >= 0.05:
         return melhor_match
     return None
 
