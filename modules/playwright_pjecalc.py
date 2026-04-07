@@ -1876,23 +1876,29 @@ class PJECalcPlaywright:
             if _n_opts == 0:
                 return False
 
-            # Buscar pelo CNJ
+            # Buscar pelo CNJ (comparação apenas dígitos para máxima tolerância a formatação)
+            import re as _re_recentes
             _num_proc = (self._dados or {}).get("processo", {}).get("numero", "")
-            _num_clean = _num_proc.replace(".", "").replace("-", "").replace("/", "") if _num_proc else ""
+            _num_clean = _re_recentes.sub(r'\D', '', _num_proc) if _num_proc else ""
             _found_idx = None
 
             if _num_clean:
                 for _idx in range(_n_opts):
                     _opt_text = (_options.nth(_idx).text_content() or "")
-                    _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
-                    if _num_clean in _opt_clean:
+                    _opt_digits = _re_recentes.sub(r'\D', '', _opt_text)
+                    if _num_clean in _opt_digits:
                         _found_idx = _idx
                         break
 
             # Fallback: buscar pelo nome do reclamante
             if _found_idx is None:
                 _reclamante = (self._dados or {}).get("processo", {}).get("reclamante", {})
-                _nome_recl = (_reclamante.get("nome") or "").strip().upper() if isinstance(_reclamante, dict) else ""
+                if isinstance(_reclamante, str):
+                    _nome_recl = _reclamante.strip().upper()
+                elif isinstance(_reclamante, dict):
+                    _nome_recl = (_reclamante.get("nome") or "").strip().upper()
+                else:
+                    _nome_recl = ""
                 if _nome_recl and len(_nome_recl) >= 5:
                     for _idx in range(_n_opts):
                         _opt_text = (_options.nth(_idx).text_content() or "").upper()
@@ -1901,17 +1907,20 @@ class PJECalcPlaywright:
                             break
 
             if _found_idx is None:
-                # Diagnóstico: listar todos os itens disponíveis
+                # Diagnóstico: listar TODOS os itens disponíveis (não apenas 5)
                 _nome_recl2 = ""
                 try:
                     _r = (self._dados or {}).get("processo", {}).get("reclamante", {})
-                    _nome_recl2 = (_r.get("nome") or "").strip() if isinstance(_r, dict) else ""
+                    if isinstance(_r, str):
+                        _nome_recl2 = _r.strip()
+                    elif isinstance(_r, dict):
+                        _nome_recl2 = (_r.get("nome") or "").strip()
                 except Exception:
                     pass
                 self._log(f"  ℹ Recentes ({_n_opts} itens) — buscando CNJ='{_num_proc}' / reclamante='{_nome_recl2}':")
-                for _idx in range(min(_n_opts, 5)):
+                for _idx in range(_n_opts):
                     _opt_text = (_options.nth(_idx).text_content() or "").strip()
-                    self._log(f"    item {_idx+1}: '{_opt_text[:100]}'")
+                    self._log(f"    item {_idx+1}: '{_opt_text[:120]}'")
 
                 # Último recurso: se há apenas 1 item nos recentes, é provável que seja o nosso
                 # (H2 foi limpo antes, então só existe o cálculo que acabamos de criar)
@@ -3876,6 +3885,36 @@ class PJECalcPlaywright:
                 self._log(f"  → '{nome}' é checkbox da aba FGTS — configurada em fase_fgts(), ignorando criação manual")
                 continue
 
+            # ── Pre-check: detectar página de erro antes de tentar novo formulário ──
+            try:
+                _page_ok = self._page.evaluate("""() => {
+                    const body = document.body ? document.body.textContent : '';
+                    if (body.match(/HTTP\\s*500|NullPointerException|ViewExpiredException|Internal Server Error/i)) {
+                        return false;
+                    }
+                    if (document.title && document.title.match(/500|erro|error/i)) {
+                        return false;
+                    }
+                    return true;
+                }""")
+                if not _page_ok:
+                    self._log(f"  🔄 Página em estado de erro antes de verba '{nome}' — recuperando…")
+                    _rec = self._reabrir_calculo_recentes()
+                    if _rec and self._calculo_url_base and self._calculo_conversation_id:
+                        _url_verbas_listing = (
+                            f"{self._calculo_url_base}verba/verba-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        _url_verbas = (
+                            f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                    self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                    self._page.wait_for_timeout(1000)
+                    self._aguardar_ajax()
+            except Exception:
+                pass
+
             # Navegar para listagem de verbas se não estiver lá
             _cur_url = self._page.url
             if "verba-calculo" not in _cur_url or "conversationId" not in _cur_url:
@@ -4412,6 +4451,7 @@ class PJECalcPlaywright:
             self._page.wait_for_timeout(600)
 
             # Verificar se o salvamento gerou erro (HTTP 500 / mensagem de erro JSF)
+            _http500_detected = False
             try:
                 _erro_msgs = self._page.evaluate("""() => {
                     const erros = [...document.querySelectorAll(
@@ -4422,13 +4462,52 @@ class PJECalcPlaywright:
                     if (document.title && document.title.match(/500|erro|error/i)) {
                         erros.push('Página de erro HTTP: ' + document.title);
                     }
+                    // Verificar conteúdo da página para HTTP 500 / NullPointerException
+                    const body = document.body ? document.body.textContent : '';
+                    if (body.match(/HTTP\s*500|NullPointerException|ViewExpiredException|Internal Server Error/i)) {
+                        erros.push('HTTP 500 detectado no corpo da página');
+                    }
                     return erros;
                 }""")
                 if _erro_msgs:
                     self._log(f"  ⚠ Verba '{nome}': ERRO ao salvar — {'; '.join(_erro_msgs[:3])}")
                     _salvou = False
+                    _http500_detected = any(
+                        "500" in e or "NullPointer" in e or "ViewExpired" in e or "Internal Server" in e
+                        for e in _erro_msgs
+                    )
             except Exception:
                 pass
+
+            # ── Recuperação de HTTP 500 ──
+            # Quando o JSF retorna HTTP 500, o ViewState fica corrompido e
+            # nenhuma interação subsequente no formulário funciona. Precisamos
+            # obter uma conversação Seam limpa via Recentes antes de continuar.
+            if _http500_detected:
+                self._log(f"  🔄 HTTP 500 detectado — recuperando sessão via Recentes…")
+                try:
+                    _recuperou = self._reabrir_calculo_recentes()
+                    if _recuperou:
+                        self._log(f"  ✓ Sessão recuperada — novo conversationId={self._calculo_conversation_id}")
+                        # Atualizar URLs com nova conversação
+                        if self._calculo_url_base and self._calculo_conversation_id:
+                            _url_verbas = (
+                                f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                                f"?conversationId={self._calculo_conversation_id}"
+                            )
+                            _url_verbas_listing = (
+                                f"{self._calculo_url_base}verba/verba-calculo.jsf"
+                                f"?conversationId={self._calculo_conversation_id}"
+                            )
+                        # Navegar para a listagem de verbas com a nova conversação
+                        self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                        self._page.wait_for_timeout(1000)
+                        self._aguardar_ajax()
+                    else:
+                        self._log(f"  ⚠ Não foi possível recuperar sessão — tentando navegar direto…")
+                except Exception as _rec_err:
+                    self._log(f"  ⚠ Erro na recuperação: {_rec_err}")
+                continue  # Pular para próxima verba (esta falhou)
 
             # Após salvar, atualizar conversationId (pode ter mudado) e voltar para listagem
             self._capturar_base_calculo()

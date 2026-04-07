@@ -1102,9 +1102,44 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
     # Passagem 2: classificar não reconhecidas em UMA chamada LLM
     personalizadas: list[dict] = []
     nao_reconhecidas: list[dict] = []
+
+    # Nomes PJE-Calc que são verbas Expresso (nunca devem ir para Manual)
+    _NOMES_EXPRESSO = {
+        _normalizar_chave(cfg.get("nome_pjecalc", ""))
+        for cfg in VERBAS_PREDEFINIDAS.values()
+        if cfg.get("compor_principal")
+    }
+
     if pendentes_llm:
         classificadas = _classificar_lote_via_llm(pendentes_llm)
         for resultado in classificadas:
+            # Se o LLM classificou como uma verba que existe no Expresso,
+            # promover para predefinidas (não criar manual para Férias, 13º, etc.)
+            _nome_pjc = resultado.get("nome_pjecalc") or resultado.get("sugestao_llm", {}).get("nome_pjecalc", "")
+            _nome_pjc_norm = _normalizar_chave(_nome_pjc) if _nome_pjc else ""
+            _carac = _normalizar_chave(resultado.get("caracteristica", ""))
+            _is_expresso_verba = (
+                _nome_pjc_norm in _NOMES_EXPRESSO
+                or _carac in ("ferias", "decimo terceiro salario", "13o salario")
+                or any(k in _nome_pjc_norm for k in ("ferias", "13 salario", "decimo terceiro"))
+            )
+            if _is_expresso_verba and _nome_pjc:
+                # Buscar config predefinida correspondente
+                _cfg_match = None
+                for _k, _cfg in _VERBAS_NORMALIZADAS.items():
+                    if _normalizar_chave(_cfg.get("nome_pjecalc", "")) == _nome_pjc_norm:
+                        _cfg_match = _cfg
+                        break
+                if _cfg_match:
+                    resultado = {**resultado, **_cfg_match}
+                    resultado["lancamento"] = "Expresso"
+                    resultado["mapeada"] = True
+                    resultado["confianca_mapeamento"] = 0.85  # via LLM, não dicionário direto
+                    resultado["reflexas_sugeridas"] = REFLEXAS_TIPICAS.get(_cfg_match["nome_pjecalc"], [])
+                    predefinidas.append(resultado)
+                    reflexas_acumuladas.extend(resultado["reflexas_sugeridas"])
+                    continue
+
             resultado["lancamento"] = "Manual"
             resultado["mapeada"] = False
             if resultado.get("sugestao_llm"):
