@@ -382,6 +382,122 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
 - valor_pensao: float com o valor da pensão se deducao_pensao_alimenticia=true
 - meses_tributaveis: número de meses tributáveis, se informado
 
+**DURAÇÃO DO TRABALHO / CARTÃO DE PONTO** → preenche "duracao_trabalho":
+Extrair SEMPRE que houver condenação em horas extras, adicional noturno, intervalo intrajornada,
+adicional de turno, ou qualquer parcela que envolva fixação de jornada de trabalho.
+Esta seção alimenta o Cartão de Ponto do PJE-Calc (Manual seção 10).
+
+⚠️ CONCEITO CRÍTICO — Jornada PADRÃO vs Jornada PRATICADA:
+O PJE-Calc calcula HE = praticada − padrão. São dois conceitos distintos:
+- **Jornada Padrão** (contratada): a jornada CONTRATUAL de referência (ex: 8h/dia, 44h/sem).
+  → Vem de contrato.jornada_diaria / contrato.carga_horaria (já extraídos na SEÇÃO 2).
+- **Jornada Praticada** (efetiva): a jornada EFETIVAMENTE TRABALHADA conforme fixada na sentença.
+  → É o que vai em jornada_seg a jornada_dom DESTA SEÇÃO.
+Se a sentença diz "trabalhava das 07h às 17h (10h no local)" e o contrato era de 8h/dia:
+  → contrato.jornada_diaria = 8.0 (padrão)
+  → jornada_seg..sex = 10.0 (praticada — horas brutas no local)
+  → PJE-Calc apura: 10h − 8h = 2h extras/dia
+
+─── Campos do Cartão de Ponto ───
+
+PERÍODO DE APURAÇÃO:
+- periodo_cartao_inicio: data início do cartão de ponto (DD/MM/AAAA).
+  Normalmente = período das horas extras na sentença (ex: admissão ou início da condenação em HE).
+  Se não explícito → usar contrato.admissao
+- periodo_cartao_fim: data fim do cartão (DD/MM/AAAA).
+  Normalmente = fim do período de HE (ex: demissão ou data limite da condenação).
+  Se não explícito → usar contrato.demissao
+
+TIPO DE APURAÇÃO:
+- tipo_apuracao: como a sentença define a jornada para apuração de horas extras:
+    "apuracao_jornada" → a sentença fixa horários de entrada/saída por dia da semana
+      (ex: "07h às 17h, seg a sex", "jornada das 08:00 às 18:00 com 1h de intervalo")
+    "quantidade_fixa" → a sentença fixa quantidade mensal/diária de HE sem detalhar jornada
+      (ex: "50 horas extras mensais", "2h extras por dia")
+    null → não há condenação em horas extras ou informação insuficiente
+
+FORMA DE APURAÇÃO (Manual seção 10.1):
+- forma_apuracao_pjecalc: mapear para o enum do PJE-Calc:
+    "NAP" → Não apurar horas extras
+    "HJD" → Excedentes da jornada diária (ex: 8ª hora diária)
+    "SEM" → Excedentes da jornada semanal (ex: 44ª hora semanal)
+    "FAV" → Critério mais favorável (compara diário vs semanal, usa maior)
+    "MEN" → Excedentes da jornada mensal (ex: 220h mensais)
+    "HST" → Súmula 85 TST (com limite de compensação)
+    "APH" → Primeiras HE em separado
+    Regra: se sentença diz "8ª diária e 44ª semanal" → "FAV"
+           se apenas "8ª hora" → "HJD" | se apenas "44ª hora" → "SEM"
+           "quantidade_fixa" → "NAP" | null → "NAP"
+- considerar_feriados: bool — true se sentença menciona "feriados trabalhados" ou labor em feriados
+- extras_feriados_separado: bool — true se sentença pede "horas extras em feriados em separado"
+- extras_domingos_separado: bool — true se sentença pede "horas extras em domingos em separado"
+- considerar_jornada_feriados_trabalhados: bool — true se deve considerar a jornada diária padrão
+  nos feriados efetivamente trabalhados (default: false — PJE-Calc assume jornada zero em feriados)
+
+PREENCHIMENTO DE JORNADAS (como gerar a Grade de Ocorrências):
+- preenchimento_jornada: modalidade de preenchimento da grade:
+    "livre" → campos em branco para preenchimento manual posterior (default quando jornada vaga)
+    "programacao_semanal" → grade fixa por dia da semana — mais comum quando sentença fixa horários
+    "escala" → escala de trabalho pré-definida (12x36, 6x1, etc.)
+    Regra: se sentença diz "escala 12x36" → "escala"
+           se fixa horários por dia da semana → "programacao_semanal"
+           senão → "livre"
+- escala_tipo: se preenchimento_jornada="escala", qual escala:
+    "12x12" | "12x24" | "12x36" | "12x48" | "5x1" | "6x1" | "8x2" | "outra"
+    null se preenchimento_jornada != "escala"
+
+JORNADA PRATICADA (efetivamente trabalhada — alimenta a Grade de Ocorrências):
+- jornada_entrada: horário de início (string "HH:MM", ex: "07:00")
+- jornada_saida: horário de término (string "HH:MM", ex: "17:00")
+- intervalo_minutos: duração do intervalo intrajornada em MINUTOS (int, ex: 60 para 1h, 90 para 1h30)
+  Extrair de "com 1h de intervalo", "1 hora de almoço", "1h30 de intervalo"
+  Se não explícito: inferir 60 min para jornada ≥ 6h (art. 71 CLT), 15 min para 4h-6h
+- jornada_seg a jornada_dom: horas BRUTAS no local por dia da semana (float — sem descontar intervalo)
+  Calcular: (horario_saida - horario_entrada) para cada dia mencionado.
+  Ex: "07h às 17h, seg a sex, sáb 07h às 17h" → seg=10.0, ..., sex=10.0, sab=10.0, dom=0.0
+  ⚠️ NÃO descontar intervalo — o PJE-Calc faz isso automaticamente
+
+QUANTIDADE FIXA (se tipo_apuracao = "quantidade_fixa"):
+- qt_horas_extras_mes: total de HE mensais (float, ex: 50.0)
+- qt_horas_extras_dia: HE diárias (float, ex: 1.0)
+
+TOTAIS:
+- jornada_semanal_cartao: total de horas semanais praticadas (float)
+  Calcular: soma de jornada_seg a jornada_dom
+- jornada_mensal_cartao: média mensal de horas praticadas (float)
+  Calcular: jornada_semanal_cartao × 30 / 7
+
+ADICIONAL DE HORAS EXTRAS:
+- adicional_he_percentual: percentual do adicional (float, ex: 0.50 para 50%, 1.00 para 100%)
+  Default: 0.50 se não especificado. Extrair de "adicional de 50%", "70%", "100% (feriados)"
+
+PERÍODOS DE DESCANSO E INTERVALOS (Manual seção 10.1 — checkboxes):
+- trabalha_feriados: bool — true se sentença indica labor habitual em feriados
+- trabalha_domingos: bool — true se jornada_dom > 0 ou sentença menciona trabalho dominical
+- supressao_intervalo_intrajornada: bool — true se sentença condena em intervalo intrajornada
+  suprimido ou parcialmente concedido (art. 71, §4º CLT). Extrair de "intervalo não concedido",
+  "supressão do intervalo", "intervalo de apenas 30min quando deveria ser 1h"
+- intervalo_interjornadas: bool — true se sentença menciona violação do intervalo de 11h entre
+  jornadas (art. 66 CLT) ou intervalo semanal de 35h (art. 67 CLT)
+
+HORÁRIO NOTURNO:
+- apurar_hora_noturna: bool — true se sentença condena em adicional noturno ou trabalho noturno
+- tipo_atividade_noturna: tipo para definir faixa horária noturna:
+    "urbana" → 22:00 às 05:00 (padrão se não especificado)
+    "agricola" → 21:00 às 05:00
+    "pecuaria" → 20:00 às 04:00
+- hora_inicio_noturno: string "HH:MM" — início do período noturno
+  Default conforme tipo_atividade_noturna (urbana: "22:00")
+- hora_fim_noturno: string "HH:MM" — fim do período noturno
+  Default conforme tipo_atividade_noturna (urbana: "05:00")
+- reducao_ficta: bool — true para redução ficta (hora noturna = 52m30s). Default true
+  false apenas se sentença diz "sem redução ficta"
+- prorrogacao_horario_noturno: bool — true se sentença menciona prorrogação do horário noturno
+  (Súmula 60 TST: labor após 05h em continuidade mantém adicional)
+- apurar_he_noturnas: bool — true se sentença pede apuração de HE noturnas em separado das diurnas
+
+- confianca: 0.0-1.0
+
 === SCHEMA JSON ESPERADO ===
 {{
   "processo": {{
@@ -510,6 +626,45 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
     "percentual": "float | null",
     "devedor": "RECLAMADO | RECLAMANTE | null"
   }},
+  "duracao_trabalho": {{
+    "periodo_cartao_inicio": "DD/MM/AAAA | null",
+    "periodo_cartao_fim": "DD/MM/AAAA | null",
+    "tipo_apuracao": "apuracao_jornada | quantidade_fixa | null",
+    "forma_apuracao_pjecalc": "NAP | HJD | SEM | FAV | MEN | HST | APH",
+    "considerar_feriados": "bool | null",
+    "extras_feriados_separado": "bool | null",
+    "extras_domingos_separado": "bool | null",
+    "considerar_jornada_feriados_trabalhados": "bool | null",
+    "preenchimento_jornada": "livre | programacao_semanal | escala",
+    "escala_tipo": "12x36 | 6x1 | ... | null",
+    "jornada_entrada": "HH:MM | null",
+    "jornada_saida": "HH:MM | null",
+    "intervalo_minutos": "int | null",
+    "jornada_seg": "float (horas brutas praticadas) | null",
+    "jornada_ter": "float | null",
+    "jornada_qua": "float | null",
+    "jornada_qui": "float | null",
+    "jornada_sex": "float | null",
+    "jornada_sab": "float | null",
+    "jornada_dom": "float | null",
+    "qt_horas_extras_mes": "float | null",
+    "qt_horas_extras_dia": "float | null",
+    "jornada_semanal_cartao": "float | null",
+    "jornada_mensal_cartao": "float | null",
+    "adicional_he_percentual": "float (0.50 = 50%) | null",
+    "trabalha_feriados": "bool | null",
+    "trabalha_domingos": "bool | null",
+    "supressao_intervalo_intrajornada": "bool | null",
+    "intervalo_interjornadas": "bool | null",
+    "apurar_hora_noturna": "bool | null",
+    "tipo_atividade_noturna": "urbana | agricola | pecuaria | null",
+    "hora_inicio_noturno": "HH:MM | null",
+    "hora_fim_noturno": "HH:MM | null",
+    "reducao_ficta": "bool | null",
+    "prorrogacao_horario_noturno": "bool | null",
+    "apurar_he_noturnas": "bool | null",
+    "confianca": 0.85
+  }},
   "campos_ausentes": [],
   "alertas": []
 }}
@@ -596,16 +751,31 @@ seguindo rigorosamente o guia de extração e o schema JSON abaixo.
   (padrão: 6 dias para 44h/sem, 5 dias para 40h/sem, proporcional para outros)
 
 **DURAÇÃO DO TRABALHO / CARTÃO DE PONTO** → preenche "duracao_trabalho":
-Extrair SEMPRE que houver condenação em horas extras. Esta seção alimenta o Cartão de Ponto do PJE-Calc.
+Extrair SEMPRE que houver condenação em horas extras, adicional noturno, intervalo intrajornada,
+adicional de turno, ou qualquer parcela que envolva fixação de jornada de trabalho.
+Esta seção alimenta o Cartão de Ponto do PJE-Calc (Manual seção 10).
 
+⚠️ CONCEITO CRÍTICO — Jornada PADRÃO vs Jornada PRATICADA:
+O PJE-Calc calcula HE = praticada − padrão. São dois conceitos distintos:
+- **Jornada Padrão** (contratada): jornada CONTRATUAL de referência (ex: 8h/dia, 44h/sem).
+  → Vem de contrato.jornada_diaria / contrato.carga_horaria (já extraídos acima).
+- **Jornada Praticada** (efetiva): jornada EFETIVAMENTE TRABALHADA conforme fixada na sentença.
+  → É o que vai em jornada_seg a jornada_dom DESTA SEÇÃO.
+
+─── Campos do Cartão de Ponto ───
+
+PERÍODO DE APURAÇÃO:
+- periodo_cartao_inicio: data início do cartão de ponto (DD/MM/AAAA). Default: contrato.admissao
+- periodo_cartao_fim: data fim do cartão (DD/MM/AAAA). Default: contrato.demissao
+
+TIPO DE APURAÇÃO:
 - tipo_apuracao: como a sentença define a jornada para apuração de horas extras:
     "apuracao_jornada" → a sentença fixa horários de entrada/saída por dia da semana
-      (ex: "07h às 17h, seg a sex", "jornada das 08:00 às 18:00 com 1h de intervalo")
     "quantidade_fixa" → a sentença fixa quantidade mensal/diária de HE sem detalhar jornada
-      (ex: "50 horas extras mensais", "2h extras por dia")
     null → não há condenação em horas extras ou informação insuficiente
 
-- forma_apuracao_pjecalc: mapear para o enum do PJE-Calc (Manual seção 10.1):
+FORMA DE APURAÇÃO (Manual seção 10.1):
+- forma_apuracao_pjecalc: mapear para o enum do PJE-Calc:
     "NAP" → Não apurar horas extras
     "HJD" → Excedentes da jornada diária
     "SEM" → Excedentes da jornada semanal
@@ -613,65 +783,61 @@ Extrair SEMPRE que houver condenação em horas extras. Esta seção alimenta o 
     "MEN" → Excedentes da jornada mensal
     "HST" → Súmula 85 TST (com limite de compensação)
     "APH" → Primeiras HE em separado
-    Regra: "apuracao_jornada" → "FAV" (default) | "quantidade_fixa" → "NAP" | null → "NAP"
+    Regra: se sentença diz "8ª diária e 44ª semanal" → "FAV"
+           se apenas "8ª hora" → "HJD" | se apenas "44ª hora" → "SEM"
+           "quantidade_fixa" → "NAP" | null → "NAP"
+- considerar_feriados: bool — true se sentença menciona feriados trabalhados
+- extras_feriados_separado: bool — true se sentença pede HE em feriados em separado
+- extras_domingos_separado: bool — true se sentença pede HE em domingos em separado
+- considerar_jornada_feriados_trabalhados: bool — true se deve considerar jornada padrão em feriados
 
-- preenchimento_jornada: como preencher a grade de jornadas no PJE-Calc (Manual seção 10.1):
-    "livre" → campos em branco para preenchimento manual posterior (default quando jornada vaga)
-    "programacao_semanal" → grade fixa por dia da semana (quando sentença fixa horários claros seg-dom)
-    "escala" → escala de trabalho pré-definida (12x36, 6x1, etc.)
-    Regra: se sentença diz "escala 12x36" → "escala" | se fixa horários por dia → "programacao_semanal" | senão → "livre"
-
-- escala_tipo: se preenchimento_jornada="escala", qual escala:
-    "12x12" | "12x24" | "12x36" | "12x48" | "5x1" | "6x1" | "8x2" | "outra"
-    Extrair de "escala 12x36", "regime 6x1", "escala de revezamento 5x1"
+PREENCHIMENTO DE JORNADAS:
+- preenchimento_jornada: modalidade de preenchimento da grade:
+    "livre" | "programacao_semanal" | "escala"
+    Regra: se sentença diz "escala 12x36" → "escala"
+           se fixa horários por dia da semana → "programacao_semanal" | senão → "livre"
+- escala_tipo: "12x12" | "12x24" | "12x36" | "12x48" | "5x1" | "6x1" | "8x2" | "outra"
     null se preenchimento_jornada != "escala"
 
-- jornada_entrada: horário de início (string "HH:MM", ex: "07:00") — extrair de "das 07h às", "entrada às 7h"
-- jornada_saida: horário de término (string "HH:MM", ex: "17:00") — extrair de "às 17h", "saída às 17:00"
-- intervalo_minutos: duração do intervalo intrajornada em MINUTOS (int, ex: 60 para 1h)
-  Extrair de "com 1h de intervalo", "intervalo de 30 minutos", "1 hora de almoço"
+JORNADA PRATICADA (efetivamente trabalhada — alimenta a Grade de Ocorrências):
+- jornada_entrada: horário de início (string "HH:MM", ex: "07:00")
+- jornada_saida: horário de término (string "HH:MM", ex: "17:00")
+- intervalo_minutos: duração do intervalo intrajornada em MINUTOS (int, ex: 60 para 1h, 90 para 1h30)
   Se não explícito: inferir 60 min para jornada ≥ 6h (art. 71 CLT), 15 min para 4h-6h
-
-- jornada_seg: horas de trabalho na segunda-feira (float, ex: 9.0 = 9 horas no local)
-- jornada_ter: idem terça
-- jornada_qua: idem quarta
-- jornada_qui: idem quinta
-- jornada_sex: idem sexta
-- jornada_sab: idem sábado (0.0 se não trabalha)
-- jornada_dom: idem domingo (0.0 se não trabalha)
-  Calcular: (horario_saida - horario_entrada) para cada dia mencionado.
-  Ex: "07h às 17h com 1h intervalo, seg a sex" → seg=10.0, ter=10.0, ..., sex=10.0, sab=0.0, dom=0.0
-  ⚠️ Esses valores são horas BRUTAS no local (sem descontar intervalo) — o PJE-Calc desconta o intervalo
-
-- qt_horas_extras_mes: para tipo="quantidade_fixa", total de HE mensais (float, ex: 50.0)
-- qt_horas_extras_dia: para tipo="quantidade_fixa", HE diárias (float, ex: 1.0)
-
-- jornada_semanal_cartao: total de horas semanais para o cartão de ponto (float)
-  Calcular: soma de jornada_seg a jornada_dom (ex: 10×5 = 50.0)
-- jornada_mensal_cartao: média mensal de horas (float)
-  Calcular: jornada_semanal_cartao × 4.5 ou jornada_semanal_cartao × (30/7)
-
-- adicional_he_percentual: percentual do adicional de horas extras (float, ex: 0.50 para 50%)
-  Extrair de "adicional de 50%", "horas extras com adicional de 70%"
-  Default: 0.50 (50%) se não especificado
-
-- trabalha_feriados: bool — true se sentença indica labor em feriados
-- trabalha_domingos: bool — true se jornada_dom > 0 ou sentença menciona trabalho dominical
-- sabados_trabalhados: lista de datas específicas de sábados trabalhados (DD/MM/AAAA), se mencionados
-  Ex: ["29/11/2025", "13/12/2025"] — extrair de "sábados 29/11 e 13/12" ou similar
-
-- apurar_hora_noturna: bool — true se sentença condena em adicional noturno ou menciona trabalho noturno
-  Extrair de "adicional noturno", "horas noturnas", "labor noturno", "22h às 05h"
-- hora_inicio_noturno: string "HH:MM" — início do período noturno (default "22:00" para urbano)
-  Rural: varia conforme atividade (pecuária "20:00", lavoura "21:00")
-- hora_fim_noturno: string "HH:MM" — fim do período noturno (default "05:00" para urbano)
-- reducao_ficta: bool — true se deve aplicar redução ficta (hora noturna = 52m30s). Default true
-  Extrair de "sem redução ficta" → false, "com hora reduzida" → true
-- prorrogacao_horario_noturno: bool — true se sentença menciona prorrogação do horário noturno
-  (Súmula 60 TST: labor após 05h em continuidade a jornada noturna mantém adicional)
-  Extrair de "prorrogação noturna", "Súmula 60", "trabalho após 05h"
+- jornada_seg a jornada_dom: horas BRUTAS no local por dia da semana (float — sem descontar intervalo)
+  Ex: "07h às 17h, seg a sex, sáb 07h às 17h" → seg=10.0, ..., sex=10.0, sab=10.0, dom=0.0
+  ⚠️ NÃO descontar intervalo — o PJE-Calc faz isso automaticamente
+- sabados_trabalhados: lista de datas específicas de sábados (DD/MM/AAAA), se mencionados
 - dias_especiais: lista de objetos para dias com jornada diferenciada:
   Ex: [{{"data": "23/12/2025", "horas_extras": 6.0, "descricao": "labor até 23h"}}]
+
+QUANTIDADE FIXA (se tipo_apuracao = "quantidade_fixa"):
+- qt_horas_extras_mes: total de HE mensais (float, ex: 50.0)
+- qt_horas_extras_dia: HE diárias (float, ex: 1.0)
+
+TOTAIS:
+- jornada_semanal_cartao: total de horas semanais praticadas (float). Calcular: soma seg a dom
+- jornada_mensal_cartao: média mensal (float). Calcular: semanal × 30 / 7
+
+ADICIONAL DE HORAS EXTRAS:
+- adicional_he_percentual: float (ex: 0.50 para 50%, 1.00 para 100%). Default: 0.50
+
+PERÍODOS DE DESCANSO E INTERVALOS:
+- trabalha_feriados: bool — true se sentença indica labor habitual em feriados
+- trabalha_domingos: bool — true se jornada_dom > 0 ou sentença menciona trabalho dominical
+- supressao_intervalo_intrajornada: bool — true se sentença condena em intervalo intrajornada
+  suprimido ou parcialmente concedido (art. 71, §4º CLT)
+- intervalo_interjornadas: bool — true se sentença menciona violação do intervalo de 11h (art. 66 CLT)
+
+HORÁRIO NOTURNO:
+- apurar_hora_noturna: bool — true se sentença condena em adicional noturno ou trabalho noturno
+- tipo_atividade_noturna: "urbana" (22h-05h) | "agricola" (21h-05h) | "pecuaria" (20h-04h)
+  Default: "urbana" se não especificado
+- hora_inicio_noturno: string "HH:MM" — default conforme tipo_atividade_noturna
+- hora_fim_noturno: string "HH:MM" — default conforme tipo_atividade_noturna
+- reducao_ficta: bool — true para hora noturna = 52m30s. Default true
+- prorrogacao_horario_noturno: bool — true se Súmula 60 TST (labor após 05h mantém adicional)
+- apurar_he_noturnas: bool — true se sentença pede HE noturnas em separado das diurnas
 
 - confianca: 0.0-1.0
 
@@ -1139,8 +1305,14 @@ _EXTRACTION_SCHEMA: dict = {
             "type": ["object","null"],
             "additionalProperties": False,
             "properties": {
+                "periodo_cartao_inicio":  {"type": ["string","null"]},
+                "periodo_cartao_fim":     {"type": ["string","null"]},
                 "tipo_apuracao":          {"type": ["string","null"]},
                 "forma_apuracao_pjecalc": {"type": ["string","null"]},
+                "considerar_feriados":    {"type": ["boolean","null"]},
+                "extras_feriados_separado": {"type": ["boolean","null"]},
+                "extras_domingos_separado": {"type": ["boolean","null"]},
+                "considerar_jornada_feriados_trabalhados": {"type": ["boolean","null"]},
                 "preenchimento_jornada":  {"type": ["string","null"]},
                 "escala_tipo":            {"type": ["string","null"]},
                 "jornada_entrada":        {"type": ["string","null"]},
@@ -1160,13 +1332,17 @@ _EXTRACTION_SCHEMA: dict = {
                 "adicional_he_percentual":{"type": ["number","null"]},
                 "trabalha_feriados":      {"type": ["boolean","null"]},
                 "trabalha_domingos":      {"type": ["boolean","null"]},
+                "supressao_intervalo_intrajornada": {"type": ["boolean","null"]},
+                "intervalo_interjornadas": {"type": ["boolean","null"]},
                 "sabados_trabalhados":    {"type": ["array","null"], "items": {"type": "string"}},
                 "dias_especiais":         {"type": ["array","null"], "items": {"type": "object"}},
                 "apurar_hora_noturna":    {"type": ["boolean","null"]},
+                "tipo_atividade_noturna": {"type": ["string","null"]},
                 "hora_inicio_noturno":    {"type": ["string","null"]},
                 "hora_fim_noturno":       {"type": ["string","null"]},
                 "reducao_ficta":          {"type": ["boolean","null"]},
                 "prorrogacao_horario_noturno": {"type": ["boolean","null"]},
+                "apurar_he_noturnas":     {"type": ["boolean","null"]},
                 "confianca":              {"type": "number"},
             },
         },

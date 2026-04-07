@@ -4952,9 +4952,9 @@ class PJECalcPlaywright:
         intervalo_min = dur.get("intervalo_minutos")
         qt_he_mes = dur.get("qt_horas_extras_mes")
 
-        # Datas do período
-        data_inicio = cont.get("admissao")
-        data_fim = cont.get("demissao")
+        # Datas do período (preferir periodo_cartao do duracao_trabalho, fallback contrato)
+        data_inicio = dur.get("periodo_cartao_inicio") or cont.get("admissao")
+        data_fim = dur.get("periodo_cartao_fim") or cont.get("demissao")
 
         # ── Fallback legado: calcular a partir de contrato se duracao_trabalho não foi extraído ──
         if not tipo_apuracao:
