@@ -1901,8 +1901,26 @@ class PJECalcPlaywright:
                             break
 
             if _found_idx is None:
-                self._log(f"  ⚠ Processo '{_num_proc}' não encontrado nos recentes")
-                return False
+                # Diagnóstico: listar todos os itens disponíveis
+                _nome_recl2 = ""
+                try:
+                    _r = (self._dados or {}).get("processo", {}).get("reclamante", {})
+                    _nome_recl2 = (_r.get("nome") or "").strip() if isinstance(_r, dict) else ""
+                except Exception:
+                    pass
+                self._log(f"  ℹ Recentes ({_n_opts} itens) — buscando CNJ='{_num_proc}' / reclamante='{_nome_recl2}':")
+                for _idx in range(min(_n_opts, 5)):
+                    _opt_text = (_options.nth(_idx).text_content() or "").strip()
+                    self._log(f"    item {_idx+1}: '{_opt_text[:100]}'")
+
+                # Último recurso: se há apenas 1 item nos recentes, é provável que seja o nosso
+                # (H2 foi limpo antes, então só existe o cálculo que acabamos de criar)
+                if _n_opts == 1:
+                    self._log("  → Apenas 1 cálculo nos recentes — usando-o como fallback")
+                    _found_idx = 0
+                else:
+                    self._log(f"  ⚠ Processo '{_num_proc}' não encontrado nos recentes")
+                    return False
 
             _opt_el = _listbox.first.locator("option").nth(_found_idx)
             _opt_el.click()
