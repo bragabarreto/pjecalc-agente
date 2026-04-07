@@ -1848,6 +1848,79 @@ class PJECalcPlaywright:
 
     # ── Navegação principal ────────────────────────────────────────────────────
 
+    def _reabrir_calculo_recentes(self) -> bool:
+        """Volta para principal.jsf e re-abre o cálculo via lista de Recentes.
+
+        Cria uma nova conversação Seam limpa, necessário quando a conversação atual
+        está corrompida (NPE, ViewExpiredException, etc.).
+        Retorna True se o cálculo foi re-aberto com sucesso.
+        """
+        try:
+            _home = f"{self.PJECALC_BASE}/pages/principal.jsf"
+            self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+            self._page.wait_for_timeout(2000)
+            try:
+                self._instalar_monitor_ajax()
+            except Exception:
+                pass
+
+            _listbox = self._page.locator(
+                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+            )
+            if _listbox.count() == 0:
+                self._log("  ⚠ Lista de cálculos recentes não encontrada")
+                return False
+
+            _options = _listbox.first.locator("option")
+            _n_opts = _options.count()
+            if _n_opts == 0:
+                return False
+
+            # Buscar pelo CNJ
+            _num_proc = (self._dados or {}).get("processo", {}).get("numero", "")
+            _num_clean = _num_proc.replace(".", "").replace("-", "").replace("/", "") if _num_proc else ""
+            _found_idx = None
+
+            if _num_clean:
+                for _idx in range(_n_opts):
+                    _opt_text = (_options.nth(_idx).text_content() or "")
+                    _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
+                    if _num_clean in _opt_clean:
+                        _found_idx = _idx
+                        break
+
+            # Fallback: buscar pelo nome do reclamante
+            if _found_idx is None:
+                _reclamante = (self._dados or {}).get("processo", {}).get("reclamante", {})
+                _nome_recl = (_reclamante.get("nome") or "").strip().upper() if isinstance(_reclamante, dict) else ""
+                if _nome_recl and len(_nome_recl) >= 5:
+                    for _idx in range(_n_opts):
+                        _opt_text = (_options.nth(_idx).text_content() or "").upper()
+                        if _nome_recl in _opt_text:
+                            _found_idx = _idx
+                            break
+
+            if _found_idx is None:
+                self._log(f"  ⚠ Processo '{_num_proc}' não encontrado nos recentes")
+                return False
+
+            _opt_el = _listbox.first.locator("option").nth(_found_idx)
+            _opt_el.click()
+            self._page.wait_for_timeout(300)
+            _opt_el.dblclick()
+            self._aguardar_ajax(30000)
+            self._page.wait_for_timeout(2000)
+
+            _url_after = self._page.url
+            if "calculo" in _url_after and "conversationId" in _url_after:
+                self._capturar_base_calculo()
+                self._log(f"  ✓ Cálculo re-aberto via Recentes: conversationId={self._calculo_conversation_id}")
+                return True
+            return False
+        except Exception as _e:
+            self._log(f"  ⚠ _reabrir_calculo_recentes: {_e}")
+            return False
+
     def _capturar_base_calculo(self) -> None:
         """Captura a URL base e conversationId do cálculo ativo para navegação por URL."""
         import re as _re
@@ -2969,7 +3042,12 @@ class PJECalcPlaywright:
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
         self._clicar_menu_lateral("Verbas")
-        self._verificar_pagina_pjecalc()  # detectar HTTP 500 pós-navegação
+        # Se página retornou 500 (NPE comum em verba-calculo.jsf), re-abrir cálculo via Recentes
+        if not self._verificar_pagina_pjecalc():
+            self._log("  → 500 em Verbas — re-abrindo cálculo via Recentes…")
+            self._reabrir_calculo_recentes()
+            self._clicar_menu_lateral("Verbas")
+            self._verificar_pagina_pjecalc()
         self._verificar_secao_ativa("Verba")
         self._page.wait_for_timeout(1500)
 
@@ -3392,8 +3470,13 @@ class PJECalcPlaywright:
         if not predefinidas:
             return
 
-        # Garantir listagem
+        # Garantir listagem — se page está em estado inválido (500, home), re-abrir cálculo
         if "verbas-para-calculo" not in self._page.url:
+            # Se estamos na home ou em 500, re-abrir cálculo via Recentes primeiro
+            _url_atual = self._page.url
+            if "principal.jsf" in _url_atual or "9257" not in _url_atual:
+                self._log("  → Página fora do cálculo — re-abrindo via Recentes…")
+                self._reabrir_calculo_recentes()
             self._clicar_menu_lateral("Verbas", obrigatorio=False)
             self._aguardar_ajax()
             self._page.wait_for_timeout(800)
@@ -6260,102 +6343,17 @@ class PJECalcPlaywright:
         # Restaurar sessão Seam ANTES da liquidação.
         # A conversação original fica corrompida por NPEs acumulados durante a automação
         # (ex: ApresentadorHonorarios.getListaCredoresDoCalculo causando NPE a cada render).
-        # Navegar para calculo.jsf?conversationId=X com conversação morta causa
-        # "identifier 'registro' resolved to null" em liquidacao.xhtml.
-        #
         # Solução: voltar para principal.jsf e re-abrir o cálculo da lista de "Recentes".
-        # Isso cria uma NOVA conversação Seam limpa com o backing bean corretamente injetado.
-        _sessao_restaurada = False
-        try:
-            self._log("  → Re-abrindo cálculo via Tela Inicial (nova conversação Seam)…")
-            _home = f"{self.PJECALC_BASE}/pages/principal.jsf"
-            self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
-            self._page.wait_for_timeout(2000)
-            try:
-                self._instalar_monitor_ajax()
-            except Exception:
-                pass
+        self._log("  → Re-abrindo cálculo via Tela Inicial (nova conversação Seam)…")
+        _sessao_restaurada = self._reabrir_calculo_recentes()
 
-            # Clicar no cálculo correto da lista de "Cálculos Recentes" (double-click abre)
-            _listbox = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
-            if _listbox.count() > 0:
-                _options = _listbox.first.locator("option")
-                _n_opts = _options.count()
-                self._log(f"  ℹ Cálculos recentes: {_n_opts} itens")
-                if _n_opts > 0:
-                    _num_proc = (self._dados or {}).get("processo", {}).get("numero", "")
-                    # Normalizar: remover pontos e traços para busca textual
-                    _num_clean = _num_proc.replace(".", "").replace("-", "").replace("/", "") if _num_proc else ""
+        # Verificar processo correto após re-abertura
+        if _sessao_restaurada:
+            if not self._verificar_calculo_correto():
+                self._log("  ⚠ CÁLCULO ERRADO após re-abertura via Recentes!")
+                _sessao_restaurada = False
 
-                    # Buscar EXATAMENTE o processo correto — NUNCA usar fallback para outro
-                    _found_idx = None
-                    if _num_clean:
-                        for _idx in range(_n_opts):
-                            _opt_text = (_options.nth(_idx).text_content() or "")
-                            _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
-                            # Match exato: todos os dígitos do CNJ devem estar presentes
-                            if _num_clean in _opt_clean:
-                                _found_idx = _idx
-                                self._log(f"  ✓ Encontrado cálculo correto: '{_opt_text.strip()[:60]}' (item {_idx+1})")
-                                break
-
-                    if _found_idx is None:
-                        # Log todos os itens disponíveis para diagnóstico
-                        for _idx in range(_n_opts):
-                            _opt_text = (_options.nth(_idx).text_content() or "").strip()
-                            self._log(f"    item {_idx+1}: '{_opt_text[:80]}'")
-                        self._log(f"  ⚠ Processo '{_num_proc}' NÃO encontrado nos recentes — NÃO usar outro processo!")
-                    else:
-                        # Abrir apenas o cálculo que corresponde ao processo correto
-                        _lb = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
-                        if _lb.count() > 0:
-                            _opt_el = _lb.first.locator("option").nth(_found_idx)
-                            _opt_el.click()
-                            self._page.wait_for_timeout(300)
-                            _opt_el.dblclick()
-                            self._aguardar_ajax(30000)
-                            self._page.wait_for_timeout(2000)
-                            _url_after = self._page.url
-                            if "calculo" in _url_after and "conversationId" in _url_after:
-                                self._capturar_base_calculo()
-                                if self._verificar_calculo_correto():
-                                    self._log(f"  ✓ Cálculo re-aberto com nova conversação: {self._calculo_conversation_id}")
-                                    _sessao_restaurada = True
-                                else:
-                                    self._log("  ⚠ CÁLCULO ERRADO após re-abertura! Abortando para evitar exportar processo incorreto.")
-                            else:
-                                self._log(f"  ⚠ URL inesperada após dblclick: {_url_after}")
-            else:
-                self._log("  ⚠ Lista de cálculos recentes não encontrada")
-
-            if not _sessao_restaurada:
-                # Fallback: tentar "Buscar Cálculo" (sprite-abrir) → abre lista de cálculos
-                self._log("  → Tentando via Buscar Cálculo…")
-                _buscar_link = self._page.locator("div.sprite-abrir a, a[title*='Buscar']")
-                if _buscar_link.count() > 0:
-                    _buscar_link.first.click()
-                    self._aguardar_ajax(15000)
-                    self._page.wait_for_timeout(2000)
-                    # Na lista de cálculos, clicar no primeiro "Selecionar"
-                    _sel_link = self._page.locator("a[class*='linkSelecionar'], a[title*='Selecionar']")
-                    if _sel_link.count() > 0:
-                        _sel_link.first.click()
-                        self._aguardar_ajax(15000)
-                        self._page.wait_for_timeout(2000)
-                        _url_after2 = self._page.url
-                        if "calculo" in _url_after2 and "conversationId" in _url_after2:
-                            self._capturar_base_calculo()
-                            # SEMPRE verificar se é o processo correto
-                            if self._verificar_calculo_correto():
-                                self._log(f"  ✓ Cálculo aberto via Buscar: {self._calculo_conversation_id}")
-                                _sessao_restaurada = True
-                            else:
-                                self._log("  ⚠ CÁLCULO ERRADO via Buscar! Não usar.")
-
-        except Exception as _e:
-            self._log(f"  ⚠ Re-abertura do cálculo falhou: {_e}")
-
-        # Último fallback: tentar conversação antiga (pode falhar)
+        # Fallback: tentar conversação antiga (pode falhar se corrompida)
         if not _sessao_restaurada and self._calculo_url_base and self._calculo_conversation_id:
             try:
                 _calc_url = (
@@ -6371,7 +6369,6 @@ class PJECalcPlaywright:
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
                 self._capturar_base_calculo()
-                # Verificar processo correto mesmo no fallback
                 if self._verificar_calculo_correto():
                     _sessao_restaurada = True
                 else:
@@ -6380,10 +6377,18 @@ class PJECalcPlaywright:
                 self._log(f"  ⚠ Fallback conversação antiga: {_e}")
 
         # REGRA DE SEGURANÇA: verificar processo correto ANTES de liquidar.
-        # Se a sessão foi restaurada mas o processo está errado, abortar.
-        if _sessao_restaurada and not self._verificar_calculo_correto():
+        _num_proc = (self._dados or {}).get("processo", {}).get("numero", "?")
+        if not _sessao_restaurada:
             raise RuntimeError(
-                "ABORTADO: o cálculo aberto pertence a um processo diferente do solicitado. "
+                "ABORTADO: não foi possível restaurar a sessão do cálculo correto. "
+                "Nenhuma das estratégias (Recentes, Buscar, conversação antiga) encontrou "
+                f"o processo '{_num_proc}'. "
+                "Não é seguro prosseguir com liquidação/exportação."
+            )
+        if not self._verificar_calculo_correto():
+            raise RuntimeError(
+                "ABORTADO: o cálculo aberto pertence a um processo diferente do solicitado "
+                f"(esperado: '{_num_proc}'). "
                 "Não é seguro prosseguir com liquidação/exportação."
             )
 
