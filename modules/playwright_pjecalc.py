@@ -414,6 +414,7 @@ class PJECalcPlaywright:
         self._calculo_conversation_id: str | None = None
         self._dados: dict | None = None  # dados da sentença (armazenado em preencher_calculo)
         self._reflexos_configurados: set[str] = set()  # nomes de verbas principais cujos reflexos foram configurados via botão
+        self._verbas_expresso_ok: set[str] = set()  # nomes de verbas criadas com sucesso via Expresso (reflexos auto-gerados)
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
@@ -692,6 +693,20 @@ class PJECalcPlaywright:
             return False
         try:
             loc.wait_for(state="visible", timeout=8000)
+            # Verificar se disabled/readonly — evitar timeout de 60s do Playwright
+            try:
+                _state = loc.evaluate("el => ({disabled: el.disabled, readonly: el.readOnly})")
+                if _state.get("disabled") or _state.get("readonly"):
+                    loc.evaluate(
+                        f"el => {{ el.disabled = false; el.readOnly = false; "
+                        f"el.value = '{valor}'; "
+                        "el.dispatchEvent(new Event('input',{bubbles:true})); "
+                        "el.dispatchEvent(new Event('change',{bubbles:true})); }}"
+                    )
+                    self._log(f"  ✓ {field_id}: {valor} (disabled/readonly override)")
+                    return True
+            except Exception:
+                pass
             loc.click()
             loc.fill("")
             loc.fill(valor)
@@ -783,6 +798,36 @@ class PJECalcPlaywright:
             return False
         try:
             loc.wait_for(state="visible", timeout=8000)
+            # Verificar se o select está disabled (evitar timeout de 60s do Playwright)
+            try:
+                _is_disabled = loc.evaluate("el => el.disabled")
+                if _is_disabled:
+                    self._log(f"  ⚠ select {field_id}: disabled — tentando JS direto")
+                    _js_ok = self._page.evaluate(
+                        """([suffix, val]) => {
+                            const sel = [...document.querySelectorAll('select')]
+                                .find(s => s.id && s.id.endsWith(suffix));
+                            if (!sel) return false;
+                            sel.disabled = false;
+                            // Tentar por value
+                            for (const opt of sel.options) {
+                                if (opt.value === val || opt.text.trim() === val) {
+                                    sel.value = opt.value;
+                                    sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }""",
+                        [field_id, valor],
+                    )
+                    if _js_ok:
+                        self._aguardar_ajax()
+                        self._log(f"  ✓ select {field_id}: {valor} (via JS disabled override)")
+                        return True
+                    return False
+            except Exception:
+                pass
             # Tenta por label primeiro (mais estável), depois por value
             try:
                 loc.select_option(label=valor)
@@ -2408,10 +2453,8 @@ class PJECalcPlaywright:
             _comp_ini = _para_competencia(h.get("data_inicio", ""))
             _comp_fim = _para_competencia(h.get("data_fim", ""))
             # Competência fields (MM/yyyy): rich:calendar with jQuery mask('99/9999').
-            # DOM IDs confirmados v2.15.1:
-            #   formulario:competenciaInicialInputDate / formulario:competenciaFinalInputDate
-            # Strategy: type into InputDate field, then use RichFaces Calendar API
-            # to parse and set the date. Finally Tab to trigger blur + server update.
+            # DOM IDs confirmados v2.15.1: formulario:competenciaInicialInputDate / formulario:competenciaFinalInputDate
+            # (NÃO dataInicio/dataFinal — esses são campos diferentes)
             for _cfield, _cval in [("competenciaInicial", _comp_ini),
                                     ("competenciaFinal", _comp_fim)]:
                 _cloc = self._localizar(_cfield, tipo="input")
@@ -2867,6 +2910,9 @@ class PJECalcPlaywright:
 
         if _marcadas:
             self._log(f"  ✓ Marcadas: {_marcadas}")
+            # Registrar verbas Expresso OK — seus reflexos são auto-gerados pelo PJE-Calc
+            for _m in _marcadas:
+                self._verbas_expresso_ok.add(_m.upper())
             _salvou = (
                 self._clicar_botao_id("btnSalvarExpresso")
                 or self._clicar_salvar()
@@ -3650,13 +3696,36 @@ class PJECalcPlaywright:
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
             _nome_lower = nome.lower()
 
-            # Verbas reflexas: só pular se o reflexo foi configurado via botão "Verba Reflexa"
-            _eh_reflexa = v.get("eh_reflexa") or "reflexo" in _nome_lower
+            # ── REGRA: Pular reflexas cujo principal foi criado via Expresso ──
+            # Parcelas Expresso geram reflexos automaticamente (Aviso Prévio, Férias+1/3,
+            # 13º, RSR, Multa 477). Criar reflexo manual duplica e causa erro.
+            _eh_reflexa = v.get("eh_reflexa") or "reflexo" in _nome_lower or "sobre" in _nome_lower
             if _eh_reflexa:
                 # Inferir nome da verba principal a partir do nome do reflexo
                 import re as _re_ref
-                _m_principal = _re_ref.match(r'(?i)reflexo\s+(?:de\s+)?(.+?)\s+em\s+', nome)
+                # Padrões: "RSR sobre Horas Extras", "13º s/ Horas Extras", "Férias + 1/3 s/ Adicional Noturno"
+                _m_principal = _re_ref.search(
+                    r'(?i)(?:sobre|s/)\s+(.+?)$', nome
+                )
                 _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
+                if not _nome_principal_ref:
+                    _m_principal = _re_ref.match(r'(?i)reflexo\s+(?:de\s+)?(.+?)\s+em\s+', nome)
+                    _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
+
+                # Verificar se o principal foi criado via Expresso (reflexos auto-gerados)
+                if _nome_principal_ref:
+                    _ref_upper = _nome_principal_ref.upper()
+                    _skip_expresso = any(
+                        _ref_upper in exp_name or exp_name in _ref_upper
+                        for exp_name in self._verbas_expresso_ok
+                    )
+                    if _skip_expresso:
+                        self._log(
+                            f"  → '{nome}' reflexo de verba Expresso '{_nome_principal_ref}' "
+                            f"— reflexos auto-gerados pelo PJE-Calc, pulando criação manual"
+                        )
+                        continue
+
                 if _nome_principal_ref and _nome_principal_ref in self._reflexos_configurados:
                     self._log(f"  → '{nome}' reflexo já configurado via botão Verba Reflexa — pulando")
                     continue
@@ -3752,55 +3821,107 @@ class PJECalcPlaywright:
                         except Exception:
                             continue
 
-            # ── Assuntos CNJ (obrigatório *) ──
-            # Código desejado: 2581 = "Remuneração, Verbas indenizatórias e benefícios"
-            # Estratégia: tentar suggestion inline rápida, depois JS direto.
-            # Modal CNJ desabilitado: campo readonly + btnSelecionarCNJ disabled = 120s perdidos.
+            # ── Assunto CNJ (OBRIGATÓRIO — sem ele, "Existem erros no formulário") ──
+            # Procedimento confirmado por vídeo: clicar lupa → modal com lista hierárquica
+            # → selecionar código 2581 (Remuneração, Verbas Indenizatórias e Benefícios)
+            # Fallback: JS direto nos campos hidden se modal não funcionar
             _cnj_ok = False
             try:
-                _cnj_field = self._localizar("assuntosCnj", tipo="input")
-                if _cnj_field:
-                    # --- Tentativa rápida: RichFaces suggestionbox inline ---
+                # Tentativa 1: RichFaces suggestionbox inline (digitar no campo e aguardar popup)
+                _cnj_field = self._page.locator(
+                    'input[id$="assuntosCnj"]:not([id*="modalCNJ"]):not([type="hidden"])'
+                )
+                if _cnj_field.count() > 0:
                     try:
-                        _cnj_field.focus()
-                        self._page.keyboard.press("Control+a")
-                        self._page.keyboard.press("Delete")
-                        _cnj_field.press_sequentially("2581", delay=120)
+                        _cnj_field.first.click()
+                        self._page.wait_for_timeout(300)
+                        _cnj_field.first.press_sequentially("2581", delay=120)
                         self._page.wait_for_timeout(2000)
-
-                        _cnj_ok = self._page.evaluate("""() => {
-                            const popups = document.querySelectorAll(
-                                '[id*="assuntosCnj"][class*="suggest"], ' +
-                                '[id*="assuntosCnj"].rich-sb-ext-decor, ' +
-                                'div.rich-sb-common-container'
-                            );
-                            for (const popup of popups) {
-                                const rows = popup.querySelectorAll('tr, td, div.rich-sb-int');
-                                for (const row of rows) {
-                                    const txt = (row.textContent || '').trim();
-                                    if (txt.includes('2581') && txt.includes('Remunera') && txt.length < 200) {
-                                        row.click();
-                                        return true;
-                                    }
-                                }
-                            }
-                            return false;
-                        }""")
-                        if _cnj_ok:
+                        # Verificar se popup de sugestão apareceu
+                        _popup = self._page.locator(
+                            '.rf-su-popup:visible, .rich-sb-ext-decor:visible, '
+                            '[id*="assuntosCnj"][id*="suggest"]:visible'
+                        )
+                        if _popup.count() > 0:
+                            _popup.first.locator('tr, div, td').first.click()
                             self._aguardar_ajax()
-                            self._page.wait_for_timeout(500)
-                            self._log(f"  ✓ Assunto CNJ: 2581 (sugestão inline)")
-                        else:
-                            self._page.keyboard.press("Escape")
-                            self._page.wait_for_timeout(300)
+                            _cnj_ok = True
+                            self._log("  ✓ Assunto CNJ: 2581 (via suggestionbox)")
                     except Exception:
                         pass
 
+                # Tentativa 2: Clicar na lupa → modal CNJ → buscar na árvore
                 if not _cnj_ok:
-                    # --- JS direto: setar valor + código nos campos hidden ---
-                    self._page.evaluate("""() => {
+                    _lupa = self._page.locator(
+                        'a[id*="assuntosCnj"][id*="btn"], '
+                        'img[id*="assuntosCnj"], '
+                        'a[onclick*="modalCNJ"], '
+                        'input[id*="btnAssunto"], '
+                        '[id$="btnBuscarAssuntoCnj"]'
+                    )
+                    if _lupa.count() > 0:
+                        try:
+                            _lupa.first.click(force=True)
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(1000)
+                            # Modal pode ter campo de busca
+                            _modal_input = self._page.locator(
+                                '[id*="modalCNJ"] input[type="text"], '
+                                '[id*="modalAssunto"] input[type="text"]'
+                            )
+                            if _modal_input.count() > 0:
+                                _is_readonly = _modal_input.first.evaluate(
+                                    "el => el.readOnly || el.disabled"
+                                )
+                                if _is_readonly:
+                                    _modal_input.first.evaluate("""el => {
+                                        el.readOnly = false;
+                                        el.disabled = false;
+                                    }""")
+                                _modal_input.first.fill("2581")
+                                _modal_input.first.dispatch_event("change")
+                                self._aguardar_ajax()
+                                self._page.wait_for_timeout(1000)
+                            # Clicar no item da árvore que contém "2581" ou "Remuneração"
+                            _tree_item = self._page.locator(
+                                '[id*="modalCNJ"] tr:has-text("2581"), '
+                                '[id*="modalCNJ"] .rf-trn:has-text("2581"), '
+                                '[id*="modalAssunto"] tr:has-text("2581")'
+                            )
+                            if _tree_item.count() > 0:
+                                _tree_item.first.click()
+                                self._page.wait_for_timeout(500)
+                            # Clicar botão "Selecionar"
+                            _btn_sel = self._page.locator(
+                                '[id*="modalCNJ"] input[value="Selecionar"], '
+                                '[id*="modalCNJ"] [id$="btnSelecionarCNJ"], '
+                                '[id*="modalAssunto"] input[value="Selecionar"]'
+                            )
+                            if _btn_sel.count() > 0:
+                                _is_disabled = _btn_sel.first.evaluate("el => el.disabled")
+                                if not _is_disabled:
+                                    _btn_sel.first.click(force=True)
+                                    self._aguardar_ajax()
+                                    _cnj_ok = True
+                                    self._log("  ✓ Assunto CNJ: 2581 (via modal lupa)")
+                            # Fechar modal se ainda aberto
+                            if not _cnj_ok:
+                                _close = self._page.locator(
+                                    '[id*="modalCNJ"] [id*="close"], '
+                                    '[id*="modalCNJ"] input[value*="Fechar"], '
+                                    '[id*="modalCNJ"] input[value*="Cancelar"]'
+                                )
+                                if _close.count() > 0:
+                                    _close.first.click(force=True)
+                                    self._page.wait_for_timeout(500)
+                        except Exception as _e_modal:
+                            self._log(f"  ⚠ Modal CNJ: {_e_modal}")
+
+                # Tentativa 3: JS direto — setar valor + campo hidden do código
+                if not _cnj_ok:
+                    _cnj_ok = self._page.evaluate("""() => {
                         const txt = document.querySelector(
-                            'input[id$="assuntosCnj"]:not([id*="modalCNJ"])'
+                            'input[id$="assuntosCnj"]:not([id*="modalCNJ"]):not([type="hidden"])'
                         );
                         const cod = document.querySelector('[id$="codigoAssuntosCnj"]');
                         if (txt) {
@@ -3813,89 +3934,94 @@ class PJECalcPlaywright:
                             cod.value = '2581';
                             cod.dispatchEvent(new Event('change', {bubbles: true}));
                         }
+                        return !!(txt || cod);
                     }""")
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(500)
-                    self._log(f"  ✓ Assunto CNJ: 2581 (JS direto)")
-                    _cnj_ok = True
-                if not _cnj_field:
-                    self._log(f"  ⚠ Verba '{nome}': campo assuntosCnj não encontrado")
+                    if _cnj_ok:
+                        self._aguardar_ajax()
+                        self._log("  ✓ Assunto CNJ: 2581 (via JS direto)")
             except Exception as _e_cnj:
-                self._log(f"  ⚠ Assuntos CNJ: {_e_cnj}")
+                self._log(f"  ⚠ Assunto CNJ: {_e_cnj}")
 
-            # ── Tipo de Verba: PRINCIPAL ou REFLEXO ──
-            # Aguardar estado estável após interação CNJ (modal pode ter alterado AJAX)
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(500)
-
-            # Configurar ANTES de preencher reflexo-specific fields
-            _tipo_valor = "PRINCIPAL" if not _eh_reflexa else "REFLEXO"
-            # Tentativa 1: _marcar_radio com label matching
-            _tipo_ok = self._marcar_radio("tipoDeVerba", _tipo_valor)
-            if not _tipo_ok:
-                # Tentativa 2: JS direto com label matching
-                _tipo_ok = self._marcar_radio_js("tipoDeVerba", _tipo_valor)
-            if not _tipo_ok:
-                # Tentativa 3: click direto por índice (0=Principal, 1=Reflexa)
-                _idx = "1" if _eh_reflexa else "0"
-                try:
-                    _radio_direto = self._page.locator(f"input[id$='tipoDeVerba:{_idx}']")
-                    if _radio_direto.count() > 0:
-                        _radio_direto.first.click()
-                        _tipo_ok = True
-                        self._log(f"  ✓ radio tipoDeVerba: {_tipo_valor} (click direto :{_idx})")
-                except Exception:
-                    pass
-            if not _tipo_ok:
-                self._log(f"  ⚠ tipoDeVerba={_tipo_valor}: todas tentativas falharam")
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(500)
-
-            # ── Para verbas reflexas: selecionar verba base ──
+            # ── Para verbas reflexas: marcar tipo REFLEXO e selecionar verba base ──
             if _eh_reflexa:
-                # Select baseVerbaDeCalculo — selecionar a verba principal pelo nome
+                # Radio tipoDeVerba = REFLEXO (DOM: formulario:tipoDeVerba com sufixo numérico)
+                # Tier 1: label-based match
+                _reflexo_ok = any(
+                    self._marcar_radio(fid, "REFLEXO")
+                    for fid in ["tipoDeVerba", "tipoVerba", "tipo"]
+                )
+                # Tier 2: JS radio by name
+                if not _reflexo_ok:
+                    _reflexo_ok = self._marcar_radio_js("tipoDeVerba", "REFLEXO")
+                # Tier 3: Direct click by index (tipoDeVerba:1 = Reflexa)
+                if not _reflexo_ok:
+                    try:
+                        _radio_direto = self._page.locator("input[id$='tipoDeVerba:1']")
+                        if _radio_direto.count() > 0:
+                            _radio_direto.first.click()
+                            _reflexo_ok = True
+                            self._log("  ✓ tipoDeVerba:1 (Reflexa) via click direto")
+                    except Exception:
+                        pass
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+
+                # ── baseVerbaDeCalculo — OBRIGATÓRIO para reflexa (manual seção 9.4) ──
+                # A verba principal deve ser selecionada no dropdown "Verba *"
                 _principal_ref = v.get("verba_principal_ref") or ""
                 if not _principal_ref and _m_principal:
                     _principal_ref = _m_principal.group(1).strip()
                 if _principal_ref:
-                    # Tentar selecionar pelo texto da opção que contém o nome da principal
                     try:
-                        self._page.evaluate(
+                        _sel_result = self._page.evaluate(
                             """(nomePrincipal) => {
-                                const sels = [...document.querySelectorAll('select')].filter(s => {
+                                // Buscar select com id contendo baseVerba ou verbaDeCalculo
+                                let sels = [...document.querySelectorAll('select')].filter(s => {
                                     return s.id.includes('baseVerba') || s.id.includes('verbaDeCalculo')
                                         || s.name.includes('baseVerba');
                                 });
+                                // Fallback: qualquer select visível com opções de verbas
                                 if (!sels.length) {
-                                    // Fallback: qualquer select visível que não seja os já conhecidos
-                                    sels.push(...[...document.querySelectorAll('select')].filter(s => {
+                                    sels = [...document.querySelectorAll('select')].filter(s => {
                                         const r = s.getBoundingClientRect();
-                                        return r.width > 0 && r.height > 0
-                                            && !s.id.includes('tipoDaBase') && !s.id.includes('caracteristica');
-                                    }));
+                                        if (r.width <= 0 || r.height <= 0) return false;
+                                        // Excluir selects conhecidos que não são baseVerba
+                                        if (s.id.includes('tipoDaBase') || s.id.includes('caracteristica')
+                                            || s.id.includes('ocorrencia')) return false;
+                                        // Deve ter opções que parecem nomes de verba
+                                        return [...s.options].some(o =>
+                                            o.text.length > 5 && !o.text.includes('Selecione')
+                                        );
+                                    });
                                 }
-                                const norm = s => s.toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                                const norm = s => s.toLowerCase().normalize('NFD')
+                                    .replace(/[\\u0300-\\u036f]/g, '');
                                 const target = norm(nomePrincipal);
                                 for (const sel of sels) {
+                                    // Match por nome da principal
                                     for (const opt of sel.options) {
                                         if (norm(opt.text).includes(target)) {
                                             sel.value = opt.value;
                                             sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                            return opt.text;
+                                            return 'OK: ' + opt.text;
                                         }
                                     }
-                                    // Se não encontrou por nome, selecionar a primeira opção válida (índice 0)
+                                    // Fallback: primeira opção válida (pular noSelectionValue)
                                     if (sel.options.length > 1) {
-                                        sel.value = sel.options[1].value;  // pular noSelectionValue
+                                        sel.value = sel.options[1].value;
                                         sel.dispatchEvent(new Event('change', {bubbles: true}));
-                                        return sel.options[1].text;
+                                        return 'FALLBACK: ' + sel.options[1].text;
                                     }
                                 }
                                 return null;
                             }""",
                             _principal_ref,
                         )
-                        self._aguardar_ajax()
+                        if _sel_result:
+                            self._aguardar_ajax()
+                            self._log(f"  ✓ baseVerbaDeCalculo: {_sel_result}")
+                        else:
+                            self._log(f"  ⚠ baseVerbaDeCalculo: nenhum select encontrado para '{_principal_ref}'")
                     except Exception as _e_base:
                         self._log(f"  ⚠ baseVerbaDeCalculo: {_e_base}")
 
@@ -4011,33 +4137,88 @@ class PJECalcPlaywright:
             if not _ocorr_ok:
                 self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' ({ocorr_enum}) NÃO preenchida — pode causar erro na liquidação")
 
-            # ── Base de Cálculo (SELECT confirmado DOM v2.15.1: formulario:tipoDaBaseTabelada) ──
-            # Valores: MAIOR_REMUNERACAO / HISTORICO_SALARIAL / SALARIO_DA_CATEGORIA / SALARIO_MINIMO
-            _base_label = v.get("base_calculo") or "Historico Salarial"
-            # Mapeamento de valores humanos → enum
-            _BASE_ENUM = {
-                "historico": "HISTORICO_SALARIAL",
-                "maior remuneracao": "MAIOR_REMUNERACAO",
-                "maior remuneração": "MAIOR_REMUNERACAO",
-                "salario minimo": "SALARIO_MINIMO",
-                "salário mínimo": "SALARIO_MINIMO",
-                "piso salarial": "SALARIO_DA_CATEGORIA",
-                "salario categoria": "SALARIO_DA_CATEGORIA",
-            }
-            _base_enum_val = None
-            for _k, _bv in _BASE_ENUM.items():
-                if _k in _norm_key(_base_label):
-                    _base_enum_val = _bv
-                    break
-            if not _base_enum_val:
-                _base_enum_val = "HISTORICO_SALARIAL"  # padrão seguro
+            # ── Base de Cálculo em 2 etapas (confirmado por vídeo + manual seção 9.2) ──
+            # Etapa 1: Selecionar "Bases Cadastradas" (tipoDaBaseTabelada)
+            #   → HISTORICO_SALARIAL / MAIOR_REMUNERACAO / SALARIO_DA_CATEGORIA / SALARIO_MINIMO
+            # Etapa 2: Após AJAX, selecionar sub-opção no segundo dropdown
+            #   → ex: "ÚLTIMA REMUNERAÇÃO" dentro de Histórico Salarial
+            # Para verbas reflexas: NÃO preencher base cadastrada — usar a verba principal como base
+            if not _eh_reflexa:
+                _base_label = v.get("base_calculo") or "Historico Salarial"
+                _BASE_ENUM = {
+                    "historico": "HISTORICO_SALARIAL",
+                    "maior remuneracao": "MAIOR_REMUNERACAO",
+                    "maior remuneração": "MAIOR_REMUNERACAO",
+                    "salario minimo": "SALARIO_MINIMO",
+                    "salário mínimo": "SALARIO_MINIMO",
+                    "piso salarial": "SALARIO_DA_CATEGORIA",
+                    "salario categoria": "SALARIO_DA_CATEGORIA",
+                }
+                _base_enum_val = None
+                for _k, _bv in _BASE_ENUM.items():
+                    if _k in _norm_key(_base_label):
+                        _base_enum_val = _bv
+                        break
+                if not _base_enum_val:
+                    _base_enum_val = "HISTORICO_SALARIAL"
 
-            _base_ok = self._selecionar("tipoDaBaseTabelada", _base_enum_val, obrigatorio=False)
-            if not _base_ok:
-                # Fallback: usar _sel_por_opcoes buscando select com "histórico salarial"
-                _base_ok = _sel_por_opcoes(["historico"], _base_label, "base_calculo")
-            if not _base_ok:
-                self._log(f"  ⚠ Verba '{nome}': base_calculo '{_base_label}' não preenchida")
+                _base_ok = self._selecionar("tipoDaBaseTabelada", _base_enum_val, obrigatorio=False)
+                if not _base_ok:
+                    _base_ok = _sel_por_opcoes(["historico"], _base_label, "base_calculo")
+                if not _base_ok:
+                    self._log(f"  ⚠ Verba '{nome}': base_calculo '{_base_label}' não preenchida")
+                else:
+                    # Etapa 2: Aguardar AJAX carregar sub-dropdown e selecionar
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(800)
+                    _sub_base = v.get("sub_base_calculo") or "ULTIMA REMUNERACAO"
+                    try:
+                        _sub_result = self._page.evaluate(
+                            """(subBase) => {
+                                // Buscar segundo select que aparece após AJAX (não é tipoDaBaseTabelada)
+                                const sels = [...document.querySelectorAll('select')].filter(s => {
+                                    const r = s.getBoundingClientRect();
+                                    if (r.width <= 0 || r.height <= 0) return false;
+                                    if (s.id.includes('tipoDaBase')) return false;
+                                    if (s.id.includes('caracteristica')) return false;
+                                    if (s.id.includes('ocorrencia')) return false;
+                                    if (s.id.includes('baseVerba') || s.id.includes('verbaDeCalculo')) return false;
+                                    // Deve ter opções de remuneração
+                                    const optTexts = [...s.options].map(o => o.text.toLowerCase());
+                                    return optTexts.some(t =>
+                                        t.includes('remuner') || t.includes('salario') || t.includes('salário')
+                                    );
+                                });
+                                const norm = s => s.toLowerCase().normalize('NFD')
+                                    .replace(/[\\u0300-\\u036f]/g, '');
+                                const target = norm(subBase);
+                                for (const sel of sels) {
+                                    for (const opt of sel.options) {
+                                        if (norm(opt.text).includes(target)) {
+                                            sel.value = opt.value;
+                                            sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                            return opt.text;
+                                        }
+                                    }
+                                    // Fallback: primeira opção não-vazia
+                                    const valid = [...sel.options].filter(o =>
+                                        o.value && o.value !== 'noSelectionValue'
+                                    );
+                                    if (valid.length) {
+                                        sel.value = valid[0].value;
+                                        sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                        return 'FALLBACK: ' + valid[0].text;
+                                    }
+                                }
+                                return null;
+                            }""",
+                            _sub_base,
+                        )
+                        if _sub_result:
+                            self._aguardar_ajax()
+                            self._log(f"  ✓ sub_base_calculo: {_sub_result}")
+                    except Exception as _e_sub:
+                        self._log(f"  ⚠ sub_base_calculo: {_e_sub}")
 
             if v.get("valor_informado"):
                 # formulario:valor (radio CALCULADO/INFORMADO) — confirmado DOM v2.15.1
