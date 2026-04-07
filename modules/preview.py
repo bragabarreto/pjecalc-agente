@@ -151,16 +151,32 @@ def gerar_previa(
             f"   Preenchimento   : {preen_label}",
         ]
         if tipo_ap == "apuracao_jornada" and preen in ("programacao_semanal", "escala"):
-            entrada = dur.get("jornada_entrada") or "—"
-            saida = dur.get("jornada_saida") or "���"
-            interv = dur.get("intervalo_minutos")
-            interv_str = f"{interv} min" if interv else "—"
-            linhas.append(f"   Horário         : {entrada} às {saida} (intervalo {interv_str})")
+            grade = dur.get("grade_semanal")
+            if grade and isinstance(grade, dict):
+                linhas.append("   Grade Semanal:")
+                _labels = {"seg":"Seg","ter":"Ter","qua":"Qua","qui":"Qui",
+                           "sex":"Sex","sab":"Sáb","dom":"Dom","feriado":"Fer"}
+                for dia, label in _labels.items():
+                    dia_data = grade.get(dia)
+                    if dia_data and isinstance(dia_data, dict) and dia_data.get("turnos"):
+                        turnos_str = " / ".join(
+                            f"{t.get('entrada','?')}-{t.get('saida','?')}"
+                            for t in dia_data["turnos"]
+                        )
+                        linhas.append(f"     {label}: {turnos_str}")
+                    else:
+                        linhas.append(f"     {label}: —")
+            else:
+                entrada = dur.get("jornada_entrada") or "—"
+                saida = dur.get("jornada_saida") or "—"
+                interv = dur.get("intervalo_minutos")
+                interv_str = f"{interv} min" if interv else "—"
+                linhas.append(f"   Horário         : {entrada} às {saida} (intervalo {interv_str})")
             dias_semana = []
             for d, label in [("seg","Seg"),("ter","Ter"),("qua","Qua"),
                              ("qui","Qui"),("sex","Sex"),("sab","Sáb"),("dom","Dom")]:
                 v = dur.get(f"jornada_{d}")
-                dias_semana.append(f"{label}={v}h" if v else f"{label}=���")
+                dias_semana.append(f"{label}={v}h" if v else f"{label}=—")
             linhas.append(f"   Jornada/dia     : {', '.join(dias_semana)}")
             linhas.append(f"   Semanal/Mensal  : {dur.get('jornada_semanal_cartao') or '—'}h / {dur.get('jornada_mensal_cartao') or '—'}h")
         elif tipo_ap == "apuracao_jornada":
@@ -332,6 +348,50 @@ def exibir_previa(dados: dict[str, Any], verbas_mapeadas: dict[str, Any]) -> Non
         print(texto)
 
 
+def _deep_set(obj: Any, path: str, valor: Any) -> None:
+    """
+    Define um valor em um caminho pontilhado com suporte a arrays.
+    Exemplos:
+      _deep_set(d, "processo.numero", "123")
+      _deep_set(d, "duracao_trabalho.grade_semanal.seg.turnos[0].entrada", "07:00")
+    Cria dicts intermediários se necessário.
+    """
+    import re as _re
+    # Tokenizar: "a.b[0].c" → ["a", "b", "[0]", "c"]
+    tokens: list[str | int] = []
+    for part in path.split("."):
+        # Separar array indices: "turnos[0]" → "turnos", 0
+        m = _re.match(r'^(.+?)\[(\d+)\]$', part)
+        if m:
+            tokens.append(m.group(1))
+            tokens.append(int(m.group(2)))
+        else:
+            tokens.append(part)
+
+    cur = obj
+    for i, token in enumerate(tokens[:-1]):
+        next_token = tokens[i + 1]
+        if isinstance(token, int):
+            if isinstance(cur, list) and 0 <= token < len(cur):
+                cur = cur[token]
+            else:
+                return  # index out of range
+        else:
+            if not isinstance(cur, dict):
+                return
+            if token not in cur or cur[token] is None:
+                # Create intermediate container
+                cur[token] = [] if isinstance(next_token, int) else {}
+            cur = cur[token]
+
+    last = tokens[-1]
+    if isinstance(last, int):
+        if isinstance(cur, list) and 0 <= last < len(cur):
+            cur[last] = valor
+    elif isinstance(cur, dict):
+        cur[last] = valor
+
+
 def aplicar_edicao_usuario(
     dados: dict[str, Any],
     campo: str,
@@ -460,15 +520,8 @@ def aplicar_edicao_usuario(
             dados[arr_name] = lista
         return dados
 
-    # secao.subcampo padrão
-    partes = campo.split(".", 1)
-    if len(partes) == 2:
-        secao, subcampo = partes
-        if secao not in dados or not isinstance(dados[secao], dict):
-            dados[secao] = {}
-        dados[secao][subcampo] = novo_valor
-    else:
-        dados[campo] = novo_valor
+    # Deep path: secao.sub.sub2.turnos[0].campo — suporta aninhamento arbitrário
+    _deep_set(dados, campo, novo_valor)
     return dados
 
 

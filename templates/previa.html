@@ -597,7 +597,67 @@
 
         <!-- Bloco: Apuração por Jornada -->
         <div id="bloco-apuracao-jornada" style="{{ '' if dur.get('tipo_apuracao') == 'apuracao_jornada' else 'display:none;' }}">
-          <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px;">
+
+          <!-- Grade Semanal: tabela de Entrada/Saída por dia (Programação Semanal) -->
+          {% set grade = dur.get('grade_semanal') or {} %}
+          <fieldset id="fieldset-grade-semanal" style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px; {{ '' if dur.get('preenchimento_jornada') == 'programacao_semanal' else 'display:none;' }}">
+            <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">
+              Grade Semanal — Pares Entrada/Saída
+              <button type="button" onclick="copiarSegParaSemana()" style="margin-left:12px; font-size:0.75rem; padding:2px 8px; cursor:pointer;" title="Copiar horários de Segunda para Terça a Sexta">Copiar Seg → Ter-Sex</button>
+            </legend>
+            <table style="width:100%; border-collapse:collapse; font-size:0.82rem;">
+              <thead>
+                <tr style="background:#f0f4fa;">
+                  <th style="padding:4px 8px; text-align:left;">Dia</th>
+                  <th style="padding:4px 4px;">Entrada 1</th>
+                  <th style="padding:4px 4px;">Saída 1</th>
+                  <th style="padding:4px 4px;">Entrada 2</th>
+                  <th style="padding:4px 4px;">Saída 2</th>
+                  <th style="padding:4px 4px;">Total (h)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% set dias_grade = [('seg','Segunda'),('ter','Terça'),('qua','Quarta'),('qui','Quinta'),('sex','Sexta'),('sab','Sábado'),('dom','Domingo'),('feriado','Feriado')] %}
+                {% for dia_key, dia_label in dias_grade %}
+                  {% set dia_data = grade.get(dia_key) or {} %}
+                  {% set turnos = dia_data.get('turnos', []) if dia_data else [] %}
+                  <tr style="border-bottom:1px solid #e8ecf2;">
+                    <td style="padding:4px 8px; font-weight:600;">{{ dia_label }}</td>
+                    <td style="padding:2px 2px;">
+                      <input type="text" placeholder="--:--" style="width:56px; text-align:center; font-size:0.8rem; padding:3px;"
+                             value="{{ turnos[0].entrada if turnos|length > 0 and turnos[0] else '' }}"
+                             data-dia="{{ dia_key }}" data-turno="0" data-campo="entrada"
+                             onchange="salvarGradeSemanal('{{ dia_key }}', 0, 'entrada', this.value)">
+                    </td>
+                    <td style="padding:2px 2px;">
+                      <input type="text" placeholder="--:--" style="width:56px; text-align:center; font-size:0.8rem; padding:3px;"
+                             value="{{ turnos[0].saida if turnos|length > 0 and turnos[0] else '' }}"
+                             data-dia="{{ dia_key }}" data-turno="0" data-campo="saida"
+                             onchange="salvarGradeSemanal('{{ dia_key }}', 0, 'saida', this.value)">
+                    </td>
+                    <td style="padding:2px 2px;">
+                      <input type="text" placeholder="--:--" style="width:56px; text-align:center; font-size:0.8rem; padding:3px;"
+                             value="{{ turnos[1].entrada if turnos|length > 1 and turnos[1] else '' }}"
+                             data-dia="{{ dia_key }}" data-turno="1" data-campo="entrada"
+                             onchange="salvarGradeSemanal('{{ dia_key }}', 1, 'entrada', this.value)">
+                    </td>
+                    <td style="padding:2px 2px;">
+                      <input type="text" placeholder="--:--" style="width:56px; text-align:center; font-size:0.8rem; padding:3px;"
+                             value="{{ turnos[1].saida if turnos|length > 1 and turnos[1] else '' }}"
+                             data-dia="{{ dia_key }}" data-turno="1" data-campo="saida"
+                             onchange="salvarGradeSemanal('{{ dia_key }}', 1, 'saida', this.value)">
+                    </td>
+                    <td style="padding:4px 4px; text-align:center; font-size:0.8rem; color:#666;" id="grade-total-{{ dia_key }}">
+                      {{ dur.get('jornada_' ~ dia_key, '') or '—' if dia_key != 'feriado' else '—' }}
+                    </td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </fieldset>
+
+          <!-- Fallback: campos flat de horário (quando não é Programação Semanal) -->
+          <fieldset id="fieldset-horario-flat" style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px; {{ 'display:none;' if dur.get('preenchimento_jornada') == 'programacao_semanal' else '' }}">
             <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Horário e Intervalo</legend>
             <div class="campos-grid">
               <div class="campo-form">
@@ -622,7 +682,7 @@
             </div>
           </fieldset>
 
-          <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px;">
+          <fieldset id="fieldset-horas-dia" style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:12px; {{ 'display:none;' if dur.get('preenchimento_jornada') == 'programacao_semanal' else '' }}">
             <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Horas por Dia da Semana (horas brutas no local)</legend>
             <div class="campos-grid" style="grid-template-columns: repeat(7, 1fr);">
               <div class="campo-form">
@@ -1422,10 +1482,75 @@ function togglePreenchimentoJornada(mode) {
   const blocoJornada = document.getElementById('bloco-apuracao-jornada');
   const campoEscala = document.getElementById('campo-escala-tipo');
   const avisoLivre = document.getElementById('aviso-livre');
+  const gradeFs = document.getElementById('fieldset-grade-semanal');
+  const flatFs = document.getElementById('fieldset-horario-flat');
+  const horasDiaFs = document.getElementById('fieldset-horas-dia');
   // Jornada detail block: show for programacao_semanal and escala, hide for livre
   if (blocoJornada) blocoJornada.style.display = (mode === 'programacao_semanal' || mode === 'escala') ? '' : 'none';
   if (campoEscala) campoEscala.style.display = (mode === 'escala') ? '' : 'none';
   if (avisoLivre) avisoLivre.style.display = (mode === 'livre') ? '' : 'none';
+  // Toggle grade vs flat fields
+  if (gradeFs) gradeFs.style.display = (mode === 'programacao_semanal') ? '' : 'none';
+  if (flatFs) flatFs.style.display = (mode === 'programacao_semanal') ? 'none' : '';
+  if (horasDiaFs) horasDiaFs.style.display = (mode === 'programacao_semanal') ? 'none' : '';
+}
+
+// Salvar campo da grade semanal (entrada/saída de um turno específico)
+function salvarGradeSemanal(dia, turnoIdx, campo, valor) {
+  const path = 'duracao_trabalho.grade_semanal.' + dia + '.turnos[' + turnoIdx + '].' + campo;
+  // Ensure the turnos array structure exists by saving via deep-set
+  salvarCampo(path, valor, null);
+  // Recalculate total hours for this day
+  recalcGradeTotal(dia);
+}
+
+// Recalcular total de horas de um dia na grade
+function recalcGradeTotal(dia) {
+  const inputs = document.querySelectorAll('input[data-dia="' + dia + '"]');
+  let totalMin = 0;
+  // Group by turno index
+  const turnos = {};
+  inputs.forEach(inp => {
+    const ti = inp.dataset.turno;
+    const campo = inp.dataset.campo;
+    if (!turnos[ti]) turnos[ti] = {};
+    turnos[ti][campo] = inp.value;
+  });
+  for (const ti of Object.keys(turnos)) {
+    const ent = turnos[ti].entrada;
+    const sai = turnos[ti].saida;
+    if (ent && sai && ent.includes(':') && sai.includes(':')) {
+      const [he, me] = ent.split(':').map(Number);
+      const [hs, ms] = sai.split(':').map(Number);
+      let diff = (hs * 60 + ms) - (he * 60 + me);
+      if (diff < 0) diff += 24 * 60;
+      totalMin += diff;
+    }
+  }
+  const totalEl = document.getElementById('grade-total-' + dia);
+  if (totalEl) totalEl.textContent = totalMin > 0 ? (totalMin / 60).toFixed(1) : '—';
+}
+
+// Copiar turnos de Segunda para Terça a Sexta
+function copiarSegParaSemana() {
+  const segInputs = document.querySelectorAll('input[data-dia="seg"]');
+  const valores = {};
+  segInputs.forEach(inp => {
+    const key = inp.dataset.turno + '_' + inp.dataset.campo;
+    valores[key] = inp.value;
+  });
+  const diasAlvo = ['ter','qua','qui','sex'];
+  for (const dia of diasAlvo) {
+    const inputs = document.querySelectorAll('input[data-dia="' + dia + '"]');
+    inputs.forEach(inp => {
+      const key = inp.dataset.turno + '_' + inp.dataset.campo;
+      if (valores[key] !== undefined) {
+        inp.value = valores[key];
+        salvarGradeSemanal(dia, parseInt(inp.dataset.turno), inp.dataset.campo, inp.value);
+      }
+    });
+  }
+  mostrarToast('Horários copiados de Seg → Ter-Sex', 'sucesso');
 }
 
 // Recalcular jornada semanal/mensal a partir dos campos diários

@@ -5265,6 +5265,62 @@ class PJECalcPlaywright:
         else:
             pass  # Continue with steps 3+ below
 
+        # ── 2c. Preencher Grade Semanal (Programação Semanal) ──
+        # JSF DataTable IDs: formulario:listagemProgramacao:{rowIdx}:entrada{pairNum}
+        # rowIdx: seg=0, ter=1, qua=2, qui=3, sex=4, sab=5, dom=6, feriado=7
+        # pairNum: 1-6 (até 6 pares entrada/saída por dia)
+        grade = dur.get("grade_semanal")
+        if preenchimento == "programacao_semanal" and grade and isinstance(grade, dict):
+            _ROW_MAP = {"seg": 0, "ter": 1, "qua": 2, "qui": 3, "sex": 4, "sab": 5, "dom": 6, "feriado": 7}
+            self._log("    Preenchendo Grade Semanal (Programação Semanal)...")
+            for dia, row_idx in _ROW_MAP.items():
+                dia_data = grade.get(dia)
+                if not dia_data or not isinstance(dia_data, dict):
+                    continue
+                turnos = dia_data.get("turnos", [])
+                for turno_idx, turno in enumerate(turnos[:6]):  # max 6 pares
+                    pair_num = turno_idx + 1  # 1-indexed
+                    entrada_val = turno.get("entrada", "")
+                    saida_val = turno.get("saida", "")
+                    if not entrada_val and not saida_val:
+                        continue
+                    # Preencher entrada
+                    if entrada_val:
+                        ent_id = f"listagemProgramacao:{row_idx}:entrada{pair_num}"
+                        try:
+                            loc_ent = self._page.locator(f"input[id$='{ent_id}']")
+                            if loc_ent.count() > 0:
+                                loc_ent.first.click()
+                                loc_ent.first.fill("")
+                                loc_ent.first.press_sequentially(entrada_val.replace(":", ""), delay=50)
+                                loc_ent.first.press("Tab")
+                                self._page.wait_for_timeout(200)
+                            else:
+                                self._log(f"      ⚠ {dia.upper()} E{pair_num}: campo '{ent_id}' não encontrado")
+                        except Exception as e:
+                            self._log(f"      ⚠ {dia.upper()} E{pair_num}: erro {e}")
+                    # Preencher saída
+                    if saida_val:
+                        sai_id = f"listagemProgramacao:{row_idx}:saida{pair_num}"
+                        try:
+                            loc_sai = self._page.locator(f"input[id$='{sai_id}']")
+                            if loc_sai.count() > 0:
+                                loc_sai.first.click()
+                                loc_sai.first.fill("")
+                                loc_sai.first.press_sequentially(saida_val.replace(":", ""), delay=50)
+                                loc_sai.first.press("Tab")
+                                self._page.wait_for_timeout(200)
+                            else:
+                                self._log(f"      ⚠ {dia.upper()} S{pair_num}: campo '{sai_id}' não encontrado")
+                        except Exception as e:
+                            self._log(f"      ⚠ {dia.upper()} S{pair_num}: erro {e}")
+                    self._log(f"      {dia.upper()} T{pair_num}: {entrada_val}-{saida_val}")
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+        elif preenchimento == "programacao_semanal" and not grade:
+            # Fallback: sintetizar grade a partir de jornada_entrada/saida/intervalo
+            self._log("    ⚠ grade_semanal ausente — usando campos flat como fallback para grade")
+
         # ── 3. Quantidade fixa (HST) ──
         if forma == "HST" and qt_he_mes and preenchimento != "livre":
             hh_he = int(qt_he_mes)
