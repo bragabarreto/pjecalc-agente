@@ -120,13 +120,23 @@ def _ler_pdf_ocr(caminho: Path, alertas: list[str]) -> dict[str, Any]:
         texto_pg = pytesseract.image_to_string(img, lang=OCR_LANG)
         paginas.append(texto_pg)
 
-    return {
+    # Calcular confiança média geral do OCR
+    _conf_geral = sum(confs) / max(len(confs), 1) if confs else 0
+
+    resultado = {
         "texto": "\n\n".join(paginas),
         "paginas": paginas,
         "formato": "pdf_ocr",
         "encoding_original": "ocr",
         "num_paginas": len(imagens),
     }
+
+    # Propagar flag de baixa confiança para downstream (extração pode reduzir confiança)
+    if _conf_geral < OCR_CONFIDENCE_MIN:
+        resultado["_ocr_baixa_confianca"] = True
+        resultado["_ocr_confianca_media"] = round(_conf_geral, 1)
+
+    return resultado
 
 
 def _ler_docx(caminho: Path, alertas: list[str]) -> dict[str, Any]:

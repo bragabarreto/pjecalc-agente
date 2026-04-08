@@ -7606,15 +7606,15 @@ def preencher_como_generator(
             if msg is None:
                 break
             yield msg
+        yield "[FIM DA EXECUÇÃO]"
     except GeneratorExit:
-        # SSE desconectou — forçar cleanup do browser
+        # SSE desconectou ou runner chamou gen.close() — cleanup do browser
+        logger.info("Generator fechado (GeneratorExit)")
+    finally:
         _stop_keepalive.set()
         if _agente_ref:
             try:
                 _agente_ref[0].fechar()
-                logger.info("Browser fechado por GeneratorExit (SSE disconnect)")
+                logger.info("Browser fechado no cleanup do generator")
             except Exception:
                 pass
-        return
-
-    yield "[FIM DA EXECUÇÃO]"

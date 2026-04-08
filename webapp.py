@@ -1627,6 +1627,13 @@ def _tarefa_processar_sentenca(
                 is_relatorio=is_relatorio,
                 usar_gemini=usar_gemini,
             )
+            # Propagar alerta de OCR com baixa confiança
+            if resultado.get("_ocr_baixa_confianca"):
+                _conf = resultado.get("_ocr_confianca_media", 0)
+                dados.setdefault("alertas", []).append(
+                    f"⚠ OCR com confiança baixa ({_conf}%). "
+                    "O texto extraído pode conter erros — revise todos os campos."
+                )
 
         # Fase 2b: IA bloqueada → salvar calculo com status erro_ia e encerrar
         if dados.get("_erro_ia"):

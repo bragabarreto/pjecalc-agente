@@ -99,7 +99,15 @@ def _limpar_e_parsear_json(texto: str) -> dict:
             parcial += ']' * fecha_colchete
         if abre > 0:
             parcial += '}' * abre
-        return _sanitizar_chaves(json.loads(parcial))
+        resultado = _sanitizar_chaves(json.loads(parcial))
+        # Marcar como auto-reparado para que downstream saiba que os dados podem estar incompletos
+        logger.warning(
+            f"JSON auto-reparado (fechamento de {abre} chaves + {fecha_colchete} colchetes). "
+            "Dados podem estar incompletos."
+        )
+        if isinstance(resultado, dict):
+            resultado["_json_auto_reparado"] = True
+        return resultado
     except json.JSONDecodeError:
         pass
 
@@ -2616,6 +2624,13 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
         if _cnj_partes:
             _proc.update(_cnj_partes)
             dados["processo"] = _proc
+
+    # Alerta se JSON foi auto-reparado (dados potencialmente incompletos)
+    if dados.pop("_json_auto_reparado", False):
+        dados.setdefault("alertas", []).append(
+            "⚠ JSON da IA foi truncado e auto-reparado — campos podem estar incompletos. "
+            "Revise todos os dados com atenção."
+        )
 
     # Filtrar campos_ausentes recebidos do LLM: manter apenas os que realmente estão vazios
     campos_ausentes_llm = dados.get("campos_ausentes", [])
