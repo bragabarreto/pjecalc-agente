@@ -181,12 +181,14 @@ _iniciar_java() {
     echo "[PJE-Calc] Lancador iniciado (PID: $(cat /tmp/pjecalc.pid))"
 }
 
-# H2 cleanup: NÃO restaurar template (contém cálculos obsoletos).
-# O H2 auto-cria o arquivo .h2.db quando a webapp faz a primeira conexão JDBC.
-# Isso garante banco limpo (sem cálculos residuais) a cada reinicialização.
+# Restaurar template H2 se foi removido por limpar_h2_database()
+# O template contém o schema Hibernate obrigatório — sem ele o contexto /pjecalc falha.
+# Os dados de cálculos residuais são limpos pelo Python (limpar_h2_database → _limpar_calculos_h2).
 H2_DB="$PJECALC_DIR/.dados/pjecalc.h2.db"
-if [ ! -f "$H2_DB" ]; then
-    echo "[PJE-Calc] H2 ausente — será criado automaticamente pelo Tomcat (banco limpo)."
+H2_TEMPLATE="$PJECALC_DIR/.dados/pjecalc.h2.db.template"
+if [ ! -f "$H2_DB" ] && [ -f "$H2_TEMPLATE" ]; then
+    echo "[PJE-Calc] Restaurando template H2 (schema obrigatório)..."
+    cp "$H2_TEMPLATE" "$H2_DB"
 fi
 
 echo "[PJE-Calc] Iniciando processo Java (porta 9257)..."
