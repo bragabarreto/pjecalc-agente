@@ -150,8 +150,8 @@ class _AutomacaoRunner:
         _automacao_global_lock.clear()
 
         # Atualizar status no DB
+        _db = SessionLocal()
         try:
-            _db = SessionLocal()
             _calc = RepositorioCalculo(_db).buscar_sessao(sid)
             if _calc and _calc.status == "em_automacao":
                 _has_pjc = any("PJC_GERADO:" in m for m in self.logs)
@@ -160,11 +160,38 @@ class _AutomacaoRunner:
                     "erro_automacao" if _has_error else "concluido"
                 )
                 _db.commit()
-            _db.close()
         except Exception:
             pass
+        finally:
+            _db.close()
+
+    def stop(self):
+        """Para a automação forçadamente (chamado pelo endpoint /api/parar)."""
+        if self.done:
+            return
+        logger.info(f"Runner stop solicitado [{self._sessao_id}]")
+        if self._gen:
+            try:
+                self._gen.close()  # dispara GeneratorExit → fecha browser
+            except Exception:
+                pass
+        # Se gen.close() não setou done, forçar
+        if not self.done:
+            self._append("⏹ Automação interrompida pelo usuário.")
+            self._append("[FIM DA EXECUÇÃO]")
 
 _automacao_runners: dict[str, _AutomacaoRunner] = {}  # sessao_id → runner
+
+def _limpar_runners_antigos():
+    """Remove runners finalizados há mais de 5 minutos."""
+    import time
+    _limite = time.time() - 300
+    _remover = [sid for sid, r in _automacao_runners.items()
+                if r.done and r.started_at < _limite]
+    for sid in _remover:
+        _automacao_runners.pop(sid, None)
+    if _remover:
+        logger.info(f"Runners limpos: {_remover}")
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
@@ -1126,6 +1153,9 @@ async def executar_automacao_sse(
     from fastapi.responses import StreamingResponse as _SR
     import time as _time_mod
 
+    # Limpeza oportunística de runners antigos (finalizados há >5 min)
+    _limpar_runners_antigos()
+
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo:
@@ -1208,21 +1238,23 @@ async def executar_automacao_sse(
         _automacao_global_lock["sessao"] = sessao_id
 
         # Atualizar status no DB: confirmado → em_automacao
+        _db_status = SessionLocal()
         try:
-            _db_status = SessionLocal()
             _calc_status = RepositorioCalculo(_db_status).buscar_sessao(sessao_id)
             if _calc_status:
                 _calc_status.status = "em_automacao"
                 _db_status.commit()
-            _db_status.close()
         except Exception:
             pass
+        finally:
+            _db_status.close()
 
         _persist_enabled = os.environ.get("CALCULATION_PERSISTENCE", "true").lower() == "true"
         _exec_dir = None
+        _runner_started = False  # track se o runner assumiu a responsabilidade dos locks
 
         try:
-            # Fix 6: emitir aviso CNJ se inválido
+            # Emitir aviso CNJ se inválido
             if _cnj_aviso:
                 yield f"data: {json.dumps({'msg': f'⚠ {_cnj_aviso}'})}\n\n"
 
@@ -1280,7 +1312,7 @@ async def executar_automacao_sse(
                     _msg_erro += "Verifique /api/logs/java para diagnóstico."
                 yield f"data: {json.dumps({'msg': _msg_erro})}\n\n"
                 yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
-                return
+                return  # finally block below will release locks
 
             # ── Criar runner desacoplado e iniciar automação em thread ──
             loop = asyncio.get_event_loop()
@@ -1295,6 +1327,7 @@ async def executar_automacao_sse(
             runner.exec_dir = _exec_dir
             _automacao_runners[sessao_id] = runner
             runner.start_thread(gen)
+            _runner_started = True  # runner agora é responsável pelo cleanup dos locks
 
             # Agora apenas seguir o runner (mesmo código de follow)
             async for chunk in _sse_follow_runner(runner, sessao_id):
@@ -1305,13 +1338,30 @@ async def executar_automacao_sse(
             yield f"data: ERRO_EXPORTAVEL::Erro interno da automação: {_exc_sse}\n\n"
             yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
 
-        # NÃO há finally que mata o browser — o runner limpa sozinho quando termina
+        finally:
+            # Se o runner NÃO foi criado, liberar locks aqui (senão o runner limpa sozinho)
+            if not _runner_started:
+                logger.info(f"gerador_sse cleanup (runner não iniciado) [{sessao_id}]")
+                _sessoes_automacao.pop(sessao_id, None)
+                _automacao_global_lock.clear()
 
     return _SR(
         gerador_sse(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@app.post("/api/parar/{sessao_id}")
+async def parar_automacao(sessao_id: str):
+    """Para a automação em execução e limpa o runner."""
+    runner = _automacao_runners.get(sessao_id)
+    if not runner:
+        return JSONResponse({"ok": False, "msg": "Nenhuma automação ativa para esta sessão."})
+    if runner.done:
+        return JSONResponse({"ok": True, "msg": "Automação já finalizada."})
+    runner.stop()
+    return JSONResponse({"ok": True, "msg": "Automação interrompida."})
 
 
 async def _sse_follow_runner(runner: "_AutomacaoRunner", sessao_id: str):

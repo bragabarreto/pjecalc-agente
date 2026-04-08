@@ -583,7 +583,11 @@ function abrirSSE() {
 
 function encerrarAutomacao() {
   if (evtSource) { evtSource.close(); evtSource = null; }
-  logMsg('Automação encerrada pelo usuário.', 'wait');
+  // Parar a automação no servidor (runner desacoplado)
+  fetch(`/api/parar/${SESSAO_ID}`, { method: 'POST' })
+    .then(r => r.json())
+    .then(d => logMsg(d.msg || 'Automação interrompida.', 'wait'))
+    .catch(() => logMsg('Automação encerrada localmente.', 'wait'));
   finalizarAutomacao();
 }
 

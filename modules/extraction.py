@@ -2678,7 +2678,6 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     campos_ausentes = [c for c in campos_ausentes if c not in _CAMPOS_OPCIONAIS]
 
     dados["campos_ausentes"] = list(set(campos_ausentes))
-    dados["alertas"] = alertas
 
     # ── Detecção de inconsistências críticas ──────────────────────────────────
     inconsistencias: list[str] = []
@@ -2754,5 +2753,8 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
         )
 
     dados["inconsistencias_criticas"] = inconsistencias
+    # Propagar inconsistências como alertas visíveis na prévia
+    alertas.extend(f"⚠ INCONSISTÊNCIA: {ic}" for ic in inconsistencias)
+    dados["alertas"] = alertas
 
     return dados

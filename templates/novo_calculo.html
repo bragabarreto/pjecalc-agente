@@ -411,7 +411,10 @@ document.getElementById('form-upload').addEventListener('submit', async function
   } catch(err) {
     const box = document.getElementById('status-box');
     box.className = 'erro-box';
-    box.innerHTML = '<strong>Erro:</strong> ' + err.message;
+    box.innerHTML = '<strong>Erro:</strong> ' + err.message +
+      '<br><button onclick="document.getElementById(\'form-upload\').style.display=\'block\';' +
+      'document.getElementById(\'status-area\').style.display=\'none\';" ' +
+      'class="btn btn-sm" style="margin-top:8px;">Tentar novamente</button>';
   }
 });
 

@@ -1601,7 +1601,8 @@ async function salvarCampo(campo, valor, el) {
       // Operações add/remove precisam reload para renderizar novos cards
       if (campo.includes('.add') || campo.includes('.remove')) {
         mostrarToast('Salvo — atualizando…', 'ok');
-        setTimeout(() => location.reload(), 300);
+        // Aguardar mais para permitir que onchange de outros campos dispare antes do reload
+        setTimeout(() => location.reload(), 1200);
         return;
       }
       if (el) {

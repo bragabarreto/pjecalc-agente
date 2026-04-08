@@ -1582,8 +1582,7 @@ class PJECalcPlaywright:
                 if loc.count() > 0:
                     self._log(f"  → Salvar: clicando via '{sel}'")
                     loc.first.click(force=True)
-                    _clicar_e_aguardar(sel)
-                    return True
+                    return _clicar_e_aguardar(sel)
             except Exception:
                 continue
         # JS fallback: busca por id/value/textContent — inclui input[type='button']
@@ -1606,8 +1605,7 @@ class PJECalcPlaywright:
                 return null;
             }""")
             if clicou:
-                _clicar_e_aguardar(f"JS:{clicou}")
-                return True
+                return _clicar_e_aguardar(f"JS:{clicou}")
         except Exception:
             pass
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
@@ -2540,7 +2538,13 @@ class PJECalcPlaywright:
                 _body_check = self._page.evaluate(
                     "() => (document.body ? document.body.textContent : '').substring(0, 500)"
                 )
-                if "500" in _body_check or "NullPointer" in _body_check or "JdbcBatch" in _body_check:
+                _is_error = ("NullPointer" in _body_check
+                             or "JdbcBatch" in _body_check
+                             or "HTTP 500" in _body_check
+                             or "HTTP Status 500" in _body_check
+                             or "javax.faces" in _body_check.lower()
+                             or "java.lang.Exception" in _body_check)
+                if _is_error:
                     self._log("  ⚠ Histórico Salarial: erro H2/JSF detectado na página — tentando recuperar…")
                     # Tentar voltar para Parâmetros do Cálculo e re-salvar
                     if self._calculo_url_base and self._calculo_conversation_id:
