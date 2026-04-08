@@ -289,7 +289,12 @@ def limpar_h2_database(pjecalc_dir: str | Path, log_cb=None) -> bool:
     Remove arquivos H2 (.h2.db, .lock.db, .mv.db, .trace.db) do diretório .dados/.
     NÃO remove JSONs, PJCs ou outros arquivos do usuário.
     Deve ser chamada ANTES de iniciar o Tomcat (ou após pará-lo).
-    Restaura template .h2.db.template se disponível.
+
+    IMPORTANTE: NÃO restaura o template antigo (.h2.db.template) pois ele contém
+    cálculos obsoletos de execuções anteriores que contaminam a sessão.
+    O PJE-Calc recria automaticamente o banco H2 ao detectar sua ausência
+    (o Lancador exibe um dialog "Banco não encontrado" que o xdotool auto-dismiss).
+    Isso garante um banco limpo sem cálculos residuais a cada execução.
     """
     _log = log_cb or (lambda m: None)
     dados_dir = Path(pjecalc_dir) / ".dados"
@@ -303,7 +308,7 @@ def limpar_h2_database(pjecalc_dir: str | Path, log_cb=None) -> bool:
     for pattern in h2_patterns:
         for f in dados_dir.glob(pattern):
             if f.name.endswith(".template"):
-                continue  # nunca remover o template
+                continue  # preservar template como backup (mas não restaurar)
             try:
                 f.unlink()
                 removed.append(f.name)
@@ -315,13 +320,12 @@ def limpar_h2_database(pjecalc_dir: str | Path, log_cb=None) -> bool:
     else:
         _log("H2 cleanup: nenhum arquivo H2 encontrado")
 
-    # Restaurar template se H2 foi removido e template existe
-    template = dados_dir / "pjecalc.h2.db.template"
+    # NÃO restaurar template — PJE-Calc recria o banco automaticamente.
+    # O banco novo será criado vazio (sem cálculos residuais) pelo Lancador,
+    # que detecta a ausência do H2 e exibe um dialog auto-dismissed pelo xdotool.
     h2_db = dados_dir / "pjecalc.h2.db"
-    if not h2_db.exists() and template.exists():
-        import shutil
-        shutil.copy2(str(template), str(h2_db))
-        _log("H2 cleanup: template restaurado → pjecalc.h2.db")
+    if not h2_db.exists():
+        _log("H2 cleanup: banco removido — PJE-Calc criará banco limpo na próxima inicialização")
 
     return bool(removed)
 
@@ -3634,17 +3638,21 @@ class PJECalcPlaywright:
             except Exception:
                 pass
 
-            # Mapa nome_pjecalc → reflexas_tipicas
+            # Mapa nome_pjecalc → reflexas_tipicas (ou lista vazia = marcar TODOS)
+            # Estratégia: para verbas Expresso com reflexas_tipicas, marcar só as listadas.
+            # Para verbas Expresso SEM reflexas_tipicas, marcar TODOS os checkboxes
+            # (PJE-Calc já pré-configura as reflexas corretas para cada verba Expresso).
             _reflexos_map: dict[str, list[str]] = {}
             for v in verbas:
                 _nome_v = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
                 _reflexas = v.get("reflexas_tipicas", [])
                 # Não configurar reflexas de verbas que são elas mesmas reflexas
-                if _nome_v and _reflexas and not v.get("eh_reflexa") and "reflexo" not in _nome_v.lower():
+                if _nome_v and not v.get("eh_reflexa") and "reflexo" not in _nome_v.lower():
+                    # Se tem reflexas específicas, usar; senão lista vazia = marcar todos
                     _reflexos_map[_nome_v] = _reflexas
 
             if not _reflexos_map:
-                self._log("  → Nenhuma verba com reflexos para configurar")
+                self._log("  → Nenhuma verba principal para configurar reflexos")
                 return
 
             # Verificar se há botões de reflexo na página
@@ -3686,7 +3694,8 @@ class PJECalcPlaywright:
                     continue
                 _texto_row = row.get("texto", "").lower()
 
-                _reflexas_needed: list[str] = []
+                _reflexas_needed: list[str] | None = None  # None = não encontrou verba
+                _marcar_todos: bool = False
                 _nome_principal: str = ""
                 for nome_v, reflexas in _reflexos_map.items():
                     # Testar as 3 primeiras palavras do nome para match
@@ -3694,14 +3703,18 @@ class PJECalcPlaywright:
                     for _n_words in (3, 2, 1):
                         _kw = " ".join(_palavras[:_n_words])
                         if _kw and _kw in _texto_row:
-                            _reflexas_needed = reflexas
                             _nome_principal = nome_v
-                            self._log(f"  → Reflexos de '{nome_v}': {reflexas}")
+                            if reflexas:
+                                _reflexas_needed = reflexas
+                                self._log(f"  → Reflexos específicos de '{nome_v}': {reflexas}")
+                            else:
+                                _marcar_todos = True
+                                self._log(f"  → Reflexos de '{nome_v}': marcar TODOS (Expresso pré-configurado)")
                             break
-                    if _reflexas_needed:
+                    if _reflexas_needed is not None or _marcar_todos:
                         break
 
-                if not _reflexas_needed:
+                if _reflexas_needed is None and not _marcar_todos:
                     continue
 
                 row_idx = row["index"]
@@ -3734,46 +3747,76 @@ class PJECalcPlaywright:
                     continue
 
                 _algum_reflexo_marcado = False
-                for reflexo_nome in _reflexas_needed:
+
+                if _marcar_todos:
+                    # Marcar TODOS os checkboxes de reflexo visíveis após clicar "Exibir"
+                    # PJE-Calc já pré-configura as reflexas corretas para cada verba Expresso
                     try:
-                        _marcou = self._page.evaluate(
-                            """(rNome) => {
-                                function norm(s) {
-                                    return s.toLowerCase()
-                                        .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                        _count = self._page.evaluate("""() => {
+                            const cbs = [...document.querySelectorAll(
+                                'input[type="checkbox"][id*="listaReflexo"],' +
+                                'input[type="checkbox"][id*="reflexo"],' +
+                                'input[type="checkbox"][id*="Reflexo"],' +
+                                'input[type="checkbox"][id*="ativo"]'
+                            )];
+                            let marked = 0;
+                            for (const cb of cbs) {
+                                if (!cb.checked && !cb.disabled) {
+                                    cb.click();
+                                    marked++;
                                 }
-                                const rLower = norm(rNome);
-                                // NÃO filtrar por getBoundingClientRect — checkboxes podem
-                                // estar abaixo do fold mas são clicáveis via JS
-                                const cbs = [...document.querySelectorAll(
-                                    'input[type="checkbox"][id*="listaReflexo"],' +
-                                    'input[type="checkbox"][id*="reflexo"],' +
-                                    'input[type="checkbox"][id*="Reflexo"]'
-                                )];
-                                // Tokenizar para matching flexível
-                                const rTokens = rLower.split(/\\s+/).filter(t => t.length >= 3);
-                                for (const cb of cbs) {
-                                    const ctx = cb.closest('td,tr,li,div') || cb.parentElement;
-                                    const txt = norm((ctx && ctx.textContent) || '');
-                                    // Match por substring ou por todos os tokens presentes
-                                    const tokenMatch = rTokens.length >= 2
-                                        && rTokens.every(t => txt.includes(t));
-                                    if (txt.includes(rLower) || tokenMatch) {
-                                        if (!cb.checked) cb.click();
-                                        return (ctx && ctx.textContent.trim().substring(0, 60)) || 'ok';
-                                    }
-                                }
-                                return null;
-                            }""",
-                            reflexo_nome,
-                        )
-                        if _marcou:
-                            self._log(f"  ✓ Reflexo: {reflexo_nome} → '{_marcou}'")
+                            }
+                            return marked;
+                        }""")
+                        if _count:
+                            self._log(f"  ✓ Marcados {_count} reflexo(s) de '{_nome_principal}'")
                             _algum_reflexo_marcado = True
                         else:
-                            self._log(f"  ⚠ Reflexo não encontrado: {reflexo_nome}")
+                            self._log(f"  → Nenhum reflexo desmarcado para '{_nome_principal}'")
                     except Exception as _e:
-                        self._log(f"  ⚠ Reflexo {reflexo_nome}: {_e}")
+                        self._log(f"  ⚠ Marcar todos reflexos de '{_nome_principal}': {_e}")
+                else:
+                    # Marcar reflexos específicos por nome
+                    for reflexo_nome in (_reflexas_needed or []):
+                        try:
+                            _marcou = self._page.evaluate(
+                                """(rNome) => {
+                                    function norm(s) {
+                                        return s.toLowerCase()
+                                            .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                                    }
+                                    const rLower = norm(rNome);
+                                    // NÃO filtrar por getBoundingClientRect — checkboxes podem
+                                    // estar abaixo do fold mas são clicáveis via JS
+                                    const cbs = [...document.querySelectorAll(
+                                        'input[type="checkbox"][id*="listaReflexo"],' +
+                                        'input[type="checkbox"][id*="reflexo"],' +
+                                        'input[type="checkbox"][id*="Reflexo"]'
+                                    )];
+                                    // Tokenizar para matching flexível
+                                    const rTokens = rLower.split(/\\s+/).filter(t => t.length >= 3);
+                                    for (const cb of cbs) {
+                                        const ctx = cb.closest('td,tr,li,div') || cb.parentElement;
+                                        const txt = norm((ctx && ctx.textContent) || '');
+                                        // Match por substring ou por todos os tokens presentes
+                                        const tokenMatch = rTokens.length >= 2
+                                            && rTokens.every(t => txt.includes(t));
+                                        if (txt.includes(rLower) || tokenMatch) {
+                                            if (!cb.checked) cb.click();
+                                            return (ctx && ctx.textContent.trim().substring(0, 60)) || 'ok';
+                                        }
+                                    }
+                                    return null;
+                                }""",
+                                reflexo_nome,
+                            )
+                            if _marcou:
+                                self._log(f"  ✓ Reflexo: {reflexo_nome} → '{_marcou}'")
+                                _algum_reflexo_marcado = True
+                            else:
+                                self._log(f"  ⚠ Reflexo não encontrado: {reflexo_nome}")
+                        except Exception as _e:
+                            self._log(f"  ⚠ Reflexo {reflexo_nome}: {_e}")
 
                 if _algum_reflexo_marcado and _nome_principal:
                     self._reflexos_configurados.add(_nome_principal)
