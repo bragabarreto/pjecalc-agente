@@ -583,4 +583,5 @@ def get_db():
 
 
 # ── Inicialização ─────────────────────────────────────────────────────────────
-criar_tabelas()
+# criar_tabelas() é chamado via app startup event no webapp.py
+# (não mais em import time — evita crash se DB não disponível durante import)

@@ -397,4 +397,4 @@ if not _INFRASTRUCTURE_LOADED:
     def criar_tabelas(bind=None):
         Base.metadata.create_all(bind=bind or engine)
 
-    criar_tabelas()
+    # criar_tabelas() chamado via app startup event no webapp.py

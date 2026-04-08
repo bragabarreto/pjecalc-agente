@@ -220,6 +220,19 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+# ── Startup: criar tabelas DB ─────────────────────────────────────────────────
+
+@app.on_event("startup")
+def _startup_criar_tabelas():
+    """Cria tabelas no banco na inicialização do app (não mais em import time)."""
+    try:
+        from database import criar_tabelas
+        criar_tabelas()
+        logger.info("Tabelas do banco criadas/verificadas com sucesso")
+    except Exception as e:
+        logger.error(f"Falha ao criar tabelas: {e} — app continuará, mas DB pode falhar")
+
+
 # ── Rotas principais ──────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
@@ -1188,8 +1201,19 @@ async def executar_automacao_sse(
         elif _global_age >= _LOCK_TIMEOUT_S:
             _automacao_global_lock.clear()
 
+    # Adquirir locks ANTES de criar o StreamingResponse (evita race condition
+    # onde duas requests passam o check acima antes de qualquer uma adquirir)
+    _sessoes_automacao[sessao_id] = _time_mod.time()
+    _automacao_global_lock["ts"] = _time_mod.time()
+    _automacao_global_lock["sessao"] = sessao_id
+
+    def _liberar_locks():
+        _sessoes_automacao.pop(sessao_id, None)
+        _automacao_global_lock.clear()
+
     # Verificar que o usuário confirmou a prévia (HITL obrigatório)
     if not calculo.confirmado_em:
+        _liberar_locks()
         async def _nao_confirmado_sse():
             yield "data: ERRO_EXPORTAVEL::Prévia não confirmada — revise os dados e clique Confirmar antes de executar.\n\n"
             yield "data: [FIM DA EXECUÇÃO]\n\n"
@@ -1203,6 +1227,7 @@ async def executar_automacao_sse(
     from modules.extraction import ValidadorSentenca
     _resultado_val = ValidadorSentenca(dados).validar()
     if not _resultado_val.valido:
+        _liberar_locks()
         _erros_str = "; ".join(_resultado_val.erros[:3])
         async def _val_sse():
             yield f"data: ERRO_EXPORTAVEL::Dados inválidos — {_erros_str}\n\n"
@@ -1232,10 +1257,7 @@ async def executar_automacao_sse(
         from modules.playwright_pjecalc import preencher_como_generator
         from database import SessionLocal
 
-        # Registrar locks
-        _sessoes_automacao[sessao_id] = _time_mod.time()
-        _automacao_global_lock["ts"] = _time_mod.time()
-        _automacao_global_lock["sessao"] = sessao_id
+        # Locks já adquiridos no handler (antes do StreamingResponse)
 
         # Atualizar status no DB: confirmado → em_automacao
         _db_status = SessionLocal()

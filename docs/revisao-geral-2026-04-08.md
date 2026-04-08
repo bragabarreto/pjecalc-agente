@@ -62,17 +62,13 @@ Revisão sistemática do codebase pjecalc-agente para identificar e corrigir fal
 - **Arquivo**: `modules/classification.py` — `mapear_para_pjecalc()`
 - **Correção**: verbas com `_apenas_fgts=True` (ex: Multa Art. 467) são filtradas ANTES de entrar na lista de predefinidas. Log informativo emitido.
 
-### P7 — Race condition lock check vs. runner creation (BAIXO)
+### P7 — Race condition lock check vs. runner creation (BAIXO) ✅ CORRIGIDO
 - **Arquivo**: `webapp.py`
-- **Problema**: lock check no handler (síncrono) vs. lock acquisition no generator (lazy). Janela teórica para duplicação se duas requests chegam simultaneamente.
-- **Impacto**: baixo com `--workers 1` (single-threaded). Relevante apenas se escalar.
-- **Correção proposta**: mover lock acquisition para antes do `return StreamingResponse()`.
+- **Correção**: locks adquiridos ANTES do `StreamingResponse()` (no handler síncrono). Early returns (prévia não confirmada, dados inválidos) liberam locks via `_liberar_locks()`. Lock duplicada dentro do generator removida.
 
-### P8 — `criar_tabelas()` em import time (BAIXO)
-- **Arquivo**: `infrastructure/database.py:583`
-- **Problema**: tabelas criadas no import do módulo. Se DB não disponível, crash no startup. Race condition com múltiplos workers.
-- **Impacto**: baixo com `--workers 1`.
-- **Correção proposta**: mover para lifecycle event do FastAPI.
+### P8 — `criar_tabelas()` em import time (BAIXO) ✅ CORRIGIDO
+- **Arquivos**: `infrastructure/database.py`, `database.py`, `webapp.py`
+- **Correção**: `criar_tabelas()` removido de import time em ambos os módulos DB. Adicionado `@app.on_event("startup")` no webapp.py que chama `criar_tabelas()` com try/except (app não crasha se DB temporariamente indisponível).
 
 ---
 
