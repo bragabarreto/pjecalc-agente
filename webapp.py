@@ -68,6 +68,103 @@ _sessoes_automacao: dict[str, float] = {}  # sessao_id → timestamp de início
 _LOCK_TIMEOUT_S = 900  # 15 minutos — automação não deve levar mais que isso
 # Lock GLOBAL — apenas uma automação por vez (compartilha Firefox headless)
 _automacao_global_lock: dict[str, float | str] = {}  # "ts" → timestamp, "sessao" → sessao_id
+
+# ── Runners de automação desacoplados do SSE ──────────────────────────────────
+# Cada runner vive independente da conexão SSE. Reconexões fazem "follow" do runner existente.
+import threading as _threading_mod
+
+class _AutomacaoRunner:
+    """Estado compartilhado de uma automação em execução, desacoplado do SSE.
+    Usa padrão position-based: logs acumulados em lista, leitores rastreiam sua posição.
+    Múltiplos SSE readers podem coexistir sem consumir items uns dos outros."""
+    __slots__ = ("logs", "done", "error_msg", "exec_dir", "started_at",
+                 "_gen", "_thread", "_sessao_id", "_persist_enabled", "_cond")
+    def __init__(self, sessao_id: str):
+        self.logs: list[str] = []  # append-only — thread-safe para leitura com posição
+        self._cond = _threading_mod.Condition()  # notifica readers quando há novos logs
+        self.done = False
+        self.error_msg: str | None = None
+        self.exec_dir = None
+        self.started_at = 0.0
+        self._gen = None
+        self._thread = None
+        self._sessao_id = sessao_id
+        self._persist_enabled = os.environ.get("CALCULATION_PERSISTENCE", "true").lower() == "true"
+
+    def _append(self, msg: str):
+        """Append thread-safe com notificação a todos os readers."""
+        self.logs.append(msg)
+        with self._cond:
+            self._cond.notify_all()
+
+    def wait_for_new(self, timeout: float = 15.0) -> bool:
+        """Bloqueia até haver novos logs ou timeout. Retorna True se notificado."""
+        with self._cond:
+            return self._cond.wait(timeout=timeout)
+
+    def start_thread(self, gen):
+        """Inicia thread de automação que roda independente do SSE."""
+        self._gen = gen
+        self.started_at = __import__("time").time()
+
+        def _run():
+            try:
+                while True:
+                    try:
+                        msg = next(self._gen)
+                        self._append(msg)
+                        if msg == "[FIM DA EXECUÇÃO]":
+                            break
+                    except StopIteration:
+                        self._append("[FIM DA EXECUÇÃO]")
+                        break
+            except Exception as exc:
+                self.error_msg = str(exc)
+                self._append(f"ERRO: {exc}")
+                self._append("[FIM DA EXECUÇÃO]")
+            finally:
+                self.done = True
+                with self._cond:
+                    self._cond.notify_all()
+                self._cleanup()
+
+        self._thread = _threading_mod.Thread(target=_run, daemon=True)
+        self._thread.start()
+
+    def _cleanup(self):
+        """Cleanup pós-automação: libera locks, salva logs, atualiza DB."""
+        import time as _t
+        sid = self._sessao_id
+        logger.info(f"Runner cleanup [{sid}]")
+
+        # Salvar log acumulado
+        if self.exec_dir and self._persist_enabled and self.logs:
+            try:
+                from infrastructure.calculation_store import CalculationStore
+                CalculationStore().salvar_log(self.exec_dir, self.logs)
+            except Exception:
+                pass
+
+        # Liberar locks
+        _sessoes_automacao.pop(sid, None)
+        _automacao_global_lock.clear()
+
+        # Atualizar status no DB
+        try:
+            _db = SessionLocal()
+            _calc = RepositorioCalculo(_db).buscar_sessao(sid)
+            if _calc and _calc.status == "em_automacao":
+                _has_pjc = any("PJC_GERADO:" in m for m in self.logs)
+                _has_error = any("ERRO" in m.upper() for m in self.logs[-5:])
+                _calc.status = "pjc_exportado" if _has_pjc else (
+                    "erro_automacao" if _has_error else "concluido"
+                )
+                _db.commit()
+            _db.close()
+        except Exception:
+            pass
+
+_automacao_runners: dict[str, _AutomacaoRunner] = {}  # sessao_id → runner
 from database import (
     Calculo, Processo, RepositorioCalculo, SessionLocal, get_db,
 )
@@ -1024,31 +1121,29 @@ async def executar_automacao_sse(
 ):
     """
     SSE endpoint — transmite logs da automação Playwright em tempo real.
-    Padrão CalcMachine: generator Python → StreamingResponse text/event-stream.
+    Automação roda em thread desacoplada do SSE. Reconexões fazem "follow" do runner existente.
     """
-    from fastapi.responses import StreamingResponse
-
     from fastapi.responses import StreamingResponse as _SR
+    import time as _time_mod
 
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    # Fix 5: Check 6 — impedir execuções paralelas para o mesmo sessao_id
-    # Auto-expiração: se o lock tem mais de _LOCK_TIMEOUT_S segundos, libera automaticamente
-    import time as _time_mod
-    if sessao_id in _sessoes_automacao:
-        _lock_age = _time_mod.time() - _sessoes_automacao[sessao_id]
-        if _lock_age < _LOCK_TIMEOUT_S:
-            async def _lock_sse():
-                yield "data: ERRO_EXPORTAVEL::Automação já em andamento para esta sessão. Aguarde o término.\n\n"
-                yield "data: [FIM DA EXECUÇÃO]\n\n"
-            return _SR(_lock_sse(), media_type="text/event-stream",
-                       headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-        else:
-            # Lock expirado — liberar e continuar
-            _sessoes_automacao.pop(sessao_id, None)
+    # ── Follow mode: se já existe um runner ativo, reconectar sem reiniciar ──
+    existing_runner = _automacao_runners.get(sessao_id)
+    if existing_runner and not existing_runner.done:
+        logger.info(f"SSE follow mode [{sessao_id}] — reconectando ao runner existente")
+        return _SR(
+            _sse_follow_runner(existing_runner, sessao_id),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+    # ── Runner finalizado recentemente? Limpar para permitir nova execução ──
+    if existing_runner and existing_runner.done:
+        _automacao_runners.pop(sessao_id, None)
 
     # Lock GLOBAL — apenas uma automação por vez (Firefox headless é single-instance)
     if _automacao_global_lock.get("ts"):
@@ -1087,8 +1182,6 @@ async def executar_automacao_sse(
 
     # Fix 6: validação CNJ módulo 97 (aviso não bloqueante)
     def _validar_cnj(numero: str, digito: str, ano: str, regiao: str, vara: str) -> bool:
-        # Fórmula CNJ Res. 65/2008: NNNNNNN + "00" + AAAA + J(5) + TT + OOOO
-        # O "00" substitui o DD e fica logo após os 7 dígitos de sequência
         try:
             num = numero + "00" + ano + "5" + regiao + vara
             resto = int(num) % 97
@@ -1109,7 +1202,7 @@ async def executar_automacao_sse(
         from modules.playwright_pjecalc import preencher_como_generator
         from database import SessionLocal
 
-        # Fix 5: registrar lock de automação — liberado no finally
+        # Registrar locks
         _sessoes_automacao[sessao_id] = _time_mod.time()
         _automacao_global_lock["ts"] = _time_mod.time()
         _automacao_global_lock["sessao"] = sessao_id
@@ -1125,12 +1218,10 @@ async def executar_automacao_sse(
         except Exception:
             pass
 
-        _exec_dir = None
-        _log_acumulado: list[str] = []
         _persist_enabled = os.environ.get("CALCULATION_PERSISTENCE", "true").lower() == "true"
+        _exec_dir = None
 
         try:
-
             # Fix 6: emitir aviso CNJ se inválido
             if _cnj_aviso:
                 yield f"data: {json.dumps({'msg': f'⚠ {_cnj_aviso}'})}\n\n"
@@ -1145,7 +1236,6 @@ async def executar_automacao_sse(
                     _store.salvar_extracao_llm(_exec_dir, dados)
                     _store.salvar_parametros_enviados(_exec_dir, verbas_mapeadas)
                     _store.salvar_metadados(_exec_dir, {**dados, "_status": "automacao_iniciada"})
-                    # Salvar referência no banco
                     db3 = SessionLocal()
                     try:
                         _calc = RepositorioCalculo(db3).buscar_sessao(sessao_id)
@@ -1158,7 +1248,7 @@ async def executar_automacao_sse(
                     logger.warning(f"calculation_store_init_failed: {_e}")
                     _exec_dir = None
 
-            # Aguardar PJE-Calc ficar disponível.
+            # Aguardar PJE-Calc ficar disponível
             _tomcat_timeout = PJECALC_TOMCAT_TIMEOUT
             _pjecalc_url = PJECALC_LOCAL_URL
             elapsed = 0
@@ -1192,9 +1282,7 @@ async def executar_automacao_sse(
                 yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
                 return
 
-            import queue as _queue
-            import threading as _threading
-
+            # ── Criar runner desacoplado e iniciar automação em thread ──
             loop = asyncio.get_event_loop()
             parametrizacao_sse = dados.get("_parametrizacao") or {}
             gen = preencher_como_generator(
@@ -1203,132 +1291,81 @@ async def executar_automacao_sse(
                 exec_dir=_exec_dir,
             )
 
-            fila: _queue.Queue = _queue.Queue()
-            _gen_finished = _threading.Event()
+            runner = _AutomacaoRunner(sessao_id)
+            runner.exec_dir = _exec_dir
+            _automacao_runners[sessao_id] = runner
+            runner.start_thread(gen)
 
-            def _executar_gen():
-                """Roda em thread executor — coloca mensagens na fila."""
-                try:
-                    while True:
-                        try:
-                            msg = next(gen)
-                            fila.put(("ok", msg))
-                            if msg == "[FIM DA EXECUÇÃO]":
-                                break
-                        except StopIteration:
-                            fila.put(("fim", None))
-                            break
-                except Exception as exc:
-                    fila.put(("erro", str(exc)))
-                finally:
-                    _gen_finished.set()
-
-            _gen_thread = _threading.Thread(target=_executar_gen, daemon=True)
-            _gen_thread.start()
-
-            while True:
-                try:
-                    kind, value = await loop.run_in_executor(
-                        None, lambda: fila.get(timeout=15)
-                    )
-                except _queue.Empty:
-                    # SSE comment keepalive — mantém conexão HTTP viva sem disparar onmessage
-                    yield ": keepalive\n\n"
-                    continue
-
-                if kind == "ok":
-                    msg = value
-                    _log_acumulado.append(msg)
-                    yield f"data: {json.dumps({'msg': msg})}\n\n"
-
-                    # Parse PROGRESS messages para barra de progresso
-                    if msg.startswith("PROGRESS:"):
-                        try:
-                            parts = msg.split(":")[1].split("/")
-                            yield f"data: {json.dumps({'type': 'progress', 'current': int(parts[0]), 'total': int(parts[1])})}\n\n"
-                        except (IndexError, ValueError):
-                            pass
-
-                    # Detectar .PJC gerado e persistir
-                    if msg.startswith("PJC_GERADO:"):
-                        caminho = msg.split(":", 1)[1].strip()
-                        db2 = SessionLocal()
-                        try:
-                            RepositorioCalculo(db2).marcar_exportado(sessao_id, caminho)
-                            db2.commit()
-                        finally:
-                            db2.close()
-                        # Copiar PJC para diretório de persistência
-                        if _exec_dir and _persist_enabled:
-                            try:
-                                from infrastructure.calculation_store import CalculationStore
-                                CalculationStore().copiar_pjc(_exec_dir, caminho)
-                                CalculationStore().atualizar_status(_exec_dir, "pjc_exportado")
-                            except Exception:
-                                pass
-                        # Fix 7: protocolo SSE CalcMACHINE
-                        yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
-                    if msg == "[FIM DA EXECUÇÃO]":
-                        break
-                elif kind == "fim":
-                    yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
-                    break
-                elif kind == "erro":
-                    # Fix 7: usar ERRO_EXPORTAVEL para erros com contexto
-                    yield f"data: ERRO_EXPORTAVEL::Automação: {value}\n\n"
-                    _log_acumulado.append(f"ERRO: {value}")
-                    yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
-                    break
+            # Agora apenas seguir o runner (mesmo código de follow)
+            async for chunk in _sse_follow_runner(runner, sessao_id):
+                yield chunk
 
         except Exception as _exc_sse:
             logger.exception(f"SSE gerador_sse exception [{sessao_id}]: {_exc_sse}")
             yield f"data: ERRO_EXPORTAVEL::Erro interno da automação: {_exc_sse}\n\n"
             yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
 
-        finally:
-            # Fix 8: forçar cleanup do browser/generator ao desconectar SSE.
-            # Sem isso, cada SSE que desconecta deixa um Firefox órfão (~500MB).
-            try:
-                gen.close()  # dispara GeneratorExit → fecha browser via _agente_ref
-            except Exception:
-                pass
-            # Aguardar thread terminar (max 30s) para garantir cleanup do browser
-            if not _gen_finished.is_set():
-                logger.info(f"SSE desconectou [{sessao_id}] — aguardando cleanup do browser…")
-                _gen_finished.wait(timeout=30)
+        # NÃO há finally que mata o browser — o runner limpa sozinho quando termina
 
-            # Salvar log acumulado no diretório de persistência
-            if _exec_dir and _persist_enabled and _log_acumulado:
-                try:
-                    from infrastructure.calculation_store import CalculationStore
-                    CalculationStore().salvar_log(_exec_dir, _log_acumulado)
-                except Exception:
-                    pass
-
-            # Fix 5: liberar lock de automação — SEMPRE, mesmo em exceção
-            _sessoes_automacao.pop(sessao_id, None)
-            _automacao_global_lock.clear()
-
-            # Atualizar status no DB: em_automacao → concluido ou erro_automacao
-            try:
-                _db_final = SessionLocal()
-                _calc_final = RepositorioCalculo(_db_final).buscar_sessao(sessao_id)
-                if _calc_final and _calc_final.status == "em_automacao":
-                    _has_pjc = any("PJC_GERADO:" in m for m in _log_acumulado)
-                    _has_error = any("ERRO" in m.upper() for m in _log_acumulado[-5:])
-                    _calc_final.status = "pjc_exportado" if _has_pjc else (
-                        "erro_automacao" if _has_error else "concluido"
-                    )
-                    _db_final.commit()
-                _db_final.close()
-            except Exception:
-                pass
-
-    return StreamingResponse(
+    return _SR(
         gerador_sse(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+async def _sse_follow_runner(runner: "_AutomacaoRunner", sessao_id: str):
+    """
+    Segue um runner existente: replay dos logs acumulados + stream novos.
+    Se o SSE desconectar, o runner continua rodando em background.
+    Usa padrão position-based: cada reader tem seu próprio cursor.
+    """
+    loop = asyncio.get_event_loop()
+    pos = 0  # posição atual do cursor no runner.logs
+
+    while True:
+        # Ler todos os logs disponíveis a partir da posição atual
+        current_logs = runner.logs[pos:]  # slice de lista é thread-safe em CPython
+        if current_logs:
+            for msg in current_logs:
+                yield f"data: {json.dumps({'msg': msg})}\n\n"
+                if msg.startswith("PROGRESS:"):
+                    try:
+                        parts = msg.split(":")[1].split("/")
+                        yield f"data: {json.dumps({'type': 'progress', 'current': int(parts[0]), 'total': int(parts[1])})}\n\n"
+                    except (IndexError, ValueError):
+                        pass
+                if msg.startswith("PJC_GERADO:"):
+                    caminho = msg.split(":", 1)[1].strip()
+                    db2 = SessionLocal()
+                    try:
+                        RepositorioCalculo(db2).marcar_exportado(sessao_id, caminho)
+                        db2.commit()
+                    finally:
+                        db2.close()
+                    if runner.exec_dir and runner._persist_enabled:
+                        try:
+                            from infrastructure.calculation_store import CalculationStore
+                            CalculationStore().copiar_pjc(runner.exec_dir, caminho)
+                            CalculationStore().atualizar_status(runner.exec_dir, "pjc_exportado")
+                        except Exception:
+                            pass
+                    yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
+                if msg == "[FIM DA EXECUÇÃO]":
+                    return
+            pos += len(current_logs)
+
+        # Se runner terminou e já consumimos tudo
+        if runner.done and pos >= len(runner.logs):
+            yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+            return
+
+        # Aguardar novos logs ou timeout (keepalive)
+        got_new = await loop.run_in_executor(
+            None, lambda: runner.wait_for_new(timeout=15)
+        )
+        if not got_new and not runner.done:
+            yield ": keepalive\n\n"
 
 
 def _get_campo_valor(dados: dict, campo: str) -> Any:

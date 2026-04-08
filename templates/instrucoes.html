@@ -569,8 +569,11 @@ function abrirSSE() {
     if (automacaoConcluida) return;
     if (reconexoes < MAX_RECONEXOES) {
       reconexoes++;
-      logMsg(`⚠ Conexão interrompida — reconectando (${reconexoes}/${MAX_RECONEXOES})…`, 'wait');
-      setTimeout(() => abrirSSE(), 4000);
+      // Limpar log antes de reconectar — o backend fará replay de todos os logs
+      const logEl = document.getElementById('log-automacao');
+      logEl.innerHTML = '';
+      logMsg(`⚠ Reconectando ao servidor (${reconexoes}/${MAX_RECONEXOES})…`, 'wait');
+      setTimeout(() => abrirSSE(), 3000);
     } else {
       logMsg('Conexão perdida. Clique em Executar para tentar novamente.', 'err');
       finalizarAutomacao();
