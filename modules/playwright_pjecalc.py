@@ -6532,87 +6532,131 @@ class PJECalcPlaywright:
         out_dir = Path(OUTPUT_DIR)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Restaurar sessão Seam ANTES da liquidação.
-        # A conversação original fica corrompida por NPEs acumulados durante a automação
-        # (ex: ApresentadorHonorarios.getListaCredoresDoCalculo causando NPE a cada render).
-        # Solução: voltar para principal.jsf e re-abrir o cálculo da lista de "Recentes".
-        self._log("  → Re-abrindo cálculo via Tela Inicial (nova conversação Seam)…")
-        _sessao_restaurada = self._reabrir_calculo_recentes()
+        # ── Estratégia de restauração de sessão ──
+        # Conforme vídeo de referência do PJE-Calc: a página liquidacao.jsf mostra
+        # "Cálculo: NNN / Processo: NNNNNNN-DD.AAAA.J.TT.OOOO" — ideal para verificação.
+        #
+        # Prioridade:
+        #   1. Usar conversação EXISTENTE → navegar para Liquidar via sidebar
+        #   2. Se falhar: re-abrir via Recentes (nova conversação Seam)
+        #   3. Se Recentes falhar: tentar calculo.jsf com conversação antiga
+        _sessao_restaurada = False
 
-        # Verificar processo correto após re-abertura
-        if _sessao_restaurada:
-            if not self._verificar_calculo_correto():
-                self._log("  ⚠ CÁLCULO ERRADO após re-abertura via Recentes!")
-                _sessao_restaurada = False
+        # ── Estratégia 1: conversação existente → navegar para calculo.jsf e verificar ──
+        # IMPORTANTE: liquidacao.jsf precisa de navegação via SIDEBAR JSF (não URL direta)
+        # porque o bean apresentadorLiquidacao precisa ser inicializado pela action do menu.
+        # Por isso primeiro verificamos se a conversação está viva via calculo.jsf,
+        # e depois o Passo 1 abaixo fará a navegação sidebar para Liquidar.
+        if self._calculo_url_base and self._calculo_conversation_id:
+            self._log(f"  → Tentando conversação existente (conversationId={self._calculo_conversation_id})…")
+            try:
+                _calc_url = (
+                    f"{self._calculo_url_base}calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
 
-        # Fallback: tentar conversação antiga via dados-do-calculo.jsf (tem campos CNJ visíveis)
+                # Verificar se a página carregou (não 500/404)
+                _page_ok = self._verificar_pagina_pjecalc()
+                if _page_ok:
+                    # Verificar CNJ
+                    if self._verificar_calculo_correto():
+                        _sessao_restaurada = True
+                        self._log(f"  ✓ Sessão existente válida")
+                    else:
+                        # CNJ não visível em calculo.jsf — verificar por reclamante
+                        _recl_esperado = (self._dados or {}).get("processo", {}).get("reclamante", "")
+                        if isinstance(_recl_esperado, dict):
+                            _recl_esperado = _recl_esperado.get("nome", "")
+                        _recl_esperado = _recl_esperado.strip().upper() if _recl_esperado else ""
+                        if _recl_esperado and len(_recl_esperado) >= 5:
+                            _body_text = self._page.evaluate(
+                                "() => (document.body.innerText || '').toUpperCase()"
+                            )
+                            if _recl_esperado in _body_text:
+                                self._log(f"  ✓ Sessão verificada por reclamante: '{_recl_esperado}'")
+                                _sessao_restaurada = True
+                            else:
+                                self._log(f"  ⚠ Reclamante '{_recl_esperado}' não encontrado na página")
+                        # Se sidebar Liquidar existe na página, a sessão está viva
+                        if not _sessao_restaurada:
+                            _has_sidebar = self._page.evaluate("""() => {
+                                const links = [...document.querySelectorAll('a')];
+                                return links.some(a => (a.textContent || '').trim() === 'Liquidar');
+                            }""")
+                            if _has_sidebar:
+                                self._log("  ✓ Sessão viva (sidebar 'Liquidar' presente)")
+                                _sessao_restaurada = True
+                else:
+                    self._log("  ⚠ Página de erro na conversação existente")
+            except Exception as _e:
+                self._log(f"  ⚠ Estratégia 1 (conversação existente): {_e}")
+
+        # ── Estratégia 2: re-abrir via Recentes (nova conversação Seam) ──
+        if not _sessao_restaurada:
+            self._log("  → Re-abrindo cálculo via Tela Inicial (Recentes)…")
+            if self._reabrir_calculo_recentes():
+                # Navegar para Liquidar após re-abertura
+                try:
+                    self._clicar_menu_lateral("Liquidar", obrigatorio=False)
+                    self._page.wait_for_timeout(1500)
+                    self._aguardar_ajax()
+                except Exception:
+                    pass
+                if self._verificar_calculo_correto():
+                    _sessao_restaurada = True
+                    self._log(f"  ✓ Cálculo re-aberto via Recentes")
+                else:
+                    self._log("  ⚠ CÁLCULO ERRADO após re-abertura via Recentes!")
+
+        # ── Estratégia 3: calculo.jsf com conversação antiga + verificação por reclamante ──
         if not _sessao_restaurada and self._calculo_url_base and self._calculo_conversation_id:
-            # Tentar múltiplas páginas — calculo.jsf pode não mostrar o CNJ,
-            # mas dados-do-calculo.jsf e parametros-do-calculo.jsf mostram
-            for _fb_page in ["dados-do-calculo.jsf", "calculo.jsf", "parametros-do-calculo.jsf"]:
+            for _fb_page in ["calculo.jsf", "liquidacao.jsf"]:
                 try:
                     _calc_url = (
                         f"{self._calculo_url_base}{_fb_page}"
                         f"?conversationId={self._calculo_conversation_id}"
                     )
-                    self._log(f"  → Fallback: tentando conversação antiga via {_fb_page}…")
+                    self._log(f"  → Fallback: tentando {_fb_page} + verificação por reclamante…")
                     self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
-                    try:
-                        self._instalar_monitor_ajax()
-                    except Exception:
-                        pass
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(1000)
                     self._capturar_base_calculo()
+
+                    # Verificação por CNJ
                     if self._verificar_calculo_correto():
                         _sessao_restaurada = True
                         break
-                    else:
-                        self._log(f"  ⚠ Verificação falhou em {_fb_page} — tentando próxima…")
+
+                    # Fallback: verificação por nome do reclamante no body da página
+                    _recl_esperado = (self._dados or {}).get("processo", {}).get("reclamante", "")
+                    if isinstance(_recl_esperado, dict):
+                        _recl_esperado = _recl_esperado.get("nome", "")
+                    _recl_esperado = _recl_esperado.strip().upper() if _recl_esperado else ""
+                    if _recl_esperado and len(_recl_esperado) >= 5:
+                        _body_text = self._page.evaluate(
+                            "() => (document.body.innerText || '').toUpperCase()"
+                        )
+                        if _recl_esperado in _body_text:
+                            self._log(f"  ✓ Cálculo verificado por reclamante: '{_recl_esperado}'")
+                            _sessao_restaurada = True
+                            break
                 except Exception as _e:
                     self._log(f"  ⚠ Fallback {_fb_page}: {_e}")
-
-        # Fallback 2: se verificação falhou por "número não visível" mas a conversação existe,
-        # navegar para dados-do-calculo.jsf e comparar reclamante em vez de CNJ
-        if not _sessao_restaurada and self._calculo_url_base and self._calculo_conversation_id:
-            try:
-                _dados_url = (
-                    f"{self._calculo_url_base}dados-do-calculo.jsf"
-                    f"?conversationId={self._calculo_conversation_id}"
-                )
-                self._page.goto(_dados_url, wait_until="domcontentloaded", timeout=15000)
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(1000)
-                # Verificar pelo nome do reclamante
-                _recl_esperado = (self._dados or {}).get("processo", {}).get("reclamante", "")
-                if isinstance(_recl_esperado, dict):
-                    _recl_esperado = _recl_esperado.get("nome", "")
-                _recl_esperado = _recl_esperado.strip().upper() if _recl_esperado else ""
-                if _recl_esperado and len(_recl_esperado) >= 5:
-                    _recl_pagina = self._page.evaluate("""() => {
-                        const el = document.querySelector('[id$="reclamanteNome"], [id$="nomeReclamante"]');
-                        return el ? (el.value || el.textContent || '').trim().toUpperCase() : '';
-                    }""")
-                    if _recl_pagina and _recl_esperado in _recl_pagina:
-                        self._log(f"  ✓ Cálculo verificado por reclamante: {_recl_pagina}")
-                        _sessao_restaurada = True
-                        self._capturar_base_calculo()
-            except Exception as _e:
-                self._log(f"  ⚠ Fallback verificação por reclamante: {_e}")
 
         # REGRA DE SEGURANÇA: verificar processo correto ANTES de liquidar.
         _num_proc = (self._dados or {}).get("processo", {}).get("numero", "?")
         if not _sessao_restaurada:
             raise RuntimeError(
                 "ABORTADO: não foi possível restaurar a sessão do cálculo correto. "
-                "Nenhuma das estratégias (Recentes, Buscar, conversação antiga) encontrou "
+                "Nenhuma das estratégias (conversação existente, Recentes, fallback) encontrou "
                 f"o processo '{_num_proc}'. "
-                "Não é seguro prosseguir com liquidação/exportação."
-            )
-        if not self._verificar_calculo_correto():
-            raise RuntimeError(
-                "ABORTADO: o cálculo aberto pertence a um processo diferente do solicitado "
-                f"(esperado: '{_num_proc}'). "
                 "Não é seguro prosseguir com liquidação/exportação."
             )
 
