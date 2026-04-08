@@ -51,15 +51,15 @@ class TestLimparH2Database:
         assert (d / "config.json").exists()
         assert (d / "resultado.pjc").exists()
 
-    def test_h2_not_restored_from_template(self, dados_dir):
-        """Após remover H2, NÃO restaura do template (banco limpo criado pelo Tomcat)."""
+    def test_h2_restored_from_template(self, dados_dir):
+        """Após remover H2, restaura do template (schema Hibernate obrigatório)."""
         from modules.playwright_pjecalc import limpar_h2_database
 
         limpar_h2_database(dados_dir)
         d = dados_dir / ".dados"
-        # H2 db NÃO deve ser restaurado — PJE-Calc cria banco limpo automaticamente
-        assert not (d / "pjecalc.h2.db").exists()
-        # Template preservado como backup
+        # H2 db deve ter sido restaurado do template (schema necessário)
+        assert (d / "pjecalc.h2.db").exists()
+        # Template preservado
         assert (d / "pjecalc.h2.db.template").exists()
 
     def test_no_dados_dir(self, tmp_path):
