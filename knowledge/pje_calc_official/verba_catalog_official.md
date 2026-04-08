@@ -21,6 +21,11 @@ Fonte: `modules/classification.py` → `VERBAS_PREDEFINIDAS` + Manual Oficial PJ
 | Salário-Família | salario familia | Principal | Comum | Mensal | ✗ | ✗ | ✗ | — |
 | Indenização por Dano Moral | dano moral / indenizacao por dano moral | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
 | Indenização por Dano Material | dano material | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
+| Diárias - Integração ao Salário | diarias integracao ao salario | Principal | Comum | Mensal | ✓ | ✓ | ✓ | — |
+| Acordo (Mera Liberalidade) | acordo mera liberalidade | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
+| Acordo (Multa) | acordo multa | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
+| Acordo (Verbas Indenizatórias) | acordo verbas indenizatorias | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
+| Acordo (Verbas Remuneratórias) | acordo verbas remuneratorias | Principal | Comum | Desligamento | ✓ | ✓ | ✓ | — |
 
 ## Verbas de Uso Frequente (Lançamento Manual)
 
