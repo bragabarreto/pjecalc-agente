@@ -1940,9 +1940,43 @@ class PJECalcPlaywright:
 
             _url_after = self._page.url
             if "calculo" in _url_after and "conversationId" in _url_after:
+                # Salvar IDs anteriores para restaurar se verificação falhar
+                _prev_base = self._calculo_url_base
+                _prev_conv = self._calculo_conversation_id
                 self._capturar_base_calculo()
-                self._log(f"  ✓ Cálculo re-aberto via Recentes: conversationId={self._calculo_conversation_id}")
-                return True
+
+                # VERIFICAÇÃO DE SEGURANÇA: confirmar que o cálculo aberto é do processo correto
+                # Navegar para Dados do Cálculo para ver os campos do processo
+                try:
+                    self._clicar_menu_lateral("Dados do Cálculo", obrigatorio=False)
+                    self._page.wait_for_timeout(1500)
+                    self._aguardar_ajax()
+                except Exception:
+                    pass
+
+                if self._verificar_calculo_correto():
+                    self._log(f"  ✓ Cálculo re-aberto via Recentes: conversationId={self._calculo_conversation_id} (processo correto)")
+                    return True
+
+                # Verificar por reclamante
+                _recl = (self._dados or {}).get("processo", {}).get("reclamante", "")
+                if isinstance(_recl, str):
+                    _recl_nome = _recl.strip().upper()
+                elif isinstance(_recl, dict):
+                    _recl_nome = (_recl.get("nome") or "").strip().upper()
+                else:
+                    _recl_nome = ""
+                if _recl_nome and len(_recl_nome) >= 5:
+                    _body = self._page.evaluate("() => (document.body.innerText || '').toUpperCase()")
+                    if _recl_nome in _body:
+                        self._log(f"  ✓ Cálculo re-aberto via Recentes: conv={self._calculo_conversation_id} (reclamante '{_recl_nome}' conferido)")
+                        return True
+
+                # PROCESSO ERRADO — restaurar IDs anteriores e rejeitar
+                self._log(f"  ⚠ Cálculo re-aberto via Recentes é de OUTRO processo — rejeitando (conv={self._calculo_conversation_id})")
+                self._calculo_url_base = _prev_base
+                self._calculo_conversation_id = _prev_conv
+                return False
             return False
         except Exception as _e:
             self._log(f"  ⚠ _reabrir_calculo_recentes: {_e}")
@@ -6565,34 +6599,40 @@ class PJECalcPlaywright:
                 # Verificar se a página carregou (não 500/404)
                 _page_ok = self._verificar_pagina_pjecalc()
                 if _page_ok:
-                    # Verificar CNJ
+                    # Verificar CNJ em calculo.jsf
                     if self._verificar_calculo_correto():
                         _sessao_restaurada = True
-                        self._log(f"  ✓ Sessão existente válida")
+                        self._log(f"  ✓ Sessão existente válida (CNJ conferido)")
                     else:
-                        # CNJ não visível em calculo.jsf — verificar por reclamante
-                        _recl_esperado = (self._dados or {}).get("processo", {}).get("reclamante", "")
-                        if isinstance(_recl_esperado, dict):
-                            _recl_esperado = _recl_esperado.get("nome", "")
-                        _recl_esperado = _recl_esperado.strip().upper() if _recl_esperado else ""
-                        if _recl_esperado and len(_recl_esperado) >= 5:
-                            _body_text = self._page.evaluate(
-                                "() => (document.body.innerText || '').toUpperCase()"
-                            )
-                            if _recl_esperado in _body_text:
-                                self._log(f"  ✓ Sessão verificada por reclamante: '{_recl_esperado}'")
+                        # calculo.jsf pode não mostrar o CNJ — navegar via sidebar
+                        # para "Dados do Cálculo" que TEM os campos do processo
+                        self._log("  → CNJ não visível em calculo.jsf — navegando para Dados do Cálculo…")
+                        try:
+                            self._clicar_menu_lateral("Dados do Cálculo", obrigatorio=False)
+                            self._page.wait_for_timeout(1500)
+                            self._aguardar_ajax()
+                            if self._verificar_calculo_correto():
                                 _sessao_restaurada = True
+                                self._log(f"  ✓ Sessão existente válida (CNJ conferido em Dados do Cálculo)")
                             else:
-                                self._log(f"  ⚠ Reclamante '{_recl_esperado}' não encontrado na página")
-                        # Se sidebar Liquidar existe na página, a sessão está viva
-                        if not _sessao_restaurada:
-                            _has_sidebar = self._page.evaluate("""() => {
-                                const links = [...document.querySelectorAll('a')];
-                                return links.some(a => (a.textContent || '').trim() === 'Liquidar');
-                            }""")
-                            if _has_sidebar:
-                                self._log("  ✓ Sessão viva (sidebar 'Liquidar' presente)")
-                                _sessao_restaurada = True
+                                # Verificar por reclamante na página de dados
+                                _recl_esperado = (self._dados or {}).get("processo", {}).get("reclamante", "")
+                                if isinstance(_recl_esperado, dict):
+                                    _recl_esperado = _recl_esperado.get("nome", "")
+                                _recl_esperado = _recl_esperado.strip().upper() if _recl_esperado else ""
+                                if _recl_esperado and len(_recl_esperado) >= 5:
+                                    _body_text = self._page.evaluate(
+                                        "() => (document.body.innerText || '').toUpperCase()"
+                                    )
+                                    if _recl_esperado in _body_text:
+                                        self._log(f"  ✓ Sessão verificada por reclamante: '{_recl_esperado}'")
+                                        _sessao_restaurada = True
+                                    else:
+                                        self._log(f"  ⚠ Reclamante '{_recl_esperado}' não encontrado — SESSÃO REJEITADA")
+                                else:
+                                    self._log("  ⚠ Sem reclamante para verificação — SESSÃO REJEITADA")
+                        except Exception as _nav_err:
+                            self._log(f"  ⚠ Navegação para Dados do Cálculo falhou: {_nav_err}")
                 else:
                     self._log("  ⚠ Página de erro na conversação existente")
             except Exception as _e:
