@@ -30,7 +30,10 @@ DATABASE_URL = (
 
 _is_postgres = DATABASE_URL.startswith("postgresql")
 _connect_args = {} if _is_postgres else {"check_same_thread": False}
-engine = create_engine(DATABASE_URL, connect_args=_connect_args)
+_pool_kwargs: dict = {"pool_pre_ping": True}
+if _is_postgres:
+    _pool_kwargs.update(pool_size=10, max_overflow=20, pool_recycle=3600)
+engine = create_engine(DATABASE_URL, connect_args=_connect_args, **_pool_kwargs)
 
 
 @event.listens_for(engine, "connect")

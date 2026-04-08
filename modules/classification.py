@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import anthropic
@@ -1192,6 +1193,11 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
         chave = _normalizar_chave(nome)
         config_pjec = _VERBAS_NORMALIZADAS.get(chave) or _buscar_por_similaridade(chave)
         if config_pjec:
+            # Verbas marcadas _apenas_fgts não devem virar verba na automação
+            # (ex: Multa Art. 467 é checkbox FGTS + reflexa automática, não verba Expresso)
+            if config_pjec.get("_apenas_fgts"):
+                logging.getLogger(__name__).info(f"Verba '{nome}' marcada _apenas_fgts — não incluída como verba Expresso")
+                continue
             resultado = {**verba, **config_pjec}
             resultado["lancamento"] = "Expresso"
             resultado["mapeada"] = True

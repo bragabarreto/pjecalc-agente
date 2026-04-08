@@ -2660,6 +2660,18 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
                 f"confiança baixa ({conf:.0%}). Confirme o preenchimento."
             )
 
+    # Validar verba_principal_ref: reflexas devem referenciar uma principal existente
+    _verbas = dados.get("verbas_deferidas", [])
+    _nomes_principais = {v.get("nome_sentenca", "").strip().lower()
+                         for v in _verbas if v.get("tipo", "").lower() != "reflexa"}
+    for v in _verbas:
+        ref = v.get("verba_principal_ref")
+        if ref and ref.strip().lower() not in _nomes_principais:
+            alertas.append(
+                f"Verba reflexa '{v.get('nome_sentenca', '?')}' referencia principal "
+                f"'{ref}' que não foi encontrada. Verifique o mapeamento."
+            )
+
     # Aplicar padrões inteligentes para campos frequentemente não extraídos
 
     # Contribuição social: migrar legado "responsabilidade" → booleans; aplicar padrão legal

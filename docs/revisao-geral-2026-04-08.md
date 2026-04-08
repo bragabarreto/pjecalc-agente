@@ -34,36 +34,33 @@ Revisão sistemática do codebase pjecalc-agente para identificar e corrigir fal
 
 ## Correções pendentes
 
-### P1 — JSON corrompido passa silenciosamente (CRÍTICO)
+### P1 — JSON corrompido passa silenciosamente (CRÍTICO) ✅ CORRIGIDO
 - **Arquivo**: `modules/extraction.py:54-107`
 - **Problema**: `_limpar_e_parsear_json()` tem 6 camadas de fallback com `except: pass`. A camada 5 auto-fecha chaves/colchetes em JSON truncado, podendo gerar dados semanticamente errados (ex: `verba_principal_ref: null`).
 - **Impacto**: dados corrompidos passam para a automação sem nenhum alerta.
 - **Correção proposta**: adicionar log de warning quando fallbacks são usados; validar campos obrigatórios no JSON parseado; marcar confiança como "baixa" quando auto-repair é necessário.
 
-### P2 — `[FIM DA EXECUÇÃO]` inalcançável em GeneratorExit (ALTO)
+### P2 — `[FIM DA EXECUÇÃO]` inalcançável em GeneratorExit (ALTO) ✅ CORRIGIDO
 - **Arquivo**: `modules/playwright_pjecalc.py:7605-7616`
 - **Problema**: quando SSE desconecta, `except GeneratorExit` faz `return` sem nunca chegar ao `yield "[FIM DA EXECUÇÃO]"`. Com o runner desacoplado, o impacto é menor (runner já seta `done=True` no `finally`), mas o generator pode não limpar o browser corretamente.
 - **Correção proposta**: mover cleanup e sinalização para o `finally` block do generator.
 
-### P3 — OCR com baixa confiança não bloqueia (ALTO)
+### P3 — OCR com baixa confiança não bloqueia (ALTO) ✅ CORRIGIDO
 - **Arquivo**: `modules/ingestion.py:114-118`
 - **Problema**: quando confiança OCR é baixa, um alerta é adicionado mas processamento continua com texto degradado → LLM extrai dados incorretos.
 - **Correção proposta**: se confiança média < threshold, marcar `_ocr_baixa_confianca=True` e propagar para extração, que deve tratar como `_erro_ia` ou no mínimo baixar a confiança geral.
 
-### P4 — Pool de conexões DB não configurado (MÉDIO)
+### P4 — Pool de conexões DB não configurado (MÉDIO) ✅ CORRIGIDO
 - **Arquivo**: `infrastructure/database.py:33`
-- **Problema**: `create_engine()` sem `pool_size`, `pool_recycle`, `pool_pre_ping`. Pode esgotar conexões sob carga.
-- **Correção proposta**: adicionar `pool_size=10, max_overflow=20, pool_recycle=3600, pool_pre_ping=True`.
+- **Correção**: `pool_pre_ping=True` para todos os engines; PostgreSQL também com `pool_size=10, max_overflow=20, pool_recycle=3600`.
 
-### P5 — `verba_principal_ref` órfã não validada (MÉDIO)
-- **Arquivo**: `modules/extraction.py` (validação) + `modules/classification.py`
-- **Problema**: verbas reflexas extraídas com `verba_principal_ref: "HORAS EXTRAS"` sem validar se a verba principal existe. Se LLM extrai reflexa sem principal, automação falha silenciosamente.
-- **Correção proposta**: em `_validar_e_completar()`, verificar que toda verba com `verba_principal_ref` tem a principal correspondente.
+### P5 — `verba_principal_ref` órfã não validada (MÉDIO) ✅ CORRIGIDO
+- **Arquivo**: `modules/extraction.py` — `_validar_e_completar()`
+- **Correção**: loop valida que toda verba reflexa com `verba_principal_ref` tem a principal correspondente na lista. Gera alerta se órfã.
 
-### P6 — `_apenas_fgts` flag não enforced (MÉDIO)
-- **Arquivo**: `modules/classification.py:346-357`
-- **Problema**: Multa art 467 marcada com `_apenas_fgts: True` mas flag não verificada downstream → pode criar verba duplicada (FGTS checkbox + verba reflexa).
-- **Correção proposta**: filtrar verbas com `_apenas_fgts=True` antes de enviar para automação Playwright.
+### P6 — `_apenas_fgts` flag não enforced (MÉDIO) ✅ CORRIGIDO
+- **Arquivo**: `modules/classification.py` — `mapear_para_pjecalc()`
+- **Correção**: verbas com `_apenas_fgts=True` (ex: Multa Art. 467) são filtradas ANTES de entrar na lista de predefinidas. Log informativo emitido.
 
 ### P7 — Race condition lock check vs. runner creation (BAIXO)
 - **Arquivo**: `webapp.py`
