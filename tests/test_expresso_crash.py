@@ -51,16 +51,15 @@ class TestLimparH2Database:
         assert (d / "config.json").exists()
         assert (d / "resultado.pjc").exists()
 
-    def test_h2_restored_from_template(self, dados_dir):
-        """Após remover H2, restaura do template (schema Hibernate obrigatório)."""
+    def test_h2_template_restore(self, dados_dir):
+        """Após remover H2, restaura do template."""
         from modules.playwright_pjecalc import limpar_h2_database
 
         limpar_h2_database(dados_dir)
         d = dados_dir / ".dados"
-        # H2 db deve ter sido restaurado do template (schema necessário)
+        # H2 db deve ter sido restaurado do template
         assert (d / "pjecalc.h2.db").exists()
-        # Template preservado
-        assert (d / "pjecalc.h2.db.template").exists()
+        assert (d / "pjecalc.h2.db").read_text() == "template-data"
 
     def test_no_dados_dir(self, tmp_path):
         """Se .dados/ não existe, retorna False sem erro."""

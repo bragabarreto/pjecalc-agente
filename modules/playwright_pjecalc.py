@@ -289,10 +289,12 @@ def limpar_h2_database(pjecalc_dir: str | Path, log_cb=None) -> bool:
     Remove arquivos H2 (.h2.db, .lock.db, .mv.db, .trace.db) do diretório .dados/.
     NÃO remove JSONs, PJCs ou outros arquivos do usuário.
     Deve ser chamada ANTES de iniciar o Tomcat (ou após pará-lo).
+    Restaura template .h2.db.template se disponível (schema Hibernate obrigatório).
 
-    Restaura o template .h2.db.template (necessário para o schema Hibernate) e
-    depois limpa os dados de cálculos residuais via H2 SQL, garantindo um banco
-    com schema válido mas sem cálculos obsoletos de execuções anteriores.
+    NOTA: O template pode conter cálculos residuais de execuções anteriores.
+    A proteção contra contaminação por cálculos residuais é feita pela
+    verificação de identidade do processo (_verificar_calculo_correto) na
+    automação, não pela limpeza do H2.
     """
     _log = log_cb or (lambda m: None)
     dados_dir = Path(pjecalc_dir) / ".dados"
@@ -318,76 +320,15 @@ def limpar_h2_database(pjecalc_dir: str | Path, log_cb=None) -> bool:
     else:
         _log("H2 cleanup: nenhum arquivo H2 encontrado")
 
-    # Restaurar template (schema Hibernate obrigatório) e limpar dados de cálculo
+    # Restaurar template se H2 foi removido e template existe
     template = dados_dir / "pjecalc.h2.db.template"
     h2_db = dados_dir / "pjecalc.h2.db"
     if not h2_db.exists() and template.exists():
         import shutil
         shutil.copy2(str(template), str(h2_db))
         _log("H2 cleanup: template restaurado → pjecalc.h2.db")
-        # Limpar dados de cálculos residuais via H2 SQL
-        _limpar_calculos_h2(str(h2_db), _log)
 
     return bool(removed)
-
-
-def _limpar_calculos_h2(h2_path: str, log_cb) -> None:
-    """Conecta ao H2 restaurado e limpa tabelas de cálculo, preservando schema."""
-    try:
-        import subprocess
-        # H2 JDBC URL: arquivo sem extensão .h2.db
-        db_name = h2_path.replace(".h2.db", "")
-
-        # Encontrar h2*.jar no classpath do PJE-Calc
-        pjecalc_dir = str(Path(h2_path).parent.parent)
-        h2_jar = None
-        for jar_dir in [f"{pjecalc_dir}/bin/lib", f"{pjecalc_dir}/tomcat/lib"]:
-            jar_path = Path(jar_dir)
-            if jar_path.exists():
-                for j in jar_path.glob("h2*.jar"):
-                    h2_jar = str(j)
-                    break
-            if h2_jar:
-                break
-
-        if not h2_jar:
-            log_cb("H2 cleanup: h2.jar não encontrado — cálculos residuais podem permanecer")
-            return
-
-        # SQL para limpar tabelas de dados (preserva schema/estrutura)
-        # Tabelas conhecidas do PJE-Calc que armazenam cálculos:
-        sql = """
-DELETE FROM VERBA_OCORRENCIA WHERE 1=1;
-DELETE FROM VERBA_REFLEXA WHERE 1=1;
-DELETE FROM VERBA_CALCULO WHERE 1=1;
-DELETE FROM HISTORICO_SALARIAL WHERE 1=1;
-DELETE FROM FGTS WHERE 1=1;
-DELETE FROM INSS WHERE 1=1;
-DELETE FROM IMPOSTO_RENDA WHERE 1=1;
-DELETE FROM HONORARIO WHERE 1=1;
-DELETE FROM LIQUIDACAO WHERE 1=1;
-DELETE FROM FERIAS WHERE 1=1;
-DELETE FROM CALCULO WHERE 1=1;
-"""
-        result = subprocess.run(
-            ["java", "-cp", h2_jar, "org.h2.tools.RunScript",
-             "-url", f"jdbc:h2:file:{db_name};ACCESS_MODE_DATA=rw",
-             "-user", "sa", "-password", "",
-             "-script", "/dev/stdin"],
-            input=sql,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        if result.returncode == 0:
-            log_cb("H2 cleanup: dados de cálculos residuais removidos (schema preservado)")
-        else:
-            # Tabelas podem ter nomes diferentes — não é erro fatal
-            log_cb(f"H2 cleanup: limpeza parcial (algumas tabelas podem não existir): {result.stderr[:200]}")
-    except FileNotFoundError:
-        log_cb("H2 cleanup: Java não disponível para limpeza H2 — cálculos residuais podem permanecer")
-    except Exception as e:
-        log_cb(f"H2 cleanup: erro na limpeza H2 (não fatal): {e}")
 
 
 def _parar_tomcat(timeout: int = 15) -> None:
