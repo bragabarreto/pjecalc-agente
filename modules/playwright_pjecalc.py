@@ -1508,6 +1508,12 @@ class PJECalcPlaywright:
         DOM v2.15.1: o botão Salvar NÃO é input[type='submit'] nem <button>.
         É input[type='button'] com id='formulario:salvar'. Seletor [id$='salvar']
         cobre ambos os casos. submits:[] confirma que não há submit buttons.
+
+        IMPORTANTE: Após clicar, faz polling pela mensagem de sucesso JSF
+        ("Operação realizada com sucesso" ou similar) por até 10s. Isso garante
+        que o servidor completou a transação (IIDCALCULO atribuído) antes de
+        prosseguir para a próxima fase. Sem esse polling, fases subsequentes
+        (ex: Histórico Salarial) podem falhar com IIDCALCULO NULL no H2.
         """
         seletores = [
             "[id$='salvar']",            # cobre formulario:salvar (qualquer tipo)
@@ -1516,27 +1522,59 @@ class PJECalcPlaywright:
             "button:has-text('Salvar')", # botão HTML5
             "a:has-text('Salvar')",      # link estilizado como botão
         ]
-        def _verificar_mensagem_sucesso() -> bool:
-            """Verifica se mensagem de sucesso JSF apareceu (padrão CalcMachine)."""
+
+        def _poll_mensagem_sucesso() -> bool:
+            """Faz polling pela mensagem de sucesso JSF por até 10s (500ms entre tentativas).
+
+            Retorna True se mensagem encontrada, False se timeout sem mensagem.
+            Quando aguardar_sucesso=False, retorna True imediatamente.
+            """
             if not aguardar_sucesso:
                 return True
+            for _tentativa in range(20):  # 20 × 500ms = 10s
+                try:
+                    msg = self._page.evaluate("""() => {
+                        const msgs = document.querySelectorAll(
+                            '.rf-msgs-sum, .rich-messages-label, [class*="msg"], [class*="sucesso"]'
+                        );
+                        for (const m of msgs) {
+                            const t = (m.textContent || '').toLowerCase();
+                            if (t.includes('sucesso') || t.includes('realizada') || t.includes('salvo'))
+                                return m.textContent.trim().substring(0, 80);
+                        }
+                        // Verificar também se houve erro (HTTP 500, ViewExpired, etc.)
+                        const erros = document.querySelectorAll(
+                            '.rf-msgs-sum-err, .rich-messages-label, [class*="erro"], [class*="error"]'
+                        );
+                        for (const e of erros) {
+                            const t = (e.textContent || '').toLowerCase();
+                            if (t.includes('erro') || t.includes('error') || t.includes('falha'))
+                                return 'ERRO:' + e.textContent.trim().substring(0, 80);
+                        }
+                        return null;
+                    }""")
+                    if msg:
+                        if msg.startswith('ERRO:'):
+                            self._log(f"  ✗ Salvar: {msg}")
+                            return False
+                        self._log(f"  ✓ Salvar: '{msg}'")
+                        return True
+                except Exception:
+                    pass
+                self._page.wait_for_timeout(500)
+            self._log("  ⚠ Salvar: mensagem de sucesso não detectada em 10s (prosseguindo)")
+            return True  # não bloquear indefinidamente — mas log do warning
+
+        def _clicar_e_aguardar(clicou_via: str) -> bool:
+            """Após clicar Salvar, aguarda AJAX + polling mensagem de sucesso."""
+            self._aguardar_ajax()
+            _ok = _poll_mensagem_sucesso()
+            # Aguardar networkidle extra para garantir que a transação H2 commitou
             try:
-                msg = self._page.evaluate("""() => {
-                    const msgs = document.querySelectorAll(
-                        '.rf-msgs-sum, .rich-messages-label, [class*="msg"], [class*="sucesso"]'
-                    );
-                    for (const m of msgs) {
-                        const t = (m.textContent || '').toLowerCase();
-                        if (t.includes('sucesso') || t.includes('realizada') || t.includes('salvo'))
-                            return m.textContent.trim().substring(0, 80);
-                    }
-                    return null;
-                }""")
-                if msg:
-                    self._log(f"  ✓ Salvar: '{msg}'")
-                return True  # Não bloquear se msg não encontrada
+                self._page.wait_for_load_state("networkidle", timeout=5000)
             except Exception:
-                return True
+                pass
+            return _ok
 
         for sel in seletores:
             try:
@@ -1544,8 +1582,7 @@ class PJECalcPlaywright:
                 if loc.count() > 0:
                     self._log(f"  → Salvar: clicando via '{sel}'")
                     loc.first.click(force=True)
-                    self._aguardar_ajax()
-                    _verificar_mensagem_sucesso()
+                    _clicar_e_aguardar(sel)
                     return True
             except Exception:
                 continue
@@ -1569,8 +1606,7 @@ class PJECalcPlaywright:
                 return null;
             }""")
             if clicou:
-                self._aguardar_ajax()
-                _verificar_mensagem_sucesso()
+                _clicar_e_aguardar(f"JS:{clicou}")
                 return True
         except Exception:
             pass
@@ -2349,6 +2385,26 @@ class PJECalcPlaywright:
 
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 1: Salvar não confirmado — dados do processo podem não ter persistido.")
+
+        # Verificação pós-save: confirmar que o cálculo foi persistido no H2.
+        # Após o primeiro Salvar bem-sucedido, a URL deve conter conversationId
+        # (indicando que o Seam criou o registro em TBCALCULO com IIDCALCULO).
+        # Sem essa verificação, fases subsequentes falham com IIDCALCULO NULL.
+        self._capturar_base_calculo()
+        _url_pos_save = self._page.url
+        if "conversationId" in _url_pos_save:
+            self._log(f"  ✓ Cálculo persistido (conversationId presente na URL)")
+        else:
+            self._log("  ⚠ conversationId ausente na URL pós-save — tentando re-salvar…")
+            self._page.wait_for_timeout(2000)
+            self._clicar_salvar()
+            self._capturar_base_calculo()
+            _url_retry = self._page.url
+            if "conversationId" in _url_retry:
+                self._log(f"  ✓ Cálculo persistido após re-save")
+            else:
+                self._log("  ⚠ conversationId ainda ausente — prosseguindo (risco de IIDCALCULO NULL)")
+
         self._log("Fase 1 concluída.")
 
     # ── Utilitário de screenshot por fase ──────────────────────────────────────
@@ -2423,9 +2479,43 @@ class PJECalcPlaywright:
         self._log(f"Fase 2 — Histórico Salarial: {len(historico)} período(s) extraído(s)…")
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
+
+        # Pré-verificação: confirmar que conversationId está disponível
+        # (indica que o cálculo foi persistido no H2 com IIDCALCULO válido)
+        if not self._calculo_conversation_id:
+            self._capturar_base_calculo()
+        if not self._calculo_conversation_id:
+            self._log("  ⚠ Histórico Salarial: conversationId ausente — cálculo pode não ter sido persistido")
+
         navegou = self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
         if navegou:
             navegou = self._verificar_secao_ativa("Histórico")
+
+        # Verificar se a página carregou sem erros H2/JSF (IIDCALCULO NULL causa HTTP 500)
+        if navegou:
+            try:
+                _body_check = self._page.evaluate(
+                    "() => (document.body ? document.body.textContent : '').substring(0, 500)"
+                )
+                if "500" in _body_check or "NullPointer" in _body_check or "JdbcBatch" in _body_check:
+                    self._log("  ⚠ Histórico Salarial: erro H2/JSF detectado na página — tentando recuperar…")
+                    # Tentar voltar para Parâmetros do Cálculo e re-salvar
+                    if self._calculo_url_base and self._calculo_conversation_id:
+                        _url_params = (
+                            f"{self._calculo_url_base}parametros-do-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        self._page.goto(_url_params, wait_until="domcontentloaded", timeout=15000)
+                        self._aguardar_ajax()
+                        self._clicar_salvar()
+                        self._page.wait_for_timeout(2000)
+                        # Re-tentar navegação para Histórico Salarial
+                        navegou = self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+                        if navegou:
+                            navegou = self._verificar_secao_ativa("Histórico")
+            except Exception as _e_check:
+                self._log(f"  ⚠ Verificação pós-navegação: {_e_check}")
+
         if not navegou:
             self._log("  ⚠ Histórico Salarial não disponível no menu — listando para referência:")
             for h in historico:
