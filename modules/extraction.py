@@ -362,14 +362,17 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
   ⚠️ Padrão quando omitido: apurar_segurado_salarios_devidos=true, cobrar_do_reclamante=true, com_correcao_trabalhista=true, apurar_sobre_salarios_pagos=false
 
 **CUSTAS JUDICIAIS** → preenche "custas_judiciais":
-⚠️ OBRIGATÓRIO: SEMPRE retornar este objeto, mesmo quando a sentença não menciona custas (usar defaults).
+⚠️ OBRIGATÓRIO: SEMPRE retornar este objeto — NÃO é verba, é configuração do PJE-Calc para apuração
+de custas processuais. Custas são calculadas pelo sistema sobre o valor bruto da condenação.
+Mesmo que a sentença não mencione custas ou fixe valor específico, retornar com os defaults abaixo.
 - base: "Bruto Devido ao Reclamante" (padrão) ou "Bruto Devido ao Reclamante + Outros Débitos"
 - reclamado_conhecimento: "CALCULADA" (padrão 2%) | "INFORMADA" | "NAO_SE_APLICA"
+  Se a sentença fixar valor de custas, usar "CALCULADA" (o PJE-Calc calcula 2% automaticamente)
 - reclamado_liquidacao: "NAO_SE_APLICA" (padrão) | "CALCULADA" (0,5%) | "INFORMADA"
 - reclamante_conhecimento: "NAO_SE_APLICA" (padrão) | "CALCULADA" | "INFORMADA"
-- percentual: float (ex: 0.02 para 2%)
+- percentual: float (ex: 0.02 para 2%) — padrão 0.02
 - devedor: "RECLAMADO" (padrão) ou "RECLAMANTE"
-  ⚠️ Padrão quando omitido: base="Bruto Devido ao Reclamante", reclamado_conhecimento="CALCULADA",
+  Defaults: base="Bruto Devido ao Reclamante", reclamado_conhecimento="CALCULADA",
   reclamado_liquidacao="NAO_SE_APLICA", reclamante_conhecimento="NAO_SE_APLICA", percentual=0.02
 
 **IMPOSTO DE RENDA** → preenche "imposto_renda":
@@ -2700,6 +2703,18 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
             "Índice de correção não identificado — aplicado padrão ADC 58 "
             "(Tabela JT Única Mensal + SELIC). Verifique na sentença."
         )
+
+    # Custas judiciais: garantir objeto com defaults (configuração do PJE-Calc, não verba)
+    cust = dados.get("custas_judiciais")
+    if not cust or not isinstance(cust, dict):
+        cust = {}
+    cust.setdefault("base", "Bruto Devido ao Reclamante")
+    cust.setdefault("reclamado_conhecimento", "CALCULADA")
+    cust.setdefault("reclamado_liquidacao", "NAO_SE_APLICA")
+    cust.setdefault("reclamante_conhecimento", "NAO_SE_APLICA")
+    cust.setdefault("percentual", 0.02)
+    cust.setdefault("devedor", "RECLAMADO")
+    dados["custas_judiciais"] = cust
 
     # Remover campos opcionais que o LLM pode ter incluído indevidamente
     campos_ausentes = [c for c in campos_ausentes if c not in _CAMPOS_OPCIONAIS]
