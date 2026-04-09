@@ -2004,7 +2004,7 @@ class PJECalcPlaywright:
             _campo = (e.get("campo", "") or "").lower()
 
             # ── Data obrigatória vazia ou formato inválido ──
-            elif "data" in _campo or "data" in _fid or "data" in _msg:
+            if "data" in _campo or "data" in _fid or "data" in _msg:
                 import datetime
                 _hoje = datetime.date.today().strftime("%d/%m/%Y")
                 # Campos de data comuns que podem estar vazios
