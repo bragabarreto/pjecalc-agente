@@ -1745,7 +1745,7 @@ def _extrair_de_relatorio_estruturado(
         conteudo_parts: list[str] = []
         with cliente.messages.stream(
             model=CLAUDE_MODEL,
-            max_tokens=6000,  # reduzido de 8192 — JSON do schema raramente passa de 5000 tokens
+            max_tokens=16384,  # sentenças com 10+ verbas + reflexos ultrapassam 6000 tokens
             temperature=0.0,
             system=_SYSTEM_PROMPT_RELATORIO,
             messages=[{
@@ -1967,7 +1967,7 @@ def _extrair_via_llm(
         # Nota: output_config removido — schema tem >16 union types (limite API Anthropic)
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=4096,
+            max_tokens=16384,
             temperature=CLAUDE_EXTRACTION_TEMPERATURE,
             system=_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": content_blocks}],
@@ -2132,7 +2132,7 @@ def _extrair_via_llm_pdf(
         # Nota: output_config removido — schema tem >16 union types (limite API Anthropic)
         resposta = cliente.messages.create(
             model=CLAUDE_MODEL,
-            max_tokens=4096,
+            max_tokens=16384,
             temperature=0.0,
             system=_system,
             messages=[{"role": "user", "content": content_blocks}],
