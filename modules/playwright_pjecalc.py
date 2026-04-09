@@ -24,6 +24,38 @@ import os
 from pathlib import Path
 from typing import Any, Callable
 
+# DOM selectors validados — ver knowledge/pjecalc_selectors.py
+from knowledge.pjecalc_selectors import (
+    DadosProcesso,
+    ParametrosCalculo,
+    ParametrosGerais,
+    HistoricoSalarial,
+    Ferias as FeriasSelectors,
+    Faltas as FaltasSelectors,
+    CartaoPonto,
+    VerbaListagem,
+    VerbaExpresso,
+    VerbaManual,
+    VerbaParametro,
+    VerbaOcorrencia,
+    FGTS as FGTSSelectors,
+    ContribuicaoSocial as INSSSelectors,
+    ImpostoRenda as IRSelectors,
+    Honorarios as HonorariosSelectors,
+    MultasIndenizacoes as MultasSelectors,
+    SalarioFamilia as SalFamSelectors,
+    SeguroDesemprego as SegDeseSelectors,
+    PrevidenciaPrivada as PrevPrivSelectors,
+    PensaoAlimenticia as PensAlimSelectors,
+    CorrecaoJurosMulta,
+    CustasJudiciais as CustasSelectors,
+    Liquidacao,
+    Exportacao,
+    SidebarMenu,
+    Mensagens,
+    Comum,
+)
+
 # structlog preferido; fallback para stdlib logging se não disponível
 try:
     import structlog
@@ -831,10 +863,11 @@ class PJECalcPlaywright:
                 _state = loc.evaluate("el => ({disabled: el.disabled, readonly: el.readOnly})")
                 if _state.get("disabled") or _state.get("readonly"):
                     loc.evaluate(
-                        f"el => {{ el.disabled = false; el.readOnly = false; "
-                        f"el.value = '{valor}'; "
+                        "(el, v) => { el.disabled = false; el.readOnly = false; "
+                        "el.value = v; "
                         "el.dispatchEvent(new Event('input',{bubbles:true})); "
-                        "el.dispatchEvent(new Event('change',{bubbles:true})); }}"
+                        "el.dispatchEvent(new Event('change',{bubbles:true})); }",
+                        valor,
                     )
                     self._log(f"  ✓ {field_id}: {valor} (disabled/readonly override)")
                     return True
@@ -845,7 +878,9 @@ class PJECalcPlaywright:
             loc.fill(valor)
             loc.dispatch_event("input")
             loc.dispatch_event("change")
-            # Sem blur: JSF/RichFaces pode usar blur para AJAX postback → risco de HTTP 500
+            # Sem blur intencional: JSF/RichFaces usa blur para AJAX postback.
+            # Disparar blur aqui causa race condition com o próximo campo → HTTP 500.
+            # O blur natural ocorre quando o próximo campo recebe foco (click/Tab).
             self._log(f"  ✓ {field_id}: {valor}")
             return True
         except Exception as e:
@@ -904,9 +939,10 @@ class PJECalcPlaywright:
             # Fallback B: JS direto (ignora máscara, sem blur para não disparar AJAX)
             try:
                 loc.evaluate(
-                    f"el => {{ el.value = '{data}'; "
+                    "(el, v) => { el.value = v; "
                     "el.dispatchEvent(new Event('input',{bubbles:true})); "
-                    "el.dispatchEvent(new Event('change',{bubbles:true})); }}"
+                    "el.dispatchEvent(new Event('change',{bubbles:true})); }",
+                    data,
                 )
                 self._log(f"  ✓ data {field_id} (JS fallback): {data}")
                 return True
@@ -1234,34 +1270,40 @@ class PJECalcPlaywright:
         # Tentativa 1: seletor de ID específico do sidebar (robusto, sem ambiguidade)
         # O menu PJE-Calc usa li[id='li_XXX'] (menu-pilares.xhtml) e a4j:commandLink
         # com IDs gerados. Tentamos ambos padrões: a[id*='menuXXX'] e li[id*='xxx'] > a
+        # Seletores do SidebarMenu — ver knowledge/pjecalc_selectors.py
         _MENU_ID_MAP = {
-            "Histórico Salarial": "a[id*='menuHistoricoSalarial']",
-            "Verbas":             "a[id*='menuVerbas']",
-            "FGTS":               "a[id*='menuFGTS']",
-            "Honorários":         "a[id*='menuHonorarios']",
-            "Liquidar":           "a[id*='menuLiquidar']",
-            "Faltas":             "a[id*='menuFaltas']",
-            "Férias":             "a[id*='menuFerias']",
-            "Dados do Cálculo":   "a[id*='menuCalculo']",
-            "Novo":               "a[id*='menuNovo']",
-            "Operações":          "a[id*='menuOperacoes']",
-            "Imprimir":           "a[id*='menuImprimir']",
-            "Contribuição Social": "a[id*='menuContribuicaoSocial']",
-            "Contribuicao Social": "a[id*='menuContribuicaoSocial']",
-            "Imposto de Renda":   "a[id*='menuImpostoRenda']",
-            "Multas":             "a[id*='menuMultas']",
-            "Cartão de Ponto":    "a[id*='menuCartao'], a[id*='CartaoPonto'], a[id*='cartaoDePonto']",
-            "Salário Família":    "a[id*='menuSalarioFamilia']",
-            "Seguro Desemprego":  "a[id*='menuSeguroDesemprego']",
-            "Pensão Alimentícia": "a[id*='menuPensaoAlimenticia']",
-            "Previdência Privada": "a[id*='menuPrevidenciaPrivada']",
-            "Exportar":           "a[id*='menuExport']",
-            "Exportação":         "a[id*='menuExport']",
+            "Histórico Salarial": SidebarMenu.HISTORICO_SALARIAL,
+            "Verbas":             SidebarMenu.VERBAS,
+            "FGTS":               SidebarMenu.FGTS,
+            "Honorários":         SidebarMenu.HONORARIOS,
+            "Liquidar":           SidebarMenu.LIQUIDAR,
+            "Faltas":             SidebarMenu.FALTAS,
+            "Férias":             SidebarMenu.FERIAS,
+            "Dados do Cálculo":   SidebarMenu.DADOS_DO_CALCULO,
+            "Novo":               SidebarMenu.NOVO,
+            "Operações":          SidebarMenu.OPERACOES,
+            "Imprimir":           SidebarMenu.IMPRIMIR,
+            "Contribuição Social": SidebarMenu.CONTRIBUICAO_SOCIAL,
+            "Contribuicao Social": SidebarMenu.CONTRIBUICAO_SOCIAL,
+            "Imposto de Renda":   SidebarMenu.IMPOSTO_RENDA,
+            "Multas":             SidebarMenu.MULTAS,
+            "Cartão de Ponto":    SidebarMenu.CARTAO_DE_PONTO,
+            "Salário Família":    SidebarMenu.SALARIO_FAMILIA,
+            "Seguro Desemprego":  SidebarMenu.SEGURO_DESEMPREGO,
+            "Pensão Alimentícia": SidebarMenu.PENSAO_ALIMENTICIA,
+            "Previdência Privada": SidebarMenu.PREVIDENCIA_PRIVADA,
+            "Custas Judiciais":   SidebarMenu.CUSTAS_JUDICIAIS,
+            "Custas":             SidebarMenu.CUSTAS_JUDICIAIS,
+            "Correção, Juros e Multa": SidebarMenu.CORRECAO_JUROS,
+            "Correção e Juros":   SidebarMenu.CORRECAO_JUROS,
+            "Exportar":           SidebarMenu.EXPORTAR,
+            "Exportação":         SidebarMenu.EXPORTAR,
             "Excluir":            "a[id*='menuExcluir']",
             "Fechar":             "a[id*='menuFechar']",
         }
         # Mapa de IDs reais de <li> do menu-pilares (confirmados por inspeção DOM v2.15.1)
         # Padrão: li_calculo_XXX (dentro de cálculo) ou li_tabelas_XXX (tabelas)
+        # Nota: estes IDs de <li> complementam os seletores <a> de SidebarMenu (pjecalc_selectors.py)
         _LI_ID_MAP = {
             "Cartão de Ponto":     ["calculo_cartao_ponto"],
             "Dados do Cálculo":    ["calculo_dados_do_calculo"],
@@ -1377,7 +1419,7 @@ class PJECalcPlaywright:
                     _so_fechar = (
                         self._page.locator("input[id='formulario:fechar']").count() > 0
                         and self._page.locator(
-                            "input[id*='btnExpresso'], input[id*='btnNovo'], "
+                            f"{VerbaListagem.BTN_EXPRESSO}, input[id*='btnNovo'], "
                             "input[id*='btnSalvar'], input[id*='btnLiquidar']"
                         ).count() == 0
                     )
@@ -1665,19 +1707,18 @@ class PJECalcPlaywright:
                 return True
             for _tentativa in range(20):  # 20 × 500ms = 10s
                 try:
-                    msg = self._page.evaluate("""() => {
+                    # Seletores de mensagem passados como parâmetro (evita quebra por aspas)
+                    msg = self._page.evaluate("""(sels) => {
                         const msgs = document.querySelectorAll(
-                            '.rf-msgs-sum, .rich-messages-label, [class*="msg"], [class*="sucesso"]'
+                            sels.sucesso + ', [class*="msg"], [class*="sucesso"]'
                         );
                         for (const m of msgs) {
                             const t = (m.textContent || '').toLowerCase();
                             if (t.includes('sucesso') || t.includes('realizada') || t.includes('salvo'))
                                 return m.textContent.trim().substring(0, 80);
                         }
-                        // Verificar também se houve erro (HTTP 500, ViewExpired, etc.)
                         const erros = document.querySelectorAll(
-                            '.rf-msgs-sum-err, .rf-msgs-sum, .rich-messages-label, '
-                            + '.rf-msg-err, [class*="erro"], [class*="error"]'
+                            sels.erro + ', .rf-msg-err, [class*="erro"], [class*="error"]'
                         );
                         for (const e of erros) {
                             const t = (e.textContent || '').toLowerCase();
@@ -1687,7 +1728,7 @@ class PJECalcPlaywright:
                                 return 'ERRO:' + e.textContent.trim().substring(0, 200);
                         }
                         return null;
-                    }""")
+                    }""", {"sucesso": Mensagens.SUCESSO, "erro": Mensagens.ERRO})
                     if msg:
                         if msg.startswith('ERRO:'):
                             self._log(f"  ✗ Salvar: {msg}")
@@ -2152,7 +2193,7 @@ class PJECalcPlaywright:
 
             # Clicar botão Regerar — tentar múltiplos seletores
             _REGERAR_SELS = [
-                "[id$='regerarOcorrencias']",
+                HistoricoSalarial.REGERAR_OCORRENCIAS,  # "[id$='regerarOcorrencias']"
                 "input[value='Regerar']",
                 "input[value='Regerar Ocorrências']",
                 "input[type='submit'][value*='egerar']",
@@ -3636,7 +3677,7 @@ class PJECalcPlaywright:
 
         if not _clicou_expresso:
             for _sel in [
-                "input[id*='btnExpresso']",
+                VerbaListagem.BTN_EXPRESSO,  # "input[id*='btnExpresso']"
                 "input[value='Expresso']",
                 "input[value*='Expresso']",
                 "a[id*='Expresso']",
@@ -3718,16 +3759,20 @@ class PJECalcPlaywright:
             pass
 
         # Listar verbas disponíveis (diagnóstico)
+        # Nota: NÃO existe [id*=":nome"] no Expresso — o nome é o texto da célula <td>
+        # que contém o checkbox. Usamos cloneNode(true) + remoção de inputs/scripts.
         try:
-            _labels_exp = self._page.evaluate("""() =>
-                [...document.querySelectorAll('tr')]
-                .map(row => {
-                    const nome = row.querySelector('[id*=":nome"]');
-                    return nome ? nome.textContent.replace(/\\s+/g,' ').trim() : '';
-                })
-                .filter(Boolean)
-            """)
-            self._log(f"  📋 Verbas Expresso disponíveis: {_labels_exp}")
+            _labels_exp = self._page.evaluate("""() => {
+                const cbs = document.querySelectorAll('""" + VerbaExpresso.CHECKBOX_SELECIONADA + """');
+                return [...cbs].map(cb => {
+                    const td = cb.closest('td');
+                    if (!td) return '';
+                    const clone = td.cloneNode(true);
+                    clone.querySelectorAll('input, script, style').forEach(el => el.remove());
+                    return clone.textContent.replace(/\\s+/g, ' ').trim();
+                }).filter(Boolean);
+            }""")
+            self._log(f"  📋 Verbas Expresso disponíveis ({len(_labels_exp)}): {_labels_exp}")
         except Exception:
             pass
 
@@ -3878,6 +3923,10 @@ class PJECalcPlaywright:
                 _pers_keep.append(v)
         predefinidas = _pred_final
         personalizadas = _pers_keep
+
+        # Filtrar verbas com _apenas_fgts (ex: Multa 467) — são checkbox FGTS, não verba
+        predefinidas = [v for v in predefinidas if not v.get("_apenas_fgts")]
+        personalizadas = [v for v in personalizadas if not v.get("_apenas_fgts")]
 
         # Diagnóstico: listar botões disponíveis
         try:
@@ -4735,6 +4784,7 @@ class PJECalcPlaywright:
                     _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
 
                 # Verificar se o principal foi criado via Expresso (reflexos auto-gerados)
+                _skip_expresso = False
                 if _nome_principal_ref:
                     _ref_upper = _norm_key(_nome_principal_ref)
                     _skip_expresso = any(
@@ -4801,7 +4851,7 @@ class PJECalcPlaywright:
             if not _clicou_manual:
                 # Fallback: buscar por value="Manual"
                 try:
-                    _btn = self._page.locator("input[value='Manual'], input[value='manual']")
+                    _btn = self._page.locator(VerbaListagem.BTN_MANUAL)
                     if _btn.count() > 0:
                         _btn.first.click()
                         _clicou_manual = True
@@ -4876,9 +4926,7 @@ class PJECalcPlaywright:
             _cnj_ok = False
             try:
                 # Tentativa 1: RichFaces suggestionbox inline (digitar no campo e aguardar popup)
-                _cnj_field = self._page.locator(
-                    'input[id$="assuntosCnj"]:not([id*="modalCNJ"]):not([type="hidden"])'
-                )
+                _cnj_field = self._page.locator(VerbaManual.ASSUNTOS_CNJ)
                 if _cnj_field.count() > 0:
                     try:
                         _cnj_field.first.click()
@@ -4886,10 +4934,7 @@ class PJECalcPlaywright:
                         _cnj_field.first.press_sequentially("2581", delay=120)
                         self._page.wait_for_timeout(2000)
                         # Verificar se popup de sugestão apareceu
-                        _popup = self._page.locator(
-                            '.rf-su-popup:visible, .rich-sb-ext-decor:visible, '
-                            '[id*="assuntosCnj"][id*="suggest"]:visible'
-                        )
+                        _popup = self._page.locator(VerbaManual.POPUP_SUGESTAO)
                         if _popup.count() > 0:
                             _popup.first.locator('tr, div, td').first.click()
                             self._aguardar_ajax()
@@ -4901,11 +4946,8 @@ class PJECalcPlaywright:
                 # Tentativa 2: Clicar na lupa → modal CNJ → buscar na árvore
                 if not _cnj_ok:
                     _lupa = self._page.locator(
-                        'a[id*="assuntosCnj"][id*="btn"], '
-                        'img[id*="assuntosCnj"], '
-                        'a[onclick*="modalCNJ"], '
-                        'input[id*="btnAssunto"], '
-                        '[id$="btnBuscarAssuntoCnj"]'
+                        VerbaManual.LUPA_CNJ + ', '
+                        'a[onclick*="modalCNJ"]'
                     )
                     if _lupa.count() > 0:
                         try:
@@ -4913,10 +4955,7 @@ class PJECalcPlaywright:
                             self._aguardar_ajax()
                             self._page.wait_for_timeout(1000)
                             # Modal pode ter campo de busca
-                            _modal_input = self._page.locator(
-                                '[id*="modalCNJ"] input[type="text"], '
-                                '[id*="modalAssunto"] input[type="text"]'
-                            )
+                            _modal_input = self._page.locator(VerbaManual.MODAL_CNJ_INPUT)
                             if _modal_input.count() > 0:
                                 _is_readonly = _modal_input.first.evaluate(
                                     "el => el.readOnly || el.disabled"
@@ -4932,8 +4971,7 @@ class PJECalcPlaywright:
                                 self._page.wait_for_timeout(1000)
                             # Clicar no item da árvore que contém "2581" ou "Remuneração"
                             _tree_item = self._page.locator(
-                                '[id*="modalCNJ"] tr:has-text("2581"), '
-                                '[id*="modalCNJ"] .rf-trn:has-text("2581"), '
+                                VerbaManual.MODAL_CNJ_TREE + ', '
                                 '[id*="modalAssunto"] tr:has-text("2581")'
                             )
                             if _tree_item.count() > 0:
@@ -4941,8 +4979,7 @@ class PJECalcPlaywright:
                                 self._page.wait_for_timeout(500)
                             # Clicar botão "Selecionar"
                             _btn_sel = self._page.locator(
-                                '[id*="modalCNJ"] input[value="Selecionar"], '
-                                '[id*="modalCNJ"] [id$="btnSelecionarCNJ"], '
+                                VerbaManual.MODAL_CNJ_SELECIONAR + ', '
                                 '[id*="modalAssunto"] input[value="Selecionar"]'
                             )
                             if _btn_sel.count() > 0:
@@ -4955,8 +4992,7 @@ class PJECalcPlaywright:
                             # Fechar modal se ainda aberto
                             if not _cnj_ok:
                                 _close = self._page.locator(
-                                    '[id*="modalCNJ"] [id*="close"], '
-                                    '[id*="modalCNJ"] input[value*="Fechar"], '
+                                    VerbaManual.MODAL_CNJ_FECHAR + ', '
                                     '[id*="modalCNJ"] input[value*="Cancelar"]'
                                 )
                                 if _close.count() > 0:
@@ -5531,8 +5567,10 @@ class PJECalcPlaywright:
                     self._clicar_menu_lateral("Multas e Indenizações", obrigatorio=False)
                     self._page.wait_for_timeout(800)
 
-            # Clicar "Novo"
-            self._clicar_novo()
+            # Clicar "Incluir" — NUNCA _clicar_novo() que pode criar novo cálculo
+            if not self._clicar_botao_id("incluir"):
+                self._log(f"  ⚠ '{nome_m}': botão 'incluir' não encontrado — ignorada.")
+                continue
             self._aguardar_ajax()
             try:
                 self._page.wait_for_selector("[id$=':descricao']", state="visible", timeout=5000)
@@ -6092,9 +6130,9 @@ class PJECalcPlaywright:
         # O botão correto nesta página é input[id$='incluir'] com value='Novo'
         _novo_ok = False
         try:
-            btn_inc = self._page.locator("input[id$='incluir'][value='Novo']")
+            btn_inc = self._page.locator(f"{CartaoPonto.INCLUIR}[value='Novo']")
             if btn_inc.count() == 0:
-                btn_inc = self._page.locator("input[id$='incluir']")
+                btn_inc = self._page.locator(CartaoPonto.INCLUIR)
             if btn_inc.count() > 0:
                 btn_inc.first.click(force=True)
                 self._aguardar_ajax()
@@ -6112,16 +6150,16 @@ class PJECalcPlaywright:
         # após criar o registro de apuração no backend.
         _form_open = False
         for _wait in range(15):
-            if self._page.locator("input[id$='valorJornadaSegunda']").count() > 0:
+            if self._page.locator(CartaoPonto.JORNADA_SEGUNDA).count() > 0:
                 _form_open = True
                 break
             if self._page.locator("input[name$='tipoApuracaoHorasExtras']").count() > 0:
                 _form_open = True
                 break
             # Verificar se um popup/dialog de erro apareceu (formulario:fechar sem campos)
-            if self._page.locator("input[id$='fechar']").count() > 0 and _wait >= 3:
+            if self._page.locator(CartaoPonto.FECHAR).count() > 0 and _wait >= 3:
                 # fechar button without form fields = error popup
-                _has_fields = self._page.locator("input[id$='valorJornadaSegunda']").count() > 0
+                _has_fields = self._page.locator(CartaoPonto.JORNADA_SEGUNDA).count() > 0
                 if not _has_fields:
                     _body_txt = self._page.locator("body").text_content(timeout=2000) or ""
                     _first100 = _body_txt.strip()[:200]
@@ -6130,7 +6168,7 @@ class PJECalcPlaywright:
                     self._screenshot_fase("05b_cartao_ponto_erro")
                     # Tentar fechar o dialog e retornar
                     try:
-                        self._page.locator("input[id$='fechar']").first.click(force=True)
+                        self._page.locator(CartaoPonto.FECHAR).first.click(force=True)
                         self._aguardar_ajax()
                     except Exception:
                         pass
@@ -6266,7 +6304,7 @@ class PJECalcPlaywright:
             }
             _esc_value = _ESCALA_MAP.get(escala_tipo, "OUTRA")
             try:
-                sel_esc = self._page.locator("select[id$='tipoEscala']")
+                sel_esc = self._page.locator(CartaoPonto.TIPO_ESCALA)
                 if sel_esc.count() > 0:
                     sel_esc.first.select_option(value=_esc_value)
                     self._aguardar_ajax()
@@ -6274,7 +6312,7 @@ class PJECalcPlaywright:
                 else:
                     # Tentar via JS
                     self._page.evaluate(f"""() => {{
-                        const sel = document.querySelector("select[id$='tipoEscala']");
+                        const sel = document.querySelector("{CartaoPonto.TIPO_ESCALA}");
                         if (sel) {{
                             for (const opt of sel.options) {{
                                 if (opt.value.toUpperCase().includes('{_esc_value}') ||
@@ -6444,7 +6482,7 @@ class PJECalcPlaywright:
         if jornada_semanal and preenchimento != "livre":
             _js_val = _fmt_br(jornada_semanal)
             try:
-                loc_sem = self._page.locator("input[id$='qtJornadaSemanal']")
+                loc_sem = self._page.locator(CartaoPonto.QT_JORNADA_SEMANAL)
                 if loc_sem.count() > 0:
                     loc_sem.first.click()
                     loc_sem.first.fill("")
@@ -6457,7 +6495,7 @@ class PJECalcPlaywright:
         if jornada_mensal and preenchimento != "livre":
             _jm_val = _fmt_br(jornada_mensal)
             try:
-                loc_men = self._page.locator("input[id$='qtJornadaMensal']")
+                loc_men = self._page.locator(CartaoPonto.QT_JORNADA_MENSAL)
                 if loc_men.count() > 0:
                     loc_men.first.click()
                     loc_men.first.fill("")
@@ -6475,7 +6513,7 @@ class PJECalcPlaywright:
 
             # Marcar e preencher intervalo para jornadas > 6h
             try:
-                cb = self._page.locator("input[id$='intervalorIntraJornadaSupSeis']")
+                cb = self._page.locator(CartaoPonto.INTERVALO_INTRA_JORNADA_SUP_SEIS)
                 if cb.count() > 0 and not cb.first.is_checked():
                     cb.first.click(force=True)
                     self._aguardar_ajax()
@@ -6484,7 +6522,7 @@ class PJECalcPlaywright:
                 pass
 
             try:
-                loc_iv = self._page.locator("input[id$='valorIntervalorIntraJornadaSupSeis']")
+                loc_iv = self._page.locator(CartaoPonto.VALOR_INTERVALO_SUP_SEIS)
                 if loc_iv.count() > 0:
                     loc_iv.first.click()
                     loc_iv.first.fill("")
@@ -6500,7 +6538,7 @@ class PJECalcPlaywright:
 
         if trabalha_feriados:
             try:
-                cb_fer = self._page.locator("input[id$='considerarFeriado']")
+                cb_fer = self._page.locator(CartaoPonto.CONSIDERAR_FERIADO)
                 if cb_fer.count() > 0 and not cb_fer.first.is_checked():
                     cb_fer.first.click(force=True)
                     self._aguardar_ajax()
@@ -6510,7 +6548,7 @@ class PJECalcPlaywright:
 
         if trabalha_domingos:
             try:
-                cb_dom = self._page.locator("input[id$='extraDescansoSeparado']")
+                cb_dom = self._page.locator(CartaoPonto.EXTRA_DESCANSO_SEPARADO)
                 if cb_dom.count() > 0 and not cb_dom.first.is_checked():
                     cb_dom.first.click(force=True)
                     self._aguardar_ajax()
@@ -6522,7 +6560,7 @@ class PJECalcPlaywright:
         if intervalo_min and intervalo_min > 0:
             try:
                 # Intervalo para jornadas ≤ 6h (15 min padrão)
-                cb_inf6 = self._page.locator("input[id$='intervalorIntraJornadaInfSeis']")
+                cb_inf6 = self._page.locator(CartaoPonto.INTERVALO_INTRA_JORNADA_INF_SEIS)
                 if cb_inf6.count() > 0:
                     jornada_max = max((v or 0) for v in jornada_dias.values()) if jornada_dias else 0
                     if jornada_max <= 6 and not cb_inf6.first.is_checked():
@@ -6530,7 +6568,7 @@ class PJECalcPlaywright:
                         self._aguardar_ajax()
                         self._page.wait_for_timeout(300)
                         # Preencher valor do intervalo ≤ 6h
-                        loc_iv6 = self._page.locator("input[id$='valorIntervalorIntraJornadaInfSeis']")
+                        loc_iv6 = self._page.locator(CartaoPonto.VALOR_INTERVALO_INF_SEIS)
                         if loc_iv6.count() > 0:
                             hh_i6 = int(intervalo_min // 60)
                             mm_i6 = int(intervalo_min % 60)
@@ -6548,7 +6586,7 @@ class PJECalcPlaywright:
         apurar_noturno = dur.get("apurar_hora_noturna", False)
         if apurar_noturno:
             try:
-                cb_noturno = self._page.locator("input[id$='apurarHorasNoturnas']")
+                cb_noturno = self._page.locator(CartaoPonto.APURAR_HORAS_NOTURNAS)
                 if cb_noturno.count() > 0 and not cb_noturno.first.is_checked():
                     cb_noturno.first.click(force=True)
                     self._aguardar_ajax()
@@ -6559,14 +6597,14 @@ class PJECalcPlaywright:
                     hora_inicio_noturno = dur.get("hora_inicio_noturno", "22:00")
                     hora_fim_noturno = dur.get("hora_fim_noturno", "05:00")
 
-                    loc_inicio_not = self._page.locator("input[id$='inicioHorarioNoturno']")
+                    loc_inicio_not = self._page.locator(CartaoPonto.INICIO_HORARIO_NOTURNO)
                     if loc_inicio_not.count() > 0:
                         loc_inicio_not.first.click()
                         loc_inicio_not.first.fill("")
                         loc_inicio_not.first.press_sequentially(hora_inicio_noturno, delay=50)
                         loc_inicio_not.first.press("Tab")
 
-                    loc_fim_not = self._page.locator("input[id$='fimHorarioNoturno']")
+                    loc_fim_not = self._page.locator(CartaoPonto.FIM_HORARIO_NOTURNO)
                     if loc_fim_not.count() > 0:
                         loc_fim_not.first.click()
                         loc_fim_not.first.fill("")
@@ -6578,7 +6616,7 @@ class PJECalcPlaywright:
                     # Redução ficta (hora noturna = 52m30s)
                     reducao_ficta = dur.get("reducao_ficta", True)
                     if reducao_ficta:
-                        cb_red = self._page.locator("input[id$='reducaoFicta']")
+                        cb_red = self._page.locator(CartaoPonto.REDUCAO_FICTA)
                         if cb_red.count() > 0 and not cb_red.first.is_checked():
                             cb_red.first.click(force=True)
                             self._aguardar_ajax()
@@ -6587,7 +6625,7 @@ class PJECalcPlaywright:
                     # Prorrogação horário noturno (Súmula 60 TST)
                     prorrogacao_noturno = dur.get("prorrogacao_horario_noturno", False)
                     if prorrogacao_noturno:
-                        cb_prorr = self._page.locator("input[id$='horarioProrrogado']")
+                        cb_prorr = self._page.locator(CartaoPonto.HORARIO_PRORROGADO)
                         if cb_prorr.count() > 0 and not cb_prorr.first.is_checked():
                             cb_prorr.first.click(force=True)
                             self._aguardar_ajax()
@@ -6599,8 +6637,8 @@ class PJECalcPlaywright:
         # ── 8. Salvar ──
         # No cartão de ponto, o botão pode ser "Salvar" ou "salvar"
         _saved = False
-        for _sel in ["input[id$='salvar']", "input[value='Salvar']",
-                     "input[id$='btnSalvar']", "a4j\\:commandButton[id$='salvar']"]:
+        for _sel in [CartaoPonto.SALVAR, "input[value='Salvar']",
+                     "input[id$='btnSalvar']"]:
             try:
                 btn = self._page.locator(_sel)
                 if btn.count() > 0 and btn.first.is_visible():
@@ -6665,7 +6703,11 @@ class PJECalcPlaywright:
         self.mapear_campos("fase5c_faltas")
 
         for i, falta in enumerate(faltas):
-            self._clicar_novo()
+            # Usar _clicar_botao_id("incluir") — NUNCA _clicar_novo() que pode
+            # acionar o "Novo" do menu lateral e criar um cálculo inteiro.
+            if not self._clicar_botao_id("incluir"):
+                self._log(f"  ⚠ Falta {i+1}: botão 'incluir' não encontrado")
+                continue
             self._aguardar_ajax()
             self._page.wait_for_timeout(800)
 
@@ -6880,7 +6922,7 @@ class PJECalcPlaywright:
                         self._aguardar_ajax()
                         self._page.wait_for_timeout(500)
                         # Verificar se não caiu em página de erro
-                        if self._page.locator("[id$='indiceCorrecao'], [id$='indiceTrabalhista'], [id$='taxaJuros']").count() > 0:
+                        if self._page.locator(f"{CorrecaoJurosMulta.INDICE_CORRECAO}, {CorrecaoJurosMulta.TAXA_JUROS}").count() > 0:
                             _navegou = True
                             self._log(f"  ✓ Navegou para {_jsf}")
                             break
@@ -7631,7 +7673,7 @@ class PJECalcPlaywright:
 
         # Preencher data de liquidação se campo disponível
         try:
-            _dt_campo = self._page.locator("input[id*='dataLiquidacao'], input[id*='dataDeLiquidacao']")
+            _dt_campo = self._page.locator(Liquidacao.DATA_LIQUIDACAO)
             if _dt_campo.count() > 0:
                 _val = _dt_campo.first.input_value()
                 if not _val:

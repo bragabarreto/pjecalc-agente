@@ -1241,6 +1241,7 @@ _EXTRACTION_SCHEMA: dict = {
         "verbas_deferidas", "fgts", "honorarios", "honorarios_periciais",
         "correcao_juros", "contribuicao_social", "imposto_renda",
         "historico_salarial", "faltas", "ferias", "duracao_trabalho",
+        "justica_gratuita",
         "campos_ausentes", "alertas",
     ],
     "properties": {
@@ -1511,6 +1512,27 @@ _EXTRACTION_SCHEMA: dict = {
                     "abono":          {"type": "boolean"},
                     "dobra":          {"type": "boolean"},
                 },
+            },
+        },
+        "multas_indenizacoes": {
+            "type": "array",
+            "items": {
+                "type": "object", "additionalProperties": False,
+                "required": ["descricao","tipo_valor","valor"],
+                "properties": {
+                    "descricao":  {"type": "string"},
+                    "tipo_valor": {"type": "string"},  # "INFORMADO" ou "CALCULADO"
+                    "valor":      {"type": ["number","null"]},
+                    "percentual": {"type": ["number","null"]},
+                    "base":       {"type": ["string","null"]},
+                },
+            },
+        },
+        "custas_judiciais": {
+            "type": ["object","null"], "additionalProperties": False,
+            "properties": {
+                "base_custas":  {"type": ["string","null"]},
+                "custas_reclamado_conhecimento": {"type": ["boolean","null"]},
             },
         },
         "campos_ausentes": {"type": "array", "items": {"type": "string"}},

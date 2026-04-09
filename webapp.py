@@ -1812,6 +1812,55 @@ async def api_importar_catalogo_verbas(request: Request, db: Session = Depends(g
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+# ── DOM Audit ─────────────────────────────────────────────────────────────────
+
+_dom_audit_result: dict | None = None
+_dom_audit_running: bool = False
+
+@app.get("/api/dom-audit")
+async def api_dom_audit(background_tasks: BackgroundTasks):
+    """Inicia auditoria DOM do PJE-Calc em background. Retorna status."""
+    global _dom_audit_running, _dom_audit_result
+    if _dom_audit_running:
+        return JSONResponse({"status": "running", "message": "Auditoria já em andamento"})
+    _dom_audit_running = True
+    _dom_audit_result = None
+
+    def _run_audit():
+        global _dom_audit_running, _dom_audit_result
+        try:
+            from tools.dom_auditor import DOMAuditor
+            auditor = DOMAuditor()
+            _dom_audit_result = auditor.auditar()
+            auditor.gerar_saida()
+        except Exception as exc:
+            _dom_audit_result = {"error": str(exc)}
+        finally:
+            _dom_audit_running = False
+
+    import threading
+    t = threading.Thread(target=_run_audit, daemon=True)
+    t.start()
+    return JSONResponse({"status": "started", "message": "Auditoria DOM iniciada em background"})
+
+@app.get("/api/dom-audit/status")
+async def api_dom_audit_status():
+    """Retorna status da auditoria DOM."""
+    if _dom_audit_running:
+        return JSONResponse({"status": "running"})
+    if _dom_audit_result is None:
+        return JSONResponse({"status": "idle", "message": "Nenhuma auditoria executada"})
+    if "error" in _dom_audit_result:
+        return JSONResponse({"status": "error", "error": _dom_audit_result["error"]})
+    pages = _dom_audit_result.get("pages", {})
+    total = sum(len(p.get("elements", [])) for p in pages.values())
+    return JSONResponse({
+        "status": "done",
+        "pages": len(pages),
+        "total_elements": total,
+    })
+
+
 # ── Tarefas em Background ─────────────────────────────────────────────────────
 
 def _executar_sessao_aprendizado() -> None:
