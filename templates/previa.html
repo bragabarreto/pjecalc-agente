@@ -1200,10 +1200,71 @@
       </div>
     </div>
 
-    <!-- ═══ 13. VERBAS DEFERIDAS ═══ -->
+    <!-- ═══ 13. CUSTAS JUDICIAIS ═══ -->
+    {% set custas = dados.get('custas_judiciais') or {} %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-custas')">
+        13. Custas Judiciais
+      </div>
+      <div class="secao-corpo" id="s-custas">
+        <div class="campos-grid">
+          <div class="campo-form campo-col2">
+            <label>Base das Custas</label>
+            <select onchange="salvarCampo('custas_judiciais.base', this.value, this)">
+              <option value="Bruto Devido ao Reclamante" {{ 'selected' if custas.get('base','Bruto Devido ao Reclamante') == 'Bruto Devido ao Reclamante' }}>Bruto Devido ao Reclamante</option>
+              <option value="Bruto Devido ao Reclamante + Outros Débitos" {{ 'selected' if custas.get('base') == 'Bruto Devido ao Reclamante + Outros Débitos' }}>Bruto Devido ao Reclamante + Outros Débitos</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Custas Reclamado (Conhecimento)</label>
+            <select onchange="salvarCampo('custas_judiciais.reclamado_conhecimento', this.value, this)">
+              <option value="CALCULADA" {{ 'selected' if custas.get('reclamado_conhecimento','CALCULADA') == 'CALCULADA' }}>Calculada 2%</option>
+              <option value="INFORMADA" {{ 'selected' if custas.get('reclamado_conhecimento') == 'INFORMADA' }}>Informada</option>
+              <option value="NAO_SE_APLICA" {{ 'selected' if custas.get('reclamado_conhecimento') == 'NAO_SE_APLICA' }}>Não se aplica</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Custas Reclamado (Liquidação)</label>
+            <select onchange="salvarCampo('custas_judiciais.reclamado_liquidacao', this.value, this)">
+              <option value="NAO_SE_APLICA" {{ 'selected' if custas.get('reclamado_liquidacao','NAO_SE_APLICA') == 'NAO_SE_APLICA' }}>Não se aplica</option>
+              <option value="CALCULADA" {{ 'selected' if custas.get('reclamado_liquidacao') == 'CALCULADA' }}>Calculada 0,5%</option>
+              <option value="INFORMADA" {{ 'selected' if custas.get('reclamado_liquidacao') == 'INFORMADA' }}>Informada</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Custas Reclamante (Conhecimento)</label>
+            <select onchange="salvarCampo('custas_judiciais.reclamante_conhecimento', this.value, this)">
+              <option value="NAO_SE_APLICA" {{ 'selected' if custas.get('reclamante_conhecimento','NAO_SE_APLICA') == 'NAO_SE_APLICA' }}>Não se aplica</option>
+              <option value="CALCULADA" {{ 'selected' if custas.get('reclamante_conhecimento') == 'CALCULADA' }}>Calculada 2%</option>
+              <option value="INFORMADA" {{ 'selected' if custas.get('reclamante_conhecimento') == 'INFORMADA' }}>Informada</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Percentual (%)</label>
+            <input type="number" step="0.01" min="0" max="100"
+                   value="{{ (custas.get('percentual', 0.02) * 100)|round(2) if custas.get('percentual') else '2.00' }}"
+                   onchange="salvarCampo('custas_judiciais.percentual', (parseFloat(this.value)/100).toString(), this)"
+                   placeholder="2.00">
+          </div>
+          <div class="campo-form">
+            <label>Devedor</label>
+            <select onchange="salvarCampo('custas_judiciais.devedor', this.value, this)">
+              <option value="RECLAMADO" {{ 'selected' if custas.get('devedor','RECLAMADO') == 'RECLAMADO' }}>Reclamado</option>
+              <option value="RECLAMANTE" {{ 'selected' if custas.get('devedor') == 'RECLAMANTE' }}>Reclamante</option>
+            </select>
+          </div>
+        </div>
+        <div style="background:#e8f4fd; border-left:3px solid #1a3a6b; padding:10px; border-radius:0 5px 5px 0; font-size:0.83rem; line-height:1.5; margin-top:10px;">
+          <strong style="color:#1a3a6b;">Referência</strong> — Conhecimento: 2% (mín. R$10,64) | Liquidação: 0,5% (máx. R$638,46)<br>
+          <small style="color:#6c757d;">Ações após 10/11/2017: teto de custas = 4x teto do RGPS. Justiça gratuita isenta de custas.</small>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 14. VERBAS DEFERIDAS ═══ -->
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-verbas')">
-        13. Verbas Deferidas
+        14. Verbas Deferidas
         <span class="confianca-badge conf-alta">{{ verbas|length }} verba(s)</span>
       </div>
       <div class="secao-corpo" id="s-verbas">
@@ -1327,13 +1388,13 @@
       </div>
     </div>
 
-    <!-- ═══ 14. PLANO DE PREENCHIMENTO ═══ -->
+    <!-- ═══ 15. PLANO DE PREENCHIMENTO ═══ -->
     {% set todas_verbas_plan = [] %}
     {% for v in verbas_mapeadas.get('predefinidas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
     {% for v in verbas_mapeadas.get('personalizadas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-plano-preenchimento')">
-        14. Plano de Preenchimento (Automacao)
+        15. Plano de Preenchimento (Automacao)
         <span class="confianca-badge conf-alta">{{ todas_verbas_plan|length }} verba(s)</span>
       </div>
       <div class="secao-corpo" id="s-plano-preenchimento">

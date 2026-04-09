@@ -627,13 +627,22 @@ class CorrecaoJurosMulta:
 # ============================================================================
 
 class CustasJudiciais:
-    """Campos de Custas Judiciais"""
+    """Campos de Custas Judiciais (custas/custas.jsf).
+
+    Duas abas: Custas Devidas e Custas Recolhidas.
+    Manual seção 20: salvar após preencher AMBAS as abas.
+    """
     JSF = "custas.jsf"
 
-    BASE_CUSTAS = "select[id$='baseCustas']"
-    CUSTAS_RECLAMADO_CONHECIMENTO = "[id$='custasReclamadoConhecimento']"  # radio
+    # Aba Custas Devidas
+    BASE_CUSTAS = "select[id$='baseCustas'], select[id$='baseParaApuracao']"
+    CUSTAS_RECLAMADO_CONHECIMENTO = "[id$='custasReclamadoConhecimento']"    # radio
+    CUSTAS_RECLAMADO_LIQUIDACAO = "[id$='custasReclamadoLiquidacao']"        # radio
+    CUSTAS_RECLAMANTE_CONHECIMENTO = "[id$='custasReclamanteConhecimento']"  # radio
+    PERCENTUAL = "[id$='percentualCustas'], [id$='aliquota']"
+    DEVEDOR = "select[id$='devedor']"
 
-    # Custas Recolhidas (aba separada — manual seção 20)
+    # Aba Custas Recolhidas
     VENCIMENTO_CUSTAS = "[id$='vencimento'], [id$='dataVencimento']"
     VALOR_CUSTAS = "[id$='valorCustas'], [id$='valor']"
 

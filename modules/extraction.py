@@ -1523,8 +1523,12 @@ _EXTRACTION_SCHEMA: dict = {
         "custas_judiciais": {
             "type": ["object","null"], "additionalProperties": False,
             "properties": {
-                "base_custas":  {"type": ["string","null"]},
-                "custas_reclamado_conhecimento": {"type": ["boolean","null"]},
+                "base":                    {"type": ["string","null"]},
+                "reclamado_conhecimento":   {"type": ["string","null"]},
+                "reclamado_liquidacao":     {"type": ["string","null"]},
+                "reclamante_conhecimento":  {"type": ["string","null"]},
+                "percentual":              {"type": ["number","null"]},
+                "devedor":                 {"type": ["string","null"]},
             },
         },
         "campos_ausentes": {"type": "array", "items": {"type": "string"}},
