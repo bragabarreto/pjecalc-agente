@@ -2712,8 +2712,6 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     cust.setdefault("reclamado_conhecimento", "CALCULADA")
     cust.setdefault("reclamado_liquidacao", "NAO_SE_APLICA")
     cust.setdefault("reclamante_conhecimento", "NAO_SE_APLICA")
-    cust.setdefault("percentual", 0.02)
-    cust.setdefault("devedor", "RECLAMADO")
     dados["custas_judiciais"] = cust
 
     # Remover campos opcionais que o LLM pode ter incluído indevidamente
