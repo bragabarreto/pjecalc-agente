@@ -105,7 +105,7 @@ RUN playwright install firefox --with-deps
 COPY . .
 
 # Diretórios de dados
-RUN mkdir -p data/logs/sessions data/logs/screenshots data/output data/learning data/calculations static
+RUN mkdir -p data/logs/sessions data/logs/screenshots data/output data/exports data/learning data/calculations static
 
 # Persistência por processo — usar Railway Volumes em produção
 # (VOLUME não é permitido no Railway)

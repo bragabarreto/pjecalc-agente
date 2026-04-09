@@ -33,10 +33,11 @@ LOGS_DIR = DATA_DIR / "logs"
 SESSIONS_DIR = LOGS_DIR / "sessions"
 SCREENSHOTS_DIR = LOGS_DIR / "screenshots"
 OUTPUT_DIR = DATA_DIR / "output"
+EXPORTS_DIR = DATA_DIR / "exports"
 TEMPLATES_DIR = BASE_DIR / "templates"
 
 # Garantir que os diretórios existam
-for _dir in [LOGS_DIR, SESSIONS_DIR, SCREENSHOTS_DIR, OUTPUT_DIR]:
+for _dir in [LOGS_DIR, SESSIONS_DIR, SCREENSHOTS_DIR, OUTPUT_DIR, EXPORTS_DIR]:
     _dir.mkdir(parents=True, exist_ok=True)
 
 # ── Modo cloud ───────────────────────────────────────────────────────────────

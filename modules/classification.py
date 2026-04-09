@@ -869,15 +869,17 @@ _VERBAS_NORMALIZADAS: dict[str, dict[str, Any]] = {}
 for _k, _v in VERBAS_PREDEFINIDAS.items():
     _VERBAS_NORMALIZADAS[_k] = _v  # chave original
     import unicodedata as _ud
+    import re as _re_init
     _norm = _ud.normalize("NFD", _k.lower())
     _norm = "".join(c for c in _norm if _ud.category(c) != "Mn")
     _norm = _norm.replace("º", "").replace("°", "").replace(".", "")
+    _norm = _re_init.sub(r"\s*\+?\s*1/3\s*", " ", _norm).strip()
     for _stop in [" da ", " de ", " do ", " das ", " dos ", " a ", " o "]:
         _norm = _norm.replace(_stop, " ")
-    _norm = _norm.strip()
+    _norm = _re_init.sub(r"\s+", " ", _norm).strip()
     if _norm != _k:
         _VERBAS_NORMALIZADAS[_norm] = _v
-del _k, _v, _norm, _ud
+del _k, _v, _norm, _ud, _re_init
 
 
 # Mapeamento de reflexas típicas (Manual, Seção 3.4)
@@ -1147,12 +1149,22 @@ def classificar_verba(verba: dict[str, Any]) -> dict[str, Any]:
     nome = verba.get("nome_sentenca", "")
     chave = _normalizar_chave(nome)
 
+    # Detectar se o nome original contém sufixo "- Diferenças"
+    _, _eh_diferenca = _remover_sufixo_diferencas(nome)
+
     # Busca direta (tabela normalizada cobre ambas formas)
     config_pjec = _VERBAS_NORMALIZADAS.get(chave)
 
     # Busca por similaridade (substrings)
     if not config_pjec:
         config_pjec = _buscar_por_similaridade(chave)
+
+    # Se não encontrou, tentar removendo sufixo "- Diferenças"
+    # Ex: "Aviso Prévio Indenizado - Diferenças" → busca "Aviso Prévio Indenizado"
+    if not config_pjec and _eh_diferenca:
+        nome_base, _ = _remover_sufixo_diferencas(nome)
+        chave_base = _normalizar_chave(nome_base)
+        config_pjec = _VERBAS_NORMALIZADAS.get(chave_base) or _buscar_por_similaridade(chave_base)
 
     if config_pjec:
         verba_mapeada = {**verba, **config_pjec}
@@ -1162,6 +1174,12 @@ def classificar_verba(verba: dict[str, Any]) -> dict[str, Any]:
         # Sugerir reflexas típicas se aplicável
         reflexas = REFLEXAS_TIPICAS.get(config_pjec["nome_pjecalc"], [])
         verba_mapeada["reflexas_sugeridas"] = reflexas
+        if _eh_diferenca:
+            verba_mapeada["_diferenca"] = True
+            verba_mapeada["_alerta"] = (
+                f"Verba de diferenças \"{nome}\" tratada como verba Expresso "
+                f"\"{config_pjec['nome_pjecalc']}\""
+            )
     else:
         # Tentar via LLM
         verba_mapeada = _classificar_via_llm(verba)
@@ -1191,7 +1209,18 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
     for verba in verbas:
         nome = verba.get("nome_sentenca", "")
         chave = _normalizar_chave(nome)
+
+        # Detectar se o nome original contém sufixo "- Diferenças"
+        _, _eh_diferenca = _remover_sufixo_diferencas(nome)
+
         config_pjec = _VERBAS_NORMALIZADAS.get(chave) or _buscar_por_similaridade(chave)
+
+        # Se não encontrou, tentar removendo sufixo "- Diferenças"
+        if not config_pjec and _eh_diferenca:
+            nome_base, _ = _remover_sufixo_diferencas(nome)
+            chave_base = _normalizar_chave(nome_base)
+            config_pjec = _VERBAS_NORMALIZADAS.get(chave_base) or _buscar_por_similaridade(chave_base)
+
         if config_pjec:
             # Verbas marcadas _apenas_fgts não devem virar verba na automação
             # (ex: Multa Art. 467 é checkbox FGTS + reflexa automática, não verba Expresso)
@@ -1203,6 +1232,12 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
             resultado["mapeada"] = True
             resultado["confianca_mapeamento"] = 1.0
             resultado["reflexas_sugeridas"] = REFLEXAS_TIPICAS.get(config_pjec["nome_pjecalc"], [])
+            if _eh_diferenca:
+                resultado["_diferenca"] = True
+                resultado["_alerta"] = (
+                    f"Verba de diferenças \"{nome}\" tratada como verba Expresso "
+                    f"\"{config_pjec['nome_pjecalc']}\""
+                )
             predefinidas.append(resultado)
             reflexas_acumuladas.extend(resultado["reflexas_sugeridas"])
         else:
@@ -1291,10 +1326,38 @@ def _normalizar_chave(nome: str) -> str:
     nome = unicodedata.normalize("NFD", nome.lower())
     nome = "".join(c for c in nome if unicodedata.category(c) != "Mn")
     nome = nome.replace("º", "").replace("°", "").replace(".", "")
+    # Remover "+ 1/3" de férias (implícito no PJE-Calc)
+    nome = _re_mod.sub(r"\s*\+?\s*1/3\s*", " ", nome).strip()
     # Remover artigos e preposições irrelevantes
     for stop in [" da ", " de ", " do ", " das ", " dos ", " a ", " o "]:
         nome = nome.replace(stop, " ")
+    # Colapsar espaços múltiplos
+    nome = _re_mod.sub(r"\s+", " ", nome)
     return nome.strip()
+
+
+import re as _re_mod
+
+# Padrão para detectar sufixos de "diferenças" no nome da verba
+_PADRAO_DIFERENCAS = _re_mod.compile(
+    r"\s*[-–—]\s*diferen[cç]as?\s*$",
+    _re_mod.IGNORECASE,
+)
+
+
+def _remover_sufixo_diferencas(nome: str) -> tuple[str, bool]:
+    """
+    Remove sufixo "- Diferenças" / "- Diferença" / "- Diferencas" do nome da verba.
+
+    Verbas como "Aviso Prévio Indenizado - Diferenças" devem ser tratadas como
+    a verba Expresso base correspondente ("AVISO PRÉVIO").
+
+    Retorna (nome_sem_sufixo, tinha_sufixo).
+    """
+    if _PADRAO_DIFERENCAS.search(nome):
+        nome_limpo = _PADRAO_DIFERENCAS.sub("", nome).strip()
+        return nome_limpo, True
+    return nome, False
 
 
 def _buscar_por_similaridade(chave: str) -> dict[str, Any] | None:
