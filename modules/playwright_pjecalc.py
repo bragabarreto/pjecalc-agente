@@ -926,6 +926,20 @@ class PJECalcPlaywright:
         try:
             loc.wait_for(state="visible", timeout=8000)
 
+            # Verificar se o campo está disabled (dataCriacao, etc.)
+            try:
+                _is_disabled = loc.evaluate("el => el.disabled")
+                if _is_disabled:
+                    # Campo disabled — setar via JS direto (sem focus/type)
+                    loc.evaluate(
+                        "(el, v) => { el.disabled = false; el.value = v; el.disabled = true; }",
+                        data,
+                    )
+                    self._log(f"  ✓ data {field_id}: {data} (disabled/readonly override)")
+                    return True
+            except Exception:
+                pass
+
             # Estratégia: simular digitação humana no input visível do rich:calendar
             #
             # rich:calendar gera:
@@ -966,26 +980,37 @@ class PJECalcPlaywright:
                     pass
             self._page.wait_for_timeout(500)
 
-            # Verificar valores resultantes
+            # Verificar valores resultantes (rich:calendar ou input simples)
             _result = self._page.evaluate("""(suffix) => {
-                const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
-                if (!input) return {visible: 'NOT_FOUND', hidden: ''};
-                const hid = document.getElementById(input.id.replace('InputDate', 'InputCurrentDate'));
-                return {
-                    visible: input.value,
-                    hidden: hid ? hid.value : 'NO_HIDDEN'
-                };
+                // Tentar rich:calendar primeiro
+                const calInput = document.querySelector('input[id$="' + suffix + 'InputDate"]');
+                if (calInput) {
+                    const hid = document.getElementById(calInput.id.replace('InputDate', 'InputCurrentDate'));
+                    return {
+                        visible: calInput.value,
+                        hidden: hid ? hid.value : 'NO_HIDDEN',
+                        type: 'calendar'
+                    };
+                }
+                // Fallback: input simples
+                const simpleInput = document.querySelector(
+                    'input[id$="' + suffix + '"]:not([type="hidden"])'
+                );
+                if (simpleInput) {
+                    return {visible: simpleInput.value, hidden: '', type: 'simple'};
+                }
+                return {visible: 'NOT_FOUND', hidden: '', type: 'none'};
             }""", field_id)
 
             _vis = _result.get("visible", "") if isinstance(_result, dict) else str(_result)
             _hid = _result.get("hidden", "") if isinstance(_result, dict) else ""
-
-            if _vis == "NOT_FOUND":
-                self._log(f"  ⚠ data {field_id}: InputDate não encontrado")
-                return False
+            _type = _result.get("type", "") if isinstance(_result, dict) else ""
 
             self._aguardar_ajax(timeout=2000)
-            self._log(f"  ✓ data {field_id}: {data} (visible={_vis}, hidden={_hid})")
+            if _type == "calendar":
+                self._log(f"  ✓ data {field_id}: {data} (visible={_vis}, hidden={_hid})")
+            else:
+                self._log(f"  ✓ data {field_id}: {data}")
             return True
         except Exception as e:
             # Fallback: setar valor via JS no input visível + disparar blur
