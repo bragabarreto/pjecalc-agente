@@ -1264,6 +1264,81 @@ async def ler_campos_log(filename: str):
     return JSONResponse(json.loads(arq.read_text(encoding="utf-8")))
 
 
+# ── DOM Auditor endpoint ────────────────────────────────────────────────────
+_dom_audit_running = False
+_dom_audit_result: dict | None = None
+
+@app.get("/api/dom-audit")
+async def executar_dom_audit():
+    """Executa o DOM Auditor no PJE-Calc local e retorna o mapa JSON.
+    Se já existe um resultado recente (<1h), retorna do cache.
+    """
+    global _dom_audit_running, _dom_audit_result
+
+    if _dom_audit_running:
+        return JSONResponse({"status": "running", "msg": "DOM audit já em execução"}, status_code=409)
+
+    # Check cache
+    dom_map_path = Path("knowledge/pjecalc_dom_map.json")
+    if dom_map_path.exists():
+        try:
+            cached = json.loads(dom_map_path.read_text(encoding="utf-8"))
+            age_hours = (datetime.now() - datetime.fromisoformat(cached.get("metadata", {}).get("gerado_em", "2000-01-01"))).total_seconds() / 3600
+            if age_hours < 1 and not _dom_audit_result:
+                return JSONResponse({"status": "cached", "age_hours": round(age_hours, 2), "data": cached})
+        except Exception:
+            pass
+
+    if _dom_audit_result:
+        return JSONResponse({"status": "done", "data": _dom_audit_result})
+
+    # Start audit in background thread
+    _dom_audit_running = True
+    import threading
+    def _run():
+        global _dom_audit_running, _dom_audit_result
+        try:
+            from tools.dom_auditor import DOMAuditor
+            auditor = DOMAuditor(
+                base_url=PJECALC_LOCAL_URL,
+                headless=True,
+                output_dir="knowledge",
+            )
+            auditor.iniciar()
+            try:
+                result = auditor.auditar()
+                auditor.gerar_saida()
+                _dom_audit_result = result
+                logger.info("DOM audit concluído: %d páginas, %d elementos",
+                            result.get("metadata", {}).get("total_paginas", 0),
+                            result.get("metadata", {}).get("total_elementos", 0))
+            finally:
+                auditor.fechar()
+        except Exception as e:
+            logger.error("DOM audit falhou: %s", e, exc_info=True)
+            _dom_audit_result = {"erro": str(e)}
+        finally:
+            _dom_audit_running = False
+
+    t = threading.Thread(target=_run, daemon=True, name="dom-auditor")
+    t.start()
+    return JSONResponse({"status": "started", "msg": "DOM audit iniciado. GET /api/dom-audit novamente para resultado."})
+
+@app.get("/api/dom-audit/status")
+async def dom_audit_status():
+    """Verifica status do DOM audit."""
+    if _dom_audit_running:
+        return {"status": "running"}
+    if _dom_audit_result:
+        n_paginas = len(_dom_audit_result.get("paginas", {}))
+        n_elementos = sum(
+            len(p.get("elementos", []))
+            for p in _dom_audit_result.get("paginas", {}).values()
+        )
+        return {"status": "done", "paginas": n_paginas, "elementos": n_elementos}
+    return {"status": "idle"}
+
+
 @app.get("/api/executar/{sessao_id}")
 async def executar_automacao_sse(
     sessao_id: str,
