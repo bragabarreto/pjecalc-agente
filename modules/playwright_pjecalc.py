@@ -968,12 +968,11 @@ class PJECalcPlaywright:
             self._page.wait_for_timeout(300)
 
             # Tirar foco do campo para disparar blur natural → RichFaces atualiza hidden
-            # Escape fecha o popup do calendar (se abriu), depois Tab move foco
-            # para o próximo campo, disparando blur natural no campo atual.
+            # NÃO usar Escape (limpa o valor digitado no rich:calendar!)
             # NÃO clicar no body (pode acertar logo/menu e navegar para outra página!)
-            loc.press("Escape")
-            self._page.wait_for_timeout(200)
-            loc.press("Tab")
+            # Usar Tab diretamente — move foco para o próximo campo, disparando blur.
+            # Se o calendar popup abrir, Tab fecha-o e move foco.
+            self._page.keyboard.press("Tab")
             self._page.wait_for_timeout(500)
 
             # Verificar valores resultantes (rich:calendar ou input simples)
