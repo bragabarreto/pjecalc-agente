@@ -2279,29 +2279,23 @@ class PJECalcPlaywright:
             if _n_opts == 0:
                 return False
 
-            # Buscar pelo CNJ (comparação apenas dígitos para máxima tolerância a formatação)
-            import re as _re_recentes
+            # Buscar pelo CNJ
             _num_proc = (self._dados or {}).get("processo", {}).get("numero", "")
-            _num_clean = _re_recentes.sub(r'\D', '', _num_proc) if _num_proc else ""
+            _num_clean = _num_proc.replace(".", "").replace("-", "").replace("/", "") if _num_proc else ""
             _found_idx = None
 
             if _num_clean:
                 for _idx in range(_n_opts):
                     _opt_text = (_options.nth(_idx).text_content() or "")
-                    _opt_digits = _re_recentes.sub(r'\D', '', _opt_text)
-                    if _num_clean in _opt_digits:
+                    _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
+                    if _num_clean in _opt_clean:
                         _found_idx = _idx
                         break
 
             # Fallback: buscar pelo nome do reclamante
             if _found_idx is None:
                 _reclamante = (self._dados or {}).get("processo", {}).get("reclamante", {})
-                if isinstance(_reclamante, str):
-                    _nome_recl = _reclamante.strip().upper()
-                elif isinstance(_reclamante, dict):
-                    _nome_recl = (_reclamante.get("nome") or "").strip().upper()
-                else:
-                    _nome_recl = ""
+                _nome_recl = (_reclamante.get("nome") or "").strip().upper() if isinstance(_reclamante, dict) else ""
                 if _nome_recl and len(_nome_recl) >= 5:
                     for _idx in range(_n_opts):
                         _opt_text = (_options.nth(_idx).text_content() or "").upper()
@@ -2310,20 +2304,17 @@ class PJECalcPlaywright:
                             break
 
             if _found_idx is None:
-                # Diagnóstico: listar TODOS os itens disponíveis (não apenas 5)
+                # Diagnóstico: listar todos os itens disponíveis
                 _nome_recl2 = ""
                 try:
                     _r = (self._dados or {}).get("processo", {}).get("reclamante", {})
-                    if isinstance(_r, str):
-                        _nome_recl2 = _r.strip()
-                    elif isinstance(_r, dict):
-                        _nome_recl2 = (_r.get("nome") or "").strip()
+                    _nome_recl2 = (_r.get("nome") or "").strip() if isinstance(_r, dict) else ""
                 except Exception:
                     pass
                 self._log(f"  ℹ Recentes ({_n_opts} itens) — buscando CNJ='{_num_proc}' / reclamante='{_nome_recl2}':")
-                for _idx in range(_n_opts):
+                for _idx in range(min(_n_opts, 5)):
                     _opt_text = (_options.nth(_idx).text_content() or "").strip()
-                    self._log(f"    item {_idx+1}: '{_opt_text[:120]}'")
+                    self._log(f"    item {_idx+1}: '{_opt_text[:100]}'")
 
                 # Último recurso: se há apenas 1 item nos recentes, é provável que seja o nosso
                 # (H2 foi limpo antes, então só existe o cálculo que acabamos de criar)
@@ -2343,43 +2334,9 @@ class PJECalcPlaywright:
 
             _url_after = self._page.url
             if "calculo" in _url_after and "conversationId" in _url_after:
-                # Salvar IDs anteriores para restaurar se verificação falhar
-                _prev_base = self._calculo_url_base
-                _prev_conv = self._calculo_conversation_id
                 self._capturar_base_calculo()
-
-                # VERIFICAÇÃO DE SEGURANÇA: confirmar que o cálculo aberto é do processo correto
-                # Navegar para Dados do Cálculo para ver os campos do processo
-                try:
-                    self._clicar_menu_lateral("Dados do Cálculo", obrigatorio=False)
-                    self._page.wait_for_timeout(1500)
-                    self._aguardar_ajax()
-                except Exception:
-                    pass
-
-                if self._verificar_calculo_correto():
-                    self._log(f"  ✓ Cálculo re-aberto via Recentes: conversationId={self._calculo_conversation_id} (processo correto)")
-                    return True
-
-                # Verificar por reclamante
-                _recl = (self._dados or {}).get("processo", {}).get("reclamante", "")
-                if isinstance(_recl, str):
-                    _recl_nome = _recl.strip().upper()
-                elif isinstance(_recl, dict):
-                    _recl_nome = (_recl.get("nome") or "").strip().upper()
-                else:
-                    _recl_nome = ""
-                if _recl_nome and len(_recl_nome) >= 5:
-                    _body = self._page.evaluate("() => (document.body.innerText || '').toUpperCase()")
-                    if _recl_nome in _body:
-                        self._log(f"  ✓ Cálculo re-aberto via Recentes: conv={self._calculo_conversation_id} (reclamante '{_recl_nome}' conferido)")
-                        return True
-
-                # PROCESSO ERRADO — restaurar IDs anteriores e rejeitar
-                self._log(f"  ⚠ Cálculo re-aberto via Recentes é de OUTRO processo — rejeitando (conv={self._calculo_conversation_id})")
-                self._calculo_url_base = _prev_base
-                self._calculo_conversation_id = _prev_conv
-                return False
+                self._log(f"  ✓ Cálculo re-aberto via Recentes: conversationId={self._calculo_conversation_id}")
+                return True
             return False
         except Exception as _e:
             self._log(f"  ⚠ _reabrir_calculo_recentes: {_e}")
@@ -2667,9 +2624,35 @@ class PJECalcPlaywright:
             "distrato": "DISTRATO",
             "morte": "MORTE",
         }
-        if cont.get("tipo_rescisao"):
-            self._selecionar("tipoRescisao", rescisao_map.get(cont["tipo_rescisao"], "SEM_JUSTA_CAUSA"), obrigatorio=False)
-            self._selecionar("motivoDesligamento", rescisao_map.get(cont["tipo_rescisao"], "SEM_JUSTA_CAUSA"), obrigatorio=False)
+        # Tipo de Rescisão é OBRIGATÓRIO — sem ele, "Existem erros no formulário".
+        # Sempre tentar preencher, mesmo sem extração (default: SEM_JUSTA_CAUSA).
+        _rescisao_val = rescisao_map.get(cont.get("tipo_rescisao", "sem_justa_causa"), "SEM_JUSTA_CAUSA")
+        _rescisao_ok = (
+            self._selecionar("tipoRescisao", _rescisao_val, obrigatorio=False)
+            or self._selecionar("motivoDesligamento", _rescisao_val, obrigatorio=False)
+        )
+        if not _rescisao_ok:
+            # Fallback: JS direto buscando qualquer select com opções de rescisão
+            try:
+                _rescisao_ok = self._page.evaluate(f"""(val) => {{
+                    const sels = [...document.querySelectorAll('select')].filter(s => {{
+                        const opts = [...s.options].map(o => o.value.toUpperCase());
+                        return opts.includes('SEM_JUSTA_CAUSA') || opts.includes('JUSTA_CAUSA');
+                    }});
+                    for (const sel of sels) {{
+                        sel.value = val;
+                        sel.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        return true;
+                    }}
+                    return false;
+                }}""", _rescisao_val)
+                if _rescisao_ok:
+                    self._aguardar_ajax()
+                    self._log(f"  ✓ tipoRescisao: {_rescisao_val} (via JS fallback)")
+            except Exception:
+                pass
+        if not _rescisao_ok:
+            self._log(f"  ⚠ tipoRescisao: NÃO preenchido — pode causar erro ao salvar")
 
         # Regime de trabalho — ID confirmado: formulario:tipoDaBaseTabelada
         # Values: INTEGRAL (padrão), PARCIAL, INTERMITENTE
@@ -2727,36 +2710,11 @@ class PJECalcPlaywright:
         if presc.get("fgts") is not None:
             self._marcar_checkbox("prescricaoFgts", bool(presc["fgts"]))
 
-        # Índices de correção e juros
-        cj = dados.get("correcao_juros", {})
+        # NOTA: Índices de correção e juros NÃO são configurados aqui na aba
+        # Parâmetros do Cálculo. São configurados exclusivamente em fase_parametros_atualizacao()
+        # (Fase 6 — página correcao-juros.jsf). Configurar em ambos os lugares causa
+        # conflitos no modelo JSF e "Erro inesperado. Erro: 1" ao salvar a Fase 6.
         ir = dados.get("imposto_renda", {})
-
-        indice_map = {
-            "Tabela JT Única Mensal": "IPCAE",
-            "Tabela JT Unica Mensal": "IPCAE",
-            "IPCA-E": "IPCAE",
-            "Selic": "SELIC",
-            "TRCT": "TRCT",
-            "TR": "TRD",
-        }
-        indice = indice_map.get(cj.get("indice_correcao", ""), "IPCAE")
-        self._selecionar("indiceTrabalhista", indice, obrigatorio=False)
-        self._selecionar("indiceCorrecao", indice, obrigatorio=False)
-
-        juros_map = {
-            "Taxa Legal": "TAXA_LEGAL",
-            "Selic": "SELIC",
-            "Juros Padrão": "TRD_SIMPLES",
-            "Juros Padrao": "TRD_SIMPLES",
-            "1% ao mês": "TRD_SIMPLES",
-        }
-        juros = juros_map.get(cj.get("taxa_juros", ""), "TAXA_LEGAL")
-        self._selecionar("juros", juros, obrigatorio=False)
-        self._selecionar("taxaJuros", juros, obrigatorio=False)
-
-        base_map = {"Verbas": "VERBA_INSS", "Credito Total": "CREDITO_TOTAL"}
-        base = base_map.get(cj.get("base_juros", "Verbas"), "VERBA_INSS")
-        self._selecionar("baseDeJurosDasVerbas", base, obrigatorio=False)
 
         if ir.get("apurar"):
             self._marcar_checkbox("apurarImpostoRenda", True)
@@ -2851,6 +2809,27 @@ class PJECalcPlaywright:
         carga_semanal = parametros.get("carga_horaria_semanal")
         zerar_negativos = parametros.get("zerar_valores_negativos", True)
 
+        # Validação: data_inicial não pode ser anterior à admissão.
+        # O PJE-Calc rejeita datas de apuração fora do período contratual.
+        # Causa comum: prescrição quinquenal calculada a partir do ajuizamento
+        # pode gerar data anterior à admissão (ex: ajuiz 2026 - 5 = 2021, mas admissão é 2025).
+        if data_inicial:
+            from datetime import datetime as _dt_parse
+            try:
+                _admissao_str = parametros.get("data_admissao", "")
+                if _admissao_str:
+                    _fmt = "%d/%m/%Y"
+                    _dt_ini = _dt_parse.strptime(data_inicial, _fmt)
+                    _dt_adm = _dt_parse.strptime(_admissao_str, _fmt)
+                    if _dt_ini < _dt_adm:
+                        self._log(
+                            f"  ⚠ data_inicial_apuracao ({data_inicial}) anterior à admissão "
+                            f"({_admissao_str}) — ajustando para admissão"
+                        )
+                        data_inicial = _admissao_str
+            except (ValueError, TypeError):
+                pass  # formato inválido — preencher como está
+
         if data_inicial:
             self._preencher_data("dataInicialApuracao", data_inicial, False)
             self._preencher_data("dataInicio", data_inicial, False)
@@ -2902,13 +2881,7 @@ class PJECalcPlaywright:
                 _body_check = self._page.evaluate(
                     "() => (document.body ? document.body.textContent : '').substring(0, 500)"
                 )
-                _is_error = ("NullPointer" in _body_check
-                             or "JdbcBatch" in _body_check
-                             or "HTTP 500" in _body_check
-                             or "HTTP Status 500" in _body_check
-                             or "javax.faces" in _body_check.lower()
-                             or "java.lang.Exception" in _body_check)
-                if _is_error:
+                if "500" in _body_check or "NullPointer" in _body_check or "JdbcBatch" in _body_check:
                     self._log("  ⚠ Histórico Salarial: erro H2/JSF detectado na página — tentando recuperar…")
                     # Tentar voltar para Parâmetros do Cálculo e re-salvar
                     if self._calculo_url_base and self._calculo_conversation_id:
@@ -2943,8 +2916,28 @@ class PJECalcPlaywright:
 
         for idx_h, h in enumerate(historico):
           try:
-            # O PJE-Calc pode auto-gerar um histórico a partir da Última Remuneração.
-            # Verificar se já existe uma entrada antes de criar nova.
+            # Garantir que estamos na página de listagem do Histórico Salarial
+            # ANTES de tentar clicar "Incluir"/"Novo". Após salvar o período anterior,
+            # a página pode ter redirecionado para outro lugar ou o DOM pode ter mudado.
+            if idx_h > 0:
+                # Navegar explicitamente para a listagem do Histórico Salarial
+                if self._calculo_url_base and self._calculo_conversation_id:
+                    _url_hist_list = (
+                        f"{self._calculo_url_base}historico-salarial.jsf"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    try:
+                        self._page.goto(_url_hist_list, wait_until="domcontentloaded", timeout=15000)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(1000)
+                    except Exception:
+                        # Fallback: usar menu lateral
+                        self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+                        self._page.wait_for_timeout(1000)
+                else:
+                    self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
+                    self._page.wait_for_timeout(1000)
+
             # Fluxo: clicar "incluir"/"Novo" → preencher formulário inline ou navegar
             # IMPORTANTE: NÃO usar _clicar_novo() — pega "Novo" do top-nav e cria novo cálculo.
             #
@@ -2958,24 +2951,36 @@ class PJECalcPlaywright:
                       or self._clicar_botao_id("novo"))
             if not _abriu:
                 # Se não encontrou "incluir", pode ser que a página já tenha entradas
-                # e o botão tenha outro ID. Tentar via JS.
+                # e o botão tenha outro ID. Tentar via JS ampla.
                 _abriu = self._page.evaluate("""() => {
                     const btns = [...document.querySelectorAll(
-                        'input[type="button"], input[type="submit"], a[onclick]'
+                        'input[type="button"], input[type="submit"], a[onclick], a.rf-dt-c'
                     )];
                     for (const btn of btns) {
                         const t = ((btn.value || '') + ' ' + (btn.textContent || '') +
                                    ' ' + (btn.title || '')).trim().toLowerCase();
                         if (t === 'novo' || t === 'incluir' || t === 'nova base'
-                            || t.includes('novo hist')) {
+                            || t.includes('novo hist') || t === 'new' || t === 'add') {
                             btn.click();
+                            return true;
+                        }
+                    }
+                    // Fallback: buscar qualquer input[type="submit"] que não seja Salvar/Cancelar
+                    const submits = document.querySelectorAll('input[type="submit"], input[type="button"]');
+                    for (const s of submits) {
+                        const v = (s.value || '').toLowerCase();
+                        if (v && !v.includes('salvar') && !v.includes('cancelar') &&
+                            !v.includes('fechar') && !v.includes('excluir') &&
+                            !v.includes('importar') && !v.includes('grade') &&
+                            (v.includes('novo') || v.includes('incluir') || v.includes('add'))) {
+                            s.click();
                             return true;
                         }
                     }
                     return false;
                 }""")
             if not _abriu:
-                self._log(f"  ⚠ Botão 'incluir'/'Novo' não encontrado no Histórico Salarial")
+                self._log(f"  ⚠ Botão 'incluir'/'Novo' não encontrado no Histórico Salarial (período {idx_h+1})")
                 continue
             self._aguardar_ajax()
             self._page.wait_for_timeout(1500)
@@ -4434,35 +4439,14 @@ class PJECalcPlaywright:
                 self._log(f"  → '{nome}' é checkbox da aba FGTS — configurada em fase_fgts(), ignorando criação manual")
                 continue
 
-            # ── Pre-check: detectar página de erro antes de tentar novo formulário ──
-            try:
-                _page_ok = self._page.evaluate("""() => {
-                    const body = document.body ? document.body.textContent : '';
-                    if (body.match(/HTTP\\s*500|NullPointerException|ViewExpiredException|Internal Server Error/i)) {
-                        return false;
-                    }
-                    if (document.title && document.title.match(/500|erro|error/i)) {
-                        return false;
-                    }
-                    return true;
-                }""")
-                if not _page_ok:
-                    self._log(f"  🔄 Página em estado de erro antes de verba '{nome}' — recuperando…")
-                    _rec = self._reabrir_calculo_recentes()
-                    if _rec and self._calculo_url_base and self._calculo_conversation_id:
-                        _url_verbas_listing = (
-                            f"{self._calculo_url_base}verba/verba-calculo.jsf"
-                            f"?conversationId={self._calculo_conversation_id}"
-                        )
-                        _url_verbas = (
-                            f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
-                            f"?conversationId={self._calculo_conversation_id}"
-                        )
-                    self._clicar_menu_lateral("Verbas", obrigatorio=False)
-                    self._page.wait_for_timeout(1000)
-                    self._aguardar_ajax()
-            except Exception:
-                pass
+            # Re-calcular URLs com conversationId ATUAL antes de cada navegação
+            # O conversationId muda após cada save (Seam Framework) — usar ID expirado causa HTTP 500
+            self._capturar_base_calculo()
+            if self._calculo_url_base and self._calculo_conversation_id:
+                _url_verbas_listing = (
+                    f"{self._calculo_url_base}verba/verba-calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
 
             # Navegar para listagem de verbas se não estiver lá
             _cur_url = self._page.url
@@ -4843,6 +4827,39 @@ class PJECalcPlaywright:
             _ocorr_ajuiz = "OCORRENCIAS_VENCIDAS_E_VINCENDAS" if _sumula_439 else "OCORRENCIAS_VENCIDAS"
             self._marcar_radio("ocorrenciaAjuizamento", _ocorr_ajuiz)
 
+            # ── Helper: setar radio/select buscando por valor das opções (independente de ID) ──
+            def _setar_campo_por_valor(valor_enum: str, campo_log: str) -> bool:
+                """Busca qualquer radio ou select no form cujas opções contenham o valor_enum."""
+                try:
+                    return self._page.evaluate(f"""(valorEnum) => {{
+                        // Tentar radios primeiro
+                        const radios = document.querySelectorAll('input[type="radio"]');
+                        for (const r of radios) {{
+                            if (r.value === valorEnum && !r.checked) {{
+                                r.click();
+                                r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                return true;
+                            }}
+                        }}
+                        // Tentar selects
+                        const sels = [...document.querySelectorAll('select')].filter(s => {{
+                            const r = s.getBoundingClientRect();
+                            return r.width > 0 && r.height > 0;
+                        }});
+                        for (const sel of sels) {{
+                            for (const opt of sel.options) {{
+                                if (opt.value === valorEnum) {{
+                                    sel.value = valorEnum;
+                                    sel.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                    return true;
+                                }}
+                            }}
+                        }}
+                        return false;
+                    }}""", valor_enum)
+                except Exception:
+                    return False
+
             # ── Característica (RADIO, ID confirmado DOM v2.15.1: formulario:caracteristicaVerba) ──
             # Valores: COMUM / DECIMO_TERCEIRO_SALARIO / AVISO_PREVIO / FERIAS
             carac_label = v.get("caracteristica", "Comum")
@@ -4851,6 +4868,12 @@ class PJECalcPlaywright:
                 self._preencher_radio_ou_select(fid, carac_enum, obrigatorio=False)
                 for fid in ["caracteristicaVerba", "caracteristica", "caracteristicaDaVerba"]
             )
+            if not _carac_ok:
+                # Fallback: buscar radio/select pelo valor das opções (ID-independente)
+                _carac_ok = _setar_campo_por_valor(carac_enum, "caracteristica")
+                if _carac_ok:
+                    self._aguardar_ajax()
+                    self._log(f"  ✓ caracteristica: {carac_enum} (via fallback por valor)")
             if not _carac_ok:
                 self._log(f"  ⚠ Verba '{nome}': característica '{carac_label}' ({carac_enum}) NÃO preenchida — pode causar erro na liquidação")
 
@@ -4862,6 +4885,11 @@ class PJECalcPlaywright:
                 self._preencher_radio_ou_select(fid, ocorr_enum, obrigatorio=False)
                 for fid in ["ocorrenciaPagto", "ocorrencia", "ocorrenciaDePagamento", "periodicidade"]
             )
+            if not _ocorr_ok:
+                _ocorr_ok = _setar_campo_por_valor(ocorr_enum, "ocorrencia")
+                if _ocorr_ok:
+                    self._aguardar_ajax()
+                    self._log(f"  ✓ ocorrencia: {ocorr_enum} (via fallback por valor)")
             if not _ocorr_ok:
                 self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' ({ocorr_enum}) NÃO preenchida — pode causar erro na liquidação")
 
@@ -4950,11 +4978,17 @@ class PJECalcPlaywright:
 
             if v.get("valor_informado"):
                 # formulario:valor (radio CALCULADO/INFORMADO) — confirmado DOM v2.15.1
-                self._preencher_radio_ou_select("valor", "INFORMADO", obrigatorio=False)
+                _val_ok = self._preencher_radio_ou_select("valor", "INFORMADO", obrigatorio=False)
+                if not _val_ok:
+                    _val_ok = _setar_campo_por_valor("INFORMADO", "valor")
+                    if _val_ok:
+                        self._aguardar_ajax()
                 # formulario:outroValorDoMultiplicador — campo Multiplicador confirmado
                 self._preencher("outroValorDoMultiplicador", _fmt_br(v["valor_informado"]), False)
             else:
-                self._preencher_radio_ou_select("valor", "CALCULADO", obrigatorio=False)
+                _val_ok = self._preencher_radio_ou_select("valor", "CALCULADO", obrigatorio=False)
+                if not _val_ok:
+                    _setar_campo_por_valor("CALCULADO", "valor")
 
             # Multiplicador explícito (ex: acúmulo de função 0,30 = 30%)
             if v.get("multiplicador") is not None:
@@ -4965,23 +4999,75 @@ class PJECalcPlaywright:
 
             # ── Incidências (checkboxes, confirmados DOM v2.15.1) ──
             # Incidência: IRPF / Contribuição Social / FGTS / Previdência Privada / Pensão Alimentícia
+            # Estratégia robusta: tentar por ID primeiro, depois por label text (JSF gera IDs variáveis)
+            def _marcar_checkbox_robusto(ids: list[str], labels: list[str], marcar: bool, campo_log: str) -> bool:
+                """Tenta marcar checkbox por IDs conhecidos, depois por labels visíveis."""
+                for fid in ids:
+                    if self._marcar_checkbox(fid, marcar):
+                        return True
+                # Fallback: buscar checkbox por label text no DOM
+                for lbl_text in labels:
+                    try:
+                        _found = self._page.evaluate(f"""(labelText, shouldCheck) => {{
+                            const norm = s => (s||'').toLowerCase().normalize('NFD')
+                                .replace(/[\\u0300-\\u036f]/g,'').trim();
+                            const target = norm(labelText);
+                            // Buscar labels que contenham o texto
+                            const labels = [...document.querySelectorAll('label')];
+                            for (const lbl of labels) {{
+                                if (norm(lbl.textContent).includes(target)) {{
+                                    // Encontrar checkbox associado
+                                    let cb = null;
+                                    if (lbl.htmlFor) {{
+                                        cb = document.getElementById(lbl.htmlFor);
+                                    }}
+                                    if (!cb) {{
+                                        cb = lbl.querySelector('input[type="checkbox"]');
+                                    }}
+                                    if (!cb) {{
+                                        const parent = lbl.closest('td, div, span');
+                                        if (parent) cb = parent.querySelector('input[type="checkbox"]');
+                                    }}
+                                    if (cb && cb.type === 'checkbox') {{
+                                        if (cb.checked !== shouldCheck) {{
+                                            cb.click();
+                                        }}
+                                        return cb.id || 'found';
+                                    }}
+                                }}
+                            }}
+                            return null;
+                        }}""", lbl_text, marcar)
+                        if _found:
+                            self._aguardar_ajax()
+                            self._log(f"  ✓ {campo_log}: via label '{lbl_text}' (id={_found})")
+                            return True
+                    except Exception:
+                        continue
+                return False
+
             _fgts = bool(v.get("incidencia_fgts"))
-            if not any(self._marcar_checkbox(fid, _fgts) for fid in [
-                "fgts", "incidenciaFGTS", "incideFgts", "incidenciaFgts", "incidenciaDoFGTS",
-            ]):
+            if not _marcar_checkbox_robusto(
+                ["fgts", "incidenciaFGTS", "incideFgts", "incidenciaFgts", "incidenciaDoFGTS"],
+                ["FGTS", "Fundo de Garantia"],
+                _fgts, f"Verba '{nome}' FGTS"
+            ):
                 self._log(f"  ⚠ Verba '{nome}': checkbox FGTS não encontrado (desejado={_fgts})")
 
             _inss = bool(v.get("incidencia_inss"))
-            # ID confirmado DOM v2.15.1: formulario:inss (label visual: "Contribuição Social")
-            if not any(self._marcar_checkbox(fid, _inss) for fid in [
-                "inss", "contribuicaoSocial", "incidenciaINSS", "incidenciaInss",
-            ]):
+            if not _marcar_checkbox_robusto(
+                ["inss", "contribuicaoSocial", "incidenciaINSS", "incidenciaInss"],
+                ["Contribuição Social", "INSS", "Contribuicao Social"],
+                _inss, f"Verba '{nome}' INSS/CS"
+            ):
                 self._log(f"  ⚠ Verba '{nome}': checkbox INSS/CS não encontrado (desejado={_inss})")
 
             _irpf = bool(v.get("incidencia_ir"))
-            if not any(self._marcar_checkbox(fid, _irpf) for fid in [
-                "irpf", "ir", "incidenciaIRPF", "incidenciaIr", "incidenciaDoIRPF",
-            ]):
+            if not _marcar_checkbox_robusto(
+                ["irpf", "ir", "incidenciaIRPF", "incidenciaIr", "incidenciaDoIRPF"],
+                ["IRPF", "Imposto de Renda", "IR"],
+                _irpf, f"Verba '{nome}' IRPF"
+            ):
                 self._log(f"  ⚠ Verba '{nome}': checkbox IRPF não encontrado (desejado={_irpf})")
 
             # Período — IDs confirmados DOM v2.15.1:
@@ -5000,7 +5086,6 @@ class PJECalcPlaywright:
             self._page.wait_for_timeout(600)
 
             # Verificar se o salvamento gerou erro (HTTP 500 / mensagem de erro JSF)
-            _http500_detected = False
             try:
                 _erro_msgs = self._page.evaluate("""() => {
                     const erros = [...document.querySelectorAll(
@@ -5010,11 +5095,6 @@ class PJECalcPlaywright:
                     // Verificar também se a página retornou erro HTTP
                     if (document.title && document.title.match(/500|erro|error/i)) {
                         erros.push('Página de erro HTTP: ' + document.title);
-                    }
-                    // Verificar conteúdo da página para HTTP 500 / NullPointerException
-                    const body = document.body ? document.body.textContent : '';
-                    if (body.match(/HTTP\s*500|NullPointerException|ViewExpiredException|Internal Server Error/i)) {
-                        erros.push('HTTP 500 detectado no corpo da página');
                     }
                     return erros;
                 }""")
@@ -5033,36 +5113,6 @@ class PJECalcPlaywright:
                                 self._log(f"  ✓ Verba '{nome}': salvou após correção automática")
             except Exception:
                 pass
-
-            # ── Recuperação de HTTP 500 ──
-            # Quando o JSF retorna HTTP 500, o ViewState fica corrompido e
-            # nenhuma interação subsequente no formulário funciona. Precisamos
-            # obter uma conversação Seam limpa via Recentes antes de continuar.
-            if _http500_detected:
-                self._log(f"  🔄 HTTP 500 detectado — recuperando sessão via Recentes…")
-                try:
-                    _recuperou = self._reabrir_calculo_recentes()
-                    if _recuperou:
-                        self._log(f"  ✓ Sessão recuperada — novo conversationId={self._calculo_conversation_id}")
-                        # Atualizar URLs com nova conversação
-                        if self._calculo_url_base and self._calculo_conversation_id:
-                            _url_verbas = (
-                                f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
-                                f"?conversationId={self._calculo_conversation_id}"
-                            )
-                            _url_verbas_listing = (
-                                f"{self._calculo_url_base}verba/verba-calculo.jsf"
-                                f"?conversationId={self._calculo_conversation_id}"
-                            )
-                        # Navegar para a listagem de verbas com a nova conversação
-                        self._clicar_menu_lateral("Verbas", obrigatorio=False)
-                        self._page.wait_for_timeout(1000)
-                        self._aguardar_ajax()
-                    else:
-                        self._log(f"  ⚠ Não foi possível recuperar sessão — tentando navegar direto…")
-                except Exception as _rec_err:
-                    self._log(f"  ⚠ Erro na recuperação: {_rec_err}")
-                continue  # Pular para próxima verba (esta falhou)
 
             # Após salvar, atualizar conversationId (pode ter mudado) e voltar para listagem
             self._capturar_base_calculo()
@@ -5586,9 +5636,9 @@ class PJECalcPlaywright:
         intervalo_min = dur.get("intervalo_minutos")
         qt_he_mes = dur.get("qt_horas_extras_mes")
 
-        # Datas do período (preferir periodo_cartao do duracao_trabalho, fallback contrato)
-        data_inicio = dur.get("periodo_cartao_inicio") or cont.get("admissao")
-        data_fim = dur.get("periodo_cartao_fim") or cont.get("demissao")
+        # Datas do período
+        data_inicio = cont.get("admissao")
+        data_fim = cont.get("demissao")
 
         # ── Fallback legado: calcular a partir de contrato se duracao_trabalho não foi extraído ──
         if not tipo_apuracao:
@@ -6830,6 +6880,17 @@ class PJECalcPlaywright:
             self._selecionar("tipoHonorario", tipo, obrigatorio=False)
             self._selecionar("tipo", tipo, obrigatorio=False)
 
+            # Descrição (OBRIGATÓRIA — manual seção 19: "Texto até 60 caracteres")
+            # Sem este campo, o PJE-Calc retorna "Existem erros no formulário"
+            _descricao_hon = hon.get("descricao", "")
+            if not _descricao_hon:
+                # Gerar descrição padrão baseada no tipo e devedor
+                _tipo_label = {"SUCUMBENCIAIS": "Sucumbenciais", "CONTRATUAIS": "Contratuais"}.get(tipo, tipo)
+                _devedor_label = {"RECLAMADO": "Reclamado", "RECLAMANTE": "Reclamante"}.get(devedor, devedor)
+                _descricao_hon = f"Honorários {_tipo_label} - {_devedor_label}"
+            self._preencher("descricao", _descricao_hon[:60], False)
+            self._preencher("descricaoHonorario", _descricao_hon[:60], False)
+
             # Tipo de valor (CALCULADO / INFORMADO)
             tipo_valor = hon.get("tipo_valor", "CALCULADO")
             self._marcar_radio("tipoValor", tipo_valor) or self._selecionar("tipoValor", tipo_valor, obrigatorio=False)
@@ -7054,8 +7115,8 @@ class PJECalcPlaywright:
             return False  # fail-safe: não arriscar exportar processo errado
 
         if not _num_pagina:
-            self._log("  ⚠ Verificação de cálculo: número do processo não visível na página — assumindo correto (mesmo conversationId)")
-            return True  # Após fases de preenchimento, o conversationId garante o cálculo correto
+            self._log("  ⚠ Verificação de cálculo: número do processo não visível na página")
+            return False  # fail-safe: sem número visível, não é seguro prosseguir
 
         # Comparar apenas dígitos
         import re as _re_vc
@@ -7893,15 +7954,15 @@ def preencher_como_generator(
             if msg is None:
                 break
             yield msg
-        yield "[FIM DA EXECUÇÃO]"
     except GeneratorExit:
-        # SSE desconectou ou runner chamou gen.close() — cleanup do browser
-        logger.info("Generator fechado (GeneratorExit)")
-    finally:
+        # SSE desconectou — forçar cleanup do browser
         _stop_keepalive.set()
         if _agente_ref:
             try:
                 _agente_ref[0].fechar()
-                logger.info("Browser fechado no cleanup do generator")
+                logger.info("Browser fechado por GeneratorExit (SSE disconnect)")
             except Exception:
                 pass
+        return
+
+    yield "[FIM DA EXECUÇÃO]"
