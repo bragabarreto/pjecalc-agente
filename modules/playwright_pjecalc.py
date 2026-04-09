@@ -585,17 +585,29 @@ class PJECalcPlaywright:
 
     def iniciar_browser(self, headless: bool = False) -> None:
         import asyncio
-        import os, sys
+        import os, sys, threading
         # Em Linux sem display real (Railway/Docker), forçar headless
         if sys.platform != "win32" and not os.environ.get("DISPLAY"):
             headless = True
         self._headless = headless  # salva para crash recovery no retry
-        # Sempre criar loop isolado — sync_playwright() falha se get_event_loop().is_running().
-        # Necessário também no crash recovery (segunda chamada): o loop anterior pode estar
-        # em estado inválido após pw.__exit__().
-        asyncio.set_event_loop(asyncio.new_event_loop())
-        from playwright.sync_api import sync_playwright
-        self._pw = sync_playwright().__enter__()
+        # sync_playwright() falha com "Sync API inside asyncio loop" quando chamado
+        # de uma thread filha que herda o running loop do uvicorn (Python 3.10+).
+        # Solução: iniciar Playwright numa thread 100% nova sem contexto asyncio.
+        _exc_holder: list = []
+        def _init_pw():
+            try:
+                asyncio.set_event_loop(asyncio.new_event_loop())
+                from playwright.sync_api import sync_playwright
+                self._pw = sync_playwright().__enter__()
+            except Exception as e:
+                _exc_holder.append(e)
+        _t = threading.Thread(target=_init_pw, daemon=True)
+        _t.start()
+        _t.join(timeout=30)
+        if _exc_holder:
+            raise _exc_holder[0]
+        if not hasattr(self, '_pw') or self._pw is None:
+            raise RuntimeError("Playwright não iniciou em 30s")
         self._browser = self._pw.firefox.launch(
             headless=headless,
             slow_mo=0 if headless else 150,
