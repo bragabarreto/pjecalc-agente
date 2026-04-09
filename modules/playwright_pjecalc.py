@@ -973,7 +973,9 @@ class PJECalcPlaywright:
             # Usar Tab diretamente — move foco para o próximo campo, disparando blur.
             # Se o calendar popup abrir, Tab fecha-o e move foco.
             self._page.keyboard.press("Tab")
-            self._page.wait_for_timeout(500)
+            # Aguardar AJAX (dateDemissao tem a4j:support oninputblur que re-renderiza)
+            self._aguardar_ajax(timeout=5000)
+            self._page.wait_for_timeout(300)
 
             # Verificar valores resultantes (rich:calendar ou input simples)
             _result = self._page.evaluate("""(suffix) => {
