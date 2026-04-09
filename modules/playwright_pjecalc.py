@@ -7284,9 +7284,15 @@ class PJECalcPlaywright:
                     if match:
                         self._selecionar("baseParaApuracao", match, obrigatorio=False)
                     else:
-                        # Fallback: tentar valor direto (ex: CONDENACAO como option value)
+                        # Fallback: tentar valor direto
                         if not self._selecionar("baseParaApuracao", base, obrigatorio=False):
-                            self._log(f"  ⚠ baseParaApuracao '{base}': sem match — ignorado")
+                            # Último recurso: selecionar a primeira opção não-vazia
+                            _opcoes_validas = [o for o in opcoes if o.get("value") and "noSelection" not in o["value"]]
+                            if _opcoes_validas:
+                                self._selecionar("baseParaApuracao", _opcoes_validas[0]["value"], obrigatorio=False)
+                                self._log(f"  ✓ baseParaApuracao: {_opcoes_validas[0]['text']} (primeiro válido)")
+                            else:
+                                self._log(f"  ⚠ baseParaApuracao '{base}': sem match — ignorado")
                 except Exception as _e:
                     self._log(f"  ⚠ baseParaApuracao: erro — {_e}")
 
