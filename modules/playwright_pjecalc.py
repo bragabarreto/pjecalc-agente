@@ -331,6 +331,133 @@ def limpar_h2_database(pjecalc_dir: str | Path, log_cb=None) -> bool:
     return bool(removed)
 
 
+def limpar_calculo_via_sql(pjecalc_dir: str | Path, log_cb=None) -> bool:
+    """Limpa dados de cálculos do H2 via SQL direto, SEM parar o Tomcat.
+
+    O H2 do PJE-Calc aceita múltiplas conexões quando configurado com
+    AUTO_SERVER=TRUE (padrão). Usamos o jar do H2 embutido no PJE-Calc
+    para executar DELETE nas tabelas de dados de cálculo, preservando
+    tabelas de sistema/referência.
+
+    Retorna True se conseguiu limpar, False se falhou.
+    """
+    _log = log_cb or (lambda m: None)
+    dados_dir = Path(pjecalc_dir) / ".dados"
+    h2_db = dados_dir / "pjecalc.h2.db"
+
+    if not h2_db.exists():
+        _log("SQL cleanup: arquivo H2 não encontrado — ignorado")
+        return False
+
+    # Localizar o jar do H2 no diretório do PJE-Calc
+    pjecalc_path = Path(pjecalc_dir)
+    h2_jar = None
+    for candidate in [
+        pjecalc_path / "bin" / "lib" / "h2.jar",
+        pjecalc_path / "bin" / "lib" / "h2-1.4.200.jar",
+        pjecalc_path / "tomcat" / "lib" / "h2.jar",
+        pjecalc_path / "tomcat" / "lib" / "h2-1.4.200.jar",
+    ]:
+        if candidate.exists():
+            h2_jar = candidate
+            break
+
+    # Busca recursiva como fallback
+    if not h2_jar:
+        for f in pjecalc_path.rglob("h2*.jar"):
+            if "h2" in f.name.lower() and f.suffix == ".jar":
+                h2_jar = f
+                break
+
+    if not h2_jar:
+        _log("SQL cleanup: h2.jar não encontrado no PJE-Calc — ignorado")
+        return False
+
+    # URL JDBC para conectar ao H2 (modo embedded file)
+    # O H2 no PJE-Calc usa file mode. Se o Tomcat está rodando,
+    # precisamos do modo AUTO_SERVER para conectar simultaneamente.
+    h2_db_path = str(h2_db).replace(".h2.db", "")
+    jdbc_url = f"jdbc:h2:file:{h2_db_path};AUTO_SERVER=TRUE;IFEXISTS=TRUE"
+
+    # SQL para limpar tabelas de dados de cálculo
+    # Ordem: tabelas dependentes primeiro (FK constraints)
+    sql_statements = """
+DELETE FROM TBOCORRENCIA;
+DELETE FROM TBREFLEXAVERBA;
+DELETE FROM TBVERBA;
+DELETE FROM TBHISTORICOSALARIAL;
+DELETE FROM TBFALTA;
+DELETE FROM TBFERIAS;
+DELETE FROM TBCARTAOPONTO;
+DELETE FROM TBHONORARIO;
+DELETE FROM TBLIQUIDACAO;
+DELETE FROM TBCALCULO;
+COMMIT;
+""".strip()
+
+    try:
+        # Detectar Java disponível
+        java_cmd = os.environ.get("JAVA_HOME", "")
+        if java_cmd:
+            java_cmd = os.path.join(java_cmd, "bin", "java")
+        else:
+            java_cmd = "java"
+
+        # Executar SQL via H2 Shell (modo não-interativo)
+        result = subprocess.run(
+            [java_cmd, "-cp", str(h2_jar), "org.h2.tools.Shell",
+             "-url", jdbc_url, "-user", "sa", "-password", ""],
+            input=sql_statements,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+
+        if result.returncode == 0:
+            _log("SQL cleanup: cálculos removidos do H2 com sucesso")
+            return True
+        else:
+            # Pode falhar se as tabelas não existem com esses nomes exatos
+            # Tentar nomes alternativos (sem prefixo TB)
+            _log(f"SQL cleanup: tentativa 1 falhou ({result.stderr[:200]})")
+            sql_alt = """
+DELETE FROM OCORRENCIA;
+DELETE FROM REFLEXAVERBA;
+DELETE FROM VERBA;
+DELETE FROM HISTORICOSALARIAL;
+DELETE FROM FALTA;
+DELETE FROM FERIAS;
+DELETE FROM CARTAOPONTO;
+DELETE FROM HONORARIO;
+DELETE FROM LIQUIDACAO;
+DELETE FROM CALCULO;
+COMMIT;
+""".strip()
+            result2 = subprocess.run(
+                [java_cmd, "-cp", str(h2_jar), "org.h2.tools.Shell",
+                 "-url", jdbc_url, "-user", "sa", "-password", ""],
+                input=sql_alt,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            if result2.returncode == 0:
+                _log("SQL cleanup: cálculos removidos (nomes alternativos)")
+                return True
+            _log(f"SQL cleanup: ambas tentativas falharam — stderr: {result2.stderr[:200]}")
+            return False
+
+    except FileNotFoundError:
+        _log("SQL cleanup: Java não encontrado — ignorado")
+        return False
+    except subprocess.TimeoutExpired:
+        _log("SQL cleanup: timeout (30s) — H2 pode estar locked")
+        return False
+    except Exception as e:
+        _log(f"SQL cleanup: erro inesperado — {e}")
+        return False
+
+
 def _parar_tomcat(timeout: int = 15) -> None:
     """Para o Tomcat via SIGTERM ao PID em /tmp/pjecalc.pid. SIGKILL após timeout."""
     pid_file = Path("/tmp/pjecalc.pid")
@@ -1130,6 +1257,8 @@ class PJECalcPlaywright:
             "Previdência Privada": "a[id*='menuPrevidenciaPrivada']",
             "Exportar":           "a[id*='menuExport']",
             "Exportação":         "a[id*='menuExport']",
+            "Excluir":            "a[id*='menuExcluir']",
+            "Fechar":             "a[id*='menuFechar']",
         }
         # Mapa de IDs reais de <li> do menu-pilares (confirmados por inspeção DOM v2.15.1)
         # Padrão: li_calculo_XXX (dentro de cálculo) ou li_tabelas_XXX (tabelas)
@@ -1159,6 +1288,8 @@ class PJECalcPlaywright:
             "Exportar":            ["calculo_exportar"],
             "Exportação":          ["calculo_exportar"],
             "Imprimir":            ["calculo_imprimir"],
+            "Excluir":             ["calculo_excluir", "operacoes_excluir"],
+            "Fechar":              ["calculo_fechar", "operacoes_fechar"],
         }
         sel_id = _MENU_ID_MAP.get(texto)
         if sel_id:
@@ -2365,6 +2496,106 @@ class PJECalcPlaywright:
                 )
         except Exception:
             pass
+
+    def _limpar_calculo_via_ui(self) -> bool:
+        """Limpa cálculos existentes via interface do PJE-Calc (sem reiniciar Tomcat).
+
+        Navega para a Tela Inicial, verifica se há cálculos na lista de Recentes,
+        e exclui cada um via menu Operações > Excluir.
+        Retorna True se conseguiu limpar (ou não havia nada para limpar).
+        """
+        try:
+            self._log("Limpando cálculos existentes via interface…")
+            # Navegar para Home
+            _home = f"{self.PJECALC_BASE}/pages/principal.jsf"
+            self._page.goto(_home, wait_until="domcontentloaded", timeout=30000)
+            self._page.wait_for_timeout(2000)
+
+            # Verificar se há cálculos na lista de Recentes
+            _listbox = self._page.locator(
+                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+            )
+            if _listbox.count() == 0:
+                self._log("  ✓ Nenhuma lista de recentes encontrada — banco limpo")
+                return True
+
+            _options = _listbox.first.locator("option")
+            _n_opts = _options.count()
+            if _n_opts == 0:
+                self._log("  ✓ Nenhum cálculo nos recentes — banco limpo")
+                return True
+
+            self._log(f"  Encontrados {_n_opts} cálculo(s) nos recentes — excluindo…")
+
+            # Excluir cada cálculo: abrir via duplo-clique, depois Operações > Excluir
+            _max_exclusoes = min(_n_opts, 10)  # safety: no máximo 10
+            for _i in range(_max_exclusoes):
+                try:
+                    # Re-ler a lista (pode ter mudado após exclusão)
+                    _listbox = self._page.locator(
+                        "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+                    )
+                    if _listbox.count() == 0:
+                        break
+                    _opts = _listbox.first.locator("option")
+                    if _opts.count() == 0:
+                        break
+
+                    # Abrir o primeiro cálculo
+                    _opt = _opts.first
+                    _opt.click()
+                    self._page.wait_for_timeout(300)
+                    _opt.dblclick()
+                    self._aguardar_ajax(30000)
+                    self._page.wait_for_timeout(2000)
+
+                    # Verificar se estamos dentro de um cálculo (URL com conversationId)
+                    _url = self._page.url
+                    if "calculo" not in _url and "conversationId" not in _url:
+                        self._log(f"  ⚠ Não abriu cálculo (URL: {_url[:80]}) — abortando limpeza UI")
+                        return False
+
+                    # Auto-confirmar o dialog de exclusão
+                    self._page.once("dialog", lambda d: d.accept())
+
+                    # Clicar em Excluir via menu lateral
+                    _excluiu = self._clicar_menu_lateral("Excluir", obrigatorio=False)
+                    if not _excluiu:
+                        # Fallback: buscar link de texto "Excluir" em qualquer lugar
+                        _exc_link = self._page.locator("a:has-text('Excluir')")
+                        if _exc_link.count() > 0:
+                            self._page.once("dialog", lambda d: d.accept())
+                            _exc_link.first.click(force=True)
+                            _excluiu = True
+
+                    if _excluiu:
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(2000)
+                        self._log(f"  ✓ Cálculo {_i+1} excluído")
+                    else:
+                        self._log(f"  ⚠ Não encontrou botão Excluir para cálculo {_i+1}")
+                        return False
+
+                    # Voltar para Home para próxima iteração
+                    self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+                    self._page.wait_for_timeout(1500)
+
+                except Exception as _exc_inner:
+                    self._log(f"  ⚠ Erro ao excluir cálculo {_i+1}: {_exc_inner}")
+                    # Tentar voltar para Home mesmo com erro
+                    try:
+                        self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+                        self._page.wait_for_timeout(1000)
+                    except Exception:
+                        pass
+                    return False
+
+            self._log("  ✓ Todos os cálculos excluídos via interface")
+            return True
+
+        except Exception as _exc:
+            self._log(f"  ⚠ Limpeza via UI falhou: {_exc}")
+            return False
 
     def _ir_para_novo_calculo(self) -> None:
         """Navega para o formulário de Novo Cálculo via menu 'Novo'.
@@ -7964,14 +8195,27 @@ def iniciar_e_preencher(
     cb = log_cb or (lambda m: None)
 
     # H2 cleanup: banco fresco antes de cada cálculo
+    # Estratégia otimizada (3 níveis):
+    #   1. Via interface (Playwright): excluir cálculos existentes (~2s)
+    #   2. Via SQL direto no H2: DELETE nas tabelas de dados (~1s)
+    #   3. Último recurso: parar Tomcat + substituir H2 + reiniciar (~2-3 min)
     _h2_cleanup_enabled = os.environ.get("H2_CLEANUP_ENABLED", "true").lower() == "true"
+    _tomcat_was_running = pjecalc_rodando()
+    _cleanup_done_via_ui = False  # flag: limpeza feita via UI (precisa browser)
+
     if limpar_h2 and _h2_cleanup_enabled:
-        if pjecalc_rodando():
-            cb("Parando Tomcat para limpeza H2…")
-            _parar_tomcat()
-            limpar_h2_database(pjecalc_dir, log_cb=cb)
-            cb("Reiniciando Tomcat…")
+        if _tomcat_was_running:
+            # Tomcat rodando — tentar limpeza SEM reiniciar (economia de 2-3 min)
+            # Nível 2: SQL direto no H2 (não precisa de browser)
+            cb("Limpando cálculos anteriores via SQL…")
+            if limpar_calculo_via_sql(pjecalc_dir, log_cb=cb):
+                cb("✓ Cálculos limpos via SQL (~1s)")
+            else:
+                # Nível 1 será tentado após abrir o browser (flag)
+                cb("SQL cleanup falhou — limpeza será feita via interface após abrir browser")
+                _cleanup_done_via_ui = True  # sinaliza para limpar via UI
         else:
+            # Tomcat parado — limpeza direta do arquivo H2 (sem custo)
             limpar_h2_database(pjecalc_dir, log_cb=cb)
 
     cb("Verificando PJE-Calc Cidadão…")
@@ -7985,6 +8229,31 @@ def iniciar_e_preencher(
         _agente_ref.append(agente)
     try:
         agente.iniciar_browser(headless=headless)
+
+        # Nível 1: limpeza via UI (se SQL falhou e Tomcat estava rodando)
+        if _cleanup_done_via_ui:
+            cb("Limpando cálculos anteriores via interface…")
+            if agente._limpar_calculo_via_ui():
+                cb("✓ Cálculos limpos via interface (~2s)")
+            else:
+                # Nível 3 (último recurso): parar Tomcat + substituir H2 + reiniciar
+                cb("⚠ Limpeza via interface falhou — reiniciando Tomcat (último recurso)…")
+                try:
+                    agente.fechar()
+                except Exception:
+                    pass
+                _parar_tomcat()
+                limpar_h2_database(pjecalc_dir, log_cb=cb)
+                cb("Reiniciando Tomcat…")
+                iniciar_pjecalc(pjecalc_dir, log_cb=cb)
+                cb("PJE-Calc disponível após restart.")
+                # Re-abrir browser após restart
+                agente = PJECalcPlaywright(log_cb=cb, exec_dir=exec_dir)
+                if _agente_ref is not None:
+                    _agente_ref.clear()
+                    _agente_ref.append(agente)
+                agente.iniciar_browser(headless=headless)
+
         agente.preencher_calculo(dados, verbas_mapeadas, parametrizacao=parametrizacao)
     except Exception as exc:
         cb(f"ERRO: {exc}")
