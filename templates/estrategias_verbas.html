@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Estrategias de Verbas — Agente PJE-Calc{% endblock %}
+
+{% block extra_style %}
+.metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.metric-card { background: #fff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); padding: 20px; text-align: center; }
+.metric-card .valor { font-size: 2rem; font-weight: 700; color: #1a3a6b; }
+.metric-card .label { font-size: 0.85rem; color: #6c757d; margin-top: 4px; }
+.taxa-bar { height: 8px; border-radius: 4px; background: #e9ecef; position: relative; width: 100%; }
+.taxa-fill { height: 100%; border-radius: 4px; }
+.taxa-fill.verde { background: #28a745; }
+.taxa-fill.amarelo { background: #ffc107; }
+.taxa-fill.vermelho { background: #dc3545; }
+.badge-estrategia { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+.badge-expresso-direto { background: #d4edda; color: #155724; }
+.badge-expresso-adaptado { background: #fff3cd; color: #856404; }
+.badge-manual { background: #cce5ff; color: #004085; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+th { background: #f8f9fa; text-align: left; padding: 10px 12px; border-bottom: 2px solid #dee2e6; font-size: 0.85rem; color: #495057; }
+td { padding: 10px 12px; border-bottom: 1px solid #e9ecef; font-size: 0.88rem; vertical-align: middle; }
+tr:hover { background: #f1f3f5; }
+.section-title { color: #1a3a6b; font-size: 1.2rem; margin-top: 32px; margin-bottom: 12px; border-bottom: 2px solid #1a3a6b; padding-bottom: 6px; }
+.catalogo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.catalogo-item { background: #f8f9fa; border-radius: 6px; padding: 8px 12px; font-size: 0.82rem; border-left: 3px solid #1a3a6b; }
+.catalogo-item.adaptavel { border-left-color: #ffc107; }
+.catalogo-item.manual { border-left-color: #6c757d; }
+.erro-txt { color: #dc3545; font-size: 0.78rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+{% endblock %}
+
+{% block content %}
+<div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:20px;">
+  <h1 style="color:#1a3a6b; font-size:1.5rem;">Estrategias de Preenchimento de Verbas</h1>
+  <div>
+    <a href="/admin/aprendizado" class="btn btn-secondary" style="margin-left:8px;">Aprendizado</a>
+    <a href="/" class="btn btn-secondary" style="margin-left:8px;">Voltar</a>
+  </div>
+</div>
+
+<!-- Metricas resumo -->
+<div class="metric-grid">
+  <div class="metric-card">
+    <div class="valor">{{ total_tentativas }}</div>
+    <div class="label">Tentativas totais</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ total_sucessos }}</div>
+    <div class="label">Sucessos</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ total_falhas }}</div>
+    <div class="label">Falhas</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ taxa_global }}%</div>
+    <div class="label">Taxa de sucesso global</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ num_expresso }}</div>
+    <div class="label">Verbas Expresso</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ num_adaptaveis }}</div>
+    <div class="label">Bases adaptaveis</div>
+  </div>
+  <div class="metric-card">
+    <div class="valor">{{ num_manual }}</div>
+    <div class="label">Somente manual</div>
+  </div>
+</div>
+
+<!-- Historico de execucoes -->
+<h2 class="section-title">Historico de Estrategias Aprendidas</h2>
+{% if estrategias %}
+<table>
+  <thead>
+    <tr>
+      <th>Verba</th>
+      <th>Tipo</th>
+      <th>Estrategia</th>
+      <th>Tentativas</th>
+      <th>Sucessos</th>
+      <th>Falhas</th>
+      <th>Taxa</th>
+      <th>Ultima execucao</th>
+      <th>Ultimo erro</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in estrategias %}
+    <tr>
+      <td><strong>{{ e.nome_verba }}</strong></td>
+      <td>{{ e.tipo }}</td>
+      <td>
+        <span class="badge-estrategia badge-{{ e.estrategia | replace('_', '-') }}">
+          {{ e.estrategia | replace('_', ' ') | title }}
+        </span>
+      </td>
+      <td>{{ e.tentativas }}</td>
+      <td>{{ e.sucessos }}</td>
+      <td>{{ e.falhas }}</td>
+      <td>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <div class="taxa-bar" style="width:60px;">
+            <div class="taxa-fill {% if e.taxa_sucesso >= 0.8 %}verde{% elif e.taxa_sucesso >= 0.5 %}amarelo{% else %}vermelho{% endif %}" style="width:{{ (e.taxa_sucesso * 100) | int }}%;"></div>
+          </div>
+          <span style="font-size:0.82rem;">{{ (e.taxa_sucesso * 100) | round | int }}%</span>
+        </div>
+      </td>
+      <td style="font-size:0.78rem; color:#6c757d;">{{ e.ultima_execucao or '-' }}</td>
+      <td><span class="erro-txt" title="{{ e.ultimo_erro or '' }}">{{ e.ultimo_erro or '-' }}</span></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color:#6c757d; font-style:italic;">Nenhuma estrategia registrada ainda. Execute uma automacao para comecar o aprendizado.</p>
+{% endif %}
+
+<!-- Catalogo Expresso -->
+<h2 class="section-title">Catalogo de Verbas Expresso ({{ num_expresso }})</h2>
+<div class="catalogo-grid">
+  {% for v in catalogo.get('expresso', []) %}
+  <div class="catalogo-item">
+    <strong>{{ v.nome_pjecalc }}</strong>
+    <div style="color:#6c757d; font-size:0.75rem; margin-top:2px;">
+      {{ v.caracteristica }} | {{ v.ocorrencia }}
+      {% if v.reflexas_automaticas %}<br>Reflexas: {{ v.reflexas_automaticas | length }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Catalogo Adaptaveis -->
+<h2 class="section-title">Bases Adaptaveis ({{ num_adaptaveis }})</h2>
+<div class="catalogo-grid">
+  {% for a in catalogo.get('adaptaveis', []) %}
+  <div class="catalogo-item adaptavel">
+    <strong>{{ a.base_expresso }}</strong>
+    <div style="color:#856404; font-size:0.75rem; margin-top:2px;">
+      Aplica para: {{ a.aplica_para | join(', ') }}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Catalogo Somente Manual -->
+<h2 class="section-title">Somente Manual ({{ num_manual }})</h2>
+<div class="catalogo-grid">
+  {% for m in catalogo.get('somente_manual', []) %}
+  <div class="catalogo-item manual">
+    <strong>{{ m.nome }}</strong>
+    <div style="color:#6c757d; font-size:0.75rem; margin-top:2px;">
+      {{ m.parametros_tipicos.get('caracteristica', '') }} | {{ m.parametros_tipicos.get('ocorrencia', '') }}
+      {% if m.get('pagina_pjecalc') %}<br>Pagina: {{ m.pagina_pjecalc }}{% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<div style="margin-top:32px; padding:16px; background:#f8f9fa; border-radius:8px; font-size:0.85rem; color:#6c757d;">
+  <strong>Como funciona:</strong> A cada execucao de automacao, o sistema registra se cada estrategia
+  (Expresso Direto, Expresso Adaptado, ou Manual) funcionou ou falhou para cada verba. Com o tempo,
+  o engine aprende qual a melhor estrategia para cada tipo de verba e prioriza as com maior taxa de sucesso.
+</div>
+{% endblock %}

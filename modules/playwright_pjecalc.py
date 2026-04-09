@@ -420,6 +420,7 @@ class PJECalcPlaywright:
         self._dados: dict | None = None  # dados da sentença (armazenado em preencher_calculo)
         self._reflexos_configurados: set[str] = set()  # nomes de verbas principais cujos reflexos foram configurados via botão
         self._verbas_expresso_ok: set[str] = set()  # nomes de verbas criadas com sucesso via Expresso (reflexos auto-gerados)
+        self._strategy_engine = None  # VerbaStrategyEngine — inicializado lazy em fase_verbas
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
@@ -3579,8 +3580,34 @@ class PJECalcPlaywright:
         2. Tenta Expresso com health checks após cada passo
         3. Se Tomcat morrer: aguarda watchdog reiniciar, retenta uma vez
         4. Se falhar 2x: fallback 100% Manual
+
+        Integração com VerbaStrategyEngine:
+        - Consulta histórico de sucesso/falha para cada verba
+        - Registra resultado (sucesso/falha) de cada tentativa
+        - Permite escolha inteligente entre expresso_direto, expresso_adaptado e manual
         """
         self._log("Fase 3 — Verbas…")
+
+        # Inicializar VerbaStrategyEngine (opcional — não bloqueia se ausente)
+        if self._strategy_engine is None:
+            try:
+                from learning.verba_strategies import VerbaStrategyEngine
+                from infrastructure.database import SessionLocal
+                _db = SessionLocal()
+                # Tentar inicializar LLM Orchestrator para matching semântico de verbas
+                _llm_orch = None
+                try:
+                    from core.llm_orchestrator import LLMOrchestrator
+                    from infrastructure.config import settings
+                    _llm_orch = LLMOrchestrator(settings)
+                except Exception as _e_llm:
+                    self._log(f"  ⚠ LLM Orchestrator indisponível para matching de verbas: {_e_llm}")
+                self._strategy_engine = VerbaStrategyEngine(db=_db, llm_orchestrator=_llm_orch)
+                self._log("  ✓ VerbaStrategyEngine inicializado" + (" (com LLM matching)" if _llm_orch else " (sem LLM matching)"))
+            except Exception as _e_strat:
+                self._log(f"  ⚠ VerbaStrategyEngine indisponível: {_e_strat} — continuando sem learning")
+                self._strategy_engine = None
+
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
         self._clicar_menu_lateral("Verbas")
@@ -3652,6 +3679,15 @@ class PJECalcPlaywright:
                 if not _expresso_ok:
                     self._log("  → Expresso falhou — 100% Manual")
                     personalizadas = predefinidas + personalizadas
+                    # Registrar falha Expresso no strategy engine
+                    if self._strategy_engine:
+                        for v in predefinidas:
+                            try:
+                                self._strategy_engine.registrar_resultado(
+                                    v, "expresso_direto", sucesso=False, erro="Expresso falhou ou Tomcat crash"
+                                )
+                            except Exception:
+                                pass
                 else:
                     # Verbas não encontradas no Expresso → Manual
                     if _nao_encontradas:
@@ -3663,6 +3699,24 @@ class PJECalcPlaywright:
                             v for v in predefinidas
                             if (v.get("nome_pjecalc") or v.get("nome_sentenca") or "") in _nao_encontradas
                         ] + personalizadas
+                    # Registrar resultado no strategy engine
+                    if self._strategy_engine:
+                        _nao_enc_set = set(_nao_encontradas)
+                        for v in predefinidas:
+                            _vname = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
+                            try:
+                                if _vname in _nao_enc_set:
+                                    self._strategy_engine.registrar_resultado(
+                                        v, "expresso_direto", sucesso=False,
+                                        erro="Verba não encontrada na tabela Expresso",
+                                    )
+                                else:
+                                    self._strategy_engine.registrar_resultado(
+                                        v, "expresso_direto", sucesso=True,
+                                        detalhes={"expresso_nome": _vname},
+                                    )
+                            except Exception:
+                                pass
 
         # ── 3B: Verbas personalizadas (Manual/Novo) ────────────────────────
         if personalizadas:
@@ -4356,9 +4410,35 @@ class PJECalcPlaywright:
             "multa 40%", "multa fgts 40", "multa rescisória fgts",
         }
 
+        # ── GUARD: Verbas Expresso JAMAIS podem ser criadas via Manual ──
+        # Se a verba existe na tabela Expresso do PJE-Calc, deve SEMPRE usar Expresso.
+        _NOMES_EXPRESSO_LOWER: set[str] = set()
+        try:
+            import json as _json_guard
+            _catalogo_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                "knowledge", "catalogo_verbas_pjecalc.json"
+            )
+            with open(_catalogo_path, "r", encoding="utf-8") as _f_cat:
+                _catalogo = _json_guard.load(_f_cat)
+            for _entrada in _catalogo.get("expresso", []):
+                _NOMES_EXPRESSO_LOWER.add(_entrada["nome_pjecalc"].lower())
+                for _alias in _entrada.get("aliases", []):
+                    _NOMES_EXPRESSO_LOWER.add(_alias.lower())
+        except Exception as _e_cat:
+            self._log(f"  ⚠ Não foi possível carregar catálogo Expresso para guard: {_e_cat}")
+
         for i, v in enumerate(verbas):
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
             _nome_lower = nome.lower()
+
+            # ── REGRA: Bloquear criação manual de verba que pertence ao Expresso ──
+            if _NOMES_EXPRESSO_LOWER and _nome_lower in _NOMES_EXPRESSO_LOWER:
+                self._log(
+                    f"  ⛔ BLOQUEIO: '{nome}' é verba Expresso — não pode ser criada "
+                    f"manualmente. Use o Lançamento Expresso. Pulando."
+                )
+                continue
 
             # ── REGRA: Pular verbas já criadas via Expresso ──
             # Férias+1/3, 13º Salário e outras verbas Expresso nunca devem ser
@@ -5140,6 +5220,20 @@ class PJECalcPlaywright:
                 self._log(f"  ✓ Verba manual: {nome}")
             else:
                 self._log(f"  ✗ Verba '{nome}': Salvar falhou — VERBA NÃO REGISTRADA")
+
+            # Registrar resultado no VerbaStrategyEngine
+            if self._strategy_engine:
+                try:
+                    self._strategy_engine.registrar_resultado(
+                        v, "manual", sucesso=_salvou,
+                        erro=None if _salvou else f"Salvar falhou para '{nome}'",
+                        detalhes={"parametros": {
+                            "caracteristica": v.get("caracteristica"),
+                            "ocorrencia": v.get("ocorrencia"),
+                        }},
+                    )
+                except Exception:
+                    pass
 
     # ── Fase 3B: Multas e Indenizações ────────────────────────────────────────
 

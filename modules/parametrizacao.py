@@ -47,8 +47,8 @@ _VERBAS_EXPRESSO: dict[str, dict] = {
     "adicional_periculosidade":   {"lancamento": "EXPRESSO", "incide_fgts": True,  "incide_inss": True,  "incide_ir": True,
                                    "reflexas": ["decimo_terceiro_proporcional", "ferias_proporcionais"]},
     # Indenizatórias (sem incidências)
-    "indenizacao_danos_morais":   {"lancamento": "MANUAL",   "incide_fgts": False, "incide_inss": False, "incide_ir": False},
-    "indenizacao_danos_materiais": {"lancamento": "MANUAL",  "incide_fgts": False, "incide_inss": False, "incide_ir": False},
+    "indenizacao_danos_morais":   {"lancamento": "EXPRESSO", "incide_fgts": False, "incide_inss": False, "incide_ir": False},
+    "indenizacao_danos_materiais": {"lancamento": "EXPRESSO", "incide_fgts": False, "incide_inss": False, "incide_ir": False},
     "fgts_depositos_nao_recolhidos": {"lancamento": "EXPRESSO", "incide_fgts": False, "incide_inss": False, "incide_ir": False},
 }
 
