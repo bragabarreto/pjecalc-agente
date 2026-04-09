@@ -902,9 +902,19 @@ class PJECalcPlaywright:
         label: str | None = None,
     ) -> bool:
         """
-        Preenche campo de data usando focus() + press_sequentially + Tab.
-        Usa focus() em vez de click() para evitar abrir o popup do RichFaces Calendar.
-        Fallback via JS direto se o método principal falhar.
+        Preenche campo de data (rich:calendar) usando JS direto no componente RichFaces.
+
+        O rich:calendar gera:
+        - Input visível: formulario:{field_id}InputDate (onde o usuário digita)
+        - Hidden input: formulario:{field_id}InputCurrentDate (valor submetido ao JSF)
+        - Componente JS: RichFaces.calendarUtils / __richfaces_calendar
+
+        Estratégia: setar ambos os inputs via JS e disparar eventos de change/blur
+        para que o JSF receba o valor no submit do form.
+
+        IMPORTANTE: Usar Tab ao final (não Escape!) para disparar blur → JSF sync.
+        O blur pode disparar AJAX em alguns campos (dataDemissao), mas isso é necessário
+        para o valor ser submetido corretamente.
         """
         if not data:
             return False
@@ -915,41 +925,87 @@ class PJECalcPlaywright:
             return False
         try:
             loc.wait_for(state="visible", timeout=8000)
-            # focus() em vez de click() para não abrir o calendar popup (RichFaces)
+
+            # Estratégia 1: JS direto no rich:calendar component
+            # Seta o valor no InputDate (visível) e InputCurrentDate (hidden)
+            _js_ok = self._page.evaluate("""([suffix, dateStr]) => {
+                // Encontrar o input visível do rich:calendar
+                const inputs = document.querySelectorAll('input[id$="' + suffix + 'InputDate"]');
+                const input = inputs.length ? inputs[0] : null;
+                if (!input) return false;
+
+                // Setar valor no input visível
+                input.value = dateStr;
+
+                // Setar valor no hidden input (InputCurrentDate) — JSF lê daqui
+                const hiddenId = input.id.replace('InputDate', 'InputCurrentDate');
+                const hidden = document.getElementById(hiddenId);
+                if (hidden) {
+                    hidden.value = dateStr;
+                }
+
+                // Disparar eventos para JSF/RichFaces processar
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+                input.dispatchEvent(new Event('blur', {bubbles: true}));
+
+                return true;
+            }""", [field_id, data])
+
+            if _js_ok:
+                # Também setar via focus + type para garantia (rich:calendar pode ignorar JS puro)
+                try:
+                    loc.focus()
+                    self._page.keyboard.press("Control+a")
+                    self._page.keyboard.press("Delete")
+                    digits_only = data.replace("/", "").replace("-", "")
+                    loc.press_sequentially(digits_only, delay=60)
+                    # Tab para disparar blur → JSF sync (necessário para o servidor receber o valor)
+                    loc.press("Tab")
+                    self._aguardar_ajax(timeout=3000)
+                except Exception:
+                    pass  # JS direto já setou — se o type falhar, tudo bem
+                self._log(f"  ✓ data {field_id}: {data}")
+                return True
+
+            # Estratégia 2: focus + type + Tab (fallback se JS não encontrou o campo)
             loc.focus()
-            # Ctrl+A + Delete — limpa campos mascarados (RichFaces) que ignoram el.value=''
             self._page.keyboard.press("Control+a")
             self._page.keyboard.press("Delete")
-            # Digita apenas os dígitos — campos com máscara DD/MM/AAAA auto-inserem as barras
             digits_only = data.replace("/", "").replace("-", "")
             loc.press_sequentially(digits_only, delay=60)
             loc.dispatch_event("input")
             loc.dispatch_event("change")
-            # Escape fecha popup do RichFaces Calendar sem disparar blur AJAX
-            # (Tab dispara blur → AJAX postback → HTTP 500 → Salvar some do DOM)
-            loc.press("Escape")
+            # Tab em vez de Escape — necessário para JSF receber o valor via blur
+            loc.press("Tab")
+            self._aguardar_ajax(timeout=3000)
             self._log(f"  ✓ data {field_id}: {data}")
             return True
         except Exception as e:
-            # Fallback A: setar valor completo com barras (campos sem máscara)
+            # Fallback: JS direto com valor completo (com barras)
             try:
-                loc.focus()
-                self._page.keyboard.press("Control+a")
-                self._page.keyboard.press("Delete")
-                loc.press_sequentially(data, delay=60)
-                loc.press("Escape")
-                self._log(f"  ✓ data {field_id} (fallback A - com barras): {data}")
-                return True
-            except Exception:
-                pass
-            # Fallback B: JS direto (ignora máscara, sem blur para não disparar AJAX)
-            try:
-                loc.evaluate(
-                    "(el, v) => { el.value = v; "
-                    "el.dispatchEvent(new Event('input',{bubbles:true})); "
-                    "el.dispatchEvent(new Event('change',{bubbles:true})); }",
-                    data,
-                )
+                self._page.evaluate("""([suffix, dateStr]) => {
+                    const sels = [
+                        'input[id$="' + suffix + 'InputDate"]',
+                        'input[id$="' + suffix + '"]'
+                    ];
+                    for (const sel of sels) {
+                        const el = document.querySelector(sel);
+                        if (el) {
+                            el.value = dateStr;
+                            // Hidden
+                            const hid = document.getElementById(
+                                el.id.replace('InputDate', 'InputCurrentDate')
+                            );
+                            if (hid) hid.value = dateStr;
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                            return true;
+                        }
+                    }
+                    return false;
+                }""", [field_id, data])
                 self._log(f"  ✓ data {field_id} (JS fallback): {data}")
                 return True
             except Exception as e2:
