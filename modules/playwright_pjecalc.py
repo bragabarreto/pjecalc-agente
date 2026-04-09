@@ -1903,7 +1903,66 @@ class PJECalcPlaywright:
                     }
                 }
 
-                // 4. Ícones de erro (img com alt="erro" ou span com classe de ícone)
+                // 4. linkErro — marcadores de erro nativos do PJE-Calc (X vermelho)
+                // Cada campo tem um <a class="linkErro" id="campoErro"> com <rich:toolTip>
+                // Só ficam visíveis quando JSF detecta erro de validação
+                const linksErro = document.querySelectorAll('a.linkErro, [class="linkErro"]');
+                for (const link of linksErro) {
+                    // Só processar se visível (offsetParent !== null ou display !== none)
+                    const style = window.getComputedStyle(link);
+                    const parentMsg = link.closest('[id$="Message"], span[class*="rf-msg"]');
+                    const isVisible = link.offsetParent !== null ||
+                                      (parentMsg && parentMsg.offsetParent !== null);
+                    if (!isVisible && style.display === 'none') continue;
+                    // Verificar se realmente tem conteúdo (rich:message renderizado)
+                    const msgParent = link.closest('span[class*="rf-msg"]');
+                    if (msgParent && msgParent.children.length <= 1 &&
+                        !msgParent.querySelector('.rf-tt-cntr, .tooltip')) continue;
+
+                    // Extrair ID do campo a partir do ID do link (ex: "numeroErro" -> "numero")
+                    const linkId = link.id || '';
+                    const campoId = linkId.replace(/Erro$/, '').replace(/^formulario:/, '');
+
+                    // Ler tooltip (mensagem de erro detalhada)
+                    let tooltip = '';
+                    const ttEl = link.querySelector('.rf-tt-cntr, .tooltip, [class*="toolTip"]');
+                    if (ttEl) {
+                        tooltip = (ttEl.textContent || '').trim();
+                    }
+                    if (!tooltip) {
+                        tooltip = link.getAttribute('title') || link.textContent.trim() || '';
+                    }
+
+                    // Buscar label do campo
+                    let label = '';
+                    if (campoId) {
+                        const inputEl = document.getElementById('formulario:' + campoId) ||
+                                        document.querySelector('[id$="' + campoId + '"]');
+                        if (inputEl) {
+                            const lbl = document.querySelector('label[for="formulario:' + campoId + '"]') ||
+                                        document.querySelector('label[for="' + inputEl.id + '"]');
+                            if (lbl) label = (lbl.textContent || '').trim();
+                        }
+                    }
+                    if (!label) {
+                        const row = link.closest('tr, td, div, h\\:panelGroup');
+                        if (row) {
+                            const lbl = row.querySelector('label');
+                            if (lbl) label = (lbl.textContent || '').trim();
+                        }
+                    }
+
+                    const jaExiste = resultado.some(r => r.campo_id === campoId && campoId);
+                    if (!jaExiste) {
+                        resultado.push({
+                            campo: label || campoId || '_linkErro',
+                            mensagem: tooltip || 'Campo com erro (linkErro visível)',
+                            campo_id: campoId,
+                        });
+                    }
+                }
+
+                // 5. Ícones de erro genéricos (img com alt="erro" ou span com classe de ícone)
                 const icones = document.querySelectorAll(
                     'img[alt*="erro" i], img[alt*="error" i], ' +
                     'img[src*="error"], img[src*="erro"], ' +
@@ -1945,29 +2004,33 @@ class PJECalcPlaywright:
                     _id_info = f" [id={_fid}]" if _fid else ""
                     self._log(f"    {i}. {_campo_desc}{_id_info}: {_msg}")
 
-                # Tentar hover em ícones de erro para ler tooltips mais detalhados
+                # Hover em linkErro visíveis para ativar rich:toolTip dinâmicos
                 try:
-                    _icones = self._page.locator(
-                        'img[alt*="erro" i], img[src*="error"], '
-                        'span[class*="rf-msg-ico"]'
-                    )
-                    for idx in range(_icones.count()):
+                    _links_erro = self._page.locator('a.linkErro')
+                    for idx in range(_links_erro.count()):
                         try:
-                            _icones.nth(idx).hover(timeout=2000)
-                            self._page.wait_for_timeout(500)
-                            # Ler tooltip que pode ter aparecido após hover
-                            _tooltip = _icones.nth(idx).evaluate("""el => {
-                                // Verificar tooltip dinâmico
-                                const tip = document.querySelector(
-                                    '.rf-tt-cntr:not([style*="display: none"]), ' +
-                                    '.tooltip:not([style*="display: none"]), ' +
-                                    '[role="tooltip"]:not([style*="display: none"])'
+                            el = _links_erro.nth(idx)
+                            if not el.is_visible(timeout=500):
+                                continue
+                            el.hover(timeout=2000)
+                            self._page.wait_for_timeout(600)
+                            # Ler tooltip que apareceu após hover
+                            _tooltip = self._page.evaluate("""() => {
+                                const tips = document.querySelectorAll(
+                                    '.rf-tt-cntr, .tooltip, [role="tooltip"]'
                                 );
-                                if (tip) return tip.textContent.trim().substring(0, 200);
-                                return el.title || el.getAttribute('data-original-title') || '';
+                                for (const t of tips) {
+                                    const s = window.getComputedStyle(t);
+                                    if (s.display !== 'none' && s.visibility !== 'hidden') {
+                                        const txt = (t.textContent || '').trim();
+                                        if (txt) return txt.substring(0, 300);
+                                    }
+                                }
+                                return '';
                             }""")
                             if _tooltip:
-                                self._log(f"    → Tooltip #{idx+1}: {_tooltip}")
+                                _link_id = el.get_attribute('id') or f'#{idx}'
+                                self._log(f"    → linkErro {_link_id}: {_tooltip}")
                         except Exception:
                             continue
                 except Exception:
@@ -1975,6 +2038,55 @@ class PJECalcPlaywright:
 
                 # Capturar screenshot de diagnóstico
                 self._screenshot_fase(f"erro_formulario_{fase}" if fase else "erro_formulario")
+            else:
+                # Nenhum erro encontrado pelas estratégias anteriores.
+                # Fallback: varrer TODOS os linkErro e verificar quais são visíveis
+                self._log(f"  ⚠ {fase}: Nenhum erro detectado por seletores padrão. Varrendo linkErro visíveis...")
+                try:
+                    _links = self._page.locator('a.linkErro')
+                    _total = _links.count()
+                    _visiveis = []
+                    for idx in range(_total):
+                        try:
+                            el = _links.nth(idx)
+                            if el.is_visible(timeout=300):
+                                _lid = el.get_attribute('id') or f'link_{idx}'
+                                _visiveis.append(_lid)
+                                # Hover para pegar tooltip
+                                try:
+                                    el.hover(timeout=1500)
+                                    self._page.wait_for_timeout(500)
+                                    _tt = self._page.evaluate("""() => {
+                                        const tips = document.querySelectorAll('.rf-tt-cntr, .tooltip');
+                                        for (const t of tips) {
+                                            const s = window.getComputedStyle(t);
+                                            if (s.display !== 'none' && s.visibility !== 'hidden') {
+                                                const txt = (t.textContent || '').trim();
+                                                if (txt) return txt.substring(0, 300);
+                                            }
+                                        }
+                                        return '';
+                                    }""")
+                                    campo_id = _lid.replace('Erro', '').replace('formulario:', '')
+                                    erros.append({
+                                        "campo": campo_id,
+                                        "mensagem": _tt or "linkErro visível sem tooltip",
+                                        "campo_id": campo_id,
+                                    })
+                                    self._log(f"    → linkErro visível: {_lid} — {_tt or '(sem tooltip)'}")
+                                except Exception:
+                                    erros.append({
+                                        "campo": _lid,
+                                        "mensagem": "linkErro visível",
+                                        "campo_id": _lid.replace('Erro', ''),
+                                    })
+                                    self._log(f"    → linkErro visível: {_lid}")
+                        except Exception:
+                            continue
+                    if not _visiveis:
+                        self._log(f"    Nenhum linkErro visível encontrado ({_total} no DOM)")
+                except Exception as _e_link:
+                    self._log(f"  ⚠ Varredura linkErro: {_e_link}")
         except Exception as _e_det:
             self._log(f"  ⚠ Detecção de erros: {_e_det}")
 
@@ -7270,19 +7382,23 @@ class PJECalcPlaywright:
             tipo_valor = hon.get("tipo_valor", "CALCULADO")
             self._marcar_radio("tipoValor", tipo_valor) or self._selecionar("tipoValor", tipo_valor, obrigatorio=False)
             self._aguardar_ajax()
-            self._page.wait_for_timeout(500)
+            # Aguardar re-render do grupoCalculado/grupoInformado após seleção do radio
+            self._page.wait_for_timeout(1000)
 
             # Base de apuração — fuzzy match com opções reais
+            # Opções típicas: BRUTO, BRUTO_CS, BRUTO_CS_PP, VNP (enum Java)
             base = hon.get("base_apuracao", "") or ""
-            # Default: se tipo_valor é CALCULADO e base vazia, usar "Condenação"
+            # Default: se tipo_valor é CALCULADO e base vazia, usar "Bruto"
             if not base and tipo_valor == "CALCULADO":
-                base = "CONDENACAO"
+                base = "BRUTO"
             if base:
                 try:
                     opcoes = self._extrair_opcoes_select("baseParaApuracao")
+                    self._log(f"  → baseParaApuracao opções: {[o.get('text','?')+' = '+o.get('value','?') for o in opcoes[:8]]}")
                     match = self._match_fuzzy(base, opcoes)
                     if match:
                         self._selecionar("baseParaApuracao", match, obrigatorio=False)
+                        self._log(f"  ✓ baseParaApuracao: {match}")
                     else:
                         # Fallback: tentar valor direto
                         if not self._selecionar("baseParaApuracao", base, obrigatorio=False):
@@ -7292,7 +7408,7 @@ class PJECalcPlaywright:
                                 self._selecionar("baseParaApuracao", _opcoes_validas[0]["value"], obrigatorio=False)
                                 self._log(f"  ✓ baseParaApuracao: {_opcoes_validas[0]['text']} (primeiro válido)")
                             else:
-                                self._log(f"  ⚠ baseParaApuracao '{base}': sem match — ignorado")
+                                self._log(f"  ⚠ baseParaApuracao '{base}': sem match — opcoes={opcoes}")
                 except Exception as _e:
                     self._log(f"  ⚠ baseParaApuracao: erro — {_e}")
 
