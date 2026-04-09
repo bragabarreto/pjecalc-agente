@@ -30,7 +30,9 @@ class DadosProcesso:
     # Tipo e data de criacao (cabecalho)
     TIPO = "[id$='tipo']"
     DATA_DE_CRIACAO = "[id$='dataDeCriacao'], [id$='dataCriacao'], [id$='dataDeAbertura']"
-    DATA_CALCULO = "[id*='dataDe'], [id*='dataCria'], [id*='dataCalc']"
+    # REMOVIDO: DATA_CALCULO = "[id*='dataDe'], [id*='dataCria'], [id*='dataCalc']"
+    # Seletor muito ambíguo — [id*='dataDe'] casa com dataDemissao, dataDesligamento, etc.
+    # Usar DATA_DE_CRIACAO acima (mais específico) em vez deste.
 
     # Numero do processo (6 campos separados)
     NUMERO = "[id$='numero']"
@@ -195,8 +197,9 @@ class CartaoPonto:
     JORNADA_QUARTA = "input[id$='valorJornadaQuarta']"
     JORNADA_QUINTA = "input[id$='valorJornadaQuinta']"
     JORNADA_SEXTA = "input[id$='valorJornadaSexta']"
-    JORNADA_SABADO = "input[id$='valorJornadaSabado']"
-    JORNADA_DOMINGO = "input[id$='valorJornadaDomingo']"
+    # Nota: sáb/dom usam "Diaria" no ID, diferente de seg-sex que usam "Jornada"
+    JORNADA_SABADO = "input[id$='valorJornadaDiariaSabado'], input[id$='valorJornadaSabado']"
+    JORNADA_DOMINGO = "input[id$='valorJornadaDiariaDom'], input[id$='valorJornadaDomingo']"
 
     # Totais
     QT_JORNADA_SEMANAL = "input[id$='qtJornadaSemanal']"
@@ -566,6 +569,8 @@ class SidebarMenu:
     SEGURO_DESEMPREGO = "a[id*='menuSeguroDesemprego']"
     PENSAO_ALIMENTICIA = "a[id*='menuPensaoAlimenticia']"
     PREVIDENCIA_PRIVADA = "a[id*='menuPrevidenciaPrivada']"
+    CUSTAS_JUDICIAIS = "a[id*='menuCustas'], a[id*='menuCustasJudiciais']"
+    CORRECAO_JUROS = "a[id*='menuCorrecao'], a[id*='menuCorrecaoJuros']"
     EXPORTAR = "a[id*='menuExport']"
 
 

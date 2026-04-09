@@ -347,30 +347,6 @@
       "ocorrencia": "Desligamento",
       "reflexas_automaticas": [],
       "incidencias": {"fgts": false, "inss": false, "irpf": false}
-    },
-    {
-      "nome_pjecalc": "INDENIZAÇÃO POR DANO MORAL",
-      "aliases": ["dano moral", "danos morais", "indenização moral", "indenização por dano moral", "reparação por danos extrapatrimoniais", "compensação por dano moral", "danos extrapatrimoniais", "indenização por danos morais"],
-      "caracteristica": "Comum",
-      "ocorrencia": "Desligamento",
-      "reflexas_automaticas": [],
-      "incidencias": {"fgts": false, "inss": false, "irpf": false}
-    },
-    {
-      "nome_pjecalc": "INDENIZAÇÃO POR DANO MATERIAL",
-      "aliases": ["dano material", "danos materiais", "indenização material", "indenização por dano material"],
-      "caracteristica": "Comum",
-      "ocorrencia": "Desligamento",
-      "reflexas_automaticas": [],
-      "incidencias": {"fgts": false, "inss": false, "irpf": false}
-    },
-    {
-      "nome_pjecalc": "INDENIZAÇÃO POR DANO ESTÉTICO",
-      "aliases": ["dano estético", "danos estéticos", "indenização por dano estético"],
-      "caracteristica": "Comum",
-      "ocorrencia": "Desligamento",
-      "reflexas_automaticas": [],
-      "incidencias": {"fgts": false, "inss": false, "irpf": false}
     }
   ],
   "adaptaveis": [

@@ -28,15 +28,22 @@ from typing import Any, Callable
 from knowledge.pjecalc_selectors import (
     DadosProcesso,
     ParametrosCalculo,
+    ParametrosGerais,
     HistoricoSalarial,
+    Ferias as FeriasSelectors,
+    Faltas as FaltasSelectors,
     CartaoPonto,
     VerbaListagem,
     VerbaExpresso,
     VerbaManual,
+    VerbaParametro,
+    VerbaOcorrencia,
     FGTS as FGTSSelectors,
     ContribuicaoSocial as INSSSelectors,
+    ImpostoRenda as IRSelectors,
     Honorarios as HonorariosSelectors,
     CorrecaoJurosMulta,
+    CustasJudiciais as CustasSelectors,
     Liquidacao,
     Exportacao,
     SidebarMenu,
@@ -851,10 +858,11 @@ class PJECalcPlaywright:
                 _state = loc.evaluate("el => ({disabled: el.disabled, readonly: el.readOnly})")
                 if _state.get("disabled") or _state.get("readonly"):
                     loc.evaluate(
-                        f"el => {{ el.disabled = false; el.readOnly = false; "
-                        f"el.value = '{valor}'; "
+                        "(el, v) => { el.disabled = false; el.readOnly = false; "
+                        "el.value = v; "
                         "el.dispatchEvent(new Event('input',{bubbles:true})); "
-                        "el.dispatchEvent(new Event('change',{bubbles:true})); }}"
+                        "el.dispatchEvent(new Event('change',{bubbles:true})); }",
+                        valor,
                     )
                     self._log(f"  ✓ {field_id}: {valor} (disabled/readonly override)")
                     return True
@@ -865,7 +873,9 @@ class PJECalcPlaywright:
             loc.fill(valor)
             loc.dispatch_event("input")
             loc.dispatch_event("change")
-            # Sem blur: JSF/RichFaces pode usar blur para AJAX postback → risco de HTTP 500
+            # Sem blur intencional: JSF/RichFaces usa blur para AJAX postback.
+            # Disparar blur aqui causa race condition com o próximo campo → HTTP 500.
+            # O blur natural ocorre quando o próximo campo recebe foco (click/Tab).
             self._log(f"  ✓ {field_id}: {valor}")
             return True
         except Exception as e:
@@ -924,9 +934,10 @@ class PJECalcPlaywright:
             # Fallback B: JS direto (ignora máscara, sem blur para não disparar AJAX)
             try:
                 loc.evaluate(
-                    f"el => {{ el.value = '{data}'; "
+                    "(el, v) => { el.value = v; "
                     "el.dispatchEvent(new Event('input',{bubbles:true})); "
-                    "el.dispatchEvent(new Event('change',{bubbles:true})); }}"
+                    "el.dispatchEvent(new Event('change',{bubbles:true})); }",
+                    data,
                 )
                 self._log(f"  ✓ data {field_id} (JS fallback): {data}")
                 return True
@@ -1276,6 +1287,10 @@ class PJECalcPlaywright:
             "Seguro Desemprego":  SidebarMenu.SEGURO_DESEMPREGO,
             "Pensão Alimentícia": SidebarMenu.PENSAO_ALIMENTICIA,
             "Previdência Privada": SidebarMenu.PREVIDENCIA_PRIVADA,
+            "Custas Judiciais":   SidebarMenu.CUSTAS_JUDICIAIS,
+            "Custas":             SidebarMenu.CUSTAS_JUDICIAIS,
+            "Correção, Juros e Multa": SidebarMenu.CORRECAO_JUROS,
+            "Correção e Juros":   SidebarMenu.CORRECAO_JUROS,
             "Exportar":           SidebarMenu.EXPORTAR,
             "Exportação":         SidebarMenu.EXPORTAR,
             "Excluir":            "a[id*='menuExcluir']",
@@ -1687,20 +1702,18 @@ class PJECalcPlaywright:
                 return True
             for _tentativa in range(20):  # 20 × 500ms = 10s
                 try:
-                    # Seletores de mensagem: Mensagens.SUCESSO / Mensagens.ERRO (pjecalc_selectors.py)
-                    msg = self._page.evaluate("""() => {
+                    # Seletores de mensagem passados como parâmetro (evita quebra por aspas)
+                    msg = self._page.evaluate("""(sels) => {
                         const msgs = document.querySelectorAll(
-                            '""" + Mensagens.SUCESSO + """, [class*="msg"], [class*="sucesso"]'
+                            sels.sucesso + ', [class*="msg"], [class*="sucesso"]'
                         );
                         for (const m of msgs) {
                             const t = (m.textContent || '').toLowerCase();
                             if (t.includes('sucesso') || t.includes('realizada') || t.includes('salvo'))
                                 return m.textContent.trim().substring(0, 80);
                         }
-                        // Verificar também se houve erro (HTTP 500, ViewExpired, etc.)
                         const erros = document.querySelectorAll(
-                            '""" + Mensagens.ERRO + """, '
-                            + '.rf-msg-err, [class*="erro"], [class*="error"]'
+                            sels.erro + ', .rf-msg-err, [class*="erro"], [class*="error"]'
                         );
                         for (const e of erros) {
                             const t = (e.textContent || '').toLowerCase();
@@ -1710,7 +1723,7 @@ class PJECalcPlaywright:
                                 return 'ERRO:' + e.textContent.trim().substring(0, 200);
                         }
                         return null;
-                    }""")
+                    }""", {"sucesso": Mensagens.SUCESSO, "erro": Mensagens.ERRO})
                     if msg:
                         if msg.startswith('ERRO:'):
                             self._log(f"  ✗ Salvar: {msg}")
@@ -3906,6 +3919,10 @@ class PJECalcPlaywright:
         predefinidas = _pred_final
         personalizadas = _pers_keep
 
+        # Filtrar verbas com _apenas_fgts (ex: Multa 467) — são checkbox FGTS, não verba
+        predefinidas = [v for v in predefinidas if not v.get("_apenas_fgts")]
+        personalizadas = [v for v in personalizadas if not v.get("_apenas_fgts")]
+
         # Diagnóstico: listar botões disponíveis
         try:
             _botoes_verbas = self._page.evaluate("""() =>
@@ -4762,6 +4779,7 @@ class PJECalcPlaywright:
                     _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
 
                 # Verificar se o principal foi criado via Expresso (reflexos auto-gerados)
+                _skip_expresso = False
                 if _nome_principal_ref:
                     _ref_upper = _norm_key(_nome_principal_ref)
                     _skip_expresso = any(
@@ -5544,8 +5562,10 @@ class PJECalcPlaywright:
                     self._clicar_menu_lateral("Multas e Indenizações", obrigatorio=False)
                     self._page.wait_for_timeout(800)
 
-            # Clicar "Novo"
-            self._clicar_novo()
+            # Clicar "Incluir" — NUNCA _clicar_novo() que pode criar novo cálculo
+            if not self._clicar_botao_id("incluir"):
+                self._log(f"  ⚠ '{nome_m}': botão 'incluir' não encontrado — ignorada.")
+                continue
             self._aguardar_ajax()
             try:
                 self._page.wait_for_selector("[id$=':descricao']", state="visible", timeout=5000)
@@ -6613,7 +6633,7 @@ class PJECalcPlaywright:
         # No cartão de ponto, o botão pode ser "Salvar" ou "salvar"
         _saved = False
         for _sel in [CartaoPonto.SALVAR, "input[value='Salvar']",
-                     "input[id$='btnSalvar']", "a4j\\:commandButton[id$='salvar']"]:
+                     "input[id$='btnSalvar']"]:
             try:
                 btn = self._page.locator(_sel)
                 if btn.count() > 0 and btn.first.is_visible():
@@ -6678,7 +6698,11 @@ class PJECalcPlaywright:
         self.mapear_campos("fase5c_faltas")
 
         for i, falta in enumerate(faltas):
-            self._clicar_novo()
+            # Usar _clicar_botao_id("incluir") — NUNCA _clicar_novo() que pode
+            # acionar o "Novo" do menu lateral e criar um cálculo inteiro.
+            if not self._clicar_botao_id("incluir"):
+                self._log(f"  ⚠ Falta {i+1}: botão 'incluir' não encontrado")
+                continue
             self._aguardar_ajax()
             self._page.wait_for_timeout(800)
 
