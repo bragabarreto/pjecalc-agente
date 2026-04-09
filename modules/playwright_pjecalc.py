@@ -1544,12 +1544,15 @@ class PJECalcPlaywright:
                         }
                         // Verificar também se houve erro (HTTP 500, ViewExpired, etc.)
                         const erros = document.querySelectorAll(
-                            '.rf-msgs-sum-err, .rich-messages-label, [class*="erro"], [class*="error"]'
+                            '.rf-msgs-sum-err, .rf-msgs-sum, .rich-messages-label, '
+                            + '.rf-msg-err, [class*="erro"], [class*="error"]'
                         );
                         for (const e of erros) {
                             const t = (e.textContent || '').toLowerCase();
-                            if (t.includes('erro') || t.includes('error') || t.includes('falha'))
-                                return 'ERRO:' + e.textContent.trim().substring(0, 80);
+                            if (t.includes('erro') || t.includes('error') || t.includes('falha')
+                                || t.includes('não pôde') || t.includes('não pode')
+                                || t.includes('formulário') || t.includes('inesperado'))
+                                return 'ERRO:' + e.textContent.trim().substring(0, 200);
                         }
                         return null;
                     }""")
@@ -1611,6 +1614,367 @@ class PJECalcPlaywright:
         except Exception:
             pass
         self._log("  ⚠ Botão Salvar não encontrado — clique manualmente.")
+        return False
+
+    def _detectar_erros_formulario(self, fase: str = "") -> list[dict]:
+        """Detecta e loga campos com erro após um Salvar falhar.
+
+        Busca elementos de erro JSF/RichFaces no DOM:
+        - .rf-msg-err, .rf-msgs-sum-err (mensagens de erro RichFaces)
+        - span.rf-msg-det (detalhe do erro)
+        - Ícones de erro com tooltip (title ou data-original-title)
+        - Campos com classe 'rf-inpt-fld-err' (input com borda vermelha)
+
+        Para cada erro encontrado:
+        1. Loga o campo e a mensagem de erro
+        2. Tenta hover para ler tooltip (descrição completa)
+        3. Captura screenshot do estado de erro
+
+        Retorna lista de dicts: [{"campo": str, "mensagem": str, "campo_id": str}]
+        """
+        erros: list[dict] = []
+        try:
+            # Estratégia 1: Buscar mensagens de erro RichFaces globais e inline
+            erros_dom = self._page.evaluate("""() => {
+                const resultado = [];
+
+                // 1. Mensagens de erro globais (topo da página)
+                const globais = document.querySelectorAll(
+                    '.rf-msgs-sum-err, .rf-msgs-det, .rf-msgs li'
+                );
+                for (const el of globais) {
+                    const txt = (el.textContent || '').trim();
+                    if (txt && (txt.toLowerCase().includes('erro') ||
+                                txt.toLowerCase().includes('obrigat') ||
+                                txt.toLowerCase().includes('inválid') ||
+                                txt.toLowerCase().includes('preenchi') ||
+                                txt.toLowerCase().includes('não pôde') ||
+                                txt.length > 3)) {
+                        resultado.push({campo: '_global', mensagem: txt.substring(0, 200), campo_id: ''});
+                    }
+                }
+
+                // 2. Mensagens de erro inline por campo (RichFaces rf-msg)
+                const msgsInline = document.querySelectorAll(
+                    '.rf-msg-err, .rf-msg-det, span[class*="rf-msg"]'
+                );
+                for (const el of msgsInline) {
+                    const txt = (el.textContent || '').trim();
+                    if (!txt) continue;
+                    // Tentar identificar o campo associado via DOM
+                    let campoId = '';
+                    let campoLabel = '';
+                    // O rf-msg geralmente está perto do campo — buscar label ou input vizinho
+                    const parent = el.closest('td, div, span.rf-msg');
+                    if (parent) {
+                        const input = parent.querySelector('input, select, textarea') ||
+                                      parent.previousElementSibling;
+                        if (input && input.id) {
+                            campoId = input.id.replace(/^formulario:/, '');
+                        }
+                    }
+                    // Tentar buscar label próxima
+                    const row = el.closest('tr, div[class*="form"], div[class*="campo"]');
+                    if (row) {
+                        const lbl = row.querySelector('label, td:first-child, span[class*="label"]');
+                        if (lbl) campoLabel = (lbl.textContent || '').trim();
+                    }
+                    resultado.push({
+                        campo: campoLabel || campoId || '_inline',
+                        mensagem: txt.substring(0, 200),
+                        campo_id: campoId,
+                    });
+                }
+
+                // 3. Campos com classe de erro (input com borda vermelha)
+                const camposErro = document.querySelectorAll(
+                    '.rf-inpt-fld-err, input.error, select.error, ' +
+                    'input[class*="Err"], select[class*="Err"], ' +
+                    '[aria-invalid="true"]'
+                );
+                for (const el of camposErro) {
+                    const campoId = (el.id || '').replace(/^formulario:/, '');
+                    // Buscar tooltip do ícone de erro vizinho
+                    let tooltip = '';
+                    const nextSibling = el.nextElementSibling;
+                    if (nextSibling) {
+                        tooltip = nextSibling.getAttribute('title') ||
+                                  nextSibling.getAttribute('data-original-title') ||
+                                  (nextSibling.textContent || '').trim();
+                    }
+                    // Buscar label do campo
+                    let label = '';
+                    if (el.id) {
+                        const lbl = document.querySelector('label[for="' + el.id + '"]');
+                        if (lbl) label = (lbl.textContent || '').trim();
+                    }
+                    if (!label) {
+                        const row = el.closest('tr, div');
+                        if (row) {
+                            const lbl = row.querySelector('label, td:first-child');
+                            if (lbl) label = (lbl.textContent || '').trim();
+                        }
+                    }
+                    // Verificar se já temos esse campo nos resultados
+                    const jaExiste = resultado.some(r => r.campo_id === campoId && campoId);
+                    if (!jaExiste) {
+                        resultado.push({
+                            campo: label || campoId || '_campo_erro',
+                            mensagem: tooltip || 'Campo marcado com erro (sem tooltip)',
+                            campo_id: campoId,
+                        });
+                    }
+                }
+
+                // 4. Ícones de erro (img com alt="erro" ou span com classe de ícone)
+                const icones = document.querySelectorAll(
+                    'img[alt*="erro" i], img[alt*="error" i], ' +
+                    'img[src*="error"], img[src*="erro"], ' +
+                    'span[class*="rf-msg-ico"], span[class*="error-icon"]'
+                );
+                for (const ico of icones) {
+                    const tooltip = ico.getAttribute('title') ||
+                                    ico.getAttribute('data-original-title') ||
+                                    ico.getAttribute('alt') || '';
+                    const parent = ico.closest('td, div, span');
+                    let campoId = '';
+                    let label = '';
+                    if (parent) {
+                        const input = parent.querySelector('input, select');
+                        if (input) campoId = (input.id || '').replace(/^formulario:/, '');
+                        const lbl = parent.querySelector('label');
+                        if (lbl) label = (lbl.textContent || '').trim();
+                    }
+                    const jaExiste = resultado.some(r => r.campo_id === campoId && campoId);
+                    if (!jaExiste && tooltip) {
+                        resultado.push({
+                            campo: label || campoId || '_icone',
+                            mensagem: tooltip.substring(0, 200),
+                            campo_id: campoId,
+                        });
+                    }
+                }
+
+                return resultado;
+            }""")
+
+            if erros_dom:
+                erros = erros_dom
+                self._log(f"  ✗ {fase + ': ' if fase else ''}Erros de formulário detectados ({len(erros)}):")
+                for i, e in enumerate(erros, 1):
+                    _campo_desc = e.get("campo", "?")
+                    _msg = e.get("mensagem", "?")
+                    _fid = e.get("campo_id", "")
+                    _id_info = f" [id={_fid}]" if _fid else ""
+                    self._log(f"    {i}. {_campo_desc}{_id_info}: {_msg}")
+
+                # Tentar hover em ícones de erro para ler tooltips mais detalhados
+                try:
+                    _icones = self._page.locator(
+                        'img[alt*="erro" i], img[src*="error"], '
+                        'span[class*="rf-msg-ico"]'
+                    )
+                    for idx in range(_icones.count()):
+                        try:
+                            _icones.nth(idx).hover(timeout=2000)
+                            self._page.wait_for_timeout(500)
+                            # Ler tooltip que pode ter aparecido após hover
+                            _tooltip = _icones.nth(idx).evaluate("""el => {
+                                // Verificar tooltip dinâmico
+                                const tip = document.querySelector(
+                                    '.rf-tt-cntr:not([style*="display: none"]), ' +
+                                    '.tooltip:not([style*="display: none"]), ' +
+                                    '[role="tooltip"]:not([style*="display: none"])'
+                                );
+                                if (tip) return tip.textContent.trim().substring(0, 200);
+                                return el.title || el.getAttribute('data-original-title') || '';
+                            }""")
+                            if _tooltip:
+                                self._log(f"    → Tooltip #{idx+1}: {_tooltip}")
+                        except Exception:
+                            continue
+                except Exception:
+                    pass
+
+                # Capturar screenshot de diagnóstico
+                self._screenshot_fase(f"erro_formulario_{fase}" if fase else "erro_formulario")
+        except Exception as _e_det:
+            self._log(f"  ⚠ Detecção de erros: {_e_det}")
+
+        return erros
+
+    def _tentar_corrigir_erros(self, erros: list[dict], dados: dict, fase: str) -> bool:
+        """Tenta corrigir erros comuns detectados por _detectar_erros_formulario.
+
+        Estratégias de correção por tipo de erro:
+        1. Campo obrigatório vazio → tentar preencher com valor padrão
+        2. Data com formato inválido → reformatar DD/MM/AAAA
+        3. Tipo de rescisão não selecionado → selecionar SEM_JUSTA_CAUSA
+        4. Documento fiscal formato errado → limpar e re-preencher
+
+        Retorna True se alguma correção foi aplicada (caller deve re-salvar).
+        """
+        if not erros:
+            return False
+
+        _corrigiu = False
+        proc = dados.get("processo", {}) if isinstance(dados, dict) else {}
+        cont = dados.get("contrato", {}) if isinstance(dados, dict) else {}
+
+        for e in erros:
+            _fid = e.get("campo_id", "")
+            _msg = (e.get("mensagem", "") or "").lower()
+            _campo = (e.get("campo", "") or "").lower()
+
+            # ── Tipo de Rescisão não selecionado ──
+            if "rescis" in _campo or "rescis" in _msg or _fid in ("tipoRescisao", "motivoDesligamento"):
+                _tipo = cont.get("tipo_rescisao", "sem_justa_causa")
+                _map = {
+                    "sem_justa_causa": "SEM_JUSTA_CAUSA",
+                    "justa_causa": "JUSTA_CAUSA",
+                    "pedido_demissao": "PEDIDO_DEMISSAO",
+                }
+                _val = _map.get(_tipo, "SEM_JUSTA_CAUSA")
+                if self._selecionar("tipoRescisao", _val, obrigatorio=False):
+                    self._log(f"    → Correção: tipoRescisao = {_val}")
+                    _corrigiu = True
+                if self._selecionar("motivoDesligamento", _val, obrigatorio=False):
+                    _corrigiu = True
+
+            # ── Data obrigatória vazia ou formato inválido ──
+            elif "data" in _campo or "data" in _fid or "data" in _msg:
+                import datetime
+                _hoje = datetime.date.today().strftime("%d/%m/%Y")
+                # Campos de data comuns que podem estar vazios
+                _datas_defaults = {
+                    "dataAdmissao": cont.get("admissao", ""),
+                    "dataDemissao": cont.get("demissao", ""),
+                    "dataAjuizamento": cont.get("ajuizamento", ""),
+                    "dataDeCriacao": _hoje,
+                    "dataCriacao": _hoje,
+                    "dataInicialApuracao": cont.get("admissao", ""),
+                }
+                if _fid and _fid in _datas_defaults and _datas_defaults[_fid]:
+                    if self._preencher_data(_fid, _datas_defaults[_fid], obrigatorio=False):
+                        self._log(f"    → Correção: {_fid} = {_datas_defaults[_fid]}")
+                        _corrigiu = True
+
+            # ── Campo obrigatório vazio (genérico) ──
+            elif "obrigat" in _msg or "preenchimento" in _msg or "required" in _msg:
+                # Tentar identificar e preencher campos obrigatórios com defaults
+                _defaults_obrigatorios = {
+                    "valorCargaHorariaPadrao": "220,00",
+                    "tipoRescisao": "SEM_JUSTA_CAUSA",
+                    "motivoDesligamento": "SEM_JUSTA_CAUSA",
+                    "tipoDaBaseTabelada": "INTEGRAL",
+                }
+                if _fid and _fid in _defaults_obrigatorios:
+                    _val = _defaults_obrigatorios[_fid]
+                    if _fid in ("tipoRescisao", "motivoDesligamento", "tipoDaBaseTabelada"):
+                        if self._selecionar(_fid, _val, obrigatorio=False):
+                            self._log(f"    → Correção: {_fid} = {_val}")
+                            _corrigiu = True
+                    else:
+                        if self._preencher(_fid, _val, obrigatorio=False):
+                            self._log(f"    → Correção: {_fid} = {_val}")
+                            _corrigiu = True
+
+            # ── Documento fiscal formato errado ──
+            elif "documento" in _campo or "cpf" in _msg or "cnpj" in _msg or "fiscal" in _campo:
+                # Limpar formatação do CPF/CNPJ (apenas dígitos)
+                import re
+                for _doc_id in ["reclamanteNumeroDocumentoFiscal", "reclamadoNumeroDocumentoFiscal",
+                                "cpfReclamante", "cnpjReclamado"]:
+                    try:
+                        _val_atual = self._page.evaluate(
+                            f"""() => {{
+                                const el = document.querySelector('[id$="{_doc_id}"]');
+                                return el ? el.value : null;
+                            }}"""
+                        )
+                        if _val_atual:
+                            _limpo = re.sub(r'[^\d]', '', _val_atual)
+                            if _limpo and _limpo != _val_atual:
+                                self._preencher(_doc_id, _limpo, obrigatorio=False)
+                                self._log(f"    → Correção: {_doc_id} reformatado ({_val_atual} → {_limpo})")
+                                _corrigiu = True
+                    except Exception:
+                        continue
+
+            # ── Valor inválido (formato monetário) ──
+            elif "valor" in _campo or "valor" in _fid:
+                if _fid:
+                    try:
+                        _val_atual = self._page.evaluate(
+                            f"""() => {{
+                                const el = document.querySelector('[id$="{_fid}"]');
+                                return el ? el.value : null;
+                            }}"""
+                        )
+                        if _val_atual:
+                            # Reformatar para padrão BR (vírgula decimal)
+                            import re
+                            _limpo = re.sub(r'[^\d,.]', '', _val_atual)
+                            if '.' in _limpo and ',' not in _limpo:
+                                _limpo = _limpo.replace('.', ',')
+                                self._preencher(_fid, _limpo, obrigatorio=False)
+                                self._log(f"    → Correção: {_fid} reformatado ({_val_atual} → {_limpo})")
+                                _corrigiu = True
+                    except Exception:
+                        pass
+
+        if _corrigiu:
+            self._log("    → Correções aplicadas — re-salvando…")
+            self._aguardar_ajax()
+        else:
+            self._log("    → Nenhuma correção automática possível — verifique os campos manualmente")
+
+        return _corrigiu
+
+    def _salvar_com_deteccao_erros(self, fase: str, dados: dict | None = None,
+                                    max_tentativas: int = 2) -> bool:
+        """Wrapper robusto de Salvar: detecta erros, tenta corrigir, re-salva.
+
+        1. Clica Salvar
+        2. Se falhar: detecta erros no formulário (tooltips, mensagens)
+        3. Tenta corrigir erros comuns automaticamente
+        4. Re-salva até max_tentativas vezes
+        5. Captura screenshot em caso de falha persistente
+
+        Retorna True se o salvamento foi bem-sucedido.
+        """
+        for tentativa in range(max_tentativas):
+            _ok = self._clicar_salvar()
+            if _ok:
+                return True
+
+            self._log(f"  ⚠ {fase}: Salvar falhou (tentativa {tentativa + 1}/{max_tentativas})")
+
+            # Detectar erros específicos
+            _erros = self._detectar_erros_formulario(fase)
+
+            if not _erros:
+                # Nenhum erro detectado no DOM — pode ser timeout ou problema de rede
+                self._log(f"  ⚠ {fase}: Nenhum erro específico detectado no DOM")
+                if tentativa < max_tentativas - 1:
+                    self._page.wait_for_timeout(2000)
+                    continue
+                return False
+
+            # Tentar corrigir erros automaticamente
+            if dados and tentativa < max_tentativas - 1:
+                _corrigiu = self._tentar_corrigir_erros(_erros, dados, fase)
+                if _corrigiu:
+                    self._page.wait_for_timeout(500)
+                    continue  # re-salvar na próxima iteração
+
+            # Se não conseguiu corrigir, ainda tenta re-salvar (às vezes erros intermitentes)
+            if tentativa < max_tentativas - 1:
+                self._page.wait_for_timeout(1000)
+
+        # Falha persistente: screenshot final
+        self._screenshot_fase(f"erro_persistente_{fase}")
+        self._log(f"  ✗ {fase}: Salvar falhou após {max_tentativas} tentativas")
         return False
 
     def _regerar_ocorrencias_verbas(self) -> bool:
@@ -2383,7 +2747,7 @@ class PJECalcPlaywright:
             self._preencher("comentarios", _comentario_jg, False)
             self._log(f"  ✓ Comentários: justiça gratuita — {_desc_partes}")
 
-        if not self._clicar_salvar():
+        if not self._salvar_com_deteccao_erros("Fase 1", dados, max_tentativas=3):
             self._log("  ⚠ Fase 1: Salvar não confirmado — dados do processo podem não ter persistido.")
 
         # Verificação pós-save: confirmar que o cálculo foi persistido no H2.
@@ -2397,7 +2761,7 @@ class PJECalcPlaywright:
         else:
             self._log("  ⚠ conversationId ausente na URL pós-save — tentando re-salvar…")
             self._page.wait_for_timeout(2000)
-            self._clicar_salvar()
+            self._salvar_com_deteccao_erros("Fase 1 (retry)", dados, max_tentativas=2)
             self._capturar_base_calculo()
             _url_retry = self._page.url
             if "conversationId" in _url_retry:
@@ -2461,7 +2825,7 @@ class PJECalcPlaywright:
         if zerar_negativos is not None:
             self._marcar_checkbox("zerarValoresNegativos", bool(zerar_negativos))
 
-        if not self._clicar_salvar():
+        if not self._salvar_com_deteccao_erros("Fase 2a", parametros, max_tentativas=2):
             self._log("  ⚠ Fase 2a: Salvar não confirmado — parâmetros gerais podem não ter persistido.")
         self._aguardar_ajax()
         # Captura/atualiza URL base após salvar (URL pode ter mudado com novo conversationId)
@@ -2880,6 +3244,8 @@ class PJECalcPlaywright:
                     ])
                     if _is_validation:
                         self._log(f"  ⚠ Erro validação período {idx_h+1}: {_err_msg}")
+                        # Detectar campos específicos com erro
+                        self._detectar_erros_formulario(f"Hist.Salarial período {idx_h+1}")
                         self._clicar_menu_lateral("Histórico Salarial", obrigatorio=False)
                         self._page.wait_for_timeout(1000)
                         continue
@@ -3106,13 +3472,24 @@ class PJECalcPlaywright:
             if _salvou:
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1500)
-                self._log("  ✓ Verbas Expresso salvas")
+                # Verificar se o salvamento gerou erro mesmo retornando "sucesso"
+                _erros_exp = self._detectar_erros_formulario("Fase 3 Expresso")
+                if _erros_exp:
+                    self._log(f"  ⚠ Verbas Expresso: {len(_erros_exp)} erro(s) detectado(s) após salvar")
+                    _salvou = False
+                else:
+                    self._log("  ✓ Verbas Expresso salvas")
             else:
                 self._log("  ⚠ btnSalvarExpresso não encontrado — tentando Enter")
                 try:
                     self._page.keyboard.press("Enter")
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(1500)
+                    # Verificar erros após Enter
+                    _erros_enter = self._detectar_erros_formulario("Fase 3 Expresso (Enter)")
+                    if _erros_enter:
+                        self._log(f"  ⚠ Verbas Expresso: erros após Enter")
+                        _salvou = False
                 except Exception:
                     pass
 
@@ -4561,6 +4938,16 @@ class PJECalcPlaywright:
                 if _erro_msgs:
                     self._log(f"  ⚠ Verba '{nome}': ERRO ao salvar — {'; '.join(_erro_msgs[:3])}")
                     _salvou = False
+                    # Detectar campos específicos com erro para diagnóstico
+                    _erros_det = self._detectar_erros_formulario(f"Verba Manual '{nome}'")
+                    # Tentar corrigir e re-salvar UMA vez
+                    if _erros_det:
+                        _corrigiu = self._tentar_corrigir_erros(_erros_det, v, f"Verba Manual '{nome}'")
+                        if _corrigiu:
+                            _salvou = self._clicar_salvar()
+                            self._aguardar_ajax()
+                            if _salvou:
+                                self._log(f"  ✓ Verba '{nome}': salvou após correção automática")
             except Exception:
                 pass
 
@@ -6575,75 +6962,61 @@ class PJECalcPlaywright:
         Executa liquidação e exportação do .PJC no PJE-Calc.
 
         Fluxo correto (dois passos distintos):
-          1. Clicar botão Liquidar (AJAX, reRender="listagem" — SEM download)
-          2. Navegar para exportacao.jsf → clicar Exportar → capturar download .PJC
+          1. Navegar para Liquidar via sidebar → clicar botão Liquidar (AJAX)
+          2. Navegar para Exportar via sidebar → clicar botão Exportar → capturar download .PJC
 
-        A automação NUNCA para aqui para interação manual:
-          — Lança RuntimeError apenas se o botão Liquidar não for encontrado,
-            para que o orquestrador ofereça o .PJC gerado pelo generator.
+        Após todas as fases de preenchimento, o PJE-Calc já está no cálculo
+        correto (mesmo conversationId). Basta navegar para Liquidar e depois
+        Exportar via sidebar — sem necessidade de buscar/re-abrir o cálculo.
+
+        Fallback: se a verificação do cálculo falhar (sessão corrompida),
+        tenta re-abrir via Recentes antes de prosseguir.
         """
         self._log("→ Liquidar: iniciando geração do cálculo…")
+        import time as _time_liq
         from config import OUTPUT_DIR
         out_dir = Path(OUTPUT_DIR)
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        # Restaurar sessão Seam ANTES da liquidação.
-        # A conversação original fica corrompida por NPEs acumulados durante a automação
-        # (ex: ApresentadorHonorarios.getListaCredoresDoCalculo causando NPE a cada render).
-        # Solução: voltar para principal.jsf e re-abrir o cálculo da lista de "Recentes".
-        self._log("  → Re-abrindo cálculo via Tela Inicial (nova conversação Seam)…")
-        _sessao_restaurada = self._reabrir_calculo_recentes()
-
-        # Verificar processo correto após re-abertura
-        if _sessao_restaurada:
-            if not self._verificar_calculo_correto():
-                self._log("  ⚠ CÁLCULO ERRADO após re-abertura via Recentes!")
-                _sessao_restaurada = False
-
-        # Fallback: tentar conversação antiga (pode falhar se corrompida)
-        if not _sessao_restaurada and self._calculo_url_base and self._calculo_conversation_id:
-            try:
-                _calc_url = (
-                    f"{self._calculo_url_base}calculo.jsf"
-                    f"?conversationId={self._calculo_conversation_id}"
-                )
-                self._log("  → Fallback: tentando conversação antiga via calculo.jsf…")
-                self._page.goto(_calc_url, wait_until="domcontentloaded", timeout=15000)
-                try:
-                    self._instalar_monitor_ajax()
-                except Exception:
-                    pass
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(1000)
-                self._capturar_base_calculo()
-                if self._verificar_calculo_correto():
-                    _sessao_restaurada = True
-                else:
-                    self._log("  ⚠ CÁLCULO ERRADO no fallback conversação antiga!")
-            except Exception as _e:
-                self._log(f"  ⚠ Fallback conversação antiga: {_e}")
+        # Pasta dedicada de exports
+        _exports_dir = out_dir.parent / "exports"
+        _exports_dir.mkdir(parents=True, exist_ok=True)
 
         # REGRA DE SEGURANÇA: verificar processo correto ANTES de liquidar.
+        # O PJE-Calc já está no cálculo correto após as fases de preenchimento.
+        # Só tenta re-abrir se a verificação falhar (sessão corrompida por NPE).
         _num_proc = (self._dados or {}).get("processo", {}).get("numero", "?")
-        if not _sessao_restaurada:
-            raise RuntimeError(
-                "ABORTADO: não foi possível restaurar a sessão do cálculo correto. "
-                "Nenhuma das estratégias (Recentes, Buscar, conversação antiga) encontrou "
-                f"o processo '{_num_proc}'. "
-                "Não é seguro prosseguir com liquidação/exportação."
-            )
         if not self._verificar_calculo_correto():
-            raise RuntimeError(
-                "ABORTADO: o cálculo aberto pertence a um processo diferente do solicitado "
-                f"(esperado: '{_num_proc}'). "
-                "Não é seguro prosseguir com liquidação/exportação."
-            )
+            self._log("  ⚠ Verificação de cálculo falhou na sessão atual — tentando re-abrir via Recentes…")
+            _sessao_restaurada = self._reabrir_calculo_recentes()
+            if _sessao_restaurada and self._verificar_calculo_correto():
+                self._log("  ✓ Cálculo re-aberto e verificado via Recentes")
+            else:
+                raise RuntimeError(
+                    "ABORTADO: o cálculo aberto não corresponde ao processo solicitado "
+                    f"(esperado: '{_num_proc}'). "
+                    "Não é seguro prosseguir com liquidação/exportação."
+                )
+        else:
+            self._log(f"  ✓ Cálculo correto confirmado — processo '{_num_proc}'")
 
         def _salvar_download(dl_info_value) -> str:
-            dest = out_dir / dl_info_value.suggested_filename
-            if not dest.suffix:
-                dest = dest.with_suffix(".pjc")
+            # Gerar nome padronizado: PROCESSO_{numero}_{timestamp}.pjc
+            _ts = _time_liq.strftime("%Y%m%d_%H%M%S")
+            _num_limpo = _num_proc.replace("-", "").replace(".", "").replace("/", "")
+            _nome_padrao = f"PROCESSO_{_num_limpo}_{_ts}.pjc"
+
+            # Salvar na pasta de exports
+            dest = _exports_dir / _nome_padrao
             dl_info_value.save_as(str(dest))
+
+            # Cópia adicional na pasta output (retrocompat)
+            _dest_output = out_dir / _nome_padrao
+            try:
+                import shutil
+                shutil.copy2(str(dest), str(_dest_output))
+            except Exception:
+                pass
             # Verificar integridade do .PJC (deve ser ZIP com calculo.xml)
             try:
                 tamanho = dest.stat().st_size
