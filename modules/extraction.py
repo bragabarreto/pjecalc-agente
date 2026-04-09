@@ -362,6 +362,7 @@ NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas clássicos)
   ⚠️ Padrão quando omitido: apurar_segurado_salarios_devidos=true, cobrar_do_reclamante=true, com_correcao_trabalhista=true, apurar_sobre_salarios_pagos=false
 
 **CUSTAS JUDICIAIS** → preenche "custas_judiciais":
+⚠️ OBRIGATÓRIO: SEMPRE retornar este objeto, mesmo quando a sentença não menciona custas (usar defaults).
 - base: "Bruto Devido ao Reclamante" (padrão) ou "Bruto Devido ao Reclamante + Outros Débitos"
 - reclamado_conhecimento: "CALCULADA" (padrão 2%) | "INFORMADA" | "NAO_SE_APLICA"
 - reclamado_liquidacao: "NAO_SE_APLICA" (padrão) | "CALCULADA" (0,5%) | "INFORMADA"
@@ -1232,8 +1233,8 @@ _EXTRACTION_SCHEMA: dict = {
         "processo", "contrato", "prescricao", "aviso_previo",
         "verbas_deferidas", "fgts", "honorarios", "honorarios_periciais",
         "correcao_juros", "contribuicao_social", "imposto_renda",
-        "historico_salarial", "faltas", "ferias", "duracao_trabalho",
-        "justica_gratuita",
+        "historico_salarial", "faltas", "ferias", "custas_judiciais",
+        "duracao_trabalho", "justica_gratuita",
         "campos_ausentes", "alertas",
     ],
     "properties": {
