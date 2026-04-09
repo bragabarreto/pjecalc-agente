@@ -1310,12 +1310,80 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
             nomes_reflexas_vistos.add(r["nome"])
             reflexas_unicas.append(r)
 
-    return {
+    # Fase final: Atribuir estratégias de preenchimento a cada verba
+    resultado = {
         "predefinidas": predefinidas_dedup,
         "personalizadas": personalizadas,
         "nao_reconhecidas": nao_reconhecidas,
         "reflexas_sugeridas": reflexas_unicas,
     }
+    atribuir_estrategias_verbas(resultado)
+    return resultado
+
+
+def atribuir_estrategias_verbas(
+    verbas_mapeadas: dict[str, Any],
+    db_session: Any = None,
+    llm_orchestrator: Any = None,
+) -> None:
+    """
+    Atribui estrategia_preenchimento a cada verba em verbas_mapeadas (in-place).
+
+    Pode ser chamada:
+    - No momento da classificação (sem DB, usando só catálogo estático)
+    - Posteriormente com DB para enriquecer com histórico de sucesso/falha
+
+    Args:
+        verbas_mapeadas: dict com chaves "predefinidas", "personalizadas", etc.
+        db_session: sessão SQLAlchemy opcional (para consultar histórico)
+        llm_orchestrator: orquestrador LLM opcional (para matching semântico)
+    """
+    try:
+        from learning.verba_strategies import VerbaStrategyEngine
+        engine = VerbaStrategyEngine(db=db_session, llm_orchestrator=llm_orchestrator)
+    except Exception:
+        # Se o módulo de estratégias não estiver disponível, pular silenciosamente
+        return
+
+    todas_verbas = (
+        verbas_mapeadas.get("predefinidas", [])
+        + verbas_mapeadas.get("personalizadas", [])
+    )
+
+    for verba in todas_verbas:
+        # Não sobrescrever estratégia já definida (ex: editada pelo usuário)
+        if verba.get("estrategia_preenchimento"):
+            continue
+        try:
+            estrategia = engine.escolher_estrategia(verba)
+            # Montar reflexas com estratégias
+            reflexas_info = []
+            for ref_sug in verba.get("reflexas_sugeridas", []):
+                ref_nome = ref_sug.get("nome", "") if isinstance(ref_sug, dict) else str(ref_sug)
+                reflexas_info.append({
+                    "nome": ref_nome,
+                    "estrategia": "automatica",  # geradas pelo Expresso automaticamente
+                    "nome_pjecalc": ref_nome,
+                })
+            verba["estrategia_preenchimento"] = {
+                "estrategia": estrategia.get("estrategia", "manual"),
+                "nome_pjecalc": estrategia.get("expresso_nome")
+                    or verba.get("nome_pjecalc")
+                    or verba.get("nome_sentenca", ""),
+                "expresso_base": estrategia.get("expresso_base"),
+                "campos_alterar": estrategia.get("campos_alterar"),
+                "confianca": estrategia.get("confianca", 0.5),
+                "baseado_em": estrategia.get("baseado_em", "fallback"),
+                "parametros": estrategia.get("parametros", {}),
+                "incidencias": estrategia.get("incidencias", {}),
+            }
+            if reflexas_info:
+                verba["estrategia_preenchimento"]["reflexas"] = reflexas_info
+        except Exception as _e:
+            import logging
+            logging.getLogger(__name__).debug(
+                f"Erro ao atribuir estratégia para verba '{verba.get('nome_sentenca', '?')}': {_e}"
+            )
 
 
 # ── Funções auxiliares ────────────────────────────────────────────────────────

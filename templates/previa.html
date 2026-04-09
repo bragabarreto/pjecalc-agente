@@ -93,6 +93,10 @@
 #toast.visivel { opacity: 1; }
 #toast.ok { background: #28a745; color: #fff; }
 #toast.erro { background: #dc3545; color: #fff; }
+
+/* Plano de Preenchimento */
+.badge-verde { background: #28a745; color: #fff; }
+.badge-cinza { background: #6c757d; color: #fff; }
 {% endblock %}
 
 {% block content %}
@@ -1323,6 +1327,191 @@
       </div>
     </div>
 
+    <!-- ═══ 14. PLANO DE PREENCHIMENTO ═══ -->
+    {% set todas_verbas_plan = [] %}
+    {% for v in verbas_mapeadas.get('predefinidas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
+    {% for v in verbas_mapeadas.get('personalizadas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-plano-preenchimento')">
+        14. Plano de Preenchimento (Automacao)
+        <span class="confianca-badge conf-alta">{{ todas_verbas_plan|length }} verba(s)</span>
+      </div>
+      <div class="secao-corpo" id="s-plano-preenchimento">
+        {% if not todas_verbas_plan %}
+        <p style="color:#6c757d; font-size:0.9rem;">Nenhuma verba com estrategia de preenchimento definida.</p>
+        {% endif %}
+
+        <!-- Legenda -->
+        <div style="display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px; font-size:0.82rem;">
+          <span style="display:inline-flex; align-items:center; gap:4px;">
+            <span style="background:#28a745; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.72rem;">Expresso Direto</span>
+            Verba existe na tabela Expresso do PJE-Calc
+          </span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">
+            <span style="background:#0d6efd; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.72rem;">Expresso Adaptado</span>
+            Usa verba Expresso como base, ajusta nome/parametros
+          </span>
+          <span style="display:inline-flex; align-items:center; gap:4px;">
+            <span style="background:#6c757d; color:#fff; padding:2px 8px; border-radius:10px; font-size:0.72rem;">Manual</span>
+            Criada via botao Manual com todos os campos
+          </span>
+        </div>
+
+        {% for verba in todas_verbas_plan %}
+        {% set vi = loop.index0 %}
+        {% set ep = verba.get('estrategia_preenchimento', {}) %}
+        {% set ep_tipo = ep.get('estrategia', 'manual') %}
+        {% set ep_confianca = ep.get('confianca', 0.5) %}
+        {% set ep_params = ep.get('parametros', {}) %}
+        {% set ep_reflexas = ep.get('reflexas', []) %}
+        <div class="verba-card" id="plan-card-{{ vi }}" style="margin-bottom:10px;">
+          <div class="verba-header" onclick="toggleVerba('plan-corpo-{{ vi }}')" style="
+            border-left: 4px solid {{ '#28a745' if ep_tipo == 'expresso_direto' else ('#0d6efd' if ep_tipo == 'expresso_adaptado' else '#6c757d') }};
+          ">
+            <div>
+              <div class="verba-nome">{{ verba.get('nome_pjecalc') or verba.get('nome_sentenca', '?') }}</div>
+              {% if verba.get('nome_sentenca') and verba.get('nome_sentenca') != verba.get('nome_pjecalc') %}
+              <div style="font-size:0.78rem; color:#6c757d; margin-top:2px;">
+                Sentenca: "{{ verba.get('nome_sentenca') }}"
+              </div>
+              {% endif %}
+            </div>
+            <div class="verba-badges">
+              {% if ep_tipo == 'expresso_direto' %}
+              <span class="badge badge-verde" style="font-size:0.72rem;">Expresso Direto</span>
+              {% elif ep_tipo == 'expresso_adaptado' %}
+              <span class="badge badge-azul" style="font-size:0.72rem;">Expresso Adaptado</span>
+              {% else %}
+              <span class="badge badge-cinza" style="font-size:0.72rem;">Manual</span>
+              {% endif %}
+              <span class="confianca-badge {{ 'conf-alta' if ep_confianca >= 0.8 else ('conf-media' if ep_confianca >= 0.5 else 'conf-baixa') }}" style="font-size:0.72rem;">
+                {{ (ep_confianca * 100)|int }}%
+              </span>
+              <span style="font-size:0.72rem; color:#adb5bd;">{{ ep.get('baseado_em', '') }}</span>
+              <span style="font-size:0.8rem; color:#6c757d;">&#9660;</span>
+            </div>
+          </div>
+          <div class="verba-corpo" id="plan-corpo-{{ vi }}">
+            <div class="campos-grid">
+              <!-- Estrategia -->
+              <div class="campo-form">
+                <label>Estrategia</label>
+                <select onchange="salvarEstrategia({{ vi }}, 'estrategia', this.value, this); toggleEstrategiaParams({{ vi }}, this.value)">
+                  <option value="expresso_direto" {{ 'selected' if ep_tipo == 'expresso_direto' }}>Expresso Direto</option>
+                  <option value="expresso_adaptado" {{ 'selected' if ep_tipo == 'expresso_adaptado' }}>Expresso Adaptado</option>
+                  <option value="manual" {{ 'selected' if ep_tipo == 'manual' }}>Manual</option>
+                </select>
+              </div>
+              <!-- Nome no PJE-Calc -->
+              <div class="campo-form">
+                <label>Nome no PJE-Calc</label>
+                <input type="text"
+                       value="{{ ep.get('nome_pjecalc') or verba.get('nome_pjecalc') or '' }}"
+                       onchange="salvarEstrategia({{ vi }}, 'nome_pjecalc', this.value, this)">
+              </div>
+              <!-- Expresso Base (visivel quando adaptado) -->
+              <div class="campo-form" id="plan-base-{{ vi }}" style="{{ '' if ep_tipo == 'expresso_adaptado' else 'display:none;' }}">
+                <label>Verba Expresso Base</label>
+                <input type="text"
+                       value="{{ ep.get('expresso_base', '') or '' }}"
+                       onchange="salvarEstrategia({{ vi }}, 'expresso_base', this.value, this)"
+                       placeholder="Ex: DIFERENCA SALARIAL">
+              </div>
+            </div>
+
+            <!-- Parametros (visiveis quando adaptado ou manual) -->
+            <div id="plan-params-{{ vi }}" style="{{ '' if ep_tipo in ('expresso_adaptado', 'manual') else 'display:none;' }}">
+              <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:10px;">
+                <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Parametros de Preenchimento</legend>
+                <div class="campos-grid col3">
+                  <div class="campo-form">
+                    <label>Caracteristica</label>
+                    <select onchange="salvarEstrategia({{ vi }}, 'parametros.caracteristica', this.value, this)">
+                      <option value="">--</option>
+                      <option value="Comum" {{ 'selected' if ep_params.get('caracteristica') == 'Comum' }}>Comum</option>
+                      <option value="13o Salario" {{ 'selected' if ep_params.get('caracteristica') == '13o Salario' }}>13o Salario</option>
+                      <option value="Aviso Previo" {{ 'selected' if ep_params.get('caracteristica') == 'Aviso Previo' }}>Aviso Previo</option>
+                      <option value="Ferias" {{ 'selected' if ep_params.get('caracteristica') == 'Ferias' }}>Ferias</option>
+                    </select>
+                  </div>
+                  <div class="campo-form">
+                    <label>Ocorrencia</label>
+                    <select onchange="salvarEstrategia({{ vi }}, 'parametros.ocorrencia', this.value, this)">
+                      <option value="">--</option>
+                      <option value="Mensal" {{ 'selected' if ep_params.get('ocorrencia') == 'Mensal' }}>Mensal</option>
+                      <option value="Dezembro" {{ 'selected' if ep_params.get('ocorrencia') == 'Dezembro' }}>Dezembro</option>
+                      <option value="Periodo Aquisitivo" {{ 'selected' if ep_params.get('ocorrencia') == 'Periodo Aquisitivo' }}>Periodo Aquisitivo</option>
+                      <option value="Desligamento" {{ 'selected' if ep_params.get('ocorrencia') == 'Desligamento' }}>Desligamento</option>
+                    </select>
+                  </div>
+                  <div class="campo-form">
+                    <label>Base de Calculo</label>
+                    <select onchange="salvarEstrategia({{ vi }}, 'parametros.base_calculo', this.value, this)">
+                      <option value="">--</option>
+                      <option value="Maior Remuneracao" {{ 'selected' if ep_params.get('base_calculo') == 'Maior Remuneracao' }}>Maior Remuneracao</option>
+                      <option value="Historico Salarial" {{ 'selected' if ep_params.get('base_calculo') == 'Historico Salarial' }}>Historico Salarial</option>
+                      <option value="Salario Minimo" {{ 'selected' if ep_params.get('base_calculo') == 'Salario Minimo' }}>Salario Minimo</option>
+                      <option value="Piso Salarial" {{ 'selected' if ep_params.get('base_calculo') == 'Piso Salarial' }}>Piso Salarial</option>
+                      <option value="Verbas" {{ 'selected' if ep_params.get('base_calculo') == 'Verbas' }}>Verbas</option>
+                    </select>
+                  </div>
+                  <div class="campo-form">
+                    <label>Tipo de Valor</label>
+                    <select onchange="salvarEstrategia({{ vi }}, 'parametros.tipo_valor', this.value, this)">
+                      <option value="">--</option>
+                      <option value="CALCULADO" {{ 'selected' if ep_params.get('tipo_valor') == 'CALCULADO' }}>Calculado</option>
+                      <option value="INFORMADO" {{ 'selected' if ep_params.get('tipo_valor') == 'INFORMADO' }}>Informado</option>
+                    </select>
+                  </div>
+                </div>
+                <!-- Incidencias -->
+                <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:8px;">
+                  {% set ep_inc = ep.get('incidencias', {}) %}
+                  <div class="checkbox-row">
+                    <input type="checkbox" id="ep-fgts-{{ vi }}"
+                           {{ 'checked' if ep_inc.get('fgts') }}
+                           onchange="salvarEstrategia({{ vi }}, 'parametros.incidencia_fgts', this.checked ? 'true':'false', this)">
+                    <label for="ep-fgts-{{ vi }}">FGTS</label>
+                  </div>
+                  <div class="checkbox-row">
+                    <input type="checkbox" id="ep-inss-{{ vi }}"
+                           {{ 'checked' if ep_inc.get('inss') }}
+                           onchange="salvarEstrategia({{ vi }}, 'parametros.incidencia_inss', this.checked ? 'true':'false', this)">
+                    <label for="ep-inss-{{ vi }}">INSS</label>
+                  </div>
+                  <div class="checkbox-row">
+                    <input type="checkbox" id="ep-irpf-{{ vi }}"
+                           {{ 'checked' if ep_inc.get('irpf') }}
+                           onchange="salvarEstrategia({{ vi }}, 'parametros.incidencia_irpf', this.checked ? 'true':'false', this)">
+                    <label for="ep-irpf-{{ vi }}">IRPF</label>
+                  </div>
+                </div>
+              </fieldset>
+            </div>
+
+            <!-- Reflexas -->
+            {% if ep_reflexas %}
+            <div style="margin-top:10px;">
+              <div style="font-size:0.85rem; font-weight:600; color:#1a3a6b; margin-bottom:4px;">Reflexos:</div>
+              <ul style="margin:0; padding-left:20px; font-size:0.85rem; color:#444;">
+                {% for ref in ep_reflexas %}
+                <li>
+                  {{ ref.get('nome', ref) if ref is mapping else ref }}
+                  {% if ref is mapping and ref.get('estrategia') == 'automatica' %}
+                  <span style="font-size:0.72rem; color:#28a745; font-weight:600;">automatico</span>
+                  {% endif %}
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endif %}
+
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
   </div><!-- /formulário -->
 
   <!-- Sidebar de ações -->
@@ -1576,7 +1765,9 @@ function recalcJornadas() {
 
 // Recolher/expandir verbas
 function toggleVerba(idx) {
-  const corpo = document.getElementById('verba-corpo-' + idx);
+  // Accept either a numeric index (verba-corpo-N) or a full element ID string
+  const id = (typeof idx === 'string' && idx.startsWith('plan-')) ? idx : ('verba-corpo-' + idx);
+  const corpo = document.getElementById(id);
   if (corpo) corpo.classList.toggle('aberta');
 }
 
@@ -1638,6 +1829,41 @@ async function salvarVerba(indice, campo, valor, el) {
     }
   } catch(err) {
     mostrarToast('Erro de comunicação', 'erro');
+  }
+}
+
+// Salvar estrategia de preenchimento de verba
+async function salvarEstrategia(indice, campo, valor, el) {
+  try {
+    const form = new FormData();
+    form.append('indice', indice);
+    form.append('campo', campo);
+    form.append('valor', String(valor));
+    const resp = await fetch('/previa/' + SESSAO_ID + '/editar-estrategia', { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      if (el) {
+        el.classList.add('campo-salvo');
+        setTimeout(() => el.classList.remove('campo-salvo'), 1500);
+      }
+      mostrarToast('Estrategia salva', 'ok');
+    } else {
+      mostrarToast('Erro: ' + (dados.erro || 'falha ao salvar estrategia'), 'erro');
+    }
+  } catch(err) {
+    mostrarToast('Erro de comunicacao', 'erro');
+  }
+}
+
+// Toggle visibilidade de parametros conforme estrategia selecionada
+function toggleEstrategiaParams(indice, estrategia) {
+  const params = document.getElementById('plan-params-' + indice);
+  const base = document.getElementById('plan-base-' + indice);
+  if (params) {
+    params.style.display = (estrategia === 'expresso_adaptado' || estrategia === 'manual') ? '' : 'none';
+  }
+  if (base) {
+    base.style.display = (estrategia === 'expresso_adaptado') ? '' : 'none';
   }
 }
 
