@@ -516,23 +516,32 @@ class DOMAuditor:
         self._page.wait_for_timeout(2000)
 
     def _criar_calculo(self) -> bool:
-        """Create a new calculation via menu 'Novo'."""
+        """Create a new calculation via menu 'Novo'.
+        O menu PJE-Calc usa RichFaces panelMenu que começa colapsado —
+        usamos force=True para clicar mesmo sem visibilidade.
+        """
         print("[auditor] Criando novo calculo via menu 'Novo'...")
 
-        # Try sidebar menu "Novo"
+        # Accept any alert dialog (register BEFORE clicking)
+        self._page.on("dialog", lambda d: d.accept())
+
+        # Try sidebar menu "Novo" — IDs reais do PJE-Calc
         for sel in [
-            "a[id*='menuNovo']",
-            "a:has-text('Novo')",
-            "input[value='Novo']",
+            "li#li_calculo_novo a",         # ID real do li no menu-pilares
+            "li[id*='calculo_novo'] a",      # Fallback parcial
+            "a[id*='menuNovo']",             # Nome alternativo
+            "a:has-text('Novo')",            # Texto
         ]:
             loc = self._page.locator(sel)
-            if loc.count() > 0 and loc.first.is_visible():
-                loc.first.click()
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(3000)
-                # Accept any alert dialog
-                self._page.on("dialog", lambda d: d.accept())
-                break
+            if loc.count() > 0:
+                try:
+                    loc.first.click(force=True)  # force=True: menu pode estar colapsado
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(3000)
+                    break
+                except Exception as e:
+                    print(f"[auditor]   Click falhou para {sel}: {e}")
+                    continue
         else:
             print("[auditor] ERRO: Botao 'Novo' nao encontrado")
             return False
@@ -557,36 +566,69 @@ class DOMAuditor:
             self._calculo_url_base = m2.group(1)
 
     def _clicar_menu_lateral(self, texto: str) -> bool:
-        """Click a sidebar menu item by text."""
-        # Strategy 1: by menu ID pattern
+        """Click a sidebar menu item by text (force=True for collapsed menu)."""
+        # Strategy 0: by li ID from menu-pilares (confirmed IDs from PJE-Calc v2.15.1)
+        _LI_ID_MAP = {
+            "Dados do Cálculo":     "calculo_dados_do_calculo",
+            "Dados do Calculo":     "calculo_dados_do_calculo",
+            "Histórico Salarial":   "calculo_historico_salarial",
+            "Historico Salarial":   "calculo_historico_salarial",
+            "Verbas":               "calculo_verbas",
+            "FGTS":                 "calculo_fgts",
+            "Honorários":           "calculo_honorarios",
+            "Honorarios":           "calculo_honorarios",
+            "Liquidar":             "calculo_liquidar",
+            "Faltas":               "calculo_faltas",
+            "Férias":               "calculo_ferias",
+            "Ferias":               "calculo_ferias",
+            "Contribuição Social":  "calculo_inss",
+            "Contribuicao Social":  "calculo_inss",
+            "Imposto de Renda":     "calculo_irpf",
+            "Multas":               "calculo_multas_e_indenizacoes",
+            "Cartão de Ponto":      "calculo_cartao_ponto",
+            "Cartao de Ponto":      "calculo_cartao_ponto",
+            "Salário Família":      "calculo_salario_familia",
+            "Salario Familia":      "calculo_salario_familia",
+            "Seguro Desemprego":    "calculo_seguro_desemprego",
+            "Pensão Alimentícia":   "calculo_pensao_alimenticia",
+            "Pensao Alimenticia":   "calculo_pensao_alimenticia",
+            "Previdência Privada":  "calculo_previdencia_privada",
+            "Previdencia Privada":  "calculo_previdencia_privada",
+            "Exportar":             "calculo_exportar",
+            "Exportação":           "calculo_exportar",
+            "Correção, Juros e Multa": "calculo_correcao_juros_e_multa",
+            "Custas Judiciais":     "calculo_custas_judiciais",
+            "Novo":                 "calculo_novo",
+        }
+        li_suffix = _LI_ID_MAP.get(texto)
+        if li_suffix:
+            for sel in [f"li#li_{li_suffix} a", f"li[id*='{li_suffix}'] a"]:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    try:
+                        loc.first.click(force=True, timeout=5000)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(1500)
+                        return True
+                    except Exception:
+                        pass
+
+        # Strategy 1: by menu ID pattern (legacy)
         _menu_ids = {
             "Dados do Calculo": "menuCalculo",
             "Historico Salarial": "menuHistoricoSalarial",
-            "Historico": "menuHistoricoSalarial",
             "Verbas": "menuVerbas",
             "FGTS": "menuFGTS",
-            "Honorarios": "menuHonorarios",
             "Honorários": "menuHonorarios",
             "Liquidar": "menuLiquidar",
             "Faltas": "menuFaltas",
-            "Ferias": "menuFerias",
             "Férias": "menuFerias",
             "Novo": "menuNovo",
-            "Contribuicao Social": "menuContribuicaoSocial",
             "Contribuição Social": "menuContribuicaoSocial",
             "Imposto de Renda": "menuImpostoRenda",
             "Multas": "menuMultas",
-            "Cartao de Ponto": "menuCartao",
             "Cartão de Ponto": "menuCartao",
-            "Salario Familia": "menuSalarioFamilia",
-            "Salário Família": "menuSalarioFamilia",
-            "Seguro Desemprego": "menuSeguroDesemprego",
-            "Pensao Alimenticia": "menuPensaoAlimenticia",
-            "Pensão Alimentícia": "menuPensaoAlimenticia",
-            "Previdencia Privada": "menuPrevidenciaPrivada",
-            "Previdência Privada": "menuPrevidenciaPrivada",
             "Exportar": "menuExport",
-            "Exportação": "menuExport",
         }
         menu_id = _menu_ids.get(texto)
         if menu_id:
@@ -594,7 +636,7 @@ class DOMAuditor:
             loc = self._page.locator(sel)
             if loc.count() > 0:
                 try:
-                    loc.first.click(timeout=5000)
+                    loc.first.click(force=True, timeout=5000)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(1500)
                     return True
@@ -609,7 +651,7 @@ class DOMAuditor:
             loc = self._page.locator(sel)
             if loc.count() > 0:
                 try:
-                    loc.first.click(timeout=5000)
+                    loc.first.click(force=True, timeout=5000)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(1500)
                     return True
