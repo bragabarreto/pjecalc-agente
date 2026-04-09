@@ -2131,7 +2131,35 @@ class PJECalcPlaywright:
             _erros = self._detectar_erros_formulario(fase)
 
             if not _erros:
-                # Nenhum erro detectado no DOM — pode ser timeout ou problema de rede
+                # Nenhum erro detectado no DOM — dump de campos vazios para diagnóstico
+                try:
+                    _vazios = self._page.evaluate("""() => {
+                        const result = [];
+                        // Selects sem valor selecionado
+                        for (const sel of document.querySelectorAll('select')) {
+                            if (!sel.offsetParent) continue; // hidden
+                            const val = sel.value || '';
+                            const id = sel.id || sel.name || '';
+                            if (!val || val.includes('noSelection')) {
+                                const opts = [...sel.options].slice(0, 5).map(o => o.value + '=' + o.text.trim());
+                                result.push('SELECT ' + id + ' vazio [' + opts.join(', ') + ']');
+                            }
+                        }
+                        // Inputs required vazios
+                        for (const inp of document.querySelectorAll('input[required], input[aria-required="true"]')) {
+                            if (!inp.offsetParent) continue;
+                            if (!inp.value) {
+                                result.push('INPUT ' + (inp.id || inp.name) + ' required vazio');
+                            }
+                        }
+                        return result;
+                    }""")
+                    if _vazios:
+                        self._log(f"  ⚠ {fase}: Campos possivelmente obrigatórios vazios:")
+                        for v in _vazios[:10]:
+                            self._log(f"    → {v}")
+                except Exception:
+                    pass
                 self._log(f"  ⚠ {fase}: Nenhum erro específico detectado no DOM")
                 if tentativa < max_tentativas - 1:
                     self._page.wait_for_timeout(2000)
