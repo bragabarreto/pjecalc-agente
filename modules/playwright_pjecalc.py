@@ -1126,9 +1126,12 @@ class PJECalcPlaywright:
         for op in opcoes:
             if _norm(op.get("value", "")) == val_norm:
                 return op["value"]
-        # Substring match
+        # Substring match (skip empty text/value and noSelection placeholders)
         for op in opcoes:
             txt = _norm(op.get("text", ""))
+            val = op.get("value", "")
+            if not txt or "noselection" in val.lower():
+                continue
             if val_norm in txt or txt in val_norm:
                 return op["value"]
         return None
