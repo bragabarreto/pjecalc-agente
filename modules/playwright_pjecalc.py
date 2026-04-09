@@ -926,113 +926,80 @@ class PJECalcPlaywright:
         try:
             loc.wait_for(state="visible", timeout=8000)
 
-            # Estratégia: JS direto nos hidden fields do rich:calendar
+            # Estratégia: simular digitação humana no input visível do rich:calendar
             #
-            # rich:calendar gera 3 elementos:
-            # - formulario:dataXxxInputDate — input visível (com máscara DD/MM/AAAA)
-            # - formulario:dataXxxInputCurrentDate — hidden input (VALOR SUBMETIDO ao JSF)
-            # - formulario:dataXxx — hidden input (backup/state)
+            # rich:calendar gera:
+            # - formulario:dataXxxInputDate — input visível (máscara 99/99/9999)
+            # - formulario:dataXxxInputCurrentDate — hidden (valor submetido ao JSF)
             #
-            # Problema: Tab causa truncamento da data pela máscara (ex: "11/2024" em vez de "04/11/2024")
-            # Solução: setar TODOS os inputs via JS, incluindo o hidden, e NÃO usar Tab.
-            #          Usar apenas blur via JS (não via keyboard) para não acionar a máscara.
-            _js_ok = self._page.evaluate("""([suffix, dateStr]) => {
-                // 1. Input visível (InputDate)
+            # O RichFaces Calendar JS converte InputDate → InputCurrentDate no blur.
+            # Devemos deixar essa conversão acontecer NATURALMENTE.
+            # NÃO setar InputCurrentDate manualmente (formato interno desconhecido).
+            #
+            # Passos:
+            # 1. Focus no input (ativa a máscara via oninputfocus)
+            # 2. Ctrl+A + Delete para limpar
+            # 3. Digitar dígitos (máscara auto-insere barras: 04112024 → 04/11/2024)
+            # 4. Clicar no body para blur natural (NÃO Tab — pode abrir popup do próximo calendar)
+
+            loc.focus()
+            self._page.wait_for_timeout(300)  # Esperar máscara ativar (oninputfocus)
+            self._page.keyboard.press("Control+a")
+            self._page.keyboard.press("Delete")
+            self._page.wait_for_timeout(100)
+
+            # Digitar apenas os dígitos — a máscara 99/99/9999 auto-insere as barras
+            digits_only = data.replace("/", "").replace("-", "")
+            loc.press_sequentially(digits_only, delay=80)
+            self._page.wait_for_timeout(300)
+
+            # Clicar no body para tirar foco (blur natural → RichFaces atualiza hidden)
+            # Usar position fora de qualquer calendar para não abrir popup
+            try:
+                self._page.locator("h1, h2, fieldset legend, body").first.click(
+                    force=True, timeout=2000
+                )
+            except Exception:
+                try:
+                    self._page.click("body", position={"x": 5, "y": 5}, force=True)
+                except Exception:
+                    pass
+            self._page.wait_for_timeout(500)
+
+            # Verificar valores resultantes
+            _result = self._page.evaluate("""(suffix) => {
                 const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
-                if (!input) return 'NOT_FOUND';
-
-                // 2. Desabilitar a máscara jQuery ANTES de setar o valor
-                // A máscara dateMask() intercepta blur/change e pode truncar o valor
-                try {
-                    $(input).unbind('blur.mask change.mask');
-                } catch(e) {}
-
-                // 3. Setar valor no input visível
-                input.value = dateStr;
-
-                // 4. Disparar eventos
-                input.dispatchEvent(new Event('input', {bubbles: true}));
-                input.dispatchEvent(new Event('change', {bubbles: true}));
-                input.dispatchEvent(new Event('blur', {bubbles: true}));
-
-                // 5. APÓS eventos (máscara pode ter corrompido), forçar valor correto
-                //    no hidden field que JSF realmente submete
-                input.value = dateStr;  // re-setar visível
-
-                const hiddenCurrent = document.getElementById(
-                    input.id.replace('InputDate', 'InputCurrentDate')
-                );
-                if (hiddenCurrent) {
-                    hiddenCurrent.value = dateStr;
-                }
-
-                const baseId = input.id.replace('InputDate', '');
-                const hiddenBase = document.getElementById(baseId);
-                if (hiddenBase && hiddenBase.type === 'hidden') {
-                    hiddenBase.value = dateStr;
-                }
-
-                return input.value;
-            }""", [field_id, data])
-
-            if _js_ok == 'NOT_FOUND':
-                # Fallback: tentar focus + type (campo sem InputDate, ex: campo simples)
-                loc.focus()
-                self._page.keyboard.press("Control+a")
-                self._page.keyboard.press("Delete")
-                digits_only = data.replace("/", "").replace("-", "")
-                loc.press_sequentially(digits_only, delay=60)
-                loc.press("Escape")
-                self._log(f"  ✓ data {field_id} (type fallback): {data}")
-                return True
-
-            # Verificar se o valor foi setado corretamente
-            if _js_ok != data:
-                self._log(f"  ⚠ data {field_id}: JS setou '{_js_ok}' vs esperado '{data}' — re-setando hidden")
-
-            # SEMPRE re-setar os hidden fields como garantia final
-            # (a máscara ou event handlers podem ter corrompido os valores)
-            self._page.evaluate("""([suffix, dateStr]) => {
-                const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
-                if (!input) return;
-                // Forçar valor correto em TODOS os campos
-                input.value = dateStr;
+                if (!input) return {visible: 'NOT_FOUND', hidden: ''};
                 const hid = document.getElementById(input.id.replace('InputDate', 'InputCurrentDate'));
-                if (hid) hid.value = dateStr;
-                const baseId = input.id.replace('InputDate', '');
-                const hidBase = document.getElementById(baseId);
-                if (hidBase && hidBase.type === 'hidden') hidBase.value = dateStr;
-            }""", [field_id, data])
+                return {
+                    visible: input.value,
+                    hidden: hid ? hid.value : 'NO_HIDDEN'
+                };
+            }""", field_id)
+
+            _vis = _result.get("visible", "") if isinstance(_result, dict) else str(_result)
+            _hid = _result.get("hidden", "") if isinstance(_result, dict) else ""
+
+            if _vis == "NOT_FOUND":
+                self._log(f"  ⚠ data {field_id}: InputDate não encontrado")
+                return False
 
             self._aguardar_ajax(timeout=2000)
-            self._log(f"  ✓ data {field_id}: {data}")
+            self._log(f"  ✓ data {field_id}: {data} (visible={_vis}, hidden={_hid})")
             return True
         except Exception as e:
-            # Fallback: setar apenas os hidden fields via JS
+            # Fallback: setar valor via JS no input visível + disparar blur
             try:
                 self._page.evaluate("""([suffix, dateStr]) => {
-                    const sels = [
-                        'input[id$="' + suffix + 'InputDate"]',
-                        'input[id$="' + suffix + '"]'
-                    ];
-                    for (const sel of sels) {
-                        const el = document.querySelector(sel);
-                        if (el) {
-                            el.value = dateStr;
-                            const hid = document.getElementById(
-                                el.id.replace('InputDate', 'InputCurrentDate')
-                            );
-                            if (hid) hid.value = dateStr;
-                            // Hidden base
-                            const baseId = el.id.replace('InputDate', '');
-                            const hidBase = document.getElementById(baseId);
-                            if (hidBase && hidBase.type === 'hidden') hidBase.value = dateStr;
-                            el.dispatchEvent(new Event('change', {bubbles: true}));
-                            el.dispatchEvent(new Event('blur', {bubbles: true}));
-                            return true;
-                        }
-                    }
-                    return false;
+                    const input = document.querySelector(
+                        'input[id$="' + suffix + 'InputDate"], input[id$="' + suffix + '"]'
+                    );
+                    if (!input) return false;
+                    input.focus();
+                    input.value = dateStr;
+                    input.dispatchEvent(new Event('change', {bubbles: true}));
+                    input.dispatchEvent(new Event('blur', {bubbles: true}));
+                    return true;
                 }""", [field_id, data])
                 self._log(f"  ✓ data {field_id} (JS fallback): {data}")
                 return True
