@@ -2003,21 +2003,6 @@ class PJECalcPlaywright:
             _msg = (e.get("mensagem", "") or "").lower()
             _campo = (e.get("campo", "") or "").lower()
 
-            # ── Tipo de Rescisão não selecionado ──
-            if "rescis" in _campo or "rescis" in _msg or _fid in ("tipoRescisao", "motivoDesligamento"):
-                _tipo = cont.get("tipo_rescisao", "sem_justa_causa")
-                _map = {
-                    "sem_justa_causa": "SEM_JUSTA_CAUSA",
-                    "justa_causa": "JUSTA_CAUSA",
-                    "pedido_demissao": "PEDIDO_DEMISSAO",
-                }
-                _val = _map.get(_tipo, "SEM_JUSTA_CAUSA")
-                if self._selecionar("tipoRescisao", _val, obrigatorio=False):
-                    self._log(f"    → Correção: tipoRescisao = {_val}")
-                    _corrigiu = True
-                if self._selecionar("motivoDesligamento", _val, obrigatorio=False):
-                    _corrigiu = True
-
             # ── Data obrigatória vazia ou formato inválido ──
             elif "data" in _campo or "data" in _fid or "data" in _msg:
                 import datetime
@@ -2041,13 +2026,11 @@ class PJECalcPlaywright:
                 # Tentar identificar e preencher campos obrigatórios com defaults
                 _defaults_obrigatorios = {
                     "valorCargaHorariaPadrao": "220,00",
-                    "tipoRescisao": "SEM_JUSTA_CAUSA",
-                    "motivoDesligamento": "SEM_JUSTA_CAUSA",
                     "tipoDaBaseTabelada": "INTEGRAL",
                 }
                 if _fid and _fid in _defaults_obrigatorios:
                     _val = _defaults_obrigatorios[_fid]
-                    if _fid in ("tipoRescisao", "motivoDesligamento", "tipoDaBaseTabelada"):
+                    if _fid in ("tipoDaBaseTabelada",):
                         if self._selecionar(_fid, _val, obrigatorio=False):
                             self._log(f"    → Correção: {_fid} = {_val}")
                             _corrigiu = True
@@ -2924,42 +2907,8 @@ class PJECalcPlaywright:
         if cont.get("ajuizamento"):
             self._preencher_data("dataAjuizamento", cont["ajuizamento"], False)
 
-        rescisao_map = {
-            "sem_justa_causa": "SEM_JUSTA_CAUSA",
-            "justa_causa": "JUSTA_CAUSA",
-            "pedido_demissao": "PEDIDO_DEMISSAO",
-            "distrato": "DISTRATO",
-            "morte": "MORTE",
-        }
-        # Tipo de Rescisão é OBRIGATÓRIO — sem ele, "Existem erros no formulário".
-        # Sempre tentar preencher, mesmo sem extração (default: SEM_JUSTA_CAUSA).
-        _rescisao_val = rescisao_map.get(cont.get("tipo_rescisao", "sem_justa_causa"), "SEM_JUSTA_CAUSA")
-        _rescisao_ok = (
-            self._selecionar("tipoRescisao", _rescisao_val, obrigatorio=False)
-            or self._selecionar("motivoDesligamento", _rescisao_val, obrigatorio=False)
-        )
-        if not _rescisao_ok:
-            # Fallback: JS direto buscando qualquer select com opções de rescisão
-            try:
-                _rescisao_ok = self._page.evaluate(f"""(val) => {{
-                    const sels = [...document.querySelectorAll('select')].filter(s => {{
-                        const opts = [...s.options].map(o => o.value.toUpperCase());
-                        return opts.includes('SEM_JUSTA_CAUSA') || opts.includes('JUSTA_CAUSA');
-                    }});
-                    for (const sel of sels) {{
-                        sel.value = val;
-                        sel.dispatchEvent(new Event('change', {{bubbles: true}}));
-                        return true;
-                    }}
-                    return false;
-                }}""", _rescisao_val)
-                if _rescisao_ok:
-                    self._aguardar_ajax()
-                    self._log(f"  ✓ tipoRescisao: {_rescisao_val} (via JS fallback)")
-            except Exception:
-                pass
-        if not _rescisao_ok:
-            self._log(f"  ⚠ tipoRescisao: NÃO preenchido — pode causar erro ao salvar")
+        # NOTA: tipoRescisao NÃO existe no DOM do PJE-Calc (confirmado em calculo.xhtml).
+        # O tipo de rescisão é determinado pelas verbas/aviso prévio, não por campo no formulário.
 
         # Regime de trabalho — ID confirmado: formulario:tipoDaBaseTabelada
         # Values: INTEGRAL (padrão), PARCIAL, INTERMITENTE
