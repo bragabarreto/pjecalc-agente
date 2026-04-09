@@ -429,6 +429,117 @@ async def editar_verba(
         )
 
 
+@app.post("/previa/{sessao_id}/editar-estrategia")
+async def editar_estrategia(
+    sessao_id: str,
+    indice: int = Form(...),
+    campo: str = Form(...),
+    valor: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Edita a estratégia de preenchimento de uma verba específica pelo índice.
+
+    Campos editáveis:
+    - estrategia: "expresso_direto" | "expresso_adaptado" | "manual"
+    - nome_pjecalc: nome da verba no PJE-Calc
+    - expresso_base: verba Expresso base (para adaptado)
+    - parametros.caracteristica: Comum, 13o Salario, Aviso Previo, Ferias
+    - parametros.ocorrencia: Mensal, Dezembro, Periodo Aquisitivo, Desligamento
+    - parametros.base_calculo: livre
+    - parametros.tipo_valor: CALCULADO, INFORMADO
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessao nao encontrada")
+
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    todas_verbas = (
+        verbas_mapeadas.get("predefinidas", [])
+        + verbas_mapeadas.get("personalizadas", [])
+    )
+
+    if indice < 0 or indice >= len(todas_verbas):
+        return JSONResponse(
+            {"sucesso": False, "erro": f"Indice {indice} fora do intervalo (0-{len(todas_verbas)-1})"},
+            status_code=400,
+        )
+
+    verba = todas_verbas[indice]
+    estrategia_atual = verba.get("estrategia_preenchimento", {})
+
+    # Capturar valor anterior para learning
+    if campo == "estrategia":
+        valor_antes = estrategia_atual.get("estrategia", "")
+    elif campo.startswith("parametros."):
+        sub_campo = campo.split(".", 1)[1]
+        valor_antes = estrategia_atual.get("parametros", {}).get(sub_campo, "")
+    else:
+        valor_antes = estrategia_atual.get(campo, "")
+
+    # Aplicar edição
+    if not estrategia_atual:
+        estrategia_atual = {
+            "estrategia": "manual",
+            "nome_pjecalc": verba.get("nome_pjecalc", ""),
+            "confianca": 0.5,
+            "baseado_em": "usuario",
+            "parametros": {},
+            "incidencias": {},
+        }
+
+    if campo == "estrategia":
+        estrategia_atual["estrategia"] = valor
+        estrategia_atual["baseado_em"] = "usuario"
+    elif campo.startswith("parametros."):
+        sub_campo = campo.split(".", 1)[1]
+        estrategia_atual.setdefault("parametros", {})[sub_campo] = valor
+        estrategia_atual["baseado_em"] = "usuario"
+    else:
+        estrategia_atual[campo] = valor
+        estrategia_atual["baseado_em"] = "usuario"
+
+    # Marcar confiança como 1.0 para edições do usuário
+    estrategia_atual["confianca"] = 1.0
+    verba["estrategia_preenchimento"] = estrategia_atual
+
+    # Atualizar a verba na lista correta
+    n_pred = len(verbas_mapeadas.get("predefinidas", []))
+    if indice < n_pred:
+        verbas_mapeadas["predefinidas"][indice] = verba
+    else:
+        verbas_mapeadas["personalizadas"][indice - n_pred] = verba
+
+    # Persistir
+    dados = calculo.dados()
+    repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+
+    # Registrar correção para learning engine
+    if _LEARNING_AVAILABLE:
+        try:
+            verba_nome = verba.get("nome_sentenca") or verba.get("nome_pjecalc", "")
+            tracker = CorrectionTracker(db)
+            tracker.record_verba_correction(
+                sessao_id=sessao_id,
+                verba_index=indice,
+                campo=f"estrategia_preenchimento.{campo}",
+                valor_antes=valor_antes,
+                valor_depois=valor,
+                verba_nome=verba_nome,
+                confianca_ia=estrategia_atual.get("confianca"),
+            )
+        except Exception as _e:
+            logger.warning(f"learning_estrategia_record_failed: {_e}")
+
+    return JSONResponse({
+        "sucesso": True,
+        "indice": indice,
+        "campo": campo,
+        "valor": valor,
+        "estrategia": estrategia_atual,
+    })
+
+
 @app.post("/previa/{sessao_id}/confirmar")
 async def confirmar_previa(
     request: Request,

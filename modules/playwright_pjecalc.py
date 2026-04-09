@@ -3623,6 +3623,31 @@ class PJECalcPlaywright:
         predefinidas = verbas_mapeadas.get("predefinidas", [])
         personalizadas = verbas_mapeadas.get("personalizadas", [])
 
+        # ── Re-sort por estratégia do usuário (se editada na prévia) ──────────
+        # Se o usuário alterou estratégias na prévia, respeitar a decisão:
+        # - Verbas com estrategia "manual" movem para personalizadas
+        # - Verbas com estrategia "expresso_direto"/"expresso_adaptado" movem para predefinidas
+        _pred_final = []
+        _pers_final = list(personalizadas)
+        for v in predefinidas:
+            ep = v.get("estrategia_preenchimento", {})
+            if ep.get("baseado_em") == "usuario" and ep.get("estrategia") == "manual":
+                self._log(f"  → Usuario definiu '{v.get('nome_pjecalc', '?')}' como Manual")
+                _pers_final.append(v)
+            else:
+                _pred_final.append(v)
+        # Mover personalizadas que o usuario marcou como expresso
+        _pers_keep = []
+        for v in _pers_final:
+            ep = v.get("estrategia_preenchimento", {})
+            if ep.get("baseado_em") == "usuario" and ep.get("estrategia") in ("expresso_direto", "expresso_adaptado"):
+                self._log(f"  → Usuario definiu '{v.get('nome_pjecalc', '?')}' como Expresso")
+                _pred_final.append(v)
+            else:
+                _pers_keep.append(v)
+        predefinidas = _pred_final
+        personalizadas = _pers_keep
+
         # Diagnóstico: listar botões disponíveis
         try:
             _botoes_verbas = self._page.evaluate("""() =>
