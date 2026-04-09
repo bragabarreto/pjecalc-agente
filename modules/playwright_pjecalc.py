@@ -592,15 +592,14 @@ class PJECalcPlaywright:
         self._headless = headless  # salva para crash recovery no retry
         # sync_playwright() falha com "Sync API inside asyncio loop" quando chamado
         # de uma thread que herda o running loop do uvicorn (Python 3.10+).
-        # Solução: desassociar o event loop desta thread antes de chamar Playwright.
-        try:
-            asyncio.get_running_loop()
-            # Se chegou aqui, há um loop running — não deveria em thread separada,
-            # mas Python 3.10+ pode herdar. Forçar um loop novo.
-            asyncio.set_event_loop(asyncio.new_event_loop())
-        except RuntimeError:
-            # Nenhum loop running — OK, criar um novo por segurança
-            asyncio.set_event_loop(asyncio.new_event_loop())
+        # Solução: limpar o running loop a nível C via asyncio._set_running_loop(None)
+        # e criar um loop novo isolado.
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        # Forçar limpeza do running loop (C-level thread-local) — necessário em Python 3.10+
+        # quando threads daemon herdam referência ao loop do uvicorn/asyncio main thread.
+        _set_running = getattr(asyncio, "_set_running_loop", None)
+        if _set_running:
+            _set_running(None)
         from playwright.sync_api import sync_playwright
         self._pw = sync_playwright().__enter__()
         self._browser = self._pw.firefox.launch(
