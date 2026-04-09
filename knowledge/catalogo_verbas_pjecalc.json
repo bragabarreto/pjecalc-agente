@@ -333,7 +333,7 @@
       "incidencias": {"fgts": false, "inss": false, "irpf": false}
     },
     {
-      "nome_pjecalc": "ACORDO (REMUNERATÓRIA)",
+      "nome_pjecalc": "ACORDO (VERBAS REMUNERATÓRIAS)",
       "aliases": ["acordo remuneratória", "acordo remuneratoria"],
       "caracteristica": "Comum",
       "ocorrencia": "Desligamento",
@@ -341,7 +341,7 @@
       "incidencias": {"fgts": true, "inss": true, "irpf": true}
     },
     {
-      "nome_pjecalc": "ACORDO (INDENIZATÓRIA)",
+      "nome_pjecalc": "ACORDO (VERBAS INDENIZATÓRIAS)",
       "aliases": ["acordo indenizatória", "acordo indenizatoria"],
       "caracteristica": "Comum",
       "ocorrencia": "Desligamento",
