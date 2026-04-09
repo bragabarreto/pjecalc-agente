@@ -7432,16 +7432,21 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
-            # Tipo de devedor
-            devedor = hon.get("devedor", "RECLAMADO")
-            self._selecionar("tipoDeDevedor", devedor, obrigatorio=False)
-            self._selecionar("devedor", devedor, obrigatorio=False)
-            self._selecionar("parteDevedora", devedor, obrigatorio=False)
-
             # Tipo de honorário (SUCUMBENCIAIS / CONTRATUAIS)
+            # ATENÇÃO: ID real no XHTML é "tpHonorario" (NÃO "tipoHonorario")
+            # required="true" — sem este campo o save falha
             tipo = hon.get("tipo", "SUCUMBENCIAIS")
-            self._selecionar("tipoHonorario", tipo, obrigatorio=False)
-            self._selecionar("tipo", tipo, obrigatorio=False)
+            self._selecionar("tpHonorario", tipo, obrigatorio=False) or \
+                self._selecionar("tipoHonorario", tipo, obrigatorio=False)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+
+            # Tipo de devedor (radio)
+            devedor = hon.get("devedor", "RECLAMADO")
+            self._marcar_radio("tipoDeDevedor", devedor) or \
+                self._selecionar("tipoDeDevedor", devedor, obrigatorio=False)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
 
             # Descrição (OBRIGATÓRIA — manual seção 19: "Texto até 60 caracteres")
             # Sem este campo, o PJE-Calc retorna "Existem erros no formulário"
@@ -7505,16 +7510,38 @@ class PJECalcPlaywright:
                 if hon.get("data_vencimento"):
                     self._preencher_data("dataVencimento", hon["data_vencimento"], obrigatorio=False, label="Data Vencimento")
 
-            # Dados do credor (obrigatórios em honorarios.xhtml)
+            # Dados do credor (obrigatórios em honorarios.xhtml — marcados com *)
+            # Se extração não forneceu dados do credor, usar dados do processo
             _nome_credor = hon.get("nome_credor", "") or hon.get("credor", "")
-            if _nome_credor:
-                self._preencher("nomeCredor", _nome_credor[:100], False)
+            if not _nome_credor:
+                # Fallback: nome do advogado/parte conforme devedor
+                # Honorários do reclamado → credor é advogado do reclamante (usar nome reclamante)
+                # Honorários do reclamante → credor é advogado do reclamado (usar nome reclamado)
+                _dados = getattr(self, "_dados", {}) or {}
+                if devedor == "RECLAMADO":
+                    _nome_credor = _dados.get("advogado_reclamante", "") or _dados.get("reclamante", "") or "Advogado do Reclamante"
+                else:
+                    _nome_credor = _dados.get("advogado_reclamado", "") or _dados.get("reclamado", "") or "Advogado do Reclamado"
+            self._preencher("nomeCredor", _nome_credor[:100], False)
+            self._log(f"  → nomeCredor: {_nome_credor[:50]}")
+
             _tipo_doc = hon.get("tipo_documento_credor", "") or hon.get("tipo_doc_credor", "")
-            if _tipo_doc:
-                self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc) or self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
+            if not _tipo_doc:
+                _tipo_doc = "CPF"  # Default: CPF (advogado pessoa física)
+            self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc) or \
+                self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
+            self._aguardar_ajax()
+
             _num_doc = hon.get("numero_documento_credor", "") or hon.get("doc_credor", "")
-            if _num_doc:
-                self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
+            if not _num_doc:
+                # Usar CPF/CNPJ da parte correspondente como placeholder
+                _dados = getattr(self, "_dados", {}) or {}
+                if devedor == "RECLAMADO":
+                    _num_doc = _dados.get("cpf_reclamante", "") or _dados.get("doc_reclamante", "") or "000.000.000-00"
+                else:
+                    _num_doc = _dados.get("cnpj_reclamado", "") or _dados.get("doc_reclamado", "") or "00.000.000/0001-00"
+            self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
+            self._log(f"  → doc credor: {_tipo_doc} {_num_doc}")
 
             # Apurar IR
             if hon.get("apurar_ir"):
@@ -8074,50 +8101,44 @@ class PJECalcPlaywright:
         # Tentativa 1: Navegar via _clicar_menu_lateral (mantém backing beans Seam)
         try:
             self._log("  → Navegando para Exportação via menu lateral JSF…")
-            # Menu item ID: li_calculo_exportar (gerado por menu-pilares.xhtml)
             _clicou_export_menu = (
                 self._clicar_menu_lateral("Exportar", obrigatorio=False)
                 or self._clicar_menu_lateral("Exportação", obrigatorio=False)
             )
             if _clicou_export_menu:
-                self._log("  ✓ Navegação para Exportação via menu lateral OK")
+                self._aguardar_ajax(timeout=15000)
                 self._page.wait_for_timeout(1000)
-                _exportou = True
-            else:
-                # Fallback: buscar link por texto no sidebar via JS
-                _clicou_js = self._page.evaluate("""() => {
-                    const links = [...document.querySelectorAll('#menupainel a, .menu-item a')];
-                    for (const a of links) {
-                        const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
-                        if (txt === 'Exportar' || txt === 'Exportação') {
-                            a.click();
-                            return true;
-                        }
-                    }
-                    return false;
-                }""")
-                if _clicou_js:
-                    self._log("  ✓ Link Exportar encontrado via JS — aguardando navegação…")
-                    try:
-                        self._page.wait_for_load_state("domcontentloaded", timeout=10000)
-                    except Exception:
-                        pass
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(1000)
+                # Verificar se realmente navegou para exportacao.jsf
+                _url_pos = self._page.url
+                if "exportacao" in _url_pos:
+                    self._log(f"  ✓ Navegação para Exportação OK: {_url_pos}")
                     _exportou = True
                 else:
-                    self._log("  ⚠ Link Exportar não encontrado no menu lateral")
+                    self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos} — tentando goto")
+            else:
+                self._log("  ⚠ Link Exportar não encontrado no menu lateral")
         except Exception as _menu_err:
             self._log(f"  ⚠ Navegação via menu lateral falhou: {_menu_err}")
 
         # Tentativa 2 (fallback): goto direto com conversationId
-        if not _exportou and self._calculo_url_base and self._calculo_conversation_id:
+        # Extrair conversationId da URL atual se não tiver salvo
+        if not _exportou:
+            _conv_id = self._calculo_conversation_id
+            if not _conv_id:
+                try:
+                    import re as _re
+                    _m = _re.search(r"conversationId=(\d+)", self._page.url)
+                    if _m:
+                        _conv_id = _m.group(1)
+                except Exception:
+                    pass
+        if not _exportou and self._calculo_url_base and _conv_id:
             _exp_url = (
                 f"{self._calculo_url_base}exportacao.jsf"
-                f"?conversationId={self._calculo_conversation_id}"
+                f"?conversationId={_conv_id}"
             )
             try:
-                self._log("  → Fallback: goto direto exportacao.jsf…")
+                self._log(f"  → Fallback: goto direto {_exp_url}")
                 self._page.goto(_exp_url, wait_until="domcontentloaded", timeout=15000)
                 try:
                     self._instalar_monitor_ajax()
