@@ -926,63 +926,78 @@ class PJECalcPlaywright:
         try:
             loc.wait_for(state="visible", timeout=8000)
 
-            # Estratégia 1: JS direto no rich:calendar component
-            # Seta o valor no InputDate (visível) e InputCurrentDate (hidden)
+            # Estratégia: JS direto nos hidden fields do rich:calendar
+            #
+            # rich:calendar gera 3 elementos:
+            # - formulario:dataXxxInputDate — input visível (com máscara DD/MM/AAAA)
+            # - formulario:dataXxxInputCurrentDate — hidden input (VALOR SUBMETIDO ao JSF)
+            # - formulario:dataXxx — hidden input (backup/state)
+            #
+            # Problema: Tab causa truncamento da data pela máscara (ex: "11/2024" em vez de "04/11/2024")
+            # Solução: setar TODOS os inputs via JS, incluindo o hidden, e NÃO usar Tab.
+            #          Usar apenas blur via JS (não via keyboard) para não acionar a máscara.
             _js_ok = self._page.evaluate("""([suffix, dateStr]) => {
-                // Encontrar o input visível do rich:calendar
-                const inputs = document.querySelectorAll('input[id$="' + suffix + 'InputDate"]');
-                const input = inputs.length ? inputs[0] : null;
-                if (!input) return false;
+                // 1. Input visível (InputDate)
+                const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
+                if (!input) return 'NOT_FOUND';
 
                 // Setar valor no input visível
                 input.value = dateStr;
 
-                // Setar valor no hidden input (InputCurrentDate) — JSF lê daqui
-                const hiddenId = input.id.replace('InputDate', 'InputCurrentDate');
-                const hidden = document.getElementById(hiddenId);
-                if (hidden) {
-                    hidden.value = dateStr;
+                // 2. Hidden input InputCurrentDate (é o que JSF realmente submete)
+                const hiddenCurrent = document.getElementById(
+                    input.id.replace('InputDate', 'InputCurrentDate')
+                );
+                if (hiddenCurrent) {
+                    hiddenCurrent.value = dateStr;
                 }
 
-                // Disparar eventos para JSF/RichFaces processar
+                // 3. Hidden input base (sem sufixo) — pode ser type="hidden"
+                const baseId = input.id.replace('InputDate', '');
+                const hiddenBase = document.getElementById(baseId);
+                if (hiddenBase && hiddenBase.type === 'hidden') {
+                    hiddenBase.value = dateStr;
+                }
+
+                // 4. Disparar eventos — blur via JS (não Tab!) para sincronizar JSF
+                //    sem que a máscara jQuery intercepte e trunce o valor
                 input.dispatchEvent(new Event('input', {bubbles: true}));
                 input.dispatchEvent(new Event('change', {bubbles: true}));
                 input.dispatchEvent(new Event('blur', {bubbles: true}));
 
-                return true;
+                // 5. Verificar se o valor persistiu (a máscara pode ter modificado)
+                return input.value;
             }""", [field_id, data])
 
-            if _js_ok:
-                # Também setar via focus + type para garantia (rich:calendar pode ignorar JS puro)
-                try:
-                    loc.focus()
-                    self._page.keyboard.press("Control+a")
-                    self._page.keyboard.press("Delete")
-                    digits_only = data.replace("/", "").replace("-", "")
-                    loc.press_sequentially(digits_only, delay=60)
-                    # Tab para disparar blur → JSF sync (necessário para o servidor receber o valor)
-                    loc.press("Tab")
-                    self._aguardar_ajax(timeout=3000)
-                except Exception:
-                    pass  # JS direto já setou — se o type falhar, tudo bem
-                self._log(f"  ✓ data {field_id}: {data}")
+            if _js_ok == 'NOT_FOUND':
+                # Fallback: tentar focus + type (campo sem InputDate, ex: campo simples)
+                loc.focus()
+                self._page.keyboard.press("Control+a")
+                self._page.keyboard.press("Delete")
+                digits_only = data.replace("/", "").replace("-", "")
+                loc.press_sequentially(digits_only, delay=60)
+                loc.press("Escape")
+                self._log(f"  ✓ data {field_id} (type fallback): {data}")
                 return True
 
-            # Estratégia 2: focus + type + Tab (fallback se JS não encontrou o campo)
-            loc.focus()
-            self._page.keyboard.press("Control+a")
-            self._page.keyboard.press("Delete")
-            digits_only = data.replace("/", "").replace("-", "")
-            loc.press_sequentially(digits_only, delay=60)
-            loc.dispatch_event("input")
-            loc.dispatch_event("change")
-            # Tab em vez de Escape — necessário para JSF receber o valor via blur
-            loc.press("Tab")
-            self._aguardar_ajax(timeout=3000)
+            # Verificar se o valor foi setado corretamente
+            if _js_ok != data:
+                self._log(f"  ⚠ data {field_id}: JS setou '{_js_ok}' vs esperado '{data}' — re-setando hidden")
+                # Re-setar APENAS o hidden (que é o que JSF lê no submit)
+                self._page.evaluate("""([suffix, dateStr]) => {
+                    const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
+                    if (!input) return;
+                    const hid = document.getElementById(input.id.replace('InputDate', 'InputCurrentDate'));
+                    if (hid) hid.value = dateStr;
+                    // Também forçar no input visível
+                    input.value = dateStr;
+                }""", [field_id, data])
+
+            self._aguardar_ajax(timeout=2000)
             self._log(f"  ✓ data {field_id}: {data}")
             return True
         except Exception as e:
-            # Fallback: JS direto com valor completo (com barras)
+            # Fallback: setar apenas os hidden fields via JS
             try:
                 self._page.evaluate("""([suffix, dateStr]) => {
                     const sels = [
@@ -993,12 +1008,14 @@ class PJECalcPlaywright:
                         const el = document.querySelector(sel);
                         if (el) {
                             el.value = dateStr;
-                            // Hidden
                             const hid = document.getElementById(
                                 el.id.replace('InputDate', 'InputCurrentDate')
                             );
                             if (hid) hid.value = dateStr;
-                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                            // Hidden base
+                            const baseId = el.id.replace('InputDate', '');
+                            const hidBase = document.getElementById(baseId);
+                            if (hidBase && hidBase.type === 'hidden') hidBase.value = dateStr;
                             el.dispatchEvent(new Event('change', {bubbles: true}));
                             el.dispatchEvent(new Event('blur', {bubbles: true}));
                             return true;
