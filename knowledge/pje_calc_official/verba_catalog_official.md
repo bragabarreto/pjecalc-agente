@@ -21,6 +21,7 @@ Fonte: `modules/classification.py` → `VERBAS_PREDEFINIDAS` + Manual Oficial PJ
 | Salário-Família | salario familia | Principal | Comum | Mensal | ✗ | ✗ | ✗ | — |
 | Indenização por Dano Moral | dano moral / indenizacao por dano moral | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
 | Indenização por Dano Material | dano material | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
+| Indenização por Dano Estético | dano estetico | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
 | Diárias - Integração ao Salário | diarias integracao ao salario | Principal | Comum | Mensal | ✓ | ✓ | ✓ | — |
 | Acordo (Mera Liberalidade) | acordo mera liberalidade | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
 | Acordo (Multa) | acordo multa | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | — |
@@ -29,22 +30,27 @@ Fonte: `modules/classification.py` → `VERBAS_PREDEFINIDAS` + Manual Oficial PJ
 
 ## Verbas de Uso Frequente (Lançamento Manual)
 
-Estas verbas não estão no catálogo Expresso mas são frequentemente deferidas:
+**REGRA FUNDAMENTAL**: Se a verba EXISTE na tabela Expresso do PJE-Calc, ela JAMAIS pode ser preenchida manualmente. Deve SEMPRE usar Expresso. As verbas abaixo NAO existem no catalogo Expresso e por isso sao criadas via Manual:
 
 | Nome PJE-Calc | Tipo | Característica | Ocorrência | FGTS | INSS | IR | Obs. |
 |---|---|---|---|---|---|---|---|
-| Diferenças Salariais | Principal | Comum | Mensal | ✓ | ✓ | ✓ | Quando há aumento negado |
-| Adicional de Transferência | Principal | Comum | Mensal | ✓ | ✓ | ✓ | 25% do salário |
-| Gratificação de Função | Principal | Comum | Mensal | ✓ | ✓ | ✓ | Verificar integração |
-| Comissões | Principal | Comum | Mensal | ✓ | ✓ | ✓ | Base: média |
-| Horas in Itinere | Principal | Comum | Mensal | ✓ | ✓ | ✓ | Pré-Reforma |
-| Intervalo Intrajornada | Principal | Comum | Mensal | ✓ | ✓ | ✓ | Art. 71 §4º CLT |
 | Intervalo do Art. 384 | Principal | Comum | Mensal | ✓ | ✓ | ✓ | Mulher, pré-Reforma |
-| Adicional de Sobreaviso | Principal | Comum | Mensal | ✓ | ✓ | ✓ | 1/3 do horário normal |
 | Multa Normativa / Cláusula Penal | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | Prevista em ACT/CCT |
 | Indenização por Estabilidade | Principal | Comum | Desligamento | ✗ | ✗ | ✗ | CIPA, gestante, etc. |
+| Equiparação Salarial | Principal | Comum | Mensal | ✓ | ✓ | ✓ | Diferenças por equiparação |
 | Reintegração / Salários do período | Principal | Comum | Mensal | ✓ | ✓ | ✓ | |
 | FGTS não depositado | — | — | — | — | — | — | Via campo FGTS, não verba |
+
+**ATENCAO**: As seguintes verbas frequentes SAO Expresso (NAO criar manualmente):
+- Diferenças Salariais (DIFERENÇA SALARIAL no Expresso)
+- Adicional de Transferência (ADICIONAL DE TRANSFERÊNCIA 25% no Expresso)
+- Gratificação de Função (GRATIFICAÇÃO DE FUNÇÃO no Expresso)
+- Comissões (COMISSÃO no Expresso)
+- Horas in Itinere (HORAS IN ITINERE no Expresso)
+- Intervalo Intrajornada (INTERVALO INTRAJORNADA no Expresso)
+- Adicional de Sobreaviso (ADICIONAL DE SOBREAVISO no Expresso)
+- Indenização por Dano Moral (INDENIZAÇÃO POR DANO MORAL no Expresso)
+- Indenização por Dano Material (INDENIZAÇÃO POR DANO MATERIAL no Expresso)
 
 ## Verbas Reflexas (geradas automaticamente)
 

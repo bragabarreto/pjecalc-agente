@@ -1,0 +1,486 @@
+{
+  "versao": "2.15.1",
+  "atualizado_em": "2026-04-08",
+  "expresso": [
+    {
+      "nome_pjecalc": "SALDO DE SALÁRIO",
+      "aliases": ["saldo salarial", "saldo de salarios", "salário residual", "saldo de salário", "dias trabalhados no mês da rescisão", "salário do mês da demissão"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": ["DSR sobre Saldo de Salário"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "AVISO PRÉVIO",
+      "aliases": ["aviso prévio indenizado", "aviso previo", "aviso prévio trabalhado"],
+      "caracteristica": "Aviso Previo",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": ["Férias + 1/3 sobre Aviso Prévio", "13º sobre Aviso Prévio", "FGTS sobre Aviso Prévio"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "13º SALÁRIO",
+      "aliases": ["décimo terceiro salário", "13o salario", "13 salario proporcional", "décimo terceiro proporcional", "13º salário integral", "13º salário proporcional", "gratificação natalina", "gratificação natalina proporcional", "13o proporcional"],
+      "caracteristica": "13o Salario",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true},
+      "nota": "Proporcionais e integrais são a mesma verba com ocorrências diferentes"
+    },
+    {
+      "nome_pjecalc": "FÉRIAS + 1/3",
+      "aliases": ["férias proporcionais", "férias vencidas", "férias proporcionais + 1/3", "férias integrais", "férias + 1/3 proporcionais", "férias + 1/3 vencidas", "férias em dobro", "férias incompletas acrescidas do terço constitucional", "férias com terço constitucional", "férias acrescidas de 1/3"],
+      "caracteristica": "Ferias",
+      "ocorrencia": "Periodo Aquisitivo",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": true, "irpf": true},
+      "nota": "Proporcionais e vencidas são a mesma verba com ocorrências diferentes"
+    },
+    {
+      "nome_pjecalc": "HORAS EXTRAS 50%",
+      "aliases": ["horas extras", "hora extra 50%", "horas extraordinárias 50%", "he 50%", "sobrejornada", "trabalho suplementar", "horas extraordinarias", "horas extras habituais"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": ["RSR sobre Horas Extras", "13º s/ Horas Extras", "Férias + 1/3 s/ Horas Extras"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "HORAS EXTRAS 100%",
+      "aliases": ["hora extra 100%", "horas extraordinárias 100%", "he 100%", "horas extras domingos e feriados"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": ["RSR sobre Horas Extras 100%", "13º s/ Horas Extras 100%", "Férias + 1/3 s/ Horas Extras 100%"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE HORAS EXTRAS 50%",
+      "aliases": ["adicional hora extra 50%", "adicional de horas extras"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL NOTURNO 20%",
+      "aliases": ["adicional noturno", "adicional de trabalho noturno", "hora noturna", "adicional por trabalho noturno", "labor noturno"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": ["RSR sobre Adicional Noturno", "13º s/ Adicional Noturno", "Férias + 1/3 s/ Adicional Noturno"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE INSALUBRIDADE 40%",
+      "aliases": ["adicional de insalubridade", "insalubridade grau máximo", "insalubridade 40%"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": ["RSR sobre Insalubridade", "13º s/ Insalubridade", "Férias + 1/3 s/ Insalubridade"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE INSALUBRIDADE 20%",
+      "aliases": ["insalubridade grau médio", "insalubridade 20%"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE INSALUBRIDADE 10%",
+      "aliases": ["insalubridade grau mínimo", "insalubridade 10%"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE PERICULOSIDADE 30%",
+      "aliases": ["adicional de periculosidade", "periculosidade 30%", "periculosidade"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": ["RSR sobre Periculosidade", "13º s/ Periculosidade", "Férias + 1/3 s/ Periculosidade"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE TRANSFERÊNCIA 25%",
+      "aliases": ["adicional de transferência", "transferência 25%"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "MULTA DO ARTIGO 477 DA CLT",
+      "aliases": ["multa art 477", "multa art. 477", "multa 477", "multa do artigo 477", "multa clt 477", "multa rescisória", "penalidade por atraso nas verbas rescisórias", "multa por atraso na rescisão", "multa do art. 477 da CLT"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "VALE TRANSPORTE",
+      "aliases": ["vale transporte", "VT", "vale-transporte"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INTERVALO INTRAJORNADA",
+      "aliases": ["intervalo intrajornada", "intervalo não concedido", "supressão de intervalo", "intervalo para repouso e alimentação", "hora intervalar", "intervalo suprimido"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": ["RSR sobre Intervalo", "13º s/ Intervalo", "Férias + 1/3 s/ Intervalo"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "INTERVALO INTERJORNADAS",
+      "aliases": ["intervalo interjornadas", "intervalo entre jornadas"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "COMISSÃO",
+      "aliases": ["comissão", "comissões", "comissao"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "DIFERENÇA SALARIAL",
+      "aliases": ["diferença salarial", "diferenças salariais", "diferenca salarial", "diferença de salário", "complemento salarial", "reajuste salarial não pago"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": ["RSR sobre Diferença Salarial", "13º s/ Diferença Salarial", "Férias + 1/3 s/ Diferença Salarial"],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "GRATIFICAÇÃO DE FUNÇÃO",
+      "aliases": ["gratificação de função", "acúmulo de função", "adicional acúmulo de função", "adicional por acúmulo de função"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "PARTICIPAÇÃO NOS LUCROS OU RESULTADOS - PLR",
+      "aliases": ["participação nos lucros", "PLR", "participação nos lucros e resultados"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "FERIADO EM DOBRO",
+      "aliases": ["feriado em dobro", "feriado trabalhado em dobro", "feriados trabalhados em dobro"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "SALÁRIO RETIDO",
+      "aliases": ["salário retido", "salários retidos"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "SALÁRIO MATERNIDADE",
+      "aliases": ["salário maternidade", "licença maternidade"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "HORAS IN ITINERE",
+      "aliases": ["horas in itinere", "horas de percurso", "horas itinerantes"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE SOBREAVISO",
+      "aliases": ["adicional de sobreaviso", "sobreaviso"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "REPOUSO SEMANAL REMUNERADO EM DOBRO",
+      "aliases": ["repouso semanal remunerado", "RSR em dobro", "DSR em dobro"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "DEVOLUÇÃO DE DESCONTOS INDEVIDOS",
+      "aliases": ["devolução de descontos indevidos", "descontos indevidos", "restituição de descontos"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "TÍQUETE-ALIMENTAÇÃO",
+      "aliases": ["tíquete alimentação", "vale alimentação", "tíquete-alimentação", "VA"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "CESTA BÁSICA",
+      "aliases": ["cesta básica", "cesta basica"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE PRODUTIVIDADE 30%",
+      "aliases": ["adicional de produtividade", "produtividade"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ADICIONAL DE RISCO 40%",
+      "aliases": ["adicional de risco", "risco 40%"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "GORJETA",
+      "aliases": ["gorjeta", "gorjetas"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "AJUDA DE CUSTO",
+      "aliases": ["ajuda de custo"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "GRATIFICAÇÃO POR TEMPO DE SERVIÇO",
+      "aliases": ["gratificação por tempo de serviço", "anuênio", "quinquênio"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ABONO PECUNIÁRIO",
+      "aliases": ["abono pecuniário", "abono pecuniario"],
+      "caracteristica": "Ferias",
+      "ocorrencia": "Periodo Aquisitivo",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "DIÁRIAS - PAGAMENTO",
+      "aliases": ["diárias", "diárias pagamento"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "DIÁRIAS - INTEGRAÇÃO AO SALÁRIO",
+      "aliases": ["diárias integração ao salário", "diárias integração salarial"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "SALÁRIO-FAMÍLIA",
+      "aliases": ["salário família", "salário-família", "salario familia"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "ACORDO (MERA LIBERALIDADE)",
+      "aliases": ["acordo mera liberalidade", "acordo liberalidade"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "ACORDO (MULTA)",
+      "aliases": ["acordo multa"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "ACORDO (REMUNERATÓRIA)",
+      "aliases": ["acordo remuneratória", "acordo remuneratoria"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "ACORDO (INDENIZATÓRIA)",
+      "aliases": ["acordo indenizatória", "acordo indenizatoria"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO POR DANO MORAL",
+      "aliases": ["dano moral", "danos morais", "indenização moral", "indenização por dano moral", "reparação por danos extrapatrimoniais", "compensação por dano moral", "danos extrapatrimoniais", "indenização por danos morais"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO POR DANO MATERIAL",
+      "aliases": ["dano material", "danos materiais", "indenização material", "indenização por dano material"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO POR DANO ESTÉTICO",
+      "aliases": ["dano estético", "danos estéticos", "indenização por dano estético"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    }
+  ],
+  "adaptaveis": [
+    {
+      "base_expresso": "DIFERENÇA SALARIAL",
+      "aplica_para": ["diferenças de *", "complemento salarial", "diferenças de aviso prévio", "diferenças de férias", "diferenças de 13º"],
+      "campos_editaveis": ["nome", "ocorrencia", "base_calculo"],
+      "nota": "Usar como base para qualquer tipo de diferença não listada no Expresso"
+    },
+    {
+      "base_expresso": "HORAS EXTRAS 50%",
+      "aplica_para": ["horas extras 60%", "horas extras 70%", "horas extras 75%", "horas extras 80%"],
+      "campos_editaveis": ["nome", "percentual"],
+      "nota": "Ajustar percentual da hora extra conforme sentença ou CCT"
+    },
+    {
+      "base_expresso": "ADICIONAL DE INSALUBRIDADE 40%",
+      "aplica_para": ["adicional de insalubridade sem grau especificado"],
+      "campos_editaveis": ["nome", "percentual", "base_calculo"],
+      "nota": "Ajustar grau conforme laudo pericial"
+    },
+    {
+      "base_expresso": "COMISSÃO",
+      "aplica_para": ["diferenças de comissão", "comissões não pagas"],
+      "campos_editaveis": ["nome", "ocorrencia"],
+      "nota": "Adaptar para diferenças de comissão"
+    },
+    {
+      "base_expresso": "GRATIFICAÇÃO DE FUNÇÃO",
+      "aplica_para": ["gratificação especial", "gratificação semestral", "gratificação natalina"],
+      "campos_editaveis": ["nome", "ocorrencia", "percentual"],
+      "nota": "Base para gratificações diversas"
+    }
+  ],
+  "somente_manual": [
+    {
+      "nome": "Indenização por Dano Moral",
+      "aliases": ["dano moral", "danos morais", "indenização moral"],
+      "parametros_tipicos": {"caracteristica": "COMUM", "ocorrencia": "DESLIGAMENTO", "base_calculo": "INFORMADO", "tipo_valor": "INFORMADO"},
+      "incidencias": {"fgts": false, "inss": false, "irpf": false},
+      "pagina_pjecalc": "Multas e Indenizações"
+    },
+    {
+      "nome": "Indenização por Dano Material",
+      "aliases": ["dano material", "danos materiais", "indenização material"],
+      "parametros_tipicos": {"caracteristica": "COMUM", "ocorrencia": "DESLIGAMENTO", "base_calculo": "INFORMADO", "tipo_valor": "INFORMADO"},
+      "incidencias": {"fgts": false, "inss": false, "irpf": false},
+      "pagina_pjecalc": "Multas e Indenizações"
+    },
+    {
+      "nome": "Indenização por Dano Estético",
+      "aliases": ["dano estético", "danos estéticos"],
+      "parametros_tipicos": {"caracteristica": "COMUM", "ocorrencia": "DESLIGAMENTO", "base_calculo": "INFORMADO", "tipo_valor": "INFORMADO"},
+      "incidencias": {"fgts": false, "inss": false, "irpf": false},
+      "pagina_pjecalc": "Multas e Indenizações"
+    },
+    {
+      "nome": "Indenização Adicional",
+      "aliases": ["indenização adicional", "indenização complementar"],
+      "parametros_tipicos": {
+        "caracteristica": "COMUM",
+        "ocorrencia": "DESLIGAMENTO",
+        "base_calculo": "INFORMADO",
+        "tipo_valor": "INFORMADO"
+      },
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome": "Multa Convencional",
+      "aliases": ["multa convencional", "multa normativa", "multa CCT"],
+      "parametros_tipicos": {
+        "caracteristica": "COMUM",
+        "ocorrencia": "DESLIGAMENTO",
+        "base_calculo": "INFORMADO",
+        "tipo_valor": "INFORMADO"
+      },
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome": "Indenização por Estabilidade",
+      "aliases": ["estabilidade provisória", "estabilidade gestante", "estabilidade acidentária", "indenização estabilidade"],
+      "parametros_tipicos": {
+        "caracteristica": "COMUM",
+        "ocorrencia": "MENSAL",
+        "base_calculo": "INFORMADO",
+        "tipo_valor": "INFORMADO"
+      },
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome": "Equiparação Salarial",
+      "aliases": ["equiparação salarial", "diferenças por equiparação"],
+      "parametros_tipicos": {
+        "caracteristica": "COMUM",
+        "ocorrencia": "MENSAL",
+        "base_calculo": "INFORMADO",
+        "tipo_valor": "INFORMADO"
+      },
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome": "Indenização por Supressão de Intervalo",
+      "aliases": ["indenização intervalo", "supressão intervalo intrajornada"],
+      "parametros_tipicos": {
+        "caracteristica": "COMUM",
+        "ocorrencia": "MENSAL",
+        "base_calculo": "REMUNERACAO",
+        "tipo_valor": "PERCENTUAL"
+      },
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    }
+  ]
+}

@@ -332,6 +332,101 @@ class CorrecaoUsuario(Base):
         return f"<CorrecaoUsuario #{self.id} {self.campo} sessao={self.sessao_id}>"
 
 
+# ── Modelo — Estratégia de Preenchimento de Verbas ──────────────────────────
+
+class EstrategiaVerba(Base):
+    """
+    Registra a melhor estratégia de preenchimento para cada tipo de verba no PJE-Calc.
+
+    Estratégias:
+    - expresso_direto: verba com correspondência exata na tabela Expresso
+    - expresso_adaptado: usa verba Expresso genérica como base, depois ajusta campos
+    - manual: preenchimento completo via botão Manual (formulario:incluir)
+
+    O engine aprende a cada execução qual estratégia funciona melhor para cada verba,
+    registrando tentativas/sucessos/falhas para decisões futuras.
+    """
+    __tablename__ = "estrategia_verba"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    # Identificação da verba
+    nome_verba = Column(String(300), nullable=False)
+    nome_normalizado = Column(String(300), nullable=False, index=True)
+    tipo = Column(String(20), default="principal")  # "principal" ou "reflexa"
+
+    # Estratégia
+    estrategia = Column(String(30), nullable=False)  # "expresso_direto", "expresso_adaptado", "manual"
+
+    # Detalhes da estratégia
+    expresso_nome = Column(String(300), nullable=True)   # Nome exato na tabela Expresso (se direto)
+    expresso_base = Column(String(300), nullable=True)   # Verba Expresso base (se adaptado)
+    campos_alterados = Column(Text, nullable=True)       # JSON: campos que precisam ser alterados
+    parametros = Column(Text, nullable=True)             # JSON: {ocorrencia, base_calculo, tipo_valor, ...}
+    incidencias = Column(Text, nullable=True)            # JSON: {fgts: bool, inss: bool, irpf: bool}
+
+    # Métricas de aprendizado
+    tentativas = Column(Integer, default=0)
+    sucessos = Column(Integer, default=0)
+    falhas = Column(Integer, default=0)
+    ultima_execucao = Column(DateTime, nullable=True)
+    ultimo_erro = Column(String(500), nullable=True)
+
+    # Contexto
+    versao_pjecalc = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def taxa_sucesso(self) -> float:
+        """Taxa de sucesso (0.0 se nunca tentada)."""
+        return self.sucessos / self.tentativas if self.tentativas and self.tentativas > 0 else 0.0
+
+    # SQLite não suporta JSON nativo — serializar/deserializar
+    @property
+    def campos_alterados_dict(self) -> dict:
+        if self.campos_alterados:
+            try:
+                return json.loads(self.campos_alterados)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {}
+
+    @campos_alterados_dict.setter
+    def campos_alterados_dict(self, value: dict) -> None:
+        self.campos_alterados = json.dumps(value, ensure_ascii=False) if value else None
+
+    @property
+    def parametros_dict(self) -> dict:
+        if self.parametros:
+            try:
+                return json.loads(self.parametros)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {}
+
+    @parametros_dict.setter
+    def parametros_dict(self, value: dict) -> None:
+        self.parametros = json.dumps(value, ensure_ascii=False) if value else None
+
+    @property
+    def incidencias_dict(self) -> dict:
+        if self.incidencias:
+            try:
+                return json.loads(self.incidencias)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {}
+
+    @incidencias_dict.setter
+    def incidencias_dict(self, value: dict) -> None:
+        self.incidencias = json.dumps(value, ensure_ascii=False) if value else None
+
+    def __repr__(self) -> str:
+        taxa = f"{self.taxa_sucesso:.0%}" if self.tentativas else "N/A"
+        return f"<EstrategiaVerba '{self.nome_verba}' [{self.estrategia}] taxa={taxa}>"
+
+
 # ── Criar tabelas ─────────────────────────────────────────────────────────────
 
 def criar_tabelas() -> None:

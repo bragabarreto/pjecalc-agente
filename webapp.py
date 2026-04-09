@@ -1439,6 +1439,84 @@ async def desativar_regra(rule_id: int, db: Session = Depends(get_db)):
     return JSONResponse({"desativada": True, "rule_id": rule_id})
 
 
+# ── Estratégias de Verbas Dashboard ──────────────────────────────────────────
+
+@app.get("/admin/estrategias-verbas", response_class=HTMLResponse)
+async def admin_estrategias_verbas(request: Request, db: Session = Depends(get_db)):
+    """Dashboard de estratégias de preenchimento de verbas."""
+    try:
+        from learning.verba_strategies import VerbaStrategyEngine
+        engine = VerbaStrategyEngine(db=db)
+        estrategias = engine.obter_estatisticas()
+    except Exception as exc:
+        estrategias = []
+        logger.warning(f"Erro ao carregar estratégias de verbas: {exc}")
+
+    # Carregar catálogo para exibir verbas conhecidas
+    try:
+        from learning.verba_strategies import _carregar_catalogo
+        catalogo = _carregar_catalogo()
+    except Exception:
+        catalogo = {"expresso": [], "adaptaveis": [], "somente_manual": []}
+
+    # Estatísticas resumidas
+    total_tentativas = sum(e.get("tentativas", 0) for e in estrategias)
+    total_sucessos = sum(e.get("sucessos", 0) for e in estrategias)
+    total_falhas = sum(e.get("falhas", 0) for e in estrategias)
+    taxa_global = round(total_sucessos / total_tentativas * 100, 1) if total_tentativas > 0 else 0
+
+    return templates.TemplateResponse(
+        request, "estrategias_verbas.html",
+        {
+            "estrategias": estrategias,
+            "catalogo": catalogo,
+            "total_tentativas": total_tentativas,
+            "total_sucessos": total_sucessos,
+            "total_falhas": total_falhas,
+            "taxa_global": taxa_global,
+            "num_expresso": len(catalogo.get("expresso", [])),
+            "num_adaptaveis": len(catalogo.get("adaptaveis", [])),
+            "num_manual": len(catalogo.get("somente_manual", [])),
+        },
+    )
+
+
+@app.get("/api/estrategias-verbas")
+async def api_estrategias_verbas(db: Session = Depends(get_db)):
+    """API: lista todas as estratégias de verbas com estatísticas."""
+    try:
+        from learning.verba_strategies import VerbaStrategyEngine
+        engine = VerbaStrategyEngine(db=db)
+        return JSONResponse({"estrategias": engine.obter_estatisticas()})
+    except Exception as exc:
+        return JSONResponse({"estrategias": [], "erro": str(exc)})
+
+
+@app.get("/api/estrategias-verbas/exportar")
+async def api_exportar_catalogo_verbas(db: Session = Depends(get_db)):
+    """API: exporta catálogo de estratégias aprendidas (para compartilhar entre instâncias)."""
+    try:
+        from learning.verba_strategies import VerbaStrategyEngine
+        engine = VerbaStrategyEngine(db=db)
+        return JSONResponse({"catalogo": engine.exportar_catalogo()})
+    except Exception as exc:
+        return JSONResponse({"catalogo": [], "erro": str(exc)})
+
+
+@app.post("/api/estrategias-verbas/importar")
+async def api_importar_catalogo_verbas(request: Request, db: Session = Depends(get_db)):
+    """API: importa catálogo de estratégias (para compartilhar entre instâncias)."""
+    try:
+        from learning.verba_strategies import VerbaStrategyEngine
+        body = await request.json()
+        catalogo = body.get("catalogo", [])
+        engine = VerbaStrategyEngine(db=db)
+        count = engine.importar_catalogo(catalogo)
+        return JSONResponse({"importados": count})
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 # ── Tarefas em Background ─────────────────────────────────────────────────────
 
 def _executar_sessao_aprendizado() -> None:

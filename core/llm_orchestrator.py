@@ -34,6 +34,7 @@ class TaskType(str, Enum):
     CRASH_RECOVERY = "crash_recovery"               # Decisão de recovery após crash
     LEARNING_ANALYSIS = "learning_analysis"         # Análise de correções para aprendizado
     QUICK_VALIDATION = "quick_validation"           # Validação rápida de dados
+    VERBA_MATCHING = "verba_matching"               # Matching semântico de verbas (sentença → Expresso)
 
 
 # Routing: (modelo_primário, modelo_fallback)
@@ -47,6 +48,7 @@ _ROUTING: dict[TaskType, tuple[str, Optional[str]]] = {
     TaskType.CRASH_RECOVERY:        ("gemini", "claude"),
     TaskType.LEARNING_ANALYSIS:     ("claude", None),
     TaskType.QUICK_VALIDATION:      ("gemini", "claude"),
+    TaskType.VERBA_MATCHING:        ("gemini", "claude"),  # Rápido + barato; Claude como fallback
 }
 
 
