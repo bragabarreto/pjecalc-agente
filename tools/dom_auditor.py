@@ -703,7 +703,28 @@ class DOMAuditor:
         return False
 
     def _clicar_aba(self, aba_id: str) -> bool:
-        """Click a tab within the current page."""
+        """Click a tab within the current page (JS click for reliability)."""
+        # Try JS click first (most reliable for JSF tabs)
+        clicked = self._page.evaluate(f"""() => {{
+            const selectors = [
+                "[id$='{aba_id}_lbl']",
+                "[id$='{aba_id}_header']",
+                "[id$='{aba_id}'] span",
+                "td[id$='{aba_id}']",
+                "[id*='{aba_id}']"
+            ];
+            for (const sel of selectors) {{
+                const el = document.querySelector(sel);
+                if (el) {{ el.click(); return true; }}
+            }}
+            return false;
+        }}""")
+        if clicked:
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+            return True
+
+        # Fallback: Playwright click
         for sel in [
             f"[id$='{aba_id}_lbl']",
             f"[id$='{aba_id}_header']",
@@ -713,7 +734,7 @@ class DOMAuditor:
             loc = self._page.locator(sel)
             if loc.count() > 0:
                 try:
-                    loc.first.click(timeout=3000)
+                    loc.first.click(force=True, timeout=3000)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(800)
                     return True
@@ -806,6 +827,76 @@ class DOMAuditor:
 
     # -- Audit orchestration -------------------------------------------------
 
+    def _preenchimento_minimo(self) -> None:
+        """Fill minimal required fields so that other pages render their forms.
+        Without data, many JSF pages (FGTS, INSS, Honorários, etc.) show only
+        skeleton/empty shells with no interactive elements.
+        """
+        print("[auditor] Preenchimento mínimo para renderizar formulários...")
+
+        try:
+            # Fill basic process data on calculo.jsf (tab Dados do Processo)
+            self._page.evaluate("""() => {
+                function fill(suffix, value) {
+                    const el = document.querySelector("[id$='" + suffix + "']");
+                    if (el) {
+                        el.value = value;
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        el.dispatchEvent(new Event('blur', {bubbles: true}));
+                    }
+                }
+                fill('dataCriacao', '01/04/2026');
+                fill('numero', '0001234');
+                fill('digito', '56');
+                fill('ano', '2026');
+                fill('regiao', '07');
+                fill('vara', '0003');
+                fill('valorDaCausa', '50.000,00');
+                fill('reclamanteNome', 'AUDITORIA DOM');
+                fill('reclamadoNome', 'EMPRESA AUDITORIA');
+            }""")
+            self._page.wait_for_timeout(500)
+
+            # Click Parâmetros tab and fill dates
+            self._clicar_aba("tabParametrosCalculo")
+            self._page.wait_for_timeout(800)
+
+            self._page.evaluate("""() => {
+                function fill(suffix, value) {
+                    const el = document.querySelector("[id$='" + suffix + "']");
+                    if (el) {
+                        el.value = value;
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        el.dispatchEvent(new Event('blur', {bubbles: true}));
+                    }
+                }
+                // Set estado (CE = 5)
+                const estado = document.querySelector("[id$='estado']");
+                if (estado) { estado.value = '5'; estado.dispatchEvent(new Event('change', {bubbles: true})); }
+
+                fill('dataAdmissaoInputDate', '01/01/2024');
+                fill('dataDemissaoInputDate', '31/12/2025');
+                fill('dataAjuizamentoInputDate', '01/02/2026');
+                fill('valorCargaHorariaPadrao', '220,00');
+                fill('valorMaiorRemuneracao', '3.000,00');
+                fill('valorUltimaRemuneracao', '3.000,00');
+            }""")
+            self._page.wait_for_timeout(500)
+
+            # Try to save
+            salvar = self._page.locator("[id$='salvar']")
+            if salvar.count() > 0:
+                salvar.first.click(force=True)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(2000)
+                self._capturar_ids()
+                print(f"[auditor]   Preenchimento salvo (conversationId={self._conversation_id})")
+            else:
+                print("[auditor]   Botão salvar não encontrado")
+
+        except Exception as e:
+            print(f"[auditor]   Preenchimento mínimo falhou: {e}")
+
     def auditar(self) -> dict:
         """Main audit loop: navigate to each page and extract elements."""
         print("=" * 60)
@@ -827,6 +918,9 @@ class DOMAuditor:
         if not self._criar_calculo():
             print("[auditor] FATAL: Nao foi possivel criar calculo. Abortando.")
             return self._results
+
+        # 3b. Fill minimal data so conditional forms render on other pages
+        self._preenchimento_minimo()
 
         # 4. Audit each page
         for pagina in PAGINAS_AUDITORIA:
@@ -890,24 +984,81 @@ class DOMAuditor:
             resultado = self._extrair_pagina(pagina)
             self._results["paginas"][nome] = resultado
 
-            # Scroll down to capture elements below fold (important for Expresso)
+            # Special handling for Expresso: capture ALL checkboxes regardless of visibility
+            # The a4j:repeat renders ALL elements in DOM, but some are "invisible" to
+            # getBoundingClientRect() because they're in a column layout beyond viewport.
             if nome == "verbas_expresso":
-                print("[auditor]   Scrolling para capturar verbas abaixo do fold...")
+                print("[auditor]   Capturando TODAS as verbas expressas (incluindo fora do viewport)...")
                 try:
-                    self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
-                    self._page.wait_for_timeout(1500)
-                    # Re-extract after scroll
-                    extra_elements = self._page.evaluate(JS_EXTRACT_ELEMENTS)
-                    # Merge new elements (by ID, avoiding duplicates)
+                    # Progressive scroll to force layout computation
+                    self._page.evaluate("""() => {
+                        const containers = document.querySelectorAll(
+                            '[id*="listagem"], table, .rich-table, .panelGrid, form'
+                        );
+                        for (const c of containers) {
+                            if (c.scrollHeight > c.clientHeight) {
+                                for (let i = 1; i <= 4; i++) {
+                                    c.scrollTop = (c.scrollHeight / 4) * i;
+                                }
+                            }
+                        }
+                        const h = document.body.scrollHeight;
+                        for (let i = 1; i <= 4; i++) {
+                            window.scrollTo(0, (h / 4) * i);
+                        }
+                    }""")
+                    self._page.wait_for_timeout(1000)
+
+                    # Extract ALL checkboxes with selecionada in ID (Expresso pattern)
+                    all_verbas = self._page.evaluate("""() => {
+                        const results = [];
+                        // Pattern: input[type=checkbox][id*=selecionada]
+                        document.querySelectorAll("input[type='checkbox'][id*='selecionada']").forEach(cb => {
+                            // Find label: look for sibling or nearby text with verba name
+                            let label = '';
+                            const row = cb.closest('tr, td, div');
+                            if (row) {
+                                const nameEl = row.querySelector('[id*=":nome"], span, label');
+                                if (nameEl) label = nameEl.textContent.trim();
+                            }
+                            // Also try: next <td> sibling text
+                            if (!label) {
+                                const td = cb.closest('td');
+                                if (td && td.nextElementSibling) {
+                                    label = td.nextElementSibling.textContent.trim();
+                                }
+                            }
+                            results.push({
+                                tipo: 'checkbox',
+                                id: cb.id,
+                                sufixo: 'selecionada',
+                                label: label,
+                                checked: cb.checked,
+                                visivel: (() => { const r = cb.getBoundingClientRect(); return r.width > 0 || r.height > 0; })(),
+                            });
+                        });
+                        return results;
+                    }""")
+
+                    # Merge with existing, replacing any duplicates
                     existing_ids = {e["id"] for e in resultado["elementos"] if e.get("id")}
-                    for el in extra_elements:
+                    added = 0
+                    for el in all_verbas:
                         if el.get("id") and el["id"] not in existing_ids:
                             resultado["elementos"].append(el)
                             existing_ids.add(el["id"])
+                            added += 1
+
                     resultado["total_elementos"] = len(resultado["elementos"])
-                    print(f"[auditor]   Apos scroll: {resultado['total_elementos']} elementos totais")
+                    total_verbas = len([e for e in resultado["elementos"]
+                                       if e.get("tipo") == "checkbox" and e.get("label")])
+                    print(f"[auditor]   Verbas expressas: {total_verbas} com nome "
+                          f"(+{added} adicionadas via JS direto)")
+
+                    # Scroll back to top
+                    self._page.evaluate("() => window.scrollTo(0, 0)")
                 except Exception as e:
-                    print(f"[auditor]   Scroll failed: {e}")
+                    print(f"[auditor]   Captura Expresso falhou: {e}")
 
         # 5. Summary
         total_paginas = len(self._results["paginas"])
