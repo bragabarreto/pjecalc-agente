@@ -98,6 +98,19 @@ class ParametrosCalculo:
     CARGA_HORARIA = "[id$='cargaHoraria']"
     JORNADA_SEMANAL = "[id$='jornadaSemanal']"
 
+    # Regime de trabalho (manual seção 5.2)
+    REGIME_TRABALHO = "select[id$='tipoDaBaseTabelada'], select[id$='regimeTrabalho']"
+    # Remuneracoes (manual seção 5.2)
+    MAIOR_REMUNERACAO = "[id$='maiorRemuneracao']"
+    ULTIMA_REMUNERACAO = "[id$='ultimaRemuneracao']"
+    # Datas de limite do calculo (manual seção 5.2)
+    DATA_INICIO_CALCULO = "[id$='dataInicioCalculo'], [id*='dataInicioInputDate']"
+    DATA_FIM_CALCULO = "[id$='dataFimCalculo'], [id*='dataFimInputDate']"
+
+    # Checkboxes (manual seção 5.4)
+    SABADO_DIA_UTIL = "input[type='checkbox'][id$='sabadoDiaUtil']"
+    COMENTARIOS = "textarea[id$='comentarios'], [id$='comentarios']"
+
     SALVAR = "[id$='salvar']"
 
 
@@ -381,8 +394,12 @@ class FGTS:
     MULTA_DO_ARTIGO_467 = "input[type='checkbox'][id$='multaDoArtigo467']"  # checkbox
     MULTA_10 = "input[type='checkbox'][id$='multa10']"  # checkbox
 
+    # Base da Multa (manual seção 13 — DEVIDO, DIFERENCA, SALDO, etc.)
+    BASE_DA_MULTA = "select[id$='baseDaMulta'], select[id$='baseMulta']"
     # Excluir aviso da base da multa
     EXCLUIR_AVISO_DA_MULTA = "input[type='checkbox'][id$='excluirAvisoDaMulta']"
+    # Pensao Alimenticia sobre FGTS (manual seção 13)
+    PENSAO_ALIMENTICIA_FGTS = "input[type='checkbox'][id$='pensaoAlimenticiaFgts'], input[type='checkbox'][id$='pensaoAlimenticia']"
 
     # Saldos depositados
     DEDUZIR_DO_FGTS = "input[type='checkbox'][id$='deduzirDoFGTS']"
@@ -421,6 +438,9 @@ class ContribuicaoSocial:
     ALIQUOTA_EMPREGADOR = "[id$='tipoAliquotaEmpregador']"  # radio
     CONFIRMAR = "[id$='confirmar'], input[value='Confirmar']"
 
+    # Periodos SIMPLES (isencao — manual seção 14)
+    SIMPLES = "input[type='checkbox'][id$='simples'], input[type='checkbox'][id$='isencaoSimples']"
+
     SALVAR = "[id$='salvar']"
 
 
@@ -431,6 +451,13 @@ class ContribuicaoSocial:
 class ImpostoRenda:
     """Campos de Imposto de Renda"""
     JSF = "irpf/irpf.jsf"
+
+    # Checkbox master (manual seção 17)
+    APURAR = "input[type='checkbox'][id$='apurar'], input[type='checkbox'][id$='apurarIR']"
+    # Incidir sobre juros de mora (manual seção 17)
+    INCIDIR_SOBRE_JUROS = "input[type='checkbox'][id$='incidirSobreJurosDeMora'], input[type='checkbox'][id$='incidirJuros']"
+    # Cobrar do reclamado (manual seção 17)
+    COBRAR_DO_RECLAMADO = "input[type='checkbox'][id$='cobrarDoReclamado']"
 
     # Regime de tributacao
     TRIBUTACAO_EXCLUSIVA = "input[type='checkbox'][id$='tributacaoExclusiva'], input[type='checkbox'][id$='tributacaoExclusivaFonte']"
@@ -468,10 +495,100 @@ class Honorarios:
     VALOR_INFORMADO = "[id$='valorInformado'], [id$='valorFixo']"
     APURAR_IR = "input[type='checkbox'][id$='apurarIr'], input[type='checkbox'][id$='tributarIR']"
 
+    # Incidir sobre juros (manual seção 19)
+    INCIDIR_SOBRE_JUROS = "input[type='checkbox'][id$='incidirSobreJuros']"
+    # Aplicar juros (manual seção 19)
+    APLICAR_JUROS = "input[type='checkbox'][id$='aplicarJuros']"
+
+    # Dados do Credor (manual seção 19)
+    NOME_CREDOR = "[id$='nomeCredor'], [id$='nomeDoCredor']"
+    DOC_FISCAL_CREDOR = "[id$='documentoFiscalCredor'], [id$='cpfCnpjCredor']"
+
     # Periciais
     HONORARIOS_PERICIAIS = "[id$='honorariosPericiais'], [id$='valorPericiais']"
 
     INCLUIR = "[id$='incluir']"
+    SALVAR = "[id$='salvar']"
+
+
+# ============================================================================
+# Multas e Indenizacoes (multas-indenizacoes.jsf)
+# ============================================================================
+
+class MultasIndenizacoes:
+    """Campos da pagina Multas e Indenizacoes"""
+    JSF = "multas-indenizacoes.jsf"
+
+    # Formulario (apos clicar Novo/Incluir)
+    DESCRICAO = "[id$='descricao']"
+    VALOR = "[id$='valor']"  # radio INFORMADO/CALCULADO
+    ALIQUOTA = "[id$='aliquota']"  # valor numerico ou percentual
+    CREDOR_DEVEDOR = "select[id$='credorDevedor']"
+    TIPO_BASE_MULTA = "select[id$='tipoBaseMulta']"  # PRINCIPAL / VALOR_CAUSA / etc.
+
+    INCLUIR = "[id$='incluir']"
+    SALVAR = "[id$='salvar']"
+
+
+# ============================================================================
+# Salario-Familia (salario-familia.jsf)
+# ============================================================================
+
+class SalarioFamilia:
+    """Campos da pagina Salario-Familia"""
+    JSF = "salario-familia.jsf"
+
+    APURAR = "input[type='checkbox'][id$='apurar']"
+    COMPOR_PRINCIPAL = "[id$='comporPrincipal']"  # radio SIM/NAO
+    QUANTIDADE_DE_FILHOS = "[id$='quantidadeDeFilhos']"
+    REMUNERACAO_MENSAL = "[id$='remuneracaoMensal']"
+
+    SALVAR = "[id$='salvar']"
+
+
+# ============================================================================
+# Seguro-Desemprego (seguro-desemprego.jsf)
+# ============================================================================
+
+class SeguroDesemprego:
+    """Campos da pagina Seguro-Desemprego"""
+    JSF = "seguro-desemprego.jsf"
+
+    APURAR = "input[type='checkbox'][id$='apurar']"
+    TIPO_SOLICITACAO = "[id$='tipoSolicitacao']"  # radio PRIMEIRA/SEGUNDA/DEMAIS
+    EMPREGADO_DOMESTICO = "input[type='checkbox'][id$='empregadoDomestico']"
+    COMPOR_PRINCIPAL = "[id$='comporPrincipal']"  # radio SIM/NAO
+    QUANTIDADE_DE_PARCELAS = "[id$='quantidadeDeParcelas']"
+
+    SALVAR = "[id$='salvar']"
+
+
+# ============================================================================
+# Previdencia Privada (previdencia-privada.jsf)
+# ============================================================================
+
+class PrevidenciaPrivada:
+    """Campos da pagina Previdencia Privada"""
+    JSF = "previdencia-privada.jsf"
+
+    APURAR = "input[type='checkbox'][id$='apurar']"
+    ALIQUOTA = "[id$='aliquota']"
+
+    SALVAR = "[id$='salvar']"
+
+
+# ============================================================================
+# Pensao Alimenticia (pensao-alimenticia.jsf)
+# ============================================================================
+
+class PensaoAlimenticia:
+    """Campos da pagina Pensao Alimenticia"""
+    JSF = "pensao-alimenticia.jsf"
+
+    APURAR = "input[type='checkbox'][id$='apurar']"
+    ALIQUOTA = "[id$='aliquota']"
+    INCIDIR_SOBRE_JUROS = "input[type='checkbox'][id$='incidirSobreJuros']"
+
     SALVAR = "[id$='salvar']"
 
 
@@ -486,10 +603,18 @@ class CorrecaoJurosMulta:
     # Indice de correcao
     INDICE_CORRECAO = "select[id$='indiceCorrecao'], select[id$='indiceTrabalhista']"
 
+    # Combinar com outro indice (manual seção 21)
+    COMBINAR_COM_OUTRO = "input[type='checkbox'][id$='combinarComOutro'], input[type='checkbox'][id$='combinarIndice']"
+    SEGUNDO_INDICE = "select[id$='segundoIndice'], select[id$='outroIndice']"
+    DATA_A_PARTIR_DE = "[id$='dataAPartirDe'], [id$='dataInicioSegundoIndice']"
+
     # Juros
     TAXA_JUROS = "select[id$='taxaJuros'], select[id$='juros']"
     DATA_INICIO_TAXA_LEGAL = "[id$='dataInicioTaxaLegal'], [id$='dataMarcoTaxaLegal']"
     BASE_DE_JUROS_DAS_VERBAS = "select[id$='baseDeJurosDasVerbas']"
+
+    # Ignorar taxa negativa (manual seção 21)
+    IGNORAR_TAXA_NEGATIVA = "input[type='checkbox'][id$='ignorarTaxaNegativa']"
 
     # Multa art. 523 CPC
     APLICAR_MULTA_523 = "input[type='checkbox'][id$='aplicarMulta523']"
@@ -507,6 +632,10 @@ class CustasJudiciais:
 
     BASE_CUSTAS = "select[id$='baseCustas']"
     CUSTAS_RECLAMADO_CONHECIMENTO = "[id$='custasReclamadoConhecimento']"  # radio
+
+    # Custas Recolhidas (aba separada — manual seção 20)
+    VENCIMENTO_CUSTAS = "[id$='vencimento'], [id$='dataVencimento']"
+    VALOR_CUSTAS = "[id$='valorCustas'], [id$='valor']"
 
     SALVAR = "[id$='salvar']"
 
@@ -639,6 +768,11 @@ TODAS_PAGINAS = {
     "contribuicao_social": ContribuicaoSocial,
     "imposto_renda": ImpostoRenda,
     "honorarios": Honorarios,
+    "multas_indenizacoes": MultasIndenizacoes,
+    "salario_familia": SalarioFamilia,
+    "seguro_desemprego": SeguroDesemprego,
+    "previdencia_privada": PrevidenciaPrivada,
+    "pensao_alimenticia": PensaoAlimenticia,
     "correcao_juros_multa": CorrecaoJurosMulta,
     "custas_judiciais": CustasJudiciais,
     "liquidacao": Liquidacao,

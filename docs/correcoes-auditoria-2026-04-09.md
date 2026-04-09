@@ -31,8 +31,8 @@ Registro de todas as correções aplicadas após análise minuciosa do código.
 
 - [x] **#17** `a4j\:commandButton[id$='salvar']` seletor morto → removido
 - [x] **#18** `justica_gratuita` não required → adicionado ao `required` do schema
-- [ ] **#19** 5 páginas sem classe de seletores → será resolvido incrementalmente via DOM Auditor
-- [ ] **#20** 20+ campos do manual sem seletores → será resolvido incrementalmente via DOM Auditor
+- [x] **#19** 5 páginas sem classe de seletores → criadas: `MultasIndenizacoes`, `SalarioFamilia`, `SeguroDesemprego`, `PrevidenciaPrivada`, `PensaoAlimenticia`
+- [x] **#20** 20+ campos do manual sem seletores → adicionados em: `ParametrosCalculo` (Regime, Remunerações, Datas limite, Sábado, Comentários), `FGTS` (Base da Multa, Pensão sobre FGTS), `ImpostoRenda` (Apurar, Juros de Mora, Cobrar do Reclamado), `Honorarios` (Juros, Dados do Credor), `ContribuicaoSocial` (SIMPLES), `CorrecaoJurosMulta` (Combinar, Ignorar Negativa), `CustasJudiciais` (Custas Recolhidas)
 
 ## Arquivos modificados
 
@@ -52,4 +52,4 @@ Registro de todas as correções aplicadas após análise minuciosa do código.
 | Altos #6-#9 | CONCLUÍDO | pendente |
 | Médios #10-#16 | CONCLUÍDO | pendente |
 | Baixos #17-#18 | CONCLUÍDO | pendente |
-| Baixos #19-#20 | ADIADO (DOM Auditor) | — |
+| Baixos #19-#20 | CONCLUÍDO | pendente |
