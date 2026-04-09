@@ -967,17 +967,13 @@ class PJECalcPlaywright:
             loc.press_sequentially(digits_only, delay=80)
             self._page.wait_for_timeout(300)
 
-            # Clicar no body para tirar foco (blur natural → RichFaces atualiza hidden)
-            # Usar position fora de qualquer calendar para não abrir popup
-            try:
-                self._page.locator("h1, h2, fieldset legend, body").first.click(
-                    force=True, timeout=2000
-                )
-            except Exception:
-                try:
-                    self._page.click("body", position={"x": 5, "y": 5}, force=True)
-                except Exception:
-                    pass
+            # Tirar foco do campo para disparar blur natural → RichFaces atualiza hidden
+            # Escape fecha o popup do calendar (se abriu), depois Tab move foco
+            # para o próximo campo, disparando blur natural no campo atual.
+            # NÃO clicar no body (pode acertar logo/menu e navegar para outra página!)
+            loc.press("Escape")
+            self._page.wait_for_timeout(200)
+            loc.press("Tab")
             self._page.wait_for_timeout(500)
 
             # Verificar valores resultantes (rich:calendar ou input simples)
