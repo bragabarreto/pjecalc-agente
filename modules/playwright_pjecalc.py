@@ -941,10 +941,24 @@ class PJECalcPlaywright:
                 const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
                 if (!input) return 'NOT_FOUND';
 
-                // Setar valor no input visível
+                // 2. Desabilitar a máscara jQuery ANTES de setar o valor
+                // A máscara dateMask() intercepta blur/change e pode truncar o valor
+                try {
+                    $(input).unbind('blur.mask change.mask');
+                } catch(e) {}
+
+                // 3. Setar valor no input visível
                 input.value = dateStr;
 
-                // 2. Hidden input InputCurrentDate (é o que JSF realmente submete)
+                // 4. Disparar eventos
+                input.dispatchEvent(new Event('input', {bubbles: true}));
+                input.dispatchEvent(new Event('change', {bubbles: true}));
+                input.dispatchEvent(new Event('blur', {bubbles: true}));
+
+                // 5. APÓS eventos (máscara pode ter corrompido), forçar valor correto
+                //    no hidden field que JSF realmente submete
+                input.value = dateStr;  // re-setar visível
+
                 const hiddenCurrent = document.getElementById(
                     input.id.replace('InputDate', 'InputCurrentDate')
                 );
@@ -952,20 +966,12 @@ class PJECalcPlaywright:
                     hiddenCurrent.value = dateStr;
                 }
 
-                // 3. Hidden input base (sem sufixo) — pode ser type="hidden"
                 const baseId = input.id.replace('InputDate', '');
                 const hiddenBase = document.getElementById(baseId);
                 if (hiddenBase && hiddenBase.type === 'hidden') {
                     hiddenBase.value = dateStr;
                 }
 
-                // 4. Disparar eventos — blur via JS (não Tab!) para sincronizar JSF
-                //    sem que a máscara jQuery intercepte e trunce o valor
-                input.dispatchEvent(new Event('input', {bubbles: true}));
-                input.dispatchEvent(new Event('change', {bubbles: true}));
-                input.dispatchEvent(new Event('blur', {bubbles: true}));
-
-                // 5. Verificar se o valor persistiu (a máscara pode ter modificado)
                 return input.value;
             }""", [field_id, data])
 
@@ -983,15 +989,20 @@ class PJECalcPlaywright:
             # Verificar se o valor foi setado corretamente
             if _js_ok != data:
                 self._log(f"  ⚠ data {field_id}: JS setou '{_js_ok}' vs esperado '{data}' — re-setando hidden")
-                # Re-setar APENAS o hidden (que é o que JSF lê no submit)
-                self._page.evaluate("""([suffix, dateStr]) => {
-                    const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
-                    if (!input) return;
-                    const hid = document.getElementById(input.id.replace('InputDate', 'InputCurrentDate'));
-                    if (hid) hid.value = dateStr;
-                    // Também forçar no input visível
-                    input.value = dateStr;
-                }""", [field_id, data])
+
+            # SEMPRE re-setar os hidden fields como garantia final
+            # (a máscara ou event handlers podem ter corrompido os valores)
+            self._page.evaluate("""([suffix, dateStr]) => {
+                const input = document.querySelector('input[id$="' + suffix + 'InputDate"]');
+                if (!input) return;
+                // Forçar valor correto em TODOS os campos
+                input.value = dateStr;
+                const hid = document.getElementById(input.id.replace('InputDate', 'InputCurrentDate'));
+                if (hid) hid.value = dateStr;
+                const baseId = input.id.replace('InputDate', '');
+                const hidBase = document.getElementById(baseId);
+                if (hidBase && hidBase.type === 'hidden') hidBase.value = dateStr;
+            }""", [field_id, data])
 
             self._aguardar_ajax(timeout=2000)
             self._log(f"  ✓ data {field_id}: {data}")
