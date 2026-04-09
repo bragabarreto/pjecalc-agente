@@ -7488,14 +7488,33 @@ class PJECalcPlaywright:
                 except Exception as _e:
                     self._log(f"  ⚠ baseParaApuracao: erro — {_e}")
 
-            # Percentual ou valor informado
+            # Percentual (alíquota) ou valor informado
             if tipo_valor == "CALCULADO" and hon.get("percentual") is not None:
-                pct_str = _fmt_br(hon["percentual"] * 100)
-                self._preencher("percentualHonorarios", pct_str, False)
-                self._preencher("percentual", pct_str, False)
+                pct_val = hon["percentual"]
+                # Se percentual veio como fração (0.15), converter para %
+                if pct_val < 1:
+                    pct_val = pct_val * 100
+                pct_str = _fmt_br(pct_val)
+                # Campo correto em honorarios.xhtml é "aliquota" (id="formulario:aliquota")
+                self._preencher("aliquota", pct_str, False)
+                self._log(f"  → aliquota (percentual): {pct_str}%")
             elif tipo_valor == "INFORMADO" and hon.get("valor_informado") is not None:
                 self._preencher("valorInformado", _fmt_br(hon["valor_informado"]), False)
                 self._preencher("valorFixo", _fmt_br(hon["valor_informado"]), False)
+                # Data de vencimento (obrigatório para INFORMADO)
+                if hon.get("data_vencimento"):
+                    self._preencher_data("dataVencimento", hon["data_vencimento"], obrigatorio=False, label="Data Vencimento")
+
+            # Dados do credor (obrigatórios em honorarios.xhtml)
+            _nome_credor = hon.get("nome_credor", "") or hon.get("credor", "")
+            if _nome_credor:
+                self._preencher("nomeCredor", _nome_credor[:100], False)
+            _tipo_doc = hon.get("tipo_documento_credor", "") or hon.get("tipo_doc_credor", "")
+            if _tipo_doc:
+                self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc) or self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
+            _num_doc = hon.get("numero_documento_credor", "") or hon.get("doc_credor", "")
+            if _num_doc:
+                self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
 
             # Apurar IR
             if hon.get("apurar_ir"):
@@ -8052,43 +8071,42 @@ class PJECalcPlaywright:
         # A navegação via sidebar mantém o contexto JSF corretamente.
         _exportou = False
 
-        # Tentativa 1: Navegar via menu lateral (mantém backing beans Seam)
+        # Tentativa 1: Navegar via _clicar_menu_lateral (mantém backing beans Seam)
         try:
             self._log("  → Navegando para Exportação via menu lateral JSF…")
-            # Usar _clicar_menu_lateral para navegar (mantém backing beans)
-            # Clicar no link "Exportar" do sidebar via JS (mesmo padrão de _clicar_menu_lateral)
-            _clicou_export_menu = self._page.evaluate("""() => {
-                // Buscar link no sidebar pelo texto "Exportar"
-                const links = [...document.querySelectorAll('a')];
-                for (const a of links) {
-                    const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
-                    if (txt === 'Exportar' || txt === 'Exportação') {
-                        a.click();
-                        return true;
-                    }
-                }
-                // Buscar por ID do menu
-                const byId = document.querySelector("a[id*='menuExport']") ||
-                             document.querySelector("a[id*='menuExporta']");
-                if (byId) { byId.click(); return true; }
-                return false;
-            }""")
-
+            # Menu item ID: li_calculo_exportar (gerado por menu-pilares.xhtml)
+            _clicou_export_menu = (
+                self._clicar_menu_lateral("Exportar", obrigatorio=False)
+                or self._clicar_menu_lateral("Exportação", obrigatorio=False)
+            )
             if _clicou_export_menu:
-                self._log("  ✓ Link Exportar encontrado no menu — aguardando navegação…")
-                try:
-                    self._page.wait_for_load_state("domcontentloaded", timeout=10000)
-                except Exception:
-                    pass
-                try:
-                    self._instalar_monitor_ajax()
-                except Exception:
-                    pass
-                self._aguardar_ajax()
+                self._log("  ✓ Navegação para Exportação via menu lateral OK")
                 self._page.wait_for_timeout(1000)
                 _exportou = True
             else:
-                self._log("  ⚠ Link Exportar não encontrado no menu lateral")
+                # Fallback: buscar link por texto no sidebar via JS
+                _clicou_js = self._page.evaluate("""() => {
+                    const links = [...document.querySelectorAll('#menupainel a, .menu-item a')];
+                    for (const a of links) {
+                        const txt = (a.textContent || '').replace(/[\\s\\u00a0]+/g, ' ').trim();
+                        if (txt === 'Exportar' || txt === 'Exportação') {
+                            a.click();
+                            return true;
+                        }
+                    }
+                    return false;
+                }""")
+                if _clicou_js:
+                    self._log("  ✓ Link Exportar encontrado via JS — aguardando navegação…")
+                    try:
+                        self._page.wait_for_load_state("domcontentloaded", timeout=10000)
+                    except Exception:
+                        pass
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1000)
+                    _exportou = True
+                else:
+                    self._log("  ⚠ Link Exportar não encontrado no menu lateral")
         except Exception as _menu_err:
             self._log(f"  ⚠ Navegação via menu lateral falhou: {_menu_err}")
 
@@ -8118,32 +8136,66 @@ class PJECalcPlaywright:
         except Exception:
             pass
 
-        # Clicar botão Exportar (id="exportar" em exportacao.xhtml)
-        for sel in ["[id$='exportar']", "input[value='Exportar']",
-                    "input[id*='btnExportar']", "button:has-text('Exportar')"]:
+        # Clicar botão Exportar (a4j:commandButton id="exportar" em exportacao.xhtml)
+        # IMPORTANTE: O botão NÃO gera download diretamente. Ele dispara AJAX que:
+        #   1. Executa apresentador.exportar() no servidor
+        #   2. Seta apresentador.downloadDisponivel = true
+        #   3. Re-renderiza a página com <h:commandLink id="linkDownloadArquivo"> visível
+        #   4. JavaScript jsfcljs() auto-clica linkDownloadArquivo → dispara download
+        _btn_exportar = None
+        for sel in ["[id$='exportar']", "input[value='Exportar']"]:
             try:
                 loc_exp = self._page.locator(sel)
                 if loc_exp.count() > 0:
-                    try:
-                        with self._page.expect_download(timeout=90000) as dl_info:
-                            loc_exp.first.click()
-                        return _salvar_download(dl_info.value)
-                    except Exception as e:
-                        self._log(f"  ⚠ Exportar ({sel}): {e} — tentando próximo")
-                        # Aguardar JS auto-click em linkDownloadArquivo
-                        self._aguardar_ajax(15000)
-                        self._page.wait_for_timeout(2000)
-                        continue
+                    _btn_exportar = loc_exp.first
+                    break
             except Exception:
                 continue
 
-        # Procurar linkDownloadArquivo ou href .pjc diretamente no DOM
+        if _btn_exportar:
+            try:
+                # Estratégia 1: expect_download captura o download do JS auto-click
+                # O jsfcljs() na resposta AJAX auto-clica linkDownloadArquivo
+                self._log("  → Clicando botão Exportar (AJAX + auto-download)…")
+                with self._page.expect_download(timeout=60000) as dl_info:
+                    _btn_exportar.click()
+                    # Aguardar AJAX completar (exportar gera o arquivo no servidor)
+                    self._aguardar_ajax(timeout=30000)
+                return _salvar_download(dl_info.value)
+            except Exception as e1:
+                self._log(f"  ⚠ Auto-download não capturado: {e1}")
+                # Estratégia 2: O JS auto-click pode ter falhado.
+                # Clicar manualmente linkDownloadArquivo
+                self._page.wait_for_timeout(2000)
+                try:
+                    self._log("  → Tentando clicar linkDownloadArquivo manualmente…")
+                    with self._page.expect_download(timeout=30000) as dl_info:
+                        self._page.evaluate("""() => {
+                            const link = document.querySelector("[id$='linkDownloadArquivo']");
+                            if (link) {
+                                link.click();
+                                return true;
+                            }
+                            // Fallback: usar jsfcljs diretamente
+                            if (typeof jsfcljs === 'function') {
+                                const form = document.getElementById('formulario');
+                                if (form) {
+                                    jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
+                                    return true;
+                                }
+                            }
+                            return false;
+                        }""")
+                    return _salvar_download(dl_info.value)
+                except Exception as e2:
+                    self._log(f"  ⚠ linkDownloadArquivo também falhou: {e2}")
+
+        # Fallback: procurar links de download no DOM
         try:
             href = self._page.evaluate("""() => {
                 const links = [...document.querySelectorAll('a[href]')];
                 const pjc = links.find(a =>
                     a.href.includes('.pjc') || a.href.includes('exportar') ||
-                    a.textContent.toLowerCase().includes('exportar') ||
                     a.textContent.toLowerCase().includes('download')
                 );
                 return pjc ? pjc.href : null;
