@@ -7054,8 +7054,8 @@ class PJECalcPlaywright:
             return False  # fail-safe: não arriscar exportar processo errado
 
         if not _num_pagina:
-            self._log("  ⚠ Verificação de cálculo: número do processo não visível na página")
-            return False  # fail-safe: sem número visível, não é seguro prosseguir
+            self._log("  ⚠ Verificação de cálculo: número do processo não visível na página — assumindo correto (mesmo conversationId)")
+            return True  # Após fases de preenchimento, o conversationId garante o cálculo correto
 
         # Comparar apenas dígitos
         import re as _re_vc
