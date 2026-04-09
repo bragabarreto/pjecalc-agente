@@ -518,33 +518,52 @@ class DOMAuditor:
     def _criar_calculo(self) -> bool:
         """Create a new calculation via menu 'Novo'.
         O menu PJE-Calc usa RichFaces panelMenu que começa colapsado —
-        usamos force=True para clicar mesmo sem visibilidade.
+        usamos JavaScript para disparar onclick diretamente (A4J.AJAX.Submit).
         """
         print("[auditor] Criando novo calculo via menu 'Novo'...")
 
         # Accept any alert dialog (register BEFORE clicking)
         self._page.on("dialog", lambda d: d.accept())
 
-        # Try sidebar menu "Novo" — IDs reais do PJE-Calc
-        for sel in [
-            "li#li_calculo_novo a",         # ID real do li no menu-pilares
-            "li[id*='calculo_novo'] a",      # Fallback parcial
-            "a[id*='menuNovo']",             # Nome alternativo
-            "a:has-text('Novo')",            # Texto
-        ]:
-            loc = self._page.locator(sel)
-            if loc.count() > 0:
-                try:
-                    loc.first.click(force=True)  # force=True: menu pode estar colapsado
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(3000)
-                    break
-                except Exception as e:
-                    print(f"[auditor]   Click falhou para {sel}: {e}")
-                    continue
-        else:
-            print("[auditor] ERRO: Botao 'Novo' nao encontrado")
+        # Strategy 1: JS click via li#li_calculo_novo (reliable, works when collapsed)
+        clicked = self._page.evaluate("""() => {
+            // Try li#li_calculo_novo
+            let link = document.querySelector('li#li_calculo_novo a');
+            if (!link) link = document.querySelector("li[id*='calculo_novo'] a");
+            if (!link) {
+                // Search by text
+                const all = [...document.querySelectorAll('a')];
+                link = all.find(a => a.textContent.trim() === 'Novo');
+            }
+            if (link) {
+                link.click();
+                return true;
+            }
+            return false;
+        }""")
+
+        if not clicked:
+            # Strategy 2: Playwright force click
+            for sel in [
+                "li#li_calculo_novo a",
+                "li[id*='calculo_novo'] a",
+            ]:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    try:
+                        loc.first.click(force=True)
+                        clicked = True
+                        break
+                    except Exception as e:
+                        print(f"[auditor]   Force click falhou para {sel}: {e}")
+
+        if not clicked:
+            print("[auditor] ERRO: Botao 'Novo' nao encontrado/clicável")
             return False
+
+        # Wait for JSF navigation
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(3000)
 
         # Capture conversation ID from URL
         self._capturar_ids()
@@ -566,8 +585,8 @@ class DOMAuditor:
             self._calculo_url_base = m2.group(1)
 
     def _clicar_menu_lateral(self, texto: str) -> bool:
-        """Click a sidebar menu item by text (force=True for collapsed menu)."""
-        # Strategy 0: by li ID from menu-pilares (confirmed IDs from PJE-Calc v2.15.1)
+        """Click a sidebar menu item by text (JS click for collapsed menu)."""
+        # Strategy 0: by li ID from menu-pilares via JS click (confirmed IDs PJE-Calc v2.15.1)
         _LI_ID_MAP = {
             "Dados do Cálculo":     "calculo_dados_do_calculo",
             "Dados do Calculo":     "calculo_dados_do_calculo",
@@ -602,16 +621,17 @@ class DOMAuditor:
         }
         li_suffix = _LI_ID_MAP.get(texto)
         if li_suffix:
-            for sel in [f"li#li_{li_suffix} a", f"li[id*='{li_suffix}'] a"]:
-                loc = self._page.locator(sel)
-                if loc.count() > 0:
-                    try:
-                        loc.first.click(force=True, timeout=5000)
-                        self._aguardar_ajax()
-                        self._page.wait_for_timeout(1500)
-                        return True
-                    except Exception:
-                        pass
+            # JS click — works even when menu is collapsed (A4J onclick triggers correctly)
+            clicked = self._page.evaluate(f"""() => {{
+                let link = document.querySelector('li#li_{li_suffix} a');
+                if (!link) link = document.querySelector("li[id*='{li_suffix}'] a");
+                if (link) {{ link.click(); return true; }}
+                return false;
+            }}""")
+            if clicked:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1500)
+                return True
 
         # Strategy 1: by menu ID pattern (legacy)
         _menu_ids = {
