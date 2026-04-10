@@ -1439,12 +1439,16 @@ class PJECalcPlaywright:
             "Honorários":          ["calculo_honorarios"],
             "Custas Judiciais":    ["calculo_custas_judiciais"],
             "Correção, Juros e Multa": ["calculo_correcao_juros_e_multa"],
-            "Liquidar":            ["calculo_liquidar"],
-            "Exportar":            ["calculo_exportar"],
-            "Exportação":          ["calculo_exportar"],
-            "Imprimir":            ["calculo_imprimir"],
-            "Excluir":             ["calculo_excluir", "operacoes_excluir"],
-            "Fechar":              ["calculo_fechar", "operacoes_fechar"],
+            # Itens sob "Operações" no menu-pilares — usam enum OPERACOES_*
+            # (ver MenuItemEnum.class: OPERACOES_LIQUIDAR, OPERACOES_EXPORTAR, etc.)
+            # li IDs gerados via #{instItem.item.toString().toLowerCase()} em menu-pilares.xhtml
+            "Liquidar":            ["operacoes_liquidar", "calculo_liquidar"],
+            "Exportar":            ["operacoes_exportar", "calculo_exportar"],
+            "Exportação":          ["operacoes_exportar", "calculo_exportar"],
+            "Imprimir":            ["operacoes_imprimir_pagamento", "operacoes_imprimir", "calculo_imprimir"],
+            "Validar":             ["operacoes_validar"],
+            "Excluir":             ["operacoes_excluir", "calculo_excluir"],
+            "Fechar":              ["operacoes_fechar", "calculo_fechar"],
         }
         sel_id = _MENU_ID_MAP.get(texto)
         if sel_id:
