@@ -8506,12 +8506,24 @@ class PJECalcPlaywright:
         # ESTRATÉGIA: Dividir em duas fases. (a) Clicar exportar e esperar AJAX
         # completar. (b) Aguardar linkDownloadArquivo aparecer e disparar download
         # manualmente via jsfcljs dentro de expect_download.
+        # Seletores ESPECÍFICOS para o a4j:commandButton id="exportar" em exportacao.xhtml.
+        # CRÍTICO: NUNCA usar [id$='exportar'] sem restringir tipo — isso matcheria
+        # também `li_operacoes_exportar` da sidebar (que termina em "exportar" e está
+        # visível), fazendo o click cair no menu lateral e NÃO gerar POST do botão.
+        # O commandButton é renderizado como <input type="submit" class="botao" id="formulario:exportar"/>.
         _btn_exportar = None
-        for sel in ["[id$='exportar']:visible", "[id$='exportar']", "input[value='Exportar']"]:
+        for sel in [
+            "input[type='submit'][id$=':exportar']",
+            "input[type='button'][id$=':exportar']",
+            "input[id$=':exportar'][value='Exportar']",
+            "input.botao[value='Exportar']",
+            "input[value='Exportar'][type='submit']",
+        ]:
             try:
                 loc_exp = self._page.locator(sel)
                 if loc_exp.count() > 0:
                     _btn_exportar = loc_exp.first
+                    self._log(f"  → Botão Exportar localizado via: {sel}")
                     break
             except Exception:
                 continue
