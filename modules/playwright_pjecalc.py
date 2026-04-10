@@ -8194,24 +8194,114 @@ class PJECalcPlaywright:
         except Exception as _nav_err:
             self._log(f"  ⚠ Navegação intermediária falhou: {_nav_err}")
 
-        # Etapa 2: clicar no menu Exportar — dispara iniciar() que seta nome
+        # Etapa 2: disparar iniciar() do apresentadorExportacao via JS form POST.
+        #
+        # ESTRATÉGIA NOVA (descoberta v7):
+        # Clicar via `li#li_operacoes_exportar a` cai em principal.jsf mesmo com
+        # li correto. Motivo: o <a4j:commandLink> em menu-pilares.xhtml pode estar
+        # envolto em um <ul> que faz slideToggle (display:none quando o bloco de
+        # operações está fechado), tornando o link inacessível/ocultado e o
+        # click recai em algum handler genérico. Além disso, mesmo se clicar, o
+        # end-conversation do Seam destrói a conversação e a redirect leva para
+        # principal (porque gerenciadorDeMenus.menuItemAberto perde o cálculo).
+        #
+        # SOLUÇÃO: (a) instalar dialog handler p/ aceitar confirm/alert;
+        # (b) inspecionar o DOM e expandir o bloco "Operações" se estiver recolhido;
+        # (c) executar o `onclick` do <a> diretamente via JS, que invoca
+        # A4J.AJAX.Submit corretamente com o conversationId atual.
         try:
-            self._log("  → Clicando menu lateral 'Exportar' (dispara iniciar)…")
-            _clicou_export_menu = (
-                self._clicar_menu_lateral("Exportar", obrigatorio=False)
-                or self._clicar_menu_lateral("Exportação", obrigatorio=False)
-            )
-            if _clicou_export_menu:
-                self._aguardar_ajax(timeout=20000)
-                self._page.wait_for_timeout(2000)
-                _url_pos = self._page.url
-                if "exportacao" in _url_pos:
-                    self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
-                    _exportou = True
-                else:
-                    self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
+            # Handler de dialog: aceita tudo (confirm/alert do menu)
+            try:
+                self._page.on("dialog", lambda d: d.accept())
+            except Exception:
+                pass
+
+            self._log("  → Diagnóstico DOM do menu lateral…")
+            _diag_menu = self._page.evaluate("""() => {
+                const result = {lis: [], hrefs: [], onclicks: []};
+                const allLis = [...document.querySelectorAll('li[id^="li_operacoes"], li[id^="li_calculo_exportar"]')];
+                for (const li of allLis) {
+                    const a = li.querySelector('a');
+                    result.lis.push({
+                        id: li.id,
+                        visible: li.offsetParent !== null,
+                        display: getComputedStyle(li).display,
+                        aId: a ? a.id : null,
+                        aHref: a ? a.href : null,
+                        aOnclick: a ? (a.getAttribute('onclick') || '').slice(0, 200) : null,
+                    });
+                }
+                // Também pegar o UL pai do li_operacoes_exportar
+                const liExp = document.getElementById('li_operacoes_exportar');
+                if (liExp) {
+                    const parentUl = liExp.closest('ul');
+                    if (parentUl) {
+                        result.parentUl = {
+                            display: getComputedStyle(parentUl).display,
+                            visible: parentUl.offsetParent !== null,
+                        };
+                    }
+                    // Header "Operações" (li.header antes do menu-item)
+                    let prev = liExp.closest('li.menu-item');
+                    if (prev) prev = prev.previousElementSibling;
+                    if (prev && prev.classList.contains('header')) {
+                        result.header = {text: prev.textContent.trim(), classes: prev.className};
+                    }
+                }
+                return result;
+            }""")
+            self._log(f"  → DOM menu: {_diag_menu}")
+
+            # Se o bloco Operações está recolhido, expandir via clique no header
+            try:
+                _expandiu = self._page.evaluate("""() => {
+                    const liExp = document.getElementById('li_operacoes_exportar');
+                    if (!liExp) return 'sem_li';
+                    const ul = liExp.closest('ul');
+                    if (ul && getComputedStyle(ul).display === 'none') {
+                        // Encontrar o header (.header) que controla este ul
+                        const menuItemLi = liExp.closest('li.menu-item');
+                        if (menuItemLi) {
+                            const header = menuItemLi.previousElementSibling;
+                            if (header && header.classList.contains('header')) {
+                                header.click();
+                                return 'clicked_header';
+                            }
+                        }
+                    }
+                    return 'ja_aberto';
+                }""")
+                self._log(f"  → Expansão Operações: {_expandiu}")
+                self._page.wait_for_timeout(600)
+            except Exception as _exp_err:
+                self._log(f"  ⚠ Expansão falhou: {_exp_err}")
+
+            # Agora disparar o onclick do <a> dentro de li#li_operacoes_exportar
+            self._log("  → Disparando onclick do <a> de operacoes_exportar…")
+            _click_result = self._page.evaluate("""() => {
+                const li = document.getElementById('li_operacoes_exportar');
+                if (!li) return 'sem_li';
+                const a = li.querySelector('a');
+                if (!a) return 'sem_a';
+                // Preferir chamar o onclick (A4J.AJAX.Submit) diretamente
+                try {
+                    if (typeof a.onclick === 'function') {
+                        a.onclick.call(a, new Event('click'));
+                        return 'onclick_chamado';
+                    }
+                } catch (e) { /* fallback */ }
+                a.click();
+                return 'click_chamado';
+            }""")
+            self._log(f"  → Click via JS: {_click_result}")
+            self._aguardar_ajax(timeout=25000)
+            self._page.wait_for_timeout(2500)
+            _url_pos = self._page.url
+            if "exportacao" in _url_pos:
+                self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
+                _exportou = True
             else:
-                self._log("  ⚠ Link Exportar não encontrado no menu lateral")
+                self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
         except Exception as _menu_err:
             self._log(f"  ⚠ Clique no menu Exportar falhou: {_menu_err}")
 
