@@ -8153,32 +8153,73 @@ class PJECalcPlaywright:
         self._log("  ✓ Liquidação AJAX concluída — navegando para Exportação…")
 
         # ── Passo 2: Exportação → capturar .PJC ──────────────────────────────────
-        # ESTRATÉGIA: Após liquidação, extrair conversationId da URL atual e
-        # navegar direto para exportacao.jsf com esse ID. O menu lateral JSF
-        # frequentemente retorna HTTP 500 após liquidação bem-sucedida porque o
-        # form de liquidacao.jsf está em estado de pós-submit.
+        # DESCOBERTA CRÍTICA (análise de ApresentadorExportacao.class):
+        # - @Scope(ScopeType.SESSION), bean name "apresentadorExportacao"
+        # - Método iniciar() está anotado com @Menu(OPERACOES_EXPORTAR)
+        # - iniciar() chama servicoDeCalculo.obterCalculoAberto() +
+        #   Exportador.gerarNomeDoArquivo(calculo) → seta o campo `nome`
+        # - iniciar() é chamado APENAS via o menu lateral (gerenciadorDeMenus)
+        # - Goto direto para exportacao.jsf NÃO dispara iniciar() → nome="" →
+        #   exportar() falha silenciosamente e linkDownloadArquivo nunca aparece.
+        #
+        # ESTRATÉGIA: Navegar para uma página "neutra" primeiro (Dados do Cálculo)
+        # para sair do form de liquidacao.jsf que causa HTTP 500. Depois clicar
+        # no menu lateral Exportar, que dispara iniciar() e popula nome.
         _exportou = False
-        _conv_id_live = None
+
+        # Log do conversationId atual (para diagnóstico)
         try:
             import re as _re
             _m = _re.search(r"conversationId=(\d+)", self._page.url)
             if _m:
                 _conv_id_live = _m.group(1)
-                self._log(f"  → conversationId ativo (URL pós-liquidação): {_conv_id_live}")
-                # Atualizar armazenado para coerência de logs futuros
                 self._calculo_conversation_id = _conv_id_live
+                self._log(f"  → conversationId ativo: {_conv_id_live}")
         except Exception:
             pass
 
-        # Tentativa 1: goto direto com conversationId LIVE (mais confiável)
-        if _conv_id_live and self._calculo_url_base:
-            _exp_url_live = (
+        # Etapa 1: sair da liquidacao.jsf navegando para Dados do Cálculo.
+        # Isso evita HTTP 500 que ocorre ao submeter menu Exportar de dentro
+        # do form pós-liquidação.
+        try:
+            self._log("  → Saindo de liquidacao.jsf via menu 'Dados do Cálculo'…")
+            if self._clicar_menu_lateral("Dados do Cálculo", obrigatorio=False):
+                self._aguardar_ajax(timeout=15000)
+                self._page.wait_for_timeout(1500)
+                self._log(f"  ✓ Agora em: {self._page.url}")
+        except Exception as _nav_err:
+            self._log(f"  ⚠ Navegação intermediária falhou: {_nav_err}")
+
+        # Etapa 2: clicar no menu Exportar — dispara iniciar() que seta nome
+        try:
+            self._log("  → Clicando menu lateral 'Exportar' (dispara iniciar)…")
+            _clicou_export_menu = (
+                self._clicar_menu_lateral("Exportar", obrigatorio=False)
+                or self._clicar_menu_lateral("Exportação", obrigatorio=False)
+            )
+            if _clicou_export_menu:
+                self._aguardar_ajax(timeout=20000)
+                self._page.wait_for_timeout(2000)
+                _url_pos = self._page.url
+                if "exportacao" in _url_pos:
+                    self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
+                    _exportou = True
+                else:
+                    self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
+            else:
+                self._log("  ⚠ Link Exportar não encontrado no menu lateral")
+        except Exception as _menu_err:
+            self._log(f"  ⚠ Clique no menu Exportar falhou: {_menu_err}")
+
+        # Fallback: goto direto (iniciar NÃO vai rodar, mas tentamos mesmo assim)
+        if not _exportou and self._calculo_conversation_id and self._calculo_url_base:
+            _exp_url = (
                 f"{self._calculo_url_base}exportacao.jsf"
-                f"?conversationId={_conv_id_live}"
+                f"?conversationId={self._calculo_conversation_id}"
             )
             try:
-                self._log(f"  → Navegando direto para Exportação: {_exp_url_live}")
-                self._page.goto(_exp_url_live, wait_until="domcontentloaded", timeout=15000)
+                self._log(f"  → Fallback: goto direto {_exp_url}")
+                self._page.goto(_exp_url, wait_until="domcontentloaded", timeout=15000)
                 try:
                     self._instalar_monitor_ajax()
                 except Exception:
@@ -8186,32 +8227,10 @@ class PJECalcPlaywright:
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
                 if "exportacao" in self._page.url:
-                    self._log(f"  ✓ Navegação direta OK: {self._page.url}")
                     _exportou = True
-                else:
-                    self._log(f"  ⚠ goto não ficou em exportacao: {self._page.url}")
+                    self._log(f"  ✓ Goto OK (mas iniciar() provavelmente não rodou): {self._page.url}")
             except Exception as _goto_err:
                 self._log(f"  ⚠ goto direto falhou: {_goto_err}")
-
-        # Tentativa 2 (fallback): menu lateral (apenas se goto falhou)
-        if not _exportou:
-            try:
-                self._log("  → Fallback: menu lateral JSF…")
-                _clicou_export_menu = (
-                    self._clicar_menu_lateral("Exportar", obrigatorio=False)
-                    or self._clicar_menu_lateral("Exportação", obrigatorio=False)
-                )
-                if _clicou_export_menu:
-                    self._aguardar_ajax(timeout=15000)
-                    self._page.wait_for_timeout(1000)
-                    _url_pos = self._page.url
-                    if "exportacao" in _url_pos:
-                        self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
-                        _exportou = True
-                    else:
-                        self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
-            except Exception as _menu_err:
-                self._log(f"  ⚠ Navegação via menu lateral falhou: {_menu_err}")
 
         # Debug: capturar estado da página de exportação
         try:
