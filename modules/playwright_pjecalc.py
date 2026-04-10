@@ -5606,6 +5606,43 @@ class PJECalcPlaywright:
                     except Exception as _e_sub:
                         self._log(f"  ⚠ sub_base_calculo: {_e_sub}")
 
+                    # Etapa 3 (HISTORICO_SALARIAL apenas): clicar 'incluirBaseHistorico'
+                    # para adicionar o histórico selecionado à lista
+                    # historicosSalariaisDaVerbaParaValorDevido. Sem este clique,
+                    # Salvar falha com "Campo obrigatório: Histórico Salarial
+                    # [id=baseHistoricos]" (validação do apresentador).
+                    # Confirmado via verba-calculo.xhtml linha 558:
+                    #   actionListener="#{apresentador.adicionarHistoricoSalarialDaVerba}"
+                    if _base_enum_val == "HISTORICO_SALARIAL":
+                        try:
+                            _incluir_res = self._page.evaluate(
+                                """() => {
+                                    // Procurar commandLink 'incluirBaseHistorico' visível
+                                    const links = [...document.querySelectorAll(
+                                        'a[id$="incluirBaseHistorico"], a[id*="incluirBaseHistorico"]'
+                                    )];
+                                    for (const a of links) {
+                                        const r = a.getBoundingClientRect();
+                                        if (r.width > 0 && r.height > 0) {
+                                            a.click();
+                                            return a.id || 'incluirBaseHistorico';
+                                        }
+                                    }
+                                    return null;
+                                }"""
+                            )
+                            if _incluir_res:
+                                self._aguardar_ajax()
+                                self._page.wait_for_timeout(500)
+                                self._log(f"  ✓ Histórico Salarial adicionado à base (click {_incluir_res})")
+                            else:
+                                self._log(
+                                    "  ⚠ incluirBaseHistorico não encontrado — "
+                                    "verba pode falhar ao salvar com 'Campo obrigatório: Histórico Salarial'"
+                                )
+                        except Exception as _e_inc:
+                            self._log(f"  ⚠ incluirBaseHistorico: {_e_inc}")
+
             if v.get("valor_informado"):
                 # formulario:valor (radio CALCULADO/INFORMADO) — confirmado DOM v2.15.1
                 _val_ok = self._preencher_radio_ou_select("valor", "INFORMADO", obrigatorio=False)
