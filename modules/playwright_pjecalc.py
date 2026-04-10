@@ -5779,34 +5779,50 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(600)
 
-            # Verificar se o salvamento gerou erro (HTTP 500 / mensagem de erro JSF)
-            try:
-                _erro_msgs = self._page.evaluate("""() => {
-                    const erros = [...document.querySelectorAll(
-                        '.rf-msgs-err, .rich-messages-marker, .rf-msg-err, ' +
-                        '[class*="error"], [class*="Error"], [class*="erro"]'
-                    )].map(e => e.textContent.trim()).filter(Boolean);
-                    // Verificar também se a página retornou erro HTTP
-                    if (document.title && document.title.match(/500|erro|error/i)) {
-                        erros.push('Página de erro HTTP: ' + document.title);
-                    }
-                    return erros;
-                }""")
-                if _erro_msgs:
-                    self._log(f"  ⚠ Verba '{nome}': ERRO ao salvar — {'; '.join(_erro_msgs[:3])}")
-                    _salvou = False
-                    # Detectar campos específicos com erro para diagnóstico
-                    _erros_det = self._detectar_erros_formulario(f"Verba Manual '{nome}'")
-                    # Tentar corrigir e re-salvar UMA vez
-                    if _erros_det:
-                        _corrigiu = self._tentar_corrigir_erros(_erros_det, v, f"Verba Manual '{nome}'")
-                        if _corrigiu:
-                            _salvou = self._clicar_salvar()
-                            self._aguardar_ajax()
-                            if _salvou:
-                                self._log(f"  ✓ Verba '{nome}': salvou após correção automática")
-            except Exception:
-                pass
+            # Segundo check de erros — SOMENTE quando _clicar_salvar() retornou False.
+            # _clicar_salvar() já faz polling por ~10s diferenciando sucesso vs erro
+            # através dos textos 'sucesso'/'realizada' vs 'erro'/'falha'/'formulário'.
+            # Se retornou True, confiamos nesse resultado — o seletor genérico
+            # [class*="error"]/[class*="erro"] produz falsos positivos ao casar com
+            # containers estruturais do RichFaces (rich-messages-marker, etc.)
+            # que envolvem mensagens de SUCESSO também, gerando "ERRO ao salvar — Sucesso."
+            if not _salvou:
+                try:
+                    _erro_msgs = self._page.evaluate("""() => {
+                        // Filtrar apenas mensagens de erro REAIS (com texto erro/falha/obrigatório)
+                        const erros = [...document.querySelectorAll(
+                            '.rf-msgs-err, .rf-msg-err, ' +
+                            '[class*="error"], [class*="Error"], [class*="erro"]'
+                        )].map(e => (e.textContent || '').trim()).filter(t => {
+                            if (!t) return false;
+                            const low = t.toLowerCase();
+                            // rejeita containers que envolvem mensagens de sucesso
+                            if (low.includes('sucesso') || low.includes('realizada')
+                                || low.includes('salvo com')) return false;
+                            return low.includes('erro') || low.includes('falha')
+                                || low.includes('obrigat') || low.includes('inválid')
+                                || low.includes('invalid') || low.includes('não pôde')
+                                || low.includes('não pode') || low.includes('formulário');
+                        });
+                        if (document.title && document.title.match(/500|erro|error/i)) {
+                            erros.push('Página de erro HTTP: ' + document.title);
+                        }
+                        return erros;
+                    }""")
+                    if _erro_msgs:
+                        self._log(f"  ⚠ Verba '{nome}': ERRO ao salvar — {'; '.join(_erro_msgs[:3])}")
+                        # Detectar campos específicos com erro para diagnóstico
+                        _erros_det = self._detectar_erros_formulario(f"Verba Manual '{nome}'")
+                        # Tentar corrigir e re-salvar UMA vez
+                        if _erros_det:
+                            _corrigiu = self._tentar_corrigir_erros(_erros_det, v, f"Verba Manual '{nome}'")
+                            if _corrigiu:
+                                _salvou = self._clicar_salvar()
+                                self._aguardar_ajax()
+                                if _salvou:
+                                    self._log(f"  ✓ Verba '{nome}': salvou após correção automática")
+                except Exception:
+                    pass
 
             # Após salvar, atualizar conversationId (pode ter mudado) e voltar para listagem
             self._capturar_base_calculo()
