@@ -1076,11 +1076,42 @@ class PJECalcPlaywright:
                     return False
             except Exception:
                 pass
-            # Tenta por label primeiro (mais estável), depois por value
+            # Tenta por value primeiro, depois por label (ambos com timeout curto
+            # para evitar 60s de espera quando a opção simplesmente não existe)
+            _selected = False
             try:
-                loc.select_option(label=valor)
+                loc.select_option(value=valor, timeout=3000)
+                _selected = True
             except Exception:
-                loc.select_option(value=valor)
+                pass
+            if not _selected:
+                try:
+                    loc.select_option(label=valor, timeout=3000)
+                    _selected = True
+                except Exception:
+                    pass
+            if not _selected:
+                # Última tentativa: JS direto com fuzzy match em value e text
+                _js_ok = self._page.evaluate(
+                    """([suffix, val]) => {
+                        const sel = [...document.querySelectorAll('select')]
+                            .find(s => s.id && s.id.endsWith(suffix));
+                        if (!sel) return false;
+                        const n = s => (s || '').toString().trim().toLowerCase();
+                        const target = n(val);
+                        for (const opt of sel.options) {
+                            if (n(opt.value) === target || n(opt.text) === target) {
+                                sel.value = opt.value;
+                                sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                return true;
+                            }
+                        }
+                        return false;
+                    }""",
+                    [field_id, valor],
+                )
+                if not _js_ok:
+                    raise Exception(f"opção '{valor}' não encontrada no select")
             loc.dispatch_event("change")
             self._aguardar_ajax()
             self._log(f"  ✓ select {field_id}: {valor}")
@@ -8122,63 +8153,65 @@ class PJECalcPlaywright:
         self._log("  ✓ Liquidação AJAX concluída — navegando para Exportação…")
 
         # ── Passo 2: Exportação → capturar .PJC ──────────────────────────────────
-        # ESTRATÉGIA: Navegar via menu lateral JSF (não via page.goto direto).
-        # O goto direto para exportacao.jsf perde o backing bean "calculoAberto"
-        # na sessão Seam, causando NPE em ServicoDeCalculo.exportarCalculo().
-        # A navegação via sidebar mantém o contexto JSF corretamente.
+        # ESTRATÉGIA: Após liquidação, extrair conversationId da URL atual e
+        # navegar direto para exportacao.jsf com esse ID. O menu lateral JSF
+        # frequentemente retorna HTTP 500 após liquidação bem-sucedida porque o
+        # form de liquidacao.jsf está em estado de pós-submit.
         _exportou = False
-
-        # Tentativa 1: Navegar via _clicar_menu_lateral (mantém backing beans Seam)
+        _conv_id_live = None
         try:
-            self._log("  → Navegando para Exportação via menu lateral JSF…")
-            _clicou_export_menu = (
-                self._clicar_menu_lateral("Exportar", obrigatorio=False)
-                or self._clicar_menu_lateral("Exportação", obrigatorio=False)
-            )
-            if _clicou_export_menu:
-                self._aguardar_ajax(timeout=15000)
-                self._page.wait_for_timeout(1000)
-                # Verificar se realmente navegou para exportacao.jsf
-                _url_pos = self._page.url
-                if "exportacao" in _url_pos:
-                    self._log(f"  ✓ Navegação para Exportação OK: {_url_pos}")
-                    _exportou = True
-                else:
-                    self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos} — tentando goto")
-            else:
-                self._log("  ⚠ Link Exportar não encontrado no menu lateral")
-        except Exception as _menu_err:
-            self._log(f"  ⚠ Navegação via menu lateral falhou: {_menu_err}")
+            import re as _re
+            _m = _re.search(r"conversationId=(\d+)", self._page.url)
+            if _m:
+                _conv_id_live = _m.group(1)
+                self._log(f"  → conversationId ativo (URL pós-liquidação): {_conv_id_live}")
+                # Atualizar armazenado para coerência de logs futuros
+                self._calculo_conversation_id = _conv_id_live
+        except Exception:
+            pass
 
-        # Tentativa 2 (fallback): goto direto com conversationId
-        # Extrair conversationId da URL atual se não tiver salvo
-        if not _exportou:
-            _conv_id = self._calculo_conversation_id
-            if not _conv_id:
-                try:
-                    import re as _re
-                    _m = _re.search(r"conversationId=(\d+)", self._page.url)
-                    if _m:
-                        _conv_id = _m.group(1)
-                except Exception:
-                    pass
-        if not _exportou and self._calculo_url_base and _conv_id:
-            _exp_url = (
+        # Tentativa 1: goto direto com conversationId LIVE (mais confiável)
+        if _conv_id_live and self._calculo_url_base:
+            _exp_url_live = (
                 f"{self._calculo_url_base}exportacao.jsf"
-                f"?conversationId={_conv_id}"
+                f"?conversationId={_conv_id_live}"
             )
             try:
-                self._log(f"  → Fallback: goto direto {_exp_url}")
-                self._page.goto(_exp_url, wait_until="domcontentloaded", timeout=15000)
+                self._log(f"  → Navegando direto para Exportação: {_exp_url_live}")
+                self._page.goto(_exp_url_live, wait_until="domcontentloaded", timeout=15000)
                 try:
                     self._instalar_monitor_ajax()
                 except Exception:
                     pass
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(1000)
-                _exportou = True
-            except Exception as e:
-                self._log(f"  ⚠ Navegação exportacao.jsf: {e}")
+                if "exportacao" in self._page.url:
+                    self._log(f"  ✓ Navegação direta OK: {self._page.url}")
+                    _exportou = True
+                else:
+                    self._log(f"  ⚠ goto não ficou em exportacao: {self._page.url}")
+            except Exception as _goto_err:
+                self._log(f"  ⚠ goto direto falhou: {_goto_err}")
+
+        # Tentativa 2 (fallback): menu lateral (apenas se goto falhou)
+        if not _exportou:
+            try:
+                self._log("  → Fallback: menu lateral JSF…")
+                _clicou_export_menu = (
+                    self._clicar_menu_lateral("Exportar", obrigatorio=False)
+                    or self._clicar_menu_lateral("Exportação", obrigatorio=False)
+                )
+                if _clicou_export_menu:
+                    self._aguardar_ajax(timeout=15000)
+                    self._page.wait_for_timeout(1000)
+                    _url_pos = self._page.url
+                    if "exportacao" in _url_pos:
+                        self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
+                        _exportou = True
+                    else:
+                        self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
+            except Exception as _menu_err:
+                self._log(f"  ⚠ Navegação via menu lateral falhou: {_menu_err}")
 
         # Debug: capturar estado da página de exportação
         try:
