@@ -1184,6 +1184,10 @@ class PJECalcPlaywright:
                 loc = self._page.locator(sel)
                 if loc.count() > 0:
                     loc.first.click()
+                    # Aguardar AJAX a4j:support (evita LockTimeoutException no
+                    # @Synchronized apresentadorVerbaDeCalculo causada por
+                    # pipelining de requests consecutivos).
+                    self._aguardar_ajax()
                     self._log(f"  ✓ radio {field_id}: {valor}")
                     return True
             except Exception:
@@ -1230,6 +1234,8 @@ class PJECalcPlaywright:
                 for _try_label in _labels_to_try:
                     if _label_norm == _norm(_try_label) or _label_norm.startswith(_norm(_try_label)):
                         _r.click()
+                        # Aguardar AJAX a4j:support (mesmo motivo acima).
+                        self._aguardar_ajax()
                         self._log(f"  ✓ radio {field_id}: {valor} (label='{_label_text}')")
                         return True
         except Exception:
