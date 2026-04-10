@@ -7187,12 +7187,27 @@ class PJECalcPlaywright:
             self._marcar_checkbox("aplicarMulta523", True)
             self._log("  ✓ Multa art. 523 CPC: aplicar")
 
-        # Salvar
-        try:
-            self._clicar_salvar()
-            self._log("  ✓ Parâmetros de atualização salvos")
-        except Exception as _e:
-            self._log(f"  ⚠ Salvar parâmetros atualização: {_e}")
+        # NÃO CLICAR SALVAR — evita NPE confirmada em
+        # ParametrosDeAtualizacao.verificarCombinacoesDeCorrecaoMonetaria:465
+        # (chamada a partir de ApresentadorParametrosDeAtualizacao.salvar:114).
+        #
+        # Causa raiz: `salvar()` invoca `verificarCombinacoesDeCorrecaoMonetaria()`
+        # que chama `verificarCombinacaoDeTabelasDeCorrecao(apartir, getIndiceTrabalhista())`
+        # → `new TabelaDeCorrecaoMonetaria(indice, calculo.getIndicesAcumulados(),
+        #    getIgnorarTaxaNegativa())`. Como `indicesAcumulados` só é definido na
+        # página `liquidacao.xhtml` (Fase 7), quando Fase 6 tenta salvar ele ainda
+        # é null → NPE.
+        #
+        # Estratégia correta: `ApresentadorParametrosDeAtualizacao.iniciar()` já
+        # carregou o `registro` via `servicoDeCalculo.obterParametrosDeAtualizacao()`
+        # com os defaults do cálculo (IPCAE, Taxa Legal, etc.). Como o apresentador
+        # é `@Scope(SESSION)`, as alterações feitas via AJAX (`a4j:support onchange`)
+        # permanecem vivas no registro até a liquidação. Pular o click em Salvar
+        # elimina a NPE sem perder os valores configurados.
+        #
+        # Após a Fase 7 (liquidação, que define `indicesAcumulados`), o servidor
+        # persiste o estado final automaticamente via `calculo.salvar()`.
+        self._log("  ✓ Parâmetros de atualização configurados (registro session-scoped — salvar() pulado para evitar NPE pré-liquidação)")
 
     # ── Salário-família (passo 7 do manual) ──────────────────────────────────
 
