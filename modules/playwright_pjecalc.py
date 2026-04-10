@@ -3178,16 +3178,35 @@ class PJECalcPlaywright:
 
         # Aviso prévio — ID confirmado: formulario:apuracaoPrazoDoAvisoPrevio
         # Values: NAO_APURAR, APURACAO_CALCULADA, APURACAO_INFORMADA
+        # Manual seção 5.3:
+        #   - Nao Apurar:  mantém 30 dias padrão (sem campo Quantidade)
+        #   - Calculado:   Lei 12.506/2011 (30 + 3/ano, máx 90) — seguro como default
+        #   - Informado:   EXIGE campo prazoAvisoInformado com qtd de dias (obrigatório)
+        # Se tipo=Informado mas prazo_dias não veio da extração, cair para "Calculado"
+        # (evita erro "Campo obrigatório: Quantidade" no Salvar).
         _ap_map = {
             "Calculado": "APURACAO_CALCULADA",
             "Informado": "APURACAO_INFORMADA",
             "Nao Apurar": "NAO_APURAR",
             "nao_apurar": "NAO_APURAR",
         }
-        _ap_val = _ap_map.get(ap.get("tipo", "Calculado"), "APURACAO_CALCULADA")
+        _ap_tipo = ap.get("tipo", "Calculado")
+        _ap_prazo_dias = ap.get("prazo_dias")
+        if _ap_tipo == "Informado" and not _ap_prazo_dias:
+            self._log(
+                "  ⚠ Aviso prévio tipo=Informado sem prazo_dias — caindo para Calculado (Lei 12.506/2011)"
+            )
+            _ap_tipo = "Calculado"
+        _ap_val = _ap_map.get(_ap_tipo, "APURACAO_CALCULADA")
         self._selecionar("apuracaoPrazoDoAvisoPrevio", _ap_val, obrigatorio=False)
-        if ap.get("prazo_dias"):
-            self._preencher("diasAvisoPrevio", str(int(ap["prazo_dias"])), False)
+        # onchange reRender="painelPrazoAvisoInformado" — aguardar AJAX antes de
+        # preencher prazoAvisoInformado (painel só é renderizado quando valor='I').
+        if _ap_val == "APURACAO_INFORMADA":
+            self._aguardar_ajax()
+            # Campo obrigatório quando tipo=Informado. Fallback: 30 dias.
+            _dias = int(_ap_prazo_dias) if _ap_prazo_dias else 30
+            self._preencher("prazoAvisoInformado", str(_dias), False)
+            self._log(f"  ✓ prazoAvisoInformado: {_dias} dias")
 
         # Prescrição
         if presc.get("quinquenal") is not None:
@@ -5463,19 +5482,43 @@ class PJECalcPlaywright:
 
             # ── Ocorrência de pagamento (RADIO, ID confirmado DOM v2.15.1: formulario:ocorrenciaPagto) ──
             # Valores: DESLIGAMENTO / DEZEMBRO / MENSAL / PERIODO_AQUISITIVO
+            #
+            # IMPORTANTE: setCaracteristica() na classe VerbaDeCalculoVO já chama
+            # setOcorrenciaDePagamento(carac.getOcorrenciaDePagamento()) automaticamente:
+            #   COMUM → MENSAL
+            #   DECIMO_TERCEIRO_SALARIO → DEZEMBRO
+            #   AVISO_PREVIO → DESLIGAMENTO
+            #   FERIAS → PERIODO_AQUISITIVO
+            #
+            # Portanto, só devemos clicar explicitamente em ocorrenciaPagto quando
+            # o valor desejado DIFERIR do default da característica. Clicar
+            # redundantemente causa NPE em LegendaDaFormula.getBase via reRender
+            # painelLabelFormula (base ainda não foi definida).
+            _carac_default_ocorr = {
+                "COMUM": "MENSAL",
+                "DECIMO_TERCEIRO_SALARIO": "DEZEMBRO",
+                "AVISO_PREVIO": "DESLIGAMENTO",
+                "FERIAS": "PERIODO_AQUISITIVO",
+            }.get(carac_enum, "MENSAL")
             ocorr_label = v.get("ocorrencia", "Mensal")
-            ocorr_enum = ocorr_map.get(_norm_key(ocorr_label), "MENSAL")
-            _ocorr_ok = any(
-                self._preencher_radio_ou_select(fid, ocorr_enum, obrigatorio=False)
-                for fid in ["ocorrenciaPagto", "ocorrencia", "ocorrenciaDePagamento", "periodicidade"]
-            )
-            if not _ocorr_ok:
-                _ocorr_ok = _setar_campo_por_valor(ocorr_enum, "ocorrencia")
-                if _ocorr_ok:
-                    self._aguardar_ajax()
-                    self._log(f"  ✓ ocorrencia: {ocorr_enum} (via fallback por valor)")
-            if not _ocorr_ok:
-                self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' ({ocorr_enum}) NÃO preenchida — pode causar erro na liquidação")
+            ocorr_enum = ocorr_map.get(_norm_key(ocorr_label), _carac_default_ocorr)
+            if ocorr_enum == _carac_default_ocorr:
+                self._log(
+                    f"  ↳ ocorrencia {ocorr_enum} já definida por setCaracteristica({carac_enum}) — "
+                    "skip click (evita NPE LegendaDaFormula.getBase)"
+                )
+            else:
+                _ocorr_ok = any(
+                    self._preencher_radio_ou_select(fid, ocorr_enum, obrigatorio=False)
+                    for fid in ["ocorrenciaPagto", "ocorrencia", "ocorrenciaDePagamento", "periodicidade"]
+                )
+                if not _ocorr_ok:
+                    _ocorr_ok = _setar_campo_por_valor(ocorr_enum, "ocorrencia")
+                    if _ocorr_ok:
+                        self._aguardar_ajax()
+                        self._log(f"  ✓ ocorrencia: {ocorr_enum} (via fallback por valor)")
+                if not _ocorr_ok:
+                    self._log(f"  ⚠ Verba '{nome}': ocorrência '{ocorr_label}' ({ocorr_enum}) NÃO preenchida — pode causar erro na liquidação")
 
             # ── Base de Cálculo em 2 etapas (confirmado por vídeo + manual seção 9.2) ──
             # Etapa 1: Selecionar "Bases Cadastradas" (tipoDaBaseTabelada)
