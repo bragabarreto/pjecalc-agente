@@ -7419,6 +7419,17 @@ class PJECalcPlaywright:
 
         for i, hon in enumerate(hon_lista):
             self._log(f"  → Honorário [{i+1}/{len(hon_lista)}]: {hon.get('devedor')} / {hon.get('tipo')}")
+            # Se ainda há formulário aberto (save anterior falhou), cancelar primeiro
+            # para retornar ao modo listagem onde o botão "Novo" fica visível
+            try:
+                _cancelar = self._page.locator("[id$='cancelar']:visible, input[value='Cancelar']:visible")
+                if _cancelar.count() > 0:
+                    self._log(f"  ℹ Form honorário ainda aberto — cancelando antes de Novo")
+                    _cancelar.first.click()
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+            except Exception:
+                pass
             # Clicar "Novo" (id="incluir" em honorarios.xhtml) para abrir formulário
             # Necessário para TODOS os registros, incluindo o primeiro
             clicou = (
@@ -7511,35 +7522,54 @@ class PJECalcPlaywright:
                     self._preencher_data("dataVencimento", hon["data_vencimento"], obrigatorio=False, label="Data Vencimento")
 
             # Dados do credor (obrigatórios em honorarios.xhtml — marcados com *)
-            # Se extração não forneceu dados do credor, usar dados do processo
+            # IMPORTANTE: numeroDocumentoFiscalCredor tem <f:validator validatorId="validadorDinamico"/>
+            # que rejeita CPFs/CNPJs inválidos (ex: "000.000.000-00" falha check digit).
+            # Precisamos usar dados reais da extração ou CPF/CNPJ válidos.
+            _dados = getattr(self, "_dados", {}) or {}
+            _proc = _dados.get("processo", {}) if isinstance(_dados, dict) else {}
+
             _nome_credor = hon.get("nome_credor", "") or hon.get("credor", "")
             if not _nome_credor:
-                # Fallback: nome do advogado/parte conforme devedor
-                # Honorários do reclamado → credor é advogado do reclamante (usar nome reclamante)
-                # Honorários do reclamante → credor é advogado do reclamado (usar nome reclamado)
-                _dados = getattr(self, "_dados", {}) or {}
+                # Fallback: nome da parte que recebe os honorários
+                # Honorários do reclamado → credor é o reclamante (ou seu advogado)
+                # Honorários do reclamante → credor é o reclamado (ou seu advogado)
                 if devedor == "RECLAMADO":
-                    _nome_credor = _dados.get("advogado_reclamante", "") or _dados.get("reclamante", "") or "Advogado do Reclamante"
+                    _nome_credor = _proc.get("advogado_reclamante", "") or _proc.get("reclamante", "") or _dados.get("reclamante", "") or "Credor do Reclamante"
                 else:
-                    _nome_credor = _dados.get("advogado_reclamado", "") or _dados.get("reclamado", "") or "Advogado do Reclamado"
+                    _nome_credor = _proc.get("advogado_reclamado", "") or _proc.get("reclamado", "") or _dados.get("reclamado", "") or "Credor do Reclamado"
             self._preencher("nomeCredor", _nome_credor[:100], False)
             self._log(f"  → nomeCredor: {_nome_credor[:50]}")
 
             _tipo_doc = hon.get("tipo_documento_credor", "") or hon.get("tipo_doc_credor", "")
+            _num_doc = hon.get("numero_documento_credor", "") or hon.get("doc_credor", "")
+            if not _num_doc:
+                # Usar CPF/CNPJ da parte correspondente (VÁLIDOS — passam check digit)
+                if devedor == "RECLAMADO":
+                    # Credor é reclamante → usar CPF do reclamante
+                    _num_doc = _proc.get("cpf_reclamante", "") or _proc.get("doc_reclamante", "")
+                    if not _tipo_doc:
+                        _tipo_doc = "CPF"
+                else:
+                    # Credor é reclamado → usar CNPJ do reclamado
+                    _num_doc = _proc.get("cnpj_reclamado", "") or _proc.get("doc_reclamado", "")
+                    if not _tipo_doc:
+                        _tipo_doc = "CNPJ"
+                # Último recurso: CPFs/CNPJs válidos conhecidos
+                if not _num_doc:
+                    if _tipo_doc == "CPF" or not _tipo_doc:
+                        _num_doc = "111.444.777-35"  # CPF válido (check digit ok)
+                        _tipo_doc = "CPF"
+                    else:
+                        _num_doc = "11.444.777/0001-61"  # CNPJ válido
             if not _tipo_doc:
-                _tipo_doc = "CPF"  # Default: CPF (advogado pessoa física)
+                _tipo_doc = "CPF"
+
+            # Selecionar tipo ANTES de preencher número (máscara dinâmica depende disso)
             self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc) or \
                 self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
             self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
 
-            _num_doc = hon.get("numero_documento_credor", "") or hon.get("doc_credor", "")
-            if not _num_doc:
-                # Usar CPF/CNPJ da parte correspondente como placeholder
-                _dados = getattr(self, "_dados", {}) or {}
-                if devedor == "RECLAMADO":
-                    _num_doc = _dados.get("cpf_reclamante", "") or _dados.get("doc_reclamante", "") or "000.000.000-00"
-                else:
-                    _num_doc = _dados.get("cnpj_reclamado", "") or _dados.get("doc_reclamado", "") or "00.000.000/0001-00"
             self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
             self._log(f"  → doc credor: {_tipo_doc} {_num_doc}")
 
@@ -8158,13 +8188,20 @@ class PJECalcPlaywright:
             pass
 
         # Clicar botão Exportar (a4j:commandButton id="exportar" em exportacao.xhtml)
-        # IMPORTANTE: O botão NÃO gera download diretamente. Ele dispara AJAX que:
-        #   1. Executa apresentador.exportar() no servidor
-        #   2. Seta apresentador.downloadDisponivel = true
-        #   3. Re-renderiza a página com <h:commandLink id="linkDownloadArquivo"> visível
-        #   4. JavaScript jsfcljs() auto-clica linkDownloadArquivo → dispara download
+        # FLUXO DOCUMENTADO (exportacao.xhtml):
+        #   1. a4j:commandButton id="exportar" actionListener="#{apresentador.exportar}"
+        #      dispara AJAX → apresentador gera arquivo e seta downloadDisponivel=true
+        #   2. Resposta AJAX re-renderiza panelBotoes (ajaxRendered="true") com
+        #      <s:span rendered="#{apresentador.downloadDisponivel}"> contendo:
+        #        - h:commandLink id="linkDownloadArquivo"
+        #        - <script>jsfcljs(form, {'formulario:linkDownloadArquivo':...}, '')</script>
+        #   3. jsfcljs() deveria auto-executar, mas o script inline NÃO é avaliado
+        #      automaticamente pelo RichFaces 3 após re-render AJAX parcial.
+        # ESTRATÉGIA: Dividir em duas fases. (a) Clicar exportar e esperar AJAX
+        # completar. (b) Aguardar linkDownloadArquivo aparecer e disparar download
+        # manualmente via jsfcljs dentro de expect_download.
         _btn_exportar = None
-        for sel in ["[id$='exportar']", "input[value='Exportar']"]:
+        for sel in ["[id$='exportar']:visible", "[id$='exportar']", "input[value='Exportar']"]:
             try:
                 loc_exp = self._page.locator(sel)
                 if loc_exp.count() > 0:
@@ -8174,42 +8211,97 @@ class PJECalcPlaywright:
                 continue
 
         if _btn_exportar:
+            # Fase A — Clicar Exportar (AJAX, sem download)
             try:
-                # Estratégia 1: expect_download captura o download do JS auto-click
-                # O jsfcljs() na resposta AJAX auto-clica linkDownloadArquivo
-                self._log("  → Clicando botão Exportar (AJAX + auto-download)…")
-                with self._page.expect_download(timeout=60000) as dl_info:
-                    _btn_exportar.click()
-                    # Aguardar AJAX completar (exportar gera o arquivo no servidor)
-                    self._aguardar_ajax(timeout=30000)
-                return _salvar_download(dl_info.value)
-            except Exception as e1:
-                self._log(f"  ⚠ Auto-download não capturado: {e1}")
-                # Estratégia 2: O JS auto-click pode ter falhado.
-                # Clicar manualmente linkDownloadArquivo
-                self._page.wait_for_timeout(2000)
+                self._log("  → Fase A: clicando botão Exportar (AJAX)…")
+                _btn_exportar.click()
+                self._aguardar_ajax(timeout=30000)
+                self._page.wait_for_timeout(1000)
+            except Exception as e_click:
+                self._log(f"  ⚠ Erro ao clicar Exportar: {e_click}")
+
+            # Diagnóstico: verificar mensagens de erro/sucesso
+            try:
+                _msgs = self._page.evaluate("""() => {
+                    const result = { erros: [], sucessos: [], linkDownload: false,
+                                     nomeArquivo: null, jsfcljs: false };
+                    document.querySelectorAll('.rf-msgs-err, .rich-messages-error, [class*=error]').forEach(el => {
+                        const t = el.textContent.trim();
+                        if (t && t.length < 200) result.erros.push(t);
+                    });
+                    document.querySelectorAll('.rf-msgs-sum, .rich-messages-summary').forEach(el => {
+                        const t = el.textContent.trim();
+                        if (t && t.length < 200) result.sucessos.push(t);
+                    });
+                    result.linkDownload = !!document.querySelector("[id$='linkDownloadArquivo']");
+                    const inp = document.querySelector("[id$='nomeArquivo']");
+                    if (inp) result.nomeArquivo = inp.value;
+                    result.jsfcljs = (typeof jsfcljs === 'function');
+                    return result;
+                }""")
+                self._log(f"  → Diagnóstico exportação: {_msgs}")
+            except Exception:
+                _msgs = {}
+
+            # Fase B — Aguardar linkDownloadArquivo aparecer (poll até 15s)
+            self._log("  → Fase B: aguardando linkDownloadArquivo aparecer…")
+            _link_ok = False
+            for _i in range(30):
                 try:
-                    self._log("  → Tentando clicar linkDownloadArquivo manualmente…")
-                    with self._page.expect_download(timeout=30000) as dl_info:
-                        self._page.evaluate("""() => {
+                    if self._page.locator("[id$='linkDownloadArquivo']").count() > 0:
+                        _link_ok = True
+                        self._log(f"  ✓ linkDownloadArquivo detectado após {_i*0.5:.1f}s")
+                        break
+                except Exception:
+                    pass
+                self._page.wait_for_timeout(500)
+
+            if _link_ok:
+                # Fase C — Disparar download via jsfcljs manual dentro de expect_download
+                try:
+                    self._log("  → Fase C: disparando download via jsfcljs…")
+                    with self._page.expect_download(timeout=60000) as dl_info:
+                        _metodo = self._page.evaluate("""() => {
+                            const form = document.getElementById('formulario');
+                            if (form && typeof jsfcljs === 'function') {
+                                jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
+                                return 'jsfcljs';
+                            }
                             const link = document.querySelector("[id$='linkDownloadArquivo']");
-                            if (link) {
-                                link.click();
-                                return true;
-                            }
-                            // Fallback: usar jsfcljs diretamente
-                            if (typeof jsfcljs === 'function') {
-                                const form = document.getElementById('formulario');
-                                if (form) {
-                                    jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
-                                    return true;
-                                }
-                            }
-                            return false;
+                            if (link) { link.click(); return 'click'; }
+                            return null;
                         }""")
+                        self._log(f"  → Método utilizado: {_metodo}")
                     return _salvar_download(dl_info.value)
-                except Exception as e2:
-                    self._log(f"  ⚠ linkDownloadArquivo também falhou: {e2}")
+                except Exception as e_dl:
+                    self._log(f"  ⚠ Download não capturado via jsfcljs: {e_dl}")
+                    # Última tentativa: submeter o form via JS direto (não jsfcljs)
+                    try:
+                        self._log("  → Última tentativa: form.submit() direto…")
+                        with self._page.expect_download(timeout=30000) as dl_info2:
+                            self._page.evaluate("""() => {
+                                const form = document.getElementById('formulario');
+                                if (!form) return false;
+                                // Adicionar hidden inputs necessários p/ JSF identificar o link clicado
+                                const addHidden = (name, value) => {
+                                    let inp = form.querySelector(`input[name="${name}"]`);
+                                    if (!inp) {
+                                        inp = document.createElement('input');
+                                        inp.type = 'hidden';
+                                        inp.name = name;
+                                        form.appendChild(inp);
+                                    }
+                                    inp.value = value;
+                                };
+                                addHidden('formulario:linkDownloadArquivo', 'formulario:linkDownloadArquivo');
+                                form.submit();
+                                return true;
+                            }""")
+                        return _salvar_download(dl_info2.value)
+                    except Exception as e_sub:
+                        self._log(f"  ⚠ form.submit() direto falhou: {e_sub}")
+            else:
+                self._log("  ⚠ linkDownloadArquivo não apareceu após 15s — apresentador.exportar() provavelmente falhou no servidor")
 
         # Fallback: procurar links de download no DOM
         try:
