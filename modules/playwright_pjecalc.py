@@ -8184,13 +8184,26 @@ class PJECalcPlaywright:
 
         # Etapa 1: sair da liquidacao.jsf navegando para Dados do Cálculo.
         # Isso evita HTTP 500 que ocorre ao submeter menu Exportar de dentro
-        # do form pós-liquidação.
+        # do form pós-liquidação. APÓS, fazer reload() para garantir ViewState
+        # limpo (test v8 mostrou ViewExpiredException quando o click A4J vem
+        # após goto + instalação de monitor AJAX).
         try:
             self._log("  → Saindo de liquidacao.jsf via menu 'Dados do Cálculo'…")
             if self._clicar_menu_lateral("Dados do Cálculo", obrigatorio=False):
                 self._aguardar_ajax(timeout=15000)
                 self._page.wait_for_timeout(1500)
                 self._log(f"  ✓ Agora em: {self._page.url}")
+                # RELOAD para ViewState fresco — evita ViewExpiredException
+                # quando clicamos no link <a4j:commandLink> que dispara
+                # A4J.AJAX.Submit('formulario',...) logo em seguida.
+                try:
+                    self._log("  → Reload calculo.jsf para ViewState fresco…")
+                    self._page.reload(wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(timeout=10000)
+                    self._page.wait_for_timeout(800)
+                    self._log(f"  ✓ Após reload: {self._page.url}")
+                except Exception as _rl_err:
+                    self._log(f"  ⚠ Reload falhou: {_rl_err}")
         except Exception as _nav_err:
             self._log(f"  ⚠ Navegação intermediária falhou: {_nav_err}")
 
