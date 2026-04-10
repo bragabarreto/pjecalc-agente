@@ -2062,7 +2062,10 @@ class PJECalcPlaywright:
                         }
                     }
                     if (!label) {
-                        const row = link.closest('tr, td, div, h\\:panelGroup');
+                        // h:panelGroup do JSF é renderizado como <span> no DOM —
+                        // não usar 'h\\:panelGroup' como seletor CSS (Element.closest
+                        // valida sintaxe e rejeita namespaces JSF).
+                        const row = link.closest('tr, td, div, span');
                         if (row) {
                             const lbl = row.querySelector('label');
                             if (lbl) label = (lbl.textContent || '').trim();
@@ -5617,12 +5620,39 @@ class PJECalcPlaywright:
                 if not _val_ok:
                     _setar_campo_por_valor("CALCULADO", "valor")
 
-            # Multiplicador explícito (ex: acúmulo de função 0,30 = 30%)
-            if v.get("multiplicador") is not None:
-                self._preencher("outroValorDoMultiplicador", _fmt_br(float(v["multiplicador"])), False)
-            # Divisor explícito
-            if v.get("divisor") is not None:
-                self._preencher("outroValorDoDivisor", _fmt_br(float(v["divisor"])), False)
+            # ── Valor Devido Calculado: DivisorDeVerbaEnum.OUTRO_VALOR, TipoDeQuantidadeEnum.INFORMADA ──
+            # VerbaDeCalculoVO.<init>() seta tipoDeDivisor=OUTRO_VALOR e tipoDaQuantidade=INFORMADA (bytecode v2.14.0).
+            # Isso torna 3 campos obrigatórios no modo Calculado:
+            #   1) outroValorDoDivisor  — required="#{registro.isInformarDivisor()}" (true quando OUTRO_VALOR)
+            #   2) outroValorDoMultiplicador — required="true" incondicional
+            #   3) valorInformadoDaQuantidade — required="#{registro.isTipoDaQuantidadeInformada()}" (true quando INFORMADA)
+            # Os valores NÃO têm default no construtor (ficam null), então precisamos sempre preenchê-los
+            # quando valor=CALCULADO. Para valor=INFORMADO, todo o painel não é renderizado (rendered=#{isValorDevidoCalculado}).
+            _modo_calculado = not bool(v.get("valor_informado"))
+            if _modo_calculado:
+                # Multiplicador (default 1 = base * 1)
+                _mult_val = v.get("multiplicador")
+                if _mult_val is None:
+                    _mult_val = 1
+                self._preencher("outroValorDoMultiplicador", _fmt_br(float(_mult_val)), False)
+                # Divisor (default 1 = base / 1 = base integral)
+                _div_val = v.get("divisor")
+                if _div_val is None:
+                    _div_val = 1
+                self._preencher("outroValorDoDivisor", _fmt_br(float(_div_val)), False)
+                # Quantidade Informada (default 1 = 1 unidade por ocorrência)
+                # Só preenche se tipoDaQuantidade permaneceu INFORMADA (default).
+                _qtd_val = v.get("quantidade")
+                if _qtd_val is None:
+                    _qtd_val = 1
+                self._preencher("valorInformadoDaQuantidade", _fmt_br(float(_qtd_val)), False)
+            else:
+                # Modo INFORMADO: multiplicador/divisor/quantidade não são renderizados.
+                # Apenas preenche explícitos se o usuário forneceu (raro nesse modo).
+                if v.get("multiplicador") is not None:
+                    self._preencher("outroValorDoMultiplicador", _fmt_br(float(v["multiplicador"])), False)
+                if v.get("divisor") is not None:
+                    self._preencher("outroValorDoDivisor", _fmt_br(float(v["divisor"])), False)
 
             # ── Incidências (checkboxes, confirmados DOM v2.15.1) ──
             # Incidência: IRPF / Contribuição Social / FGTS / Previdência Privada / Pensão Alimentícia
