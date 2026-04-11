@@ -8638,8 +8638,19 @@ class PJECalcPlaywright:
                     _form_data = self._page.evaluate("""() => {
                         const form = document.getElementById('formulario');
                         if (!form) return null;
-                        // Coletar action URL absoluto
-                        const actionUrl = new URL(form.getAttribute('action') || window.location.href, window.location.href).href;
+                        // Coletar action URL absoluto. CRÍTICO: o Seam exige
+                        // ?conversationId=N na URL — o action do form NÃO inclui
+                        // esse param, mas window.location.search SIM. Concatenar.
+                        const actionRaw = form.getAttribute('action') || window.location.pathname;
+                        const actionAbs = new URL(actionRaw, window.location.href);
+                        // Mesclar query string da página atual (conversationId, cid, etc.)
+                        const pageParams = new URLSearchParams(window.location.search);
+                        for (const [k, v] of pageParams.entries()) {
+                            if (!actionAbs.searchParams.has(k)) {
+                                actionAbs.searchParams.set(k, v);
+                            }
+                        }
+                        const actionUrl = actionAbs.href;
                         // Coletar TODOS os inputs do form (hidden + visíveis)
                         const fields = {};
                         for (const el of form.querySelectorAll('input, select, textarea')) {
