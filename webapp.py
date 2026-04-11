@@ -1245,6 +1245,30 @@ async def listar_processos():
     return {"processos": result.stdout}
 
 
+@app.get("/api/calc_file/{numero}/{execucao}/{filename}")
+async def ler_calc_file(numero: str, execucao: str, filename: str):
+    """Lê um arquivo de diagnóstico dentro de data/calculations/<numero>/<execucao>/.
+    Uso: GET /api/calc_file/0000829-78.2025.5.07.0003/20260411_215236/fase_e_response_dump.html
+    """
+    base = Path("data/calculations")
+    # Bloqueia path traversal — sanitizar cada componente
+    safe_numero = Path(numero).name
+    safe_exec = Path(execucao).name
+    safe_file = Path(filename).name
+    alvo = base / safe_numero / safe_exec / safe_file
+    if not alvo.exists():
+        return JSONResponse(
+            {"erro": f"{alvo} não encontrado", "base_exists": base.exists()},
+            status_code=404,
+        )
+    # Retorna como texto bruto
+    try:
+        content = alvo.read_text(encoding="iso-8859-1")
+    except Exception:
+        content = alvo.read_bytes().decode("iso-8859-1", errors="replace")
+    return Response(content=content, media_type="text/plain; charset=iso-8859-1")
+
+
 @app.get("/api/campos_log/{filename}")
 async def ler_campos_log(filename: str):
     """Retorna o JSON de campos mapeados pelo Playwright (diagnóstico remoto).
