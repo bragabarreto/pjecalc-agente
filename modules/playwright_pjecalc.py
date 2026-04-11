@@ -8624,24 +8624,16 @@ class PJECalcPlaywright:
                 self._page.wait_for_timeout(500)
 
             if _link_ok:
-                # Fase C — Disparar download via jsfcljs manual dentro de expect_download
-                try:
-                    self._log("  → Fase C: disparando download via jsfcljs…")
-                    with self._page.expect_download(timeout=60000) as dl_info:
-                        _metodo = self._page.evaluate("""() => {
-                            const form = document.getElementById('formulario');
-                            if (form && typeof jsfcljs === 'function') {
-                                jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
-                                return 'jsfcljs';
-                            }
-                            const link = document.querySelector("[id$='linkDownloadArquivo']");
-                            if (link) { link.click(); return 'click'; }
-                            return null;
-                        }""")
-                        self._log(f"  → Método utilizado: {_metodo}")
-                    return _salvar_download(dl_info.value)
-                except Exception as e_dl:
-                    self._log(f"  ⚠ Download não capturado via jsfcljs: {e_dl}")
+                # ORDEM CRÍTICA (descoberta abr/2026):
+                # Fase D (POST direto) PRECISA rodar ANTES de qualquer Fase C (jsfcljs
+                # submit). Motivo: o método ApresentadorExportacao.downloadArquivo()
+                # é ONE-SHOT — após registrar o arquivo na response, faz `arquivo=null`.
+                # Se Fase C rodar primeiro e o server já consumiu o arquivo, a segunda
+                # tentativa (Fase D) encontra arquivo=null e renderiza a página HTML de
+                # erro silenciosa. Além disso, jsfcljs faz form.submit() que navega o
+                # browser (window.location muda, perde ?conversationId=N) corrompendo
+                # o estado para Fase D. Portanto: Fase D primeiro, com o ViewState
+                # fresco e o conversationId refrescado da navegação pelo menu Exportar.
 
                 # Fase D — POST direto via context.request (bypass do evento download).
                 # Quando jsfcljs/form.submit() submetem o form, o servidor responde com
@@ -8745,6 +8737,29 @@ class PJECalcPlaywright:
                             self._log(f"  ⚠ POST falhou: HTTP {_resp.status}")
                 except Exception as e_post:
                     self._log(f"  ⚠ Fase D POST direto falhou: {e_post}")
+
+                # Fase C (fallback) — jsfcljs manual dentro de expect_download.
+                # Só roda se Fase D não retornou o arquivo. Observação: a partir
+                # daqui o estado do server pode ter mudado (o POST de Fase D
+                # pode ter feito `arquivo=null` mesmo retornando HTML). Por isso
+                # a Fase C aqui é só um "best-effort" de última cartada.
+                try:
+                    self._log("  → Fase C (fallback): disparando download via jsfcljs…")
+                    with self._page.expect_download(timeout=30000) as dl_info:
+                        _metodo = self._page.evaluate("""() => {
+                            const form = document.getElementById('formulario');
+                            if (form && typeof jsfcljs === 'function') {
+                                jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
+                                return 'jsfcljs';
+                            }
+                            const link = document.querySelector("[id$='linkDownloadArquivo']");
+                            if (link) { link.click(); return 'click'; }
+                            return null;
+                        }""")
+                        self._log(f"  → Método utilizado: {_metodo}")
+                    return _salvar_download(dl_info.value)
+                except Exception as e_dl:
+                    self._log(f"  ⚠ Download não capturado via jsfcljs: {e_dl}")
 
                 # Última tentativa: submeter o form via JS direto (não jsfcljs)
                 try:
