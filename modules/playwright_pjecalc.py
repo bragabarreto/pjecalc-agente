@@ -8625,31 +8625,102 @@ class PJECalcPlaywright:
                     return _salvar_download(dl_info.value)
                 except Exception as e_dl:
                     self._log(f"  ⚠ Download não capturado via jsfcljs: {e_dl}")
-                    # Última tentativa: submeter o form via JS direto (não jsfcljs)
-                    try:
-                        self._log("  → Última tentativa: form.submit() direto…")
-                        with self._page.expect_download(timeout=30000) as dl_info2:
-                            self._page.evaluate("""() => {
-                                const form = document.getElementById('formulario');
-                                if (!form) return false;
-                                // Adicionar hidden inputs necessários p/ JSF identificar o link clicado
-                                const addHidden = (name, value) => {
-                                    let inp = form.querySelector(`input[name="${name}"]`);
-                                    if (!inp) {
-                                        inp = document.createElement('input');
-                                        inp.type = 'hidden';
-                                        inp.name = name;
-                                        form.appendChild(inp);
-                                    }
-                                    inp.value = value;
-                                };
-                                addHidden('formulario:linkDownloadArquivo', 'formulario:linkDownloadArquivo');
-                                form.submit();
-                                return true;
-                            }""")
-                        return _salvar_download(dl_info2.value)
-                    except Exception as e_sub:
-                        self._log(f"  ⚠ form.submit() direto falhou: {e_sub}")
+
+                # Fase D — POST direto via context.request (bypass do evento download).
+                # Quando jsfcljs/form.submit() submetem o form, o servidor responde com
+                # o .PJC e Content-Disposition: attachment. Mas em headless Firefox o
+                # evento `download` do Playwright não dispara consistentemente para
+                # respostas vindas de form.submit() de uma página AJAX-rendered.
+                # Workaround: replicar o POST do JSF via APIRequestContext que retorna
+                # os bytes diretamente sem depender do evento download do browser.
+                try:
+                    self._log("  → Fase D: POST direto via context.request (sem download event)…")
+                    _form_data = self._page.evaluate("""() => {
+                        const form = document.getElementById('formulario');
+                        if (!form) return null;
+                        // Coletar action URL absoluto
+                        const actionUrl = new URL(form.getAttribute('action') || window.location.href, window.location.href).href;
+                        // Coletar TODOS os inputs do form (hidden + visíveis)
+                        const fields = {};
+                        for (const el of form.querySelectorAll('input, select, textarea')) {
+                            if (!el.name) continue;
+                            if (el.type === 'checkbox' || el.type === 'radio') {
+                                if (el.checked) fields[el.name] = el.value;
+                            } else if (!el.disabled) {
+                                fields[el.name] = el.value;
+                            }
+                        }
+                        // Adicionar o parâmetro que identifica o linkDownloadArquivo como clicado
+                        fields['formulario:linkDownloadArquivo'] = 'formulario:linkDownloadArquivo';
+                        return { actionUrl, fields };
+                    }""")
+                    if _form_data and _form_data.get('actionUrl'):
+                        self._log(f"  → POST URL: {_form_data['actionUrl']}")
+                        self._log(f"  → POST campos: {len(_form_data['fields'])} (incluindo ViewState)")
+                        # Usar context.request — herda cookies/sessão da página
+                        _resp = self._page.context.request.post(
+                            _form_data['actionUrl'],
+                            form=_form_data['fields'],
+                            timeout=120000,
+                        )
+                        _ct = _resp.headers.get('content-type', '')
+                        _cd = _resp.headers.get('content-disposition', '')
+                        self._log(f"  → POST resposta: HTTP {_resp.status} content-type={_ct} disposition={_cd[:100]}")
+                        if _resp.status == 200:
+                            _body = _resp.body()
+                            if _body and len(_body) > 100:
+                                # Verificar se é binário (.PJC = ZIP) ou HTML de erro
+                                _is_zip = _body[:2] == b'PK'
+                                _is_html = b'<html' in _body[:200].lower() or b'<!doctype' in _body[:200].lower()
+                                self._log(f"  → POST body: {len(_body)} bytes, is_zip={_is_zip}, is_html={_is_html}")
+                                if _is_zip or (not _is_html and len(_body) > 1000):
+                                    # É o arquivo .PJC! Salvar diretamente.
+                                    _nome_arquivo = (
+                                        (_msgs.get('nomeArquivo') if isinstance(_msgs, dict) else None)
+                                        or 'calculo.PJC'
+                                    )
+                                    if not _nome_arquivo.lower().endswith('.pjc'):
+                                        _nome_arquivo += '.PJC'
+                                    _dest_dir = self._exec_dir or Path('data/calculations')
+                                    _dest_dir.mkdir(parents=True, exist_ok=True)
+                                    _dest = _dest_dir / _nome_arquivo
+                                    _dest.write_bytes(_body)
+                                    self._log(f"  ✓ .PJC salvo via POST direto: {_dest} ({len(_body)} bytes)")
+                                    return str(_dest)
+                                else:
+                                    self._log(f"  ⚠ POST retornou HTML/conteúdo inesperado — primeiros 300 chars: {_body[:300]!r}")
+                            else:
+                                self._log(f"  ⚠ POST retornou body vazio ou muito curto")
+                        else:
+                            self._log(f"  ⚠ POST falhou: HTTP {_resp.status}")
+                except Exception as e_post:
+                    self._log(f"  ⚠ Fase D POST direto falhou: {e_post}")
+
+                # Última tentativa: submeter o form via JS direto (não jsfcljs)
+                try:
+                    self._log("  → Última tentativa: form.submit() direto…")
+                    with self._page.expect_download(timeout=30000) as dl_info2:
+                        self._page.evaluate("""() => {
+                            const form = document.getElementById('formulario');
+                            if (!form) return false;
+                            // Adicionar hidden inputs necessários p/ JSF identificar o link clicado
+                            const addHidden = (name, value) => {
+                                let inp = form.querySelector(`input[name="${name}"]`);
+                                if (!inp) {
+                                    inp = document.createElement('input');
+                                    inp.type = 'hidden';
+                                    inp.name = name;
+                                    form.appendChild(inp);
+                                }
+                                inp.value = value;
+                            };
+                            addHidden('formulario:linkDownloadArquivo', 'formulario:linkDownloadArquivo');
+                            form.submit();
+                            return true;
+                        }""")
+                    return _salvar_download(dl_info2.value)
+                except Exception as e_sub:
+                    self._log(f"  ⚠ form.submit() direto falhou: {e_sub}")
             else:
                 self._log("  ⚠ linkDownloadArquivo não apareceu após 15s — apresentador.exportar() provavelmente falhou no servidor")
 
