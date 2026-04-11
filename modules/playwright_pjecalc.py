@@ -8635,9 +8635,18 @@ class PJECalcPlaywright:
                 # os bytes diretamente sem depender do evento download do browser.
                 try:
                     self._log("  → Fase D: POST direto via context.request (sem download event)…")
+                    self._log(f"  → Page URL Python-side: {self._page.url}")
                     _form_data = self._page.evaluate("""() => {
                         const form = document.getElementById('formulario');
                         if (!form) return null;
+                        // DIAGNÓSTICO — capturar exatamente o que vemos no momento
+                        const _diag = {
+                            href: window.location.href,
+                            search: window.location.search,
+                            pathname: window.location.pathname,
+                            actionAttr: form.getAttribute('action'),
+                            actionProp: form.action,
+                        };
                         // Coletar action URL absoluto. CRÍTICO: o Seam exige
                         // ?conversationId=N na URL — o action do form NÃO inclui
                         // esse param, mas window.location.search SIM. Concatenar.
@@ -8651,6 +8660,7 @@ class PJECalcPlaywright:
                             }
                         }
                         const actionUrl = actionAbs.href;
+                        _diag.actionUrlFinal = actionUrl;
                         // Coletar TODOS os inputs do form (hidden + visíveis)
                         const fields = {};
                         for (const el of form.querySelectorAll('input, select, textarea')) {
@@ -8663,8 +8673,20 @@ class PJECalcPlaywright:
                         }
                         // Adicionar o parâmetro que identifica o linkDownloadArquivo como clicado
                         fields['formulario:linkDownloadArquivo'] = 'formulario:linkDownloadArquivo';
-                        return { actionUrl, fields };
+                        return { actionUrl, fields, _diag };
                     }""")
+                    if _form_data and _form_data.get('_diag'):
+                        self._log(f"  → DIAG window.location: {_form_data['_diag']}")
+                    # Se a actionUrl não tiver conversationId mas o Python sabe qual é, força:
+                    if (_form_data and _form_data.get('actionUrl')
+                            and 'conversationId' not in _form_data['actionUrl']
+                            and self._calculo_conversation_id):
+                        _sep = '&' if '?' in _form_data['actionUrl'] else '?'
+                        _form_data['actionUrl'] = (
+                            f"{_form_data['actionUrl']}{_sep}conversationId="
+                            f"{self._calculo_conversation_id}"
+                        )
+                        self._log(f"  → Forçado conversationId={self._calculo_conversation_id} na URL")
                     if _form_data and _form_data.get('actionUrl'):
                         self._log(f"  → POST URL: {_form_data['actionUrl']}")
                         self._log(f"  → POST campos: {len(_form_data['fields'])} (incluindo ViewState)")
