@@ -8625,15 +8625,83 @@ class PJECalcPlaywright:
 
             if _link_ok:
                 # ORDEM CRÍTICA (descoberta abr/2026):
-                # Fase D (POST direto) PRECISA rodar ANTES de qualquer Fase C (jsfcljs
-                # submit). Motivo: o método ApresentadorExportacao.downloadArquivo()
-                # é ONE-SHOT — após registrar o arquivo na response, faz `arquivo=null`.
-                # Se Fase C rodar primeiro e o server já consumiu o arquivo, a segunda
-                # tentativa (Fase D) encontra arquivo=null e renderiza a página HTML de
-                # erro silenciosa. Além disso, jsfcljs faz form.submit() que navega o
-                # browser (window.location muda, perde ?conversationId=N) corrompendo
-                # o estado para Fase D. Portanto: Fase D primeiro, com o ViewState
-                # fresco e o conversationId refrescado da navegação pelo menu Exportar.
+                # downloadArquivo() do ApresentadorExportacao é ONE-SHOT — após chamar,
+                # faz `arquivo=null`. Então só temos UMA tentativa efetiva de captura
+                # dos bytes. Ordem:
+                #   Fase E (novo) — expect_response + jsfcljs no browser: captura a
+                #                   resposta DO PRÓPRIO navegador (cookies, headers,
+                #                   sessão JSF idênticos aos que o server espera).
+                #   Fase D        — context.request.post como fallback (cookies sim,
+                #                   mas headers podem divergir do que o JSF espera).
+                #   Fase C        — só último recurso (estado já pode estar podre).
+
+                # Fase E — disparar jsfcljs e capturar a resposta via expect_response.
+                # O browser faz form.submit() normalmente; o servidor responde com os
+                # bytes do .PJC + Content-Disposition. O browser trata como navegação
+                # mas Playwright's page.on("response") captura o raw body antes disso.
+                try:
+                    self._log("  → Fase E: jsfcljs no browser + expect_response…")
+                    with self._page.expect_response(
+                        lambda r: ('exportacao.jsf' in r.url
+                                   and r.request.method == 'POST'),
+                        timeout=60000,
+                    ) as resp_info:
+                        _metodo_e = self._page.evaluate("""() => {
+                            const form = document.getElementById('formulario');
+                            if (form && typeof jsfcljs === 'function') {
+                                jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
+                                return 'jsfcljs';
+                            }
+                            const link = document.querySelector("[id$='linkDownloadArquivo']");
+                            if (link) { link.click(); return 'click'; }
+                            return null;
+                        }""")
+                        self._log(f"  → Fase E método: {_metodo_e}")
+                    _resp_e = resp_info.value
+                    _ct_e = _resp_e.headers.get('content-type', '')
+                    _cd_e = _resp_e.headers.get('content-disposition', '')
+                    self._log(
+                        f"  → Fase E resposta: HTTP {_resp_e.status} "
+                        f"content-type={_ct_e} disposition={_cd_e[:120]}"
+                    )
+                    try:
+                        _body_e = _resp_e.body()
+                    except Exception as _be:
+                        _body_e = None
+                        self._log(f"  ⚠ Fase E body() falhou: {_be}")
+                    if _body_e and len(_body_e) > 100:
+                        _is_zip_e = _body_e[:2] == b'PK'
+                        _is_html_e = (
+                            b'<html' in _body_e[:200].lower()
+                            or b'<!doctype' in _body_e[:200].lower()
+                        )
+                        self._log(
+                            f"  → Fase E body: {len(_body_e)} bytes, "
+                            f"is_zip={_is_zip_e}, is_html={_is_html_e}"
+                        )
+                        if _is_zip_e or (not _is_html_e and len(_body_e) > 1000):
+                            _nome_arq_e = (
+                                (_msgs.get('nomeArquivo') if isinstance(_msgs, dict) else None)
+                                or 'calculo.PJC'
+                            )
+                            if not _nome_arq_e.lower().endswith('.pjc'):
+                                _nome_arq_e += '.PJC'
+                            _dest_dir_e = self._exec_dir or Path('data/calculations')
+                            _dest_dir_e.mkdir(parents=True, exist_ok=True)
+                            _dest_e = _dest_dir_e / _nome_arq_e
+                            _dest_e.write_bytes(_body_e)
+                            self._log(
+                                f"  ✓ .PJC salvo via Fase E (expect_response): "
+                                f"{_dest_e} ({len(_body_e)} bytes)"
+                            )
+                            return str(_dest_e)
+                        else:
+                            self._log(
+                                f"  ⚠ Fase E retornou HTML/conteúdo inesperado — "
+                                f"primeiros 300 chars: {_body_e[:300]!r}"
+                            )
+                except Exception as e_resp:
+                    self._log(f"  ⚠ Fase E expect_response falhou: {e_resp}")
 
                 # Fase D — POST direto via context.request (bypass do evento download).
                 # Quando jsfcljs/form.submit() submetem o form, o servidor responde com
@@ -8670,11 +8738,19 @@ class PJECalcPlaywright:
                         }
                         const actionUrl = actionAbs.href;
                         _diag.actionUrlFinal = actionUrl;
-                        // Coletar TODOS os inputs do form (hidden + visíveis)
+                        // Coletar inputs do form — mas EXCLUIR botões.
+                        // CRÍTICO: inputs type='button'/'submit' têm name='formulario:exportar'
+                        // etc. Se enviados, o decoder JSF dispara o actionListener do
+                        // botão (ex: apresentador.exportar) ao invés do linkDownloadArquivo,
+                        // e o server responde com a view re-renderizada em vez do .PJC.
                         const fields = {};
                         for (const el of form.querySelectorAll('input, select, textarea')) {
                             if (!el.name) continue;
-                            if (el.type === 'checkbox' || el.type === 'radio') {
+                            const t = (el.type || '').toLowerCase();
+                            if (t === 'button' || t === 'submit' || t === 'reset' || t === 'image') {
+                                continue;  // pular botões
+                            }
+                            if (t === 'checkbox' || t === 'radio') {
                                 if (el.checked) fields[el.name] = el.value;
                             } else if (!el.disabled) {
                                 fields[el.name] = el.value;
