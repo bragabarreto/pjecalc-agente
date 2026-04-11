@@ -8572,14 +8572,98 @@ class PJECalcPlaywright:
                 continue
 
         if _btn_exportar:
-            # Fase A — Clicar Exportar (AJAX, sem download)
+            # Fase A — Clicar Exportar
+            # DESCOBERTA CRÍTICA (abr/2026): clicar Exportar dispara uma sequência
+            # de DOIS requests:
+            #   1. A4J AJAX (exportar button) → server chama `apresentador.exportar()`,
+            #      seta this.arquivo e responde com re-render do panelBotoes contendo
+            #      <a linkDownloadArquivo> + <script>jsfcljs(...)</script>
+            #   2. O RichFaces 3 A4J handler AVALIA o <script> inline do fragmento
+            #      atualizado, o que dispara `jsfcljs()` AUTOMATICAMENTE → form.submit()
+            #      nativo (não-AJAX) → server chama `apresentador.downloadArquivo()` e
+            #      retorna Content-Type: application/zip com os bytes do .PJC.
+            #
+            # O problema das fases E/D/C era: quando tentamos disparar jsfcljs DEPOIS
+            # do click, o auto-submit do passo 2 já consumiu o arquivo (downloadArquivo
+            # é one-shot: seta `arquivo = null`). Solução: capturar o response do passo 2
+            # ENQUANTO clicamos Exportar, via expect_response com predicate por
+            # content-type/disposition.
+            _pjc_bytes = None
+            _pjc_filename = None
             try:
-                self._log("  → Fase A: clicando botão Exportar (AJAX)…")
-                _btn_exportar.click()
-                self._aguardar_ajax(timeout=30000)
-                self._page.wait_for_timeout(1000)
+                self._log("  → Fase A: clicando botão Exportar (AJAX + auto-submit)…")
+                with self._page.expect_response(
+                    lambda r: (
+                        'exportacao.jsf' in r.url
+                        and r.request.method == 'POST'
+                        and (
+                            'zip' in (r.headers.get('content-type') or '').lower()
+                            or 'attachment' in (r.headers.get('content-disposition') or '').lower()
+                            or '.pjc' in (r.headers.get('content-disposition') or '').lower()
+                        )
+                    ),
+                    timeout=60000,
+                ) as _pjc_resp_info:
+                    _btn_exportar.click()
+                    # NÃO chamar _aguardar_ajax aqui pois pode consumir o response
+                    # antes do expect_response capturar. Aguardar só o download.
+                _pjc_resp = _pjc_resp_info.value
+                _ct_a = _pjc_resp.headers.get('content-type', '')
+                _cd_a = _pjc_resp.headers.get('content-disposition', '')
+                self._log(
+                    f"  ✓ Fase A capturou response: HTTP {_pjc_resp.status} "
+                    f"content-type={_ct_a} disposition={_cd_a[:150]}"
+                )
+                try:
+                    _pjc_bytes = _pjc_resp.body()
+                except Exception as _be_a:
+                    self._log(f"  ⚠ Fase A body() falhou: {_be_a}")
+                # Extrair filename do disposition
+                if _cd_a:
+                    import re as _re_a
+                    _m_fn = _re_a.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', _cd_a, _re_a.IGNORECASE)
+                    if _m_fn:
+                        _pjc_filename = _m_fn.group(1).strip()
+                        self._log(f"  → Filename extraído: {_pjc_filename}")
             except Exception as e_click:
-                self._log(f"  ⚠ Erro ao clicar Exportar: {e_click}")
+                self._log(f"  ⚠ Fase A (click + expect_response .PJC) falhou: {e_click}")
+                # Fallback: ainda tentar clicar sem expect_response
+                try:
+                    _btn_exportar.click()
+                    self._aguardar_ajax(timeout=30000)
+                    self._page.wait_for_timeout(1000)
+                except Exception as e_click2:
+                    self._log(f"  ⚠ Click simples também falhou: {e_click2}")
+
+            # Se Fase A capturou bytes válidos, salvar e retornar direto
+            if _pjc_bytes and len(_pjc_bytes) > 100:
+                _is_zip_a = _pjc_bytes[:2] == b'PK'
+                _is_html_a = (
+                    b'<html' in _pjc_bytes[:200].lower()
+                    or b'<!doctype' in _pjc_bytes[:200].lower()
+                )
+                self._log(
+                    f"  → Fase A body: {len(_pjc_bytes)} bytes, "
+                    f"is_zip={_is_zip_a}, is_html={_is_html_a}"
+                )
+                if _is_zip_a:
+                    _nome_a = _pjc_filename or 'calculo.PJC'
+                    if not _nome_a.lower().endswith('.pjc'):
+                        _nome_a += '.PJC'
+                    _dest_dir_a = self._exec_dir or Path('data/calculations')
+                    _dest_dir_a.mkdir(parents=True, exist_ok=True)
+                    _dest_a = _dest_dir_a / _nome_a
+                    _dest_a.write_bytes(_pjc_bytes)
+                    self._log(
+                        f"  ✓ .PJC salvo via Fase A (auto-download): "
+                        f"{_dest_a} ({len(_pjc_bytes)} bytes)"
+                    )
+                    return str(_dest_a)
+                else:
+                    self._log(
+                        f"  ⚠ Fase A retornou conteúdo não-ZIP "
+                        f"— continuando com Fase B/E/D/C"
+                    )
 
             # Diagnóstico: verificar mensagens de erro/sucesso
             try:
