@@ -120,22 +120,16 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                         except Exception:
                             pass
                         try:
-                            import sys, threading
+                            import sys
                             headless = getattr(self, "_headless", sys.platform != "win32")
-                            # iniciar_browser usa sync_playwright() que falha se
-                            # asyncio.get_running_loop() detectar o loop herdado da thread.
-                            # Solução: reiniciar em thread 100% nova (sem contexto asyncio).
-                            _exc_restart: list = []
-                            def _restart_in_fresh_thread():
-                                try:
-                                    self.iniciar_browser(headless=headless)
-                                except Exception as _e:
-                                    _exc_restart.append(_e)
-                            _t = threading.Thread(target=_restart_in_fresh_thread, daemon=True)
-                            _t.start()
-                            _t.join(timeout=90)
-                            if _exc_restart:
-                                raise _exc_restart[0]
+                            # IMPORTANTE: iniciar_browser DEVE rodar na mesma thread que
+                            # vai usar o self._page depois. Playwright sync API é thread-bound
+                            # (greenlet): criar em uma thread e usar em outra causa
+                            # "cannot switch to a different thread (which happens to have exited)".
+                            # iniciar_browser já faz asyncio._set_running_loop(None) para
+                            # contornar o "Sync API inside asyncio loop" quando a thread herda
+                            # o loop do uvicorn (Python 3.10+).
+                            self.iniciar_browser(headless=headless)
                             self._instalar_monitor_ajax()
                             self._page.goto(
                                 f"{self.PJECALC_BASE}/pages/principal.jsf",
