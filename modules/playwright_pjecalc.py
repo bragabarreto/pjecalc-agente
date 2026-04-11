@@ -8633,6 +8633,61 @@ class PJECalcPlaywright:
                 # O browser faz form.submit() normalmente; o servidor responde com os
                 # bytes do .PJC + Content-Disposition. O browser trata como navegação
                 # mas Playwright's page.on("response") captura o raw body antes disso.
+
+                # DIAGNÓSTICO — dump do estado atual do DOM antes de submeter
+                try:
+                    _dbg_dump_dir = self._exec_dir or Path('data/calculations')
+                    _dbg_dump_dir.mkdir(parents=True, exist_ok=True)
+                    _pre_state = self._page.evaluate("""() => {
+                        const form = document.getElementById('formulario');
+                        if (!form) return {err: 'form not found'};
+                        const vs = form.querySelector("input[name='javax.faces.ViewState']");
+                        const link = form.querySelector("[id$='linkDownloadArquivo']");
+                        const nome = form.querySelector("[id$='nomeArquivo']");
+                        // Coletar todos inputs/hidden
+                        const all_inputs = [];
+                        form.querySelectorAll('input, select, textarea').forEach(el => {
+                            all_inputs.push({
+                                name: el.name || '(no-name)',
+                                id: el.id || '',
+                                type: (el.type || '').toLowerCase(),
+                                disabled: el.disabled,
+                                value: (el.value || '').slice(0, 60),
+                            });
+                        });
+                        return {
+                            action: form.getAttribute('action'),
+                            actionFull: form.action,
+                            location: window.location.href,
+                            viewState: vs ? vs.value : null,
+                            linkDownloadExists: !!link,
+                            linkDownloadId: link ? link.id : null,
+                            linkDownloadOuterHTML: link ? link.outerHTML.slice(0, 400) : null,
+                            nomeArquivo: nome ? nome.value : null,
+                            numInputs: all_inputs.length,
+                            inputs: all_inputs,
+                        };
+                    }""")
+                    self._log(f"  🔍 PRE-POST state: viewState={_pre_state.get('viewState')} "
+                              f"linkExists={_pre_state.get('linkDownloadExists')} "
+                              f"linkId={_pre_state.get('linkDownloadId')} "
+                              f"numInputs={_pre_state.get('numInputs')}")
+                    self._log(f"  🔍 PRE-POST action: {_pre_state.get('action')} "
+                              f"(full: {_pre_state.get('actionFull')})")
+                    self._log(f"  🔍 PRE-POST location: {_pre_state.get('location')}")
+                    if _pre_state.get('linkDownloadOuterHTML'):
+                        self._log(f"  🔍 PRE-POST linkHTML: {_pre_state['linkDownloadOuterHTML']}")
+                    # Dump full form HTML
+                    _pre_html = self._page.evaluate("""() => {
+                        const f = document.getElementById('formulario');
+                        return f ? f.outerHTML : '';
+                    }""")
+                    _pre_dump = _dbg_dump_dir / 'pre_post_form.html'
+                    _pre_dump.write_text(_pre_html or '', encoding='utf-8')
+                    self._log(f"  📋 PRE-POST form dumped: {_pre_dump} ({len(_pre_html or '')} chars)")
+                except Exception as _dbg_e:
+                    self._log(f"  ⚠ PRE-POST diagnóstico falhou: {_dbg_e}")
+
                 try:
                     self._log("  → Fase E: jsfcljs no browser + expect_response…")
                     with self._page.expect_response(
