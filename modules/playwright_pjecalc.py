@@ -8492,6 +8492,23 @@ class PJECalcPlaywright:
             if "exportacao" in _url_pos:
                 self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
                 _exportou = True
+                # CRÍTICO: atualizar conversationId — a navegação para exportacao.jsf
+                # avança o Seam para uma nova conversação (ex: 296→303). Se continuar
+                # usando o valor antigo em Fase D, o servidor abre conversação nova e
+                # retorna página vazia (HTML) ao invés do .PJC. Capturar o novo ID aqui.
+                try:
+                    import re as _re_cid
+                    _m_cid = _re_cid.search(r"conversationId=(\d+)", _url_pos)
+                    if _m_cid:
+                        _new_cid = _m_cid.group(1)
+                        if _new_cid != self._calculo_conversation_id:
+                            self._log(
+                                f"  ↻ conversationId atualizado: "
+                                f"{self._calculo_conversation_id} → {_new_cid}"
+                            )
+                            self._calculo_conversation_id = _new_cid
+                except Exception:
+                    pass
             else:
                 self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
         except Exception as _menu_err:
