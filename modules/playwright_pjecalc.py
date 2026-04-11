@@ -569,6 +569,7 @@ class PJECalcPlaywright:
     ):
         self._log_cb = log_cb or (lambda msg: None)
         self._pw = None
+        self._pw_cm = None
         self._browser = None
         self._page = None
         self._headless = False  # stored by iniciar_browser() para crash recovery
@@ -601,7 +602,12 @@ class PJECalcPlaywright:
         if _set_running:
             _set_running(None)
         from playwright.sync_api import sync_playwright
-        self._pw = sync_playwright().__enter__()
+        # Guardamos o context manager (não só a instância) para que fechar()
+        # consiga chamar __exit__ corretamente. A instância Playwright em si
+        # não expõe __exit__ — o erro 'Playwright object has no attribute __exit__'
+        # mascarava exceções reais no teardown.
+        self._pw_cm = sync_playwright()
+        self._pw = self._pw_cm.__enter__()
         self._browser = self._pw.firefox.launch(
             headless=headless,
             slow_mo=0 if headless else 150,
@@ -633,13 +639,24 @@ class PJECalcPlaywright:
         )
 
     def fechar(self) -> None:
+        # Teardown defensivo: cada etapa em try separado para que uma falha
+        # não impeça as seguintes. Erros aqui NÃO devem mascarar exceções
+        # reais que ocorreram durante a automação.
         try:
-            if self._browser:
+            if self._browser is not None:
                 self._browser.close()
-            if self._pw:
-                self._pw.__exit__(None, None, None)
         except Exception as e:
-            logger.debug(f"fechar(): {e}")
+            logger.debug(f"fechar(): browser.close falhou: {e}")
+        try:
+            if getattr(self, "_pw_cm", None) is not None:
+                self._pw_cm.__exit__(None, None, None)
+            elif self._pw is not None and hasattr(self._pw, "stop"):
+                self._pw.stop()
+        except Exception as e:
+            logger.debug(f"fechar(): playwright stop falhou: {e}")
+        self._browser = None
+        self._pw = None
+        self._pw_cm = None
 
     # ── Logging ────────────────────────────────────────────────────────────────
 
@@ -7760,9 +7777,24 @@ class PJECalcPlaywright:
                 self._marcar_checkbox("apurarIr", True)
                 self._marcar_checkbox("tributarIR", True)
 
-            self._clicar_salvar()
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(500)
+            self._log(f"  → Salvando honorário [{i+1}/{len(hon_lista)}]")
+            try:
+                self._clicar_salvar()
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+                self._log(f"  ✓ Honorário [{i+1}/{len(hon_lista)}] salvo")
+            except Exception as _e_save:
+                self._log(f"  ✗ Honorário [{i+1}/{len(hon_lista)}] falhou no save: {_e_save}")
+                # Capturar HTML da página para diagnóstico (sem screenshot)
+                try:
+                    _diag_dir = Path("data/logs")
+                    _diag_dir.mkdir(parents=True, exist_ok=True)
+                    _diag_file = _diag_dir / f"fase8_honorario_{i+1}_falha.html"
+                    _diag_file.write_text(self._page.content(), encoding="utf-8")
+                    self._log(f"  📋 HTML salvo: {_diag_file}")
+                except Exception:
+                    pass
+                raise
 
         # Honorários periciais — criar via fluxo Novo (não é campo standalone)
         if periciais is not None:
