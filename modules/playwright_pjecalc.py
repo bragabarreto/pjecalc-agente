@@ -8700,6 +8700,52 @@ class PJECalcPlaywright:
                                 f"  ⚠ Fase E retornou HTML/conteúdo inesperado — "
                                 f"primeiros 300 chars: {_body_e[:300]!r}"
                             )
+                            # Dump HTML para análise posterior
+                            try:
+                                _dump_dir = self._exec_dir or Path('data/calculations')
+                                _dump_dir.mkdir(parents=True, exist_ok=True)
+                                _dump_path = _dump_dir / 'fase_e_response_dump.html'
+                                _dump_path.write_bytes(_body_e)
+                                self._log(f"  📋 HTML dumpado em: {_dump_path}")
+                                # Extrair dicas úteis do HTML
+                                _hints = self._page.evaluate("""(html) => {
+                                    const parser = new DOMParser();
+                                    const doc = parser.parseFromString(html, 'text/html');
+                                    const result = {
+                                        title: doc.title,
+                                        errors: [],
+                                        downloadDisponivel: null,
+                                        hasLinkDownload: false,
+                                        messagesContent: [],
+                                        viewState: null,
+                                        scriptsInline: [],
+                                    };
+                                    // Títulos, erros, mensagens
+                                    doc.querySelectorAll('.rf-msgs-err, .rich-messages-error, [class*=error]').forEach(el => {
+                                        const t = el.textContent.trim();
+                                        if (t && t.length < 300) result.errors.push(t);
+                                    });
+                                    doc.querySelectorAll('.rf-msgs-sum, .rich-messages-summary, .rf-msgs').forEach(el => {
+                                        const t = el.textContent.trim();
+                                        if (t && t.length < 300) result.messagesContent.push(t);
+                                    });
+                                    // Há linkDownloadArquivo?
+                                    result.hasLinkDownload = !!doc.querySelector("[id$='linkDownloadArquivo']");
+                                    const nomeInp = doc.querySelector("[id$='nomeArquivo']");
+                                    if (nomeInp) result.nomeArquivo = nomeInp.value;
+                                    // ViewState
+                                    const vs = doc.querySelector("input[name='javax.faces.ViewState']");
+                                    if (vs) result.viewState = vs.value.slice(0, 50);
+                                    // Scripts inline que podem conter jsfcljs
+                                    doc.querySelectorAll('script').forEach(s => {
+                                        const t = (s.textContent || '').trim();
+                                        if (t && t.length < 500) result.scriptsInline.push(t.slice(0, 300));
+                                    });
+                                    return result;
+                                }""", _body_e.decode('iso-8859-1', errors='replace'))
+                                self._log(f"  📋 HTML hints: {_hints}")
+                            except Exception as _de:
+                                self._log(f"  ⚠ Dump HTML falhou: {_de}")
                 except Exception as e_resp:
                     self._log(f"  ⚠ Fase E expect_response falhou: {e_resp}")
 
