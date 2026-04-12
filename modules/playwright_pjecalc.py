@@ -4262,7 +4262,8 @@ class PJECalcPlaywright:
         # gera automaticamente as parcelas reflexas. O usuário apenas clica "Exibir Reflexas"
         # na listagem e marca os checkboxes desejados.
         # Portanto: reflexas cujo principal está em predefinidas (Expresso) NUNCA devem
-        # ir para criação manual — são tratadas exclusivamente por _configurar_reflexos_expresso.
+        # ir para criação manual — EXCETO se o usuário explicitamente aprovou estratégia
+        # "manual" na prévia.
         if predefinidas:
             _nomes_pred_lower = set()
             for _vp in predefinidas:
@@ -4279,7 +4280,18 @@ class PJECalcPlaywright:
                            or "reflexo" in _nome_v
                            or "sobre" in _nome_v)
                 if _eh_ref:
-                    # Reflexas de verbas Expresso → tratadas por _configurar_reflexos_expresso
+                    # Verificar se o usuário aprovou explicitamente a estratégia "manual"
+                    _ep_ref = v.get("estrategia_preenchimento", {}) or {}
+                    _estrategia_ref = (_ep_ref.get("estrategia") or "").lower()
+                    if _estrategia_ref == "manual":
+                        self._log(
+                            f"  → '{v.get('nome_pjecalc') or v.get('nome_sentenca')}' "
+                            f"é reflexa com estratégia MANUAL aprovada pelo usuário — "
+                            f"mantendo no fluxo manual"
+                        )
+                        _pers_sem_reflexas.append(v)
+                        continue
+                    # Reflexas sem aprovação manual → tratadas por _configurar_reflexos_expresso
                     self._log(
                         f"  → '{v.get('nome_pjecalc') or v.get('nome_sentenca')}' "
                         f"é reflexa — será tratada via 'Exibir Reflexas' do Expresso, "
@@ -5107,6 +5119,26 @@ class PJECalcPlaywright:
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
             _nome_lower = nome.lower()
 
+            # ── REGRA GERAL: Automação só cria verba/reflexo manual se aprovado na prévia ──
+            # O usuário deve ter explicitamente definido estratégia "manual" na prévia.
+            # Sem essa aprovação, a verba é ignorada no fluxo manual.
+            _ep_v = v.get("estrategia_preenchimento", {}) or {}
+            _estrategia_v = (_ep_v.get("estrategia") or "").lower()
+            if _estrategia_v and _estrategia_v != "manual":
+                self._log(
+                    f"  ⛔ '{nome}' — estratégia na prévia é '{_estrategia_v}', não 'manual'. "
+                    f"Criação manual requer aprovação explícita do usuário na prévia. Pulando."
+                )
+                continue
+            if not _estrategia_v:
+                # Sem estratégia definida — verificar se é verba que o sistema adicionou
+                # automaticamente (não aprovada pelo usuário). Verbas sem estratégia
+                # explícita só prosseguem se não forem Expresso/Adaptado.
+                self._log(
+                    f"  ⚠ '{nome}' — sem estratégia definida na prévia. "
+                    f"Verificando guards adicionais antes de criar manualmente."
+                )
+
             # ── REGRA: Bloquear criação manual de verba que pertence ao Expresso ──
             if _NOMES_EXPRESSO_LOWER and _nome_lower in _NOMES_EXPRESSO_LOWER:
                 self._log(
@@ -5202,7 +5234,19 @@ class PJECalcPlaywright:
                 if _nome_principal_ref and _nome_principal_ref in self._reflexos_configurados:
                     self._log(f"  → '{nome}' reflexo já configurado via botão Verba Reflexa — pulando")
                     continue
-                self._log(f"  → '{nome}' reflexo NÃO configurado via botão — criando manualmente como REFLEXO")
+
+                # ── REGRA: Reflexo manual requer aprovação explícita do usuário ──
+                # Sem estratégia "manual" explícita na prévia, reflexos NÃO são criados
+                # manualmente. As regras do manual PJE-Calc (seção 9.4/9.8) exigem que
+                # reflexos sejam gerados via "Exibir Reflexas" sempre que possível.
+                if _estrategia_v != "manual":
+                    self._log(
+                        f"  ⛔ '{nome}' é reflexo sem estratégia 'manual' aprovada "
+                        f"(estratégia: '{_estrategia_v or 'não definida'}') — "
+                        f"reflexos manuais requerem aprovação explícita na prévia. Pulando."
+                    )
+                    continue
+                self._log(f"  → '{nome}' reflexo com estratégia MANUAL aprovada — criando manualmente")
 
             # Pular verbas configuradas via checkboxes na aba FGTS (tratadas em fase_fgts)
             if any(k in _nome_lower for k in _VERBAS_APENAS_FGTS):
