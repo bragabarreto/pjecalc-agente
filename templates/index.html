@@ -15,23 +15,45 @@
         <th>Nº do Processo</th>
         <th>Reclamante</th>
         <th>Reclamado</th>
-        <th>Estado</th>
-        <th>Cálculos</th>
+        <th>Status</th>
         <th>Última Atualização</th>
+        <th>Arquivo .PJC</th>
         <th>Ações</th>
       </tr>
     </thead>
     <tbody>
       {% for proc in processos %}
+      {% set ultimo_calc = proc.calculos|sort(attribute='criado_em', reverse=true)|first if proc.calculos else None %}
       <tr>
         <td><a href="/processo/{{ proc.numero_processo }}">{{ proc.numero_processo }}</a></td>
         <td>{{ proc.reclamante or '—' }}</td>
         <td>{{ proc.reclamado or '—' }}</td>
-        <td>{{ proc.estado or '—' }}</td>
-        <td>{{ proc.calculos|length }}</td>
+        <td>
+          {% if ultimo_calc %}
+            {% if ultimo_calc.status == 'pjc_exportado' %}
+            <span class="badge badge-verde">PJC Exportado</span>
+            {% elif ultimo_calc.status == 'confirmado' %}
+            <span class="badge badge-azul">Confirmado</span>
+            {% elif ultimo_calc.status == 'previa_gerada' %}
+            <span class="badge badge-amarelo">Prévia</span>
+            {% elif ultimo_calc.status == 'em_automacao' %}
+            <span class="badge badge-azul">Automação...</span>
+            {% elif 'erro' in (ultimo_calc.status or '') %}
+            <span class="badge badge-vermelho">Erro</span>
+            {% else %}
+            <span class="badge badge-cinza">{{ ultimo_calc.status }}</span>
+            {% endif %}
+          {% else %}—{% endif %}
+        </td>
         <td>{{ proc.atualizado_em.strftime('%d/%m/%Y %H:%M') if proc.atualizado_em else '—' }}</td>
         <td>
+          {% if ultimo_calc and ultimo_calc.arquivo_pjc %}
+          <a href="/download/{{ ultimo_calc.sessao_id }}/pjc" class="btn btn-success" style="padding:4px 10px; font-size:0.8rem;">Download .PJC</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>
           <a href="/processo/{{ proc.numero_processo }}/previa-atual" class="btn btn-secondary" style="padding:5px 12px; font-size:0.85rem;">Ver Prévia</a>
+          <a href="/processo/{{ proc.numero_processo }}" class="btn btn-secondary" style="padding:5px 12px; font-size:0.85rem; margin-left:4px;">Histórico</a>
         </td>
       </tr>
       {% endfor %}
