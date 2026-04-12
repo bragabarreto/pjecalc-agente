@@ -7863,9 +7863,32 @@ class PJECalcPlaywright:
                 except Exception:
                     self._page.wait_for_timeout(2000)
 
-            # Base de apuração — fuzzy match com opções reais
-            # Opções típicas: BRUTO, BRUTO_CS, BRUTO_CS_PP, VNP (enum Java)
+            # Base de apuração — mapear termos genéricos para valores reais do PJE-Calc
+            # Opções reais do select: BRUTO, BRUTO_MENOS_CS, BRUTO_MENOS_CS_PP
+            # (para devedor Reclamante: também VNP = "Verbas que Não Compõem o Principal")
+            _BASE_APURACAO_MAP = {
+                "condenação": "BRUTO",
+                "condenacao": "BRUTO",
+                "bruto": "BRUTO",
+                "valor da condenação": "BRUTO",
+                "valor da condenacao": "BRUTO",
+                "bruto (-) cs": "BRUTO_MENOS_CS",
+                "bruto menos cs": "BRUTO_MENOS_CS",
+                "bruto_menos_cs": "BRUTO_MENOS_CS",
+                "bruto (-) cs (-) pp": "BRUTO_MENOS_CS_PP",
+                "bruto menos cs pp": "BRUTO_MENOS_CS_PP",
+                "bruto_menos_cs_pp": "BRUTO_MENOS_CS_PP",
+                "verbas não compõem principal": "VNP",
+                "verbas nao compoem principal": "VNP",
+                "vnp": "VNP",
+                "renda mensal": "RENDA_MENSAL",
+            }
             base = hon.get("base_apuracao", "") or ""
+            # Traduzir termo genérico para valor do PJE-Calc
+            _base_lower = base.lower().strip()
+            if _base_lower in _BASE_APURACAO_MAP:
+                base = _BASE_APURACAO_MAP[_base_lower]
+                self._log(f"  → base_apuracao '{hon.get('base_apuracao')}' → '{base}' (mapeado)")
             # Default: se tipo_valor é CALCULADO e base vazia, usar "Bruto"
             if not base and tipo_valor == "CALCULADO":
                 base = "BRUTO"
