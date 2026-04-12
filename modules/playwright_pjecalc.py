@@ -3372,7 +3372,6 @@ class PJECalcPlaywright:
 
     # ── Fase 2: Histórico Salarial ─────────────────────────────────────────────
 
-    @retry(max_tentativas=2)
     @staticmethod
     def _consolidar_historico(historico: list[dict], max_bases: int = 15) -> list[dict]:
         """Consolida entradas de histórico salarial em ≤max_bases bases.
