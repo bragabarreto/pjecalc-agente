@@ -4257,6 +4257,38 @@ class PJECalcPlaywright:
         predefinidas = [v for v in predefinidas if not v.get("_apenas_fgts")]
         personalizadas = [v for v in personalizadas if not v.get("_apenas_fgts")]
 
+        # ── REGRA MANUAL PJE-CALC: Reflexas de verbas Expresso são AUTO-GERADAS ──
+        # Segundo o manual (seção 9.7/9.8), após salvar verbas no Expresso, o PJE-Calc
+        # gera automaticamente as parcelas reflexas. O usuário apenas clica "Exibir Reflexas"
+        # na listagem e marca os checkboxes desejados.
+        # Portanto: reflexas cujo principal está em predefinidas (Expresso) NUNCA devem
+        # ir para criação manual — são tratadas exclusivamente por _configurar_reflexos_expresso.
+        if predefinidas:
+            _nomes_pred_lower = set()
+            for _vp in predefinidas:
+                _ep = _vp.get("estrategia_preenchimento", {}) or {}
+                _n = (_ep.get("expresso_base") or _vp.get("nome_sentenca")
+                      or _vp.get("nome_pjecalc") or "")
+                if _n:
+                    _nomes_pred_lower.add(_n.lower())
+            _pers_sem_reflexas = []
+            for v in personalizadas:
+                _nome_v = (v.get("nome_pjecalc") or v.get("nome_sentenca") or "").lower()
+                _eh_ref = (v.get("eh_reflexa")
+                           or v.get("tipo", "").lower() == "reflexa"
+                           or "reflexo" in _nome_v
+                           or "sobre" in _nome_v)
+                if _eh_ref:
+                    # Reflexas de verbas Expresso → tratadas por _configurar_reflexos_expresso
+                    self._log(
+                        f"  → '{v.get('nome_pjecalc') or v.get('nome_sentenca')}' "
+                        f"é reflexa — será tratada via 'Exibir Reflexas' do Expresso, "
+                        f"removendo do fluxo manual"
+                    )
+                    continue
+                _pers_sem_reflexas.append(v)
+            personalizadas = _pers_sem_reflexas
+
         # Diagnóstico: listar botões disponíveis
         try:
             _botoes_verbas = self._page.evaluate("""() =>
