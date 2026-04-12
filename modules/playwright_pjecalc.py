@@ -8765,6 +8765,7 @@ class PJECalcPlaywright:
                         f"  ✓ .PJC salvo via Fase A (auto-download): "
                         f"{_dest_a} ({len(_pjc_bytes)} bytes)"
                     )
+                    self._log(f"PJC_GERADO:{_dest_a}")
                     return str(_dest_a)
                 else:
                     self._log(
@@ -8934,6 +8935,7 @@ class PJECalcPlaywright:
                                 f"  ✓ .PJC salvo via Fase E (expect_response): "
                                 f"{_dest_e} ({len(_body_e)} bytes)"
                             )
+                            self._log(f"PJC_GERADO:{_dest_e}")
                             return str(_dest_e)
                         else:
                             self._log(
@@ -9090,6 +9092,7 @@ class PJECalcPlaywright:
                                     _dest = _dest_dir / _nome_arquivo
                                     _dest.write_bytes(_body)
                                     self._log(f"  ✓ .PJC salvo via POST direto: {_dest} ({len(_body)} bytes)")
+                                    self._log(f"PJC_GERADO:{_dest}")
                                     return str(_dest)
                                 else:
                                     self._log(f"  ⚠ POST retornou HTML/conteúdo inesperado — primeiros 300 chars: {_body[:300]!r}")
