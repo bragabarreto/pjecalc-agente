@@ -668,6 +668,52 @@ async def editar_estrategia(
         except Exception as _e:
             logger.warning(f"learning_estrategia_record_failed: {_e}")
 
+    # Salvar na tabela EstrategiaVerba para aprendizado futuro
+    # Quando o usuário muda a estratégia, o sistema aprende e usa
+    # essa escolha para verbas similares em cálculos futuros.
+    try:
+        from infrastructure.database import EstrategiaVerba
+        import unicodedata
+        _nome_verba = verba.get("nome_sentenca") or verba.get("nome_pjecalc", "")
+        _nome_norm = unicodedata.normalize("NFD", _nome_verba.lower())
+        _nome_norm = "".join(c for c in _nome_norm if unicodedata.category(c) != "Mn")
+        _nome_norm = _nome_norm.strip()
+
+        # Buscar registro existente ou criar novo
+        _ev = db.query(EstrategiaVerba).filter(
+            EstrategiaVerba.nome_normalizado == _nome_norm,
+        ).first()
+
+        if _ev:
+            _ev.estrategia = estrategia_atual.get("estrategia", "manual")
+            _ev.expresso_nome = estrategia_atual.get("nome_pjecalc") or estrategia_atual.get("expresso_base")
+            _ev.expresso_base = estrategia_atual.get("expresso_base")
+            _ev.campos_alterados = json.dumps(estrategia_atual.get("campos_alterar", {}), ensure_ascii=False)
+            _ev.parametros = json.dumps(estrategia_atual.get("parametros", {}), ensure_ascii=False)
+            _ev.incidencias = json.dumps(estrategia_atual.get("incidencias", {}), ensure_ascii=False)
+            # Marcar como bem-sucedida (usuário definiu = sucesso garantido)
+            _ev.tentativas = max(_ev.tentativas, 1)
+            _ev.sucessos = max(_ev.sucessos, 1)
+        else:
+            _ev = EstrategiaVerba(
+                nome_verba=_nome_verba,
+                nome_normalizado=_nome_norm,
+                tipo=verba.get("tipo", "principal").lower(),
+                estrategia=estrategia_atual.get("estrategia", "manual"),
+                expresso_nome=estrategia_atual.get("nome_pjecalc") or estrategia_atual.get("expresso_base"),
+                expresso_base=estrategia_atual.get("expresso_base"),
+                campos_alterados=json.dumps(estrategia_atual.get("campos_alterar", {}), ensure_ascii=False),
+                parametros=json.dumps(estrategia_atual.get("parametros", {}), ensure_ascii=False),
+                incidencias=json.dumps(estrategia_atual.get("incidencias", {}), ensure_ascii=False),
+                tentativas=1,
+                sucessos=1,
+            )
+            db.add(_ev)
+        db.commit()
+        logger.info(f"estrategia_aprendida verba='{_nome_verba}' estrategia={estrategia_atual.get('estrategia')}")
+    except Exception as _e:
+        logger.warning(f"estrategia_verba_save_failed: {_e}")
+
     return JSONResponse({
         "sucesso": True,
         "indice": indice,
