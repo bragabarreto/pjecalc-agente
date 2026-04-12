@@ -475,41 +475,31 @@
       "aplica_para": ["gratificação especial", "gratificação semestral", "gratificação natalina"],
       "campos_editaveis": ["nome", "ocorrencia", "percentual"],
       "nota": "Base para gratificações diversas"
+    },
+    {
+      "base_expresso": "INTERVALO INTRAJORNADA",
+      "aplica_para": ["supressão do intervalo intrajornada", "intervalo intrajornada suprimido", "hora intervalar intrajornada"],
+      "campos_editaveis": ["nome", "ocorrencia", "base_calculo"],
+      "nota": "Supressão de intervalo INTRAJORNADA (repouso/alimentação). Depende do contexto da sentença."
+    },
+    {
+      "base_expresso": "INTERVALO INTERJORNADAS",
+      "aplica_para": ["supressão do intervalo interjornadas", "intervalo interjornadas suprimido", "intervalo entre jornadas suprimido"],
+      "campos_editaveis": ["nome", "ocorrencia", "base_calculo"],
+      "nota": "Supressão de intervalo INTERJORNADAS (entre jornadas). Depende do contexto da sentença."
+    },
+    {
+      "base_expresso": "DIFERENÇA SALARIAL",
+      "aplica_para": ["equiparação salarial", "diferenças por equiparação", "diferenças salariais por equiparação"],
+      "campos_editaveis": ["nome", "ocorrencia", "base_calculo"],
+      "nota": "Equiparação salarial é tratada como diferença salarial no PJE-Calc"
+    },
+    {
+      "base_expresso": "INDENIZAÇÃO ADICIONAL",
+      "aplica_para": ["indenização por estabilidade", "estabilidade provisória", "estabilidade gestante", "estabilidade acidentária", "indenização estabilidade"],
+      "campos_editaveis": ["nome", "ocorrencia", "base_calculo"],
+      "nota": "Estabilidade provisória usa INDENIZAÇÃO ADICIONAL como base Expresso"
     }
   ],
-  "somente_manual": [
-    {
-      "nome": "Indenização por Estabilidade",
-      "aliases": ["estabilidade provisória", "estabilidade gestante", "estabilidade acidentária", "indenização estabilidade"],
-      "parametros_tipicos": {
-        "caracteristica": "COMUM",
-        "ocorrencia": "MENSAL",
-        "base_calculo": "INFORMADO",
-        "tipo_valor": "INFORMADO"
-      },
-      "incidencias": {"fgts": true, "inss": true, "irpf": true}
-    },
-    {
-      "nome": "Equiparação Salarial",
-      "aliases": ["equiparação salarial", "diferenças por equiparação"],
-      "parametros_tipicos": {
-        "caracteristica": "COMUM",
-        "ocorrencia": "MENSAL",
-        "base_calculo": "INFORMADO",
-        "tipo_valor": "INFORMADO"
-      },
-      "incidencias": {"fgts": true, "inss": true, "irpf": true}
-    },
-    {
-      "nome": "Indenização por Supressão de Intervalo",
-      "aliases": ["indenização intervalo", "supressão intervalo intrajornada"],
-      "parametros_tipicos": {
-        "caracteristica": "COMUM",
-        "ocorrencia": "MENSAL",
-        "base_calculo": "REMUNERACAO",
-        "tipo_valor": "PERCENTUAL"
-      },
-      "incidencias": {"fgts": true, "inss": true, "irpf": true}
-    }
-  ]
+  "somente_manual": []
 }

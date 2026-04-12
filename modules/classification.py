@@ -1474,31 +1474,68 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
     if pendentes_llm:
         classificadas = _classificar_lote_via_llm(pendentes_llm)
         for resultado in classificadas:
-            # Se o LLM classificou como uma verba que existe no Expresso,
-            # promover para predefinidas (não criar manual para Férias, 13º, etc.)
+            # O LLM agora retorna expresso_equivalente e lancamento para cada verba.
+            # Usar esses campos para decidir: Expresso, Expresso_Adaptado ou Manual.
             _nome_pjc = resultado.get("nome_pjecalc") or (resultado.get("sugestao_llm") or {}).get("nome_pjecalc", "")
+            _expresso_equiv = resultado.get("expresso_equivalente") or (resultado.get("sugestao_llm") or {}).get("expresso_equivalente", "")
+            _lanc_llm = (resultado.get("lancamento") or (resultado.get("sugestao_llm") or {}).get("lancamento", "")).lower()
             _nome_pjc_norm = _normalizar_chave(_nome_pjc) if _nome_pjc else ""
             _carac = _normalizar_chave(resultado.get("caracteristica", ""))
-            _is_expresso_verba = (
-                _nome_pjc_norm in _NOMES_EXPRESSO
-                or _carac in ("ferias", "decimo terceiro salario", "13o salario")
-                or any(k in _nome_pjc_norm for k in ("ferias", "13 salario", "decimo terceiro"))
-            )
-            if _is_expresso_verba and _nome_pjc:
+
+            # Determinar se é Expresso: direto, adaptado, ou por equivalência LLM
+            _is_expresso_direto = _nome_pjc_norm in _NOMES_EXPRESSO
+            _is_expresso_adaptado = _lanc_llm in ("expresso_adaptado", "expresso adaptado")
+            _is_expresso_llm = _lanc_llm == "expresso" and _expresso_equiv
+            _is_expresso_carac = _carac in ("ferias", "decimo terceiro salario", "13o salario")
+            _is_expresso_verba = _is_expresso_direto or _is_expresso_adaptado or _is_expresso_llm or _is_expresso_carac
+
+            # Se LLM identificou equivalente Expresso, usar esse nome
+            _nome_expresso_final = ""
+            if _is_expresso_direto:
+                _nome_expresso_final = _nome_pjc
+            elif _expresso_equiv:
+                _nome_expresso_final = _expresso_equiv
+            elif _is_expresso_carac:
+                _nome_expresso_final = _nome_pjc
+
+            if _is_expresso_verba and _nome_expresso_final:
                 # Buscar config predefinida correspondente
+                _nome_final_norm = _normalizar_chave(_nome_expresso_final)
                 _cfg_match = None
                 for _k, _cfg in _VERBAS_NORMALIZADAS.items():
-                    if _normalizar_chave(_cfg.get("nome_pjecalc", "")) == _nome_pjc_norm:
+                    if _normalizar_chave(_cfg.get("nome_pjecalc", "")) == _nome_final_norm:
                         _cfg_match = _cfg
                         break
                 if _cfg_match:
                     resultado = {**resultado, **_cfg_match}
                     resultado["lancamento"] = "Expresso"
                     resultado["mapeada"] = True
-                    resultado["confianca_mapeamento"] = 0.85  # via LLM, não dicionário direto
+                    resultado["confianca_mapeamento"] = 0.85
                     resultado["reflexas_sugeridas"] = REFLEXAS_TIPICAS.get(_cfg_match["nome_pjecalc"], [])
+                    # Para adaptado, manter o nome original da sentença e anotar a base
+                    if _is_expresso_adaptado and not _is_expresso_direto:
+                        resultado["lancamento"] = "Expresso_Adaptado"
+                        resultado["estrategia_preenchimento"] = {
+                            "estrategia": "expresso_adaptado",
+                            "expresso_base": _nome_expresso_final,
+                            "confianca": 0.85,
+                            "baseado_em": "llm_matching",
+                        }
                     predefinidas.append(resultado)
                     reflexas_acumuladas.extend(resultado["reflexas_sugeridas"])
+                    continue
+                # Sem config no dicionário mas LLM diz que é Expresso
+                elif _expresso_equiv:
+                    resultado["lancamento"] = "Expresso"
+                    resultado["mapeada"] = True
+                    resultado["confianca_mapeamento"] = 0.75
+                    resultado["estrategia_preenchimento"] = {
+                        "estrategia": "expresso_adaptado" if _is_expresso_adaptado else "expresso_direto",
+                        "expresso_base": _expresso_equiv,
+                        "confianca": 0.75,
+                        "baseado_em": "llm_matching",
+                    }
+                    predefinidas.append(resultado)
                     continue
 
             resultado["lancamento"] = "Manual"
@@ -1717,15 +1754,48 @@ def _classificar_lote_via_llm(verbas_nao_reconhecidas: list[dict[str, Any]]) -> 
         )
     lista_verbas = "\n".join(itens)
 
+    # Montar lista de verbas Expresso disponíveis no PJE-Calc para matching por proximidade
+    _expresso_nomes: list[str] = []
+    try:
+        import os as _os_llm
+        _cat_path = _os_llm.path.join(
+            _os_llm.path.dirname(_os_llm.path.dirname(_os_llm.path.abspath(__file__))),
+            "knowledge", "catalogo_verbas_pjecalc.json",
+        )
+        with open(_cat_path, "r", encoding="utf-8") as _f:
+            _cat = _json.load(_f)
+        _expresso_nomes = [e["nome_pjecalc"] for e in _cat.get("expresso", [])]
+        _adaptaveis = _cat.get("adaptaveis", [])
+    except Exception:
+        _adaptaveis = []
+
+    _lista_expresso = ", ".join(_expresso_nomes) if _expresso_nomes else "(não disponível)"
+    _lista_adaptaveis = "\n".join(
+        f'  - Base: {a["base_expresso"]} → aplica para: {", ".join(a["aplica_para"])}'
+        for a in _adaptaveis
+    ) if _adaptaveis else "(nenhum)"
+
     prompt = f"""Você é especialista em PJE-Calc (cálculo trabalhista).
 Classifique as verbas abaixo extraídas de uma sentença trabalhista.
-Responda APENAS com um array JSON com {len(verbas_nao_reconhecidas)} objetos (um por verba, na mesma ordem):
 
+REGRA FUNDAMENTAL: Sempre prefira o Lançamento Expresso. Antes de classificar como manual,
+OBRIGATORIAMENTE verifique se existe uma verba Expresso equivalente ou adaptável.
+O modo manual SÓ deve ser usado quando NÃO existe nenhuma verba Express equivalente.
+
+Verbas disponíveis no Lançamento Expresso do PJE-Calc v2.15.1:
+{_lista_expresso}
+
+Verbas adaptáveis (usar base Expresso e ajustar nome/parâmetros):
+{_lista_adaptaveis}
+
+Verbas a classificar:
 {lista_verbas}
 
-Schema de cada objeto:
+Schema de cada objeto no array JSON:
 {{
-  "nome_pjecalc": "nome a usar no campo Nome",
+  "nome_pjecalc": "nome EXATO da verba Expresso (se match direto ou adaptável) OU nome descritivo (se manual)",
+  "expresso_equivalente": "nome EXATO da verba Expresso mais próxima (mesmo que não seja match perfeito) ou null",
+  "lancamento": "Expresso | Expresso_Adaptado | Manual",
   "caracteristica": "Comum | 13o Salario | Aviso Previo | Ferias",
   "ocorrencia": "Mensal | Dezembro | Periodo Aquisitivo | Desligamento",
   "incidencia_fgts": true/false,
@@ -1735,10 +1805,10 @@ Schema de cada objeto:
   "compor_principal": true/false,
   "pagina_pjecalc": "Verbas | Multas e Indenizacoes",
   "confianca": 0.0-1.0,
-  "justificativa": "breve explicação"
+  "justificativa": "explique por que escolheu Expresso/Adaptado/Manual"
 }}
 
-Responda SOMENTE com o array JSON, sem markdown."""
+Responda APENAS com o array JSON ({len(verbas_nao_reconhecidas)} objetos, mesma ordem), sem markdown."""
 
     try:
         cliente = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY, timeout=60.0)
