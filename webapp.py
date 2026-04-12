@@ -1667,10 +1667,11 @@ def _get_campo_valor(dados: dict, campo: str) -> Any:
 @app.post("/api/reset-lock/{sessao_id}")
 async def reset_lock_automacao(sessao_id: str):
     """Libera lock de automação travado (para recuperação de falhas)."""
-    if sessao_id in _sessoes_automacao:
-        _sessoes_automacao.pop(sessao_id, None)
-        return {"sucesso": True, "msg": f"Lock liberado para {sessao_id}"}
-    return {"sucesso": True, "msg": "Nenhum lock ativo para esta sessão"}
+    _sessoes_automacao.pop(sessao_id, None)
+    # Limpar lock global se pertence a esta sessão (ou forçar se sessao_id == "force")
+    if _automacao_global_lock.get("sessao") == sessao_id or sessao_id == "force":
+        _automacao_global_lock.clear()
+    return {"sucesso": True, "msg": f"Lock liberado para {sessao_id}"}
 
 
 # ── Learning Dashboard ────────────────────────────────────────────────────────
