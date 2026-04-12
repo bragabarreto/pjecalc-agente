@@ -305,19 +305,19 @@ Se não mencionado → ferias = []
 **SEÇÃO 6 — HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
 - Sucumbência recíproca → gerar DOIS registros na lista:
-    [{{"devedor": "RECLAMADO", "base_apuracao": "Condenação", ...}},
-     {{"devedor": "RECLAMANTE", "base_apuracao": "Verbas Não Compõem Principal", ...}}]
+    [{{"devedor": "RECLAMADO", "base_apuracao": "BRUTO", ...}},
+     {{"devedor": "RECLAMANTE", "base_apuracao": "VNP", ...}}]
 - Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
 - Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
 - Se indeferidos ou não mencionados → honorarios = []
 - tipo: "SUCUMBENCIAIS" (padrão — condenação em honorários pelo juiz) | "CONTRATUAIS" (raro)
 - tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
-- base_apuracao — depende do devedor + tipo:
-    RECLAMADO + SUCUMBENCIAIS: "Condenação" (padrão — % sobre o valor da condenação) | "Renda Mensal"
-    RECLAMANTE + SUCUMBENCIAIS: "Verbas Não Compõem Principal" (padrão — % sobre pedidos indeferidos) | "Condenação" | "Renda Mensal"
-    CONTRATUAIS: "Condenação" | "Renda Mensal"
+- base_apuracao (usar valores EXATOS do PJE-Calc):
+    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão — % sobre o valor da condenação) | "BRUTO_MENOS_CS" | "BRUTO_MENOS_CS_PP"
+    RECLAMANTE + SUCUMBENCIAIS: "VNP" (padrão — % sobre Verbas que Não Compõem Principal) | "BRUTO" | "BRUTO_MENOS_CS"
+    CONTRATUAIS: "BRUTO" | "BRUTO_MENOS_CS"
   ⚠️ Quando a sentença diz "sobre o valor da condenação" para AMBAS as partes →
-     usar "Condenação" para os dois registros
+     usar "BRUTO" para os dois registros
 - percentual: float decimal (ex: 0.15 para 15%); null se tipo_valor=INFORMADO
 - valor_informado: float; null se tipo_valor=CALCULADO
 - apurar_ir: true quando os honorários forem tributáveis (advogado pessoa física)
@@ -520,7 +520,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "Condenação | Verbas Não Compõem Principal | Renda Mensal",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CS | BRUTO_MENOS_CS_PP | VNP",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"
@@ -648,7 +648,7 @@ REGRAS FINAIS:
     "Honorários sucumbenciais de X%"
     "Honorários advocatícios: X%"
   Se o relatório tiver QUALQUER menção a honorários com percentual ou devedor identificado → incluir no array.
-  Honorários do RECLAMADO com percentual: tipo="SUCUMBENCIAIS", tipo_valor="CALCULADO", base_apuracao="Condenação".
+  Honorários do RECLAMADO com percentual: tipo="SUCUMBENCIAIS", tipo_valor="CALCULADO", base_apuracao="BRUTO".
   Percentual: "15%" → 0.15 | "10%" → 0.10 | "20%" → 0.20. Faixa "10% a 15%" → usar 0.10.
   NUNCA retornar honorarios=[] se o relatório listar "Honorários Advocatícios" com percentual ou valor.
 - FGTS NÃO é verba_deferida: quando o relatório listar "DEPÓSITOS DE FGTS + MULTA DE 40%",
@@ -860,17 +860,17 @@ verbas_deferidas; em vez disso definir fgts.multa_40 = true. Reflexos de FGTS ta
 **HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
 - Sucumbência recíproca → gerar DOIS registros na lista:
-    [{{"devedor": "RECLAMADO", "base_apuracao": "Condenação", ...}},
-     {{"devedor": "RECLAMANTE", "base_apuracao": "Verbas Não Compõem Principal", ...}}]
+    [{{"devedor": "RECLAMADO", "base_apuracao": "BRUTO", ...}},
+     {{"devedor": "RECLAMANTE", "base_apuracao": "VNP", ...}}]
 - Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
 - Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
 - Se indeferidos ou não mencionados → honorarios = []
 - tipo: "SUCUMBENCIAIS" (padrão) | "CONTRATUAIS" (raro)
 - tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
-- base_apuracao:
-    RECLAMADO + SUCUMBENCIAIS: "Condenação" (padrão) | "Renda Mensal"
-    RECLAMANTE + SUCUMBENCIAIS: "Verbas Não Compõem Principal" (padrão) | "Condenação" | "Renda Mensal"
-    ⚠️ Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → "Condenação" nos dois
+- base_apuracao (usar valores EXATOS do PJE-Calc):
+    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão, = valor da condenação) | "BRUTO_MENOS_CS" | "BRUTO_MENOS_CS_PP"
+    RECLAMANTE + SUCUMBENCIAIS: "VNP" (padrão, = Verbas Não Compõem Principal) | "BRUTO" | "BRUTO_MENOS_CS"
+    ⚠️ Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → "BRUTO" nos dois
 - percentual: decimal (15% → 0.15); null se tipo_valor=INFORMADO
 - valor_informado: float; null se tipo_valor=CALCULADO
 - apurar_ir: true quando honorários são tributáveis
@@ -1002,7 +1002,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "Condenação | Verbas Não Compõem Principal | Renda Mensal",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CS | BRUTO_MENOS_CS_PP | VNP",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"
@@ -2301,13 +2301,13 @@ def _migrar_honorarios_legado(hon: dict) -> list[dict]:
 
     if parte in ("Ambos", "ambos", "AMBOS"):
         return [
-            _registro("RECLAMADO", "Condenação"),
-            _registro("RECLAMANTE", "Verbas Não Compõem Principal"),
+            _registro("RECLAMADO", "BRUTO"),
+            _registro("RECLAMANTE", "VNP"),
         ]
     if parte in ("Reclamante", "RECLAMANTE"):
-        return [_registro("RECLAMANTE", "Verbas Não Compõem Principal")]
+        return [_registro("RECLAMANTE", "VNP")]
     # Padrão: Reclamado
-    return [_registro("RECLAMADO", "Condenação")]
+    return [_registro("RECLAMADO", "BRUTO")]
 
 
 def _migrar_inss_legado(cs: dict) -> dict:

@@ -442,7 +442,7 @@ def aplicar_edicao_usuario(
             "tipo": "SUCUMBENCIAIS",
             "devedor": novo_valor or "RECLAMADO",
             "tipo_valor": "CALCULADO",
-            "base_apuracao": "Condenação",
+            "base_apuracao": "BRUTO",
             "percentual": None,
             "valor_informado": None,
             "apurar_ir": False,
