@@ -3373,11 +3373,86 @@ class PJECalcPlaywright:
     # ── Fase 2: Histórico Salarial ─────────────────────────────────────────────
 
     @retry(max_tentativas=2)
+    @staticmethod
+    def _consolidar_historico(historico: list[dict], max_bases: int = 15) -> list[dict]:
+        """Consolida entradas de histórico salarial em ≤max_bases bases.
+
+        O PJE-Calc limita a 15 bases no Histórico Salarial. Agrupa períodos
+        consecutivos com mesmo nome e valor em uma única base.
+        Se ainda exceder max_bases, agrupa períodos com mesmo nome
+        independente de descontinuidade de valor.
+        """
+        if len(historico) <= max_bases:
+            return historico
+
+        def _parse_valor(v) -> float:
+            if isinstance(v, (int, float)):
+                return float(v)
+            s = str(v).replace(".", "").replace(",", ".").strip()
+            try:
+                return float(s)
+            except ValueError:
+                return 0.0
+
+        # Fase 1: agrupar consecutivos com mesmo nome+valor
+        grupos: list[dict] = []
+        for h in historico:
+            nome = h.get("nome", "Salário")
+            valor = _parse_valor(h.get("valor", 0))
+            if (grupos
+                and grupos[-1]["nome"] == nome
+                and abs(grupos[-1]["_valor_num"] - valor) < 0.01):
+                # Estender data_fim do grupo atual
+                grupos[-1]["data_fim"] = h.get("data_fim", grupos[-1]["data_fim"])
+            else:
+                grupos.append({
+                    **h,
+                    "nome": nome,
+                    "_valor_num": valor,
+                })
+
+        if len(grupos) <= max_bases:
+            return grupos
+
+        # Fase 2: agrupar por nome, usando data_inicio mais antiga e data_fim mais recente
+        # Para nomes que têm múltiplas bases com valores diferentes, usar valor médio
+        # e marcar como variável (será editado via Grade de Ocorrências)
+        from collections import OrderedDict
+        por_nome: OrderedDict[str, list[dict]] = OrderedDict()
+        for g in grupos:
+            nome = g.get("nome", "Salário")
+            por_nome.setdefault(nome, []).append(g)
+
+        consolidados: list[dict] = []
+        for nome, entries in por_nome.items():
+            if len(entries) == 1:
+                consolidados.append(entries[0])
+            else:
+                # Agrupar todas as entradas deste nome em uma única base
+                data_inicio = entries[0].get("data_inicio", "")
+                data_fim = entries[-1].get("data_fim", "")
+                # Usar o último valor (mais recente) como valor da base
+                valor = entries[-1].get("valor", "")
+                consolidados.append({
+                    **entries[0],
+                    "nome": nome,
+                    "data_inicio": data_inicio,
+                    "data_fim": data_fim,
+                    "valor": valor,
+                    "variavel": len(set(e.get("valor") for e in entries)) > 1,
+                })
+
+        return consolidados[:max_bases]
+
     def fase_historico_salarial(self, dados: dict) -> None:
         historico = dados.get("historico_salarial", [])
         if not historico:
             self._log("Fase 2 — Histórico Salarial: sem entradas extraídas — ignorado.")
             return
+        # Consolidar entradas para respeitar limite de 15 bases do PJE-Calc
+        if len(historico) > 15:
+            historico = self._consolidar_historico(historico)
+            self._log(f"Fase 2 — Histórico Salarial: consolidado para {len(historico)} base(s) (limite PJE-Calc: 15)")
         self._log(f"Fase 2 — Histórico Salarial: {len(historico)} período(s) extraído(s)…")
         self._verificar_tomcat(timeout=90)
         self._verificar_pagina_pjecalc()
@@ -4306,8 +4381,17 @@ class PJECalcPlaywright:
                              .replace(/\\s+/g, ' ').trim();
                         return s;
                     }
+                    function stem(w) {
+                        // Portuguese plural→singular: morais→moral, sociais→social
+                        if (w.endsWith('ais') && w.length > 4) return w.slice(0, -2) + 'l';
+                        // ões→ão: opcoes→opcao (after NFD, ões→oes, ão→ao)
+                        if (w.endsWith('oes') && w.length > 4) return w.slice(0, -3) + 'ao';
+                        // Simple -s plural: danos→dano, verbas→verba
+                        if (w.endsWith('s') && w.length > 3 && !w.endsWith('ss')) return w.slice(0, -1);
+                        return w;
+                    }
                     function tokens(s) {
-                        return norm(s).split(' ').filter(t => t.length >= 2);
+                        return norm(s).split(' ').filter(t => t.length >= 2).map(stem);
                     }
                     function score(a, b) {
                         const ta = new Set(tokens(a));
@@ -5016,6 +5100,20 @@ class PJECalcPlaywright:
             # Parcelas Expresso geram reflexos automaticamente (Aviso Prévio, Férias+1/3,
             # 13º, RSR, Multa 477). Criar reflexo manual duplica e causa erro.
             _eh_reflexa = v.get("eh_reflexa") or "reflexo" in _nome_lower or "sobre" in _nome_lower
+
+            # REGRA ADICIONAL: verbas nomeadas "Reflexo em <categoria>" (ex: "Reflexo em 13o Salário",
+            # "Reflexo em Férias e 1/3") são reflexos auto-gerados por QUALQUER verba Expresso
+            # principal que tenha sido criada. Não devem ser criadas manualmente.
+            if _eh_reflexa and self._verbas_expresso_ok:
+                _categorias_reflexo_auto = ["13", "ferias", "aviso", "rsr", "repouso", "multa 477"]
+                _reflexo_categoria = any(c in _nome_lower for c in _categorias_reflexo_auto)
+                if _reflexo_categoria and "reflexo" in _nome_lower:
+                    self._log(
+                        f"  → '{nome}' é reflexo de categoria auto-gerada pelo Expresso "
+                        f"(verbas Expresso ativas: {list(self._verbas_expresso_ok)[:3]}) — pulando"
+                    )
+                    continue
+
             if _eh_reflexa:
                 # Inferir nome da verba principal a partir do nome do reflexo
                 import re as _re_ref
@@ -7668,7 +7766,17 @@ class PJECalcPlaywright:
             self._marcar_radio("tipoValor", tipo_valor) or self._selecionar("tipoValor", tipo_valor, obrigatorio=False)
             self._aguardar_ajax()
             # Aguardar re-render do grupoCalculado/grupoInformado após seleção do radio
-            self._page.wait_for_timeout(1000)
+            # CRÍTICO: Firefox crasha se evaluate() rodar antes do DOM estabilizar
+            self._page.wait_for_timeout(3000)
+            # Aguardar o select baseParaApuracao ficar visível (só aparece quando CALCULADO)
+            if tipo_valor == "CALCULADO":
+                try:
+                    self._page.wait_for_selector(
+                        'select[id$="baseParaApuracao"]',
+                        state="visible", timeout=8000
+                    )
+                except Exception:
+                    self._page.wait_for_timeout(2000)
 
             # Base de apuração — fuzzy match com opções reais
             # Opções típicas: BRUTO, BRUTO_CS, BRUTO_CS_PP, VNP (enum Java)
