@@ -3243,16 +3243,24 @@ class PJECalcPlaywright:
                 self._preencher("quantidadeDependentes", str(ir["dependentes"]), False)
 
         # ── Comentários: Justiça Gratuita → exigibilidade suspensa (art. 791-A, §4º, CLT) ──
+        # Só incluir a frase quando a parte beneficiária da JG é DEVEDORA de honorários
         jg = dados.get("justica_gratuita", {})
         _jg_reclamante = jg.get("reclamante", False)
         _jg_reclamado = jg.get("reclamado", False)
-        if _jg_reclamante or _jg_reclamado:
-            # Montar descrição da(s) parte(s) beneficiária(s)
+        _honorarios = dados.get("honorarios", [])
+        if isinstance(_honorarios, dict):
+            _honorarios = [_honorarios] if _honorarios else []
+        # Verificar quais partes com JG são devedoras de honorários
+        _devedores_hon = {h.get("devedor", "").upper() for h in _honorarios if isinstance(h, dict)}
+        _jg_devedor_reclamante = _jg_reclamante and "RECLAMANTE" in _devedores_hon
+        _jg_devedor_reclamado = _jg_reclamado and "RECLAMADO" in _devedores_hon
+        if _jg_devedor_reclamante or _jg_devedor_reclamado:
+            # Montar descrição da(s) parte(s) beneficiária(s) que são devedoras
             _partes_jg = []
-            if _jg_reclamante:
+            if _jg_devedor_reclamante:
                 _nome_reclamante = proc.get("reclamante", "pelo(a) reclamante")
                 _partes_jg.append(f"pelo(a) reclamante ({_nome_reclamante})")
-            if _jg_reclamado:
+            if _jg_devedor_reclamado:
                 _nome_reclamado = proc.get("reclamado", "pelo(a) reclamado(a)")
                 _partes_jg.append(f"pelo(a) reclamado(a) ({_nome_reclamado})")
             _desc_partes = " e ".join(_partes_jg)
@@ -7758,12 +7766,16 @@ class PJECalcPlaywright:
     # ── Fase 8: Honorários ────────────────────────────────────────────────────
 
     @retry(max_tentativas=3)
-    def fase_honorarios(self, hon_dados, periciais: float | None = None) -> None:
+    def fase_honorarios(self, hon_dados, periciais: float | None = None,
+                        justica_gratuita: dict | None = None) -> None:
         """
         Preenche honorários advocatícios no PJE-Calc.
         Aceita lista de registros [{tipo, devedor, tipo_valor, base_apuracao, percentual, ...}]
         ou dict legado {percentual, parte_devedora} — migra automaticamente.
+        justica_gratuita: {"reclamante": bool, "reclamado": bool} — para incluir frase de
+        suspensão de exigibilidade (art. 791-A, §4º, CLT) na descrição do honorário.
         """
+        _jg = justica_gratuita or {}
         # Migrar schema legado dict → list
         from modules.extraction import _migrar_honorarios_legado
         if isinstance(hon_dados, dict):
@@ -7835,6 +7847,40 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
+            # ── Forma de cobrança: Reclamante → sempre "Cobrar" (nunca "Descontar dos créditos")
+            # Quando devedor é Reclamante, o PJE-Calc exibe radio "Descontar dos créditos" / "Cobrar"
+            if devedor == "RECLAMANTE":
+                self._page.wait_for_timeout(1000)
+                # Tentar marcar "COBRAR" via radio
+                _cobrar_ok = (
+                    self._marcar_radio("formaCobranca", "COBRAR")
+                    or self._marcar_radio("tipoCobranca", "COBRAR")
+                    or self._marcar_radio("formaDeCobranca", "COBRAR")
+                )
+                if not _cobrar_ok:
+                    # Fallback: buscar radio por label
+                    try:
+                        _radio_cobrar = self._page.locator(
+                            'input[type="radio"][value*="COBRAR"], '
+                            'input[type="radio"][value*="cobrar"]'
+                        )
+                        if _radio_cobrar.count() > 0:
+                            _radio_cobrar.first.check(force=True)
+                            _cobrar_ok = True
+                    except Exception:
+                        pass
+                if _cobrar_ok:
+                    self._log(f"  ✓ Forma de cobrança: COBRAR (Reclamante)")
+                else:
+                    self._log(f"  ⚠ Forma de cobrança: radio 'Cobrar' não encontrado")
+
+            # ── Verificar se o devedor é beneficiário da justiça gratuita ──
+            _devedor_tem_jg = False
+            if devedor == "RECLAMANTE" and _jg.get("reclamante", False):
+                _devedor_tem_jg = True
+            elif devedor == "RECLAMADO" and _jg.get("reclamado", False):
+                _devedor_tem_jg = True
+
             # Descrição (OBRIGATÓRIA — manual seção 19: "Texto até 60 caracteres")
             # Sem este campo, o PJE-Calc retorna "Existem erros no formulário"
             _descricao_hon = hon.get("descricao", "")
@@ -7842,9 +7888,18 @@ class PJECalcPlaywright:
                 # Gerar descrição padrão baseada no tipo e devedor
                 _tipo_label = {"SUCUMBENCIAIS": "Sucumbenciais", "CONTRATUAIS": "Contratuais"}.get(tipo, tipo)
                 _devedor_label = {"RECLAMADO": "Reclamado", "RECLAMANTE": "Reclamante"}.get(devedor, devedor)
-                _descricao_hon = f"Honorários {_tipo_label} - {_devedor_label}"
+                if _devedor_tem_jg:
+                    # Incluir referência à suspensão na descrição (60 chars max)
+                    _descricao_hon = f"Hon. {_tipo_label} - {_devedor_label} - Exig. suspensa"
+                else:
+                    _descricao_hon = f"Honorários {_tipo_label} - {_devedor_label}"
             self._preencher("descricao", _descricao_hon[:60], False)
             self._preencher("descricaoHonorario", _descricao_hon[:60], False)
+            if _devedor_tem_jg:
+                self._log(
+                    f"  ℹ Devedor ({devedor}) é beneficiário da justiça gratuita — "
+                    f"exigibilidade suspensa (art. 791-A, §4º, CLT)"
+                )
 
             # Tipo de valor (CALCULADO / INFORMADO)
             tipo_valor = hon.get("tipo_valor", "CALCULADO")
@@ -9482,6 +9537,7 @@ class PJECalcPlaywright:
         self.fase_honorarios(
             dados.get("honorarios", []),
             periciais=dados.get("honorarios_periciais"),
+            justica_gratuita=dados.get("justica_gratuita"),
         )
 
         # 16. Custas Judiciais > Salvar
