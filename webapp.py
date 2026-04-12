@@ -1674,6 +1674,59 @@ async def reset_lock_automacao(sessao_id: str):
     return {"sucesso": True, "msg": f"Lock liberado para {sessao_id}"}
 
 
+@app.post("/api/vincular-pjc/{sessao_id}")
+async def vincular_pjc(sessao_id: str, db: Session = Depends(get_db)):
+    """Busca .PJC no diretório do cálculo e vincula ao registro no banco.
+
+    Útil para sessões anteriores ao fix de PJC_GERADO (retroativo).
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    # Se já tem PJC vinculado e arquivo existe, retorna
+    if calculo.arquivo_pjc and Path(calculo.arquivo_pjc).exists():
+        return {"ok": True, "arquivo": calculo.arquivo_pjc, "msg": "Já vinculado"}
+
+    # Buscar .PJC no diretório do cálculo ou em data/calculations/
+    _dirs_busca = []
+    if calculo.diretorio_calculo and Path(calculo.diretorio_calculo).exists():
+        _dirs_busca.append(Path(calculo.diretorio_calculo))
+    # Buscar em data/calculations/ por subpastas do processo
+    _calc_base = Path("data/calculations")
+    if _calc_base.exists():
+        for _subdir in sorted(_calc_base.rglob("*.PJC")):
+            _dirs_busca.append(_subdir)
+
+    _pjc_encontrado = None
+    for _item in _dirs_busca:
+        if _item.is_file() and _item.suffix.upper() == ".PJC":
+            _pjc_encontrado = _item
+            break
+        elif _item.is_dir():
+            _pjcs = sorted(_item.glob("*.PJC"), reverse=True)
+            if not _pjcs:
+                _pjcs = sorted(_item.glob("*.pjc"), reverse=True)
+            if _pjcs:
+                _pjc_encontrado = _pjcs[0]
+                break
+
+    if not _pjc_encontrado:
+        raise HTTPException(
+            status_code=404,
+            detail="Nenhum .PJC encontrado no diretório do cálculo"
+        )
+
+    repo.marcar_exportado(sessao_id, str(_pjc_encontrado))
+    db.commit()
+    return {
+        "ok": True,
+        "arquivo": str(_pjc_encontrado),
+        "download": f"/download/{sessao_id}/pjc",
+    }
+
+
 # ── Learning Dashboard ────────────────────────────────────────────────────────
 
 @app.get("/admin/aprendizado", response_class=HTMLResponse)
