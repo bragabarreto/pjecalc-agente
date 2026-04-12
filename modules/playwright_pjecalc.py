@@ -4096,9 +4096,19 @@ class PJECalcPlaywright:
             pass
 
         # Marcar checkboxes
+        # Prioridade do nome para matching Expresso:
+        # 1) estrategia_preenchimento.expresso_base (nome exato do checkbox Expresso)
+        # 2) nome_sentenca (editado pelo usuário na prévia)
+        # 3) nome_pjecalc (estático da tabela VERBAS_PREDEFINIDAS)
         _marcadas: list[str] = []
         for v in predefinidas:
-            nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or ""
+            _estr = v.get("estrategia_preenchimento", {}) or {}
+            nome = (
+                _estr.get("expresso_base")
+                or v.get("nome_sentenca")
+                or v.get("nome_pjecalc")
+                or ""
+            )
             if not nome:
                 continue
             _pct = v.get("percentual")

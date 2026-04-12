@@ -212,12 +212,15 @@ Pode haver MÚLTIPLOS históricos no mesmo processo (ex: "Salário" + "Salário 
 equiparação salarial, "Adicional Noturno Pago" para diferenças, piso salarial da norma coletiva).
 
   historico_salarial: [
-    {{"nome": "Salário", "data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 1518.00, "incidencia_fgts": true, "incidencia_cs": true}},
-    {{"nome": "Salário", "data_inicio": "01/09/2024", "data_fim": "28/02/2025", "valor": 1800.00, "incidencia_fgts": true, "incidencia_cs": true}}
+    {{"nome": "Salário", "data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 1518.00, "variavel": false, "incidencia_fgts": true, "incidencia_cs": true}},
+    {{"nome": "Comissões", "data_inicio": "01/01/2023", "data_fim": "31/08/2024", "valor": 3500.00, "variavel": true, "incidencia_fgts": true, "incidencia_cs": true}}
   ]
 
-- "nome": tipo da base ("Salário", "Salário Pago", "Salário Devido", "Adicional Noturno Pago", etc.)
+- "nome": tipo da base ("Salário", "Comissões", "Salário Pago", "Salário Devido", "Adicional Noturno Pago", etc.)
   Se não especificado na sentença, usar "Salário".
+- "variavel": true se a parcela varia mês a mês (comissões, horas extras, gorjetas, gratificações variáveis).
+  false (default) para salário fixo. Se a sentença apresenta tabela com valores diferentes a cada mês
+  para a mesma parcela, marcar variavel=true.
 - "incidencia_fgts": true se a parcela incide para fins de FGTS (default: true para salário)
 - "incidencia_cs": true se incide para Contribuição Social/INSS (default: true para salário)
 - Se salário uniforme durante todo o contrato → historico_salarial com UMA entrada do período completo
@@ -557,7 +560,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
     "confianca": 0.95
   }},
   "historico_salarial": [
-    {{"nome": "Salário", "data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00, "incidencia_fgts": true, "incidencia_cs": true}}
+    {{"nome": "Salário", "data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00, "variavel": false, "incidencia_fgts": true, "incidencia_cs": true}}
   ],
   "faltas": [
     {{"data_inicial": "DD/MM/AAAA", "data_final": "DD/MM/AAAA", "justificada": false, "descricao": ""}}
@@ -800,8 +803,9 @@ Cada entrada representa uma BASE DE CÁLCULO com nome, período e valor mensal.
 - Se equiparação salarial, desvio de função ou piso normativo → criar bases SEPARADAS com nomes
   distintos (ex: "Salário Pago" e "Salário Devido", "Adicional Noturno Pago")
 - Campos por entrada:
-  - nome: tipo da base ("Salário", "Salário Pago", "Salário Devido", etc.) — default "Salário"
+  - nome: tipo da base ("Salário", "Comissões", "Salário Pago", "Salário Devido", etc.) — default "Salário"
   - data_inicio (DD/MM/AAAA), data_fim (DD/MM/AAAA), valor (float mensal completo)
+  - variavel: true se valores mudam a cada mês (comissões, horas extras, gorjetas). false (default) para salário fixo.
   - incidencia_fgts (bool, default true), incidencia_cs (bool, default true)
 
 **VERBAS DEFERIDAS** → preenche "verbas_deferidas" (SEÇÃO MAIS CRÍTICA):
@@ -1077,7 +1081,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "confianca": 0.0-1.0
   }},
   "historico_salarial": [
-    {{"nome": "Salário", "data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00, "incidencia_fgts": true, "incidencia_cs": true}}
+    {{"nome": "Salário", "data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00, "variavel": false, "incidencia_fgts": true, "incidencia_cs": true}}
   ],
   "faltas": [],
   "ferias": [],
@@ -1486,6 +1490,7 @@ _EXTRACTION_SCHEMA: dict = {
                     "data_fim":        {"type": "string"},
                     "valor":           {"type": "number"},
                     "nome":            {"type": ["string", "null"]},
+                    "variavel":        {"type": ["boolean", "null"]},
                     "incidencia_fgts": {"type": ["boolean", "null"]},
                     "incidencia_cs":   {"type": ["boolean", "null"]},
                 },

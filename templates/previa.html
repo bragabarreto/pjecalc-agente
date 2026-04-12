@@ -314,64 +314,184 @@
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-hist-salarial')">
         3. Histórico Salarial
-        <span class="confianca-badge conf-alta">{{ hist_sal|length }} registro(s)</span>
+        <span class="confianca-badge conf-alta">{{ hist_sal|length }} base(s)</span>
       </div>
       <div class="secao-corpo recolhido" id="s-hist-salarial">
+        <p style="color:#6c757d; font-size:0.82rem; margin-bottom:12px;">
+          Registre aqui as bases de cálculo salariais. Cada base gera ocorrências mensais no PJE-Calc.
+          Use "Variável" para comissões/horas extras (valores diferentes a cada mês).
+        </p>
         {% if hist_sal %}
         {% for hs in hist_sal %}
         {% set hi = loop.index0 %}
-        <div class="verba-card" style="margin-bottom:10px;">
+        <div class="verba-card" style="margin-bottom:14px; border:1px solid #c8d6e5; border-radius:6px; overflow:hidden;">
           <div style="background:#e8f0fb; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
             <strong style="font-size:0.9rem; color:#1a3a6b;">Base {{ loop.index }}: {{ hs.get('nome', 'Salário') or 'Salário' }}</strong>
-            <button type="button" onclick="if(confirm('Remover este período?')) salvarCampo('historico_salarial.remove[{{ hi }}]', '', this)"
-                    style="background:#dc3545; color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.8rem;">✕</button>
+            <button type="button" onclick="if(confirm('Remover esta base?')) salvarCampo('historico_salarial.remove[{{ hi }}]', '', this)"
+                    style="background:#dc3545; color:#fff; border:none; border-radius:4px; padding:2px 8px; cursor:pointer; font-size:0.8rem;">✕ Remover</button>
           </div>
           <div style="padding:12px;">
-            <!-- Nome/Tipo + Incidências -->
-            <div class="campos-grid col3" style="margin-bottom:8px;">
-              <div class="campo-form">
-                <label>Nome/Tipo da Base</label>
-                <input type="text" placeholder="Salário"
-                       value="{{ hs.get('nome', '') or '' }}"
-                       onchange="salvarCampo('historico_salarial[{{ hi }}].nome', this.value, this)">
-              </div>
-              <div class="campo-form" style="display:flex; align-items:center; gap:8px; padding-top:18px;">
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+            <!-- Nome -->
+            <div class="campo-form" style="margin-bottom:10px;">
+              <label>Nome *</label>
+              <input type="text" placeholder="Ex: Salário, Comissões, Gratificação"
+                     value="{{ hs.get('nome', '') or '' }}"
+                     onchange="salvarCampo('historico_salarial[{{ hi }}].nome', this.value, this)">
+            </div>
+            <!-- Parcela + Incidência -->
+            <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:10px; align-items:center;">
+              <fieldset style="border:1px solid #ddd; border-radius:4px; padding:6px 12px; margin:0;">
+                <legend style="font-size:0.78rem; color:#6c757d; padding:0 4px;">Parcela</legend>
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin-right:12px; font-size:0.88rem;">
+                  <input type="radio" name="hist_parcela_{{ hi }}" value="false"
+                         {{ 'checked' if not hs.get('variavel', false) else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].variavel', 'false', this)">
+                  Fixa
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:0.88rem;">
+                  <input type="radio" name="hist_parcela_{{ hi }}" value="true"
+                         {{ 'checked' if hs.get('variavel', false) else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].variavel', 'true', this)">
+                  Variável
+                </label>
+              </fieldset>
+              <fieldset style="border:1px solid #ddd; border-radius:4px; padding:6px 12px; margin:0;">
+                <legend style="font-size:0.78rem; color:#6c757d; padding:0 4px;">Incidência</legend>
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin-right:8px; font-size:0.85rem;">
                   <input type="checkbox" {{ 'checked' if hs.get('incidencia_fgts', true) else '' }}
                          onchange="salvarCampo('historico_salarial[{{ hi }}].incidencia_fgts', this.checked, this)">
-                  Incide FGTS
+                  FGTS
                 </label>
-              </div>
-              <div class="campo-form" style="display:flex; align-items:center; gap:8px; padding-top:18px;">
-                <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin-right:8px; font-size:0.85rem;">
+                  <input type="checkbox" {{ 'checked' if hs.get('prop_fgts', false) else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].prop_fgts', this.checked, this)">
+                  Prop. FGTS
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin-right:8px; font-size:0.85rem;">
                   <input type="checkbox" {{ 'checked' if hs.get('incidencia_cs', true) else '' }}
                          onchange="salvarCampo('historico_salarial[{{ hi }}].incidencia_cs', this.checked, this)">
-                  Incide CS/INSS
+                  Contribuição Social
                 </label>
-              </div>
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
+                  <input type="checkbox" {{ 'checked' if hs.get('prop_cs', false) else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].prop_cs', this.checked, this)">
+                  Prop. CS
+                </label>
+              </fieldset>
             </div>
-            <!-- Datas + Valor -->
-            <div class="campos-grid col3">
-              <div class="campo-form">
-                <label>Data Início</label>
-                <input type="text" placeholder="DD/MM/AAAA"
-                       value="{{ hs.get('data_inicio', '') or '' }}"
-                       onchange="salvarCampo('historico_salarial[{{ hi }}].data_inicio', this.value, this)">
-              </div>
-              <div class="campo-form">
-                <label>Data Fim</label>
-                <input type="text" placeholder="DD/MM/AAAA"
-                       value="{{ hs.get('data_fim', '') or '' }}"
-                       onchange="salvarCampo('historico_salarial[{{ hi }}].data_fim', this.value, this)">
-              </div>
-              <div class="campo-form">
-                <label>Valor Mensal (R$)</label>
-                <input type="number" step="0.01" min="0"
-                       value="{{ hs.get('valor', '') or '' }}"
-                       onchange="salvarCampo('historico_salarial[{{ hi }}].valor', this.value, this)"
-                       placeholder="0,00">
-              </div>
+            <!-- Período + Tipo do Valor + Valor -->
+            <div style="display:flex; gap:16px; flex-wrap:wrap; margin-bottom:10px; align-items:flex-end;">
+              <fieldset style="border:1px solid #ddd; border-radius:4px; padding:6px 12px; margin:0;">
+                <legend style="font-size:0.78rem; color:#6c757d; padding:0 4px;">Período</legend>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <div class="campo-form" style="margin:0;">
+                    <label style="font-size:0.78rem;">Comp. Inicial *</label>
+                    <input type="text" placeholder="MM/AAAA" style="width:100px;"
+                           value="{{ hs.get('data_inicio', '') or '' }}"
+                           onchange="salvarCampo('historico_salarial[{{ hi }}].data_inicio', this.value, this)">
+                  </div>
+                  <div class="campo-form" style="margin:0;">
+                    <label style="font-size:0.78rem;">Comp. Final *</label>
+                    <input type="text" placeholder="MM/AAAA" style="width:100px;"
+                           value="{{ hs.get('data_fim', '') or '' }}"
+                           onchange="salvarCampo('historico_salarial[{{ hi }}].data_fim', this.value, this)">
+                  </div>
+                </div>
+              </fieldset>
+              <fieldset style="border:1px solid #ddd; border-radius:4px; padding:6px 12px; margin:0;">
+                <legend style="font-size:0.78rem; color:#6c757d; padding:0 4px;">Tipo do Valor</legend>
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; margin-right:10px; font-size:0.85rem;">
+                  <input type="radio" name="hist_tipovalor_{{ hi }}" value="INFORMADO"
+                         {{ 'checked' if hs.get('tipo_valor', 'INFORMADO') != 'CALCULADO' else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].tipo_valor', 'INFORMADO', this)">
+                  Informado
+                </label>
+                <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:0.85rem;">
+                  <input type="radio" name="hist_tipovalor_{{ hi }}" value="CALCULADO"
+                         {{ 'checked' if hs.get('tipo_valor') == 'CALCULADO' else '' }}
+                         onchange="salvarCampo('historico_salarial[{{ hi }}].tipo_valor', 'CALCULADO', this)">
+                  Calculado
+                </label>
+              </fieldset>
+              <fieldset style="border:1px solid #ddd; border-radius:4px; padding:6px 12px; margin:0;">
+                <legend style="font-size:0.78rem; color:#6c757d; padding:0 4px;">Base Informada</legend>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <div class="campo-form" style="margin:0;">
+                    <label style="font-size:0.78rem;">Valor *</label>
+                    <input type="number" step="0.01" min="0" style="width:120px;"
+                           value="{{ hs.get('valor', '') or '' }}"
+                           onchange="salvarCampo('historico_salarial[{{ hi }}].valor', this.value, this)"
+                           placeholder="0,00">
+                  </div>
+                  <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:0.8rem; padding-top:14px;">
+                    <input type="checkbox" {{ 'checked' if hs.get('fgts_recolhido', false) else '' }}
+                           onchange="salvarCampo('historico_salarial[{{ hi }}].fgts_recolhido', this.checked, this)">
+                    FGTS Recolhidos
+                  </label>
+                  <label style="display:inline-flex; align-items:center; gap:4px; cursor:pointer; font-size:0.8rem; padding-top:14px;">
+                    <input type="checkbox" {{ 'checked' if hs.get('cs_recolhida', false) else '' }}
+                           onchange="salvarCampo('historico_salarial[{{ hi }}].cs_recolhida', this.checked, this)">
+                    CS Recolhida
+                  </label>
+                </div>
+              </fieldset>
             </div>
+            <!-- Tabela de ocorrências (para bases variáveis com múltiplos valores) -->
+            {% set ocorrencias = hs.get('ocorrencias', []) %}
+            {% if ocorrencias %}
+            <details style="margin-top:8px;">
+              <summary style="cursor:pointer; font-size:0.85rem; color:#1a3a6b; font-weight:600;">
+                Ocorrências ({{ ocorrencias|length }} meses)
+              </summary>
+              <div style="max-height:300px; overflow-y:auto; margin-top:6px;">
+                <table style="width:100%; font-size:0.82rem; border-collapse:collapse;">
+                  <thead>
+                    <tr style="background:#f0f4f8;">
+                      <th style="padding:4px 8px;">Ação</th>
+                      <th style="padding:4px 8px;">Mês/Ano</th>
+                      <th style="padding:4px 8px; text-align:right;">Valor</th>
+                      <th style="padding:4px 8px; text-align:center;">Incide FGTS</th>
+                      <th style="padding:4px 8px; text-align:center;">FGTS Recol.</th>
+                      <th style="padding:4px 8px; text-align:center;">Incide CS</th>
+                      <th style="padding:4px 8px; text-align:center;">CS Recol.</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for oc in ocorrencias %}
+                    <tr style="border-bottom:1px solid #eee;">
+                      <td style="padding:3px 8px;">
+                        <button type="button" onclick="salvarCampo('historico_salarial[{{ hi }}].ocorrencias.remove[{{ loop.index0 }}]', '', this)"
+                                style="background:#dc3545; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:0.7rem; cursor:pointer;">✕</button>
+                      </td>
+                      <td style="padding:3px 8px;">{{ oc.get('mes_ano', '') }}</td>
+                      <td style="padding:3px 8px; text-align:right;">
+                        <input type="number" step="0.01" style="width:100px; text-align:right; font-size:0.82rem;"
+                               value="{{ oc.get('valor', '') }}"
+                               onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ loop.index0 }}].valor', this.value, this)">
+                      </td>
+                      <td style="padding:3px 8px; text-align:center;">
+                        <input type="checkbox" {{ 'checked' if oc.get('incide_fgts', true) else '' }}
+                               onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ loop.index0 }}].incide_fgts', this.checked, this)">
+                      </td>
+                      <td style="padding:3px 8px; text-align:center;">
+                        <input type="checkbox" {{ 'checked' if oc.get('fgts_recolhido', false) else '' }}
+                               onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ loop.index0 }}].fgts_recolhido', this.checked, this)">
+                      </td>
+                      <td style="padding:3px 8px; text-align:center;">
+                        <input type="checkbox" {{ 'checked' if oc.get('incide_cs', true) else '' }}
+                               onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ loop.index0 }}].incide_cs', this.checked, this)">
+                      </td>
+                      <td style="padding:3px 8px; text-align:center;">
+                        <input type="checkbox" {{ 'checked' if oc.get('cs_recolhida', false) else '' }}
+                               onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ loop.index0 }}].cs_recolhida', this.checked, this)">
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </details>
+            {% endif %}
           </div>
         </div>
         {% endfor %}
@@ -380,7 +500,7 @@
         {% endif %}
         <button type="button" onclick="salvarCampo('historico_salarial.add', 'Salário', this)"
                 style="margin-top:8px; background:#1a3a6b; color:#fff; border:none; border-radius:6px; padding:8px 16px; cursor:pointer; font-size:0.85rem;">
-          + Adicionar Período Salarial
+          + Adicionar Base Salarial
         </button>
       </div>
     </div>
@@ -1016,49 +1136,251 @@
     </div>
 
     <!-- ═══ 10. CORREÇÃO E JUROS ═══ -->
-    {% set conf_cj = dados.get('correcao_juros', {}).get('confianca', 1.0) %}
+    {% set cj = dados.get('correcao_juros', {}) %}
+    {% set conf_cj = cj.get('confianca', 1.0) %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-correcao')">
-        10. Correção Monetária e Juros
+        10. Correção, Juros e Multa
         <span class="confianca-badge {{ 'conf-alta' if conf_cj >= 0.8 else ('conf-media' if conf_cj >= 0.5 else 'conf-baixa') }}">
           {{ (conf_cj * 100)|int }}% confiança
         </span>
       </div>
       <div class="secao-corpo" id="s-correcao">
-        <div class="campos-grid">
-          <div class="campo-form">
-            <label>Índice de Correção Monetária</label>
-            <select onchange="salvarCampo('correcao_juros.indice_correcao', this.value, this)">
-              <option value="">— selecione —</option>
-              <option value="Tabela JT Unica Mensal" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'Tabela JT Unica Mensal' }}>Tabela JT Única Mensal (padrão ADC 58 STF)</option>
-              <option value="IPCA-E" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'IPCA-E' }}>IPCA-E</option>
-              <option value="Selic" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'Selic' }}>SELIC</option>
-              <option value="TRCT" {{ 'selected' if dados.get('correcao_juros', {}).get('indice_correcao') == 'TRCT' }}>TR/CT</option>
-            </select>
-          </div>
-          <div class="campo-form">
-            <label>Taxa de Juros</label>
-            <select onchange="salvarCampo('correcao_juros.taxa_juros', this.value, this)">
-              <option value="">— selecione —</option>
-              <option value="Juros Padrao" {{ 'selected' if dados.get('correcao_juros', {}).get('taxa_juros') == 'Juros Padrao' }}>Juros Padrão (1% a.m.)</option>
-              <option value="Selic" {{ 'selected' if dados.get('correcao_juros', {}).get('taxa_juros') == 'Selic' }}>SELIC</option>
-            </select>
-          </div>
-          <div class="campo-form">
-            <label>Base de Cálculo dos Juros</label>
-            <select onchange="salvarCampo('correcao_juros.base_juros', this.value, this)">
-              <option value="">— selecione —</option>
-              <option value="Verbas" {{ 'selected' if dados.get('correcao_juros', {}).get('base_juros') == 'Verbas' }}>Verbas</option>
-              <option value="Credito Total" {{ 'selected' if dados.get('correcao_juros', {}).get('base_juros') == 'Credito Total' }}>Crédito Total</option>
-            </select>
+
+        <!-- Abas: Dados Gerais / Dados Específicos -->
+        <div style="display:flex; border-bottom:2px solid #1a3a6b; margin-bottom:12px;">
+          <button type="button" onclick="document.getElementById('cj-gerais').style.display='block'; document.getElementById('cj-especificos').style.display='none'; this.style.background='#1a3a6b'; this.style.color='#fff'; this.nextElementSibling.style.background='#f0f4f8'; this.nextElementSibling.style.color='#333';"
+                  style="padding:8px 20px; border:none; border-radius:6px 6px 0 0; cursor:pointer; font-size:0.88rem; font-weight:600; background:#1a3a6b; color:#fff;">
+            Dados Gerais
+          </button>
+          <button type="button" onclick="document.getElementById('cj-especificos').style.display='block'; document.getElementById('cj-gerais').style.display='none'; this.style.background='#1a3a6b'; this.style.color='#fff'; this.previousElementSibling.style.background='#f0f4f8'; this.previousElementSibling.style.color='#333';"
+                  style="padding:8px 20px; border:none; border-radius:6px 6px 0 0; cursor:pointer; font-size:0.88rem; font-weight:600; background:#f0f4f8; color:#333;">
+            Dados Específicos
+          </button>
+        </div>
+
+        <!-- ═══ ABA: Dados Gerais ═══ -->
+        <div id="cj-gerais">
+          <div style="display:flex; gap:32px; flex-wrap:wrap;">
+
+            <!-- Correção Monetária -->
+            <fieldset style="border:1px solid #c8d6e5; border-radius:6px; padding:12px 16px; flex:1; min-width:280px;">
+              <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Correção Monetária</legend>
+              <div class="campo-form" style="margin-bottom:10px;">
+                <label>Índice Trabalhista</label>
+                <select onchange="salvarCampo('correcao_juros.indice_correcao', this.value, this)" style="width:100%;">
+                  <option value="">— selecione —</option>
+                  {% set idx_opts = [
+                    ('TUACDT', 'Tabela Única de Atualização e Conversão de Débitos Trabalhistas'),
+                    ('TUACDT_DIARIO', 'Tabela Única da JT Diário'),
+                    ('TR', 'TR'),
+                    ('IGP-M', 'IGP-M'),
+                    ('INPC', 'INPC'),
+                    ('IPC', 'IPC'),
+                    ('IPCA', 'IPCA'),
+                    ('IPCA-E', 'IPCA-E'),
+                    ('IPCA-E/TR', 'IPCA-E / TR')
+                  ] %}
+                  {% for val, label in idx_opts %}
+                  <option value="{{ val }}" {{ 'selected' if cj.get('indice_correcao') == val }}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div style="margin-bottom:8px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem;">
+                  <input type="checkbox" {{ 'checked' if cj.get('combinar_indice') }}
+                         onchange="salvarCampo('correcao_juros.combinar_indice', this.checked, this); document.getElementById('cj-combo-indice').style.display = this.checked ? 'flex' : 'none';">
+                  Combinar com Outro Índice
+                </label>
+              </div>
+              <div id="cj-combo-indice" style="display:{{ 'flex' if cj.get('combinar_indice') else 'none' }}; gap:8px; margin-bottom:8px; align-items:flex-end;">
+                <div class="campo-form" style="margin:0; flex:1;">
+                  <label style="font-size:0.78rem;">Segundo Índice</label>
+                  <select onchange="salvarCampo('correcao_juros.segundo_indice', this.value, this)">
+                    <option value="">— selecione —</option>
+                    {% for val, label in idx_opts %}
+                    <option value="{{ val }}" {{ 'selected' if cj.get('segundo_indice') == val }}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="campo-form" style="margin:0;">
+                  <label style="font-size:0.78rem;">A partir de</label>
+                  <input type="text" placeholder="DD/MM/AAAA" style="width:110px;"
+                         value="{{ cj.get('a_partir_de_indice', '') or '' }}"
+                         onchange="salvarCampo('correcao_juros.a_partir_de_indice', this.value, this)">
+                </div>
+              </div>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem;">
+                <input type="checkbox" {{ 'checked' if cj.get('ignorar_taxa_negativa') }}
+                       onchange="salvarCampo('correcao_juros.ignorar_taxa_negativa', this.checked, this)">
+                Ignorar Taxa Negativa para Índice(s) selecionado(s)
+              </label>
+            </fieldset>
+
+            <!-- Juros de Mora -->
+            <fieldset style="border:1px solid #c8d6e5; border-radius:6px; padding:12px 16px; flex:1; min-width:280px;">
+              <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Juros de Mora</legend>
+              <div style="margin-bottom:8px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem;">
+                  <input type="checkbox" {{ 'checked' if cj.get('juros_pre_judicial', true) }}
+                         onchange="salvarCampo('correcao_juros.juros_pre_judicial', this.checked, this)">
+                  Aplicar Juros na Fase Pré-Judicial
+                </label>
+              </div>
+              <div class="campo-form" style="margin-bottom:10px;">
+                <label>Tabela de Juros</label>
+                <select onchange="salvarCampo('correcao_juros.taxa_juros', this.value, this)" style="width:100%;">
+                  <option value="">— selecione —</option>
+                  {% set juros_opts = [
+                    ('TRD_SIMPLES', 'TRD Juros Simples'),
+                    ('TRD_CAPITALIZADOS', 'TRD Juros Capitalizados'),
+                    ('JUROS_SIMPLES_05', 'Juros Simples 0,5% a.m.'),
+                    ('JUROS_SIMPLES_1', 'Juros Simples 1% a.m.'),
+                    ('SELIC', 'SELIC'),
+                    ('SEM_JUROS', 'Sem Juros')
+                  ] %}
+                  {% for val, label in juros_opts %}
+                  <option value="{{ val }}" {{ 'selected' if cj.get('taxa_juros') == val }}>{{ label }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div style="margin-bottom:8px;">
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem;">
+                  <input type="checkbox" {{ 'checked' if cj.get('combinar_juros') }}
+                         onchange="salvarCampo('correcao_juros.combinar_juros', this.checked, this); document.getElementById('cj-combo-juros').style.display = this.checked ? 'block' : 'none';">
+                  Combinar com Outra Tabela de Juros
+                </label>
+              </div>
+              <div id="cj-combo-juros" style="display:{{ 'block' if cj.get('combinar_juros') else 'none' }};">
+                <div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:8px;">
+                  <div class="campo-form" style="margin:0; flex:1;">
+                    <label style="font-size:0.78rem;">Tabela Juros *</label>
+                    <select onchange="salvarCampo('correcao_juros.segunda_tabela_juros', this.value, this)">
+                      <option value="">— selecione —</option>
+                      {% for val, label in juros_opts %}
+                      <option value="{{ val }}" {{ 'selected' if cj.get('segunda_tabela_juros') == val }}>{{ label }}</option>
+                      {% endfor %}
+                    </select>
+                  </div>
+                  <div class="campo-form" style="margin:0;">
+                    <label style="font-size:0.78rem;">A partir de *</label>
+                    <input type="text" placeholder="DD/MM/AAAA" style="width:110px;"
+                           value="{{ cj.get('a_partir_de_juros', '') or '' }}"
+                           onchange="salvarCampo('correcao_juros.a_partir_de_juros', this.value, this)">
+                  </div>
+                </div>
+                <!-- Tabela de índices combinados -->
+                {% set indices_combinados = cj.get('indices_combinados', []) %}
+                {% if indices_combinados %}
+                <table style="width:100%; font-size:0.82rem; border-collapse:collapse; margin-top:4px;">
+                  <thead>
+                    <tr style="background:#f0f4f8;">
+                      <th style="padding:4px 8px;">Ação</th>
+                      <th style="padding:4px 8px;">Índice</th>
+                      <th style="padding:4px 8px;">A partir de</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for ic in indices_combinados %}
+                    <tr style="border-bottom:1px solid #eee;">
+                      <td style="padding:3px 8px;">
+                        <button type="button" onclick="salvarCampo('correcao_juros.indices_combinados.remove[{{ loop.index0 }}]', '', this)"
+                                style="background:#dc3545; color:#fff; border:none; border-radius:50%; width:20px; height:20px; font-size:0.7rem; cursor:pointer;">✕</button>
+                      </td>
+                      <td style="padding:3px 8px;">{{ ic.get('indice', '') }}</td>
+                      <td style="padding:3px 8px;">{{ ic.get('a_partir_de', '') }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                {% endif %}
+              </div>
+            </fieldset>
+
           </div>
         </div>
-        <div class="checkbox-row" style="margin-top:8px;">
-          <input type="checkbox" id="jam-fgts"
-                 {{ 'checked' if dados.get('correcao_juros', {}).get('jam_fgts') }}
-                 onchange="salvarCampo('correcao_juros.jam_fgts', this.checked ? 'true' : 'false', this)">
-          <label for="jam-fgts">Incluir JAM-FGTS (TR + 3% a.a.)</label>
+
+        <!-- ═══ ABA: Dados Específicos ═══ -->
+        <div id="cj-especificos" style="display:none;">
+          <div style="display:flex; gap:32px; flex-wrap:wrap;">
+
+            <!-- Base de Juros das Verbas -->
+            <fieldset style="border:1px solid #c8d6e5; border-radius:6px; padding:12px 16px; min-width:250px;">
+              <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Base de Juros das Verbas</legend>
+              {% set bj_opts = [('VERBA', 'Verba'), ('VERBA_INSS', 'Verba (-) CS'), ('VERBA_INSS_PP', 'Verba (-) CS (-) PP')] %}
+              {% for val, label in bj_opts %}
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem; margin-bottom:4px;">
+                <input type="radio" name="base_juros_verbas" value="{{ val }}"
+                       {{ 'checked' if cj.get('base_juros', 'VERBA') == val }}
+                       onchange="salvarCampo('correcao_juros.base_juros', this.value, this)">
+                {{ label }}
+              </label>
+              {% endfor %}
+            </fieldset>
+
+            <!-- FGTS -->
+            <fieldset style="border:1px solid #c8d6e5; border-radius:6px; padding:12px 16px; min-width:250px;">
+              <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">FGTS</legend>
+              {% set fgts_opts = [
+                ('UTILIZAR_INDICE_TRABALHISTA', 'Utilizar índice trabalhista'),
+                ('UTILIZAR_JAM', 'Utilizar índice JAM'),
+                ('JAM_MAIS_TRABALHISTA', 'JAM + índice trabalhista')
+              ] %}
+              {% for val, label in fgts_opts %}
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem; margin-bottom:4px;">
+                <input type="radio" name="indice_fgts" value="{{ val }}"
+                       {{ 'checked' if cj.get('indice_fgts', 'UTILIZAR_INDICE_TRABALHISTA') == val }}
+                       onchange="salvarCampo('correcao_juros.indice_fgts', this.value, this)">
+                {{ label }}
+              </label>
+              {% endfor %}
+            </fieldset>
+
+            <!-- Contribuição Social -->
+            <fieldset style="border:1px solid #c8d6e5; border-radius:6px; padding:12px 16px; min-width:250px;">
+              <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Contribuição Social — Salários Devidos</legend>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem; margin-bottom:4px;">
+                <input type="checkbox" {{ 'checked' if cj.get('cs_correcao_trabalhista', true) }}
+                       onchange="salvarCampo('correcao_juros.cs_correcao_trabalhista', this.checked, this)">
+                Atualização Trabalhista
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem; margin-bottom:4px;">
+                <input type="checkbox" {{ 'checked' if cj.get('cs_juros_trabalhistas') }}
+                       onchange="salvarCampo('correcao_juros.cs_juros_trabalhistas', this.checked, this)">
+                Juros Trabalhistas
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem; margin-bottom:4px;">
+                <input type="checkbox" {{ 'checked' if cj.get('cs_lei_11941') }}
+                       onchange="salvarCampo('correcao_juros.cs_lei_11941', this.checked, this)">
+                Lei 11.941/2009
+              </label>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem; margin-bottom:4px;">
+                <input type="checkbox" {{ 'checked' if cj.get('cs_correcao_previdenciaria') }}
+                       onchange="salvarCampo('correcao_juros.cs_correcao_previdenciaria', this.checked, this)">
+                Atualização Previdenciária
+              </label>
+            </fieldset>
+
+            <!-- Custas Judiciais -->
+            <fieldset style="border:1px solid #c8d6e5; border-radius:6px; padding:12px 16px; min-width:250px;">
+              <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Custas Judiciais</legend>
+              <div class="campo-form" style="margin-bottom:6px;">
+                <label style="font-size:0.82rem;">Índice de Correção</label>
+                <select onchange="salvarCampo('correcao_juros.indice_custas', this.value, this)" style="width:100%;">
+                  <option value="NAO_ATUALIZA" {{ 'selected' if cj.get('indice_custas', 'NAO_ATUALIZA') == 'NAO_ATUALIZA' }}>Não atualiza (padrão)</option>
+                  <option value="UTILIZAR_INDICE_TRABALHISTA" {{ 'selected' if cj.get('indice_custas') == 'UTILIZAR_INDICE_TRABALHISTA' }}>Utilizar índice trabalhista</option>
+                </select>
+              </div>
+              <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.88rem;">
+                <input type="checkbox" {{ 'checked' if cj.get('juros_custas') }}
+                       onchange="salvarCampo('correcao_juros.juros_custas', this.checked, this)">
+                Juros sobre Custas
+              </label>
+            </fieldset>
+
+          </div>
         </div>
+
       </div>
     </div>
 
