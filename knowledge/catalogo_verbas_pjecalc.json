@@ -347,6 +347,102 @@
       "ocorrencia": "Desligamento",
       "reflexas_automaticas": [],
       "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO POR DANO MORAL",
+      "aliases": ["dano moral", "danos morais", "indenização moral", "indenização por danos morais"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO POR DANO MATERIAL",
+      "aliases": ["dano material", "danos materiais", "indenização material", "indenização por danos materiais"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO POR DANO ESTÉTICO",
+      "aliases": ["dano estético", "danos estéticos", "indenização por danos estéticos"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO ADICIONAL",
+      "aliases": ["indenização adicional", "indenização complementar"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "MULTA CONVENCIONAL",
+      "aliases": ["multa convencional", "multa normativa", "multa CCT"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "INDENIZAÇÃO PIS - ABONO SALARIAL",
+      "aliases": ["indenização PIS", "abono salarial PIS", "PIS não recolhido"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "PRÊMIO PRODUÇÃO",
+      "aliases": ["prêmio produção", "prêmio de produção", "prêmio produtividade"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "REPOUSO SEMANAL REMUNERADO (COMISSIONISTA)",
+      "aliases": ["RSR comissionista", "DSR comissionista", "repouso semanal comissionista"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Mensal",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA",
+      "aliases": ["restituição de despesa", "indenização de despesa", "reembolso de despesas"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "SALDO DE EMPREITADA",
+      "aliases": ["saldo de empreitada", "empreitada"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
+    },
+    {
+      "nome_pjecalc": "VALOR PAGO - NÃO TRIBUTÁVEL",
+      "aliases": ["valor pago não tributável", "pagamento não tributável"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": false, "inss": false, "irpf": false}
+    },
+    {
+      "nome_pjecalc": "VALOR PAGO - TRIBUTÁVEL",
+      "aliases": ["valor pago tributável", "pagamento tributável"],
+      "caracteristica": "Comum",
+      "ocorrencia": "Desligamento",
+      "reflexas_automaticas": [],
+      "incidencias": {"fgts": true, "inss": true, "irpf": true}
     }
   ],
   "adaptaveis": [
@@ -382,49 +478,6 @@
     }
   ],
   "somente_manual": [
-    {
-      "nome": "Indenização por Dano Moral",
-      "aliases": ["dano moral", "danos morais", "indenização moral"],
-      "parametros_tipicos": {"caracteristica": "COMUM", "ocorrencia": "DESLIGAMENTO", "base_calculo": "INFORMADO", "tipo_valor": "INFORMADO"},
-      "incidencias": {"fgts": false, "inss": false, "irpf": false},
-      "pagina_pjecalc": "Multas e Indenizações"
-    },
-    {
-      "nome": "Indenização por Dano Material",
-      "aliases": ["dano material", "danos materiais", "indenização material"],
-      "parametros_tipicos": {"caracteristica": "COMUM", "ocorrencia": "DESLIGAMENTO", "base_calculo": "INFORMADO", "tipo_valor": "INFORMADO"},
-      "incidencias": {"fgts": false, "inss": false, "irpf": false},
-      "pagina_pjecalc": "Multas e Indenizações"
-    },
-    {
-      "nome": "Indenização por Dano Estético",
-      "aliases": ["dano estético", "danos estéticos"],
-      "parametros_tipicos": {"caracteristica": "COMUM", "ocorrencia": "DESLIGAMENTO", "base_calculo": "INFORMADO", "tipo_valor": "INFORMADO"},
-      "incidencias": {"fgts": false, "inss": false, "irpf": false},
-      "pagina_pjecalc": "Multas e Indenizações"
-    },
-    {
-      "nome": "Indenização Adicional",
-      "aliases": ["indenização adicional", "indenização complementar"],
-      "parametros_tipicos": {
-        "caracteristica": "COMUM",
-        "ocorrencia": "DESLIGAMENTO",
-        "base_calculo": "INFORMADO",
-        "tipo_valor": "INFORMADO"
-      },
-      "incidencias": {"fgts": false, "inss": false, "irpf": false}
-    },
-    {
-      "nome": "Multa Convencional",
-      "aliases": ["multa convencional", "multa normativa", "multa CCT"],
-      "parametros_tipicos": {
-        "caracteristica": "COMUM",
-        "ocorrencia": "DESLIGAMENTO",
-        "base_calculo": "INFORMADO",
-        "tipo_valor": "INFORMADO"
-      },
-      "incidencias": {"fgts": false, "inss": false, "irpf": false}
-    },
     {
       "nome": "Indenização por Estabilidade",
       "aliases": ["estabilidade provisória", "estabilidade gestante", "estabilidade acidentária", "indenização estabilidade"],
