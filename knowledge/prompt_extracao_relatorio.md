@@ -390,29 +390,54 @@ Valor: [float — ex: 5000.00 | null se não deferidos]
 ### 14. CORREÇÃO MONETÁRIA E JUROS
 
 ```
-Índice de Correção: [IPCA-E | Tabela JT Unica Mensal | Selic | TRCT]
+Lei 14.905/2024: [Sim | Não]
+Índice de Correção (pré-30/08/2024): [IPCA-E | Tabela JT Unica Mensal | Selic | TRCT]
+Índice de Correção (pós-30/08/2024): [IPCA | null — somente quando Lei 14.905 = Sim]
 Taxa de Juros: [Taxa Legal | Selic | Juros Padrao]
-Data Marco Taxa Legal: [DD/MM/AAAA — somente quando Taxa de Juros = Taxa Legal; padrão 30/08/2024]
+Data Marco Taxa Legal: [DD/MM/AAAA — padrão 30/08/2024; somente quando Taxa = Taxa Legal]
 Base dos Juros: [Verbas (padrão) | Credito Total]
 JAM FGTS: [Sim | Não]
 ```
 
 **Mapeamento dos critérios da sentença (em ordem de prevalência):**
 
-| Critério na sentença | Índice | Juros | Data Marco |
-|---|---|---|---|
-| **ADC 58 + Lei 14.905/2024** (3 fases: IPCA-E pré-judicial / SELIC até 29/08/2024 / IPCA + taxa legal após) — E-ED-RR-20407, "taxa legal", "art. 406 CC", "SELIC - IPCA" | IPCA-E | Taxa Legal | 30/08/2024 |
-| ADC 58 / "critérios JT" / "IPCA-E até ajuizamento e SELIC após" — SEM menção à Lei 14.905 | Tabela JT Unica Mensal | Selic | — |
-| "SELIC" / "taxa SELIC" (sem distinguir fases) | Selic | Selic | — |
-| EC 113/2021 / "SELIC a partir de dezembro/2021" | Selic | Selic | — |
-| "IPCA-E + juros de 1% ao mês" / "IPCA-E + juros legais" | IPCA-E | Juros Padrao | — |
-| "TR" / "TRCT" + juros de 1% ao mês | TRCT | Juros Padrao | — |
-| IPCA-E sem especificação de juros | IPCA-E | Juros Padrao | — |
+| Critério na sentença | Lei 14.905 | Correção | Correção pós | Juros | Data Marco |
+|---|---|---|---|---|---|
+| **ADC 58 + Lei 14.905/2024** — 3 fases (ver detalhe abaixo) | Sim | IPCA-E | IPCA | Taxa Legal | 30/08/2024 |
+| ADC 58 / "critérios JT" — SEM menção Lei 14.905 | Não | Tabela JT Unica Mensal | — | Selic | — |
+| "SELIC" / "taxa SELIC" sem distinguir fases | Não | Selic | — | Selic | — |
+| EC 113/2021 / "SELIC a partir de dezembro/2021" | Não | Selic | — | Selic | — |
+| "IPCA-E + juros de 1% ao mês" | Não | IPCA-E | — | Juros Padrao | — |
+| "TR" / "TRCT" + juros de 1% | Não | TRCT | — | Juros Padrao | — |
+| IPCA-E sem especificação de juros | Não | IPCA-E | — | Juros Padrao | — |
 
-> **"Taxa Legal"** = SELIC − IPCA (juros reais, Lei 14.905/2024, vigência 30/08/2024). É a jurisprudência majoritária atual. O PJe-Calc gerencia internamente as 3 fases quando se seleciona "Taxa Legal" com a data marco.
+**DETALHAMENTO — Lei 14.905/2024 (jurisprudência majoritária atual):**
+
+Indicadores na sentença: "E-ED-RR-20407", "Lei 14.905", "taxa legal", "art. 406 CC",
+"SELIC - IPCA", "IPCA-E pré-judicial + SELIC até 29/08/2024 + taxa legal após"
+
+O PJe-Calc exige COMBINAÇÕES de índices nesse regime:
+
+**Correção Monetária:**
+- IPCA-E até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
+- Se admissão posterior a 30/08/2024 → usar somente IPCA
+
+**Juros de Mora — depende da data de ajuizamento:**
+
+Cenário A — Ajuizamento ANTES de 30/08/2024:
+- Fase pré-judicial: TRD juros simples, combinado com "Sem juros" a partir de 30/08/2024
+- Judicial Fase 1: SELIC (Receita Federal) do ajuizamento até 29/08/2024
+- Judicial Fase 2: Taxa Legal a partir de 30/08/2024
+
+Cenário B — Ajuizamento DEPOIS de 30/08/2024:
+- Fase pré-judicial: TRD juros simples
+- Judicial: Taxa Legal a partir do ajuizamento
+
+> **"Taxa Legal"** = SELIC − IPCA (juros reais, definida pelo Banco Central)
 > "Juros Padrao" = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
 > "Selic" = taxa SELIC acumulada (aplicável após ADC 58, absorve correção + juros)
-> Base dos Juros: usar "Verbas" (padrão), exceto se a sentença mencionar explicitamente "crédito total" ou "total da dívida"
+> "IPCA" = índice de correção pós-Lei 14.905 (substitui IPCA-E a partir de 30/08/2024)
+> Base dos Juros: "Verbas" (padrão), "Credito Total" somente se sentença mencionar explicitamente
 > JAM FGTS: "Sim" apenas se a sentença mencionar "JAM" ou "juros e atualização monetária sobre FGTS"
 
 ### 15. CONTRIBUIÇÃO SOCIAL (INSS)

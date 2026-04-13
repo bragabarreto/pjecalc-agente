@@ -211,23 +211,41 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 ### Enums do PJe-Calc
 | Campo | Valores aceitos |
 |-------|----------------|
+| lei_14905 | true (regime Lei 14.905/2024 — exige combinações), false |
 | indice_correcao | IPCA-E, Tabela JT Unica Mensal, Selic, TRCT |
+| indice_correcao_pos | **IPCA** (correção pós-30/08/2024 — somente quando lei_14905=true) |
 | taxa_juros | **Taxa Legal** (SELIC − IPCA, Lei 14.905/2024), Selic, Juros Padrao (1% a.m.) |
 | data_taxa_legal | DD/MM/AAAA (padrão 30/08/2024 — somente quando taxa_juros = Taxa Legal) |
 | base_juros | Verbas (padrão), Credito Total |
 
 ### Mapeamento da sentença → enums (em ordem de prevalência)
-| Critério na sentença | Índice | Juros | Data Marco |
-|----------------------|--------|-------|------------|
-| **ADC 58 + Lei 14.905/2024** — 3 fases (IPCA-E pré-judicial / SELIC até 29/08/2024 / IPCA + taxa legal após 30/08/2024). E-ED-RR-20407, "taxa legal", "art. 406 CC" | IPCA-E | **Taxa Legal** | 30/08/2024 |
-| ADC 58 / critérios JT SEM Lei 14.905 (sentenças pré-ago/2024) | Tabela JT Unica Mensal | Selic | — |
-| "SELIC" / "taxa SELIC" sem distinguir fases | Selic | Selic | — |
-| EC 113/2021 / "SELIC a partir de dez/2021" | Selic | Selic | — |
-| "IPCA-E + juros de 1% a.m." / "IPCA-E + juros legais" | IPCA-E | Juros Padrao | — |
-| "TR" / "TRCT" + juros de 1% | TRCT | Juros Padrao | — |
-| IPCA-E sem especificação de juros | IPCA-E | Juros Padrao | — |
+| Critério na sentença | Lei 14.905 | Correção | Correção pós | Juros |
+|----------------------|-----------|----------|-------------|-------|
+| **ADC 58 + Lei 14.905/2024** — E-ED-RR-20407, "taxa legal", "art. 406 CC" | **true** | IPCA-E | **IPCA** | **Taxa Legal** |
+| ADC 58 / critérios JT SEM Lei 14.905 (pré-ago/2024) | false | Tabela JT Unica Mensal | — | Selic |
+| "SELIC" / "taxa SELIC" sem distinguir fases | false | Selic | — | Selic |
+| EC 113/2021 / "SELIC a partir de dez/2021" | false | Selic | — | Selic |
+| "IPCA-E + juros de 1% a.m." | false | IPCA-E | — | Juros Padrao |
+| "TR" / "TRCT" + juros de 1% | false | TRCT | — | Juros Padrao |
 
-> **Taxa Legal** é a jurisprudência majoritária atual (E-ED-RR-20407-32.2015.5.04.0271). O PJe-Calc gerencia internamente as 3 fases quando se seleciona "Taxa Legal" com a data marco 30/08/2024.
+### Detalhamento — Lei 14.905/2024 (jurisprudência majoritária atual)
+
+**Correção Monetária no PJe-Calc:**
+- IPCA-E até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
+- Se admissão > 30/08/2024 → usar somente IPCA como índice único
+
+**Juros de Mora — depende da data de ajuizamento:**
+
+**Cenário A — Ajuizamento ANTES de 30/08/2024:**
+- Fase pré-judicial: TRD juros simples, combinado com "Sem juros" a partir de 30/08/2024
+- Judicial Fase 1: SELIC (Receita Federal) do ajuizamento até 29/08/2024
+- Judicial Fase 2: Taxa Legal a partir de 30/08/2024
+
+**Cenário B — Ajuizamento DEPOIS de 30/08/2024:**
+- Fase pré-judicial: TRD juros simples
+- Judicial: Taxa Legal a partir do ajuizamento
+
+> **NOTA**: O PJe-Calc exige que essas fases sejam configuradas via "Combinar com outro índice" tanto na correção quanto nos juros.
 > JAM FGTS: marcar apenas se sentença mencionar "JAM" ou "juros sobre atraso no depósito FGTS".
 
 ---

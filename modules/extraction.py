@@ -335,39 +335,63 @@ CASOS MAIS COMUNS (em ordem de prevalência jurisprudencial):
 1. ADC 58 + Lei 14.905/2024 — JURISPRUDÊNCIA MAJORITÁRIA ATUAL (E-ED-RR-20407-32.2015.5.04.0271):
    Indicadores: menção a "ADC 58", "E-ED-RR-20407", "Lei 14.905", "taxa legal",
    "IPCA-E na fase pré-judicial", "SELIC até 29/08/2024", "IPCA + taxa legal a partir de 30/08/2024",
-   3 fases distintas (pré-judicial / ajuizamento-29.08.2024 / pós-30.08.2024)
+   3 fases distintas (pré-judicial / ajuizamento-29.08.2024 / pós-30.08.2024),
+   "art. 406 do CC", "SELIC - IPCA"
+     lei_14905 = true
      indice_correcao = "IPCA-E"
+     indice_correcao_pos = "IPCA"
      taxa_juros = "Taxa Legal"
      data_taxa_legal = "30/08/2024"
-   ⚠️ O PJe-Calc gerencia internamente as 3 fases quando se seleciona "Taxa Legal" com a data marco.
+   ⚠️ PREENCHIMENTO NO PJe-Calc (a automação deve fazer combinações):
+     CORREÇÃO: IPCA-E até 29/08/2024 COMBINADO com IPCA a partir de 30/08/2024.
+       Se admissão posterior a 30/08/2024 → usar somente IPCA.
+     JUROS (depende da data de ajuizamento):
+       Cenário A — Ajuizamento ANTES de 30/08/2024:
+         - Pré-judicial: TRD juros simples, combinado com "Sem juros" a partir de 30/08/2024
+         - Judicial Fase 1: SELIC (Receita Federal) do ajuizamento até 29/08/2024
+         - Judicial Fase 2: Taxa Legal a partir de 30/08/2024
+       Cenário B — Ajuizamento DEPOIS de 30/08/2024:
+         - Pré-judicial: TRD juros simples
+         - Judicial: Taxa Legal a partir do ajuizamento
 
 2. ADC 58 / critérios TST SEM menção à Lei 14.905 (sentenças anteriores a ago/2024):
    Indicadores: "ADC 58", "Tabela JT Única Mensal", "IPCA-E até o ajuizamento e SELIC a partir",
    "critérios da Justiça do Trabalho" — SEM mencionar "taxa legal" ou "Lei 14.905"
+     lei_14905 = false
      indice_correcao = "Tabela JT Unica Mensal"
      taxa_juros = "Selic"
 
 3. Apenas SELIC para tudo ("atualizado pela SELIC", "taxa SELIC", sem distinguir fases):
+     lei_14905 = false
      indice_correcao = "Selic"
      taxa_juros = "Selic"
 
 4. IPCA-E + juros legais de 1% ao mês ("IPCA-E mais juros de 1% ao mês", "IPCA-E + juros
    moratórios de 1% ao mês"):
+     lei_14905 = false
      indice_correcao = "IPCA-E"
      taxa_juros = "Juros Padrao"
 
 5. TR + juros de 1% ao mês ("TR", "TRCT", "correção pela TR mais 1% ao mês"):
+     lei_14905 = false
      indice_correcao = "TRCT"
      taxa_juros = "Juros Padrao"
 
 6. IPCA-E sem especificação de juros:
+     lei_14905 = false
      indice_correcao = "IPCA-E"
      taxa_juros = "Juros Padrao"  (padrão quando índice é IPCA-E)
 
 NOTA: "Juros Padrao" = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
       "Selic" = taxa SELIC acumulada (aplicável após ADC 58, absorve correção + juros)
       "Taxa Legal" = SELIC − IPCA (juros reais, Lei 14.905/2024, vigência 30/08/2024)
+      "IPCA" = índice de correção pós-Lei 14.905 (substitui IPCA-E a partir de 30/08/2024)
 
+- correcao_juros.lei_14905: true quando a sentença aplica o regime da Lei 14.905/2024 (habilita
+    combinações de índices no PJe-Calc). false quando usa regimes anteriores.
+- correcao_juros.indice_correcao_pos: índice de correção a partir de 30/08/2024 (somente quando
+    lei_14905=true). Valores: "IPCA" (padrão Lei 14.905). Se admissão > 30/08/2024: usar "IPCA" como
+    índice único e indice_correcao pode ser null.
 - correcao_juros.data_taxa_legal: "DD/MM/AAAA" — data marco a partir da qual se aplica Taxa Legal.
     Padrão: "30/08/2024" (vigência Lei 14.905/2024). Informar SOMENTE quando taxa_juros = "Taxa Legal".
 - correcao_juros.base_juros:
@@ -546,10 +570,12 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
     "reclamado": "true | false"
   }},
   "correcao_juros": {{
+    "lei_14905": "true | false (true quando Lei 14.905/2024 se aplica — habilita combinações de índices)",
     "indice_correcao": "Tabela JT Unica Mensal | IPCA-E | Selic | TRCT | null",
+    "indice_correcao_pos": "IPCA | null (índice pós-30/08/2024; somente quando lei_14905=true)",
     "base_juros": "Verbas | Credito Total | null",
     "taxa_juros": "Taxa Legal | Juros Padrao | Selic | null",
-    "data_taxa_legal": "DD/MM/AAAA | null (somente quando taxa_juros = Taxa Legal; padrão 30/08/2024)",
+    "data_taxa_legal": "DD/MM/AAAA | null (padrão 30/08/2024; somente quando taxa_juros=Taxa Legal)",
     "jam_fgts": "true | false | null",
     "confianca": 0.95
   }},
@@ -902,33 +928,48 @@ Caso 1 — ADC 58 + Lei 14.905/2024 (JURISPRUDÊNCIA MAJORITÁRIA ATUAL):
                "SELIC até 29/08/2024", "IPCA + taxa legal a partir de 30/08/2024",
                3 fases distintas (pré-judicial / ajuizamento-29.08.2024 / pós-30.08.2024),
                "art. 406 do CC", "SELIC - IPCA"
-  → indice_correcao = "IPCA-E" | taxa_juros = "Taxa Legal" | data_taxa_legal = "30/08/2024"
-  ⚠️ O PJe-Calc gerencia internamente as 3 fases quando se seleciona "Taxa Legal" com a data marco.
+  → lei_14905 = true
+    indice_correcao = "IPCA-E"
+    indice_correcao_pos = "IPCA"
+    taxa_juros = "Taxa Legal"
+    data_taxa_legal = "30/08/2024"
+  ⚠️ PREENCHIMENTO NO PJe-Calc exige COMBINAÇÕES de índices:
+    CORREÇÃO: IPCA-E até 29/08/2024 COMBINADO COM IPCA a partir de 30/08/2024.
+      Se admissão > 30/08/2024 → usar somente IPCA (campo indice_correcao = null, indice_correcao_pos = "IPCA").
+    JUROS (cenário depende da data de ajuizamento vs 30/08/2024):
+      Cenário A — Ajuizamento ANTES de 30/08/2024:
+        Pré-judicial: TRD juros simples combinado com "Sem juros" a partir de 30/08/2024
+        Judicial Fase 1: SELIC do ajuizamento até 29/08/2024
+        Judicial Fase 2: Taxa Legal a partir de 30/08/2024
+      Cenário B — Ajuizamento DEPOIS de 30/08/2024:
+        Pré-judicial: TRD juros simples
+        Judicial: Taxa Legal a partir do ajuizamento
 
 Caso 2 — ADC 58 / critérios TST SEM menção à Lei 14.905 (sentenças anteriores a ago/2024):
   Indicadores: "ADC 58", "Tabela JT Única Mensal", "IPCA-E até o ajuizamento e SELIC a partir",
                "critérios da Justiça do Trabalho" — SEM mencionar "taxa legal" ou "Lei 14.905"
-  → indice_correcao = "Tabela JT Unica Mensal" | taxa_juros = "Selic"
+  → lei_14905 = false | indice_correcao = "Tabela JT Unica Mensal" | taxa_juros = "Selic"
 
 Caso 3 — Apenas SELIC:
   Indicadores: "atualizado pela SELIC", "taxa SELIC", "correção pela SELIC" (sem distinção de fases)
-  → indice_correcao = "Selic" | taxa_juros = "Selic"
+  → lei_14905 = false | indice_correcao = "Selic" | taxa_juros = "Selic"
 
 Caso 4 — IPCA-E + juros de 1% ao mês:
   Indicadores: "IPCA-E mais juros de 1% ao mês", "IPCA-E e juros moratórios de 1%",
                "IPCA-E + juros legais", "IPCA-E acrescido de 1% ao mês"
-  → indice_correcao = "IPCA-E" | taxa_juros = "Juros Padrao"
+  → lei_14905 = false | indice_correcao = "IPCA-E" | taxa_juros = "Juros Padrao"
 
 Caso 5 — TR / TRCT + juros de 1% ao mês:
   Indicadores: "TR mais 1% ao mês", "TRCT", "correção pela TR e juros de 1%"
-  → indice_correcao = "TRCT" | taxa_juros = "Juros Padrao"
+  → lei_14905 = false | indice_correcao = "TRCT" | taxa_juros = "Juros Padrao"
 
 Caso 6 — IPCA-E sem especificação de juros:
-  → indice_correcao = "IPCA-E" | taxa_juros = "Juros Padrao"
+  → lei_14905 = false | indice_correcao = "IPCA-E" | taxa_juros = "Juros Padrao"
 
 "Juros Padrao" = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
 "Selic" = taxa SELIC acumulada (aplicável após ADC 58, absorve correção + juros)
 "Taxa Legal" = SELIC − IPCA (juros reais, Lei 14.905/2024, vigência 30/08/2024)
+"IPCA" = índice de correção pós-Lei 14.905 (substitui IPCA-E a partir de 30/08/2024)
 data_taxa_legal: "DD/MM/AAAA" — data marco para Taxa Legal (padrão "30/08/2024"). Informar SOMENTE quando taxa_juros = "Taxa Legal".
 base_juros: "Verbas" (padrão — juros calculados verba a verba) ou
             "Credito Total" (apenas se a sentença mencionar explicitamente)
@@ -1466,12 +1507,14 @@ _EXTRACTION_SCHEMA: dict = {
             "type": "object", "additionalProperties": False,
             "required": ["indice_correcao","base_juros","taxa_juros","jam_fgts","confianca"],
             "properties": {
-                "indice_correcao":  {"type": ["string","null"]},
-                "base_juros":       {"type": ["string","null"]},
-                "taxa_juros":       {"type": ["string","null"]},
-                "data_taxa_legal":  {"type": ["string","null"]},
-                "jam_fgts":         {"type": ["boolean","null"]},
-                "confianca":        {"type": "number"},
+                "lei_14905":          {"type": ["boolean","null"]},
+                "indice_correcao":    {"type": ["string","null"]},
+                "indice_correcao_pos":{"type": ["string","null"]},
+                "base_juros":         {"type": ["string","null"]},
+                "taxa_juros":         {"type": ["string","null"]},
+                "data_taxa_legal":    {"type": ["string","null"]},
+                "jam_fgts":           {"type": ["boolean","null"]},
+                "confianca":          {"type": "number"},
             },
         },
         "contribuicao_social": {
@@ -1896,7 +1939,9 @@ def _extrair_via_regex(texto: str) -> dict[str, Any]:
                                      "selic - ipca", "selic menos ipca",
                                      "art. 406", "e-ed-rr-20407"]) or \
        (re.search(r"(?i)30[/.]08[/.]2024", texto) and "selic" in txt_lower):
+        resultado["lei_14905"] = True
         resultado["indice_correcao"] = "IPCA-E"
+        resultado["indice_correcao_pos"] = "IPCA"
         resultado["taxa_juros"] = "Taxa Legal"
         resultado["data_taxa_legal"] = "30/08/2024"
     # Caso 2: ADC 58 sem Lei 14.905 (sentenças pré-ago/2024)
@@ -2763,14 +2808,16 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     # Correção/juros: se ausentes e há verbas deferidas, aplicar padrão ADC 58 + Lei 14.905 com alerta
     cj = dados.get("correcao_juros", {})
     if not cj.get("indice_correcao") and dados.get("verbas_deferidas"):
+        cj["lei_14905"] = True
         cj["indice_correcao"] = "IPCA-E"
+        cj["indice_correcao_pos"] = "IPCA"
         cj["taxa_juros"] = "Taxa Legal"
         cj["data_taxa_legal"] = "30/08/2024"
         cj.setdefault("base_juros", "Verbas")
         dados["correcao_juros"] = cj
         alertas.append(
             "Índice de correção não identificado — aplicado padrão ADC 58 + Lei 14.905/2024 "
-            "(IPCA-E + Taxa Legal a partir de 30/08/2024). Verifique na sentença."
+            "(IPCA-E→IPCA + Taxa Legal a partir de 30/08/2024). Verifique na sentença."
         )
 
     # Custas judiciais: garantir objeto com defaults (configuração do PJE-Calc, não verba)
