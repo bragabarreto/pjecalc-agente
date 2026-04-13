@@ -7473,14 +7473,35 @@ class PJECalcPlaywright:
                 return
 
         # --- Índice de correção monetária ---
-        _indice = cj.get("indice_correcao", "IPCA-E")
+        _indice = cj.get("indice_correcao", "IPCAE")
+        # Mapeamento: valor da prévia/extração → nome do enum Java IndiceMonetarioEnum
         _indice_map = {
+            # Valores do enum Java (prévia atualizada usa estes)
+            "TUACDT": "TUACDT",
+            "TABELA_DEVEDOR_FAZENDA": "TABELA_DEVEDOR_FAZENDA",
+            "TABELA_INDEBITO_TRIBUTARIO": "TABELA_INDEBITO_TRIBUTARIO",
+            "TABELA_UNICA_JT_MENSAL": "TABELA_UNICA_JT_MENSAL",
+            "TABELA_UNICA_JT_DIARIO": "TABELA_UNICA_JT_DIARIO",
+            "TR": "TR",
+            "IGPM": "IGPM",
+            "INPC": "INPC",
+            "IPC": "IPC",
+            "IPCA": "IPCA",
+            "IPCAE": "IPCAE",
+            "IPCAETR": "IPCAETR",
+            "SELIC": "SELIC",
+            "SELIC_FAZENDA": "SELIC_FAZENDA",
+            "SELIC_BACEN": "SELIC_BACEN",
+            "SEM_CORRECAO": "SEM_CORRECAO",
+            # Valores legados da extração (backward compat)
             "IPCA-E": "IPCAE",
-            "Tabela JT Única Mensal": "IPCAE",
-            "Tabela JT Unica Mensal": "IPCAE",
+            "IPCA-E/TR": "IPCAETR",
+            "IGP-M": "IGPM",
+            "Tabela JT Única Mensal": "TUACDT",
+            "Tabela JT Unica Mensal": "TUACDT",
             "Selic": "SELIC",
-            "TRCT": "TRCT",
-            "TR": "TRD",
+            "TRCT": "TR",
+            "TUACDT_DIARIO": "TABELA_UNICA_JT_DIARIO",
         }
         _val_indice = _indice_map.get(_indice, "IPCAE")
         self._selecionar("indiceCorrecao", _val_indice, obrigatorio=False)
@@ -7488,13 +7509,32 @@ class PJECalcPlaywright:
         self._log(f"  ✓ Índice de correção: {_val_indice}")
 
         # --- Taxa de juros ---
-        _taxa = cj.get("taxa_juros", "Taxa Legal")
+        _taxa = cj.get("taxa_juros", "TAXA_LEGAL")
+        # Mapeamento: valor da prévia/extração → nome do enum Java JurosEnum
         _juros_map = {
+            # Valores do enum Java (prévia atualizada usa estes)
+            "JUROS_PADRAO": "JUROS_PADRAO",
+            "JUROS_POUPANCA": "JUROS_POUPANCA",
+            "FAZENDA_PUBLICA": "FAZENDA_PUBLICA",
+            "JUROS_MEIO_PORCENTO": "JUROS_MEIO_PORCENTO",
+            "JUROS_UM_PORCENTO": "JUROS_UM_PORCENTO",
+            "JUROS_ZERO_TRINTA_TRES": "JUROS_ZERO_TRINTA_TRES",
+            "SELIC": "SELIC",
+            "SELIC_FAZENDA": "SELIC_FAZENDA",
+            "SELIC_BACEN": "SELIC_BACEN",
+            "TRD_SIMPLES": "TRD_SIMPLES",
+            "TRD_COMPOSTOS": "TRD_COMPOSTOS",
+            "TAXA_LEGAL": "TAXA_LEGAL",
+            "SEM_JUROS": "SEM_JUROS",
+            # Valores legados da extração (backward compat)
             "Taxa Legal": "TAXA_LEGAL",
             "Selic": "SELIC",
-            "Juros Padrão": "TRD_SIMPLES",
-            "Juros Padrao": "TRD_SIMPLES",
-            "1% ao mês": "TRD_SIMPLES",
+            "Juros Padrão": "JUROS_PADRAO",
+            "Juros Padrao": "JUROS_PADRAO",
+            "1% ao mês": "JUROS_UM_PORCENTO",
+            "TRD_CAPITALIZADOS": "TRD_COMPOSTOS",
+            "JUROS_SIMPLES_05": "JUROS_MEIO_PORCENTO",
+            "JUROS_SIMPLES_1": "JUROS_UM_PORCENTO",
         }
         _val_juros = _juros_map.get(_taxa, "TAXA_LEGAL")
         self._selecionar("taxaJuros", _val_juros, obrigatorio=False)

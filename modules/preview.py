@@ -300,9 +300,9 @@ def gerar_previa(
     # 8. Correção, Juros e Multa
     linhas += [
         "CORREÇÃO, JUROS E MULTA",
-        f"   Índice Correção : {correcao.get('indice_correcao') or 'Tabela JT Única Mensal'}",
+        f"   Índice Correção : {correcao.get('indice_correcao') or 'TUACDT'}",
         f"   Base dos Juros  : {correcao.get('base_juros') or 'Verbas'}",
-        f"   Taxa de Juros   : {correcao.get('taxa_juros') or 'Juros Padrão (1% a.m.)'}",
+        f"   Taxa de Juros   : {correcao.get('taxa_juros') or 'JUROS_PADRAO'}",
         f"   JAM (FGTS)      : {'Sim' if correcao.get('jam_fgts') else 'Não'}",
         "",
     ]

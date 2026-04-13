@@ -441,10 +441,10 @@ class PJECalcAutomation:
         """Manual, Seção 6.2.12."""
         self._navegar_menu_lateral("Correção, Juros e Multa")
 
-        indice = dados_cj.get("indice_correcao") or "Tabela JT Única Mensal"
+        indice = dados_cj.get("indice_correcao") or "TUACDT"
         self._selecionar_opcao("Índice de Correção Monetária", indice)
 
-        taxa = dados_cj.get("taxa_juros") or "Juros Padrão"
+        taxa = dados_cj.get("taxa_juros") or "JUROS_PADRAO"
         self._selecionar_opcao("Juros de Mora", taxa)
 
         base = dados_cj.get("base_juros") or "Verbas"
