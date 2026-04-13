@@ -1168,21 +1168,35 @@
               <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Correção Monetária</legend>
               <div class="campo-form" style="margin-bottom:10px;">
                 <label>Índice Trabalhista</label>
-                <select onchange="salvarCampo('correcao_juros.indice_correcao', this.value, this)" style="width:100%;">
-                  <option value="">— selecione —</option>
-                  {% set idx_opts = [
+                {% set idx_opts = [
                     ('TUACDT', 'Tabela Única de Atualização e Conversão de Débitos Trabalhistas'),
-                    ('TUACDT_DIARIO', 'Tabela Única da JT Diário'),
+                    ('TABELA_DEVEDOR_FAZENDA', 'Devedor Fazenda Pública'),
+                    ('TABELA_INDEBITO_TRIBUTARIO', 'Repetição de Indébito Tributário'),
+                    ('TABELA_UNICA_JT_MENSAL', 'Tabela JT Mensal'),
+                    ('TABELA_UNICA_JT_DIARIO', 'Tabela JT Diária'),
                     ('TR', 'TR'),
-                    ('IGP-M', 'IGP-M'),
+                    ('IGPM', 'IGP-M'),
                     ('INPC', 'INPC'),
                     ('IPC', 'IPC'),
                     ('IPCA', 'IPCA'),
-                    ('IPCA-E', 'IPCA-E'),
-                    ('IPCA-E/TR', 'IPCA-E / TR')
+                    ('IPCAE', 'IPCA-E'),
+                    ('IPCAETR', 'IPCA-E / TR'),
+                    ('SELIC', 'SELIC (Receita Federal)'),
+                    ('SELIC_FAZENDA', 'SELIC Simples'),
+                    ('SELIC_BACEN', 'SELIC Composta'),
+                    ('SEM_CORRECAO', 'Sem Correção')
                   ] %}
+                  {# Normalizar valores legados da extração para enum PJe-Calc #}
+                  {% set _norm_idx = {
+                    'IPCA-E': 'IPCAE', 'IPCA-E/TR': 'IPCAETR', 'IGP-M': 'IGPM',
+                    'Tabela JT Unica Mensal': 'TUACDT', 'Tabela JT Única Mensal': 'TUACDT',
+                    'Selic': 'SELIC', 'TRCT': 'TR', 'TUACDT_DIARIO': 'TABELA_UNICA_JT_DIARIO',
+                  } %}
+                  {% set _idx_val = _norm_idx.get(cj.get('indice_correcao', ''), cj.get('indice_correcao', '')) %}
+                <select onchange="salvarCampo('correcao_juros.indice_correcao', this.value, this)" style="width:100%;">
+                  <option value="">— selecione —</option>
                   {% for val, label in idx_opts %}
-                  <option value="{{ val }}" {{ 'selected' if cj.get('indice_correcao') == val }}>{{ label }}</option>
+                  <option value="{{ val }}" {{ 'selected' if _idx_val == val }}>{{ label }}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -1196,10 +1210,11 @@
               <div id="cj-combo-indice" style="display:{{ 'flex' if cj.get('combinar_indice') else 'none' }}; gap:8px; margin-bottom:8px; align-items:flex-end;">
                 <div class="campo-form" style="margin:0; flex:1;">
                   <label style="font-size:0.78rem;">Segundo Índice</label>
+                  {% set _seg_idx_val = _norm_idx.get(cj.get('segundo_indice', ''), cj.get('segundo_indice', '')) %}
                   <select onchange="salvarCampo('correcao_juros.segundo_indice', this.value, this)">
                     <option value="">— selecione —</option>
                     {% for val, label in idx_opts %}
-                    <option value="{{ val }}" {{ 'selected' if cj.get('segundo_indice') == val }}>{{ label }}</option>
+                    <option value="{{ val }}" {{ 'selected' if _seg_idx_val == val }}>{{ label }}</option>
                     {% endfor %}
                   </select>
                 </div>
@@ -1229,18 +1244,34 @@
               </div>
               <div class="campo-form" style="margin-bottom:10px;">
                 <label>Tabela de Juros</label>
-                <select onchange="salvarCampo('correcao_juros.taxa_juros', this.value, this)" style="width:100%;">
-                  <option value="">— selecione —</option>
-                  {% set juros_opts = [
+                {% set juros_opts = [
+                    ('JUROS_PADRAO', 'Juros Padrão'),
+                    ('JUROS_POUPANCA', 'Juros Caderneta de Poupança'),
+                    ('FAZENDA_PUBLICA', 'Juros Fazenda Pública'),
+                    ('JUROS_MEIO_PORCENTO', 'Juros Simples 0,5% a.m.'),
+                    ('JUROS_UM_PORCENTO', 'Juros Simples 1,0% a.m.'),
+                    ('JUROS_ZERO_TRINTA_TRES', 'Juros Simples 0,0333333% a.d.'),
+                    ('SELIC', 'SELIC (Receita Federal)'),
+                    ('SELIC_FAZENDA', 'SELIC Simples'),
+                    ('SELIC_BACEN', 'SELIC Composta'),
                     ('TRD_SIMPLES', 'TRD Juros Simples'),
-                    ('TRD_CAPITALIZADOS', 'TRD Juros Capitalizados'),
-                    ('JUROS_SIMPLES_05', 'Juros Simples 0,5% a.m.'),
-                    ('JUROS_SIMPLES_1', 'Juros Simples 1% a.m.'),
-                    ('SELIC', 'SELIC'),
+                    ('TRD_COMPOSTOS', 'TRD Juros Compostos'),
+                    ('TAXA_LEGAL', 'Taxa Legal'),
                     ('SEM_JUROS', 'Sem Juros')
                   ] %}
+                  {# Normalizar valores legados da extração para enum PJe-Calc #}
+                  {% set _norm_juros = {
+                    'Taxa Legal': 'TAXA_LEGAL', 'Juros Padrao': 'JUROS_PADRAO',
+                    'Juros Padrão': 'JUROS_PADRAO', 'Selic': 'SELIC',
+                    'TRD_CAPITALIZADOS': 'TRD_COMPOSTOS',
+                    'JUROS_SIMPLES_05': 'JUROS_MEIO_PORCENTO',
+                    'JUROS_SIMPLES_1': 'JUROS_UM_PORCENTO',
+                  } %}
+                  {% set _juros_val = _norm_juros.get(cj.get('taxa_juros', ''), cj.get('taxa_juros', '')) %}
+                <select onchange="salvarCampo('correcao_juros.taxa_juros', this.value, this)" style="width:100%;">
+                  <option value="">— selecione —</option>
                   {% for val, label in juros_opts %}
-                  <option value="{{ val }}" {{ 'selected' if cj.get('taxa_juros') == val }}>{{ label }}</option>
+                  <option value="{{ val }}" {{ 'selected' if _juros_val == val }}>{{ label }}</option>
                   {% endfor %}
                 </select>
               </div>
@@ -1255,10 +1286,11 @@
                 <div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:8px;">
                   <div class="campo-form" style="margin:0; flex:1;">
                     <label style="font-size:0.78rem;">Tabela Juros *</label>
+                    {% set _seg_juros_val = _norm_juros.get(cj.get('segunda_tabela_juros', ''), cj.get('segunda_tabela_juros', '')) %}
                     <select onchange="salvarCampo('correcao_juros.segunda_tabela_juros', this.value, this)">
                       <option value="">— selecione —</option>
                       {% for val, label in juros_opts %}
-                      <option value="{{ val }}" {{ 'selected' if cj.get('segunda_tabela_juros') == val }}>{{ label }}</option>
+                      <option value="{{ val }}" {{ 'selected' if _seg_juros_val == val }}>{{ label }}</option>
                       {% endfor %}
                     </select>
                   </div>

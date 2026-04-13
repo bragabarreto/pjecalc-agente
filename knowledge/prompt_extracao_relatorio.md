@@ -391,25 +391,62 @@ Valor: [float — ex: 5000.00 | null se não deferidos]
 
 ```
 Lei 14.905/2024: [Sim | Não]
-Índice de Correção (pré-30/08/2024): [IPCA-E | Tabela JT Unica Mensal | Selic | TRCT]
+Índice de Correção (pré-30/08/2024): [IPCAE | TUACDT | SELIC | TR | IPCA | IGPM | INPC | IPC | IPCAETR | SELIC_FAZENDA | SELIC_BACEN | TABELA_UNICA_JT_MENSAL | TABELA_UNICA_JT_DIARIO | SEM_CORRECAO]
 Índice de Correção (pós-30/08/2024): [IPCA | null — somente quando Lei 14.905 = Sim]
-Taxa de Juros: [Taxa Legal | Selic | Juros Padrao]
-Data Marco Taxa Legal: [DD/MM/AAAA — padrão 30/08/2024; somente quando Taxa = Taxa Legal]
+Taxa de Juros: [TAXA_LEGAL | JUROS_PADRAO | SELIC | TRD_SIMPLES | TRD_COMPOSTOS | JUROS_UM_PORCENTO | JUROS_MEIO_PORCENTO | SELIC_FAZENDA | SELIC_BACEN | SEM_JUROS]
+Data Marco Taxa Legal: [DD/MM/AAAA — padrão 30/08/2024; somente quando Taxa = TAXA_LEGAL]
 Base dos Juros: [Verbas (padrão) | Credito Total]
 JAM FGTS: [Sim | Não]
 ```
+
+**Enums do PJe-Calc — Correção Monetária:**
+| Enum | Nome no PJe-Calc |
+|------|-----------------|
+| TUACDT | Tabela Única de Atualização e Conversão de Débitos Trabalhistas |
+| TABELA_DEVEDOR_FAZENDA | Devedor Fazenda Pública |
+| TABELA_INDEBITO_TRIBUTARIO | Repetição de Indébito Tributário |
+| TABELA_UNICA_JT_MENSAL | Tabela JT Mensal |
+| TABELA_UNICA_JT_DIARIO | Tabela JT Diária |
+| TR | TR |
+| IGPM | IGP-M |
+| INPC | INPC |
+| IPC | IPC |
+| IPCA | IPCA |
+| IPCAE | IPCA-E |
+| IPCAETR | IPCA-E / TR |
+| SELIC | SELIC (Receita Federal) |
+| SELIC_FAZENDA | SELIC Simples |
+| SELIC_BACEN | SELIC Composta |
+| SEM_CORRECAO | Sem Correção |
+
+**Enums do PJe-Calc — Juros de Mora:**
+| Enum | Nome no PJe-Calc |
+|------|-----------------|
+| JUROS_PADRAO | Juros Padrão |
+| JUROS_POUPANCA | Juros Caderneta de Poupança |
+| FAZENDA_PUBLICA | Juros Fazenda Pública |
+| JUROS_MEIO_PORCENTO | Juros Simples 0,5% a.m. |
+| JUROS_UM_PORCENTO | Juros Simples 1,0% a.m. |
+| JUROS_ZERO_TRINTA_TRES | Juros Simples 0,0333333% a.d. |
+| SELIC | SELIC (Receita Federal) |
+| SELIC_FAZENDA | SELIC Simples |
+| SELIC_BACEN | SELIC Composta |
+| TRD_SIMPLES | TRD Juros Simples |
+| TRD_COMPOSTOS | TRD Juros Compostos |
+| TAXA_LEGAL | Taxa Legal |
+| SEM_JUROS | Sem Juros |
 
 **Mapeamento dos critérios da sentença (em ordem de prevalência):**
 
 | Critério na sentença | Lei 14.905 | Correção | Correção pós | Juros | Data Marco |
 |---|---|---|---|---|---|
-| **ADC 58 + Lei 14.905/2024** — 3 fases (ver detalhe abaixo) | Sim | IPCA-E | IPCA | Taxa Legal | 30/08/2024 |
-| ADC 58 / "critérios JT" — SEM menção Lei 14.905 | Não | Tabela JT Unica Mensal | — | Selic | — |
-| "SELIC" / "taxa SELIC" sem distinguir fases | Não | Selic | — | Selic | — |
-| EC 113/2021 / "SELIC a partir de dezembro/2021" | Não | Selic | — | Selic | — |
-| "IPCA-E + juros de 1% ao mês" | Não | IPCA-E | — | Juros Padrao | — |
-| "TR" / "TRCT" + juros de 1% | Não | TRCT | — | Juros Padrao | — |
-| IPCA-E sem especificação de juros | Não | IPCA-E | — | Juros Padrao | — |
+| **ADC 58 + Lei 14.905/2024** — 3 fases (ver detalhe abaixo) | Sim | IPCAE | IPCA | TAXA_LEGAL | 30/08/2024 |
+| ADC 58 / "critérios JT" — SEM menção Lei 14.905 | Não | TUACDT | — | SELIC | — |
+| "SELIC" / "taxa SELIC" sem distinguir fases | Não | SELIC | — | SELIC | — |
+| EC 113/2021 / "SELIC a partir de dezembro/2021" | Não | SELIC | — | SELIC | — |
+| "IPCA-E + juros de 1% ao mês" | Não | IPCAE | — | JUROS_PADRAO | — |
+| "TR" / "TRCT" + juros de 1% | Não | TR | — | JUROS_PADRAO | — |
+| IPCA-E sem especificação de juros | Não | IPCAE | — | JUROS_PADRAO | — |
 
 **DETALHAMENTO — Lei 14.905/2024 (jurisprudência majoritária atual):**
 
@@ -419,24 +456,24 @@ Indicadores na sentença: "E-ED-RR-20407", "Lei 14.905", "taxa legal", "art. 406
 O PJe-Calc exige COMBINAÇÕES de índices nesse regime:
 
 **Correção Monetária:**
-- IPCA-E até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
+- IPCAE até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
 - Se admissão posterior a 30/08/2024 → usar somente IPCA
 
 **Juros de Mora — depende da data de ajuizamento:**
 
 Cenário A — Ajuizamento ANTES de 30/08/2024:
-- Fase pré-judicial: TRD juros simples, combinado com "Sem juros" a partir de 30/08/2024
-- Judicial Fase 1: SELIC (Receita Federal) do ajuizamento até 29/08/2024
-- Judicial Fase 2: Taxa Legal a partir de 30/08/2024
+- Fase pré-judicial: TRD_SIMPLES, combinado com SEM_JUROS a partir de 30/08/2024
+- Judicial Fase 1: SELIC do ajuizamento até 29/08/2024
+- Judicial Fase 2: TAXA_LEGAL a partir de 30/08/2024
 
 Cenário B — Ajuizamento DEPOIS de 30/08/2024:
-- Fase pré-judicial: TRD juros simples
-- Judicial: Taxa Legal a partir do ajuizamento
+- Fase pré-judicial: TRD_SIMPLES
+- Judicial: TAXA_LEGAL a partir do ajuizamento
 
-> **"Taxa Legal"** = SELIC − IPCA (juros reais, definida pelo Banco Central)
-> "Juros Padrao" = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
-> "Selic" = taxa SELIC acumulada (aplicável após ADC 58, absorve correção + juros)
-> "IPCA" = índice de correção pós-Lei 14.905 (substitui IPCA-E a partir de 30/08/2024)
+> **TAXA_LEGAL** = Taxa Legal = SELIC − IPCA (juros reais, definida pelo Banco Central)
+> **JUROS_PADRAO** = Juros Padrão = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
+> **SELIC** = SELIC (Receita Federal) = taxa SELIC acumulada (absorve correção + juros)
+> **IPCA** = índice de correção pós-Lei 14.905 (substitui IPCA-E a partir de 30/08/2024)
 > Base dos Juros: "Verbas" (padrão), "Credito Total" somente se sentença mencionar explicitamente
 > JAM FGTS: "Sim" apenas se a sentença mencionar "JAM" ou "juros e atualização monetária sobre FGTS"
 
