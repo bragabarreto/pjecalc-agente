@@ -390,25 +390,28 @@ Valor: [float — ex: 5000.00 | null se não deferidos]
 ### 14. CORREÇÃO MONETÁRIA E JUROS
 
 ```
-Índice de Correção: [Tabela JT Unica Mensal | IPCA-E | Selic | TRCT]
-Taxa de Juros: [Selic | Juros Padrao]
+Índice de Correção: [IPCA-E | Tabela JT Unica Mensal | Selic | TRCT]
+Taxa de Juros: [Taxa Legal | Selic | Juros Padrao]
+Data Marco Taxa Legal: [DD/MM/AAAA — somente quando Taxa de Juros = Taxa Legal; padrão 30/08/2024]
 Base dos Juros: [Verbas (padrão) | Credito Total]
 JAM FGTS: [Sim | Não]
 ```
 
-**Mapeamento dos critérios da sentença:**
+**Mapeamento dos critérios da sentença (em ordem de prevalência):**
 
-| Critério na sentença | Índice | Juros |
-|---|---|---|
-| ADC 58 / "critérios JT" / "Tabela JT Única" / "IPCA-E até ajuizamento e SELIC após" | Tabela JT Unica Mensal | Selic |
-| "SELIC" / "taxa SELIC" (sem distinguir fases) | Selic | Selic |
-| EC 113/2021 / "SELIC a partir de dezembro/2021" | Selic | Selic |
-| "IPCA-E + juros de 1% ao mês" / "IPCA-E + juros legais" | IPCA-E | Juros Padrao |
-| "TR" / "TRCT" + juros de 1% ao mês | TRCT | Juros Padrao |
-| IPCA-E sem especificação de juros | IPCA-E | Juros Padrao |
+| Critério na sentença | Índice | Juros | Data Marco |
+|---|---|---|---|
+| **ADC 58 + Lei 14.905/2024** (3 fases: IPCA-E pré-judicial / SELIC até 29/08/2024 / IPCA + taxa legal após) — E-ED-RR-20407, "taxa legal", "art. 406 CC", "SELIC - IPCA" | IPCA-E | Taxa Legal | 30/08/2024 |
+| ADC 58 / "critérios JT" / "IPCA-E até ajuizamento e SELIC após" — SEM menção à Lei 14.905 | Tabela JT Unica Mensal | Selic | — |
+| "SELIC" / "taxa SELIC" (sem distinguir fases) | Selic | Selic | — |
+| EC 113/2021 / "SELIC a partir de dezembro/2021" | Selic | Selic | — |
+| "IPCA-E + juros de 1% ao mês" / "IPCA-E + juros legais" | IPCA-E | Juros Padrao | — |
+| "TR" / "TRCT" + juros de 1% ao mês | TRCT | Juros Padrao | — |
+| IPCA-E sem especificação de juros | IPCA-E | Juros Padrao | — |
 
+> **"Taxa Legal"** = SELIC − IPCA (juros reais, Lei 14.905/2024, vigência 30/08/2024). É a jurisprudência majoritária atual. O PJe-Calc gerencia internamente as 3 fases quando se seleciona "Taxa Legal" com a data marco.
 > "Juros Padrao" = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
-> "Selic" = taxa SELIC acumulada (aplicável desde ADC 58, 30/08/2021)
+> "Selic" = taxa SELIC acumulada (aplicável após ADC 58, absorve correção + juros)
 > Base dos Juros: usar "Verbas" (padrão), exceto se a sentença mencionar explicitamente "crédito total" ou "total da dívida"
 > JAM FGTS: "Sim" apenas se a sentença mencionar "JAM" ou "juros e atualização monetária sobre FGTS"
 

@@ -211,20 +211,23 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 ### Enums do PJe-Calc
 | Campo | Valores aceitos |
 |-------|----------------|
-| indice_correcao | Tabela JT Unica Mensal, IPCA-E, Selic, TRCT |
-| taxa_juros | Selic, Juros Padrao (1% a.m.) |
+| indice_correcao | IPCA-E, Tabela JT Unica Mensal, Selic, TRCT |
+| taxa_juros | **Taxa Legal** (SELIC − IPCA, Lei 14.905/2024), Selic, Juros Padrao (1% a.m.) |
+| data_taxa_legal | DD/MM/AAAA (padrão 30/08/2024 — somente quando taxa_juros = Taxa Legal) |
 | base_juros | Verbas (padrão), Credito Total |
 
-### Mapeamento da sentença → enums
-| Critério na sentença | Índice | Juros |
-|----------------------|--------|-------|
-| ADC 58 / critérios JT / "IPCA-E até ajuizamento + SELIC após" | Tabela JT Unica Mensal | Selic |
-| "SELIC" / "taxa SELIC" sem distinguir fases | Selic | Selic |
-| EC 113/2021 / "SELIC a partir de dez/2021" | Selic | Selic |
-| "IPCA-E + juros de 1% a.m." / "IPCA-E + juros legais" | IPCA-E | Juros Padrao |
-| "TR" / "TRCT" + juros de 1% | TRCT | Juros Padrao |
-| IPCA-E sem especificação de juros | IPCA-E | Juros Padrao |
+### Mapeamento da sentença → enums (em ordem de prevalência)
+| Critério na sentença | Índice | Juros | Data Marco |
+|----------------------|--------|-------|------------|
+| **ADC 58 + Lei 14.905/2024** — 3 fases (IPCA-E pré-judicial / SELIC até 29/08/2024 / IPCA + taxa legal após 30/08/2024). E-ED-RR-20407, "taxa legal", "art. 406 CC" | IPCA-E | **Taxa Legal** | 30/08/2024 |
+| ADC 58 / critérios JT SEM Lei 14.905 (sentenças pré-ago/2024) | Tabela JT Unica Mensal | Selic | — |
+| "SELIC" / "taxa SELIC" sem distinguir fases | Selic | Selic | — |
+| EC 113/2021 / "SELIC a partir de dez/2021" | Selic | Selic | — |
+| "IPCA-E + juros de 1% a.m." / "IPCA-E + juros legais" | IPCA-E | Juros Padrao | — |
+| "TR" / "TRCT" + juros de 1% | TRCT | Juros Padrao | — |
+| IPCA-E sem especificação de juros | IPCA-E | Juros Padrao | — |
 
+> **Taxa Legal** é a jurisprudência majoritária atual (E-ED-RR-20407-32.2015.5.04.0271). O PJe-Calc gerencia internamente as 3 fases quando se seleciona "Taxa Legal" com a data marco 30/08/2024.
 > JAM FGTS: marcar apenas se sentença mencionar "JAM" ou "juros sobre atraso no depósito FGTS".
 
 ---
