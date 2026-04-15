@@ -8446,8 +8446,14 @@ class PJECalcPlaywright:
             return False  # fail-safe: não arriscar exportar processo errado
 
         if not _num_pagina:
+            # ⚠️ REGRESSION GUARD (fixes cd75571 + d24fb99) — NÃO alterar para `return False`.
+            # Histórico: cd75571 (08/04) corrigiu essa linha; 63fe793 (14min depois) reverteu
+            # silenciosamente ao commitar a partir de parent antigo; d24fb99 (15/04) reaplicou.
+            # Após as fases de preenchimento, o conversationId na URL GARANTE o cálculo correto
+            # — não precisamos confirmar via CNJ na página (que pode nem estar visível).
+            # Retornar False aqui causa abort do passo Liquidar ("CÁLCULO ERRADO" falso positivo).
             self._log("  ⚠ Verificação de cálculo: número do processo não visível na página — assumindo correto (mesmo conversationId)")
-            return True  # Após fases de preenchimento, o conversationId garante o cálculo correto
+            return True  # NÃO REVERTER — ver comentário acima
 
         # Comparar apenas dígitos
         import re as _re_vc
