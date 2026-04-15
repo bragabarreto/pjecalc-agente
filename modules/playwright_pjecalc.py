@@ -3048,20 +3048,13 @@ class PJECalcPlaywright:
         if proc.get("oab_reclamante"):
             self._preencher("numeroOABAdvogadoReclamante", proc["oab_reclamante"], False)
 
-        # FIX: garantir persistência do número do processo antes de sair da aba
-        # "Dados do Processo". Sem esse Salvar intermediário, a navegação para
-        # "Parâmetros do Cálculo" podia descartar os campos de numero/digito/ano
-        # (ViewState inconsistente em JSF após AJAX lento). Salvar aqui força o
-        # backend a persistir o cabeçalho do processo antes de outras abas.
-        try:
-            if num:
-                self._log("  → Salvando Dados do Processo antes de navegar para Parâmetros…")
-                if self._clicar_salvar(aguardar_sucesso=True):
-                    self._aguardar_ajax()
-                else:
-                    self._log("  ⚠ Salvar intermediário (Dados do Processo) não confirmado — prosseguindo mesmo assim")
-        except Exception as _e_save_pre:
-            self._log(f"  ⚠ Falha no Salvar intermediário (Dados do Processo): {_e_save_pre}")
+        # NOTA: NÃO salvar aqui. Manual oficial (Seção 5 + Seção 10) exige que o
+        # Salvar ocorra APENAS APÓS ambas as abas (Dados do Processo + Parâmetros
+        # do Cálculo) estarem preenchidas: "CRITICO: Apos completar e verificar
+        # ambas as abas, o usuario DEVE clicar no icone Salvar". Salvar apenas
+        # com a aba Geral preenchida gera "Existem erros no formulário" porque
+        # campos obrigatórios dos Parâmetros (estado/município/carga horária)
+        # ainda não foram informados. O Salvar final ocorre no fim desta fase.
 
         # ── Aba Parâmetros do Cálculo ──
         self._log("  → Aba Parâmetros do Cálculo…")
@@ -4739,6 +4732,29 @@ class PJECalcPlaywright:
             return False
 
         self._aguardar_ajax()
+        self._page.wait_for_timeout(400)
+
+        # FIX: guarda de URL pós-clique. Se o clique heurístico por 'ocorr' pegou
+        # um link errado (ex: menu lateral "Faltas" pode conter "ocorrência"), a
+        # página navega para falta.jsf em vez da tela de Ocorrências da Verba.
+        # Sem validar isso, o filtro de checkboxes por período desmarca ocorrências
+        # de FALTAS indevidamente. Manual Seção 9 (Verbas) — fluxo pós-Expresso
+        # opera SEMPRE dentro de verbas-para-calculo/verba-calculo.
+        _url_oc = self._page.url
+        if ("falta" in _url_oc and "verba" not in _url_oc) or (
+            "verba" not in _url_oc and "ocorrencia" not in _url_oc
+        ):
+            self._log(
+                f"  ⚠ Ocorrências '{nome_na_lista}': navegação inesperada → {_url_oc}"
+                " — pulando verba para não corromper outra tela"
+            )
+            # Voltar para a listagem de verbas
+            try:
+                self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                self._aguardar_ajax()
+            except Exception:
+                pass
+            return False
 
         # 2. Gerar ocorrências automáticas (mesmo padrão do histórico salarial)
         _gerou = (

@@ -263,6 +263,14 @@ Se não mencionado → ferias = []
       "Ferias" se for férias (vencidas, proporcionais)
       "Aviso Previo" se for aviso prévio
       "Comum" para demais (diferenças salariais, saldo, horas extras, adicionais, danos morais, etc.)
+      IMPORTANTE: PRESERVAR o nome original da sentença em `nome_sentenca`. Exemplos que
+      DEVEM mapear para a verba Expresso "HORAS EXTRAS 50%" (via classificador):
+        - "HORAS EXTRAS (ALÉM 8ª DIÁRIA E 44ª SEMANAL)"
+        - "HE 50%", "Horas Extraordinárias", "Horas Extras 50%"
+      Sempre que a sentença mencionar "horas extras"/"HE"/"extraordinárias", marque a
+      verba como Principal e NÃO como Reflexa. Os RSR/13º/Férias+1/3 sobre HE são
+      reflexos e devem ser extraídos com tipo="Reflexa" e verba_principal_ref apontando
+      para o nome_sentenca da HE principal.
     ocorrencia:
       "Mensal" para verbas mensais (horas extras, adicionais, diferenças salariais mensais)
       "Dezembro" para 13º salário
