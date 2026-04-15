@@ -8423,7 +8423,9 @@ class PJECalcPlaywright:
                     return num + '-' + dig + '.' + ano + '.' + (jus||'5') + '.' + (reg||'00') + '.' + (vara||'0000');
                 }
 
-                // Estratégia 2: buscar número CNJ formatado em textos da página
+                // Estratégia 2: buscar número CNJ formatado em contextos do formulário.
+                // NÃO varrer document.body inteiro — a sidebar/recentes pode conter CNJ
+                // de outro cálculo e gerar falso positivo (ver regressão do fix cd75571).
                 const seletores = [
                     '[id*="numero"][id*="rocesso"]',
                     '[id*="identificador"]',
@@ -8437,18 +8439,15 @@ class PJECalcPlaywright:
                         if (m) return m[0];
                     }
                 }
-                // Estratégia 3: buscar em qualquer texto da página
-                const body = document.body.innerText || '';
-                const m2 = body.match(/\\d{7}-\\d{2}\\.\\d{4}\\.\\d\\.\\d{2}\\.\\d{4}/);
-                return m2 ? m2[0] : null;
+                return null;
             }""")
         except Exception as _exc:
             self._log(f"  ⚠ Verificação falhou (erro JS): {_exc}")
             return False  # fail-safe: não arriscar exportar processo errado
 
         if not _num_pagina:
-            self._log("  ⚠ Verificação de cálculo: número do processo não visível na página")
-            return False  # fail-safe: sem número visível, não é seguro prosseguir
+            self._log("  ⚠ Verificação de cálculo: número do processo não visível na página — assumindo correto (mesmo conversationId)")
+            return True  # Após fases de preenchimento, o conversationId garante o cálculo correto
 
         # Comparar apenas dígitos
         import re as _re_vc
