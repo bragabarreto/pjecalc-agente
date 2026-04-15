@@ -83,3 +83,45 @@ Fonte: `modules/classification.py` → `VERBAS_PREDEFINIDAS` + Manual Oficial PJ
 - `Média pelo Valor Absoluto`: soma total da verba no período ÷ meses
 - `Valor Mensal`: usa o último valor mensal fixo da verba
 - `Percentual sobre Salário`: aplica percentual sobre salário base
+# Hints de classificação de verbas — injetados em system prompts
+
+Este arquivo é injetado automaticamente pelo `LLMOrchestrator` em todos os
+prompts de extração e classificação. Mantenha conciso e de alta precisão.
+
+## Regra 1 — Horas Extras (Expresso "HORAS EXTRAS 50%")
+
+Qualquer condenação cujo `nome_sentenca` contenha uma das expressões abaixo
+DEVE ser classificada como verba Principal mapeada para a verba Expresso
+`HORAS EXTRAS 50%` do PJE-Calc:
+
+- "horas extras"
+- "HE" (sigla isolada, como em "HE 50%")
+- "extraordinárias" / "extraordinarias"
+- "além da 8ª diária", "além da 44ª semanal", "além da jornada"
+
+Configuração esperada pela classificação:
+- `tipo`: `"Principal"`
+- `caracteristica`: `"Comum"` (catálogo oficial PJE-Calc; confirmado em
+  `modules/classification.py` chave `horas extras`)
+- `ocorrencia`: `"Mensal"`
+- `base_calculo`: `"Historico Salarial"` quando há variação salarial;
+  caso contrário `"Maior Remuneracao"`
+- `incidencia_fgts`, `incidencia_inss`, `incidencia_ir`: todos `true`
+- Percentual explícito na sentença (50%, 100%) → preencher em `percentual`
+  (0.5 ou 1.0). Quando for "HORAS EXTRAS 100%", o `nome_pjecalc` correto
+  é `HORAS EXTRAS 100%` (verba Expresso distinta).
+
+## Regra 2 — Reflexos de Horas Extras
+
+"REFLEXO DAS HORAS EXTRAS NO RSR / 13º / FÉRIAS + 1/3 / AVISO PRÉVIO"
+são verbas `tipo="Reflexa"` com `verba_principal_ref` apontando para o
+`nome_sentenca` da HE principal. Não criar como Principal autônoma. A
+automação usa o fluxo "Exibir Reflexas" na listagem de verbas (Seção 9
+do manual oficial) — reflexos Expresso nunca devem ser criados como
+verbas manuais autônomas.
+
+## Regra 3 — Preservação do nome original
+
+Sempre preencher `nome_sentenca` com o texto literal do título de condenação
+(ex: "HORAS EXTRAS (ALÉM 8ª DIÁRIA E 44ª SEMANAL)"). O classificador faz
+matching por proximidade contra o catálogo; alterar o nome quebra auditoria.
