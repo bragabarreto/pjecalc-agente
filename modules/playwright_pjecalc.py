@@ -3048,6 +3048,21 @@ class PJECalcPlaywright:
         if proc.get("oab_reclamante"):
             self._preencher("numeroOABAdvogadoReclamante", proc["oab_reclamante"], False)
 
+        # FIX: garantir persistência do número do processo antes de sair da aba
+        # "Dados do Processo". Sem esse Salvar intermediário, a navegação para
+        # "Parâmetros do Cálculo" podia descartar os campos de numero/digito/ano
+        # (ViewState inconsistente em JSF após AJAX lento). Salvar aqui força o
+        # backend a persistir o cabeçalho do processo antes de outras abas.
+        try:
+            if num:
+                self._log("  → Salvando Dados do Processo antes de navegar para Parâmetros…")
+                if self._clicar_salvar(aguardar_sucesso=True):
+                    self._aguardar_ajax()
+                else:
+                    self._log("  ⚠ Salvar intermediário (Dados do Processo) não confirmado — prosseguindo mesmo assim")
+        except Exception as _e_save_pre:
+            self._log(f"  ⚠ Falha no Salvar intermediário (Dados do Processo): {_e_save_pre}")
+
         # ── Aba Parâmetros do Cálculo ──
         self._log("  → Aba Parâmetros do Cálculo…")
         self._clicar_aba("tabParametrosCalculo")
@@ -4056,29 +4071,28 @@ class PJECalcPlaywright:
             raise RuntimeError("Tomcat morreu após navegação Expresso")
 
         # Scroll progressivo para carregar TODAS as verbas (tabela <a4j:repeat> em 3 colunas)
-        # A tabela tem ~60+ verbas mas só ~27 são visíveis no viewport.
-        # Scroll múltiplo para forçar o browser a computar layout de todos os elementos.
+        # A tabela tem ~60+ verbas mas só ~27 são visíveis no viewport. Verbas como
+        # "13º Salário", "Saldo de Salário", "Férias Proporcionais + 1/3", "Multa 477"
+        # ficam abaixo do scroll e precisam de forçar layout para entrar no DOM visível.
+        # Scroll em 5 passos (0%→25%→50%→75%→100%) com delay entre cada passo para
+        # dar tempo ao <a4j:repeat> de renderizar as linhas lazy.
         try:
-            self._page.evaluate("""() => {
-                // Scroll em todos os containers possíveis
-                const containers = document.querySelectorAll(
-                    '[id*="listagem"], table.list-check, .rich-table, .panelGrid, form'
-                );
-                for (const c of containers) {
-                    if (c.scrollHeight > c.clientHeight) {
-                        // Scroll progressivo em 4 passos
-                        for (let i = 1; i <= 4; i++) {
-                            c.scrollTop = (c.scrollHeight / 4) * i;
+            for _pct in (0.0, 0.25, 0.50, 0.75, 1.0):
+                self._page.evaluate(
+                    """(pct) => {
+                        const containers = document.querySelectorAll(
+                            '[id*="listagem"], [id*="verbas-para-calculo"], table.list-check, .rich-table, .panelGrid, form'
+                        );
+                        for (const c of containers) {
+                            if (c.scrollHeight > c.clientHeight) {
+                                c.scrollTop = c.scrollHeight * pct;
+                            }
                         }
-                    }
-                }
-                // Scroll da janela em passos
-                const h = document.body.scrollHeight;
-                for (let i = 1; i <= 4; i++) {
-                    window.scrollTo(0, (h / 4) * i);
-                }
-            }""")
-            self._page.wait_for_timeout(500)
+                        window.scrollTo(0, document.body.scrollHeight * pct);
+                    }""",
+                    _pct,
+                )
+                self._page.wait_for_timeout(250)
             # Voltar ao topo para que o salvamento funcione
             self._page.evaluate("() => window.scrollTo(0, 0)")
             self._page.wait_for_timeout(300)
@@ -4688,9 +4702,12 @@ class PJECalcPlaywright:
         )
         return True
 
-    def _configurar_ocorrencias_verba(self, nome_na_lista: str) -> bool:
+    def _configurar_ocorrencias_verba(self, nome_na_lista: str, v: dict | None = None) -> bool:
         """Abre 'Ocorrências da Verba' para a linha que contém nome_na_lista,
         gera as ocorrências automáticas e salva.
+
+        Se `v` for fornecido e contiver periodo_inicio/periodo_fim, desmarca as
+        ocorrências de meses fora do intervalo do período da verba.
 
         Retorna True se salvou com sucesso.
         """
@@ -4739,6 +4756,45 @@ class PJECalcPlaywright:
         if _gerou:
             self._aguardar_ajax()
             self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+
+        # 2b. FIX: filtrar ocorrências fora do período extraído da sentença.
+        # O "Gerar" cria ocorrências para TODO o período do contrato; verbas
+        # que só valem por N meses (ex: "Adicional Noturno de 03/2022 a 05/2023")
+        # precisam ter as ocorrências fora desse intervalo desmarcadas.
+        if v and _gerou:
+            _pi = v.get("periodo_inicio")
+            _pf = v.get("periodo_fim")
+            if _pi and _pf:
+                try:
+                    from datetime import datetime as _dt
+                    _di = _dt.strptime(_pi, "%d/%m/%Y")
+                    _df = _dt.strptime(_pf, "%d/%m/%Y")
+                    _mes_ini = _di.year * 12 + _di.month
+                    _mes_fim = _df.year * 12 + _df.month
+                    _js_filtro = (
+                        "(args) => {"
+                        "  const {mesIni, mesFim} = args;"
+                        "  const rows = document.querySelectorAll('table tr, tbody tr');"
+                        "  let desmarcados = 0;"
+                        "  rows.forEach(tr => {"
+                        "    const txt = tr.innerText || tr.textContent || '';"
+                        "    const m = txt.match(/(\\d{2})[\\/\\-](\\d{4})/);"
+                        "    if (!m) return;"
+                        "    const mesOcc = parseInt(m[2]) * 12 + parseInt(m[1]);"
+                        "    if (mesOcc < mesIni || mesOcc > mesFim) {"
+                        "      const cbx = tr.querySelector('input[type=\"checkbox\"]');"
+                        "      if (cbx && cbx.checked) { cbx.click(); desmarcados++; }"
+                        "    }"
+                        "  });"
+                        "  return desmarcados;"
+                        "}"
+                    )
+                    _n = self._page.evaluate(_js_filtro, {"mesIni": _mes_ini, "mesFim": _mes_fim})
+                    self._log(f"  ✓ Ocorrências fora do período ({_pi}→{_pf}) desmarcadas: {_n}")
+                    if _n:
+                        self._aguardar_ajax()
+                except Exception as _e_filt:
+                    self._log(f"  ⚠ Falha ao filtrar ocorrências por período: {_e_filt}")
 
         # 3. Salvar
         self._clicar_salvar()
@@ -4809,7 +4865,7 @@ class PJECalcPlaywright:
 
             # Ocorrências — sempre tentar (gerar + salvar confirma o período)
             try:
-                self._configurar_ocorrencias_verba(nome)
+                self._configurar_ocorrencias_verba(nome, v=v)
             except Exception as _e:
                 self._log(f"  ⚠ _configurar_ocorrencias_verba('{nome}'): {_e}")
 
@@ -6309,9 +6365,16 @@ class PJECalcPlaywright:
             self._marcar_checkbox("multa10", True)
 
         # Saldos FGTS já depositados (para dedução)
-        for saldo in fgts.get("saldos", []):
-            if saldo.get("data") and saldo.get("valor"):
-                self._marcar_checkbox("deduzirDoFGTS", True)
+        # FIX: marcar checkbox "deduzirDoFGTS" UMA ÚNICA VEZ antes do loop.
+        # Antes, o marcar dentro do loop causava toggle em iterações subsequentes
+        # (checkbox fica desmarcado na 2ª linha), e a seção de saldos ficava
+        # indisponível intermitentemente.
+        _saldos_validos = [s for s in fgts.get("saldos", []) if s.get("data") and s.get("valor")]
+        if _saldos_validos:
+            self._marcar_checkbox("deduzirDoFGTS", True)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(300)  # tempo para AJAX habilitar a seção
+            for saldo in _saldos_validos:
                 self._preencher_data("competencia", saldo["data"], False)
                 self._preencher("valor", _fmt_br(saldo["valor"]), False)
                 # Adicionar linha via botão "+" ou Enter
@@ -7523,6 +7586,122 @@ class PJECalcPlaywright:
             self._log(
                 f"  ℹ Férias {i+1}: {per_ini} a {per_fim} (situação={situacao})"
             )
+
+        # FIX: Configurar status/dobra/abono por período aquisitivo extraído da
+        # sentença. O PJE-Calc auto-gera as linhas, mas NÃO sabe quais são
+        # "Vencidas", "Proporcionais", "Gozadas", "Indenizadas" nem se têm dobra
+        # ou abono — isso precisa vir da sentença. Sem essa configuração, as
+        # ocorrências de férias ficam incorretas na liquidação.
+        _alterou_alguma = False
+        for entrada in ferias:
+            _situacao = (entrada.get("situacao") or "").strip()
+            _dobra = bool(entrada.get("dobra"))
+            _abono = bool(entrada.get("abono"))
+            _per_aq_ini = entrada.get("periodo_aquisitivo_inicio") or entrada.get("periodo_inicio") or ""
+            _per_aq_fim = entrada.get("periodo_aquisitivo_fim") or entrada.get("periodo_fim") or ""
+            # Só age se tiver pelo menos uma configuração não-default
+            if not (_situacao or _dobra or _abono):
+                continue
+            if not (_per_aq_ini and _per_aq_fim):
+                continue
+
+            try:
+                # Localizar e clicar no botão Editar da linha correspondente ao período aquisitivo.
+                # Estratégia: JS busca <tr> cujo texto contém as duas datas e clica em editar/lápis/link.
+                _js_editar = """
+                    (args) => {
+                        const {ini, fim} = args;
+                        const rows = document.querySelectorAll('tbody tr, tr[id*="listagem"]');
+                        for (const tr of rows) {
+                            const txt = (tr.innerText || tr.textContent || '');
+                            if (txt.includes(ini) && txt.includes(fim)) {
+                                const btn = tr.querySelector(
+                                    'input[id$=":editar"], input[id*="edit"], a[id*="edit"], '
+                                    + 'img[title*="Editar"], img[alt*="Editar"], '
+                                    + 'input[value="Editar"], button[title*="Editar"]'
+                                );
+                                if (btn) { btn.click(); return true; }
+                                // fallback: primeiro input/link da última célula (normalmente ações)
+                                const tds = tr.querySelectorAll('td');
+                                if (tds.length) {
+                                    const last = tds[tds.length - 1];
+                                    const any = last.querySelector('input[type="image"], a, input[type="button"]');
+                                    if (any) { any.click(); return true; }
+                                }
+                            }
+                        }
+                        return false;
+                    }
+                """
+                _clicou = self._page.evaluate(_js_editar, {"ini": _per_aq_ini, "fim": _per_aq_fim})
+                if not _clicou:
+                    self._log(f"  ⚠ Férias: linha {_per_aq_ini} a {_per_aq_fim} não localizada — pulando edição")
+                    continue
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+
+                # Situação (dropdown)
+                if _situacao:
+                    _sel_ok = False
+                    for _sel_id in ("[id$='situacao']", "[id$='status']",
+                                    "select[id*='situacao']", "select[id*='status']",
+                                    "select[name*='situacao']"):
+                        try:
+                            _loc = self._page.locator(_sel_id)
+                            if _loc.count() > 0:
+                                try:
+                                    _loc.first.select_option(label=_situacao)
+                                    _sel_ok = True
+                                    break
+                                except Exception:
+                                    # tentar por value
+                                    try:
+                                        _loc.first.select_option(value=_situacao)
+                                        _sel_ok = True
+                                        break
+                                    except Exception:
+                                        continue
+                        except Exception:
+                            continue
+                    if _sel_ok:
+                        self._log(f"  ✓ Férias {_per_aq_ini}-{_per_aq_fim}: situação='{_situacao}'")
+                        self._aguardar_ajax()
+
+                # Dobra
+                if _dobra:
+                    try:
+                        self._marcar_checkbox("dobra", True) or self._marcar_checkbox("emDobra", True)
+                        self._log(f"  ✓ Férias {_per_aq_ini}-{_per_aq_fim}: dobra marcada")
+                    except Exception as _e:
+                        self._log(f"  ⚠ Férias dobra: {_e}")
+
+                # Abono pecuniário
+                if _abono:
+                    try:
+                        self._marcar_checkbox("abono", True) or self._marcar_checkbox("abonoPecuniario", True)
+                        self._log(f"  ✓ Férias {_per_aq_ini}-{_per_aq_fim}: abono marcado")
+                    except Exception as _e:
+                        self._log(f"  ⚠ Férias abono: {_e}")
+
+                # Salvar edição
+                try:
+                    self._clicar_salvar(aguardar_sucesso=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    _alterou_alguma = True
+                except Exception as _e_sv:
+                    self._log(f"  ⚠ Férias: falha ao salvar edição ({_e_sv})")
+            except Exception as _e_ed:
+                # Never break main automation flow due to férias edit issues
+                self._log(f"  ⚠ Férias: erro na edição do período {_per_aq_ini}-{_per_aq_fim}: {_e_ed}")
+
+        # Se alterou alguma, regerar ocorrências de férias (CRIT: manual pede
+        # Regerar após alteração de status conforme seção 7 do PJE-Calc).
+        if _alterou_alguma:
+            try:
+                self._regerar_ferias()
+            except Exception as _e_rg:
+                self._log(f"  ⚠ Regerar férias pós-edição falhou: {_e_rg}")
 
         self._log("Fase 5d concluída.")
 
