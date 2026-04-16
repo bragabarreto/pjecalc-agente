@@ -8153,24 +8153,37 @@ class PJECalcPlaywright:
                 except Exception:
                     self._page.wait_for_timeout(2000)
 
-            # Base de apuração — mapear termos genéricos para valores reais do PJE-Calc
-            # Opções reais do select: BRUTO, BRUTO_MENOS_CS, BRUTO_MENOS_CS_PP
-            # (para devedor Reclamante: também VNP = "Verbas que Não Compõem o Principal")
+            # Base de apuração — mapear termos genéricos para valores EXATOS do select PJE-Calc
+            # Opções reais do select (valores de option no DOM):
+            #   BRUTO
+            #   BRUTO_MENOS_CONTRIBUICAO_SOCIAL
+            #   BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA
+            #   VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL  (só aparece quando devedor = Reclamante)
+            # Incluímos códigos curtos legados (VNP, BRUTO_MENOS_CS, ...) para compat com
+            # registros já persistidos no banco antes da padronização.
             _BASE_APURACAO_MAP = {
                 "condenação": "BRUTO",
                 "condenacao": "BRUTO",
                 "bruto": "BRUTO",
                 "valor da condenação": "BRUTO",
                 "valor da condenacao": "BRUTO",
-                "bruto (-) cs": "BRUTO_MENOS_CS",
-                "bruto menos cs": "BRUTO_MENOS_CS",
-                "bruto_menos_cs": "BRUTO_MENOS_CS",
-                "bruto (-) cs (-) pp": "BRUTO_MENOS_CS_PP",
-                "bruto menos cs pp": "BRUTO_MENOS_CS_PP",
-                "bruto_menos_cs_pp": "BRUTO_MENOS_CS_PP",
-                "verbas não compõem principal": "VNP",
-                "verbas nao compoem principal": "VNP",
-                "vnp": "VNP",
+                # Bruto (-) CS
+                "bruto (-) cs": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+                "bruto menos cs": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+                "bruto_menos_cs": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+                "bruto_menos_contribuicao_social": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+                # Bruto (-) CS (-) PP
+                "bruto (-) cs (-) pp": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
+                "bruto menos cs pp": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
+                "bruto_menos_cs_pp": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
+                "bruto_menos_contribuicao_social_menos_previdencia_privada": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
+                # VNP — Verbas que Não Compõem o Principal
+                "verbas não compõem principal": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
+                "verbas nao compoem principal": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
+                "verbas que não compõem o principal": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
+                "verbas que nao compoem o principal": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
+                "vnp": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
+                "verbas_que_nao_compoe_o_principal": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
                 "renda mensal": "RENDA_MENSAL",
             }
             base = hon.get("base_apuracao", "") or ""

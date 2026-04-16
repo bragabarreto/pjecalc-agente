@@ -314,16 +314,20 @@ Se não mencionado → ferias = []
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
 - Sucumbência recíproca → gerar DOIS registros na lista:
     [{{"devedor": "RECLAMADO", "base_apuracao": "BRUTO", ...}},
-     {{"devedor": "RECLAMANTE", "base_apuracao": "VNP", ...}}]
+     {{"devedor": "RECLAMANTE", "base_apuracao": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL", ...}}]
 - Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
 - Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
 - Se indeferidos ou não mencionados → honorarios = []
 - tipo: "SUCUMBENCIAIS" (padrão — condenação em honorários pelo juiz) | "CONTRATUAIS" (raro)
 - tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
-- base_apuracao (usar valores EXATOS do PJE-Calc):
-    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão — % sobre o valor da condenação) | "BRUTO_MENOS_CS" | "BRUTO_MENOS_CS_PP"
-    RECLAMANTE + SUCUMBENCIAIS: "VNP" (padrão — % sobre Verbas que Não Compõem Principal) | "BRUTO" | "BRUTO_MENOS_CS"
-    CONTRATUAIS: "BRUTO" | "BRUTO_MENOS_CS"
+- base_apuracao (usar valores EXATOS do select do PJE-Calc — copiar literalmente):
+    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão — % sobre o valor da condenação)
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA"
+    RECLAMANTE + SUCUMBENCIAIS: "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL" (padrão — % sobre Verbas que Não Compõem Principal)
+                               | "BRUTO"
+                               | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+    CONTRATUAIS: "BRUTO" | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
   ⚠️ Quando a sentença diz "sobre o valor da condenação" para AMBAS as partes →
      usar "BRUTO" para os dois registros
 - percentual: float decimal (ex: 0.15 para 15%); null se tipo_valor=INFORMADO
@@ -566,7 +570,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "BRUTO | BRUTO_MENOS_CS | BRUTO_MENOS_CS_PP | VNP",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA | VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"
@@ -910,15 +914,20 @@ verbas_deferidas; em vez disso definir fgts.multa_40 = true. Reflexos de FGTS ta
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
 - Sucumbência recíproca → gerar DOIS registros na lista:
     [{{"devedor": "RECLAMADO", "base_apuracao": "BRUTO", ...}},
-     {{"devedor": "RECLAMANTE", "base_apuracao": "VNP", ...}}]
+     {{"devedor": "RECLAMANTE", "base_apuracao": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL", ...}}]
 - Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
 - Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
 - Se indeferidos ou não mencionados → honorarios = []
 - tipo: "SUCUMBENCIAIS" (padrão) | "CONTRATUAIS" (raro)
 - tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
-- base_apuracao (usar valores EXATOS do PJE-Calc):
-    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão, = valor da condenação) | "BRUTO_MENOS_CS" | "BRUTO_MENOS_CS_PP"
-    RECLAMANTE + SUCUMBENCIAIS: "VNP" (padrão, = Verbas Não Compõem Principal) | "BRUTO" | "BRUTO_MENOS_CS"
+- base_apuracao (VALORES EXATOS do select do PJE-Calc — nunca emitir abreviações):
+    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão — % sobre valor da condenação)
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA"
+    RECLAMANTE + SUCUMBENCIAIS: "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL" (padrão — % sobre Verbas que Não Compõem Principal)
+                               | "BRUTO"
+                               | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+    CONTRATUAIS: "BRUTO" | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
     ⚠️ Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → "BRUTO" nos dois
 - percentual: decimal (15% → 0.15); null se tipo_valor=INFORMADO
 - valor_informado: float; null se tipo_valor=CALCULADO
@@ -1076,7 +1085,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "BRUTO | BRUTO_MENOS_CS | BRUTO_MENOS_CS_PP | VNP",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA | VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"
@@ -2393,10 +2402,10 @@ def _migrar_honorarios_legado(hon: dict) -> list[dict]:
     if parte in ("Ambos", "ambos", "AMBOS"):
         return [
             _registro("RECLAMADO", "BRUTO"),
-            _registro("RECLAMANTE", "VNP"),
+            _registro("RECLAMANTE", "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL"),
         ]
     if parte in ("Reclamante", "RECLAMANTE"):
-        return [_registro("RECLAMANTE", "VNP")]
+        return [_registro("RECLAMANTE", "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL")]
     # Padrão: Reclamado
     return [_registro("RECLAMADO", "BRUTO")]
 

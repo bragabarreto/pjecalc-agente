@@ -1530,11 +1530,16 @@ async def executar_automacao_sse(
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     # Fix 6: validação CNJ módulo 97 (aviso não bloqueante)
+    # Algoritmo oficial CNJ (Resolução 65/2008):
+    # Dado o número NNNNNNN-DD.AAAA.J.TR.OOOO, o dígito DD é calculado como:
+    #   key = NNNNNNN + AAAA + J + TR + OOOO + "00"   (20 dígitos)
+    #   DD  = 98 - (int(key) % 97)
+    # J = 5 (Justiça do Trabalho). Valores válidos de DD: 01..98.
     def _validar_cnj(numero: str, digito: str, ano: str, regiao: str, vara: str) -> bool:
         try:
-            num = numero + "00" + ano + "5" + regiao + vara
-            resto = int(num) % 97
-            return int(digito) == (97 - resto)
+            key = numero + ano + "5" + regiao + vara + "00"
+            resto = int(key) % 97
+            return int(digito) == (98 - resto)
         except Exception:
             return True
     _processo = dados.get("processo", {})
