@@ -154,14 +154,23 @@ class _AutomacaoRunner:
         try:
             _calc = RepositorioCalculo(_db).buscar_sessao(sid)
             if _calc and _calc.status == "em_automacao":
-                _has_pjc = any("PJC_GERADO:" in m for m in self.logs)
+                # Extrair caminho do .PJC se foi gerado (última ocorrência vence)
+                _pjc_path: str | None = None
+                for _m in self.logs:
+                    if _m.startswith("PJC_GERADO:"):
+                        _pjc_path = _m.split(":", 1)[1].strip()
                 _has_error = any("ERRO" in m.upper() for m in self.logs[-5:])
-                _calc.status = "pjc_exportado" if _has_pjc else (
-                    "erro_automacao" if _has_error else "concluido"
-                )
-                _db.commit()
-        except Exception:
-            pass
+                if _pjc_path:
+                    # Fix: grava status E arquivo_pjc atomicamente via marcar_exportado.
+                    # Antes, _cleanup só setava status — se SSE desconectasse antes do
+                    # handler inline processar PJC_GERADO (webapp.py:1666), o campo
+                    # arquivo_pjc ficava NULL e o endpoint /download/{sid}/pjc → 404.
+                    RepositorioCalculo(_db).marcar_exportado(sid, _pjc_path)
+                else:
+                    _calc.status = "erro_automacao" if _has_error else "concluido"
+                    _db.commit()
+        except Exception as _exc:
+            logger.warning(f"_cleanup DB update falhou [{sid}]: {_exc}")
         finally:
             _db.close()
 
@@ -898,16 +907,45 @@ async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
+    # Fallback defensivo: se arquivo_pjc está vazio ou aponta para path inexistente,
+    # varrer data/calculations/<processo>/ e data/calculations/<CNJ_com_prefixo>/
+    # procurando o .PJC mais recente. Se encontrar, auto-vincula via marcar_exportado.
     if not calculo.arquivo_pjc or not Path(calculo.arquivo_pjc).exists():
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                "Arquivo .PJC ainda não disponível. "
-                "O arquivo .PJC válido só é gerado após a automação completar "
-                "a liquidação no PJE-Calc Cidadão e exportar o resultado. "
-                "Execute a automação primeiro em Instruções > Executar Automação."
-            ),
-        )
+        _pjc_encontrado: Path | None = None
+        _dirs_busca: list[Path] = []
+        if calculo.diretorio_calculo and Path(calculo.diretorio_calculo).exists():
+            _dirs_busca.append(Path(calculo.diretorio_calculo))
+        # Fallback: varredura em data/calculations/ por subpastas do processo
+        _calc_base = Path("data/calculations")
+        _cnj = calculo.processo.numero_processo if calculo.processo else None
+        if _calc_base.exists() and _cnj:
+            for _proc_dir in _calc_base.iterdir():
+                if _proc_dir.is_dir() and _cnj in _proc_dir.name:
+                    _dirs_busca.append(_proc_dir)
+        for _d in _dirs_busca:
+            if not _d.exists():
+                continue
+            _pjcs = sorted(_d.rglob("*.PJC"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if not _pjcs:
+                _pjcs = sorted(_d.rglob("*.pjc"), key=lambda p: p.stat().st_mtime, reverse=True)
+            if _pjcs:
+                _pjc_encontrado = _pjcs[0]
+                break
+        if _pjc_encontrado:
+            repo.marcar_exportado(sessao_id, str(_pjc_encontrado))
+            db.commit()
+            calculo = repo.buscar_sessao(sessao_id)  # refresh
+            logger.info(f"download_pjc auto-vinculou {_pjc_encontrado} → sessão {sessao_id}")
+        else:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    "Arquivo .PJC ainda não disponível. "
+                    "O arquivo .PJC válido só é gerado após a automação completar "
+                    "a liquidação no PJE-Calc Cidadão e exportar o resultado. "
+                    "Execute a automação primeiro em Instruções > Executar Automação."
+                ),
+            )
 
     caminho = Path(calculo.arquivo_pjc)
     return FileResponse(
