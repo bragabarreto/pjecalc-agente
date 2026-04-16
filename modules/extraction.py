@@ -297,6 +297,12 @@ Se não mencionado → ferias = []
 - "Multa de 20%" → fgts.multa_40 = true, fgts.multa_20 = true (estabilidade provisória: CIPA, gestante, acidentário, etc.)
   ATENÇÃO: quando a sentença determina multa de 20% (não 40%), marcar AMBOS multa_40=true (habilita a seção de multa no PJE-Calc) e multa_20=true (seleciona 20% em vez de 40%).
 - saldo_fgts: saldo das contas FGTS do empregado, se informado na sentença (float; null se não mencionado)
+- incidencia_13o_dezembro: true (padrão) — indica que o FGTS sobre o 13º deve ser recolhido na
+  competência de dezembro (ou no mês do desligamento, se antes de dezembro). A base FGTS daquele
+  mês será: salário mensal + 13º proporcional (nº meses trabalhados naquele ano / 12).
+  O PJE-Calc não faz esse ajuste automaticamente — o agente adiciona depois via página "Ocorrências
+  do FGTS". Emitir false somente se a sentença expressamente afastar incidência de FGTS sobre o 13º
+  (hipótese muito rara).
 
 **SEÇÃO 5 — MULTAS TRABALHISTAS**:
 - "Multa art. 467 CLT — Deferida" → fgts.multa_467 = true (campo opcional)
@@ -563,6 +569,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
     "multa_20": "true | false | null",
     "multa_467": "true | false | null",
     "saldo_fgts": "float | null",
+    "incidencia_13o_dezembro": "true | false (padrão true — FGTS do 13º é recolhido na competência de dezembro; base de dezembro = salário + 13º proporcional. Emitir false apenas se a sentença expressamente afastar incidência de FGTS sobre o 13º.)",
     "confianca": 0.95
   }},
   "honorarios": [
@@ -909,6 +916,11 @@ verbas_deferidas; em vez disso definir fgts.multa_40 = true. Reflexos de FGTS ta
 - multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
 - saldo_fgts: saldo das contas FGTS do trabalhador, se informado (ex: "saldo FGTS de R$ 1.200,00");
   null se não mencionado — NÃO inferir, apenas extrair se explícito
+- incidencia_13o_dezembro: true (padrão) — o recolhimento do FGTS referente ao 13º salário
+  ocorre na competência de dezembro (ou no mês do desligamento, se antes de dezembro). Portanto a
+  base FGTS daquele mês deve conter: salário mensal + 13º proporcional. O agente faz esse ajuste
+  automaticamente via página "Ocorrências do FGTS" após salvar os parâmetros. Emitir false apenas
+  se a sentença expressamente afastar incidência de FGTS sobre 13º (hipótese rara).
 
 **HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
@@ -1078,6 +1090,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "multa_40": "true | false | null",
     "multa_20": "true | false | null",
     "multa_467": "true | false | null",
+    "incidencia_13o_dezembro": "true | false (padrão true — FGTS do 13º é recolhido na competência de dezembro; base de dezembro = salário + 13º proporcional. Emitir false apenas se a sentença expressamente afastar incidência de FGTS sobre o 13º.)",
     "confianca": 0.0-1.0
   }},
   "honorarios": [
@@ -1494,6 +1507,7 @@ _EXTRACTION_SCHEMA: dict = {
                 "multa_20":   {"type": ["boolean","null"]},
                 "multa_467":  {"type": ["boolean","null"]},
                 "saldo_fgts": {"type": ["number","null"]},
+                "incidencia_13o_dezembro": {"type": ["boolean","null"]},
                 "confianca":  {"type": "number"},
             },
         },
@@ -2544,6 +2558,7 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
             "multa_20": None,
             "multa_467": None,
             "saldo_fgts": None,
+            "incidencia_13o_dezembro": True,
             "confianca": 0.5,
         },
         "honorarios": _migrar_honorarios_legado({

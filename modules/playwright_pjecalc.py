@@ -6406,7 +6406,136 @@ class PJECalcPlaywright:
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 4: Salvar FGTS não confirmado.")
         self._aguardar_ajax()
+
+        # Fase 4B: ajustar Ocorrências do FGTS com 13º proporcional em dezembro
+        # (Lei 8.036/90 — FGTS sobre 13º recolhido na competência de dezembro)
+        _ajustes_13o = fgts.get("ajustes_ocorrencias_13o") or []
+        if _ajustes_13o and fgts.get("incidencia_13o_dezembro", True):
+            try:
+                self._ajustar_ocorrencias_fgts(_ajustes_13o)
+            except Exception as e:
+                self._log(f"  ⚠ Ajuste de Ocorrências FGTS falhou: {e}")
+
         self._log("Fase 4 concluída.")
+
+    # ── Fase 4B: Ocorrências do FGTS (ajuste 13º) ─────────────────────────────
+
+    def _ajustar_ocorrencias_fgts(self, ajustes: list[dict]) -> None:
+        """Aplica ajustes de 13º proporcional na página Ocorrências do FGTS.
+
+        Fluxo (parametrizar-fgts.xhtml):
+        1. Clicar no botão `formulario:ocorrencias` na aba FGTS para abrir a página.
+        2. Para cada linha em `formulario:listagem`, ler `[id$=':ocorrencia']` (MM/YYYY)
+           e, se bater com um ajuste, somar `valor_13o_proporcional` ao
+           `[id$=':baseHistorico']` (input moeda BR, a4j:support onblur → AJAX).
+        3. Clicar em `formulario:salvar` e aguardar a mensagem de sucesso.
+
+        Args:
+            ajustes: lista de dicts com keys 'competencia' (MM/YYYY),
+                     'valor_13o_proporcional' (float).
+        """
+        if not ajustes:
+            return
+        self._log(f"  → Ajustando Ocorrências FGTS: {len(ajustes)} competência(s) com 13º…")
+
+        # 1. Navegar para página Ocorrências
+        #    IDs reais em fgts.xhtml / parametrizar-fgts.xhtml:
+        #      formulario:ocorrencias (botão "Ocorrências")
+        abriu = self._clicar_botao_id("ocorrencias")
+        if not abriu:
+            # Fallback: tentar pelo texto do botão
+            try:
+                self._page.get_by_role("button", name="Ocorrências").first.click()
+                abriu = True
+            except Exception:
+                abriu = False
+        if not abriu:
+            self._log("  ⚠ Botão Ocorrências (FGTS) não encontrado — ajuste do 13º pulado.")
+            return
+        self._aguardar_ajax()
+        self._page.wait_for_timeout(1200)
+
+        # 2. Mapear competências → índice de linha na listagem
+        try:
+            linhas_info = self._page.evaluate("""() => {
+                const inputs = document.querySelectorAll('[id^="formulario:listagem:"][id$=":ocorrencia"]');
+                const result = {};
+                for (const el of inputs) {
+                    const m = el.id.match(/^formulario:listagem:(\\d+):ocorrencia$/);
+                    if (!m) continue;
+                    const txt = (el.value || el.textContent || '').trim();
+                    if (txt) result[txt] = parseInt(m[1], 10);
+                }
+                return result;
+            }""")
+        except Exception as e:
+            self._log(f"  ⚠ Falha ao mapear linhas da tabela de Ocorrências FGTS: {e}")
+            return
+
+        if not linhas_info:
+            self._log("  ⚠ Tabela de Ocorrências FGTS vazia ou IDs diferentes do esperado.")
+            return
+
+        # 3. Para cada ajuste, localizar a linha e somar o 13º proporcional à base
+        aplicados = 0
+        for ajuste in ajustes:
+            comp = (ajuste.get("competencia") or "").strip()
+            valor_13o = float(ajuste.get("valor_13o_proporcional") or 0)
+            if not comp or valor_13o <= 0:
+                continue
+            idx = linhas_info.get(comp)
+            if idx is None:
+                # Algumas instalações renderizam "12/2022" ou "12/2022 " — tentar match fuzzy
+                for k, v in linhas_info.items():
+                    if k.startswith(comp) or comp.startswith(k):
+                        idx = v
+                        break
+            if idx is None:
+                self._log(f"  ⚠ Competência {comp} não encontrada na tabela — ignorada.")
+                continue
+
+            base_id = f"formulario:listagem:{idx}:baseHistorico"
+            try:
+                loc = self._page.locator(f"[id='{base_id}']").first
+                loc.wait_for(state="visible", timeout=5000)
+                # Ler valor atual (em formato BR "1.234,56") e somar 13º
+                val_atual_str = loc.input_value() or "0"
+                # Converter BR → float
+                try:
+                    val_atual = float(
+                        val_atual_str.replace(".", "").replace(",", ".")
+                        if "," in val_atual_str else val_atual_str
+                    )
+                except Exception:
+                    val_atual = 0.0
+                novo_valor = val_atual + valor_13o
+                novo_str = _fmt_br(novo_valor)
+                # Preencher e disparar blur (a4j:support onblur → AJAX postback)
+                loc.click()
+                loc.fill("")
+                loc.fill(novo_str)
+                loc.dispatch_event("input")
+                loc.dispatch_event("change")
+                # Blur via Tab para disparar o a4j:support onblur
+                loc.press("Tab")
+                self._aguardar_ajax()
+                self._log(
+                    f"  ✓ {comp}: base {val_atual_str} + 13º R$ {valor_13o:.2f} = R$ {novo_str}"
+                )
+                aplicados += 1
+            except Exception as e:
+                self._log(f"  ⚠ Falha ao ajustar {comp} (idx={idx}): {e}")
+                continue
+
+        # 4. Salvar a página de Ocorrências
+        if aplicados > 0:
+            if self._clicar_salvar():
+                self._log(f"  ✓ Ocorrências FGTS salvas ({aplicados} ajustes aplicados).")
+            else:
+                self._log("  ⚠ Salvar Ocorrências FGTS não confirmado.")
+            self._aguardar_ajax()
+        else:
+            self._log("  ⚠ Nenhum ajuste aplicado — não chamando Salvar.")
 
     # ── Fase 5: Contribuição Social (INSS) ────────────────────────────────────
 
