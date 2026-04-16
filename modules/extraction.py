@@ -297,6 +297,12 @@ Se não mencionado → ferias = []
 - "Multa de 20%" → fgts.multa_40 = true, fgts.multa_20 = true (estabilidade provisória: CIPA, gestante, acidentário, etc.)
   ATENÇÃO: quando a sentença determina multa de 20% (não 40%), marcar AMBOS multa_40=true (habilita a seção de multa no PJE-Calc) e multa_20=true (seleciona 20% em vez de 40%).
 - saldo_fgts: saldo das contas FGTS do empregado, se informado na sentença (float; null se não mencionado)
+- incidencia_13o_dezembro: true (padrão) — indica que o FGTS sobre o 13º deve ser recolhido na
+  competência de dezembro (ou no mês do desligamento, se antes de dezembro). A base FGTS daquele
+  mês será: salário mensal + 13º proporcional (nº meses trabalhados naquele ano / 12).
+  O PJE-Calc não faz esse ajuste automaticamente — o agente adiciona depois via página "Ocorrências
+  do FGTS". Emitir false somente se a sentença expressamente afastar incidência de FGTS sobre o 13º
+  (hipótese muito rara).
 
 **SEÇÃO 5 — MULTAS TRABALHISTAS**:
 - "Multa art. 467 CLT — Deferida" → fgts.multa_467 = true (campo opcional)
@@ -314,16 +320,20 @@ Se não mencionado → ferias = []
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
 - Sucumbência recíproca → gerar DOIS registros na lista:
     [{{"devedor": "RECLAMADO", "base_apuracao": "BRUTO", ...}},
-     {{"devedor": "RECLAMANTE", "base_apuracao": "VNP", ...}}]
+     {{"devedor": "RECLAMANTE", "base_apuracao": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL", ...}}]
 - Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
 - Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
 - Se indeferidos ou não mencionados → honorarios = []
 - tipo: "SUCUMBENCIAIS" (padrão — condenação em honorários pelo juiz) | "CONTRATUAIS" (raro)
 - tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
-- base_apuracao (usar valores EXATOS do PJE-Calc):
-    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão — % sobre o valor da condenação) | "BRUTO_MENOS_CS" | "BRUTO_MENOS_CS_PP"
-    RECLAMANTE + SUCUMBENCIAIS: "VNP" (padrão — % sobre Verbas que Não Compõem Principal) | "BRUTO" | "BRUTO_MENOS_CS"
-    CONTRATUAIS: "BRUTO" | "BRUTO_MENOS_CS"
+- base_apuracao (usar valores EXATOS do select do PJE-Calc — copiar literalmente):
+    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão — % sobre o valor da condenação)
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA"
+    RECLAMANTE + SUCUMBENCIAIS: "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL" (padrão — % sobre Verbas que Não Compõem Principal)
+                               | "BRUTO"
+                               | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+    CONTRATUAIS: "BRUTO" | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
   ⚠️ Quando a sentença diz "sobre o valor da condenação" para AMBAS as partes →
      usar "BRUTO" para os dois registros
 - percentual: float decimal (ex: 0.15 para 15%); null se tipo_valor=INFORMADO
@@ -559,6 +569,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
     "multa_20": "true | false | null",
     "multa_467": "true | false | null",
     "saldo_fgts": "float | null",
+    "incidencia_13o_dezembro": "true | false (padrão true — FGTS do 13º é recolhido na competência de dezembro; base de dezembro = salário + 13º proporcional. Emitir false apenas se a sentença expressamente afastar incidência de FGTS sobre o 13º.)",
     "confianca": 0.95
   }},
   "honorarios": [
@@ -566,7 +577,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "BRUTO | BRUTO_MENOS_CS | BRUTO_MENOS_CS_PP | VNP",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA | VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"
@@ -905,20 +916,30 @@ verbas_deferidas; em vez disso definir fgts.multa_40 = true. Reflexos de FGTS ta
 - multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
 - saldo_fgts: saldo das contas FGTS do trabalhador, se informado (ex: "saldo FGTS de R$ 1.200,00");
   null se não mencionado — NÃO inferir, apenas extrair se explícito
+- incidencia_13o_dezembro: true (padrão) — o recolhimento do FGTS referente ao 13º salário
+  ocorre na competência de dezembro (ou no mês do desligamento, se antes de dezembro). Portanto a
+  base FGTS daquele mês deve conter: salário mensal + 13º proporcional. O agente faz esse ajuste
+  automaticamente via página "Ocorrências do FGTS" após salvar os parâmetros. Emitir false apenas
+  se a sentença expressamente afastar incidência de FGTS sobre 13º (hipótese rara).
 
 **HONORÁRIOS ADVOCATÍCIOS** → preenche "honorarios" (LISTA de registros):
 ⚠️ O PJE-Calc NÃO tem opção "Ambos" — cada honorário é um registro separado por devedor.
 - Sucumbência recíproca → gerar DOIS registros na lista:
     [{{"devedor": "RECLAMADO", "base_apuracao": "BRUTO", ...}},
-     {{"devedor": "RECLAMANTE", "base_apuracao": "VNP", ...}}]
+     {{"devedor": "RECLAMANTE", "base_apuracao": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL", ...}}]
 - Sucumbência integral da reclamada → um registro com devedor="RECLAMADO"
 - Sucumbência integral do reclamante → um registro com devedor="RECLAMANTE"
 - Se indeferidos ou não mencionados → honorarios = []
 - tipo: "SUCUMBENCIAIS" (padrão) | "CONTRATUAIS" (raro)
 - tipo_valor: "CALCULADO" quando há percentual | "INFORMADO" quando há valor fixo em R$
-- base_apuracao (usar valores EXATOS do PJE-Calc):
-    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão, = valor da condenação) | "BRUTO_MENOS_CS" | "BRUTO_MENOS_CS_PP"
-    RECLAMANTE + SUCUMBENCIAIS: "VNP" (padrão, = Verbas Não Compõem Principal) | "BRUTO" | "BRUTO_MENOS_CS"
+- base_apuracao (VALORES EXATOS do select do PJE-Calc — nunca emitir abreviações):
+    RECLAMADO + SUCUMBENCIAIS: "BRUTO" (padrão — % sobre valor da condenação)
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+                              | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA"
+    RECLAMANTE + SUCUMBENCIAIS: "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL" (padrão — % sobre Verbas que Não Compõem Principal)
+                               | "BRUTO"
+                               | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+    CONTRATUAIS: "BRUTO" | "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
     ⚠️ Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → "BRUTO" nos dois
 - percentual: decimal (15% → 0.15); null se tipo_valor=INFORMADO
 - valor_informado: float; null se tipo_valor=CALCULADO
@@ -1069,6 +1090,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "multa_40": "true | false | null",
     "multa_20": "true | false | null",
     "multa_467": "true | false | null",
+    "incidencia_13o_dezembro": "true | false (padrão true — FGTS do 13º é recolhido na competência de dezembro; base de dezembro = salário + 13º proporcional. Emitir false apenas se a sentença expressamente afastar incidência de FGTS sobre o 13º.)",
     "confianca": 0.0-1.0
   }},
   "honorarios": [
@@ -1076,7 +1098,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "BRUTO | BRUTO_MENOS_CS | BRUTO_MENOS_CS_PP | VNP",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA | VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"
@@ -1485,6 +1507,7 @@ _EXTRACTION_SCHEMA: dict = {
                 "multa_20":   {"type": ["boolean","null"]},
                 "multa_467":  {"type": ["boolean","null"]},
                 "saldo_fgts": {"type": ["number","null"]},
+                "incidencia_13o_dezembro": {"type": ["boolean","null"]},
                 "confianca":  {"type": "number"},
             },
         },
@@ -2393,10 +2416,10 @@ def _migrar_honorarios_legado(hon: dict) -> list[dict]:
     if parte in ("Ambos", "ambos", "AMBOS"):
         return [
             _registro("RECLAMADO", "BRUTO"),
-            _registro("RECLAMANTE", "VNP"),
+            _registro("RECLAMANTE", "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL"),
         ]
     if parte in ("Reclamante", "RECLAMANTE"):
-        return [_registro("RECLAMANTE", "VNP")]
+        return [_registro("RECLAMANTE", "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL")]
     # Padrão: Reclamado
     return [_registro("RECLAMADO", "BRUTO")]
 
@@ -2535,6 +2558,7 @@ def _estrutura_vazia_com_regex(regex: dict[str, Any]) -> dict[str, Any]:
             "multa_20": None,
             "multa_467": None,
             "saldo_fgts": None,
+            "incidencia_13o_dezembro": True,
             "confianca": 0.5,
         },
         "honorarios": _migrar_honorarios_legado({

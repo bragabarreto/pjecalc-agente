@@ -1530,11 +1530,16 @@ async def executar_automacao_sse(
                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     # Fix 6: validação CNJ módulo 97 (aviso não bloqueante)
+    # Algoritmo oficial CNJ (Resolução 65/2008):
+    # Dado o número NNNNNNN-DD.AAAA.J.TR.OOOO, o dígito DD é calculado como:
+    #   key = NNNNNNN + AAAA + J + TR + OOOO + "00"   (20 dígitos)
+    #   DD  = 98 - (int(key) % 97)
+    # J = 5 (Justiça do Trabalho). Valores válidos de DD: 01..98.
     def _validar_cnj(numero: str, digito: str, ano: str, regiao: str, vara: str) -> bool:
         try:
-            num = numero + "00" + ano + "5" + regiao + vara
-            resto = int(num) % 97
-            return int(digito) == (97 - resto)
+            key = numero + ano + "5" + regiao + vara + "00"
+            resto = int(key) % 97
+            return int(digito) == (98 - resto)
         except Exception:
             return True
     _processo = dados.get("processo", {})
@@ -2166,6 +2171,32 @@ def _tarefa_processar_sentenca(
         # Persistir parametrização incorporando em dados (salvo via dados_json)
         if parametrizacao:
             dados["_parametrizacao"] = parametrizacao
+
+        # Fase 2d: FGTS + 13º dezembro — calcular ajustes das Ocorrências do FGTS
+        # Regra regulatória (Lei 8.036/90): FGTS sobre 13º é recolhido na competência
+        # de dezembro (ou mês do desligamento). O PJE-Calc não faz esse ajuste
+        # automaticamente — o agente calcula aqui, mostra na prévia para HITL, e
+        # aplica via automação na página Ocorrências do FGTS.
+        try:
+            from modules.fgts_13o_calculator import calcular_ajustes_13o_fgts
+            _fgts = dados.setdefault("fgts", {})
+            _contrato = dados.get("contrato", {}) or {}
+            _incidencia_ativa = _fgts.get("incidencia_13o_dezembro", True)
+            if _incidencia_ativa is None:
+                _incidencia_ativa = True
+            _ajustes_13o = calcular_ajustes_13o_fgts(
+                historico_salarial=dados.get("historico_salarial", []) or [],
+                data_admissao=_contrato.get("data_admissao"),
+                data_demissao=_contrato.get("data_demissao"),
+                incidencia_ativa=bool(_incidencia_ativa),
+            )
+            _fgts["ajustes_ocorrencias_13o"] = _ajustes_13o
+            _fgts["incidencia_13o_dezembro"] = bool(_incidencia_ativa)
+        except Exception as e_fgts13:
+            import logging
+            logging.getLogger("pjecalc_agent.webapp").warning(
+                f"Cálculo FGTS+13º falhou (não crítico): {e_fgts13}"
+            )
 
         # Fase 3: Classificação
         verbas_mapeadas = mapear_para_pjecalc(dados.get("verbas_deferidas", []))

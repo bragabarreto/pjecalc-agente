@@ -210,8 +210,24 @@ def gerar_previa(
         f"   Alíquota  : {_fmt_pct(fgts.get('aliquota'))}",
         f"   Multa 40% : {'Sim' if fgts.get('multa_40') else 'Não'}",
         f"   Multa 467 : {'Sim' if fgts.get('multa_467') else 'Não'}",
-        "",
+        f"   FGTS s/ 13º em dezembro : {'Sim' if fgts.get('incidencia_13o_dezembro', True) else 'Não'}",
     ]
+    _ajustes_13o = fgts.get("ajustes_ocorrencias_13o") or []
+    if _ajustes_13o:
+        linhas.append("   Ajustes Ocorrências FGTS (13º proporcional):")
+        for a in _ajustes_13o:
+            def _flt(x, default=0.0):
+                try:
+                    return float(x)
+                except (TypeError, ValueError):
+                    return default
+            linhas.append(
+                f"      • {a.get('competencia','—')}  "
+                f"+R$ {_flt(a.get('valor_13o_proporcional')):.2f}  "
+                f"({a.get('meses_trabalhados','?')}/12 de "
+                f"R$ {_flt(a.get('salario_base')):.2f})"
+            )
+    linhas.append("")
 
     # 5. Contribuição Social
     linhas.append("CONTRIBUIÇÃO SOCIAL (INSS)")

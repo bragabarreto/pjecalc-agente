@@ -1036,6 +1036,77 @@
                  onchange="salvarCampo('fgts.multa_467', this.checked ? 'true' : 'false', this)">
           <label for="fgts-multa467">Multa art. 467 da CLT</label>
         </div>
+
+        <!-- FGTS + 13º: ajustes das Ocorrências do FGTS -->
+        <div style="margin-top:16px; padding-top:12px; border-top:1px solid #dee2e6;">
+          <div class="checkbox-row">
+            <input type="checkbox" id="fgts-13o-dez"
+                   {{ 'checked' if dados.get('fgts', {}).get('incidencia_13o_dezembro', True) }}
+                   onchange="toggleFgts13oDez(this)">
+            <label for="fgts-13o-dez">
+              <strong>FGTS sobre 13º — recolher na competência de dezembro</strong>
+              <span style="display:block; font-size:0.8rem; color:#6c757d; font-weight:normal; margin-top:2px;">
+                Regra regulatória (Lei 8.036/90): o FGTS sobre o 13º é recolhido na competência
+                de dezembro (ou mês do desligamento). A base FGTS daquele mês = salário + 13º proporcional.
+                O PJE-Calc não aplica esse ajuste automaticamente — o agente o fará via página "Ocorrências do FGTS".
+              </span>
+            </label>
+          </div>
+
+          {% set ajustes_13o = dados.get('fgts', {}).get('ajustes_ocorrencias_13o') or [] %}
+          <div id="fgts-13o-ajustes"
+               style="{{ 'display:none;' if not dados.get('fgts', {}).get('incidencia_13o_dezembro', True) else '' }} margin-top:10px;">
+            {% if ajustes_13o %}
+            <div style="font-size:0.85rem; color:#1a3a6b; margin-bottom:6px;">
+              Ajustes a aplicar na página <em>Ocorrências do FGTS</em>
+              (base da competência = valor atual <strong>+</strong> 13º proporcional):
+            </div>
+            <div style="overflow-x:auto;">
+              <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+                <thead style="background:#f1f3f5;">
+                  <tr>
+                    <th style="padding:6px 8px; text-align:left;">Competência</th>
+                    <th style="padding:6px 8px; text-align:center;">Meses trab.</th>
+                    <th style="padding:6px 8px; text-align:right;">Salário base (R$)</th>
+                    <th style="padding:6px 8px; text-align:right;">13º proporcional (R$)</th>
+                    <th style="padding:6px 8px; text-align:left;">Motivo</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for a in ajustes_13o %}
+                  {% set ai = loop.index0 %}
+                  <tr style="border-top:1px solid #dee2e6;">
+                    <td style="padding:4px 8px;">
+                      <input type="text" value="{{ a.competencia }}" style="width:80px; font-size:0.85rem;"
+                             onchange="salvarCampo('fgts.ajustes_ocorrencias_13o[{{ ai }}].competencia', this.value, this)">
+                    </td>
+                    <td style="padding:4px 8px; text-align:center;">
+                      <input type="number" min="0" max="12" value="{{ a.meses_trabalhados }}" style="width:50px; font-size:0.85rem; text-align:center;"
+                             onchange="salvarCampo('fgts.ajustes_ocorrencias_13o[{{ ai }}].meses_trabalhados', this.value, this)">
+                    </td>
+                    <td style="padding:4px 8px; text-align:right;">
+                      <input type="number" step="0.01" min="0" value="{{ '%.2f'|format(a.salario_base|float) }}" style="width:110px; font-size:0.85rem; text-align:right;"
+                             onchange="salvarCampo('fgts.ajustes_ocorrencias_13o[{{ ai }}].salario_base', this.value, this)">
+                    </td>
+                    <td style="padding:4px 8px; text-align:right;">
+                      <input type="number" step="0.01" min="0" value="{{ '%.2f'|format(a.valor_13o_proporcional|float) }}" style="width:110px; font-size:0.85rem; text-align:right;"
+                             onchange="salvarCampo('fgts.ajustes_ocorrencias_13o[{{ ai }}].valor_13o_proporcional', this.value, this)">
+                    </td>
+                    <td style="padding:4px 8px; font-size:0.8rem; color:#6c757d;">
+                      {{ a.motivo or '—' }}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+            {% else %}
+            <div style="font-size:0.85rem; color:#856404; background:#fff3cd; border:1px solid #ffe69c; padding:8px 12px; border-radius:4px;">
+              Nenhum ajuste de 13º calculado. Verifique se o histórico salarial e as datas de admissão/demissão estão preenchidos.
+            </div>
+            {% endif %}
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1085,9 +1156,10 @@
                 <div class="campo-form campo-col2">
                   <label>Base de Apuração</label>
                   <select onchange="salvarCampo('honorarios[{{ i }}].base_apuracao', this.value, this)">
-                    <option value="Condenação" {{ 'selected' if hon.base_apuracao == 'Condenação' }}>Condenação (valor total da condenação)</option>
-                    <option value="Verbas Não Compõem Principal" {{ 'selected' if hon.base_apuracao == 'Verbas Não Compõem Principal' }}>Verbas Não Compõem Principal (VNP — pedidos indeferidos)</option>
-                    <option value="Renda Mensal" {{ 'selected' if hon.base_apuracao == 'Renda Mensal' }}>Renda Mensal</option>
+                    <option value="BRUTO" {{ 'selected' if hon.base_apuracao == 'BRUTO' }}>Bruto (= valor da condenação)</option>
+                    <option value="BRUTO_MENOS_CONTRIBUICAO_SOCIAL" {{ 'selected' if hon.base_apuracao == 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL' }}>Bruto (-) Contribuição Social</option>
+                    <option value="BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA" {{ 'selected' if hon.base_apuracao == 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA' }}>Bruto (-) Contribuição Social (-) Previdência Privada</option>
+                    <option value="VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL" {{ 'selected' if hon.base_apuracao == 'VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL' }}>Verbas que Não Compõem o Principal (só p/ RECLAMANTE)</option>
                   </select>
                 </div>
                 <div class="campo-form" id="hon-pct-{{ i }}" {{ 'style="display:none"' if hon.tipo_valor == 'INFORMADO' else '' }}>
@@ -2037,6 +2109,13 @@ const SESSAO_ID = "{{ sessao_id }}";
 function toggleSecao(id) {
   const corpo = document.getElementById(id);
   if (corpo) corpo.classList.toggle('recolhido');
+}
+
+// FGTS sobre 13º em dezembro: mostrar/ocultar tabela de ajustes + salvar flag
+function toggleFgts13oDez(el) {
+  const bloco = document.getElementById('fgts-13o-ajustes');
+  if (bloco) bloco.style.display = el.checked ? '' : 'none';
+  salvarCampo('fgts.incidencia_13o_dezembro', el.checked ? 'true' : 'false', el);
 }
 
 // Toggle Duração do Trabalho: mostrar/esconder blocos conforme tipo de apuração
