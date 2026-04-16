@@ -671,13 +671,13 @@
           <div class="campo-form campo-col2">
             <label>Forma de Apuração de HE (PJE-Calc)</label>
             <select onchange="salvarCampo('duracao_trabalho.forma_apuracao_pjecalc', this.value, this)">
-              <option value="NAP" {{ 'selected' if dur.get('forma_apuracao_pjecalc', 'NAP') == 'NAP' }}>Não apurar horas extras</option>
-              <option value="HJD" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HJD' }}>Excedentes da jornada diária</option>
-              <option value="SEM" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'SEM' }}>Excedentes da jornada semanal</option>
-              <option value="FAV" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'FAV' }}>Critério mais favorável (diário vs semanal)</option>
-              <option value="MEN" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'MEN' }}>Excedentes da jornada mensal</option>
-              <option value="HST" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'HST' }}>Súmula 85 TST</option>
-              <option value="APH" {{ 'selected' if dur.get('forma_apuracao_pjecalc') == 'APH' }}>Primeiras HE em separado</option>
+              <option value="NAO_APURAR_HORAS_EXTRAS" {{ 'selected' if dur.get('forma_apuracao_pjecalc', 'NAO_APURAR_HORAS_EXTRAS') in ('NAP', 'NAO_APURAR_HORAS_EXTRAS') }}>NAP — Não apurar horas extras</option>
+              <option value="HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA" {{ 'selected' if dur.get('forma_apuracao_pjecalc') in ('HJD', 'HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA') }}>HJD — Excedentes da jornada diária</option>
+              <option value="HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL" {{ 'selected' if dur.get('forma_apuracao_pjecalc') in ('SEM', 'HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL') }}>SEM — Excedentes da jornada semanal</option>
+              <option value="HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL" {{ 'selected' if dur.get('forma_apuracao_pjecalc') in ('FAV', 'HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL') }}>FAV — Critério mais favorável (diário vs semanal)</option>
+              <option value="HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL" {{ 'selected' if dur.get('forma_apuracao_pjecalc') in ('MEN', 'HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL') }}>MEN — Excedentes da jornada mensal</option>
+              <option value="HORAS_EXTRAS_CONFORME_SUMULA_85" {{ 'selected' if dur.get('forma_apuracao_pjecalc') in ('HST', 'HORAS_EXTRAS_CONFORME_SUMULA_85') }}>HST — Súmula 85 TST</option>
+              <option value="APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO" {{ 'selected' if dur.get('forma_apuracao_pjecalc') in ('APH', 'APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO') }}>APH — Primeiras HE em separado</option>
             </select>
           </div>
           <div class="campo-form">
@@ -2136,9 +2136,9 @@ function toggleApuracao(tipo) {
   // Auto-ajustar forma PJE-Calc
   const formaSel = document.querySelector('select[onchange*="forma_apuracao_pjecalc"]');
   if (formaSel) {
-    if (tipo === 'apuracao_jornada') formaSel.value = 'FAV';
-    else if (tipo === 'quantidade_fixa') formaSel.value = 'NAP';
-    else formaSel.value = 'NAP';
+    if (tipo === 'apuracao_jornada') formaSel.value = 'HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL';
+    else if (tipo === 'quantidade_fixa') formaSel.value = 'NAO_APURAR_HORAS_EXTRAS';
+    else formaSel.value = 'NAO_APURAR_HORAS_EXTRAS';
     salvarCampo('duracao_trabalho.forma_apuracao_pjecalc', formaSel.value, formaSel);
   }
 }

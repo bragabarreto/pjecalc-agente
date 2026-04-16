@@ -458,8 +458,13 @@ Extrair SEMPRE que houver condenação em horas extras, adicional noturno, inter
 ou qualquer parcela que dependa de jornada de trabalho.
 
 - tipo_apuracao: "apuracao_jornada" (horários fixados) | "quantidade_fixa" (HE mensais/diárias)
-- forma_apuracao_pjecalc: "HJD" | "SEM" | "FAV" | "MEN" | "HST" | "APH" | "NAP"
-  Regra: "apuracao_jornada" → "FAV" (default) | "quantidade_fixa" → "NAP" | null → "NAP"
+- forma_apuracao_pjecalc: valor EXATO do enum FormaDeApuracaoCartaoEnum do PJE-Calc:
+    "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL" | "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA" |
+    "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL" | "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL" |
+    "HORAS_EXTRAS_CONFORME_SUMULA_85" | "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO" |
+    "NAO_APURAR_HORAS_EXTRAS"
+  Regra: "apuracao_jornada" → "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL" (default) |
+         "quantidade_fixa" → "NAO_APURAR_HORAS_EXTRAS" | null → "NAO_APURAR_HORAS_EXTRAS"
 - preenchimento_jornada: "programacao_semanal" | "escala" | "livre"
   Regra: horários por dia → "programacao_semanal" | "escala 12x36" → "escala" | senão → "livre"
 - escala_tipo: "12x12" | "12x24" | "12x36" | "12x48" | "5x1" | "6x1" | "8x2" | "outra" | null
@@ -639,7 +644,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
   }},
   "duracao_trabalho": {{
     "tipo_apuracao": "apuracao_jornada | quantidade_fixa | null",
-    "forma_apuracao_pjecalc": "FAV | HJD | SEM | MEN | HST | APH | NAP | null",
+    "forma_apuracao_pjecalc": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL | HORAS_EXTRAS_CONFORME_SUMULA_85 | APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO | NAO_APURAR_HORAS_EXTRAS | null",
     "preenchimento_jornada": "programacao_semanal | escala | livre | null",
     "escala_tipo": "string | null",
     "grade_semanal": {{
@@ -771,15 +776,16 @@ Extrair SEMPRE que houver condenação em horas extras. Esta seção alimenta o 
       (ex: "50 horas extras mensais", "2h extras por dia")
     null → não há condenação em horas extras ou informação insuficiente
 
-- forma_apuracao_pjecalc: mapear para o enum do PJE-Calc (Manual seção 10.1):
-    "NAP" → Não apurar horas extras
-    "HJD" → Excedentes da jornada diária
-    "SEM" → Excedentes da jornada semanal
-    "FAV" → Critério mais favorável (compara diário vs semanal, usa maior)
-    "MEN" → Excedentes da jornada mensal
-    "HST" → Súmula 85 TST (com limite de compensação)
-    "APH" → Primeiras HE em separado
-    Regra: "apuracao_jornada" → "FAV" (default) | "quantidade_fixa" → "NAP" | null → "NAP"
+- forma_apuracao_pjecalc: valor EXATO do enum FormaDeApuracaoCartaoEnum do PJE-Calc (Manual seção 10.1):
+    "NAO_APURAR_HORAS_EXTRAS" → Não apurar horas extras
+    "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA" → Excedentes da jornada diária
+    "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL" → Excedentes da jornada semanal
+    "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL" → Critério mais favorável (compara diário vs semanal, usa maior)
+    "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL" → Excedentes da jornada mensal
+    "HORAS_EXTRAS_CONFORME_SUMULA_85" → Súmula 85 TST (com limite de compensação)
+    "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO" → Primeiras HE em separado
+    Regra: "apuracao_jornada" → "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL" (default) |
+           "quantidade_fixa" → "NAO_APURAR_HORAS_EXTRAS" | null → "NAO_APURAR_HORAS_EXTRAS"
 
 - preenchimento_jornada: como preencher a grade de jornadas no PJE-Calc (Manual seção 10.1):
     "livre" → campos em branco para preenchimento manual posterior (default quando jornada vaga)
@@ -1142,7 +1148,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
   }},
   "duracao_trabalho": {{
     "tipo_apuracao": "apuracao_jornada | quantidade_fixa | null",
-    "forma_apuracao_pjecalc": "FAV | HJD | SEM | MEN | HST | APH | NAP | null",
+    "forma_apuracao_pjecalc": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL | HORAS_EXTRAS_CONFORME_SUMULA_85 | APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO | NAO_APURAR_HORAS_EXTRAS | null",
     "preenchimento_jornada": "programacao_semanal | escala | livre | null",
     "escala_tipo": "string | null",
     "grade_semanal": {{

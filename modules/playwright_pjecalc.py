@@ -6808,7 +6808,7 @@ class PJECalcPlaywright:
             jornada_semanal = jornada_semanal_cont or round(jornada_diaria * 5, 1)
             jornada_mensal = round(jornada_semanal * 30 / 7, 2) if jornada_semanal else None
             intervalo_min = intervalo_min or (60 if jornada_diaria >= 6 else 15)
-            forma_pjecalc = "HJD"  # default: jornada diária
+            forma_pjecalc = "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA"  # default: jornada diária
             tipo_apuracao = "apuracao_jornada"
 
         # Se ainda não há dados suficientes, sair
@@ -6956,11 +6956,14 @@ class PJECalcPlaywright:
         # HJD = "Jornada Diária" (label contém "ornada")
         # APH = "Apuração por Horas Separadas" (label contém "eparad")
         # NAP = "Não Apurar" (label contém "ão Apur")
-        forma = forma_pjecalc or "HJD"
+        forma = forma_pjecalc or "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA"
         self._log(f"  Cartão de Ponto: selecionando forma de apuração = {forma}")
 
-        # Mapa de forma abreviada → valor real do enum Java (confirmados por inspeção DOM v2.15.1)
+        # Mapa de siglas LEGADAS → valor real do enum Java
+        # (mantido para backward-compat com dados antigos no banco)
+        # Dados novos já vêm com o enum name direto do extraction.py.
         _FORMA_TO_ENUM = {
+            # Siglas legadas (backward-compat)
             "HJD": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA",
             "HST": "HORAS_EXTRAS_CONFORME_SUMULA_85",
             "APH": "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO",
@@ -6968,6 +6971,14 @@ class PJECalcPlaywright:
             "FAV": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
             "SEM": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL",
             "MEN": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL",
+            # Enum names (passam direto)
+            "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA",
+            "HORAS_EXTRAS_CONFORME_SUMULA_85": "HORAS_EXTRAS_CONFORME_SUMULA_85",
+            "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO": "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO",
+            "NAO_APURAR_HORAS_EXTRAS": "NAO_APURAR_HORAS_EXTRAS",
+            "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
+            "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL",
+            "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL": "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL",
         }
         _enum_value = _FORMA_TO_ENUM.get(forma, forma)
 
@@ -7299,7 +7310,17 @@ class PJECalcPlaywright:
         # - duracao_trabalho.jornada_seg..dom = jornada PRATICADA (do que diz a sentença)
         #
         # Aqui usamos a jornada contratual (Parâmetros do Cálculo / cargaHorariaDiaria).
-        if forma in ("HJD", "APH", "FAV", "SEM", "MEN") and preenchimento != "livre":
+        # Enum names + siglas legadas para backward-compat
+        _FORMAS_COM_JORNADA = (
+            "HJD", "APH", "FAV", "SEM", "MEN",
+            "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA",
+            "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO",
+            "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
+            "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL",
+            "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL",
+            "HORAS_EXTRAS_CONFORME_SUMULA_85",
+        )
+        if forma in _FORMAS_COM_JORNADA and preenchimento != "livre":
             # Determinar jornada PADRÃO (contratual) — NÃO a efetivamente praticada!
             # PRIORIDADE: derivar de carga_horaria (Parâmetros do Cálculo) que é o valor
             # contratual real. contrato.jornada_diaria pode conter a jornada PRATICADA
