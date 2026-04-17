@@ -1619,17 +1619,32 @@ def atribuir_estrategias_verbas(
                     "estrategia": "automatica",  # geradas pelo Expresso automaticamente
                     "nome_pjecalc": ref_nome,
                 })
+
+            # SEGURANÇA: se a verba foi mapeada por similaridade aproximada
+            # (prefixo/fuzzy com nome_sentenca divergente do canônico), forçar
+            # estratégia "expresso_adaptado" em vez de "expresso_direto". Isso
+            # garante que o usuário revise os parâmetros (jornada, divisor,
+            # percentual) que podem diferir do template canônico.
+            # Ex: "HORAS EXTRAS (excedentes 6ª diária — NR-17)" → canônico é
+            # "HORAS EXTRAS 50%" (8h/220), mas a sentença exige 6h/180.
+            _strategia_final = estrategia.get("estrategia", "manual")
+            _nome_canonico = estrategia.get("expresso_nome") or verba.get("nome_pjecalc") or ""
+            _base_final = estrategia.get("expresso_base")
+            if verba.get("_match_aproximado") and _strategia_final == "expresso_direto":
+                _strategia_final = "expresso_adaptado"
+                _base_final = _base_final or _nome_canonico
+
             verba["estrategia_preenchimento"] = {
-                "estrategia": estrategia.get("estrategia", "manual"),
-                "nome_pjecalc": estrategia.get("expresso_nome")
-                    or verba.get("nome_pjecalc")
-                    or verba.get("nome_sentenca", ""),
-                "expresso_base": estrategia.get("expresso_base"),
+                "estrategia": _strategia_final,
+                "nome_pjecalc": _nome_canonico or verba.get("nome_sentenca", ""),
+                "expresso_base": _base_final,
                 "campos_alterar": estrategia.get("campos_alterar"),
                 "confianca": estrategia.get("confianca", 0.5),
                 "baseado_em": estrategia.get("baseado_em", "fallback"),
                 "parametros": estrategia.get("parametros", {}),
                 "incidencias": estrategia.get("incidencias", {}),
+                "_match_aproximado": bool(verba.get("_match_aproximado")),
+                "_match_score": verba.get("_match_score"),
             }
             if reflexas_info:
                 verba["estrategia_preenchimento"]["reflexas"] = reflexas_info
@@ -1688,12 +1703,18 @@ def _buscar_por_similaridade(chave: str) -> dict[str, Any] | None:
     Para prefix matches (ex: "ferias proporcionais + 1/3" ↔ "ferias proporcionais"),
     o score é proporcional ao comprimento do match, evitando empates entre
     "ferias" (0.90) e "ferias proporcionais" (0.95).
+
+    Retorna o config com flag `_match_aproximado=True` quando o match foi por
+    similaridade (não exato) e o nome da sentença difere significativamente do
+    nome canônico. Isso permite que _atribuir_estrategias marque como
+    `expresso_adaptado` — sinalizando ao usuário que revisão é necessária.
     """
     from difflib import SequenceMatcher
 
     melhor_match: dict[str, Any] | None = None
     melhor_score = 0.0
     melhor_len = 0  # comprimento da chave que gerou melhor_score (desempate)
+    melhor_chave_ref = ""
     segundo_score = 0.0
 
     for chave_ref, config in _VERBAS_NORMALIZADAS.items():
@@ -1714,12 +1735,23 @@ def _buscar_por_similaridade(chave: str) -> dict[str, Any] | None:
             melhor_score = score
             melhor_match = config
             melhor_len = len(chave_ref)
+            melhor_chave_ref = chave_ref
         elif score > segundo_score:
             segundo_score = score
 
     # Exigir alta similaridade E diferença clara do segundo candidato (sem ambiguidade)
-    if melhor_score >= 0.75 and (melhor_score - segundo_score) >= 0.05:
-        return melhor_match
+    if melhor_score >= 0.75 and (melhor_score - segundo_score) >= 0.05 and melhor_match:
+        # Marcar como match aproximado quando a chave da sentença difere >20%
+        # do canônico — sinaliza necessidade de revisão (adaptado, não direto).
+        _eh_exato = (chave == melhor_chave_ref)
+        _eh_quase_exato = (
+            chave.startswith(melhor_chave_ref) and len(chave) <= len(melhor_chave_ref) * 1.2
+        )
+        # Retornar COPY do config para não poluir o dicionário global com flag
+        _resultado = {**melhor_match}
+        _resultado["_match_aproximado"] = not (_eh_exato or _eh_quase_exato)
+        _resultado["_match_score"] = round(melhor_score, 3)
+        return _resultado
     return None
 
 
