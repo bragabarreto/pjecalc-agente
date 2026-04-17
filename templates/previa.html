@@ -1161,9 +1161,9 @@
                 <div class="campo-form campo-col2">
                   <label>Base de Apuração</label>
                   <select onchange="salvarCampo('honorarios[{{ i }}].base_apuracao', this.value, this)">
-                    <option value="BRUTO" {{ 'selected' if hon.base_apuracao in ('BRUTO', 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL', 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA') }}>Condenação (= valor bruto)</option>
-                    <option value="VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL" {{ 'selected' if hon.base_apuracao == 'VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL' }}>Verbas que Não Compõem o Principal (só p/ RECLAMANTE)</option>
-                    <option value="RENDA_MENSAL" {{ 'selected' if hon.base_apuracao == 'RENDA_MENSAL' }}>Renda Mensal</option>
+                    <option value="BRUTO" {{ 'selected' if hon.base_apuracao == 'BRUTO' }}>Bruto</option>
+                    <option value="BRUTO_MENOS_CONTRIBUICAO_SOCIAL" {{ 'selected' if hon.base_apuracao == 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL' }}>Bruto (-) Contribuição Social</option>
+                    <option value="BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA" {{ 'selected' if hon.base_apuracao == 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA' }}>Bruto (-) Contribuição Social (-) Previdência Privada</option>
                   </select>
                 </div>
                 <div class="campo-form" id="hon-pct-{{ i }}" {{ 'style="display:none"' if hon.tipo_valor == 'INFORMADO' else '' }}>

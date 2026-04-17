@@ -252,9 +252,10 @@ Devedor: [Reclamante | Reclamado]
 Tipo do Valor: [Calculado (percentual) | Informado (valor fixo)]
 Percentual: [ex: 15% → 0.15 | null se informado]
 Valor Informado: R$ [valor | null se calculado]
-Base de Apuração:
-  - Se devedor = RECLAMADO: [Condenação (padrão) | Renda Mensal]
-  - Se devedor = RECLAMANTE: [Verbas Não Compõem Principal (padrão) | Condenação]
+Base de Apuração (opções exatas do PJE-Calc):
+  - Bruto (padrão — sobre o valor bruto da condenação)
+  - Bruto (-) Contribuição Social (bruto menos CS)
+  - Bruto (-) Contribuição Social (-) Previdência Privada (bruto menos CS e PP)
 Apurar IR: [Sim | Não]
 ```
 

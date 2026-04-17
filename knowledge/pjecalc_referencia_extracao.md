@@ -184,17 +184,22 @@ Situações especiais:
 | tipo | SUCUMBENCIAIS (padrão), CONTRATUAIS |
 | devedor | RECLAMANTE, RECLAMADO |
 | tipo_valor | CALCULADO (percentual), INFORMADO (valor fixo) |
-| base_apuracao | **BRUTO** (valor da condenação), **BRUTO_MENOS_CS**, **BRUTO_MENOS_CS_PP**, **VNP** (Verbas que Não Compõem Principal) |
+| base_apuracao | **BRUTO** (valor bruto da condenação — padrão), **BRUTO_MENOS_CONTRIBUICAO_SOCIAL** (bruto menos CS), **BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA** (bruto menos CS e PP) |
+
+### Opções reais do PJE-Calc (DOM confirmado v2.15.1)
+O campo `baseApuracao` na página `honorarios.jsf` tem exatamente 3 opções:
+1. **Bruto** → `BRUTO`
+2. **Bruto (-) Contribuição Social** → `BRUTO_MENOS_CONTRIBUICAO_SOCIAL`
+3. **Bruto (-) Contribuição Social (-) Previdência Privada** → `BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA`
 
 ### Regras de base_apuracao
 | Devedor | Tipo | Base padrão |
 |---------|------|-------------|
 | RECLAMADO | SUCUMBENCIAIS | BRUTO |
-| RECLAMANTE | SUCUMBENCIAIS | VNP |
-| Ambos | SUCUMBENCIAIS | BRUTO para reclamado + VNP para reclamante |
+| RECLAMANTE | SUCUMBENCIAIS | BRUTO |
 | Qualquer | CONTRATUAIS | BRUTO |
 
-> Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → BRUTO nos dois.
+> Quando sentença determina dedução de CS antes de aplicar percentual → BRUTO_MENOS_CONTRIBUICAO_SOCIAL.
 > NÃO existe opção "Ambos" — sucumbência recíproca = DOIS registros separados.
 > Faixa "10% a 15%" → usar o menor valor (0.10).
 
