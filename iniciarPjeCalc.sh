@@ -203,30 +203,34 @@ if [ -f "$H2_DB" ] && [ -f "$H2_JAR" ]; then
     H2_URL="jdbc:h2:$PJECALC_DIR/.dados/pjecalc"
     H2_USER="pjecalc"
     H2_PASS="/pjecalc/"
-    # Descobrir nomes reais das tabelas Calculo* via INFORMATION_SCHEMA, e
-    # disparar DELETE em cada uma. Desligando FK checks para evitar erros de
-    # ordem. Tudo com error tolerance — se falhar, segue.
+    # Descobrir nomes das tabelas de INSTÂNCIA de cálculo via INFORMATION_SCHEMA.
+    # ⚠ CUIDADO: o H2 contém também tabelas de CATÁLOGO (tipos de verba do Expresso,
+    # tabelas de correção, etc.) que NÃO podem ser apagadas. Filtro restrito:
+    # apenas CALCULO e tabelas dependentes que são criadas com id = FK para Calculo.
+    # Tabelas de catálogo NÃO incluem 'CALCULO' como substring (ex: VERBA_PADRAO,
+    # TIPO_VERBA, TABELA_JT_MENSAL, etc. — essas precisam ficar).
     CLEANUP_SQL="/tmp/pjecalc_cleanup.sql"
     DUMP_TABLES="/tmp/pjecalc_tables.txt"
-    # 1. Listar tabelas de usuário
     java -cp "$H2_JAR" org.h2.tools.Shell \
         -url "$H2_URL" -user "$H2_USER" -password "$H2_PASS" \
         -sql "SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA='PUBLIC' AND TABLE_NAME NOT LIKE 'HIBERNATE_%'" \
         > "$DUMP_TABLES" 2>&1 || true
-    # 2. Construir DELETE statements para tabelas que parecem de calc/verba/processo
+    # Filtro CIRÚRGICO: apenas tabelas que contenham "CALCULO" no nome + PROCESSO
+    # (que é 1:1 com CALCULO). NÃO incluir VERBA/HONORARIO/FGTS/etc. que podem ser
+    # catálogos ou tabelas de configuração.
     {
         echo "SET REFERENTIAL_INTEGRITY FALSE;"
-        grep -iE "CALCULO|VERBA|HISTORICO|PROCESSO|OCORRENCIA|HONORARIO|FERIA|FGTS|INSS|IRPF|MULTA|CUSTA|CARTAO|FALTA|ACORDO|SALARIO|PENSAO|JUROS|CORRECAO|AUX_|LIQUIDACAO|EXPORTACAO" "$DUMP_TABLES" 2>/dev/null | awk '{print "DELETE FROM " $1 ";"}' | head -100
+        grep -iE "^[A-Z_]*CALCULO[A-Z_]*\$|^PROCESSO\$|^OCORRENCIA_CALCULO|^AUX_CALCULO|^CALCULO_" "$DUMP_TABLES" 2>/dev/null | awk '{print "DELETE FROM " $1 ";"}' | head -50
         echo "SET REFERENTIAL_INTEGRITY TRUE;"
         echo "COMMIT;"
     } > "$CLEANUP_SQL"
     echo "[PJE-Calc] SQL cleanup gerado ($(wc -l < "$CLEANUP_SQL") stmts):"
-    head -5 "$CLEANUP_SQL" | sed 's/^/  /'
+    cat "$CLEANUP_SQL" | sed 's/^/  /'
     java -cp "$H2_JAR" org.h2.tools.RunScript \
         -url "$H2_URL" -user "$H2_USER" -password "$H2_PASS" \
         -script "$CLEANUP_SQL" 2>&1 | head -10 || true
     rm -f "$CLEANUP_SQL" "$DUMP_TABLES"
-    echo "[PJE-Calc] Cleanup H2 concluído (falhas toleradas)."
+    echo "[PJE-Calc] Cleanup H2 concluído (preservando catálogos)."
 fi
 
 echo "[PJE-Calc] Iniciando processo Java (porta 9257)..."
