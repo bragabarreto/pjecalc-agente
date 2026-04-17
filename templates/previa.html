@@ -1691,7 +1691,9 @@
               {% endif %}
             </div>
             <div class="verba-badges">
-              {% if verba.tipo %}<span class="badge badge-azul" style="font-size:0.72rem;">{{ verba.tipo }}</span>{% endif %}
+              {% if verba.tipo %}
+              <span class="badge {{ 'badge-azul' if verba.tipo == 'Principal' else 'badge-amarelo' }}" style="font-size:0.72rem;">{{ verba.tipo }}{% if verba.tipo == 'Reflexa' and verba.verba_principal_ref %} → {{ verba.verba_principal_ref }}{% endif %}</span>
+              {% endif %}
               {% if not verba.mapeada %}<span class="badge badge-amarelo" style="font-size:0.72rem;">Não mapeada</span>{% endif %}
               {% if verba.confianca and verba.confianca < 0.7 %}<span class="badge badge-vermelho" style="font-size:0.72rem;">Baixa confiança</span>{% endif %}
               <span style="font-size:0.8rem; color:#6c757d;">▼</span>
@@ -1706,10 +1708,27 @@
               </div>
               <div class="campo-form">
                 <label>Tipo</label>
-                <select onchange="salvarVerba({{ loop.index0 }}, 'tipo', this.value, this)">
+                <select id="verba-tipo-{{ loop.index0 }}"
+                        onchange="salvarVerba({{ loop.index0 }}, 'tipo', this.value, this); toggleVerbaPrincipalRef({{ loop.index0 }}, this.value)">
                   <option value="">—</option>
                   <option value="Principal" {{ 'selected' if verba.tipo == 'Principal' }}>Principal</option>
                   <option value="Reflexa" {{ 'selected' if verba.tipo == 'Reflexa' }}>Reflexa</option>
+                </select>
+              </div>
+              {% set outer_idx = loop.index0 %}
+              <div class="campo-form" id="verba-principal-ref-{{ outer_idx }}"
+                   style="{{ '' if verba.tipo == 'Reflexa' else 'display:none;' }}">
+                <label>Parcela Principal</label>
+                <select onchange="salvarVerba({{ outer_idx }}, 'verba_principal_ref', this.value, this)">
+                  <option value="">— selecione a principal —</option>
+                  {% for vp in verbas %}
+                  {% if vp.tipo == 'Principal' and loop.index0 != outer_idx %}
+                  <option value="{{ vp.nome_pjecalc or vp.nome_sentenca }}"
+                          {{ 'selected' if verba.verba_principal_ref == (vp.nome_pjecalc or vp.nome_sentenca) }}>
+                    {{ vp.nome_pjecalc or vp.nome_sentenca }}
+                  </option>
+                  {% endif %}
+                  {% endfor %}
                 </select>
               </div>
               <div class="campo-form">
@@ -1869,6 +1888,33 @@
                   <option value="expresso_direto" {{ 'selected' if ep_tipo == 'expresso_direto' }}>Expresso Direto</option>
                   <option value="expresso_adaptado" {{ 'selected' if ep_tipo == 'expresso_adaptado' }}>Expresso Adaptado</option>
                   <option value="manual" {{ 'selected' if ep_tipo == 'manual' }}>Manual</option>
+                </select>
+              </div>
+              <!-- Tipo: Principal / Reflexa -->
+              <div class="campo-form">
+                <label>Tipo da Verba</label>
+                {% set ep_tipo_verba = verba.get('tipo', ep.get('tipo_verba', 'Principal')) %}
+                <select id="plan-tipo-verba-{{ vi }}"
+                        onchange="salvarEstrategia({{ vi }}, 'tipo_verba', this.value, this); togglePlanPrincipalRef({{ vi }}, this.value)">
+                  <option value="Principal" {{ 'selected' if ep_tipo_verba != 'Reflexa' }}>Principal</option>
+                  <option value="Reflexa" {{ 'selected' if ep_tipo_verba == 'Reflexa' }}>Reflexa</option>
+                </select>
+              </div>
+              <!-- Parcela principal (visivel quando reflexa) -->
+              {% set ep_principal_ref = verba.get('verba_principal_ref', ep.get('verba_principal_ref', '')) %}
+              <div class="campo-form" id="plan-principal-ref-{{ vi }}"
+                   style="{{ '' if ep_tipo_verba == 'Reflexa' else 'display:none;' }}">
+                <label>Parcela Principal</label>
+                <select onchange="salvarEstrategia({{ vi }}, 'verba_principal_ref', this.value, this)">
+                  <option value="">— selecione a principal —</option>
+                  {% for vp in todas_verbas_plan %}
+                  {% if (vp.get('tipo', 'Principal') == 'Principal' or vp.get('tipo', '') != 'Reflexa') and loop.index0 != vi %}
+                  <option value="{{ vp.get('nome_pjecalc') or vp.get('nome_sentenca', '') }}"
+                          {{ 'selected' if ep_principal_ref == (vp.get('nome_pjecalc') or vp.get('nome_sentenca', '')) }}>
+                    {{ vp.get('nome_pjecalc') or vp.get('nome_sentenca', '?') }}
+                  </option>
+                  {% endif %}
+                  {% endfor %}
                 </select>
               </div>
               <!-- Nome no PJE-Calc -->
@@ -2245,6 +2291,29 @@ function toggleVerba(idx) {
   const id = (typeof idx === 'string' && idx.startsWith('plan-')) ? idx : ('verba-corpo-' + idx);
   const corpo = document.getElementById(id);
   if (corpo) corpo.classList.toggle('aberta');
+}
+
+// Mostrar/ocultar seletor de parcela principal quando tipo muda (Seção 14)
+function toggleVerbaPrincipalRef(idx, tipoVal) {
+  const refDiv = document.getElementById('verba-principal-ref-' + idx);
+  if (refDiv) {
+    refDiv.style.display = (tipoVal === 'Reflexa') ? '' : 'none';
+  }
+}
+
+// Mostrar/ocultar seletor de parcela principal no Plano de Preenchimento (Seção 15)
+function togglePlanPrincipalRef(idx, tipoVal) {
+  const refDiv = document.getElementById('plan-principal-ref-' + idx);
+  if (refDiv) {
+    refDiv.style.display = (tipoVal === 'Reflexa') ? '' : 'none';
+  }
+  // Quando muda para Reflexa e estratégia é expresso_direto, sugerir manual
+  // pois reflexas no PJE-Calc precisam de config específica
+  if (tipoVal === 'Reflexa') {
+    const stratSel = document.querySelector('#plan-corpo-' + idx + ' select');
+    // Se for expresso_direto sem reflexas automáticas, mudar para manual pode ser necessário
+    // Mas deixamos o usuário decidir
+  }
 }
 
 // Toast de feedback

@@ -1422,8 +1422,22 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
     pendentes_llm: list[dict] = []   # verbas que precisam de classificação LLM
     reflexas_acumuladas: list[dict] = []
 
-    # Passagem 1: classificar via dicionário (instantâneo)
+    # Passagem 0: separar verbas explicitamente marcadas como Reflexa pelo LLM
+    # Estas não devem ser classificadas como verbas independentes — serão adicionadas
+    # à lista de personalizadas com metadados de reflexa preservados.
+    _reflexas_explicitas: list[dict] = []
+    _verbas_para_classificar: list[dict] = []
     for verba in verbas:
+        _tipo = (verba.get("tipo") or "").strip().lower()
+        _ref = (verba.get("verba_principal_ref") or "").strip()
+        if _tipo == "reflexa" and _ref:
+            # Preservar como personalizada com tipo=Reflexa e verba_principal_ref
+            _reflexas_explicitas.append(verba)
+        else:
+            _verbas_para_classificar.append(verba)
+
+    # Passagem 1: classificar via dicionário (instantâneo)
+    for verba in _verbas_para_classificar:
         nome = verba.get("nome_sentenca", "")
         chave = _normalizar_chave(nome)
 
@@ -1563,6 +1577,33 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
         if r["nome"] not in nomes_reflexas_vistos:
             nomes_reflexas_vistos.add(r["nome"])
             reflexas_unicas.append(r)
+
+    # Adicionar reflexas explícitas (extraídas com tipo=Reflexa e verba_principal_ref)
+    # como personalizadas com estratégia manual e metadados preservados
+    for ref_expl in _reflexas_explicitas:
+        ref_expl["mapeada"] = True
+        ref_expl["lancamento"] = "Manual"
+        ref_expl["confianca_mapeamento"] = 0.9
+        ref_expl["eh_reflexa"] = True
+        # Preservar nome_pjecalc se não definido
+        if not ref_expl.get("nome_pjecalc"):
+            ref_expl["nome_pjecalc"] = ref_expl.get("nome_sentenca", "")
+        # Estratégia: manual por padrão para reflexas explícitas,
+        # pois precisam ser criadas com tipoDeVerba=REFLEXO no PJE-Calc
+        ref_expl["estrategia_preenchimento"] = {
+            "estrategia": "manual",
+            "nome_pjecalc": ref_expl.get("nome_pjecalc", ""),
+            "tipo_verba": "Reflexa",
+            "verba_principal_ref": ref_expl.get("verba_principal_ref", ""),
+            "confianca": 0.9,
+            "baseado_em": "catalogo_reflexa",
+            "parametros": {
+                "caracteristica": ref_expl.get("caracteristica", "Comum"),
+                "ocorrencia": ref_expl.get("ocorrencia", "Mensal"),
+                "base_calculo": ref_expl.get("base_calculo", "Verbas"),
+            },
+        }
+        personalizadas.append(ref_expl)
 
     # Fase final: Atribuir estratégias de preenchimento a cada verba
     resultado = {

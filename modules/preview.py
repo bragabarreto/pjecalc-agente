@@ -557,6 +557,9 @@ def aplicar_edicao_verba(
     """
     Edita um campo de uma verba específica pelo índice (base 0).
     Percorre predefinidas → personalizadas → nao_reconhecidas em ordem.
+
+    Quando o campo 'tipo' muda (Principal ↔ Reflexa), sincroniza com
+    a estratégia de preenchimento e limpa/configura verba_principal_ref.
     """
     todas = (
         verbas_mapeadas.get("predefinidas", [])
@@ -565,6 +568,26 @@ def aplicar_edicao_verba(
     )
     if 0 <= indice < len(todas):
         todas[indice][campo] = novo_valor
+
+        # Sincronizar tipo ↔ estratégia de preenchimento
+        if campo == "tipo":
+            ep = todas[indice].get("estrategia_preenchimento", {})
+            ep["tipo_verba"] = novo_valor
+            ep["baseado_em"] = "usuario"
+            todas[indice]["estrategia_preenchimento"] = ep
+
+            # Limpar verba_principal_ref se mudou para Principal
+            if novo_valor == "Principal":
+                todas[indice].pop("verba_principal_ref", None)
+                ep.pop("verba_principal_ref", None)
+
+        # Sincronizar verba_principal_ref → estratégia
+        elif campo == "verba_principal_ref":
+            ep = todas[indice].get("estrategia_preenchimento", {})
+            ep["verba_principal_ref"] = novo_valor
+            ep["baseado_em"] = "usuario"
+            todas[indice]["estrategia_preenchimento"] = ep
+
     return verbas_mapeadas
 
 

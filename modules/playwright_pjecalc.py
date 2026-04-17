@@ -5252,7 +5252,16 @@ class PJECalcPlaywright:
             # ── REGRA: Pular reflexas cujo principal foi criado via Expresso ──
             # Parcelas Expresso geram reflexos automaticamente (Aviso Prévio, Férias+1/3,
             # 13º, RSR, Multa 477). Criar reflexo manual duplica e causa erro.
-            _eh_reflexa = v.get("eh_reflexa") or "reflexo" in _nome_lower or "sobre" in _nome_lower
+            # Prioridade: campo 'tipo' explícito > eh_reflexa > heurística por nome
+            _tipo_verba = (v.get("tipo") or "").strip()
+            _ep_tipo_verba = (v.get("estrategia_preenchimento", {}).get("tipo_verba") or "").strip()
+            _eh_reflexa = (
+                _tipo_verba.lower() == "reflexa"
+                or _ep_tipo_verba.lower() == "reflexa"
+                or v.get("eh_reflexa")
+                or "reflexo" in _nome_lower
+                or "sobre" in _nome_lower
+            )
 
             # REGRA ADICIONAL: verbas nomeadas "Reflexo em <categoria>" (ex: "Reflexo em 13o Salário",
             # "Reflexo em Férias e 1/3") são reflexos auto-gerados por QUALQUER verba Expresso
@@ -5268,16 +5277,24 @@ class PJECalcPlaywright:
                     continue
 
             if _eh_reflexa:
-                # Inferir nome da verba principal a partir do nome do reflexo
-                import re as _re_ref
-                # Padrões: "RSR sobre Horas Extras", "13º s/ Horas Extras", "Férias + 1/3 s/ Adicional Noturno"
-                _m_principal = _re_ref.search(
-                    r'(?i)(?:sobre|s/)\s+(.+?)$', nome
-                )
-                _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
+                # Usar verba_principal_ref explícita (editada pelo usuário) se disponível
+                _nome_principal_ref = (
+                    v.get("verba_principal_ref")
+                    or v.get("estrategia_preenchimento", {}).get("verba_principal_ref")
+                    or ""
+                ).strip()
+
+                # Fallback: inferir nome da verba principal a partir do nome do reflexo
                 if not _nome_principal_ref:
-                    _m_principal = _re_ref.match(r'(?i)reflexo\s+(?:de\s+)?(.+?)\s+em\s+', nome)
+                    import re as _re_ref
+                    # Padrões: "RSR sobre Horas Extras", "13º s/ Horas Extras", "Férias + 1/3 s/ Adicional Noturno"
+                    _m_principal = _re_ref.search(
+                        r'(?i)(?:sobre|s/)\s+(.+?)$', nome
+                    )
                     _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
+                    if not _nome_principal_ref:
+                        _m_principal = _re_ref.match(r'(?i)reflexo\s+(?:de\s+)?(.+?)\s+em\s+', nome)
+                        _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
 
                 # Verificar se o principal foi criado via Expresso (reflexos auto-gerados)
                 _skip_expresso = False
