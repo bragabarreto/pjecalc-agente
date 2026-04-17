@@ -1181,7 +1181,20 @@ class PJECalcPlaywright:
         return None
 
     def _marcar_radio(self, field_id: str, valor: str) -> bool:
-        """Clica em radio button JSF."""
+        """Clica em radio button JSF.
+
+        Hardened contra hangs: cada click tem timeout explícito de 5s (vs. default
+        30s do Playwright). Se AJAX anterior ainda está pendente, esperamos até 5s
+        pelo ViewState estabilizar antes de clicar.
+        """
+        # Garantir que AJAX pré-existente terminou antes de clicar no novo radio.
+        # Se não terminar em 5s, prosseguir mesmo assim — o novo click vai invalidar
+        # o anterior ou o JSF vai processar em fila.
+        try:
+            self._page.wait_for_load_state("networkidle", timeout=5000)
+        except Exception:
+            pass
+
         seletores = [
             f"input[type='radio'][value='{valor}'][id$='{field_id}']",
             f"table[id$='{field_id}'] input[value='{valor}']",
@@ -1194,7 +1207,9 @@ class PJECalcPlaywright:
             try:
                 loc = self._page.locator(sel)
                 if loc.count() > 0:
-                    loc.first.click()
+                    # timeout=5000: fail fast se o elemento está bloqueado por overlay
+                    # ou não-clicável. Default do Playwright (30s) esconde problemas.
+                    loc.first.click(timeout=5000)
                     # Aguardar AJAX a4j:support (evita LockTimeoutException no
                     # @Synchronized apresentadorVerbaDeCalculo causada por
                     # pipelining de requests consecutivos).
@@ -1333,16 +1348,30 @@ class PJECalcPlaywright:
         valor: str,
         obrigatorio: bool = True,
     ) -> bool:
-        """Tenta preencher campo como select primeiro, depois como radio (JSF pode usar qualquer um)."""
+        """Tenta preencher campo como select primeiro, depois como radio (JSF pode usar qualquer um).
+
+        Budget wallclock de 20s para evitar hangs: se as tentativas encadeadas
+        (select → radio → radio_js → eval) excederem 20s, aborta silenciosamente.
+        Radios JSF/a4j normais completam em <3s.
+        """
+        import time as _t
+        _deadline = _t.monotonic() + 20.0
+
+        def _budget_ok() -> bool:
+            return _t.monotonic() < _deadline
+
         # Try select (by option value or text)
-        if self._selecionar(field_id, valor, obrigatorio=False):
+        if _budget_ok() and self._selecionar(field_id, valor, obrigatorio=False):
             return True
         # Try radio (Playwright locator)
-        if self._marcar_radio(field_id, valor):
+        if _budget_ok() and self._marcar_radio(field_id, valor):
             return True
         # Try radio (JS fallback)
-        if self._marcar_radio_js(field_id, valor):
+        if _budget_ok() and self._marcar_radio_js(field_id, valor):
             return True
+        if not _budget_ok():
+            self._log(f"  ⚠ {field_id}={valor}: budget de 20s estourado — pulando")
+            return False
         # JS fallback: search selects by option text containing valor
         try:
             _found = self._page.evaluate(f"""() => {{
