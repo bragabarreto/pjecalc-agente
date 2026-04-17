@@ -181,15 +181,18 @@ _iniciar_java() {
     echo "[PJE-Calc] Lancador iniciado (PID: $(cat /tmp/pjecalc.pid))"
 }
 
-# Restaurar template H2 se foi removido por limpar_h2_database()
-# O template contém o schema Hibernate obrigatório — sem ele o contexto /pjecalc falha.
-# Os dados de cálculos residuais são limpos pelo Python (limpar_h2_database → _limpar_calculos_h2).
+# Restaurar template H2 — FORÇAR overwrite a cada boot. Motivo:
+# (1) O volume persistente (Oracle Cloud) pode ter .h2.db CORROMPIDO por
+#     cleanup SQL muito agressivo em deploys anteriores (ex: catálogo Expresso
+#     apagado). Template é a fonte da verdade do schema + catálogo.
+# (2) Cada container restart começa do template limpo (comportamento esperado
+#     do Docker — dados de usuário ficam em /app/data/, não no H2 do PJE-Calc).
 H2_DB="$PJECALC_DIR/.dados/pjecalc.h2.db"
 H2_TEMPLATE="$PJECALC_DIR/.dados/pjecalc.h2.db.template"
 H2_JAR="$PJECALC_DIR/bin/lib/h2-1.3.154.jar"
-if [ ! -f "$H2_DB" ] && [ -f "$H2_TEMPLATE" ]; then
-    echo "[PJE-Calc] Restaurando template H2 (schema obrigatório)..."
-    cp "$H2_TEMPLATE" "$H2_DB"
+if [ -f "$H2_TEMPLATE" ]; then
+    echo "[PJE-Calc] Restaurando H2 a partir do template (overwrite — fonte da verdade do catálogo)..."
+    cp -f "$H2_TEMPLATE" "$H2_DB"
 fi
 
 # Limpar CÁLCULOS RESIDUAIS do template (.h2.db.template tem calcs embutidos como
