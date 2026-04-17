@@ -9823,9 +9823,25 @@ class PJECalcPlaywright:
         # - Goto direto para exportacao.jsf NÃO dispara iniciar() → nome="" →
         #   exportar() falha silenciosamente e linkDownloadArquivo nunca aparece.
         #
-        # ESTRATÉGIA: Navegar para uma página "neutra" primeiro (Dados do Cálculo)
-        # para sair do form de liquidacao.jsf que causa HTTP 500. Depois clicar
-        # no menu lateral Exportar, que dispara iniciar() e popula nome.
+        # ⚠ BUG DIAGNOSTICADO (abr/2026): quando a limpeza de calculos antigos
+        #   falha, obterCalculoAberto() pode retornar um calc RESIDUAL (id=71
+        #   do .h2.db.template), não o que acabamos de liquidar. Resultado:
+        #   o .PJC exportado contém dados do calc errado.
+        #
+        # PROTEÇÃO: Antes de clicar menu Exportar, RE-ABRIR explicitamente o
+        # calc alvo via "Cálculos Recentes", usando o CNJ do processo. Isso
+        # força o Seam session (servicoDeCalculo.calculoAberto) a apontar
+        # para o calc correto.
+        self._log("  🛡 Guard pre-export: re-abrindo cálculo alvo via Recentes para forçar calculoAberto correto…")
+        try:
+            _reabriu = self._reabrir_calculo_recentes()
+            if _reabriu:
+                self._log("  ✓ Cálculo alvo confirmado como calculoAberto no Seam")
+            else:
+                self._log("  ⚠ Pre-export guard: re-abertura falhou — continuando mesmo assim (post-export validator vai detectar se der errado)")
+        except Exception as _e_pre:
+            self._log(f"  ⚠ Pre-export guard exception: {_e_pre}")
+
         _exportou = False
 
         # Log do conversationId atual (para diagnóstico)
@@ -10131,6 +10147,36 @@ class PJECalcPlaywright:
                     f"is_zip={_is_zip_a}, is_html={_is_html_a}"
                 )
                 if _is_zip_a:
+                    # GUARD pós-export: validar que o CNJ no filename bate
+                    # com o processo alvo. Se não, ABORTAR — não entregar
+                    # .PJC de calc residual ao usuário.
+                    _proc_alvo = (self._dados or {}).get("processo", {}).get("numero", "")
+                    _proc_clean = _proc_alvo.replace(".", "").replace("-", "").replace("/", "")
+                    if _proc_clean and _pjc_filename:
+                        _fname_clean = _pjc_filename.replace(".", "").replace("-", "").replace("/", "").replace("_", "")
+                        if _proc_clean not in _fname_clean:
+                            # Também tentar verificar via conteúdo do ZIP (XML interno)
+                            _conteudo_bate = False
+                            try:
+                                import zipfile, io, re as _re_pc
+                                with zipfile.ZipFile(io.BytesIO(_pjc_bytes)) as _zf:
+                                    _inner = [n for n in _zf.namelist() if n.lower().endswith('.pjc')]
+                                    if _inner:
+                                        _xml = _zf.read(_inner[0]).decode('iso-8859-1', errors='replace')
+                                        _conteudo_bate = _proc_clean in _xml.replace(".", "").replace("-", "").replace("/", "").replace("_", "")
+                            except Exception:
+                                pass
+                            if not _conteudo_bate:
+                                raise RuntimeError(
+                                    "AUTOMAÇÃO ABORTADA: .PJC gerado NÃO contém o CNJ do processo alvo. "
+                                    f"Processo esperado: {_proc_alvo}. "
+                                    f"Filename recebido: {_pjc_filename}. "
+                                    "Isso indica que o PJE-Calc exportou um CÁLCULO RESIDUAL (provavelmente "
+                                    "do template .h2.db, id=71) em vez do cálculo recém-liquidado. "
+                                    "Verifique a limpeza de cálculos antigos no container e tente novamente."
+                                )
+                            else:
+                                self._log(f"  ✓ Filename não bate mas conteúdo XML contém CNJ alvo — OK")
                     _nome_a = _pjc_filename or 'calculo.PJC'
                     if not _nome_a.lower().endswith('.pjc'):
                         _nome_a += '.PJC'
