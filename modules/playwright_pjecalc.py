@@ -4272,6 +4272,16 @@ class PJECalcPlaywright:
         predefinidas = [v for v in predefinidas if not v.get("_apenas_fgts")]
         personalizadas = [v for v in personalizadas if not v.get("_apenas_fgts")]
 
+        # Filtrar reflexas automatica_expresso — geradas pelo Expresso, não devem ser criadas
+        predefinidas = [
+            v for v in predefinidas
+            if (v.get("estrategia_preenchimento", {}) or {}).get("estrategia") != "automatica_expresso"
+        ]
+        personalizadas = [
+            v for v in personalizadas
+            if (v.get("estrategia_preenchimento", {}) or {}).get("estrategia") != "automatica_expresso"
+        ]
+
         # ── REGRA MANUAL PJE-CALC: Reflexas de verbas Expresso são AUTO-GERADAS ──
         # Segundo o manual (seção 9.7/9.8), após salvar verbas no Expresso, o PJE-Calc
         # gera automaticamente as parcelas reflexas. O usuário apenas clica "Exibir Reflexas"
