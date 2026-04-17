@@ -1198,7 +1198,9 @@ class PJECalcPlaywright:
                     # Aguardar AJAX a4j:support (evita LockTimeoutException no
                     # @Synchronized apresentadorVerbaDeCalculo causada por
                     # pipelining de requests consecutivos).
-                    self._aguardar_ajax()
+                    # Timeout 8s: radios com a4j:support completam em <1s;
+                    # timeout cheio de 15s acumula em fases com muitos radios.
+                    self._aguardar_ajax(timeout=8000)
                     self._log(f"  ✓ radio {field_id}: {valor}")
                     return True
             except Exception:
@@ -6493,19 +6495,23 @@ class PJECalcPlaywright:
                 self._log(f"  ⚠ FGTS re-open falhou: {_e}")
 
         # Destino: PAGAR (ao reclamante) ou DEPOSITAR (em conta vinculada)
+        self._log("  → FGTS: preenchendo tipoDeVerba…")
         _destino = fgts.get("destino", "PAGAR")
         self._preencher_radio_ou_select("tipoDeVerba", _destino)
 
         # Compor principal
+        self._log("  → FGTS: preenchendo comporPrincipal…")
         _compor = "SIM" if fgts.get("compor_principal", True) else "NAO"
         self._preencher_radio_ou_select("comporPrincipal", _compor)
 
         # Alíquota — radio com valores enum (não percentual numérico)
+        self._log("  → FGTS: preenchendo aliquota…")
         aliquota = fgts.get("aliquota", 0.08)
         _aliq_radio = "DOIS_POR_CENTO" if aliquota <= 0.02 else "OITO_POR_CENTO"
         self._preencher_radio_ou_select("aliquota", _aliq_radio)
 
         # Incidência do FGTS (select) — padrão: sobre o total devido
+        self._log("  → FGTS: preenchendo incidenciaDoFgts…")
         _incidencia_map = {
             "total_devido": "SOBRE_O_TOTAL_DEVIDO",
             "depositado_sacado": "SOBRE_DEPOSITADO_SACADO",
@@ -6532,19 +6538,24 @@ class PJECalcPlaywright:
             _multa_val = "CALCULADA"
         else:
             _multa_val = "NAO_APURAR"
+        self._log(f"  → FGTS: preenchendo multa={_multa_val}…")
         self._selecionar("multa", _multa_val, obrigatorio=False)
         # Aguardar AJAX do onchange do select multa (re-renderiza campos dependentes)
-        self._aguardar_ajax()
+        # Timeout reduzido a 8s: se o AJAX não completar em 8s, é porque não houve
+        # mudança real (ex: valor já era o mesmo) — prosseguir evita hang.
+        self._aguardar_ajax(timeout=8000)
         self._page.wait_for_timeout(1000)
 
         if _multa_val == "CALCULADA":
             # Percentual: 40% padrão; 20% para estabilidade provisória (CIPA, gestante etc.)
+            self._log("  → FGTS: preenchendo multaDoFgts…")
             _pct_multa = "VINTE_POR_CENTO" if fgts.get("multa_20") else "QUARENTA_POR_CENTO"
             self._preencher_radio_ou_select("multaDoFgts", _pct_multa)
 
             # Base da multa (select condicional: DEVIDO / DIFERENCA / SALDO_E_OU_SAQUE / etc.)
             _base_multa = fgts.get("base_multa", fgts.get("baseDaMulta", ""))
             if _base_multa:
+                self._log(f"  → FGTS: preenchendo baseDaMulta={_base_multa}…")
                 self._selecionar("baseDaMulta", _base_multa, obrigatorio=False)
 
             # Excluir aviso indenizado da base da multa (checkbox)
@@ -6577,8 +6588,9 @@ class PJECalcPlaywright:
         # indisponível intermitentemente.
         _saldos_validos = [s for s in fgts.get("saldos", []) if s.get("data") and s.get("valor")]
         if _saldos_validos:
+            self._log(f"  → FGTS: marcando deduzirDoFGTS ({len(_saldos_validos)} saldo(s))…")
             self._marcar_checkbox("deduzirDoFGTS", True)
-            self._aguardar_ajax()
+            self._aguardar_ajax(timeout=8000)
             self._page.wait_for_timeout(300)  # tempo para AJAX habilitar a seção
             for saldo in _saldos_validos:
                 self._preencher_data("competencia", saldo["data"], False)
@@ -6589,13 +6601,14 @@ class PJECalcPlaywright:
                     or self._clicar_botao_id("adicionarSaldo")
                 )
                 if _adicionou:
-                    self._aguardar_ajax()
+                    self._aguardar_ajax(timeout=8000)
                     self._log(f"  ✓ Saldo FGTS deduzido: {saldo['data']} R$ {saldo['valor']}")
 
         # Salvar — ID confirmado: formulario:salvar
+        self._log("  → FGTS: clicando Salvar…")
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 4: Salvar FGTS não confirmado.")
-        self._aguardar_ajax()
+        self._aguardar_ajax(timeout=10000)
 
         # Fase 4B: ajustar Ocorrências do FGTS com 13º proporcional em dezembro
         # (Lei 8.036/90 — FGTS sobre 13º recolhido na competência de dezembro)
