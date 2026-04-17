@@ -1307,26 +1307,40 @@
               <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Correção Monetária</legend>
               <div class="campo-form" style="margin-bottom:10px;">
                 <label>Índice Trabalhista</label>
-                {# Opções DOM confirmadas v2.15.1 (select indiceCorrecao) #}
+                {# Opções do select indiceCorrecao — PJE-Calc v2.15.1 TRT7.
+                   Valores "TABELA_UNICA", "DEVEDOR_FAZENDA_PUBLICA", "REPETICAO_INDEBITO_TRIBUTARIO",
+                   "SELIC_RECEITA", "SELIC_SIMPLES", "SELIC_COMPOSTA", "SEM_CORRECAO" são
+                   PROVISÓRIOS até re-execução da varredura DOM. A automação Playwright seleciona
+                   por TEXTO (opt.text match), então os textos precisam estar corretos
+                   (DOM map confirmado nas fotos do sistema). #}
                 {% set idx_opts = [
-                    ('TABELA_UNICA_JT_DIARIO', 'Tabela JT Diária'),
+                    ('TABELA_UNICA', 'Tabela Única de Atualização e Conversão de Débitos Trabalhistas'),
+                    ('DEVEDOR_FAZENDA_PUBLICA', 'Devedor Fazenda Pública'),
+                    ('REPETICAO_INDEBITO_TRIBUTARIO', 'Repetição de Indébito Tributário'),
                     ('TABELA_UNICA_JT_MENSAL', 'Tabela JT Mensal'),
+                    ('TABELA_UNICA_JT_DIARIO', 'Tabela JT Diária'),
                     ('TR', 'TR'),
                     ('IGP_M', 'IGP-M'),
                     ('INPC', 'INPC'),
                     ('IPC', 'IPC'),
                     ('IPCA', 'IPCA'),
                     ('IPCA_E', 'IPCA-E'),
-                    ('IPCA_E_TR', 'IPCA-E / TR')
+                    ('IPCA_E_TR', 'IPCA-E/TR'),
+                    ('SELIC_RECEITA', 'SELIC (Receita Federal)'),
+                    ('SELIC_SIMPLES', 'SELIC Simples'),
+                    ('SELIC_COMPOSTA', 'SELIC Composta'),
+                    ('SEM_CORRECAO', 'Sem Correção')
                   ] %}
-                  {# Normalizar valores legados da extração para enum DOM #}
+                  {# Normalização de valores legados → enum novo #}
                   {% set _norm_idx = {
                     'IPCAE': 'IPCA_E', 'IPCAETR': 'IPCA_E_TR', 'IGPM': 'IGP_M',
                     'IPCA-E': 'IPCA_E', 'IPCA-E/TR': 'IPCA_E_TR', 'IGP-M': 'IGP_M',
                     'TUACDT': 'TABELA_UNICA_JT_MENSAL',
                     'Tabela JT Unica Mensal': 'TABELA_UNICA_JT_MENSAL',
                     'Tabela JT Única Mensal': 'TABELA_UNICA_JT_MENSAL',
-                    'Selic': 'SELIC', 'TRCT': 'TR', 'TUACDT_DIARIO': 'TABELA_UNICA_JT_DIARIO',
+                    'TRCT': 'TR', 'TUACDT_DIARIO': 'TABELA_UNICA_JT_DIARIO',
+                    'Selic': 'SELIC_RECEITA', 'SELIC': 'SELIC_RECEITA',
+                    'Tabela Única': 'TABELA_UNICA', 'TABELA_UNICA_TRABALHISTA': 'TABELA_UNICA',
                   } %}
                   {% set _idx_val = _norm_idx.get(cj.get('indice_correcao', ''), cj.get('indice_correcao', '')) %}
                 <select onchange="salvarCampo('correcao_juros.indice_correcao', this.value, this)" style="width:100%;">
@@ -1380,17 +1394,30 @@
               </div>
               <div class="campo-form" style="margin-bottom:10px;">
                 <label>Tabela de Juros</label>
-                {# Opções DOM confirmadas v2.15.1 (select taxaJuros) #}
+                {# Opções DOM confirmadas v2.15.1 (select taxaJuros) — IDÊNTICAS ao PJE-Calc #}
                 {% set juros_opts = [
                     ('PADRAO', 'Juros Padrão'),
+                    ('CADERNETA_POUPANCA', 'Juros Caderneta de Poupança'),
                     ('FAZENDA_PUBLICA', 'Juros Fazenda Pública'),
-                    ('SELIC', 'SELIC')
+                    ('SIMPLES_0_5_MES', 'Juros Simples 0,5% a.m.'),
+                    ('SIMPLES_1_MES', 'Juros Simples 1,0% a.m.'),
+                    ('SIMPLES_0_0333333_DIA', 'Juros Simples 0,0333333% a.d.'),
+                    ('SELIC_RECEITA', 'SELIC (Receita Federal)'),
+                    ('SELIC_SIMPLES', 'SELIC Simples'),
+                    ('SELIC_COMPOSTA', 'SELIC Composta'),
+                    ('TRD_SIMPLES', 'TRD Juros Simples'),
+                    ('TRD_COMPOSTOS', 'TRD Juros Compostos'),
+                    ('TAXA_LEGAL', 'Taxa Legal'),
+                    ('SEM_JUROS', 'Sem Juros')
                   ] %}
                   {# Normalizar valores legados da extração para enum DOM #}
                   {% set _norm_juros = {
-                    'JUROS_PADRAO': 'PADRAO', 'TAXA_LEGAL': 'PADRAO',
-                    'Taxa Legal': 'PADRAO', 'Juros Padrao': 'PADRAO',
-                    'Juros Padrão': 'PADRAO', 'Selic': 'SELIC',
+                    'JUROS_PADRAO': 'PADRAO',
+                    'Juros Padrao': 'PADRAO', 'Juros Padrão': 'PADRAO',
+                    'Selic': 'SELIC_RECEITA', 'SELIC': 'SELIC_RECEITA',
+                    'Taxa Legal': 'TAXA_LEGAL', 'TRD': 'TRD_SIMPLES',
+                    'TRD Juros Simples': 'TRD_SIMPLES',
+                    'TRD Juros Compostos': 'TRD_COMPOSTOS',
                   } %}
                   {% set _juros_val = _norm_juros.get(cj.get('taxa_juros', ''), cj.get('taxa_juros', '')) %}
                 <select onchange="salvarCampo('correcao_juros.taxa_juros', this.value, this)" style="width:100%;">

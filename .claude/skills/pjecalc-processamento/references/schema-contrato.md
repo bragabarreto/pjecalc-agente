@@ -269,10 +269,20 @@ Array de até 3 objetos `{inicio, fim}` — datas de gozo efetivo (DD/MM/AAAA).
 Somente quando situacao = `Gozadas` ou `GOZADAS_PARCIALMENTE`.
 
 ### correcao_juros.indice_correcao
-`Tabela JT Unica Mensal` | `IPCA-E` | `Selic` | `TRCT`
+Valores DOM PJE-Calc v2.15.1 (select `indiceCorrecao` — IDÊNTICOS ao sistema):
+`TABELA_UNICA` (Tabela Única de Atualização e Conversão de Débitos Trabalhistas) |
+`DEVEDOR_FAZENDA_PUBLICA` | `REPETICAO_INDEBITO_TRIBUTARIO` |
+`TABELA_UNICA_JT_MENSAL` (Tabela JT Mensal) | `TABELA_UNICA_JT_DIARIO` (Tabela JT Diária) |
+`TR` | `IGP_M` | `INPC` | `IPC` | `IPCA` | `IPCA_E` | `IPCA_E_TR` |
+`SELIC_RECEITA` (SELIC Receita Federal) | `SELIC_SIMPLES` | `SELIC_COMPOSTA` |
+`SEM_CORRECAO`
 
 ### correcao_juros.taxa_juros
-`Juros Padrao` | `Selic`
+Valores DOM PJE-Calc v2.15.1 (select `taxaJuros` — IDÊNTICOS ao sistema):
+`PADRAO` (Juros Padrão) | `CADERNETA_POUPANCA` | `FAZENDA_PUBLICA` |
+`SIMPLES_0_5_MES` | `SIMPLES_1_MES` | `SIMPLES_0_0333333_DIA` |
+`SELIC_RECEITA` | `SELIC_SIMPLES` | `SELIC_COMPOSTA` |
+`TRD_SIMPLES` | `TRD_COMPOSTOS` | `TAXA_LEGAL` | `SEM_JUROS`
 
 ### correcao_juros.acumular_indices
 `MES_SUBSEQUENTE` | `MES_VENCIMENTO` | `MISTO` | null

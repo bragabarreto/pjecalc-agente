@@ -3896,12 +3896,24 @@
               "texto": "Selecione"
             },
             {
-              "value": "TABELA_UNICA_JT_DIARIO",
-              "texto": "Tabela Única JT Diário"
+              "value": "TABELA_UNICA",
+              "texto": "Tabela Única de Atualização e Conversão de Débitos Trabalhistas"
+            },
+            {
+              "value": "DEVEDOR_FAZENDA_PUBLICA",
+              "texto": "Devedor Fazenda Pública"
+            },
+            {
+              "value": "REPETICAO_INDEBITO_TRIBUTARIO",
+              "texto": "Repetição de Indébito Tributário"
             },
             {
               "value": "TABELA_UNICA_JT_MENSAL",
-              "texto": "Tabela Única JT Mensal"
+              "texto": "Tabela JT Mensal"
+            },
+            {
+              "value": "TABELA_UNICA_JT_DIARIO",
+              "texto": "Tabela JT Diária"
             },
             {
               "value": "TR",
@@ -3929,9 +3941,26 @@
             },
             {
               "value": "IPCA_E_TR",
-              "texto": "IPCA-E / TR"
+              "texto": "IPCA-E/TR"
+            },
+            {
+              "value": "SELIC_RECEITA",
+              "texto": "SELIC (Receita Federal)"
+            },
+            {
+              "value": "SELIC_SIMPLES",
+              "texto": "SELIC Simples"
+            },
+            {
+              "value": "SELIC_COMPOSTA",
+              "texto": "SELIC Composta"
+            },
+            {
+              "value": "SEM_CORRECAO",
+              "texto": "Sem Correção"
             }
-          ]
+          ],
+          "_nota": "Confirmado visualmente v2.15.1 TRT7 (fotos user 17/04/2026). Values são PROVISÓRIOS — validar via re-execução dom_auditor."
         },
         {
           "tipo": "checkbox",
@@ -3948,7 +3977,71 @@
           "opcoes": [
             {
               "value": "",
-              "texto": "(mesma lista de índices)"
+              "texto": "Selecione"
+            },
+            {
+              "value": "TABELA_UNICA",
+              "texto": "Tabela Única de Atualização e Conversão de Débitos Trabalhistas"
+            },
+            {
+              "value": "DEVEDOR_FAZENDA_PUBLICA",
+              "texto": "Devedor Fazenda Pública"
+            },
+            {
+              "value": "REPETICAO_INDEBITO_TRIBUTARIO",
+              "texto": "Repetição de Indébito Tributário"
+            },
+            {
+              "value": "TABELA_UNICA_JT_MENSAL",
+              "texto": "Tabela JT Mensal"
+            },
+            {
+              "value": "TABELA_UNICA_JT_DIARIO",
+              "texto": "Tabela JT Diária"
+            },
+            {
+              "value": "TR",
+              "texto": "TR"
+            },
+            {
+              "value": "IGP_M",
+              "texto": "IGP-M"
+            },
+            {
+              "value": "INPC",
+              "texto": "INPC"
+            },
+            {
+              "value": "IPC",
+              "texto": "IPC"
+            },
+            {
+              "value": "IPCA",
+              "texto": "IPCA"
+            },
+            {
+              "value": "IPCA_E",
+              "texto": "IPCA-E"
+            },
+            {
+              "value": "IPCA_E_TR",
+              "texto": "IPCA-E/TR"
+            },
+            {
+              "value": "SELIC_RECEITA",
+              "texto": "SELIC (Receita Federal)"
+            },
+            {
+              "value": "SELIC_SIMPLES",
+              "texto": "SELIC Simples"
+            },
+            {
+              "value": "SELIC_COMPOSTA",
+              "texto": "SELIC Composta"
+            },
+            {
+              "value": "SEM_CORRECAO",
+              "texto": "Sem Correção"
             }
           ]
         },
@@ -3973,17 +4066,58 @@
           "opcoes": [
             {
               "value": "PADRAO",
-              "texto": "Padrão (0,5% até 26/02/87 + 1% cap. até 03/03/91 + 1% simples)"
+              "texto": "Juros Padrão"
+            },
+            {
+              "value": "CADERNETA_POUPANCA",
+              "texto": "Juros Caderneta de Poupança"
             },
             {
               "value": "FAZENDA_PUBLICA",
-              "texto": "Fazenda Pública (0,5% limitado 70% SELIC)"
+              "texto": "Juros Fazenda Pública"
             },
             {
-              "value": "SELIC",
-              "texto": "Taxa SELIC"
+              "value": "SIMPLES_0_5_MES",
+              "texto": "Juros Simples 0,5% a.m."
+            },
+            {
+              "value": "SIMPLES_1_MES",
+              "texto": "Juros Simples 1,0% a.m."
+            },
+            {
+              "value": "SIMPLES_0_0333333_DIA",
+              "texto": "Juros Simples 0,0333333% a.d."
+            },
+            {
+              "value": "SELIC_RECEITA",
+              "texto": "SELIC (Receita Federal)"
+            },
+            {
+              "value": "SELIC_SIMPLES",
+              "texto": "SELIC Simples"
+            },
+            {
+              "value": "SELIC_COMPOSTA",
+              "texto": "SELIC Composta"
+            },
+            {
+              "value": "TRD_SIMPLES",
+              "texto": "TRD Juros Simples"
+            },
+            {
+              "value": "TRD_COMPOSTOS",
+              "texto": "TRD Juros Compostos"
+            },
+            {
+              "value": "TAXA_LEGAL",
+              "texto": "Taxa Legal"
+            },
+            {
+              "value": "SEM_JUROS",
+              "texto": "Sem Juros"
             }
-          ]
+          ],
+          "_nota": "Confirmado visualmente v2.15.1 TRT7 (fotos user 17/04/2026). Values PROVISÓRIOS."
         },
         {
           "tipo": "input",
