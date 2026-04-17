@@ -725,8 +725,9 @@ class SidebarMenu:
     PREVIDENCIA_PRIVADA = "li#li_calculo_previdencia_privada a"
 
     # Operações finais
-    LIQUIDAR = "li#li_calculo_liquidar a"
-    EXPORTAR = "li#li_calculo_exportar a"
+    OPERACOES = "li#li_calculo_operacoes a, li#li_operacoes a"
+    LIQUIDAR = "li#li_calculo_liquidar a, li#li_operacoes_liquidar a"
+    EXPORTAR = "li#li_calculo_exportar a, li#li_operacoes_exportar a"
 
     # Tabelas e relatórios
     RELATORIO_CONSOLIDADO = "li#li_processo_relatorio a"
