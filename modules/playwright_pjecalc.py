@@ -10573,23 +10573,12 @@ def iniciar_e_preencher(
             if agente._limpar_calculo_via_ui():
                 cb("✓ Cálculos limpos via interface (~2s)")
             else:
-                # Nível 3 (último recurso): parar Tomcat + substituir H2 + reiniciar
-                cb("⚠ Limpeza via interface falhou — reiniciando Tomcat (último recurso)…")
-                try:
-                    agente.fechar()
-                except Exception:
-                    pass
-                _parar_tomcat()
-                limpar_h2_database(pjecalc_dir, log_cb=cb)
-                cb("Reiniciando Tomcat…")
-                iniciar_pjecalc(pjecalc_dir, log_cb=cb)
-                cb("PJE-Calc disponível após restart.")
-                # Re-abrir browser após restart
-                agente = PJECalcPlaywright(log_cb=cb, exec_dir=exec_dir)
-                if _agente_ref is not None:
-                    _agente_ref.clear()
-                    _agente_ref.append(agente)
-                agente.iniciar_browser(headless=headless)
+                # Limpeza falhou — prosseguir sem reiniciar Tomcat.
+                # Restart desperdiça 3-5 min e tipicamente não resolve (os cálculos
+                # residuais persistem no H2/volume). O novo cálculo será criado ao
+                # lado dos antigos sem causar conflito; a proteção contra contaminação
+                # é feita por _verificar_calculo_correto() durante a liquidação.
+                cb("⚠ Limpeza via interface falhou — prosseguindo sem limpeza (cálculos antigos permanecerão nos Recentes)")
 
         agente.preencher_calculo(dados, verbas_mapeadas, parametrizacao=parametrizacao)
     except Exception as exc:
