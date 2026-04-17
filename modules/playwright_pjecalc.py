@@ -9814,34 +9814,84 @@ class PJECalcPlaywright:
         self._log("  ✓ Liquidação AJAX concluída — navegando para Exportação…")
 
         # ── Passo 2: Exportação → capturar .PJC ──────────────────────────────────
-        # DESCOBERTA CRÍTICA (análise de ApresentadorExportacao.class):
-        # - @Scope(ScopeType.SESSION), bean name "apresentadorExportacao"
-        # - Método iniciar() está anotado com @Menu(OPERACOES_EXPORTAR)
-        # - iniciar() chama servicoDeCalculo.obterCalculoAberto() +
-        #   Exportador.gerarNomeDoArquivo(calculo) → seta o campo `nome`
-        # - iniciar() é chamado APENAS via o menu lateral (gerenciadorDeMenus)
-        # - Goto direto para exportacao.jsf NÃO dispara iniciar() → nome="" →
-        #   exportar() falha silenciosamente e linkDownloadArquivo nunca aparece.
+        # DIAGNÓSTICO DEFINITIVO via decompilação do bytecode (abr/2026):
         #
-        # ⚠ BUG DIAGNOSTICADO (abr/2026): quando a limpeza de calculos antigos
-        #   falha, obterCalculoAberto() pode retornar um calc RESIDUAL (id=71
-        #   do .h2.db.template), não o que acabamos de liquidar. Resultado:
-        #   o .PJC exportado contém dados do calc errado.
+        # ApresentadorCalculo.abrirCalculo(Calculo) tem GUARD CLAUSE:
+        #     if (!servicoDeCalculo.isCalculoAberto()) {
+        #         servicoDeCalculo.abrirCalculo(novoCalc);  // SEM ELSE
+        #     }
+        #     return alterar();
         #
-        # NOVA DESCOBERTA: o calc recém-criado NÃO aparece em "Recentes" (só
-        # entra lá após fechar/salvar a conversação). Então re-abrir via
-        # Recentes falha. A conversação Seam ATIVA é a única referência viva
-        # para o calc em edição.
+        # Se já há calc aberto em session, `abrirCalculo(novoCalc)` é IGNORADO.
+        # `servicoDeCalculo` é @Scope(SESSION), @AutoCreate — o campo
+        # `calculoAberto` persiste entre conversações e sobrevive a re-attach.
         #
-        # NOVA PROTEÇÃO: preservar a conversação ativa até o final. Navegar
-        # para exportacao.jsf USANDO o conversationId atual (que contém o
-        # calculoAberto correto no Seam), em vez de clicar o menu sidebar
-        # que cria uma NOVA conversação e perde a referência.
+        # SOLUÇÃO: antes de Exportar, forçar SESSION_CLEAN via retorno à
+        # principal.jsf. pages.xml linhas 43-46 define:
+        #     <rule if-outcome="principal">
+        #         <raise-event type="SESSION_CLEAN"/>
+        #         <redirect view-id="/pages/principal.xhtml"/>
+        #     </rule>
+        # O evento SESSION_CLEAN é observado por ServicoDeCalculo, zerando
+        # `calculoAberto`. Depois reabrir o calc alvo via duplo-click em
+        # Recentes → `isCalculoAberto()` agora é false → `abrirCalculo(alvo)`
+        # EXECUTA → `calculoAberto` = alvo correto → Export gera .PJC certo.
         _conv_id_maria = self._calculo_conversation_id
-        self._log(
-            f"  🛡 Guard pre-export: preservando conversação Seam ativa "
-            f"(conversationId={_conv_id_maria}) — calc em edição não existe em Recentes."
-        )
+        _proc_alvo = (self._dados or {}).get("processo", {}).get("numero", "")
+
+        self._log(f"  🧹 PRE-EXPORT: limpando session bean (calculoAberto) via SESSION_CLEAN…")
+        try:
+            # 1. Navegar para principal.jsf — dispara SESSION_CLEAN no pages.xml
+            _principal_url = f"{self.PJECALC_BASE}/pages/principal.jsf"
+            self._page.goto(_principal_url, wait_until="domcontentloaded", timeout=15000)
+            self._aguardar_ajax(timeout=8000)
+            self._page.wait_for_timeout(1500)
+            self._log(f"  ✓ SESSION_CLEAN disparado (principal.jsf carregado)")
+
+            # 2. Localizar o calc alvo no listbox "Cálculos Recentes"
+            _listbox = self._page.locator(
+                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+            )
+            if _listbox.count() > 0:
+                _options = _listbox.first.locator("option")
+                _n_opts = _options.count()
+                _proc_clean = _proc_alvo.replace(".", "").replace("-", "").replace("/", "")
+                _found_idx = None
+                for _idx in range(_n_opts):
+                    _opt_text = (_options.nth(_idx).text_content() or "")
+                    _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
+                    if _proc_clean and _proc_clean in _opt_clean:
+                        _found_idx = _idx
+                        break
+
+                if _found_idx is not None:
+                    _opt_el = _options.nth(_found_idx)
+                    _opt_el.click()
+                    self._page.wait_for_timeout(300)
+                    _opt_el.dblclick()
+                    self._aguardar_ajax(timeout=20000)
+                    self._page.wait_for_timeout(2000)
+                    # Capturar novo conversationId
+                    import re as _re_abr
+                    _m_new = _re_abr.search(r"conversationId=(\d+)", self._page.url)
+                    if _m_new:
+                        _conv_id_maria = _m_new.group(1)
+                        self._calculo_conversation_id = _conv_id_maria
+                        self._capturar_base_calculo()
+                    self._log(
+                        f"  ✓ Calc alvo reaberto após SESSION_CLEAN — "
+                        f"calculoAberto agora é o correto (conv={_conv_id_maria})"
+                    )
+                else:
+                    self._log(
+                        f"  ⚠ Calc '{_proc_alvo}' não encontrado nos Recentes "
+                        f"(listagem tem {_n_opts} itens). Post-export validator vai "
+                        f"detectar se export pegar calc errado."
+                    )
+            else:
+                self._log(f"  ⚠ Listbox 'Cálculos Recentes' não encontrado — prosseguindo.")
+        except Exception as _pre_err:
+            self._log(f"  ⚠ PRE-EXPORT cleanup falhou: {_pre_err} — prosseguindo mesmo assim.")
 
         _exportou = False
 
