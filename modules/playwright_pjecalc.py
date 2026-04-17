@@ -4236,15 +4236,18 @@ class PJECalcPlaywright:
         # Marcar checkboxes
         # Prioridade do nome para matching Expresso:
         # 1) estrategia_preenchimento.expresso_base (nome exato do checkbox Expresso)
-        # 2) nome_sentenca (editado pelo usuário na prévia)
-        # 3) nome_pjecalc (estático da tabela VERBAS_PREDEFINIDAS)
+        # 2) nome_pjecalc (nome canônico da tabela Expresso, setado pela classification)
+        # 3) nome_sentenca (fallback — só quando não houve mapping)
+        # NOTA: nome_pjecalc ANTES de nome_sentenca, pois a classification fez o
+        # mapeamento por proximidade semântica para a verba canônica do Expresso.
+        # Usar nome_sentenca primeiro (nome longo da sentença) derrubaria o Expresso.
         _marcadas: list[str] = []
         for v in predefinidas:
             _estr = v.get("estrategia_preenchimento", {}) or {}
             nome = (
                 _estr.get("expresso_base")
-                or v.get("nome_sentenca")
                 or v.get("nome_pjecalc")
+                or v.get("nome_sentenca")
                 or ""
             )
             if not nome:
@@ -10414,6 +10417,25 @@ class PJECalcPlaywright:
         _progress(4)
         self.fase_verbas(verbas_mapeadas)
         self._screenshot_fase("05_verbas")
+
+        # Abort guard: se nenhuma verba principal foi marcada e existiam principais
+        # a lançar, ABORTAR com instrução clara ao usuário. Prosseguir geraria um
+        # .PJC inútil (sem as verbas condenatórias principais).
+        _principais_esperadas = [
+            v for v in (verbas_mapeadas.get("predefinidas", []) + verbas_mapeadas.get("personalizadas", []))
+            if (v.get("tipo") or "Principal") == "Principal"
+        ]
+        _principais_ok = len(self._verbas_expresso_ok)
+        if _principais_esperadas and _principais_ok == 0:
+            _nomes = [v.get("nome_pjecalc") or v.get("nome_sentenca") or "?" for v in _principais_esperadas]
+            raise RuntimeError(
+                "AUTOMAÇÃO ABORTADA: nenhuma verba principal foi lançada. "
+                f"Esperado: {_nomes}. "
+                "Prosseguir geraria um .PJC incompleto/incorreto. "
+                "Volte à prévia, ajuste o 'Plano de Preenchimento' das verbas principais "
+                "(use nomes compatíveis com as verbas Expresso do PJE-Calc, ex: 'HORAS EXTRAS 50%') "
+                "e reinicie a automação."
+            )
 
         # Recuperar de erros pós-verbas (NPE em verba-calculo.jsf é comum)
         try:
