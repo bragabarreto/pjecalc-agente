@@ -86,14 +86,6 @@ class ParametrosCalculo:
     DATA_ADMISSAO = "[id$='dataAdmissaoInputDate']"
     DATA_DEMISSAO = "[id$='dataDemissaoInputDate']"
     DATA_AJUIZAMENTO = "[id$='dataAjuizamentoInputDate']"
-    DATA_CITACAO = "[id$='dataCitacaoInputDate']"
-    DATA_DISTRIBUICAO = "[id$='dataDistribuicaoInputDate']"
-    DATA_PRESCRICAO = "[id$='dataPrescricaoInputDate']"
-
-    # Tipo de rescisao
-    TIPO_RESCISAO = "[id$='tipoRescisao']"  # radio: SEM_JUSTA_CAUSA, COM_JUSTA_CAUSA, etc.
-    MOTIVO_RESCISAO = "[id$='motivoRescisao']"
-
     # Aviso previo — DOM confirmados
     AVISO_PREVIO = "select[id$='apuracaoPrazoDoAvisoPrevio']"  # Não apurar/Calculado/Informado
     AVISO_PREVIO_DIAS = "[id$='diasAvisoPrevio']"
@@ -128,18 +120,8 @@ class ParametrosCalculo:
     # Comentarios
     COMENTARIOS = "textarea[id$='comentarios']"
 
-    # Regime de trabalho (manual seção 5.2)
-    REGIME_TRABALHO = "select[id$='tipoDaBaseTabelada'], select[id$='regimeTrabalho']"
-    # Remuneracoes (manual seção 5.2)
-    MAIOR_REMUNERACAO = "[id$='maiorRemuneracao']"
-    ULTIMA_REMUNERACAO = "[id$='ultimaRemuneracao']"
-    # Datas de limite do calculo (manual seção 5.2)
-    DATA_INICIO_CALCULO = "[id$='dataInicioCalculo'], [id*='dataInicioInputDate']"
-    DATA_FIM_CALCULO = "[id$='dataFimCalculo'], [id*='dataFimInputDate']"
-
-    # Checkboxes (manual seção 5.4)
-    SABADO_DIA_UTIL = "input[type='checkbox'][id$='sabadoDiaUtil']"
-    COMENTARIOS = "textarea[id$='comentarios'], [id$='comentarios']"
+    # Data fim calculo — DOM confirmado
+    DATA_FIM_CALCULO = "[id$='dataTerminoCalculoInputDate']"
 
     SALVAR = "[id$='salvar']"
 
@@ -173,7 +155,7 @@ class HistoricoSalarial:
     NOME = "[id$='nome']"
     COMPETENCIA_INICIAL = "[id*='competenciaInicialInputDate'], [id*='competenciaInicial']"
     COMPETENCIA_FINAL = "[id*='competenciaFinalInputDate'], [id*='competenciaFinal']"
-    TIPO_VARIACAO = "[id$='tipoVariacao']"  # select
+    TIPO = "input[type='radio'][id$='tipo']"  # radio: FIXA / VARIAVEL
     TIPO_VALOR = "[id$='tipoValor']"  # select/radio
     VALOR_PARA = "[id$='valorPara'], [id$='valorParaBaseDeCalculo']"
 
@@ -228,7 +210,7 @@ class Faltas:
 
 class CartaoPonto:
     """Campos do Cartao de Ponto"""
-    JSF = "calculo/apuracao-cartaodeponto.xhtml"
+    JSF = "calculo/apuracao-cartaodeponto.jsf"
 
     # Tipo de apuracao
     TIPO_APURACAO_HORAS_EXTRAS = "[id$='tipoApuracaoHorasExtras']"  # radio HST/HJD/APH/NAP
@@ -406,7 +388,7 @@ class VerbaOcorrencia:
 
 class FGTS:
     """Campos da pagina FGTS"""
-    JSF = "fgts/fgts.jsf"
+    JSF = "calculo/fgts.jsf"
 
     # Destino: PAGAR ou DEPOSITAR
     TIPO_DE_VERBA = "[id$='tipoDeVerba']"  # radio
@@ -418,9 +400,8 @@ class FGTS:
     # Incidencia do FGTS (select)
     INCIDENCIA_DO_FGTS = "select[id$='incidenciaDoFgts']"
 
-    # Multa rescisoria
-    MULTA = "input[type='checkbox'][id$='multa']"  # checkbox master (ativa campos dependentes)
-    TIPO_DO_VALOR_DA_MULTA = "[id$='tipoDoValorDaMulta']"  # radio CALCULADA/INFORMADA
+    # Multa rescisoria — SELECT com 3 opções (NAO_APURAR / CALCULADA / INFORMADA)
+    MULTA = "select[id$='multa']"  # select (ativa campos dependentes conforme seleção)
     MULTA_DO_FGTS = "[id$='multaDoFgts']"  # radio VINTE_POR_CENTO / QUARENTA_POR_CENTO
     MULTA_DO_ARTIGO_467 = "input[type='checkbox'][id$='multaDoArtigo467']"  # checkbox
     MULTA_10 = "input[type='checkbox'][id$='multa10']"  # checkbox
@@ -447,19 +428,13 @@ class FGTS:
 
 class ContribuicaoSocial:
     """Campos de Contribuicao Social (INSS)"""
-    JSF = "inss/inss.jsf"
+    JSF = "calculo/inss.jsf"
 
     # Checkboxes principais
-    APURAR_SEGURADO_SALARIOS_DEVIDOS = (
-        "input[type='checkbox'][id$='apurarSeguradoSaláriosDevidos'], "
-        "input[type='checkbox'][id$='apurarSeguradoSalariosDevidos']"
-    )
+    APURAR_SEGURADO_SALARIOS_DEVIDOS = "input[type='checkbox'][id$='apurarSeguradoSalariosDevidos']"
     COBRAR_DO_RECLAMANTE = "input[type='checkbox'][id$='cobrarDoReclamante']"
     COM_CORRECAO_TRABALHISTA = "input[type='checkbox'][id$='comCorrecaoTrabalhista']"
-    APURAR_SOBRE_SALARIOS_PAGOS = (
-        "input[type='checkbox'][id$='apurarSobreSaláriosPagos'], "
-        "input[type='checkbox'][id$='apurarSobreSalariosPagos']"
-    )
+    APURAR_SOBRE_SALARIOS_PAGOS = "input[type='checkbox'][id$='apurarSobreSalariosPagos']"
     LEI_11941 = "input[type='checkbox'][id$='lei11941']"
 
     # Parametros das Ocorrencias
@@ -481,7 +456,7 @@ class ContribuicaoSocial:
 
 class ImpostoRenda:
     """Campos de Imposto de Renda"""
-    JSF = "irpf/irpf.jsf"
+    JSF = "calculo/irpf.jsf"
 
     # Checkbox master (manual seção 17)
     APURAR = "input[type='checkbox'][id$='apurar'], input[type='checkbox'][id$='apurarIR']"
@@ -514,7 +489,7 @@ class ImpostoRenda:
 
 class Honorarios:
     """Campos de Honorarios"""
-    JSF = "honorarios/honorarios.jsf"
+    JSF = "calculo/honorarios/honorarios.jsf"
 
     # Formulario (apos clicar Novo)
     TIPO_DE_DEVEDOR = "select[id$='tipoDeDevedor'], select[id$='devedor'], select[id$='parteDevedora']"
@@ -548,7 +523,7 @@ class Honorarios:
 
 class MultasIndenizacoes:
     """Campos da pagina Multas e Indenizacoes"""
-    JSF = "multas-indenizacoes.jsf"
+    JSF = "calculo/multas-indenizacoes.jsf"
 
     # Formulario (apos clicar Novo/Incluir)
     DESCRICAO = "[id$='descricao']"
@@ -567,7 +542,7 @@ class MultasIndenizacoes:
 
 class SalarioFamilia:
     """Campos da pagina Salario-Familia"""
-    JSF = "salario-familia.jsf"
+    JSF = "calculo/salario-familia.jsf"
 
     APURAR = "input[type='checkbox'][id$='apurar']"
     COMPOR_PRINCIPAL = "[id$='comporPrincipal']"  # radio SIM/NAO
@@ -583,7 +558,7 @@ class SalarioFamilia:
 
 class SeguroDesemprego:
     """Campos da pagina Seguro-Desemprego"""
-    JSF = "seguro-desemprego.jsf"
+    JSF = "calculo/seguro-desemprego.jsf"
 
     APURAR = "input[type='checkbox'][id$='apurar']"
     TIPO_SOLICITACAO = "[id$='tipoSolicitacao']"  # radio PRIMEIRA/SEGUNDA/DEMAIS
@@ -600,7 +575,7 @@ class SeguroDesemprego:
 
 class PrevidenciaPrivada:
     """Campos da pagina Previdencia Privada"""
-    JSF = "previdencia-privada.jsf"
+    JSF = "calculo/previdencia-privada.jsf"
 
     APURAR = "input[type='checkbox'][id$='apurar']"
     ALIQUOTA = "[id$='aliquota']"
@@ -614,7 +589,7 @@ class PrevidenciaPrivada:
 
 class PensaoAlimenticia:
     """Campos da pagina Pensao Alimenticia"""
-    JSF = "pensao-alimenticia.jsf"
+    JSF = "calculo/pensao-alimenticia.jsf"
 
     APURAR = "input[type='checkbox'][id$='apurar']"
     ALIQUOTA = "[id$='aliquota']"
@@ -629,7 +604,7 @@ class PensaoAlimenticia:
 
 class CorrecaoJurosMulta:
     """Campos de Correcao Monetaria, Juros de Mora e Multa"""
-    JSF = "correcao-juros.jsf"
+    JSF = "calculo/correcao-juros.jsf"
 
     # Indice de correcao
     INDICE_CORRECAO = "select[id$='indiceCorrecao'], select[id$='indiceTrabalhista']"
@@ -663,10 +638,10 @@ class CustasJudiciais:
     Duas abas: Custas Devidas e Custas Recolhidas.
     Manual seção 20: salvar após preencher AMBAS as abas.
     """
-    JSF = "custas.jsf"
+    JSF = "calculo/custas-judiciais.jsf"
 
     # Aba Custas Devidas
-    BASE_CUSTAS = "select[id$='baseCustas'], select[id$='baseParaApuracao']"
+    BASE_CUSTAS = "select[id$='baseCustas']"  # BRUTO_RECLAMANTE / BRUTO_MAIS_DEBITOS
     CUSTAS_RECLAMADO_CONHECIMENTO = "[id$='custasReclamadoConhecimento']"    # radio
     CUSTAS_RECLAMADO_LIQUIDACAO = "[id$='custasReclamadoLiquidacao']"        # radio
     CUSTAS_RECLAMANTE_CONHECIMENTO = "[id$='custasReclamanteConhecimento']"  # radio
@@ -717,30 +692,45 @@ class Exportacao:
 # ============================================================================
 
 class SidebarMenu:
-    """Seletores do menu lateral do PJE-Calc"""
+    """Seletores do menu lateral do PJE-Calc.
 
-    DADOS_DO_CALCULO = "a[id*='menuCalculo']"
-    HISTORICO_SALARIAL = "a[id*='menuHistoricoSalarial']"
-    VERBAS = "a[id*='menuVerbas']"
-    FGTS = "a[id*='menuFGTS']"
-    HONORARIOS = "a[id*='menuHonorarios']"
-    LIQUIDAR = "a[id*='menuLiquidar']"
-    FALTAS = "a[id*='menuFaltas']"
-    FERIAS = "a[id*='menuFerias']"
-    NOVO = "a[id*='menuNovo']"
-    OPERACOES = "a[id*='menuOperacoes']"
-    IMPRIMIR = "a[id*='menuImprimir']"
-    CONTRIBUICAO_SOCIAL = "a[id*='menuContribuicaoSocial']"
-    IMPOSTO_RENDA = "a[id*='menuImpostoRenda']"
-    MULTAS = "a[id*='menuMultas']"
-    CARTAO_DE_PONTO = "a[id*='menuCartao'], a[id*='CartaoPonto'], a[id*='cartaoDePonto']"
-    SALARIO_FAMILIA = "a[id*='menuSalarioFamilia']"
-    SEGURO_DESEMPREGO = "a[id*='menuSeguroDesemprego']"
-    PENSAO_ALIMENTICIA = "a[id*='menuPensaoAlimenticia']"
-    PREVIDENCIA_PRIVADA = "a[id*='menuPrevidenciaPrivada']"
-    CUSTAS_JUDICIAIS = "a[id*='menuCustas'], a[id*='menuCustasJudiciais']"
-    CORRECAO_JUROS = "a[id*='menuCorrecao'], a[id*='menuCorrecaoJuros']"
-    EXPORTAR = "a[id*='menuExport']"
+    O menu usa <li id='li_calculo_xxx'><a>...</a></li>.
+    Seletores usam li_id confirmados por DOM Auditor.
+    """
+
+    # Tela inicial e operações gerais
+    TELA_INICIAL = "li#li_tela_inicial a"
+    NOVO = "li#li_calculo_novo a"
+    CALCULO_EXTERNO = "li#li_calculo_externo_novo a"
+    BUSCAR = "li#li_calculo_buscar a"
+    IMPORTAR = "li#li_calculo_importar a"
+
+    # Páginas do cálculo (visíveis após salvar)
+    DADOS_DO_CALCULO = "li#li_calculo_dados a"
+    HISTORICO_SALARIAL = "li#li_calculo_historico_salarial a"
+    FERIAS = "li#li_calculo_ferias a"
+    FALTAS = "li#li_calculo_faltas a"
+    CARTAO_DE_PONTO = "li#li_calculo_cartao_ponto a"
+    VERBAS = "li#li_calculo_verbas a"
+    FGTS = "li#li_calculo_fgts a"
+    CONTRIBUICAO_SOCIAL = "li#li_calculo_contribuicao_social a"
+    IMPOSTO_RENDA = "li#li_calculo_imposto_renda a"
+    HONORARIOS = "li#li_calculo_honorarios a"
+    MULTAS = "li#li_calculo_multas a"
+    CORRECAO_JUROS = "li#li_calculo_correcao_juros a"
+    CUSTAS_JUDICIAIS = "li#li_calculo_custas a"
+    SALARIO_FAMILIA = "li#li_calculo_salario_familia a"
+    SEGURO_DESEMPREGO = "li#li_calculo_seguro_desemprego a"
+    PENSAO_ALIMENTICIA = "li#li_calculo_pensao_alimenticia a"
+    PREVIDENCIA_PRIVADA = "li#li_calculo_previdencia_privada a"
+
+    # Operações finais
+    LIQUIDAR = "li#li_calculo_liquidar a"
+    EXPORTAR = "li#li_calculo_exportar a"
+
+    # Tabelas e relatórios
+    RELATORIO_CONSOLIDADO = "li#li_processo_relatorio a"
+    IMPRIMIR = "li#li_calculo_imprimir a"
 
 
 # ============================================================================

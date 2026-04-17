@@ -238,9 +238,12 @@ Se não mencionado → faltas = []
 Se a sentença mencionar períodos de férias não gozadas ou situações específicas, extrair:
   ferias: [
     {{"situacao": "Vencidas", "periodo_inicio": "DD/MM/AAAA", "periodo_fim": "DD/MM/AAAA",
-     "abono": false, "dobra": false}}
+     "abono": false, "dobra": false, "gozo_periodos": []}}
   ]
-Situações: "Vencidas" | "Proporcionais" | "Gozadas"
+Situações: "Vencidas" | "Proporcionais" | "Gozadas" | "GOZADAS_PARCIALMENTE"
+- gozo_periodos: lista de até 3 períodos de gozo (somente quando situacao=Gozadas ou GOZADAS_PARCIALMENTE).
+  Cada período: {{"inicio": "DD/MM/AAAA", "fim": "DD/MM/AAAA"}}
+  Extrair as datas em que as férias foram efetivamente usufruídas, se informadas na sentença.
 Se não mencionado → ferias = []
 
 **AVISO PRÉVIO** → preenche "aviso_previo":
@@ -356,12 +359,12 @@ CASOS MAIS COMUNS (em ordem de prevalência jurisprudencial):
    3 fases distintas (pré-judicial / ajuizamento-29.08.2024 / pós-30.08.2024),
    "art. 406 do CC", "SELIC - IPCA"
      lei_14905 = true
-     indice_correcao = "IPCAE"
+     indice_correcao = "IPCA_E"
      indice_correcao_pos = "IPCA"
      taxa_juros = "TAXA_LEGAL"
      data_taxa_legal = "30/08/2024"
    ⚠️ PREENCHIMENTO NO PJe-Calc (a automação deve fazer combinações):
-     CORREÇÃO: IPCAE até 29/08/2024 COMBINADO com IPCA a partir de 30/08/2024.
+     CORREÇÃO: IPCA_E até 29/08/2024 COMBINADO com IPCA a partir de 30/08/2024.
        Se admissão posterior a 30/08/2024 → usar somente IPCA.
      JUROS (depende da data de ajuizamento):
        Cenário A — Ajuizamento ANTES de 30/08/2024:
@@ -387,20 +390,20 @@ CASOS MAIS COMUNS (em ordem de prevalência jurisprudencial):
 4. IPCA-E + juros legais de 1% ao mês ("IPCA-E mais juros de 1% ao mês", "IPCA-E + juros
    moratórios de 1% ao mês"):
      lei_14905 = false
-     indice_correcao = "IPCAE"
-     taxa_juros = "JUROS_PADRAO"
+     indice_correcao = "IPCA_E"
+     taxa_juros = "PADRAO"
 
 5. TR + juros de 1% ao mês ("TR", "TRCT", "correção pela TR mais 1% ao mês"):
      lei_14905 = false
      indice_correcao = "TR"
-     taxa_juros = "JUROS_PADRAO"
+     taxa_juros = "PADRAO"
 
 6. IPCA-E sem especificação de juros:
      lei_14905 = false
-     indice_correcao = "IPCAE"
-     taxa_juros = "JUROS_PADRAO"  (padrão quando índice é IPCAE)
+     indice_correcao = "IPCA_E"
+     taxa_juros = "PADRAO"  (padrão quando índice é IPCA_E)
 
-NOTA: JUROS_PADRAO = Juros Padrão = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
+NOTA: PADRAO = Juros Padrão = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
       SELIC = SELIC (Receita Federal) = taxa SELIC acumulada (absorve correção + juros)
       TAXA_LEGAL = Taxa Legal = SELIC − IPCA (juros reais, Lei 14.905/2024, vigência 30/08/2024)
       IPCA = índice de correção pós-Lei 14.905 (substitui IPCA-E a partir de 30/08/2024)
@@ -416,6 +419,11 @@ NOTA: JUROS_PADRAO = Juros Padrão = 1% ao mês (juros legais trabalhistas — a
     "Verbas" = padrão (juros calculados verba a verba)
     "Credito Total" = apenas quando explicitamente mencionado "crédito total" ou "total da dívida"
 - correcao_juros.jam_fgts: true se a sentença mencionar "JAM" ou "juros sobre atraso de FGTS"
+- correcao_juros.acumular_indices: como acumular os índices de correção na liquidação:
+    "MES_SUBSEQUENTE" = a partir do mês seguinte ao vencimento (padrão para todas as parcelas)
+    "MES_VENCIMENTO" = a partir do mês do vencimento (todas as parcelas)
+    "MISTO" = subsequente para mensais, vencimento para anuais/rescisórias
+    null quando não mencionado (o PJe-Calc usará seu padrão)
 
 **CONTRIBUIÇÕES PREVIDENCIÁRIAS** → preenche "contribuicao_social":
 ⚠️ PJE-Calc usa checkboxes individuais — NÃO um campo "responsabilidade":
@@ -595,12 +603,13 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
   }},
   "correcao_juros": {{
     "lei_14905": "true | false (true quando Lei 14.905/2024 se aplica — habilita combinações de índices)",
-    "indice_correcao": "TUACDT | IPCAE | SELIC | TR | IPCA | IGPM | INPC | IPC | IPCAETR | SELIC_FAZENDA | SELIC_BACEN | TABELA_UNICA_JT_MENSAL | TABELA_UNICA_JT_DIARIO | SEM_CORRECAO | null",
+    "indice_correcao": "TABELA_UNICA_JT_DIARIO | TABELA_UNICA_JT_MENSAL | TR | IGP_M | INPC | IPC | IPCA | IPCA_E | IPCA_E_TR | null",
     "indice_correcao_pos": "IPCA | null (índice pós-30/08/2024; somente quando lei_14905=true)",
     "base_juros": "Verbas | Credito Total | null",
-    "taxa_juros": "TAXA_LEGAL | JUROS_PADRAO | SELIC | TRD_SIMPLES | TRD_COMPOSTOS | JUROS_UM_PORCENTO | JUROS_MEIO_PORCENTO | SELIC_FAZENDA | SELIC_BACEN | SEM_JUROS | null",
+    "taxa_juros": "PADRAO | FAZENDA_PUBLICA | SELIC | null",
     "data_taxa_legal": "DD/MM/AAAA | null (padrão 30/08/2024; somente quando taxa_juros=TAXA_LEGAL)",
     "jam_fgts": "true | false | null",
+    "acumular_indices": "MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO | null (como acumular correção: subsequente=mês seguinte ao vencimento, vencimento=mês do vencimento, misto=subsequente p/ mensais + vencimento p/ anuais)",
     "confianca": 0.95
   }},
   "contribuicao_social": {{
@@ -632,7 +641,8 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
   ],
   "ferias": [
     {{"situacao": "Vencidas | Proporcionais | Gozadas", "periodo_inicio": "DD/MM/AAAA",
-      "periodo_fim": "DD/MM/AAAA", "abono": false, "dobra": false}}
+      "periodo_fim": "DD/MM/AAAA", "abono": false, "dobra": false,
+      "gozo_periodos": [{{"inicio": "DD/MM/AAAA", "fim": "DD/MM/AAAA"}}]}}
   ],
   "custas_judiciais": {{
     "base": "Bruto Devido ao Reclamante | Bruto Devido ao Reclamante + Outros Débitos | null",
@@ -681,9 +691,66 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
     "periodo_cartao_fim": "DD/MM/AAAA | null",
     "confianca": 0.85
   }},
+  "salario_familia": {{
+    "apurar": "true | false (true se sentença deferir salário-família)",
+    "compor_principal": "SIM | NAO | null (se o salário-família compõe o principal para fins de cálculo)",
+    "competencia_inicio": "MM/AAAA | null (competência inicial para apuração)",
+    "competencia_fim": "MM/AAAA | null (competência final para apuração)",
+    "quantidade_filhos": "int | null (número de filhos menores de 14 anos ou inválidos)",
+    "remuneracao_mensal_pagos": "NENHUM | MAIOR_REMUNERACAO | HISTORICO | null (base para salários pagos)",
+    "remuneracao_mensal_devidos": "string | null (base para salários devidos — verbas selecionadas)",
+    "variacoes_filhos": [{{"competencia": "MM/AAAA", "quantidade": "int"}}]
+  }},
+  "seguro_desemprego": {{
+    "apurar": "true | false (true se sentença deferir indenização substitutiva do seguro-desemprego)",
+    "tipo_solicitacao": "PRIMEIRA | SEGUNDA | DEMAIS | null (qual solicitação do seguro-desemprego)",
+    "empregado_domestico": "true | false | null",
+    "compor_principal": "SIM | NAO | null",
+    "quantidade_parcelas": "int | null (número de parcelas devidas)"
+  }},
+  "pensao_alimenticia": {{
+    "apurar": "true | false (true se houver pensão alimentícia a deduzir do crédito)",
+    "aliquota": "float | null (percentual da pensão, ex: 0.30 para 30%)",
+    "incidir_sobre_juros": "true | false | null (se a pensão incide sobre juros de mora)"
+  }},
+  "previdencia_privada": {{
+    "apurar": "true | false (true se houver dedução de previdência privada)",
+    "aliquota": "float | null (percentual de contribuição, ex: 0.05 para 5%)"
+  }},
   "campos_ausentes": [],
   "alertas": []
 }}
+
+**SALÁRIO-FAMÍLIA** → preenche "salario_familia":
+- apurar: true se a sentença deferir salário-família ou mencionar "salário-família"
+- compor_principal: "SIM" se deve compor o crédito principal, "NAO" caso contrário
+- competencia_inicio: competência inicial para apuração (MM/AAAA)
+- competencia_fim: competência final para apuração (MM/AAAA)
+- quantidade_filhos: número de filhos menores de 14 anos ou inválidos
+- remuneracao_mensal_pagos: base para salários pagos: "NENHUM" | "MAIOR_REMUNERACAO" | "HISTORICO"
+- remuneracao_mensal_devidos: base para salários devidos (string, verbas selecionadas)
+- variacoes_filhos: lista de variações na quantidade de filhos por competência:
+    [{{"competencia": "MM/AAAA", "quantidade": int}}]
+    Usar quando o número de filhos muda ao longo do período contratual.
+
+**SEGURO-DESEMPREGO** → preenche "seguro_desemprego":
+- apurar: true se a sentença deferir indenização substitutiva do seguro-desemprego
+  Buscar: "indenização substitutiva", "seguro-desemprego", "guias SD", "não habilitação ao seguro"
+- tipo_solicitacao: PRIMEIRA, SEGUNDA ou DEMAIS (qual requerimento do seguro-desemprego)
+- empregado_domestico: true se empregado doméstico
+- compor_principal: "SIM" se compor o principal, "NAO" caso contrário
+- quantidade_parcelas: número de parcelas (3, 4 ou 5 conforme tempo de serviço e nº de solicitações)
+
+**PENSÃO ALIMENTÍCIA** → preenche "pensao_alimenticia":
+- apurar: true se houver pensão alimentícia a deduzir do crédito do reclamante
+  Buscar: "pensão alimentícia", "desconto de pensão", "alimentos"
+- aliquota: percentual da pensão (float, ex: 0.30 para 30%)
+- incidir_sobre_juros: true se a pensão incide sobre juros de mora
+
+**PREVIDÊNCIA PRIVADA** → preenche "previdencia_privada":
+- apurar: true se houver contribuição de previdência privada a deduzir
+  Buscar: "previdência complementar", "previdência privada", "fundo de pensão"
+- aliquota: percentual de contribuição (float, ex: 0.05 para 5%)
 
 REGRAS FINAIS:
 - campos_ausentes: listar APENAS campos OBRIGATÓRIOS ausentes:
@@ -964,12 +1031,12 @@ Caso 1 — ADC 58 + Lei 14.905/2024 (JURISPRUDÊNCIA MAJORITÁRIA ATUAL):
                3 fases distintas (pré-judicial / ajuizamento-29.08.2024 / pós-30.08.2024),
                "art. 406 do CC", "SELIC - IPCA"
   → lei_14905 = true
-    indice_correcao = "IPCAE"
+    indice_correcao = "IPCA_E"
     indice_correcao_pos = "IPCA"
     taxa_juros = "TAXA_LEGAL"
     data_taxa_legal = "30/08/2024"
   ⚠️ PREENCHIMENTO NO PJe-Calc exige COMBINAÇÕES de índices:
-    CORREÇÃO: IPCAE até 29/08/2024 COMBINADO COM IPCA a partir de 30/08/2024.
+    CORREÇÃO: IPCA_E até 29/08/2024 COMBINADO COM IPCA a partir de 30/08/2024.
       Se admissão > 30/08/2024 → usar somente IPCA (campo indice_correcao = null, indice_correcao_pos = "IPCA").
     JUROS (cenário depende da data de ajuizamento vs 30/08/2024):
       Cenário A — Ajuizamento ANTES de 30/08/2024:
@@ -992,16 +1059,16 @@ Caso 3 — Apenas SELIC:
 Caso 4 — IPCA-E + juros de 1% ao mês:
   Indicadores: "IPCA-E mais juros de 1% ao mês", "IPCA-E e juros moratórios de 1%",
                "IPCA-E + juros legais", "IPCA-E acrescido de 1% ao mês"
-  → lei_14905 = false | indice_correcao = "IPCAE" | taxa_juros = "JUROS_PADRAO"
+  → lei_14905 = false | indice_correcao = "IPCA_E" | taxa_juros = "PADRAO"
 
 Caso 5 — TR / TRCT + juros de 1% ao mês:
   Indicadores: "TR mais 1% ao mês", "TRCT", "correção pela TR e juros de 1%"
-  → lei_14905 = false | indice_correcao = "TR" | taxa_juros = "JUROS_PADRAO"
+  → lei_14905 = false | indice_correcao = "TR" | taxa_juros = "PADRAO"
 
 Caso 6 — IPCA-E sem especificação de juros:
-  → lei_14905 = false | indice_correcao = "IPCAE" | taxa_juros = "JUROS_PADRAO"
+  → lei_14905 = false | indice_correcao = "IPCA_E" | taxa_juros = "PADRAO"
 
-JUROS_PADRAO = Juros Padrão = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
+PADRAO = Juros Padrão = 1% ao mês (juros legais trabalhistas — art. 39 Lei 8.177/91)
 SELIC = SELIC (Receita Federal) = taxa SELIC acumulada (absorve correção + juros)
 TAXA_LEGAL = Taxa Legal = SELIC − IPCA (juros reais, Lei 14.905/2024, vigência 30/08/2024)
 IPCA = índice de correção pós-Lei 14.905 (substitui IPCA-E a partir de 30/08/2024)
@@ -1032,6 +1099,31 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
 - deducao_pensao_alimenticia: true se mencionar pensão alimentícia como dedução do IR
 - valor_pensao: float com o valor da pensão alimentícia se deducao_pensao_alimenticia=true
 - meses_tributaveis: número de meses tributáveis, se explicitado
+
+**SALÁRIO-FAMÍLIA** → preenche "salario_familia":
+- apurar: true se a sentença deferir salário-família
+- compor_principal: "SIM" se compõe o principal, "NAO" caso contrário
+- quantidade_filhos: número de filhos menores de 14 anos ou inválidos
+- remuneracao_mensal: remuneração mensal para enquadramento na faixa (float)
+
+**SEGURO-DESEMPREGO** → preenche "seguro_desemprego":
+- apurar: true se sentença deferir indenização substitutiva do seguro-desemprego
+  Buscar: "indenização substitutiva", "seguro-desemprego", "guias SD"
+- tipo_solicitacao: PRIMEIRA, SEGUNDA ou DEMAIS
+- empregado_domestico: true se empregado doméstico
+- compor_principal: "SIM" ou "NAO"
+- quantidade_parcelas: número de parcelas devidas (3, 4 ou 5)
+
+**PENSÃO ALIMENTÍCIA** → preenche "pensao_alimenticia":
+- apurar: true se houver pensão alimentícia a deduzir do crédito
+  Buscar: "pensão alimentícia", "desconto de pensão", "alimentos"
+- aliquota: percentual (float, ex: 0.30 para 30%)
+- incidir_sobre_juros: true se incide sobre juros de mora
+
+**PREVIDÊNCIA PRIVADA** → preenche "previdencia_privada":
+- apurar: true se houver previdência privada a deduzir
+  Buscar: "previdência complementar", "previdência privada", "fundo de pensão"
+- aliquota: percentual (float, ex: 0.05 para 5%)
 
 === SCHEMA JSON ESPERADO ===
 {{
@@ -1117,12 +1209,13 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
   }},
   "correcao_juros": {{
     "lei_14905": "true | false (true quando Lei 14.905/2024 se aplica)",
-    "indice_correcao": "TUACDT | IPCAE | SELIC | TR | IPCA | IGPM | INPC | IPC | IPCAETR | SELIC_FAZENDA | SELIC_BACEN | TABELA_UNICA_JT_MENSAL | TABELA_UNICA_JT_DIARIO | SEM_CORRECAO | null",
+    "indice_correcao": "TABELA_UNICA_JT_DIARIO | TABELA_UNICA_JT_MENSAL | TR | IGP_M | INPC | IPC | IPCA | IPCA_E | IPCA_E_TR | null",
     "indice_correcao_pos": "IPCA | null (somente quando lei_14905=true)",
     "base_juros": "Verbas | Credito Total | null",
-    "taxa_juros": "TAXA_LEGAL | JUROS_PADRAO | SELIC | TRD_SIMPLES | TRD_COMPOSTOS | JUROS_UM_PORCENTO | JUROS_MEIO_PORCENTO | SELIC_FAZENDA | SELIC_BACEN | SEM_JUROS | null",
+    "taxa_juros": "PADRAO | FAZENDA_PUBLICA | SELIC | null",
     "data_taxa_legal": "DD/MM/AAAA | null (padrão 30/08/2024; somente quando taxa_juros=TAXA_LEGAL)",
     "jam_fgts": "true | false | null",
+    "acumular_indices": "MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO | null",
     "confianca": 0.0-1.0
   }},
   "contribuicao_social": {{
@@ -1189,7 +1282,37 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     {{"nome": "Salário", "data_inicio": "DD/MM/AAAA", "data_fim": "DD/MM/AAAA", "valor": 0.00, "variavel": false, "incidencia_fgts": true, "incidencia_cs": true}}
   ],
   "faltas": [],
-  "ferias": [],
+  "ferias": [
+    {{"situacao": "Vencidas | Proporcionais | Gozadas", "periodo_inicio": "DD/MM/AAAA",
+      "periodo_fim": "DD/MM/AAAA", "abono": false, "dobra": false,
+      "gozo_periodos": [{{"inicio": "DD/MM/AAAA", "fim": "DD/MM/AAAA"}}]}}
+  ],
+  "salario_familia": {{
+    "apurar": "true | false",
+    "compor_principal": "SIM | NAO | null",
+    "competencia_inicio": "MM/AAAA | null",
+    "competencia_fim": "MM/AAAA | null",
+    "quantidade_filhos": "int | null",
+    "remuneracao_mensal_pagos": "NENHUM | MAIOR_REMUNERACAO | HISTORICO | null",
+    "remuneracao_mensal_devidos": "string | null",
+    "variacoes_filhos": [{{"competencia": "MM/AAAA", "quantidade": "int"}}]
+  }},
+  "seguro_desemprego": {{
+    "apurar": "true | false",
+    "tipo_solicitacao": "PRIMEIRA | SEGUNDA | DEMAIS | null",
+    "empregado_domestico": "true | false | null",
+    "compor_principal": "SIM | NAO | null",
+    "quantidade_parcelas": "int | null"
+  }},
+  "pensao_alimenticia": {{
+    "apurar": "true | false",
+    "aliquota": "float | null",
+    "incidir_sobre_juros": "true | false | null"
+  }},
+  "previdencia_privada": {{
+    "apurar": "true | false",
+    "aliquota": "float | null"
+  }},
   "campos_ausentes": ["campos OBRIGATÓRIOS ausentes — ver regra abaixo"],
   "alertas": ["avisos relevantes para o operador"]
 }}
@@ -1553,6 +1676,7 @@ _EXTRACTION_SCHEMA: dict = {
                 "taxa_juros":         {"type": ["string","null"]},
                 "data_taxa_legal":    {"type": ["string","null"]},
                 "jam_fgts":           {"type": ["boolean","null"]},
+                "acumular_indices":   {"type": ["string","null"]},
                 "confianca":          {"type": "number"},
             },
         },
@@ -1629,6 +1753,16 @@ _EXTRACTION_SCHEMA: dict = {
                     "periodo_fim":    {"type": "string"},
                     "abono":          {"type": "boolean"},
                     "dobra":          {"type": "boolean"},
+                    "gozo_periodos":  {
+                        "type": ["array","null"],
+                        "items": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {
+                                "inicio": {"type": ["string","null"]},
+                                "fim":    {"type": ["string","null"]},
+                            },
+                        },
+                    },
                 },
             },
         },
@@ -1655,6 +1789,54 @@ _EXTRACTION_SCHEMA: dict = {
                 "reclamante_conhecimento":  {"type": ["string","null"]},
                 "percentual":              {"type": ["number","null"]},
                 "devedor":                 {"type": ["string","null"]},
+            },
+        },
+        "salario_familia": {
+            "type": ["object","null"], "additionalProperties": False,
+            "properties": {
+                "apurar":                    {"type": ["boolean","null"]},
+                "compor_principal":          {"type": ["string","null"]},
+                "competencia_inicio":        {"type": ["string","null"]},
+                "competencia_fim":           {"type": ["string","null"]},
+                "quantidade_filhos":         {"type": ["integer","null"]},
+                "remuneracao_mensal":        {"type": ["number","null"]},
+                "remuneracao_mensal_pagos":  {"type": ["string","null"]},
+                "remuneracao_mensal_devidos": {"type": ["string","null"]},
+                "variacoes_filhos":          {
+                    "type": ["array","null"],
+                    "items": {
+                        "type": "object", "additionalProperties": False,
+                        "properties": {
+                            "competencia": {"type": ["string","null"]},
+                            "quantidade":  {"type": ["integer","null"]},
+                        },
+                    },
+                },
+            },
+        },
+        "seguro_desemprego": {
+            "type": ["object","null"], "additionalProperties": False,
+            "properties": {
+                "apurar":               {"type": ["boolean","null"]},
+                "tipo_solicitacao":     {"type": ["string","null"]},
+                "empregado_domestico":  {"type": ["boolean","null"]},
+                "compor_principal":     {"type": ["string","null"]},
+                "quantidade_parcelas":  {"type": ["integer","null"]},
+            },
+        },
+        "pensao_alimenticia": {
+            "type": ["object","null"], "additionalProperties": False,
+            "properties": {
+                "apurar":              {"type": ["boolean","null"]},
+                "aliquota":            {"type": ["number","null"]},
+                "incidir_sobre_juros": {"type": ["boolean","null"]},
+            },
+        },
+        "previdencia_privada": {
+            "type": ["object","null"], "additionalProperties": False,
+            "properties": {
+                "apurar":    {"type": ["boolean","null"]},
+                "aliquota":  {"type": ["number","null"]},
             },
         },
         "campos_ausentes": {"type": "array", "items": {"type": "string"}},
@@ -1979,7 +2161,7 @@ def _extrair_via_regex(texto: str) -> dict[str, Any]:
                                      "art. 406", "e-ed-rr-20407"]) or \
        (re.search(r"(?i)30[/.]08[/.]2024", texto) and "selic" in txt_lower):
         resultado["lei_14905"] = True
-        resultado["indice_correcao"] = "IPCAE"
+        resultado["indice_correcao"] = "IPCA_E"
         resultado["indice_correcao_pos"] = "IPCA"
         resultado["taxa_juros"] = "TAXA_LEGAL"
         resultado["data_taxa_legal"] = "30/08/2024"
@@ -1994,14 +2176,14 @@ def _extrair_via_regex(texto: str) -> dict[str, Any]:
         resultado["taxa_juros"] = "SELIC"
     elif re.search(r"(?i)ipca[- ]?e\b.*juros\s+(?:de\s+)?1\s*%", texto) or \
          re.search(r"(?i)ipca[- ]?e\b.*juros\s+(?:de\s+)?um\s+por\s+cento", texto):
-        resultado["indice_correcao"] = "IPCAE"
-        resultado["taxa_juros"] = "JUROS_PADRAO"
+        resultado["indice_correcao"] = "IPCA_E"
+        resultado["taxa_juros"] = "PADRAO"
     elif re.search(r"(?i)\btr\b.*juros\s+(?:de\s+)?1\s*%", texto) or \
          re.search(r"(?i)trct\b", texto):
         resultado["indice_correcao"] = "TR"
-        resultado["taxa_juros"] = "JUROS_PADRAO"
+        resultado["taxa_juros"] = "PADRAO"
     elif re.search(r"(?i)ipca[- ]?e\b", texto):
-        resultado["indice_correcao"] = "IPCAE"
+        resultado["indice_correcao"] = "IPCA_E"
         resultado["taxa_juros"] = None
     else:
         resultado["indice_correcao"] = None
@@ -2766,7 +2948,7 @@ def _normalizar_grade_semanal(dados: dict[str, Any]) -> dict[str, Any]:
 
 
 _NORM_INDICE_CORRECAO = {
-    "IPCA-E": "IPCAE", "IPCA-E/TR": "IPCAETR", "IGP-M": "IGPM",
+    "IPCA-E": "IPCA_E", "IPCA-E/TR": "IPCA_E_TR", "IGP-M": "IGP_M",
     "Tabela JT Unica Mensal": "TUACDT", "Tabela JT Única Mensal": "TUACDT",
     "Tabela JT Mensal": "TABELA_UNICA_JT_MENSAL",
     "Selic": "SELIC", "TRCT": "TR",
@@ -2775,7 +2957,7 @@ _NORM_INDICE_CORRECAO = {
 
 _NORM_TAXA_JUROS = {
     "Taxa Legal": "TAXA_LEGAL",
-    "Juros Padrão": "JUROS_PADRAO", "Juros Padrao": "JUROS_PADRAO",
+    "Juros Padrão": "PADRAO", "Juros Padrao": "PADRAO",
     "Selic": "SELIC",
     "TRD_CAPITALIZADOS": "TRD_COMPOSTOS",
     "JUROS_SIMPLES_05": "JUROS_MEIO_PORCENTO",
@@ -2888,7 +3070,7 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     cj = dados.get("correcao_juros", {})
     if not cj.get("indice_correcao") and dados.get("verbas_deferidas"):
         cj["lei_14905"] = True
-        cj["indice_correcao"] = "IPCAE"
+        cj["indice_correcao"] = "IPCA_E"
         cj["indice_correcao_pos"] = "IPCA"
         cj["taxa_juros"] = "TAXA_LEGAL"
         cj["data_taxa_legal"] = "30/08/2024"
@@ -2908,6 +3090,32 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     cust.setdefault("reclamado_liquidacao", "NAO_SE_APLICA")
     cust.setdefault("reclamante_conhecimento", "NAO_SE_APLICA")
     dados["custas_judiciais"] = cust
+
+    # Páginas extras: garantir objetos com defaults (apurar=false quando não mencionados)
+    sf = dados.get("salario_familia")
+    if not sf or not isinstance(sf, dict):
+        sf = {}
+    sf.setdefault("apurar", False)
+    sf.setdefault("variacoes_filhos", [])
+    dados["salario_familia"] = sf
+
+    sd = dados.get("seguro_desemprego")
+    if not sd or not isinstance(sd, dict):
+        sd = {}
+    sd.setdefault("apurar", False)
+    dados["seguro_desemprego"] = sd
+
+    pa = dados.get("pensao_alimenticia")
+    if not pa or not isinstance(pa, dict):
+        pa = {}
+    pa.setdefault("apurar", False)
+    dados["pensao_alimenticia"] = pa
+
+    pp = dados.get("previdencia_privada")
+    if not pp or not isinstance(pp, dict):
+        pp = {}
+    pp.setdefault("apurar", False)
+    dados["previdencia_privada"] = pp
 
     # Remover campos opcionais que o LLM pode ter incluído indevidamente
     campos_ausentes = [c for c in campos_ausentes if c not in _CAMPOS_OPCIONAIS]

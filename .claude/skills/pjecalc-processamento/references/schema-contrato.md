@@ -94,16 +94,39 @@ Este é o schema real implementado — difere do CalcMACHINE em alguns campos.
       "periodo_inicio": "01/03/2022",
       "periodo_fim": "28/02/2023",
       "abono": false,
-      "dobra": false
+      "dobra": false,
+      "gozo_periodos": []
+    },
+    {
+      "situacao": "Gozadas",
+      "periodo_inicio": "01/03/2023",
+      "periodo_fim": "28/02/2024",
+      "abono": false,
+      "dobra": false,
+      "gozo_periodos": [
+        {"inicio": "01/07/2023", "fim": "30/07/2023"}
+      ]
     },
     {
       "situacao": "Proporcionais",
       "periodo_inicio": "01/03/2024",
       "periodo_fim": "03/12/2024",
       "abono": false,
-      "dobra": false
+      "dobra": false,
+      "gozo_periodos": []
     }
   ],
+
+  "salario_familia": {
+    "apurar": false,
+    "compor_principal": "SIM",
+    "competencia_inicio": null,
+    "competencia_fim": null,
+    "quantidade_filhos": null,
+    "remuneracao_mensal_pagos": null,
+    "remuneracao_mensal_devidos": null,
+    "variacoes_filhos": []
+  },
 
   "historico_salarial": [
     {
@@ -181,6 +204,7 @@ Este é o schema real implementado — difere do CalcMACHINE em alguns campos.
     "base_juros": "Verbas",
     "taxa_juros": "Selic",
     "jam_fgts": false,
+    "acumular_indices": null,
     "confianca": 0.85
   },
 
@@ -238,13 +262,23 @@ Siglas UF: AC, AL, AP, AM, BA, CE, DF, ES, GO, MA, MT, MS, MG, PA, PB, PR, PE, P
 `Condenação` | `Verbas Não Compõem Principal` | `Renda Mensal`
 
 ### ferias.situacao
-`Vencidas` | `Proporcionais` | `Gozadas`
+`Vencidas` | `Proporcionais` | `Gozadas` | `GOZADAS_PARCIALMENTE` | `INDENIZADAS` | `PERDIDAS`
+
+### ferias.gozo_periodos
+Array de até 3 objetos `{inicio, fim}` — datas de gozo efetivo (DD/MM/AAAA).
+Somente quando situacao = `Gozadas` ou `GOZADAS_PARCIALMENTE`.
 
 ### correcao_juros.indice_correcao
 `Tabela JT Unica Mensal` | `IPCA-E` | `Selic` | `TRCT`
 
 ### correcao_juros.taxa_juros
 `Juros Padrao` | `Selic`
+
+### correcao_juros.acumular_indices
+`MES_SUBSEQUENTE` | `MES_VENCIMENTO` | `MISTO` | null
+
+### salario_familia.remuneracao_mensal_pagos
+`NENHUM` | `MAIOR_REMUNERACAO` | `HISTORICO` | null
 
 ---
 

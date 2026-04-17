@@ -444,7 +444,7 @@ class PJECalcAutomation:
         indice = dados_cj.get("indice_correcao") or "TUACDT"
         self._selecionar_opcao("Índice de Correção Monetária", indice)
 
-        taxa = dados_cj.get("taxa_juros") or "JUROS_PADRAO"
+        taxa = dados_cj.get("taxa_juros") or "PADRAO"
         self._selecionar_opcao("Juros de Mora", taxa)
 
         base = dados_cj.get("base_juros") or "Verbas"

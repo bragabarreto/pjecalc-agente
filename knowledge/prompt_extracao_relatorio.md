@@ -171,10 +171,20 @@ Situações especiais:
 |---------------------------|------------------------|----------|-------|-------|
 | DD/MM/AAAA | DD/MM/AAAA | Vencidas | Não | Não |
 
+**Períodos de Gozo** (somente quando Situação = Gozadas ou Gozadas Parcialmente):
+Para cada período de férias gozadas, informar até 3 períodos de gozo com datas de início e fim.
+
+| Gozo | Início | Fim |
+|------|--------|-----|
+| 1 | DD/MM/AAAA | DD/MM/AAAA |
+| 2 | DD/MM/AAAA | DD/MM/AAAA |
+| 3 | DD/MM/AAAA | DD/MM/AAAA |
+
 Situações possíveis:
 - **Vencidas**: período aquisitivo completo cujas férias não foram concedidas (gera pagamento + 1/3)
 - **Proporcionais**: último período aquisitivo incompleto (pagamento proporcional + 1/3)
-- **Gozadas**: férias já usufruídas — incluir quando há condenação APENAS em reflexos sobre férias
+- **Gozadas**: férias já usufruídas — incluir quando há condenação APENAS em reflexos sobre férias. Preencher os períodos de gozo.
+- **Gozadas Parcialmente**: férias parcialmente gozadas ��� preencher os períodos de gozo efetivo.
 - **Dobra**: "Sim" quando férias vencidas foram pagas fora do prazo concessivo (art. 137 CLT)
 - **Abono**: "Sim" quando a sentença defere abono pecuniário (conversão de 1/3 em dinheiro)
 
@@ -397,7 +407,14 @@ Taxa de Juros: [TAXA_LEGAL | JUROS_PADRAO | SELIC | TRD_SIMPLES | TRD_COMPOSTOS 
 Data Marco Taxa Legal: [DD/MM/AAAA — padrão 30/08/2024; somente quando Taxa = TAXA_LEGAL]
 Base dos Juros: [Verbas (padrão) | Credito Total]
 JAM FGTS: [Sim | Não]
+Acumular Índices: [MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO | null]
 ```
+
+> **Acumular Índices de Correção** — como o PJe-Calc acumula a correção monetária na liquidação:
+> - `MES_SUBSEQUENTE`: a partir do mês seguinte ao vencimento (padrão para todas as parcelas)
+> - `MES_VENCIMENTO`: a partir do mês do próprio vencimento (todas as parcelas)
+> - `MISTO`: subsequente para mensais, vencimento para anuais/rescisórias
+> Extrair se mencionado na sentença. Se omitido → null (o PJe-Calc usará seu padrão).
 
 **Enums do PJe-Calc — Correção Monetária:**
 | Enum | Nome no PJe-Calc |
@@ -523,6 +540,63 @@ Devedor: [RECLAMADO (padrão) | RECLAMANTE]
 
 > SEMPRE incluir esta seção. Se a sentença fixar valor de custas, usar CALCULADA (o PJe-Calc calcula automaticamente).
 > Defaults quando omitido: Base "Bruto Devido ao Reclamante", Reclamado Conhecimento "CALCULADA", demais "NAO_SE_APLICA", Percentual 0.02, Devedor "RECLAMADO".
+
+---
+
+### 18. SALÁRIO-FAMÍLIA
+
+```
+Apurar: [Sim | Não]
+Compor Principal: [SIM | NAO]
+Competência Início: [MM/AAAA | null]
+Competência Fim: [MM/AAAA | null]
+Quantidade de Filhos: [int | null]
+Remuneração Mensal (Pagos): [NENHUM | MAIOR_REMUNERACAO | HISTORICO | null]
+Remuneração Mensal (Devidos): [string | null]
+```
+
+> Incluir somente se a sentença deferir salário-família ou o relatório mencionar "salário-família".
+> Variações de filhos: se o número de filhos muda ao longo do período, informar:
+> | Competência | Quantidade |
+> |-------------|-----------|
+> | MM/AAAA | int |
+
+---
+
+### 19. SEGURO-DESEMPREGO
+
+```
+Apurar: [Sim | Não]
+Tipo de Solicitação: [PRIMEIRA | SEGUNDA | DEMAIS | null]
+Empregado Doméstico: [Sim | Não]
+Compor Principal: [SIM | NAO]
+Quantidade de Parcelas: [int | null]
+```
+
+> Incluir quando a sentença deferir indenização substitutiva do seguro-desemprego.
+
+---
+
+### 20. PENSÃO ALIMENTÍCIA
+
+```
+Apurar: [Sim | Não]
+Alíquota: [float | null (ex: 0.30 para 30%)]
+Incidir sobre Juros: [Sim | Não | null]
+```
+
+> Incluir quando houver pensão alimentícia a deduzir do crédito do reclamante.
+
+---
+
+### 21. PREVIDÊNCIA PRIVADA
+
+```
+Apurar: [Sim | Não]
+Alíquota: [float | null (ex: 0.05 para 5%)]
+```
+
+> Dedução de contribuição para fundo de pensão / previdência complementar.
 
 ---
 

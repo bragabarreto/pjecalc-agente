@@ -4,8 +4,10 @@
     "base_url": "http://localhost:9257/pjecalc",
     "versao_auditor": "1.0.0",
     "total_paginas": 20,
-    "total_elementos": 1250,
-    "concluido_em": "2026-04-09T03:12:07.726262"
+    "total_elementos": 539,
+    "concluido_em": "2026-04-09T03:12:07.726262",
+    "atualizado_em": "2026-04-16T14:00:00",
+    "nota_atualizacao": "v3: Campos condicionais completos baseados no manual oficial. Inclui bifurcações por radio/select, campos de modais, sub-abas (Correção: Gerais+Específicos, Custas: Devidas+Recolhidas), e edição inline (Férias, Ocorrências)."
   },
   "sidebar": [
     {
@@ -793,7 +795,8 @@
           "id": "formularioModalPPJE:cmdVisualizarPPJE"
         }
       ],
-      "total": 89
+      "total": 89,
+      "visiveis": 41
     },
     "parametros_calculo": {
       "url": "http://localhost:9257/pjecalc/pages/calculo/calculo.jsf?conversationId=6#irTopoPagina",
@@ -1483,214 +1486,1172 @@
           "id": "formularioModalPPJE:cmdVisualizarPPJE"
         }
       ],
-      "total": 89
+      "total": 89,
+      "visiveis": 39
     },
     "parametros_gerais": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/calculo/parametros-gerais.jsf?conversationId=6",
-      "titulo": "Parametros Gerais",
-      "elementos": [
-        {
-          "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
-        },
-        {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
-        }
-      ],
-      "total": 2
+      "url": "http://localhost:9257/pjecalc/pages/calculo/calculo.jsf",
+      "titulo": "Parâmetros Gerais",
+      "nota": "Mesma página que dados_processo e parametros_calculo (calculo.jsf). Elementos compartilhados - veja parametros_calculo.",
+      "elementos": [],
+      "total": 0,
+      "visiveis": 0
     },
     "historico_salarial": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/calculo/historico-salarial.jsf?conversationId=6",
-      "titulo": "Historico Salarial",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/historico-salarial.jsf",
+      "titulo": "Histórico Salarial",
+      "nota": "Formulário bifurca por tipoValor: Informada (competências+valor) vs Calculada (quantidade+referência). Grade de ocorrências editável por mês. Importação CSV disponível.",
       "elementos": [
         {
           "tipo": "button",
+          "sufixo": "incluir",
+          "texto": "Incluir/Novo",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "cmdGerarOcorrencias",
+          "texto": "Gerar Ocorrências",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
           "sufixo": "fechar",
-          "texto": "",
+          "texto": "Fechar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "importar",
+          "texto": "Importar (CSV)",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "nome",
+          "label": "Nome da Base",
           "visivel": true,
-          "id": "formulario:fechar"
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipo",
+          "label": "Tipo",
+          "radio_values": [
+            {
+              "value": "FIXA",
+              "texto": "Fixa"
+            },
+            {
+              "value": "VARIAVEL",
+              "texto": "Variável"
+            }
+          ],
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "incidenciaFgts",
+          "label": "Incidência FGTS",
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "incidenciaCs",
+          "label": "Incidência Contribuição Social",
+          "visivel": true,
+          "condicao": "form aberto"
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "tipoValor",
+          "label": "Tipo de Valor",
+          "visivel": true,
+          "condicao": "form aberto",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
+            {
+              "value": "INFORMADA",
+              "texto": "Base Informada"
+            },
+            {
+              "value": "CALCULADA",
+              "texto": "Base Calculada"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "competenciaInicialInputDate",
+          "label": "Competência Inicial",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "competenciaFinalInputDate",
+          "label": "Competência Final",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorPara",
+          "label": "Valor",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADA"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "fgtsJaRecolhido",
+          "label": "FGTS já recolhido",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADA E incidenciaFgts=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "contribuicoesJaRecolhidas",
+          "label": "Contribuições já recolhidas",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADA E incidenciaCs=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "quantidade",
+          "label": "Quantidade (multiplicador)",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADA"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "referencia",
+          "label": "Referência",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADA",
+          "opcoes": [
+            {
+              "value": "SALARIO_MINIMO",
+              "texto": "Salário Mínimo"
+            },
+            {
+              "value": "PISO_SALARIAL",
+              "texto": "Piso Salarial"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "categoriaProfissional",
+          "label": "Categoria Profissional",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADA E referencia=PISO_SALARIAL"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoRegeracao",
+          "label": "Regerar: Manter/Sobrescrever",
+          "radio_values": [
+            {
+              "value": "true",
+              "texto": "Manter alterações"
+            },
+            {
+              "value": "false",
+              "texto": "Sobrescrever"
+            }
           ],
-          "visivel": false
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "GerarOcorrencias",
+          "texto": "Gerar Ocorrências (confirmar)",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorOcorrencia",
+          "label": "Valor (por ocorrência/mês)",
+          "visivel": true,
+          "nota": "Campo editável por linha na grade de ocorrências"
         }
       ],
-      "total": 2
+      "total": 21,
+      "visiveis": 21
     },
     "ferias": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/calculo/ferias.jsf?conversationId=6",
-      "titulo": "Ferias",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/ferias.jsf",
+      "titulo": "Férias",
+      "nota": "Tabela auto-gerada a partir do histórico salarial. Cada período aquisitivo editável inline: situação (4 opções), dobra, abono, até 3 períodos de gozo. Gozo Parcial auto-gera ocorrência rescisória.",
       "elementos": [
         {
           "tipo": "button",
+          "sufixo": "regerarFerias",
+          "texto": "Regerar Férias",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
           "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
+          "texto": "Fechar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "importar",
+          "texto": "Importar (CSV)",
+          "visivel": true
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "situacao",
+          "label": "Situação",
+          "visivel": true,
+          "nota": "Por período aquisitivo na tabela",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
+            {
+              "value": "GOZADAS",
+              "texto": "Gozadas"
+            },
+            {
+              "value": "INDENIZADAS",
+              "texto": "Indenizadas"
+            },
+            {
+              "value": "PERDIDAS",
+              "texto": "Perdidas"
+            },
+            {
+              "value": "GOZADAS_PARCIALMENTE",
+              "texto": "Gozadas Parcialmente"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "dobra",
+          "label": "Dobra (férias em dobro)",
+          "visivel": true,
+          "nota": "Auto-marcado se período concessivo expirou. Editável."
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "abono",
+          "label": "Abono Pecuniário",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataInicioGozo1",
+          "label": "Gozo 1: Início",
+          "visivel": true,
+          "condicao": "situacao=GOZADAS ou GOZADAS_PARCIALMENTE"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataFimGozo1",
+          "label": "Gozo 1: Fim",
+          "visivel": true,
+          "condicao": "situacao=GOZADAS ou GOZADAS_PARCIALMENTE"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataInicioGozo2",
+          "label": "Gozo 2: Início",
+          "visivel": true,
+          "condicao": "situacao=GOZADAS ou GOZADAS_PARCIALMENTE"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataFimGozo2",
+          "label": "Gozo 2: Fim",
+          "visivel": true,
+          "condicao": "situacao=GOZADAS ou GOZADAS_PARCIALMENTE"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataInicioGozo3",
+          "label": "Gozo 3: Início",
+          "visivel": true,
+          "condicao": "situacao=GOZADAS ou GOZADAS_PARCIALMENTE"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataFimGozo3",
+          "label": "Gozo 3: Fim",
+          "visivel": true,
+          "condicao": "situacao=GOZADAS ou GOZADAS_PARCIALMENTE"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "feriasColetivas",
+          "label": "Férias Coletivas (data início proporcional)",
+          "visivel": true,
+          "nota": "Campo modal para marcar início de férias coletivas"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoRegeracao",
+          "label": "Regerar: Manter/Sobrescrever",
+          "radio_values": [
+            {
+              "value": "MANTER",
+              "texto": "Manter alterações"
+            },
+            {
+              "value": "SOBRESCREVER",
+              "texto": "Sobrescrever"
+            }
           ],
-          "visivel": false
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 15,
+      "visiveis": 15
     },
     "faltas": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/calculo/faltas.jsf?conversationId=6",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/faltas.jsf",
       "titulo": "Faltas",
+      "nota": "Lista de faltas. Botão Novo abre formulário para incluir período de falta.",
       "elementos": [
         {
           "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
+          "sufixo": "incluir",
+          "texto": "Novo",
+          "visivel": true
         },
         {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataInicioInputDate",
+          "label": "Data Início",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataFimInputDate",
+          "label": "Data Fim",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "quantidadeDias",
+          "label": "Quantidade de Dias",
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 6,
+      "visiveis": 6
     },
     "cartao_ponto": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/calculo/apuracao-cartaodeponto.jsf?conversationId=6",
-      "titulo": "Cartao de Ponto",
-      "elementos": [
-        {
-          "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
-        },
-        {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
-        }
-      ],
-      "total": 2
-    },
-    "verbas_listagem": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/verba/verba-calculo.jsf?conversationId=6",
-      "titulo": "Verbas - Listagem",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/apuracao-cartaodeponto.jsf",
+      "titulo": "Cartão de Ponto",
+      "nota": "Configuração de jornada, entradas/saídas e apuração de horas extras.",
       "elementos": [
         {
           "tipo": "input",
-          "sufixo": "",
-          "visivel": false
+          "sufixo": "valorJornadaSegunda",
+          "label": "Jornada Segunda",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaTerca",
+          "label": "Jornada Terça",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaQuarta",
+          "label": "Jornada Quarta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaQuinta",
+          "label": "Jornada Quinta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaSexta",
+          "label": "Jornada Sexta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaDiariaSabado",
+          "label": "Jornada Diária Sábado",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaSabado",
+          "label": "Jornada Sábado",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaDiariaDom",
+          "label": "Jornada Diária Domingo",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorJornadaDomingo",
+          "label": "Jornada Domingo",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "qtJornadaSemanal",
+          "label": "Jornada Semanal (total)",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "qtJornadaMensal",
+          "label": "Jornada Mensal (total)",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "inicioHorarioNoturno",
+          "label": "Início Horário Noturno",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "fimHorarioNoturno",
+          "label": "Fim Horário Noturno",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "competenciaInicial",
+          "label": "Competência Inicial",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "competenciaFinal",
+          "label": "Competência Final",
+          "visivel": true
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoApuracaoHorasExtras",
+          "label": "Tipo de Apuração de Horas Extras",
+          "radio_values": [
+            {
+              "value": "HST",
+              "texto": "Hora semanal total"
+            },
+            {
+              "value": "HJD",
+              "texto": "Hora jornada diária"
+            },
+            {
+              "value": "APH",
+              "texto": "Apurar apenas horas"
+            },
+            {
+              "value": "NAP",
+              "texto": "Não apurar"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "select",
+          "sufixo": "tipoEscala",
+          "label": "Tipo de Escala",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "",
+              "texto": "Selecione"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "intervalorIntraJornadaSupSeis",
+          "label": "Intervalo Intrajornada Superior a 6h",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "intervalorIntraJornadaInfSeis",
+          "label": "Intervalo Intrajornada Inferior a 6h",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "considerarFeriado",
+          "label": "Considerar Feriado",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "extraDescansoSeparado",
+          "label": "Extra de Descanso Separado",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "apurarHorasNoturnas",
+          "label": "Apurar Horas Noturnas",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "reducaoFicta",
+          "label": "Redução Ficta",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "horarioProrrogado",
+          "label": "Horário Prorrogado",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorIntervalorIntraJornadaSupSeis",
+          "label": "Valor Intervalo Sup 6h",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorIntervalorIntraJornadaInfSeis",
+          "label": "Valor Intervalo Inf 6h",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "entradaSegunda",
+          "label": "Entrada Segunda",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "saidaSegunda",
+          "label": "Saída Segunda",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "entradaTerca",
+          "label": "Entrada Terça",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "saidaTerca",
+          "label": "Saída Terça",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "entradaQuarta",
+          "label": "Entrada Quarta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "saidaQuarta",
+          "label": "Saída Quarta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "entradaQuinta",
+          "label": "Entrada Quinta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "saidaQuinta",
+          "label": "Saída Quinta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "entradaSexta",
+          "label": "Entrada Sexta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "saidaSexta",
+          "label": "Saída Sexta",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "entradaSabado",
+          "label": "Entrada Sábado",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "saidaSabado",
+          "label": "Saída Sábado",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "entradaDomingo",
+          "label": "Entrada Domingo",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "saidaDomingo",
+          "label": "Saída Domingo",
+          "visivel": true
         },
         {
           "tipo": "button",
           "sufixo": "incluir",
+          "texto": "Incluir",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
+        }
+      ],
+      "total": 43,
+      "visiveis": 43
+    },
+    "verbas_listagem": {
+      "url": "http://localhost:9257/pjecalc/pages/verba/verba-calculo.jsf",
+      "titulo": "Verbas - Listagem",
+      "nota": "Formulário manual é MUITO complexo: Característica (Comum/13º/Aviso Prévio/Férias) altera divisor/quantidade forçados. Tipo Principal/Reflexa altera campos de base. tipoValor Calculado/Informado bifurca completamente. Assunto CNJ obrigatório (modal com árvore).",
+      "elementos": [
+        {
+          "tipo": "button",
+          "sufixo": "incluir",
           "texto": "Manual",
-          "visivel": true,
-          "id": "formulario:incluir"
+          "visivel": true
         },
         {
           "tipo": "button",
           "sufixo": "lancamentoExpresso",
           "texto": "Expresso",
-          "visivel": true,
-          "id": "formulario:lancamentoExpresso"
+          "visivel": true
         },
         {
           "tipo": "button",
           "sufixo": "regerarOcorrencias",
-          "label": "Manter alterações realizadas nas ocorrências",
           "texto": "Regerar",
-          "visivel": true,
-          "id": "formulario:regerarOcorrencias"
-        },
-        {
-          "tipo": "radio",
-          "sufixo": "0",
-          "label": "Manter alterações realizadas nas ocorrências",
-          "radio_value": "true",
-          "visivel": true,
-          "id": "formulario:tipoRegeracao:0"
-        },
-        {
-          "tipo": "radio",
-          "sufixo": "1",
-          "label": "Sobrescrever alterações realizadas nas ocorrências",
-          "radio_value": "false",
-          "visivel": true,
-          "id": "formulario:tipoRegeracao:1"
+          "visivel": true
         },
         {
           "tipo": "input",
-          "sufixo": "assuntosCnjCNJ",
-          "label": "Assunto CNJ *",
-          "visivel": false,
-          "id": "formularioModalCNJ:assuntosCnjCNJ"
+          "sufixo": "descricao",
+          "label": "Nome (50 chars)",
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "assuntosCnj",
+          "label": "Assunto CNJ",
+          "visivel": true,
+          "condicao": "form manual aberto",
+          "nota": "OBRIGATÓRIO. Abre modal CNJ com árvore hierárquica."
+        },
+        {
+          "tipo": "button",
+          "sufixo": "btnBuscarAssuntoCnj",
+          "texto": "Buscar Assunto CNJ",
+          "visivel": true
         },
         {
           "tipo": "button",
           "sufixo": "btnSelecionarCNJ",
-          "label": "Assunto CNJ *",
-          "texto": "Selecionar",
-          "visivel": false,
-          "id": "btnSelecionarCNJ"
+          "texto": "Selecionar CNJ (modal)",
+          "visivel": true
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "parcela",
+          "label": "Parcela",
+          "visivel": true,
+          "condicao": "form manual aberto",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
+            {
+              "value": "FIXA",
+              "texto": "Fixa"
+            },
+            {
+              "value": "VARIAVEL",
+              "texto": "Variável"
+            }
+          ]
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoValor",
+          "label": "Tipo de Valor",
+          "radio_values": [
+            {
+              "value": "CALCULADO",
+              "texto": "Calculado"
+            },
+            {
+              "value": "INFORMADO",
+              "texto": "Informado"
+            }
           ],
-          "visivel": false
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "fgts",
+          "label": "FGTS",
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "impostoDeRenda",
+          "label": "Imposto de Renda",
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "contribuicaoSocial",
+          "label": "Contribuição Social",
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "previdenciaPrivada",
+          "label": "Previdência Privada",
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "pensaoAlimenticia",
+          "label": "Pensão Alimentícia",
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "caracteristica",
+          "label": "Característica",
+          "visivel": true,
+          "condicao": "form manual aberto",
+          "opcoes": [
+            {
+              "value": "COMUM",
+              "texto": "Comum"
+            },
+            {
+              "value": "DECIMO_TERCEIRO",
+              "texto": "13º Salário"
+            },
+            {
+              "value": "AVISO_PREVIO",
+              "texto": "Aviso Prévio"
+            },
+            {
+              "value": "FERIAS",
+              "texto": "Férias"
+            }
+          ],
+          "nota": "OBRIGATÓRIO. Cada opção altera os campos de Valor Devido."
+        },
+        {
+          "tipo": "select",
+          "sufixo": "ocorrencia",
+          "label": "Ocorrência",
+          "visivel": true,
+          "condicao": "form manual aberto",
+          "opcoes": [
+            {
+              "value": "MENSAL",
+              "texto": "Mensal"
+            },
+            {
+              "value": "DESLIGAMENTO",
+              "texto": "Desligamento"
+            },
+            {
+              "value": "DEZEMBRO",
+              "texto": "Dezembro"
+            },
+            {
+              "value": "PERIODO_AQUISITIVO",
+              "texto": "Período Aquisitivo"
+            },
+            {
+              "value": "UNICA",
+              "texto": "Única"
+            }
+          ],
+          "nota": "OBRIGATÓRIO."
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoDeVerba",
+          "label": "Tipo",
+          "radio_values": [
+            {
+              "value": "PRINCIPAL",
+              "texto": "Principal"
+            },
+            {
+              "value": "REFLEXA",
+              "texto": "Reflexa"
+            }
+          ],
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "gerarVerbaReflexaPrincipal",
+          "label": "Gerar Verba (Devido/Diferença)",
+          "visivel": true,
+          "condicao": "tipoDeVerba=PRINCIPAL",
+          "opcoes": [
+            {
+              "value": "DEVIDO",
+              "texto": "Devido"
+            },
+            {
+              "value": "DIFERENCA",
+              "texto": "Diferença"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "baseVerbaDeCalculo",
+          "label": "Base Verba de Cálculo (principal)",
+          "visivel": true,
+          "condicao": "tipoDeVerba=REFLEXA",
+          "nota": "Lista verbas principais existentes"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "comportamentoBase",
+          "label": "Comportamento da Base",
+          "visivel": true,
+          "condicao": "tipoDeVerba=REFLEXA",
+          "opcoes": [
+            {
+              "value": "VALOR_MENSAL",
+              "texto": "Valor Mensal"
+            },
+            {
+              "value": "MEDIA_ABSOLUTO",
+              "texto": "Média pelo Valor Absoluto"
+            },
+            {
+              "value": "MEDIA_CORRIGIDO",
+              "texto": "Média pelo Valor Corrigido"
+            },
+            {
+              "value": "MEDIA_QUANTIDADE",
+              "texto": "Média pela Quantidade"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "tratamentoFracao",
+          "label": "Tratamento de Fração de Mês",
+          "visivel": true,
+          "condicao": "tipoDeVerba=REFLEXA",
+          "opcoes": [
+            {
+              "value": "MANTER",
+              "texto": "Manter"
+            },
+            {
+              "value": "INTEGRALIZAR",
+              "texto": "Integralizar"
+            },
+            {
+              "value": "DESPREZAR",
+              "texto": "Desprezar"
+            },
+            {
+              "value": "DESPREZAR_MENOR_15",
+              "texto": "Desprezar menor que 15 dias"
+            }
+          ]
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "comporPrincipal",
+          "label": "Compor Principal",
+          "radio_values": [
+            {
+              "value": "SIM"
+            },
+            {
+              "value": "NAO"
+            }
+          ],
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "zerarValorNegativo",
+          "label": "Zerar Valor Negativo",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "textarea",
+          "sufixo": "comentarios",
+          "label": "Comentários (255 chars)",
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "baseDeCalculo",
+          "label": "Base de Cálculo",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "opcoes": [
+            {
+              "value": "REMUNERACAO",
+              "texto": "Remuneração"
+            },
+            {
+              "value": "MAIOR_REMUNERACAO",
+              "texto": "Maior Remuneração"
+            },
+            {
+              "value": "ULTIMA_REMUNERACAO",
+              "texto": "Última Remuneração"
+            },
+            {
+              "value": "HISTORICO",
+              "texto": "Histórico Salarial"
+            },
+            {
+              "value": "SALARIO_MINIMO",
+              "texto": "Salário Mínimo"
+            },
+            {
+              "value": "PISO",
+              "texto": "Piso Salarial"
+            },
+            {
+              "value": "VALE_TRANSPORTE",
+              "texto": "Vale Transporte"
+            },
+            {
+              "value": "OUTRA_VERBA",
+              "texto": "Outra Verba"
+            },
+            {
+              "value": "INFORMADO",
+              "texto": "Informado"
+            }
+          ],
+          "nota": "OBRIGATÓRIO se Calculado. Proporcionalizar disponível p/ meses parciais."
+        },
+        {
+          "tipo": "select",
+          "sufixo": "divisor",
+          "label": "Divisor",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "opcoes": [
+            {
+              "value": "CARGA_HORARIA",
+              "texto": "Carga Horária"
+            },
+            {
+              "value": "DIAS_UTEIS",
+              "texto": "Dias Úteis"
+            },
+            {
+              "value": "CARTAO_PONTO",
+              "texto": "Importar do Cartão de Ponto"
+            },
+            {
+              "value": "INFORMADO",
+              "texto": "Informado"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "multiplicador",
+          "label": "Multiplicador (8 decimais)",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "quantidade",
+          "label": "Quantidade",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "opcoes": [
+            {
+              "value": "CALENDARIO",
+              "texto": "Importar do Calendário"
+            },
+            {
+              "value": "CARTAO_PONTO",
+              "texto": "Importar do Cartão de Ponto"
+            },
+            {
+              "value": "INFORMADA",
+              "texto": "Informada"
+            }
+          ],
+          "nota": "Proporcionalizar disponível. 13º: forçado a Avos. Férias: forçado a Avos."
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "excluirFaltasJustificadas",
+          "label": "Excluir Faltas Justificadas",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "excluirFaltasNaoJustificadas",
+          "label": "Excluir Faltas Não Justificadas",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "excluirFeriasGozadas",
+          "label": "Excluir Férias Gozadas",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "dobrarValorDevido",
+          "label": "Dobrar Valor Devido",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorDevido",
+          "label": "Valor Devido (informado)",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoPago",
+          "label": "Valor Pago (Calculado/Informado)",
+          "radio_values": [
+            {
+              "value": "CALCULADO"
+            },
+            {
+              "value": "INFORMADO"
+            }
+          ],
+          "visivel": true,
+          "condicao": "form manual aberto"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoRegeracao",
+          "label": "Regerar: Manter/Sobrescrever",
+          "radio_values": [
+            {
+              "value": "true",
+              "texto": "Manter"
+            },
+            {
+              "value": "false",
+              "texto": "Sobrescrever"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "select",
+          "sufixo": "jurosTst439",
+          "label": "Juros (TST Súmula 439)",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "opcoes": [
+            {
+              "value": "NAO",
+              "texto": "Não"
+            },
+            {
+              "value": "SIM",
+              "texto": "Sim"
+            }
+          ]
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "cancelar",
+          "texto": "Cancelar",
+          "visivel": true
         }
       ],
-      "total": 9
+      "total": 38,
+      "visiveis": 38
     },
     "verbas_expresso": {
       "url": "http://localhost:9257/pjecalc/pages/calculo/verba/verbas-para-calculo.jsf?conversationId=36",
@@ -2135,320 +3096,1876 @@
           "visivel": false
         }
       ],
-      "total": 58
+      "total": 58,
+      "visiveis": 56
     },
     "fgts": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/fgts/fgts.jsf?conversationId=36",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/fgts.jsf",
       "titulo": "FGTS",
+      "nota": "Configuração de FGTS: tipo, alíquota, multa, saldos.",
       "elementos": [
         {
-          "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
+          "tipo": "radio",
+          "sufixo": "tipoDeVerba",
+          "label": "Destino",
+          "radio_values": [
+            {
+              "value": "PAGAR",
+              "texto": "Pagar ao Reclamante"
+            },
+            {
+              "value": "DEPOSITAR",
+              "texto": "Recolher em conta vinculada"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "comporPrincipal",
+          "label": "Compor Principal",
+          "radio_values": [
+            {
+              "value": "SIM",
+              "texto": "Sim"
+            },
+            {
+              "value": "NAO",
+              "texto": "Não"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "aliquota",
+          "label": "Alíquota",
+          "radio_values": [
+            {
+              "value": "OITO_POR_CENTO",
+              "texto": "8%"
+            },
+            {
+              "value": "DOIS_POR_CENTO",
+              "texto": "2%"
+            }
+          ],
+          "visivel": true
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "multa",
+          "label": "Multa",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
+            {
+              "value": "NAO_APURAR",
+              "texto": "Não apurar"
+            },
+            {
+              "value": "CALCULADA",
+              "texto": "Calculada"
+            },
+            {
+              "value": "INFORMADA",
+              "texto": "Informada"
+            }
           ],
-          "visivel": false
-        }
-      ],
-      "total": 2
-    },
-    "contribuicao_social": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/inss/inss.jsf?conversationId=36",
-      "titulo": "Contribuicao Social (INSS)",
-      "elementos": [
+          "visivel": true,
+          "nota": "Se Calculada→exibe percentual+base. Se Informada→exibe campo valor."
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "multaDoFgts",
+          "label": "Percentual da Multa",
+          "radio_values": [
+            {
+              "value": "QUARENTA_POR_CENTO",
+              "texto": "40%"
+            },
+            {
+              "value": "VINTE_POR_CENTO",
+              "texto": "20%"
+            }
+          ],
+          "visivel": true,
+          "condicao": "multa=CALCULADA"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "baseDaMulta",
+          "label": "Base da Multa",
+          "opcoes": [
+            {
+              "value": "DEVIDO",
+              "texto": "Devido"
+            },
+            {
+              "value": "DIFERENCA",
+              "texto": "Diferença"
+            },
+            {
+              "value": "SALDO_E_OU_SAQUE",
+              "texto": "Saldo e/ou Saque"
+            },
+            {
+              "value": "DEVIDO_MENOS_SALDO",
+              "texto": "Devido (-) Saldo"
+            },
+            {
+              "value": "DEVIDO_MAIS_SALDO",
+              "texto": "Devido (+) Saldo"
+            }
+          ],
+          "visivel": true,
+          "condicao": "multa=CALCULADA"
+        },
         {
           "tipo": "input",
-          "sufixo": "",
-          "visivel": false
+          "sufixo": "valorMultaInformada",
+          "label": "Valor da Multa (informada)",
+          "visivel": true,
+          "condicao": "multa=INFORMADA"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "multaDoArtigo467",
+          "label": "Multa art. 467 CLT (50%)",
+          "visivel": true,
+          "condicao": "multa!=NAO_APURAR",
+          "nota": "Checkbox na aba FGTS, NÃO é verba Expresso"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "pensaoAlimenticiaFgts",
+          "label": "Pensão Alimentícia sobre FGTS",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "pensaoAlimenticia",
+          "label": "Pensão Alimentícia sobre Multa FGTS",
+          "visivel": true,
+          "condicao": "pensaoAlimenticiaFgts=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "deduzirDoFGTS",
+          "label": "Deduzir do FGTS",
+          "visivel": true
+        },
+        {
+          "tipo": "select",
+          "sufixo": "incidenciaDoFgts",
+          "label": "Incidência do FGTS",
+          "opcoes": [
+            {
+              "value": "DEVIDO",
+              "texto": "Devido"
+            },
+            {
+              "value": "DIFERENCA",
+              "texto": "Diferença"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "competencia",
+          "label": "Competência (modal Saldo)",
+          "visivel": true,
+          "condicao": "baseDaMulta=SALDO_E_OU_SAQUE ou tela Saldos aberta"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valor",
+          "label": "Valor (modal Saldo)",
+          "visivel": true,
+          "condicao": "baseDaMulta=SALDO_E_OU_SAQUE ou tela Saldos aberta"
+        },
+        {
+          "tipo": "button",
+          "sufixo": "btnAdicionarSaldo",
+          "texto": "Adicionar Saldo",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "deduzir",
+          "label": "Deduzir (saldo)",
+          "visivel": true,
+          "condicao": "Pelo menos 1 saldo adicionado"
         },
         {
           "tipo": "button",
           "sufixo": "salvar",
           "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
+        }
+      ],
+      "total": 18,
+      "visiveis": 18
+    },
+    "contribuicao_social": {
+      "url": "http://localhost:9257/pjecalc/pages/calculo/inss.jsf",
+      "titulo": "Contribuição Social (INSS)",
+      "nota": "Sub-tela Ocorrências acessível via botão. 2 abas: Salários Devidos e Salários Pagos (campos editáveis por mês: valor, segurado, empresa, SAT, terceiros). Alteração em Lote disponível.",
+      "elementos": [
+        {
+          "tipo": "checkbox",
+          "sufixo": "apurarSeguradoSalariosDevidos",
+          "label": "Apurar Segurado s/ Salários Devidos",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "cobrarDoReclamante",
+          "label": "Cobrar do Reclamante",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "comCorrecaoTrabalhista",
+          "label": "Com Correção Trabalhista",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "apurarSobreSalariosPagos",
+          "label": "Apurar Sobre Salários Pagos",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "simples",
+          "label": "Simples Nacional",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "isencaoSimples",
+          "label": "Isenção Simples",
+          "visivel": true
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "aliquotaSegurado",
+          "label": "Alíquota Segurado",
+          "radio_values": [
+            {
+              "value": "EMPREGADO",
+              "texto": "Segurado Empregado (tabela)"
+            },
+            {
+              "value": "DOMESTICO",
+              "texto": "Empregado Doméstico (tabela)"
+            },
+            {
+              "value": "FIXA",
+              "texto": "Fixa (informar %)"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "aliquotaSeguradoFixa",
+          "label": "Alíquota Segurado Fixa (%)",
           "visivel": true,
-          "id": "formulario:salvar"
+          "condicao": "aliquotaSegurado=FIXA"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "limitarAoTeto",
+          "label": "Limitar ao Teto",
+          "visivel": true,
+          "condicao": "aliquotaSegurado=FIXA"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoAliquotaEmpregador",
+          "label": "Tipo Alíquota Empregador",
+          "radio_values": [
+            {
+              "value": "ATIVIDADE_ECONOMICA",
+              "texto": "Por Atividade Econômica"
+            },
+            {
+              "value": "POR_PERIODO",
+              "texto": "Por Período"
+            },
+            {
+              "value": "FIXA",
+              "texto": "Fixa"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "buscaAtividadeEconomica",
+          "label": "Buscar Atividade Econômica",
+          "visivel": true,
+          "condicao": "tipoAliquotaEmpregador=ATIVIDADE_ECONOMICA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "periodoInicioEmpregador",
+          "label": "Competência Início (empregador)",
+          "visivel": true,
+          "condicao": "tipoAliquotaEmpregador=POR_PERIODO"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "periodoFimEmpregador",
+          "label": "Competência Fim (empregador)",
+          "visivel": true,
+          "condicao": "tipoAliquotaEmpregador=POR_PERIODO"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "aliquotaEmpresa",
+          "label": "Alíquota Empresa (%)",
+          "visivel": true,
+          "condicao": "tipoAliquotaEmpregador=POR_PERIODO ou FIXA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "aliquotaSAT",
+          "label": "Alíquota SAT (%)",
+          "visivel": true,
+          "condicao": "tipoAliquotaEmpregador=POR_PERIODO ou FIXA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "aliquotaTerceiros",
+          "label": "Alíquota Terceiros (%)",
+          "visivel": true,
+          "condicao": "tipoAliquotaEmpregador=POR_PERIODO ou FIXA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "periodoIncidenciaDevidos",
+          "label": "Período Incidência s/ Sal. Devidos",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "periodoIncidenciaPagos",
+          "label": "Período Incidência s/ Sal. Pagos",
+          "visivel": true,
+          "condicao": "apurarSobreSalariosPagos=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "simplesInicio",
+          "label": "Período SIMPLES Início",
+          "visivel": true,
+          "condicao": "simples=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "simplesFim",
+          "label": "Período SIMPLES Fim",
+          "visivel": true,
+          "condicao": "simples=true"
+        },
+        {
+          "tipo": "button",
+          "sufixo": "cmdParametrosOcorrencias",
+          "texto": "Parâmetros/Ocorrências",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "confirmar",
+          "texto": "Confirmar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
         },
         {
           "tipo": "button",
           "sufixo": "ocorrencias",
           "texto": "Ocorrências",
-          "visivel": true,
-          "id": "formulario:ocorrencias"
+          "visivel": true
         },
         {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 4
+      "total": 25,
+      "visiveis": 25
     },
     "imposto_renda": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/irpf/irpf.jsf?conversationId=36",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/irpf.jsf",
       "titulo": "Imposto de Renda (IRPF)",
+      "nota": "Deduções aparecem condicionalmente se as respectivas páginas (CS, PP, PA, Honorários) estiverem configuradas. Regime de Caixa sobrescreve bifurcação automática pré/pós 28/07/2010.",
       "elementos": [
+        {
+          "tipo": "checkbox",
+          "sufixo": "apurar",
+          "label": "Apurar Imposto de Renda",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "incidirSobreJurosDeMora",
+          "label": "Incidir Sobre Juros de Mora",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "cobrarDoReclamado",
+          "label": "Cobrar do Reclamado",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "tributacaoExclusiva",
+          "label": "Tributação Exclusiva na Fonte (13º)",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "regimeDeCaixa",
+          "label": "Regime de Caixa",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "tributacaoEmSeparado",
+          "label": "Tributação em Separado (férias)",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "deducaoInss",
+          "label": "Dedução CS Reclamante",
+          "visivel": true,
+          "condicao": "apurar=true E cobrarDoReclamante=true na pág. Contribuição Social"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "deducaoPrevidenciaPrivada",
+          "label": "Dedução Previdência Privada",
+          "visivel": true,
+          "condicao": "apurar=true E previdência privada configurada"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "deducaoPensaoAlimenticia",
+          "label": "Dedução Pensão Alimentícia",
+          "visivel": true,
+          "condicao": "apurar=true E pensão alimentícia configurada"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "deducaoHonorariosReclamante",
+          "label": "Dedução Honorários Reclamante",
+          "visivel": true,
+          "condicao": "apurar=true E honorários c/ devedor=Reclamante configurados"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "aposentadoMaior65",
+          "label": "Aposentado Maior de 65 anos",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "numeroDeDependentes",
+          "label": "Número de Dependentes",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "mesesTributaveis",
+          "label": "Meses Tributáveis",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
         {
           "tipo": "button",
           "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
-        },
-        {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 15,
+      "visiveis": 15
     },
     "honorarios": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/honorarios/honorarios.jsf?conversationId=36",
-      "titulo": "Honorarios",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/honorarios/honorarios.jsf",
+      "titulo": "Honorários Advocatícios",
+      "nota": "Formulário aparece após clicar Incluir. Campos condicionais por tipoValor (Calculado vs Informado), devedor (Reclamante revela formaCobranca e baseSucumbencia), e apurarIr (revela tipoIR).",
       "elementos": [
         {
           "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
+          "sufixo": "incluir",
+          "texto": "Incluir/Novo",
+          "visivel": true
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "tipoHonorario",
+          "label": "Tipo de Honorários (rubrica PJe-JT)",
+          "visivel": true,
+          "condicao": "form aberto",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
+            {
+              "value": "",
+              "texto": "Selecione (lista de rubricas PJe-JT)"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "descricao",
+          "label": "Descrição (60 chars)",
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "tipoDeDevedor",
+          "label": "Devedor",
+          "visivel": true,
+          "condicao": "form aberto",
+          "opcoes": [
+            {
+              "value": "RECLAMADO",
+              "texto": "Reclamado"
+            },
+            {
+              "value": "RECLAMANTE",
+              "texto": "Reclamante"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "formaCobranca",
+          "label": "Forma de Cobrança",
+          "visivel": true,
+          "condicao": "devedor=RECLAMANTE",
+          "opcoes": [
+            {
+              "value": "DESCONTAR",
+              "texto": "Descontar dos créditos"
+            },
+            {
+              "value": "COBRAR",
+              "texto": "Cobrar do reclamante"
+            }
+          ]
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoValor",
+          "label": "Tipo de Valor",
+          "radio_values": [
+            {
+              "value": "CALCULADO",
+              "texto": "Calculado"
+            },
+            {
+              "value": "INFORMADO",
+              "texto": "Informado"
+            }
           ],
-          "visivel": false
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "percentualHonorarios",
+          "label": "Alíquota (%)",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "baseParaApuracao",
+          "label": "Base de Apuração",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "opcoes": [
+            {
+              "value": "BRUTO",
+              "texto": "Bruto"
+            },
+            {
+              "value": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+              "texto": "Bruto (-) Contribuição Social"
+            },
+            {
+              "value": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
+              "texto": "Bruto (-) CS (-) Previdência Privada"
+            }
+          ],
+          "nota": "Confirmado via screenshot real do PJE-Calc (abril/2026)"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "vencimento",
+          "label": "Vencimento (data)",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorInformado",
+          "label": "Valor Informado",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "indiceCorrecao",
+          "label": "Índice de Correção",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO",
+          "opcoes": [
+            {
+              "value": "TRABALHISTA",
+              "texto": "Utilizar índice trabalhista"
+            },
+            {
+              "value": "OUTRO",
+              "texto": "Utilizar outro índice"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "aplicarJuros",
+          "label": "Aplicar Juros",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "baseSucumbencia",
+          "label": "Base Sucumbência",
+          "visivel": true,
+          "condicao": "devedor=RECLAMANTE E tipo=SUCUMBENCIAIS",
+          "opcoes": [
+            {
+              "value": "COMPOEM_PRINCIPAL",
+              "texto": "Verbas que Compõem o Principal"
+            },
+            {
+              "value": "NAO_COMPOEM_PRINCIPAL",
+              "texto": "Verbas que Não Compõem o Principal"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "selecionarAdvogado",
+          "label": "Selecionar Advogado (se cadastrado)",
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "nomeCredor",
+          "label": "Nome do Credor (se não cadastrado)",
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoDocumentoCredor",
+          "label": "Tipo Documento Fiscal Credor",
+          "radio_values": [
+            {
+              "value": "CPF"
+            },
+            {
+              "value": "CNPJ"
+            },
+            {
+              "value": "CEI"
+            }
+          ],
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "documentoFiscalCredor",
+          "label": "Número Documento Credor",
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "apurarIr",
+          "label": "Apurar IR sobre Honorários",
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "tipoIrHonorarios",
+          "label": "Tipo IR Honorários",
+          "visivel": true,
+          "condicao": "apurarIr=true",
+          "opcoes": [
+            {
+              "value": "IRPF",
+              "texto": "IRPF (tabela progressiva mensal)"
+            },
+            {
+              "value": "IRPJ",
+              "texto": "IRPJ (1,5% fixo)"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "incidirSobreJuros",
+          "label": "IR incidir sobre juros",
+          "visivel": true,
+          "condicao": "apurarIr=true E aplicarJuros=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "honorariosPericiais",
+          "label": "Valor Honorários Periciais",
+          "visivel": true,
+          "condicao": "tipoHonorario contém 'Pericial'"
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 23,
+      "visiveis": 23
     },
     "correcao_juros_multa": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/correcao-juros.jsf?conversationId=36",
-      "titulo": "Correcao, Juros e Multa",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/correcao-juros.jsf",
+      "titulo": "Correção, Juros e Multa",
+      "nota": "2 abas: Dados Gerais (índice, juros, multa 523) e Dados Específicos (FGTS JAM, CS Lei 11.941, CS atualização trabalhista/previdenciária/ambas, PP, Custas). Vários campos condicionais por seleção.",
       "elementos": [
         {
-          "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
+          "tipo": "select",
+          "sufixo": "indiceCorrecao",
+          "label": "Índice Trabalhista",
           "visivel": true,
-          "id": "formulario:fechar"
+          "opcoes": [
+            {
+              "value": "",
+              "texto": "Selecione"
+            },
+            {
+              "value": "TABELA_UNICA_JT_DIARIO",
+              "texto": "Tabela Única JT Diário"
+            },
+            {
+              "value": "TABELA_UNICA_JT_MENSAL",
+              "texto": "Tabela Única JT Mensal"
+            },
+            {
+              "value": "TR",
+              "texto": "TR"
+            },
+            {
+              "value": "IGP_M",
+              "texto": "IGP-M"
+            },
+            {
+              "value": "INPC",
+              "texto": "INPC"
+            },
+            {
+              "value": "IPC",
+              "texto": "IPC"
+            },
+            {
+              "value": "IPCA",
+              "texto": "IPCA"
+            },
+            {
+              "value": "IPCA_E",
+              "texto": "IPCA-E"
+            },
+            {
+              "value": "IPCA_E_TR",
+              "texto": "IPCA-E / TR"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "combinarComOutro",
+          "label": "Combinar com Outro Índice",
+          "visivel": true
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "segundoIndice",
+          "label": "Segundo Índice",
+          "visivel": true,
+          "condicao": "combinarComOutro=true",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
+            {
+              "value": "",
+              "texto": "(mesma lista de índices)"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataInicioSegundoIndice",
+          "label": "A partir de (segundo índice)",
+          "visivel": true,
+          "condicao": "combinarComOutro=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "ignorarTaxaNegativa",
+          "label": "Ignorar Taxa Negativa",
+          "visivel": true
+        },
+        {
+          "tipo": "select",
+          "sufixo": "taxaJuros",
+          "label": "Taxa de Juros",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "PADRAO",
+              "texto": "Padrão (0,5% até 26/02/87 + 1% cap. até 03/03/91 + 1% simples)"
+            },
+            {
+              "value": "FAZENDA_PUBLICA",
+              "texto": "Fazenda Pública (0,5% limitado 70% SELIC)"
+            },
+            {
+              "value": "SELIC",
+              "texto": "Taxa SELIC"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "periodoSemJurosInicio",
+          "label": "Período Sem Juros: Início",
+          "visivel": true,
+          "nota": "Modal para adicionar períodos de isenção de juros"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "periodoSemJurosFim",
+          "label": "Período Sem Juros: Fim",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "aplicarMulta523",
+          "label": "Aplicar Multa Art. 523 CPC",
+          "visivel": true
+        },
+        {
+          "tipo": "select",
+          "sufixo": "baseDeJurosDasVerbas",
+          "label": "Base de Juros das Verbas",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "VERBA",
+              "texto": "Verba"
+            },
+            {
+              "value": "VERBA_MENOS_CS",
+              "texto": "Verba (-) CS"
+            },
+            {
+              "value": "VERBA_MENOS_CS_MENOS_PP",
+              "texto": "Verba (-) CS (-) Previdência Privada"
+            }
+          ]
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "fgtsCorrecao",
+          "label": "FGTS: Correção",
+          "radio_values": [
+            {
+              "value": "INDICE_TRABALHISTA",
+              "texto": "Utilizar índice trabalhista"
+            },
+            {
+              "value": "JAM",
+              "texto": "Utilizar índice JAM"
+            },
+            {
+              "value": "JAM_MAIS_TRABALHISTA",
+              "texto": "JAM + índice trabalhista"
+            }
           ],
-          "visivel": false
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "lei11941",
+          "label": "Lei 11.941/2009 (CS)",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataInicioLei11941",
+          "label": "Data Início Lei 11.941",
+          "visivel": true,
+          "condicao": "lei11941=true"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "limitarMultaLei11941",
+          "label": "Limitar Multa Lei 11.941",
+          "visivel": true,
+          "condicao": "lei11941=true"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "atualizacaoCS",
+          "label": "Atualização CS",
+          "radio_values": [
+            {
+              "value": "TRABALHISTA",
+              "texto": "Atualização Trabalhista"
+            },
+            {
+              "value": "PREVIDENCIARIA",
+              "texto": "Atualização Previdenciária"
+            },
+            {
+              "value": "AMBAS",
+              "texto": "Ambas (trabalhista até data, previdenciária depois)"
+            }
+          ],
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "dataTransicaoCS",
+          "label": "Data de Transição (CS)",
+          "visivel": true,
+          "condicao": "atualizacaoCS=AMBAS"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "tipoMultaPrevidenciaria",
+          "label": "Tipo Multa Previdenciária",
+          "visivel": true,
+          "condicao": "atualizacaoCS=PREVIDENCIARIA ou AMBAS",
+          "opcoes": [
+            {
+              "value": "URBANA",
+              "texto": "Urbana"
+            },
+            {
+              "value": "RURAL",
+              "texto": "Rural"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "pagamentoMultaPrevidenciaria",
+          "label": "Pagamento Multa Prev.",
+          "visivel": true,
+          "condicao": "atualizacaoCS=PREVIDENCIARIA ou AMBAS",
+          "opcoes": [
+            {
+              "value": "INTEGRAL",
+              "texto": "Integral"
+            },
+            {
+              "value": "REDUZIDO",
+              "texto": "Reduzido (50%, 11/1999-11/2008)"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "indicePrevidenciaPrivada",
+          "label": "Índice PP",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "TRABALHISTA",
+              "texto": "Utilizar índice trabalhista"
+            },
+            {
+              "value": "OUTRO",
+              "texto": "Utilizar outro índice"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "jurosPrevidenciaPrivada",
+          "label": "Juros PP",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "atualizarCustas",
+          "label": "Atualizar Custas",
+          "visivel": true
+        },
+        {
+          "tipo": "select",
+          "sufixo": "indiceCustas",
+          "label": "Índice Custas",
+          "visivel": true,
+          "condicao": "atualizarCustas=true",
+          "opcoes": [
+            {
+              "value": "TRABALHISTA",
+              "texto": "Trabalhista"
+            },
+            {
+              "value": "OUTRO",
+              "texto": "Outro índice"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "jurosCustas",
+          "label": "Juros sobre Custas",
+          "visivel": true,
+          "condicao": "atualizarCustas=true"
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 25,
+      "visiveis": 25
     },
     "salario_familia": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/salario-familia.jsf?conversationId=36",
-      "titulo": "Salario Familia",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/salario-familia.jsf",
+      "titulo": "Salário Família",
       "elementos": [
         {
-          "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
+          "tipo": "checkbox",
+          "sufixo": "apurar",
+          "label": "Apurar Salário Família",
+          "visivel": true
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "comporPrincipal",
+          "label": "Compor Principal",
+          "radio_values": [
+            {
+              "value": "SIM",
+              "texto": "Sim"
+            },
+            {
+              "value": "NAO",
+              "texto": "Não"
+            }
+          ],
           "visivel": true,
-          "id": "formulario:fechar"
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "competenciaInicio",
+          "label": "Competência Início",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "competenciaFim",
+          "label": "Competência Fim",
+          "visivel": true,
+          "condicao": "apurar=true"
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "remuneracaoMensalPagos",
+          "label": "Remuneração Mensal - Salários Pagos",
+          "visivel": true,
+          "condicao": "apurar=true",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+            {
+              "value": "NENHUM",
+              "texto": "Nenhum"
+            },
+            {
+              "value": "MAIOR_REMUNERACAO",
+              "texto": "Maior Remuneração"
+            },
+            {
+              "value": "HISTORICO",
+              "texto": "Histórico Salarial (multi-select bases)"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "remuneracaoMensalDevidos",
+          "label": "Remuneração Mensal - Salários Devidos",
+          "visivel": true,
+          "condicao": "apurar=true",
+          "opcoes": [
+            {
+              "value": "",
+              "texto": "Multi-select verbas"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "quantidadeDeFilhos",
+          "label": "Quantidade de Filhos (<14 anos)",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "filhosVariacaoCompetencia",
+          "label": "Variação Filhos: Competência",
+          "visivel": true,
+          "condicao": "apurar=true",
+          "nota": "Modal para adicionar variações: Competência + Nova Quantidade + Adicionar"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "filhosVariacaoQuantidade",
+          "label": "Variação Filhos: Nova Quantidade",
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "button",
+          "sufixo": "adicionarVariacao",
+          "texto": "Adicionar (variação filhos)",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 12,
+      "visiveis": 12,
+      "nota": "Apuração habilitada via checkbox. Modal para variações do número de filhos por competência."
     },
     "seguro_desemprego": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/seguro-desemprego.jsf?conversationId=36",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/seguro-desemprego.jsf",
       "titulo": "Seguro Desemprego",
       "elementos": [
         {
+          "tipo": "checkbox",
+          "sufixo": "apurar",
+          "label": "Apurar Seguro Desemprego",
+          "visivel": true
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoValor",
+          "label": "Valor",
+          "radio_values": [
+            {
+              "value": "CALCULADO",
+              "texto": "Calculado"
+            },
+            {
+              "value": "INFORMADO",
+              "texto": "Informado"
+            }
+          ],
+          "visivel": true,
+          "condicao": "apurar=true"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoSolicitacao",
+          "label": "Tipo de Solicitação",
+          "radio_values": [
+            {
+              "value": "PRIMEIRA",
+              "texto": "Primeira"
+            },
+            {
+              "value": "SEGUNDA",
+              "texto": "Segunda"
+            },
+            {
+              "value": "DEMAIS",
+              "texto": "Demais"
+            }
+          ],
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "empregadoDomestico",
+          "label": "Empregado Doméstico",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
           "tipo": "input",
-          "sufixo": "",
-          "visivel": false
+          "sufixo": "quantidadeDeParcelas",
+          "label": "Quantidade de Parcelas",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "nota": "Auto-calculado pelo sistema, editável"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "remuneracaoMensalPagos",
+          "label": "Remuneração Mensal - Salários Pagos",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "opcoes": [
+            {
+              "value": "NENHUM",
+              "texto": "Nenhum"
+            },
+            {
+              "value": "MAIOR_REMUNERACAO",
+              "texto": "Maior Remuneração"
+            },
+            {
+              "value": "HISTORICO",
+              "texto": "Histórico Salarial (multi-select bases)"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorInformado",
+          "label": "Valor Informado",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "comporPrincipal",
+          "label": "Compor Principal",
+          "radio_values": [
+            {
+              "value": "SIM",
+              "texto": "Sim"
+            },
+            {
+              "value": "NAO",
+              "texto": "Não"
+            }
+          ],
+          "visivel": true,
+          "condicao": "apurar=true"
         },
         {
           "tipo": "button",
           "sufixo": "salvar",
           "texto": "Salvar",
-          "visivel": true,
-          "id": "formulario:salvar"
+          "visivel": true
         },
         {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 3
+      "total": 10,
+      "visiveis": 10,
+      "nota": "Bifurca por tipoValor: Calculado (tipo solicitação, doméstico, parcelas, remuneração) vs Informado (valor direto)."
     },
     "pensao_alimenticia": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/pensao-alimenticia.jsf?conversationId=36",
-      "titulo": "Pensao Alimenticia",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/pensao-alimenticia.jsf",
+      "titulo": "Pensão Alimentícia",
       "elementos": [
         {
+          "tipo": "checkbox",
+          "sufixo": "apurar",
+          "label": "Apurar Pensão Alimentícia",
+          "visivel": true
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "incidirSobreJuros",
+          "label": "Incidir Sobre Juros",
+          "visivel": true
+        },
+        {
           "tipo": "input",
-          "sufixo": "",
-          "visivel": false
+          "sufixo": "aliquota",
+          "label": "Alíquota (%)",
+          "visivel": true
         },
         {
           "tipo": "button",
           "sufixo": "salvar",
           "texto": "Salvar",
-          "visivel": true,
-          "id": "formulario:salvar"
+          "visivel": true
         },
         {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 3
+      "total": 5,
+      "visiveis": 5
     },
     "previdencia_privada": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/previdencia-privada.jsf?conversationId=36",
-      "titulo": "Previdencia Privada",
+      "url": "http://localhost:9257/pjecalc/pages/calculo/previdencia-privada.jsf",
+      "titulo": "Previdência Privada",
       "elementos": [
         {
+          "tipo": "checkbox",
+          "sufixo": "apurar",
+          "label": "Apurar Previdência Privada",
+          "visivel": true
+        },
+        {
           "tipo": "input",
-          "sufixo": "",
-          "visivel": false
+          "sufixo": "aliquota",
+          "label": "Alíquota (%)",
+          "visivel": true
         },
         {
           "tipo": "button",
           "sufixo": "salvar",
           "texto": "Salvar",
-          "visivel": true,
-          "id": "formulario:salvar"
+          "visivel": true
         },
         {
-          "tipo": "select",
-          "sufixo": "",
-          "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 3
+      "total": 4,
+      "visiveis": 4
     },
     "liquidacao": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/liquidacao/liquidacao.xhtml?conversationId=36",
+      "url": "http://localhost:9257/pjecalc/pages/liquidacao/liquidacao.xhtml",
       "titulo": "Liquidar",
+      "nota": "Antes de liquidar, sistema verifica pendências (erros=bloqueantes, alertas=informativos). Links click-to-resolve para cada pendência. Data + critério de acumulação obrigatórios.",
       "elementos": [
         {
-          "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
-          "visivel": true,
-          "id": "formulario:fechar"
+          "tipo": "input",
+          "sufixo": "dataLiquidacao",
+          "label": "Data de Liquidação",
+          "visivel": true
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "acumularIndices",
+          "label": "Acumular Índices de Correção",
+          "visivel": true,
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
-          ],
-          "visivel": false
+            {
+              "value": "MES_SUBSEQUENTE",
+              "texto": "A partir do mês subsequente ao vencimento (todas)"
+            },
+            {
+              "value": "MES_VENCIMENTO",
+              "texto": "A partir do mês de vencimento (todas)"
+            },
+            {
+              "value": "MISTO",
+              "texto": "Misto (subsequente p/ mensais, vencimento p/ anuais/rescisórias)"
+            }
+          ]
+        },
+        {
+          "tipo": "button",
+          "sufixo": "liquidar",
+          "texto": "Liquidar",
+          "visivel": true,
+          "nota": "Aguardar .rf-msgs-sum com 'Operação realizada com sucesso'. Verificar pendências antes."
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 4,
+      "visiveis": 4
     },
     "exportacao": {
-      "url": "http://localhost:9257/pjecalc/pages/calculo/exportacao/exportacao.xhtml?conversationId=36",
+      "url": "http://localhost:9257/pjecalc/pages/exportacao/exportacao.xhtml",
       "titulo": "Exportar",
+      "nota": "Exporta o cálculo liquidado como arquivo .PJC.",
       "elementos": [
         {
           "tipo": "button",
-          "sufixo": "fechar",
-          "texto": "",
+          "sufixo": "exportar",
+          "texto": "Exportar",
           "visivel": true,
-          "id": "formulario:fechar"
+          "nota": "input[type='submit'][id$=':exportar'] ou input[type='button'][id$=':exportar']"
+        },
+        {
+          "tipo": "link",
+          "sufixo": "linkDownloadArquivo",
+          "label": "Link Download Arquivo",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
+        }
+      ],
+      "total": 3,
+      "visiveis": 3
+    },
+    "multas_indenizacoes": {
+      "url": "http://localhost:9257/pjecalc/pages/calculo/multas-indenizacoes.jsf",
+      "titulo": "Multas e Indenizações",
+      "nota": "Formulário aparece após Incluir. Campos condicionais: credorDevedor com Terceiro revela nome. tipoValor Calculado vs Informado revela campos distintos.",
+      "elementos": [
+        {
+          "tipo": "button",
+          "sufixo": "incluir",
+          "texto": "Novo/Incluir",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "descricao",
+          "label": "Descrição (60 chars)",
+          "visivel": true,
+          "condicao": "form aberto"
         },
         {
           "tipo": "select",
-          "sufixo": "",
+          "sufixo": "credorDevedor",
+          "label": "Credor / Devedor",
+          "visivel": true,
+          "condicao": "form aberto",
           "opcoes": [
-            "verde",
-            "azul",
-            "cinza",
-            "altoContraste",
-            "vermelho"
+            {
+              "value": "",
+              "texto": "Selecione"
+            },
+            {
+              "value": "RECLAMANTE_RECLAMADO",
+              "texto": "Reclamante e Reclamado"
+            },
+            {
+              "value": "RECLAMADO_RECLAMANTE",
+              "texto": "Reclamado e Reclamante"
+            },
+            {
+              "value": "TERCEIRO_RECLAMANTE",
+              "texto": "Terceiro e Reclamante"
+            },
+            {
+              "value": "TERCEIRO_RECLAMADO",
+              "texto": "Terceiro e Reclamado"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "nomeTerceiro",
+          "label": "Nome do Terceiro",
+          "visivel": true,
+          "condicao": "credorDevedor contém TERCEIRO"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "formaCobrancaTerceiro",
+          "label": "Forma de Cobrança",
+          "visivel": true,
+          "condicao": "credorDevedor=TERCEIRO_RECLAMANTE",
+          "opcoes": [
+            {
+              "value": "DESCONTAR",
+              "texto": "Descontar dos créditos"
+            },
+            {
+              "value": "COBRAR",
+              "texto": "Cobrar do reclamante"
+            }
+          ]
+        },
+        {
+          "tipo": "radio",
+          "sufixo": "tipoValor",
+          "label": "Tipo de Valor",
+          "radio_values": [
+            {
+              "value": "CALCULADO",
+              "texto": "Calculado"
+            },
+            {
+              "value": "INFORMADO",
+              "texto": "Informado"
+            }
           ],
-          "visivel": false
+          "visivel": true,
+          "condicao": "form aberto"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "tipoBaseMulta",
+          "label": "Base de Cálculo",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO",
+          "opcoes": [
+            {
+              "value": "PRINCIPAL",
+              "texto": "Principal"
+            },
+            {
+              "value": "PRINCIPAL_MENOS_CS",
+              "texto": "Principal (-) Contribuição Social"
+            },
+            {
+              "value": "PRINCIPAL_MENOS_CS_MENOS_PP",
+              "texto": "Principal (-) CS (-) Previdência Privada"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "aliquota",
+          "label": "Alíquota (%)",
+          "visivel": true,
+          "condicao": "tipoValor=CALCULADO"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "vencimento",
+          "label": "Vencimento (data indexação)",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valor",
+          "label": "Valor",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "indiceCorrecao",
+          "label": "Índice de Correção",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO",
+          "opcoes": [
+            {
+              "value": "TRABALHISTA",
+              "texto": "Utilizar índice trabalhista"
+            },
+            {
+              "value": "OUTRO",
+              "texto": "Utilizar outro índice"
+            }
+          ]
+        },
+        {
+          "tipo": "checkbox",
+          "sufixo": "aplicarJuros",
+          "label": "Aplicar Juros",
+          "visivel": true,
+          "condicao": "tipoValor=INFORMADO"
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
         }
       ],
-      "total": 2
+      "total": 14,
+      "visiveis": 14
+    },
+    "custas_judiciais": {
+      "url": "http://localhost:9257/pjecalc/pages/calculo/custas-judiciais.jsf",
+      "titulo": "Custas Judiciais",
+      "elementos": [
+        {
+          "tipo": "select",
+          "sufixo": "baseCustas",
+          "label": "Base de Cálculo",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "BRUTO_RECLAMANTE",
+              "texto": "Bruto Devido ao Reclamante"
+            },
+            {
+              "value": "BRUTO_MAIS_DEBITOS",
+              "texto": "Bruto + Outros Débitos da Reclamada"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "custasReclamanteConhecimento",
+          "label": "Custas Reclamante Conhecimento",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "NAO_SE_APLICA",
+              "texto": "Não se aplica"
+            },
+            {
+              "value": "CALCULADA_2PCT",
+              "texto": "Calculada 2%"
+            },
+            {
+              "value": "INFORMADA",
+              "texto": "Informada"
+            }
+          ]
+        },
+        {
+          "tipo": "select",
+          "sufixo": "formaCobrancaReclamante",
+          "label": "Forma Cobrança Reclamante",
+          "visivel": true,
+          "condicao": "custasReclamanteConhecimento!=NAO_SE_APLICA",
+          "opcoes": [
+            {
+              "value": "DESCONTAR",
+              "texto": "Descontar dos créditos"
+            },
+            {
+              "value": "COBRAR",
+              "texto": "Cobrar do reclamante"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "vencimentoReclamanteConhecimento",
+          "label": "Vencimento (Reclamante Conhecimento)",
+          "visivel": true,
+          "condicao": "custasReclamanteConhecimento=INFORMADA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorReclamanteConhecimento",
+          "label": "Valor (Reclamante Conhecimento)",
+          "visivel": true,
+          "condicao": "custasReclamanteConhecimento=INFORMADA"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "custasReclamadoConhecimento",
+          "label": "Custas Reclamado Conhecimento",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "CALCULADA_2PCT",
+              "texto": "Calculada 2%"
+            },
+            {
+              "value": "INFORMADA",
+              "texto": "Informada"
+            },
+            {
+              "value": "NAO_SE_APLICA",
+              "texto": "Não se aplica"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "vencimentoReclamadoConhecimento",
+          "label": "Vencimento (Reclamado Conhecimento)",
+          "visivel": true,
+          "condicao": "custasReclamadoConhecimento=INFORMADA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorReclamadoConhecimento",
+          "label": "Valor (Reclamado Conhecimento)",
+          "visivel": true,
+          "condicao": "custasReclamadoConhecimento=INFORMADA"
+        },
+        {
+          "tipo": "select",
+          "sufixo": "custasReclamadoLiquidacao",
+          "label": "Custas Reclamado Liquidação",
+          "visivel": true,
+          "opcoes": [
+            {
+              "value": "NAO_SE_APLICA",
+              "texto": "Não se aplica"
+            },
+            {
+              "value": "CALCULADA_05PCT",
+              "texto": "Calculada 0,5%"
+            },
+            {
+              "value": "INFORMADA",
+              "texto": "Informada"
+            }
+          ]
+        },
+        {
+          "tipo": "input",
+          "sufixo": "vencimentoReclamadoLiquidacao",
+          "label": "Vencimento (Reclamado Liquidação)",
+          "visivel": true,
+          "condicao": "custasReclamadoLiquidacao=INFORMADA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "valorReclamadoLiquidacao",
+          "label": "Valor (Reclamado Liquidação)",
+          "visivel": true,
+          "condicao": "custasReclamadoLiquidacao=INFORMADA"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "custasFixasVencimento",
+          "label": "Custas Fixas: Vencimento",
+          "visivel": true,
+          "nota": "Modal c/ 6 tipos: Oficiais Z.Urbana/Rural, Agravo, Petição, Impugnação, Embargos, Recurso de Revista"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "custasFixasQuantidade",
+          "label": "Custas Fixas: Quantidade",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "custasAutosVencimento",
+          "label": "Custas Autos: Vencimento",
+          "visivel": true,
+          "nota": "3 tipos: Adjudicação, Arrematação, Remissão"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "custasAutosValorBem",
+          "label": "Custas Autos: Valor do Bem",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "armazenamentoDataInicio",
+          "label": "Armazenamento: Data Início",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "armazenamentoValorBem",
+          "label": "Armazenamento: Valor do Bem",
+          "visivel": true
+        },
+        {
+          "tipo": "input",
+          "sufixo": "recolhidaVencimento",
+          "label": "Custas Recolhidas: Vencimento",
+          "visivel": true,
+          "nota": "Tabela na 2ª aba"
+        },
+        {
+          "tipo": "input",
+          "sufixo": "recolhidaValor",
+          "label": "Custas Recolhidas: Valor",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "adicionar",
+          "texto": "Adicionar (custas recolhidas)",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "salvar",
+          "texto": "Salvar",
+          "visivel": true
+        },
+        {
+          "tipo": "button",
+          "sufixo": "fechar",
+          "texto": "Fechar",
+          "visivel": true
+        }
+      ],
+      "total": 22,
+      "visiveis": 22,
+      "nota": "2 abas: Custas Devidas (Reclamante/Reclamado Conhecimento + Reclamado Liquidação + Fixas + Autos + Armazenamento) e Custas Recolhidas (tabela). Campos condicionais por tipo Calculada/Informada."
     }
   }
 }
