@@ -8471,7 +8471,7 @@ class PJECalcPlaywright:
             self._marcar_checkbox("combinarComOutro", True)
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
-            _val_seg = _indice_map.get(_segundo_indice, _segundo_indice)
+            _val_seg = _indice_text_map.get(_segundo_indice, _segundo_indice)
             self._selecionar("segundoIndice", _val_seg, obrigatorio=False)
             _dt_seg = cj.get("data_inicio_segundo_indice") or cj.get("data_taxa_legal", "30/08/2024")
             self._preencher_data("dataInicioSegundoIndice", _dt_seg, False)
