@@ -114,12 +114,14 @@ JSON (convertidas para BR na automação), booleanos como strings "sim"/"não", 
     { "ano": 2026, "avos": 2 }
   ],
 
-  // === FÉRIAS ===
+  // === FÉRIAS (pjecalc-agente usa format diferente com gozo_periodos) ===
   "ferias_selecionadas": [
     { "periodo": "2024/2025", "tipo": "vencidas_dobro" },
     { "periodo": "2025/2026", "tipo": "simples" },
     { "periodo": "2026", "tipo": "proporcionais", "avos": 1 }
   ],
+  // pjecalc-agente: ferias[].gozo_periodos = [{inicio, fim}] (até 3 períodos de gozo)
+  // Situações: GOZADAS / INDENIZADAS / PERDIDAS / GOZADAS_PARCIALMENTE
 
   // === CORREÇÃO MONETÁRIA ===
   "correcao_monetaria": {
@@ -128,6 +130,8 @@ JSON (convertidas para BR na automação), booleanos como strings "sim"/"não", 
     "apos_30082024": "IPCA_SELIC_SUBTRAI",
     "lei_14905_2024": true
   },
+  // pjecalc-agente: correcao_juros.acumular_indices = MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO
+  // pjecalc-agente: salario_familia com competencia_inicio/fim, remuneracao_mensal_pagos/devidos, variacoes_filhos
 
   // === OBSERVAÇÕES ===
   "observacoes": {

@@ -586,9 +586,10 @@
                 <label>Situação</label>
                 <select onchange="salvarCampo('ferias[{{ fri }}].situacao', this.value, this)">
                   <option value="">— selecione —</option>
-                  <option value="Vencidas" {{ 'selected' if fer.get('situacao') == 'Vencidas' }}>Vencidas</option>
-                  <option value="Proporcionais" {{ 'selected' if fer.get('situacao') == 'Proporcionais' }}>Proporcionais</option>
-                  <option value="Gozadas" {{ 'selected' if fer.get('situacao') == 'Gozadas' }}>Gozadas</option>
+                  <option value="GOZADAS" {{ 'selected' if fer.get('situacao') in ('GOZADAS', 'Gozadas') }}>Gozadas</option>
+                  <option value="INDENIZADAS" {{ 'selected' if fer.get('situacao') in ('INDENIZADAS', 'Vencidas', 'Proporcionais') }}>Indenizadas</option>
+                  <option value="PERDIDAS" {{ 'selected' if fer.get('situacao') == 'PERDIDAS' }}>Perdidas (dobra)</option>
+                  <option value="GOZADAS_PARCIALMENTE" {{ 'selected' if fer.get('situacao') == 'GOZADAS_PARCIALMENTE' }}>Gozadas Parcialmente</option>
                 </select>
               </div>
               <div class="campo-form">
@@ -617,6 +618,28 @@
                        onchange="salvarCampo('ferias[{{ fri }}].dobra', this.checked ? 'true' : 'false', this)">
                 <label for="fer-dobra-{{ fri }}">Dobra (art. 137 CLT)</label>
               </div>
+            </div>
+            <!-- Datas de gozo (visível quando situação = Gozadas ou Gozadas Parcialmente) -->
+            {% set gozo_list = fer.get('gozo_periodos') or [] %}
+            <div style="margin-top:10px; padding:8px 12px; background:#f0f7ff; border-radius:4px;">
+              <strong style="font-size:0.82rem; color:#1a3a6b;">Períodos de Gozo (até 3)</strong>
+              {% for gi in range(3) %}
+              {% set gozo = gozo_list[gi] if gi < gozo_list|length else {} %}
+              <div class="campos-grid" style="margin-top:4px;">
+                <div class="campo-form">
+                  <label>Gozo {{ gi+1 }} — Início</label>
+                  <input type="text" placeholder="DD/MM/AAAA"
+                         value="{{ (gozo.get('inicio') or gozo.get('data_inicio') or '') if gozo else '' }}"
+                         onchange="salvarCampo('ferias[{{ fri }}].gozo_periodos[{{ gi }}].inicio', this.value, this)">
+                </div>
+                <div class="campo-form">
+                  <label>Gozo {{ gi+1 }} — Fim</label>
+                  <input type="text" placeholder="DD/MM/AAAA"
+                         value="{{ (gozo.get('fim') or gozo.get('data_fim') or '') if gozo else '' }}"
+                         onchange="salvarCampo('ferias[{{ fri }}].gozo_periodos[{{ gi }}].fim', this.value, this)">
+                </div>
+              </div>
+              {% endfor %}
             </div>
           </div>
         </div>
@@ -1024,17 +1047,61 @@
             <span style="font-size:0.8rem; color:#6c757d;">Padrão: 8%</span>
           </div>
         </div>
-        <div class="checkbox-row" style="margin-top:8px;">
-          <input type="checkbox" id="fgts-multa40"
-                 {{ 'checked' if dados.get('fgts', {}).get('multa_40') }}
-                 onchange="salvarCampo('fgts.multa_40', this.checked ? 'true' : 'false', this)">
-          <label for="fgts-multa40">Multa de 40% — art. 18, §1º, Lei 8.036/90</label>
+        <div class="campos-grid" style="margin-top:8px;">
+          <div class="campo-form">
+            <label>Destino do FGTS</label>
+            <select onchange="salvarCampo('fgts.tipo_de_verba', this.value, this)">
+              <option value="PAGAR" {{ 'selected' if dados.get('fgts', {}).get('tipo_de_verba') == 'PAGAR' }}>Pagar ao Reclamante</option>
+              <option value="DEPOSITAR" {{ 'selected' if dados.get('fgts', {}).get('tipo_de_verba') == 'DEPOSITAR' }}>Depositar em Conta</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Multa Rescisória</label>
+            <select id="fgts-multa" onchange="salvarCampo('fgts.multa', this.value, this); document.getElementById('fgts-multa-detalhe').style.display = this.value === 'CALCULADA' ? '' : 'none';">
+              <option value="NAO_APURAR" {{ 'selected' if dados.get('fgts', {}).get('multa') == 'NAO_APURAR' or (not dados.get('fgts', {}).get('multa_40') and not dados.get('fgts', {}).get('multa')) }}>Não Apurar</option>
+              <option value="CALCULADA" {{ 'selected' if dados.get('fgts', {}).get('multa') == 'CALCULADA' or dados.get('fgts', {}).get('multa_40') }}>Calculada</option>
+              <option value="INFORMADA" {{ 'selected' if dados.get('fgts', {}).get('multa') == 'INFORMADA' }}>Informada</option>
+            </select>
+          </div>
         </div>
-        <div class="checkbox-row">
+        <div id="fgts-multa-detalhe" style="{{ '' if dados.get('fgts', {}).get('multa_40') or dados.get('fgts', {}).get('multa') == 'CALCULADA' else 'display:none;' }} margin-top:8px;">
+          <div class="campos-grid">
+            <div class="campo-form">
+              <label>Percentual da Multa</label>
+              <select onchange="salvarCampo('fgts.multa_percentual', this.value, this)">
+                <option value="QUARENTA_POR_CENTO" {{ 'selected' if not dados.get('fgts', {}).get('multa_20') }}>40%</option>
+                <option value="VINTE_POR_CENTO" {{ 'selected' if dados.get('fgts', {}).get('multa_20') }}>20%</option>
+              </select>
+            </div>
+            <div class="campo-form">
+              <label>Base da Multa</label>
+              <select onchange="salvarCampo('fgts.base_multa', this.value, this)">
+                <option value="DEVIDO" {{ 'selected' if dados.get('fgts', {}).get('base_multa', 'DEVIDO') == 'DEVIDO' }}>Devido</option>
+                <option value="DIFERENCA" {{ 'selected' if dados.get('fgts', {}).get('base_multa') == 'DIFERENCA' }}>Diferença</option>
+                <option value="SALDO_E_OU_SAQUE" {{ 'selected' if dados.get('fgts', {}).get('base_multa') == 'SALDO_E_OU_SAQUE' }}>Saldo e/ou Saque</option>
+                <option value="DEVIDO_MENOS_SALDO" {{ 'selected' if dados.get('fgts', {}).get('base_multa') == 'DEVIDO_MENOS_SALDO' }}>Devido - Saldo</option>
+                <option value="DEVIDO_MAIS_SALDO" {{ 'selected' if dados.get('fgts', {}).get('base_multa') == 'DEVIDO_MAIS_SALDO' }}>Devido + Saldo</option>
+              </select>
+            </div>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="fgts-excl-aviso"
+                   {{ 'checked' if dados.get('fgts', {}).get('excluir_aviso_multa') }}
+                   onchange="salvarCampo('fgts.excluir_aviso_multa', this.checked ? 'true' : 'false', this)">
+            <label for="fgts-excl-aviso">Excluir aviso prévio da base da multa</label>
+          </div>
+        </div>
+        <div class="checkbox-row" style="margin-top:8px;">
           <input type="checkbox" id="fgts-multa467"
                  {{ 'checked' if dados.get('fgts', {}).get('multa_467') }}
                  onchange="salvarCampo('fgts.multa_467', this.checked ? 'true' : 'false', this)">
           <label for="fgts-multa467">Multa art. 467 da CLT</label>
+        </div>
+        <div class="checkbox-row">
+          <input type="checkbox" id="fgts-multa10"
+                 {{ 'checked' if dados.get('fgts', {}).get('multa_10') }}
+                 onchange="salvarCampo('fgts.multa_10', this.checked ? 'true' : 'false', this)">
+          <label for="fgts-multa10">Multa 10% (rescisão antecipada contrato a prazo)</label>
         </div>
 
         <!-- FGTS + 13º: ajustes das Ocorrências do FGTS -->
@@ -1240,28 +1307,25 @@
               <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Correção Monetária</legend>
               <div class="campo-form" style="margin-bottom:10px;">
                 <label>Índice Trabalhista</label>
+                {# Opções DOM confirmadas v2.15.1 (select indiceCorrecao) #}
                 {% set idx_opts = [
-                    ('TUACDT', 'Tabela Única de Atualização e Conversão de Débitos Trabalhistas'),
-                    ('TABELA_DEVEDOR_FAZENDA', 'Devedor Fazenda Pública'),
-                    ('TABELA_INDEBITO_TRIBUTARIO', 'Repetição de Indébito Tributário'),
-                    ('TABELA_UNICA_JT_MENSAL', 'Tabela JT Mensal'),
                     ('TABELA_UNICA_JT_DIARIO', 'Tabela JT Diária'),
+                    ('TABELA_UNICA_JT_MENSAL', 'Tabela JT Mensal'),
                     ('TR', 'TR'),
-                    ('IGPM', 'IGP-M'),
+                    ('IGP_M', 'IGP-M'),
                     ('INPC', 'INPC'),
                     ('IPC', 'IPC'),
                     ('IPCA', 'IPCA'),
-                    ('IPCAE', 'IPCA-E'),
-                    ('IPCAETR', 'IPCA-E / TR'),
-                    ('SELIC', 'SELIC (Receita Federal)'),
-                    ('SELIC_FAZENDA', 'SELIC Simples'),
-                    ('SELIC_BACEN', 'SELIC Composta'),
-                    ('SEM_CORRECAO', 'Sem Correção')
+                    ('IPCA_E', 'IPCA-E'),
+                    ('IPCA_E_TR', 'IPCA-E / TR')
                   ] %}
-                  {# Normalizar valores legados da extração para enum PJe-Calc #}
+                  {# Normalizar valores legados da extração para enum DOM #}
                   {% set _norm_idx = {
-                    'IPCA-E': 'IPCAE', 'IPCA-E/TR': 'IPCAETR', 'IGP-M': 'IGPM',
-                    'Tabela JT Unica Mensal': 'TUACDT', 'Tabela JT Única Mensal': 'TUACDT',
+                    'IPCAE': 'IPCA_E', 'IPCAETR': 'IPCA_E_TR', 'IGPM': 'IGP_M',
+                    'IPCA-E': 'IPCA_E', 'IPCA-E/TR': 'IPCA_E_TR', 'IGP-M': 'IGP_M',
+                    'TUACDT': 'TABELA_UNICA_JT_MENSAL',
+                    'Tabela JT Unica Mensal': 'TABELA_UNICA_JT_MENSAL',
+                    'Tabela JT Única Mensal': 'TABELA_UNICA_JT_MENSAL',
                     'Selic': 'SELIC', 'TRCT': 'TR', 'TUACDT_DIARIO': 'TABELA_UNICA_JT_DIARIO',
                   } %}
                   {% set _idx_val = _norm_idx.get(cj.get('indice_correcao', ''), cj.get('indice_correcao', '')) %}
@@ -1316,28 +1380,17 @@
               </div>
               <div class="campo-form" style="margin-bottom:10px;">
                 <label>Tabela de Juros</label>
+                {# Opções DOM confirmadas v2.15.1 (select taxaJuros) #}
                 {% set juros_opts = [
-                    ('JUROS_PADRAO', 'Juros Padrão'),
-                    ('JUROS_POUPANCA', 'Juros Caderneta de Poupança'),
+                    ('PADRAO', 'Juros Padrão'),
                     ('FAZENDA_PUBLICA', 'Juros Fazenda Pública'),
-                    ('JUROS_MEIO_PORCENTO', 'Juros Simples 0,5% a.m.'),
-                    ('JUROS_UM_PORCENTO', 'Juros Simples 1,0% a.m.'),
-                    ('JUROS_ZERO_TRINTA_TRES', 'Juros Simples 0,0333333% a.d.'),
-                    ('SELIC', 'SELIC (Receita Federal)'),
-                    ('SELIC_FAZENDA', 'SELIC Simples'),
-                    ('SELIC_BACEN', 'SELIC Composta'),
-                    ('TRD_SIMPLES', 'TRD Juros Simples'),
-                    ('TRD_COMPOSTOS', 'TRD Juros Compostos'),
-                    ('TAXA_LEGAL', 'Taxa Legal'),
-                    ('SEM_JUROS', 'Sem Juros')
+                    ('SELIC', 'SELIC')
                   ] %}
-                  {# Normalizar valores legados da extração para enum PJe-Calc #}
+                  {# Normalizar valores legados da extração para enum DOM #}
                   {% set _norm_juros = {
-                    'Taxa Legal': 'TAXA_LEGAL', 'Juros Padrao': 'JUROS_PADRAO',
-                    'Juros Padrão': 'JUROS_PADRAO', 'Selic': 'SELIC',
-                    'TRD_CAPITALIZADOS': 'TRD_COMPOSTOS',
-                    'JUROS_SIMPLES_05': 'JUROS_MEIO_PORCENTO',
-                    'JUROS_SIMPLES_1': 'JUROS_UM_PORCENTO',
+                    'JUROS_PADRAO': 'PADRAO', 'TAXA_LEGAL': 'PADRAO',
+                    'Taxa Legal': 'PADRAO', 'Juros Padrao': 'PADRAO',
+                    'Juros Padrão': 'PADRAO', 'Selic': 'SELIC',
                   } %}
                   {% set _juros_val = _norm_juros.get(cj.get('taxa_juros', ''), cj.get('taxa_juros', '')) %}
                 <select onchange="salvarCampo('correcao_juros.taxa_juros', this.value, this)" style="width:100%;">
@@ -1482,6 +1535,19 @@
               </label>
             </fieldset>
 
+            <fieldset style="border:1px solid #c8d6e5; border-radius:6px; padding:12px 16px; min-width:250px;">
+              <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b; padding:0 6px;">Liquidação</legend>
+              <div class="campo-form" style="margin-bottom:6px;">
+                <label style="font-size:0.82rem;">Acumular Índices de Correção</label>
+                <select onchange="salvarCampo('correcao_juros.acumular_indices', this.value, this)" style="width:100%;">
+                  <option value="" {{ 'selected' if not cj.get('acumular_indices') }}>— padrão —</option>
+                  <option value="MES_SUBSEQUENTE" {{ 'selected' if cj.get('acumular_indices') == 'MES_SUBSEQUENTE' }}>Mês subsequente ao vencimento (todas)</option>
+                  <option value="MES_VENCIMENTO" {{ 'selected' if cj.get('acumular_indices') == 'MES_VENCIMENTO' }}>Mês de vencimento (todas)</option>
+                  <option value="MISTO" {{ 'selected' if cj.get('acumular_indices') == 'MISTO' }}>Misto (subsequente p/ mensais, vencimento p/ anuais)</option>
+                </select>
+              </div>
+            </fieldset>
+
           </div>
         </div>
 
@@ -1528,6 +1594,58 @@
                  onchange="salvarCampo('contribuicao_social.lei_11941', this.checked ? 'true' : 'false', this)">
           <label for="lei-11941">Aplicar cálculo pela Lei 11.941/2009 (regime de competência)</label>
         </div>
+        <!-- Alíquotas (expandível) -->
+        <div style="margin-top:12px; padding-top:10px; border-top:1px solid #dee2e6;">
+          <div style="font-size:0.82rem; font-weight:600; color:#495057; margin-bottom:6px; text-transform:uppercase; letter-spacing:0.3px;">Alíquotas (Parâmetros das Ocorrências)</div>
+          <div class="campos-grid">
+            <div class="campo-form">
+              <label>Tipo Alíquota Segurado</label>
+              <select onchange="salvarCampo('contribuicao_social.tipo_aliquota_segurado', this.value, this); document.getElementById('cs-aliq-fixa').style.display = this.value === 'FIXA' ? '' : 'none';">
+                <option value="SEGURADO_EMPREGADO" {{ 'selected' if inss.get('tipo_aliquota_segurado', 'SEGURADO_EMPREGADO') == 'SEGURADO_EMPREGADO' }}>Segurado Empregado (tabela)</option>
+                <option value="EMPREGADO_DOMESTICO" {{ 'selected' if inss.get('tipo_aliquota_segurado') == 'EMPREGADO_DOMESTICO' }}>Empregado Doméstico (tabela)</option>
+                <option value="FIXA" {{ 'selected' if inss.get('tipo_aliquota_segurado') == 'FIXA' }}>Fixa (informar %)</option>
+              </select>
+            </div>
+            <div class="campo-form" id="cs-aliq-fixa" style="{{ '' if inss.get('tipo_aliquota_segurado') == 'FIXA' else 'display:none;' }}">
+              <label>Alíquota Segurado Fixa (%)</label>
+              <input type="number" step="0.01" min="0" max="100"
+                     value="{{ inss.get('aliquota_segurado_fixa', '') }}"
+                     onchange="salvarCampo('contribuicao_social.aliquota_segurado_fixa', this.value, this)"
+                     placeholder="11">
+            </div>
+            <div class="campo-form">
+              <label>Tipo Alíquota Empregador</label>
+              <select onchange="salvarCampo('contribuicao_social.tipo_aliquota_empregador', this.value, this); document.getElementById('cs-empregador-det').style.display = (this.value === 'POR_PERIODO' || this.value === 'FIXA') ? '' : 'none';">
+                <option value="ATIVIDADE_ECONOMICA" {{ 'selected' if inss.get('tipo_aliquota_empregador', 'ATIVIDADE_ECONOMICA') == 'ATIVIDADE_ECONOMICA' }}>Por Atividade Econômica</option>
+                <option value="POR_PERIODO" {{ 'selected' if inss.get('tipo_aliquota_empregador') == 'POR_PERIODO' }}>Por Período</option>
+                <option value="FIXA" {{ 'selected' if inss.get('tipo_aliquota_empregador') == 'FIXA' }}>Fixa</option>
+              </select>
+            </div>
+          </div>
+          <div id="cs-empregador-det" class="campos-grid" style="{{ '' if inss.get('tipo_aliquota_empregador') in ('POR_PERIODO', 'FIXA') else 'display:none;' }} margin-top:8px;">
+            <div class="campo-form">
+              <label>Alíquota Empresa (%)</label>
+              <input type="number" step="0.01" min="0" max="100"
+                     value="{{ inss.get('aliquota_empresa', '20') }}"
+                     onchange="salvarCampo('contribuicao_social.aliquota_empresa', this.value, this)"
+                     placeholder="20">
+            </div>
+            <div class="campo-form">
+              <label>Alíquota SAT/RAT (%)</label>
+              <input type="number" step="0.01" min="0" max="100"
+                     value="{{ inss.get('aliquota_sat', '') }}"
+                     onchange="salvarCampo('contribuicao_social.aliquota_sat', this.value, this)"
+                     placeholder="1 a 3">
+            </div>
+            <div class="campo-form">
+              <label>Alíquota Terceiros (%)</label>
+              <input type="number" step="0.01" min="0" max="100"
+                     value="{{ inss.get('aliquota_terceiros', '') }}"
+                     onchange="salvarCampo('contribuicao_social.aliquota_terceiros', this.value, this)"
+                     placeholder="5.8">
+            </div>
+          </div>
+        </div>
         <div style="background:#e8f4fd; border-left:3px solid #1a3a6b; padding:10px; border-radius:0 5px 5px 0; font-size:0.83rem; line-height:1.5; margin-top:10px;">
           <strong style="color:#1a3a6b;">Referência</strong> — cota do segurado: 7,5% a 14% (progressiva) | cota patronal: 20% RGPS + RAT/FAP + terceiros<br>
           <small style="color:#6c757d;">O PJE-Calc calcula automaticamente o valor de cada cota com base nas verbas salariais liquidadas.</small>
@@ -1554,8 +1672,21 @@
           <p style="font-size:0.83rem; color:#6c757d; margin:0 0 8px;">
             Campos correspondentes às opções do PJE-Calc Cidadão (aba Imposto de Renda).
           </p>
+          <!-- Opções gerais -->
+          <div class="checkbox-row">
+            <input type="checkbox" id="ir-juros"
+                   {{ 'checked' if ir.get('incidir_sobre_juros') }}
+                   onchange="salvarCampo('imposto_renda.incidir_sobre_juros', this.checked ? 'true' : 'false', this)">
+            <label for="ir-juros">Incidir sobre juros de mora</label>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox" id="ir-cobrar-reclamado"
+                   {{ 'checked' if ir.get('cobrar_do_reclamado') }}
+                   onchange="salvarCampo('imposto_renda.cobrar_do_reclamado', this.checked ? 'true' : 'false', this)">
+            <label for="ir-cobrar-reclamado">Cobrar do reclamado (inversão do ônus tributário)</label>
+          </div>
           <!-- Tributação -->
-          <div style="font-size:0.82rem; font-weight:600; color:#495057; margin-bottom:4px; text-transform:uppercase; letter-spacing:0.3px;">Regime de Tributação</div>
+          <div style="font-size:0.82rem; font-weight:600; color:#495057; margin-bottom:4px; margin-top:10px; text-transform:uppercase; letter-spacing:0.3px;">Regime de Tributação</div>
           <div class="checkbox-row">
             <input type="checkbox" id="ir-exclusiva"
                    {{ 'checked' if ir.get('tributacao_exclusiva') }}
@@ -1618,6 +1749,12 @@
                      placeholder="0">
             </div>
           </div>
+          <div class="checkbox-row" style="margin-top:8px;">
+            <input type="checkbox" id="ir-aposentado65"
+                   {{ 'checked' if ir.get('aposentado_maior_65') }}
+                   onchange="salvarCampo('imposto_renda.aposentado_maior_65', this.checked ? 'true' : 'false', this)">
+            <label for="ir-aposentado65">Aposentado maior de 65 anos (isenção parcial)</label>
+          </div>
           <div style="background:#fff8e1; border-left:3px solid #e67700; padding:10px; border-radius:0 5px 5px 0; font-size:0.83rem; line-height:1.5; margin-top:10px;">
             <strong style="color:#e67700;">Reclamante (contribuinte)</strong> — suporta economicamente o IR s/ parcelas tributáveis<br>
             <strong style="color:#e67700;">Reclamado (fonte pagadora)</strong> — retém e recolhe na fonte (DARF); responsabilidade solidária por omissão
@@ -1635,25 +1772,25 @@
       <div class="secao-corpo" id="s-custas">
         <div class="campos-grid">
           <div class="campo-form campo-col2">
-            <label>Base para Custas de Conhecimento e Liquidação</label>
+            <label>Base para Custas</label>
             <select onchange="salvarCampo('custas_judiciais.base', this.value, this)">
-              <option value="Bruto Devido ao Reclamante" {{ 'selected' if custas.get('base','Bruto Devido ao Reclamante') == 'Bruto Devido ao Reclamante' }}>Bruto Devido ao Reclamante</option>
-              <option value="Bruto Devido ao Reclamante + Outros Débitos" {{ 'selected' if custas.get('base') == 'Bruto Devido ao Reclamante + Outros Débitos' }}>Bruto Devido ao Reclamante + Outros Débitos do Reclamado</option>
+              <option value="BRUTO_RECLAMANTE" {{ 'selected' if custas.get('base','BRUTO_RECLAMANTE') in ('BRUTO_RECLAMANTE', 'Bruto Devido ao Reclamante') }}>Bruto Devido ao Reclamante</option>
+              <option value="BRUTO_MAIS_DEBITOS" {{ 'selected' if custas.get('base') in ('BRUTO_MAIS_DEBITOS', 'Bruto Devido ao Reclamante + Outros Débitos') }}>Bruto + Outros Débitos da Reclamada</option>
             </select>
           </div>
           <div class="campo-form">
             <label>Custas do Reclamado — Conhecimento</label>
             <select onchange="salvarCampo('custas_judiciais.reclamado_conhecimento', this.value, this)">
-              <option value="NAO_SE_APLICA" {{ 'selected' if custas.get('reclamado_conhecimento') == 'NAO_SE_APLICA' }}>Não se Aplica</option>
-              <option value="CALCULADA" {{ 'selected' if custas.get('reclamado_conhecimento','CALCULADA') == 'CALCULADA' }}>Calculada 2%</option>
+              <option value="CALCULADA_2PCT" {{ 'selected' if custas.get('reclamado_conhecimento','CALCULADA_2PCT') in ('CALCULADA_2PCT', 'CALCULADA') }}>Calculada 2%</option>
               <option value="INFORMADA" {{ 'selected' if custas.get('reclamado_conhecimento') == 'INFORMADA' }}>Informada</option>
+              <option value="NAO_SE_APLICA" {{ 'selected' if custas.get('reclamado_conhecimento') == 'NAO_SE_APLICA' }}>Não se Aplica</option>
             </select>
           </div>
           <div class="campo-form">
             <label>Custas do Reclamado — Liquidação</label>
             <select onchange="salvarCampo('custas_judiciais.reclamado_liquidacao', this.value, this)">
               <option value="NAO_SE_APLICA" {{ 'selected' if custas.get('reclamado_liquidacao','NAO_SE_APLICA') == 'NAO_SE_APLICA' }}>Não se Aplica</option>
-              <option value="CALCULADA" {{ 'selected' if custas.get('reclamado_liquidacao') == 'CALCULADA' }}>Calculada 0,5%</option>
+              <option value="CALCULADA_05PCT" {{ 'selected' if custas.get('reclamado_liquidacao') in ('CALCULADA_05PCT', 'CALCULADA') }}>Calculada 0,5%</option>
               <option value="INFORMADA" {{ 'selected' if custas.get('reclamado_liquidacao') == 'INFORMADA' }}>Informada</option>
             </select>
           </div>
@@ -1661,7 +1798,7 @@
             <label>Custas do Reclamante — Conhecimento</label>
             <select onchange="salvarCampo('custas_judiciais.reclamante_conhecimento', this.value, this)">
               <option value="NAO_SE_APLICA" {{ 'selected' if custas.get('reclamante_conhecimento','NAO_SE_APLICA') == 'NAO_SE_APLICA' }}>Não se Aplica</option>
-              <option value="CALCULADA" {{ 'selected' if custas.get('reclamante_conhecimento') == 'CALCULADA' }}>Calculada 2%</option>
+              <option value="CALCULADA_2PCT" {{ 'selected' if custas.get('reclamante_conhecimento') in ('CALCULADA_2PCT', 'CALCULADA') }}>Calculada 2%</option>
               <option value="INFORMADA" {{ 'selected' if custas.get('reclamante_conhecimento') == 'INFORMADA' }}>Informada</option>
             </select>
           </div>
@@ -1669,10 +1806,278 @@
       </div>
     </div>
 
-    <!-- ═══ 14. VERBAS DEFERIDAS ═══ -->
+    <!-- ═══ 14. SALÁRIO-FAMÍLIA ═══ -->
+    {% set sf = dados.get('salario_familia') or {} %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-sal-familia')">
+        14. Salário-Família
+        <span class="confianca-badge {{ 'conf-alta' if sf.get('apurar') else 'conf-media' }}">{{ 'Apurar' if sf.get('apurar') else 'Não apurar' }}</span>
+      </div>
+      <div class="secao-corpo" id="s-sal-familia">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Apurar</label>
+            <select onchange="salvarCampo('salario_familia.apurar', this.value, this)">
+              <option value="false" {{ 'selected' if not sf.get('apurar') }}>Não</option>
+              <option value="true" {{ 'selected' if sf.get('apurar') }}>Sim</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Compor Principal</label>
+            <select onchange="salvarCampo('salario_familia.compor_principal', this.value, this)">
+              <option value="SIM" {{ 'selected' if sf.get('compor_principal','SIM') == 'SIM' }}>Sim</option>
+              <option value="NAO" {{ 'selected' if sf.get('compor_principal') == 'NAO' }}>Não</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Competência Início</label>
+            <input type="text" placeholder="MM/AAAA" value="{{ sf.get('competencia_inicio') or '' }}"
+                   onchange="salvarCampo('salario_familia.competencia_inicio', this.value, this)">
+          </div>
+          <div class="campo-form">
+            <label>Competência Fim</label>
+            <input type="text" placeholder="MM/AAAA" value="{{ sf.get('competencia_fim') or '' }}"
+                   onchange="salvarCampo('salario_familia.competencia_fim', this.value, this)">
+          </div>
+          <div class="campo-form">
+            <label>Quantidade de Filhos</label>
+            <input type="number" min="0" value="{{ sf.get('quantidade_filhos') or '' }}"
+                   onblur="salvarCampo('salario_familia.quantidade_filhos', this.value, this)">
+          </div>
+          <div class="campo-form">
+            <label>Remuneração Mensal — Pagos</label>
+            <select onchange="salvarCampo('salario_familia.remuneracao_mensal_pagos', this.value, this)">
+              <option value="" {{ 'selected' if not sf.get('remuneracao_mensal_pagos') }}>— selecione —</option>
+              <option value="NENHUM" {{ 'selected' if sf.get('remuneracao_mensal_pagos') == 'NENHUM' }}>Nenhum</option>
+              <option value="MAIOR_REMUNERACAO" {{ 'selected' if sf.get('remuneracao_mensal_pagos') == 'MAIOR_REMUNERACAO' }}>Maior Remuneração</option>
+              <option value="HISTORICO" {{ 'selected' if sf.get('remuneracao_mensal_pagos') == 'HISTORICO' }}>Histórico Salarial</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Remuneração Mensal — Devidos</label>
+            <input type="text" value="{{ sf.get('remuneracao_mensal_devidos') or '' }}"
+                   onblur="salvarCampo('salario_familia.remuneracao_mensal_devidos', this.value, this)">
+          </div>
+        </div>
+        <!-- Variações de filhos por competência -->
+        {% set sf_var = sf.get('variacoes_filhos') or [] %}
+        {% if sf_var %}
+        <div style="margin-top:10px; padding:8px 12px; background:#f0f7ff; border-radius:4px;">
+          <strong style="font-size:0.82rem; color:#1a3a6b;">Variações de Filhos</strong>
+          {% for vf in sf_var %}
+          <div class="campos-grid" style="margin-top:4px;">
+            <div class="campo-form">
+              <label>Competência</label>
+              <input type="text" placeholder="MM/AAAA" value="{{ vf.get('competencia') or '' }}"
+                     onchange="salvarCampo('salario_familia.variacoes_filhos[{{ loop.index0 }}].competencia', this.value, this)">
+            </div>
+            <div class="campo-form">
+              <label>Quantidade</label>
+              <input type="number" min="0" value="{{ vf.get('quantidade') or '' }}"
+                     onblur="salvarCampo('salario_familia.variacoes_filhos[{{ loop.index0 }}].quantidade', this.value, this)">
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- ═══ 15. SEGURO-DESEMPREGO ═══ -->
+    {% set sd = dados.get('seguro_desemprego') or {} %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-seg-desemprego')">
+        15. Seguro-Desemprego
+        <span class="confianca-badge {{ 'conf-alta' if sd.get('apurar') else 'conf-media' }}">{{ 'Apurar' if sd.get('apurar') else 'Não apurar' }}</span>
+      </div>
+      <div class="secao-corpo" id="s-seg-desemprego">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Apurar</label>
+            <select onchange="salvarCampo('seguro_desemprego.apurar', this.value, this)">
+              <option value="false" {{ 'selected' if not sd.get('apurar') }}>Não</option>
+              <option value="true" {{ 'selected' if sd.get('apurar') }}>Sim</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Tipo de Solicitação</label>
+            <select onchange="salvarCampo('seguro_desemprego.tipo_solicitacao', this.value, this)">
+              <option value="PRIMEIRA" {{ 'selected' if sd.get('tipo_solicitacao','PRIMEIRA') == 'PRIMEIRA' }}>Primeira</option>
+              <option value="SEGUNDA" {{ 'selected' if sd.get('tipo_solicitacao') == 'SEGUNDA' }}>Segunda</option>
+              <option value="DEMAIS" {{ 'selected' if sd.get('tipo_solicitacao') == 'DEMAIS' }}>Demais</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Empregado Doméstico</label>
+            <select onchange="salvarCampo('seguro_desemprego.empregado_domestico', this.value, this)">
+              <option value="false" {{ 'selected' if not sd.get('empregado_domestico') }}>Não</option>
+              <option value="true" {{ 'selected' if sd.get('empregado_domestico') }}>Sim</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Compor Principal</label>
+            <select onchange="salvarCampo('seguro_desemprego.compor_principal', this.value, this)">
+              <option value="SIM" {{ 'selected' if sd.get('compor_principal','SIM') == 'SIM' }}>Sim</option>
+              <option value="NAO" {{ 'selected' if sd.get('compor_principal') == 'NAO' }}>Não</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Quantidade de Parcelas</label>
+            <input type="number" min="0" value="{{ sd.get('quantidade_parcelas') or '' }}"
+                   onblur="salvarCampo('seguro_desemprego.quantidade_parcelas', this.value, this)">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 16. PENSÃO ALIMENTÍCIA ═══ -->
+    {% set pen = dados.get('pensao_alimenticia') or {} %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-pensao')">
+        16. Pensão Alimentícia
+        <span class="confianca-badge {{ 'conf-alta' if pen.get('apurar') else 'conf-media' }}">{{ 'Apurar' if pen.get('apurar') else 'Não apurar' }}</span>
+      </div>
+      <div class="secao-corpo" id="s-pensao">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Apurar</label>
+            <select onchange="salvarCampo('pensao_alimenticia.apurar', this.value, this)">
+              <option value="false" {{ 'selected' if not pen.get('apurar') }}>Não</option>
+              <option value="true" {{ 'selected' if pen.get('apurar') }}>Sim</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Alíquota (%)</label>
+            <input type="text" value="{{ pen.get('aliquota') or '' }}"
+                   onblur="salvarCampo('pensao_alimenticia.aliquota', this.value, this)"
+                   placeholder="Ex: 0.30 para 30%">
+          </div>
+          <div class="campo-form">
+            <label>Incidir sobre Juros</label>
+            <select onchange="salvarCampo('pensao_alimenticia.incidir_sobre_juros', this.value, this)">
+              <option value="false" {{ 'selected' if not pen.get('incidir_sobre_juros') }}>Não</option>
+              <option value="true" {{ 'selected' if pen.get('incidir_sobre_juros') }}>Sim</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 17. PREVIDÊNCIA PRIVADA ═══ -->
+    {% set pprev = dados.get('previdencia_privada') or {} %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-prev-privada')">
+        17. Previdência Privada
+        <span class="confianca-badge {{ 'conf-alta' if pprev.get('apurar') else 'conf-media' }}">{{ 'Apurar' if pprev.get('apurar') else 'Não apurar' }}</span>
+      </div>
+      <div class="secao-corpo" id="s-prev-privada">
+        <div class="campos-grid">
+          <div class="campo-form">
+            <label>Apurar</label>
+            <select onchange="salvarCampo('previdencia_privada.apurar', this.value, this)">
+              <option value="false" {{ 'selected' if not pprev.get('apurar') }}>Não</option>
+              <option value="true" {{ 'selected' if pprev.get('apurar') }}>Sim</option>
+            </select>
+          </div>
+          <div class="campo-form">
+            <label>Alíquota (%)</label>
+            <input type="text" value="{{ pprev.get('aliquota') or '' }}"
+                   onblur="salvarCampo('previdencia_privada.aliquota', this.value, this)"
+                   placeholder="Ex: 0.05 para 5%">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 18. MULTAS E INDENIZAÇÕES ═══ -->
+    {% set multas_lista = dados.get('multas_indenizacoes', []) %}
+    <div class="secao">
+      <div class="secao-titulo" onclick="toggleSecao('s-multas')">
+        18. Multas e Indenizações
+        <span class="confianca-badge conf-alta">{{ multas_lista|length }} registro(s)</span>
+      </div>
+      <div class="secao-corpo" id="s-multas">
+        <p style="font-size:0.84rem; color:#6c757d; margin:0 0 10px;">
+          Multas, penalidades e indenizações não enquadradas como verbas salariais.
+          Cada registro gera uma linha na aba "Multas e Indenizações" do PJE-Calc.
+        </p>
+        <div id="multas-cards">
+          {% for multa in multas_lista %}
+          {% set mi = loop.index0 %}
+          <div class="verba-card" id="multa-card-{{ mi }}" style="margin-bottom:12px;">
+            <div style="background:#fbe8e8; padding:8px 14px; display:flex; justify-content:space-between; align-items:center;">
+              <strong style="font-size:0.9rem; color:#6b1a1a;">
+                Multa {{ loop.index }} — {{ multa.get('descricao', '—') }}
+              </strong>
+              <button type="button" onclick="removerMulta({{ mi }})"
+                      style="background:#dc3545; color:#fff; border:none; border-radius:4px; padding:2px 10px; font-size:0.8rem; cursor:pointer;">✕ Remover</button>
+            </div>
+            <div style="padding:12px;">
+              <div class="campos-grid col3">
+                <div class="campo-form campo-col2">
+                  <label>Descrição</label>
+                  <input type="text" maxlength="60"
+                         value="{{ multa.get('descricao', '') }}"
+                         onchange="salvarCampo('multas_indenizacoes[{{ mi }}].descricao', this.value, this)"
+                         placeholder="Ex: Multa art. 477 CLT">
+                </div>
+                <div class="campo-form">
+                  <label>Credor / Devedor</label>
+                  <select onchange="salvarCampo('multas_indenizacoes[{{ mi }}].credor_devedor', this.value, this)">
+                    <option value="">— selecione —</option>
+                    <option value="RECLAMANTE_RECLAMADO" {{ 'selected' if multa.get('credor_devedor') == 'RECLAMANTE_RECLAMADO' }}>Reclamante e Reclamado</option>
+                    <option value="RECLAMADO_RECLAMANTE" {{ 'selected' if multa.get('credor_devedor') == 'RECLAMADO_RECLAMANTE' }}>Reclamado e Reclamante</option>
+                    <option value="TERCEIRO_RECLAMANTE" {{ 'selected' if multa.get('credor_devedor') == 'TERCEIRO_RECLAMANTE' }}>Terceiro e Reclamante</option>
+                    <option value="TERCEIRO_RECLAMADO" {{ 'selected' if multa.get('credor_devedor') == 'TERCEIRO_RECLAMADO' }}>Terceiro e Reclamado</option>
+                  </select>
+                </div>
+                <div class="campo-form">
+                  <label>Tipo de Valor</label>
+                  <select onchange="salvarCampo('multas_indenizacoes[{{ mi }}].tipo_valor', this.value, this); document.getElementById('multa-calc-{{ mi }}').style.display = this.value === 'CALCULADO' ? '' : 'none'; document.getElementById('multa-info-{{ mi }}').style.display = this.value === 'INFORMADO' ? '' : 'none';">
+                    <option value="CALCULADO" {{ 'selected' if multa.get('tipo_valor', 'CALCULADO') == 'CALCULADO' }}>Calculado (%)</option>
+                    <option value="INFORMADO" {{ 'selected' if multa.get('tipo_valor') == 'INFORMADO' }}>Informado (R$)</option>
+                  </select>
+                </div>
+                <div class="campo-form" id="multa-calc-{{ mi }}" {{ 'style="display:none"' if multa.get('tipo_valor') == 'INFORMADO' else '' }}>
+                  <label>Base de Cálculo</label>
+                  <select onchange="salvarCampo('multas_indenizacoes[{{ mi }}].base_calculo', this.value, this)">
+                    <option value="PRINCIPAL" {{ 'selected' if multa.get('base_calculo', 'PRINCIPAL') == 'PRINCIPAL' }}>Principal</option>
+                    <option value="PRINCIPAL_MENOS_CS" {{ 'selected' if multa.get('base_calculo') == 'PRINCIPAL_MENOS_CS' }}>Principal (-) CS</option>
+                    <option value="PRINCIPAL_MENOS_CS_PP" {{ 'selected' if multa.get('base_calculo') == 'PRINCIPAL_MENOS_CS_PP' }}>Principal (-) CS (-) PP</option>
+                  </select>
+                </div>
+                <div class="campo-form" id="multa-aliq-{{ mi }}" {{ 'style="display:none"' if multa.get('tipo_valor') == 'INFORMADO' else '' }}>
+                  <label>Alíquota (%)</label>
+                  <input type="number" step="0.01" min="0" max="100"
+                         value="{{ multa.get('aliquota', '') }}"
+                         onchange="salvarCampo('multas_indenizacoes[{{ mi }}].aliquota', this.value, this)"
+                         placeholder="Ex: 100">
+                </div>
+                <div class="campo-form" id="multa-info-{{ mi }}" {{ '' if multa.get('tipo_valor') == 'INFORMADO' else 'style="display:none"' }}>
+                  <label>Valor (R$)</label>
+                  <input type="number" step="0.01" min="0"
+                         value="{{ multa.get('valor', '') }}"
+                         onchange="salvarCampo('multas_indenizacoes[{{ mi }}].valor', this.value, this)"
+                         placeholder="0,00">
+                </div>
+              </div>
+            </div>
+          </div>
+          {% else %}
+          <p style="color:#6c757d; font-size:0.9rem;" id="multas-vazio">Nenhuma multa ou indenização.</p>
+          {% endfor %}
+        </div>
+        <div style="margin-top:10px;">
+          <button type="button" class="btn btn-sm" style="background:#6b1a1a; color:#fff;"
+                  onclick="adicionarMulta()">+ Adicionar Multa / Indenização</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ 15. VERBAS DEFERIDAS ═══ -->
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-verbas')">
-        14. Verbas Deferidas
+        19. Verbas Deferidas
         <span class="confianca-badge conf-alta">{{ verbas|length }} verba(s)</span>
       </div>
       <div class="secao-corpo" id="s-verbas">
@@ -1796,13 +2201,13 @@
       </div>
     </div>
 
-    <!-- ═══ 15. PLANO DE PREENCHIMENTO ═══ -->
+    <!-- ═══ 16. PLANO DE PREENCHIMENTO ═══ -->
     {% set todas_verbas_plan = [] %}
     {% for v in verbas_mapeadas.get('predefinidas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
     {% for v in verbas_mapeadas.get('personalizadas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-plano-preenchimento')">
-        15. Plano de Preenchimento (Automacao)
+        20. Plano de Preenchimento (Automacao)
         <span class="confianca-badge conf-alta">{{ todas_verbas_plan|length }} verba(s)</span>
       </div>
       <div class="secao-corpo" id="s-plano-preenchimento">
@@ -2390,6 +2795,45 @@ async function removerHonorario(idx) {
       setTimeout(() => window.location.reload(), 500);
     } else {
       mostrarToast('Erro ao remover honorário', 'erro');
+    }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
+  }
+}
+
+// Adicionar multa/indenização
+async function adicionarMulta() {
+  try {
+    const form = new FormData();
+    form.append('campo', 'multas_indenizacoes.add');
+    form.append('valor', '');
+    const resp = await fetch('/previa/' + SESSAO_ID + '/editar', { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      mostrarToast('Multa adicionada', 'ok');
+      setTimeout(() => window.location.reload(), 500);
+    } else {
+      mostrarToast('Erro ao adicionar multa', 'erro');
+    }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
+  }
+}
+
+// Remover multa/indenização pelo índice
+async function removerMulta(idx) {
+  if (!confirm('Remover este registro de multa/indenização?')) return;
+  try {
+    const form = new FormData();
+    form.append('campo', 'multas_indenizacoes.remove[' + idx + ']');
+    form.append('valor', '');
+    const resp = await fetch('/previa/' + SESSAO_ID + '/editar', { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      mostrarToast('Multa removida', 'ok');
+      setTimeout(() => window.location.reload(), 500);
+    } else {
+      mostrarToast('Erro ao remover multa', 'erro');
     }
   } catch(err) {
     mostrarToast('Erro de comunicação', 'erro');

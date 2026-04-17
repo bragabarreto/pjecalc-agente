@@ -16,14 +16,14 @@
 - Maior remuneração / última remuneração
 - Pelo menos 1 verba deferida
 
-### Tipo de rescisão (enum)
-| Valor | Quando usar |
-|-------|-------------|
-| sem_justa_causa | Dispensa imotivada, rescisão indireta (art. 483 CLT) |
-| justa_causa | Justa causa reconhecida |
-| pedido_demissao | Pedido de demissão do empregado |
-| distrato | Acordo para rescisão (art. 484-A CLT) |
-| morte | Falecimento do empregado |
+### Tipo de rescisão
+> **ATENÇÃO**: O PJe-Calc v2.15.1 NÃO possui campo "tipo de rescisão" no DOM.
+> A natureza da rescisão é inferida pela combinação de verbas e configurações FGTS.
+> Manter na extração apenas para orientar o preenchimento de verbas e FGTS:
+> - Sem justa causa → FGTS multa=CALCULADA, multaDoFgts=QUARENTA_POR_CENTO
+> - Justa causa → FGTS multa=NAO_APURAR (multa 40% incompatível)
+> - Pedido de demissão → sem aviso prévio indenizado, FGTS multa=NAO_APURAR
+> - Rescisão indireta → mesmos efeitos de sem justa causa
 
 ### Regime de trabalho
 | Valor | Divisor | Descrição |
@@ -122,9 +122,9 @@ Situações especiais:
 
 | Item | Tratamento no PJe-Calc |
 |------|----------------------|
-| FGTS + Multa 40% | Aba FGTS — checkbox multa_40 |
-| FGTS + Multa 20% | Aba FGTS — checkbox multa_40 + multa_20 |
-| Multa art. 467 CLT | Aba FGTS — checkbox multa_467 + reflexa automática |
+| FGTS + Multa 40% | Aba FGTS — select multa=CALCULADA + radio multaDoFgts=QUARENTA_POR_CENTO |
+| FGTS + Multa 20% | Aba FGTS — select multa=CALCULADA + radio multaDoFgts=VINTE_POR_CENTO |
+| Multa art. 467 CLT | Aba FGTS — checkbox multaDoArtigo467 + reflexa automática |
 | FGTS não depositado | Aba FGTS — campo separado |
 | Honorários periciais | Campo top-level separado |
 
@@ -164,10 +164,13 @@ Situações especiais:
 
 | Campo | Valores | Regra |
 |-------|---------|-------|
-| aliquota | 0.08 (8% padrão), 0.02 (2% aprendiz) | — |
-| multa_40 | true/false | true = sem justa causa ou rescisão indireta. INCOMPATÍVEL com justa_causa |
-| multa_20 | true/false | Estabilidade provisória (CIPA, gestante). Quando true, multa_40 também = true |
-| multa_467 | true/false | Parcelas rescisórias incontroversas não pagas (art. 467 CLT) |
+| tipoDeVerba | PAGAR / DEPOSITAR (radio) | PAGAR = direto ao reclamante; DEPOSITAR = conta FGTS |
+| aliquota | OITO_POR_CENTO / DOIS_POR_CENTO (radio) | 8% padrão; 2% aprendiz |
+| multa | NAO_APURAR / CALCULADA / INFORMADA (select) | SELECT, não checkbox. CALCULADA ativa campos condicionais |
+| multaDoFgts | QUARENTA_POR_CENTO / VINTE_POR_CENTO (radio) | Condicional: visível quando multa=CALCULADA |
+| baseDaMulta | DEVIDO / DIFERENCA / SALDO_E_OU_SAQUE / DEVIDO_MENOS_SALDO / DEVIDO_MAIS_SALDO (select) | Condicional: visível quando multa=CALCULADA |
+| multaDoArtigo467 | true/false (checkbox) | Parcelas incontroversas (art. 467 CLT) |
+| multa10 | true/false (checkbox) | Multa 10% adicional |
 | saldo_fgts | float ou null | Apenas se explícito na sentença — NÃO inferir |
 
 ### Incidência FGTS por verba
@@ -184,19 +187,20 @@ Situações especiais:
 | tipo | SUCUMBENCIAIS (padrão), CONTRATUAIS |
 | devedor | RECLAMANTE, RECLAMADO |
 | tipo_valor | CALCULADO (percentual), INFORMADO (valor fixo) |
-| base_apuracao | **BRUTO** (valor da condenação), **BRUTO_MENOS_CS**, **BRUTO_MENOS_CS_PP**, **VNP** (Verbas que Não Compõem Principal) |
+| base_apuracao | **BRUTO** (valor da condenação), **BRUTO_MENOS_CONTRIBUICAO_SOCIAL**, **BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA** |
 
 ### Regras de base_apuracao
 | Devedor | Tipo | Base padrão |
 |---------|------|-------------|
 | RECLAMADO | SUCUMBENCIAIS | BRUTO |
-| RECLAMANTE | SUCUMBENCIAIS | VNP |
-| Ambos | SUCUMBENCIAIS | BRUTO para reclamado + VNP para reclamante |
+| RECLAMANTE | SUCUMBENCIAIS | BRUTO_MENOS_CONTRIBUICAO_SOCIAL |
+| Ambos | SUCUMBENCIAIS | BRUTO para reclamado + BRUTO_MENOS_CONTRIBUICAO_SOCIAL para reclamante |
 | Qualquer | CONTRATUAIS | BRUTO |
 
 > Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → BRUTO nos dois.
 > NÃO existe opção "Ambos" — sucumbência recíproca = DOIS registros separados.
 > Faixa "10% a 15%" → usar o menor valor (0.10).
+> **Bases disponíveis no DOM**: BRUTO, BRUTO_MENOS_CONTRIBUICAO_SOCIAL, BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA
 
 ### Justiça Gratuita e Honorários
 Quando devedor tem justiça gratuita → exigibilidade SUSPENSA (art. 791-A, §4º, CLT).
@@ -217,12 +221,12 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 | TABELA_UNICA_JT_MENSAL | Tabela JT Mensal |
 | TABELA_UNICA_JT_DIARIO | Tabela JT Diária |
 | TR | TR |
-| IGPM | IGP-M |
+| IGP_M | IGP-M |
 | INPC | INPC |
 | IPC | IPC |
 | IPCA | IPCA |
-| IPCAE | IPCA-E |
-| IPCAETR | IPCA-E / TR |
+| IPCA_E | IPCA-E |
+| IPCA_E_TR | IPCA-E / TR |
 | SELIC | SELIC (Receita Federal) |
 | SELIC_FAZENDA | SELIC Simples |
 | SELIC_BACEN | SELIC Composta |
@@ -231,19 +235,13 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 ### Enums do PJe-Calc — Juros de Mora (JurosEnum)
 | Enum | Nome no PJe-Calc |
 |------|-----------------|
-| JUROS_PADRAO | Juros Padrão |
-| JUROS_POUPANCA | Juros Caderneta de Poupança |
+| PADRAO | Juros Padrão |
 | FAZENDA_PUBLICA | Juros Fazenda Pública |
-| JUROS_MEIO_PORCENTO | Juros Simples 0,5% a.m. |
-| JUROS_UM_PORCENTO | Juros Simples 1,0% a.m. |
-| JUROS_ZERO_TRINTA_TRES | Juros Simples 0,0333333% a.d. |
-| SELIC | SELIC (Receita Federal) |
-| SELIC_FAZENDA | SELIC Simples |
-| SELIC_BACEN | SELIC Composta |
-| TRD_SIMPLES | TRD Juros Simples |
-| TRD_COMPOSTOS | TRD Juros Compostos |
-| TAXA_LEGAL | Taxa Legal |
-| SEM_JUROS | Sem Juros |
+| SELIC | SELIC |
+
+> **ATENÇÃO**: Apenas 3 opções confirmadas no DOM do PJe-Calc v2.15.1.
+> Valores como JUROS_POUPANCA, TAXA_LEGAL, TRD_SIMPLES etc. podem existir em
+> versões futuras ou em abas condicionais (Dados Específicos). Verificar DOM antes de usar.
 
 ### Campos de correção/juros
 | Campo | Valores aceitos |
@@ -258,17 +256,17 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 ### Mapeamento da sentença → enums (em ordem de prevalência)
 | Critério na sentença | Lei 14.905 | Correção | Correção pós | Juros |
 |----------------------|-----------|----------|-------------|-------|
-| **ADC 58 + Lei 14.905/2024** — E-ED-RR-20407, "taxa legal", "art. 406 CC" | **true** | IPCAE | **IPCA** | **TAXA_LEGAL** |
+| **ADC 58 + Lei 14.905/2024** — E-ED-RR-20407, "taxa legal", "art. 406 CC" | **true** | IPCA_E | **IPCA** | **TAXA_LEGAL** |
 | ADC 58 / critérios JT SEM Lei 14.905 (pré-ago/2024) | false | TUACDT | — | SELIC |
 | "SELIC" / "taxa SELIC" sem distinguir fases | false | SELIC | — | SELIC |
 | EC 113/2021 / "SELIC a partir de dez/2021" | false | SELIC | — | SELIC |
-| "IPCA-E + juros de 1% a.m." | false | IPCAE | — | JUROS_PADRAO |
-| "TR" / "TRCT" + juros de 1% | false | TR | — | JUROS_PADRAO |
+| "IPCA-E + juros de 1% a.m." | false | IPCA_E | — | PADRAO |
+| "TR" / "TRCT" + juros de 1% | false | TR | — | PADRAO |
 
 ### Detalhamento — Lei 14.905/2024 (jurisprudência majoritária atual)
 
 **Correção Monetária no PJe-Calc:**
-- IPCAE até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
+- IPCA_E até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
 - Se admissão > 30/08/2024 → usar somente IPCA como índice único
 
 **Juros de Mora — depende da data de ajuizamento:**
@@ -324,27 +322,26 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 
 | Campo | Default |
 |-------|---------|
-| base | Bruto Devido ao Reclamante |
-| reclamado_conhecimento | CALCULADA (2%) |
-| reclamado_liquidacao | NAO_SE_APLICA |
-| reclamante_conhecimento | NAO_SE_APLICA |
-| percentual | 0.02 |
-| devedor | RECLAMADO |
+| base | BRUTO_RECLAMANTE (Bruto Devido ao Reclamante) ou BRUTO_MAIS_DEBITOS |
+| reclamado_conhecimento | CALCULADA_2PCT / INFORMADA / NAO_SE_APLICA |
+| reclamado_liquidacao | NAO_SE_APLICA / CALCULADA_05PCT / INFORMADA |
+| reclamante_conhecimento | NAO_SE_APLICA / CALCULADA_2PCT / INFORMADA |
+| devedor | RECLAMADO (padrão) |
 
 ---
 
 ## 12. Cartão de Ponto (Duração do Trabalho)
 
-### Forma de Apuração de Horas Extras (enum)
-| Código | Descrição |
-|--------|-----------|
-| NAP | Não apurar horas extras |
-| HJD | Excedentes da jornada diária |
-| SEM | Excedentes da jornada semanal |
-| FAV | Critério mais favorável (compara diário vs semanal) |
-| MEN | Excedentes da jornada mensal |
-| HST | Conforme Súmula 85 TST |
-| APH | Primeiras HE em separado |
+### Forma de Apuração de Horas Extras (radio tipoApuracaoHorasExtras)
+| Valor DOM | Descrição |
+|-----------|-----------|
+| NAO_APURAR_HORAS_EXTRAS | Não apurar horas extras |
+| HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA | Excedentes da jornada diária |
+| HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL | Excedentes da jornada semanal |
+| HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL | Critério mais favorável (compara diário vs semanal) |
+| HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL | Excedentes da jornada mensal |
+| HORAS_EXTRAS_CONFORME_SUMULA_85 | Conforme Súmula 85 TST |
+| APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO | Primeiras HE em separado |
 
 ### Preenchimento de Jornada
 | Modalidade | Quando usar |
@@ -370,7 +367,103 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 
 ---
 
-## 13. Erros Comuns
+## 13. Salário-Família
+
+| Campo | Valores DOM |
+|-------|-------------|
+| apurar | checkbox (true/false) |
+| comporPrincipal | radio SIM / NAO |
+| competenciaInicio | input data (MM/AAAA) |
+| competenciaFim | input data (MM/AAAA) |
+| quantidadeDeFilhos | input numérico |
+| remuneracaoMensalPagos | select: NENHUM / MAIOR_REMUNERACAO / HISTORICO |
+| remuneracaoMensalDevidos | select (dinâmico — verbas) |
+| filhosVariacaoCompetencia | input data (MM/AAAA) — modal variação |
+| filhosVariacaoQuantidade | input num��rico — modal variação |
+| adicionarVariacao | button — adiciona variação de filhos |
+
+> Apurar apenas se sentença deferir salário-família. O PJE-Calc calcula com base na tabela vigente.
+> Variações de filhos: quando a quantidade de filhos muda ao longo do período, usar a modal
+> de variação (competência + nova quantidade) para cada mudança.
+
+---
+
+## 14. Seguro-Desemprego
+
+| Campo | Valores DOM |
+|-------|-------------|
+| apurar | checkbox (true/false) |
+| tipoSolicitacao | radio PRIMEIRA / SEGUNDA / DEMAIS |
+| empregadoDomestico | checkbox (true/false) |
+| comporPrincipal | radio SIM / NAO |
+| quantidadeDeParcelas | input numérico (3, 4 ou 5) |
+
+> Indenização substitutiva quando empregador não fornece guias CD/SD.
+
+---
+
+## 15. Pensão Alimentícia
+
+| Campo | Valores DOM |
+|-------|-------------|
+| apurar | checkbox (true/false) |
+| aliquota | input numérico (percentual, ex: 30.00) |
+| incidirSobreJuros | checkbox (true/false) |
+
+> Dedução sobre o crédito do reclamante quando há obrigação alimentar judicial.
+
+---
+
+## 16. Previdência Privada
+
+| Campo | Valores DOM |
+|-------|-------------|
+| apurar | checkbox (true/false) |
+| aliquota | input numérico (percentual, ex: 5.00) |
+
+> Dedução de contribuição para fundo de pensão / previdência complementar.
+
+---
+
+## 17. Férias — Campos DOM
+
+| Campo | Valores DOM |
+|-------|-------------|
+| situacao | select: GOZADAS / INDENIZADAS / PERDIDAS / GOZADAS_PARCIALMENTE |
+| dobra | checkbox (férias em dobro — art. 137 CLT) |
+| abono | checkbox (abono pecuniário) |
+| dataInicioGozo1 | input data DD/MM/AAAA — Gozo 1 início (condicional: situacao=GOZADAS ou GOZADAS_PARCIALMENTE) |
+| dataFimGozo1 | input data DD/MM/AAAA — Gozo 1 fim |
+| dataInicioGozo2 | input data DD/MM/AAAA — Gozo 2 início |
+| dataFimGozo2 | input data DD/MM/AAAA — Gozo 2 fim |
+| dataInicioGozo3 | input data DD/MM/AAAA — Gozo 3 início |
+| dataFimGozo3 | input data DD/MM/AAAA — Gozo 3 fim |
+| regerarFerias | button — regerar períodos após alterações |
+| prazoFeriasProporcionais | input numérico |
+| feriasColetivas | input data DD/MM/AAAA |
+
+> Férias são auto-geradas pelo PJE-Calc a partir de admissão/demissão. A edição é por linha
+> (clicar no ícone de edição), onde se configura situação, dobra, abono e períodos de gozo.
+> Após alterações, regerar férias para atualizar ocorrências.
+
+---
+
+## 18. Liquidação — Campos DOM
+
+| Campo | Valores DOM |
+|-------|-------------|
+| dataDeLiquidacao | input data DD/MM/AAAA |
+| acumularIndices | select: MES_SUBSEQUENTE / MES_VENCIMENTO / MISTO |
+| liquidar | button — executa a liquidação |
+
+> **acumularIndices**: como o PJE-Calc acumula a correção monetária:
+> - `MES_SUBSEQUENTE`: a partir do mês seguinte ao vencimento (padrão para todas as parcelas)
+> - `MES_VENCIMENTO`: a partir do mês do próprio vencimento (todas as parcelas)
+> - `MISTO`: subsequente para mensais, vencimento para anuais/rescisórias
+
+---
+
+## 19. Erros Comuns
 
 | Erro | Causa | Prevenção |
 |------|-------|-----------|

@@ -3044,9 +3044,43 @@ class PJECalcPlaywright:
             self._preencher("cnpjReclamado", proc["cnpj_reclamado"], False)
 
         if proc.get("advogado_reclamante"):
+            # Clicar em "Incluir" advogado reclamante se botão existir
+            try:
+                _btn_adv_rec = self._page.locator("[id$='incluirAdvogadoReclamante']")
+                if _btn_adv_rec.count() > 0:
+                    _btn_adv_rec.click()
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+            except Exception:
+                pass
             self._preencher("nomeAdvogadoReclamante", proc["advogado_reclamante"], False)
         if proc.get("oab_reclamante"):
             self._preencher("numeroOABAdvogadoReclamante", proc["oab_reclamante"], False)
+        if proc.get("doc_advogado_reclamante"):
+            self._preencher("numeroDocumentoAdvogadoReclamante", proc["doc_advogado_reclamante"], False)
+
+        # Advogado do reclamado — IDs confirmados no DOM
+        if proc.get("advogado_reclamado"):
+            # Clicar em "Incluir" para adicionar advogado (botão dinâmico RichFaces)
+            try:
+                _btn_adv = self._page.locator("[id$='incluirAdvogadoReclamado']")
+                if _btn_adv.count() > 0:
+                    _btn_adv.click()
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+            except Exception:
+                pass
+            self._preencher("nomeAdvogadoReclamado", proc["advogado_reclamado"], False)
+        if proc.get("oab_reclamado"):
+            self._preencher("numeroOABAdvogadoReclamado", proc["oab_reclamado"], False)
+        if proc.get("doc_advogado_reclamado"):
+            self._preencher("numeroDocumentoAdvogadoReclamado", proc["doc_advogado_reclamado"], False)
+
+        # PIS/PASEP do reclamante — documento previdenciário
+        if proc.get("pis_reclamante") or proc.get("pasep_reclamante"):
+            _pis = proc.get("pis_reclamante") or proc.get("pasep_reclamante", "")
+            self._marcar_radio("reclamanteTipoDocumentoPrevidenciario", "PIS")
+            self._preencher("reclamanteNumeroDocumentoPrevidenciario", _pis, False)
 
         # NOTA: NÃO salvar aqui. Manual oficial (Seção 5 + Seção 10) exige que o
         # Salvar ocorra APENAS APÓS ambas as abas (Dados do Processo + Parâmetros
@@ -3235,6 +3269,81 @@ class PJECalcPlaywright:
             self._marcar_checkbox("prescricaoQuinquenal", bool(presc["quinquenal"]))
         if presc.get("fgts") is not None:
             self._marcar_checkbox("prescricaoFgts", bool(presc["fgts"]))
+
+        # Checkboxes auxiliares de parâmetros
+        # sabadoDiaUtil — se sábado é dia útil para fins de cálculo (padrão true na maioria)
+        if cont.get("sabado_dia_util") is not None:
+            self._marcar_checkbox("sabadoDiaUtil", bool(cont["sabado_dia_util"]))
+        # projetaAvisoIndenizado — projetar aviso prévio para cálculos (13º, férias prop.)
+        if ap.get("projetar") is not None:
+            self._marcar_checkbox("projetaAvisoIndenizado", bool(ap["projetar"]))
+        # zeraValorNegativo — zerar verbas com resultado negativo (padrão: true)
+        if dados.get("zera_valor_negativo") is not None:
+            self._marcar_checkbox("zeraValorNegativo", bool(dados["zera_valor_negativo"]))
+
+        # Feriados — considerar feriados estaduais e municipais
+        if dados.get("considerar_feriado_estadual") is not None:
+            self._marcar_checkbox("consideraFeriadoEstadual", bool(dados["considerar_feriado_estadual"]))
+        if dados.get("considerar_feriado_municipal") is not None:
+            self._marcar_checkbox("consideraFeriadoMunicipal", bool(dados["considerar_feriado_municipal"]))
+
+        # Datas de início e término do cálculo (período de apuração)
+        if cont.get("data_inicio_calculo"):
+            self._preencher_data("dataInicioCalculo", cont["data_inicio_calculo"], False)
+        if cont.get("data_fim_calculo") or cont.get("data_termino_calculo"):
+            _dt_fim = cont.get("data_fim_calculo") or cont.get("data_termino_calculo")
+            self._preencher_data("dataTerminoCalculo", _dt_fim, False)
+
+        # Exceções de Carga Horária (períodos com CH diferente)
+        _excecoes_ch = dados.get("excecoes_carga_horaria", [])
+        for _exc_ch in _excecoes_ch:
+            try:
+                _btn_exc = self._page.locator("[id$='incluirExcecaoCH']")
+                if _btn_exc.count() > 0:
+                    _btn_exc.click()
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    if _exc_ch.get("data_inicio"):
+                        self._preencher_data("dataInicioExcecao", _exc_ch["data_inicio"], False)
+                    if _exc_ch.get("data_termino"):
+                        self._preencher_data("dataTerminoExcecao", _exc_ch["data_termino"], False)
+                    if _exc_ch.get("valor"):
+                        self._preencher("valorExcecaoCH", _fmt_br(_exc_ch["valor"]), False)
+                    self._log(f"  ✓ Exceção CH: {_exc_ch.get('data_inicio')} a {_exc_ch.get('data_termino')}")
+            except Exception as _e_exc:
+                self._log(f"  ⚠ Exceção CH: {_e_exc}")
+
+        # Exceções de Sábado (períodos onde sábado NÃO é dia útil)
+        _excecoes_sab = dados.get("excecoes_sabado", [])
+        for _exc_sab in _excecoes_sab:
+            try:
+                _btn_sab = self._page.locator("[id$='incluirExcecaoSab']")
+                if _btn_sab.count() > 0:
+                    _btn_sab.click()
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    if _exc_sab.get("data_inicio"):
+                        self._preencher_data("dataInicioExcecaoSabado", _exc_sab["data_inicio"], False)
+                    if _exc_sab.get("data_termino"):
+                        self._preencher_data("dataTerminoExcecaoSabado", _exc_sab["data_termino"], False)
+                    self._log(f"  ✓ Exceção Sábado: {_exc_sab.get('data_inicio')} a {_exc_sab.get('data_termino')}")
+            except Exception as _e_sab:
+                self._log(f"  ⚠ Exceção Sábado: {_e_sab}")
+
+        # Pontos Facultativos
+        _pontos_fac = dados.get("pontos_facultativos", [])
+        for _pf in _pontos_fac:
+            try:
+                _btn_pf = self._page.locator("[id$='cmdAdicionarPontoFacultativo']")
+                if _btn_pf.count() > 0:
+                    _btn_pf.click()
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    if _pf.get("data"):
+                        self._preencher_data("pontoFacultativo", _pf["data"], False)
+                    self._log(f"  ✓ Ponto Facultativo: {_pf.get('data')}")
+            except Exception as _e_pf:
+                self._log(f"  ⚠ Ponto Facultativo: {_e_pf}")
 
         # NOTA: Índices de correção e juros NÃO são configurados aqui na aba
         # Parâmetros do Cálculo. São configurados exclusivamente em fase_parametros_atualizacao()
@@ -3712,6 +3821,12 @@ class PJECalcPlaywright:
             except Exception:
                 pass
 
+            # Tipo FIXA/VARIAVEL (radio referencia — DOM: formulario:referencia)
+            _variavel = h.get("variavel", False)
+            if _variavel:
+                self._preencher_radio_ou_select("referencia", "VARIAVEL", obrigatorio=False)
+            # Se FIXA (default), não precisa clicar — já é o default do PJE-Calc
+
             # Incidências — checkboxes may trigger AJAX that errors on server side
             # (known NPE in ApresentadorHonorarios). Use short timeout and don't block.
             try:
@@ -3719,6 +3834,12 @@ class PJECalcPlaywright:
                 _inc_inss = h.get("incidencia_cs", h.get("incidencia_inss", True))
                 self._marcar_checkbox("fgts", bool(_inc_fgts))
                 self._marcar_checkbox("inss", bool(_inc_inss))
+                # FGTS já recolhido (para dedução)
+                if h.get("fgts_recolhido") or h.get("fgts_ja_recolhido"):
+                    self._marcar_checkbox("fgtsJaRecolhido", True)
+                # Contribuições sociais já recolhidas
+                if h.get("cs_recolhida") or h.get("contribuicoes_ja_recolhidas"):
+                    self._marcar_checkbox("contribuicoesJaRecolhidas", True)
             except Exception as _e_chk:
                 self._log(f"  ⚠ Checkboxes FGTS/INSS: {_e_chk} — continuando")
 
@@ -5133,9 +5254,9 @@ class PJECalcPlaywright:
         # Valores enum do PJE-Calc — chaves normalizadas para tolerância a acentos/case
         carac_map = {
             "comum": "COMUM",
-            "13o salario": "DECIMO_TERCEIRO_SALARIO",
-            "decimo terceiro salario": "DECIMO_TERCEIRO_SALARIO",
-            "13 salario": "DECIMO_TERCEIRO_SALARIO",
+            "13o salario": "DECIMO_TERCEIRO",
+            "decimo terceiro salario": "DECIMO_TERCEIRO",
+            "13 salario": "DECIMO_TERCEIRO",
             "ferias": "FERIAS",
             "aviso previo": "AVISO_PREVIO",
         }
@@ -5741,7 +5862,7 @@ class PJECalcPlaywright:
                     return False
 
             # ── Característica (RADIO, ID confirmado DOM v2.15.1: formulario:caracteristicaVerba) ──
-            # Valores: COMUM / DECIMO_TERCEIRO_SALARIO / AVISO_PREVIO / FERIAS
+            # Valores: COMUM / DECIMO_TERCEIRO / AVISO_PREVIO / FERIAS
             carac_label = v.get("caracteristica", "Comum")
             carac_enum = carac_map.get(_norm_key(carac_label), "COMUM")
             _carac_ok = any(
@@ -5763,7 +5884,7 @@ class PJECalcPlaywright:
             # IMPORTANTE: setCaracteristica() na classe VerbaDeCalculoVO já chama
             # setOcorrenciaDePagamento(carac.getOcorrenciaDePagamento()) automaticamente:
             #   COMUM → MENSAL
-            #   DECIMO_TERCEIRO_SALARIO → DEZEMBRO
+            #   DECIMO_TERCEIRO → DEZEMBRO
             #   AVISO_PREVIO → DESLIGAMENTO
             #   FERIAS → PERIODO_AQUISITIVO
             #
@@ -5773,7 +5894,7 @@ class PJECalcPlaywright:
             # painelLabelFormula (base ainda não foi definida).
             _carac_default_ocorr = {
                 "COMUM": "MENSAL",
-                "DECIMO_TERCEIRO_SALARIO": "DEZEMBRO",
+                "DECIMO_TERCEIRO": "DEZEMBRO",
                 "AVISO_PREVIO": "DESLIGAMENTO",
                 "FERIAS": "PERIODO_AQUISITIVO",
             }.get(carac_enum, "MENSAL")
@@ -5941,6 +6062,14 @@ class PJECalcPlaywright:
             # quando valor=CALCULADO. Para valor=INFORMADO, todo o painel não é renderizado (rendered=#{isValorDevidoCalculado}).
             _modo_calculado = not bool(v.get("valor_informado"))
             if _modo_calculado:
+                # Tipo de divisor (DOM: tipoDeDivisor select)
+                # Values: OUTRO_VALOR (default), DIAS_NO_MES, HORAS_NO_MES
+                _tipo_div = v.get("tipo_divisor")
+                if _tipo_div:
+                    self._selecionar("tipoDeDivisor", _tipo_div, obrigatorio=False)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(300)
+
                 # Multiplicador (default 1 = base * 1)
                 _mult_val = v.get("multiplicador")
                 if _mult_val is None:
@@ -5951,6 +6080,15 @@ class PJECalcPlaywright:
                 if _div_val is None:
                     _div_val = 1
                 self._preencher("outroValorDoDivisor", _fmt_br(float(_div_val)), False)
+
+                # Tipo de quantidade (DOM: tipoDaQuantidade select)
+                # Values: INFORMADA (default), CONFORME_JORNADA, CONFORME_CARTAO_DE_PONTO
+                _tipo_qtd = v.get("tipo_quantidade")
+                if _tipo_qtd:
+                    self._selecionar("tipoDaQuantidade", _tipo_qtd, obrigatorio=False)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(300)
+
                 # Quantidade Informada (default 1 = 1 unidade por ocorrência)
                 # Só preenche se tipoDaQuantidade permaneceu INFORMADA (default).
                 _qtd_val = v.get("quantidade")
@@ -6032,11 +6170,47 @@ class PJECalcPlaywright:
 
             _irpf = bool(v.get("incidencia_ir"))
             if not _marcar_checkbox_robusto(
-                ["irpf", "ir", "incidenciaIRPF", "incidenciaIr", "incidenciaDoIRPF"],
+                ["impostoDeRenda", "irpf", "ir", "incidenciaIRPF", "incidenciaIr"],
                 ["IRPF", "Imposto de Renda", "IR"],
                 _irpf, f"Verba '{nome}' IRPF"
             ):
                 self._log(f"  ⚠ Verba '{nome}': checkbox IRPF não encontrado (desejado={_irpf})")
+
+            # Previdência Privada e Pensão Alimentícia (checkboxes opcionais)
+            if v.get("incidencia_previdencia_privada") is not None:
+                _marcar_checkbox_robusto(
+                    ["previdenciaPrivada", "incidenciaPrevidenciaPrivada"],
+                    ["Previdência Privada", "Previdencia Privada"],
+                    bool(v["incidencia_previdencia_privada"]), f"Verba '{nome}' Prev.Privada"
+                )
+            if v.get("incidencia_pensao_alimenticia") is not None:
+                _marcar_checkbox_robusto(
+                    ["pensaoAlimenticia", "incidenciaPensaoAlimenticia"],
+                    ["Pensão Alimentícia", "Pensao Alimenticia"],
+                    bool(v["incidencia_pensao_alimenticia"]), f"Verba '{nome}' Pensão"
+                )
+
+            # Campos opcionais de verba (comportamento, fração, dobra, exclusões)
+            if v.get("tratamento_fracao"):
+                self._selecionar("tratamentoFracao", v["tratamento_fracao"], obrigatorio=False)
+            if v.get("comportamento_base"):
+                self._selecionar("comportamentoBase", v["comportamento_base"], obrigatorio=False)
+            if v.get("dobrar_valor_devido"):
+                self._marcar_checkbox("dobrarValorDevido", True)
+            if v.get("zerar_valor_negativo") is not None:
+                self._marcar_checkbox("zerarValorNegativo", bool(v["zerar_valor_negativo"]))
+            if v.get("excluir_faltas_justificadas") is not None:
+                self._marcar_checkbox("excluirFaltasJustificadas", bool(v["excluir_faltas_justificadas"]))
+            if v.get("excluir_faltas_nao_justificadas") is not None:
+                self._marcar_checkbox("excluirFaltasNaoJustificadas", bool(v["excluir_faltas_nao_justificadas"]))
+            if v.get("excluir_ferias_gozadas") is not None:
+                self._marcar_checkbox("excluirFeriasGozadas", bool(v["excluir_ferias_gozadas"]))
+            # Juros TST 439 (select na verba)
+            if v.get("juros_tst_439"):
+                self._selecionar("jurosTst439", v["juros_tst_439"], obrigatorio=False)
+            # Tipo pago (radio — se verba já foi parcialmente paga)
+            if v.get("tipo_pago"):
+                self._marcar_radio("tipoPago", v["tipo_pago"])
 
             # Período — IDs confirmados DOM v2.15.1:
             # formulario:periodoInicialInputDate / formulario:periodoFinalInputDate
@@ -6344,36 +6518,52 @@ class PJECalcPlaywright:
         )
         self._selecionar("incidenciaDoFgts", _incidencia, obrigatorio=False)
 
-        # Multa rescisória — checkbox formulario:multa + radio formulario:multaDoFgts
-        # IMPORTANTE (fgts.xhtml): o checkbox "multa" controla disabled de TODOS os
-        # campos de multa (tipoDoValorDaMulta, multaDoFgts, multaDoArtigo467).
+        # Multa rescisória — SELECT formulario:multa (NAO_APURAR / CALCULADA / INFORMADA)
+        # DOM confirmado v2.15.1: é SELECT, NÃO checkbox.
+        # Selecionar CALCULADA ativa campos condicionais (multaDoFgts, baseDaMulta, etc.)
         # Tem a4j:support onchange que re-renderiza esses campos via AJAX.
-        # DEVE aguardar AJAX antes de tentar preencher os radios dependentes.
         multa_40 = fgts.get("multa_40", True)
         multa_467 = fgts.get("multa_467", False)
-        self._marcar_checkbox("multa", bool(multa_40))
-        # Aguardar AJAX do onchange do checkbox multa (re-renderiza campos dependentes)
+        # Determinar valor do select multa
+        if fgts.get("multa") in ("NAO_APURAR", "CALCULADA", "INFORMADA"):
+            # Valor direto do DOM (extrações atualizadas)
+            _multa_val = fgts["multa"]
+        elif multa_40:
+            _multa_val = "CALCULADA"
+        else:
+            _multa_val = "NAO_APURAR"
+        self._selecionar("multa", _multa_val, obrigatorio=False)
+        # Aguardar AJAX do onchange do select multa (re-renderiza campos dependentes)
         self._aguardar_ajax()
         self._page.wait_for_timeout(1000)
 
-        if multa_40:
-            # Tipo do valor da multa — DEVE ser selecionado ANTES do percentual
-            # pois o radio multaDoFgts só aparece quando tipoDoValorDaMulta == CALCULADA
-            self._preencher_radio_ou_select("tipoDoValorDaMulta", "CALCULADA")
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(500)
-
+        if _multa_val == "CALCULADA":
             # Percentual: 40% padrão; 20% para estabilidade provisória (CIPA, gestante etc.)
             _pct_multa = "VINTE_POR_CENTO" if fgts.get("multa_20") else "QUARENTA_POR_CENTO"
             self._preencher_radio_ou_select("multaDoFgts", _pct_multa)
+
+            # Base da multa (select condicional: DEVIDO / DIFERENCA / SALDO_E_OU_SAQUE / etc.)
+            _base_multa = fgts.get("base_multa", fgts.get("baseDaMulta", ""))
+            if _base_multa:
+                self._selecionar("baseDaMulta", _base_multa, obrigatorio=False)
 
             # Excluir aviso indenizado da base da multa (checkbox)
             _excl_aviso = fgts.get("excluir_aviso_multa", False)
             self._marcar_checkbox("excluirAvisoDaMulta", _excl_aviso)
 
+        elif _multa_val == "INFORMADA":
+            # Valor fixo da multa informada (campo condicional quando multa=INFORMADA)
+            _val_multa_inf = fgts.get("valor_multa_informada") or fgts.get("valorMultaInformada")
+            if _val_multa_inf:
+                self._preencher("valorMultaInformada", _fmt_br(float(_val_multa_inf)), False)
+                self._log(f"  ✓ Valor multa informada: R$ {_val_multa_inf}")
+
+        # Pensão alimentícia sobre FGTS (checkbox condicional)
+        if fgts.get("pensao_alimenticia_fgts") is not None:
+            self._marcar_checkbox("pensaoAlimenticiaFgts", bool(fgts["pensao_alimenticia_fgts"]))
+
         # Multa Art. 467 CLT — checkbox formulario:multaDoArtigo467
-        # Dependente de checkbox "multa" estar marcado (disabled se multa=false)
-        if multa_467 and multa_40:
+        if multa_467:
             self._marcar_checkbox("multaDoArtigo467", True)
 
         # Multa 10% (rescisão antecipada de contrato a prazo)
@@ -6593,6 +6783,59 @@ class PJECalcPlaywright:
                               cs.get("apurar_sobre_salarios_pagos", False))
         if cs.get("lei_11941"):
             self._marcar_checkbox("lei11941", True)
+
+        # Limitar ao teto do INSS
+        if cs.get("limitar_ao_teto") is not None:
+            self._marcar_checkbox("limitarAoTeto", bool(cs["limitar_ao_teto"]))
+
+        # Isenção Simples Nacional (empresa optante pelo Simples)
+        if cs.get("isencao_simples"):
+            self._marcar_checkbox("isencaoSimples", True)
+            if cs.get("simples_inicio"):
+                self._preencher_data("simplesInicio", cs["simples_inicio"], False)
+            if cs.get("simples_fim"):
+                self._preencher_data("simplesFim", cs["simples_fim"], False)
+
+        # Períodos de incidência (salários pagos e devidos)
+        if cs.get("periodo_incidencia_pagos"):
+            self._preencher("periodoIncidenciaPagos", cs["periodo_incidencia_pagos"], False)
+        if cs.get("periodo_incidencia_devidos"):
+            self._preencher("periodoIncidenciaDevidos", cs["periodo_incidencia_devidos"], False)
+
+        # Período do empregador (se alíquota por período)
+        if cs.get("periodo_inicio_empregador"):
+            self._preencher_data("periodoInicioEmpregador", cs["periodo_inicio_empregador"], False)
+        if cs.get("periodo_fim_empregador"):
+            self._preencher_data("periodoFimEmpregador", cs["periodo_fim_empregador"], False)
+
+        # Atividade econômica (lookup — busca por código CNAE)
+        if cs.get("atividade_economica"):
+            self._preencher("buscaAtividadeEconomica", cs["atividade_economica"], False)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+
+        # Tipo de alíquota do segurado (DOM: tipoAliquotaSegurado radio)
+        _tipo_seg = cs.get("tipo_aliquota_segurado")
+        if _tipo_seg:
+            self._marcar_radio("tipoAliquotaSegurado", _tipo_seg)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(300)
+
+        # Tipo de alíquota do empregador (DOM: tipoAliquotaEmpregador radio)
+        _tipo_emp = cs.get("tipo_aliquota_empregador")
+        if _tipo_emp:
+            self._marcar_radio("tipoAliquotaEmpregador", _tipo_emp)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(300)
+
+        # Alíquotas fixas quando aplicável
+        if cs.get("aliquota_empresa"):
+            self._preencher("aliquotaEmpresa", _fmt_br(cs["aliquota_empresa"]), False)
+        if cs.get("aliquota_sat"):
+            self._preencher("aliquotaSAT", _fmt_br(cs["aliquota_sat"]), False)
+        if cs.get("aliquota_terceiros"):
+            self._preencher("aliquotaTerceiros", _fmt_br(cs["aliquota_terceiros"]), False)
+
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 5: Salvar INSS não confirmado.")
         self._aguardar_ajax()
@@ -7087,12 +7330,48 @@ class PJECalcPlaywright:
             except Exception as e:
                 self._log(f"    ⚠ Escala tipo: erro {e}")
 
-        # Se LIVRE: pular preenchimento de jornada — usuário preencherá manualmente após importação PJC
+        # Se LIVRE: preencher campos simples entrada/saída por dia (entradaSegunda..Dom, saidaSegunda..Dom)
         if preenchimento == "livre":
-            self._log("    → Modo Livre: pulando preenchimento de jornada (será feito após importação PJC)")
-            # Ir direto para Salvar (seção 8)
-            # Fall through to save section below (skip steps 3-7)
-            pass
+            self._log("    → Modo Livre: preenchendo campos entrada/saída simples")
+            _jorn_entrada = dur.get("jornada_entrada") or ""
+            _jorn_saida = dur.get("jornada_saida") or ""
+            if _jorn_entrada and _jorn_saida:
+                _DIAS_SIMPLES = {
+                    "seg": ("entradaSegunda", "saidaSegunda"),
+                    "ter": ("entradaTerca", "saidaTerca"),
+                    "qua": ("entradaQuarta", "saidaQuarta"),
+                    "qui": ("entradaQuinta", "saidaQuinta"),
+                    "sex": ("entradaSexta", "saidaSexta"),
+                    "sab": ("entradaSabado", "saidaSabado"),
+                    "dom": ("entradaDomingo", "saidaDomingo"),
+                }
+                for dia, (campo_ent, campo_sai) in _DIAS_SIMPLES.items():
+                    # Preencher seg-sex; sáb/dom somente se jornada extraída > 0
+                    _jorn_dia = jornada_dias.get(dia, 0) or 0
+                    if dia in ("sab", "dom") and _jorn_dia <= 0:
+                        continue
+                    try:
+                        loc_e = self._page.locator(f"input[id$='{campo_ent}']")
+                        if loc_e.count() > 0:
+                            loc_e.first.click()
+                            loc_e.first.fill("")
+                            loc_e.first.press_sequentially(_jorn_entrada.replace(":", ""), delay=50)
+                            loc_e.first.press("Tab")
+                    except Exception as _e_ent:
+                        self._log(f"      ⚠ {dia.upper()} entrada: {_e_ent}")
+                    try:
+                        loc_s = self._page.locator(f"input[id$='{campo_sai}']")
+                        if loc_s.count() > 0:
+                            loc_s.first.click()
+                            loc_s.first.fill("")
+                            loc_s.first.press_sequentially(_jorn_saida.replace(":", ""), delay=50)
+                            loc_s.first.press("Tab")
+                    except Exception as _e_sai:
+                        self._log(f"      ⚠ {dia.upper()} saída: {_e_sai}")
+                    self._log(f"      {dia.upper()}: {_jorn_entrada}-{_jorn_saida}")
+                self._aguardar_ajax()
+            else:
+                self._log("    ⚠ Modo Livre: sem jornada_entrada/saida — campos não preenchidos")
         else:
             pass  # Continue with steps 3+ below
 
@@ -7480,17 +7759,17 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(800)
 
-            # Data inicial
+            # Data inicial — DOM confirmado: dataInicioInputDate
             dt_ini = falta.get("data_inicial", "")
             if dt_ini:
-                self._preencher_data("dataInicial", dt_ini, False)
-                self._preencher_data("dataInicio", dt_ini, False)
+                self._preencher_data("dataInicioInputDate", dt_ini, False)
+                self._preencher_data("dataInicio", dt_ini, False)  # fallback
 
-            # Data final
+            # Data final — DOM confirmado: dataFimInputDate
             dt_fim = falta.get("data_final", "")
             if dt_fim:
-                self._preencher_data("dataFinal", dt_fim, False)
-                self._preencher_data("dataFim", dt_fim, False)
+                self._preencher_data("dataFimInputDate", dt_fim, False)
+                self._preencher_data("dataFim", dt_fim, False)  # fallback
 
             # Tipo / justificada
             tipo = falta.get("tipo", falta.get("justificada", ""))
@@ -7685,6 +7964,22 @@ class PJECalcPlaywright:
                     except Exception as _e:
                         self._log(f"  ⚠ Férias abono: {_e}")
 
+                # Datas de gozo (até 3 períodos) — condicionais: situação GOZADAS ou GOZADAS_PARCIALMENTE
+                _sit_upper = _situacao.upper() if _situacao else ""
+                if _sit_upper in ("GOZADAS", "GOZADAS_PARCIALMENTE"):
+                    _gozo_periodos = entrada.get("gozo_periodos") or []
+                    for _gi, _gozo in enumerate(_gozo_periodos[:3]):
+                        _num = _gi + 1  # 1, 2, 3
+                        _g_ini = _gozo.get("inicio") or _gozo.get("data_inicio") or ""
+                        _g_fim = _gozo.get("fim") or _gozo.get("data_fim") or ""
+                        if _g_ini:
+                            self._preencher_data(f"dataInicioGozo{_num}", _g_ini, False)
+                        if _g_fim:
+                            self._preencher_data(f"dataFimGozo{_num}", _g_fim, False)
+                        if _g_ini or _g_fim:
+                            self._log(f"  ✓ Férias {_per_aq_ini}-{_per_aq_fim}: gozo {_num} = {_g_ini} a {_g_fim}")
+                    self._aguardar_ajax()
+
                 # Salvar edição
                 try:
                     self._clicar_salvar(aguardar_sucesso=True)
@@ -7818,70 +8113,60 @@ class PJECalcPlaywright:
                 return
 
         # --- Índice de correção monetária ---
-        _indice = cj.get("indice_correcao", "IPCAE")
-        # Mapeamento: valor da prévia/extração → nome do enum Java IndiceMonetarioEnum
+        _indice = cj.get("indice_correcao", "IPCA_E")
+        # Mapeamento: valor da prévia/extração → valor <option> do DOM (select indiceCorrecao)
+        # DOM confirmado v2.15.1: TABELA_UNICA_JT_DIARIO, TABELA_UNICA_JT_MENSAL,
+        # TR, IGP_M, INPC, IPC, IPCA, IPCA_E, IPCA_E_TR
         _indice_map = {
-            # Valores do enum Java (prévia atualizada usa estes)
-            "TUACDT": "TUACDT",
-            "TABELA_DEVEDOR_FAZENDA": "TABELA_DEVEDOR_FAZENDA",
-            "TABELA_INDEBITO_TRIBUTARIO": "TABELA_INDEBITO_TRIBUTARIO",
-            "TABELA_UNICA_JT_MENSAL": "TABELA_UNICA_JT_MENSAL",
+            # Valores DOM confirmados (select options)
             "TABELA_UNICA_JT_DIARIO": "TABELA_UNICA_JT_DIARIO",
+            "TABELA_UNICA_JT_MENSAL": "TABELA_UNICA_JT_MENSAL",
             "TR": "TR",
-            "IGPM": "IGPM",
+            "IGP_M": "IGP_M",
             "INPC": "INPC",
             "IPC": "IPC",
             "IPCA": "IPCA",
-            "IPCAE": "IPCAE",
-            "IPCAETR": "IPCAETR",
-            "SELIC": "SELIC",
-            "SELIC_FAZENDA": "SELIC_FAZENDA",
-            "SELIC_BACEN": "SELIC_BACEN",
-            "SEM_CORRECAO": "SEM_CORRECAO",
+            "IPCA_E": "IPCA_E",
+            "IPCA_E_TR": "IPCA_E_TR",
             # Valores legados da extração (backward compat)
-            "IPCA-E": "IPCAE",
-            "IPCA-E/TR": "IPCAETR",
-            "IGP-M": "IGPM",
-            "Tabela JT Única Mensal": "TUACDT",
-            "Tabela JT Unica Mensal": "TUACDT",
-            "Selic": "SELIC",
+            "IPCAE": "IPCA_E",
+            "IPCAETR": "IPCA_E_TR",
+            "IGPM": "IGP_M",
+            "IPCA-E": "IPCA_E",
+            "IPCA-E/TR": "IPCA_E_TR",
+            "IGP-M": "IGP_M",
+            "TUACDT": "TABELA_UNICA_JT_MENSAL",
+            "Tabela JT Única Mensal": "TABELA_UNICA_JT_MENSAL",
+            "Tabela JT Unica Mensal": "TABELA_UNICA_JT_MENSAL",
+            "Selic": "SELIC",  # SELIC não confirmado no DOM como opção de índice
+            "SELIC": "SELIC",
             "TRCT": "TR",
             "TUACDT_DIARIO": "TABELA_UNICA_JT_DIARIO",
         }
-        _val_indice = _indice_map.get(_indice, "IPCAE")
+        _val_indice = _indice_map.get(_indice, "IPCA_E")
         self._selecionar("indiceCorrecao", _val_indice, obrigatorio=False)
         self._selecionar("indiceTrabalhista", _val_indice, obrigatorio=False)
         self._log(f"  ✓ Índice de correção: {_val_indice}")
 
         # --- Taxa de juros ---
-        _taxa = cj.get("taxa_juros", "TAXA_LEGAL")
-        # Mapeamento: valor da prévia/extração → nome do enum Java JurosEnum
+        _taxa = cj.get("taxa_juros", "PADRAO")
+        # Mapeamento: valor da prévia/extração → valor <option> do DOM (select taxaJuros)
+        # DOM confirmado v2.15.1: PADRAO, FAZENDA_PUBLICA, SELIC
         _juros_map = {
-            # Valores do enum Java (prévia atualizada usa estes)
-            "JUROS_PADRAO": "JUROS_PADRAO",
-            "JUROS_POUPANCA": "JUROS_POUPANCA",
+            # Valores DOM confirmados (select options)
+            "PADRAO": "PADRAO",
             "FAZENDA_PUBLICA": "FAZENDA_PUBLICA",
-            "JUROS_MEIO_PORCENTO": "JUROS_MEIO_PORCENTO",
-            "JUROS_UM_PORCENTO": "JUROS_UM_PORCENTO",
-            "JUROS_ZERO_TRINTA_TRES": "JUROS_ZERO_TRINTA_TRES",
             "SELIC": "SELIC",
-            "SELIC_FAZENDA": "SELIC_FAZENDA",
-            "SELIC_BACEN": "SELIC_BACEN",
-            "TRD_SIMPLES": "TRD_SIMPLES",
-            "TRD_COMPOSTOS": "TRD_COMPOSTOS",
-            "TAXA_LEGAL": "TAXA_LEGAL",
-            "SEM_JUROS": "SEM_JUROS",
             # Valores legados da extração (backward compat)
-            "Taxa Legal": "TAXA_LEGAL",
+            "JUROS_PADRAO": "PADRAO",
+            "TAXA_LEGAL": "PADRAO",  # Taxa Legal não confirmada no DOM; mapear para Padrão
+            "Taxa Legal": "PADRAO",
             "Selic": "SELIC",
-            "Juros Padrão": "JUROS_PADRAO",
-            "Juros Padrao": "JUROS_PADRAO",
-            "1% ao mês": "JUROS_UM_PORCENTO",
-            "TRD_CAPITALIZADOS": "TRD_COMPOSTOS",
-            "JUROS_SIMPLES_05": "JUROS_MEIO_PORCENTO",
-            "JUROS_SIMPLES_1": "JUROS_UM_PORCENTO",
+            "Juros Padrão": "PADRAO",
+            "Juros Padrao": "PADRAO",
+            "1% ao mês": "PADRAO",
         }
-        _val_juros = _juros_map.get(_taxa, "TAXA_LEGAL")
+        _val_juros = _juros_map.get(_taxa, "PADRAO")
         self._selecionar("taxaJuros", _val_juros, obrigatorio=False)
         self._selecionar("juros", _val_juros, obrigatorio=False)
         self._log(f"  ✓ Taxa de juros: {_val_juros}")
@@ -7899,6 +8184,71 @@ class PJECalcPlaywright:
         _val_base = _base_map.get(_base, "VERBA_INSS")
         self._selecionar("baseDeJurosDasVerbas", _val_base, obrigatorio=False)
         self._log(f"  ✓ Base de juros: {_val_base}")
+
+        # --- Segundo índice de correção (combinar com outro) ---
+        _segundo_indice = cj.get("segundo_indice") or cj.get("indice_correcao_pos")
+        if _segundo_indice:
+            self._marcar_checkbox("combinarComOutro", True)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            _val_seg = _indice_map.get(_segundo_indice, _segundo_indice)
+            self._selecionar("segundoIndice", _val_seg, obrigatorio=False)
+            _dt_seg = cj.get("data_inicio_segundo_indice") or cj.get("data_taxa_legal", "30/08/2024")
+            self._preencher_data("dataInicioSegundoIndice", _dt_seg, False)
+            self._log(f"  ✓ Segundo índice: {_val_seg} a partir de {_dt_seg}")
+
+        # --- Ignorar taxa negativa ---
+        if cj.get("ignorar_taxa_negativa") is not None:
+            self._marcar_checkbox("ignorarTaxaNegativa", bool(cj["ignorar_taxa_negativa"]))
+
+        # --- FGTS: índice de correção ---
+        if cj.get("fgts_correcao"):
+            self._selecionar("fgtsCorrecao", cj["fgts_correcao"], obrigatorio=False)
+            self._log(f"  ✓ FGTS correção: {cj['fgts_correcao']}")
+
+        # --- Lei 11.941/2009 (contribuição social - regime de competência) ---
+        _cs_dados = cj  # CS fields may come nested in correcao_juros or as standalone
+        if _cs_dados.get("lei_11941") or _cs_dados.get("lei11941"):
+            self._marcar_checkbox("lei11941", True)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            if _cs_dados.get("data_inicio_lei_11941"):
+                self._preencher_data("dataInicioLei11941", _cs_dados["data_inicio_lei_11941"], False)
+            if _cs_dados.get("limitar_multa_lei_11941") is not None:
+                self._marcar_checkbox("limitarMultaLei11941", bool(_cs_dados["limitar_multa_lei_11941"]))
+            self._log("  ✓ Lei 11.941/2009: ativada")
+
+        # --- Período sem juros ---
+        if cj.get("periodo_sem_juros_inicio"):
+            self._preencher_data("periodoSemJurosInicio", cj["periodo_sem_juros_inicio"], False)
+        if cj.get("periodo_sem_juros_fim"):
+            self._preencher_data("periodoSemJurosFim", cj["periodo_sem_juros_fim"], False)
+
+        # --- Índice e juros das custas ---
+        if cj.get("indice_custas"):
+            self._selecionar("indiceCustas", cj["indice_custas"], obrigatorio=False)
+        if cj.get("atualizar_custas") is not None:
+            self._marcar_checkbox("atualizarCustas", bool(cj["atualizar_custas"]))
+        if cj.get("juros_custas") is not None:
+            self._marcar_checkbox("jurosCustas", bool(cj["juros_custas"]))
+
+        # --- Atualização da Contribuição Social ---
+        if cj.get("atualizacao_cs"):
+            self._marcar_radio("atualizacaoCS", cj["atualizacao_cs"])
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(300)
+        if cj.get("data_transicao_cs"):
+            self._preencher_data("dataTransicaoCS", cj["data_transicao_cs"], False)
+
+        # --- Previdência Privada (índice e juros na aba correção) ---
+        if cj.get("indice_previdencia_privada"):
+            self._selecionar("indicePrevidenciaPrivada", cj["indice_previdencia_privada"], obrigatorio=False)
+        if cj.get("juros_previdencia_privada") is not None:
+            self._marcar_checkbox("jurosPrevidenciaPrivada", bool(cj["juros_previdencia_privada"]))
+        if cj.get("tipo_multa_previdenciaria"):
+            self._selecionar("tipoMultaPrevidenciaria", cj["tipo_multa_previdenciaria"], obrigatorio=False)
+        if cj.get("pagamento_multa_previdenciaria"):
+            self._selecionar("pagamentoMultaPrevidenciaria", cj["pagamento_multa_previdenciaria"], obrigatorio=False)
 
         # --- Multa do art. 523 CPC (se aplicável) ---
         _multa_523 = cj.get("multa_523", False)
@@ -7919,7 +8269,7 @@ class PJECalcPlaywright:
         #
         # Estratégia correta: `ApresentadorParametrosDeAtualizacao.iniciar()` já
         # carregou o `registro` via `servicoDeCalculo.obterParametrosDeAtualizacao()`
-        # com os defaults do cálculo (IPCAE, Taxa Legal, etc.). Como o apresentador
+        # com os defaults do cálculo (IPCA_E, PADRAO, etc.). Como o apresentador
         # é `@Scope(SESSION)`, as alterações feitas via AJAX (`a4j:support onchange`)
         # permanecem vivas no registro até a liquidação. Pular o click em Salvar
         # elimina a NPE sem perder os valores configurados.
@@ -7957,10 +8307,56 @@ class PJECalcPlaywright:
         _compor = sf.get("compor_principal", "SIM")
         self._marcar_radio("comporPrincipal", _compor)
 
+        # Competência início/fim
+        _comp_ini = sf.get("competencia_inicio", "")
+        if _comp_ini:
+            self._preencher_data("competenciaInicio", _comp_ini, False)
+            self._log(f"  ✓ Competência início: {_comp_ini}")
+        _comp_fim = sf.get("competencia_fim", "")
+        if _comp_fim:
+            self._preencher_data("competenciaFim", _comp_fim, False)
+            self._log(f"  ✓ Competência fim: {_comp_fim}")
+
         # Quantidade de filhos menores de 14 anos
-        _qtd = sf.get("qtd_filhos", "")
+        _qtd = sf.get("quantidade_filhos") or sf.get("qtd_filhos") or ""
         if _qtd:
             self._preencher("quantidadeDeFilhos", str(_qtd), False)
+
+        # Remuneração mensal — PJE-Calc tem 2 selects distintos:
+        # remuneracaoMensalPagos (base para salários pagos) e remuneracaoMensalDevidos (base para devidos)
+        _rem_pagos = sf.get("remuneracao_mensal_pagos") or sf.get("remuneracao_mensal") or ""
+        if _rem_pagos:
+            _ok = self._preencher("remuneracaoMensalPagos", str(_rem_pagos), False)
+            if not _ok:
+                # Fallback: campo genérico remuneracaoMensal
+                self._preencher("remuneracaoMensal", _fmt_br(str(_rem_pagos)), False)
+            self._log(f"  ✓ Remuneração mensal (pagos): {_rem_pagos}")
+
+        _rem_devidos = sf.get("remuneracao_mensal_devidos", "")
+        if _rem_devidos:
+            self._preencher("remuneracaoMensalDevidos", str(_rem_devidos), False)
+            self._log(f"  ✓ Remuneração mensal (devidos): {_rem_devidos}")
+
+        # Variações de filhos por competência (loop)
+        _variacoes = sf.get("variacoes_filhos") or []
+        for _vi, _var in enumerate(_variacoes):
+            _v_comp = _var.get("competencia", "")
+            _v_qtd = _var.get("quantidade", "")
+            if not _v_comp or not _v_qtd:
+                continue
+            try:
+                # Preencher campos de variação
+                self._preencher_data("filhosVariacaoCompetencia", _v_comp, False)
+                self._preencher("filhosVariacaoQuantidade", str(_v_qtd), False)
+                # Clicar botão "Adicionar" variação
+                _btn_add = self._page.locator("input[id$='adicionarVariacao'], input[value*='Adicionar']")
+                if _btn_add.count() > 0:
+                    _btn_add.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    self._log(f"  ✓ Variação {_vi+1}: competência={_v_comp}, filhos={_v_qtd}")
+            except Exception as _e_var:
+                self._log(f"  ⚠ Variação filhos {_vi+1}: {_e_var}")
 
         # Salvar
         if not self._clicar_salvar():
@@ -8006,7 +8402,7 @@ class PJECalcPlaywright:
         self._marcar_radio("comporPrincipal", _compor)
 
         # Quantidade de parcelas
-        _parcelas = sd.get("qtd_parcelas", "")
+        _parcelas = sd.get("quantidade_parcelas") or sd.get("qtd_parcelas") or ""
         if _parcelas:
             self._preencher("quantidadeDeParcelas", str(_parcelas), False)
 
@@ -8081,7 +8477,7 @@ class PJECalcPlaywright:
             self._preencher("aliquota", _fmt_br(str(_aliquota)), False)
 
         # Incidir sobre juros
-        if pa.get("incidir_juros"):
+        if pa.get("incidir_sobre_juros") or pa.get("incidir_juros"):
             self._marcar_checkbox("incidirSobreJuros", True)
 
         # Salvar
@@ -8130,12 +8526,22 @@ class PJECalcPlaywright:
         if ir.get("deducao_honorarios_reclamante"):
             self._marcar_checkbox("deducaoHonorariosReclamante", True)
             self._marcar_checkbox("descontarHonorarios", True)
+        if ir.get("deducao_previdencia_privada"):
+            self._marcar_checkbox("deducaoPrevidenciaPrivada", True)
         if ir.get("deducao_pensao_alimenticia"):
             self._marcar_checkbox("deducaoPensaoAlimenticia", True)
             self._marcar_checkbox("pensaoAlimenticia", True)
             if ir.get("valor_pensao"):
                 self._preencher("valorPensao", _fmt_br(ir["valor_pensao"]), False)
                 self._preencher("valorDaPensao", _fmt_br(ir["valor_pensao"]), False)
+
+        # Checkboxes adicionais de IR (DOM confirmado)
+        if ir.get("incidir_sobre_juros_de_mora") is not None:
+            self._marcar_checkbox("incidirSobreJurosDeMora", bool(ir["incidir_sobre_juros_de_mora"]))
+        if ir.get("cobrar_do_reclamado") is not None:
+            self._marcar_checkbox("cobrarDoReclamado", bool(ir["cobrar_do_reclamado"]))
+        if ir.get("aposentado_maior_65") is not None:
+            self._marcar_checkbox("aposentadoMaior65", bool(ir["aposentado_maior_65"]))
 
         # Campos numéricos
         if ir.get("dependentes"):
@@ -8373,9 +8779,13 @@ class PJECalcPlaywright:
                 if pct_val < 1:
                     pct_val = pct_val * 100
                 pct_str = _fmt_br(pct_val)
-                # Campo correto em honorarios.xhtml é "aliquota" (id="formulario:aliquota")
-                self._preencher("aliquota", pct_str, False)
-                self._log(f"  → aliquota (percentual): {pct_str}%")
+                # Campo correto em honorarios.xhtml: tentar "percentualHonorarios" (DOM) e "aliquota" (fallback)
+                _pct_ok = (
+                    self._preencher("percentualHonorarios", pct_str, False)
+                    or self._preencher("aliquota", pct_str, False)
+                    or self._preencher("percentual", pct_str, False)
+                )
+                self._log(f"  → percentual honorários: {pct_str}%{'' if _pct_ok else ' (⚠ campo não encontrado)'}")
             elif tipo_valor == "INFORMADO" and hon.get("valor_informado") is not None:
                 self._preencher("valorInformado", _fmt_br(hon["valor_informado"]), False)
                 self._preencher("valorFixo", _fmt_br(hon["valor_informado"]), False)
@@ -8427,18 +8837,27 @@ class PJECalcPlaywright:
                 _tipo_doc = "CPF"
 
             # Selecionar tipo ANTES de preencher número (máscara dinâmica depende disso)
-            self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc) or \
-                self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
+            (self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc)
+             or self._marcar_radio("tipoDocumentoCredor", _tipo_doc)
+             or self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
+             or self._selecionar("tipoDocumentoCredor", _tipo_doc, obrigatorio=False))
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
-            self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
+            (self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
+             or self._preencher("documentoFiscalCredor", _num_doc, False))
             self._log(f"  → doc credor: {_tipo_doc} {_num_doc}")
 
             # Apurar IR
             if hon.get("apurar_ir"):
                 self._marcar_checkbox("apurarIr", True)
                 self._marcar_checkbox("tributarIR", True)
+            # Tipo de IR sobre honorários (se aplicável)
+            if hon.get("tipo_ir_honorarios"):
+                self._selecionar("tipoIrHonorarios", hon["tipo_ir_honorarios"], obrigatorio=False)
+            # Base de sucumbência (se diferente do default)
+            if hon.get("base_sucumbencia"):
+                self._selecionar("baseSucumbencia", hon["base_sucumbencia"], obrigatorio=False)
 
             self._log(f"  → Salvando honorário [{i+1}/{len(hon_lista)}]")
             try:
@@ -8554,17 +8973,55 @@ class PJECalcPlaywright:
             self._log(f"  ✓ Base custas: {_val}")
 
         # Custas do Reclamado — Conhecimento (padrão: Calculada 2%)
-        _reclamado_conhecimento = custas.get("reclamado_conhecimento", "CALCULADA")
+        # DOM v2.15.1: radio values = CALCULADA_2PCT / INFORMADA / NAO_SE_APLICA
+        _reclamado_conhecimento = custas.get("reclamado_conhecimento", "CALCULADA_2PCT")
+        # Backward compat: CALCULADA → CALCULADA_2PCT
+        if _reclamado_conhecimento == "CALCULADA":
+            _reclamado_conhecimento = "CALCULADA_2PCT"
         self._marcar_radio("custasReclamadoConhecimento", _reclamado_conhecimento)
         self._log(f"  ✓ Custas reclamado conhecimento: {_reclamado_conhecimento}")
+        # Campos condicionais quando INFORMADA — valor e vencimento
+        if _reclamado_conhecimento == "INFORMADA":
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            if custas.get("valor_reclamado_conhecimento"):
+                self._preencher("valorReclamadoConhecimento",
+                                _fmt_br(custas["valor_reclamado_conhecimento"]), False)
+            if custas.get("vencimento_reclamado_conhecimento"):
+                self._preencher_data("vencimentoReclamadoConhecimento",
+                                     custas["vencimento_reclamado_conhecimento"], False)
 
         # Custas do Reclamado — Liquidação
+        # DOM v2.15.1: radio values = NAO_SE_APLICA / CALCULADA_05PCT / INFORMADA
         _reclamado_liq = custas.get("reclamado_liquidacao", "NAO_SE_APLICA")
+        if _reclamado_liq == "CALCULADA":
+            _reclamado_liq = "CALCULADA_05PCT"
         self._marcar_radio("custasReclamadoLiquidacao", _reclamado_liq)
+        if _reclamado_liq == "INFORMADA":
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            if custas.get("valor_reclamado_liquidacao"):
+                self._preencher("valorReclamadoLiquidacao",
+                                _fmt_br(custas["valor_reclamado_liquidacao"]), False)
+            if custas.get("vencimento_reclamado_liquidacao"):
+                self._preencher_data("vencimentoReclamadoLiquidacao",
+                                     custas["vencimento_reclamado_liquidacao"], False)
 
         # Custas do Reclamante — Conhecimento (padrão: não se aplica)
+        # DOM v2.15.1: radio values = NAO_SE_APLICA / CALCULADA_2PCT / INFORMADA
         _reclamante_conhecimento = custas.get("reclamante_conhecimento", "NAO_SE_APLICA")
+        if _reclamante_conhecimento == "CALCULADA":
+            _reclamante_conhecimento = "CALCULADA_2PCT"
         self._marcar_radio("custasReclamanteConhecimento", _reclamante_conhecimento)
+        if _reclamante_conhecimento == "INFORMADA":
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            if custas.get("valor_reclamante_conhecimento"):
+                self._preencher("valorReclamanteConhecimento",
+                                _fmt_br(custas["valor_reclamante_conhecimento"]), False)
+            if custas.get("vencimento_reclamante_conhecimento"):
+                self._preencher_data("vencimentoReclamanteConhecimento",
+                                     custas["vencimento_reclamante_conhecimento"], False)
 
         # Percentual (se informado e diferente do padrão 2%)
         _pct = custas.get("percentual")
@@ -8579,6 +9036,59 @@ class PJECalcPlaywright:
 
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 9: Salvar Custas não confirmado.")
+
+        # Forma de cobrança do reclamante (se aplicável)
+        if custas.get("forma_cobranca_reclamante"):
+            self._selecionar("formaCobrancaReclamante", custas["forma_cobranca_reclamante"], obrigatorio=False)
+
+        # Custas fixas (quando aplicável)
+        if custas.get("custas_fixas_quantidade"):
+            self._preencher("custasFixasQuantidade", str(custas["custas_fixas_quantidade"]), False)
+        if custas.get("custas_fixas_vencimento"):
+            self._preencher_data("custasFixasVencimento", custas["custas_fixas_vencimento"], False)
+
+        # Custas de autos/armazenamento (quando aplicável)
+        if custas.get("custas_autos_valor_bem"):
+            self._preencher("custasAutosValorBem", _fmt_br(custas["custas_autos_valor_bem"]), False)
+        if custas.get("custas_autos_vencimento"):
+            self._preencher_data("custasAutosVencimento", custas["custas_autos_vencimento"], False)
+        if custas.get("armazenamento_data_inicio"):
+            self._preencher_data("armazenamentoDataInicio", custas["armazenamento_data_inicio"], False)
+        if custas.get("armazenamento_valor_bem"):
+            self._preencher("armazenamentoValorBem", _fmt_br(custas["armazenamento_valor_bem"]), False)
+
+        # ── Aba Custas Recolhidas (se houver dados) ──
+        _recolhidas = custas.get("custas_recolhidas", [])
+        if _recolhidas:
+            self._log(f"  → Aba Custas Recolhidas: {len(_recolhidas)} registro(s)…")
+            try:
+                _aba_rec = self._page.locator(
+                    "[id$='tabCustasRecolhidas'], a:has-text('Custas Recolhidas'), "
+                    "a:has-text('Recolhidas')"
+                )
+                if _aba_rec.count() > 0:
+                    _aba_rec.first.click()
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(800)
+                    for _rec in _recolhidas:
+                        # Clicar "Incluir" para adicionar registro de custas recolhidas
+                        _btn_inc = self._page.locator("[id$='incluirRecolhida'], [id$='incluir']")
+                        if _btn_inc.count() > 0:
+                            _btn_inc.first.click()
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(500)
+                        if _rec.get("valor"):
+                            self._preencher("recolhidaValor", _fmt_br(_rec["valor"]), False)
+                            self._preencher("valorRecolhida", _fmt_br(_rec["valor"]), False)
+                        if _rec.get("vencimento"):
+                            self._preencher_data("recolhidaVencimento", _rec["vencimento"], False)
+                            self._preencher_data("vencimentoRecolhida", _rec["vencimento"], False)
+                    # Salvar custas recolhidas
+                    self._clicar_salvar()
+                    self._log("  ✓ Custas recolhidas salvas")
+            except Exception as _e_rec:
+                self._log(f"  ⚠ Custas recolhidas: {_e_rec}")
+
         self._log("Fase 9 concluída.")
 
     # ── Verificação de cálculo correto ──────────────────────────────────────────
@@ -8822,6 +9332,26 @@ class PJECalcPlaywright:
                     self._log(f"  ✓ Data liquidação: {date.today().strftime('%d/%m/%Y')}")
         except Exception:
             pass
+
+        # Acumular Índices de Correção (select na página de liquidação)
+        # Opções: MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO
+        _acum = (self._dados or {}).get("correcao_juros", {}).get("acumular_indices", "")
+        if not _acum:
+            _acum = (self._dados or {}).get("acumular_indices", "")
+        if _acum:
+            try:
+                _sel_acum = self._page.locator("select[id$='acumularIndices']")
+                if _sel_acum.count() > 0:
+                    try:
+                        _sel_acum.first.select_option(value=_acum)
+                    except Exception:
+                        _sel_acum.first.select_option(label=_acum)
+                    self._aguardar_ajax()
+                    self._log(f"  ✓ Acumular índices: {_acum}")
+                else:
+                    self._log(f"  ⚠ Campo acumularIndices não encontrado na página de liquidação")
+            except Exception as _e_acum:
+                self._log(f"  ⚠ Acumular índices: erro {_e_acum}")
 
         # Localizar botão Liquidar
         # /pages/calculo/liquidacao.xhtml: <a4j:commandButton id="liquidar" value="Liquidar">

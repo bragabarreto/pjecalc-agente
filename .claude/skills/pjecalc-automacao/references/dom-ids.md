@@ -39,7 +39,7 @@ IDs verificados por inspeção DOM direta (console Firefox) em localhost:9257.
 | Nome | `formulario:descricao` | text | |
 | Parcela | `formulario:tipoVariacaoDaParcela` | radio | `FIXA` / `VARIAVEL` |
 | Valor tipo | `formulario:valor` | radio | `CALCULADO` / `INFORMADO` |
-| Característica | `formulario:caracteristicaVerba` | radio | `COMUM` / `DECIMO_TERCEIRO_SALARIO` / `AVISO_PREVIO` / `FERIAS` |
+| Característica | `formulario:caracteristicaVerba` | radio | `COMUM` / `DECIMO_TERCEIRO` / `AVISO_PREVIO` / `FERIAS` |
 | Ocorrência | `formulario:ocorrenciaPagto` | radio | `DESLIGAMENTO` / `DEZEMBRO` / `MENSAL` / `PERIODO_AQUISITIVO` |
 | Súmula 439 TST | `formulario:ocorrenciaAjuizamento` | radio | `OCORRENCIAS_VENCIDAS_E_VINCENDAS` (Sim) / `OCORRENCIAS_VENCIDAS` (Não) |
 | Tipo verba | `formulario:tipoDeVerba` | radio | `PRINCIPAL` / `REFLEXO` |
@@ -206,11 +206,46 @@ Usar `name*=` ou `table[id$=] input[value=]`.
 
 ---
 
+## ferias.jsf (Férias)
+
+| Campo | Seletor | Notas |
+|---|---|---|
+| Situação | `select[id$='situacao']` | GOZADAS / INDENIZADAS / PERDIDAS / GOZADAS_PARCIALMENTE |
+| Dobra | `input[id$='dobra']` | checkbox |
+| Abono | `input[id$='abono']` | checkbox |
+| Gozo 1 Início | `input[id$='dataInicioGozo1']` | DD/MM/AAAA — condicional: situacao=GOZADAS ou GOZADAS_PARCIALMENTE |
+| Gozo 1 Fim | `input[id$='dataFimGozo1']` | DD/MM/AAAA |
+| Gozo 2 Início | `input[id$='dataInicioGozo2']` | DD/MM/AAAA |
+| Gozo 2 Fim | `input[id$='dataFimGozo2']` | DD/MM/AAAA |
+| Gozo 3 Início | `input[id$='dataInicioGozo3']` | DD/MM/AAAA |
+| Gozo 3 Fim | `input[id$='dataFimGozo3']` | DD/MM/AAAA |
+| Regerar Férias | `input[id$='regerarFerias']` | button — regerar após alterações |
+
+---
+
+## salario-familia.jsf (Salário-Família)
+
+| Campo | Seletor | Notas |
+|---|---|---|
+| Apurar | `input[id$='apurar']` | checkbox |
+| Compor Principal | `input[name*='comporPrincipal']` | radio SIM / NAO |
+| Competência Início | `input[id$='competenciaInicio']` | MM/AAAA |
+| Competência Fim | `input[id$='competenciaFim']` | MM/AAAA |
+| Quantidade de Filhos | `input[id$='quantidadeDeFilhos']` | numérico |
+| Remuneração Pagos | `select[id$='remuneracaoMensalPagos']` | NENHUM / MAIOR_REMUNERACAO / HISTORICO |
+| Remuneração Devidos | `select[id$='remuneracaoMensalDevidos']` | multi-select dinâmico |
+| Variação Competência | `input[id$='filhosVariacaoCompetencia']` | MM/AAAA — modal |
+| Variação Quantidade | `input[id$='filhosVariacaoQuantidade']` | numérico — modal |
+| Adicionar Variação | `input[id$='adicionarVariacao']` | button |
+
+---
+
 ## liquidacao.jsf (Liquidar)
 
 | Campo | Seletor | Notas |
 |---|---|---|
 | Data de liquidação | `input[id*='dataLiquidacao']` | DD/MM/AAAA — fill com data de hoje |
+| Acumular Índices | `select[id$='acumularIndices']` | MES_SUBSEQUENTE / MES_VENCIMENTO / MISTO |
 | Botão Liquidar | `[id$='liquidar']` ou botão "Liquidar" | Dispara AJAX longo |
 | Mensagem sucesso | texto "Não foram encontradas pendências para a liquidação" | Aguardar após clicar |
 | Mensagem erro | texto "não foi possível" ou "existem pendências" | Indica problema nos dados |

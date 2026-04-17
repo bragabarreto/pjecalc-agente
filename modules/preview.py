@@ -318,7 +318,7 @@ def gerar_previa(
         "CORREÇÃO, JUROS E MULTA",
         f"   Índice Correção : {correcao.get('indice_correcao') or 'TUACDT'}",
         f"   Base dos Juros  : {correcao.get('base_juros') or 'Verbas'}",
-        f"   Taxa de Juros   : {correcao.get('taxa_juros') or 'JUROS_PADRAO'}",
+        f"   Taxa de Juros   : {correcao.get('taxa_juros') or 'PADRAO'}",
         f"   JAM (FGTS)      : {'Sim' if correcao.get('jam_fgts') else 'Não'}",
         "",
     ]
@@ -506,6 +506,14 @@ def aplicar_edicao_usuario(
             "periodo_fim": None,
             "abono": False,
             "dobra": False,
+        },
+        "multas_indenizacoes": {
+            "descricao": "",
+            "credor_devedor": "RECLAMANTE_RECLAMADO",
+            "tipo_valor": "CALCULADO",
+            "base_calculo": "PRINCIPAL",
+            "aliquota": None,
+            "valor": None,
         },
     }
 

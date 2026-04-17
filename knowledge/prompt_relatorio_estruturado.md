@@ -147,9 +147,15 @@ Jornada Semanal: [horas/semana — ex: 44]
 
 | Período Aquisitivo Início | Período Aquisitivo Fim | Situação | Dobra | Abono |
 |---------------------------|------------------------|----------|-------|-------|
-| dd/mm/aaaa | dd/mm/aaaa | Gozadas / Vencidas / Proporcionais | Sim/Não | Sim/Não |
+| dd/mm/aaaa | dd/mm/aaaa | Gozadas / Vencidas / Proporcionais / Gozadas Parcialmente | Sim/Não | Sim/Não |
 
-- Se a condenação é apenas em reflexos sobre férias: todas as férias foram **gozadas**.
+**Períodos de Gozo** (somente quando Situação = Gozadas ou Gozadas Parcialmente):
+
+| Gozo | Início | Fim |
+|------|--------|-----|
+| 1 | dd/mm/aaaa | dd/mm/aaaa |
+
+- Se a condenação é apenas em reflexos sobre férias: todas as férias foram **gozadas**. Preencher períodos de gozo.
 - Se há condenação em férias + 1/3 como parcela principal: o período respectivo é **Indenizado** (marcar como "Vencidas").
 - Férias proporcionais = último período aquisitivo incompleto.
 - Dobra = férias vencidas pagas fora do prazo concessivo (art. 137 CLT).
@@ -283,6 +289,7 @@ Percentual: 2%
 Taxa de Juros: [Selic | Juros Padrão (1% a.m.)]
 Base dos Juros: [Verbas (padrão) | Crédito Total]
 JAM FGTS: [Sim | Não]
+Acumular Índices: [MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO | null]
 ```
 
 > **Mapeamento dos critérios mais comuns da sentença:**
@@ -318,10 +325,33 @@ Valor Pensão: R$ [valor | null]
 Dependentes: [número | null]
 ```
 
-### 17. OBRIGAÇÕES DE FAZER
+### 17. SALÁRIO-FAMÍLIA
+
+```
+Apurar: [Sim | Não]
+Compor Principal: [SIM | NAO]
+Competência Início: [MM/AAAA | null]
+Competência Fim: [MM/AAAA | null]
+Quantidade de Filhos: [int | null]
+Remuneração Mensal (Pagos): [NENHUM | MAIOR_REMUNERACAO | HISTORICO | null]
+```
+
+> Incluir somente se a sentença deferir salário-família.
+
+### 18. SEGURO-DESEMPREGO
+
+```
+Apurar: [Sim | Não]
+Tipo de Solicitação: [PRIMEIRA | SEGUNDA | DEMAIS]
+Quantidade de Parcelas: [int]
+```
+
+> Incluir quando a sentença deferir indenização substitutiva do seguro-desemprego.
+
+### 19. OBRIGAÇÕES DE FAZER
 - [Listar todas: retificação CTPS, entrega de documentos, etc.]
 
-### 18. DISPOSITIVO DA SENTENÇA
+### 20. DISPOSITIVO DA SENTENÇA
 
 **TRANSCRIÇÃO INTEGRAL:**
 "[Copiar integralmente o dispositivo]"

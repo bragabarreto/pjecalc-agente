@@ -109,21 +109,21 @@ def _aliquota_fgts_enum(aliquota: float | None) -> str:
 
 def _indice_enum(indice: str | None) -> str:
     if not indice:
-        return "IPCAE"
+        return "IPCA_E"
     s = indice.lower()
     if "tabela jt" in s or "jt unica" in s or "jt única" in s:
-        return "IPCAE"
-    if "ipca-e" in s or "ipcae" in s:
-        return "IPCAE"
+        return "TABELA_UNICA_JT_MENSAL"
+    if "ipca-e" in s or "ipcae" in s or "ipca_e" in s:
+        return "IPCA_E"
     if "selic" in s:
         return "SELIC"
-    if "trct" in s:
-        return "TRCT"
-    if "tr" in s:
-        return "TRD"
+    if "trct" in s or "tr" in s:
+        return "TR"
+    if "igp" in s:
+        return "IGP_M"
     if "ipca" in s:
         return "IPCA"
-    return "IPCAE"
+    return "IPCA_E"
 
 
 def _juros_enum(juros: str | None) -> str:
@@ -146,7 +146,7 @@ def _apuracao_aviso_enum(tipo: str | None) -> str:
 def _caracteristica_enum(c: str | None) -> str:
     return {
         "Comum": "COMUM",
-        "13o Salario": "DECIMO_TERCEIRO_SALARIO",
+        "13o Salario": "DECIMO_TERCEIRO",
         "Ferias": "FERIAS",
         "Aviso Previo": "AVISO_PREVIO",
     }.get(c or "", "COMUM")
@@ -275,7 +275,7 @@ def _formula_calculada(verba: dict, vid: int, calc_id: int) -> str:
         multiplicador = 1.3333333300
         divisor_val = 12.0
         qtd_tipo = "AVOS"
-    elif carac == "DECIMO_TERCEIRO_SALARIO":
+    elif carac == "DECIMO_TERCEIRO":
         base_tipo = "HISTORICO_SALARIAL"
         multiplicador = 1.0
         divisor_val = 12.0
