@@ -162,6 +162,15 @@
 </div>
 {% endif %}
 
+<!-- Datalist global: nomes canônicos das verbas Expresso.
+     Usado pelos inputs "Nome no PJE-Calc" e "Verba Expresso Base" para
+     autocomplete e validação visual. Fonte: knowledge/catalogo_verbas_pjecalc.json -->
+<datalist id="expresso-catalog-list">
+  {% for nome in (expresso_nomes or []) %}
+  <option value="{{ nome }}"></option>
+  {% endfor %}
+</datalist>
+
 <!-- Layout principal -->
 <div class="previa-container">
 
@@ -2460,15 +2469,37 @@
                   <option value="manual" {{ 'selected' if ep_tipo == 'manual' }}>Manual</option>
                 </select>
               </div>
+              <!-- Nome no PJE-Calc (validado contra catálogo Expresso canônico) -->
               <div class="campo-form">
-                <label>Nome no PJE-Calc</label>
-                <input type="text" value="{{ ep.get('nome_pjecalc') or verba.get('nome_pjecalc') or '' }}"
-                       onchange="salvarEstrategia({{ vi }}, 'nome_pjecalc', this.value, this)">
+                <label>Nome no PJE-Calc <span style="color:#6c757d; font-size:0.72rem;">(use nome Expresso canônico)</span></label>
+                {% set _nome_atual = ep.get('nome_pjecalc') or verba.get('nome_pjecalc') or '' %}
+                {% set _nome_valido = _nome_atual in expresso_nomes %}
+                <input type="text" list="expresso-catalog-list"
+                       value="{{ _nome_atual }}"
+                       onchange="validarECanonico(this); salvarEstrategia({{ vi }}, 'nome_pjecalc', this.value, this)"
+                       style="border-color: {{ '#28a745' if _nome_valido else '#ffc107' }}; border-width: 2px;"
+                       placeholder="Digite para ver opções do catálogo Expresso">
+                {% if not _nome_valido and _nome_atual %}
+                <div style="font-size:0.75rem; color:#d97706; margin-top:4px;">
+                  ⚠ Nome não é Expresso canônico — automação abortará se estratégia=expresso_direto.
+                </div>
+                {% endif %}
               </div>
+              <!-- Expresso Base (visivel quando adaptado) — datalist obrigatório -->
               <div class="campo-form" id="plan-base-{{ vi }}" style="{{ '' if ep_tipo == 'expresso_adaptado' else 'display:none;' }}">
-                <label>Verba Expresso Base</label>
-                <input type="text" value="{{ ep.get('expresso_base', '') or '' }}"
-                       onchange="salvarEstrategia({{ vi }}, 'expresso_base', this.value, this)" placeholder="Ex: DIFERENCA SALARIAL">
+                <label>Verba Expresso Base <span style="color:#dc3545; font-size:0.72rem;">*obrigatório para adaptado</span></label>
+                {% set _base_atual = ep.get('expresso_base', '') or '' %}
+                {% set _base_valido = _base_atual in expresso_nomes %}
+                <input type="text" list="expresso-catalog-list"
+                       value="{{ _base_atual }}"
+                       onchange="validarECanonico(this); salvarEstrategia({{ vi }}, 'expresso_base', this.value, this)"
+                       style="border-color: {{ '#28a745' if _base_valido else '#dc3545' }}; border-width: 2px;"
+                       placeholder="Digite para ver catálogo (ex: HORAS EXTRAS 50%)">
+                {% if not _base_valido %}
+                <div style="font-size:0.75rem; color:#dc3545; margin-top:4px;">
+                  ⚠ Sem base Expresso válida → automação abortará. Escolha da lista.
+                </div>
+                {% endif %}
               </div>
             </div>
 
@@ -2980,6 +3011,26 @@ async function salvarVerba(indice, campo, valor, el) {
 }
 
 // Salvar estrategia de preenchimento de verba
+// Lista canônica de verbas Expresso (fonte: knowledge/catalogo_verbas_pjecalc.json)
+const EXPRESSO_NOMES_CANONICOS = {{ (expresso_nomes or [])|tojson }};
+
+// Valida visualmente se o input tem um nome canônico do catálogo.
+// Verde = canônico, amarelo = não canônico (mas aceito como nome_pjecalc),
+// vermelho = não canônico quando é expresso_base (obrigatório canônico).
+function validarECanonico(el) {
+  if (!el) return;
+  const valor = (el.value || '').trim();
+  const ehCanonico = EXPRESSO_NOMES_CANONICOS.includes(valor);
+  const isBase = el.closest('[id^="plan-base-"]') !== null;
+  if (!valor) {
+    el.style.borderColor = isBase ? '#dc3545' : '#ffc107';
+  } else if (ehCanonico) {
+    el.style.borderColor = '#28a745';
+  } else {
+    el.style.borderColor = isBase ? '#dc3545' : '#ffc107';
+  }
+}
+
 async function salvarEstrategia(indice, campo, valor, el) {
   try {
     const form = new FormData();

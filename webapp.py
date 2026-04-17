@@ -420,6 +420,15 @@ async def exibir_previa_web(
     verbas_mapeadas = calculo.verbas_mapeadas()
     previa_texto = calculo.previa_texto or gerar_previa(dados, verbas_mapeadas)
 
+    # Nomes canônicos do Expresso para datalist de validação no front.
+    # Fonte única de verdade: knowledge/catalogo_verbas_pjecalc.json.
+    try:
+        from learning.verba_strategies import _carregar_catalogo
+        _catalogo = _carregar_catalogo()
+        _expresso_nomes = [v.get("nome_pjecalc", "") for v in _catalogo.get("expresso", [])]
+    except Exception:
+        _expresso_nomes = []
+
     return templates.TemplateResponse(
         request, "previa.html",
         {
@@ -435,6 +444,7 @@ async def exibir_previa_web(
             "verbas": calculo.verbas,
             "status": calculo.status,
             "cloud_mode": CLOUD_MODE,
+            "expresso_nomes": _expresso_nomes,
         },
     )
 

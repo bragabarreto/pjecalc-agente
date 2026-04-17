@@ -4535,6 +4535,50 @@ class PJECalcPlaywright:
                         raise RuntimeError("Tomcat não reiniciou após crash do Expresso")
 
                 if not _expresso_ok:
+                    # ABORT IMMEDIATE: Se alguma predefinida tinha estratégia
+                    # explícita "expresso_direto" na prévia, Manual não vai resolver
+                    # (mesmo nome, mesmo DOM). Abortar com diagnóstico.
+                    _tinha_direto = [
+                        v for v in predefinidas
+                        if (v.get("estrategia_preenchimento") or {}).get("estrategia") == "expresso_direto"
+                    ]
+                    if _tinha_direto:
+                        _nomes_esp = [
+                            (v.get("estrategia_preenchimento") or {}).get("expresso_base")
+                            or v.get("nome_pjecalc")
+                            or v.get("nome_sentenca")
+                            or "?"
+                            for v in _tinha_direto
+                        ]
+                        # Capturar labels Expresso reais para diagnóstico acionável
+                        _labels_atuais: list[str] = []
+                        try:
+                            _labels_atuais = self._page.evaluate("""() => {
+                                const rows = [...document.querySelectorAll('table tr')];
+                                return rows.map(tr => {
+                                    const td = tr.querySelector('td:nth-child(2)');
+                                    if (!td) return '';
+                                    const clone = td.cloneNode(true);
+                                    clone.querySelectorAll('input, script, style').forEach(el => el.remove());
+                                    return clone.textContent.replace(/\\s+/g, ' ').trim();
+                                }).filter(Boolean);
+                            }""")
+                        except Exception:
+                            pass
+                        self._log(
+                            f"  ❌ Expresso falhou para verbas com estratégia 'expresso_direto': {_nomes_esp}"
+                        )
+                        if _labels_atuais:
+                            self._log(f"  📋 Labels disponíveis no DOM ({len(_labels_atuais)}): {_labels_atuais[:30]}")
+                        raise RuntimeError(
+                            "AUTOMAÇÃO ABORTADA: Expresso falhou em marcar as verbas principais com "
+                            f"estratégia 'expresso_direto'. Esperado: {_nomes_esp}. "
+                            "Cair em Manual não resolve (mesmo nome, mesmo DOM). "
+                            "Volte à prévia, verifique o campo 'Verba Expresso Base' — deve conter um "
+                            "nome EXATO do catálogo Expresso (use o autocomplete do datalist). "
+                            "Se a verba da sentença não existe no catálogo, mude a estratégia para 'manual'."
+                        )
+                    # Caso contrário (sem 'expresso_direto' explícito) — cair em Manual como fallback legítimo
                     self._log("  → Expresso falhou — 100% Manual")
                     personalizadas = predefinidas + personalizadas
                     # Registrar falha Expresso no strategy engine
