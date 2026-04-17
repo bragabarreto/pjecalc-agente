@@ -8317,60 +8317,60 @@ class PJECalcPlaywright:
                 return
 
         # --- Índice de correção monetária ---
+        # Seleção por TEXTO do option (PJE-Calc TRT7 v2.15.1 tem 16 opções reais).
+        # O _selecionar() do framework resolve tanto por value quanto por option text.
         _indice = cj.get("indice_correcao", "IPCA_E")
-        # Mapeamento: valor da prévia/extração → valor <option> do DOM (select indiceCorrecao)
-        # DOM confirmado v2.15.1: TABELA_UNICA_JT_DIARIO, TABELA_UNICA_JT_MENSAL,
-        # TR, IGP_M, INPC, IPC, IPCA, IPCA_E, IPCA_E_TR
-        _indice_map = {
-            # Valores DOM confirmados (select options)
-            "TABELA_UNICA_JT_DIARIO": "TABELA_UNICA_JT_DIARIO",
-            "TABELA_UNICA_JT_MENSAL": "TABELA_UNICA_JT_MENSAL",
-            "TR": "TR",
-            "IGP_M": "IGP_M",
-            "INPC": "INPC",
-            "IPC": "IPC",
-            "IPCA": "IPCA",
-            "IPCA_E": "IPCA_E",
-            "IPCA_E_TR": "IPCA_E_TR",
-            # Valores legados da extração (backward compat)
-            "IPCAE": "IPCA_E",
-            "IPCAETR": "IPCA_E_TR",
-            "IGPM": "IGP_M",
-            "IPCA-E": "IPCA_E",
-            "IPCA-E/TR": "IPCA_E_TR",
-            "IGP-M": "IGP_M",
-            "TUACDT": "TABELA_UNICA_JT_MENSAL",
-            "Tabela JT Única Mensal": "TABELA_UNICA_JT_MENSAL",
-            "Tabela JT Unica Mensal": "TABELA_UNICA_JT_MENSAL",
-            "Selic": "SELIC",  # SELIC não confirmado no DOM como opção de índice
-            "SELIC": "SELIC",
-            "TRCT": "TR",
-            "TUACDT_DIARIO": "TABELA_UNICA_JT_DIARIO",
+        _indice_text_map = {
+            "TABELA_UNICA": "Tabela Única de Atualização e Conversão de Débitos Trabalhistas",
+            "DEVEDOR_FAZENDA_PUBLICA": "Devedor Fazenda Pública",
+            "REPETICAO_INDEBITO_TRIBUTARIO": "Repetição de Indébito Tributário",
+            "TABELA_UNICA_JT_MENSAL": "Tabela JT Mensal",
+            "TABELA_UNICA_JT_DIARIO": "Tabela JT Diária",
+            "TR": "TR", "IGP_M": "IGP-M", "INPC": "INPC", "IPC": "IPC",
+            "IPCA": "IPCA", "IPCA_E": "IPCA-E", "IPCA_E_TR": "IPCA-E/TR",
+            "SELIC_RECEITA": "SELIC (Receita Federal)",
+            "SELIC_SIMPLES": "SELIC Simples",
+            "SELIC_COMPOSTA": "SELIC Composta",
+            "SEM_CORRECAO": "Sem Correção",
+            # Aliases legados
+            "IPCAE": "IPCA-E", "IPCAETR": "IPCA-E/TR", "IGPM": "IGP-M",
+            "IPCA-E": "IPCA-E", "IPCA-E/TR": "IPCA-E/TR", "IGP-M": "IGP-M",
+            "TUACDT": "Tabela Única de Atualização e Conversão de Débitos Trabalhistas",
+            "Tabela JT Única Mensal": "Tabela JT Mensal",
+            "Tabela JT Unica Mensal": "Tabela JT Mensal",
+            "Selic": "SELIC (Receita Federal)", "SELIC": "SELIC (Receita Federal)",
+            "TRCT": "TR", "TUACDT_DIARIO": "Tabela JT Diária",
         }
-        _val_indice = _indice_map.get(_indice, "IPCA_E")
+        _val_indice = _indice_text_map.get(_indice, _indice)
         self._selecionar("indiceCorrecao", _val_indice, obrigatorio=False)
         self._selecionar("indiceTrabalhista", _val_indice, obrigatorio=False)
         self._log(f"  ✓ Índice de correção: {_val_indice}")
 
         # --- Taxa de juros ---
+        # Seleção por TEXTO do option (PJE-Calc TRT7 v2.15.1 tem 13 opções reais).
         _taxa = cj.get("taxa_juros", "PADRAO")
-        # Mapeamento: valor da prévia/extração → valor <option> do DOM (select taxaJuros)
-        # DOM confirmado v2.15.1: PADRAO, FAZENDA_PUBLICA, SELIC
-        _juros_map = {
-            # Valores DOM confirmados (select options)
-            "PADRAO": "PADRAO",
-            "FAZENDA_PUBLICA": "FAZENDA_PUBLICA",
-            "SELIC": "SELIC",
-            # Valores legados da extração (backward compat)
-            "JUROS_PADRAO": "PADRAO",
-            "TAXA_LEGAL": "PADRAO",  # Taxa Legal não confirmada no DOM; mapear para Padrão
-            "Taxa Legal": "PADRAO",
-            "Selic": "SELIC",
-            "Juros Padrão": "PADRAO",
-            "Juros Padrao": "PADRAO",
-            "1% ao mês": "PADRAO",
+        _juros_text_map = {
+            "PADRAO": "Juros Padrão",
+            "CADERNETA_POUPANCA": "Juros Caderneta de Poupança",
+            "FAZENDA_PUBLICA": "Juros Fazenda Pública",
+            "SIMPLES_0_5_MES": "Juros Simples 0,5% a.m.",
+            "SIMPLES_1_MES": "Juros Simples 1,0% a.m.",
+            "SIMPLES_0_0333333_DIA": "Juros Simples 0,0333333% a.d.",
+            "SELIC_RECEITA": "SELIC (Receita Federal)",
+            "SELIC_SIMPLES": "SELIC Simples",
+            "SELIC_COMPOSTA": "SELIC Composta",
+            "TRD_SIMPLES": "TRD Juros Simples",
+            "TRD_COMPOSTOS": "TRD Juros Compostos",
+            "TAXA_LEGAL": "Taxa Legal",
+            "SEM_JUROS": "Sem Juros",
+            # Aliases legados
+            "JUROS_PADRAO": "Juros Padrão",
+            "Taxa Legal": "Taxa Legal",
+            "Selic": "SELIC (Receita Federal)", "SELIC": "SELIC (Receita Federal)",
+            "Juros Padrão": "Juros Padrão", "Juros Padrao": "Juros Padrão",
+            "1% ao mês": "Juros Padrão",
         }
-        _val_juros = _juros_map.get(_taxa, "PADRAO")
+        _val_juros = _juros_text_map.get(_taxa, _taxa)
         self._selecionar("taxaJuros", _val_juros, obrigatorio=False)
         self._selecionar("juros", _val_juros, obrigatorio=False)
         self._log(f"  ✓ Taxa de juros: {_val_juros}")

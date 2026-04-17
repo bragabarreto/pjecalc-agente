@@ -379,13 +379,13 @@ CASOS MAIS COMUNS (em ordem de prevalência jurisprudencial):
    Indicadores: "ADC 58", "Tabela JT Única Mensal", "IPCA-E até o ajuizamento e SELIC a partir",
    "critérios da Justiça do Trabalho" — SEM mencionar "taxa legal" ou "Lei 14.905"
      lei_14905 = false
-     indice_correcao = "TUACDT"
-     taxa_juros = "SELIC"
+     indice_correcao = "TABELA_UNICA_JT_MENSAL"
+     taxa_juros = "SELIC_RECEITA"
 
 3. Apenas SELIC para tudo ("atualizado pela SELIC", "taxa SELIC", sem distinguir fases):
      lei_14905 = false
-     indice_correcao = "SELIC"
-     taxa_juros = "SELIC"
+     indice_correcao = "SELIC_RECEITA"
+     taxa_juros = "SELIC_RECEITA"
 
 4. IPCA-E + juros legais de 1% ao mês ("IPCA-E mais juros de 1% ao mês", "IPCA-E + juros
    moratórios de 1% ao mês"):
@@ -603,10 +603,10 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
   }},
   "correcao_juros": {{
     "lei_14905": "true | false (true quando Lei 14.905/2024 se aplica — habilita combinações de índices)",
-    "indice_correcao": "TABELA_UNICA_JT_DIARIO | TABELA_UNICA_JT_MENSAL | TR | IGP_M | INPC | IPC | IPCA | IPCA_E | IPCA_E_TR | null",
-    "indice_correcao_pos": "IPCA | null (índice pós-30/08/2024; somente quando lei_14905=true)",
+    "indice_correcao": "TABELA_UNICA | DEVEDOR_FAZENDA_PUBLICA | REPETICAO_INDEBITO_TRIBUTARIO | TABELA_UNICA_JT_MENSAL | TABELA_UNICA_JT_DIARIO | TR | IGP_M | INPC | IPC | IPCA | IPCA_E | IPCA_E_TR | SELIC_RECEITA | SELIC_SIMPLES | SELIC_COMPOSTA | SEM_CORRECAO | null (opções IDÊNTICAS ao select PJE-Calc)",
+    "indice_correcao_pos": "IPCA | null (índice pós-30/08/2024; somente quando lei_14905=true — será colocado em combinar_indice)",
     "base_juros": "Verbas | Credito Total | null",
-    "taxa_juros": "PADRAO | FAZENDA_PUBLICA | SELIC | null",
+    "taxa_juros": "PADRAO | CADERNETA_POUPANCA | FAZENDA_PUBLICA | SIMPLES_0_5_MES | SIMPLES_1_MES | SIMPLES_0_0333333_DIA | SELIC_RECEITA | SELIC_SIMPLES | SELIC_COMPOSTA | TRD_SIMPLES | TRD_COMPOSTOS | TAXA_LEGAL | SEM_JUROS | null (opções IDÊNTICAS ao select PJE-Calc)",
     "data_taxa_legal": "DD/MM/AAAA | null (padrão 30/08/2024; somente quando taxa_juros=TAXA_LEGAL)",
     "jam_fgts": "true | false | null",
     "acumular_indices": "MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO | null (como acumular correção: subsequente=mês seguinte ao vencimento, vencimento=mês do vencimento, misto=subsequente p/ mensais + vencimento p/ anuais)",
