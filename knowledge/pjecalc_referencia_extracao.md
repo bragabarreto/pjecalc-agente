@@ -162,16 +162,33 @@ Situações especiais:
 
 ## 6. FGTS
 
-| Campo | Valores | Regra |
-|-------|---------|-------|
-| tipoDeVerba | PAGAR / DEPOSITAR (radio) | PAGAR = direto ao reclamante; DEPOSITAR = conta FGTS |
-| aliquota | OITO_POR_CENTO / DOIS_POR_CENTO (radio) | 8% padrão; 2% aprendiz |
-| multa | NAO_APURAR / CALCULADA / INFORMADA (select) | SELECT, não checkbox. CALCULADA ativa campos condicionais |
-| multaDoFgts | QUARENTA_POR_CENTO / VINTE_POR_CENTO (radio) | Condicional: visível quando multa=CALCULADA |
-| baseDaMulta | DEVIDO / DIFERENCA / SALDO_E_OU_SAQUE / DEVIDO_MENOS_SALDO / DEVIDO_MAIS_SALDO (select) | Condicional: visível quando multa=CALCULADA |
-| multaDoArtigo467 | true/false (checkbox) | Parcelas incontroversas (art. 467 CLT) |
-| multa10 | true/false (checkbox) | Multa 10% adicional |
-| saldo_fgts | float ou null | Apenas se explícito na sentença — NÃO inferir |
+IDs reais confirmados por inspeção DOM (v2.15.1 — localhost:9257):
+
+| Campo DOM | ID | Tipo | Valores |
+|-----------|-----|------|---------|
+| Destino | `formulario:tipoDeVerba` | radio | PAGAR / DEPOSITAR |
+| Compor Principal | `formulario:comporPrincipal` | radio | SIM / NAO |
+| Alíquota | `formulario:aliquota` | radio | OITO_POR_CENTO / DOIS_POR_CENTO |
+| Tipo Valor da Multa | `formulario:tipoDoValorDaMulta` | radio | CALCULADA / INFORMADA |
+| Tipo Multa (percentual) | `formulario:multaDoFgts` | radio | QUARENTA_POR_CENTO / VINTE_POR_CENTO |
+| Base de Incidência | `formulario:incidenciaDoFgts` | select | SOBRE_O_TOTAL_DEVIDO / SOBRE_DEPOSITADO_SACADO / SOBRE_DIFERENCA / SOBRE_TOTAL_DEVIDO_MAIS_SAQUE_E_OU_SALDO / SOBRE_TOTAL_DEVIDO_MENOS_SAQUE_E_OU_SALDO |
+| Apurar Multa (40%/20%) | `formulario:multa` | checkbox | — |
+| Excluir Aviso da Multa | `formulario:excluirAvisoDaMulta` | checkbox | — |
+| Multa Art. 467 CLT | `formulario:multaDoArtigo467` | checkbox | — |
+| Multa 10% | `formulario:multa10` | checkbox | — |
+| Contribuição Social (INSS) | `formulario:contribuiçãoSocial` | checkbox | **ID com ç/ã** |
+| Pensão Alimentícia | `formulario:incidenciaPensaoAlimenticia` | checkbox | — |
+| Deduzir do FGTS | `formulario:deduzirDoFGTS` | checkbox | — |
+
+> `multa` é **checkbox** (liga/desliga apuração da multa); o tipo do valor é o radio `tipoDoValorDaMulta`; o percentual (40% ou 20%) é o radio `multaDoFgts`. NÃO confundir.
+
+Campos extraídos da sentença (mapeados para o DOM acima):
+- `aliquota`: 0.08 (padrão) ou 0.02 (aprendiz)
+- `multa_40`: true → `multa` checkbox marcado + `multaDoFgts = QUARENTA_POR_CENTO`
+- `multa_20`: true → `multa` checkbox marcado + `multaDoFgts = VINTE_POR_CENTO` (estabilidade provisória)
+- `multa_467`: true → `multaDoArtigo467` checkbox marcado
+- `saldo_fgts`: float | null — apenas se explícito na sentença, NÃO inferir
+- `incidencia_13o_dezembro`: boolean | null — incidência específica do 13º dezembro
 
 ### Incidência FGTS por verba
 - **Incide**: saldo de salário, horas extras, adicionais (noturno, insalubridade, periculosidade), comissões, gratificações, aviso prévio indenizado
@@ -187,20 +204,24 @@ Situações especiais:
 | tipo | SUCUMBENCIAIS (padrão), CONTRATUAIS |
 | devedor | RECLAMANTE, RECLAMADO |
 | tipo_valor | CALCULADO (percentual), INFORMADO (valor fixo) |
-| base_apuracao | **BRUTO** (valor da condenação), **BRUTO_MENOS_CONTRIBUICAO_SOCIAL**, **BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA** |
+| base_apuracao | **BRUTO** / **BRUTO_MENOS_CS** / **BRUTO_MENOS_CS_PP** / **VNP** |
+
+Significados das bases:
+- **BRUTO** — valor bruto da condenação
+- **BRUTO_MENOS_CS** — bruto menos contribuição social (INSS)
+- **BRUTO_MENOS_CS_PP** — bruto menos CS menos previdência privada
+- **VNP** — Verbas que Não Compõem Principal (padrão quando devedor = RECLAMANTE + SUCUMBENCIAIS)
 
 ### Regras de base_apuracao
-| Devedor | Tipo | Base padrão |
-|---------|------|-------------|
-| RECLAMADO | SUCUMBENCIAIS | BRUTO |
-| RECLAMANTE | SUCUMBENCIAIS | BRUTO_MENOS_CONTRIBUICAO_SOCIAL |
-| Ambos | SUCUMBENCIAIS | BRUTO para reclamado + BRUTO_MENOS_CONTRIBUICAO_SOCIAL para reclamante |
-| Qualquer | CONTRATUAIS | BRUTO |
+| Devedor | Tipo | Base padrão | Alternativas |
+|---------|------|-------------|--------------|
+| RECLAMADO | SUCUMBENCIAIS | BRUTO | BRUTO_MENOS_CS, BRUTO_MENOS_CS_PP |
+| RECLAMANTE | SUCUMBENCIAIS | VNP | BRUTO, BRUTO_MENOS_CS |
+| Qualquer | CONTRATUAIS | BRUTO | BRUTO_MENOS_CS |
 
-> Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → BRUTO nos dois.
+> Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → BRUTO nos dois registros.
 > NÃO existe opção "Ambos" — sucumbência recíproca = DOIS registros separados.
 > Faixa "10% a 15%" → usar o menor valor (0.10).
-> **Bases disponíveis no DOM**: BRUTO, BRUTO_MENOS_CONTRIBUICAO_SOCIAL, BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA
 
 ### Justiça Gratuita e Honorários
 Quando devedor tem justiça gratuita → exigibilidade SUSPENSA (art. 791-A, §4º, CLT).
@@ -221,12 +242,12 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 | TABELA_UNICA_JT_MENSAL | Tabela JT Mensal |
 | TABELA_UNICA_JT_DIARIO | Tabela JT Diária |
 | TR | TR |
-| IGP_M | IGP-M |
+| IGPM | IGP-M |
 | INPC | INPC |
 | IPC | IPC |
 | IPCA | IPCA |
-| IPCA_E | IPCA-E |
-| IPCA_E_TR | IPCA-E / TR |
+| IPCAE | IPCA-E |
+| IPCAETR | IPCA-E / TR |
 | SELIC | SELIC (Receita Federal) |
 | SELIC_FAZENDA | SELIC Simples |
 | SELIC_BACEN | SELIC Composta |
@@ -235,13 +256,19 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 ### Enums do PJe-Calc — Juros de Mora (JurosEnum)
 | Enum | Nome no PJe-Calc |
 |------|-----------------|
-| PADRAO | Juros Padrão |
+| JUROS_PADRAO | Juros Padrão |
+| JUROS_POUPANCA | Juros Caderneta de Poupança |
 | FAZENDA_PUBLICA | Juros Fazenda Pública |
-| SELIC | SELIC |
-
-> **ATENÇÃO**: Apenas 3 opções confirmadas no DOM do PJe-Calc v2.15.1.
-> Valores como JUROS_POUPANCA, TAXA_LEGAL, TRD_SIMPLES etc. podem existir em
-> versões futuras ou em abas condicionais (Dados Específicos). Verificar DOM antes de usar.
+| JUROS_MEIO_PORCENTO | Juros Simples 0,5% a.m. |
+| JUROS_UM_PORCENTO | Juros Simples 1,0% a.m. |
+| JUROS_ZERO_TRINTA_TRES | Juros Simples 0,0333333% a.d. |
+| SELIC | SELIC (Receita Federal) |
+| SELIC_FAZENDA | SELIC Simples |
+| SELIC_BACEN | SELIC Composta |
+| TRD_SIMPLES | TRD Juros Simples |
+| TRD_COMPOSTOS | TRD Juros Compostos |
+| TAXA_LEGAL | Taxa Legal |
+| SEM_JUROS | Sem Juros |
 
 ### Campos de correção/juros
 | Campo | Valores aceitos |
@@ -256,17 +283,17 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 ### Mapeamento da sentença → enums (em ordem de prevalência)
 | Critério na sentença | Lei 14.905 | Correção | Correção pós | Juros |
 |----------------------|-----------|----------|-------------|-------|
-| **ADC 58 + Lei 14.905/2024** — E-ED-RR-20407, "taxa legal", "art. 406 CC" | **true** | IPCA_E | **IPCA** | **TAXA_LEGAL** |
+| **ADC 58 + Lei 14.905/2024** — E-ED-RR-20407, "taxa legal", "art. 406 CC" | **true** | IPCAE | **IPCA** | **TAXA_LEGAL** |
 | ADC 58 / critérios JT SEM Lei 14.905 (pré-ago/2024) | false | TUACDT | — | SELIC |
 | "SELIC" / "taxa SELIC" sem distinguir fases | false | SELIC | — | SELIC |
 | EC 113/2021 / "SELIC a partir de dez/2021" | false | SELIC | — | SELIC |
-| "IPCA-E + juros de 1% a.m." | false | IPCA_E | — | PADRAO |
-| "TR" / "TRCT" + juros de 1% | false | TR | — | PADRAO |
+| "IPCA-E + juros de 1% a.m." | false | IPCAE | — | JUROS_PADRAO |
+| "TR" / "TRCT" + juros de 1% | false | TR | — | JUROS_PADRAO |
 
 ### Detalhamento — Lei 14.905/2024 (jurisprudência majoritária atual)
 
 **Correção Monetária no PJe-Calc:**
-- IPCA_E até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
+- IPCAE até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
 - Se admissão > 30/08/2024 → usar somente IPCA como índice único
 
 **Juros de Mora — depende da data de ajuizamento:**
@@ -280,7 +307,9 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 - Fase pré-judicial: TRD_SIMPLES
 - Judicial: TAXA_LEGAL a partir do ajuizamento
 
-> **NOTA**: O PJe-Calc exige que essas fases sejam configuradas via "Combinar com outro índice" tanto na correção quanto nos juros.
+> **TAXA_LEGAL** = Taxa Legal = SELIC − IPCA (juros reais, Banco Central)
+> **JUROS_PADRAO** = Juros Padrão = 1% ao mês (art. 39 Lei 8.177/91)
+> O PJe-Calc exige que essas fases sejam configuradas via "Combinar com outro índice" tanto na correção quanto nos juros.
 > JAM FGTS: marcar apenas se sentença mencionar "JAM" ou "juros sobre atraso no depósito FGTS".
 
 ---
@@ -320,13 +349,14 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 
 ## 11. Custas Processuais
 
-| Campo | Default |
-|-------|---------|
-| base | BRUTO_RECLAMANTE (Bruto Devido ao Reclamante) ou BRUTO_MAIS_DEBITOS |
-| reclamado_conhecimento | CALCULADA_2PCT / INFORMADA / NAO_SE_APLICA |
-| reclamado_liquidacao | NAO_SE_APLICA / CALCULADA_05PCT / INFORMADA |
-| reclamante_conhecimento | NAO_SE_APLICA / CALCULADA_2PCT / INFORMADA |
-| devedor | RECLAMADO (padrão) |
+| Campo | Default | Valores |
+|-------|---------|---------|
+| base | "Bruto Devido ao Reclamante" | "Bruto Devido ao Reclamante" / "Bruto Mais Débitos" |
+| reclamado_conhecimento | CALCULADA | CALCULADA (2% padrão) / INFORMADA / NAO_SE_APLICA |
+| reclamado_liquidacao | NAO_SE_APLICA | NAO_SE_APLICA / CALCULADA (0,5%) / INFORMADA |
+| reclamante_conhecimento | NAO_SE_APLICA | NAO_SE_APLICA / CALCULADA / INFORMADA |
+| percentual | 0.02 | float (ex: 0.02 = 2%) |
+| devedor | RECLAMADO | RECLAMADO / RECLAMANTE |
 
 ---
 
@@ -429,10 +459,10 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 
 | Campo | Valores DOM |
 |-------|-------------|
-| situacao | select: GOZADAS / INDENIZADAS / PERDIDAS / GOZADAS_PARCIALMENTE |
+| situacao | select: Vencidas / Proporcionais / Gozadas / Gozadas Parcialmente |
 | dobra | checkbox (férias em dobro — art. 137 CLT) |
 | abono | checkbox (abono pecuniário) |
-| dataInicioGozo1 | input data DD/MM/AAAA — Gozo 1 início (condicional: situacao=GOZADAS ou GOZADAS_PARCIALMENTE) |
+| dataInicioGozo1 | input data DD/MM/AAAA — Gozo 1 início (condicional: situacao=Gozadas ou Gozadas Parcialmente) |
 | dataFimGozo1 | input data DD/MM/AAAA — Gozo 1 fim |
 | dataInicioGozo2 | input data DD/MM/AAAA — Gozo 2 início |
 | dataFimGozo2 | input data DD/MM/AAAA — Gozo 2 fim |
