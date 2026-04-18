@@ -8957,7 +8957,16 @@ class PJECalcPlaywright:
             _descricao_hon = hon.get("descricao", "")
             if not _descricao_hon:
                 # Gerar descrição padrão baseada no tipo e devedor
-                _tipo_label = {"SUCUMBENCIAIS": "Sucumbenciais", "CONTRATUAIS": "Contratuais"}.get(tipo, tipo)
+                _tipo_label = {
+                    "SUCUMBENCIAIS": "Sucumbenciais",
+                    "ADVOCATICIOS": "Advocatícios",
+                    "CONTRATUAIS": "Contratuais",
+                    "ASSISTENCIAIS": "Assistenciais",
+                    "PERICIAIS_CONTADOR": "Periciais - Contador",
+                    "PERICIAIS_ENGENHEIRO": "Periciais - Engenheiro",
+                    "PERICIAIS_MEDICO": "Periciais - Médico",
+                    "PERICIAIS_OUTROS": "Periciais - Outros",
+                }.get(tipo, tipo)
                 _devedor_label = {"RECLAMADO": "Reclamado", "RECLAMANTE": "Reclamante"}.get(devedor, devedor)
                 if _devedor_tem_jg:
                     # Incluir referência à suspensão na descrição (60 chars max)
@@ -9055,6 +9064,11 @@ class PJECalcPlaywright:
             # Percentual (alíquota) ou valor informado
             if tipo_valor == "CALCULADO" and hon.get("percentual") is not None:
                 pct_val = hon["percentual"]
+                # Garantir tipo numérico (pode chegar como string da prévia)
+                try:
+                    pct_val = float(str(pct_val).replace(",", "."))
+                except (ValueError, TypeError):
+                    pct_val = 0.0
                 # Se percentual veio como fração (0.15), converter para %
                 if pct_val < 1:
                     pct_val = pct_val * 100

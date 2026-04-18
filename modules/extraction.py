@@ -2588,6 +2588,12 @@ def _migrar_honorarios_legado(hon: dict) -> list[dict]:
     if not hon or not isinstance(hon, dict):
         return []
     percentual = hon.get("percentual")
+    # Garantir tipo numérico — pode chegar como string do LLM ou da prévia
+    if percentual is not None:
+        try:
+            percentual = float(str(percentual).replace(",", "."))
+        except (ValueError, TypeError):
+            percentual = None
     valor_fixo = hon.get("valor_informado") or hon.get("valor_fixo")
     parte = (hon.get("parte_devedora") or "Reclamado").strip()
     tipo_valor = "CALCULADO" if percentual is not None else "INFORMADO"
