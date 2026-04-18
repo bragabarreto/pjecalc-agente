@@ -10094,32 +10094,26 @@ class PJECalcPlaywright:
             except Exception as _goto_err:
                 self._log(f"  ⚠ goto direto falhou: {_goto_err}")
 
-        # ── Guard crítico pré-Exportar ─────────────────────────────────────
-        # Se a navegação via menu criou uma NOVA conversação Seam (ex: 35 → 116),
-        # o calculoAberto vira residual. Força volta à conversação original de
-        # Maria via goto direto com cid explícito — Seam honra o ID.
+        # ── Atualizar conv pré-Exportar ────────────────────────────────────
+        # A navegação para exportacao.jsf via menu Seam cria naturalmente um novo
+        # conversationId — e esse novo conv TEM calculoAberto correto (o processo
+        # atual). NUNCA forçar re-attach ao conv antigo (_conv_id_maria): o conv
+        # antigo pode ter expirado ou pertencer a outro processo aberto anteriormente.
+        # Apenas atualiza a referência local para o conv vigente.
         try:
             import re as _re_reatach
             _m_current = _re_reatach.search(r"conversationId=(\d+)", self._page.url)
             _current_cid = _m_current.group(1) if _m_current else None
-            if _conv_id_maria and _current_cid and _current_cid != _conv_id_maria:
-                self._log(
-                    f"  🔁 Conversação divergiu ({_conv_id_maria} → {_current_cid}) "
-                    f"— forçando re-attach à conv {_conv_id_maria} de Maria para preservar calculoAberto"
-                )
-                _reatach_url = (
-                    f"{self._calculo_url_base}exportacao.jsf?conversationId={_conv_id_maria}"
-                )
-                try:
-                    self._page.goto(_reatach_url, wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(timeout=10000)
-                    self._page.wait_for_timeout(1500)
-                    self._calculo_conversation_id = _conv_id_maria
-                    self._log(f"  ✓ Re-attach OK: {self._page.url}")
-                except Exception as _re_err:
-                    self._log(f"  ⚠ Re-attach falhou: {_re_err}")
+            if _current_cid:
+                if _current_cid != _conv_id_maria:
+                    self._log(
+                        f"  ℹ Conv atualizado: {_conv_id_maria} → {_current_cid} "
+                        f"(navegação natural Seam para exportação — calculoAberto preservado)"
+                    )
+                _conv_id_maria = _current_cid
+                self._calculo_conversation_id = _current_cid
         except Exception as _rea_ex:
-            self._log(f"  ⚠ Guard re-attach exception: {_rea_ex}")
+            self._log(f"  ⚠ Conv update exception: {_rea_ex}")
 
         # Debug: capturar estado da página de exportação
         try:
