@@ -381,10 +381,16 @@ Base de Apuração: [usar valores EXATOS abaixo]
 Apurar IR: [Sim | Não]
 ```
 
-**Valores EXATOS de Base de Apuração (enums do PJe-Calc):**
-- Devedor RECLAMADO + SUCUMBENCIAIS → **BRUTO** (padrão = valor da condenação) | BRUTO_MENOS_CS | BRUTO_MENOS_CS_PP
-- Devedor RECLAMANTE + SUCUMBENCIAIS → **VNP** (padrão = Verbas que Não Compõem Principal) | BRUTO | BRUTO_MENOS_CS
-- CONTRATUAIS → BRUTO | BRUTO_MENOS_CS
+**Valores EXATOS de Base de Apuração — as 3 opções reais do DOM v2.15.1 (`honorarios.jsf`):**
+- **BRUTO** — Bruto (valor bruto da condenação — padrão para qualquer devedor)
+- **BRUTO_MENOS_CONTRIBUICAO_SOCIAL** — Bruto (-) Contribuição Social
+- **BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA** — Bruto (-) CS (-) Previdência Privada
+
+Regras:
+- Devedor RECLAMADO + SUCUMBENCIAIS → `BRUTO` (padrão)
+- Devedor RECLAMANTE + SUCUMBENCIAIS → `BRUTO` (padrão)
+- Qualquer devedor + CONTRATUAIS → `BRUTO` (padrão)
+- Apenas quando a sentença determinar dedução de CS antes do cálculo → `BRUTO_MENOS_CONTRIBUICAO_SOCIAL`
 
 > Quando a sentença diz "sobre o valor da condenação" para AMBAS as partes → usar BRUTO para os dois registros.
 > Se a sentença diz faixa "de 10% a 15%" → usar o menor valor (0.10).
@@ -401,7 +407,7 @@ Valor: [float — ex: 5000.00 | null se não deferidos]
 
 ```
 Lei 14.905/2024: [Sim | Não]
-Índice de Correção (pré-30/08/2024): [IPCAE | TUACDT | SELIC | TR | IPCA | IGPM | INPC | IPC | IPCAETR | SELIC_FAZENDA | SELIC_BACEN | TABELA_UNICA_JT_MENSAL | TABELA_UNICA_JT_DIARIO | SEM_CORRECAO]
+Índice de Correção (pré-30/08/2024): [IPCA_E | TUACDT | SELIC | TR | IPCA | IGP_M | INPC | IPC | IPCA_E_TR | SELIC_FAZENDA | SELIC_BACEN | TABELA_UNICA_JT_MENSAL | TABELA_UNICA_JT_DIARIO | SEM_CORRECAO]
 Índice de Correção (pós-30/08/2024): [IPCA | null — somente quando Lei 14.905 = Sim]
 Taxa de Juros: [TAXA_LEGAL | JUROS_PADRAO | SELIC | TRD_SIMPLES | TRD_COMPOSTOS | JUROS_UM_PORCENTO | JUROS_MEIO_PORCENTO | SELIC_FAZENDA | SELIC_BACEN | SEM_JUROS]
 Data Marco Taxa Legal: [DD/MM/AAAA — padrão 30/08/2024; somente quando Taxa = TAXA_LEGAL]
@@ -425,12 +431,12 @@ Acumular Índices: [MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO | null]
 | TABELA_UNICA_JT_MENSAL | Tabela JT Mensal |
 | TABELA_UNICA_JT_DIARIO | Tabela JT Diária |
 | TR | TR |
-| IGPM | IGP-M |
+| IGP_M | IGP-M |
 | INPC | INPC |
 | IPC | IPC |
 | IPCA | IPCA |
-| IPCAE | IPCA-E |
-| IPCAETR | IPCA-E / TR |
+| IPCA_E | IPCA-E |
+| IPCA_E_TR | IPCA-E / TR |
 | SELIC | SELIC (Receita Federal) |
 | SELIC_FAZENDA | SELIC Simples |
 | SELIC_BACEN | SELIC Composta |
@@ -457,13 +463,13 @@ Acumular Índices: [MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO | null]
 
 | Critério na sentença | Lei 14.905 | Correção | Correção pós | Juros | Data Marco |
 |---|---|---|---|---|---|
-| **ADC 58 + Lei 14.905/2024** — 3 fases (ver detalhe abaixo) | Sim | IPCAE | IPCA | TAXA_LEGAL | 30/08/2024 |
+| **ADC 58 + Lei 14.905/2024** — 3 fases (ver detalhe abaixo) | Sim | IPCA_E | IPCA | TAXA_LEGAL | 30/08/2024 |
 | ADC 58 / "critérios JT" — SEM menção Lei 14.905 | Não | TUACDT | — | SELIC | — |
 | "SELIC" / "taxa SELIC" sem distinguir fases | Não | SELIC | — | SELIC | — |
 | EC 113/2021 / "SELIC a partir de dezembro/2021" | Não | SELIC | — | SELIC | — |
-| "IPCA-E + juros de 1% ao mês" | Não | IPCAE | — | JUROS_PADRAO | — |
+| "IPCA-E + juros de 1% ao mês" | Não | IPCA_E | — | JUROS_PADRAO | — |
 | "TR" / "TRCT" + juros de 1% | Não | TR | — | JUROS_PADRAO | — |
-| IPCA-E sem especificação de juros | Não | IPCAE | — | JUROS_PADRAO | — |
+| IPCA-E sem especificação de juros | Não | IPCA_E | — | JUROS_PADRAO | — |
 
 **DETALHAMENTO — Lei 14.905/2024 (jurisprudência majoritária atual):**
 
@@ -473,7 +479,7 @@ Indicadores na sentença: "E-ED-RR-20407", "Lei 14.905", "taxa legal", "art. 406
 O PJe-Calc exige COMBINAÇÕES de índices nesse regime:
 
 **Correção Monetária:**
-- IPCAE até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
+- IPCA_E até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
 - Se admissão posterior a 30/08/2024 → usar somente IPCA
 
 **Juros de Mora — depende da data de ajuizamento:**

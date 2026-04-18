@@ -647,6 +647,16 @@ async def editar_estrategia(
     if campo == "estrategia":
         estrategia_atual["estrategia"] = valor
         estrategia_atual["baseado_em"] = "usuario"
+    elif campo == "tipo_verba":
+        # Sincronizar tipo da verba: salva na estratégia E no nível da verba
+        estrategia_atual["tipo_verba"] = valor
+        verba["tipo"] = valor  # Sincroniza com campo 'tipo' da verba (Seção 14)
+        estrategia_atual["baseado_em"] = "usuario"
+    elif campo == "verba_principal_ref":
+        # Salvar referência à parcela principal (para reflexas)
+        estrategia_atual["verba_principal_ref"] = valor
+        verba["verba_principal_ref"] = valor  # Sincroniza com campo da verba
+        estrategia_atual["baseado_em"] = "usuario"
     elif campo.startswith("parametros."):
         sub_campo = campo.split(".", 1)[1]
         estrategia_atual.setdefault("parametros", {})[sub_campo] = valor

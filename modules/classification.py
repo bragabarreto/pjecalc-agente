@@ -1128,6 +1128,51 @@ REFLEXAS_TIPICAS: dict[str, list[dict[str, Any]]] = {
             "incidencia_inss": True,
             "incidencia_ir": True,
         },
+        {
+            "nome": "Aviso Prévio s/ Horas Extras",
+            "comportamento_base": "Média pelo Valor Absoluto",
+            "caracteristica": "Aviso Previo",
+            "ocorrencia": "Desligamento",
+            "incidencia_fgts": True,
+            "incidencia_inss": True,
+            "incidencia_ir": True,
+        },
+    ],
+    "HORAS EXTRAS 100%": [
+        {
+            "nome": "RSR sobre Horas Extras 100%",
+            "comportamento_base": "Média pelo Valor Absoluto",
+            "incidencia_fgts": True,
+            "incidencia_inss": True,
+            "incidencia_ir": True,
+        },
+        {
+            "nome": "13º s/ Horas Extras 100%",
+            "comportamento_base": "Média pelo Valor Absoluto",
+            "caracteristica": "13o Salario",
+            "ocorrencia": "Desligamento",
+            "incidencia_fgts": True,
+            "incidencia_inss": True,
+            "incidencia_ir": True,
+        },
+        {
+            "nome": "Férias + 1/3 s/ Horas Extras 100%",
+            "comportamento_base": "Média pelo Valor Absoluto",
+            "caracteristica": "Ferias",
+            "ocorrencia": "Periodo Aquisitivo",
+            "incidencia_fgts": False,
+            "incidencia_inss": True,
+            "incidencia_ir": True,
+        },
+        {
+            "nome": "Aviso Prévio s/ Horas Extras 100%",
+            "comportamento_base": "Média pelo Valor Absoluto",
+            "caracteristica": "Aviso Previo",
+            "ocorrencia": "Desligamento",
+            "incidencia_fgts": True,
+            "incidencia_inss": True,
+            "incidencia_ir": True,
+        },
     ],
     "ADICIONAL NOTURNO 20%": [
         {
@@ -1155,6 +1200,15 @@ REFLEXAS_TIPICAS: dict[str, list[dict[str, Any]]] = {
             "incidencia_inss": True,
             "incidencia_ir": True,
         },
+        {
+            "nome": "Aviso Prévio s/ Adicional Noturno",
+            "comportamento_base": "Média pelo Valor Absoluto",
+            "caracteristica": "Aviso Previo",
+            "ocorrencia": "Desligamento",
+            "incidencia_fgts": True,
+            "incidencia_inss": True,
+            "incidencia_ir": True,
+        },
     ],
     "ADICIONAL DE INSALUBRIDADE": [
         {
@@ -1172,6 +1226,15 @@ REFLEXAS_TIPICAS: dict[str, list[dict[str, Any]]] = {
             "caracteristica": "Ferias",
             "ocorrencia": "Periodo Aquisitivo",
             "incidencia_fgts": False,
+            "incidencia_inss": True,
+            "incidencia_ir": True,
+        },
+        {
+            "nome": "Aviso Prévio s/ Insalubridade",
+            "comportamento_base": "Valor Mensal",
+            "caracteristica": "Aviso Previo",
+            "ocorrencia": "Desligamento",
+            "incidencia_fgts": True,
             "incidencia_inss": True,
             "incidencia_ir": True,
         },
@@ -1422,8 +1485,22 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
     pendentes_llm: list[dict] = []   # verbas que precisam de classificação LLM
     reflexas_acumuladas: list[dict] = []
 
-    # Passagem 1: classificar via dicionário (instantâneo)
+    # Passagem 0: separar verbas explicitamente marcadas como Reflexa pelo LLM
+    # Estas não devem ser classificadas como verbas independentes — serão adicionadas
+    # à lista de personalizadas com metadados de reflexa preservados.
+    _reflexas_explicitas: list[dict] = []
+    _verbas_para_classificar: list[dict] = []
     for verba in verbas:
+        _tipo = (verba.get("tipo") or "").strip().lower()
+        _ref = (verba.get("verba_principal_ref") or "").strip()
+        if _tipo == "reflexa" and _ref:
+            # Preservar como personalizada com tipo=Reflexa e verba_principal_ref
+            _reflexas_explicitas.append(verba)
+        else:
+            _verbas_para_classificar.append(verba)
+
+    # Passagem 1: classificar via dicionário (instantâneo)
+    for verba in _verbas_para_classificar:
         nome = verba.get("nome_sentenca", "")
         chave = _normalizar_chave(nome)
 
@@ -1563,6 +1640,75 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
         if r["nome"] not in nomes_reflexas_vistos:
             nomes_reflexas_vistos.add(r["nome"])
             reflexas_unicas.append(r)
+
+    # Adicionar reflexas explícitas (extraídas com tipo=Reflexa e verba_principal_ref)
+    # Verificar se a principal é Expresso — se sim, a reflexa é auto-gerada (não precisa de Manual)
+    _nomes_principais_expresso: set[str] = set()
+    for p in predefinidas_dedup:
+        _npj = (p.get("nome_pjecalc") or "").strip().upper()
+        _nse = (p.get("nome_sentenca") or "").strip().upper()
+        if _npj:
+            _nomes_principais_expresso.add(_npj)
+        if _nse:
+            _nomes_principais_expresso.add(_nse)
+        # Também adicionar variantes normalizadas
+        if _npj:
+            _nomes_principais_expresso.add(_normalizar_chave(_npj))
+        if _nse:
+            _nomes_principais_expresso.add(_normalizar_chave(_nse))
+
+    for ref_expl in _reflexas_explicitas:
+        ref_expl["mapeada"] = True
+        ref_expl["confianca_mapeamento"] = 0.9
+        ref_expl["eh_reflexa"] = True
+        # Preservar nome_pjecalc se não definido
+        if not ref_expl.get("nome_pjecalc"):
+            ref_expl["nome_pjecalc"] = ref_expl.get("nome_sentenca", "")
+
+        # Verificar se a principal desta reflexa é Expresso
+        _ref_principal = (ref_expl.get("verba_principal_ref") or "").strip()
+        _ref_principal_upper = _ref_principal.upper()
+        _ref_principal_norm = _normalizar_chave(_ref_principal) if _ref_principal else ""
+        _principal_eh_expresso = (
+            _ref_principal_upper in _nomes_principais_expresso
+            or _ref_principal_norm in _nomes_principais_expresso
+        )
+
+        if _principal_eh_expresso:
+            # Principal é Expresso → reflexa será auto-gerada pelo PJE-Calc
+            # Não criar como Manual (evita duplicação)
+            ref_expl["lancamento"] = "Expresso"
+            ref_expl["estrategia_preenchimento"] = {
+                "estrategia": "automatica_expresso",
+                "nome_pjecalc": ref_expl.get("nome_pjecalc", ""),
+                "tipo_verba": "Reflexa",
+                "verba_principal_ref": _ref_principal,
+                "confianca": 0.95,
+                "baseado_em": "expresso_auto_reflexa",
+                "nota": (
+                    f"Reflexa auto-gerada pelo Expresso ao criar a principal "
+                    f"\"{_ref_principal}\". Não necessita criação manual."
+                ),
+            }
+            # Adicionar às predefinidas (não personalizadas) para agrupar com principal
+            predefinidas_dedup.append(ref_expl)
+        else:
+            # Principal NÃO é Expresso → precisa criação manual
+            ref_expl["lancamento"] = "Manual"
+            ref_expl["estrategia_preenchimento"] = {
+                "estrategia": "manual",
+                "nome_pjecalc": ref_expl.get("nome_pjecalc", ""),
+                "tipo_verba": "Reflexa",
+                "verba_principal_ref": _ref_principal,
+                "confianca": 0.9,
+                "baseado_em": "catalogo_reflexa",
+                "parametros": {
+                    "caracteristica": ref_expl.get("caracteristica", "Comum"),
+                    "ocorrencia": ref_expl.get("ocorrencia", "Mensal"),
+                    "base_calculo": ref_expl.get("base_calculo", "Verbas"),
+                },
+            }
+            personalizadas.append(ref_expl)
 
     # Fase final: Atribuir estratégias de preenchimento a cada verba
     resultado = {

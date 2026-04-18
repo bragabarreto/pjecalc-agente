@@ -204,22 +204,22 @@ Campos extraídos da sentença (mapeados para o DOM acima):
 | tipo | SUCUMBENCIAIS (padrão), CONTRATUAIS |
 | devedor | RECLAMANTE, RECLAMADO |
 | tipo_valor | CALCULADO (percentual), INFORMADO (valor fixo) |
-| base_apuracao | **BRUTO** / **BRUTO_MENOS_CS** / **BRUTO_MENOS_CS_PP** / **VNP** |
+| base_apuracao | **BRUTO** (valor bruto da condenação — padrão), **BRUTO_MENOS_CONTRIBUICAO_SOCIAL** (bruto menos CS), **BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA** (bruto menos CS e PP) |
 
-Significados das bases:
-- **BRUTO** — valor bruto da condenação
-- **BRUTO_MENOS_CS** — bruto menos contribuição social (INSS)
-- **BRUTO_MENOS_CS_PP** — bruto menos CS menos previdência privada
-- **VNP** — Verbas que Não Compõem Principal (padrão quando devedor = RECLAMANTE + SUCUMBENCIAIS)
+### Opções reais do PJE-Calc (DOM confirmado v2.15.1)
+O campo `baseApuracao` na página `honorarios.jsf` tem exatamente 3 opções:
+1. **Bruto** → `BRUTO`
+2. **Bruto (-) Contribuição Social** → `BRUTO_MENOS_CONTRIBUICAO_SOCIAL`
+3. **Bruto (-) Contribuição Social (-) Previdência Privada** → `BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA`
 
 ### Regras de base_apuracao
-| Devedor | Tipo | Base padrão | Alternativas |
-|---------|------|-------------|--------------|
-| RECLAMADO | SUCUMBENCIAIS | BRUTO | BRUTO_MENOS_CS, BRUTO_MENOS_CS_PP |
-| RECLAMANTE | SUCUMBENCIAIS | VNP | BRUTO, BRUTO_MENOS_CS |
-| Qualquer | CONTRATUAIS | BRUTO | BRUTO_MENOS_CS |
+| Devedor | Tipo | Base padrão |
+|---------|------|-------------|
+| RECLAMADO | SUCUMBENCIAIS | BRUTO |
+| RECLAMANTE | SUCUMBENCIAIS | BRUTO |
+| Qualquer | CONTRATUAIS | BRUTO |
 
-> Quando sentença diz "sobre o valor da condenação" para AMBAS as partes → BRUTO nos dois registros.
+> Quando sentença determina dedução de CS antes de aplicar percentual → BRUTO_MENOS_CONTRIBUICAO_SOCIAL.
 > NÃO existe opção "Ambos" — sucumbência recíproca = DOIS registros separados.
 > Faixa "10% a 15%" → usar o menor valor (0.10).
 
@@ -242,12 +242,12 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 | TABELA_UNICA_JT_MENSAL | Tabela JT Mensal |
 | TABELA_UNICA_JT_DIARIO | Tabela JT Diária |
 | TR | TR |
-| IGPM | IGP-M |
+| IGP_M | IGP-M |
 | INPC | INPC |
 | IPC | IPC |
 | IPCA | IPCA |
-| IPCAE | IPCA-E |
-| IPCAETR | IPCA-E / TR |
+| IPCA_E | IPCA-E |
+| IPCA_E_TR | IPCA-E / TR |
 | SELIC | SELIC (Receita Federal) |
 | SELIC_FAZENDA | SELIC Simples |
 | SELIC_BACEN | SELIC Composta |
@@ -283,17 +283,17 @@ Campo SEPARADO (não entra no array de honorários advocatícios). Valor float o
 ### Mapeamento da sentença → enums (em ordem de prevalência)
 | Critério na sentença | Lei 14.905 | Correção | Correção pós | Juros |
 |----------------------|-----------|----------|-------------|-------|
-| **ADC 58 + Lei 14.905/2024** — E-ED-RR-20407, "taxa legal", "art. 406 CC" | **true** | IPCAE | **IPCA** | **TAXA_LEGAL** |
+| **ADC 58 + Lei 14.905/2024** — E-ED-RR-20407, "taxa legal", "art. 406 CC" | **true** | IPCA_E | **IPCA** | **TAXA_LEGAL** |
 | ADC 58 / critérios JT SEM Lei 14.905 (pré-ago/2024) | false | TUACDT | — | SELIC |
 | "SELIC" / "taxa SELIC" sem distinguir fases | false | SELIC | — | SELIC |
 | EC 113/2021 / "SELIC a partir de dez/2021" | false | SELIC | — | SELIC |
-| "IPCA-E + juros de 1% a.m." | false | IPCAE | — | JUROS_PADRAO |
+| "IPCA-E + juros de 1% a.m." | false | IPCA_E | — | JUROS_PADRAO |
 | "TR" / "TRCT" + juros de 1% | false | TR | — | JUROS_PADRAO |
 
 ### Detalhamento — Lei 14.905/2024 (jurisprudência majoritária atual)
 
 **Correção Monetária no PJe-Calc:**
-- IPCAE até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
+- IPCA_E até 29/08/2024, COMBINADO COM IPCA a partir de 30/08/2024
 - Se admissão > 30/08/2024 → usar somente IPCA como índice único
 
 **Juros de Mora — depende da data de ajuizamento:**

@@ -1030,9 +1030,14 @@
         <div class="checkbox-row" style="margin-top:8px;">
           <input type="checkbox" id="aviso-projetar"
                  {{ 'checked' if dados.get('aviso_previo', {}).get('projetar') }}
-                 onchange="salvarCampo('aviso_previo.projetar', this.checked ? 'true' : 'false', this)">
+                 onchange="salvarCampo('aviso_previo.projetar', this.checked ? 'true' : 'false', this); ajustarTipoAvisoPrevio(this.checked)">
           <label for="aviso-projetar">Projetar Aviso Prévio no contrato</label>
         </div>
+        {% if dados.get('aviso_previo', {}).get('projetar') and dados.get('aviso_previo', {}).get('tipo') != 'Calculado' %}
+        <div style="margin-top:6px; font-size:0.82rem; color:#856404; background:#fff3cd; padding:6px 10px; border-radius:6px;">
+          ⚠️ Aviso prévio indenizado com projeção ativa — recomenda-se tipo <strong>Calculado</strong> (Lei 12.506/2011).
+        </div>
+        {% endif %}
       </div>
     </div>
 
@@ -1232,10 +1237,9 @@
                 <div class="campo-form campo-col2">
                   <label>Base de Apuração</label>
                   <select onchange="salvarCampo('honorarios[{{ i }}].base_apuracao', this.value, this)">
-                    <option value="BRUTO" {{ 'selected' if hon.base_apuracao == 'BRUTO' }}>Bruto (= valor da condenação)</option>
+                    <option value="BRUTO" {{ 'selected' if hon.base_apuracao == 'BRUTO' }}>Bruto</option>
                     <option value="BRUTO_MENOS_CONTRIBUICAO_SOCIAL" {{ 'selected' if hon.base_apuracao == 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL' }}>Bruto (-) Contribuição Social</option>
                     <option value="BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA" {{ 'selected' if hon.base_apuracao == 'BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA' }}>Bruto (-) Contribuição Social (-) Previdência Privada</option>
-                    <option value="VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL" {{ 'selected' if hon.base_apuracao == 'VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL' }}>Verbas que Não Compõem o Principal (só p/ RECLAMANTE)</option>
                   </select>
                 </div>
                 <div class="campo-form" id="hon-pct-{{ i }}" {{ 'style="display:none"' if hon.tipo_valor == 'INFORMADO' else '' }}>
@@ -2110,19 +2114,37 @@
       </div>
     </div>
 
-    <!-- ═══ 15. VERBAS DEFERIDAS ═══ -->
+    <!-- ═══ 18. VERBAS DEFERIDAS ═══ -->
+    {# Agrupar: principais em destaque, reflexas aninhadas sob sua principal #}
+    {% set ns_verbas = namespace(principais=[], reflexas_map={}) %}
+    {% for verba in verbas %}
+      {% if verba.tipo == 'Reflexa' and verba.verba_principal_ref %}
+        {% set _ref_key = verba.verba_principal_ref %}
+        {% if _ref_key not in ns_verbas.reflexas_map %}
+          {% set _ = ns_verbas.reflexas_map.update({_ref_key: []}) %}
+        {% endif %}
+        {% set _ = ns_verbas.reflexas_map[_ref_key].append({'verba': verba, 'idx': loop.index0}) %}
+      {% else %}
+        {% set _ = ns_verbas.principais.append({'verba': verba, 'idx': loop.index0}) %}
+      {% endif %}
+    {% endfor %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-verbas')">
-        19. Verbas Deferidas
-        <span class="confianca-badge conf-alta">{{ verbas|length }} verba(s)</span>
+        18. Verbas Deferidas
+        <span class="confianca-badge conf-alta">{{ ns_verbas.principais|length }} principal(is) + {{ verbas|length - ns_verbas.principais|length }} reflexa(s)</span>
       </div>
       <div class="secao-corpo" id="s-verbas">
         {% if not verbas %}
         <p style="color:#6c757d; font-size:0.9rem;">Nenhuma verba extraída. Verifique a sentença e os alertas acima.</p>
         {% endif %}
-        {% for verba in verbas %}
+
+        {% for item in ns_verbas.principais %}
+        {% set verba = item.verba %}
+        {% set vidx = item.idx %}
+        {% set nome_ref_key = verba.nome_pjecalc or verba.nome_sentenca %}
+        {% set reflexas_desta = ns_verbas.reflexas_map.get(nome_ref_key, []) %}
         <div class="verba-card{{ ' conf-baixa-warn' if verba.confianca and verba.confianca < 0.7 else '' }}">
-          <div class="verba-header" onclick="toggleVerba({{ loop.index0 }})">
+          <div class="verba-header" onclick="toggleVerba({{ vidx }})">
             <div>
               <div class="verba-nome">{{ verba.nome_pjecalc or verba.nome_sentenca }}</div>
               {% if verba.nome_pjecalc and verba.nome_pjecalc != verba.nome_sentenca %}
@@ -2132,30 +2154,41 @@
               {% endif %}
             </div>
             <div class="verba-badges">
-              {% if verba.tipo %}<span class="badge badge-azul" style="font-size:0.72rem;">{{ verba.tipo }}</span>{% endif %}
+              <span class="badge badge-azul" style="font-size:0.72rem;">Principal</span>
+              {% if reflexas_desta %}<span class="badge badge-verde" style="font-size:0.72rem;">{{ reflexas_desta|length }} reflexo(s)</span>{% endif %}
               {% if not verba.mapeada %}<span class="badge badge-amarelo" style="font-size:0.72rem;">Não mapeada</span>{% endif %}
               {% if verba.confianca and verba.confianca < 0.7 %}<span class="badge badge-vermelho" style="font-size:0.72rem;">Baixa confiança</span>{% endif %}
               <span style="font-size:0.8rem; color:#6c757d;">▼</span>
             </div>
           </div>
-          <div class="verba-corpo" id="verba-corpo-{{ loop.index0 }}">
+          <div class="verba-corpo" id="verba-corpo-{{ vidx }}">
+            {# ── Campos da verba principal ── #}
             <div class="campos-grid">
               <div class="campo-form campo-col2">
                 <label>Nome no PJE-Calc</label>
                 <input type="text" value="{{ verba.nome_pjecalc or verba.nome_sentenca }}"
-                       onchange="salvarVerba({{ loop.index0 }}, 'nome_pjecalc', this.value, this)">
+                       onchange="salvarVerba({{ vidx }}, 'nome_pjecalc', this.value, this)">
               </div>
               <div class="campo-form">
                 <label>Tipo</label>
-                <select onchange="salvarVerba({{ loop.index0 }}, 'tipo', this.value, this)">
-                  <option value="">—</option>
-                  <option value="Principal" {{ 'selected' if verba.tipo == 'Principal' }}>Principal</option>
+                <select id="verba-tipo-{{ vidx }}"
+                        onchange="salvarVerba({{ vidx }}, 'tipo', this.value, this); toggleVerbaPrincipalRef({{ vidx }}, this.value)">
+                  <option value="Principal" {{ 'selected' if verba.tipo != 'Reflexa' }}>Principal</option>
                   <option value="Reflexa" {{ 'selected' if verba.tipo == 'Reflexa' }}>Reflexa</option>
+                </select>
+              </div>
+              <div class="campo-form" id="verba-principal-ref-{{ vidx }}" style="display:none;">
+                <label>Parcela Principal</label>
+                <select onchange="salvarVerba({{ vidx }}, 'verba_principal_ref', this.value, this)">
+                  <option value="">— selecione —</option>
+                  {% for vp in verbas %}{% if vp.tipo == 'Principal' and loop.index0 != vidx %}
+                  <option value="{{ vp.nome_pjecalc or vp.nome_sentenca }}">{{ vp.nome_pjecalc or vp.nome_sentenca }}</option>
+                  {% endif %}{% endfor %}
                 </select>
               </div>
               <div class="campo-form">
                 <label>Característica</label>
-                <select onchange="salvarVerba({{ loop.index0 }}, 'caracteristica', this.value, this)">
+                <select onchange="salvarVerba({{ vidx }}, 'caracteristica', this.value, this)">
                   <option value="">—</option>
                   <option value="Comum" {{ 'selected' if verba.caracteristica == 'Comum' }}>Comum</option>
                   <option value="13o Salario" {{ 'selected' if verba.caracteristica == '13o Salario' }}>13º Salário</option>
@@ -2165,7 +2198,7 @@
               </div>
               <div class="campo-form">
                 <label>Ocorrência</label>
-                <select onchange="salvarVerba({{ loop.index0 }}, 'ocorrencia', this.value, this)">
+                <select onchange="salvarVerba({{ vidx }}, 'ocorrencia', this.value, this)">
                   <option value="">—</option>
                   <option value="Mensal" {{ 'selected' if verba.ocorrencia == 'Mensal' }}>Mensal</option>
                   <option value="Dezembro" {{ 'selected' if verba.ocorrencia == 'Dezembro' }}>Dezembro</option>
@@ -2175,19 +2208,17 @@
               </div>
               <div class="campo-form">
                 <label>Período Início</label>
-                <input type="text" placeholder="DD/MM/AAAA"
-                       value="{{ verba.periodo_inicio or '' }}"
-                       onchange="salvarVerba({{ loop.index0 }}, 'periodo_inicio', this.value, this)">
+                <input type="text" placeholder="DD/MM/AAAA" value="{{ verba.periodo_inicio or '' }}"
+                       onchange="salvarVerba({{ vidx }}, 'periodo_inicio', this.value, this)">
               </div>
               <div class="campo-form">
                 <label>Período Fim</label>
-                <input type="text" placeholder="DD/MM/AAAA"
-                       value="{{ verba.periodo_fim or '' }}"
-                       onchange="salvarVerba({{ loop.index0 }}, 'periodo_fim', this.value, this)">
+                <input type="text" placeholder="DD/MM/AAAA" value="{{ verba.periodo_fim or '' }}"
+                       onchange="salvarVerba({{ vidx }}, 'periodo_fim', this.value, this)">
               </div>
               <div class="campo-form">
                 <label>Base de Cálculo</label>
-                <select onchange="salvarVerba({{ loop.index0 }}, 'base_calculo', this.value, this)">
+                <select onchange="salvarVerba({{ vidx }}, 'base_calculo', this.value, this)">
                   <option value="">—</option>
                   <option value="Maior Remuneracao" {{ 'selected' if verba.base_calculo == 'Maior Remuneracao' }}>Maior Remuneração</option>
                   <option value="Historico Salarial" {{ 'selected' if verba.base_calculo == 'Historico Salarial' }}>Histórico Salarial</option>
@@ -2200,37 +2231,148 @@
                 <label>Percentual (%)</label>
                 <input type="number" step="0.01" min="0"
                        value="{{ (verba.percentual * 100)|round(2) if verba.percentual else '' }}"
-                       onchange="salvarVerba({{ loop.index0 }}, 'percentual', (parseFloat(this.value)||0)/100, this)"
-                       placeholder="100">
+                       onchange="salvarVerba({{ vidx }}, 'percentual', (parseFloat(this.value)||0)/100, this)" placeholder="100">
               </div>
               <div class="campo-form">
                 <label>Valor Informado (R$)</label>
-                <input type="number" step="0.01" min="0"
-                       value="{{ verba.valor_informado or '' }}"
-                       onchange="salvarVerba({{ loop.index0 }}, 'valor_informado', this.value, this)"
-                       placeholder="0,00">
+                <input type="number" step="0.01" min="0" value="{{ verba.valor_informado or '' }}"
+                       onchange="salvarVerba({{ vidx }}, 'valor_informado', this.value, this)" placeholder="0,00">
               </div>
             </div>
             <div style="margin-top:10px; display:flex; gap:20px; flex-wrap:wrap;">
               <div class="checkbox-row">
-                <input type="checkbox" id="v{{ loop.index0 }}-fgts"
-                       {{ 'checked' if verba.incidencia_fgts }}
-                       onchange="salvarVerba({{ loop.index0 }}, 'incidencia_fgts', this.checked ? 'true':'false', this)">
-                <label for="v{{ loop.index0 }}-fgts">Incide FGTS</label>
+                <input type="checkbox" id="v{{ vidx }}-fgts" {{ 'checked' if verba.incidencia_fgts }}
+                       onchange="salvarVerba({{ vidx }}, 'incidencia_fgts', this.checked ? 'true':'false', this)">
+                <label for="v{{ vidx }}-fgts">Incide FGTS</label>
               </div>
               <div class="checkbox-row">
-                <input type="checkbox" id="v{{ loop.index0 }}-inss"
-                       {{ 'checked' if verba.incidencia_inss }}
-                       onchange="salvarVerba({{ loop.index0 }}, 'incidencia_inss', this.checked ? 'true':'false', this)">
-                <label for="v{{ loop.index0 }}-inss">Incide INSS</label>
+                <input type="checkbox" id="v{{ vidx }}-inss" {{ 'checked' if verba.incidencia_inss }}
+                       onchange="salvarVerba({{ vidx }}, 'incidencia_inss', this.checked ? 'true':'false', this)">
+                <label for="v{{ vidx }}-inss">Incide INSS</label>
               </div>
               <div class="checkbox-row">
-                <input type="checkbox" id="v{{ loop.index0 }}-ir"
-                       {{ 'checked' if verba.incidencia_ir }}
-                       onchange="salvarVerba({{ loop.index0 }}, 'incidencia_ir', this.checked ? 'true':'false', this)">
-                <label for="v{{ loop.index0 }}-ir">Incide IR</label>
+                <input type="checkbox" id="v{{ vidx }}-ir" {{ 'checked' if verba.incidencia_ir }}
+                       onchange="salvarVerba({{ vidx }}, 'incidencia_ir', this.checked ? 'true':'false', this)">
+                <label for="v{{ vidx }}-ir">Incide IR</label>
               </div>
             </div>
+
+            {# ── Reflexas vinculadas a esta principal ── #}
+            {% if reflexas_desta %}
+            <div style="margin-top:14px; border-top:2px solid #e9ecef; padding-top:10px;">
+              <div style="font-size:0.88rem; font-weight:700; color:#856404; margin-bottom:8px;">
+                🔸 Parcelas Reflexas ({{ reflexas_desta|length }})
+              </div>
+              {% for ref_item in reflexas_desta %}
+              {% set rv = ref_item.verba %}
+              {% set ridx = ref_item.idx %}
+              {% set rv_ep = rv.estrategia_preenchimento if rv.estrategia_preenchimento is mapping else {} %}
+              {% set rv_auto = rv_ep.get('estrategia', '') == 'automatica_expresso' %}
+              {% if rv_auto %}
+              {# Reflexa auto-gerada pelo Expresso — card informativo simples #}
+              <div style="background:#e8f5e9; border:1px solid #81c784; border-radius:8px; padding:8px 12px; margin-bottom:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <div>
+                    <span style="font-weight:600; font-size:0.85rem; color:#2e7d32;">✓ {{ rv.nome_pjecalc or rv.nome_sentenca }}</span>
+                  </div>
+                  <span class="badge" style="background:#c8e6c9; color:#1b5e20; font-size:0.68rem; padding:2px 8px; border-radius:4px;">Auto Expresso</span>
+                </div>
+                <div style="font-size:0.78rem; color:#558b2f; margin-top:3px;">
+                  Gerada automaticamente pelo Expresso ao criar a principal. Não requer criação manual.
+                </div>
+              </div>
+              {% else %}
+              {# Reflexa manual — card editável completo #}
+              <div style="background:#fffbea; border:1px solid #ffc107; border-radius:8px; padding:10px 12px; margin-bottom:8px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+                     onclick="toggleVerba({{ ridx }})">
+                  <div>
+                    <span style="font-weight:600; font-size:0.88rem;">{{ rv.nome_pjecalc or rv.nome_sentenca }}</span>
+                    {% if rv.nome_sentenca and rv.nome_sentenca != rv.nome_pjecalc %}
+                    <span style="font-size:0.75rem; color:#6c757d;"> — "{{ rv.nome_sentenca }}"</span>
+                    {% endif %}
+                  </div>
+                  <span class="badge badge-amarelo" style="font-size:0.7rem;">Reflexa Manual</span>
+                </div>
+                <div class="verba-corpo" id="verba-corpo-{{ ridx }}">
+                  <div class="campos-grid" style="margin-top:8px;">
+                    <div class="campo-form campo-col2">
+                      <label>Nome no PJE-Calc</label>
+                      <input type="text" value="{{ rv.nome_pjecalc or rv.nome_sentenca }}"
+                             onchange="salvarVerba({{ ridx }}, 'nome_pjecalc', this.value, this)">
+                    </div>
+                    <div class="campo-form">
+                      <label>Tipo</label>
+                      <select onchange="salvarVerba({{ ridx }}, 'tipo', this.value, this)">
+                        <option value="Reflexa" selected>Reflexa</option>
+                        <option value="Principal">Principal</option>
+                      </select>
+                    </div>
+                    <div class="campo-form">
+                      <label>Parcela Principal</label>
+                      <select onchange="salvarVerba({{ ridx }}, 'verba_principal_ref', this.value, this)">
+                        {% for vp in verbas %}{% if vp.tipo == 'Principal' %}
+                        <option value="{{ vp.nome_pjecalc or vp.nome_sentenca }}"
+                                {{ 'selected' if rv.verba_principal_ref == (vp.nome_pjecalc or vp.nome_sentenca) }}>
+                          {{ vp.nome_pjecalc or vp.nome_sentenca }}
+                        </option>
+                        {% endif %}{% endfor %}
+                      </select>
+                    </div>
+                    <div class="campo-form">
+                      <label>Característica</label>
+                      <select onchange="salvarVerba({{ ridx }}, 'caracteristica', this.value, this)">
+                        <option value="">—</option>
+                        <option value="Comum" {{ 'selected' if rv.caracteristica == 'Comum' }}>Comum</option>
+                        <option value="13o Salario" {{ 'selected' if rv.caracteristica == '13o Salario' }}>13º Salário</option>
+                        <option value="Aviso Previo" {{ 'selected' if rv.caracteristica == 'Aviso Previo' }}>Aviso Prévio</option>
+                        <option value="Ferias" {{ 'selected' if rv.caracteristica == 'Ferias' }}>Férias</option>
+                      </select>
+                    </div>
+                    <div class="campo-form">
+                      <label>Ocorrência</label>
+                      <select onchange="salvarVerba({{ ridx }}, 'ocorrencia', this.value, this)">
+                        <option value="">—</option>
+                        <option value="Mensal" {{ 'selected' if rv.ocorrencia == 'Mensal' }}>Mensal</option>
+                        <option value="Dezembro" {{ 'selected' if rv.ocorrencia == 'Dezembro' }}>Dezembro</option>
+                        <option value="Periodo Aquisitivo" {{ 'selected' if rv.ocorrencia == 'Periodo Aquisitivo' }}>Período Aquisitivo</option>
+                        <option value="Desligamento" {{ 'selected' if rv.ocorrencia == 'Desligamento' }}>Desligamento</option>
+                      </select>
+                    </div>
+                    <div class="campo-form">
+                      <label>Base de Cálculo</label>
+                      <select onchange="salvarVerba({{ ridx }}, 'base_calculo', this.value, this)">
+                        <option value="">—</option>
+                        <option value="Verbas" {{ 'selected' if rv.base_calculo == 'Verbas' }}>Verbas</option>
+                        <option value="Historico Salarial" {{ 'selected' if rv.base_calculo == 'Historico Salarial' }}>Histórico Salarial</option>
+                        <option value="Maior Remuneracao" {{ 'selected' if rv.base_calculo == 'Maior Remuneracao' }}>Maior Remuneração</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style="margin-top:6px; display:flex; gap:16px; flex-wrap:wrap;">
+                    <div class="checkbox-row">
+                      <input type="checkbox" id="v{{ ridx }}-fgts" {{ 'checked' if rv.incidencia_fgts }}
+                             onchange="salvarVerba({{ ridx }}, 'incidencia_fgts', this.checked ? 'true':'false', this)">
+                      <label for="v{{ ridx }}-fgts">FGTS</label>
+                    </div>
+                    <div class="checkbox-row">
+                      <input type="checkbox" id="v{{ ridx }}-inss" {{ 'checked' if rv.incidencia_inss }}
+                             onchange="salvarVerba({{ ridx }}, 'incidencia_inss', this.checked ? 'true':'false', this)">
+                      <label for="v{{ ridx }}-inss">INSS</label>
+                    </div>
+                    <div class="checkbox-row">
+                      <input type="checkbox" id="v{{ ridx }}-ir" {{ 'checked' if rv.incidencia_ir }}
+                             onchange="salvarVerba({{ ridx }}, 'incidencia_ir', this.checked ? 'true':'false', this)">
+                      <label for="v{{ ridx }}-ir">IR</label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+              {% endfor %}
+            </div>
+            {% endif %}
+
           </div>
         </div>
         {% endfor %}
@@ -2241,10 +2383,24 @@
     {% set todas_verbas_plan = [] %}
     {% for v in verbas_mapeadas.get('predefinidas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
     {% for v in verbas_mapeadas.get('personalizadas', []) %}{% if todas_verbas_plan.append(v) %}{% endif %}{% endfor %}
+    {# Agrupar: principais em destaque, reflexas aninhadas #}
+    {% set ns_plan = namespace(principais=[], reflexas_map={}) %}
+    {% for v in todas_verbas_plan %}
+      {% set _tv = v.get('tipo', v.get('estrategia_preenchimento', {}).get('tipo_verba', '')) %}
+      {% set _ref = v.get('verba_principal_ref', v.get('estrategia_preenchimento', {}).get('verba_principal_ref', '')) %}
+      {% if _tv == 'Reflexa' and _ref %}
+        {% if _ref not in ns_plan.reflexas_map %}
+          {% set _ = ns_plan.reflexas_map.update({_ref: []}) %}
+        {% endif %}
+        {% set _ = ns_plan.reflexas_map[_ref].append({'verba': v, 'idx': loop.index0}) %}
+      {% else %}
+        {% set _ = ns_plan.principais.append({'verba': v, 'idx': loop.index0}) %}
+      {% endif %}
+    {% endfor %}
     <div class="secao">
       <div class="secao-titulo" onclick="toggleSecao('s-plano-preenchimento')">
-        20. Plano de Preenchimento (Automacao)
-        <span class="confianca-badge conf-alta">{{ todas_verbas_plan|length }} verba(s)</span>
+        19. Plano de Preenchimento (Automacao)
+        <span class="confianca-badge conf-alta">{{ ns_plan.principais|length }} principal(is) + {{ todas_verbas_plan|length - ns_plan.principais|length }} reflexa(s)</span>
       </div>
       <div class="secao-corpo" id="s-plano-preenchimento">
         {% if not todas_verbas_plan %}
@@ -2267,19 +2423,22 @@
           </span>
         </div>
 
-        {% for verba in todas_verbas_plan %}
-        {% set vi = loop.index0 %}
+        {% for item in ns_plan.principais %}
+        {% set verba = item.verba %}
+        {% set vi = item.idx %}
         {% set ep = verba.get('estrategia_preenchimento', {}) %}
         {% set ep_tipo = ep.get('estrategia', 'manual') %}
         {% set ep_confianca = ep.get('confianca', 0.5) %}
         {% set ep_params = ep.get('parametros', {}) %}
         {% set ep_reflexas = ep.get('reflexas', []) %}
+        {% set plan_nome_key = verba.get('nome_pjecalc') or verba.get('nome_sentenca', '') %}
+        {% set plan_reflexas_desta = ns_plan.reflexas_map.get(plan_nome_key, []) %}
         <div class="verba-card" id="plan-card-{{ vi }}" style="margin-bottom:10px;">
           <div class="verba-header" onclick="toggleVerba('plan-corpo-{{ vi }}')" style="
             border-left: 4px solid {{ '#28a745' if ep_tipo == 'expresso_direto' else ('#0d6efd' if ep_tipo == 'expresso_adaptado' else '#6c757d') }};
           ">
             <div>
-              <div class="verba-nome">{{ verba.get('nome_pjecalc') or verba.get('nome_sentenca', '?') }}</div>
+              <div class="verba-nome">{{ plan_nome_key or '?' }}</div>
               {% if verba.get('nome_sentenca') and verba.get('nome_sentenca') != verba.get('nome_pjecalc') %}
               <div style="font-size:0.78rem; color:#6c757d; margin-top:2px;">
                 Sentenca: "{{ verba.get('nome_sentenca') }}"
@@ -2294,16 +2453,14 @@
               {% else %}
               <span class="badge badge-cinza" style="font-size:0.72rem;">Manual</span>
               {% endif %}
-              <span class="confianca-badge {{ 'conf-alta' if ep_confianca >= 0.8 else ('conf-media' if ep_confianca >= 0.5 else 'conf-baixa') }}" style="font-size:0.72rem;">
-                {{ (ep_confianca * 100)|int }}%
-              </span>
-              <span style="font-size:0.72rem; color:#adb5bd;">{{ ep.get('baseado_em', '') }}</span>
+              {% if plan_reflexas_desta or ep_reflexas %}
+              <span class="badge badge-amarelo" style="font-size:0.72rem;">{{ (plan_reflexas_desta|length) + (ep_reflexas|length) }} reflexo(s)</span>
+              {% endif %}
               <span style="font-size:0.8rem; color:#6c757d;">&#9660;</span>
             </div>
           </div>
           <div class="verba-corpo" id="plan-corpo-{{ vi }}">
             <div class="campos-grid">
-              <!-- Estrategia -->
               <div class="campo-form">
                 <label>Estrategia</label>
                 <select onchange="salvarEstrategia({{ vi }}, 'estrategia', this.value, this); toggleEstrategiaParams({{ vi }}, this.value)">
@@ -2346,7 +2503,6 @@
               </div>
             </div>
 
-            <!-- Parametros (visiveis quando adaptado ou manual) -->
             <div id="plan-params-{{ vi }}" style="{{ '' if ep_tipo in ('expresso_adaptado', 'manual') else 'display:none;' }}">
               <fieldset style="border:1px solid #d0d7e3; border-radius:8px; padding:12px; margin-top:10px;">
                 <legend style="font-size:0.85rem; font-weight:600; color:#1a3a6b;">Parametros de Preenchimento</legend>
@@ -2391,24 +2547,20 @@
                     </select>
                   </div>
                 </div>
-                <!-- Incidencias -->
                 <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:8px;">
                   {% set ep_inc = ep.get('incidencias', {}) %}
                   <div class="checkbox-row">
-                    <input type="checkbox" id="ep-fgts-{{ vi }}"
-                           {{ 'checked' if ep_inc.get('fgts') }}
+                    <input type="checkbox" id="ep-fgts-{{ vi }}" {{ 'checked' if ep_inc.get('fgts') }}
                            onchange="salvarEstrategia({{ vi }}, 'parametros.incidencia_fgts', this.checked ? 'true':'false', this)">
                     <label for="ep-fgts-{{ vi }}">FGTS</label>
                   </div>
                   <div class="checkbox-row">
-                    <input type="checkbox" id="ep-inss-{{ vi }}"
-                           {{ 'checked' if ep_inc.get('inss') }}
+                    <input type="checkbox" id="ep-inss-{{ vi }}" {{ 'checked' if ep_inc.get('inss') }}
                            onchange="salvarEstrategia({{ vi }}, 'parametros.incidencia_inss', this.checked ? 'true':'false', this)">
                     <label for="ep-inss-{{ vi }}">INSS</label>
                   </div>
                   <div class="checkbox-row">
-                    <input type="checkbox" id="ep-irpf-{{ vi }}"
-                           {{ 'checked' if ep_inc.get('irpf') }}
+                    <input type="checkbox" id="ep-irpf-{{ vi }}" {{ 'checked' if ep_inc.get('irpf') }}
                            onchange="salvarEstrategia({{ vi }}, 'parametros.incidencia_irpf', this.checked ? 'true':'false', this)">
                     <label for="ep-irpf-{{ vi }}">IRPF</label>
                   </div>
@@ -2416,20 +2568,77 @@
               </fieldset>
             </div>
 
-            <!-- Reflexas -->
+            {# Reflexas auto-geradas pelo Expresso #}
             {% if ep_reflexas %}
             <div style="margin-top:10px;">
-              <div style="font-size:0.85rem; font-weight:600; color:#1a3a6b; margin-bottom:4px;">Reflexos:</div>
+              <div style="font-size:0.85rem; font-weight:600; color:#28a745; margin-bottom:4px;">Reflexos Expresso (automáticos):</div>
               <ul style="margin:0; padding-left:20px; font-size:0.85rem; color:#444;">
                 {% for ref in ep_reflexas %}
                 <li>
                   {{ ref.get('nome', ref) if ref is mapping else ref }}
-                  {% if ref is mapping and ref.get('estrategia') == 'automatica' %}
-                  <span style="font-size:0.72rem; color:#28a745; font-weight:600;">automatico</span>
-                  {% endif %}
+                  <span style="font-size:0.72rem; color:#28a745; font-weight:600;">automático</span>
                 </li>
                 {% endfor %}
               </ul>
+            </div>
+            {% endif %}
+
+            {# Reflexas explícitas vinculadas a esta principal #}
+            {% if plan_reflexas_desta %}
+            <div style="margin-top:10px; border-top:2px solid #ffc107; padding-top:8px;">
+              <div style="font-size:0.85rem; font-weight:700; color:#856404; margin-bottom:6px;">
+                🔸 Parcelas Reflexas Vinculadas ({{ plan_reflexas_desta|length }})
+              </div>
+              {% for ref_item in plan_reflexas_desta %}
+              {% set rv = ref_item.verba %}
+              {% set ri = ref_item.idx %}
+              {% set rep = rv.get('estrategia_preenchimento', {}) %}
+              {% set rep_tipo = rep.get('estrategia', 'manual') %}
+              {% if rep_tipo == 'automatica_expresso' %}
+              {# Reflexa auto-gerada — card informativo verde #}
+              <div style="background:#e8f5e9; border:1px solid #81c784; border-radius:8px; padding:8px 12px; margin-bottom:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-weight:600; font-size:0.85rem; color:#2e7d32;">✓ {{ rv.get('nome_pjecalc') or rv.get('nome_sentenca', '?') }}</span>
+                  <span class="badge" style="background:#c8e6c9; color:#1b5e20; font-size:0.68rem; padding:2px 8px; border-radius:4px;">Auto Expresso</span>
+                </div>
+                <div style="font-size:0.78rem; color:#558b2f; margin-top:3px;">
+                  Gerada automaticamente pelo Expresso. Não requer ação no plano de preenchimento.
+                </div>
+              </div>
+              {% else %}
+              {# Reflexa manual — card editável #}
+              <div style="background:#fffbea; border:1px solid #ffc107; border-radius:8px; padding:8px 12px; margin-bottom:6px;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                  <span style="font-weight:600; font-size:0.85rem;">{{ rv.get('nome_pjecalc') or rv.get('nome_sentenca', '?') }}</span>
+                  <div style="display:flex; gap:4px;">
+                    <span class="badge badge-amarelo" style="font-size:0.7rem;">Reflexa</span>
+                    <span class="badge badge-cinza" style="font-size:0.7rem;">Manual</span>
+                  </div>
+                </div>
+                <div class="campos-grid" style="margin-top:6px;">
+                  <div class="campo-form">
+                    <label>Estrategia</label>
+                    <select onchange="salvarEstrategia({{ ri }}, 'estrategia', this.value, this)">
+                      <option value="expresso_direto" {{ 'selected' if rep_tipo == 'expresso_direto' }}>Expresso Direto</option>
+                      <option value="manual" {{ 'selected' if rep_tipo == 'manual' }}>Manual</option>
+                      <option value="automatica_expresso" {{ 'selected' if rep_tipo == 'automatica_expresso' }}>Auto Expresso</option>
+                    </select>
+                  </div>
+                  <div class="campo-form">
+                    <label>Parcela Principal</label>
+                    <select onchange="salvarEstrategia({{ ri }}, 'verba_principal_ref', this.value, this)">
+                      {% for vp in todas_verbas_plan %}{% if vp.get('tipo', '') != 'Reflexa' %}
+                      <option value="{{ vp.get('nome_pjecalc') or vp.get('nome_sentenca', '') }}"
+                              {{ 'selected' if (rv.get('verba_principal_ref') or '') == (vp.get('nome_pjecalc') or vp.get('nome_sentenca', '')) }}>
+                        {{ vp.get('nome_pjecalc') or vp.get('nome_sentenca', '?') }}
+                      </option>
+                      {% endif %}{% endfor %}
+                    </select>
+                  </div>
+                </div>
+              </div>
+              {% endif %}
+              {% endfor %}
             </div>
             {% endif %}
 
@@ -2703,6 +2912,41 @@ function toggleVerba(idx) {
   const id = (typeof idx === 'string' && idx.startsWith('plan-')) ? idx : ('verba-corpo-' + idx);
   const corpo = document.getElementById(id);
   if (corpo) corpo.classList.toggle('aberta');
+}
+
+// Ajustar tipo de aviso prévio quando projetar é marcado
+function ajustarTipoAvisoPrevio(projetar) {
+  if (projetar) {
+    // Quando projetar está ativo (aviso indenizado), sugerir Calculado
+    const tipoSel = document.querySelector('#s-aviso select');
+    if (tipoSel && tipoSel.value !== 'Calculado') {
+      tipoSel.value = 'Calculado';
+      salvarCampo('aviso_previo.tipo', 'Calculado', tipoSel);
+    }
+  }
+}
+
+// Mostrar/ocultar seletor de parcela principal quando tipo muda (Seção 14)
+function toggleVerbaPrincipalRef(idx, tipoVal) {
+  const refDiv = document.getElementById('verba-principal-ref-' + idx);
+  if (refDiv) {
+    refDiv.style.display = (tipoVal === 'Reflexa') ? '' : 'none';
+  }
+}
+
+// Mostrar/ocultar seletor de parcela principal no Plano de Preenchimento (Seção 15)
+function togglePlanPrincipalRef(idx, tipoVal) {
+  const refDiv = document.getElementById('plan-principal-ref-' + idx);
+  if (refDiv) {
+    refDiv.style.display = (tipoVal === 'Reflexa') ? '' : 'none';
+  }
+  // Quando muda para Reflexa e estratégia é expresso_direto, sugerir manual
+  // pois reflexas no PJE-Calc precisam de config específica
+  if (tipoVal === 'Reflexa') {
+    const stratSel = document.querySelector('#plan-corpo-' + idx + ' select');
+    // Se for expresso_direto sem reflexas automáticas, mudar para manual pode ser necessário
+    // Mas deixamos o usuário decidir
+  }
 }
 
 // Toast de feedback

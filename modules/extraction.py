@@ -590,7 +590,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA | VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"
@@ -1196,7 +1196,7 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
       "tipo": "SUCUMBENCIAIS | CONTRATUAIS",
       "devedor": "RECLAMANTE | RECLAMADO",
       "tipo_valor": "CALCULADO | INFORMADO",
-      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA | VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
+      "base_apuracao": "BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL | BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
       "percentual": "float | null",
       "valor_informado": "float | null",
       "apurar_ir": "true | false"

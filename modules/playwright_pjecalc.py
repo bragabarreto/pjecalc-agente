@@ -4427,6 +4427,16 @@ class PJECalcPlaywright:
         predefinidas = [v for v in predefinidas if not v.get("_apenas_fgts")]
         personalizadas = [v for v in personalizadas if not v.get("_apenas_fgts")]
 
+        # Filtrar reflexas automatica_expresso — geradas pelo Expresso, não devem ser criadas
+        predefinidas = [
+            v for v in predefinidas
+            if (v.get("estrategia_preenchimento", {}) or {}).get("estrategia") != "automatica_expresso"
+        ]
+        personalizadas = [
+            v for v in personalizadas
+            if (v.get("estrategia_preenchimento", {}) or {}).get("estrategia") != "automatica_expresso"
+        ]
+
         # ── REGRA MANUAL PJE-CALC: Reflexas de verbas Expresso são AUTO-GERADAS ──
         # Segundo o manual (seção 9.7/9.8), após salvar verbas no Expresso, o PJE-Calc
         # gera automaticamente as parcelas reflexas. O usuário apenas clica "Exibir Reflexas"
@@ -5451,7 +5461,16 @@ class PJECalcPlaywright:
             # ── REGRA: Pular reflexas cujo principal foi criado via Expresso ──
             # Parcelas Expresso geram reflexos automaticamente (Aviso Prévio, Férias+1/3,
             # 13º, RSR, Multa 477). Criar reflexo manual duplica e causa erro.
-            _eh_reflexa = v.get("eh_reflexa") or "reflexo" in _nome_lower or "sobre" in _nome_lower
+            # Prioridade: campo 'tipo' explícito > eh_reflexa > heurística por nome
+            _tipo_verba = (v.get("tipo") or "").strip()
+            _ep_tipo_verba = (v.get("estrategia_preenchimento", {}).get("tipo_verba") or "").strip()
+            _eh_reflexa = (
+                _tipo_verba.lower() == "reflexa"
+                or _ep_tipo_verba.lower() == "reflexa"
+                or v.get("eh_reflexa")
+                or "reflexo" in _nome_lower
+                or "sobre" in _nome_lower
+            )
 
             # REGRA ADICIONAL: verbas nomeadas "Reflexo em <categoria>" (ex: "Reflexo em 13o Salário",
             # "Reflexo em Férias e 1/3") são reflexos auto-gerados por QUALQUER verba Expresso
@@ -5467,16 +5486,24 @@ class PJECalcPlaywright:
                     continue
 
             if _eh_reflexa:
-                # Inferir nome da verba principal a partir do nome do reflexo
-                import re as _re_ref
-                # Padrões: "RSR sobre Horas Extras", "13º s/ Horas Extras", "Férias + 1/3 s/ Adicional Noturno"
-                _m_principal = _re_ref.search(
-                    r'(?i)(?:sobre|s/)\s+(.+?)$', nome
-                )
-                _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
+                # Usar verba_principal_ref explícita (editada pelo usuário) se disponível
+                _nome_principal_ref = (
+                    v.get("verba_principal_ref")
+                    or v.get("estrategia_preenchimento", {}).get("verba_principal_ref")
+                    or ""
+                ).strip()
+
+                # Fallback: inferir nome da verba principal a partir do nome do reflexo
                 if not _nome_principal_ref:
-                    _m_principal = _re_ref.match(r'(?i)reflexo\s+(?:de\s+)?(.+?)\s+em\s+', nome)
+                    import re as _re_ref
+                    # Padrões: "RSR sobre Horas Extras", "13º s/ Horas Extras", "Férias + 1/3 s/ Adicional Noturno"
+                    _m_principal = _re_ref.search(
+                        r'(?i)(?:sobre|s/)\s+(.+?)$', nome
+                    )
                     _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
+                    if not _nome_principal_ref:
+                        _m_principal = _re_ref.match(r'(?i)reflexo\s+(?:de\s+)?(.+?)\s+em\s+', nome)
+                        _nome_principal_ref = _m_principal.group(1).strip() if _m_principal else ""
 
                 # Verificar se o principal foi criado via Expresso (reflexos auto-gerados)
                 _skip_expresso = False
@@ -7138,7 +7165,7 @@ class PJECalcPlaywright:
             jornada_dias["sab"] = 0.0
             jornada_dias["dom"] = 0.0
             jornada_semanal = jornada_semanal_cont or round(jornada_diaria * 5, 1)
-            jornada_mensal = round(jornada_semanal * 30 / 7, 1) if jornada_semanal else None
+            jornada_mensal = round(jornada_semanal * 30 / 7, 2) if jornada_semanal else None
             intervalo_min = intervalo_min or (60 if jornada_diaria >= 6 else 15)
             forma_pjecalc = "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA"  # default: jornada diária
             tipo_apuracao = "apuracao_jornada"
@@ -7363,29 +7390,87 @@ class PJECalcPlaywright:
             "escala": "ESCALA",
         }
         _preen_enum = _PREEN_MAP.get(preenchimento, "PROGRAMACAO_SEMANAL")
+        # O radio JSF com s:convertEnum pode ter values variados:
+        # - enum name: PROGRAMACAO_SEMANAL, LIVRE, ESCALA
+        # - enum valor: PRO, LIV, ESC (usado no rendered condition do XHTML)
+        # Tentamos todos os formatos possíveis.
         _preen_res = self._page.evaluate(f"""() => {{
-            const radios = document.querySelectorAll("input[name$='tipoPreenchimentoJornada']");
+            const radios = document.querySelectorAll("input[name$='tipoPreenchimentoJornada'], input[name$='preenchimentoJornadasCartao']");
             if (radios.length === 0) return 'NO_RADIOS';
+
+            // Tabela de match: preenchimento → possíveis values do radio
+            const matchMap = {{
+                'PROGRAMACAO_SEMANAL': ['PROGRAMACAO_SEMANAL', 'PRO', 'Programação Semanal'],
+                'LIVRE': ['LIVRE', 'LIV', 'Livre'],
+                'ESCALA': ['ESCALA', 'ESC', 'Escala'],
+            }};
+            const targets = matchMap['{_preen_enum}'] || ['{_preen_enum}'];
+
+            // 1. Match exato por value
             for (const r of radios) {{
-                if (r.value === '{_preen_enum}' || r.value.toUpperCase().includes('{_preen_enum}')) {{
-                    r.click();
-                    r.dispatchEvent(new Event('change', {{bubbles: true}}));
-                    return 'OK:' + r.value;
+                const val = (r.value || '').toUpperCase();
+                for (const t of targets) {{
+                    if (val === t.toUpperCase()) {{
+                        r.click();
+                        r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        r.dispatchEvent(new Event('click', {{bubbles: true}}));
+                        return 'VALUE:' + r.value;
+                    }}
                 }}
             }}
-            // Fallback: match by label text
+
+            // 2. Match parcial por value (contains)
+            for (const r of radios) {{
+                const val = (r.value || '').toUpperCase();
+                if (val.includes('PROGRAMACAO') || val.includes('PRO')) {{
+                    if ('{_preen_enum}' === 'PROGRAMACAO_SEMANAL') {{
+                        r.click();
+                        r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        return 'PARTIAL:' + r.value;
+                    }}
+                }}
+            }}
+
+            // 3. Match por label text
             for (const r of radios) {{
                 const lbl = r.parentElement ? r.parentElement.textContent.trim().toLowerCase() : '';
-                if ('{preenchimento}' === 'livre' && lbl.includes('livre')) {{ r.click(); return 'LABEL:' + lbl; }}
-                if ('{preenchimento}' === 'programacao_semanal' && lbl.includes('semanal')) {{ r.click(); return 'LABEL:' + lbl; }}
-                if ('{preenchimento}' === 'escala' && lbl.includes('escala')) {{ r.click(); return 'LABEL:' + lbl; }}
+                if ('{preenchimento}' === 'programacao_semanal' && (lbl.includes('semanal') || lbl.includes('programa'))) {{
+                    r.click();
+                    r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return 'LABEL:' + lbl.substring(0, 40);
+                }}
+                if ('{preenchimento}' === 'livre' && lbl.includes('livre')) {{
+                    r.click();
+                    r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return 'LABEL:' + lbl.substring(0, 40);
+                }}
+                if ('{preenchimento}' === 'escala' && lbl.includes('escala')) {{
+                    r.click();
+                    r.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return 'LABEL:' + lbl.substring(0, 40);
+                }}
             }}
-            return 'NOT_FOUND:' + [...radios].map(r => r.value).join(',');
+
+            return 'NOT_FOUND:' + [...radios].map(r => r.value + '=' + (r.parentElement?.textContent?.trim()?.substring(0,30)||'')).join(' | ');
         }}""")
         self._log(f"    Preenchimento radio: {_preen_res}")
         if _preen_res and not _preen_res.startswith("NOT_FOUND") and _preen_res != "NO_RADIOS":
             self._aguardar_ajax()
-            self._page.wait_for_timeout(800)
+            self._page.wait_for_timeout(1500)  # AJAX re-render do painel de programação
+
+            # Aguardar tabela listagemProgramacao renderizar (condição: .valor == 'PRO')
+            if preenchimento == "programacao_semanal":
+                _tabela_ok = False
+                for _t_wait in range(8):
+                    _cnt = self._page.locator("input[id$='listagemProgramacao:0:entrada1']").count()
+                    if _cnt > 0:
+                        _tabela_ok = True
+                        break
+                    self._page.wait_for_timeout(500)
+                if _tabela_ok:
+                    self._log("    ✓ Tabela listagemProgramacao renderizada")
+                else:
+                    self._log("    ⚠ Tabela listagemProgramacao NÃO renderizada — grade pode não ser preenchida")
 
         # Se Escala: selecionar o tipo de escala no dropdown
         if preenchimento == "escala":
@@ -7517,8 +7602,88 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
         elif preenchimento == "programacao_semanal" and not grade:
-            # Fallback: sintetizar grade a partir de jornada_entrada/saida/intervalo
-            self._log("    ⚠ grade_semanal ausente — usando campos flat como fallback para grade")
+            # ── Sintetizar grade semanal a partir de jornada_dias + intervalo ──
+            # Sem grade_semanal explícita, calculamos horários de entrada/saída
+            # para cada dia a partir das horas praticadas e do intervalo.
+            # Ex: 11h/dia + 60min intervalo → 07:00-12:30, 13:30-19:00
+            self._log("    grade_semanal ausente — sintetizando entrada/saída a partir de jornada por dia")
+            _ROW_MAP_SYNTH = {"seg": 0, "ter": 1, "qua": 2, "qui": 3, "sex": 4, "sab": 5, "dom": 6}
+            _intervalo_h = (intervalo_min or 60) / 60.0  # em horas
+
+            def _h_to_hhmm(h):
+                """Converte horas decimais para HH:MM (ex: 13.5 → '13:30')"""
+                hh = int(h)
+                mm = int(round((h - hh) * 60))
+                return f"{hh:02d}:{mm:02d}"
+
+            _grade_preenchida = False
+            for dia, row_idx in _ROW_MAP_SYNTH.items():
+                horas = jornada_dias.get(dia) or 0
+                if horas <= 0:
+                    continue
+
+                # Calcular 2 turnos: trabalho dividido ao meio com intervalo
+                inicio = 7.0  # 07:00 (padrão para jornadas longas)
+                if horas <= 6:
+                    inicio = 8.0  # 08:00 para jornadas curtas
+                meio_trabalho = horas / 2.0
+                fim_turno1 = inicio + meio_trabalho
+                inicio_turno2 = fim_turno1 + _intervalo_h
+                fim_turno2 = inicio_turno2 + (horas - meio_trabalho)
+
+                # Se sem intervalo, um único turno
+                if _intervalo_h <= 0:
+                    turnos_synth = [
+                        (_h_to_hhmm(inicio), _h_to_hhmm(inicio + horas))
+                    ]
+                else:
+                    turnos_synth = [
+                        (_h_to_hhmm(inicio), _h_to_hhmm(fim_turno1)),
+                        (_h_to_hhmm(inicio_turno2), _h_to_hhmm(fim_turno2)),
+                    ]
+
+                for turno_idx, (ent_val, sai_val) in enumerate(turnos_synth):
+                    pair_num = turno_idx + 1
+                    # Preencher entrada
+                    ent_id = f"listagemProgramacao:{row_idx}:entrada{pair_num}"
+                    try:
+                        loc_ent = self._page.locator(f"input[id$='{ent_id}']")
+                        if loc_ent.count() > 0:
+                            loc_ent.first.click()
+                            loc_ent.first.fill("")
+                            loc_ent.first.press_sequentially(ent_val.replace(":", ""), delay=50)
+                            loc_ent.first.press("Tab")
+                            self._page.wait_for_timeout(200)
+                            _grade_preenchida = True
+                        else:
+                            self._log(f"      ⚠ {dia.upper()} E{pair_num}: campo '{ent_id}' não encontrado no DOM")
+                    except Exception as e:
+                        self._log(f"      ⚠ {dia.upper()} E{pair_num}: erro {e}")
+
+                    # Preencher saída
+                    sai_id = f"listagemProgramacao:{row_idx}:saida{pair_num}"
+                    try:
+                        loc_sai = self._page.locator(f"input[id$='{sai_id}']")
+                        if loc_sai.count() > 0:
+                            loc_sai.first.click()
+                            loc_sai.first.fill("")
+                            loc_sai.first.press_sequentially(sai_val.replace(":", ""), delay=50)
+                            loc_sai.first.press("Tab")
+                            self._page.wait_for_timeout(200)
+                            _grade_preenchida = True
+                        else:
+                            self._log(f"      ⚠ {dia.upper()} S{pair_num}: campo '{sai_id}' não encontrado no DOM")
+                    except Exception as e:
+                        self._log(f"      ⚠ {dia.upper()} S{pair_num}: erro {e}")
+
+                    self._log(f"      {dia.upper()} T{pair_num}: {ent_val}–{sai_val}")
+
+            if _grade_preenchida:
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+                self._log("    ✓ Grade semanal sintetizada com sucesso")
+            else:
+                self._log("    ⚠ Grade semanal: nenhum campo preenchido (tabela pode não estar renderizada)")
 
         # ── 3. Quantidade fixa (HST) ──
         if forma == "HST" and qt_he_mes and preenchimento != "livre":
@@ -7551,24 +7716,50 @@ class PJECalcPlaywright:
             "HORAS_EXTRAS_CONFORME_SUMULA_85",
         )
         if forma in _FORMAS_COM_JORNADA and preenchimento != "livre":
-            # Determinar jornada PADRÃO (contratual) — NÃO a praticada
-            _jornada_padrao_diaria = cont.get("jornada_diaria") or cont.get("carga_horaria_diaria")
-            _jornada_padrao_semanal = cont.get("jornada_semanal") or cont.get("carga_horaria_semanal")
-
-            # Se contrato não tem jornada explícita, usar carga horária para inferir
+            # Determinar jornada PADRÃO (contratual) — NÃO a efetivamente praticada!
+            # PRIORIDADE: derivar de carga_horaria (Parâmetros do Cálculo) que é o valor
+            # contratual real. contrato.jornada_diaria pode conter a jornada PRATICADA
+            # (ex: 11h) quando a extração não distingue contratual vs praticada.
+            # HE = praticada (grade) − padrão (aqui). Se padrão = praticada → HE = 0!
             _ch = cont.get("carga_horaria")
-            if not _jornada_padrao_diaria:
-                if _ch and _ch >= 210:
-                    _jornada_padrao_diaria = 8.0
-                elif _ch and _ch >= 155:
-                    _jornada_padrao_diaria = 6.0
-                else:
-                    _jornada_padrao_diaria = 8.0  # CLT padrão
+            _jornada_padrao_diaria = None
+            _jornada_padrao_semanal = None
 
+            # 1ª prioridade: derivar de carga_horaria mensal (fonte confiável)
+            if _ch and _ch >= 210:
+                _jornada_padrao_diaria = 8.0
+                _jornada_padrao_semanal = 44.0  # CLT: 8h × 5 + 4h sáb = 44h
+            elif _ch and _ch >= 175:
+                _jornada_padrao_diaria = 8.0
+                _jornada_padrao_semanal = 40.0
+            elif _ch and _ch >= 155:
+                _jornada_padrao_diaria = 6.0
+                _jornada_padrao_semanal = 36.0
+            elif _ch and _ch > 0:
+                _jornada_padrao_diaria = round(_ch / (4.5 * 5), 1)
+                _jornada_padrao_semanal = round(_jornada_padrao_diaria * 5, 1)
+
+            # 2ª prioridade: carga_horaria_diaria explícita (campo separado)
+            if not _jornada_padrao_diaria:
+                _chd = cont.get("carga_horaria_diaria")
+                if _chd and _chd > 0:
+                    _jornada_padrao_diaria = _chd
+                    _jornada_padrao_semanal = cont.get("carga_horaria_semanal") or _chd * 5
+
+            # 3ª prioridade: jornada_diaria do contrato SOMENTE se não há carga_horaria
+            # (pode ser a praticada, mas é melhor que nada)
+            if not _jornada_padrao_diaria:
+                _jd = cont.get("jornada_diaria")
+                _js = cont.get("jornada_semanal")
+                if _jd:
+                    _jornada_padrao_diaria = _jd
+                    _jornada_padrao_semanal = _js or _jd * 5
+
+            # Fallback final: CLT padrão
+            if not _jornada_padrao_diaria:
+                _jornada_padrao_diaria = 8.0
             if not _jornada_padrao_semanal:
-                _jornada_padrao_semanal = _jornada_padrao_diaria * 5
-                if _jornada_padrao_diaria == 8.0:
-                    _jornada_padrao_semanal = 44.0  # CLT: 8h × 5 + 4h sáb = 44h
+                _jornada_padrao_semanal = 44.0 if _jornada_padrao_diaria == 8.0 else _jornada_padrao_diaria * 5
 
             # Montar dias com jornada PADRÃO (não a praticada!)
             _jornada_padrao_dias = {}
@@ -7612,7 +7803,7 @@ class PJECalcPlaywright:
 
             # Usar jornada PADRÃO para semanal/mensal também
             jornada_semanal = _jornada_padrao_semanal
-            jornada_mensal = round(_jornada_padrao_semanal * 30 / 7, 1)
+            jornada_mensal = round(_jornada_padrao_semanal * 30 / 7, 2)
 
         # ── 5. Jornada semanal e mensal ──
         # qtJornadaSemanal usa currencyMask() — formato decimal BR (ex: "50,00")
