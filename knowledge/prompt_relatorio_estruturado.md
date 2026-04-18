@@ -134,7 +134,18 @@ Regime: [Tempo Integral | Tempo Parcial | Trabalho Intermitente]
 Carga Horária Mensal: [horas/mês — ex: 220 | null se não informado]
 Jornada Diária: [horas/dia — ex: 8.0 | null]
 Jornada Semanal: [horas/semana — ex: 44.0 | null]
+Limitar Cálculo — Data Inicial: [DD/MM/AAAA | null — ver regras abaixo]
+Limitar Cálculo — Data Final: [DD/MM/AAAA | null — ver regras abaixo]
 ```
+
+Regras de "Limitar Cálculo" (período de apuração no PJe-Calc):
+- **Data Inicial**:
+  - Padrão: data de admissão
+  - Se houve prescrição quinquenal pronunciada → data de ajuizamento − 5 anos
+- **Data Final**:
+  - Padrão: data de demissão (com projeção do aviso prévio, se deferido — ex: demissão 05/11/2025 + AP 30 dias = 05/12/2025)
+  - Se houver parcela na condenação que se projeta para período posterior à demissão → a data mais tardia dentre os períodos das verbas (estabilidade indenizada, reintegração, salários do período estabilitário, etc.)
+- Se não houver dados suficientes para inferir, deixar `null` — o agente aplica os defaults automaticamente e o usuário revisa na prévia.
 
 Regras de mapeamento do tipo de dispensa:
 - "Sem justa causa" / "dispensa imotivada" / "rescisão imotivada" → sem_justa_causa

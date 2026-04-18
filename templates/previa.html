@@ -274,6 +274,22 @@
                    {{ 'class=campo-ausente' if 'contrato.ajuizamento' in campos_ausentes }}>
           </div>
           <div class="campo-form">
+            <label>Limitar Cálculo — Data Inicial
+              <span title="Padrão: admissão. Se houver prescrição quinquenal, usa-se ajuizamento − 5 anos. Edite livremente se necessário." style="cursor:help;color:#888;">ⓘ</span>
+            </label>
+            <input type="text" placeholder="DD/MM/AAAA"
+                   value="{{ dados.get('contrato', {}).get('data_inicio_calculo', '') or '' }}"
+                   onchange="salvarCampo('contrato.data_inicio_calculo', this.value, this)">
+          </div>
+          <div class="campo-form">
+            <label>Limitar Cálculo — Data Final
+              <span title="Padrão: demissão + projeção do aviso prévio (se cabível), ou a maior data de término entre as verbas da condenação — cobre estabilidade indenizada e similares." style="cursor:help;color:#888;">ⓘ</span>
+            </label>
+            <input type="text" placeholder="DD/MM/AAAA"
+                   value="{{ dados.get('contrato', {}).get('data_fim_calculo', '') or '' }}"
+                   onchange="salvarCampo('contrato.data_fim_calculo', this.value, this)">
+          </div>
+          <div class="campo-form">
             <label>Tipo de Rescisão</label>
             <select onchange="salvarCampo('contrato.tipo_rescisao', this.value, this)">
               <option value="">— selecione —</option>

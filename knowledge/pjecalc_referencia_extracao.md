@@ -36,6 +36,16 @@
 - **Quinquenal**: PJe-Calc subtrai 5 anos do ajuizamento automaticamente
 - **FGTS**: prescrição quinquenal (STF RE 709.212, substituiu trintenária)
 
+### Limitar Cálculo (Data Inicial / Data Final)
+Fieldset "Limitar Cálculo" em `parametros-do-calculo.jsf`:
+
+| Campo DOM | ID | Tipo | Regra |
+|-----------|-----|------|-------|
+| Data Inicial | `formulario:dataInicioCalculo` | input date DD/MM/AAAA | Padrão = admissão. Se prescrição quinquenal aplicada → ajuizamento − 5 anos |
+| Data Final | `formulario:dataTerminoCalculo` | input date DD/MM/AAAA | Padrão = demissão (+ projeção AP se cabível). Projetada ao futuro quando houver parcela que se estenda além da rescisão — estabilidade indenizada, reintegração, período estabilitário etc. |
+
+Mapeamento no schema: `contrato.data_inicio_calculo` e `contrato.data_fim_calculo`. Ambos opcionais — quando ausentes, o agente calcula defaults e o usuário revisa na prévia.
+
 ---
 
 ## 2. Aviso Prévio

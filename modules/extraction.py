@@ -1515,6 +1515,8 @@ _EXTRACTION_SCHEMA: dict = {
                 "maior_remuneracao": {"type": ["number","null"]},
                 "ultima_remuneracao":{"type": ["number","null"]},
                 "ajuizamento":       {"type": ["string","null"]},
+                "data_inicio_calculo": {"type": ["string","null"]},
+                "data_fim_calculo":    {"type": ["string","null"]},
                 "confianca":         {"type": "number"},
             },
         },
@@ -2984,6 +2986,65 @@ def _normalizar_correcao_juros(dados: dict[str, Any]) -> dict[str, Any]:
     return dados
 
 
+def _aplicar_defaults_limitar_calculo(dados: dict[str, Any]) -> dict[str, Any]:
+    """
+    Preenche contrato.data_inicio_calculo e contrato.data_fim_calculo quando
+    ausentes, seguindo as regras de negócio do PJE-Calc:
+
+    - data_inicio_calculo:
+        • Se prescricao.quinquenal=True e contrato.ajuizamento presente → ajuizamento − 5 anos
+        • Senão → contrato.admissao
+
+    - data_fim_calculo:
+        • Base = contrato.demissao (+30 dias de projeção de AP se aviso_previo.projetar=True)
+        • Máximo com o maior verbas_deferidas[].periodo_fim posterior à demissão
+          (ex.: estabilidade gestante, reintegração, etc.)
+    """
+    from datetime import datetime, timedelta
+
+    def _parse(d):
+        if not d: return None
+        s = str(d).strip()
+        for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
+            try: return datetime.strptime(s, fmt).date()
+            except Exception: pass
+        return None
+
+    def _fmt(d):
+        return d.strftime("%d/%m/%Y") if d else None
+
+    contrato = dados.setdefault("contrato", {})
+    presc = dados.get("prescricao") or {}
+    ap = dados.get("aviso_previo") or {}
+
+    _adm = _parse(contrato.get("admissao"))
+    _dem = _parse(contrato.get("demissao"))
+    _ajz = _parse(contrato.get("ajuizamento"))
+
+    # data_inicio_calculo
+    if not contrato.get("data_inicio_calculo"):
+        if presc.get("quinquenal") and _ajz:
+            _ini = _ajz.replace(year=_ajz.year - 5)
+            contrato["data_inicio_calculo"] = _fmt(_ini)
+        elif _adm:
+            contrato["data_inicio_calculo"] = _fmt(_adm)
+
+    # data_fim_calculo
+    if not contrato.get("data_fim_calculo"):
+        _fim = _dem
+        if _fim and ap.get("projetar"):
+            _fim = _fim + timedelta(days=int(ap.get("prazo_dias") or 30))
+        # projetar para maior periodo_fim das verbas que se estendem além da demissão
+        for v in dados.get("verbas_deferidas") or []:
+            _pf = _parse(v.get("periodo_fim"))
+            if _pf and (not _fim or _pf > _fim):
+                _fim = _pf
+        if _fim:
+            contrato["data_fim_calculo"] = _fmt(_fim)
+
+    return dados
+
+
 def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     """
     Identifica campos obrigatórios ausentes e campos com baixa confiança.
@@ -3001,6 +3062,9 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
         if _cnj_partes:
             _proc.update(_cnj_partes)
             dados["processo"] = _proc
+
+    # Defaults para "Limitar Cálculo" — data_inicio_calculo e data_fim_calculo
+    dados = _aplicar_defaults_limitar_calculo(dados)
 
     # Alerta se JSON foi auto-reparado (dados potencialmente incompletos)
     if dados.pop("_json_auto_reparado", False):
