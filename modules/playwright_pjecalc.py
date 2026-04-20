@@ -9840,74 +9840,22 @@ class PJECalcPlaywright:
         # `servicoDeCalculo` é @Scope(SESSION), @AutoCreate — o campo
         # `calculoAberto` persiste entre conversações e sobrevive a re-attach.
         #
-        # SOLUÇÃO: antes de Exportar, forçar SESSION_CLEAN via retorno à
-        # principal.jsf. pages.xml linhas 43-46 define:
-        #     <rule if-outcome="principal">
-        #         <raise-event type="SESSION_CLEAN"/>
-        #         <redirect view-id="/pages/principal.xhtml"/>
-        #     </rule>
-        # O evento SESSION_CLEAN é observado por ServicoDeCalculo, zerando
-        # `calculoAberto`. Depois reabrir o calc alvo via duplo-click em
-        # Recentes → `isCalculoAberto()` agora é false → `abrirCalculo(alvo)`
-        # EXECUTA → `calculoAberto` = alvo correto → Export gera .PJC certo.
+        # NÃO fazer SESSION_CLEAN aqui.
+        #
+        # HISTÓRICO DO BUG: SESSION_CLEAN navegava para principal.jsf (que zera
+        # calculoAberto), depois tentava re-abrir o calc correto via dblclick nos
+        # Recentes. O problema: o dblclick nos Recentes abria o CALC ERRADO (da
+        # sessão anterior, ex: 0000102), então o export gerava o .PJC errado.
+        # Confirmado por screenshot: exportacao.jsf mostrava "Cálculo: 102 /
+        # Processo: 0000102" mesmo quando o processo alvo era 0000310.
+        #
+        # CORREÇÃO: NÃO usar SESSION_CLEAN. A automação já percorreu todas as fases
+        # do 0000310 (Dados do Processo → Verbas → FGTS → etc → Liquidar) dentro
+        # da mesma sessão Seam. O `calculoAberto` já É o cálculo correto (0000310).
+        # Navegar diretamente para Exportar (via Dados do Cálculo → reload → Exportar)
+        # preserva o calculoAberto correto sem interferência.
         _conv_id_maria = self._calculo_conversation_id
         _proc_alvo = (self._dados or {}).get("processo", {}).get("numero", "")
-
-        self._log(f"  🧹 PRE-EXPORT: limpando session bean (calculoAberto) via SESSION_CLEAN…")
-        try:
-            # 1. Navegar para principal.jsf — dispara SESSION_CLEAN no pages.xml
-            _principal_url = f"{self.PJECALC_BASE}/pages/principal.jsf"
-            self._page.goto(_principal_url, wait_until="domcontentloaded", timeout=15000)
-            self._aguardar_ajax(timeout=8000)
-            self._page.wait_for_timeout(1500)
-            self._log(f"  ✓ SESSION_CLEAN disparado (principal.jsf carregado)")
-
-            # 2. Localizar o calc alvo no listbox "Cálculos Recentes"
-            _listbox = self._page.locator(
-                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
-            )
-            if _listbox.count() > 0:
-                _options = _listbox.first.locator("option")
-                _n_opts = _options.count()
-                _proc_clean = _proc_alvo.replace(".", "").replace("-", "").replace("/", "")
-                _found_idx = None
-                for _idx in range(_n_opts):
-                    _opt_text = (_options.nth(_idx).text_content() or "")
-                    _opt_clean = _opt_text.replace(".", "").replace("-", "").replace("/", "")
-                    if _proc_clean and _proc_clean in _opt_clean:
-                        _found_idx = _idx
-                        break
-
-                if _found_idx is not None:
-                    _opt_el = _options.nth(_found_idx)
-                    _opt_el.click()
-                    self._page.wait_for_timeout(300)
-                    _opt_el.dblclick()
-                    self._aguardar_ajax(timeout=20000)
-                    self._page.wait_for_timeout(2000)
-                    # Capturar novo conversationId
-                    import re as _re_abr
-                    _m_new = _re_abr.search(r"conversationId=(\d+)", self._page.url)
-                    if _m_new:
-                        _conv_id_maria = _m_new.group(1)
-                        self._calculo_conversation_id = _conv_id_maria
-                        self._capturar_base_calculo()
-                    self._log(
-                        f"  ✓ Calc alvo reaberto após SESSION_CLEAN — "
-                        f"calculoAberto agora é o correto (conv={_conv_id_maria})"
-                    )
-                else:
-                    self._log(
-                        f"  ⚠ Calc '{_proc_alvo}' não encontrado nos Recentes "
-                        f"(listagem tem {_n_opts} itens). Post-export validator vai "
-                        f"detectar se export pegar calc errado."
-                    )
-            else:
-                self._log(f"  ⚠ Listbox 'Cálculos Recentes' não encontrado — prosseguindo.")
-        except Exception as _pre_err:
-            self._log(f"  ⚠ PRE-EXPORT cleanup falhou: {_pre_err} — prosseguindo mesmo assim.")
-
-        _exportou = False
 
         # Log do conversationId atual (para diagnóstico)
         try:
@@ -9916,9 +9864,12 @@ class PJECalcPlaywright:
             if _m:
                 _conv_id_live = _m.group(1)
                 self._calculo_conversation_id = _conv_id_live
-                self._log(f"  → conversationId ativo: {_conv_id_live}")
+                _conv_id_maria = _conv_id_live
+                self._log(f"  → Conv ativo pré-export: {_conv_id_live} (calculoAberto={_proc_alvo})")
         except Exception:
             pass
+
+        _exportou = False
 
         # Etapa 1: sair da liquidacao.jsf navegando para Dados do Cálculo.
         # Isso evita HTTP 500 que ocorre ao submeter menu Exportar de dentro
@@ -10121,6 +10072,32 @@ class PJECalcPlaywright:
             self._screenshot_fase("pre_exportacao")
         except Exception:
             pass
+
+        # ── Verificação pré-export: confirmar processo correto na página ──────
+        # exportacao.jsf mostra "Processo: 0000310-69.2026.5.07.0003" no DOM.
+        # Se calculoAberto for errado (bug de sessão residual), abortar AQUI
+        # antes de gerar o .PJC errado — falha limpa e descritiva.
+        try:
+            _proc_alvo_clean = _proc_alvo.replace("-", "").replace(".", "").replace("/", "") if _proc_alvo else ""
+            if _proc_alvo_clean and "exportacao" in self._page.url:
+                _page_text = self._page.locator("body").text_content() or ""
+                _page_clean = _page_text.replace("-", "").replace(".", "").replace("/", "").replace(" ", "")
+                if _proc_alvo_clean not in _page_clean:
+                    # Tentar extrair qual processo a página mostra (para diagnóstico)
+                    import re as _re_pg
+                    _proc_shown = _re_pg.search(r'Processo[:\s]+(\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4})', _page_text)
+                    _proc_shown_str = _proc_shown.group(1) if _proc_shown else "(não identificado)"
+                    raise RuntimeError(
+                        f"PRÉ-EXPORT: exportacao.jsf mostra processo '{_proc_shown_str}' "
+                        f"mas o alvo é '{_proc_alvo}'. "
+                        f"calculoAberto corrompido — SESSION contém cálculo de outro processo."
+                    )
+                else:
+                    self._log(f"  ✓ Verificação pré-export OK: página confirma processo {_proc_alvo}")
+        except RuntimeError:
+            raise
+        except Exception as _vpre_err:
+            self._log(f"  ⚠ Verificação pré-export: {_vpre_err} (continuando)")
 
         # Clicar botão Exportar (a4j:commandButton id="exportar" em exportacao.xhtml)
         # FLUXO DOCUMENTADO (exportacao.xhtml):
