@@ -3113,10 +3113,25 @@ class PJECalcPlaywright:
             self._marcar_radio("reclamanteTipoDocumentoPrevidenciario", "PIS")
             self._preencher("reclamanteNumeroDocumentoPrevidenciario", _pis, False)
 
+        # NOTA: NÃO salvar aqui. Manual oficial (Seção 5 + Seção 10) exige que o
+        # Salvar ocorra APENAS APÓS ambas as abas (Dados do Processo + Parâmetros
+        # do Cálculo) estarem preenchidas: "CRITICO: Apos completar e verificar
+        # ambas as abas, o usuario DEVE clicar no icone Salvar". Salvar apenas
+        # com a aba Geral preenchida gera "Existem erros no formulário" porque
+        # campos obrigatórios dos Parâmetros (estado/município/carga horária)
+        # ainda não foram informados. O Salvar final ocorre no fim desta fase.
+
+        # ── Aba Parâmetros do Cálculo ──
+        self._log("  → Aba Parâmetros do Cálculo…")
+        self._clicar_aba("tabParametrosCalculo")
+        self._page.wait_for_timeout(600)
+        self.mapear_campos("fase1_parametros")
+
         # ── Comentários: Justiça Gratuita → exigibilidade suspensa (art. 791-A, §4º, CLT) ──
-        # IMPORTANTE: preencher AQUI, enquanto a aba "Dados do Processo" está ativa.
-        # O campo 'comentarios' está na aba Geral (não na aba Parâmetros). Se preenchido
-        # depois da navegação para a aba Parâmetros, o campo não está no DOM → silently skipped.
+        # IMPORTANTE: campo 'comentarios' está na aba "Parâmetros do Cálculo" (confirmado
+        # por inspeção DOM em pje.trt7.jus.br). Preencher LOGO após navegar para essa aba,
+        # antes dos demais campos, para evitar que AJAX subsequente re-renderize a página
+        # e limpe o valor.
         _jg_fase1 = dados.get("justica_gratuita", {})
         _honorarios_fase1 = dados.get("honorarios", [])
         if isinstance(_honorarios_fase1, dict):
@@ -3135,22 +3150,19 @@ class PJECalcPlaywright:
                 f"suspensa, ante a gratuidade judiciária deferida, nos termos do "
                 f"art. 791-A, parágrafo 4o, da CLT."
             )
-            self._preencher("comentarios", _comentario_jg_f1, False)
-            self._log(f"  ✓ Comentários JG: exigibilidade suspensa — {', '.join(_partes_jg_f1)}")
-
-        # NOTA: NÃO salvar aqui. Manual oficial (Seção 5 + Seção 10) exige que o
-        # Salvar ocorra APENAS APÓS ambas as abas (Dados do Processo + Parâmetros
-        # do Cálculo) estarem preenchidas: "CRITICO: Apos completar e verificar
-        # ambas as abas, o usuario DEVE clicar no icone Salvar". Salvar apenas
-        # com a aba Geral preenchida gera "Existem erros no formulário" porque
-        # campos obrigatórios dos Parâmetros (estado/município/carga horária)
-        # ainda não foram informados. O Salvar final ocorre no fim desta fase.
-
-        # ── Aba Parâmetros do Cálculo ──
-        self._log("  → Aba Parâmetros do Cálculo…")
-        self._clicar_aba("tabParametrosCalculo")
-        self._page.wait_for_timeout(600)
-        self.mapear_campos("fase1_parametros")
+            # Scroll até o campo e preencher (está no final da página da aba Parâmetros)
+            try:
+                _loc_coment = self._page.locator("[id$='comentarios']")
+                if _loc_coment.count() > 0:
+                    _loc_coment.first.scroll_into_view_if_needed()
+                    self._page.wait_for_timeout(200)
+            except Exception:
+                pass
+            _coment_ok = self._preencher("comentarios", _comentario_jg_f1, False)
+            if _coment_ok:
+                self._log(f"  ✓ Comentários JG: exigibilidade suspensa — {', '.join(_partes_jg_f1)}")
+            else:
+                self._log(f"  ⚠ Comentários JG: campo 'comentarios' não encontrado na aba Parâmetros")
 
         # Estado + Município (IDs confirmados por inspeção DOM: formulario:estado, formulario:municipio)
         # Estado usa índice numérico (0=AC, 1=AL, ..., 5=CE, ...) — NÃO a sigla como value
