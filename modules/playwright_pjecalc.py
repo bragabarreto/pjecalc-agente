@@ -10409,7 +10409,13 @@ class PJECalcPlaywright:
         # Se calculoAberto for errado (bug de sessão residual), abortar AQUI
         # antes de gerar o .PJC errado — falha limpa e descritiva.
         try:
-            _proc_alvo_clean = _proc_alvo.replace("-", "").replace(".", "").replace("/", "") if _proc_alvo else ""
+            # Normalizar _proc_alvo para padrão CNJ puro antes de comparar —
+            # sessões antigas podem ter "ATSum NNNNNNN-..." com prefixo não-numérico.
+            _proc_alvo_cnj = _proc_alvo or ""
+            _cnj_only = re.search(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}", _proc_alvo_cnj)
+            if _cnj_only:
+                _proc_alvo_cnj = _cnj_only.group(0)
+            _proc_alvo_clean = _proc_alvo_cnj.replace("-", "").replace(".", "").replace("/", "") if _proc_alvo_cnj else ""
             if _proc_alvo_clean and "exportacao" in self._page.url:
                 _page_text = self._page.locator("body").text_content() or ""
                 _page_clean = _page_text.replace("-", "").replace(".", "").replace("/", "").replace(" ", "")
@@ -10545,6 +10551,10 @@ class PJECalcPlaywright:
                     # com o processo alvo. Se não, ABORTAR — não entregar
                     # .PJC de calc residual ao usuário.
                     _proc_alvo = (self._dados or {}).get("processo", {}).get("numero", "")
+                    # Normalizar para CNJ puro (ignora prefixos como "ATSum ")
+                    _cnj_m2 = re.search(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}", _proc_alvo or "")
+                    if _cnj_m2:
+                        _proc_alvo = _cnj_m2.group(0)
                     _proc_clean = _proc_alvo.replace(".", "").replace("-", "").replace("/", "")
                     if _proc_clean and _pjc_filename:
                         _fname_clean = _pjc_filename.replace(".", "").replace("-", "").replace("/", "").replace("_", "")
