@@ -1573,7 +1573,8 @@ class PJECalcPlaywright:
         # NÃO usar URL direta para "Liquidar" e "Exportar" — a navegação via URL
         # não inicializa os backing beans Seam, causando NPE em registro.data.
         # Essas páginas DEVEM ser acessadas via sidebar JSF click.
-        _SKIP_URL_NAV = {"Liquidar", "Exportar", "Exportação"}
+        _SKIP_URL_NAV = {"Liquidar", "Exportar", "Exportação",
+                         "Correção, Juros e Multa", "Correção e Juros"}
         if self._calculo_url_base and self._calculo_conversation_id and texto not in _SKIP_URL_NAV:
             jsf_page = _URL_SECTION_MAP.get(texto)
             if jsf_page:
@@ -8401,10 +8402,31 @@ class PJECalcPlaywright:
         # errada — e o PJC exporta os defaults do H2 (ex: baseDeJurosDasVerbas=VERBA_INSS).
         self._capturar_base_calculo()
 
-        # Navegar para correção/juros — prioriza sidebar click (não depende de URL exata)
-        _nav_ok = self._clicar_menu_lateral("Correção, Juros e Multa", obrigatorio=False)
-        self._aguardar_ajax()
-        self._page.wait_for_timeout(1000)
+        # Navegar para correção/juros via botão do formulário (POST JSF).
+        # ⚠ Não usar URL nav para esta página: page.goto() não passa pelas regras de
+        # navegação do Seam, então ApresentadorParametrosDeAtualizacao.salvar() falha
+        # com NPE em ParametrosDeAtualizacao.verificarCombinacoesDeCorrecaoMonetaria:465
+        # (this.calculo == null). O click no input button faz POST JSF que inicializa
+        # corretamente o bean, incluindo o FK calculo.
+        _nav_ok = self._page.evaluate("""() => {
+            const btns = [...document.querySelectorAll("input[type='button']")];
+            const btn = btns.find(b => {
+                const v = (b.value || '').normalize('NFD')
+                    .replace(/[\\u0300-\\u036f]/g, '').toLowerCase();
+                return v.includes('correc') && (v.includes('juros') || v.includes('multa'));
+            });
+            if (btn) { btn.click(); return true; }
+            return false;
+        }""")
+        if _nav_ok:
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(1000)
+            self._log("  → Navegou para Correção/Juros via botão do formulário (POST JSF)")
+        else:
+            # Fallback ao menu lateral (excluindo URL nav para evitar NPE em calculo==null)
+            _nav_ok = self._clicar_menu_lateral("Correção, Juros e Multa", obrigatorio=False)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(1000)
 
         # Verificar se chegou na página (URL pode ser correcao-juros.jsf, atualizacao.jsf, etc.)
         _url_atual = self._page.url.lower()
