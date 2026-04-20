@@ -8394,6 +8394,13 @@ class PJECalcPlaywright:
         """
         self._log("Fase 6 — Parâmetros de atualização (Correção, Juros e Multa)…")
 
+        # Atualizar _calculo_conversation_id com o conv atual antes da navegação.
+        # Após Honorários (Fase 8) e Custas (Fase 9) o conv avançou além do 80
+        # capturado em IRPF (Fase 7). Sem esta atualização, _clicar_menu_lateral
+        # navega via URL com conv=80 (stale), gravando os parâmetros na Seam bean
+        # errada — e o PJC exporta os defaults do H2 (ex: baseDeJurosDasVerbas=VERBA_INSS).
+        self._capturar_base_calculo()
+
         # Navegar para correção/juros — prioriza sidebar click (não depende de URL exata)
         _nav_ok = self._clicar_menu_lateral("Correção, Juros e Multa", obrigatorio=False)
         self._aguardar_ajax()
@@ -8616,27 +8623,25 @@ class PJECalcPlaywright:
             self._marcar_checkbox("aplicarMulta523", True)
             self._log("  ✓ Multa art. 523 CPC: aplicar")
 
-        # NÃO CLICAR SALVAR — evita NPE confirmada em
+        # Persistir os parâmetros via Salvar.
+        #
+        # Histórico: anteriormente era pulado para evitar NPE em
         # ParametrosDeAtualizacao.verificarCombinacoesDeCorrecaoMonetaria:465
-        # (chamada a partir de ApresentadorParametrosDeAtualizacao.salvar:114).
+        # → `new TabelaDeCorrecaoMonetaria(indice, calculo.getIndicesAcumulados(), ...)`
+        # onde `indicesAcumulados` é null antes da liquidação.
         #
-        # Causa raiz: `salvar()` invoca `verificarCombinacoesDeCorrecaoMonetaria()`
-        # que chama `verificarCombinacaoDeTabelasDeCorrecao(apartir, getIndiceTrabalhista())`
-        # → `new TabelaDeCorrecaoMonetaria(indice, calculo.getIndicesAcumulados(),
-        #    getIgnorarTaxaNegativa())`. Como `indicesAcumulados` só é definido na
-        # página `liquidacao.xhtml` (Fase 7), quando Fase 6 tenta salvar ele ainda
-        # é null → NPE.
+        # No entanto, sem salvar, os campos (ex: baseDeJurosDasVerbas) NÃO são
+        # persistidos no DB. O `ApresentadorParametrosDeAtualizacao` é @Scope(SESSION)
+        # mas os selects sem `a4j:support onchange` só chegam ao servidor via submit.
+        # Resultado: o PJC exportado sempre mostrava VERBA_INSS (default H2).
         #
-        # Estratégia correta: `ApresentadorParametrosDeAtualizacao.iniciar()` já
-        # carregou o `registro` via `servicoDeCalculo.obterParametrosDeAtualizacao()`
-        # com os defaults do cálculo (IPCA_E, PADRAO, etc.). Como o apresentador
-        # é `@Scope(SESSION)`, as alterações feitas via AJAX (`a4j:support onchange`)
-        # permanecem vivas no registro até a liquidação. Pular o click em Salvar
-        # elimina a NPE sem perder os valores configurados.
-        #
-        # Após a Fase 7 (liquidação, que define `indicesAcumulados`), o servidor
-        # persiste o estado final automaticamente via `calculo.salvar()`.
-        self._log("  ✓ Parâmetros de atualização configurados (registro session-scoped — salvar() pulado para evitar NPE pré-liquidação)")
+        # Novo comportamento: tenta salvar; se NPE (retorno False), loga aviso e
+        # continua — o regerar+liquidar subsequente pode usar os defaults do DB.
+        _save_params_ok = self._clicar_salvar()
+        if _save_params_ok:
+            self._log("  ✓ Parâmetros de atualização salvos com sucesso.")
+        else:
+            self._log("  ⚠ Parâmetros de atualização: salvar() retornou False (possível NPE pré-liquidação) — continuando com defaults do DB.")
 
     # ── Salário-família (passo 7 do manual) ──────────────────────────────────
 
