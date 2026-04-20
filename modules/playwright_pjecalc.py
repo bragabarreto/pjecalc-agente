@@ -8529,25 +8529,39 @@ class PJECalcPlaywright:
 
         # --- Base de juros ---
         # Mapeamento dos termos da extração para os valores do select PJE-Calc.
-        # "Verbas" (todas as verbas) → TODAS_AS_VERBAS  (corrigido: antes mapeava VERBA_INSS)
-        # "Verba INSS" → VERBA_INSS
+        # Opções reais do DOM: VERBA ("Verba"), VERBA_MENOS_CS, VERBA_MENOS_CS_MENOS_PP.
+        # NOTA: quando combinarOutroJuros=true este select fica OCULTO (rendered=false JSF),
+        # então _localizar retorna None silenciosamente — comportamento esperado.
         _base = cj.get("base_juros", "Verbas")
         _base_map = {
-            "Verbas": "TODAS_AS_VERBAS",
-            "Todas as Verbas": "TODAS_AS_VERBAS",
-            "TODAS_AS_VERBAS": "TODAS_AS_VERBAS",
-            "Verba INSS": "VERBA_INSS",
-            "VERBA_INSS": "VERBA_INSS",
+            "Verbas": "VERBA",             # DOM value "VERBA", label "Verba"
+            "Todas as Verbas": "VERBA",
+            "TODAS_AS_VERBAS": "VERBA",    # Legado: mapeava para opção inexistente
+            "VERBA": "VERBA",
+            "Verba": "VERBA",
+            "Verba INSS": "VERBA",         # VERBA_INSS não é opção DOM válida; usar VERBA
+            "VERBA_INSS": "VERBA",
+            "VERBA_MENOS_CS": "VERBA_MENOS_CS",
+            "VERBA_MENOS_CS_MENOS_PP": "VERBA_MENOS_CS_MENOS_PP",
             "Credito Total": "CREDITO_TOTAL",
             "CREDITO_TOTAL": "CREDITO_TOTAL",
         }
         _val_base = _base_map.get(_base, _base)
-        self._selecionar("baseDeJurosDasVerbas", _val_base, obrigatorio=False)
-        self._log(f"  ✓ Base de juros: {_val_base}")
+        _base_ok = self._selecionar("baseDeJurosDasVerbas", _val_base, obrigatorio=False)
+        if _base_ok:
+            self._log(f"  ✓ Base de juros: {_val_base}")
+        else:
+            self._log(f"  ℹ Base de juros: {_val_base} (oculto — combinarOutroJuros ativo ou não encontrado)")
 
         # --- Segunda tabela de juros (combinar juros — Lei 14.905/2024) ---
         # Extração pode trazer: combinar_juros=true, segunda_tabela_juros="TAXA_LEGAL",
         # a_partir_de_juros="DD/MM/AAAA"
+        # ⚠ ORDEM CRÍTICA: setar a DATA primeiro, aguardar AJAX re-render, DEPOIS setar
+        # outroJuros via JS direto (sem dispatch change event). Motivo: o blur da data
+        # dispara AJAX que re-renderiza a seção de combinação com outroJuros=SEM_JUROS
+        # (estado do bean servidor). Se outroJuros for setado antes, o re-render o redefine.
+        # Setando após o re-render e sem change event, o DOM fica TAXA_LEGAL e o Salvar
+        # inclui o valor correto no form POST.
         _combinar_juros = cj.get("combinar_juros", False)
         _segunda_tabela = cj.get("segunda_tabela_juros") or cj.get("segundo_juros")
         _a_partir_juros = cj.get("a_partir_de_juros") or cj.get("data_inicio_segundo_juros")
@@ -8555,17 +8569,48 @@ class PJECalcPlaywright:
             self._marcar_checkbox("combinarOutroJuros", True)
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
-            if _segunda_tabela:
-                _val_seg_juros = _juros_text_map.get(_segunda_tabela, _segunda_tabela)
-                (self._selecionar("outroJuros", _val_seg_juros, obrigatorio=False)
-                 or self._selecionar("segundaTabelaJuros", _val_seg_juros, obrigatorio=False)
-                 or self._selecionar("segundoJuros", _val_seg_juros, obrigatorio=False))
-                self._log(f"  ✓ Segunda tabela juros: {_val_seg_juros}")
+            # 1) Setar a DATA primeiro → dispara blur AJAX → re-render da seção de combo
             if _a_partir_juros:
                 (self._preencher_data("aPartirDeOutroJuros", _a_partir_juros, False)
                  or self._preencher_data("dataInicioOutroJuros", _a_partir_juros, False)
                  or self._preencher_data("dataInicioSegundoJuros", _a_partir_juros, False))
+                self._aguardar_ajax()  # Aguarda re-render do section de combinação
+                self._page.wait_for_timeout(500)
                 self._log(f"  ✓ A partir de (segundo juros): {_a_partir_juros}")
+            # 2) Setar outroJuros APÓS o re-render via JS direto (sem change event)
+            #    → DOM fica com TAXA_LEGAL; Salvar inclui no form POST sem nova re-renderização
+            if _segunda_tabela:
+                _val_seg_juros = _juros_text_map.get(_segunda_tabela, _segunda_tabela)
+                _outro_ok = self._page.evaluate(
+                    """([suffix, val]) => {
+                        const aliases = [suffix, 'outroJuros', 'segundaTabelaJuros', 'segundoJuros'];
+                        let sel = null;
+                        for (const s of aliases) {
+                            sel = [...document.querySelectorAll('select')]
+                                .find(el => el.id && el.id.endsWith(s));
+                            if (sel) break;
+                        }
+                        if (!sel) return false;
+                        const n = v => (v || '').toString().trim().toLowerCase();
+                        const target = n(val);
+                        for (const opt of sel.options) {
+                            if (n(opt.value) === target || n(opt.text) === target) {
+                                sel.value = opt.value;
+                                return opt.value;  // retorna value real (ex: TAXA_LEGAL)
+                            }
+                        }
+                        return false;
+                    }""",
+                    ["outroJuros", _val_seg_juros],
+                )
+                if _outro_ok:
+                    self._log(f"  ✓ Segunda tabela juros: {_val_seg_juros} → DOM={_outro_ok}")
+                else:
+                    # Fallback: usar _selecionar (com AJAX — menos confiável mas tenta mesmo assim)
+                    (self._selecionar("outroJuros", _val_seg_juros, obrigatorio=False)
+                     or self._selecionar("segundaTabelaJuros", _val_seg_juros, obrigatorio=False)
+                     or self._selecionar("segundoJuros", _val_seg_juros, obrigatorio=False))
+                    self._log(f"  ⚠ Segunda tabela juros (fallback _selecionar): {_val_seg_juros}")
 
         # --- Segundo índice de correção monetária (combinar com outro) ---
         # Só combinar quando os índices pré e pós são DIFERENTES (ex: IPCA-E → IPCA).
