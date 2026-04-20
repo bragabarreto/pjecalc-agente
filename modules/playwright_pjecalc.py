@@ -3113,6 +3113,31 @@ class PJECalcPlaywright:
             self._marcar_radio("reclamanteTipoDocumentoPrevidenciario", "PIS")
             self._preencher("reclamanteNumeroDocumentoPrevidenciario", _pis, False)
 
+        # ── Comentários: Justiça Gratuita → exigibilidade suspensa (art. 791-A, §4º, CLT) ──
+        # IMPORTANTE: preencher AQUI, enquanto a aba "Dados do Processo" está ativa.
+        # O campo 'comentarios' está na aba Geral (não na aba Parâmetros). Se preenchido
+        # depois da navegação para a aba Parâmetros, o campo não está no DOM → silently skipped.
+        _jg_fase1 = dados.get("justica_gratuita", {})
+        _honorarios_fase1 = dados.get("honorarios", [])
+        if isinstance(_honorarios_fase1, dict):
+            _honorarios_fase1 = [_honorarios_fase1] if _honorarios_fase1 else []
+        _devedores_hon_fase1 = {h.get("devedor", "").upper() for h in _honorarios_fase1 if isinstance(h, dict)}
+        _jg_dev_rec_fase1 = _jg_fase1.get("reclamante", False) and "RECLAMANTE" in _devedores_hon_fase1
+        _jg_dev_recdo_fase1 = _jg_fase1.get("reclamado", False) and "RECLAMADO" in _devedores_hon_fase1
+        if _jg_dev_rec_fase1 or _jg_dev_recdo_fase1:
+            _partes_jg_f1 = []
+            if _jg_dev_rec_fase1:
+                _partes_jg_f1.append(f"pelo(a) reclamante ({proc.get('reclamante', 'reclamante')})")
+            if _jg_dev_recdo_fase1:
+                _partes_jg_f1.append(f"pelo(a) reclamado(a) ({proc.get('reclamado', 'reclamado')})")
+            _comentario_jg_f1 = (
+                f"Honorários advocatícios devidos {' e '.join(_partes_jg_f1)} com exigibilidade "
+                f"suspensa, ante a gratuidade judiciária deferida, nos termos do "
+                f"art. 791-A, parágrafo 4o, da CLT."
+            )
+            self._preencher("comentarios", _comentario_jg_f1, False)
+            self._log(f"  ✓ Comentários JG: exigibilidade suspensa — {', '.join(_partes_jg_f1)}")
+
         # NOTA: NÃO salvar aqui. Manual oficial (Seção 5 + Seção 10) exige que o
         # Salvar ocorra APENAS APÓS ambas as abas (Dados do Processo + Parâmetros
         # do Cálculo) estarem preenchidas: "CRITICO: Apos completar e verificar
@@ -3389,36 +3414,6 @@ class PJECalcPlaywright:
             if ir.get("dependentes"):
                 self._marcar_checkbox("possuiDependentes", True)
                 self._preencher("quantidadeDependentes", str(ir["dependentes"]), False)
-
-        # ── Comentários: Justiça Gratuita → exigibilidade suspensa (art. 791-A, §4º, CLT) ──
-        # Só incluir a frase quando a parte beneficiária da JG é DEVEDORA de honorários
-        jg = dados.get("justica_gratuita", {})
-        _jg_reclamante = jg.get("reclamante", False)
-        _jg_reclamado = jg.get("reclamado", False)
-        _honorarios = dados.get("honorarios", [])
-        if isinstance(_honorarios, dict):
-            _honorarios = [_honorarios] if _honorarios else []
-        # Verificar quais partes com JG são devedoras de honorários
-        _devedores_hon = {h.get("devedor", "").upper() for h in _honorarios if isinstance(h, dict)}
-        _jg_devedor_reclamante = _jg_reclamante and "RECLAMANTE" in _devedores_hon
-        _jg_devedor_reclamado = _jg_reclamado and "RECLAMADO" in _devedores_hon
-        if _jg_devedor_reclamante or _jg_devedor_reclamado:
-            # Montar descrição da(s) parte(s) beneficiária(s) que são devedoras
-            _partes_jg = []
-            if _jg_devedor_reclamante:
-                _nome_reclamante = proc.get("reclamante", "pelo(a) reclamante")
-                _partes_jg.append(f"pelo(a) reclamante ({_nome_reclamante})")
-            if _jg_devedor_reclamado:
-                _nome_reclamado = proc.get("reclamado", "pelo(a) reclamado(a)")
-                _partes_jg.append(f"pelo(a) reclamado(a) ({_nome_reclamado})")
-            _desc_partes = " e ".join(_partes_jg)
-            _comentario_jg = (
-                f"Honorários advocatícios devidos {_desc_partes} com exigibilidade "
-                f"suspensa, ante a gratuidade judiciária deferida, nos termos do "
-                f"art. 791-A, parágrafo 4o, da CLT."
-            )
-            self._preencher("comentarios", _comentario_jg, False)
-            self._log(f"  ✓ Comentários: justiça gratuita — {_desc_partes}")
 
         if not self._salvar_com_deteccao_erros("Fase 1", dados, max_tentativas=3):
             self._log("  ⚠ Fase 1: Salvar não confirmado — dados do processo podem não ter persistido.")
@@ -5081,6 +5076,7 @@ class PJECalcPlaywright:
                 v.get("percentual") is not None,
                 v.get("base_calculo"),
                 v.get("quantidade") is not None,
+                v.get("valor_informado") is not None,  # verbas com valor fixo (ex: danos morais)
             ])
             if _tem_dado:
                 try:
@@ -6150,8 +6146,15 @@ class PJECalcPlaywright:
                     _val_ok = _setar_campo_por_valor("INFORMADO", "valor")
                     if _val_ok:
                         self._aguardar_ajax()
-                # formulario:outroValorDoMultiplicador — campo Multiplicador confirmado
-                self._preencher("outroValorDoMultiplicador", _fmt_br(v["valor_informado"]), False)
+                # Em modo INFORMADO, o painel com outroValorDoMultiplicador NÃO é renderizado
+                # (rendered=#{isValorDevidoCalculado}). O campo correto é baseDeCalculo
+                # (ou outroValorDaBase), que recebe o valor fixo diretamente.
+                # Tentamos os IDs mais prováveis em ordem; obrigatorio=False → falha silenciosa.
+                _val_str = _fmt_br(v["valor_informado"])
+                (self._preencher("baseDeCalculo", _val_str, False)
+                 or self._preencher("outroValorDaBase", _val_str, False)
+                 or self._preencher("outroValorDoMultiplicador", _val_str, False)
+                 or self._preencher("valorInformado", _val_str, False))
             else:
                 _val_ok = self._preencher_radio_ou_select("valor", "CALCULADO", obrigatorio=False)
                 if not _val_ok:
@@ -8459,14 +8462,54 @@ class PJECalcPlaywright:
             self._log(f"  ✓ Data marco Taxa Legal: {_data_marco}")
 
         # --- Base de juros ---
+        # Mapeamento dos termos da extração para os valores do select PJE-Calc.
+        # "Verbas" (todas as verbas) → TODAS_AS_VERBAS  (corrigido: antes mapeava VERBA_INSS)
+        # "Verba INSS" → VERBA_INSS
         _base = cj.get("base_juros", "Verbas")
-        _base_map = {"Verbas": "VERBA_INSS", "Credito Total": "CREDITO_TOTAL"}
-        _val_base = _base_map.get(_base, "VERBA_INSS")
+        _base_map = {
+            "Verbas": "TODAS_AS_VERBAS",
+            "Todas as Verbas": "TODAS_AS_VERBAS",
+            "TODAS_AS_VERBAS": "TODAS_AS_VERBAS",
+            "Verba INSS": "VERBA_INSS",
+            "VERBA_INSS": "VERBA_INSS",
+            "Credito Total": "CREDITO_TOTAL",
+            "CREDITO_TOTAL": "CREDITO_TOTAL",
+        }
+        _val_base = _base_map.get(_base, _base)
         self._selecionar("baseDeJurosDasVerbas", _val_base, obrigatorio=False)
         self._log(f"  ✓ Base de juros: {_val_base}")
 
-        # --- Segundo índice de correção (combinar com outro) ---
-        _segundo_indice = cj.get("segundo_indice") or cj.get("indice_correcao_pos")
+        # --- Segunda tabela de juros (combinar juros — Lei 14.905/2024) ---
+        # Extração pode trazer: combinar_juros=true, segunda_tabela_juros="TAXA_LEGAL",
+        # a_partir_de_juros="DD/MM/AAAA"
+        _combinar_juros = cj.get("combinar_juros", False)
+        _segunda_tabela = cj.get("segunda_tabela_juros") or cj.get("segundo_juros")
+        _a_partir_juros = cj.get("a_partir_de_juros") or cj.get("data_inicio_segundo_juros")
+        if _combinar_juros or _segunda_tabela:
+            self._marcar_checkbox("combinarOutroJuros", True)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(500)
+            if _segunda_tabela:
+                _val_seg_juros = _juros_text_map.get(_segunda_tabela, _segunda_tabela)
+                (self._selecionar("outroJuros", _val_seg_juros, obrigatorio=False)
+                 or self._selecionar("segundaTabelaJuros", _val_seg_juros, obrigatorio=False)
+                 or self._selecionar("segundoJuros", _val_seg_juros, obrigatorio=False))
+                self._log(f"  ✓ Segunda tabela juros: {_val_seg_juros}")
+            if _a_partir_juros:
+                (self._preencher_data("aPartirDeOutroJuros", _a_partir_juros, False)
+                 or self._preencher_data("dataInicioOutroJuros", _a_partir_juros, False)
+                 or self._preencher_data("dataInicioSegundoJuros", _a_partir_juros, False))
+                self._log(f"  ✓ A partir de (segundo juros): {_a_partir_juros}")
+
+        # --- Segundo índice de correção monetária (combinar com outro) ---
+        # Só combinar quando os índices pré e pós são DIFERENTES (ex: IPCA-E → IPCA).
+        # Se indice_correcao == indice_correcao_pos → mesmo índice, não combinar.
+        _segundo_indice = cj.get("segundo_indice")
+        if not _segundo_indice:
+            _idx_pre = cj.get("indice_correcao", "")
+            _idx_pos = cj.get("indice_correcao_pos", "")
+            if _idx_pos and _idx_pos != _idx_pre:
+                _segundo_indice = _idx_pos
         if _segundo_indice:
             self._marcar_checkbox("combinarComOutro", True)
             self._aguardar_ajax()
@@ -9155,10 +9198,39 @@ class PJECalcPlaywright:
 
             self._log(f"  → Salvando honorário [{i+1}/{len(hon_lista)}]")
             try:
-                self._clicar_salvar()
+                _save_ok = self._clicar_salvar()
                 self._aguardar_ajax()
                 self._page.wait_for_timeout(500)
-                self._log(f"  ✓ Honorário [{i+1}/{len(hon_lista)}] salvo")
+                if not _save_ok:
+                    # Verificar se o erro é "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL requer verbas"
+                    # Nesse caso, fallback para base BRUTO (que sempre funciona)
+                    try:
+                        _page_text = self._page.locator("body").text_content() or ""
+                    except Exception:
+                        _page_text = ""
+                    _erro_vnp = (
+                        "não compõem" in _page_text.lower()
+                        or "nao compoem" in _page_text.lower()
+                        or "VERBAS_QUE_NAO" in _page_text
+                        or "informar ao menos uma verba" in _page_text.lower()
+                    )
+                    if _erro_vnp:
+                        self._log(
+                            f"  ⚠ Honorário [{i+1}]: 'Verbas que não compõem o Principal' exige verbas "
+                            f"explícitas — fallback para base BRUTO (art. 791-A, §3º, CLT)"
+                        )
+                        self._selecionar("baseParaApuracao", "BRUTO", obrigatorio=False)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
+                        _save_ok = self._clicar_salvar()
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
+                    if not _save_ok:
+                        self._log(f"  ✗ Honorário [{i+1}/{len(hon_lista)}] não confirmado pelo servidor")
+                    else:
+                        self._log(f"  ✓ Honorário [{i+1}/{len(hon_lista)}] salvo (base fallback BRUTO)")
+                else:
+                    self._log(f"  ✓ Honorário [{i+1}/{len(hon_lista)}] salvo")
             except Exception as _e_save:
                 self._log(f"  ✗ Honorário [{i+1}/{len(hon_lista)}] falhou no save: {_e_save}")
                 # Capturar HTML da página para diagnóstico (sem screenshot)
