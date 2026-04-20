@@ -8554,14 +8554,13 @@ class PJECalcPlaywright:
             self._log(f"  ℹ Base de juros: {_val_base} (oculto — combinarOutroJuros ativo ou não encontrado)")
 
         # --- Segunda tabela de juros (combinar juros — Lei 14.905/2024) ---
-        # Extração pode trazer: combinar_juros=true, segunda_tabela_juros="TAXA_LEGAL",
-        # a_partir_de_juros="DD/MM/AAAA"
-        # ⚠ ORDEM CRÍTICA: setar a DATA primeiro, aguardar AJAX re-render, DEPOIS setar
-        # outroJuros via JS direto (sem dispatch change event). Motivo: o blur da data
-        # dispara AJAX que re-renderiza a seção de combinação com outroJuros=SEM_JUROS
-        # (estado do bean servidor). Se outroJuros for setado antes, o re-render o redefine.
-        # Setando após o re-render e sem change event, o DOM fica TAXA_LEGAL e o Salvar
-        # inclui o valor correto no form POST.
+        # ⚠ PADRÃO CORRETO (lido do XHTML parametros-atualizacao.xhtml):
+        # O UI usa padrão de lista gerenciada:
+        #   1) Marcar checkbox combinarOutroJuros → seção "camposOrdemJuros" aparece
+        #   2) Preencher outroJuros (select) e apartirDeOutroJuros (date) nos campos temporários
+        #   3) Clicar botão "+" (addOutroJuros → adicionarOutroJuros()) para adicionar à lista
+        #      listaDeCombinacaoDeJuros
+        #   4) Salvar persiste a lista — sem o clique no "+" a lista fica vazia → SEM_JUROS
         _combinar_juros = cj.get("combinar_juros", False)
         _segunda_tabela = cj.get("segunda_tabela_juros") or cj.get("segundo_juros")
         _a_partir_juros = cj.get("a_partir_de_juros") or cj.get("data_inicio_segundo_juros")
@@ -8569,50 +8568,55 @@ class PJECalcPlaywright:
             self._marcar_checkbox("combinarOutroJuros", True)
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
-            # 1) Setar a DATA primeiro → dispara blur AJAX → re-render da seção de combo
+            # 1) Setar outroJuros (select temporário)
+            if _segunda_tabela:
+                _val_seg_juros = _juros_text_map.get(_segunda_tabela, _segunda_tabela)
+                _outro_ok = (self._selecionar("outroJuros", _val_seg_juros, obrigatorio=False)
+                             or self._selecionar("segundaTabelaJuros", _val_seg_juros, obrigatorio=False)
+                             or self._selecionar("segundoJuros", _val_seg_juros, obrigatorio=False))
+                if _outro_ok:
+                    self._log(f"  ✓ Segunda tabela juros (campo temporário): {_val_seg_juros}")
+                else:
+                    self._log(f"  ⚠ Segunda tabela juros: campo não encontrado — {_val_seg_juros}")
+            # 2) Setar data "A partir de" (campo temporário)
             if _a_partir_juros:
                 (self._preencher_data("aPartirDeOutroJuros", _a_partir_juros, False)
                  or self._preencher_data("dataInicioOutroJuros", _a_partir_juros, False)
                  or self._preencher_data("dataInicioSegundoJuros", _a_partir_juros, False))
-                self._aguardar_ajax()  # Aguarda re-render do section de combinação
-                self._page.wait_for_timeout(500)
+                self._page.wait_for_timeout(300)
                 self._log(f"  ✓ A partir de (segundo juros): {_a_partir_juros}")
-            # 2) Setar outroJuros APÓS o re-render via JS direto (sem change event)
-            #    → DOM fica com TAXA_LEGAL; Salvar inclui no form POST sem nova re-renderização
-            if _segunda_tabela:
-                _val_seg_juros = _juros_text_map.get(_segunda_tabela, _segunda_tabela)
-                _outro_ok = self._page.evaluate(
-                    """([suffix, val]) => {
-                        const aliases = [suffix, 'outroJuros', 'segundaTabelaJuros', 'segundoJuros'];
-                        let sel = null;
-                        for (const s of aliases) {
-                            sel = [...document.querySelectorAll('select')]
-                                .find(el => el.id && el.id.endsWith(s));
-                            if (sel) break;
-                        }
-                        if (!sel) return false;
-                        const n = v => (v || '').toString().trim().toLowerCase();
-                        const target = n(val);
-                        for (const opt of sel.options) {
-                            if (n(opt.value) === target || n(opt.text) === target) {
-                                sel.value = opt.value;
-                                return opt.value;  // retorna value real (ex: TAXA_LEGAL)
-                            }
-                        }
-                        return false;
-                    }""",
-                    ["outroJuros", _val_seg_juros],
-                )
-                if _outro_ok:
-                    self._log(f"  ✓ Segunda tabela juros: {_val_seg_juros} → DOM={_outro_ok}")
-                else:
-                    # Fallback: usar _selecionar (com AJAX — menos confiável mas tenta mesmo assim)
-                    (self._selecionar("outroJuros", _val_seg_juros, obrigatorio=False)
-                     or self._selecionar("segundaTabelaJuros", _val_seg_juros, obrigatorio=False)
-                     or self._selecionar("segundoJuros", _val_seg_juros, obrigatorio=False))
-                    self._log(f"  ⚠ Segunda tabela juros (fallback _selecionar): {_val_seg_juros}")
+            # 3) Clicar botão "+" (addOutroJuros) para adicionar à listaDeCombinacaoDeJuros
+            #    SEM este clique, Salvar persiste lista vazia → outroJuros=SEM_JUROS no XML!
+            _add_link = (self._page.locator("[id$='addOutroJuros']").first
+                         if self._page.locator("[id$='addOutroJuros']").count() > 0
+                         else None)
+            if _add_link:
+                try:
+                    _add_link.click(timeout=10000)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    self._log(f"  ✓ Botão '+' (adicionarOutroJuros) clicado — entrada adicionada à lista")
+                except Exception as _e:
+                    # Fallback: clicar via JS (RichFaces commandLink pode precisar de JS)
+                    try:
+                        self._page.evaluate(
+                            """() => {
+                                const el = [...document.querySelectorAll('a,input')]
+                                    .find(e => e.id && e.id.endsWith('addOutroJuros'));
+                                if (el) { el.click(); return true; }
+                                return false;
+                            }"""
+                        )
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
+                        self._log(f"  ✓ Botão '+' (adicionarOutroJuros) clicado via JS")
+                    except Exception as _e2:
+                        self._log(f"  ⚠ Botão '+' (adicionarOutroJuros) não clicado: {_e2}")
 
         # --- Segundo índice de correção monetária (combinar com outro) ---
+        # ⚠ PADRÃO CORRETO (lido do XHTML): mesmo padrão de lista gerenciada que juros.
+        # XHTML IDs: combinarOutroIndice (checkbox), outroIndiceTrabalhista (select),
+        # apartirDeOutroIndice (date), addOutroIndice (botão "+") → adicionarOutroIndice()
         # Só combinar quando os índices pré e pós são DIFERENTES (ex: IPCA-E → IPCA).
         # Se indice_correcao == indice_correcao_pos → mesmo índice, não combinar.
         _segundo_indice = cj.get("segundo_indice")
@@ -8622,14 +8626,44 @@ class PJECalcPlaywright:
             if _idx_pos and _idx_pos != _idx_pre:
                 _segundo_indice = _idx_pos
         if _segundo_indice:
-            self._marcar_checkbox("combinarComOutro", True)
+            # Checkbox correto: combinarOutroIndice (não combinarComOutro)
+            self._marcar_checkbox("combinarOutroIndice", True)
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
             _val_seg = _indice_text_map.get(_segundo_indice, _segundo_indice)
-            self._selecionar("segundoIndice", _val_seg, obrigatorio=False)
+            # Select correto: outroIndiceTrabalhista (não segundoIndice)
+            self._selecionar("outroIndiceTrabalhista", _val_seg, obrigatorio=False)
             _dt_seg = cj.get("data_inicio_segundo_indice") or cj.get("data_taxa_legal", "30/08/2024")
-            self._preencher_data("dataInicioSegundoIndice", _dt_seg, False)
-            self._log(f"  ✓ Segundo índice: {_val_seg} a partir de {_dt_seg}")
+            # Date correto: apartirDeOutroIndice (não dataInicioSegundoIndice)
+            self._preencher_data("apartirDeOutroIndice", _dt_seg, False)
+            self._page.wait_for_timeout(300)
+            # Clicar botão "+" (addOutroIndice) para adicionar à listaDeCombinacaoDeIndices
+            _add_idx = (self._page.locator("[id$='addOutroIndice']").first
+                        if self._page.locator("[id$='addOutroIndice']").count() > 0
+                        else None)
+            if _add_idx:
+                try:
+                    _add_idx.click(timeout=10000)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                    self._log(f"  ✓ Segundo índice adicionado: {_val_seg} a partir de {_dt_seg}")
+                except Exception as _e:
+                    try:
+                        self._page.evaluate(
+                            """() => {
+                                const el = [...document.querySelectorAll('a,input')]
+                                    .find(e => e.id && e.id.endsWith('addOutroIndice'));
+                                if (el) { el.click(); return true; }
+                                return false;
+                            }"""
+                        )
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
+                        self._log(f"  ✓ Segundo índice adicionado via JS: {_val_seg}")
+                    except Exception as _e2:
+                        self._log(f"  ⚠ Botão '+' (adicionarOutroIndice) não clicado: {_e2}")
+            else:
+                self._log(f"  ⚠ Botão '+' (addOutroIndice) não encontrado — índice pode não ter sido adicionado")
 
         # --- Ignorar taxa negativa ---
         if cj.get("ignorar_taxa_negativa") is not None:
