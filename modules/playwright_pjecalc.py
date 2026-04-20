@@ -8533,29 +8533,43 @@ class PJECalcPlaywright:
         _a_partir_juros = cj.get("a_partir_de_juros") or cj.get("data_inicio_segundo_juros")
 
         # ⚠ RESET: se combinar_juros NÃO está na sentença, garantir que combinarOutroJuros
-        # está DESMARCADO **antes** de tentar setar baseDeJurosDasVerbas.
-        # Sessões anteriores podem ter deixado combinarOutroJuros=true com outroJuros=SEM_JUROS
-        # (lista inválida), o que:
-        #   1) Oculta o select baseDeJurosDasVerbas (rendered=false no JSF)
-        #   2) Causa "Existem erros no formulário" no Salvar
+        # está DESMARCADO antes de salvar.
+        # Problema raiz: sessão anterior pode ter deixado combinarOutroJuros=true + SEM_JUROS.
+        # Adicionalmente: o AJAX de mudança do select `juros` (reRender="groupOutroJuros")
+        # pode ter resetado o bean para false sem re-renderizar o próprio checkbox
+        # → DOM mostra checked=true (stale) mas bean=false → salvar re-submete true → erro.
+        # SOLUÇÃO: SEMPRE chamar _marcar_checkbox(..., False) aqui, sem pre-check via JS.
+        # _marcar_checkbox usa is_checked() internamente e só clica se necessário.
         if not _combinar_juros and not _segunda_tabela:
             try:
-                _cur_checked = self._page.evaluate("""() => {
-                    const cb = document.querySelector('input[id*="combinarOutroJuros"]');
-                    return cb ? cb.checked : false;
-                }""")
-                if _cur_checked:
-                    self._marcar_checkbox("combinarOutroJuros", False)
+                _unchk = self._marcar_checkbox("combinarOutroJuros", False)
+                if _unchk:
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(300)
-                    self._log("  ✓ combinarOutroJuros desmarcado (sentença não requer combinação de juros)")
+                    self._log("  ✓ combinarOutroJuros: garantido desmarcado")
+                else:
+                    # Fallback: forçar via JS com type="checkbox" (evita match em hidden inputs)
+                    _js_was = self._page.evaluate("""() => {
+                        const cb = document.querySelector('input[type="checkbox"][id*="combinarOutroJuros"]');
+                        if (!cb) return 'NOT_FOUND';
+                        const was = cb.checked;
+                        if (was) {
+                            cb.checked = false;
+                            cb.dispatchEvent(new Event('change', {bubbles: true}));
+                        }
+                        return was ? 'DESMARCADO' : 'JA_DESMARCADO';
+                    }""")
+                    self._aguardar_ajax()
+                    self._log(f"  ✓ combinarOutroJuros reset via JS: {_js_was}")
             except Exception as _e_reset:
                 self._log(f"  ⚠ reset combinarOutroJuros: {_e_reset}")
 
         # --- Base de juros ---
         # Opções reais do DOM: VERBA ("Verba"), VERBA_MENOS_CS, VERBA_MENOS_CS_MENOS_PP.
-        # NOTA: quando combinarOutroJuros=true este select fica OCULTO (rendered=false JSF),
-        # por isso o reset acima precisa ocorrer ANTES deste ponto.
+        # ATENÇÃO: baseDeJurosDasVerbas fica no 2º tab (tabDadosEspecificos) do rich:tabPanel
+        # com switchType="client". O elemento ESTÁ no DOM mas oculto (tab inativa).
+        # _selecionar() falha porque exige is_visible()=True. Usar JS evaluate() direto
+        # para setar o value, pois switchType="client" garante que o <select> está no DOM.
         _base = cj.get("base_juros", "Verbas")
         _base_map = {
             "Verbas": "VERBA",             # DOM value "VERBA", label "Verba"
@@ -8571,11 +8585,33 @@ class PJECalcPlaywright:
             "CREDITO_TOTAL": "CREDITO_TOTAL",
         }
         _val_base = _base_map.get(_base, _base)
+        # Tentar _selecionar primeiro (caso tab esteja ativa); fallback: JS direto (tab inativa)
         _base_ok = self._selecionar("baseDeJurosDasVerbas", _val_base, obrigatorio=False)
+        if not _base_ok:
+            # Tab inativa: setar via JS (o elemento ESTÁ no DOM por switchType="client")
+            _base_ok = self._page.evaluate("""([val]) => {
+                const sel = [...document.querySelectorAll('select')]
+                    .find(s => s.id && s.id.includes('baseDeJurosDasVerbas'));
+                if (!sel) return false;
+                for (const opt of sel.options) {
+                    if (opt.value === val || opt.text.trim() === val) {
+                        sel.value = opt.value;
+                        return true;
+                    }
+                }
+                // Tentar match parcial por texto
+                for (const opt of sel.options) {
+                    if (opt.text.toLowerCase().includes(val.toLowerCase())) {
+                        sel.value = opt.value;
+                        return true;
+                    }
+                }
+                return false;
+            }""", [_val_base])
         if _base_ok:
             self._log(f"  ✓ Base de juros: {_val_base}")
         else:
-            self._log(f"  ℹ Base de juros: {_val_base} (oculto — combinarOutroJuros ativo ou não encontrado)")
+            self._log(f"  ⚠ Base de juros: {_val_base} — select não encontrado no DOM")
 
         # --- Segunda tabela de juros (combinar juros — Lei 14.905/2024) ---
         # ⚠ PADRÃO CORRETO (lido do XHTML parametros-atualizacao.xhtml):
