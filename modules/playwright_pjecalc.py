@@ -8527,11 +8527,35 @@ class PJECalcPlaywright:
             self._preencher("dataMarcoTaxaLegal", _data_marco, obrigatorio=False)
             self._log(f"  ✓ Data marco Taxa Legal: {_data_marco}")
 
+        # --- Combinação de juros — ler valores primeiro (usados em 2 lugares abaixo) ---
+        _combinar_juros = cj.get("combinar_juros", False)
+        _segunda_tabela = cj.get("segunda_tabela_juros") or cj.get("segundo_juros")
+        _a_partir_juros = cj.get("a_partir_de_juros") or cj.get("data_inicio_segundo_juros")
+
+        # ⚠ RESET: se combinar_juros NÃO está na sentença, garantir que combinarOutroJuros
+        # está DESMARCADO **antes** de tentar setar baseDeJurosDasVerbas.
+        # Sessões anteriores podem ter deixado combinarOutroJuros=true com outroJuros=SEM_JUROS
+        # (lista inválida), o que:
+        #   1) Oculta o select baseDeJurosDasVerbas (rendered=false no JSF)
+        #   2) Causa "Existem erros no formulário" no Salvar
+        if not _combinar_juros and not _segunda_tabela:
+            try:
+                _cur_checked = self._page.evaluate("""() => {
+                    const cb = document.querySelector('input[id*="combinarOutroJuros"]');
+                    return cb ? cb.checked : false;
+                }""")
+                if _cur_checked:
+                    self._marcar_checkbox("combinarOutroJuros", False)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(300)
+                    self._log("  ✓ combinarOutroJuros desmarcado (sentença não requer combinação de juros)")
+            except Exception as _e_reset:
+                self._log(f"  ⚠ reset combinarOutroJuros: {_e_reset}")
+
         # --- Base de juros ---
-        # Mapeamento dos termos da extração para os valores do select PJE-Calc.
         # Opções reais do DOM: VERBA ("Verba"), VERBA_MENOS_CS, VERBA_MENOS_CS_MENOS_PP.
         # NOTA: quando combinarOutroJuros=true este select fica OCULTO (rendered=false JSF),
-        # então _localizar retorna None silenciosamente — comportamento esperado.
+        # por isso o reset acima precisa ocorrer ANTES deste ponto.
         _base = cj.get("base_juros", "Verbas")
         _base_map = {
             "Verbas": "VERBA",             # DOM value "VERBA", label "Verba"
@@ -8561,9 +8585,6 @@ class PJECalcPlaywright:
         #   3) Clicar botão "+" (addOutroJuros → adicionarOutroJuros()) para adicionar à lista
         #      listaDeCombinacaoDeJuros
         #   4) Salvar persiste a lista — sem o clique no "+" a lista fica vazia → SEM_JUROS
-        _combinar_juros = cj.get("combinar_juros", False)
-        _segunda_tabela = cj.get("segunda_tabela_juros") or cj.get("segundo_juros")
-        _a_partir_juros = cj.get("a_partir_de_juros") or cj.get("data_inicio_segundo_juros")
         if _combinar_juros or _segunda_tabela:
             self._marcar_checkbox("combinarOutroJuros", True)
             self._aguardar_ajax()
