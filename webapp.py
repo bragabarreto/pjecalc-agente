@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import shutil
 import tempfile
 import uuid
@@ -2221,8 +2222,12 @@ def _tarefa_processar_sentenca(
         # Fase 3: Classificação
         verbas_mapeadas = mapear_para_pjecalc(dados.get("verbas_deferidas", []))
 
-        # Número do processo
-        numero = dados.get("processo", {}).get("numero") or f"SESS-{sessao_id[:8]}"
+        # Número do processo — normalizar para padrão CNJ puro (ignora prefixos como "ATSum ")
+        _numero_raw = dados.get("processo", {}).get("numero") or f"SESS-{sessao_id[:8]}"
+        _cnj_m = re.search(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}", _numero_raw)
+        numero = _cnj_m.group(0) if _cnj_m else _numero_raw
+        if numero != _numero_raw:
+            dados.setdefault("processo", {})["numero"] = numero  # normalizar também nos dados
 
         # Fase 4: Salvar no banco
         repo.criar_calculo(

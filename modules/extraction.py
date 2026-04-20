@@ -1976,7 +1976,8 @@ def _desmembrar_cnj(numero_completo: str) -> dict | None:
     NÃO inclui "numero" para não sobrescrever o número completo em processo.numero.
     Retorna None se o formato não bater.
     """
-    m = re.match(r"^(\d{7})-(\d{2})\.(\d{4})\.(\d)\.(\d{2})\.(\d{4})$", (numero_completo or "").strip())
+    # re.search() em vez de re.match() para tolerar prefixos como "ATSum ", "Nº " etc.
+    m = re.search(r"(\d{7})-(\d{2})\.(\d{4})\.(\d)\.(\d{2})\.(\d{4})", (numero_completo or "").strip())
     if not m:
         return None
     return {
@@ -3060,6 +3061,16 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     dados = _normalizar_correcao_juros(dados)
     # Normalizar grade_semanal (gerar a partir de campos flat ou recalcular campos flat)
     dados = _normalizar_grade_semanal(dados)
+
+    # Normalizar processo.numero para padrão CNJ puro — extrair apenas NNNNNNN-DD.AAAA.J.RR.VVVV
+    # Ignora prefixos como "ATSum ", "Processo ", "Nº " que o LLM pode incluir erroneamente.
+    _proc = dados.get("processo", {})
+    if _proc.get("numero"):
+        _cnj_raw = _proc["numero"]
+        _cnj_match = re.search(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}", str(_cnj_raw))
+        if _cnj_match and _cnj_match.group(0) != _cnj_raw:
+            _proc["numero"] = _cnj_match.group(0)
+            dados["processo"] = _proc
 
     # Desmembrar CNJ se número completo disponível e partes ainda não extraídas
     _proc = dados.get("processo", {})
