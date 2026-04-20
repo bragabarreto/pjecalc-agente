@@ -531,10 +531,15 @@ def _fmt_br(valor: float | str | None) -> str:
 
 
 def _parsear_numero_processo(numero: str | None) -> dict:
-    """'0001686-52.2026.5.07.0003' → {numero, digito, ano, justica, regiao, vara}."""
+    """'0001686-52.2026.5.07.0003' → {numero, digito, ano, justica, regiao, vara}.
+
+    Tolera prefixos não-numéricos como 'ATSum ', 'Processo ', 'Nº ' etc.
+    O regex usa search() (não match()) para encontrar o padrão CNJ em qualquer posição.
+    """
     if not numero:
         return {}
-    m = re.match(r"(\d{7})-(\d{2})\.(\d{4})\.(\d)\.(\d{2})\.(\d{4})", numero.strip())
+    # Usar search() em vez de match() para ignorar prefixos como "ATSum ", "Processo " etc.
+    m = re.search(r"(\d{7})-(\d{2})\.(\d{4})\.(\d)\.(\d{2})\.(\d{4})", numero.strip())
     if m:
         return {
             "numero": m.group(1),
