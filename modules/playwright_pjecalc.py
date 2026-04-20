@@ -8703,6 +8703,13 @@ class PJECalcPlaywright:
                         self._log(f"  ✓ Botão '+' (adicionarOutroJuros) clicado via JS")
                     except Exception as _e2:
                         self._log(f"  ⚠ Botão '+' (adicionarOutroJuros) não clicado: {_e2}")
+                # ⚠ SIDE EFFECT PÓS-'+': o AJAX do addOutroJuros (A4J partial submit
+                # execute="@this" no RichFaces 3) não inclui o form field combinarOutroJuros.
+                # O servidor pode ter recebido apenas o action sem o checkbox, resetando
+                # combinarOutroJuros=false no bean. Re-marcar OBRIGATORIAMENTE antes do Salvar.
+                self._marcar_checkbox("combinarOutroJuros", True)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(300)
 
         # --- Segundo índice de correção monetária (combinar com outro) ---
         # ⚠ PADRÃO CORRETO (lido do XHTML): mesmo padrão de lista gerenciada que juros.
