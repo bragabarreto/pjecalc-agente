@@ -8625,6 +8625,33 @@ class PJECalcPlaywright:
             self._marcar_checkbox("combinarOutroJuros", True)
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
+            # 0) Limpar entradas EXISTENTES em listaDeCombinacaoDeJuros antes de adicionar.
+            # ⚠ PROBLEMA RAIZ: sessões anteriores podem ter deixado entradas inválidas (SEM_JUROS).
+            # O Java Set.add() usa equals() — se equals() baseia-se em apartirDeOutroJuros
+            # e a nova entrada tem a mesma data que a antiga, o add() é silenciosamente ignorado.
+            # SOLUÇÃO: clicar no botão X (excluirDep) de cada entrada existente antes de adicionar.
+            try:
+                _excluir_links = self._page.locator(
+                    "a[id*='excluirDep'][id*='listagemJuros'], "
+                    "a[id*='excluirDep'][id*='JurosCombinados'], "
+                    "a[id*='removerOutroJuros'], "
+                    "a[id*='excluirDep']"
+                )
+                # Clicar no primeiro enquanto existir (lista diminui a cada clique)
+                _max_del = 5  # safety limit
+                _del_count = 0
+                while _excluir_links.count() > 0 and _del_count < _max_del:
+                    try:
+                        _excluir_links.first.click(timeout=5000)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(300)
+                        _del_count += 1
+                    except Exception:
+                        break
+                if _del_count > 0:
+                    self._log(f"  ✓ Entradas antigas de listaDeCombinacaoDeJuros removidas ({_del_count})")
+            except Exception as _e_del:
+                self._log(f"  ⚠ Limpeza listaDeCombinacaoDeJuros: {_e_del}")
             # 1) Setar outroJuros (select temporário)
             if _segunda_tabela:
                 _val_seg_juros = _juros_text_map.get(_segunda_tabela, _segunda_tabela)
