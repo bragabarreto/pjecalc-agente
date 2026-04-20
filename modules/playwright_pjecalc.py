@@ -136,6 +136,18 @@ def retry(max_tentativas: int = 3, delay: int = 2):
                                 wait_until="domcontentloaded", timeout=30000
                             )
                             self._page.wait_for_timeout(2000)
+                            # Re-autenticar e re-abrir o cálculo (nova sessão HTTP não tem
+                            # o estado anterior — conv IDs do processo antigo são inválidos)
+                            try:
+                                self._verificar_e_fazer_login()
+                                self._page.wait_for_timeout(1000)
+                                _reabriu = self._reabrir_calculo_recentes()
+                                if _reabriu:
+                                    self._log("  ✓ Cálculo re-aberto após restart do browser")
+                                else:
+                                    self._log("  ⚠ Não foi possível re-abrir cálculo — usando página atual")
+                            except Exception as _reopen_exc:
+                                self._log(f"  ⚠ Re-abertura pós-restart: {_reopen_exc}")
                             self._log("  ✓ Browser reiniciado — retentando fase…")
                         except Exception as re_exc:
                             self._log(f"  ⚠ Falha ao reiniciar browser: {re_exc}")
@@ -3150,15 +3162,28 @@ class PJECalcPlaywright:
                 f"suspensa, ante a gratuidade judiciária deferida, nos termos do "
                 f"art. 791-A, parágrafo 4o, da CLT."
             )
-            # Scroll até o campo e preencher (está no final da página da aba Parâmetros)
+            # Scroll até o campo e preencher (está no final da página da aba Parâmetros).
+            # JSF <h:inputTextarea id="comentarios"> renderiza como <textarea>, NÃO <input>.
+            # _preencher() usa selector input:not([hidden])... e NÃO encontra textarea.
+            # Usar selector textarea diretamente.
+            _coment_ok = False
             try:
-                _loc_coment = self._page.locator("[id$='comentarios']")
-                if _loc_coment.count() > 0:
-                    _loc_coment.first.scroll_into_view_if_needed()
-                    self._page.wait_for_timeout(200)
+                _loc_coment_ta = self._page.locator(
+                    "textarea[id$='comentarios'], textarea[id*=':comentarios']"
+                )
+                if _loc_coment_ta.count() > 0:
+                    _elem_ta = _loc_coment_ta.first
+                    _elem_ta.scroll_into_view_if_needed()
+                    self._page.wait_for_timeout(300)
+                    _elem_ta.click()
+                    _elem_ta.fill(_comentario_jg_f1)
+                    _elem_ta.dispatch_event("change")
+                    _coment_ok = True
             except Exception:
                 pass
-            _coment_ok = self._preencher("comentarios", _comentario_jg_f1, False)
+            if not _coment_ok:
+                # Fallback: _preencher cobre outros formatos de campo
+                _coment_ok = self._preencher("comentarios", _comentario_jg_f1, False)
             if _coment_ok:
                 self._log(f"  ✓ Comentários JG: exigibilidade suspensa — {', '.join(_partes_jg_f1)}")
             else:
@@ -8887,6 +8912,9 @@ class PJECalcPlaywright:
 
         if not self._clicar_salvar():
             self._log("  ⚠ Fase 7: Salvar IRPF não confirmado.")
+        # Capturar conversationId atual após IRPF para garantir que
+        # fase_honorarios use o conv correto (não o conv stale da fase verbas)
+        self._capturar_base_calculo()
         self._log("Fase 7 concluída.")
 
     # ── Fase 8: Honorários ────────────────────────────────────────────────────
@@ -9094,6 +9122,16 @@ class PJECalcPlaywright:
                 self._log(f"  → base_apuracao '{hon.get('base_apuracao')}' → '{base}' (mapeado)")
             # Default: se tipo_valor é CALCULADO e base vazia, usar "Bruto"
             if not base and tipo_valor == "CALCULADO":
+                base = "BRUTO"
+            # VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL exige seleção manual de verbas específicas no
+            # formulário de honorários — como não fazemos isso automaticamente, o PJE-Calc
+            # rejeita o save com "é necessário informar ao menos uma verba".
+            # Fallback preventivo para BRUTO (sempre aceito, cálculo equivalente para sucumbência).
+            if base == "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL":
+                self._log(
+                    f"  ℹ Honorário [{i+1}]: base VERBAS_QUE_NAO_COMPOE → "
+                    f"usando BRUTO (PJE-Calc exige seleção manual de verbas que não implementamos)"
+                )
                 base = "BRUTO"
             if base:
                 try:
