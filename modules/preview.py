@@ -569,6 +569,15 @@ def aplicar_edicao_verba(
     Quando o campo 'tipo' muda (Principal ↔ Reflexa), sincroniza com
     a estratégia de preenchimento e limpa/configura verba_principal_ref.
     """
+    # Campos booleanos — o frontend envia strings "true"/"false".
+    # PostgreSQL BOOLEAN rejeita string "false" → converter para bool nativo.
+    _CAMPOS_BOOL = {
+        "incidencia_fgts", "incidencia_inss", "incidencia_ir",
+        "compor_principal", "mapeada",
+    }
+    if campo in _CAMPOS_BOOL and isinstance(novo_valor, str):
+        novo_valor = novo_valor.strip().lower() in ("true", "1", "yes", "sim")
+
     todas = (
         verbas_mapeadas.get("predefinidas", [])
         + verbas_mapeadas.get("personalizadas", [])
