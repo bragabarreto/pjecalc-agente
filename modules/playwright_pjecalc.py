@@ -10202,34 +10202,67 @@ class PJECalcPlaywright:
 
         _exportou = False
 
-        # Etapa 1: sair da liquidacao.jsf navegando para Dados do Cálculo.
-        # Isso evita HTTP 500 que ocorre ao submeter menu Exportar de dentro
-        # do form pós-liquidação. APÓS, fazer reload() para garantir ViewState
-        # limpo (test v8 mostrou ViewExpiredException quando o click A4J vem
-        # após goto + instalação de monitor AJAX).
-        try:
-            self._log("  → Saindo de liquidacao.jsf via menu 'Dados do Cálculo'…")
-            if self._clicar_menu_lateral("Dados do Cálculo", obrigatorio=False):
-                self._aguardar_ajax(timeout=15000)
-                self._page.wait_for_timeout(1500)
-                self._log(f"  ✓ Agora em: {self._page.url}")
-                # RELOAD para ViewState fresco — evita ViewExpiredException
-                # quando clicamos no link <a4j:commandLink> que dispara
-                # A4J.AJAX.Submit('formulario',...) logo em seguida.
-                try:
-                    self._log("  → Reload calculo.jsf para ViewState fresco…")
-                    self._page.reload(wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(timeout=10000)
-                    self._page.wait_for_timeout(800)
-                    self._log(f"  ✓ Após reload: {self._page.url}")
-                except Exception as _rl_err:
-                    self._log(f"  ⚠ Reload falhou: {_rl_err}")
-        except Exception as _nav_err:
-            self._log(f"  ⚠ Navegação intermediária falhou: {_nav_err}")
-
-        # Etapa 2: disparar iniciar() do apresentadorExportacao via JS form POST.
+        # Etapa 1 (NOVA ESTRATÉGIA): navegar DIRETAMENTE para exportacao.jsf
+        # usando o mesmo conversationId da liquidação — sem passar por calculo.jsf.
         #
-        # ESTRATÉGIA NOVA (descoberta v7):
+        # HISTÓRICO DO BUG (abr/2026): a estratégia anterior navegava para
+        # calculo.jsf?conversationId=416 e fazia reload(), o que acionava algum
+        # código Seam que redefinia calculoAberto para o último recente (0000322).
+        # Depois, o clique no menu Exportar criava conversa nova (423) já com o
+        # calculoAberto errado. O export então gerava .PJC do processo errado.
+        #
+        # CORREÇÃO: goto direto para exportacao.jsf?conversationId=416 (GET puro),
+        # preservando calculoAberto=0000320 que foi setado durante as fases.
+        # Não cria nova conversa, não aciona guard clause de abrirCalculo().
+        _goto_exportacao_ok = False
+        if self._calculo_conversation_id and self._calculo_url_base:
+            _exp_url_direto = (
+                f"{self._calculo_url_base}exportacao.jsf"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
+            try:
+                self._log(f"  → Goto direto exportacao.jsf (conv={self._calculo_conversation_id})…")
+                self._page.goto(_exp_url_direto, wait_until="domcontentloaded", timeout=20000)
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
+                self._aguardar_ajax(timeout=10000)
+                self._page.wait_for_timeout(1000)
+                _url_direto = self._page.url
+                if "exportacao" in _url_direto:
+                    _exportou = True
+                    _goto_exportacao_ok = True
+                    self._log(f"  ✓ Goto direto OK: {_url_direto}")
+                else:
+                    self._log(f"  ⚠ Goto direto redirecionou para: {_url_direto} (tentando via menu)")
+            except Exception as _goto_err:
+                self._log(f"  ⚠ Goto direto exportacao.jsf falhou: {_goto_err}")
+
+        # Etapa 2 (FALLBACK): navegar por calculo.jsf e disparar menu Exportar via A4J.
+        # Só executa se goto direto não chegou a exportacao.jsf.
+        if not _goto_exportacao_ok:
+            # Primeiro: sair de onde estiver e ir para calculo.jsf (avita HTTP 500
+            # de submeter menu Exportar de dentro do form pós-liquidação).
+            try:
+                self._log("  → [Fallback] Navegando para calculo.jsf via 'Dados do Cálculo'…")
+                if self._clicar_menu_lateral("Dados do Cálculo", obrigatorio=False):
+                    self._aguardar_ajax(timeout=15000)
+                    self._page.wait_for_timeout(1500)
+                    self._log(f"  ✓ [Fallback] Agora em: {self._page.url}")
+                    try:
+                        self._page.reload(wait_until="domcontentloaded", timeout=15000)
+                        self._aguardar_ajax(timeout=10000)
+                        self._page.wait_for_timeout(800)
+                        self._log(f"  ✓ [Fallback] Após reload: {self._page.url}")
+                    except Exception as _rl_err:
+                        self._log(f"  ⚠ [Fallback] Reload falhou: {_rl_err}")
+            except Exception as _nav_err:
+                self._log(f"  ⚠ [Fallback] Navegação calculo.jsf falhou: {_nav_err}")
+
+        # Etapa 2b (FALLBACK): clicar menu Exportar via JS/A4J.
+        # Só executa se o goto direto para exportacao.jsf não funcionou.
+        # ESTRATÉGIA (descoberta v7):
         # Clicar via `li#li_operacoes_exportar a` cai em principal.jsf mesmo com
         # li correto. Motivo: o <a4j:commandLink> em menu-pilares.xhtml pode estar
         # envolto em um <ul> que faz slideToggle (display:none quando o bloco de
@@ -10242,139 +10275,115 @@ class PJECalcPlaywright:
         # (b) inspecionar o DOM e expandir o bloco "Operações" se estiver recolhido;
         # (c) executar o `onclick` do <a> diretamente via JS, que invoca
         # A4J.AJAX.Submit corretamente com o conversationId atual.
-        try:
-            # Handler de dialog: aceita tudo (confirm/alert do menu)
+        if not _goto_exportacao_ok:
             try:
-                self._page.on("dialog", lambda d: d.accept())
-            except Exception:
-                pass
+                # Handler de dialog: aceita tudo (confirm/alert do menu)
+                try:
+                    self._page.on("dialog", lambda d: d.accept())
+                except Exception:
+                    pass
 
-            self._log("  → Diagnóstico DOM do menu lateral…")
-            _diag_menu = self._page.evaluate("""() => {
-                const result = {lis: [], hrefs: [], onclicks: []};
-                const allLis = [...document.querySelectorAll('li[id^="li_operacoes"], li[id^="li_calculo_exportar"]')];
-                for (const li of allLis) {
-                    const a = li.querySelector('a');
-                    result.lis.push({
-                        id: li.id,
-                        visible: li.offsetParent !== null,
-                        display: getComputedStyle(li).display,
-                        aId: a ? a.id : null,
-                        aHref: a ? a.href : null,
-                        aOnclick: a ? (a.getAttribute('onclick') || '').slice(0, 200) : null,
-                    });
-                }
-                // Também pegar o UL pai do li_operacoes_exportar
-                const liExp = document.getElementById('li_operacoes_exportar');
-                if (liExp) {
-                    const parentUl = liExp.closest('ul');
-                    if (parentUl) {
-                        result.parentUl = {
-                            display: getComputedStyle(parentUl).display,
-                            visible: parentUl.offsetParent !== null,
-                        };
+                self._log("  → Diagnóstico DOM do menu lateral…")
+                _diag_menu = self._page.evaluate("""() => {
+                    const result = {lis: [], hrefs: [], onclicks: []};
+                    const allLis = [...document.querySelectorAll('li[id^="li_operacoes"], li[id^="li_calculo_exportar"]')];
+                    for (const li of allLis) {
+                        const a = li.querySelector('a');
+                        result.lis.push({
+                            id: li.id,
+                            visible: li.offsetParent !== null,
+                            display: getComputedStyle(li).display,
+                            aId: a ? a.id : null,
+                            aHref: a ? a.href : null,
+                            aOnclick: a ? (a.getAttribute('onclick') || '').slice(0, 200) : null,
+                        });
                     }
-                    // Header "Operações" (li.header antes do menu-item)
-                    let prev = liExp.closest('li.menu-item');
-                    if (prev) prev = prev.previousElementSibling;
-                    if (prev && prev.classList.contains('header')) {
-                        result.header = {text: prev.textContent.trim(), classes: prev.className};
-                    }
-                }
-                return result;
-            }""")
-            self._log(f"  → DOM menu: {_diag_menu}")
-
-            # Se o bloco Operações está recolhido, expandir via clique no header
-            try:
-                _expandiu = self._page.evaluate("""() => {
+                    // Também pegar o UL pai do li_operacoes_exportar
                     const liExp = document.getElementById('li_operacoes_exportar');
-                    if (!liExp) return 'sem_li';
-                    const ul = liExp.closest('ul');
-                    if (ul && getComputedStyle(ul).display === 'none') {
-                        // Encontrar o header (.header) que controla este ul
-                        const menuItemLi = liExp.closest('li.menu-item');
-                        if (menuItemLi) {
-                            const header = menuItemLi.previousElementSibling;
-                            if (header && header.classList.contains('header')) {
-                                header.click();
-                                return 'clicked_header';
-                            }
+                    if (liExp) {
+                        const parentUl = liExp.closest('ul');
+                        if (parentUl) {
+                            result.parentUl = {
+                                display: getComputedStyle(parentUl).display,
+                                visible: parentUl.offsetParent !== null,
+                            };
+                        }
+                        // Header "Operações" (li.header antes do menu-item)
+                        let prev = liExp.closest('li.menu-item');
+                        if (prev) prev = prev.previousElementSibling;
+                        if (prev && prev.classList.contains('header')) {
+                            result.header = {text: prev.textContent.trim(), classes: prev.className};
                         }
                     }
-                    return 'ja_aberto';
+                    return result;
                 }""")
-                self._log(f"  → Expansão Operações: {_expandiu}")
-                self._page.wait_for_timeout(600)
-            except Exception as _exp_err:
-                self._log(f"  ⚠ Expansão falhou: {_exp_err}")
+                self._log(f"  → DOM menu: {_diag_menu}")
 
-            # Agora disparar o onclick do <a> dentro de li#li_operacoes_exportar
-            self._log("  → Disparando onclick do <a> de operacoes_exportar…")
-            _click_result = self._page.evaluate("""() => {
-                const li = document.getElementById('li_operacoes_exportar');
-                if (!li) return 'sem_li';
-                const a = li.querySelector('a');
-                if (!a) return 'sem_a';
-                // Preferir chamar o onclick (A4J.AJAX.Submit) diretamente
-                try {
-                    if (typeof a.onclick === 'function') {
-                        a.onclick.call(a, new Event('click'));
-                        return 'onclick_chamado';
-                    }
-                } catch (e) { /* fallback */ }
-                a.click();
-                return 'click_chamado';
-            }""")
-            self._log(f"  → Click via JS: {_click_result}")
-            self._aguardar_ajax(timeout=25000)
-            self._page.wait_for_timeout(2500)
-            _url_pos = self._page.url
-            if "exportacao" in _url_pos:
-                self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
-                _exportou = True
-                # CRÍTICO: atualizar conversationId — a navegação para exportacao.jsf
-                # avança o Seam para uma nova conversação (ex: 296→303). Se continuar
-                # usando o valor antigo em Fase D, o servidor abre conversação nova e
-                # retorna página vazia (HTML) ao invés do .PJC. Capturar o novo ID aqui.
+                # Se o bloco Operações está recolhido, expandir via clique no header
                 try:
-                    import re as _re_cid
-                    _m_cid = _re_cid.search(r"conversationId=(\d+)", _url_pos)
-                    if _m_cid:
-                        _new_cid = _m_cid.group(1)
-                        if _new_cid != self._calculo_conversation_id:
-                            self._log(
-                                f"  ↻ conversationId atualizado: "
-                                f"{self._calculo_conversation_id} → {_new_cid}"
-                            )
-                            self._calculo_conversation_id = _new_cid
-                except Exception:
-                    pass
-            else:
-                self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
-        except Exception as _menu_err:
-            self._log(f"  ⚠ Clique no menu Exportar falhou: {_menu_err}")
+                    _expandiu = self._page.evaluate("""() => {
+                        const liExp = document.getElementById('li_operacoes_exportar');
+                        if (!liExp) return 'sem_li';
+                        const ul = liExp.closest('ul');
+                        if (ul && getComputedStyle(ul).display === 'none') {
+                            // Encontrar o header (.header) que controla este ul
+                            const menuItemLi = liExp.closest('li.menu-item');
+                            if (menuItemLi) {
+                                const header = menuItemLi.previousElementSibling;
+                                if (header && header.classList.contains('header')) {
+                                    header.click();
+                                    return 'clicked_header';
+                                }
+                            }
+                        }
+                        return 'ja_aberto';
+                    }""")
+                    self._log(f"  → Expansão Operações: {_expandiu}")
+                    self._page.wait_for_timeout(600)
+                except Exception as _exp_err:
+                    self._log(f"  ⚠ Expansão falhou: {_exp_err}")
 
-        # Fallback: goto direto (iniciar NÃO vai rodar, mas tentamos mesmo assim)
-        if not _exportou and self._calculo_conversation_id and self._calculo_url_base:
-            _exp_url = (
-                f"{self._calculo_url_base}exportacao.jsf"
-                f"?conversationId={self._calculo_conversation_id}"
-            )
-            try:
-                self._log(f"  → Fallback: goto direto {_exp_url}")
-                self._page.goto(_exp_url, wait_until="domcontentloaded", timeout=15000)
-                try:
-                    self._instalar_monitor_ajax()
-                except Exception:
-                    pass
-                self._aguardar_ajax()
-                self._page.wait_for_timeout(1000)
-                if "exportacao" in self._page.url:
+                # Agora disparar o onclick do <a> dentro de li#li_operacoes_exportar
+                self._log("  → Disparando onclick do <a> de operacoes_exportar…")
+                _click_result = self._page.evaluate("""() => {
+                    const li = document.getElementById('li_operacoes_exportar');
+                    if (!li) return 'sem_li';
+                    const a = li.querySelector('a');
+                    if (!a) return 'sem_a';
+                    // Preferir chamar o onclick (A4J.AJAX.Submit) diretamente
+                    try {
+                        if (typeof a.onclick === 'function') {
+                            a.onclick.call(a, new Event('click'));
+                            return 'onclick_chamado';
+                        }
+                    } catch (e) { /* fallback */ }
+                    a.click();
+                    return 'click_chamado';
+                }""")
+                self._log(f"  → Click via JS: {_click_result}")
+                self._aguardar_ajax(timeout=25000)
+                self._page.wait_for_timeout(2500)
+                _url_pos = self._page.url
+                if "exportacao" in _url_pos:
+                    self._log(f"  ✓ Navegação via menu OK: {_url_pos}")
                     _exportou = True
-                    self._log(f"  ✓ Goto OK (mas iniciar() provavelmente não rodou): {self._page.url}")
-            except Exception as _goto_err:
-                self._log(f"  ⚠ goto direto falhou: {_goto_err}")
+                    try:
+                        import re as _re_cid
+                        _m_cid = _re_cid.search(r"conversationId=(\d+)", _url_pos)
+                        if _m_cid:
+                            _new_cid = _m_cid.group(1)
+                            if _new_cid != self._calculo_conversation_id:
+                                self._log(
+                                    f"  ↻ conversationId atualizado: "
+                                    f"{self._calculo_conversation_id} → {_new_cid}"
+                                )
+                                self._calculo_conversation_id = _new_cid
+                    except Exception:
+                        pass
+                else:
+                    self._log(f"  ⚠ Menu Exportar clicado mas URL ficou em: {_url_pos}")
+            except Exception as _menu_err:
+                self._log(f"  ⚠ Clique no menu Exportar falhou: {_menu_err}")
 
         # ── Atualizar conv pré-Exportar ────────────────────────────────────
         # A navegação para exportacao.jsf via menu Seam cria naturalmente um novo
