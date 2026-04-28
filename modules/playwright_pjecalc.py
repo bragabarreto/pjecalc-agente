@@ -10231,9 +10231,53 @@ class PJECalcPlaywright:
                 self._page.wait_for_timeout(1000)
                 _url_direto = self._page.url
                 if "exportacao" in _url_direto:
-                    _exportou = True
                     _goto_exportacao_ok = True
                     self._log(f"  ✓ Goto direto OK: {_url_direto}")
+                    # CRÍTICO: goto direto (GET) carrega exportacao.jsf mas NÃO chama
+                    # apresentadorExportacao.iniciar() — sem isso, `arquivo` fica null
+                    # e o botão Exportar retorna HTTP 500 com filename="null".
+                    # Solução: executar o onclick do li_operacoes_exportar a partir da
+                    # própria exportacao.jsf. Isso chama iniciar() via A4J sem passar
+                    # por calculo.jsf (logo sem risco de contaminar calculoAberto).
+                    try:
+                        self._log("  → Chamando iniciar() via onclick li_operacoes_exportar…")
+                        try:
+                            self._page.on("dialog", lambda d: d.accept())
+                        except Exception:
+                            pass
+                        _click_init = self._page.evaluate("""() => {
+                            const li = document.getElementById('li_operacoes_exportar');
+                            if (!li) return 'sem_li';
+                            const a = li.querySelector('a');
+                            if (!a) return 'sem_a';
+                            try {
+                                if (typeof a.onclick === 'function') {
+                                    a.onclick.call(a, new Event('click'));
+                                    return 'onclick_chamado';
+                                }
+                            } catch (e) { /* fallback */ }
+                            a.click();
+                            return 'click_chamado';
+                        }""")
+                        self._log(f"  → iniciar() dispatch: {_click_init}")
+                        self._aguardar_ajax(timeout=20000)
+                        self._page.wait_for_timeout(1500)
+                        _url_pos_init = self._page.url
+                        if "exportacao" in _url_pos_init:
+                            self._log(f"  ✓ iniciar() OK: ainda em exportacao.jsf ({_url_pos_init})")
+                            # Atualizar conversationId se mudou
+                            import re as _re_init
+                            _m_init = _re_init.search(r"conversationId=(\d+)", _url_pos_init)
+                            if _m_init:
+                                _cid_new = _m_init.group(1)
+                                if _cid_new != self._calculo_conversation_id:
+                                    self._log(f"  ↻ conv atualizado: {self._calculo_conversation_id} → {_cid_new}")
+                                    self._calculo_conversation_id = _cid_new
+                        else:
+                            self._log(f"  ⚠ iniciar() redirecionou para: {_url_pos_init}")
+                    except Exception as _init_err:
+                        self._log(f"  ⚠ iniciar() via onclick falhou: {_init_err}")
+                    _exportou = True
                 else:
                     self._log(f"  ⚠ Goto direto redirecionou para: {_url_direto} (tentando via menu)")
             except Exception as _goto_err:
