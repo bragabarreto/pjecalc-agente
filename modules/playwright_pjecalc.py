@@ -1344,6 +1344,10 @@ class PJECalcPlaywright:
                     }}
                 }}
                 if (r) {{
+                    // Override disabled state (JSF às vezes desabilita radios
+                    // condicionalmente; necessário para aliquota/multaDoFgts no FGTS)
+                    r.disabled = false;
+                    r.checked = true;
                     r.click();
                     r.dispatchEvent(new Event('change', {{bubbles: true}}));
                     return true;
@@ -2941,6 +2945,19 @@ class PJECalcPlaywright:
                     return False
 
             self._log("  ✓ Todos os cálculos excluídos via interface")
+
+            # Após excluir todos, recarregar principal.jsf para garantir que o
+            # SESSION bean servicoDeCalculo limpe calculoAberto. O bean é @Scope(SESSION)
+            # e abrirCalculo() tem guard "if (!isCalculoAberto()) → abrirCalculo()".
+            # Se calculoAberto ainda aponta para um cálculo excluído (orphan reference),
+            # o guard faz o próximo abrirCalculo() ser ignorado silenciosamente.
+            try:
+                self._page.reload(wait_until="domcontentloaded", timeout=15000)
+                self._page.wait_for_timeout(1000)
+                self._log("  ✓ principal.jsf recarregado após limpeza (flush calculoAberto)")
+            except Exception as _rl_e:
+                self._log(f"  ⚠ Reload após limpeza falhou: {_rl_e} (não crítico)")
+
             return True
 
         except Exception as _exc:
@@ -9189,8 +9206,21 @@ class PJECalcPlaywright:
                 or bool(self._page.locator("input[value='Novo']").first.click() if self._page.locator("input[value='Novo']").count() else None)
             )
             if not clicou:
-                self._log(f"  ⚠ Botão Novo não encontrado para honorário {i+1} — pulando.")
-                continue
+                # Mesmo com retorno False, verificar se o formulário abriu (URL ou
+                # campo tpHonorario visível) — _clicar_novo() pode retornar False
+                # mas o clique ter ocorrido (ex: retornou de irpf.jsf para honorarios.jsf)
+                _form_abriu = False
+                try:
+                    if "honorarios" in self._page.url.lower():
+                        _tp = self._page.locator("[id$='tpHonorario']:visible, [id$='tipoHonorario']:visible")
+                        if _tp.count() > 0:
+                            _form_abriu = True
+                            self._log(f"  ℹ Form honorário já visível apesar de clicou=False — continuando")
+                except Exception:
+                    pass
+                if not _form_abriu:
+                    self._log(f"  ⚠ Botão Novo não encontrado para honorário {i+1} — pulando.")
+                    continue
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
@@ -10273,6 +10303,33 @@ class PJECalcPlaywright:
                                 if _cid_new != self._calculo_conversation_id:
                                     self._log(f"  ↻ conv atualizado: {self._calculo_conversation_id} → {_cid_new}")
                                     self._calculo_conversation_id = _cid_new
+                            # Verificar processo correto após iniciar() — iniciar() faz
+                            # uma requisição A4J que pode, em teoria, recarregar o estado
+                            # da sessão. Confirmar que a página ainda exibe o processo alvo.
+                            try:
+                                _proc_alvo_ini = (self._dados or {}).get("processo", {}).get("numero", "")
+                                if _proc_alvo_ini:
+                                    import re as _re_pini
+                                    _cnj_ini = _re_pini.search(r"\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}", _proc_alvo_ini)
+                                    if _cnj_ini:
+                                        _proc_alvo_ini = _cnj_ini.group(0)
+                                    _proc_ini_clean = _proc_alvo_ini.replace("-", "").replace(".", "").replace("/", "")
+                                    _body_ini = self._page.locator("body").text_content() or ""
+                                    _body_ini_clean = _body_ini.replace("-", "").replace(".", "").replace("/", "").replace(" ", "")
+                                    if _proc_ini_clean and _proc_ini_clean not in _body_ini_clean:
+                                        import re as _re_shown
+                                        _shown = _re_shown.search(r'\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}', _body_ini)
+                                        _shown_str = _shown.group(0) if _shown else "(não identificado)"
+                                        raise RuntimeError(
+                                            f"PÓS-INICIAR: exportacao.jsf mostra '{_shown_str}' "
+                                            f"mas alvo é '{_proc_alvo_ini}' — SESSION contaminada após iniciar()"
+                                        )
+                                    else:
+                                        self._log(f"  ✓ Pós-iniciar() processo confirmado: {_proc_alvo_ini}")
+                            except RuntimeError:
+                                raise
+                            except Exception as _pini_err:
+                                self._log(f"  ⚠ Verificação pós-iniciar(): {_pini_err} (continuando)")
                         else:
                             self._log(f"  ⚠ iniciar() redirecionou para: {_url_pos_init}")
                     except Exception as _init_err:
