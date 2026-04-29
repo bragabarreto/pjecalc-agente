@@ -2946,17 +2946,25 @@ class PJECalcPlaywright:
 
             self._log("  ✓ Todos os cálculos excluídos via interface")
 
-            # Após excluir todos, recarregar principal.jsf para garantir que o
-            # SESSION bean servicoDeCalculo limpe calculoAberto. O bean é @Scope(SESSION)
-            # e abrirCalculo() tem guard "if (!isCalculoAberto()) → abrirCalculo()".
-            # Se calculoAberto ainda aponta para um cálculo excluído (orphan reference),
-            # o guard faz o próximo abrirCalculo() ser ignorado silenciosamente.
+            # ── CORREÇÃO CRÍTICA (29/04/2026): invalidar HTTP session ────────
+            # Após abrir cálculos para deletá-los, servicoDeCalculo.calculoAberto
+            # (SESSION bean Java @Scope(SESSION)) fica com referência ORPHAN ao
+            # cálculo deletado. Reload de principal.jsf NÃO limpa SESSION bean.
+            #
+            # O bug se manifesta em apresentadorExportacao.iniciar() — ao começar
+            # nova conversação, lê calculoAberto da SESSION → retorna o orphan
+            # (cálculo deletado de OUTRO processo) → exporta .PJC errado.
+            #
+            # SOLUÇÃO: limpar todos os cookies (JSESSIONID) → próxima requisição
+            # cria HTTP session NOVA no Tomcat → servicoDeCalculo é instanciado
+            # zerado (calculoAberto=null). Reload não basta — precisa cookie kill.
             try:
-                self._page.reload(wait_until="domcontentloaded", timeout=15000)
-                self._page.wait_for_timeout(1000)
-                self._log("  ✓ principal.jsf recarregado após limpeza (flush calculoAberto)")
+                self._page.context.clear_cookies()
+                self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+                self._page.wait_for_timeout(1500)
+                self._log("  ✓ HTTP session invalidada (cookies cleared) — SESSION bean fresh")
             except Exception as _rl_e:
-                self._log(f"  ⚠ Reload após limpeza falhou: {_rl_e} (não crítico)")
+                self._log(f"  ⚠ Cookie clear após limpeza falhou: {_rl_e} (não crítico)")
 
             return True
 
