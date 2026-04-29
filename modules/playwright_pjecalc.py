@@ -2857,7 +2857,14 @@ class PJECalcPlaywright:
         Navega para a Tela Inicial, verifica se há cálculos na lista de Recentes,
         e exclui cada um via menu Operações > Excluir.
         Retorna True se conseguiu limpar (ou não havia nada para limpar).
+
+        IMPORTANTE: SEMPRE limpa cookies (HTTP session) ao final, mesmo em erro,
+        para garantir que servicoDeCalculo (SESSION bean Java) seja zerado.
+        Sem isto, calculoAberto orphan corrompe o próximo export.
         """
+        # Flag indica se houve abertura de cálculo (que setou calculoAberto no
+        # SESSION bean) — usado no finally para decidir se cookie clear é necessário.
+        _calculo_foi_aberto = False
         try:
             self._log("Limpando cálculos existentes via interface…")
             # Navegar para Home
@@ -2909,6 +2916,10 @@ class PJECalcPlaywright:
                         self._log(f"  ⚠ Não abriu cálculo (URL: {_url[:80]}) — abortando limpeza UI")
                         return False
 
+                    # Marcar que abrimos um cálculo — calculoAberto agora está
+                    # setado no SESSION bean. O finally precisará limpar cookies.
+                    _calculo_foi_aberto = True
+
                     # Auto-confirmar o dialog de exclusão
                     self._page.once("dialog", lambda d: d.accept())
 
@@ -2945,7 +2956,12 @@ class PJECalcPlaywright:
                     return False
 
             self._log("  ✓ Todos os cálculos excluídos via interface")
+            return True
 
+        except Exception as _exc:
+            self._log(f"  ⚠ Limpeza via UI falhou: {_exc}")
+            return False
+        finally:
             # ── CORREÇÃO CRÍTICA (29/04/2026): invalidar HTTP session ────────
             # Após abrir cálculos para deletá-los, servicoDeCalculo.calculoAberto
             # (SESSION bean Java @Scope(SESSION)) fica com referência ORPHAN ao
@@ -2958,19 +2974,17 @@ class PJECalcPlaywright:
             # SOLUÇÃO: limpar todos os cookies (JSESSIONID) → próxima requisição
             # cria HTTP session NOVA no Tomcat → servicoDeCalculo é instanciado
             # zerado (calculoAberto=null). Reload não basta — precisa cookie kill.
-            try:
-                self._page.context.clear_cookies()
-                self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
-                self._page.wait_for_timeout(1500)
-                self._log("  ✓ HTTP session invalidada (cookies cleared) — SESSION bean fresh")
-            except Exception as _rl_e:
-                self._log(f"  ⚠ Cookie clear após limpeza falhou: {_rl_e} (não crítico)")
-
-            return True
-
-        except Exception as _exc:
-            self._log(f"  ⚠ Limpeza via UI falhou: {_exc}")
-            return False
+            #
+            # IMPORTANTE: roda no FINALLY mesmo se exclusões falharem mid-loop —
+            # qualquer abertura de cálculo deixa o SESSION bean contaminado.
+            if _calculo_foi_aberto:
+                try:
+                    self._page.context.clear_cookies()
+                    self._page.goto(_home, wait_until="domcontentloaded", timeout=15000)
+                    self._page.wait_for_timeout(1500)
+                    self._log("  ✓ HTTP session invalidada (cookies cleared) — SESSION bean fresh")
+                except Exception as _rl_e:
+                    self._log(f"  ⚠ Cookie clear no finally falhou: {_rl_e} (não crítico)")
 
     def _ir_para_novo_calculo(self) -> None:
         """Navega para o formulário de Novo Cálculo via menu 'Novo'.
@@ -10340,11 +10354,21 @@ class PJECalcPlaywright:
                                 self._log(f"  ⚠ Verificação pós-iniciar(): {_pini_err} (continuando)")
                         else:
                             self._log(f"  ⚠ iniciar() redirecionou para: {_url_pos_init}")
+                    except RuntimeError:
+                        # PÓS-INICIAR detectou contaminação SESSION — abortar HARD,
+                        # não silenciar como warning. Sem isto, o except genérico abaixo
+                        # transformaria o erro em aviso e o export prosseguiria com
+                        # processo errado (depois capturado pelo PRÉ-EXPORT, mas
+                        # tarde demais — melhor falhar imediatamente aqui).
+                        raise
                     except Exception as _init_err:
                         self._log(f"  ⚠ iniciar() via onclick falhou: {_init_err}")
                     _exportou = True
                 else:
                     self._log(f"  ⚠ Goto direto redirecionou para: {_url_direto} (tentando via menu)")
+            except RuntimeError:
+                # Propagar contaminação SESSION detectada por PÓS-INICIAR
+                raise
             except Exception as _goto_err:
                 self._log(f"  ⚠ Goto direto exportacao.jsf falhou: {_goto_err}")
 
