@@ -2912,7 +2912,14 @@ class PJECalcPlaywright:
             return False
 
     def _capturar_base_calculo(self) -> None:
-        """Captura a URL base e conversationId do cálculo ativo para navegação por URL."""
+        """Captura a URL base e conversationId do cálculo ativo para navegação por URL.
+
+        IMPORTANTE: SOMENTE atualiza self._calculo_url_base se a URL atual
+        contém o segmento /calculo/. URLs em /pages/custas/, /pages/principal/,
+        páginas de erro, etc. NÃO atualizam o base — preservam o último base
+        válido capturado. Sem essa proteção, uma navegação 404 em fase Custas
+        contamina o base para /pages/custas/, quebrando todas as próximas fases.
+        """
         import re as _re
         try:
             url = self._page.url
@@ -2926,6 +2933,15 @@ class PJECalcPlaywright:
                 m_calculo = _re.search(r'(https?://.+?/calculo/)', base)
                 if m_calculo:
                     base = m_calculo.group(1)
+                else:
+                    # URL não pertence ao cálculo (ex: /pages/custas/, página de erro,
+                    # principal.jsf). NÃO atualizar self._calculo_url_base — preservar
+                    # o último base válido. Mas pode atualizar conversationId se já
+                    # tínhamos base e queremos manter conv sincronizado.
+                    if self._calculo_url_base:
+                        self._calculo_conversation_id = m_conv.group(1)
+                        # Não logar URL base (não mudou); apenas conv se mudou
+                    return
                 self._calculo_url_base = base
                 self._calculo_conversation_id = m_conv.group(1)
                 self._log(
