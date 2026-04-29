@@ -537,6 +537,21 @@ def reiniciar_tomcat_background(pjecalc_dir: str | Path, log_cb=None) -> None:
     import platform
     _log = log_cb or (lambda m: None)
     sistema = platform.system()
+
+    # Lock file: evitar duplo launcher se 2 runs sequenciais disparem restart
+    # numa janela curta. Lock expira em 60s (proteção contra orphan).
+    _lock_file = Path("/tmp/pjecalc-startup.lock")
+    try:
+        if _lock_file.exists():
+            _age = time.time() - _lock_file.stat().st_mtime
+            if _age < 60:
+                _log(f"  ↻ Tomcat: startup já em andamento (lock {_age:.0f}s) — ignorando")
+                return
+            _log(f"  ↻ Tomcat: lock expirado ({_age:.0f}s > 60s) — prosseguindo")
+        _lock_file.touch()
+    except Exception:
+        pass
+
     try:
         # Kill via PID file (registrado por iniciarPjeCalc.sh)
         pid_file = Path("/tmp/pjecalc.pid")
@@ -575,9 +590,15 @@ def reiniciar_tomcat_background(pjecalc_dir: str | Path, log_cb=None) -> None:
                     stderr=subprocess.DEVNULL,
                     start_new_session=True,
                 )
-                _log("  ↻ Tomcat: launcher disparado em background — próximo run aguardará disponibilidade")
+                _log("  ↻ Tomcat: launcher disparado em background (ETA ~2-3 min até HTTP disponível)")
+                _log("  ↻ Próximo run aguardará via polling do webapp (até 600s)")
     except Exception as _e:
         _log(f"  ⚠ reiniciar_tomcat_background: {_e} (não crítico)")
+        # Em caso de erro, libera o lock para próxima tentativa não ficar bloqueada
+        try:
+            _lock_file.unlink(missing_ok=True)
+        except Exception:
+            pass
 
 
 # ── Utilitários de formatação ─────────────────────────────────────────────────
