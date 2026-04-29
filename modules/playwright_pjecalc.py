@@ -518,6 +518,68 @@ def _parar_tomcat(timeout: int = 15) -> None:
         pid_file.unlink(missing_ok=True)
 
 
+def reiniciar_tomcat_background(pjecalc_dir: str | Path, log_cb=None) -> None:
+    """
+    Reinicia Tomcat em BACKGROUND para limpar estado APPLICATION-scoped.
+
+    CONTEXTO (29/04/2026): cookie clear não é suficiente para zerar
+    `servicoDeCalculo.calculoAberto` — o bean é APPLICATION-scoped (singleton)
+    no Seam Framework do PJE-Calc. A referência a cálculo de run anterior
+    sobrevive HTTP session invalidation, contaminando iniciar() do próximo
+    export. Apenas restart de Tomcat zera APPLICATION beans + Hibernate L2.
+
+    Estratégia: chamar ao FINAL de cada run (sucesso ou falha). O usuário
+    atual já recebeu seu .PJC; o restart roda em background sem bloquear.
+    O próximo run aguarda no polling do webapp (até 600s).
+
+    Mata processo Java atual e re-executa launcher script. Não bloqueia.
+    """
+    import platform
+    _log = log_cb or (lambda m: None)
+    sistema = platform.system()
+    try:
+        # Kill via PID file (registrado por iniciarPjeCalc.sh)
+        pid_file = Path("/tmp/pjecalc.pid")
+        if pid_file.exists():
+            try:
+                pid = int(pid_file.read_text().strip())
+                os.kill(pid, signal.SIGTERM)
+                _log(f"  ↻ Tomcat: SIGTERM enviado para PID {pid}")
+            except (ValueError, ProcessLookupError, PermissionError):
+                pass
+            try:
+                pid_file.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        # Backup: pkill via padrão de comando (caso PID file não exista)
+        try:
+            subprocess.run(
+                ["pkill", "-TERM", "-f", "org.apache.catalina.startup.Bootstrap"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                timeout=5,
+            )
+        except Exception:
+            pass
+
+        # Re-executar launcher em background — não aguarda. Webapp polling
+        # cuidará de aguardar Tomcat ficar disponível no próximo run.
+        if sistema != "Windows":
+            launcher = Path(pjecalc_dir) / "iniciarPjeCalc.sh"
+            if launcher.exists():
+                subprocess.Popen(
+                    ["bash", str(launcher)],
+                    cwd=str(Path(pjecalc_dir)),
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                _log("  ↻ Tomcat: launcher disparado em background — próximo run aguardará disponibilidade")
+    except Exception as _e:
+        _log(f"  ⚠ reiniciar_tomcat_background: {_e} (não crítico)")
+
+
 # ── Utilitários de formatação ─────────────────────────────────────────────────
 
 def _fmt_br(valor: float | str | None) -> str:
@@ -11484,6 +11546,18 @@ def iniciar_e_preencher(
             pass
         if _agente_ref is not None:
             _agente_ref.clear()
+
+        # ── CORREÇÃO DEFINITIVA (29/04/2026): restart Tomcat em background ──
+        # O bug de SESSION orphan persiste mesmo com cookie clear porque o
+        # servicoDeCalculo é APPLICATION-scoped no Seam (singleton ou Hibernate
+        # L2 cache). A única forma de zerar é reiniciar o Tomcat. Roda em
+        # background — usuário atual já recebeu seu .PJC. Próximo run aguarda
+        # no polling do webapp (até 600s) até Tomcat ficar disponível.
+        try:
+            cb("Reiniciando Tomcat em background para próximo cálculo (estado limpo)…")
+            reiniciar_tomcat_background(pjecalc_dir, log_cb=cb)
+        except Exception as _restart_err:
+            cb(f"⚠ Restart Tomcat em background falhou: {_restart_err} (próximo run pode falhar)")
 
 
 def preencher_como_generator(
