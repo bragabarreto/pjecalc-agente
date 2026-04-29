@@ -1655,7 +1655,7 @@ class PJECalcPlaywright:
             "Multas e Indenizações":   "multas-indenizacoes.jsf",
             "Multas":                  "multas-indenizacoes.jsf",
             "Honorários":              "honorarios.jsf",
-            "Custas Judiciais":        "custas.jsf",
+            "Custas Judiciais":        "custas/custas.jsf",
             "Correção, Juros e Multa": "parametros-atualizacao/parametros-atualizacao.jsf",
             "Liquidar":                "liquidacao.jsf",
             "Imprimir":                "imprimir.jsf",
