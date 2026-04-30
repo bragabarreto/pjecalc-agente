@@ -3927,41 +3927,82 @@ class PJECalcPlaywright:
 
         # ── Deletar entrada default "ÚLTIMA REMUNERAÇÃO" criada pelo PJE-Calc ──
         # PJE-Calc cria automaticamente uma entrada "ÚLTIMA REMUNERAÇÃO" no
-        # histórico quando valorUltimaRemuneracao é preenchido na Fase 1
-        # (manual_completo.md:153). Como a prévia tem histórico customizado,
-        # essa entrada gera duplicação de base salarial. Procurar e remover
-        # ANTES de adicionar as customizadas.
+        # histórico quando valorUltimaRemuneracao é preenchido na Fase 1.
+        # Estratégia: instalar dialog handler, mapear o DOM da listagem,
+        # encontrar o link "Excluir" da linha que contém "ÚLTIMA REMUNERAÇÃO",
+        # disparar o onclick (gera A4J postback), aguardar AJAX, verificar.
         try:
-            _deletados = self._page.evaluate("""() => {
-                // Procurar todas as linhas (tr) da tabela de histórico salarial
-                const linhas = [...document.querySelectorAll("table[id*='listagem'] tbody tr, table[id*='historico'] tbody tr, .rich-table tbody tr")];
-                let count = 0;
-                for (const tr of linhas) {
-                    const txt = (tr.textContent || '').toUpperCase();
-                    // Match exato (não capturar verbas como "ÚLTIMA REMUNERAÇÃO" no nome de outra entrada custom)
-                    if (txt.includes('ÚLTIMA REMUNERAÇÃO') || txt.includes('ULTIMA REMUNERACAO')) {
-                        // Procurar botão/link de excluir nessa linha
-                        const btns = [...tr.querySelectorAll("a, input[type='button'], input[type='image']")];
-                        const excluir = btns.find(b => {
-                            const v = (b.value || b.title || b.alt || b.textContent || '').toLowerCase();
-                            return v.includes('excluir') || v.includes('remover') || v.includes('delet');
-                        });
-                        if (excluir) { excluir.click(); count++; return count; }
+            # Instalar dialog handler ANTES do click — confirm dialog do delete
+            self._page.on("dialog", lambda d: d.accept())
+
+            # Diagnóstico: descobrir o que tem na página
+            _diag = self._page.evaluate("""() => {
+                const allLinks = [...document.querySelectorAll('a')];
+                const excluirLinks = allLinks.filter(a => {
+                    const t = (a.textContent || '').toLowerCase();
+                    const id = (a.id || '').toLowerCase();
+                    return t.includes('excluir') || t.includes('remover') || id.includes('excluir') || id.includes('remov');
+                });
+                const tabelas = [...document.querySelectorAll('table')]
+                    .filter(t => t.id || t.className.includes('rich'))
+                    .map(t => ({id: t.id, cls: t.className, rows: t.querySelectorAll('tbody tr').length}));
+                return {
+                    totalExcluirLinks: excluirLinks.length,
+                    excluirSamples: excluirLinks.slice(0, 5).map(a => ({
+                        id: a.id, txt: (a.textContent||'').trim().substring(0,40),
+                        rowText: a.closest('tr')?.textContent?.replace(/\\s+/g,' ').trim().substring(0,80) || ''
+                    })),
+                    tabelas: tabelas.slice(0, 5),
+                };
+            }""")
+            self._log(f"  🔍 Diag histórico: {_diag.get('totalExcluirLinks')} link(s) Excluir, {len(_diag.get('tabelas',[]))} tabela(s)")
+            for ex in _diag.get('excluirSamples', [])[:3]:
+                self._log(f"     · id={ex['id'][:40]} | row='{ex['rowText'][:60]}'")
+
+            # Click via id pattern JSF (a4j:commandLink dentro de listagem)
+            _resultado = self._page.evaluate("""() => {
+                // Busca CADA link excluir e verifica se a linha contém "ÚLTIMA REMUNERAÇÃO"
+                const links = [...document.querySelectorAll('a')];
+                for (const a of links) {
+                    const txt = (a.textContent || '').toLowerCase();
+                    const id = (a.id || '').toLowerCase();
+                    const ehExcluir = txt.includes('excluir') || id.includes('excluir');
+                    if (!ehExcluir) continue;
+                    const tr = a.closest('tr');
+                    if (!tr) continue;
+                    const rowTxt = (tr.textContent || '').toUpperCase();
+                    // Match flexível para ÚLTIMA REMUNERAÇÃO (acentos podem variar)
+                    const norm = rowTxt.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                    if (norm.includes('ULTIMA REMUNERACAO')) {
+                        // Disparar onclick (necessário para JSF a4j:commandLink)
+                        const linkId = a.id;
+                        if (typeof a.onclick === 'function') {
+                            try { a.onclick.call(a, new Event('click')); }
+                            catch(e) { a.click(); }
+                        } else {
+                            a.click();
+                        }
+                        return {ok: true, linkId: linkId, rowText: rowTxt.substring(0,80)};
                     }
                 }
-                return count;
+                return {ok: false, totalLinks: links.length};
             }""")
-            if _deletados:
-                # Auto-aceitar dialog de confirmação se aparecer
-                try:
-                    self._page.once("dialog", lambda d: d.accept())
-                except Exception:
-                    pass
-                self._aguardar_ajax(timeout=10000)
-                self._page.wait_for_timeout(1500)
-                self._log(f"  ✓ Entrada default 'ÚLTIMA REMUNERAÇÃO' deletada — evita duplicação no histórico")
+            if _resultado.get('ok'):
+                self._log(f"  → Click Excluir disparado: {_resultado['linkId']}")
+                self._aguardar_ajax(timeout=15000)
+                self._page.wait_for_timeout(2500)
+                # Verificar se entrada sumiu
+                _ainda = self._page.evaluate("""() => {
+                    const txt = document.body.textContent || '';
+                    const norm = txt.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
+                    return norm.includes('ULTIMA REMUNERACAO');
+                }""")
+                if _ainda:
+                    self._log(f"  ⚠ Entrada 'ÚLTIMA REMUNERAÇÃO' ainda presente após click — PJE-Calc pode estar regenerando")
+                else:
+                    self._log(f"  ✓ Entrada default 'ÚLTIMA REMUNERAÇÃO' DELETADA com sucesso")
             else:
-                self._log("  ℹ Nenhuma entrada 'ÚLTIMA REMUNERAÇÃO' default encontrada no histórico")
+                self._log(f"  ℹ Nenhuma linha 'ÚLTIMA REMUNERAÇÃO' encontrada na listagem (ok={_resultado.get('ok')}, totalLinks={_resultado.get('totalLinks')})")
         except Exception as _del_err:
             self._log(f"  ⚠ Tentativa de deletar entrada default falhou: {_del_err} (prosseguindo)")
 
