@@ -3862,9 +3862,34 @@ class PJECalcPlaywright:
                 self._log(f"  ⚠ Verificação pós-navegação: {_e_check}")
 
         if not navegou:
-            self._log("  ⚠ Histórico Salarial não disponível no menu — listando para referência:")
+            # ── Fallback URL nav quando menu lateral falha ──────────────────
+            # CRÍTICO: sem este fallback, fase Histórico Salarial é PULADA
+            # silenciosamente quando menu não responde, e PJE-Calc cria entrada
+            # default "ÚLTIMA REMUNERAÇÃO" com FGTS=false — quebrando todos os
+            # cálculos subsequentes que dependem do histórico real da prévia.
+            self._log("  ⚠ Menu Histórico Salarial falhou — tentando URL nav direto…")
+            if self._calculo_url_base and self._calculo_conversation_id:
+                _url_hist = (
+                    f"{self._calculo_url_base}historico-salarial.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                try:
+                    self._page.goto(_url_hist, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(timeout=10000)
+                    self._page.wait_for_timeout(800)
+                    _url_atual = self._page.url.lower()
+                    if "historico-salarial" in _url_atual:
+                        navegou = True
+                        self._log(f"  ✓ Histórico Salarial: navegado via URL direta")
+                except Exception as _eh:
+                    self._log(f"  ⚠ URL nav Histórico Salarial falhou: {_eh}")
+        if not navegou:
+            self._log("  ✗ FALHA CRÍTICA: Histórico Salarial não pôde ser preenchido")
+            self._log("    → A prévia tinha as seguintes entradas que NÃO foram enviadas ao PJE-Calc:")
             for h in historico:
-                self._log(f"    {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
+                self._log(f"      {h.get('nome','')}: {h.get('data_inicio','')} a {h.get('data_fim','')} — R$ {h.get('valor','')}")
+            self._log("    → PJE-Calc usará a ÚLTIMA REMUNERAÇÃO como default (cálculo INCORRETO)")
+            self._log("    → Acesse o PJE-Calc manualmente após a automação para corrigir")
             return
         self.mapear_campos("fase2_historico_salarial")
         def _para_competencia(d: str) -> str:
@@ -9779,16 +9804,27 @@ class PJECalcPlaywright:
         self.mapear_campos("fase9_custas")
 
         # Base das custas
+        # ENUMS CORRETOS confirmados em PJC real (XML interno):
+        #   BRUTO_DEVIDO_AO_RECLAMANTE
+        #   BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO
+        # CUIDADO: enums anteriores (BRUTO_RECLAMANTE / BRUTO_RECLAMANTE_OUTROS)
+        # NÃO existem no PJE-Calc — quando enviados, o sistema cai em default
+        # (geralmente o segundo, "+ Outros Débitos") sem aviso.
         _base = custas.get("base", "")
         if _base:
             _base_map = {
-                "Bruto Devido ao Reclamante": "BRUTO_RECLAMANTE",
-                "Bruto Devido ao Reclamante + Outros Débitos": "BRUTO_RECLAMANTE_OUTROS",
+                "Bruto Devido ao Reclamante": "BRUTO_DEVIDO_AO_RECLAMANTE",
+                "Bruto Devido ao Reclamante + Outros Débitos": "BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO",
+                "BRUTO_RECLAMANTE": "BRUTO_DEVIDO_AO_RECLAMANTE",  # legacy
+                "BRUTO_RECLAMANTE_OUTROS": "BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO",  # legacy
             }
             _val = _base_map.get(_base, _base)
-            self._selecionar("baseCustas", _val, obrigatorio=False)
-            self._selecionar("baseParaApuracao", _val, obrigatorio=False)
-            self._log(f"  ✓ Base custas: {_val}")
+            _ok = self._selecionar("baseCustas", _val, obrigatorio=True) or \
+                  self._selecionar("baseParaApuracao", _val, obrigatorio=False)
+            if _ok:
+                self._log(f"  ✓ Base custas: {_val} (de prévia: '{_base}')")
+            else:
+                self._log(f"  ✗ Base custas: FALHA ao selecionar '{_val}' — prévia indicava '{_base}'")
 
         # Custas do Reclamado — Conhecimento (padrão: Calculada 2%)
         # DOM v2.15.1: radio values = CALCULADA_2PCT / INFORMADA / NAO_SE_APLICA
