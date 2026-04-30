@@ -6898,8 +6898,13 @@ class PJECalcPlaywright:
             self._marcar_checkbox("pensaoAlimenticiaFgts", bool(fgts["pensao_alimenticia_fgts"]))
 
         # Multa Art. 467 CLT — checkbox formulario:multaDoArtigo467
+        # ÚNICO ponto de entrada (não é verba Expresso — confirmado em
+        # knowledge/pje_calc_official/verba_catalog_official.md:19).
+        # Quando marcado, PJE-Calc gera AUTOMATICAMENTE a multa 467 como reflexa
+        # sob cada verba principal na aba Verbas (50% sobre multa FGTS).
         if multa_467:
             self._marcar_checkbox("multaDoArtigo467", True)
+            self._log("  ✓ Multa Art. 467: checkbox FGTS marcado (reflexa será gerada automaticamente)")
 
         # Multa 10% (rescisão antecipada de contrato a prazo)
         if fgts.get("multa_10"):

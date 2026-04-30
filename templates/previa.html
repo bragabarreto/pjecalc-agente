@@ -2211,13 +2211,16 @@
             </div>
             {% endif %}
             {% if _fgts_dados.get('multa_467') %}
-            <div style="background:#fff; padding:8px 12px; border-left:4px solid #fd7e14; border-radius:4px;">
+            <div style="background:#fff; padding:10px 12px; border-left:4px solid #fd7e14; border-radius:4px;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:600; font-size:0.88rem;">MULTA DO ART. 467 DA CLT</span>
-                <span class="badge" style="background:#fd7e14; color:#fff; font-size:0.7rem; padding:2px 8px; border-radius:4px;">Aba FGTS (checkbox)</span>
+                <span style="font-weight:600; font-size:0.88rem;">MULTA DO ART. 467 DA CLT (50%)</span>
+                <span class="badge" style="background:#fd7e14; color:#fff; font-size:0.7rem; padding:2px 8px; border-radius:4px;">Aba FGTS (único ponto de entrada)</span>
               </div>
-              <div style="font-size:0.78rem; color:#6c757d; margin-top:2px;">
-                Sobre parcelas rescisórias incontroversas. Configurado em FGTS → Multa Art. 467 (checkbox marcado).
+              <div style="font-size:0.78rem; color:#6c757d; margin-top:6px;">
+                Configurado em <strong>FGTS → Multa Art. 467 (checkbox <code>multaDoArtigo467</code>)</strong>. Calcula 50% sobre a multa do FGTS.
+              </div>
+              <div style="font-size:0.78rem; color:#155724; margin-top:6px; padding:6px 8px; background:#d4edda; border-radius:3px;">
+                ℹ <strong>Reflexa automática:</strong> ao marcar este checkbox, o PJE-Calc gera automaticamente a multa 467 como reflexa sob cada verba principal na aba Verbas. Não é necessário (nem existe a opção) lançar como reflexo Expresso manualmente — não é verba do catálogo Expresso.
               </div>
             </div>
             {% endif %}
