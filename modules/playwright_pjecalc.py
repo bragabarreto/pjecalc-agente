@@ -3483,30 +3483,16 @@ class PJECalcPlaywright:
         self._log(f"  ✓ valorCargaHorariaPadrao: {_ch}")
 
         # Maior remuneração e última remuneração — IDs confirmados por inspeção DOM
+        # NOTA: valorUltimaRemuneracao SEMPRE é preenchido (necessário pelo PJE-Calc
+        # para validações JSF internas). A entrada automática "ÚLTIMA REMUNERAÇÃO"
+        # criada no Histórico Salarial é deletada pela Fase 2 antes de adicionar as
+        # entradas customizadas (vide fase_historico_salarial → _deletar_entrada_default).
+        # Tentar pular este preenchimento causa conflito de navegação JSF (servidor
+        # dispara redirect automático que conflita com nosso goto na Fase 2).
         if cont.get("maior_remuneracao"):
             self._preencher("valorMaiorRemuneracao", _fmt_br(cont["maior_remuneracao"]), False)
-
-        # PJE-Calc cria AUTOMATICAMENTE entrada "ÚLTIMA REMUNERAÇÃO" no Histórico
-        # Salarial quando valorUltimaRemuneracao é preenchido (manual_completo.md:153,
-        # tutorial_rules.md Regra 2). Para evitar duplicação com histórico customizado
-        # da prévia, só preencher se: (a) NÃO há histórico explícito OU (b) alguma
-        # verba usa "Ultima Remuneracao" como base de cálculo (precisa do fallback).
-        _hist_custom = bool(dados.get("historico_salarial"))
-        _verbas_usam_ultima = any(
-            (v.get("base_calculo") or "").strip().lower()
-                .replace("ú", "u").replace("ç", "c").replace(" ", "")
-                in ("ultimaremuneracao", "ultima_remuneracao")
-            for v in (dados.get("verbas_deferidas") or [])
-        )
         if cont.get("ultima_remuneracao"):
-            if _hist_custom and not _verbas_usam_ultima:
-                self._log(
-                    f"  ℹ valorUltimaRemuneracao={cont['ultima_remuneracao']:.2f} NÃO preenchido — "
-                    f"histórico salarial customizado presente ({len(dados.get('historico_salarial'))} entradas) "
-                    "evita criação automática de entrada 'ÚLTIMA REMUNERAÇÃO' duplicada."
-                )
-            else:
-                self._preencher("valorUltimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]), False)
+            self._preencher("valorUltimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]), False)
 
         # Aviso prévio — ID confirmado: formulario:apuracaoPrazoDoAvisoPrevio
         # Values: NAO_APURAR, APURACAO_CALCULADA, APURACAO_INFORMADA
@@ -3912,6 +3898,47 @@ class PJECalcPlaywright:
             self._log("    → Acesse o PJE-Calc manualmente após a automação para corrigir")
             return
         self.mapear_campos("fase2_historico_salarial")
+
+        # ── Deletar entrada default "ÚLTIMA REMUNERAÇÃO" criada pelo PJE-Calc ──
+        # PJE-Calc cria automaticamente uma entrada "ÚLTIMA REMUNERAÇÃO" no
+        # histórico quando valorUltimaRemuneracao é preenchido na Fase 1
+        # (manual_completo.md:153). Como a prévia tem histórico customizado,
+        # essa entrada gera duplicação de base salarial. Procurar e remover
+        # ANTES de adicionar as customizadas.
+        try:
+            _deletados = self._page.evaluate("""() => {
+                // Procurar todas as linhas (tr) da tabela de histórico salarial
+                const linhas = [...document.querySelectorAll("table[id*='listagem'] tbody tr, table[id*='historico'] tbody tr, .rich-table tbody tr")];
+                let count = 0;
+                for (const tr of linhas) {
+                    const txt = (tr.textContent || '').toUpperCase();
+                    // Match exato (não capturar verbas como "ÚLTIMA REMUNERAÇÃO" no nome de outra entrada custom)
+                    if (txt.includes('ÚLTIMA REMUNERAÇÃO') || txt.includes('ULTIMA REMUNERACAO')) {
+                        // Procurar botão/link de excluir nessa linha
+                        const btns = [...tr.querySelectorAll("a, input[type='button'], input[type='image']")];
+                        const excluir = btns.find(b => {
+                            const v = (b.value || b.title || b.alt || b.textContent || '').toLowerCase();
+                            return v.includes('excluir') || v.includes('remover') || v.includes('delet');
+                        });
+                        if (excluir) { excluir.click(); count++; return count; }
+                    }
+                }
+                return count;
+            }""")
+            if _deletados:
+                # Auto-aceitar dialog de confirmação se aparecer
+                try:
+                    self._page.once("dialog", lambda d: d.accept())
+                except Exception:
+                    pass
+                self._aguardar_ajax(timeout=10000)
+                self._page.wait_for_timeout(1500)
+                self._log(f"  ✓ Entrada default 'ÚLTIMA REMUNERAÇÃO' deletada — evita duplicação no histórico")
+            else:
+                self._log("  ℹ Nenhuma entrada 'ÚLTIMA REMUNERAÇÃO' default encontrada no histórico")
+        except Exception as _del_err:
+            self._log(f"  ⚠ Tentativa de deletar entrada default falhou: {_del_err} (prosseguindo)")
+
         def _para_competencia(d: str) -> str:
             partes = d.split("/")
             if len(partes) == 3 and len(partes[2]) == 4:
