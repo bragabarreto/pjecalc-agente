@@ -3879,16 +3879,42 @@ class PJECalcPlaywright:
                     f"{self._calculo_url_base}historico-salarial.jsf"
                     f"?conversationId={self._calculo_conversation_id}"
                 )
-                try:
-                    self._page.goto(_url_hist, wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(timeout=10000)
-                    self._page.wait_for_timeout(800)
-                    _url_atual = self._page.url.lower()
-                    if "historico-salarial" in _url_atual:
-                        navegou = True
-                        self._log(f"  ✓ Histórico Salarial: navegado via URL direta")
-                except Exception as _eh:
-                    self._log(f"  ⚠ URL nav Histórico Salarial falhou: {_eh}")
+                # Retry com backoff para lidar com race condition JSF: o servidor
+                # pode disparar redirect AJAX (conv ID novo) interrompendo nosso goto.
+                # Quando isso ocorre, esperamos o servidor estabilizar e tentamos com
+                # o conv ID atualizado (capturado da própria URL pós-erro).
+                _tentativas_hist = 3
+                for _t in range(_tentativas_hist):
+                    try:
+                        self._page.goto(_url_hist, wait_until="domcontentloaded", timeout=15000)
+                        self._aguardar_ajax(timeout=10000)
+                        self._page.wait_for_timeout(800)
+                        _url_atual = self._page.url.lower()
+                        if "historico-salarial" in _url_atual:
+                            navegou = True
+                            self._log(f"  ✓ Histórico Salarial: navegado via URL direta (tentativa {_t+1})")
+                            break
+                    except Exception as _eh:
+                        _emsg = str(_eh)
+                        self._log(f"  ⚠ Histórico Salarial nav (tentativa {_t+1}/{_tentativas_hist}): {_emsg[:200]}")
+                        # Se foi "interrupted by another navigation", aguardar e re-tentar
+                        # com conv ID atualizado (pode ter mudado durante o redirect)
+                        if "interrupted by another navigation" in _emsg or "interrupted" in _emsg:
+                            self._page.wait_for_timeout(3000)
+                            self._aguardar_ajax(timeout=10000)
+                            # Re-capturar conv atual da URL
+                            try:
+                                self._capturar_base_calculo()
+                                _url_hist = (
+                                    f"{self._calculo_url_base}historico-salarial.jsf"
+                                    f"?conversationId={self._calculo_conversation_id}"
+                                )
+                                self._log(f"    → conv atualizado para {self._calculo_conversation_id} — retrying")
+                            except Exception:
+                                pass
+                        else:
+                            # Erro não relacionado a race — não vale repetir
+                            break
         if not navegou:
             self._log("  ✗ FALHA CRÍTICA: Histórico Salarial não pôde ser preenchido")
             self._log("    → A prévia tinha as seguintes entradas que NÃO foram enviadas ao PJE-Calc:")
