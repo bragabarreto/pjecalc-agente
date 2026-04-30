@@ -11674,6 +11674,67 @@ class PJECalcPlaywright:
         self._log("Fase pré-liquidação — Regerar ocorrências…")
         self._regerar_ocorrencias_verbas()
 
+        # ── Remoção FINAL da entrada default 'ÚLTIMA REMUNERAÇÃO' ──────────
+        # PJE-Calc regenera essa entrada toda vez que valorUltimaRemuneracao
+        # é preenchido E a página de histórico é "tocada" (save/navigate).
+        # Por isso a remoção tem que ser AGORA, depois de todas as fases que
+        # tocam o histórico, e ANTES da liquidação. Tentar até 3 vezes.
+        if dados.get("historico_salarial"):
+            self._log("Pré-liquidação — removendo entrada default 'ÚLTIMA REMUNERAÇÃO'…")
+            try:
+                # Navegar para histórico salarial
+                if self._calculo_url_base and self._calculo_conversation_id:
+                    _url_h = (f"{self._calculo_url_base}historico-salarial.jsf"
+                              f"?conversationId={self._calculo_conversation_id}")
+                    self._page.goto(_url_h, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(timeout=10000)
+                    self._page.wait_for_timeout(1000)
+                    self._page.on("dialog", lambda d: d.accept())
+                    for _t in range(3):
+                        _r = self._page.evaluate("""() => {
+                            const links = [...document.querySelectorAll('a')].filter(a => {
+                                const id = (a.id || '').toLowerCase();
+                                return id.includes('listagem') && id.includes('excluir');
+                            });
+                            for (const a of links) {
+                                const tr = a.closest('tr');
+                                if (!tr) continue;
+                                const norm = (tr.textContent || '').toUpperCase()
+                                    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                                if (norm.includes('ULTIMA REMUNERACAO')) {
+                                    if (typeof a.onclick === 'function') {
+                                        try { a.onclick.call(a, new Event('click')); }
+                                        catch(e) { a.click(); }
+                                    } else { a.click(); }
+                                    return {ok: true, linkId: a.id};
+                                }
+                            }
+                            return {ok: false};
+                        }""")
+                        if not _r.get('ok'):
+                            self._log(f"  ✓ ÚLTIMA REMUNERAÇÃO não está mais na listagem (tentativa {_t+1})")
+                            break
+                        self._log(f"  → Tentativa {_t+1}: click {_r['linkId']}")
+                        self._aguardar_ajax(timeout=15000)
+                        self._page.wait_for_timeout(2500)
+                    # Verificar uma última vez
+                    _ainda = self._page.evaluate("""() => {
+                        const trs = [...document.querySelectorAll('tr')];
+                        return trs.some(tr => {
+                            const links = [...tr.querySelectorAll('a')].filter(a => (a.id||'').includes('listagem'));
+                            if (!links.length) return false;
+                            const norm = (tr.textContent || '').toUpperCase()
+                                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                            return norm.includes('ULTIMA REMUNERACAO');
+                        });
+                    }""")
+                    if _ainda:
+                        self._log(f"  ⚠ ÚLTIMA REMUNERAÇÃO persistiu após 3 tentativas — PJE-Calc continua regenerando")
+                    else:
+                        self._log(f"  ✓ ÚLTIMA REMUNERAÇÃO removida do histórico")
+            except Exception as _re:
+                self._log(f"  ⚠ Remoção pré-liquidação falhou: {_re}")
+
         # Screenshot pré-liquidação (captura estado final antes de liquidar)
         self._screenshot_fase("pre_liquidacao")
 
