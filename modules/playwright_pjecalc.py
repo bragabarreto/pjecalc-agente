@@ -3959,22 +3959,23 @@ class PJECalcPlaywright:
             for ex in _diag.get('excluirSamples', [])[:3]:
                 self._log(f"     · id={ex['id'][:40]} | row='{ex['rowText'][:60]}'")
 
-            # Click via id pattern JSF (a4j:commandLink dentro de listagem)
+            # Click via id pattern JSF: especificamente formulario:listagem:N:excluirHistorico
+            # (confirmado por diag em run 20260430_172247 — esse é o ID do link Excluir
+            # DENTRO da tabela de histórico salarial; outros links Excluir do menu lateral
+            # não devem ser clicados pois fariam ações destrutivas no cálculo).
             _resultado = self._page.evaluate("""() => {
-                // Busca CADA link excluir e verifica se a linha contém "ÚLTIMA REMUNERAÇÃO"
-                const links = [...document.querySelectorAll('a')];
-                for (const a of links) {
-                    const txt = (a.textContent || '').toLowerCase();
+                // Filtro por ID pattern: precisa conter 'listagem' E 'excluir' (não menu lateral)
+                const links = [...document.querySelectorAll('a')].filter(a => {
                     const id = (a.id || '').toLowerCase();
-                    const ehExcluir = txt.includes('excluir') || id.includes('excluir');
-                    if (!ehExcluir) continue;
+                    return id.includes('listagem') && id.includes('excluir');
+                });
+                for (const a of links) {
+                    // Verificar que está em <tr> com 'ÚLTIMA REMUNERAÇÃO'
                     const tr = a.closest('tr');
                     if (!tr) continue;
                     const rowTxt = (tr.textContent || '').toUpperCase();
-                    // Match flexível para ÚLTIMA REMUNERAÇÃO (acentos podem variar)
                     const norm = rowTxt.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
                     if (norm.includes('ULTIMA REMUNERACAO')) {
-                        // Disparar onclick (necessário para JSF a4j:commandLink)
                         const linkId = a.id;
                         if (typeof a.onclick === 'function') {
                             try { a.onclick.call(a, new Event('click')); }
@@ -3985,7 +3986,7 @@ class PJECalcPlaywright:
                         return {ok: true, linkId: linkId, rowText: rowTxt.substring(0,80)};
                     }
                 }
-                return {ok: false, totalLinks: links.length};
+                return {ok: false, totalLinks: links.length, candidatos: links.map(a=>a.id)};
             }""")
             if _resultado.get('ok'):
                 self._log(f"  → Click Excluir disparado: {_resultado['linkId']}")
