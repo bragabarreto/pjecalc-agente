@@ -3485,8 +3485,28 @@ class PJECalcPlaywright:
         # Maior remuneração e última remuneração — IDs confirmados por inspeção DOM
         if cont.get("maior_remuneracao"):
             self._preencher("valorMaiorRemuneracao", _fmt_br(cont["maior_remuneracao"]), False)
+
+        # PJE-Calc cria AUTOMATICAMENTE entrada "ÚLTIMA REMUNERAÇÃO" no Histórico
+        # Salarial quando valorUltimaRemuneracao é preenchido (manual_completo.md:153,
+        # tutorial_rules.md Regra 2). Para evitar duplicação com histórico customizado
+        # da prévia, só preencher se: (a) NÃO há histórico explícito OU (b) alguma
+        # verba usa "Ultima Remuneracao" como base de cálculo (precisa do fallback).
+        _hist_custom = bool(dados.get("historico_salarial"))
+        _verbas_usam_ultima = any(
+            (v.get("base_calculo") or "").strip().lower()
+                .replace("ú", "u").replace("ç", "c").replace(" ", "")
+                in ("ultimaremuneracao", "ultima_remuneracao")
+            for v in (dados.get("verbas_deferidas") or [])
+        )
         if cont.get("ultima_remuneracao"):
-            self._preencher("valorUltimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]), False)
+            if _hist_custom and not _verbas_usam_ultima:
+                self._log(
+                    f"  ℹ valorUltimaRemuneracao={cont['ultima_remuneracao']:.2f} NÃO preenchido — "
+                    f"histórico salarial customizado presente ({len(dados.get('historico_salarial'))} entradas) "
+                    "evita criação automática de entrada 'ÚLTIMA REMUNERAÇÃO' duplicada."
+                )
+            else:
+                self._preencher("valorUltimaRemuneracao", _fmt_br(cont["ultima_remuneracao"]), False)
 
         # Aviso prévio — ID confirmado: formulario:apuracaoPrazoDoAvisoPrevio
         # Values: NAO_APURAR, APURACAO_CALCULADA, APURACAO_INFORMADA
