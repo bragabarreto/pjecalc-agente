@@ -9819,8 +9819,13 @@ class PJECalcPlaywright:
                 "BRUTO_RECLAMANTE_OUTROS": "BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO",  # legacy
             }
             _val = _base_map.get(_base, _base)
-            _ok = self._selecionar("baseCustas", _val, obrigatorio=True) or \
-                  self._selecionar("baseParaApuracao", _val, obrigatorio=False)
+            # ID correto confirmado em campos_fase9_custas.json:
+            # formulario:baseParaCustasCalculadas (NÃO "baseCustas" — esse não
+            # existe no DOM, e _selecionar caía silenciosamente em default).
+            # baseParaApuracao é da página Honorários (NÃO da Custas) — manter
+            # apenas como fallback de última instância.
+            _ok = self._selecionar("baseParaCustasCalculadas", _val, obrigatorio=True) or \
+                  self._selecionar("baseCustas", _val, obrigatorio=False)
             if _ok:
                 self._log(f"  ✓ Base custas: {_val} (de prévia: '{_base}')")
             else:
