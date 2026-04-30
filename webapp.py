@@ -476,6 +476,21 @@ async def editar_campo_previa(
         # Aplicar edição
         dados = aplicar_edicao_usuario(dados, campo, valor)
 
+        # Validações server-side PJE-Calc: corrige automaticamente combinações
+        # inválidas (ex: prescrição quinquenal com contrato < 5 anos). O alerta
+        # é incluído na resposta para que o frontend mostre ao usuário.
+        _alertas_pjecalc = []
+        try:
+            from modules.pjecalc_validators import aplicar_validacoes_pjecalc
+            _alertas_antes = list(dados.get("_alertas_validacao") or [])
+            dados = aplicar_validacoes_pjecalc(dados)
+            _alertas_pjecalc = [
+                a for a in (dados.get("_alertas_validacao") or [])
+                if a not in _alertas_antes
+            ]
+        except Exception as _ve:
+            logger.debug(f"Validações PJE-Calc não aplicadas: {_ve}")
+
         # Registrar rastreabilidade
         repo.registrar_rastreabilidade(sessao_id, {
             "campo_pjecalc": campo,
@@ -518,6 +533,7 @@ async def editar_campo_previa(
             "campo": campo,
             "valor": valor,
             "previa_atualizada": nova_previa,
+            "alertas_pjecalc": _alertas_pjecalc,
         })
     except Exception as exc:
         import logging, traceback

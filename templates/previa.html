@@ -3017,6 +3017,16 @@ async function salvarCampo(campo, valor, el) {
         setTimeout(() => el.classList.remove('campo-salvo'), 1500);
       }
       mostrarToast('Salvo: ' + campo, 'ok');
+      // Alertas de validação PJE-Calc — informa o usuário se algum campo
+      // foi auto-corrigido por violar regra server-side (ex: prescrição
+      // quinquenal com contrato < 5 anos).
+      if (Array.isArray(dados.alertas_pjecalc) && dados.alertas_pjecalc.length > 0) {
+        for (const alerta of dados.alertas_pjecalc) {
+          mostrarToast('⚠ ' + alerta.mensagem, 'erro');
+          // Reload em 3s para refletir os campos auto-corrigidos
+          setTimeout(() => location.reload(), 3500);
+        }
+      }
     } else {
       mostrarToast('Erro ao salvar ' + campo, 'erro');
     }

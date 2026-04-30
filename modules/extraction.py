@@ -3083,6 +3083,16 @@ def _validar_e_completar(dados: dict[str, Any]) -> dict[str, Any]:
     # Defaults para "Limitar Cálculo" — data_inicio_calculo e data_fim_calculo
     dados = _aplicar_defaults_limitar_calculo(dados)
 
+    # Validações server-side conhecidas do PJE-Calc — corrige extrações
+    # incoerentes que causariam HTTP 500 no Save (ex: prescrição quinquenal
+    # quando contrato < 5 anos; data_inicio_calculo retroativo).
+    try:
+        from modules.pjecalc_validators import aplicar_validacoes_pjecalc
+        dados = aplicar_validacoes_pjecalc(dados)
+    except Exception as _ve:
+        # Validação é defensiva — qualquer erro não deve quebrar a extração
+        logger.debug(f"Validações PJE-Calc não aplicadas: {_ve}")
+
     # Alerta se JSON foi auto-reparado (dados potencialmente incompletos)
     if dados.pop("_json_auto_reparado", False):
         dados.setdefault("alertas", []).append(

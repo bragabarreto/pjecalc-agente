@@ -2382,6 +2382,25 @@ class PJECalcPlaywright:
             _msg = (e.get("mensagem", "") or "").lower()
             _campo = (e.get("campo", "") or "").lower()
 
+            # ── Prescrição quinquenal/FGTS rejeitada (período < 5 anos) ──
+            # PJE-Calc: "Não é possível selecionar prescrição quinquenal,
+            # pois o período entre a data de admissão e a data do ajuizamento
+            # é menor que cinco anos."
+            if ("prescric" in _msg and ("quinquenal" in _msg or "fgts" in _msg)) or \
+               ("cinco anos" in _msg) or ("menor que cinco" in _msg):
+                self._log("    → Correção: prescrição quinquenal/FGTS rejeitada — desmarcando ambos")
+                try:
+                    self._marcar_checkbox("prescricaoQuinquenal", False)
+                    self._marcar_checkbox("prescricaoFgts", False)
+                    if isinstance(dados, dict):
+                        presc = dados.setdefault("prescricao", {})
+                        presc["quinquenal"] = False
+                        presc["fgts"] = False
+                    _corrigiu = True
+                except Exception as _ce:
+                    self._log(f"    ⚠ Falha ao desmarcar prescrição: {_ce}")
+                continue
+
             # ── Data obrigatória vazia ou formato inválido ──
             if "data" in _campo or "data" in _fid or "data" in _msg:
                 import datetime
@@ -3501,7 +3520,25 @@ class PJECalcPlaywright:
             self._preencher("prazoAvisoInformado", str(_dias), False)
             self._log(f"  ✓ prazoAvisoInformado: {_dias} dias")
 
-        # Prescrição
+        # Prescrição — defesa em profundidade contra rejeição server-side.
+        # PJE-Calc valida: período (admissão → ajuizamento) >= 5 anos; senão
+        # rejeita Save com HTTP 500. Aqui aplicamos a validação como última
+        # camada (camadas 1-2 estão em extraction.py e webapp.py /editar).
+        try:
+            from modules.pjecalc_validators import validar_prescricao
+            _r = validar_prescricao(
+                admissao=cont.get("admissao"),
+                ajuizamento=cont.get("ajuizamento"),
+                quinquenal=presc.get("quinquenal"),
+                fgts=presc.get("fgts"),
+            )
+            if _r.get("corrigido"):
+                self._log(f"  ⚠ {_r.get('alerta')}")
+                presc["quinquenal"] = _r["quinquenal"]
+                presc["fgts"] = _r["fgts"]
+        except Exception as _vp_err:
+            self._log(f"  ⚠ Validação prescrição falhou: {_vp_err} (prosseguindo)")
+
         if presc.get("quinquenal") is not None:
             self._marcar_checkbox("prescricaoQuinquenal", bool(presc["quinquenal"]))
         if presc.get("fgts") is not None:
