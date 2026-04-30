@@ -602,6 +602,137 @@ async def editar_verba(
         )
 
 
+@app.post("/previa/{sessao_id}/adicionar-verba")
+async def adicionar_verba(
+    sessao_id: str,
+    estrategia: str = Form(...),  # "expresso_direto" | "expresso_adaptado" | "manual"
+    nome_pjecalc: str = Form(...),
+    nome_sentenca: str = Form(""),
+    caracteristica: str = Form("Comum"),  # Comum | 13o Salario | Aviso Previo | Ferias
+    ocorrencia: str = Form("Mensal"),     # Mensal | Dezembro | Periodo Aquisitivo | Desligamento
+    base_calculo: str = Form("Historico Salarial"),
+    percentual: str = Form(""),
+    valor_informado: str = Form(""),
+    incidencia_fgts: str = Form("true"),
+    incidencia_inss: str = Form("true"),
+    incidencia_ir: str = Form("true"),
+    tipo: str = Form("Principal"),       # Principal | Reflexa
+    verba_principal_ref: str = Form(""),  # nome da verba principal (se Reflexa)
+    db: Session = Depends(get_db),
+):
+    """
+    Adiciona uma nova verba à prévia. Suporta 3 estratégias:
+
+    - **expresso_direto**: verba existe na tabela Expresso do PJE-Calc.
+      Adicionada em verbas_mapeadas['predefinidas'] com mapeada=True.
+
+    - **expresso_adaptado**: usa Expresso como base mas customiza nome/parâmetros.
+      Adicionada em ['personalizadas'] com estrategia_preenchimento.tipo='expresso_adaptado'.
+
+    - **manual**: criada via botão Manual no PJE-Calc, todos os campos editáveis.
+      Adicionada em ['personalizadas'] com estrategia_preenchimento.tipo='manual'.
+
+    Após inserção, aplica validações server-side (pjecalc_validators) e
+    regenera a prévia.
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    if estrategia not in ("expresso_direto", "expresso_adaptado", "manual"):
+        return JSONResponse(
+            {"sucesso": False, "erro": f"estrategia inválida: {estrategia}"},
+            status_code=400,
+        )
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+
+    try:
+        def _to_bool(s: str) -> bool:
+            return str(s).strip().lower() in ("true", "1", "yes", "sim")
+
+        def _to_float(s: str):
+            try:
+                return float(str(s).replace(",", ".").strip()) if s else None
+            except Exception:
+                return None
+
+        # Construir verba completa
+        nova_verba = {
+            "nome_sentenca": nome_sentenca or nome_pjecalc,
+            "nome_pjecalc": nome_pjecalc,
+            "tipo": tipo,
+            "caracteristica": caracteristica,
+            "ocorrencia": ocorrencia,
+            "base_calculo": base_calculo,
+            "percentual": _to_float(percentual),
+            "valor_informado": _to_float(valor_informado),
+            "incidencia_fgts": _to_bool(incidencia_fgts),
+            "incidencia_inss": _to_bool(incidencia_inss),
+            "incidencia_ir": _to_bool(incidencia_ir),
+            "verba_principal_ref": verba_principal_ref or None,
+            "confianca": 1.0,  # adicionada manualmente pelo usuário → confiança máxima
+            "mapeada": estrategia == "expresso_direto",
+            "estrategia_preenchimento": {
+                "tipo_verba": tipo,
+                "tipo": estrategia,
+                "baseado_em": "usuario",
+                "verba_principal_ref": verba_principal_ref or None,
+            },
+        }
+
+        # Categorizar pela estratégia
+        if estrategia == "expresso_direto":
+            verbas_mapeadas.setdefault("predefinidas", []).append(nova_verba)
+        else:
+            verbas_mapeadas.setdefault("personalizadas", []).append(nova_verba)
+
+        # Aplicar validações server-side PJE-Calc (defesa em profundidade)
+        try:
+            from modules.pjecalc_validators import aplicar_validacoes_pjecalc
+            dados = aplicar_validacoes_pjecalc(dados)
+        except Exception as _ve:
+            logger.debug(f"Validações PJE-Calc não aplicadas: {_ve}")
+
+        # Regerar prévia + persistir
+        nova_previa = gerar_previa(dados, verbas_mapeadas)
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+
+        # Rastreabilidade
+        repo.registrar_rastreabilidade(sessao_id, {
+            "campo_pjecalc": f"verba.adicionada.{estrategia}",
+            "valor": nome_pjecalc,
+            "fonte": "USUARIO",
+            "confirmado_usuario": True,
+            "pergunta_formulada": f"Usuário adicionou verba '{nome_pjecalc}' via estratégia '{estrategia}'",
+            "resposta_usuario": nome_pjecalc,
+        })
+
+        return JSONResponse({
+            "sucesso": True,
+            "estrategia": estrategia,
+            "nome_pjecalc": nome_pjecalc,
+            "indice": (
+                len(verbas_mapeadas.get("predefinidas", [])) - 1
+                if estrategia == "expresso_direto"
+                else None
+            ),
+        })
+    except Exception as exc:
+        import traceback
+        logger.error(
+            "Erro ao adicionar verba '%s' (%s): %s\n%s",
+            nome_pjecalc, estrategia, exc, traceback.format_exc()
+        )
+        return JSONResponse(
+            {"sucesso": False, "erro": str(exc)},
+            status_code=500,
+        )
+
+
 @app.post("/previa/{sessao_id}/editar-estrategia")
 async def editar_estrategia(
     sessao_id: str,

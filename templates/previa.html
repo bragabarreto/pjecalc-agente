@@ -2176,6 +2176,108 @@
         <p style="color:#6c757d; font-size:0.9rem;">Nenhuma verba extraída. Verifique a sentença e os alertas acima.</p>
         {% endif %}
 
+        <!-- ── Botão Adicionar Verba ───────────────────────────────── -->
+        <div style="margin-bottom:16px; display:flex; gap:8px; flex-wrap:wrap;">
+          <button type="button" class="btn btn-success"
+                  style="padding:8px 14px; font-size:0.88rem; background:#28a745; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:600;"
+                  onclick="abrirModalAdicionarVerba('expresso_direto')">+ Adicionar Verba (Expresso)</button>
+          <button type="button" class="btn"
+                  style="padding:8px 14px; font-size:0.88rem; background:#0d6efd; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:600;"
+                  onclick="abrirModalAdicionarVerba('expresso_adaptado')">+ Adicionar Verba (Expresso Adaptado)</button>
+          <button type="button" class="btn"
+                  style="padding:8px 14px; font-size:0.88rem; background:#6c757d; color:#fff; border:none; border-radius:6px; cursor:pointer; font-weight:600;"
+                  onclick="abrirModalAdicionarVerba('manual')">+ Adicionar Verba (Manual)</button>
+        </div>
+
+        <!-- ── Modal Adicionar Verba ───────────────────────────────── -->
+        <div id="modalAdicionarVerba" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+          <div style="background:white; padding:24px; border-radius:8px; max-width:600px; width:90%; max-height:90vh; overflow-y:auto;">
+            <h3 id="modalVerbaTitulo" style="margin:0 0 16px 0; color:#1a3a6b;">Adicionar Verba</h3>
+            <p id="modalVerbaDescricao" style="font-size:0.85rem; color:#6c757d; margin-bottom:16px;"></p>
+
+            <form id="formAdicionarVerba">
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                <div style="grid-column:1/3;">
+                  <label style="font-size:0.82rem; font-weight:600;">Nome no PJE-Calc *</label>
+                  <input type="text" id="nv-nome-pjecalc" required style="width:100%; padding:6px;" list="expresso-catalog-list" placeholder="Ex: SALDO DE SALÁRIO">
+                </div>
+                <div style="grid-column:1/3;">
+                  <label style="font-size:0.82rem; font-weight:600;">Nome na Sentença</label>
+                  <input type="text" id="nv-nome-sentenca" style="width:100%; padding:6px;" placeholder="Como aparece no dispositivo (opcional)">
+                </div>
+
+                <div>
+                  <label style="font-size:0.82rem; font-weight:600;">Tipo</label>
+                  <select id="nv-tipo" style="width:100%; padding:6px;" onchange="toggleNvPrincipalRef()">
+                    <option value="Principal">Principal</option>
+                    <option value="Reflexa">Reflexa</option>
+                  </select>
+                </div>
+                <div id="nv-principal-ref-wrapper" style="display:none;">
+                  <label style="font-size:0.82rem; font-weight:600;">Verba Principal de Referência</label>
+                  <input type="text" id="nv-principal-ref" style="width:100%; padding:6px;" placeholder="Nome da verba principal">
+                </div>
+
+                <div>
+                  <label style="font-size:0.82rem; font-weight:600;">Característica</label>
+                  <select id="nv-caracteristica" style="width:100%; padding:6px;">
+                    <option value="Comum">Comum</option>
+                    <option value="13o Salario">13º Salário</option>
+                    <option value="Aviso Previo">Aviso Prévio</option>
+                    <option value="Ferias">Férias</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.82rem; font-weight:600;">Ocorrência</label>
+                  <select id="nv-ocorrencia" style="width:100%; padding:6px;">
+                    <option value="Mensal">Mensal</option>
+                    <option value="Dezembro">Dezembro</option>
+                    <option value="Periodo Aquisitivo">Período Aquisitivo</option>
+                    <option value="Desligamento">Desligamento</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label style="font-size:0.82rem; font-weight:600;">Base de Cálculo</label>
+                  <select id="nv-base-calculo" style="width:100%; padding:6px;">
+                    <option value="Historico Salarial">Histórico Salarial</option>
+                    <option value="Maior Remuneracao">Maior Remuneração</option>
+                    <option value="Ultima Remuneracao">Última Remuneração</option>
+                    <option value="Salario Minimo">Salário Mínimo</option>
+                    <option value="Valor Informado">Valor Informado</option>
+                  </select>
+                </div>
+                <div>
+                  <label style="font-size:0.82rem; font-weight:600;">Percentual (%) ou Valor (R$)</label>
+                  <input type="text" id="nv-percentual-ou-valor" style="width:100%; padding:6px;" placeholder="0.5 = 50% / 1500.00">
+                </div>
+
+                <div style="grid-column:1/3;">
+                  <label style="font-size:0.82rem; font-weight:600;">Incidências</label>
+                  <div style="display:flex; gap:16px; margin-top:6px;">
+                    <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem;">
+                      <input type="checkbox" id="nv-fgts" checked> FGTS
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem;">
+                      <input type="checkbox" id="nv-inss" checked> INSS
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem;">
+                      <input type="checkbox" id="nv-ir" checked> IR
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div style="margin-top:20px; display:flex; gap:8px; justify-content:flex-end;">
+                <button type="button" onclick="fecharModalAdicionarVerba()"
+                        style="padding:8px 16px; background:#6c757d; color:#fff; border:none; border-radius:4px; cursor:pointer;">Cancelar</button>
+                <button type="button" onclick="enviarAdicionarVerba()"
+                        style="padding:8px 16px; background:#28a745; color:#fff; border:none; border-radius:4px; cursor:pointer; font-weight:600;">Adicionar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
         {% for item in ns_verbas.principais %}
         {% set verba = item.verba %}
         {% set vidx = item.idx %}
@@ -2997,6 +3099,97 @@ function mostrarToast(msg, tipo) {
 }
 
 // Salvar campo principal
+// ── Modal Adicionar Verba ─────────────────────────────────────────────
+let _estrategiaAtual = 'expresso_direto';
+
+function abrirModalAdicionarVerba(estrategia) {
+  _estrategiaAtual = estrategia;
+  const titulos = {
+    expresso_direto: '+ Adicionar Verba (Expresso Direto)',
+    expresso_adaptado: '+ Adicionar Verba (Expresso Adaptado)',
+    manual: '+ Adicionar Verba (Manual)',
+  };
+  const descricoes = {
+    expresso_direto: 'Verba que existe no catálogo Expresso do PJE-Calc. Use o autocomplete para selecionar o nome canônico.',
+    expresso_adaptado: 'Usa uma verba Expresso como base mas customiza nome/parâmetros. Selecione a base no autocomplete.',
+    manual: 'Verba criada via botão "Manual" no PJE-Calc. Todos os campos são editáveis livremente.',
+  };
+  document.getElementById('modalVerbaTitulo').textContent = titulos[estrategia] || 'Adicionar Verba';
+  document.getElementById('modalVerbaDescricao').textContent = descricoes[estrategia] || '';
+  document.getElementById('modalAdicionarVerba').style.display = 'flex';
+  document.getElementById('formAdicionarVerba').reset();
+  // Defaults
+  document.getElementById('nv-fgts').checked = true;
+  document.getElementById('nv-inss').checked = true;
+  document.getElementById('nv-ir').checked = true;
+  document.getElementById('nv-tipo').value = 'Principal';
+  toggleNvPrincipalRef();
+}
+
+function fecharModalAdicionarVerba() {
+  document.getElementById('modalAdicionarVerba').style.display = 'none';
+}
+
+function toggleNvPrincipalRef() {
+  const tipo = document.getElementById('nv-tipo').value;
+  document.getElementById('nv-principal-ref-wrapper').style.display =
+    (tipo === 'Reflexa') ? 'block' : 'none';
+}
+
+async function enviarAdicionarVerba() {
+  const nome_pjecalc = document.getElementById('nv-nome-pjecalc').value.trim();
+  if (!nome_pjecalc) {
+    mostrarToast('Nome no PJE-Calc é obrigatório', 'erro');
+    return;
+  }
+  const tipo = document.getElementById('nv-tipo').value;
+  const verba_principal_ref = (tipo === 'Reflexa')
+    ? document.getElementById('nv-principal-ref').value.trim()
+    : '';
+  if (tipo === 'Reflexa' && !verba_principal_ref) {
+    mostrarToast('Verba reflexa requer Verba Principal de Referência', 'erro');
+    return;
+  }
+
+  const valor_pct = document.getElementById('nv-percentual-ou-valor').value.trim();
+  const base_calc = document.getElementById('nv-base-calculo').value;
+  // Heurística: se base = "Valor Informado", o input vai como valor; senão como percentual
+  const valor_informado = (base_calc === 'Valor Informado') ? valor_pct : '';
+  const percentual = (base_calc !== 'Valor Informado') ? valor_pct : '';
+
+  const form = new FormData();
+  form.append('estrategia', _estrategiaAtual);
+  form.append('nome_pjecalc', nome_pjecalc);
+  form.append('nome_sentenca', document.getElementById('nv-nome-sentenca').value.trim());
+  form.append('tipo', tipo);
+  form.append('verba_principal_ref', verba_principal_ref);
+  form.append('caracteristica', document.getElementById('nv-caracteristica').value);
+  form.append('ocorrencia', document.getElementById('nv-ocorrencia').value);
+  form.append('base_calculo', base_calc);
+  form.append('percentual', percentual);
+  form.append('valor_informado', valor_informado);
+  form.append('incidencia_fgts', document.getElementById('nv-fgts').checked ? 'true' : 'false');
+  form.append('incidencia_inss', document.getElementById('nv-inss').checked ? 'true' : 'false');
+  form.append('incidencia_ir', document.getElementById('nv-ir').checked ? 'true' : 'false');
+
+  try {
+    const resp = await fetch('/previa/' + SESSAO_ID + '/adicionar-verba', {
+      method: 'POST', body: form
+    });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      mostrarToast('✓ Verba adicionada: ' + nome_pjecalc, 'ok');
+      fecharModalAdicionarVerba();
+      // Reload para renderizar a nova verba
+      setTimeout(() => location.reload(), 800);
+    } else {
+      mostrarToast('Erro: ' + (dados.erro || 'desconhecido'), 'erro');
+    }
+  } catch (err) {
+    mostrarToast('Erro de comunicação: ' + err, 'erro');
+  }
+}
+
 async function salvarCampo(campo, valor, el) {
   try {
     const form = new FormData();
