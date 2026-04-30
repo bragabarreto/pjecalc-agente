@@ -3937,27 +3937,20 @@ class PJECalcPlaywright:
 
             # Diagnóstico: descobrir o que tem na página
             _diag = self._page.evaluate("""() => {
-                const allLinks = [...document.querySelectorAll('a')];
-                const excluirLinks = allLinks.filter(a => {
-                    const t = (a.textContent || '').toLowerCase();
-                    const id = (a.id || '').toLowerCase();
-                    return t.includes('excluir') || t.includes('remover') || id.includes('excluir') || id.includes('remov');
-                });
-                const tabelas = [...document.querySelectorAll('table')]
-                    .filter(t => t.id || t.className.includes('rich'))
-                    .map(t => ({id: t.id, cls: t.className, rows: t.querySelectorAll('tbody tr').length}));
+                // Listar TODOS os links que tenham 'listagem' no ID (são os da tabela)
+                const linksListagem = [...document.querySelectorAll("a[id*='listagem']")];
                 return {
-                    totalExcluirLinks: excluirLinks.length,
-                    excluirSamples: excluirLinks.slice(0, 5).map(a => ({
-                        id: a.id, txt: (a.textContent||'').trim().substring(0,40),
-                        rowText: a.closest('tr')?.textContent?.replace(/\\s+/g,' ').trim().substring(0,80) || ''
+                    total: linksListagem.length,
+                    samples: linksListagem.slice(0, 12).map(a => ({
+                        id: a.id,
+                        txt: (a.textContent||'').trim().substring(0,30),
+                        rowText: a.closest('tr')?.textContent?.replace(/\\s+/g,' ').trim().substring(0,60) || ''
                     })),
-                    tabelas: tabelas.slice(0, 5),
                 };
             }""")
-            self._log(f"  🔍 Diag histórico: {_diag.get('totalExcluirLinks')} link(s) Excluir, {len(_diag.get('tabelas',[]))} tabela(s)")
-            for ex in _diag.get('excluirSamples', [])[:3]:
-                self._log(f"     · id={ex['id'][:40]} | row='{ex['rowText'][:60]}'")
+            self._log(f"  🔍 Diag histórico: {_diag.get('total')} link(s) na listagem")
+            for ex in _diag.get('samples', [])[:6]:
+                self._log(f"     · id={ex['id'][-50:]} txt='{ex['txt']}' row='{ex['rowText'][:50]}'")
 
             # Click via id pattern JSF: especificamente formulario:listagem:N:excluirHistorico
             # (confirmado por diag em run 20260430_172247 — esse é o ID do link Excluir
