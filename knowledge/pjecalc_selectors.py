@@ -209,12 +209,14 @@ class Faltas:
 # ============================================================================
 
 class CartaoPonto:
-    """Campos do Cartao de Ponto"""
-    JSF = "calculo/apuracao-cartaodeponto.jsf"
+    """Campos do Cartao de Ponto — IDs confirmados via DOM TRT7 2.15.1 (calc 262928)"""
+    JSF = "../cartaodeponto/apuracao-cartaodeponto.jsf"  # path relativo a /pages/calculo/
 
-    # Tipo de apuracao
-    TIPO_APURACAO_HORAS_EXTRAS = "[id$='tipoApuracaoHorasExtras']"  # radio HST/HJD/APH/NAP
-    TIPO_ESCALA = "select[id$='tipoEscala']"
+    # Tipo de apuracao (radio com 7 opções :0 a :6 confirmadas)
+    # 0=NAO_APURAR, 1=DIARIA, 2=MAIS_FAVORAVEL (default), 3=SUMULA_85,
+    # 4=PRIMEIRAS_SEPARADO, 5=SEMANAL, 6=MENSAL
+    TIPO_APURACAO_HORAS_EXTRAS = "[id$='tipoApuracaoHorasExtras']"
+    TIPO_ESCALA = "select[id$='tipoEscala']"  # legado (não confirmado em 2.15.1)
 
     # Jornada por dia da semana (HH:MM)
     JORNADA_SEGUNDA = "input[id$='valorJornadaSegunda']"
@@ -230,31 +232,76 @@ class CartaoPonto:
     QT_JORNADA_SEMANAL = "input[id$='qtJornadaSemanal']"
     QT_JORNADA_MENSAL = "input[id$='qtJornadaMensal']"
 
-    # Intervalos
+    # Intervalos intrajornada — ⚠️ TYPOS confirmados no DOM PJE-Calc:
+    #   "intervalor" (com R extra após "intervalo") em vez de "intervalo"
+    # O código deve usar o ID exatamente como aparece no servidor.
+    # Confirmado via DOM TRT7 v2.15.1 (calc 262928, 2026-05-01)
     INTERVALO_INTRA_JORNADA_SUP_SEIS = "input[id$='intervalorIntraJornadaSupSeis']"  # checkbox
     VALOR_INTERVALO_SUP_SEIS = "input[id$='valorIntervalorIntraJornadaSupSeis']"
-    INTERVALO_INTRA_JORNADA_INF_SEIS = "input[id$='intervalorIntraJornadaInfSeis']"  # checkbox
-    VALOR_INTERVALO_INF_SEIS = "input[id$='valorIntervalorIntraJornadaInfSeis']"
+    # Variantes Sup4-6 (jornadas entre 4h e 6h) — sem typo
+    INTERVALO_INTRA_JORNADA_SUP_QUATRO_SEIS = "input[id$='intervaloIntraJornadaSupQuatroSeis']"
+    VALOR_INTERVALO_SUP_QUATRO_SEIS = "input[id$='valorIntervaloIntraJornadaSupQuatroSeis']"
+    # Tolerância intervalo intrajornada
+    TOLERANCIA_INTERVALO_INTRA = "input[id$='toleranciaIntervaloIntraJornadaSupSeis']"
+    # Apuração supressão / excesso intervalo intrajornada
+    APURAR_SUPRESSAO_INTRA_INTEGRAL = "input[id$='apurarSupressaoIntervaloIntraIntegral']"
+    APURAR_SUPRESSAO_INTRA_REFORMA = "input[id$='apurarSupressaoIntervaloIntraReforma']"
+    APURAR_EXCESSO_INTRA = "input[id$='apurarExcessoIntervaloIntra']"
+    VALOR_INTERVALO_INTRA_MAXIMO = "input[id$='valorIntervaloIntrajornadaMaximo']"
+    APURAR_APENAS_EXCESSO_ACIMA_JORNADA = "input[id$='apurarApenasExcessoAcimaJornada']"
+    CONSIDERAR_FRACIONAMENTO_INTRA = "input[id$='considerarFracionamentoIntra']"
 
-    # Configuracoes
-    CONSIDERAR_FERIADO = "input[id$='considerarFeriado']"  # checkbox
+    # Intervalo interjornadas
+    DESCANSO_ENTRE_JORNADAS = "input[id$='descansoEntreJornadas']"  # checkbox
+    VALOR_DESCANSO_ENTRE_JORNADAS = "input[id$='valorDescansoEntreJornadas']"
+    VALOR_DESCANSO_ENTRE_SEMANAS = "input[id$='valorDescansoEntreSemanas']"
+
+    # Súmulas / Art. 253
+    APURAR_SUPRESSAO_INTERVALO_384 = "input[id$='apurarSupressaoIntervalo384']"
+    APURAR_SUPRESSAO_INTERVALO_72 = "input[id$='apurarSupressaoIntervalo72']"
+    APURAR_SUPRESSAO_INTERVALO_ART253 = "input[id$='apurarSupressaoIntervaloArt253']"
+    VALOR_TRABALHO_ART253 = "input[id$='valorTrabalhoArt253']"
+    VALOR_DESCANSO_ART253 = "input[id$='valorDescansoArt253']"
+
+    # Configuracoes / Feriados / Domingos
+    CONSIDERAR_FERIADO = "input[id$='considerarFeriado']"  # checkbox (default true)
+    EXTRA_FERIADO_SEPARADO = "input[id$='extraFeriadoSeparado']"  # checkbox
     EXTRA_DESCANSO_SEPARADO = "input[id$='extraDescansoSeparado']"  # checkbox
+    EXTRA_SAB_DOM_SEPARADO = "input[id$='extraSabadoDomingoSeparado']"  # checkbox
+    APURAR_FERIADOS_TRABALHADOS = "input[id$='apurarFeriadosTrabalhados']"
+    APURAR_DOMINGOS_TRABALHADOS = "input[id$='apurarDomingosTrabalhados']"
+    APURAR_SABADOS_DOMINGOS_TRABALHADOS = "input[id$='apurarSabadosDomingosTrabalhados']"
+    JORNADA_DIARIA_FERIADO_TRABALHADO = "input[id$='jornadaDiariaFeriadoTrabalhado']"
+    JORNADA_DIARIA_FERIADO_NAO_TRABALHADO = "input[id$='jornadaDiariaFeriadoNaoTrabalhado']"
 
-    # Horas noturnas
+    # Tolerância
+    TOLERANCIA = "input[id$='tolerancia']"  # checkbox principal
+    TOLERANCIA_POR_TURNO = "input[id$='toleranciaPorTurno']"
+    TOLERANCIA_POR_DIA = "input[id$='toleranciaPorDia']"
+
+    # Quantidades específicas
+    QT_SUMULA_TST = "input[id$='qtsumulatst']"
+    QT_HORA_SEPARADO = "input[id$='qthoraseparado']"
+
+    # Horas noturnas — ⚠️ TYPO confirmado: "Apuracaro" em vez de "Apuracao"
+    HORARIO_NOTURNO_APURACAO = "[id$='horarioNoturnoApuracaroCartao']"  # radio :0/:1/:2
     APURAR_HORAS_NOTURNAS = "input[id$='apurarHorasNoturnas']"  # checkbox
-    INICIO_HORARIO_NOTURNO = "input[id$='inicioHorarioNoturno']"
-    FIM_HORARIO_NOTURNO = "input[id$='fimHorarioNoturno']"
-    REDUCAO_FICTA = "input[id$='reducaoFicta']"  # checkbox
-    HORARIO_PRORROGADO = "input[id$='horarioProrrogado']"  # checkbox
+    APURAR_HORAS_EXTRAS_NOTURNAS = "input[id$='apurarHorasExtrasNoturnas']"
+    REDUCAO_FICTA = "input[id$='considerarReducaoFictaDaHoraNoturna']"  # corrigido
+    HORARIO_PRORROGADO = "input[id$='horarioProrrogadoSumula60']"  # corrigido (era 'horarioProrrogado')
+    FORCAR_PRORROGACAO = "input[id$='forcarProrrogacao']"
 
-    # Horarios de entrada/saida por dia
+    # Preenchimento
+    PREENCHIMENTO_JORNADAS = "[id$='preenchimentoJornadasCartao']"  # radio :0/:1/:2
+
+    # Horarios de entrada/saida por dia (legado/Cidadão; em TRT7 institucional não confirmado)
     # Formato: entrada{Dia}, saida{Dia} (ex: entradaSegunda, saidaSegunda)
     ENTRADA_PREFIX = "input[id$='entrada{dia}']"  # substituir {dia} por Segunda, Terca, etc.
     SAIDA_PREFIX = "input[id$='saida{dia}']"
 
     # Competencias
-    COMPETENCIA_INICIAL = "[id*='competenciaInicial']"
-    COMPETENCIA_FINAL = "[id*='competenciaFinal']"
+    COMPETENCIA_INICIAL = "[id$='competenciaInicialInputDate']"
+    COMPETENCIA_FINAL = "[id$='competenciaFinalInputDate']"
 
     # Botoes
     INCLUIR = "input[id$='incluir']"
