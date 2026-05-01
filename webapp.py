@@ -189,6 +189,10 @@ class _AutomacaoRunner:
         if not self.done:
             self._append("⏹ Automação interrompida pelo usuário.")
             self._append("[FIM DA EXECUÇÃO]")
+        # CRÍTICO: marcar done=True para permitir cleanup pelo _limpar_runners_antigos.
+        # Sem isso, o runner fica em cache indefinidamente e novos /api/executar
+        # entram em "follow mode" do runner morto, retornando logs antigos.
+        self.done = True
 
 _automacao_runners: dict[str, _AutomacaoRunner] = {}  # sessao_id → runner
 
@@ -2048,7 +2052,15 @@ async def reset_lock_automacao(sessao_id: str):
     # Limpar lock global se pertence a esta sessão (ou forçar se sessao_id == "force")
     if _automacao_global_lock.get("sessao") == sessao_id or sessao_id == "force":
         _automacao_global_lock.clear()
-    return {"sucesso": True, "msg": f"Lock liberado para {sessao_id}"}
+    # CRÍTICO: também pop o runner cacheado para permitir nova execução fresca.
+    # Sem isso, se o runner antigo está done=False (caso de stop sem cleanup),
+    # qualquer novo /api/executar entra em "follow mode" e retorna logs do morto.
+    _runner_removido = _automacao_runners.pop(sessao_id, None)
+    return {
+        "sucesso": True,
+        "msg": f"Lock liberado para {sessao_id}",
+        "runner_removido": _runner_removido is not None,
+    }
 
 
 @app.post("/api/vincular-pjc/{sessao_id}")
