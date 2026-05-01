@@ -259,3 +259,68 @@ Checkboxes:
 - `li_operacoes_liquidar`, `_fechar`, `_excluir`, `_exportar`, `_validar`
   (Validar = "Enviar para o PJe")
 - Atualização de pagamento aparece apenas após liquidar (li_pagamento_*)
+
+## Cartão de Ponto — DETALHADO (apuracao-cartaodeponto.jsf)
+
+Form de inclusão extenso (~50 campos). Conferido em calc 262928.
+
+### Datas:
+- `formulario:competenciaInicialInputDate`, `competenciaFinalInputDate` (formato MM/AAAA)
+
+### Tipo de Apuração HE (`formulario:tipoApuracaoHorasExtras:0-6`):
+- :0 = `NAO_APURAR_HORAS_EXTRAS` ("Não apurar horas extras")
+- :1 = `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA` ("Horas extras excedentes da jornada diária")
+- :2 = `HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL` ("Horas extras pelo critério mais favorável") ← default
+- :3 = `HORAS_EXTRAS_CONFORME_SUMULA_85` ("Horas extras conforme Súmula 85")
+- :4 = `APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO` ("Apurar primeiras horas extras em separado")
+- :5 = `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL`
+- :6 = `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL`
+
+### Jornadas por dia (formato HH:MM):
+- `valorJornadaSegunda`, `Terca`, `Quarta`, `Quinta`, `Sexta`
+- `valorJornadaDiariaSabado`, `valorJornadaDiariaDom`
+- `qtJornadaSemanal`, `qtJornadaMensal` (totais)
+
+### Campos especiais:
+- `qtsumulatst` (qty Súmula TST)
+- `qthoraseparado` (qty horas separadas)
+- `toleranciaPorTurno`, `toleranciaPorDia`
+- `tolerancia` (checkbox)
+- `considerarFeriado` (checkbox, default true)
+
+### Feriados/Descansos:
+- `extraFeriadoSeparado`, `extraDescansoSeparado`, `extraSabadoDomingoSeparado` (checkboxes)
+- `apurarFeriadosTrabalhados`, `apurarDomingosTrabalhados`, `apurarSabadosDomingosTrabalhados`
+- `jornadaDiariaFeriadoTrabalhado`, `jornadaDiariaFeriadoNaoTrabalhado`
+
+### Súmula 384/72/Art253:
+- `apurarSupressaoIntervalo384`, `_72`, `_Art253` (checkboxes)
+- `valorTrabalhoArt253`, `valorDescansoArt253`
+
+### Intervalo Interjornadas:
+- `descansoEntreJornadas` (checkbox)
+- `valorDescansoEntreJornadas`, `valorDescansoEntreSemanas`
+
+### Intervalo Intrajornada (⚠️ TYPOS NO PJE-CALC):
+- `intervaloIntraJornadaSupQuatroSeis` (checkbox — sem typo)
+- `valorIntervaloIntraJornadaSupQuatroSeis` (text — sem typo)
+- ⚠️ **`intervalorIntraJornadaSupSeis` (com R extra — typo PJE-Calc)**
+- ⚠️ **`valorIntervalorIntraJornadaSupSeis` (com R extra — typo)**
+- `toleranciaIntervaloIntraJornadaSupSeis`
+- `considerarFracionamentoIntra`
+- `apurarSupressaoIntervaloIntraIntegral`, `_IntraReforma`
+- `apurarExcessoIntervaloIntra`
+- `valorIntervaloIntrajornadaMaximo`
+- `apurarApenasExcessoAcimaJornada`
+
+### Horário Noturno (⚠️ TYPO):
+- ⚠️ **`horarioNoturnoApuracaroCartao:0/1/2` (Apuracaro — com R extra)**
+- `apurarHorasNoturnas`, `apurarHorasExtrasNoturnas`
+- `considerarReducaoFictaDaHoraNoturna`
+- `horarioProrrogadoSumula60`, `forcarProrrogacao`
+
+### Preenchimento:
+- `preenchimentoJornadasCartao:0/1/2` (radio)
+- `salvar`, `cancelar`
+
+**OBSERVAÇÃO:** PJE-Calc 2.15.1 contém **typos nos IDs JSF** (`intervalor` em vez de `intervalo`, `Apuracaro` em vez de `Apuracao`). Esses typos são reais no XHTML do servidor — o código deve usar os IDs **exatamente como aparecem**, com os typos.
