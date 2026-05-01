@@ -9976,7 +9976,7 @@ class PJECalcPlaywright:
                     "PERICIAIS_ENGENHEIRO": "Periciais - Engenheiro",
                     "PERICIAIS_MEDICO": "Periciais - Médico",
                     "PERICIAIS_OUTROS": "Periciais - Outros",
-                }.get(tipo, tipo)
+                }.get(tipo_in, tipo_in)
                 _devedor_label = {"RECLAMADO": "Reclamado", "RECLAMANTE": "Reclamante"}.get(devedor, devedor)
                 if _devedor_tem_jg:
                     # Incluir referência à suspensão na descrição (60 chars max)
