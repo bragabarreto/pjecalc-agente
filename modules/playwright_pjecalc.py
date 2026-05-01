@@ -9131,10 +9131,15 @@ class PJECalcPlaywright:
 
         if not _nav_ok or not _na_pagina:
             # Fallback: tentar variantes de URL conhecidas
+            # IMPORTANTE: parametros-atualizacao/parametros-atualizacao.jsf é a URL
+            # canônica do TRT7 Institucional 2.15.1 (commit 6230b71 DOM audit).
+            # Cidadão local pode usar variantes mais simples — testar todas.
             _url_tentativas = [
+                "parametros-atualizacao/parametros-atualizacao.jsf",  # TRT7 Inst confirmada
                 "correcao-juros.jsf",
                 "atualizacao.jsf",
                 "correcao-juros-e-multa.jsf",
+                "parametros-atualizacao.jsf",  # variante sem subpasta
             ]
             _navegou = False
             if self._calculo_url_base and self._calculo_conversation_id:
@@ -9156,6 +9161,20 @@ class PJECalcPlaywright:
                         continue
             if not _navegou:
                 self._log("  ⚠ Correção/Juros: página não encontrada — pulando configuração de índices")
+                # CRÍTICO: re-navegar para uma página estável (verba-calculo) para que
+                # a fase Pré-Liquidação consiga encontrar o link "Liquidar" na sidebar.
+                # Sem isso, o browser fica em "principal.jsf" sem sidebar do cálculo.
+                try:
+                    if self._calculo_url_base and self._calculo_conversation_id:
+                        _url_recover = (
+                            f"{self._calculo_url_base}verba/verba-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        self._page.goto(_url_recover, wait_until="domcontentloaded", timeout=10000)
+                        self._aguardar_ajax()
+                        self._log(f"  ✓ Navegação recuperada para verba-calculo.jsf")
+                except Exception as _re:
+                    self._log(f"  ⚠ Recuperação de navegação falhou: {_re}")
                 return
 
         # --- Índice de correção monetária ---
