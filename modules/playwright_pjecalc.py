@@ -5042,6 +5042,43 @@ class PJECalcPlaywright:
                 f"(deveriam ter sido corrigidas na prévia): {nomes}"
             )
 
+        # ── Marcar Multa Art. 467 como REFLEXA EXPRESSO em cada verba ────────
+        # Quando fgts.multa_467_origem == 'expresso_reflex', o checkbox da aba
+        # FGTS NÃO é marcado (Fase 4 cuida disso). Em vez disso, na aba Verbas
+        # cada verba principal tem uma reflexa "MULTA DO ARTIGO 467 SOBRE [verba]"
+        # auto-sugerida pelo Expresso — aqui marcamos os checkboxes correspondentes.
+        _fgts = (self._dados or {}).get("fgts", {})
+        if _fgts.get("multa_467") and _fgts.get("multa_467_origem") == "expresso_reflex":
+            self._log("  → Multa Art. 467 modo Expresso: marcando reflexas verba a verba…")
+            try:
+                _marcadas = self._page.evaluate("""() => {
+                    // Procurar checkboxes em linhas que contêm "MULTA DO ARTIGO 467"
+                    const trs = [...document.querySelectorAll('tr')];
+                    let count = 0;
+                    for (const tr of trs) {
+                        const txt = (tr.textContent || '').toUpperCase()
+                            .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+                        if (!txt.includes('MULTA DO ARTIGO 467')) continue;
+                        // Buscar checkboxes dentro da linha
+                        const cb = [...tr.querySelectorAll('input[type=\"checkbox\"]')]
+                            .find(c => !c.checked);
+                        if (cb) {
+                            cb.click();
+                            cb.dispatchEvent(new Event('change', {bubbles: true}));
+                            count++;
+                        }
+                    }
+                    return count;
+                }""")
+                if _marcadas:
+                    self._aguardar_ajax(timeout=10000)
+                    self._page.wait_for_timeout(1500)
+                    self._log(f"  ✓ {_marcadas} reflexa(s) Multa 467 marcada(s) via Expresso")
+                else:
+                    self._log("  ℹ Nenhuma reflexa Multa 467 não-marcada encontrada (já podem estar todas ativas)")
+            except Exception as _e:
+                self._log(f"  ⚠ Falha ao marcar reflexas Multa 467: {_e} (prosseguindo)")
+
         self._log("Fase 3 concluída.")
 
     def _marcar_checkbox_expresso(self, nome: str, percentual: float | None = None) -> bool:
@@ -7091,14 +7128,21 @@ class PJECalcPlaywright:
         if fgts.get("pensao_alimenticia_fgts") is not None:
             self._marcar_checkbox("pensaoAlimenticiaFgts", bool(fgts["pensao_alimenticia_fgts"]))
 
-        # Multa Art. 467 CLT — checkbox formulario:multaDoArtigo467
-        # ÚNICO ponto de entrada (não é verba Expresso — confirmado em
-        # knowledge/pje_calc_official/verba_catalog_official.md:19).
-        # Quando marcado, PJE-Calc gera AUTOMATICAMENTE a multa 467 como reflexa
-        # sob cada verba principal na aba Verbas (50% sobre multa FGTS).
-        if multa_467:
+        # Multa Art. 467 CLT — DOIS caminhos possíveis (confirmado por
+        # screenshots do TRT7, calc 262818):
+        #   (a) checkbox formulario:multaDoArtigo467 na aba FGTS — auto-aplica
+        #       reflexa em TODAS as verbas principais (modo padrão)
+        #   (b) reflexo Expresso na aba Verbas — selecionar verba a verba
+        #       (controle granular; checkbox FGTS DESMARCADO)
+        # Usuário escolhe via fgts.multa_467_origem (default 'fgts_checkbox').
+        # No modo 'expresso_reflex', NÃO marcar o checkbox aqui — a Fase 3
+        # (Verbas) cuida de marcar as reflexas individualmente.
+        _m467_origem = fgts.get("multa_467_origem", "fgts_checkbox")
+        if multa_467 and _m467_origem == "fgts_checkbox":
             self._marcar_checkbox("multaDoArtigo467", True)
-            self._log("  ✓ Multa Art. 467: checkbox FGTS marcado (reflexa será gerada automaticamente)")
+            self._log("  ✓ Multa Art. 467: checkbox FGTS marcado (reflexa será gerada em TODAS as verbas)")
+        elif multa_467 and _m467_origem == "expresso_reflex":
+            self._log("  ℹ Multa Art. 467: modo Expresso — checkbox FGTS NÃO marcado; reflexas serão marcadas verba a verba na Fase 3")
 
         # Multa 10% (rescisão antecipada de contrato a prazo)
         if fgts.get("multa_10"):

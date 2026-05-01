@@ -2211,16 +2211,25 @@
             </div>
             {% endif %}
             {% if _fgts_dados.get('multa_467') %}
+            {% set _m467_origem = _fgts_dados.get('multa_467_origem', 'fgts_checkbox') %}
             <div style="background:#fff; padding:10px 12px; border-left:4px solid #fd7e14; border-radius:4px;">
-              <div style="display:flex; justify-content:space-between; align-items:center;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                 <span style="font-weight:600; font-size:0.88rem;">MULTA DO ART. 467 DA CLT (50%)</span>
-                <span class="badge" style="background:#fd7e14; color:#fff; font-size:0.7rem; padding:2px 8px; border-radius:4px;">Aba FGTS (único ponto de entrada)</span>
+                <select onchange="salvarCampo('fgts.multa_467_origem', this.value, this)"
+                        style="font-size:0.78rem; padding:3px 6px; border-radius:4px; border:1px solid #fd7e14;">
+                  <option value="fgts_checkbox" {{ 'selected' if _m467_origem == 'fgts_checkbox' }}>Aba FGTS (checkbox — auto-aplica em todas as verbas)</option>
+                  <option value="expresso_reflex" {{ 'selected' if _m467_origem == 'expresso_reflex' }}>Reflexo Expresso (selecionar verba a verba)</option>
+                </select>
               </div>
               <div style="font-size:0.78rem; color:#6c757d; margin-top:6px;">
-                Configurado em <strong>FGTS → Multa Art. 467 (checkbox <code>multaDoArtigo467</code>)</strong>. Calcula 50% sobre a multa do FGTS.
+                {% if _m467_origem == 'fgts_checkbox' %}
+                Configurado em <strong>FGTS → Multa Art. 467 (checkbox <code>multaDoArtigo467</code>)</strong>. Ao marcar, o PJE-Calc gera automaticamente a multa 467 como reflexa sob CADA verba principal — comportamento "all-in-one".
+                {% else %}
+                Configurado como <strong>Reflexo Expresso</strong> em cada verba principal na aba Verbas (<em>MULTA DO ARTIGO 467 SOBRE [verba]</em>). O checkbox da aba FGTS fica DESMARCADO. Modo apropriado quando a sentença vincula a multa 467 apenas a verbas específicas (ex: aplica só sobre saldo de salário e aviso, não sobre 13º).
+                {% endif %}
               </div>
-              <div style="font-size:0.78rem; color:#155724; margin-top:6px; padding:6px 8px; background:#d4edda; border-radius:3px;">
-                ℹ <strong>Reflexa automática:</strong> ao marcar este checkbox, o PJE-Calc gera automaticamente a multa 467 como reflexa sob cada verba principal na aba Verbas. Não é necessário (nem existe a opção) lançar como reflexo Expresso manualmente — não é verba do catálogo Expresso.
+              <div style="font-size:0.72rem; color:#856404; margin-top:6px; padding:4px 6px; background:#fff3cd; border-radius:3px;">
+                ℹ Os dois modos são equivalentes para condenação ampla; a escolha "Reflexo Expresso" permite controle granular por verba.
               </div>
             </div>
             {% endif %}
