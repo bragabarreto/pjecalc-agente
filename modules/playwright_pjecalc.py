@@ -2499,12 +2499,23 @@ class PJECalcPlaywright:
                             self._log(f"    → Correção: {_fid} = {_val}")
                             _corrigiu = True
 
-            # ── Documento fiscal formato errado ──
-            elif "documento" in _campo or "cpf" in _msg or "cnpj" in _msg or "fiscal" in _campo:
-                # Limpar formatação do CPF/CNPJ (apenas dígitos)
+            # ── Documento fiscal formato errado ou DV inválido ──
+            # CPF/CNPJ NÃO são obrigatórios para liquidação — só são exigidos
+            # ao enviar o cálculo ao PJe (etapa manual posterior).
+            # Estratégia em 2 níveis:
+            #   1. Se valor tem caracteres não-dígitos: reformatar (remover)
+            #   2. Se ainda for inválido (DV errado): LIMPAR o campo
+            #      (deixar em branco e seguir — usuário corrige antes de enviar ao PJe)
+            elif ("documento" in _campo or "cpf" in _msg or "cnpj" in _msg
+                  or "fiscal" in _campo or "fiscal" in _fid.lower()
+                  or "numerodocumento" in _fid.lower()
+                  or _fid in ("reclamanteNumeroDocumentoFiscal", "reclamadoNumeroDocumentoFiscal")):
                 import re
-                for _doc_id in ["reclamanteNumeroDocumentoFiscal", "reclamadoNumeroDocumentoFiscal",
-                                "cpfReclamante", "cnpjReclamado"]:
+                _docs = ["reclamanteNumeroDocumentoFiscal", "reclamadoNumeroDocumentoFiscal",
+                         "cpfReclamante", "cnpjReclamado"]
+                # Se o erro tem campo_id específico, focar só nele; senão tentar todos
+                _doc_alvo = [_fid] if _fid in _docs else _docs
+                for _doc_id in _doc_alvo:
                     try:
                         _val_atual = self._page.evaluate(
                             f"""() => {{
@@ -2512,13 +2523,37 @@ class PJECalcPlaywright:
                                 return el ? el.value : null;
                             }}"""
                         )
-                        if _val_atual:
-                            _limpo = re.sub(r'[^\d]', '', _val_atual)
-                            if _limpo and _limpo != _val_atual:
-                                self._preencher(_doc_id, _limpo, obrigatorio=False)
+                        if not _val_atual:
+                            continue
+                        _limpo = re.sub(r'[^\d]', '', _val_atual)
+                        # Estratégia 1: se havia caracteres não-dígito, reformatar
+                        if _limpo and _limpo != _val_atual:
+                            if self._preencher(_doc_id, _limpo, obrigatorio=False):
                                 self._log(f"    → Correção: {_doc_id} reformatado ({_val_atual} → {_limpo})")
                                 _corrigiu = True
-                    except Exception:
+                                continue
+                        # Estratégia 2: valor já estava limpo mas é inválido (DV errado)
+                        # → LIMPAR campo e prosseguir (CPF/CNPJ só obrigatórios ao enviar ao PJe)
+                        # Detectar via mensagem "valor inválido" / "número inválido"
+                        if "inv" in _msg or "válido" in _msg or "dv" in _msg:
+                            self._page.evaluate(
+                                f"""() => {{
+                                    const el = document.querySelector('[id$="{_doc_id}"]');
+                                    if (el) {{
+                                        el.value = '';
+                                        el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                                        el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                        el.dispatchEvent(new Event('blur', {{bubbles: true}}));
+                                    }}
+                                }}"""
+                            )
+                            self._log(
+                                f"    → Correção: {_doc_id} LIMPO (DV inválido — "
+                                f"campo opcional para liquidação; obrigatório só ao enviar ao PJe)"
+                            )
+                            _corrigiu = True
+                    except Exception as _e_doc:
+                        self._log(f"    ⚠ Falha ao corrigir {_doc_id}: {_e_doc}")
                         continue
 
             # ── Valor inválido (formato monetário) ──
