@@ -593,6 +593,7 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
     "multa_467": "true | false | null (true SOMENTE com condenação clara no dispositivo)",
     "multa_467_origem": "'fgts_checkbox' | 'expresso_reflex' (default 'fgts_checkbox' — só usar 'expresso_reflex' quando sentença deferir 467 só sobre verbas específicas)",
     "saldo_fgts": "float | null",
+    "saldos": "[lista — depósitos do empregador efetivamente recolhidos durante o contrato, para serem deduzidos da multa rescisória do FGTS. Emitir quando a sentença mencionar saldo da conta vinculada ou competências específicas. Cada item: {data: 'MM/AAAA', valor: float}. Lista vazia se não mencionar.]",
     "incidencia_13o_dezembro": "true | false (padrão true — FGTS do 13º é recolhido na competência de dezembro; base de dezembro = salário + 13º proporcional. Emitir false apenas se a sentença expressamente afastar incidência de FGTS sobre o 13º.)",
     "confianca": 0.95
   }},
@@ -1687,6 +1688,17 @@ _EXTRACTION_SCHEMA: dict = {
                 "multa_20":   {"type": ["boolean","null"]},
                 "multa_467":  {"type": ["boolean","null"]},
                 "saldo_fgts": {"type": ["number","null"]},
+                "saldos": {
+                    "type": ["array","null"],
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": True,
+                        "properties": {
+                            "data":  {"type": ["string","null"]},
+                            "valor": {"type": ["number","null"]},
+                        },
+                    },
+                },
                 "incidencia_13o_dezembro": {"type": ["boolean","null"]},
                 "confianca":  {"type": "number"},
             },

@@ -1134,6 +1134,63 @@
           <label for="fgts-multa10">Multa 10% (rescisão antecipada contrato a prazo)</label>
         </div>
 
+        <!-- FGTS: Saldos depositados (lista de competência+valor para deduzir da multa) -->
+        {% set fgts_saldos = dados.get('fgts', {}).get('saldos') or [] %}
+        <div style="margin-top:16px; padding-top:12px; border-top:1px solid #dee2e6;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="font-size:0.95rem; font-weight:700; color:#1a3a6b;">
+              💰 Saldos FGTS Depositados <span style="font-weight:400; color:#6c757d;">({{ fgts_saldos|length }})</span>
+            </div>
+            <button type="button" class="btn btn-sm" style="font-size:0.78rem; padding:3px 10px;"
+                    onclick="salvarCampo('fgts.saldos.add', '', this); setTimeout(()=>location.reload(), 350)">+ Adicionar Saldo</button>
+          </div>
+          <div style="font-size:0.78rem; color:#6c757d; margin-bottom:8px;">
+            Valores efetivamente recolhidos pelo empregador ao FGTS durante o contrato.
+            Quando informados, o agente marca "Deduzir do FGTS" e adiciona cada linha
+            (competência + valor) na seção de saldos para abater da multa rescisória.
+          </div>
+          {% if fgts_saldos %}
+          <div style="overflow-x:auto;">
+            <table style="width:100%; border-collapse:collapse; font-size:0.85rem;">
+              <thead style="background:#f1f3f5;">
+                <tr>
+                  <th style="padding:6px 8px; text-align:left;">Competência (MM/AAAA)</th>
+                  <th style="padding:6px 8px; text-align:right;">Valor (R$)</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for s in fgts_saldos %}
+                {% set si = loop.index0 %}
+                <tr style="border-top:1px solid #dee2e6;">
+                  <td style="padding:4px 8px;">
+                    <input type="text" value="{{ s.get('data') or '' }}" placeholder="ex: 06/2025"
+                           style="width:110px; font-size:0.85rem;"
+                           onchange="salvarCampo('fgts.saldos[{{ si }}].data', this.value, this)">
+                  </td>
+                  <td style="padding:4px 8px; text-align:right;">
+                    <input type="number" step="0.01" min="0" value="{{ s.get('valor') or '' }}"
+                           placeholder="0,00" style="width:120px; font-size:0.85rem; text-align:right;"
+                           onchange="salvarCampo('fgts.saldos[{{ si }}].valor', this.value, this)">
+                  </td>
+                  <td style="padding:4px 8px; text-align:center;">
+                    <button type="button" class="btn btn-sm btn-link" style="color:#dc3545; font-size:0.85rem;"
+                            onclick="if(confirm('Remover este saldo?')) { salvarCampo('fgts.saldos.remove[{{ si }}]', '', this); setTimeout(()=>location.reload(), 350); }"
+                            title="Remover">✕</button>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+          {% else %}
+          <div style="font-size:0.78rem; color:#6c757d; font-style:italic;">
+            Nenhum saldo depositado registrado. A multa rescisória será calculada sobre
+            o total devido (sem dedução).
+          </div>
+          {% endif %}
+        </div>
+
         <!-- FGTS + 13º: ajustes das Ocorrências do FGTS -->
         <div style="margin-top:16px; padding-top:12px; border-top:1px solid #dee2e6;">
           <div class="checkbox-row">

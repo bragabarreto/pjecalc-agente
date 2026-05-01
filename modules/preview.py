@@ -476,6 +476,33 @@ def aplicar_edicao_usuario(
             dados["honorarios"] = lista
         return dados
 
+    # ── fgts.saldos (lista de competência+valor para dedução) ────────────────
+    # fgts.saldos[N].campo
+    m = _re.match(r'^fgts\.saldos\[(\d+)\]\.(.+)$', campo)
+    if m:
+        idx = int(m.group(1))
+        sub = m.group(2)
+        fgts = dados.setdefault("fgts", {})
+        saldos = fgts.setdefault("saldos", [])
+        if 0 <= idx < len(saldos):
+            saldos[idx][sub] = novo_valor
+        return dados
+    # fgts.saldos.add
+    if campo == "fgts.saldos.add":
+        fgts = dados.setdefault("fgts", {})
+        saldos = fgts.setdefault("saldos", [])
+        saldos.append({"data": None, "valor": None})
+        return dados
+    # fgts.saldos.remove[N]
+    m = _re.match(r'^fgts\.saldos\.remove\[(\d+)\]$', campo)
+    if m:
+        idx = int(m.group(1))
+        fgts = dados.setdefault("fgts", {})
+        saldos = fgts.setdefault("saldos", [])
+        if 0 <= idx < len(saldos):
+            saldos.pop(idx)
+        return dados
+
     # ── Arrays genéricos: historico_salarial, faltas, ferias ─────────────────
 
     _ARRAY_DEFAULTS: dict[str, dict[str, Any]] = {
