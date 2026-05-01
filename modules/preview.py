@@ -608,6 +608,122 @@ def aplicar_edicao_verba(
     return verbas_mapeadas
 
 
+# ── Bases de Cálculo da verba (lista) ─────────────────────────────────────────
+#
+# O PJE-Calc trata "Bases Cadastradas" como LISTA de bases por verba, não como
+# string única. Cada base tem: tipo_base (HISTORICO_SALARIAL/MAIOR_REMUNERACAO/
+# SALARIO_MINIMO/SALARIO_DA_CATEGORIA/VALE_TRANSPORTE), historico_subtipo
+# (ULTIMA_REMUNERACAO/SALARIO_BASE/ADICIONAL_INSALUBRIDADE_PAGO — só quando
+# tipo_base=HISTORICO_SALARIAL), proporcionalizar (bool), verba_compor (nome
+# de outra verba a somar), integralizar (bool), divisor (CARGA_HORARIA/
+# OUTRO_VALOR/DIAS_UTEIS/IMPORTADA_DO_CARTAO), multiplicador (float),
+# outro_valor_divisor (float — quando divisor=OUTRO_VALOR).
+#
+# Ver docs/feature-previa-bases-calculo.md para o desenho completo.
+
+
+_BASE_DEFAULT_HE = {
+    "tipo_base": "HISTORICO_SALARIAL",
+    "historico_subtipo": "ULTIMA_REMUNERACAO",
+    "proporcionalizar": False,
+    "verba_compor": None,
+    "integralizar": True,
+    "divisor": "CARGA_HORARIA",
+    "outro_valor_divisor": None,
+    "multiplicador": 1.5,
+}
+
+
+def _todas_verbas(verbas_mapeadas: dict[str, Any]) -> list[dict[str, Any]]:
+    return (
+        verbas_mapeadas.get("predefinidas", [])
+        + verbas_mapeadas.get("personalizadas", [])
+        + verbas_mapeadas.get("nao_reconhecidas", [])
+    )
+
+
+def _verba_por_indice(verbas_mapeadas: dict[str, Any], indice: int) -> dict[str, Any] | None:
+    todas = _todas_verbas(verbas_mapeadas)
+    if 0 <= indice < len(todas):
+        return todas[indice]
+    return None
+
+
+def adicionar_base_calculo(
+    verbas_mapeadas: dict[str, Any],
+    indice: int,
+    base: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Adiciona uma base de cálculo à verba na posição `indice`.
+
+    Se `base` for None, adiciona uma base default (HE-style: HISTORICO_SALARIAL +
+    ULTIMA_REMUNERACAO). O usuário pode em seguida editar campos via PATCH.
+    """
+    verba = _verba_por_indice(verbas_mapeadas, indice)
+    if verba is None:
+        return verbas_mapeadas
+    bases = verba.setdefault("bases_calculo", [])
+    nova = dict(_BASE_DEFAULT_HE)
+    if isinstance(base, dict):
+        nova.update({k: v for k, v in base.items() if k in _BASE_DEFAULT_HE})
+    bases.append(nova)
+    return verbas_mapeadas
+
+
+def remover_base_calculo(
+    verbas_mapeadas: dict[str, Any],
+    indice: int,
+    base_idx: int,
+) -> dict[str, Any]:
+    """Remove a base de cálculo de índice `base_idx` da verba `indice`."""
+    verba = _verba_por_indice(verbas_mapeadas, indice)
+    if verba is None:
+        return verbas_mapeadas
+    bases = verba.get("bases_calculo") or []
+    if 0 <= base_idx < len(bases):
+        bases.pop(base_idx)
+        verba["bases_calculo"] = bases
+    return verbas_mapeadas
+
+
+def editar_base_calculo(
+    verbas_mapeadas: dict[str, Any],
+    indice: int,
+    base_idx: int,
+    campo: str,
+    novo_valor: Any,
+) -> dict[str, Any]:
+    """Edita um campo de uma base de cálculo específica."""
+    verba = _verba_por_indice(verbas_mapeadas, indice)
+    if verba is None:
+        return verbas_mapeadas
+    bases = verba.get("bases_calculo") or []
+    if not (0 <= base_idx < len(bases)):
+        return verbas_mapeadas
+    base = bases[base_idx]
+    # Coerções
+    _CAMPOS_BOOL = {"proporcionalizar", "integralizar"}
+    _CAMPOS_FLOAT = {"multiplicador", "outro_valor_divisor"}
+    if campo in _CAMPOS_BOOL and isinstance(novo_valor, str):
+        novo_valor = novo_valor.strip().lower() in ("true", "1", "yes", "sim")
+    elif campo in _CAMPOS_FLOAT:
+        try:
+            novo_valor = float(str(novo_valor).replace(",", ".")) if novo_valor not in (None, "") else None
+        except Exception:
+            return verbas_mapeadas
+    elif campo in {"verba_compor", "historico_subtipo"} and novo_valor in ("", "null", "None"):
+        novo_valor = None
+    base[campo] = novo_valor
+
+    # Coerências automáticas: se tipo_base ≠ HISTORICO_SALARIAL, limpa subtipo
+    if campo == "tipo_base" and novo_valor != "HISTORICO_SALARIAL":
+        base["historico_subtipo"] = None
+    # Se divisor ≠ OUTRO_VALOR, limpa outro_valor_divisor
+    if campo == "divisor" and novo_valor != "OUTRO_VALOR":
+        base["outro_valor_divisor"] = None
+    return verbas_mapeadas
+
+
 # ── Auxiliares de formatação ──────────────────────────────────────────────────
 
 def _fmt(valor: Any) -> str:

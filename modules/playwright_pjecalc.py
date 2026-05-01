@@ -5231,6 +5231,119 @@ class PJECalcPlaywright:
     # Confirmado via Chrome MCP no calc 262818 (TRT7 Inst 2.15.1, 2026-05-01).
     _BASE_HISTORICOS_PADRAO = "ULTIMA REMUNERACAO"  # texto match (sem acento, upper)
 
+    # Mapeia historico_subtipo enum (modelo Prévia) → texto exato do option
+    _HISTORICO_SUBTIPO_TEXTO = {
+        "ULTIMA_REMUNERACAO": "ULTIMA REMUNERACAO",
+        "SALARIO_BASE": "SALARIO BASE",
+        "ADICIONAL_INSALUBRIDADE_PAGO": "ADICIONAL DE INSALUBRIDADE PAGO",
+    }
+
+    def _adicionar_base_calculo_completa(self, base: dict) -> bool:
+        """Adiciona uma base completa à tabela 'Bases Cadastradas' da verba.
+
+        Espera dict no formato do modelo Prévia (modules/preview.py):
+          {tipo_base, historico_subtipo, proporcionalizar, verba_compor,
+           integralizar, divisor, multiplicador, outro_valor_divisor}
+
+        Fluxo:
+          1. seleciona tipoDaBaseTabelada
+          2. se HISTORICO_SALARIAL: seleciona baseHistoricos
+          3. seleciona proporcionalizaHistorico
+          4. se verba_compor: seleciona baseVerbaDeCalculo (por nome)
+          5. seleciona integralizarBase
+          6. marca radio tipoDeDivisor + outroValorDoDivisor (se OUTRO_VALOR)
+          7. preenche outroValorDoMultiplicador
+          8. clica formulario:incluirBaseHistorico
+          9. aguarda AJAX que repinta a tabela "Bases Cadastradas"
+        """
+        try:
+            _tipo = (base.get("tipo_base") or "HISTORICO_SALARIAL").upper()
+            # 1. tipoDaBaseTabelada
+            self._page.evaluate("""(val) => {
+                const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
+                if (sel) {
+                    const opt = Array.from(sel.options).find(o => o.value === val);
+                    if (opt) { sel.value = val; sel.dispatchEvent(new Event('change', {bubbles:true})); }
+                }
+            }""", _tipo)
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(400)
+
+            # 2. baseHistoricos (se HISTORICO_SALARIAL)
+            if _tipo == "HISTORICO_SALARIAL":
+                _subt = base.get("historico_subtipo") or "ULTIMA_REMUNERACAO"
+                _texto = self._HISTORICO_SUBTIPO_TEXTO.get(_subt, _subt)
+                self._page.evaluate("""(texto) => {
+                    const sel = document.querySelector('select[id$=":baseHistoricos"]');
+                    if (!sel) return;
+                    const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase();
+                    const opt = Array.from(sel.options).find(o => norm(o.text).includes(norm(texto)));
+                    if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', {bubbles:true})); }
+                }""", _texto)
+                self._page.wait_for_timeout(300)
+
+            # 3. proporcionalizaHistorico
+            _prop = "SIM" if base.get("proporcionalizar") else "NAO"
+            self._page.evaluate("""(val) => {
+                const sel = document.querySelector('select[id$=":proporcionalizaHistorico"]');
+                if (sel) { sel.value = val; sel.dispatchEvent(new Event('change', {bubbles:true})); }
+            }""", _prop)
+
+            # 4. baseVerbaDeCalculo (compor com outra verba)
+            _vcompor = base.get("verba_compor")
+            if _vcompor:
+                self._page.evaluate("""(nome) => {
+                    const sel = document.querySelector('select[id$=":baseVerbaDeCalculo"]');
+                    if (!sel) return;
+                    const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase().trim();
+                    const opt = Array.from(sel.options).find(o => norm(o.text).includes(norm(nome)));
+                    if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', {bubbles:true})); }
+                }""", _vcompor)
+
+            # 5. integralizarBase
+            _integ = "SIM" if base.get("integralizar", True) else "NAO"
+            self._page.evaluate("""(val) => {
+                const sel = document.querySelector('select[id$=":integralizarBase"]');
+                if (sel) { sel.value = val; sel.dispatchEvent(new Event('change', {bubbles:true})); }
+            }""", _integ)
+
+            # 6. tipoDeDivisor (radio) + outroValorDoDivisor
+            _div = (base.get("divisor") or "CARGA_HORARIA").upper()
+            try:
+                self._marcar_radio("tipoDeDivisor", _div)
+            except Exception:
+                pass
+            if _div == "OUTRO_VALOR" and base.get("outro_valor_divisor") is not None:
+                try:
+                    self._preencher("outroValorDoDivisor", _fmt_br(base["outro_valor_divisor"]), obrigatorio=False)
+                except Exception:
+                    pass
+
+            # 7. outroValorDoMultiplicador
+            _mult = base.get("multiplicador")
+            if _mult is not None:
+                try:
+                    self._preencher("outroValorDoMultiplicador", _fmt_br(_mult), obrigatorio=False)
+                except Exception:
+                    pass
+
+            # 8. Clicar Adicionar Base
+            self._page.wait_for_timeout(300)
+            _clicou = self._page.evaluate("""() => {
+                const a = document.getElementById('formulario:incluirBaseHistorico');
+                if (a) { a.click(); return true; }
+                return false;
+            }""")
+            if not _clicou:
+                self._log("  ⚠ _adicionar_base_calculo_completa: incluirBaseHistorico não encontrado")
+                return False
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+            return True
+        except Exception as _e:
+            self._log(f"  ⚠ _adicionar_base_calculo_completa: {_e}")
+            return False
+
     def _selecionar_base_historicos(self, preferencia: str | None = None) -> bool:
         """Seleciona uma opção em formulario:baseHistoricos E clica 'Adicionar Base'
         (formulario:incluirBaseHistorico) para ADICIONAR a base à tabela
@@ -5414,22 +5527,34 @@ class PJECalcPlaywright:
             self._marcar_radio("tipoDaBaseTabelada", _base_enum)
             _preencheu = True
 
-        # baseHistoricos OBRIGATÓRIO quando base = HISTORICO_SALARIAL
-        # (default do PJE-Calc para HE/INTERVALO/COMISSÃO/etc. via Expresso).
-        # Sem isso, Liquidar emite erro "Falta selecionar pelo menos um Histórico Salarial".
-        try:
-            _eh_historico = self._page.evaluate("""() => {
-                const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
-                if (!sel) return false;
-                const cur = Array.from(sel.options).find(o => o.selected);
-                return cur && cur.value === 'HISTORICO_SALARIAL';
-            }""")
-            if _eh_historico:
-                _pref = (verba.get("base_historicos") or self._BASE_HISTORICOS_PADRAO)
-                if self._selecionar_base_historicos(_pref):
-                    _preencheu = True
-        except Exception as _e_bh:
-            self._log(f"  ⚠ baseHistoricos check: {_e_bh}")
+        # Bases de Cálculo — modelo NOVO (lista):
+        # Se verba["bases_calculo"] estiver presente, iterar e adicionar cada
+        # base via _selecionar_base_historicos / sequência completa.
+        # FALLBACK legado: se ausente, comportamento antigo (1 base default
+        # quando tipoDaBaseTabelada=HISTORICO_SALARIAL).
+        _bases = verba.get("bases_calculo") or []
+        if _bases:
+            for _b in _bases:
+                try:
+                    if self._adicionar_base_calculo_completa(_b):
+                        _preencheu = True
+                except Exception as _e_b:
+                    self._log(f"  ⚠ adicionar_base_calculo: {_e_b}")
+        else:
+            # Legado: detectar HISTORICO_SALARIAL e adicionar default
+            try:
+                _eh_historico = self._page.evaluate("""() => {
+                    const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
+                    if (!sel) return false;
+                    const cur = Array.from(sel.options).find(o => o.selected);
+                    return cur && cur.value === 'HISTORICO_SALARIAL';
+                }""")
+                if _eh_historico:
+                    _pref = (verba.get("base_historicos") or self._BASE_HISTORICOS_PADRAO)
+                    if self._selecionar_base_historicos(_pref):
+                        _preencheu = True
+            except Exception as _e_bh:
+                self._log(f"  ⚠ baseHistoricos check: {_e_bh}")
 
         # Quantidade (se informada na sentença)
         _qtd = verba.get("quantidade") or verba.get("valor_informado_quantidade")

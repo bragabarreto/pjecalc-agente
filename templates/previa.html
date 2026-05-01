@@ -2531,6 +2531,98 @@
               </fieldset>
             </div>
 
+            {# Bases de Cálculo (lista — espelha 'Bases Cadastradas' do PJE-Calc) #}
+            {% set verba_bases = verba.get('bases_calculo') or [] %}
+            <div id="bases-{{ vi }}" style="margin-top:10px; border-top:1px dashed #6c757d; padding-top:8px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                <div style="font-size:0.85rem; font-weight:700; color:#1c3d5a;">
+                  📐 Bases de Cálculo ({{ verba_bases|length }})
+                </div>
+                <button type="button" class="btn btn-sm" style="font-size:0.75rem; padding:2px 8px;"
+                        onclick="adicionarBaseVerba({{ vi }})">+ Adicionar Base</button>
+              </div>
+              {% if verba_bases %}
+              <table style="width:100%; font-size:0.8rem; border-collapse:collapse;">
+                <thead style="background:#f1f3f5;">
+                  <tr>
+                    <th style="text-align:left; padding:4px 6px;">Tipo</th>
+                    <th style="text-align:left; padding:4px 6px;">Histórico</th>
+                    <th style="text-align:left; padding:4px 6px;">Verba a compor</th>
+                    <th style="text-align:left; padding:4px 6px;">Divisor</th>
+                    <th style="text-align:left; padding:4px 6px;">Mult.</th>
+                    <th style="text-align:center; padding:4px 6px;">Prop.</th>
+                    <th style="text-align:center; padding:4px 6px;">Integ.</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                {% for base in verba_bases %}
+                <tr style="border-top:1px solid #dee2e6;">
+                  <td style="padding:4px 6px;">
+                    <select onchange="salvarBase({{ vi }}, {{ loop.index0 }}, 'tipo_base', this.value, this)" style="font-size:0.8rem;">
+                      <option value="HISTORICO_SALARIAL" {{ 'selected' if base.get('tipo_base') == 'HISTORICO_SALARIAL' }}>Histórico</option>
+                      <option value="MAIOR_REMUNERACAO" {{ 'selected' if base.get('tipo_base') == 'MAIOR_REMUNERACAO' }}>Maior Rem.</option>
+                      <option value="SALARIO_DA_CATEGORIA" {{ 'selected' if base.get('tipo_base') == 'SALARIO_DA_CATEGORIA' }}>Piso</option>
+                      <option value="SALARIO_MINIMO" {{ 'selected' if base.get('tipo_base') == 'SALARIO_MINIMO' }}>Sal. Mínimo</option>
+                      <option value="VALE_TRANSPORTE" {{ 'selected' if base.get('tipo_base') == 'VALE_TRANSPORTE' }}>VT</option>
+                    </select>
+                  </td>
+                  <td style="padding:4px 6px;">
+                    <select onchange="salvarBase({{ vi }}, {{ loop.index0 }}, 'historico_subtipo', this.value, this)" style="font-size:0.8rem;"
+                            {{ 'disabled' if base.get('tipo_base') != 'HISTORICO_SALARIAL' }}>
+                      <option value="">—</option>
+                      <option value="ULTIMA_REMUNERACAO" {{ 'selected' if base.get('historico_subtipo') == 'ULTIMA_REMUNERACAO' }}>Última Rem.</option>
+                      <option value="SALARIO_BASE" {{ 'selected' if base.get('historico_subtipo') == 'SALARIO_BASE' }}>Salário Base</option>
+                      <option value="ADICIONAL_INSALUBRIDADE_PAGO" {{ 'selected' if base.get('historico_subtipo') == 'ADICIONAL_INSALUBRIDADE_PAGO' }}>Ad. Insalub. Pago</option>
+                    </select>
+                  </td>
+                  <td style="padding:4px 6px;">
+                    <input type="text" value="{{ base.get('verba_compor') or '' }}"
+                           placeholder="(nenhuma)" style="font-size:0.8rem; width:120px;"
+                           onblur="salvarBase({{ vi }}, {{ loop.index0 }}, 'verba_compor', this.value, this)">
+                  </td>
+                  <td style="padding:4px 6px;">
+                    <select onchange="salvarBase({{ vi }}, {{ loop.index0 }}, 'divisor', this.value, this)" style="font-size:0.8rem;">
+                      <option value="CARGA_HORARIA" {{ 'selected' if base.get('divisor') == 'CARGA_HORARIA' }}>Carga Hor.</option>
+                      <option value="OUTRO_VALOR" {{ 'selected' if base.get('divisor') == 'OUTRO_VALOR' }}>Outro</option>
+                      <option value="DIAS_UTEIS" {{ 'selected' if base.get('divisor') == 'DIAS_UTEIS' }}>Dias Úteis</option>
+                      <option value="IMPORTADA_DO_CARTAO" {{ 'selected' if base.get('divisor') == 'IMPORTADA_DO_CARTAO' }}>Cartão Ponto</option>
+                    </select>
+                    {% if base.get('divisor') == 'OUTRO_VALOR' %}
+                    <input type="text" value="{{ base.get('outro_valor_divisor') or '' }}"
+                           placeholder="ex: 220" style="font-size:0.8rem; width:60px; margin-left:4px;"
+                           onblur="salvarBase({{ vi }}, {{ loop.index0 }}, 'outro_valor_divisor', this.value, this)">
+                    {% endif %}
+                  </td>
+                  <td style="padding:4px 6px;">
+                    <input type="text" value="{{ base.get('multiplicador') if base.get('multiplicador') is not none else '1' }}"
+                           style="font-size:0.8rem; width:55px;"
+                           onblur="salvarBase({{ vi }}, {{ loop.index0 }}, 'multiplicador', this.value, this)">
+                  </td>
+                  <td style="text-align:center; padding:4px 6px;">
+                    <input type="checkbox" {{ 'checked' if base.get('proporcionalizar') }}
+                           onchange="salvarBase({{ vi }}, {{ loop.index0 }}, 'proporcionalizar', this.checked ? 'true' : 'false', this)">
+                  </td>
+                  <td style="text-align:center; padding:4px 6px;">
+                    <input type="checkbox" {{ 'checked' if base.get('integralizar') }}
+                           onchange="salvarBase({{ vi }}, {{ loop.index0 }}, 'integralizar', this.checked ? 'true' : 'false', this)">
+                  </td>
+                  <td style="padding:4px 6px;">
+                    <button type="button" class="btn btn-sm btn-link" style="color:#dc3545; font-size:0.75rem;"
+                            onclick="removerBaseVerba({{ vi }}, {{ loop.index0 }})" title="Remover esta base">✕</button>
+                  </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+              </table>
+              {% else %}
+              <div style="font-size:0.78rem; color:#6c757d; font-style:italic;">
+                Nenhuma base cadastrada. O PJE-Calc exigirá ao menos uma base ao
+                liquidar verbas com tipoDaBaseTabelada=HISTORICO_SALARIAL.
+              </div>
+              {% endif %}
+            </div>
+
             {# Reflexas auto-geradas pelo Expresso #}
             {% if ep_reflexas %}
             <div style="margin-top:10px;">
@@ -3092,6 +3184,64 @@ function validarECanonico(el) {
     el.style.borderColor = '#28a745';
   } else {
     el.style.borderColor = isBase ? '#dc3545' : '#ffc107';
+  }
+}
+
+// Bases de Cálculo da verba (lista) — espelha "Bases Cadastradas" do PJE-Calc
+async function adicionarBaseVerba(indice) {
+  try {
+    const resp = await fetch(`/previa/${SESSAO_ID}/verba/${indice}/base`, { method: 'POST' });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      mostrarToast('Base adicionada', 'ok');
+      // Re-renderizar a página inteira é mais simples que diff DOM
+      setTimeout(() => location.reload(), 400);
+    } else {
+      mostrarToast('Erro: ' + (dados.erro || 'falha ao adicionar base'), 'erro');
+    }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
+  }
+}
+
+async function removerBaseVerba(indice, baseIdx) {
+  if (!confirm('Remover esta base de cálculo?')) return;
+  try {
+    const resp = await fetch(`/previa/${SESSAO_ID}/verba/${indice}/base/${baseIdx}`, { method: 'DELETE' });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      mostrarToast('Base removida', 'ok');
+      setTimeout(() => location.reload(), 400);
+    } else {
+      mostrarToast('Erro: ' + (dados.erro || 'falha ao remover'), 'erro');
+    }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
+  }
+}
+
+async function salvarBase(indice, baseIdx, campo, valor, el) {
+  try {
+    const form = new FormData();
+    form.append('campo', campo);
+    form.append('valor', String(valor));
+    const resp = await fetch(`/previa/${SESSAO_ID}/verba/${indice}/base/${baseIdx}/editar`, { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      if (el) {
+        el.classList.add('campo-salvo');
+        setTimeout(() => el.classList.remove('campo-salvo'), 1500);
+      }
+      mostrarToast('Base salva', 'ok');
+      // Se mudou tipo_base ou divisor, re-renderiza para mostrar/ocultar campos dependentes
+      if (campo === 'tipo_base' || campo === 'divisor') {
+        setTimeout(() => location.reload(), 400);
+      }
+    } else {
+      mostrarToast('Erro: ' + (dados.erro || 'falha ao salvar'), 'erro');
+    }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
   }
 }
 

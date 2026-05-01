@@ -209,7 +209,14 @@ from modules.ingestion import ler_documento
 from modules.extraction import extrair_dados_sentenca, extrair_dados_sentenca_pdf
 from modules.classification import mapear_para_pjecalc
 from modules.parametrizacao import gerar_parametrizacao
-from modules.preview import gerar_previa, aplicar_edicao_usuario, aplicar_edicao_verba
+from modules.preview import (
+    gerar_previa,
+    aplicar_edicao_usuario,
+    aplicar_edicao_verba,
+    adicionar_base_calculo,
+    remover_base_calculo,
+    editar_base_calculo,
+)
 
 # ── Configuração da aplicação ─────────────────────────────────────────────────
 
@@ -600,6 +607,110 @@ async def editar_verba(
             {"sucesso": False, "erro": str(exc), "indice": indice, "campo": campo},
             status_code=500,
         )
+
+
+@app.post("/previa/{sessao_id}/verba/{indice}/base")
+async def add_base_verba(
+    sessao_id: str,
+    indice: int,
+    db: Session = Depends(get_db),
+):
+    """Adiciona uma base de cálculo padrão (HE-style) à verba `indice`.
+
+    Defaults: tipo_base=HISTORICO_SALARIAL, historico_subtipo=ULTIMA_REMUNERACAO,
+    divisor=CARGA_HORARIA, multiplicador=1.5, integralizar=true.
+    Após criação, o usuário edita campos via PATCH.
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    try:
+        verbas_mapeadas = adicionar_base_calculo(verbas_mapeadas, indice)
+        nova_previa = gerar_previa(dados, verbas_mapeadas)
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+        # Retornar a base recém-criada para o frontend
+        todas = (
+            verbas_mapeadas.get("predefinidas", [])
+            + verbas_mapeadas.get("personalizadas", [])
+            + verbas_mapeadas.get("nao_reconhecidas", [])
+        )
+        verba = todas[indice] if 0 <= indice < len(todas) else {}
+        bases = verba.get("bases_calculo") or []
+        return JSONResponse(
+            {"sucesso": True, "indice": indice, "base_idx": len(bases) - 1, "base": bases[-1] if bases else None}
+        )
+    except Exception as exc:
+        import logging, traceback
+        logging.error("add_base_verba erro: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse({"sucesso": False, "erro": str(exc)}, status_code=500)
+
+
+@app.delete("/previa/{sessao_id}/verba/{indice}/base/{base_idx}")
+async def del_base_verba(
+    sessao_id: str,
+    indice: int,
+    base_idx: int,
+    db: Session = Depends(get_db),
+):
+    """Remove a base de cálculo `base_idx` da verba `indice`."""
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    try:
+        verbas_mapeadas = remover_base_calculo(verbas_mapeadas, indice, base_idx)
+        nova_previa = gerar_previa(dados, verbas_mapeadas)
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+        return JSONResponse({"sucesso": True, "indice": indice, "base_idx": base_idx})
+    except Exception as exc:
+        import logging, traceback
+        logging.error("del_base_verba erro: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse({"sucesso": False, "erro": str(exc)}, status_code=500)
+
+
+@app.post("/previa/{sessao_id}/verba/{indice}/base/{base_idx}/editar")
+async def edit_base_verba(
+    sessao_id: str,
+    indice: int,
+    base_idx: int,
+    campo: str = Form(...),
+    valor: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Edita um campo de uma base de cálculo da verba.
+
+    Campos suportados: tipo_base, historico_subtipo, proporcionalizar (bool),
+    verba_compor (str|null), integralizar (bool), divisor, multiplicador (float),
+    outro_valor_divisor (float).
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    try:
+        verbas_mapeadas = editar_base_calculo(verbas_mapeadas, indice, base_idx, campo, valor)
+        nova_previa = gerar_previa(dados, verbas_mapeadas)
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+        return JSONResponse(
+            {"sucesso": True, "indice": indice, "base_idx": base_idx, "campo": campo, "valor": valor}
+        )
+    except Exception as exc:
+        import logging, traceback
+        logging.error("edit_base_verba erro: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse({"sucesso": False, "erro": str(exc)}, status_code=500)
 
 
 @app.post("/previa/{sessao_id}/adicionar-verba")
