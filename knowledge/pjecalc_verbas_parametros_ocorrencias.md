@@ -302,3 +302,65 @@ Acessível em `liquidacao.jsf` ao clicar Liquidar. Há 2 níveis:
 2. "O parâmetro Quantidade foi alterado após a geração das ocorrências da verba {NOME}."
    - Sinaliza dessincronia entre Parâmetros e Ocorrências
    - Fix: re-gerar ocorrências (link "Recuperar" na grade)
+
+## Reflexos auto-gerados pelo Lançamento Expresso
+
+Inspeção via Chrome MCP no calc 262818 com 13 verbas (8 variáveis + 5 rescisórias).
+A listagem de Verbas (verba-calculo.jsf) mostra cada verba PRINCIPAL com link
+"Exibir" que expande as REFLEXAS associadas. Total observado: 86 linhas (13 mains
++ ~50 reflexas + linhas separadoras).
+
+### Padrão por característica de verba
+
+#### Verbas variáveis HABITUAIS (HE 50%, INTERVALO INTRAJORNADA, IN ITINERE, AD NOTURNO 20%, COMISSÃO, DIÁRIAS-INTEGRAÇÃO)
+
+Reflexos auto-gerados (6 verbas reflexas cada):
+1. AVISO PRÉVIO (×2 — provavelmente uma para indenizado, outra para trabalhado)
+2. FÉRIAS + 1/3
+3. MULTA DO ARTIGO 477 DA CLT
+4. REPOUSO SEMANAL REMUNERADO E FERIADO ← exclusivo de habituais variáveis
+5. 13º SALÁRIO
+
+#### AD INSALUBRIDADE 20% (FIXA, base SALARIO_MINIMO)
+
+Reflexos (5 verbas — SEM RSR porque é parcela fixa mensal):
+1. AVISO PRÉVIO (×2)
+2. FÉRIAS + 1/3
+3. MULTA DO ARTIGO 477 DA CLT
+4. 13º SALÁRIO
+
+#### GORJETA (VARIAVEL, mas remunera diretamente — não habitual)
+
+Reflexos (5 — SEM RSR):
+1. AVISO PRÉVIO (×2)
+2. FÉRIAS + 1/3
+3. MULTA DO ARTIGO 477 DA CLT
+4. 13º SALÁRIO
+
+#### Verbas rescisórias (SALDO DE SALÁRIO, FÉRIAS + 1/3, AVISO PRÉVIO, 13º SALÁRIO)
+
+Reflexos (apenas MULTA 467 ×2):
+1. MULTA DO ARTIGO 467 DA CLT (×2 linhas — provavelmente principal + diferença)
+
+#### MULTA DO ARTIGO 477 DA CLT
+
+Sem reflexos (verba final).
+
+### Implicações para a automação
+
+1. **NÃO criar reflexas manualmente** para verbas adicionadas via Expresso —
+   o PJE-Calc já gera automaticamente. Configurar reflexas manualmente
+   resulta em duplicidade ou bug HTTP 500.
+
+2. **Verificar se RSR é necessário**: para COMISSÃO/HE/INTERVALO/etc.
+   o PJE-Calc gera RSR auto. Se a sentença pede explicitamente RSR,
+   confirmar que já não foi gerado antes de criar manual.
+
+3. **MULTA 467 inclui auto** sobre rescisórias. Se a sentença pede
+   multa 467, basta marcar a checkbox em FGTS (`multaDoArtigo467`)
+   ou confiar nas reflexas auto-geradas das verbas rescisórias.
+
+4. **Por que AVISO PRÉVIO aparece 2× como reflexa**: hipótese — uma
+   linha para AVISO PRÉVIO TRABALHADO e outra para AVISO PRÉVIO
+   INDENIZADO (naturezas diferentes para fins de incidência).
+   A confirmar inspecionando os Parâmetros de cada uma.
