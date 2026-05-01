@@ -10685,6 +10685,26 @@ class PJECalcPlaywright:
             if _nav_ok:
                 self._page.wait_for_timeout(1000)
 
+        # Fallback adicional: URL direta para liquidacao.jsf (se sidebar não funcionou).
+        # Após todas as fases, o bean apresentadorLiquidacao já foi inicializado pelas
+        # ações de Save (Fases 1, 2, 5, etc.) e a URL direta NÃO causa NPE.
+        if not _nav_ok and self._calculo_url_base and self._calculo_conversation_id:
+            self._log("  ⚠ Sidebar/menu_lateral falharam — tentando URL direta liquidacao.jsf")
+            _url_liq = (
+                f"{self._calculo_url_base}liquidacao.jsf"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
+            try:
+                self._page.goto(_url_liq, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax(timeout=10000)
+                self._page.wait_for_timeout(1500)
+                _url_after = self._page.url.lower()
+                if "liquidacao" in _url_after and "principal" not in _url_after:
+                    _nav_ok = True
+                    self._log(f"  ✓ Navegação direta OK: {_url_after[-60:]}")
+            except Exception as _e_url:
+                self._log(f"  ⚠ URL direta liquidacao.jsf falhou: {_e_url}")
+
         # Verificar se chegou na página de liquidação corretamente
         _na_liquidacao = False
         try:
