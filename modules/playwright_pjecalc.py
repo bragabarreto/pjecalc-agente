@@ -5232,12 +5232,21 @@ class PJECalcPlaywright:
     _BASE_HISTORICOS_PADRAO = "ULTIMA REMUNERACAO"  # texto match (sem acento, upper)
 
     def _selecionar_base_historicos(self, preferencia: str | None = None) -> bool:
-        """Seleciona uma opção em formulario:baseHistoricos.
+        """Seleciona uma opção em formulario:baseHistoricos E clica 'Adicionar Base'
+        (formulario:incluirBaseHistorico) para ADICIONAR a base à tabela
+        'Bases Cadastradas' da verba.
+
+        DESCOBERTA CRÍTICA (Chrome MCP, 2026-05-01): apenas selecionar o
+        select baseHistoricos NÃO basta. PJE-Calc só "registra" a base após
+        clicar no link `formulario:incluirBaseHistorico` (title='Adicionar Base').
+        Sem o clique, Liquidar bloqueia com:
+          "Falta selecionar pelo menos um Histórico Salarial para apurar o
+           Valor Devido da Verba {NOME}".
 
         Tenta por prioridade: 'preferencia' → 'ÚLTIMA REMUNERAÇÃO' → 'SALÁRIO BASE'
         → primeira opção disponível ≠ NoSelection.
 
-        Retorna True se selecionou alguma opção.
+        Retorna True se a base foi adicionada com sucesso (ou já estava na tabela).
         """
         try:
             _alvos = []
@@ -5245,32 +5254,68 @@ class PJECalcPlaywright:
                 _alvos.append(preferencia)
             _alvos.extend(["ULTIMA REMUNERACAO", "SALARIO BASE", "ADICIONAL DE INSALUBRIDADE PAGO"])
 
-            return bool(self._page.evaluate(f"""(alvos) => {{
+            # 1. Verificar se já existe linha "ÚLTIMA REMUNERAÇÃO" ou similar
+            #    na tabela "Bases Cadastradas". Se sim, não precisa adicionar de novo.
+            _ja_existe = self._page.evaluate("""() => {
+                // A tabela 'Bases Cadastradas' aparece após adicionar bases.
+                // Heurística: procurar por texto 'ÚLTIMA REMUNERAÇÃO' ou 'SALÁRIO BASE'
+                // num <tr> que contenha um link de exclusão (=base já cadastrada).
+                const trs = document.querySelectorAll('tr');
+                for (const tr of trs) {
+                    const txt = tr.textContent || '';
+                    if (/ÚLTIMA REMUNERAÇÃO|SALÁRIO BASE|ADICIONAL DE INSALUBRIDADE PAGO/i.test(txt)) {
+                        // Verificar se há link de exclusão (indica linha de base já cadastrada)
+                        if (tr.querySelector('a[id*="excluir"], a[title*="xclui"]')) return true;
+                    }
+                }
+                return false;
+            }""")
+            if _ja_existe:
+                return True
+
+            # 2. Selecionar a opção desejada
+            _selecionou = self._page.evaluate("""(alvos) => {
                 const sel = document.querySelector('select[id$=":baseHistoricos"]');
                 if (!sel) return false;
                 const norm = s => (s || '').toString()
                     .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
                     .toUpperCase().trim();
-                // Já há opção selecionada que não seja NoSelection?
-                const cur = Array.from(sel.options).find(o => o.selected);
-                if (cur && !cur.value.includes('NoSelection') && cur.value !== '') return true;
-                for (const alvo of alvos) {{
+                for (const alvo of alvos) {
                     const opt = Array.from(sel.options).find(o => norm(o.text).includes(norm(alvo)));
-                    if (opt) {{
+                    if (opt) {
                         sel.value = opt.value;
-                        sel.dispatchEvent(new Event('change', {{bubbles: true}}));
-                        return true;
-                    }}
-                }}
+                        sel.dispatchEvent(new Event('change', {bubbles: true}));
+                        return opt.text;
+                    }
+                }
                 // Fallback: primeira opção ≠ NoSelection
                 const opt = Array.from(sel.options).find(o => o.value && !o.value.includes('NoSelection'));
-                if (opt) {{
+                if (opt) {
                     sel.value = opt.value;
-                    sel.dispatchEvent(new Event('change', {{bubbles: true}}));
-                    return true;
-                }}
+                    sel.dispatchEvent(new Event('change', {bubbles: true}));
+                    return opt.text;
+                }
                 return false;
-            }}""", _alvos))
+            }""", _alvos)
+            if not _selecionou:
+                return False
+
+            # 3. CRÍTICO: clicar 'Adicionar Base' (link com id 'formulario:incluirBaseHistorico')
+            #    para registrar a base na tabela 'Bases Cadastradas'.
+            self._page.wait_for_timeout(400)  # debounce do change event
+            _clicou = self._page.evaluate("""() => {
+                const btn = document.getElementById('formulario:incluirBaseHistorico');
+                if (!btn) return false;
+                btn.click();
+                return true;
+            }""")
+            if not _clicou:
+                self._log("  ⚠ baseHistoricos: link 'Adicionar Base' não encontrado")
+                return False
+            # Aguardar AJAX que repinta a tabela "Bases Cadastradas"
+            self._aguardar_ajax()
+            self._page.wait_for_timeout(800)
+            return True
         except Exception as _e:
             self._log(f"  ⚠ _selecionar_base_historicos: {_e}")
             return False

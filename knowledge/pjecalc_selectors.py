@@ -444,6 +444,10 @@ class VerbaParametro:
     # NoSelection / 0=ADICIONAL DE INSALUBRIDADE PAGO / 1=SALÁRIO BASE / 2=ÚLTIMA REMUNERAÇÃO
     # OBRIGATÓRIO selecionar quando tipoDaBaseTabelada=HISTORICO_SALARIAL,
     # senão Liquidar emite erro 'Falta selecionar pelo menos um Histórico Salarial'.
+    # IMPORTANTE: o select sozinho NÃO BASTA. Após selecionar, é preciso clicar
+    # `formulario:incluirBaseHistorico` (link 'Adicionar Base') para registrar
+    # a base na tabela 'Bases Cadastradas' da verba.
+    INCLUIR_BASE_HISTORICO = "a[id='formulario:incluirBaseHistorico']"
     BASE_VERBA_DE_CALCULO = "select[id$=':baseVerbaDeCalculo']"
     # NoSelection / N=verbas existentes (para somar à base de cálculo)
     INTEGRALIZAR_BASE = "select[id$=':integralizarBase']"  # SIM / NAO

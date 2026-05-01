@@ -269,12 +269,30 @@ Acessível em `liquidacao.jsf` ao clicar Liquidar. Há 2 níveis:
 
 2. **"Falta selecionar pelo menos um Histórico Salarial para apurar o
    Valor Devido da Verba {NOME}."**
-   - Causa: campo `formulario:baseHistoricos` ficou em NoSelection
-   - Fix: na página Parâmetros da verba, selecionar uma das opções:
-     `ADICIONAL DE INSALUBRIDADE PAGO`, `SALÁRIO BASE`, `ÚLTIMA REMUNERAÇÃO`
+   - Causa: a verba NÃO tem nenhuma "Base Cadastrada" do tipo Histórico Salarial
+   - **Fluxo correto (descoberta crítica 2026-05-01)**:
+     1. Na página Parâmetros da verba, selecione `formulario:baseHistoricos`
+        com uma das opções: `ÚLTIMA REMUNERAÇÃO`, `SALÁRIO BASE`,
+        `ADICIONAL DE INSALUBRIDADE PAGO`.
+     2. **Clique no link `formulario:incluirBaseHistorico`**
+        (title='Adicionar Base'). Isso adiciona uma linha à tabela
+        "Bases Cadastradas" da verba, com colunas:
+        Histórico Salarial | Proporcionalizar | (link Excluir).
+     3. Salve a verba.
+   - **Apenas selecionar o select NÃO basta** — a Liquidação só reconhece
+     bases que estejam efetivamente na tabela "Bases Cadastradas".
    - **CRÍTICO PARA AUTOMAÇÃO**: o Lançamento Expresso NÃO preenche
-     `baseHistoricos` automaticamente. A automação DEVE selecionar este
-     campo após adicionar verbas via Expresso.
+     bases automaticamente. A automação DEVE:
+     - selecionar `formulario:baseHistoricos` (default seguro: ÚLTIMA REMUNERAÇÃO)
+     - clicar `formulario:incluirBaseHistorico`
+     - aguardar AJAX
+     - clicar `formulario:salvar`
+     Para cada verba com `tipoDaBaseTabelada=HISTORICO_SALARIAL`.
+
+   **Verificação prévia**: antes de incluir, checar se a tabela
+   "Bases Cadastradas" já tem uma linha com texto contendo `ÚLTIMA REMUNERAÇÃO`
+   ou `SALÁRIO BASE` (heurística: linha com link de exclusão na coluna Ação).
+   Se sim, pular para evitar duplicação.
 
 ### Alertas típicos descobertos
 
