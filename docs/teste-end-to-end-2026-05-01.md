@@ -111,6 +111,72 @@ na URL garante o cálculo correto. Não reverter.
 | Tamanho PJC (zip) | 10.9 KB | 14.9 KB |
 | Tamanho PJC (descompactado) | 193 KB | 360 KB |
 
+### Cenário 3 — PEDRO (proc 0000948-78.2021.5.07.0003)
+
+Sessão: `a3d8e65d-f13d-439b-bb91-d890904e93b1`
+
+**Features exercitadas**:
+- 2 históricos paralelos: "Salário Pago Autor" R$ 2.800 + custom "SALARIO_PARADIGMA" R$ 4.500
+- Bases de cálculo apontando para histórico custom (validação direta da feature `2009ec8`)
+- 8 verbas: DIFERENÇA SALARIAL + SALDO + AVISO + FÉRIAS+1/3 + 13º + HE 50% +
+  AD NOTURNO 20% + INTERVALO INTRAJORNADA
+- Equiparação salarial (R$ 1.700/mês de diferença)
+- Jornada noturna integral (22h-06h) com hora ficta reduzida
+- Adicional Noturno 20% sobre todas as horas + Súmula 60-II TST
+- Intervalo intrajornada 30min suprimido (indenizatório, sem reflexos)
+- Aviso prévio Calculado proporcional Lei 12.506/2011 (36 dias)
+- 1 honorário 10% sucumbencial reclamado
+- ADC 58 + Lei 14.905/2024
+
+**Resultado**: PJC 1014KB (maior da bateria) gerado em ~12min após resolver
+problemas operacionais.
+
+**Tentativas até sucesso**: 12 — descobriu múltiplos bugs operacionais:
+- 5 bugs no código (CPF/CNPJ DV, CNJ DV, runner cache, etc.)
+- Padronização do processo CNJ usado em todos os testes: 0000948-78.2021.5.07.0003
+
+## Bugs adicionais corrigidos durante o teste do Cenário 3
+
+### 5. Limpeza CPF/CNPJ inválido — commit `e0152ff`
+
+**Sintoma**: dados de teste com CPF/CNPJ fictícios bloqueavam Fase 1
+indefinidamente (loop de 3 retries → 0 corrigidos → automação prossegue
+com dados não persistidos).
+
+**Fix**: estratégia em 2 níveis em `_tentar_corrigir_erros`:
+- Nível 1: reformatar (remover caracteres não-dígito)
+- Nível 2: se ainda inválido (DV errado), LIMPAR campo e prosseguir
+  (CPF/CNPJ só são obrigatórios ao enviar ao PJe — etapa manual posterior)
+
+### 6. Runner cache eternamente travado — commit `35aa4bb`
+
+**Sintoma**: após `/api/parar`, próxima `/api/executar` retornava
+instantaneamente com 246 linhas de logs antigos, sem nunca rodar de fato.
+
+**Causa raiz**:
+- `_AutomacaoRunner.stop()` fechava generator + adicionava `[FIM]` mas
+  NÃO setava `self.done = True`
+- `_limpar_runners_antigos` só remove runners `done=True` → runner parado
+  ficava cacheado eternamente (>5min)
+- `/api/reset-lock` só limpava locks, não removia runner do cache
+- Próxima `/api/executar` via `existing_runner.done == False` → entrava
+  em "follow mode" do runner morto
+
+**Fix**:
+- `stop()`: agora seta `self.done = True` ao final
+- `/api/reset-lock`: agora também faz `_automacao_runners.pop()`
+
+## Total — 6 bugs descobertos e corrigidos pela bateria
+
+| # | Commit | Categoria |
+|---|--------|-----------|
+| 1 | `2ea96b1` | Prompt format `{...}` literais não escapados |
+| 2 | `8dd1e3e` | NameError 'tipo' em fase_honorarios |
+| 3 | `21ffb5c` | URLs Fase 6 + recovery navegação |
+| 4 | `3b96af1` | Liquidar URL direta fallback |
+| 5 | `e0152ff` | Limpar CPF/CNPJ inválido |
+| 6 | `35aa4bb` | Runner cache (stop() + reset-lock) |
+
 ## Próximos passos sugeridos
 
 1. **Auditoria pós-importação**: importar os PJCs gerados em uma instância
