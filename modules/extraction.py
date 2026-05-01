@@ -308,8 +308,12 @@ Se não mencionado → ferias = []
   (hipótese muito rara).
 
 **SEÇÃO 5 — MULTAS TRABALHISTAS**:
-- "Multa art. 467 CLT — Deferida" → fgts.multa_467 = true (campo opcional)
-- "Multa art. 467 CLT — Indeferida" → fgts.multa_467 = false
+- "Multa art. 467 CLT — Deferida"/"condenação em multa do art. 467" → fgts.multa_467 = true
+- "Multa art. 467 CLT — Indeferida"/sentença silente/só citação na fundamentação →
+  fgts.multa_467 = false (NÃO inferir; só extrair quando claramente deferida no dispositivo)
+- fgts.multa_467_origem (string opcional, default "fgts_checkbox"):
+    • "fgts_checkbox" — quando deferida amplamente sobre verbas rescisórias incontroversas
+    • "expresso_reflex" — quando deferida apenas sobre verbas específicas (granular)
 
 **SEÇÃO 5B — JUSTIÇA GRATUITA** → preenche "justica_gratuita":
 - Buscar "benefício da justiça gratuita", "gratuidade judiciária", "assistência judiciária gratuita"
@@ -580,7 +584,8 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
     "aliquota": "float | null",
     "multa_40": "true | false | null",
     "multa_20": "true | false | null",
-    "multa_467": "true | false | null",
+    "multa_467": "true | false | null (true SOMENTE com condenação clara no dispositivo)",
+    "multa_467_origem": "'fgts_checkbox' | 'expresso_reflex' (default 'fgts_checkbox' — só usar 'expresso_reflex' quando sentença deferir 467 só sobre verbas específicas)",
     "saldo_fgts": "float | null",
     "incidencia_13o_dezembro": "true | false (padrão true — FGTS do 13º é recolhido na competência de dezembro; base de dezembro = salário + 13º proporcional. Emitir false apenas se a sentença expressamente afastar incidência de FGTS sobre o 13º.)",
     "confianca": 0.95
@@ -986,7 +991,26 @@ verbas_deferidas; em vez disso definir fgts.multa_40 = true. Reflexos de FGTS ta
 - multa_20: true SOMENTE quando a sentença determina multa de 20% (estabilidade provisória:
   CIPA, gestante, acidentário, etc.). Quando multa_20=true, multa_40 TAMBÉM deve ser true.
   Se a sentença não menciona 20%, multa_20=false (default).
-- multa_467: true quando deferida "multa do art. 467 CLT" (verbas rescisórias incontroversas)
+- multa_467: true SOMENTE quando a sentença EFETIVAMENTE CONDENA a parte ré ao pagamento
+  da multa do art. 467 da CLT. Critérios para true:
+    • Dispositivo contém: "condeno em multa do art. 467 CLT", "deferida multa art. 467",
+      "aplica-se multa do art. 467 sobre verbas rescisórias incontroversas", ou similar
+    • Reconhecimento de existência de verbas rescisórias incontroversas com aplicação da multa
+  Critérios para false (NÃO marcar):
+    • Mera citação do artigo 467 na fundamentação sem deferimento no dispositivo
+    • Sentença silente ou que indefere a multa
+    • Pedido constante na petição inicial mas indeferido pelo juízo
+  Default: false (NÃO inferir; só marcar quando há condenação clara no dispositivo)
+- multa_467_origem: "fgts_checkbox" | "expresso_reflex" — onde a multa será configurada
+  no PJE-Calc. Só relevante quando multa_467=true.
+    • "fgts_checkbox" (DEFAULT): a multa é marcada como checkbox na aba FGTS do PJE-Calc;
+      o sistema gera AUTOMATICAMENTE reflexas em todas as verbas principais.
+      Use quando a sentença defere de forma ampla (ex: "multa do art. 467 sobre todas as
+      verbas rescisórias incontroversas")
+    • "expresso_reflex": a multa será marcada como reflexa Expresso verba a verba na aba
+      Verbas; o checkbox FGTS fica DESMARCADO. Use quando a sentença vincula a multa
+      apenas a verbas específicas (ex: "multa do art. 467 incidente sobre saldo de salário
+      e aviso prévio" — sem outras verbas)
 - saldo_fgts: saldo das contas FGTS do trabalhador, se informado (ex: "saldo FGTS de R$ 1.200,00");
   null se não mencionado — NÃO inferir, apenas extrair se explícito
 - incidencia_13o_dezembro: true (padrão) — o recolhimento do FGTS referente ao 13º salário
@@ -1187,7 +1211,8 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
     "aliquota": "float | null",
     "multa_40": "true | false | null",
     "multa_20": "true | false | null",
-    "multa_467": "true | false | null",
+    "multa_467": "true | false | null (true SOMENTE com condenação clara no dispositivo)",
+    "multa_467_origem": "'fgts_checkbox' | 'expresso_reflex' (default 'fgts_checkbox')",
     "incidencia_13o_dezembro": "true | false (padrão true — FGTS do 13º é recolhido na competência de dezembro; base de dezembro = salário + 13º proporcional. Emitir false apenas se a sentença expressamente afastar incidência de FGTS sobre o 13º.)",
     "confianca": 0.0-1.0
   }},

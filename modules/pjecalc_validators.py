@@ -128,6 +128,67 @@ def validar_data_inicio_calculo(
     return {"data_inicio_calculo": data_inicio, "alerta": None, "corrigido": False}
 
 
+def validar_multa_467(
+    multa_467: bool | None,
+    multa_467_origem: str | None,
+) -> dict[str, Any]:
+    """
+    Valida a configuração da Multa Art. 467 da CLT.
+
+    Regras:
+      - multa_467 deve ser bool (true/false). null → false (default seguro).
+      - multa_467_origem só faz sentido quando multa_467=True.
+        Valores válidos: 'fgts_checkbox' (default) ou 'expresso_reflex'.
+        Se multa_467=False, origem é zerada (None).
+
+    Retorna dict com:
+      - multa_467: bool
+      - multa_467_origem: str | None
+      - alerta: str | None
+      - corrigido: bool
+    """
+    _alerta = None
+    _corrigido = False
+
+    # Normaliza multa_467 para bool
+    _m467_novo = bool(multa_467) if multa_467 is not None else False
+    if multa_467 is None:
+        _corrigido = True
+
+    # Se multa_467=False, origem deve ser None (não faz sentido)
+    if not _m467_novo:
+        if multa_467_origem not in (None, ""):
+            _corrigido = True
+        return {
+            "multa_467": _m467_novo,
+            "multa_467_origem": None,
+            "alerta": _alerta,
+            "corrigido": _corrigido,
+        }
+
+    # multa_467=True — validar origem
+    _ORIGENS_VALIDAS = ("fgts_checkbox", "expresso_reflex")
+    _origem_norm = (multa_467_origem or "").strip().lower()
+    if _origem_norm not in _ORIGENS_VALIDAS:
+        _origem_corrigido = "fgts_checkbox"  # default
+        _alerta = (
+            f"multa_467_origem inválido ('{multa_467_origem}') — "
+            f"corrigido para 'fgts_checkbox' (default). "
+            f"Valores aceitos: {' ou '.join(_ORIGENS_VALIDAS)}."
+        )
+        _corrigido = True
+        _origem = _origem_corrigido
+    else:
+        _origem = _origem_norm
+
+    return {
+        "multa_467": _m467_novo,
+        "multa_467_origem": _origem,
+        "alerta": _alerta,
+        "corrigido": _corrigido,
+    }
+
+
 def aplicar_validacoes_pjecalc(
     dados: dict[str, Any],
     log_cb=None,
@@ -186,6 +247,24 @@ def aplicar_validacoes_pjecalc(
             })
             _log(f"  ⚠ Validação PJE-Calc: {_r2['alerta']}")
         dados["contrato"] = contrato
+
+    # 3. Multa Art. 467 — coerência entre flag e origem
+    fgts = dados.get("fgts") or {}
+    _r3 = validar_multa_467(
+        multa_467=fgts.get("multa_467"),
+        multa_467_origem=fgts.get("multa_467_origem"),
+    )
+    if _r3["corrigido"]:
+        fgts["multa_467"] = _r3["multa_467"]
+        fgts["multa_467_origem"] = _r3["multa_467_origem"]
+        if _r3["alerta"]:
+            alertas.append({
+                "campo": "fgts.multa_467_origem",
+                "mensagem": _r3["alerta"],
+                "severidade": "warning",
+            })
+            _log(f"  ⚠ Validação PJE-Calc: {_r3['alerta']}")
+        dados["fgts"] = fgts
 
     if alertas:
         dados["_alertas_validacao"] = alertas
