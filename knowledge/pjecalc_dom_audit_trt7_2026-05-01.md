@@ -324,3 +324,70 @@ Form de inclusão extenso (~50 campos). Conferido em calc 262928.
 - `salvar`, `cancelar`
 
 **OBSERVAÇÃO:** PJE-Calc 2.15.1 contém **typos nos IDs JSF** (`intervalor` em vez de `intervalo`, `Apuracaro` em vez de `Apuracao`). Esses typos são reais no XHTML do servidor — o código deve usar os IDs **exatamente como aparecem**, com os typos.
+
+## Parâmetros da Verba (link `formulario:listagem:N:j_id558`)
+
+URL: `verba/verba-calculo.jsf?conversationId=N` (mesma da listagem — abre form inline)
+
+Form de configuração detalhada da verba — IDs idênticos ao **Manual** (já catalogado):
+- `descricao`, `assuntosCnj`, `tipoVariacaoDaParcela`, `valor`, `caracteristicaVerba`,
+  `ocorrenciaPagto`, `ocorrenciaAjuizamento`, `tipoDeVerba`, `geraReflexo`,
+  `gerarPrincipal`, `comporPrincipal`, `zeraValorNegativo`, `dobraValorDevido`
+- Incidências: `irpf`, `inss`, `fgts`, `previdenciaPrivada`, `pensaoAlimenticia`
+- `tipoDaBaseTabelada` (select MAIOR/HISTORICO/SALARIO_DA_CATEGORIA/...)
+- `baseHistoricos` (select condicional — lista de bases do histórico)
+- `proporcionalizaHistorico` (select SIM/NAO)
+- `baseVerbaDeCalculo` (select condicional)
+- `integralizarBase` (select SIM/NAO)
+- **`tipoDeDivisor:0/1/2/3` (radio):**
+  - 0 = OUTRO_VALOR ("Informado")
+  - 1 = CARGA_HORARIA (default)
+  - 2 = DIAS_UTEIS
+  - 3 = IMPORTADA_DO_CARTAO
+- `outroValorDoMultiplicador` (text — quando divisor=OUTRO_VALOR)
+- **`tipoDaQuantidade:0/1/2/3` (radio):**
+  - 0 = INFORMADA (default)
+  - 1 = IMPORTADA_DO_CALENDARIO
+  - 2 = IMPORTADA_DO_CARTAO_DE_PONTO
+  - 3 = (próxima opção truncada)
+
+## Ocorrências da Verba (link `formulario:listagem:N:j_id559`)
+
+⚠️ **URL DEDICADA: `parametrizar-ocorrencia.jsf?conversationId=N`** (NÃO `verba-calculo.jsf`)
+
+Grade mensal de ocorrências (até 60 linhas, dependendo do período do contrato).
+
+### Form geral (parâmetros aplicados a todas as ocorrências):
+- `formulario:dataInicialInputDate`, `dataFinalInputDate`
+- `formulario:divisor`, `multiplicador`, `quantidade`
+- `formulario:devido`, `pago`
+- `formulario:dobra` (checkbox)
+- `formulario:propDevido`, `propPago`, `propQuantidade` (checkboxes proporcionalizar)
+- Botões: `recuperar`, `cancelar`, `salvar`
+
+### Grade mensal de linhas (`formulario:listagem:N:*`):
+Headers (colunas):
+1. Ativar Todos (checkbox global)
+2. Data Inicial
+3. Data Final
+4. Valor
+5. Divisor
+6. Multiplicador
+7. Quantidade
+8. Dobra
+9. Devido
+10. Pago *
+11. Selecionar Todos (checkbox global)
+
+IDs por linha (N = índice da ocorrência mensal):
+- `formulario:listagem:N:ativo` (checkbox — incluir esta ocorrência)
+- `formulario:listagem:N:selecionar` (checkbox para batch operations)
+- `formulario:listagem:N:dobra` (checkbox)
+- `formulario:listagem:N:termoDiv`, `termoMult`, `termoQuant` (text)
+- `formulario:listagem:N:valorDevido`, `valorPago` (text)
+- `formulario:listagem:ativarTodos`, `selecionarTodos` (checkboxes header)
+
+**Aplicação prática:** quando a sentença determina "horas extras de jun/2018 a fev/2021",
+a grade tem ~32 linhas mensais que podem ser ativadas/desativadas individualmente,
+ou ter divisor/multiplicador customizados por mês. Útil também para configurar
+ocorrências específicas que diferem do default (ex: meses de férias = sem HE).
