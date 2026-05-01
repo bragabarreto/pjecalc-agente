@@ -2678,6 +2678,17 @@
                 liquidar verbas com tipoDaBaseTabelada=HISTORICO_SALARIAL.
               </div>
               {% endif %}
+              {# Warning: Pisos Salariais (SALARIO_DA_CATEGORIA) é tabela admin-only #}
+              {% set _usa_categoria = verba_bases | selectattr('tipo_base', 'equalto', 'SALARIO_DA_CATEGORIA') | list %}
+              {% if _usa_categoria %}
+              <div style="margin-top:6px; padding:6px 10px; background:#fff3cd; border:1px solid #ffc107; border-radius:4px; font-size:0.78rem; color:#856404;">
+                ⚠️ <strong>Atenção (Piso Salarial)</strong>: a tabela
+                <em>Tabelas &gt; Pisos Salariais</em> é gerenciada centralmente
+                no PJE-Calc. Confirme que o piso da categoria/estado do reclamante
+                está cadastrado antes da liquidação — caso contrário a Liquidação
+                falhará com erro de base não localizada.
+              </div>
+              {% endif %}
             </div>
 
             {# Reflexas auto-geradas pelo Expresso #}

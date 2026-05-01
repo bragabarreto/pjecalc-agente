@@ -319,6 +319,30 @@ Textos:
 Radios:
 - `pagarPrecatorio` (false*) / `priorizarJuros` (false*) / `recolherDebitos` (false*)
 
+### Pisos Salariais — limitação conhecida
+
+**A tabela `Pisos Salariais` (Tabelas &gt; Pisos Salariais — categoria) é
+gerenciada centralmente no PJE-Calc**, não por usuário comum durante a
+liquidação. URL: `/pages/salario-categoria/salario-categoria.jsf`. A
+busca por categoria + estado retorna apenas pisos pré-cadastrados pela
+administração do TRT (ex: "AUXÍLIO ALIMENTAÇÃO CAIXA ECONÔMICA FEDERAL CE").
+
+**Implicações para a automação**:
+
+- Quando uma `bases_calculo` da verba usa `tipo_base = SALARIO_DA_CATEGORIA`,
+  o PJE-Calc consulta a tabela auxiliar pela categoria vinculada aos
+  Dados do Cálculo (cabeçalho do processo).
+- Se o piso da categoria não estiver na tabela para a competência, a
+  Liquidação falha com mensagem específica.
+- A automação NÃO cadastra pisos automaticamente (tabela admin-only).
+- A Prévia exibe um warning amarelo abaixo da tabela de bases quando
+  `SALARIO_DA_CATEGORIA` é selecionado, alertando o usuário a confirmar
+  cadastro prévio do piso.
+
+**Workaround**: usar `tipo_base = HISTORICO_SALARIAL` + valor do piso
+no histórico salarial da verba quando a sentença referenciar piso
+normativo de categoria não cadastrada.
+
 ### Tabelas (sub-páginas em `/pages/{tabela}/{tabela}.jsf`)
 
 | Tabela | URL | Conteúdo |

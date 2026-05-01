@@ -216,6 +216,7 @@ from modules.preview import (
     adicionar_base_calculo,
     remover_base_calculo,
     editar_base_calculo,
+    garantir_bases_default,
 )
 
 # ── Configuração da aplicação ─────────────────────────────────────────────────
@@ -799,6 +800,14 @@ async def adicionar_verba(
             verbas_mapeadas.setdefault("predefinidas", []).append(nova_verba)
         else:
             verbas_mapeadas.setdefault("personalizadas", []).append(nova_verba)
+
+        # Auto-popular bases_calculo default — garante que a Prévia mostre
+        # fielmente o que a automação aplicará na tabela "Bases Cadastradas"
+        # do PJE-Calc, mesmo quando o usuário/IA não especificou base.
+        try:
+            verbas_mapeadas = garantir_bases_default(verbas_mapeadas)
+        except Exception as _e_b:
+            logger.debug(f"garantir_bases_default não aplicado: {_e_b}")
 
         # Aplicar validações server-side PJE-Calc (defesa em profundidade)
         try:

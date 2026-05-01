@@ -1718,6 +1718,13 @@ def mapear_para_pjecalc(verbas: list[dict[str, Any]]) -> dict[str, Any]:
         "reflexas_sugeridas": reflexas_unicas,
     }
     atribuir_estrategias_verbas(resultado)
+    # Auto-popular bases_calculo default por verba (1 base) quando a IA não emitir.
+    # Garante fidelidade entre Prévia e tabela "Bases Cadastradas" do PJE-Calc.
+    try:
+        from modules.preview import garantir_bases_default
+        resultado = garantir_bases_default(resultado)
+    except Exception:  # noqa: BLE001
+        pass
     return resultado
 
 

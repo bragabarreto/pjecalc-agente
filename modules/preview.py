@@ -661,6 +661,138 @@ _BASE_DEFAULT_HE = {
 }
 
 
+def base_default_para_verba(nome_pjecalc: str, caracteristica: str | None = None) -> dict[str, Any]:
+    """Retorna a base default que o PJE-Calc Expresso aplica para a verba.
+
+    Confirmado via Chrome MCP no calc 262818 (TRT7 Inst 2.15.1, 2026-05-01).
+    Cobre as principais verbas Expresso variáveis. Para verbas sem mapeamento
+    explícito, retorna o default genérico (HISTORICO_SALARIAL+ULTIMA_REM).
+    """
+    nome_norm = (nome_pjecalc or "").upper().strip()
+    carac = (caracteristica or "").upper().strip()
+
+    # Adicional Insalubridade — base SALARIO_MINIMO, FIXA, sem histórico
+    if "INSALUBRID" in nome_norm:
+        # Detectar percentual no nome (10%/20%/40%)
+        mult = 0.20  # default 20%
+        if "10%" in nome_norm:
+            mult = 0.10
+        elif "40%" in nome_norm:
+            mult = 0.40
+        return {
+            "tipo_base": "SALARIO_MINIMO",
+            "historico_subtipo": None,
+            "proporcionalizar": False,
+            "verba_compor": None,
+            "integralizar": False,
+            "divisor": "OUTRO_VALOR",
+            "outro_valor_divisor": 1.0,
+            "multiplicador": mult,
+        }
+
+    # Adicional Periculosidade 30% — base SALARIO_BASE, FIXA
+    if "PERICULOSID" in nome_norm:
+        return {
+            "tipo_base": "HISTORICO_SALARIAL",
+            "historico_subtipo": "SALARIO_BASE",
+            "proporcionalizar": False,
+            "verba_compor": None,
+            "integralizar": True,
+            "divisor": "OUTRO_VALOR",
+            "outro_valor_divisor": 1.0,
+            "multiplicador": 0.30,
+        }
+
+    # Adicional Noturno 20% — HE-style mas multiplicador 0,2
+    if "NOTURNO" in nome_norm:
+        return {
+            "tipo_base": "HISTORICO_SALARIAL",
+            "historico_subtipo": "ULTIMA_REMUNERACAO",
+            "proporcionalizar": False,
+            "verba_compor": None,
+            "integralizar": True,
+            "divisor": "CARGA_HORARIA",
+            "outro_valor_divisor": None,
+            "multiplicador": 0.20,
+        }
+
+    # Comissão / Diárias / Gorjeta — divisor OUTRO_VALOR=1
+    if "COMISS" in nome_norm or "DIÁRIA" in nome_norm or "DIARIA" in nome_norm:
+        return {
+            "tipo_base": "HISTORICO_SALARIAL",
+            "historico_subtipo": "ULTIMA_REMUNERACAO",
+            "proporcionalizar": False,
+            "verba_compor": None,
+            "integralizar": True,
+            "divisor": "OUTRO_VALOR",
+            "outro_valor_divisor": 1.0,
+            "multiplicador": 1.0,
+        }
+    if "GORJETA" in nome_norm:
+        return {
+            "tipo_base": "HISTORICO_SALARIAL",
+            "historico_subtipo": "ULTIMA_REMUNERACAO",
+            "proporcionalizar": True,
+            "verba_compor": None,
+            "integralizar": True,
+            "divisor": "OUTRO_VALOR",
+            "outro_valor_divisor": 1.0,
+            "multiplicador": 0.10,
+        }
+
+    # Horas Extras / Intervalo / In Itinere — multiplicador 1.5 ou superior
+    if "HORAS EXTRAS" in nome_norm or "INTERVALO" in nome_norm or "IN ITINERE" in nome_norm:
+        mult = 1.5
+        if "100%" in nome_norm:
+            mult = 2.0
+        return {
+            "tipo_base": "HISTORICO_SALARIAL",
+            "historico_subtipo": "ULTIMA_REMUNERACAO",
+            "proporcionalizar": False,
+            "verba_compor": None,
+            "integralizar": True,
+            "divisor": "CARGA_HORARIA",
+            "outro_valor_divisor": None,
+            "multiplicador": mult,
+        }
+
+    # Verbas rescisórias (Saldo, Aviso, Férias, 13º) — característica define o flow
+    # mas aqui é geralmente CARGA_HORARIA com base ÚLTIMA_REM
+    if carac in {"AVISO_PREVIO", "FERIAS", "DECIMO_TERCEIRO_SALARIO"}:
+        return {
+            "tipo_base": "HISTORICO_SALARIAL",
+            "historico_subtipo": "ULTIMA_REMUNERACAO",
+            "proporcionalizar": False,
+            "verba_compor": None,
+            "integralizar": True,
+            "divisor": "OUTRO_VALOR",
+            "outro_valor_divisor": 1.0,
+            "multiplicador": 1.0,
+        }
+
+    # Default genérico — HE-style
+    return dict(_BASE_DEFAULT_HE)
+
+
+def garantir_bases_default(verbas_mapeadas: dict[str, Any]) -> dict[str, Any]:
+    """Para cada verba sem `bases_calculo`, popula 1 base default conforme nome+característica.
+
+    Usar após adicionar/extrair verbas para garantir que a Prévia mostre fielmente
+    o que a automação aplicará. Ignora verbas que já têm bases definidas.
+    """
+    for grupo in ("predefinidas", "personalizadas", "nao_reconhecidas"):
+        for verba in verbas_mapeadas.get(grupo, []):
+            if verba.get("bases_calculo"):
+                continue
+            nome = verba.get("nome_pjecalc") or verba.get("nome_sentenca") or ""
+            carac = verba.get("caracteristica") or ""
+            # Pular verbas reflexas (não têm Parâmetros próprios — herdam da principal)
+            if (verba.get("tipo") or "").lower() == "reflexa" or verba.get("eh_reflexa"):
+                continue
+            verba["bases_calculo"] = [base_default_para_verba(nome, carac)]
+    return verbas_mapeadas
+
+
 def _todas_verbas(verbas_mapeadas: dict[str, Any]) -> list[dict[str, Any]]:
     return (
         verbas_mapeadas.get("predefinidas", [])
