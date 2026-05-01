@@ -319,6 +319,50 @@ Textos:
 Radios:
 - `pagarPrecatorio` (false*) / `priorizarJuros` (false*) / `recolherDebitos` (false*)
 
+### Múltiplos Históricos Salariais — confirmado e suportado
+
+Validação Chrome MCP no calc 262818 (2026-05-01):
+
+**O PJE-Calc permite criar históricos salariais customizados ALÉM dos 3 default**
+(ÚLTIMA REMUNERAÇÃO, SALÁRIO BASE, ADICIONAL DE INSALUBRIDADE PAGO).
+
+Fluxo confirmado:
+1. `historico-salarial.jsf` → botão `formulario:incluir` (Novo)
+2. Form com `formulario:nome` (texto livre), `tipoVariacaoDaParcela` (FIXA/VARIAVEL),
+   `tipoValor` (INFORMADO/CALCULADO), `competenciaInicialInputDate`,
+   `competenciaFinalInputDate`, `valorParaBaseDeCalculo`
+3. **OBRIGATÓRIO** clicar `formulario:cmdGerarOcorrencias` ANTES de salvar.
+   Sem isso, o save falha com: "Erro. Deve haver pelo menos um registro de Ocorrências."
+4. Click `formulario:salvar`
+
+Após criar histórico custom (ex: "GRATIFICACAO HABITUAL"), ele aparece no select
+`baseHistoricos` da verba (Parâmetros), em ordem alfabética junto aos defaults:
+
+```
+opts: [
+  '0=ADICIONAL DE INSALUBRIDADE PAGO',
+  '1=GRATIFICACAO HABITUAL',  ← custom!
+  '2=SALÁRIO BASE',
+  '3=ÚLTIMA REMUNERAÇÃO'
+]
+```
+
+**ATENÇÃO**: os `value` do select são índices DINÂMICOS — mudam quando se adiciona/
+remove históricos. Por isso o matching da automação é feito SEMPRE por TEXTO
+(case + acento-insensitive), nunca por value posicional.
+
+**Cobertura no agente**:
+- ✅ Prévia: `historico_salarial[]` é lista editável (add/remove/edit) com nome livre.
+- ✅ Extração: prompt orienta LLM a emitir múltiplas entradas quando salário variar
+  ou houver natureza salarial paralela.
+- ✅ Automation: `fase_historico_salarial` itera entradas, deleta default ÚLTIMA REM,
+  cria cada custom com Nome+Datas+Valor+Gerar Ocorrências+Salvar.
+- ✅ Vinculação base→histórico: `bases_calculo[].historico_subtipo` aceita os 3 enums
+  default OU nome custom em UPPERCASE; `_adicionar_base_calculo_completa` matcha
+  por texto contendo (case-insensitive sem acentos).
+- ✅ Prévia bases: select `historico_subtipo` é DINÂMICO — lista os 3 default +
+  todos os nomes únicos de `dados.historico_salarial[]` em optgroup "Customizados".
+
 ### Pisos Salariais — limitação conhecida
 
 **A tabela `Pisos Salariais` (Tabelas &gt; Pisos Salariais — categoria) é

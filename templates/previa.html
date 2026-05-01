@@ -2625,12 +2625,28 @@
                     </select>
                   </td>
                   <td style="padding:4px 6px;">
+                    {# Lista dinâmica: 3 default + nomes customizados de dados.historico_salarial #}
+                    {% set _hist_nomes_default = [('ULTIMA_REMUNERACAO', 'Última Rem.'), ('SALARIO_BASE', 'Salário Base'), ('ADICIONAL_INSALUBRIDADE_PAGO', 'Ad. Insalub. Pago')] %}
+                    {% set _hist_custom_nomes = [] %}
+                    {% for h in dados.get('historico_salarial', []) %}
+                      {% set _hn = (h.get('nome') or '').strip().upper() %}
+                      {% if _hn and _hn not in ['ULTIMA REMUNERACAO', 'ÚLTIMA REMUNERAÇÃO', 'SALARIO BASE', 'SALÁRIO BASE', 'ADICIONAL DE INSALUBRIDADE PAGO'] and _hn not in _hist_custom_nomes %}
+                        {% set _ = _hist_custom_nomes.append(_hn) %}
+                      {% endif %}
+                    {% endfor %}
                     <select onchange="salvarBase({{ vi }}, {{ loop.index0 }}, 'historico_subtipo', this.value, this)" style="font-size:0.8rem;"
                             {{ 'disabled' if base.get('tipo_base') != 'HISTORICO_SALARIAL' }}>
                       <option value="">—</option>
-                      <option value="ULTIMA_REMUNERACAO" {{ 'selected' if base.get('historico_subtipo') == 'ULTIMA_REMUNERACAO' }}>Última Rem.</option>
-                      <option value="SALARIO_BASE" {{ 'selected' if base.get('historico_subtipo') == 'SALARIO_BASE' }}>Salário Base</option>
-                      <option value="ADICIONAL_INSALUBRIDADE_PAGO" {{ 'selected' if base.get('historico_subtipo') == 'ADICIONAL_INSALUBRIDADE_PAGO' }}>Ad. Insalub. Pago</option>
+                      {% for _val, _lab in _hist_nomes_default %}
+                      <option value="{{ _val }}" {{ 'selected' if base.get('historico_subtipo') == _val }}>{{ _lab }}</option>
+                      {% endfor %}
+                      {% if _hist_custom_nomes %}
+                      <optgroup label="Customizados">
+                        {% for _hn in _hist_custom_nomes %}
+                        <option value="{{ _hn }}" {{ 'selected' if base.get('historico_subtipo') == _hn }}>{{ _hn|title }}</option>
+                        {% endfor %}
+                      </optgroup>
+                      {% endif %}
                     </select>
                   </td>
                   <td style="padding:4px 6px;">

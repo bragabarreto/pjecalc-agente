@@ -5231,7 +5231,10 @@ class PJECalcPlaywright:
     # Confirmado via Chrome MCP no calc 262818 (TRT7 Inst 2.15.1, 2026-05-01).
     _BASE_HISTORICOS_PADRAO = "ULTIMA REMUNERACAO"  # texto match (sem acento, upper)
 
-    # Mapeia historico_subtipo enum (modelo Prévia) → texto exato do option
+    # Mapeia historico_subtipo enum (modelo Prévia) → texto exato do option.
+    # Quando o subtipo NÃO está no mapa, é tratado como nome de histórico
+    # CUSTOMIZADO criado pelo usuário (ex: "GRATIFICACAO HABITUAL") — o
+    # matching é feito por inclusão case-insensitive no texto do option.
     _HISTORICO_SUBTIPO_TEXTO = {
         "ULTIMA_REMUNERACAO": "ULTIMA REMUNERACAO",
         "SALARIO_BASE": "SALARIO BASE",
