@@ -5224,6 +5224,57 @@ class PJECalcPlaywright:
         "salario categoria":  "SALARIO_DA_CATEGORIA",
     }
 
+    # baseHistoricos default por verba (texto do option, não value).
+    # Quando Parâmetros usa tipoDaBaseTabelada=HISTORICO_SALARIAL, este select é
+    # OBRIGATÓRIO — sem ele Liquidar emite "Falta selecionar pelo menos um
+    # Histórico Salarial para apurar o Valor Devido da Verba {NOME}".
+    # Confirmado via Chrome MCP no calc 262818 (TRT7 Inst 2.15.1, 2026-05-01).
+    _BASE_HISTORICOS_PADRAO = "ULTIMA REMUNERACAO"  # texto match (sem acento, upper)
+
+    def _selecionar_base_historicos(self, preferencia: str | None = None) -> bool:
+        """Seleciona uma opção em formulario:baseHistoricos.
+
+        Tenta por prioridade: 'preferencia' → 'ÚLTIMA REMUNERAÇÃO' → 'SALÁRIO BASE'
+        → primeira opção disponível ≠ NoSelection.
+
+        Retorna True se selecionou alguma opção.
+        """
+        try:
+            _alvos = []
+            if preferencia:
+                _alvos.append(preferencia)
+            _alvos.extend(["ULTIMA REMUNERACAO", "SALARIO BASE", "ADICIONAL DE INSALUBRIDADE PAGO"])
+
+            return bool(self._page.evaluate(f"""(alvos) => {{
+                const sel = document.querySelector('select[id$=":baseHistoricos"]');
+                if (!sel) return false;
+                const norm = s => (s || '').toString()
+                    .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+                    .toUpperCase().trim();
+                // Já há opção selecionada que não seja NoSelection?
+                const cur = Array.from(sel.options).find(o => o.selected);
+                if (cur && !cur.value.includes('NoSelection') && cur.value !== '') return true;
+                for (const alvo of alvos) {{
+                    const opt = Array.from(sel.options).find(o => norm(o.text).includes(norm(alvo)));
+                    if (opt) {{
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change', {{bubbles: true}}));
+                        return true;
+                    }}
+                }}
+                // Fallback: primeira opção ≠ NoSelection
+                const opt = Array.from(sel.options).find(o => o.value && !o.value.includes('NoSelection'));
+                if (opt) {{
+                    sel.value = opt.value;
+                    sel.dispatchEvent(new Event('change', {{bubbles: true}}));
+                    return true;
+                }}
+                return false;
+            }}""", _alvos))
+        except Exception as _e:
+            self._log(f"  ⚠ _selecionar_base_historicos: {_e}")
+            return False
+
     def _configurar_parametros_verba(self, verba: dict, nome_na_lista: str) -> bool:
         """Abre 'Parâmetros da Verba' para a linha que contém nome_na_lista e preenche
         todos os campos disponíveis na extração (período, percentual, base, quantidade).
@@ -5317,6 +5368,23 @@ class PJECalcPlaywright:
         if _base_enum:
             self._marcar_radio("tipoDaBaseTabelada", _base_enum)
             _preencheu = True
+
+        # baseHistoricos OBRIGATÓRIO quando base = HISTORICO_SALARIAL
+        # (default do PJE-Calc para HE/INTERVALO/COMISSÃO/etc. via Expresso).
+        # Sem isso, Liquidar emite erro "Falta selecionar pelo menos um Histórico Salarial".
+        try:
+            _eh_historico = self._page.evaluate("""() => {
+                const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
+                if (!sel) return false;
+                const cur = Array.from(sel.options).find(o => o.selected);
+                return cur && cur.value === 'HISTORICO_SALARIAL';
+            }""")
+            if _eh_historico:
+                _pref = (verba.get("base_historicos") or self._BASE_HISTORICOS_PADRAO)
+                if self._selecionar_base_historicos(_pref):
+                    _preencheu = True
+        except Exception as _e_bh:
+            self._log(f"  ⚠ baseHistoricos check: {_e_bh}")
 
         # Quantidade (se informada na sentença)
         _qtd = verba.get("quantidade") or verba.get("valor_informado_quantidade")
@@ -5519,7 +5587,12 @@ class PJECalcPlaywright:
             if not nome:
                 continue
 
-            # Parâmetros — apenas se há dado útil para preencher
+            # Parâmetros — abrir SEMPRE para verbas Expresso, mesmo sem dado extraído.
+            # Motivo: o Expresso não preenche `formulario:baseHistoricos` automaticamente,
+            # e sem ele o PJE-Calc bloqueia Liquidar com erro "Falta selecionar pelo menos
+            # um Histórico Salarial para apurar o Valor Devido da Verba {NOME}".
+            # _configurar_parametros_verba aplica defaults seguros + seleção de
+            # baseHistoricos quando tipoDaBaseTabelada=HISTORICO_SALARIAL.
             _tem_dado = any([
                 v.get("periodo_inicio"),
                 v.get("periodo_fim"),
@@ -5528,11 +5601,12 @@ class PJECalcPlaywright:
                 v.get("quantidade") is not None,
                 v.get("valor_informado") is not None,  # verbas com valor fixo (ex: danos morais)
             ])
-            if _tem_dado:
-                try:
-                    self._configurar_parametros_verba(v, nome)
-                except Exception as _e:
-                    self._log(f"  ⚠ _configurar_parametros_verba('{nome}'): {_e}")
+            # Sempre tentar — _configurar_parametros_verba aplicará baseHistoricos
+            # mesmo sem dados específicos (apenas para selecionar histórico padrão).
+            try:
+                self._configurar_parametros_verba(v, nome)
+            except Exception as _e:
+                self._log(f"  ⚠ _configurar_parametros_verba('{nome}'): {_e}")
 
             # Ocorrências — sempre tentar (gerar + salvar confirma o período)
             try:

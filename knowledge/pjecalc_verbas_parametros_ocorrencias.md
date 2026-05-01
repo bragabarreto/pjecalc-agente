@@ -145,3 +145,142 @@ Documenta os DEFAULTS automáticos e estrutura específica de cada característi
   Lei 12.506/2011 (sistema apura 30+3/ano, máx 90)
 - Saldo Salário, Multa 477: DESLIGAMENTO (1 ocorrência única)
 - Horas Extras, Intervalo: MENSAL (N ocorrências mensais)
+
+## Particularidades adicionais — Verbas variáveis (Expresso 2026-05-01)
+
+Inspeção via Chrome MCP no calc 262818 com 8 verbas adicionadas via Expresso
+(HE 50%, INTERVALO INTRAJORNADA, COMISSÃO, GORJETA, DIÁRIAS-INTEGRAÇÃO,
+AD INSALUBRIDADE 20%, AD NOTURNO 20%, HORAS IN ITINERE).
+
+### Campos novos descobertos (form Parâmetros)
+
+Além dos já documentados (caracteristicaVerba, ocorrenciaPagto, tipoDaQuantidade,
+tipoDeDivisor, tipoDaBaseTabelada), Parâmetros expõe:
+
+- `formulario:tipoVariacaoDaParcela` (radio): **FIXA** | **VARIAVEL**
+  - FIXA: AD INSALUBRIDADE/PERICULOSIDADE (parcela fixa mensal)
+  - VARIAVEL: HE, INTERVALO, COMISSÃO, GORJETA, DIÁRIAS, AD NOTURNO, IN ITINERE
+- `formulario:valor` (radio): CALCULADO* | INFORMADO
+- `formulario:tipoDeVerba` (radio): PRINCIPAL* | REFLEXO
+- `formulario:gerarPrincipal` / `formulario:geraReflexo` (radio): DEVIDO | DIFERENCA*
+- `formulario:comporPrincipal` (radio): SIM* | NAO
+  - **DIÁRIAS-INTEGRAÇÃO = NAO** (não compõe principal — só integra base)
+- `formulario:tipoDoValorPago` (radio): INFORMADO* | CALCULADO
+- `formulario:ocorrenciaAjuizamento` (radio):
+  OCORRENCIAS_VENCIDAS_E_VINCENDAS | OCORRENCIAS_VENCIDAS*
+
+### Campos de base de cálculo
+
+- `formulario:tipoDaBaseTabelada` (select): MAIOR_REMUNERACAO | HISTORICO_SALARIAL* |
+  SALARIO_DA_CATEGORIA (Piso Salarial) | SALARIO_MINIMO | VALE_TRANSPORTE
+  - **AD INSALUBRIDADE 20% default = SALARIO_MINIMO** (não HISTORICO!)
+- `formulario:baseHistoricos` (select): NoSelection* | ADICIONAL DE INSALUBRIDADE PAGO |
+  SALÁRIO BASE | ÚLTIMA REMUNERAÇÃO
+  - **CRÍTICO**: campo OBRIGATÓRIO quando `tipoDaBaseTabelada=HISTORICO_SALARIAL`
+  - Se ficar em NoSelection, Liquidar falha com erro:
+    `"Falta selecionar pelo menos um Histórico Salarial para apurar o Valor Devido"`
+- `formulario:baseVerbaDeCalculo` (select): permite somar OUTRA verba à base
+  (ex: HE com base sobre COMISSÃO + SALARIO BASE)
+- `formulario:integralizarBase` (select): SIM* | NAO
+  - AD INSALUBRIDADE 20% default = NAO
+- `formulario:proporcionalizaHistorico` (select): SIM | NAO*
+  - GORJETA default = SIM (única assim entre as testadas)
+
+### Multiplicadores e divisores
+
+- `formulario:outroValorDoMultiplicador` (texto livre):
+  - HE 50%, INTERVALO INTRAJORNADA, IN ITINERE = "1,5"
+  - GORJETA = "0,1" (10%)
+  - AD INSALUBRIDADE 20%, AD NOTURNO 20% = "0,2" (20%)
+  - COMISSÃO, DIÁRIAS = "1"
+- `formulario:outroValorDoDivisor` (texto livre): default "1"
+  (usado quando `tipoDeDivisor=OUTRO_VALOR`)
+- `formulario:valorInformadoDaQuantidade` (texto livre): "0" ou "1"
+
+### Incidências e exclusões (checkboxes)
+
+- `formulario:fgts`, `formulario:inss`, `formulario:irpf`:
+  - true (salarial): HE, INTERVALO, COMISSÃO, GORJETA, AD INSALUB, AD NOTURNO, IN ITINERE
+  - **false (indenizatória): DIÁRIAS-INTEGRAÇÃO** (única assim)
+- `formulario:previdenciaPrivada`, `formulario:pensaoAlimenticia`: false default
+- `formulario:zeraValorNegativo`: false default
+- `formulario:excluirFaltaJustificada`, `excluirFaltaNaoJustificada`,
+  `excluirFeriasGozadas`: true default para verbas mensais
+  - **DIÁRIAS-INTEGRAÇÃO = todas false** (não exclui nada)
+  - **AD INSALUBRIDADE = excluirFaltaJustificada false** (paga mesmo nas faltas justif.)
+- `formulario:dobraValorDevido`: false default
+- `formulario:aplicarProporcionalidadeAQuantidade`:
+  - true: HE, INTERVALO, AD NOTURNO (verbas com quantidade variável por mês)
+  - false: COMISSÃO, GORJETA, DIÁRIAS, AD INSALUB
+- `formulario:aplicarProporcionalidadeABase`: presente APENAS em AD INSALUBRIDADE
+  (true default)
+- `formulario:aplicarProporcionalidadeValorPago`: false default
+
+### Cheat sheet — perfis de verba
+
+| Verba                  | Variação | Divisor       | Mult | Base            | FGTS | Multi |
+|------------------------|----------|---------------|------|-----------------|------|-------|
+| HE 50%                 | VARIAVEL | CARGA_HORARIA | 1,5  | HISTORICO       | sim  | 1,5   |
+| INTERVALO INTRAJORNADA | VARIAVEL | CARGA_HORARIA | 1,5  | HISTORICO       | sim  | 1,5   |
+| HORAS IN ITINERE       | VARIAVEL | CARGA_HORARIA | 1,5  | HISTORICO       | sim  | 1,5   |
+| AD NOTURNO 20%         | VARIAVEL | CARGA_HORARIA | 0,2  | HISTORICO       | sim  | 0,2   |
+| AD INSALUB 20%         | FIXA     | OUTRO_VALOR   | 0,2  | SALARIO_MINIMO  | sim  | 0,2   |
+| COMISSÃO               | VARIAVEL | OUTRO_VALOR   | 1    | HISTORICO       | sim  | 1     |
+| GORJETA                | VARIAVEL | OUTRO_VALOR   | 0,1  | HISTORICO       | sim  | 0,1   |
+| DIÁRIAS-INTEGRAÇÃO     | VARIAVEL | OUTRO_VALOR   | 1    | HISTORICO       | NÃO  | 1     |
+
+### Estrutura da grade de Ocorrências (HE 50%)
+
+URL: `parametrizar-ocorrencia.jsf?conversationId=N`
+
+Para cada mês do contrato (1 linha por mês):
+- `termoDiv` = "220" (carga horária mensal — divisor)
+- `termoMult` = "1,5" (multiplicador da hora extra 50%)
+- `termoQuant` = "0" (DEVE ser preenchido pelo usuário com nº horas extras)
+- `dobra` = checkbox (default false)
+- `valorDevido` = "" (calculado pelo sistema após salvar)
+- `valorPago` = "0,00" (preencher se houve pagamento parcial)
+- `selecionar` = checkbox
+
+**ALERTA**: Se todas as ocorrências forem salvas com `termoQuant=0`,
+PJE-Calc emite alerta "Todas as ocorrências da verba X foram salvas com
+quantidade igual a zero" (não impede Liquidar mas zera o valor da verba).
+
+**ALERTA**: Se mudar `valorInformadoDaQuantidade` em Parâmetros depois de
+gerar Ocorrências, PJE-Calc emite alerta:
+"O parâmetro Quantidade foi alterado após a geração das ocorrências da
+verba X" — recomenda regerar.
+
+## Pendências comuns na Liquidação
+
+Acessível em `liquidacao.jsf` ao clicar Liquidar. Há 2 níveis:
+
+- **Erro** (impede Liquidar)
+- **Alerta** (não impede)
+
+### Erros típicos descobertos
+
+1. **"O Histórico Salarial ÚLTIMA REMUNERAÇÃO não possui valor cadastrado
+   para todas as ocorrências da Contribuição Social sobre Salários Devidos."**
+   - Causa: rescisória adicionada sem cadastro completo de Histórico Salarial
+     ÚLTIMA REMUNERAÇÃO (mês a mês) na aba "Contribuição Social"
+   - Fix: cadastrar histórico ÚLTIMA REMUNERAÇÃO na aba Contribuição Social
+     OU mudar a base de CS para outro tipo
+
+2. **"Falta selecionar pelo menos um Histórico Salarial para apurar o
+   Valor Devido da Verba {NOME}."**
+   - Causa: campo `formulario:baseHistoricos` ficou em NoSelection
+   - Fix: na página Parâmetros da verba, selecionar uma das opções:
+     `ADICIONAL DE INSALUBRIDADE PAGO`, `SALÁRIO BASE`, `ÚLTIMA REMUNERAÇÃO`
+   - **CRÍTICO PARA AUTOMAÇÃO**: o Lançamento Expresso NÃO preenche
+     `baseHistoricos` automaticamente. A automação DEVE selecionar este
+     campo após adicionar verbas via Expresso.
+
+### Alertas típicos descobertos
+
+1. "Todas as ocorrências da verba {NOME} foram salvas com quantidade igual a zero."
+   - Sinaliza verba zerada (lançamento incompleto)
+
+2. "O parâmetro Quantidade foi alterado após a geração das ocorrências da verba {NOME}."
+   - Sinaliza dessincronia entre Parâmetros e Ocorrências
+   - Fix: re-gerar ocorrências (link "Recuperar" na grade)

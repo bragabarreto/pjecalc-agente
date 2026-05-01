@@ -402,19 +402,123 @@ class VerbaManual:
 # ============================================================================
 
 class VerbaParametro:
-    """Campos da pagina de parametros de uma verba"""
-    JSF = "verba/verba-parametro.jsf"
+    """Campos da pagina de parametros de uma verba.
 
-    # Links de acao na listagem de verbas
-    LINK_PARAMETRO = ('a[id*="parametro"], a[id*="alterar"], a[id*="editar"], '
-                      'input[id*="parametro"], input[id*="alterar"]')
-    LINK_ACAO = 'a[id*="acao"], input[id*="acao"]'
+    Confirmados via Chrome MCP no calc 262818 (TRT7 Inst 2.15.1, 2026-05-01).
+    Form aparece inline em verba/verba-calculo.jsf?conversationId=N
+    ao clicar no link suffix `j_id558` (tooltip 'Parâmetros da Verba')
+    da listagem `formulario:listagem:N:j_id558`.
+    """
+    JSF = "verba/verba-calculo.jsf"
+
+    # Links na listagem de verbas (suffixes confirmados)
+    LINK_PARAMETROS = "a[id$='j_id558']"  # tooltip 'Parâmetros da Verba'
+    LINK_OCORRENCIAS = "a[id$='j_id559']"  # tooltip 'Ocorrências da Verba'
+    LINK_EXCLUIR = "a[id$='j_id560']"
+
+    # Radios principais
+    TIPO_VARIACAO_PARCELA = "input[type='radio'][name$=':tipoVariacaoDaParcela']"  # FIXA / VARIAVEL
+    VALOR = "input[type='radio'][name$=':valor']"  # CALCULADO / INFORMADO
+    CARACTERISTICA_VERBA = "input[type='radio'][name$=':caracteristicaVerba']"
+    # COMUM / DECIMO_TERCEIRO_SALARIO / AVISO_PREVIO / FERIAS
+    OCORRENCIA_PAGTO = "input[type='radio'][name$=':ocorrenciaPagto']"
+    # DESLIGAMENTO / DEZEMBRO / MENSAL / PERIODO_AQUISITIVO
+    OCORRENCIA_AJUIZAMENTO = "input[type='radio'][name$=':ocorrenciaAjuizamento']"
+    # OCORRENCIAS_VENCIDAS_E_VINCENDAS / OCORRENCIAS_VENCIDAS
+    TIPO_DE_VERBA = "input[type='radio'][name$=':tipoDeVerba']"  # PRINCIPAL / REFLEXO
+    GERAR_PRINCIPAL = "input[type='radio'][name$=':gerarPrincipal']"  # DEVIDO / DIFERENCA
+    GERAR_REFLEXO = "input[type='radio'][name$=':geraReflexo']"  # DEVIDO / DIFERENCA
+    COMPOR_PRINCIPAL = "input[type='radio'][name$=':comporPrincipal']"  # SIM / NAO
+    TIPO_DE_DIVISOR = "input[type='radio'][name$=':tipoDeDivisor']"
+    # OUTRO_VALOR / CARGA_HORARIA / DIAS_UTEIS / IMPORTADA_DO_CARTAO
+    TIPO_DA_QUANTIDADE = "input[type='radio'][name$=':tipoDaQuantidade']"
+    # INFORMADA / IMPORTADA_DO_CALENDARIO / IMPORTADA_DO_CARTAO (e AVOS para 13º/Férias)
+    TIPO_DO_VALOR_PAGO = "input[type='radio'][name$=':tipoDoValorPago']"
+    # INFORMADO / CALCULADO
+
+    # Selects de base de cálculo
+    TIPO_DA_BASE_TABELADA = "select[id$=':tipoDaBaseTabelada']"
+    # NoSelection / MAIOR_REMUNERACAO / HISTORICO_SALARIAL / SALARIO_DA_CATEGORIA
+    # / SALARIO_MINIMO / VALE_TRANSPORTE
+    BASE_HISTORICOS = "select[id$=':baseHistoricos']"
+    # NoSelection / 0=ADICIONAL DE INSALUBRIDADE PAGO / 1=SALÁRIO BASE / 2=ÚLTIMA REMUNERAÇÃO
+    # OBRIGATÓRIO selecionar quando tipoDaBaseTabelada=HISTORICO_SALARIAL,
+    # senão Liquidar emite erro 'Falta selecionar pelo menos um Histórico Salarial'.
+    BASE_VERBA_DE_CALCULO = "select[id$=':baseVerbaDeCalculo']"
+    # NoSelection / N=verbas existentes (para somar à base de cálculo)
+    INTEGRALIZAR_BASE = "select[id$=':integralizarBase']"  # SIM / NAO
+    PROPORCIONALIZA_HISTORICO = "select[id$=':proporcionalizaHistorico']"  # SIM / NAO
+
+    # Inputs texto
+    OUTRO_VALOR_DIVISOR = "input[id$=':outroValorDoDivisor']"
+    OUTRO_VALOR_MULTIPLICADOR = "input[id$=':outroValorDoMultiplicador']"
+    VALOR_INFORMADO_QUANTIDADE = "input[id$=':valorInformadoDaQuantidade']"
+    VALOR_INFORMADO_PAGO = "input[id$=':valorInformadoPago']"
+
+    # Incidências (checkboxes)
+    FGTS = "input[type='checkbox'][id$=':fgts']"
+    INSS = "input[type='checkbox'][id$=':inss']"
+    IRPF = "input[type='checkbox'][id$=':irpf']"
+    PREVIDENCIA_PRIVADA = "input[type='checkbox'][id$=':previdenciaPrivada']"
+    PENSAO_ALIMENTICIA = "input[type='checkbox'][id$=':pensaoAlimenticia']"
+    ZERA_VALOR_NEGATIVO = "input[type='checkbox'][id$=':zeraValorNegativo']"
+    DOBRA_VALOR_DEVIDO = "input[type='checkbox'][id$=':dobraValorDevido']"
+
+    # Exclusões/proporcionalidades
+    EXCLUIR_FALTA_JUSTIFICADA = "input[type='checkbox'][id$=':excluirFaltaJustificada']"
+    EXCLUIR_FALTA_NAO_JUSTIFICADA = "input[type='checkbox'][id$=':excluirFaltaNaoJustificada']"
+    EXCLUIR_FERIAS_GOZADAS = "input[type='checkbox'][id$=':excluirFeriasGozadas']"
+    APLICAR_PROPORCIONALIDADE_QUANTIDADE = "input[type='checkbox'][id$=':aplicarProporcionalidadeAQuantidade']"
+    APLICAR_PROPORCIONALIDADE_BASE = "input[type='checkbox'][id$=':aplicarProporcionalidadeABase']"
+    APLICAR_PROPORCIONALIDADE_VALOR_PAGO = "input[type='checkbox'][id$=':aplicarProporcionalidadeValorPago']"
 
     # Reflexos (checkboxes na tabela de reflexos)
     CHECKBOX_REFLEXO = ('input[type="checkbox"][id*="listaReflexo"], '
                         'input[type="checkbox"][id*="reflexo"], '
                         'input[type="checkbox"][id*="Reflexo"], '
                         'input[type="checkbox"][id*="ativo"]')
+
+    # Botões
+    SALVAR = "input[id='formulario:salvar']"
+    CANCELAR = "input[id='formulario:cancelar']"
+
+
+class VerbaOcorrenciaGrade:
+    """Grade de Ocorrências da verba (parametrizar-ocorrencia.jsf).
+
+    URL dedicada: /pages/calculo/parametrizar-ocorrencia.jsf?conversationId=N
+    Acessada pelo link `formulario:listagem:N:j_id559`.
+    """
+    JSF = "calculo/parametrizar-ocorrencia.jsf"
+
+    # Coluna por linha N (índice 0+)
+    ATIVO = "input[type='checkbox'][id$=':{N}:ativo']"
+    DOBRA = "input[type='checkbox'][id$=':{N}:dobra']"
+    TERMO_DIV = "input[type='text'][id$=':{N}:termoDiv']"  # divisor
+    TERMO_MULT = "input[type='text'][id$=':{N}:termoMult']"  # multiplicador
+    TERMO_QUANT = "input[type='text'][id$=':{N}:termoQuant']"  # quantidade (preencher!)
+    VALOR_DEVIDO = "input[type='text'][id$=':{N}:valorDevido']"  # calculado pós-salvar
+    VALOR_PAGO = "input[type='text'][id$=':{N}:valorPago']"
+    SELECIONAR = "input[type='checkbox'][id$=':{N}:selecionar']"
+
+    # Cabeçalho global
+    ATIVAR_TODOS = "input[type='checkbox'][id$=':ativarTodos']"
+
+    # Form geral (params globais aplicados a múltiplas linhas selecionadas)
+    DATA_INICIAL = "[id$='dataInicialInputDate']"
+    DATA_FINAL = "[id$='dataFinalInputDate']"
+    DIVISOR_GLOBAL = "[id$='formulario:divisor']"
+    MULT_GLOBAL = "[id$='formulario:multiplicador']"
+    QUANT_GLOBAL = "[id$='formulario:quantidade']"
+    DEVIDO_GLOBAL = "[id$='formulario:devido']"
+    PAGO_GLOBAL = "[id$='formulario:pago']"
+    DOBRA_GLOBAL = "input[type='checkbox'][id='formulario:dobra']"
+    PROP_DEVIDO = "[id$='propDevido']"
+    PROP_PAGO = "[id$='propPago']"
+    PROP_QUANTIDADE = "[id$='propQuantidade']"
+    BTN_RECUPERAR = "input[id$='recuperar']"
+    BTN_CANCELAR = "input[id$='cancelar']"
+    BTN_SALVAR = "input[id$='salvar']"
 
 
 # ============================================================================
