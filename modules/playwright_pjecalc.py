@@ -5785,12 +5785,16 @@ class PJECalcPlaywright:
             """Normaliza chave para lookup nos mapas (sem acentos, minúsculas)."""
             return _ud_m.normalize("NFD", s.lower()).encode("ascii", "ignore").decode().strip()
 
-        # Valores enum do PJE-Calc — chaves normalizadas para tolerância a acentos/case
+        # Valores enum REAIS confirmados em DOM TRT7 2.15.1 (verba-calculo.jsf,
+        # formulario:caracteristicaVerba): COMUM, DECIMO_TERCEIRO_SALARIO,
+        # AVISO_PREVIO, FERIAS. Chaves normalizadas (sem acentos/case).
         carac_map = {
             "comum": "COMUM",
-            "13o salario": "DECIMO_TERCEIRO",
-            "decimo terceiro salario": "DECIMO_TERCEIRO",
-            "13 salario": "DECIMO_TERCEIRO",
+            "13o salario": "DECIMO_TERCEIRO_SALARIO",
+            "13 salario": "DECIMO_TERCEIRO_SALARIO",
+            "13o": "DECIMO_TERCEIRO_SALARIO",
+            "decimo terceiro salario": "DECIMO_TERCEIRO_SALARIO",
+            "decimo terceiro": "DECIMO_TERCEIRO_SALARIO",
             "ferias": "FERIAS",
             "aviso previo": "AVISO_PREVIO",
         }
@@ -6445,7 +6449,7 @@ class PJECalcPlaywright:
             # painelLabelFormula (base ainda não foi definida).
             _carac_default_ocorr = {
                 "COMUM": "MENSAL",
-                "DECIMO_TERCEIRO": "DEZEMBRO",
+                "DECIMO_TERCEIRO_SALARIO": "DEZEMBRO",
                 "AVISO_PREVIO": "DESLIGAMENTO",
                 "FERIAS": "PERIODO_AQUISITIVO",
             }.get(carac_enum, "MENSAL")
