@@ -240,7 +240,12 @@ Se a sentença mencionar períodos de férias não gozadas ou situações espec�
     {{"situacao": "Vencidas", "periodo_inicio": "DD/MM/AAAA", "periodo_fim": "DD/MM/AAAA",
      "abono": false, "dobra": false, "gozo_periodos": []}}
   ]
-Situações: "Vencidas" | "Proporcionais" | "Gozadas" | "GOZADAS_PARCIALMENTE"
+Situações ENUMS DOM: "INDENIZADAS" (= Vencidas/devidas indenizadas) | "GOZADAS" |
+  "GOZADAS_PARCIALMENTE" | "PERDIDAS"
+NOTA: "Proporcionais" NÃO é situação cadastrada — o PJE-Calc gera automaticamente
+o período proporcional a partir da rescisão. Para férias proporcionais (período
+incompleto não gozado), OMITIR a entrada do array (ou usar situacao=INDENIZADAS
+quando explicitamente devidas em valor).
 - gozo_periodos: lista de até 3 períodos de gozo (somente quando situacao=Gozadas ou GOZADAS_PARCIALMENTE).
   Cada período: {{"inicio": "DD/MM/AAAA", "fim": "DD/MM/AAAA"}}
   Extrair as datas em que as férias foram efetivamente usufruídas, se informadas na sentença.

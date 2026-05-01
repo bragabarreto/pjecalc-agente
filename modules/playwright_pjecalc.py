@@ -8625,9 +8625,24 @@ class PJECalcPlaywright:
         # "Vencidas", "Proporcionais", "Gozadas", "Indenizadas" nem se têm dobra
         # ou abono — isso precisa vir da sentença. Sem essa configuração, as
         # ocorrências de férias ficam incorretas na liquidação.
+        # Enums válidos no select 'situacao' confirmados via DOM TRT7 2.15.1:
+        #   GOZADAS, GOZADAS_PARCIALMENTE, INDENIZADAS, PERDIDAS
+        # "PROPORCIONAIS" NÃO existe — é o resultado automático da rescisão
+        # quando há período não completo (gerado pelo PJE-Calc, não cadastrado).
+        _ENUMS_FERIAS_VALIDOS = {"GOZADAS", "GOZADAS_PARCIALMENTE", "INDENIZADAS", "PERDIDAS"}
         _alterou_alguma = False
         for entrada in ferias:
-            _situacao = (entrada.get("situacao") or "").strip()
+            _situacao_raw = (entrada.get("situacao") or "").strip()
+            _situacao_norm = _situacao_raw.upper().replace(" ", "_").replace("-", "_")
+            # Skip quando 'Proporcionais' — PJE-Calc gera automaticamente
+            if _situacao_norm in ("PROPORCIONAIS", "PROPORCIONAL"):
+                self._log(f"  ℹ Férias '{_situacao_raw}' — proporcionais geradas auto pelo PJE-Calc (skip)")
+                _situacao = ""  # não tentar configurar
+            elif _situacao_norm and _situacao_norm not in _ENUMS_FERIAS_VALIDOS:
+                self._log(f"  ⚠ Férias situação '{_situacao_raw}' inválida — opções: {_ENUMS_FERIAS_VALIDOS}")
+                _situacao = ""
+            else:
+                _situacao = _situacao_norm
             _dobra = bool(entrada.get("dobra"))
             _abono = bool(entrada.get("abono"))
             _per_aq_ini = entrada.get("periodo_aquisitivo_inicio") or entrada.get("periodo_inicio") or ""
@@ -9633,12 +9648,25 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
-            # Tipo de honorário (SUCUMBENCIAIS / CONTRATUAIS)
-            # ATENÇÃO: ID real no XHTML é "tpHonorario" (NÃO "tipoHonorario")
-            # required="true" — sem este campo o save falha
-            tipo = hon.get("tipo", "SUCUMBENCIAIS")
-            self._selecionar("tpHonorario", tipo, obrigatorio=False) or \
-                self._selecionar("tipoHonorario", tipo, obrigatorio=False)
+            # Tipo de honorário — DOM TRT7 Institucional 2.15.1 confirmado:
+            # ADVOCATICIOS (sucumbenciais), ASSISTENCIAIS, CONTRATUAIS, PERICIAIS_*
+            # Versão Cidadão pode ter "SUCUMBENCIAIS" — mapeamento de compat:
+            #   SUCUMBENCIAIS → ADVOCATICIOS (institucional sem opção SUCUMBENCIAIS)
+            # ATENÇÃO: ID real é "tpHonorario" (NÃO "tipoHonorario")
+            tipo_in = hon.get("tipo", "ADVOCATICIOS")
+            _tipo_alts = [tipo_in]
+            if tipo_in == "SUCUMBENCIAIS":
+                _tipo_alts.append("ADVOCATICIOS")  # fallback institucional
+            elif tipo_in == "ADVOCATICIOS":
+                _tipo_alts.append("SUCUMBENCIAIS")  # fallback cidadão
+            _ok_tipo = False
+            for _t in _tipo_alts:
+                if self._selecionar("tpHonorario", _t, obrigatorio=False) or \
+                   self._selecionar("tipoHonorario", _t, obrigatorio=False):
+                    _ok_tipo = True
+                    break
+            if not _ok_tipo:
+                self._log(f"  ⚠ tpHonorario: nenhuma opção {_tipo_alts} aceita pelo PJE-Calc")
             self._aguardar_ajax()
             self._page.wait_for_timeout(500)
 
