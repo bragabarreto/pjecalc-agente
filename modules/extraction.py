@@ -2982,16 +2982,29 @@ def _normalizar_grade_semanal(dados: dict[str, Any]) -> dict[str, Any]:
 
 
 _NORM_INDICE_CORRECAO = {
-    "IPCA-E": "IPCA_E", "IPCA-E/TR": "IPCA_E_TR", "IGP-M": "IGP_M",
+    # Mapeia variações textuais e legados para enums REAIS confirmados via DOM
+    # do PJE-Calc Institucional 2.15.1 (TRT7) — formulario:indiceTrabalhista
+    "IPCA-E": "IPCAE", "IPCA_E": "IPCAE",  # enum real é IPCAE (sem underscore)
+    "IPCA-E/TR": "IPCAETR", "IPCA_E_TR": "IPCAETR",
+    "IGP-M": "IGPM", "IGP_M": "IGPM",
     "Tabela JT Unica Mensal": "TUACDT", "Tabela JT Única Mensal": "TUACDT",
     "Tabela JT Mensal": "TABELA_UNICA_JT_MENSAL",
-    "Selic": "SELIC", "TRCT": "TR",
+    "Selic": "SELIC", "SELIC_RECEITA": "SELIC",
+    "SELIC_SIMPLES": "SELIC_FAZENDA", "SELIC_COMPOSTA": "SELIC_BACEN",
+    "TRCT": "TR",
     "TUACDT_DIARIO": "TABELA_UNICA_JT_DIARIO",
+    "DEVEDOR_FAZENDA_PUBLICA": "TABELA_DEVEDOR_FAZENDA",
+    "REPETICAO_INDEBITO_TRIBUTARIO": "TABELA_INDEBITO_TRIBUTARIO",
 }
 
 _NORM_TAXA_JUROS = {
+    # Mapeia para enums REAIS confirmados em DOM (formulario:juros / outroJuros):
+    # JUROS_PADRAO, JUROS_POUPANCA, FAZENDA_PUBLICA, JUROS_MEIO_PORCENTO,
+    # JUROS_UM_PORCENTO, JUROS_ZERO_TRINTA_TRES, SELIC, SELIC_FAZENDA,
+    # SELIC_BACEN, TRD_SIMPLES, TRD_COMPOSTOS, TAXA_LEGAL, SEM_JUROS
     "Taxa Legal": "TAXA_LEGAL",
-    "Juros Padrão": "PADRAO", "Juros Padrao": "PADRAO",
+    "Juros Padrão": "JUROS_PADRAO", "Juros Padrao": "JUROS_PADRAO",
+    "PADRAO": "JUROS_PADRAO",  # legado — enum real prefixa JUROS_
     "Selic": "SELIC",
     "TRD_CAPITALIZADOS": "TRD_COMPOSTOS",
     "JUROS_SIMPLES_05": "JUROS_MEIO_PORCENTO",

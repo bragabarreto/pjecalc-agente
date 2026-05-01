@@ -1651,14 +1651,15 @@ class PJECalcPlaywright:
             "Multas e Indenizações": ["calculo_multas_e_indenizacoes"],
             "Honorários":          ["calculo_honorarios"],
             "Custas Judiciais":    ["calculo_custas_judiciais"],
-            "Correção, Juros e Multa": ["calculo_correcao_juros_e_multa"],
+            "Correção, Juros e Multa": ["calculo_correcao_juros_multa"],
+            "Correção e Juros":        ["calculo_correcao_juros_multa"],
             # Itens sob "Operações" no menu-pilares — usam enum OPERACOES_*
             # (ver MenuItemEnum.class: OPERACOES_LIQUIDAR, OPERACOES_EXPORTAR, etc.)
             # li IDs gerados via #{instItem.item.toString().toLowerCase()} em menu-pilares.xhtml
             "Liquidar":            ["operacoes_liquidar", "calculo_liquidar"],
             "Exportar":            ["operacoes_exportar", "calculo_exportar"],
             "Exportação":          ["operacoes_exportar", "calculo_exportar"],
-            "Imprimir":            ["operacoes_imprimir_pagamento", "operacoes_imprimir", "calculo_imprimir"],
+            "Imprimir":            ["calculo_relatorios", "operacoes_imprimir_pagamento", "operacoes_imprimir"],
             "Validar":             ["operacoes_validar"],
             "Excluir":             ["operacoes_excluir", "calculo_excluir"],
             "Fechar":              ["operacoes_fechar", "calculo_fechar"],
@@ -1716,7 +1717,7 @@ class PJECalcPlaywright:
             "Multas e Indenizações":   "multas-indenizacoes.jsf",
             "Multas":                  "multas-indenizacoes.jsf",
             "Honorários":              "honorarios.jsf",
-            "Custas Judiciais":        "custas/custas.jsf",
+            "Custas Judiciais":        "custas-judiciais.jsf",
             "Correção, Juros e Multa": "parametros-atualizacao/parametros-atualizacao.jsf",
             "Liquidar":                "liquidacao.jsf",
             "Imprimir":                "imprimir.jsf",
@@ -7079,29 +7080,36 @@ class PJECalcPlaywright:
         )
         self._selecionar("incidenciaDoFgts", _incidencia, obrigatorio=False)
 
-        # Multa rescisória — SELECT formulario:multa (NAO_APURAR / CALCULADA / INFORMADA)
-        # DOM confirmado v2.15.1: é SELECT, NÃO checkbox.
-        # Selecionar CALCULADA ativa campos condicionais (multaDoFgts, baseDaMulta, etc.)
-        # Tem a4j:support onchange que re-renderiza esses campos via AJAX.
+        # Multa rescisória — DOM TRT7 2.15.1 confirmado:
+        #   formulario:multa = CHECKBOX (apenas marca/desmarca se há multa)
+        #   formulario:tipoDoValorDaMulta:0/1 = radios CALCULADA / INFORMADA
+        #   formulario:multaDoFgts:0/1 = radios VINTE_POR_CENTO / QUARENTA_POR_CENTO
+        # Marcar o checkbox dispara AJAX que renderiza campos condicionais.
         multa_40 = fgts.get("multa_40", True)
         multa_467 = fgts.get("multa_467", False)
-        # Determinar valor do select multa
-        if fgts.get("multa") in ("NAO_APURAR", "CALCULADA", "INFORMADA"):
-            # Valor direto do DOM (extrações atualizadas)
-            _multa_val = fgts["multa"]
-        elif multa_40:
-            _multa_val = "CALCULADA"
+        # Compatibilidade: extração antiga pode ter "multa" como string
+        _multa_legado = fgts.get("multa")
+        if _multa_legado == "NAO_APURAR":
+            _aplicar_multa = False
+        elif _multa_legado in ("CALCULADA", "INFORMADA"):
+            _aplicar_multa = True
         else:
-            _multa_val = "NAO_APURAR"
-        self._log(f"  → FGTS: preenchendo multa={_multa_val}…")
-        self._selecionar("multa", _multa_val, obrigatorio=False)
-        # Aguardar AJAX do onchange do select multa (re-renderiza campos dependentes)
-        # Timeout reduzido a 8s: se o AJAX não completar em 8s, é porque não houve
-        # mudança real (ex: valor já era o mesmo) — prosseguir evita hang.
+            _aplicar_multa = bool(multa_40)
+        self._log(f"  → FGTS: marcando checkbox multa={_aplicar_multa}…")
+        self._marcar_checkbox("multa", _aplicar_multa)
+        # Aguardar AJAX (a4j:support) — renderiza campos condicionais quando true
         self._aguardar_ajax(timeout=8000)
         self._page.wait_for_timeout(1000)
 
-        if _multa_val == "CALCULADA":
+        if _aplicar_multa:
+            # Tipo do valor: CALCULADA (default) ou INFORMADA (se valor fixo na sentença)
+            _tipo_valor = "INFORMADA" if _multa_legado == "INFORMADA" else "CALCULADA"
+            self._log(f"  → FGTS: tipoDoValorDaMulta={_tipo_valor}")
+            self._preencher_radio_ou_select("tipoDoValorDaMulta", _tipo_valor)
+            self._aguardar_ajax(timeout=5000)
+            self._page.wait_for_timeout(500)
+
+        if _aplicar_multa and _multa_legado != "INFORMADA":
             # Percentual: 40% padrão; 20% para estabilidade provisória (CIPA, gestante etc.)
             self._log("  → FGTS: preenchendo multaDoFgts…")
             _pct_multa = "VINTE_POR_CENTO" if fgts.get("multa_20") else "QUARENTA_POR_CENTO"
@@ -7117,8 +7125,8 @@ class PJECalcPlaywright:
             _excl_aviso = fgts.get("excluir_aviso_multa", False)
             self._marcar_checkbox("excluirAvisoDaMulta", _excl_aviso)
 
-        elif _multa_val == "INFORMADA":
-            # Valor fixo da multa informada (campo condicional quando multa=INFORMADA)
+        if _aplicar_multa and _multa_legado == "INFORMADA":
+            # Valor fixo da multa informada (campo condicional quando tipoDoValorDaMulta=INFORMADA)
             _val_multa_inf = fgts.get("valor_multa_informada") or fgts.get("valorMultaInformada")
             if _val_multa_inf:
                 self._preencher("valorMultaInformada", _fmt_br(float(_val_multa_inf)), False)
@@ -10045,11 +10053,12 @@ class PJECalcPlaywright:
                 self._log(f"  ✗ Base custas: FALHA ao selecionar '{_val}' — prévia indicava '{_base}'")
 
         # Custas do Reclamado — Conhecimento (padrão: Calculada 2%)
-        # DOM v2.15.1: radio values = CALCULADA_2PCT / INFORMADA / NAO_SE_APLICA
-        _reclamado_conhecimento = custas.get("reclamado_conhecimento", "CALCULADA_2PCT")
-        # Backward compat: CALCULADA → CALCULADA_2PCT
-        if _reclamado_conhecimento == "CALCULADA":
-            _reclamado_conhecimento = "CALCULADA_2PCT"
+        # DOM TRT7 2.15.1 confirmado: radio values =
+        # NAO_SE_APLICA (idx 0) / CALCULADA_2_POR_CENTO (idx 1) / INFORMADA (idx 2)
+        _reclamado_conhecimento = custas.get("reclamado_conhecimento", "CALCULADA_2_POR_CENTO")
+        # Backward compat: aceitar variações antigas e mapear para enum real
+        if _reclamado_conhecimento in ("CALCULADA", "CALCULADA_2PCT"):
+            _reclamado_conhecimento = "CALCULADA_2_POR_CENTO"
         self._marcar_radio("custasReclamadoConhecimento", _reclamado_conhecimento)
         self._log(f"  ✓ Custas reclamado conhecimento: {_reclamado_conhecimento}")
         # Campos condicionais quando INFORMADA — valor e vencimento
@@ -10064,10 +10073,11 @@ class PJECalcPlaywright:
                                      custas["vencimento_reclamado_conhecimento"], False)
 
         # Custas do Reclamado — Liquidação
-        # DOM v2.15.1: radio values = NAO_SE_APLICA / CALCULADA_05PCT / INFORMADA
+        # DOM TRT7 2.15.1 confirmado: radio values =
+        # NAO_SE_APLICA (idx 0) / CALCULADA_MEIO_POR_CENTO (idx 1) / INFORMADA (idx 2)
         _reclamado_liq = custas.get("reclamado_liquidacao", "NAO_SE_APLICA")
-        if _reclamado_liq == "CALCULADA":
-            _reclamado_liq = "CALCULADA_05PCT"
+        if _reclamado_liq in ("CALCULADA", "CALCULADA_05PCT", "CALCULADA_MEIO_PCT"):
+            _reclamado_liq = "CALCULADA_MEIO_POR_CENTO"
         self._marcar_radio("custasReclamadoLiquidacao", _reclamado_liq)
         if _reclamado_liq == "INFORMADA":
             self._aguardar_ajax()
@@ -10080,10 +10090,11 @@ class PJECalcPlaywright:
                                      custas["vencimento_reclamado_liquidacao"], False)
 
         # Custas do Reclamante — Conhecimento (padrão: não se aplica)
-        # DOM v2.15.1: radio values = NAO_SE_APLICA / CALCULADA_2PCT / INFORMADA
+        # DOM TRT7 2.15.1 confirmado: radio values =
+        # NAO_SE_APLICA (idx 0) / CALCULADA_2_POR_CENTO (idx 1) / INFORMADA (idx 2)
         _reclamante_conhecimento = custas.get("reclamante_conhecimento", "NAO_SE_APLICA")
-        if _reclamante_conhecimento == "CALCULADA":
-            _reclamante_conhecimento = "CALCULADA_2PCT"
+        if _reclamante_conhecimento in ("CALCULADA", "CALCULADA_2PCT"):
+            _reclamante_conhecimento = "CALCULADA_2_POR_CENTO"
         self._marcar_radio("custasReclamanteConhecimento", _reclamante_conhecimento)
         if _reclamante_conhecimento == "INFORMADA":
             self._aguardar_ajax()
