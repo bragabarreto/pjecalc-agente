@@ -2357,7 +2357,7 @@ if (typeof window.__origSalvarCampo === 'function') {
                 </div>
               </div>
               <button type="button" class="btn btn-sm" style="background:#dc3545; color:white; padding:5px 12px; font-size:0.82rem;"
-                      onclick="if(confirm('Remover esta reflexa órfã?\n\n{{ (_v.nome_pjecalc or _v.nome_sentenca or '?')|replace(\"'\",\"\\\\'\")[:80] }}')) removerVerba({{ _i }})">
+                      onclick="if(confirm('Remover esta reflexa órfã?')) removerVerba({{ _i }})">
                 ✕ Remover
               </button>
             </div>
