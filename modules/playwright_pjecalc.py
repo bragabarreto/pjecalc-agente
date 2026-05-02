@@ -10831,23 +10831,28 @@ class PJECalcPlaywright:
 
         self._page.wait_for_timeout(2000)
 
-        # Validar resultado da liquidação antes de exportar
+        # Validar resultado da liquidação antes de exportar.
         # Mensagem de sucesso: "Não foram encontradas pendências para a liquidação"
+        # CRÍTICO: exigir confirmação EXPLÍCITA de sucesso. Sem isso, PJCs
+        # pré-liquidação (hashCodeLiquidacao=null) eram exportados como se
+        # liquidados, causando "arquivo inválido" no import do PJE-Calc.
         _liquidacao_ok = False
         _liquidacao_erro_msg = None
         try:
             body_text = self._page.locator("body").text_content(timeout=5000) or ""
             _body_lower = body_text.lower()
-            # Verificar sucesso explícito
+            # Verificar sucesso EXPLÍCITO (única condição que aprova)
             if "não foram encontradas pendências" in _body_lower or \
                "liquidação realizada" in _body_lower or \
-               "cálculo liquidado" in _body_lower:
+               "cálculo liquidado" in _body_lower or \
+               "operação realizada com sucesso" in _body_lower:
                 self._log("  ✓ Liquidação concluída sem pendências")
                 _liquidacao_ok = True
             else:
                 # Verificar erros — "pendente" sozinho é falso positivo (aparece na msg de sucesso)
                 for indicador in ["não foi possível", "inconsistente", "erro interno",
-                                  "existem pendências", "campos obrigatórios"]:
+                                  "existem pendências", "campos obrigatórios",
+                                  "é necessário resolver", "pendência"]:
                     if indicador in _body_lower:
                         self._log(f"  ⚠ Liquidação pode ter falhado: '{indicador}' detectado")
                         _liquidacao_erro_msg = indicador
@@ -10871,10 +10876,17 @@ class PJECalcPlaywright:
                         except Exception:
                             pass
                         break
+                # CRÍTICO: NÃO assumir sucesso quando não há mensagem clara.
+                # Sem sucesso explícito + sem erro detectado = sucesso AMBÍGUO,
+                # provavelmente AJAX parcial ou Liquidar não clicado.
+                # Marcar como erro para forçar o retry.
                 if not _liquidacao_erro_msg:
-                    _liquidacao_ok = True  # Sem erro explícito = OK
-        except Exception:
-            _liquidacao_ok = True  # Se não conseguiu verificar, assume OK
+                    self._log("  ⚠ Liquidação ambígua: nenhum indicador claro de sucesso ou erro")
+                    self._screenshot_fase("liquidacao_ambigua")
+                    _liquidacao_erro_msg = "ambigua"
+        except Exception as _e_val:
+            self._log(f"  ⚠ Validação liquidação falhou: {_e_val} — marcando como erro")
+            _liquidacao_erro_msg = "validacao_excecao"
 
         # Retry: se liquidação falhou, re-abrir cálculo via Tela Inicial (nova conversação)
         if not _liquidacao_ok and _liquidacao_erro_msg:
@@ -10945,14 +10957,13 @@ class PJECalcPlaywright:
                             _body2 = (self._page.locator("body").text_content(timeout=5000) or "").lower()
                             if "não foram encontradas pendências" in _body2 or \
                                "liquidação realizada" in _body2 or \
-                               "cálculo liquidado" in _body2:
+                               "cálculo liquidado" in _body2 or \
+                               "operação realizada com sucesso" in _body2:
                                 self._log("  ✓ Retry liquidação: sucesso!")
                                 _liquidacao_ok = True
-                            elif "erro interno" not in _body2 and "não foi possível" not in _body2:
-                                self._log("  ✓ Retry liquidação: sem erro detectado")
-                                _liquidacao_ok = True
                             else:
-                                self._log("  ⚠ Retry liquidação: ainda com erro")
+                                # Sem confirmação explícita = abortar (não exportar PJC inválido)
+                                self._log("  ⚠ Retry liquidação: sem confirmação explícita de sucesso")
                                 self._screenshot_fase("liquidacao_erro_retry")
                             break
             except Exception as _retry_err:
