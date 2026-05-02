@@ -5478,16 +5478,36 @@ class PJECalcPlaywright:
         _kw = nome_na_lista.lower()[:18]
         _clicou = self._page.evaluate(f"""() => {{
             const kw = {repr(_kw)};
-            // CRÍTICO: usar APENAS linhas reais da listagem JSF
-            // (tr[id^="formulario:listagem:"]) — usar 'tr' genérico pega
-            // o <tr> pai que contém toda a tabela e clica sempre listagem:0
-            // (bug observado em sessão 07fe69f6: HE 50% clicava MULTA 477)
-            const rows = document.querySelectorAll('tr[id^="formulario:listagem:"]');
+            // CRÍTICO: identificar linhas via os links Parâmetros que têm
+            // ID estável formulario:listagem:N:j_id558. RichFaces dataTable
+            // não coloca id na <tr> diretamente — usa nos elementos filhos.
+            // Estratégia: pegar TODOS os links com title="Parâmetros da Verba"
+            // (1 por linha), subir ao <tr> ancestral, e matchar nome da verba.
             const norm = s => (s||'').toLowerCase()
                 .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
+            const linksParam = Array.from(document.querySelectorAll(
+                'a[title*="arametr" i], a[id*=":listagem:"][id*=":j_id558"], ' +
+                'a[id^="formulario:listagem:"][id$=":j_id558"]'
+            ));
+            // dedup por id
+            const seenIds = new Set();
+            const linksUnicos = linksParam.filter(a => {{
+                if (seenIds.has(a.id)) return false;
+                seenIds.add(a.id);
+                return true;
+            }});
+            for (const link of linksUnicos) {{
+                const tr = link.closest('tr');
+                if (!tr) continue;
+                const nomeTexto = norm(tr.textContent);
+                if (!nomeTexto.includes(norm(kw))) continue;
+                // achou a linha correta — clicar este link específico
+                link.click();
+                return {{ok: true, via: 'param-link-direct', id: link.id}};
+            }}
+            // FALLBACK: lógica antiga (para compatibilidade)
+            const rows = document.querySelectorAll('tr[id^="formulario:listagem:"], tbody tr');
             for (const tr of rows) {{
-                // Match apenas pela 1a célula (nome da verba), NÃO o tr inteiro
-                // — TRs podem ter detalhes/reflexos que confundem o match.
                 const nomeCell = tr.querySelector('td:first-of-type, th:first-of-type') || tr;
                 const nomeTexto = norm(nomeCell.textContent);
                 if (!nomeTexto.includes(norm(kw))) continue;
