@@ -5478,11 +5478,19 @@ class PJECalcPlaywright:
         _kw = nome_na_lista.lower()[:18]
         _clicou = self._page.evaluate(f"""() => {{
             const kw = {repr(_kw)};
-            const rows = document.querySelectorAll('tr');
+            // CRÍTICO: usar APENAS linhas reais da listagem JSF
+            // (tr[id^="formulario:listagem:"]) — usar 'tr' genérico pega
+            // o <tr> pai que contém toda a tabela e clica sempre listagem:0
+            // (bug observado em sessão 07fe69f6: HE 50% clicava MULTA 477)
+            const rows = document.querySelectorAll('tr[id^="formulario:listagem:"]');
             const norm = s => (s||'').toLowerCase()
                 .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
             for (const tr of rows) {{
-                if (!norm(tr.textContent).includes(norm(kw))) continue;
+                // Match apenas pela 1a célula (nome da verba), NÃO o tr inteiro
+                // — TRs podem ter detalhes/reflexos que confundem o match.
+                const nomeCell = tr.querySelector('td:first-of-type, th:first-of-type') || tr;
+                const nomeTexto = norm(nomeCell.textContent);
+                if (!nomeTexto.includes(norm(kw))) continue;
                 // PRIORIDADE 1: title contém "parametro" (sem acento)
                 const titulados = [...tr.querySelectorAll('a[title], input[title]')];
                 for (const el of titulados) {{
