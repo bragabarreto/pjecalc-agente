@@ -260,9 +260,53 @@ def validar_previa(
             if (v.get("tipo") or "").lower() == "reflexa" or v.get("eh_reflexa"):
                 ref = (v.get("verba_principal_ref") or "").upper().strip()
                 if ref and ref not in nomes_principais:
-                    # Verificar match parcial (ex: "REFLEXO HE EM DSR" → principal "HORAS EXTRAS 50%")
-                    match_partial = any(ref in p or p in ref for p in nomes_principais)
-                    if not match_partial:
+                    # Match flexível em 3 níveis (ordem de relaxamento):
+                    #   1. Substring direta (ex: "HORAS EXTRAS" in "HORAS EXTRAS 50%")
+                    #   2. Tokens significativos (ignorando complementos entre parênteses
+                    #      e variações singular/plural — DIFERENÇA ↔ DIFERENÇAS)
+                    #   3. Sem match em nenhum nível → ERRO bloqueante
+                    def _norma(s: str) -> str:
+                        # Normaliza para comparação: upper, sem acentos/cedilhas,
+                        # remove parênteses, remove plural/feminino simples, remove
+                        # palavras curtas e stopwords.
+                        import re as _re
+                        s = (s or "").upper()
+                        for a, b in [("Á","A"),("É","E"),("Í","I"),("Ó","O"),("Ú","U"),
+                                     ("Â","A"),("Ê","E"),("Ô","O"),("Ã","A"),("Õ","O"),
+                                     ("Ç","C")]:
+                            s = s.replace(a, b)
+                        s = _re.sub(r"\([^)]*\)", " ", s)  # remove parênteses
+                        s = _re.sub(r"[^\w\s]", " ", s)
+                        toks = []
+                        for w in s.split():
+                            if len(w) < 4 or w in {"PARA", "COM", "SOBRE", "DOS", "DAS"}:
+                                continue
+                            # Plural simples: termina em S e palavra > 4
+                            if len(w) > 4 and w.endswith("S"):
+                                w = w[:-1]
+                            # Feminino plural: ais → al (SALARIAIS → SALARIAL → SALARIAI)
+                            if w.endswith("I") and len(w) > 5:
+                                w = w[:-1] + "L"
+                            toks.append(w)
+                        return " ".join(sorted(set(toks)))
+                    _ref_norm = _norma(ref)
+                    match_fuzzy = False
+                    for p in nomes_principais:
+                        if ref in p or p in ref:
+                            match_fuzzy = True
+                            break
+                        _p_norm = _norma(p)
+                        # Fuzzy por similaridade de strings normalizadas
+                        if _ref_norm and _p_norm:
+                            from difflib import SequenceMatcher
+                            ratio = SequenceMatcher(None, _ref_norm, _p_norm).ratio()
+                            # Match se ratio ≥ 0.7 OU principais tokens contidos na ref
+                            if ratio >= 0.7 or all(
+                                t in _ref_norm for t in _p_norm.split() if len(t) >= 5
+                            ):
+                                match_fuzzy = True
+                                break
+                    if not match_fuzzy:
                         # ERRO BLOQUEANTE: PJE-Calc gera pendência "verba reflexa
                         # sem principal" e impede Liquidar.
                         res.erros.append(_erro(prefix, "verba_principal_ref",

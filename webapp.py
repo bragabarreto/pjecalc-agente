@@ -614,6 +614,46 @@ async def editar_verba(
         )
 
 
+@app.delete("/previa/{sessao_id}/verba/{indice}")
+async def remover_verba_endpoint(
+    sessao_id: str,
+    indice: int,
+    db: Session = Depends(get_db),
+):
+    """Remove uma verba do índice global da prévia (predefinidas + personalizadas
+    + nao_reconhecidas). Útil para descartar verbas órfãs ou desnecessárias.
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    dados = calculo.dados()
+    verbas_mapeadas = calculo.verbas_mapeadas()
+    try:
+        # Encontrar a verba pelo índice global e removê-la do grupo correto
+        _grupos = ("predefinidas", "personalizadas", "nao_reconhecidas")
+        _offset = 0
+        _removida = None
+        for _g in _grupos:
+            _lst = verbas_mapeadas.get(_g) or []
+            if indice - _offset < len(_lst):
+                _removida = _lst.pop(indice - _offset)
+                verbas_mapeadas[_g] = _lst
+                break
+            _offset += len(_lst)
+        if _removida is None:
+            return JSONResponse({"sucesso": False, "erro": f"índice {indice} fora de range"}, status_code=400)
+        nova_previa = gerar_previa(dados, verbas_mapeadas)
+        repo.atualizar_dados(sessao_id, dados, verbas_mapeadas)
+        repo.salvar_previa(sessao_id, nova_previa, _previa_para_html(nova_previa))
+        return JSONResponse({"sucesso": True, "indice": indice,
+                             "nome": (_removida.get("nome_pjecalc") or _removida.get("nome_sentenca") or "?")})
+    except Exception as exc:
+        import logging, traceback
+        logging.error("remover_verba erro: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse({"sucesso": False, "erro": str(exc)}, status_code=500)
+
+
 @app.post("/previa/{sessao_id}/verba/{indice}/base")
 async def add_base_verba(
     sessao_id: str,
