@@ -2343,23 +2343,46 @@ if (typeof window.__origSalvarCampo === 'function') {
             <strong>(a)</strong> Adicionar a verba principal faltante via "+ Adicionar Verba" abaixo, OU
             <strong>(b)</strong> Remover a reflexa órfã clicando no ✕.
           </p>
+          {# Lista de principais para o dropdown de vinculação #}
+          {% set _principais_lista = [] %}
+          {% for verba in verbas %}
+            {% if verba.tipo != 'Reflexa' and not verba.eh_reflexa %}
+              {% set _nm = (verba.nome_pjecalc or verba.nome_sentenca or '').strip() %}
+              {% if _nm and _nm not in _principais_lista %}{% set _ = _principais_lista.append(_nm) %}{% endif %}
+            {% endif %}
+          {% endfor %}
           {% for orf in ns_verbas.orfas %}
             {% set _v = orf.verba %}
             {% set _i = orf.idx %}
-            <div style="background:#fff; padding:10px 14px; margin-bottom:8px; border-left:4px solid #dc3545; border-radius:4px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-              <div style="flex:1; min-width:250px;">
-                <div style="font-size:0.92rem; font-weight:600; color:#495057;">
-                  {{ _v.nome_pjecalc or _v.nome_sentenca or 'verba sem nome' }}
+            <div style="background:#fff; padding:10px 14px; margin-bottom:8px; border-left:4px solid #dc3545; border-radius:4px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px;">
+                <div style="flex:1; min-width:250px;">
+                  <div style="font-size:0.92rem; font-weight:600; color:#495057;">
+                    {{ _v.nome_pjecalc or _v.nome_sentenca or 'verba sem nome' }}
+                  </div>
+                  <div style="font-size:0.78rem; color:#6c757d; margin-top:2px;">
+                    Aponta para principal inexistente:
+                    <code style="background:#f8d7da; padding:1px 6px; border-radius:3px; color:#721c24;">{{ _v.verba_principal_ref or '(vazio)' }}</code>
+                  </div>
                 </div>
-                <div style="font-size:0.78rem; color:#6c757d; margin-top:2px;">
-                  Aponta para principal inexistente:
-                  <code style="background:#f8d7da; padding:1px 6px; border-radius:3px; color:#721c24;">{{ _v.verba_principal_ref or '(vazio)' }}</code>
-                </div>
+                <button type="button" class="btn btn-sm" style="background:#dc3545; color:white; padding:5px 12px; font-size:0.82rem;"
+                        onclick="if(confirm('Remover esta reflexa órfã?')) removerVerba({{ _i }})">
+                  ✕ Remover
+                </button>
               </div>
-              <button type="button" class="btn btn-sm" style="background:#dc3545; color:white; padding:5px 12px; font-size:0.82rem;"
-                      onclick="if(confirm('Remover esta reflexa órfã?')) removerVerba({{ _i }})">
-                ✕ Remover
-              </button>
+              <div style="margin-top:8px; padding-top:8px; border-top:1px dashed #dee2e6; font-size:0.82rem;">
+                <strong style="color:#155724;">🔗 Vincular esta reflexa a uma principal existente:</strong>
+                <select id="vinc-{{ _i }}" style="margin-left:6px; font-size:0.82rem; padding:3px 6px; min-width:280px;">
+                  <option value="">— escolher principal —</option>
+                  {% for _p in _principais_lista %}
+                  <option value="{{ _p|e }}">{{ _p[:80] }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" class="btn btn-sm btn-success" style="padding:3px 10px; font-size:0.82rem; margin-left:4px;"
+                        onclick="vincularReflexa({{ _i }})">
+                  Vincular
+                </button>
+              </div>
             </div>
           {% endfor %}
         </fieldset>
@@ -3353,6 +3376,32 @@ async function salvarCampo(campo, valor, el) {
       }
     } else {
       mostrarToast('Erro ao salvar ' + campo, 'erro');
+    }
+  } catch(err) {
+    mostrarToast('Erro de comunicação', 'erro');
+  }
+}
+
+// Vincular reflexa órfã a uma principal existente (atualiza verba_principal_ref)
+async function vincularReflexa(indice) {
+  const sel = document.getElementById('vinc-' + indice);
+  if (!sel || !sel.value) {
+    mostrarToast('Escolha uma principal no dropdown', 'erro');
+    return;
+  }
+  const novoRef = sel.value;
+  try {
+    const form = new FormData();
+    form.append('indice', indice);
+    form.append('campo', 'verba_principal_ref');
+    form.append('valor', novoRef);
+    const resp = await fetch(`/previa/{{ sessao_id }}/editar-verba`, { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      mostrarToast(`Reflexa vinculada a: ${novoRef}`, 'ok');
+      setTimeout(() => location.reload(), 600);
+    } else {
+      mostrarToast('Erro: ' + (dados.erro || 'falha ao vincular'), 'erro');
     }
   } catch(err) {
     mostrarToast('Erro de comunicação', 'erro');
