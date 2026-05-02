@@ -3420,7 +3420,7 @@ class PJECalcPlaywright:
             _comentario_jg_f1 = (
                 f"Honorários advocatícios devidos {' e '.join(_partes_jg_f1)} com exigibilidade "
                 f"suspensa, ante a gratuidade judiciária deferida, nos termos do "
-                f"art. 791-A, parágrafo 4o, da CLT."
+                f"art. 791-A, §4º, da CLT."
             )
             # Scroll até o campo e preencher (está no final da página da aba Parâmetros).
             # JSF <h:inputTextarea id="comentarios"> renderiza como <textarea>, NÃO <input>.
