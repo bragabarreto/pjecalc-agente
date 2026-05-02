@@ -1811,13 +1811,24 @@ def atribuir_estrategias_verbas(
 # ── Funções auxiliares ────────────────────────────────────────────────────────
 
 def _normalizar_chave(nome: str) -> str:
-    """Normaliza o nome da verba para busca no dicionário."""
+    """Normaliza o nome da verba para busca no dicionário.
+
+    Equivalências aplicadas (importantes para matching exato vs aproximado):
+    - "art" / "art." → "artigo" (multa do art. 477 ↔ multa do artigo 477)
+    - "§" → "" (paragrafo é geralmente irrelevante)
+    - "+ 1/3" / "+ 1/3" → "" (já implícito em férias)
+    - acentos, cedilha, ° º removidos
+    - artigos/preposições removidos (da, de, do, das, dos)
+    """
     import unicodedata
     nome = unicodedata.normalize("NFD", nome.lower())
     nome = "".join(c for c in nome if unicodedata.category(c) != "Mn")
     nome = nome.replace("º", "").replace("°", "").replace(".", "")
+    nome = nome.replace("§", " ")
     # Remover "+ 1/3" de férias (implícito no PJE-Calc)
     nome = _re_mod.sub(r"\s*\+?\s*1/3\s*", " ", nome).strip()
+    # Equivalências comuns: "art" → "artigo" (sentenças usam ambas)
+    nome = _re_mod.sub(r"\bart\b", "artigo", nome)
     # Remover artigos e preposições irrelevantes
     for stop in [" da ", " de ", " do ", " das ", " dos ", " a ", " o "]:
         nome = nome.replace(stop, " ")

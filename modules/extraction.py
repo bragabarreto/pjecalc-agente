@@ -258,6 +258,62 @@ Se não mencionado → ferias = []
     aviso_previo.prazo_dias = 33 (campo opcional — não colocar em campos_ausentes)
 - Se sem condenação em aviso prévio: aviso_previo.tipo = "Nao Apurar"
 
+**CATÁLOGO DE VERBAS EXPRESSO DO PJE-CALC** (54 verbas — usar nome EXATO em
+expresso_equivalente quando lancamento=Expresso ou Expresso_Adaptado):
+
+  Rescisórias / Indenizatórias:
+    SALDO DE SALÁRIO | AVISO PRÉVIO | FÉRIAS + 1/3 | 13º SALÁRIO |
+    ABONO PECUNIÁRIO | INDENIZAÇÃO ADICIONAL | INDENIZAÇÃO POR DANO MORAL |
+    INDENIZAÇÃO POR DANO MATERIAL | INDENIZAÇÃO POR DANO ESTÉTICO |
+    MULTA DO ARTIGO 477 DA CLT | MULTA CONVENCIONAL | INDENIZAÇÃO PIS - ABONO SALARIAL
+
+  Horas / Adicionais (variáveis com base em jornada):
+    HORAS EXTRAS 50% | HORAS EXTRAS 100% | ADICIONAL DE HORAS EXTRAS 50% |
+    HORAS IN ITINERE | INTERVALO INTRAJORNADA | INTERVALO INTERJORNADAS |
+    ADICIONAL NOTURNO 20% | ADICIONAL DE INSALUBRIDADE 10% / 20% / 40% |
+    ADICIONAL DE PERICULOSIDADE 30% | ADICIONAL DE RISCO 40% |
+    ADICIONAL DE PRODUTIVIDADE 30% | ADICIONAL DE TRANSFERÊNCIA 25% |
+    ADICIONAL DE SOBREAVISO
+
+  Salariais / Benefícios:
+    COMISSÃO | DIÁRIAS - INTEGRAÇÃO AO SALÁRIO | DIÁRIAS - PAGAMENTO |
+    GORJETA | GRATIFICAÇÃO DE FUNÇÃO | GRATIFICAÇÃO POR TEMPO DE SERVIÇO |
+    DIFERENÇA SALARIAL | SALÁRIO MATERNIDADE | SALÁRIO RETIDO |
+    SALDO DE EMPREITADA | PRÊMIO PRODUÇÃO | AJUDA DE CUSTO |
+    PARTICIPAÇÃO NOS LUCROS OU RESULTADOS - PLR
+
+  Benefícios não-salariais:
+    VALE TRANSPORTE | TÍQUETE-ALIMENTAÇÃO | CESTA BÁSICA |
+    DEVOLUÇÃO DE DESCONTOS INDEVIDOS | RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA |
+    VALOR PAGO - TRIBUTÁVEL | VALOR PAGO - NÃO TRIBUTÁVEL
+
+  Repouso / Feriado:
+    REPOUSO SEMANAL REMUNERADO (COMISSIONISTA) |
+    REPOUSO SEMANAL REMUNERADO EM DOBRO | FERIADO EM DOBRO
+
+  Acordo:
+    ACORDO (MERA LIBERALIDADE) | ACORDO (MULTA) |
+    ACORDO (VERBAS INDENIZATÓRIAS) | ACORDO (VERBAS REMUNERATÓRIAS)
+
+REGRAS de classificação Expresso/Adaptado/Manual:
+  • lancamento="Expresso" → verba existe no catálogo E parâmetros padrão (jornada 8h,
+    divisor 220, percentual padrão da verba). Ex: "MULTA DO ARTIGO 477 DA CLT" → SEMPRE
+    Expresso (parâmetros fixos: 1 salário no desligamento).
+  • lancamento="Expresso_Adaptado" → verba existe no catálogo MAS parâmetros divergem
+    do template padrão. Ex: HE 50% calculada sobre 6ª diária (NR-17) em vez de 8ª.
+  • lancamento="Manual" → SOMENTE verbas que NÃO estão no catálogo acima.
+    Ex: "INDENIZAÇÃO SUBSTITUTIVA DA ESTABILIDADE ACIDENTÁRIA" não tem equivalente Expresso
+    direto — mas se a sentença a calcula como remuneração em dobro, considere se deve
+    ser Manual com nome próprio OU classificada com expresso_equivalente="ACORDO (VERBAS
+    INDENIZATÓRIAS)" (genérico).
+
+VINCULAÇÃO REFLEXA↔PRINCIPAL — REGRA CRÍTICA:
+  O campo `verba_principal_ref` da Reflexa DEVE ser EXATAMENTE igual ao `nome_sentenca`
+  da Principal correspondente. PJE-Calc faz string match — qualquer divergência (plural,
+  parênteses, complemento) gera erro "verba reflexa sem principal" e BLOQUEIA Liquidação.
+  ❌ ERRADO: Principal "DIFERENÇA SALARIAL" + Reflexa ref="DIFERENÇAS SALARIAIS (integração)"
+  ✅ CERTO:  Principal "DIFERENÇA SALARIAL" + Reflexa ref="DIFERENÇA SALARIAL"
+
 **SEÇÃO 3 — PARCELAS CONDENADAS** → preenche "verbas_deferidas":
 - 🔵 CONDENAÇÃO PRINCIPAL N → tipo = "Principal"
 - 🔸 Reflexo em [...] → tipo = "Reflexa", verba_principal_ref = nome_sentenca da verba 🔵 correspondente
@@ -582,7 +638,9 @@ CAMPOS LEGADO (mantidos para compatibilidade — preenchidos automaticamente se 
       "incidencia_fgts": true,
       "incidencia_inss": true,
       "incidencia_ir": false,
-      "verba_principal_ref": "nome_sentenca da verba principal se reflexa | null",
+      "verba_principal_ref": "nome_sentenca da verba principal se reflexa | null (USAR EXATAMENTE o texto do nome_sentenca da Principal correspondente — comparação é por string match. Se a Principal está cadastrada como 'DIFERENÇA SALARIAL', a Reflexa NÃO pode apontar para 'DIFERENÇAS SALARIAIS' nem 'INTEGRAÇÃO DO SALÁRIO POR FORA'.)",
+      "lancamento": "Expresso | Expresso_Adaptado | Manual (OBRIGATÓRIO — ver lista abaixo de verbas Expresso disponíveis. Use 'Expresso' SEMPRE que a verba estiver no catálogo, mesmo que nome_sentenca tenha variação textual. Use 'Expresso_Adaptado' APENAS quando os PARÂMETROS de cálculo (jornada, divisor, percentual) diferem do template padrão da verba Expresso — ex: HE 50% calculada sobre 6h diária em vez de 8h. Use 'Manual' SOMENTE para verbas raras que não existem no catálogo Expresso.)",
+      "expresso_equivalente": "string — nome EXATO da verba do catálogo Expresso (ver lista abaixo). Obrigatório quando lancamento=Expresso ou Expresso_Adaptado.",
       "confianca": 0.95
     }}
   ],
@@ -953,6 +1011,49 @@ Cada entrada representa uma BASE DE CÁLCULO com nome, período e valor mensal.
   - variavel: true se valores mudam a cada mês (comissões, horas extras, gorjetas). false (default) para salário fixo.
   - incidencia_fgts (bool, default true), incidencia_cs (bool, default true)
 
+**CATÁLOGO DE VERBAS EXPRESSO DO PJE-CALC** (54 verbas — usar nome EXATO em
+expresso_equivalente quando lancamento=Expresso ou Expresso_Adaptado):
+
+  Rescisórias / Indenizatórias:
+    SALDO DE SALÁRIO | AVISO PRÉVIO | FÉRIAS + 1/3 | 13º SALÁRIO |
+    ABONO PECUNIÁRIO | INDENIZAÇÃO ADICIONAL | INDENIZAÇÃO POR DANO MORAL |
+    INDENIZAÇÃO POR DANO MATERIAL | INDENIZAÇÃO POR DANO ESTÉTICO |
+    MULTA DO ARTIGO 477 DA CLT | MULTA CONVENCIONAL | INDENIZAÇÃO PIS - ABONO SALARIAL
+
+  Horas / Adicionais:
+    HORAS EXTRAS 50% | HORAS EXTRAS 100% | ADICIONAL DE HORAS EXTRAS 50% |
+    HORAS IN ITINERE | INTERVALO INTRAJORNADA | INTERVALO INTERJORNADAS |
+    ADICIONAL NOTURNO 20% | ADICIONAL DE INSALUBRIDADE 10% / 20% / 40% |
+    ADICIONAL DE PERICULOSIDADE 30% | ADICIONAL DE RISCO 40% |
+    ADICIONAL DE PRODUTIVIDADE 30% | ADICIONAL DE TRANSFERÊNCIA 25% |
+    ADICIONAL DE SOBREAVISO
+
+  Salariais / Benefícios:
+    COMISSÃO | DIÁRIAS - INTEGRAÇÃO AO SALÁRIO | DIÁRIAS - PAGAMENTO |
+    GORJETA | GRATIFICAÇÃO DE FUNÇÃO | GRATIFICAÇÃO POR TEMPO DE SERVIÇO |
+    DIFERENÇA SALARIAL | SALÁRIO MATERNIDADE | SALÁRIO RETIDO |
+    SALDO DE EMPREITADA | PRÊMIO PRODUÇÃO | AJUDA DE CUSTO | PARTICIPAÇÃO NOS LUCROS
+
+  Outros: VALE TRANSPORTE, TÍQUETE-ALIMENTAÇÃO, CESTA BÁSICA,
+    DEVOLUÇÃO DE DESCONTOS INDEVIDOS, RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA,
+    VALOR PAGO - TRIBUTÁVEL/NÃO TRIBUTÁVEL, REPOUSO SEMANAL REMUNERADO (COMISSIONISTA/EM DOBRO),
+    FERIADO EM DOBRO, ACORDO (MERA LIBERALIDADE/MULTA/INDENIZATÓRIAS/REMUNERATÓRIAS).
+
+REGRAS de classificação Expresso/Adaptado/Manual:
+  • lancamento="Expresso" → verba existe no catálogo E parâmetros padrão.
+    Ex: "MULTA DO ARTIGO 477 DA CLT" → SEMPRE Expresso (parâmetros fixos).
+  • lancamento="Expresso_Adaptado" → verba existe no catálogo MAS parâmetros divergem
+    do template. Ex: HE 50% sobre 6ª diária (NR-17) em vez de 8ª.
+  • lancamento="Manual" → SOMENTE verbas que NÃO estão no catálogo acima.
+
+VINCULAÇÃO REFLEXA↔PRINCIPAL — REGRA CRÍTICA:
+  O campo `verba_principal_ref` da Reflexa DEVE ser EXATAMENTE igual ao `nome_sentenca`
+  da Principal correspondente. PJE-Calc faz string match — qualquer divergência
+  (plural, parênteses, complemento) gera erro "verba reflexa sem principal" e
+  BLOQUEIA Liquidação.
+  ❌ ERRADO: Principal "DIFERENÇA SALARIAL" + Reflexa ref="DIFERENÇAS SALARIAIS (integração)"
+  ✅ CERTO:  Principal "DIFERENÇA SALARIAL" + Reflexa ref="DIFERENÇA SALARIAL"
+
 **VERBAS DEFERIDAS** → preenche "verbas_deferidas" (SEÇÃO MAIS CRÍTICA):
 Listar cada parcela condenada. Para cada verba:
 
@@ -1211,7 +1312,9 @@ jam_fgts: true se mencionar "JAM" ou "juros sobre atraso no depósito do FGTS"
       "incidencia_fgts": true,
       "incidencia_inss": true,
       "incidencia_ir": false,
-      "verba_principal_ref": "nome_sentenca da verba principal se reflexa | null",
+      "verba_principal_ref": "nome_sentenca da verba principal se reflexa | null (USAR EXATAMENTE o texto do nome_sentenca da Principal correspondente — string match.)",
+      "lancamento": "Expresso | Expresso_Adaptado | Manual (OBRIGATÓRIO — ver lista de verbas Expresso disponíveis. Use 'Expresso' SEMPRE que a verba estiver no catálogo, mesmo com variação textual. Use 'Expresso_Adaptado' APENAS quando os PARÂMETROS de cálculo (jornada, divisor, percentual) diferem do template. Use 'Manual' SOMENTE para verbas raras fora do catálogo.)",
+      "expresso_equivalente": "string — nome EXATO da verba do catálogo Expresso. Obrigatório quando lancamento=Expresso ou Expresso_Adaptado.",
       "confianca": 0.0-1.0
     }}
   ],
