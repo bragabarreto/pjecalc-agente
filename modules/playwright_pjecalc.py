@@ -10875,6 +10875,29 @@ class PJECalcPlaywright:
                                 self._log(f"  ⚠ Mensagem JSF: {_msgs[:300]}")
                         except Exception:
                             pass
+                        # Capturar lista de pendências da página de liquidação.
+                        # Estrutura observada: seção "Pendências do Cálculo" com
+                        # lista de itens "Erro:"/"Alerta:" — cada um descreve um
+                        # bloqueio (ex: "Falta selecionar histórico salarial..." ou
+                        # "Histórico ÚLTIMA REMUNERAÇÃO sem valor...").
+                        try:
+                            _pend = self._page.evaluate("""() => {
+                                const body = document.body.innerText || '';
+                                const idx = body.indexOf('Pendências do Cálculo');
+                                if (idx < 0) return null;
+                                // Capturar até "Total de Erros" ou 3000 chars
+                                const fim = body.indexOf('Total de Erros', idx);
+                                return body.slice(idx, fim > 0 ? fim : idx + 3000);
+                            }""")
+                            if _pend:
+                                # Logar cada linha não-vazia de pendência (limit 30 linhas)
+                                _linhas = [l.strip() for l in _pend.split('\n')
+                                           if l.strip() and 'Legenda' not in l and 'ícones' not in l]
+                                self._log(f"  📋 PENDÊNCIAS DETALHADAS ({len(_linhas)} itens):")
+                                for _l in _linhas[:30]:
+                                    self._log(f"    • {_l[:200]}")
+                        except Exception as _e_pend:
+                            self._log(f"  ⚠ Captura pendências falhou: {_e_pend}")
                         break
                 # CRÍTICO: NÃO assumir sucesso quando não há mensagem clara.
                 # Sem sucesso explícito + sem erro detectado = sucesso AMBÍGUO,
