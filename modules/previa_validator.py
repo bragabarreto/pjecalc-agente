@@ -263,9 +263,12 @@ def validar_previa(
                     # Verificar match parcial (ex: "REFLEXO HE EM DSR" → principal "HORAS EXTRAS 50%")
                     match_partial = any(ref in p or p in ref for p in nomes_principais)
                     if not match_partial:
-                        res.avisos.append(_aviso(prefix, "verba_principal_ref",
-                            f"Verba reflexa aponta para '{ref}' que não está na lista de "
-                            "principais. Pode causar erro ao Liquidar."))
+                        # ERRO BLOQUEANTE: PJE-Calc gera pendência "verba reflexa
+                        # sem principal" e impede Liquidar.
+                        res.erros.append(_erro(prefix, "verba_principal_ref",
+                            f"Verba reflexa aponta para '{ref}' que NÃO está cadastrada "
+                            f"como principal. Adicione a principal primeiro OU remova "
+                            f"esta reflexa. Disponíveis: {sorted(nomes_principais)[:5]}..."))
                 continue
 
             # Verba principal: validar bases_calculo
