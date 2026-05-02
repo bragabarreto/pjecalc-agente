@@ -5573,35 +5573,45 @@ class PJECalcPlaywright:
                         _preencheu = True
                 except Exception as _e_b:
                     self._log(f"  ⚠ adicionar_base_calculo: {_e_b}")
-        else:
-            # Legado: detectar HISTORICO_SALARIAL e adicionar default.
-            # Se a verba tem multiplicador/percentual e o base_calculo NÃO foi
-            # explicitado, assumir HISTORICO_SALARIAL (default seguro do
-            # PJE-Calc para verbas variáveis tipo HE 50%, INTERVALO, AD NOTURNO).
-            try:
-                _eh_historico = self._page.evaluate("""() => {
-                    const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
-                    if (!sel) return false;
-                    const cur = Array.from(sel.options).find(o => o.selected);
-                    return cur && cur.value === 'HISTORICO_SALARIAL';
-                }""")
-                # Se ainda não está em HISTORICO_SALARIAL E a verba precisa de
-                # base (tem percentual ou multiplicador), forçar HISTORICO_SALARIAL.
-                if not _eh_historico and (_perc is not None or _base_enum is None) and (
-                    _perc is not None or verba.get("multiplicador") is not None
-                ):
-                    self._log("    ℹ Forçando tipoDaBaseTabelada=HISTORICO_SALARIAL (verba c/ multiplicador sem base)")
+
+        # ── GARANTIA CRÍTICA: se tipoDaBaseTabelada=HISTORICO_SALARIAL
+        # (default Expresso para HE 50%, COMISSÃO, INTERVALO, GORJETA,
+        # AD INSALUB, AD NOTURNO, IN ITINERE, DIÁRIAS) e a tabela
+        # "Bases Cadastradas" está vazia → adicionar ÚLTIMA REMUNERAÇÃO
+        # via _selecionar_base_historicos (que checa duplicatas e clica
+        # formulario:incluirBaseHistorico). Sem isso, Liquidador bloqueia
+        # com "Falta selecionar Histórico Salarial". DOM auditado em
+        # 2026-05-02: o select tipoDaBaseTabelada vem default em
+        # HISTORICO_SALARIAL para verbas variáveis Expresso, mas
+        # baseHistoricos fica em NoSelection e Bases Cadastradas vazia.
+        try:
+            _eh_historico_atual = self._page.evaluate("""() => {
+                const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
+                if (!sel) return false;
+                const cur = Array.from(sel.options).find(o => o.selected);
+                return cur && cur.value === 'HISTORICO_SALARIAL';
+            }""")
+            # Se a verba precisa de base histórica (é variável: tem percentual
+            # ou multiplicador) E a página atual mostra HISTORICO_SALARIAL,
+            # garantir que ÚLTIMA REMUNERAÇÃO esteja na tabela "Bases Cadastradas".
+            _precisa_base_hist = (
+                _eh_historico_atual
+                or _perc is not None
+                or verba.get("multiplicador") is not None
+            )
+            if _precisa_base_hist:
+                # Se ainda não está em HISTORICO_SALARIAL, forçar
+                if not _eh_historico_atual:
+                    self._log("    ℹ Forçando tipoDaBaseTabelada=HISTORICO_SALARIAL")
                     self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL", obrigatorio=False)
                     self._aguardar_ajax()
-                    self._page.wait_for_timeout(400)
-                    _eh_historico = True
+                    self._page.wait_for_timeout(500)
+                _pref = (verba.get("base_historicos") or self._BASE_HISTORICOS_PADRAO)
+                if self._selecionar_base_historicos(_pref):
+                    self._log(f"    ✓ Base ÚLTIMA REMUNERAÇÃO garantida em '{nome_na_lista}'")
                     _preencheu = True
-                if _eh_historico:
-                    _pref = (verba.get("base_historicos") or self._BASE_HISTORICOS_PADRAO)
-                    if self._selecionar_base_historicos(_pref):
-                        _preencheu = True
-            except Exception as _e_bh:
-                self._log(f"  ⚠ baseHistoricos check: {_e_bh}")
+        except Exception as _e_bh:
+            self._log(f"  ⚠ baseHistoricos garantia: {_e_bh}")
 
         # Quantidade (se informada na sentença)
         _qtd = verba.get("quantidade") or verba.get("valor_informado_quantidade")
