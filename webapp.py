@@ -1024,6 +1024,29 @@ async def editar_estrategia(
     })
 
 
+@app.get("/api/previa/{sessao_id}/validar")
+async def validar_previa_endpoint(sessao_id: str, db: Session = Depends(get_db)):
+    """Valida a Prévia sem confirmar — retorna erros e avisos de forma
+    estruturada para exibição na UI antes do clique em Confirmar."""
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    try:
+        from modules.previa_validator import validar_previa
+        res = validar_previa(calculo.dados(), calculo.verbas_mapeadas())
+        return JSONResponse(res.to_dict())
+    except Exception as exc:
+        import logging, traceback
+        logging.error("validar_previa erro: %s\n%s", exc, traceback.format_exc())
+        return JSONResponse(
+            {"valido": False, "erros": [{"severidade": "erro", "secao": "_sistema",
+                                          "campo": "_validador", "mensagem": str(exc)}],
+             "avisos": []},
+            status_code=500,
+        )
+
+
 @app.post("/previa/{sessao_id}/confirmar")
 async def confirmar_previa(
     request: Request,
@@ -1077,14 +1100,31 @@ async def confirmar_previa(
             f"{', '.join(verbas_baixa_confianca)}"
         )
 
+    # ── Validador completo da Prévia ──────────────────────────────────────────
+    # Identifica problemas que fariam a automação Playwright falhar OU a
+    # Liquidação do PJE-Calc bloquear com pendências do tipo "Erro".
+    # Política: erros bloqueantes IMPEDEM a confirmação. Avisos são informativos.
+    try:
+        from modules.previa_validator import validar_previa
+        _val = validar_previa(dados, verbas_mapeadas)
+        # Adiciona erros do validador ao bloqueio
+        for e in _val.erros:
+            erros.append(f"[{e['secao']}] {e['mensagem']}")
+        # Avisos não bloqueiam, mas serão retornados para exibição
+        avisos_validador = _val.avisos
+    except Exception as _e_val:
+        logger.warning(f"validador_previa_falhou: {_e_val}")
+        avisos_validador = []
+
     if erros:
         return JSONResponse(
             {
                 "sucesso": False,
                 "erros": erros,
+                "avisos": avisos_validador,
                 "mensagem": (
-                    "Dados incompletos ou com baixa confiança. "
-                    "Corrija os campos indicados na prévia antes de confirmar."
+                    "Prévia inválida — corrija os erros indicados antes de confirmar. "
+                    "Sem isso, a automação falhará no PJE-Calc."
                 ),
             },
             status_code=422,
