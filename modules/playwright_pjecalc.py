@@ -5485,16 +5485,17 @@ class PJECalcPlaywright:
             // (1 por linha), subir ao <tr> ancestral, e matchar nome da verba.
             const norm = s => (s||'').toLowerCase()
                 .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
-            const linksParam = Array.from(document.querySelectorAll(
-                'a[title*="arametr" i], a[id*=":listagem:"][id*=":j_id558"], ' +
-                'a[id^="formulario:listagem:"][id$=":j_id558"]'
-            ));
-            // dedup por id
-            const seenIds = new Set();
-            const linksUnicos = linksParam.filter(a => {{
-                if (seenIds.has(a.id)) return false;
-                seenIds.add(a.id);
-                return true;
+            // CSS selector com [attr*=val i] case-insensitive não funciona
+            // em Firefox antigo. Usar filter JS robusto sobre TODOS os <a>.
+            const todosLinks = Array.from(document.querySelectorAll('a'));
+            const linksUnicos = todosLinks.filter(a => {{
+                if (!a.id) return false;
+                // Match por ID estável da listagem JSF
+                if (a.id.includes(':listagem:') && a.id.endsWith(':j_id558')) return true;
+                // Match por title contendo "parametro" (sem acento)
+                const t = norm(a.title || '');
+                if (t.includes('parametro') && !t.includes('ocorrencia') && !t.includes('exclui')) return true;
+                return false;
             }});
             for (const link of linksUnicos) {{
                 const tr = link.closest('tr');
