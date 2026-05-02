@@ -4022,80 +4022,23 @@ class PJECalcPlaywright:
             return
         self.mapear_campos("fase2_historico_salarial")
 
-        # ── Deletar entrada default "ÚLTIMA REMUNERAÇÃO" criada pelo PJE-Calc ──
-        # PJE-Calc cria automaticamente uma entrada "ÚLTIMA REMUNERAÇÃO" no
-        # histórico quando valorUltimaRemuneracao é preenchido na Fase 1.
-        # Estratégia: instalar dialog handler, mapear o DOM da listagem,
-        # encontrar o link "Excluir" da linha que contém "ÚLTIMA REMUNERAÇÃO",
-        # disparar o onclick (gera A4J postback), aguardar AJAX, verificar.
-        try:
-            # Instalar dialog handler ANTES do click — confirm dialog do delete
-            self._page.on("dialog", lambda d: d.accept())
+        # ── Manter entrada default "ÚLTIMA REMUNERAÇÃO" criada pelo PJE-Calc ──
+        # DECISÃO (2026-05-02, instrução do usuário): não excluir a entrada
+        # automática "ÚLTIMA REMUNERAÇÃO" criada pelo PJE-Calc quando
+        # valorUltimaRemuneracao é preenchido na Fase 1. Apenas adicionamos
+        # os históricos customizados adicionais (com nomes diferentes) e
+        # selecionamos a base de cálculo correta nos parâmetros da verba.
+        #
+        # Histórico anterior: o agente excluía a default e re-criava todas as
+        # entradas, mas isso causava perda da grade automática + risco de
+        # regeneração pelo PJE-Calc. Estratégia mais segura: convivência —
+        # default fica, customizadas são adicionadas em separado.
+        self._log("  ℹ Entrada default 'ÚLTIMA REMUNERAÇÃO' mantida (instrução do usuário)")
 
-            # Diagnóstico: descobrir o que tem na página
-            _diag = self._page.evaluate("""() => {
-                // Listar TODOS os links que tenham 'listagem' no ID (são os da tabela)
-                const linksListagem = [...document.querySelectorAll("a[id*='listagem']")];
-                return {
-                    total: linksListagem.length,
-                    samples: linksListagem.slice(0, 12).map(a => ({
-                        id: a.id,
-                        txt: (a.textContent||'').trim().substring(0,30),
-                        rowText: a.closest('tr')?.textContent?.replace(/\\s+/g,' ').trim().substring(0,60) || ''
-                    })),
-                };
-            }""")
-            self._log(f"  🔍 Diag histórico: {_diag.get('total')} link(s) na listagem")
-            for ex in _diag.get('samples', [])[:6]:
-                self._log(f"     · id={ex['id'][-50:]} txt='{ex['txt']}' row='{ex['rowText'][:50]}'")
-
-            # Click via id pattern JSF: especificamente formulario:listagem:N:excluirHistorico
-            # (confirmado por diag em run 20260430_172247 — esse é o ID do link Excluir
-            # DENTRO da tabela de histórico salarial; outros links Excluir do menu lateral
-            # não devem ser clicados pois fariam ações destrutivas no cálculo).
-            _resultado = self._page.evaluate("""() => {
-                // Filtro por ID pattern: precisa conter 'listagem' E 'excluir' (não menu lateral)
-                const links = [...document.querySelectorAll('a')].filter(a => {
-                    const id = (a.id || '').toLowerCase();
-                    return id.includes('listagem') && id.includes('excluir');
-                });
-                for (const a of links) {
-                    // Verificar que está em <tr> com 'ÚLTIMA REMUNERAÇÃO'
-                    const tr = a.closest('tr');
-                    if (!tr) continue;
-                    const rowTxt = (tr.textContent || '').toUpperCase();
-                    const norm = rowTxt.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
-                    if (norm.includes('ULTIMA REMUNERACAO')) {
-                        const linkId = a.id;
-                        if (typeof a.onclick === 'function') {
-                            try { a.onclick.call(a, new Event('click')); }
-                            catch(e) { a.click(); }
-                        } else {
-                            a.click();
-                        }
-                        return {ok: true, linkId: linkId, rowText: rowTxt.substring(0,80)};
-                    }
-                }
-                return {ok: false, totalLinks: links.length, candidatos: links.map(a=>a.id)};
-            }""")
-            if _resultado.get('ok'):
-                self._log(f"  → Click Excluir disparado: {_resultado['linkId']}")
-                self._aguardar_ajax(timeout=15000)
-                self._page.wait_for_timeout(2500)
-                # Verificar se entrada sumiu
-                _ainda = self._page.evaluate("""() => {
-                    const txt = document.body.textContent || '';
-                    const norm = txt.normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
-                    return norm.includes('ULTIMA REMUNERACAO');
-                }""")
-                if _ainda:
-                    self._log(f"  ⚠ Entrada 'ÚLTIMA REMUNERAÇÃO' ainda presente após click — PJE-Calc pode estar regenerando")
-                else:
-                    self._log(f"  ✓ Entrada default 'ÚLTIMA REMUNERAÇÃO' DELETADA com sucesso")
-            else:
-                self._log(f"  ℹ Nenhuma linha 'ÚLTIMA REMUNERAÇÃO' encontrada na listagem (ok={_resultado.get('ok')}, totalLinks={_resultado.get('totalLinks')})")
-        except Exception as _del_err:
-            self._log(f"  ⚠ Tentativa de deletar entrada default falhou: {_del_err} (prosseguindo)")
+        # Pular criação de históricos com nome que conflita com a default
+        _NOMES_DEFAULT = {"ÚLTIMA REMUNERAÇÃO", "ULTIMA REMUNERACAO",
+                          "SALÁRIO BASE", "SALARIO BASE",
+                          "ADICIONAL DE INSALUBRIDADE PAGO"}
 
         def _para_competencia(d: str) -> str:
             partes = d.split("/")
@@ -4107,6 +4050,17 @@ class PJECalcPlaywright:
 
         for idx_h, h in enumerate(historico):
           try:
+            # Pular se nome conflita com histórico default já existente no PJE-Calc
+            # (ÚLTIMA REMUNERAÇÃO, SALÁRIO BASE, ADICIONAL DE INSALUBRIDADE PAGO).
+            # Esses 3 são criados automaticamente; criar entradas com mesmo nome
+            # geraria duplicação ou conflito. As verbas que precisam de cada um
+            # apenas selecionam via baseHistoricos nos parâmetros.
+            _nome_h = (h.get("nome", "") or "").strip().upper()
+            _nome_h_norm = _nome_h.replace("Á","A").replace("É","E").replace("Í","I").replace("Ó","O").replace("Ú","U").replace("Ç","C")
+            if _nome_h_norm in {n.upper().replace("Á","A").replace("É","E").replace("Í","I").replace("Ó","O").replace("Ú","U").replace("Ç","C") for n in _NOMES_DEFAULT}:
+                self._log(f"  ⏭ Pulando histórico '{h.get('nome','?')}' — já existe como default no PJE-Calc")
+                continue
+
             # Garantir que estamos na página de listagem do Histórico Salarial
             # ANTES de tentar clicar "Incluir"/"Novo". Após salvar o período anterior,
             # a página pode ter redirecionado para outro lugar ou o DOM pode ter mudado.
@@ -5307,17 +5261,36 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(400)
 
-            # 2. baseHistoricos (se HISTORICO_SALARIAL)
+            # 2. baseHistoricos (se HISTORICO_SALARIAL) — CRÍTICO para Liquidação
             if _tipo == "HISTORICO_SALARIAL":
                 _subt = base.get("historico_subtipo") or "ULTIMA_REMUNERACAO"
                 _texto = self._HISTORICO_SUBTIPO_TEXTO.get(_subt, _subt)
-                self._page.evaluate("""(texto) => {
+                _resultado_sel = self._page.evaluate("""(texto) => {
                     const sel = document.querySelector('select[id$=":baseHistoricos"]');
-                    if (!sel) return;
+                    if (!sel) return {ok: false, motivo: 'select baseHistoricos não encontrado'};
                     const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').toUpperCase();
-                    const opt = Array.from(sel.options).find(o => norm(o.text).includes(norm(texto)));
-                    if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', {bubbles:true})); }
+                    const alvo_norm = norm(texto);
+                    const opt = Array.from(sel.options).find(o => norm(o.text).includes(alvo_norm));
+                    if (opt) {
+                        sel.value = opt.value;
+                        sel.dispatchEvent(new Event('change', {bubbles:true}));
+                        return {ok: true, opt_text: opt.text, opt_value: opt.value};
+                    }
+                    return {
+                        ok: false,
+                        motivo: 'opção não encontrada',
+                        alvo: texto,
+                        opcoes_disponiveis: Array.from(sel.options).map(o => o.text)
+                    };
                 }""", _texto)
+                if _resultado_sel.get('ok'):
+                    self._log(f"    ✓ baseHistoricos: '{_resultado_sel['opt_text']}' selecionado")
+                else:
+                    _opts = _resultado_sel.get('opcoes_disponiveis', [])
+                    self._log(
+                        f"    ✗ baseHistoricos NÃO selecionado: alvo='{_texto}' "
+                        f"motivo='{_resultado_sel.get('motivo')}' opções={_opts}"
+                    )
                 self._page.wait_for_timeout(300)
 
             # 3. proporcionalizaHistorico
