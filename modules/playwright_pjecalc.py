@@ -5250,21 +5250,34 @@ class PJECalcPlaywright:
         """
         try:
             _tipo = (base.get("tipo_base") or "HISTORICO_SALARIAL").upper()
-            # 1. tipoDaBaseTabelada
-            self._page.evaluate("""(val) => {
-                const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
-                if (sel) {
-                    const opt = Array.from(sel.options).find(o => o.value === val);
-                    if (opt) { sel.value = val; sel.dispatchEvent(new Event('change', {bubbles:true})); }
-                }
-            }""", _tipo)
+            # 1. tipoDaBaseTabelada — usar Playwright select_option p/ disparar
+            #    o a4j:ajax que renderiza baseHistoricos. JS dispatchEvent não
+            #    é suficiente para JSF/RichFaces em todos os casos.
+            try:
+                self._selecionar("tipoDaBaseTabelada", _tipo, obrigatorio=False)
+            except Exception:
+                # Fallback JS direto
+                self._page.evaluate("""(val) => {
+                    const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
+                    if (sel) {
+                        const opt = Array.from(sel.options).find(o => o.value === val);
+                        if (opt) { sel.value = val; sel.dispatchEvent(new Event('change', {bubbles:true})); }
+                    }
+                }""", _tipo)
             self._aguardar_ajax()
-            self._page.wait_for_timeout(400)
+            self._page.wait_for_timeout(600)
 
             # 2. baseHistoricos (se HISTORICO_SALARIAL) — CRÍTICO para Liquidação
             if _tipo == "HISTORICO_SALARIAL":
                 _subt = base.get("historico_subtipo") or "ULTIMA_REMUNERACAO"
                 _texto = self._HISTORICO_SUBTIPO_TEXTO.get(_subt, _subt)
+                # Aguardar select aparecer (até 3s) — a4j:ajax pode levar tempo
+                try:
+                    self._page.wait_for_selector(
+                        'select[id$=":baseHistoricos"]', state="attached", timeout=3000
+                    )
+                except Exception:
+                    pass
                 _resultado_sel = self._page.evaluate("""(texto) => {
                     const sel = document.querySelector('select[id$=":baseHistoricos"]');
                     if (!sel) return {ok: false, motivo: 'select baseHistoricos não encontrado'};
@@ -5531,12 +5544,21 @@ class PJECalcPlaywright:
             self._preencher("outroValorDoMultiplicador", _fmt_br(_perc_val), obrigatorio=False)
             _preencheu = True
 
-        # Base de cálculo
+        # Base de cálculo — DOM PJE-Calc 2.15.1: tipoDaBaseTabelada é SELECT
+        # (não radio). Default seguro: HISTORICO_SALARIAL com baseHistoricos
+        # = ÚLTIMA REMUNERAÇÃO, exigido pelo Liquidador para verbas com
+        # multiplicador (HE 50%, INTERVALO, AD NOTURNO etc.).
         _base_raw = (verba.get("base_calculo") or "").lower().strip()
         _base_enum = self._BASE_CALCULO_MAP.get(_base_raw)
         if _base_enum:
-            self._marcar_radio("tipoDaBaseTabelada", _base_enum)
-            _preencheu = True
+            try:
+                self._selecionar("tipoDaBaseTabelada", _base_enum, obrigatorio=False)
+                # AJAX renderiza baseHistoricos quando _base_enum=HISTORICO_SALARIAL
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(400)
+                _preencheu = True
+            except Exception as _e_btb:
+                self._log(f"  ⚠ tipoDaBaseTabelada: {_e_btb}")
 
         # Bases de Cálculo — modelo NOVO (lista):
         # Se verba["bases_calculo"] estiver presente, iterar e adicionar cada
@@ -5552,7 +5574,10 @@ class PJECalcPlaywright:
                 except Exception as _e_b:
                     self._log(f"  ⚠ adicionar_base_calculo: {_e_b}")
         else:
-            # Legado: detectar HISTORICO_SALARIAL e adicionar default
+            # Legado: detectar HISTORICO_SALARIAL e adicionar default.
+            # Se a verba tem multiplicador/percentual e o base_calculo NÃO foi
+            # explicitado, assumir HISTORICO_SALARIAL (default seguro do
+            # PJE-Calc para verbas variáveis tipo HE 50%, INTERVALO, AD NOTURNO).
             try:
                 _eh_historico = self._page.evaluate("""() => {
                     const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
@@ -5560,6 +5585,17 @@ class PJECalcPlaywright:
                     const cur = Array.from(sel.options).find(o => o.selected);
                     return cur && cur.value === 'HISTORICO_SALARIAL';
                 }""")
+                # Se ainda não está em HISTORICO_SALARIAL E a verba precisa de
+                # base (tem percentual ou multiplicador), forçar HISTORICO_SALARIAL.
+                if not _eh_historico and (_perc is not None or _base_enum is None) and (
+                    _perc is not None or verba.get("multiplicador") is not None
+                ):
+                    self._log("    ℹ Forçando tipoDaBaseTabelada=HISTORICO_SALARIAL (verba c/ multiplicador sem base)")
+                    self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL", obrigatorio=False)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(400)
+                    _eh_historico = True
+                    _preencheu = True
                 if _eh_historico:
                     _pref = (verba.get("base_historicos") or self._BASE_HISTORICOS_PADRAO)
                     if self._selecionar_base_historicos(_pref):
