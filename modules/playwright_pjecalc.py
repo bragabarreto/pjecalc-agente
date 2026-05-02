@@ -5584,12 +5584,24 @@ class PJECalcPlaywright:
         # tipoDaBaseTabelada some, prejudicando a garantia subsequente).
         _base_garantida = False
         try:
+            # Aguardar até 8s pelo select tipoDaBaseTabelada renderizar — JSF a4j
+            # pode demorar a injetar o componente após click em Parâmetros.
+            try:
+                self._page.wait_for_selector(
+                    'select[id$=":tipoDaBaseTabelada"]', state="attached", timeout=8000
+                )
+            except Exception:
+                self._log(f"  ⚠ tipoDaBaseTabelada não apareceu em 8s para '{nome_na_lista}'")
+            self._page.wait_for_timeout(300)
+
             _eh_historico_atual = self._page.evaluate("""() => {
                 const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
-                if (!sel) return false;
+                if (!sel) return null;
                 const cur = Array.from(sel.options).find(o => o.selected);
                 return cur && cur.value === 'HISTORICO_SALARIAL';
             }""")
+            if _eh_historico_atual is None:
+                self._log(f"  ⚠ select tipoDaBaseTabelada NÃO existe na página de Parâmetros de '{nome_na_lista}'")
             _precisa_base_hist = (
                 _eh_historico_atual
                 or _perc is not None
@@ -5600,12 +5612,32 @@ class PJECalcPlaywright:
                     self._log("    ℹ Forçando tipoDaBaseTabelada=HISTORICO_SALARIAL")
                     self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL", obrigatorio=False)
                     self._aguardar_ajax()
-                    self._page.wait_for_timeout(500)
+                    self._page.wait_for_timeout(800)
+                # Aguardar baseHistoricos materializar (a4j renderiza após change)
+                try:
+                    self._page.wait_for_selector(
+                        'select[id$=":baseHistoricos"]', state="attached", timeout=5000
+                    )
+                except Exception:
+                    self._log(f"  ⚠ baseHistoricos não apareceu em 5s para '{nome_na_lista}'")
+                self._page.wait_for_timeout(300)
                 _pref = (verba.get("base_historicos") or self._BASE_HISTORICOS_PADRAO)
                 if self._selecionar_base_historicos(_pref):
                     self._log(f"    ✓ Base ÚLTIMA REMUNERAÇÃO garantida em '{nome_na_lista}'")
                     _preencheu = True
                     _base_garantida = True
+                else:
+                    # Diagnóstico extra — vê o que está disponível
+                    _diag = self._page.evaluate("""() => {
+                        const sel = document.querySelector('select[id$=":baseHistoricos"]');
+                        return {
+                            hasBaseHistSelect: !!sel,
+                            baseHistOptions: sel ? Array.from(sel.options).map(o => o.text.trim()) : [],
+                            hasIncluirBtn: !!document.getElementById('formulario:incluirBaseHistorico'),
+                            url: location.href.substring(location.href.lastIndexOf('/'))
+                        };
+                    }""")
+                    self._log(f"  ⚠ Base não garantida em '{nome_na_lista}': {_diag}")
         except Exception as _e_bh:
             self._log(f"  ⚠ baseHistoricos garantia: {_e_bh}")
 
