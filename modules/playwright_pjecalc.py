@@ -5465,51 +5465,73 @@ class PJECalcPlaywright:
         """
         import re as _re
 
-        # 1. Clicar botão "Parâmetros da Verba" na linha correspondente
+        # 1. Clicar botão "Parâmetros da Verba" na linha correspondente.
+        # DOM auditado em 2026-05-02 (Chrome MCP, calc 262818):
+        # cada linha tem 3 ícones nessa ordem:
+        #   - formulario:listagem:N:j_id558  title="Parâmetros da Verba"  ← QUEREMOS ESSE
+        #   - formulario:listagem:N:j_id559  title="Ocorrências da Verba"
+        #   - formulario:listagem:N:j_id560  title="Excluir"
+        # O fallback antigo (iconLinks[1]) clicava no SEGUNDO ícone =
+        # Ocorrências, NÃO Parâmetros — bug grave que impedia abrir o
+        # form e fazia baseHistoricos NUNCA aparecer. Agora priorizamos
+        # title="Parâmetros da Verba" exato (case-insensitive).
         _kw = nome_na_lista.lower()[:18]
         _clicou = self._page.evaluate(f"""() => {{
             const kw = {repr(_kw)};
             const rows = document.querySelectorAll('tr');
+            const norm = s => (s||'').toLowerCase()
+                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
             for (const tr of rows) {{
-                if (!tr.textContent.toLowerCase().includes(kw)) continue;
-                // Buscar por texto/title/alt em links e botões
-                const btns = [...tr.querySelectorAll(
-                    'a, input[type="button"], input[type="submit"], input[type="image"]'
-                )];
-                for (const btn of btns) {{
-                    const t = ((btn.title || '') + ' ' + (btn.value || '') + ' ' +
-                               (btn.textContent || '') + ' ' + (btn.alt || '')).toLowerCase();
-                    if (t.includes('par') && t.includes('metro')) {{
-                        btn.click();
-                        return true;
+                if (!norm(tr.textContent).includes(norm(kw))) continue;
+                // PRIORIDADE 1: title contém "parametro" (sem acento)
+                const titulados = [...tr.querySelectorAll('a[title], input[title]')];
+                for (const el of titulados) {{
+                    const t = norm(el.title);
+                    if (t.includes('parametro') && !t.includes('ocorrencia')) {{
+                        el.click();
+                        return {{ok: true, via: 'title=' + el.title, id: el.id}};
                     }}
                 }}
-                // Buscar por ID contendo "parametro" ou "alterar" ou "editar"
+                // PRIORIDADE 2: textContent inclui "parâmetros" mas exclui "ocorrências" e "excluir"
+                const todosLinks = [...tr.querySelectorAll('a, input[type="button"], input[type="submit"], input[type="image"]')];
+                for (const el of todosLinks) {{
+                    const t = norm((el.title || '') + ' ' + (el.value || '') + ' ' +
+                                   (el.textContent || '') + ' ' + (el.alt || ''));
+                    if (t.includes('parametro') && !t.includes('ocorrencia') && !t.includes('exclui')) {{
+                        el.click();
+                        return {{ok: true, via: 'fallback-text', id: el.id}};
+                    }}
+                }}
+                // PRIORIDADE 3: ID contém "parametro/alterar/editar" (não usa j_id genérico)
                 const acoes = [...tr.querySelectorAll(
                     'a[id*="parametro"], a[id*="alterar"], a[id*="editar"], ' +
-                    'input[id*="parametro"], input[id*="alterar"], input[id*="editar"], ' +
-                    'a[id*="acao"], input[id*="acao"]'
+                    'input[id*="parametro"], input[id*="alterar"], input[id*="editar"]'
                 )];
                 if (acoes.length >= 1) {{
                     acoes[0].click();
-                    return true;
+                    return {{ok: true, via: 'id-match', id: acoes[0].id}};
                 }}
-                // Fallback: buscar ícones de ação (links com img) — o segundo é normalmente "Parâmetros"
+                // PRIORIDADE 4 (último recurso): primeiro ícone (Parâmetros é
+                // sempre o PRIMEIRO ícone na ordem do DOM, NÃO o segundo)
                 const iconLinks = [...tr.querySelectorAll('a:has(img), a[onclick]')]
-                    .filter(a => !a.textContent.trim().toLowerCase().includes('exclu'));
-                if (iconLinks.length >= 2) {{
-                    iconLinks[1].click();  // Parâmetros é geralmente o 2o ícone
-                    return true;
-                }} else if (iconLinks.length === 1) {{
-                    iconLinks[0].click();
-                    return true;
+                    .filter(a => {{
+                        const t = norm(a.textContent + ' ' + (a.title || '') + ' ' + (a.alt || ''));
+                        return !t.includes('exclui') && !t.includes('ocorrencia');
+                    }});
+                if (iconLinks.length >= 1) {{
+                    iconLinks[0].click();  // PRIMEIRO ícone = Parâmetros
+                    return {{ok: true, via: 'icon-first', id: iconLinks[0].id}};
                 }}
+                return {{ok: false, motivo: 'nenhum botão Parâmetros válido na linha'}};
             }}
-            return false;
+            return {{ok: false, motivo: 'linha não encontrada'}};
         }}""")
-        if not _clicou:
-            self._log(f"  ⚠ Parâmetros '{nome_na_lista}': botão não encontrado na listagem")
+        if not _clicou or not (_clicou.get("ok") if isinstance(_clicou, dict) else _clicou):
+            _motivo = _clicou.get("motivo", "?") if isinstance(_clicou, dict) else "evaluate retornou false"
+            self._log(f"  ⚠ Parâmetros '{nome_na_lista}': botão não encontrado ({_motivo})")
             return False
+        if isinstance(_clicou, dict):
+            self._log(f"  → Parâmetros '{nome_na_lista}': click via {_clicou.get('via')} (id={_clicou.get('id')})")
 
         self._aguardar_ajax()
         self._page.wait_for_timeout(800)
