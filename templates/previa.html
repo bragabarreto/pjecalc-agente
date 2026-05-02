@@ -2537,6 +2537,128 @@ if (typeof window.__origSalvarCampo === 'function') {
                     <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem;">
                       <input type="checkbox" id="nv-ir" checked> IR
                     </label>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem;">
+                      <input type="checkbox" id="nv-prev-priv"> Prev. Privada
+                    </label>
+                    <label style="display:flex; align-items:center; gap:4px; font-size:0.85rem;">
+                      <input type="checkbox" id="nv-pensao"> Pensão
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {# ── Parâmetros Manual (avançado) — só relevantes para Manual / Adaptado ── #}
+              <div id="nv-manual-adv" style="display:none; margin-top:16px; border-top:2px solid #e0e0e0; padding-top:12px;">
+                <div style="cursor:pointer; font-weight:700; color:#1a3a6b; font-size:0.88rem; margin-bottom:8px;"
+                     onclick="toggleNvAdvanced()">
+                  <span id="nv-adv-toggle">▶</span> Parâmetros avançados (Manual / Expresso Adaptado)
+                </div>
+                <div id="nv-adv-body" style="display:none;">
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Tipo de Variação da Parcela</label>
+                      <select id="nv-variacao" style="width:100%; padding:6px;">
+                        <option value="FIXA">FIXA (mensal)</option>
+                        <option value="VARIAVEL" selected>VARIÁVEL</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Tipo de Valor</label>
+                      <select id="nv-tipo-valor" style="width:100%; padding:6px;">
+                        <option value="CALCULADO" selected>CALCULADO</option>
+                        <option value="INFORMADO">INFORMADO</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Compor Principal</label>
+                      <select id="nv-compor" style="width:100%; padding:6px;">
+                        <option value="SIM" selected>SIM</option>
+                        <option value="NAO">NÃO (apenas integra base)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Ocorrência Ajuizamento</label>
+                      <select id="nv-ocorr-ajuiz" style="width:100%; padding:6px;">
+                        <option value="OCORRENCIAS_VENCIDAS" selected>Vencidas</option>
+                        <option value="OCORRENCIAS_VENCIDAS_E_VINCENDAS">Vencidas e Vincendas</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Tipo da Base Tabelada</label>
+                      <select id="nv-base-tabelada" style="width:100%; padding:6px;" onchange="toggleNvBaseHist()">
+                        <option value="HISTORICO_SALARIAL" selected>Histórico Salarial</option>
+                        <option value="MAIOR_REMUNERACAO">Maior Remuneração</option>
+                        <option value="SALARIO_DA_CATEGORIA">Salário da Categoria (Piso)</option>
+                        <option value="SALARIO_MINIMO">Salário Mínimo</option>
+                        <option value="VALE_TRANSPORTE">Vale Transporte</option>
+                      </select>
+                    </div>
+                    <div id="nv-base-hist-wrap">
+                      <label style="font-size:0.78rem; font-weight:600;">Base do Histórico * <span style="color:#dc3545;">(obrigatório)</span></label>
+                      <select id="nv-base-historico" style="width:100%; padding:6px;">
+                        <option value="ÚLTIMA REMUNERAÇÃO" selected>ÚLTIMA REMUNERAÇÃO</option>
+                        <option value="SALÁRIO BASE">SALÁRIO BASE</option>
+                        <option value="ADICIONAL DE INSALUBRIDADE PAGO">ADICIONAL DE INSALUBRIDADE PAGO</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Proporcionaliza Histórico</label>
+                      <select id="nv-prop-hist" style="width:100%; padding:6px;">
+                        <option value="NAO" selected>NÃO</option>
+                        <option value="SIM">SIM</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Integralizar Base</label>
+                      <select id="nv-integralizar" style="width:100%; padding:6px;">
+                        <option value="SIM" selected>SIM</option>
+                        <option value="NAO">NÃO</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Tipo de Divisor</label>
+                      <select id="nv-tipo-divisor" style="width:100%; padding:6px;">
+                        <option value="CARGA_HORARIA" selected>Carga Horária (220)</option>
+                        <option value="DIAS_UTEIS">Dias Úteis</option>
+                        <option value="IMPORTADA_DO_CARTAO">Importada do Cartão</option>
+                        <option value="OUTRO_VALOR">Outro Valor</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Valor do Multiplicador</label>
+                      <input type="text" id="nv-multiplicador" style="width:100%; padding:6px;" placeholder="Ex: 1,5 (HE 50%)">
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Tipo de Quantidade</label>
+                      <select id="nv-tipo-qtd" style="width:100%; padding:6px;">
+                        <option value="INFORMADA" selected>Informada</option>
+                        <option value="IMPORTADA_DO_CALENDARIO">Calendário</option>
+                        <option value="IMPORTADA_DO_CARTAO_DE_PONTO">Cartão de Ponto</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style="font-size:0.78rem; font-weight:600;">Quantidade Informada</label>
+                      <input type="text" id="nv-quantidade" style="width:100%; padding:6px;" placeholder="0">
+                    </div>
+                  </div>
+
+                  <div style="margin-top:10px;">
+                    <label style="font-size:0.78rem; font-weight:600;">Comportamentos extras</label>
+                    <div style="display:flex; gap:14px; flex-wrap:wrap; margin-top:4px; font-size:0.78rem;">
+                      <label><input type="checkbox" id="nv-zera-neg"> Zera valor negativo</label>
+                      <label><input type="checkbox" id="nv-dobra"> Dobra valor devido</label>
+                      <label><input type="checkbox" id="nv-excl-falta-just" checked> Exclui falta justificada</label>
+                      <label><input type="checkbox" id="nv-excl-falta-nj" checked> Exclui falta não justificada</label>
+                      <label><input type="checkbox" id="nv-excl-ferias-goz" checked> Exclui férias gozadas</label>
+                      <label><input type="checkbox" id="nv-prop-qtd"> Aplicar prop. à quantidade</label>
+                      <label><input type="checkbox" id="nv-prop-base"> Aplicar prop. à base</label>
+                    </div>
+                  </div>
+
+                  <div style="margin-top:8px; padding:8px; background:#f0f4f8; border-left:3px solid #1a3a6b; font-size:0.75rem; color:#1a3a6b;">
+                    💡 Estes campos viram <code>estrategia_preenchimento.parametros</code> e são aplicados pela
+                    automação no form Manual/Parâmetros do PJE-Calc — evita o erro "Falta selecionar Histórico
+                    Salarial" e demais bloqueios típicos da Liquidação.
                   </div>
                 </div>
               </div>
@@ -2936,6 +3058,55 @@ if (typeof window.__origSalvarCampo === 'function') {
             </div>
             {% endif %}
 
+            {# ── Adicionar Reflexa a esta Principal ────────────────────── #}
+            <div style="margin-top:10px; border-top:1px dashed #ced4da; padding-top:8px;">
+              <button type="button" class="btn"
+                      style="background:#fff3cd; color:#856404; border:1px solid #ffc107; font-size:0.82rem; padding:6px 12px;"
+                      onclick="toggleFormReflexa({{ vi }})">
+                🔸 + Adicionar Reflexa
+              </button>
+              <div id="form-reflexa-{{ vi }}" style="display:none; background:#fffbea; border:1px solid #ffc107; border-radius:8px; padding:12px; margin-top:8px;">
+                <div class="campos-grid col3">
+                  <div class="campo-form">
+                    <label>Tipo do reflexo</label>
+                    <select id="reflexa-tipo-{{ vi }}">
+                      <option value="REPOUSO SEMANAL REMUNERADO">REPOUSO SEMANAL REMUNERADO (RSR)</option>
+                      <option value="AVISO PRÉVIO">AVISO PRÉVIO</option>
+                      <option value="FÉRIAS + 1/3">FÉRIAS + 1/3</option>
+                      <option value="13º SALÁRIO">13º SALÁRIO</option>
+                      <option value="MULTA DO ARTIGO 477 DA CLT">MULTA DO ARTIGO 477 DA CLT</option>
+                      <option value="OUTRO">Outro (digitar nome)</option>
+                    </select>
+                  </div>
+                  <div class="campo-form" id="reflexa-outro-wrap-{{ vi }}" style="display:none;">
+                    <label>Nome (livre)</label>
+                    <input type="text" id="reflexa-outro-{{ vi }}" placeholder="Ex: GRATIFICAÇÃO HABITUAL">
+                  </div>
+                  <div class="campo-form">
+                    <label>Modo de inclusão</label>
+                    <select id="reflexa-modo-{{ vi }}">
+                      <option value="automatica_expresso">Auto-Expresso (marca checkbox listaReflexo da Principal)</option>
+                      <option value="expresso_direto">Expresso (entry própria, Tipo=Reflexa)</option>
+                      <option value="manual">Manual (entry própria, criada via botão Manual)</option>
+                    </select>
+                  </div>
+                </div>
+                <div style="font-size:0.75rem; color:#6c5400; margin-top:6px;">
+                  💡 <strong>Auto-Expresso</strong> só é compatível se a Principal for Expresso E o tipo de reflexo
+                  estiver entre os checkboxes <code>listaReflexo:M:ativo</code> que o PJE-Calc oferece para aquela parcela.
+                  Caso contrário, use <strong>Expresso</strong> (cria verba reflexa própria) ou <strong>Manual</strong>.
+                </div>
+                <div style="margin-top:8px; display:flex; gap:6px;">
+                  <button type="button" class="btn btn-success" style="font-size:0.82rem; padding:6px 14px;"
+                          onclick="adicionarReflexa({{ vi }}, '{{ (plan_nome_key or '')|replace("'", "\\'") }}')">
+                    ✓ Adicionar
+                  </button>
+                  <button type="button" class="btn" style="background:#e9ecef; font-size:0.82rem; padding:6px 14px;"
+                          onclick="toggleFormReflexa({{ vi }})">Cancelar</button>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
         {% endfor %}
@@ -3278,6 +3449,30 @@ function abrirModalAdicionarVerba(estrategia) {
   document.getElementById('nv-ir').checked = true;
   document.getElementById('nv-tipo').value = 'Principal';
   toggleNvPrincipalRef();
+  // Painel avançado: visível para Manual e Expresso Adaptado (Expresso Direto usa defaults do catálogo)
+  const adv = document.getElementById('nv-manual-adv');
+  if (adv) adv.style.display = (estrategia === 'manual' || estrategia === 'expresso_adaptado') ? 'block' : 'none';
+  // Reset toggle do corpo
+  const advBody = document.getElementById('nv-adv-body');
+  const advTog  = document.getElementById('nv-adv-toggle');
+  if (advBody) advBody.style.display = 'none';
+  if (advTog)  advTog.textContent = '▶';
+  toggleNvBaseHist();
+}
+
+function toggleNvAdvanced() {
+  const body = document.getElementById('nv-adv-body');
+  const tog  = document.getElementById('nv-adv-toggle');
+  const open = body.style.display === 'none' || !body.style.display;
+  body.style.display = open ? 'block' : 'none';
+  tog.textContent = open ? '▼' : '▶';
+}
+
+function toggleNvBaseHist() {
+  const sel = document.getElementById('nv-base-tabelada');
+  const wrap = document.getElementById('nv-base-hist-wrap');
+  if (!sel || !wrap) return;
+  wrap.style.display = (sel.value === 'HISTORICO_SALARIAL') ? '' : 'none';
 }
 
 function fecharModalAdicionarVerba() {
@@ -3325,6 +3520,35 @@ async function enviarAdicionarVerba() {
   form.append('incidencia_fgts', document.getElementById('nv-fgts').checked ? 'true' : 'false');
   form.append('incidencia_inss', document.getElementById('nv-inss').checked ? 'true' : 'false');
   form.append('incidencia_ir', document.getElementById('nv-ir').checked ? 'true' : 'false');
+  form.append('incidencia_prev_priv', document.getElementById('nv-prev-priv').checked ? 'true' : 'false');
+  form.append('incidencia_pensao', document.getElementById('nv-pensao').checked ? 'true' : 'false');
+
+  // Parâmetros avançados Manual/Adaptado — só envia se o painel está visível
+  const advVis = document.getElementById('nv-manual-adv').style.display === 'block';
+  if (advVis) {
+    const baseTab = document.getElementById('nv-base-tabelada').value;
+    form.append('tipo_variacao_parcela', document.getElementById('nv-variacao').value);
+    form.append('tipo_valor', document.getElementById('nv-tipo-valor').value);
+    form.append('compor_principal', document.getElementById('nv-compor').value);
+    form.append('ocorrencia_ajuizamento', document.getElementById('nv-ocorr-ajuiz').value);
+    form.append('tipo_base_tabelada', baseTab);
+    if (baseTab === 'HISTORICO_SALARIAL') {
+      form.append('base_historico', document.getElementById('nv-base-historico').value);
+    }
+    form.append('proporcionaliza_historico', document.getElementById('nv-prop-hist').value);
+    form.append('integralizar_base', document.getElementById('nv-integralizar').value);
+    form.append('tipo_divisor', document.getElementById('nv-tipo-divisor').value);
+    form.append('multiplicador', document.getElementById('nv-multiplicador').value);
+    form.append('tipo_quantidade', document.getElementById('nv-tipo-qtd').value);
+    form.append('quantidade_informada', document.getElementById('nv-quantidade').value);
+    form.append('zera_negativo', document.getElementById('nv-zera-neg').checked ? 'true' : 'false');
+    form.append('dobra_valor_devido', document.getElementById('nv-dobra').checked ? 'true' : 'false');
+    form.append('excluir_falta_justificada', document.getElementById('nv-excl-falta-just').checked ? 'true' : 'false');
+    form.append('excluir_falta_nao_justificada', document.getElementById('nv-excl-falta-nj').checked ? 'true' : 'false');
+    form.append('excluir_ferias_gozadas', document.getElementById('nv-excl-ferias-goz').checked ? 'true' : 'false');
+    form.append('aplicar_prop_quantidade', document.getElementById('nv-prop-qtd').checked ? 'true' : 'false');
+    form.append('aplicar_prop_base', document.getElementById('nv-prop-base').checked ? 'true' : 'false');
+  }
 
   try {
     const resp = await fetch('/previa/' + SESSAO_ID + '/adicionar-verba', {
@@ -3405,6 +3629,77 @@ async function vincularReflexa(indice) {
     }
   } catch(err) {
     mostrarToast('Erro de comunicação', 'erro');
+  }
+}
+
+// Toggle do form inline "Adicionar Reflexa" (por Principal)
+function toggleFormReflexa(vi) {
+  const div = document.getElementById('form-reflexa-' + vi);
+  if (!div) return;
+  div.style.display = (div.style.display === 'none' || !div.style.display) ? 'block' : 'none';
+  const tipoSel = document.getElementById('reflexa-tipo-' + vi);
+  if (tipoSel && !tipoSel.dataset.bound) {
+    tipoSel.dataset.bound = '1';
+    tipoSel.addEventListener('change', () => {
+      const wrap = document.getElementById('reflexa-outro-wrap-' + vi);
+      if (wrap) wrap.style.display = (tipoSel.value === 'OUTRO') ? '' : 'none';
+    });
+  }
+}
+
+// Adicionar reflexa vinculada a uma Principal — chama /adicionar-verba
+async function adicionarReflexa(vi, nomePrincipal) {
+  if (!nomePrincipal) {
+    mostrarToast('Principal sem nome — impossível vincular', 'erro');
+    return;
+  }
+  const tipoSel = document.getElementById('reflexa-tipo-' + vi);
+  const outro = document.getElementById('reflexa-outro-' + vi);
+  const modoSel = document.getElementById('reflexa-modo-' + vi);
+  let nome = tipoSel ? tipoSel.value : '';
+  if (nome === 'OUTRO') {
+    nome = (outro && outro.value || '').trim();
+    if (!nome) { mostrarToast('Digite o nome da reflexa', 'erro'); return; }
+  }
+  const modo = modoSel ? modoSel.value : 'expresso_direto';
+  // Mapear modo → estrategia aceita pelo endpoint /adicionar-verba
+  // (automatica_expresso é tratada como expresso_direto + flag estrategia=automatica_expresso
+  //  no estrategia_preenchimento; o /adicionar-verba só aceita 3 valores oficialmente,
+  //  então enviamos 'expresso_direto' e ajustamos estrategia depois via /editar-verba)
+  const estrategiaEndpoint = (modo === 'manual') ? 'manual' : 'expresso_direto';
+  // Caracteristica auto-deduzida pelo nome do reflexo
+  let caracteristica = 'Comum';
+  if (/AVISO/i.test(nome)) caracteristica = 'Aviso Previo';
+  else if (/F[ÉE]RIAS/i.test(nome)) caracteristica = 'Ferias';
+  else if (/13/i.test(nome)) caracteristica = '13o Salario';
+  try {
+    const form = new FormData();
+    form.append('estrategia', estrategiaEndpoint);
+    form.append('nome_pjecalc', nome);
+    form.append('nome_sentenca', nome);
+    form.append('caracteristica', caracteristica);
+    form.append('ocorrencia', 'Mensal');
+    form.append('base_calculo', 'Verbas');
+    form.append('tipo', 'Reflexa');
+    form.append('verba_principal_ref', nomePrincipal);
+    const resp = await fetch('/previa/' + SESSAO_ID + '/adicionar-verba', { method: 'POST', body: form });
+    const dados = await resp.json();
+    if (!dados.sucesso) {
+      mostrarToast('Erro: ' + (dados.erro || 'falha ao adicionar'), 'erro');
+      return;
+    }
+    // Se modo=automatica_expresso, atualizar estrategia da verba recém-criada
+    if (modo === 'automatica_expresso' && typeof dados.indice === 'number') {
+      const f2 = new FormData();
+      f2.append('indice', dados.indice);
+      f2.append('campo', 'estrategia');
+      f2.append('valor', 'automatica_expresso');
+      await fetch('/previa/' + SESSAO_ID + '/editar-estrategia', { method: 'POST', body: f2 });
+    }
+    mostrarToast(`Reflexa adicionada: ${nome} → ${nomePrincipal}`, 'ok');
+    setTimeout(() => location.reload(), 700);
+  } catch (err) {
+    mostrarToast('Erro de comunicação: ' + err, 'erro');
   }
 }
 

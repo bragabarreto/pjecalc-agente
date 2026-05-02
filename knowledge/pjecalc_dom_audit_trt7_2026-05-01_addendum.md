@@ -5,6 +5,94 @@
 **Método**: Chrome MCP via tab Playwright/extensão
 **Inclui**: novidades não cobertas no master `pjecalc_dom_audit_trt7_2026-05-01.md`.
 
+## Form completo "Manual" de Verba (verba-calculo.jsf, click `formulario:incluir`) — auditado 2026-05-01
+
+Mapa **integral** de IDs ao acionar o botão **Manual**, em ordem de exibição:
+
+### Identificação
+- `formulario:descricao` (text) — nome livre da verba
+- `formulario:assuntosCnj` (text autocomplete) — Assunto CNJ obrigatório
+
+### Variação e tipo de valor (radio)
+- `formulario:tipoVariacaoDaParcela:0` = FIXA, `:1` = VARIAVEL
+- `formulario:valor:0` = CALCULADO, `:1` = INFORMADO
+
+### Característica (radio)
+- `formulario:caracteristicaVerba:0` = COMUM, `:1` = DECIMO_TERCEIRO_SALARIO,
+  `:2` = AVISO_PREVIO, `:3` = FERIAS
+
+### Ocorrências (radio)
+- `formulario:ocorrenciaPagto:0` = MENSAL, `:1` = DEZEMBRO,
+  `:2` = PERIODO_AQUISITIVO, `:3` = DESLIGAMENTO
+- `formulario:ocorrenciaAjuizamento:0` = OCORRENCIAS_VENCIDAS,
+  `:1` = OCORRENCIAS_VENCIDAS_E_VINCENDAS
+
+### Tipo da verba (radio)
+- `formulario:tipoDeVerba:0` = PRINCIPAL, `:1` = REFLEXO
+- `formulario:geraReflexo:0/1` (DEVIDO/DIFERENCA)
+- `formulario:gerarPrincipal:0/1` (DEVIDO/DIFERENCA)
+- `formulario:comporPrincipal:0` = SIM, `:1` = NAO
+
+### Período
+- `formulario:periodoInicialInputDate` (text DD/MM/AAAA)
+- `formulario:periodoFinalInputDate` (text DD/MM/AAAA)
+
+### Comportamentos (checkbox)
+- `formulario:zeraValorNegativo`
+- `formulario:dobraValorDevido`
+- `formulario:excluirFaltaJustificada` (default true)
+- `formulario:excluirFaltaNaoJustificada` (default true)
+- `formulario:excluirFeriasGozadas` (default true)
+- `formulario:aplicarProporcionalidadeABase`
+- `formulario:aplicarProporcionalidadeAQuantidade`
+
+### Incidências (checkbox)
+- `formulario:irpf` / `formulario:inss` / `formulario:fgts`
+- `formulario:previdenciaPrivada` / `formulario:pensaoAlimenticia`
+
+### Base de cálculo
+- `formulario:tipoDaBaseTabelada` (select):
+  - NoSelectionConverter (default — bloqueia Liquidação se ficar)
+  - `MAIOR_REMUNERACAO`
+  - `HISTORICO_SALARIAL` ⟵ default seguro
+  - `SALARIO_DA_CATEGORIA` (Piso)
+  - `SALARIO_MINIMO`
+  - `VALE_TRANSPORTE`
+- `formulario:baseHistoricos` (select condicional, aparece quando tipoDaBaseTabelada=HISTORICO_SALARIAL):
+  - NoSelection
+  - ÚLTIMA REMUNERAÇÃO ⟵ default seguro
+  - SALÁRIO BASE
+  - ADICIONAL DE INSALUBRIDADE PAGO
+  - GRATIFICACAO HABITUAL (e demais customizados)
+- `formulario:proporcionalizaHistorico` (select SIM/NAO)
+- `formulario:incluirBaseHistorico` (link, title="Adicionar Base") — **CRÍTICO**:
+  apenas selecionar baseHistoricos NÃO basta; precisa clicar este link para
+  adicionar a linha à tabela "Bases Cadastradas". Sem isso, Liquidação falha com
+  *"Falta selecionar pelo menos um Histórico Salarial para apurar o Valor Devido"*.
+- `formulario:baseVerbaDeCalculo` (select com lista das verbas já criadas)
+- `formulario:integralizarBase` (select SIM/NAO)
+
+### Divisor (radio + text)
+- `formulario:tipoDeDivisor:0` = OUTRO_VALOR, `:1` = CARGA_HORARIA (default),
+  `:2` = DIAS_UTEIS, `:3` = IMPORTADA_DO_CARTAO
+- `formulario:outroValorDoDivisor` (text — só quando tipoDeDivisor=OUTRO_VALOR)
+
+### Multiplicador (text)
+- `formulario:outroValorDoMultiplicador` (text)
+
+### Quantidade (radio + text)
+- `formulario:tipoDaQuantidade:0` = INFORMADA (default), `:1` = IMPORTADA_DO_CALENDARIO,
+  `:2` = IMPORTADA_DO_CARTAO_DE_PONTO
+- `formulario:valorInformadoDaQuantidade` (text)
+
+### Valor pago (radio + text)
+- `formulario:tipoDoValorPago:0` = INFORMADO, `:1` = CALCULADO
+- `formulario:valorInformadoPago` (text)
+
+> Total: 64 inputs/selects/radios distintos no form Manual (auditado 2026-05-01,
+> calc 262818, conversationId=1960). A Prévia do agente expõe TODOS estes campos
+> via "Adicionar Verba (Manual)" → painel "Parâmetros avançados".
+
 ## Mapa de IDs do menu lateral
 
 Estrutura `formulario:j_id38:{grupo}:j_id41:{idx}:j_id46`:

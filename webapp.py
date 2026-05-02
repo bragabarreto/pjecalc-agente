@@ -774,6 +774,28 @@ async def adicionar_verba(
     incidencia_ir: str = Form("true"),
     tipo: str = Form("Principal"),       # Principal | Reflexa
     verba_principal_ref: str = Form(""),  # nome da verba principal (se Reflexa)
+    # ── Parâmetros avançados Manual / Adaptado (mapa DOM PJE-Calc 2.15.1) ──
+    incidencia_prev_priv: str = Form("false"),
+    incidencia_pensao: str = Form("false"),
+    tipo_variacao_parcela: str = Form(""),       # FIXA | VARIAVEL
+    tipo_valor: str = Form(""),                  # CALCULADO | INFORMADO
+    compor_principal: str = Form(""),            # SIM | NAO
+    ocorrencia_ajuizamento: str = Form(""),      # OCORRENCIAS_VENCIDAS | _E_VINCENDAS
+    tipo_base_tabelada: str = Form(""),          # MAIOR_REMUNERACAO | HISTORICO_SALARIAL | ...
+    base_historico: str = Form(""),              # ÚLTIMA REMUNERAÇÃO | SALÁRIO BASE | ...
+    proporcionaliza_historico: str = Form(""),   # SIM | NAO
+    integralizar_base: str = Form(""),           # SIM | NAO
+    tipo_divisor: str = Form(""),                # CARGA_HORARIA | DIAS_UTEIS | OUTRO_VALOR | IMPORTADA_DO_CARTAO
+    multiplicador: str = Form(""),               # ex: 1,5
+    tipo_quantidade: str = Form(""),             # INFORMADA | IMPORTADA_DO_CALENDARIO | IMPORTADA_DO_CARTAO_DE_PONTO
+    quantidade_informada: str = Form(""),
+    zera_negativo: str = Form("false"),
+    dobra_valor_devido: str = Form("false"),
+    excluir_falta_justificada: str = Form("true"),
+    excluir_falta_nao_justificada: str = Form("true"),
+    excluir_ferias_gozadas: str = Form("true"),
+    aplicar_prop_quantidade: str = Form("false"),
+    aplicar_prop_base: str = Form("false"),
     db: Session = Depends(get_db),
 ):
     """
@@ -828,6 +850,8 @@ async def adicionar_verba(
             "incidencia_fgts": _to_bool(incidencia_fgts),
             "incidencia_inss": _to_bool(incidencia_inss),
             "incidencia_ir": _to_bool(incidencia_ir),
+            "incidencia_previdencia_privada": _to_bool(incidencia_prev_priv),
+            "incidencia_pensao_alimenticia": _to_bool(incidencia_pensao),
             "verba_principal_ref": verba_principal_ref or None,
             "confianca": 1.0,  # adicionada manualmente pelo usuário → confiança máxima
             "mapeada": estrategia == "expresso_direto",
@@ -836,6 +860,30 @@ async def adicionar_verba(
                 "tipo": estrategia,
                 "baseado_em": "usuario",
                 "verba_principal_ref": verba_principal_ref or None,
+                # parametros aplicados pelo Playwright no form Manual / Parâmetros
+                "parametros": {
+                    k: v for k, v in {
+                        "tipo_variacao_parcela": tipo_variacao_parcela or None,
+                        "tipo_valor": tipo_valor or None,
+                        "compor_principal": compor_principal or None,
+                        "ocorrencia_ajuizamento": ocorrencia_ajuizamento or None,
+                        "tipo_base_tabelada": tipo_base_tabelada or None,
+                        "base_historico": base_historico or None,
+                        "proporcionaliza_historico": proporcionaliza_historico or None,
+                        "integralizar_base": integralizar_base or None,
+                        "tipo_divisor": tipo_divisor or None,
+                        "multiplicador": multiplicador or None,
+                        "tipo_quantidade": tipo_quantidade or None,
+                        "quantidade_informada": quantidade_informada or None,
+                        "zera_valor_negativo": _to_bool(zera_negativo),
+                        "dobra_valor_devido": _to_bool(dobra_valor_devido),
+                        "excluir_falta_justificada": _to_bool(excluir_falta_justificada),
+                        "excluir_falta_nao_justificada": _to_bool(excluir_falta_nao_justificada),
+                        "excluir_ferias_gozadas": _to_bool(excluir_ferias_gozadas),
+                        "aplicar_prop_quantidade": _to_bool(aplicar_prop_quantidade),
+                        "aplicar_prop_base": _to_bool(aplicar_prop_base),
+                    }.items() if v not in (None, "")
+                },
             },
         }
 
@@ -880,9 +928,14 @@ async def adicionar_verba(
             "estrategia": estrategia,
             "nome_pjecalc": nome_pjecalc,
             "indice": (
+                # indice global = predefinidas vêm primeiro, depois personalizadas
                 len(verbas_mapeadas.get("predefinidas", [])) - 1
                 if estrategia == "expresso_direto"
-                else None
+                else (
+                    len(verbas_mapeadas.get("predefinidas", []))
+                    + len(verbas_mapeadas.get("personalizadas", []))
+                    - 1
+                )
             ),
         })
     except Exception as exc:
