@@ -5565,25 +5565,24 @@ class PJECalcPlaywright:
         # base via _selecionar_base_historicos / sequência completa.
         # FALLBACK legado: se ausente, comportamento antigo (1 base default
         # quando tipoDaBaseTabelada=HISTORICO_SALARIAL).
-        _bases = verba.get("bases_calculo") or []
-        if _bases:
-            for _b in _bases:
-                try:
-                    if self._adicionar_base_calculo_completa(_b):
-                        _preencheu = True
-                except Exception as _e_b:
-                    self._log(f"  ⚠ adicionar_base_calculo: {_e_b}")
-
-        # ── GARANTIA CRÍTICA: se tipoDaBaseTabelada=HISTORICO_SALARIAL
-        # (default Expresso para HE 50%, COMISSÃO, INTERVALO, GORJETA,
-        # AD INSALUB, AD NOTURNO, IN ITINERE, DIÁRIAS) e a tabela
-        # "Bases Cadastradas" está vazia → adicionar ÚLTIMA REMUNERAÇÃO
-        # via _selecionar_base_historicos (que checa duplicatas e clica
-        # formulario:incluirBaseHistorico). Sem isso, Liquidador bloqueia
-        # com "Falta selecionar Histórico Salarial". DOM auditado em
-        # 2026-05-02: o select tipoDaBaseTabelada vem default em
-        # HISTORICO_SALARIAL para verbas variáveis Expresso, mas
-        # baseHistoricos fica em NoSelection e Bases Cadastradas vazia.
+        # ── GARANTIA CRÍTICA: SEMPRE rodada PRIMEIRO (antes do loop _bases)
+        # se tipoDaBaseTabelada=HISTORICO_SALARIAL (default Expresso para
+        # HE 50%, COMISSÃO, INTERVALO, GORJETA, AD INSALUB, AD NOTURNO,
+        # IN ITINERE, DIÁRIAS) e a tabela "Bases Cadastradas" está vazia
+        # → adicionar ÚLTIMA REMUNERAÇÃO via _selecionar_base_historicos
+        # (idempotente: checa duplicatas e clica formulario:incluirBaseHistorico).
+        #
+        # Sem isso, Liquidador bloqueia com "Falta selecionar Histórico
+        # Salarial". DOM auditado em 2026-05-02: tipoDaBaseTabelada vem
+        # default em HISTORICO_SALARIAL para verbas variáveis Expresso,
+        # mas baseHistoricos fica em NoSelection e Bases Cadastradas vazia.
+        #
+        # IMPORTANTE: este bloco é executado ANTES do loop _bases para
+        # evitar que falhas em _adicionar_base_calculo_completa corrompam
+        # o estado AJAX da página de Parâmetros e impeçam a garantia de
+        # rodar (bug observado em HE 50% — o loop falha 2x e o select
+        # tipoDaBaseTabelada some, prejudicando a garantia subsequente).
+        _base_garantida = False
         try:
             _eh_historico_atual = self._page.evaluate("""() => {
                 const sel = document.querySelector('select[id$=":tipoDaBaseTabelada"]');
@@ -5591,16 +5590,12 @@ class PJECalcPlaywright:
                 const cur = Array.from(sel.options).find(o => o.selected);
                 return cur && cur.value === 'HISTORICO_SALARIAL';
             }""")
-            # Se a verba precisa de base histórica (é variável: tem percentual
-            # ou multiplicador) E a página atual mostra HISTORICO_SALARIAL,
-            # garantir que ÚLTIMA REMUNERAÇÃO esteja na tabela "Bases Cadastradas".
             _precisa_base_hist = (
                 _eh_historico_atual
                 or _perc is not None
                 or verba.get("multiplicador") is not None
             )
             if _precisa_base_hist:
-                # Se ainda não está em HISTORICO_SALARIAL, forçar
                 if not _eh_historico_atual:
                     self._log("    ℹ Forçando tipoDaBaseTabelada=HISTORICO_SALARIAL")
                     self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL", obrigatorio=False)
@@ -5610,8 +5605,26 @@ class PJECalcPlaywright:
                 if self._selecionar_base_historicos(_pref):
                     self._log(f"    ✓ Base ÚLTIMA REMUNERAÇÃO garantida em '{nome_na_lista}'")
                     _preencheu = True
+                    _base_garantida = True
         except Exception as _e_bh:
             self._log(f"  ⚠ baseHistoricos garantia: {_e_bh}")
+
+        # Bases de Cálculo extras — modelo NOVO (lista):
+        # Se verba["bases_calculo"] tem entradas além da garantia básica,
+        # tentar adicionar (ex: usuário pediu base SALÁRIO BASE também).
+        # Se a garantia já adicionou ÚLTIMA REM, o _adicionar_base_calculo_completa
+        # vai pular duplicatas internamente. Se a garantia falhou, este loop
+        # tenta como fallback.
+        _bases = verba.get("bases_calculo") or []
+        # Skip loop se garantia já cobriu E só há 1 entrada (provavelmente
+        # ÚLTIMA REM repetida). Se há > 1 entrada, ainda vale tentar.
+        if _bases and (not _base_garantida or len(_bases) > 1):
+            for _b in _bases:
+                try:
+                    if self._adicionar_base_calculo_completa(_b):
+                        _preencheu = True
+                except Exception as _e_b:
+                    self._log(f"  ⚠ adicionar_base_calculo: {_e_b}")
 
         # Quantidade (se informada na sentença)
         _qtd = verba.get("quantidade") or verba.get("valor_informado_quantidade")
