@@ -35,6 +35,29 @@ Siga AS REGRAS CRÍTICAS abaixo SEM exceção.
 - **Data de ajuizamento**: extrair da capa do processo se disponível, ou inferir
   pelo número CNJ (ano).
 
+### 1.1 Datas de início/término do CÁLCULO (críticas para indenizações pós-contrato)
+
+- `data_inicio_calculo` — geralmente data de admissão (ou início do período prescrito)
+- **`data_termino_calculo`** ⚠️ **REGRA CRÍTICA**:
+  - Default: data da rescisão / desligamento
+  - **MAS quando houver verba com período POSTERIOR à rescisão** (ex: indenização
+    de estabilidade gestante, estabilidade acidentária, salário-maternidade pós-rescisão,
+    aviso prévio projetado), **`data_termino_calculo` DEVE SER ≥ MAIOR `periodo_fim`
+    de todas as verbas**.
+  - Caso contrário, o PJE-Calc rejeita Liquidação com:
+    *"As ocorrências da verba X devem estar contidas no período estabelecido"* e
+    *"As ocorrências do FGTS iniciam/terminam em data diferente da Data Final
+    da limitação do Cálculo"*.
+- **Exemplos**:
+  - **Estabilidade Gestante** (CF art. 10 II 'b' ADCT): até **data do parto + 5 meses**
+  - **Estabilidade Acidentária** (Lei 8.213/91 art. 118): até **data alta INSS + 12 meses**
+  - **CIPA** (CLT art. 165): até **1 ano após mandato**
+  - Sentença determinou *"reintegração no emprego com pagamento da remuneração até..."*:
+    usar a data limite mencionada
+- **Sempre informar `data_termino_calculo` explicitamente** quando houver indenização
+  de estabilidade. O agente automatizará o ajuste para MAX(periodo_fim das verbas)
+  caso esteja menor, mas é melhor já vir correto na prévia.
+
 ### 2. Verbas — campos obrigatórios
 
 Para cada verba condenada na sentença, gerar UMA entrada com os seguintes campos:
@@ -162,6 +185,41 @@ Reflexa:   verba_principal_ref = "DIFERENÇAS SALARIAIS (integração do salári
 Principal: nome_sentenca = "DIFERENÇAS SALARIAIS"
 Reflexa:   verba_principal_ref = "DIFERENÇAS SALARIAIS"
 ```
+
+### 5.1 Indenização Estabilidade Gestante / Acidentária (período pós-contrato)
+
+Sentenças com "estabilidade gestante", "garantia provisória de emprego", "estabilidade
+acidentária", "estabilidade decorrente de acidente de trabalho" — **TODAS exigem o
+mesmo tratamento** (verba pós-rescisão):
+
+```
+nome_pjecalc        — "INDENIZAÇÃO POR DANO MATERIAL"  (verba Expresso já existente,
+                       usada para evitar bloqueios de validação pós-demissão)
+tipo                — "Principal"
+caracteristica      — "Comum"
+ocorrencia          — "Mensal"
+periodo_inicio      — DD/MM/AAAA  (1 dia APÓS a demissão real)
+periodo_fim         — DD/MM/AAAA  (gestante: parto + 5 meses;
+                                    acidentária: alta INSS + 12 meses)
+percentual          — null (Calculado, base = Maior Remuneração proporcionalizado)
+base_calculo        — "Maior Remuneracao"
+proporcionalizar    — true (proporcionalização nas "pontas" do período)
+multiplicador       — 1
+divisor             — 1
+quantidade          — 1  (já está proporcionalizado pelas datas)
+incidencia_fgts     — true
+incidencia_inss     — true
+incidencia_ir       — true
+```
+
+**Reflexos OBRIGATÓRIOS (criar como Reflexas Manuais, integralizar=SIM):**
+- 13º Salário: caracteristica="13o Salario", divisor=12, multiplicador=1, quantidade=12
+- Férias + 1/3: caracteristica="Ferias", divisor=12, multiplicador=1.33, quantidade=12
+- FGTS reflexo manual (NÃO usar a aba FGTS sistêmica): divisor=100, multiplicador=8
+  (ou 11.2 se cumulado com multa 40%)
+
+**OBRIGATÓRIO marcar `data_termino_calculo` = `periodo_fim` da indenização**
+(senão Liquidador rejeita — ver seção 1.1).
 
 ### 6. Reflexos típicos por verba (use estes nomes)
 

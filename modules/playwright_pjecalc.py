@@ -3667,8 +3667,42 @@ class PJECalcPlaywright:
         # Datas de início e término do cálculo (período de apuração)
         if cont.get("data_inicio_calculo"):
             self._preencher_data("dataInicioCalculo", cont["data_inicio_calculo"], False)
-        if cont.get("data_fim_calculo") or cont.get("data_termino_calculo"):
-            _dt_fim = cont.get("data_fim_calculo") or cont.get("data_termino_calculo")
+        # ── REGRA DE NEGÓCIO (vídeo Estabilidade Gestante/Acidentária 2026-05-03) ──
+        # dataTerminoCalculo DEVE ser ≥ MAX(periodo_fim de TODAS as verbas).
+        # Caso contrário, indenizações com período pós-rescisão (estabilidade
+        # gestante até parto+5m, acidentária até alta+12m, etc.) caem fora do
+        # limite e Liquidador bloqueia com:
+        #   - "Todas as ocorrências da verba X devem estar contidas no
+        #      período estabelecido na página parâmetro da verba"
+        #   - "As ocorrências do FGTS iniciam/terminam em data diferente da
+        #      Data Final da limitação do Cálculo"
+        _dt_fim = (cont.get("data_fim_calculo") or cont.get("data_termino_calculo") or "").strip()
+        # Calcular MAX dos periodo_fim das verbas (formato DD/MM/AAAA)
+        try:
+            from datetime import datetime as _dt
+            def _parse_br(s):
+                try:
+                    return _dt.strptime(str(s).strip(), "%d/%m/%Y")
+                except Exception:
+                    return None
+            _verbas_pred = (self._verbas_mapeadas or {}).get("predefinidas", [])
+            _verbas_pers = (self._verbas_mapeadas or {}).get("personalizadas", [])
+            _todas_v = list(_verbas_pred) + list(_verbas_pers)
+            _datas_fim = [_parse_br(v.get("periodo_fim")) for v in _todas_v if v.get("periodo_fim")]
+            _datas_fim = [d for d in _datas_fim if d is not None]
+            _max_periodo_fim = max(_datas_fim) if _datas_fim else None
+            _dt_fim_dt = _parse_br(_dt_fim) if _dt_fim else None
+            if _max_periodo_fim and (_dt_fim_dt is None or _max_periodo_fim > _dt_fim_dt):
+                _dt_fim_ajustado = _max_periodo_fim.strftime("%d/%m/%Y")
+                self._log(
+                    f"  ℹ AJUSTE auto dataTerminoCalculo: '{_dt_fim or '(vazio)'}' → '{_dt_fim_ajustado}' "
+                    f"(há verba(s) com periodo_fim posterior — provavelmente indenização "
+                    f"de estabilidade gestante/acidentária ou similar)"
+                )
+                _dt_fim = _dt_fim_ajustado
+        except Exception as _e_dtc:
+            self._log(f"  ⚠ Ajuste dataTerminoCalculo: {_e_dtc}")
+        if _dt_fim:
             self._preencher_data("dataTerminoCalculo", _dt_fim, False)
 
         # Exceções de Carga Horária (períodos com CH diferente)
