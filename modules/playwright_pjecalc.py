@@ -5475,141 +5475,92 @@ class PJECalcPlaywright:
         # Ocorrências, NÃO Parâmetros — bug grave que impedia abrir o
         # form e fazia baseHistoricos NUNCA aparecer. Agora priorizamos
         # title="Parâmetros da Verba" exato (case-insensitive).
-        _kw = nome_na_lista.lower()[:18]
-        _clicou = self._page.evaluate(f"""() => {{
-            const kw = {repr(_kw)};
-            // CRÍTICO: identificar linhas via os links Parâmetros que têm
-            // ID estável formulario:listagem:N:j_id558. RichFaces dataTable
-            // não coloca id na <tr> diretamente — usa nos elementos filhos.
-            // Estratégia: pegar TODOS os links com title="Parâmetros da Verba"
-            // (1 por linha), subir ao <tr> ancestral, e matchar nome da verba.
-            const norm = s => (s||'').toLowerCase()
-                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '');
-            // CSS selector com [attr*=val i] case-insensitive não funciona
-            // em Firefox antigo. Usar filter JS robusto sobre TODOS os <a>.
-            const todosLinks = Array.from(document.querySelectorAll('a'));
-            const linksUnicos = todosLinks.filter(a => {{
-                if (!a.id) return false;
-                // Match por ID estável da listagem JSF
-                if (a.id.includes(':listagem:') && a.id.endsWith(':j_id558')) return true;
-                // Match por title contendo "parametro" (sem acento)
-                const t = norm(a.title || '');
-                if (t.includes('parametro') && !t.includes('ocorrencia') && !t.includes('exclui')) return true;
-                return false;
-            }});
-            // Coletar diagnóstico — mapa link.id → texto da TR ancestral
+        # ESTRATÉGIA REFATORADA (commit pos-análise Chrome MCP):
+        # 1. JS evaluate APENAS IDENTIFICA o link.id que casa o nome da verba
+        # 2. Click é feito via Playwright page.locator(...).click() — disparar
+        #    o postback JSF a4j corretamente. JS link.click() não aciona o
+        #    onclick=A4J.AJAX.Submit(...) de forma síncrona/confiável.
+        # Match por NOME EXATO (sem truncar em 18 chars) — evita confundir
+        # "INDENIZAÇÃO POR DANO MATERIAL" com "INDENIZAÇÃO POR DANO MORAL".
+        _nome_canonico = nome_na_lista.upper().strip()
+        _link_info = self._page.evaluate(f"""() => {{
+            const alvo = {repr(_nome_canonico)};
+            const norm = s => (s||'').toUpperCase()
+                .normalize('NFD').replace(/[\\u0300-\\u036f]/g, '')
+                .replace(/\\s+/g, ' ').trim();
+            const alvoNorm = norm(alvo);
+            // Pegar TODOS os links Parâmetros (1 por linha)
+            const linksUnicos = Array.from(document.querySelectorAll('a'))
+                .filter(a => {{
+                    if (!a.id) return false;
+                    if (a.id.includes(':listagem:') && a.id.endsWith(':j_id558')) return true;
+                    const t = norm(a.title || '');
+                    if (t.includes('PARAMETRO') && !t.includes('OCORRENCIA') && !t.includes('EXCLUI')) return true;
+                    return false;
+                }});
+            // Diagnóstico
             const diag = linksUnicos.map(link => {{
                 const tr = link.closest('tr');
-                return {{
-                    id: link.id,
-                    title: link.title,
-                    trText: tr ? norm(tr.textContent).substring(0, 120) : '(sem tr)'
-                }};
+                // Pegar nome da verba especificamente (1ª célula, sem o "Exibir")
+                let nome = '';
+                if (tr) {{
+                    const txt = tr.textContent.replace(/\\s+/g,' ').trim();
+                    nome = txt.replace(/Exibir.*$/i, '').trim();
+                }}
+                return {{id: link.id, nome: nome}};
             }});
-            for (const link of linksUnicos) {{
-                const tr = link.closest('tr');
-                if (!tr) continue;
-                // Estratégia 1: textContent da tr ancestral
-                const nomeTexto = norm(tr.textContent);
-                if (nomeTexto.includes(norm(kw))) {{
-                    link.click();
-                    return {{ok: true, via: 'param-link-direct', id: link.id}};
-                }}
-                // Estratégia 2: textContent das TRs vizinhas (acima/abaixo)
-                // RichFaces às vezes coloca nome em uma tr e ações em outra.
-                let scope = tr.parentElement;
-                if (scope) {{
-                    // Pegar todas as tr filhas próximas e juntar texto
-                    const trsIrmas = Array.from(scope.querySelectorAll(':scope > tr'));
-                    const idx = trsIrmas.indexOf(tr);
-                    const vizinhas = [
-                        trsIrmas[idx-1], trsIrmas[idx], trsIrmas[idx+1]
-                    ].filter(Boolean);
-                    const textoCombinado = norm(vizinhas.map(t => t.textContent).join(' '));
-                    if (textoCombinado.includes(norm(kw))) {{
-                        link.click();
-                        return {{ok: true, via: 'param-link-vizinha', id: link.id}};
-                    }}
+            // Match EXATO (nome canônico = alvo)
+            for (const d of diag) {{
+                if (norm(d.nome) === alvoNorm) {{
+                    return {{ok: true, via: 'exato', id: d.id, nome: d.nome}};
                 }}
             }}
-            // Estratégia 3: usar índice posicional baseado em ordem alfabética
-            // do nome canônico (verbas Expresso são listadas alfabeticamente)
-            const ordemAlfa = [
-                'ADICIONAL DE INSALUBRIDADE 20%', 'ADICIONAL NOTURNO 20%',
-                'AVISO PRÉVIO', 'COMISSÃO', 'DIÁRIAS - INTEGRAÇÃO AO SALÁRIO',
-                'DIFERENÇA SALARIAL',
-                'FÉRIAS + 1/3', 'GORJETA',
-                'HORAS EXTRAS 50%', 'HORAS IN ITINERE',
-                'INDENIZAÇÃO ADICIONAL', 'INDENIZAÇÃO POR DANO MATERIAL',
-                'INDENIZAÇÃO POR DANO MORAL',
-                'INTERVALO INTRAJORNADA',
-                'MULTA DO ARTIGO 477 DA CLT',
-                'SALDO DE SALÁRIO', '13º SALÁRIO'
-            ];
-            const idxEsperado = ordemAlfa.findIndex(n => norm(n).includes(norm(kw)));
-            if (idxEsperado >= 0 && idxEsperado < linksUnicos.length) {{
-                linksUnicos[idxEsperado].click();
-                return {{ok: true, via: 'idx-alfa-' + idxEsperado, id: linksUnicos[idxEsperado].id}};
+            // Match POR INCLUSÃO MUTUAL (nome inclui alvo OU alvo inclui nome)
+            // Para verbas onde o título tem variações (ex: "MULTA 477" vs "MULTA DO ARTIGO 477 DA CLT")
+            for (const d of diag) {{
+                const dNorm = norm(d.nome);
+                if (dNorm.includes(alvoNorm) || alvoNorm.includes(dNorm)) {{
+                    return {{ok: true, via: 'inclusao', id: d.id, nome: d.nome}};
+                }}
             }}
-            // Diagnóstico final: nada casou — devolver dump
-            if (linksUnicos.length > 0) {{
-                return {{ok: false, motivo: 'kw="' + kw + '" não casou em nenhuma TR', diag: diag}};
+            // Match por palavras-chave (todas as palavras do alvo presentes no nome)
+            const palavras = alvoNorm.split(' ').filter(p => p.length >= 3);
+            for (const d of diag) {{
+                const dNorm = norm(d.nome);
+                if (palavras.length > 0 && palavras.every(p => dNorm.includes(p))) {{
+                    return {{ok: true, via: 'palavras', id: d.id, nome: d.nome}};
+                }}
             }}
-            // FALLBACK: lógica antiga (para compatibilidade)
-            const rows = document.querySelectorAll('tr[id^="formulario:listagem:"], tbody tr');
-            for (const tr of rows) {{
-                const nomeCell = tr.querySelector('td:first-of-type, th:first-of-type') || tr;
-                const nomeTexto = norm(nomeCell.textContent);
-                if (!nomeTexto.includes(norm(kw))) continue;
-                // PRIORIDADE 1: title contém "parametro" (sem acento)
-                const titulados = [...tr.querySelectorAll('a[title], input[title]')];
-                for (const el of titulados) {{
-                    const t = norm(el.title);
-                    if (t.includes('parametro') && !t.includes('ocorrencia')) {{
-                        el.click();
-                        return {{ok: true, via: 'title=' + el.title, id: el.id}};
-                    }}
-                }}
-                // PRIORIDADE 2: textContent inclui "parâmetros" mas exclui "ocorrências" e "excluir"
-                const todosLinks = [...tr.querySelectorAll('a, input[type="button"], input[type="submit"], input[type="image"]')];
-                for (const el of todosLinks) {{
-                    const t = norm((el.title || '') + ' ' + (el.value || '') + ' ' +
-                                   (el.textContent || '') + ' ' + (el.alt || ''));
-                    if (t.includes('parametro') && !t.includes('ocorrencia') && !t.includes('exclui')) {{
-                        el.click();
-                        return {{ok: true, via: 'fallback-text', id: el.id}};
-                    }}
-                }}
-                // PRIORIDADE 3: ID contém "parametro/alterar/editar" (não usa j_id genérico)
-                const acoes = [...tr.querySelectorAll(
-                    'a[id*="parametro"], a[id*="alterar"], a[id*="editar"], ' +
-                    'input[id*="parametro"], input[id*="alterar"], input[id*="editar"]'
-                )];
-                if (acoes.length >= 1) {{
-                    acoes[0].click();
-                    return {{ok: true, via: 'id-match', id: acoes[0].id}};
-                }}
-                // PRIORIDADE 4 (último recurso): primeiro ícone (Parâmetros é
-                // sempre o PRIMEIRO ícone na ordem do DOM, NÃO o segundo)
-                const iconLinks = [...tr.querySelectorAll('a:has(img), a[onclick]')]
-                    .filter(a => {{
-                        const t = norm(a.textContent + ' ' + (a.title || '') + ' ' + (a.alt || ''));
-                        return !t.includes('exclui') && !t.includes('ocorrencia');
-                    }});
-                if (iconLinks.length >= 1) {{
-                    iconLinks[0].click();  // PRIMEIRO ícone = Parâmetros
-                    return {{ok: true, via: 'icon-first', id: iconLinks[0].id}};
-                }}
-                return {{ok: false, motivo: 'nenhum botão Parâmetros válido na linha'}};
-            }}
-            return {{ok: false, motivo: 'linha não encontrada'}};
+            return {{ok: false, motivo: 'nome="' + alvo + '" não casou', diag: diag}};
         }}""")
-        if not _clicou or not (_clicou.get("ok") if isinstance(_clicou, dict) else _clicou):
-            _motivo = _clicou.get("motivo", "?") if isinstance(_clicou, dict) else "evaluate retornou false"
-            self._log(f"  ⚠ Parâmetros '{nome_na_lista}': botão não encontrado ({_motivo})")
+        # Validar resultado e clicar via Playwright (não JS)
+        if not _link_info or not _link_info.get('ok'):
+            _motivo = _link_info.get('motivo', '?') if _link_info else 'evaluate falhou'
+            _diag = _link_info.get('diag', []) if _link_info else []
+            self._log(f"  ⚠ Parâmetros '{nome_na_lista}': {_motivo}. Diag: {_diag[:3]}")
             return False
-        if isinstance(_clicou, dict):
-            self._log(f"  → Parâmetros '{nome_na_lista}': click via {_clicou.get('via')} (id={_clicou.get('id')})")
+        _link_id = _link_info['id']
+        _nome_real = _link_info.get('nome', '?')
+        _via = _link_info.get('via', '?')
+        self._log(f"  → Parâmetros '{nome_na_lista}': identificado link {_link_id} via {_via} (linha='{_nome_real}')")
+        # CLICK VIA PLAYWRIGHT — dispara o postback JSF a4j corretamente
+        try:
+            _loc = self._page.locator(f"#{_link_id.replace(':', chr(92)+':')}")
+            if _loc.count() == 0:
+                # Fallback: usar attribute selector
+                _loc = self._page.locator(f"a[id='{_link_id}']")
+            _loc.first.click(timeout=8000)
+            _clicou = {"ok": True, "via": "playwright-click", "id": _link_id}
+        except Exception as _e_click:
+            self._log(f"  ⚠ Click Playwright falhou: {_e_click} — fallback JS")
+            try:
+                self._page.evaluate(f"() => {{ const e = document.getElementById({repr(_link_id)}); if (e) e.click(); }}")
+                _clicou = {"ok": True, "via": "js-fallback", "id": _link_id}
+            except Exception:
+                _clicou = {"ok": False, "motivo": str(_e_click)}
+        if not _clicou.get("ok"):
+            self._log(f"  ⚠ Click final falhou: {_clicou.get('motivo')}")
+            return False
 
         self._aguardar_ajax()
         self._page.wait_for_timeout(800)
