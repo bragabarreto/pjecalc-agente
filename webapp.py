@@ -1664,6 +1664,41 @@ async def api_detalhe_calculo(sessao_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.get("/api/pendencias/{sessao_id}")
+async def api_pendencias(sessao_id: str, db: Session = Depends(get_db)):
+    """Retorna o último relatório de pendências (JSON) para a sessão.
+
+    Quando a Liquidação falha, a automação salva um arquivo
+    `PENDENCIAS_<numProcesso>_<timestamp>.json` na OUTPUT_DIR. Este endpoint
+    localiza o mais recente para a sessão e devolve o conteúdo.
+    """
+    import json as _json
+    import glob as _glob
+    from config import OUTPUT_DIR
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo or not calculo.processo:
+        raise HTTPException(status_code=404, detail="Sessão/processo não encontrado")
+    _num = calculo.processo.numero_processo or ""
+    _num_limpo = _num.replace("-", "").replace(".", "").replace("/", "")
+    _padrao = str(Path(OUTPUT_DIR) / f"PENDENCIAS_{_num_limpo}_*.json")
+    _arquivos = sorted(_glob.glob(_padrao))
+    if not _arquivos:
+        return {
+            "tem_pendencias": False,
+            "processo": _num,
+            "mensagem": "Nenhum relatório de pendências encontrado para este processo.",
+        }
+    _ultimo = _arquivos[-1]
+    try:
+        _payload = _json.loads(Path(_ultimo).read_text(encoding="utf-8"))
+        _payload["tem_pendencias"] = True
+        _payload["arquivo"] = Path(_ultimo).name
+        return _payload
+    except Exception as _e:
+        raise HTTPException(status_code=500, detail=f"Erro ao ler relatório: {_e}")
+
+
 @app.get("/download/extensao")
 async def download_extensao():
     """

@@ -11147,6 +11147,140 @@ class PJECalcPlaywright:
             result["motivo"] = f"erro inesperado: {_e}"
             return result
 
+    def _parsear_pendencias(self, body_text: str) -> list[dict]:
+        """Categoriza o texto livre da seção 'Pendências do Cálculo' em itens
+        estruturados acionáveis. Retorna lista de dicts:
+            {"tipo": str, "verba": str|None, "raw": str}
+
+        Tipos reconhecidos (para auto-correção):
+            - multiplicador_alterado: "O parâmetro Multiplicador foi alterado..."
+            - historico_cs_sem_valor: "O Histórico Salarial X não possui valor..."
+            - indenizacao_sem_valor: "Para apurar a verba informada X deve existir..."
+            - ocorrencia_qtd_zero: "Todas as ocorrências da verba X foram salvas com qtd=0"
+            - ocorrencia_fora_periodo: "Todas as ocorrências da verba X devem estar contidas..."
+            - fgts_fora_periodo: "As ocorrências do FGTS iniciam em data diferente..."
+            - desconhecida: tudo o mais
+        """
+        import re as _re
+        pendencias: list[dict] = []
+        idx = body_text.find("Pendências do Cálculo")
+        if idx < 0:
+            return pendencias
+        fim = body_text.find("Total de Erros", idx)
+        bloco = body_text[idx:fim if fim > 0 else idx + 4000]
+        for linha in bloco.split("\n"):
+            l = linha.strip()
+            if not l or "Legenda" in l or "ícones" in l:
+                continue
+            low = l.lower()
+            tipo = "desconhecida"
+            verba = None
+            if "multiplicador" in low and "alterado" in low:
+                tipo = "multiplicador_alterado"
+                m = _re.search(r"verba\s+(.+?)\s*\.?\s*$", l, _re.IGNORECASE)
+                if m:
+                    verba = m.group(1).strip().rstrip('.')
+            elif "histórico salarial" in low and "não possui valor" in low:
+                tipo = "historico_cs_sem_valor"
+            elif "para apurar a verba informada" in low and "diferente de zero" in low:
+                tipo = "indenizacao_sem_valor"
+                m = _re.search(r"verba informada\s+(.+?)\s+deve existir", l, _re.IGNORECASE)
+                if m:
+                    verba = m.group(1).strip()
+            elif "todas as ocorrências" in low and "quantidade igual a zero" in low:
+                tipo = "ocorrencia_qtd_zero"
+                m = _re.search(r"verba\s+(.+?)\s+foram salvas", l, _re.IGNORECASE)
+                if m:
+                    verba = m.group(1).strip()
+            elif "ocorrências da verba" in low and "contidas no período" in low:
+                tipo = "ocorrencia_fora_periodo"
+                m = _re.search(r"ocorrências da verba\s+(.+?)\s+devem", l, _re.IGNORECASE)
+                if m:
+                    verba = m.group(1).strip()
+            elif "ocorrências do fgts" in low and "data diferente" in low:
+                tipo = "fgts_fora_periodo"
+            pendencias.append({"tipo": tipo, "verba": verba, "raw": l[:300]})
+        return pendencias
+
+    def _auto_corrigir_pendencias(self, pendencias: list[dict]) -> int:
+        """Aplica correções automáticas baseadas em pendências detectadas.
+        Retorna número de correções aplicadas com sucesso.
+
+        Estratégia genérica: para cada categoria, executa o helper apropriado.
+        Categorias sem helper conhecido são reportadas mas não bloqueiam.
+        """
+        if not pendencias:
+            return 0
+        n_fix = 0
+        tipos = {p["tipo"] for p in pendencias}
+        self._log(f"  🔧 Auto-correção iniciada — categorias detectadas: {sorted(tipos)}")
+
+        # 1. Multiplicador alterado / Ocorrências fora período → re-Regerar verbas
+        if tipos & {"multiplicador_alterado", "ocorrencia_fora_periodo",
+                    "ocorrencia_qtd_zero", "indenizacao_sem_valor"}:
+            self._log("  🔧 Regerar ocorrências de verbas (Sobrescrever)…")
+            try:
+                if self._regerar_ocorrencias_verbas():
+                    n_fix += 1
+                    self._log("  ✓ Regerar OK")
+            except Exception as _e:
+                self._log(f"  ⚠ Regerar falhou: {_e}")
+
+        # 2. CS sem valor → re-executar Recuperar Devidos
+        if "historico_cs_sem_valor" in tipos:
+            self._log("  🔧 Re-vincular Históricos Salariais à CS…")
+            try:
+                # Navegar para CS e re-executar parametrização das ocorrências
+                self._clicar_menu_lateral("Contribuição Social", obrigatorio=False)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1000)
+                _cs = (self._dados or {}).get("contribuicao_social", {}) or {}
+                self._configurar_parametros_ocorrencias_cs(_cs)
+                n_fix += 1
+                self._log("  ✓ CS re-vinculada")
+            except Exception as _e:
+                self._log(f"  ⚠ CS auto-fix falhou: {_e}")
+
+        # 3. FGTS fora do período → log apenas (correção complexa, requer ajuste manual)
+        if "fgts_fora_periodo" in tipos:
+            self._log("  ℹ FGTS fora do período — correção manual recomendada (não auto-corrigível com segurança)")
+
+        return n_fix
+
+    def _salvar_pendencias_relatorio(self, pendencias: list[dict]) -> str | None:
+        """Salva pendências em JSON na pasta output para o usuário consultar
+        após a falha. Retorna caminho do arquivo ou None.
+        """
+        try:
+            import json as _json
+            import time as _time
+            from config import OUTPUT_DIR
+            _num_proc = (self._dados or {}).get("processo", {}).get("numero", "desconhecido")
+            _num_limpo = _num_proc.replace("-", "").replace(".", "").replace("/", "")
+            _ts = _time.strftime("%Y%m%d_%H%M%S")
+            _path = Path(OUTPUT_DIR) / f"PENDENCIAS_{_num_limpo}_{_ts}.json"
+            _path.parent.mkdir(parents=True, exist_ok=True)
+            _payload = {
+                "processo": _num_proc,
+                "timestamp": _ts,
+                "total_pendencias": len(pendencias),
+                "categorias": sorted({p["tipo"] for p in pendencias}),
+                "pendencias": pendencias,
+                "instrucoes_usuario": (
+                    "A automação preencheu o cálculo no PJE-Calc Cidadão mas a "
+                    "Liquidação detectou pendências. Abra o PJE-Calc Cidadão "
+                    "(http://163.176.44.221:8000), navegue para o cálculo, "
+                    "corrija as pendências listadas acima e clique Liquidar/Exportar manualmente."
+                ),
+            }
+            _path.write_text(_json.dumps(_payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            self._log(f"  💾 Relatório de pendências salvo: {_path.name}")
+            self._log(f"PENDENCIAS_REPORT:{_path}")
+            return str(_path)
+        except Exception as _e:
+            self._log(f"  ⚠ Falha ao salvar relatório: {_e}")
+            return None
+
     def _clicar_liquidar(self) -> str | None:
         """
         Executa liquidação e exportação do .PJC no PJE-Calc.
@@ -11554,7 +11688,49 @@ class PJECalcPlaywright:
             self._log(f"  ⚠ Validação liquidação falhou: {_e_val} — marcando como erro")
             _liquidacao_erro_msg = "validacao_excecao"
 
-        # Retry: se liquidação falhou, re-abrir cálculo via Tela Inicial (nova conversação)
+        # ── Auto-correção pré-retry: parsear pendências e aplicar correções ────
+        # Antes de reabrir o cálculo, tentar consertar as pendências detectadas
+        # diretamente (Regerar verbas, Recuperar Devidos CS, etc.). Se algo for
+        # corrigido, vale a pena tentar Liquidar de novo na MESMA conversação.
+        _pendencias_estruturadas: list[dict] = []
+        if not _liquidacao_ok and _liquidacao_erro_msg:
+            try:
+                _body_now = self._page.locator("body").text_content(timeout=5000) or ""
+                _pendencias_estruturadas = self._parsear_pendencias(_body_now)
+                if _pendencias_estruturadas:
+                    self._log(f"  📊 Pendências estruturadas: {len(_pendencias_estruturadas)} item(ns)")
+                    _n_fix = self._auto_corrigir_pendencias(_pendencias_estruturadas)
+                    if _n_fix > 0:
+                        self._log(f"  🔧 {_n_fix} categoria(s) auto-corrigida(s) — tentando Liquidar novamente…")
+                        # Re-navegar para Liquidar e clicar
+                        self._clicar_menu_lateral("Liquidar", obrigatorio=False)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(1500)
+                        for _sel in ["input[id$='liquidar'][value='Liquidar']",
+                                     "input[value='Liquidar']", "a[id$='liquidar']"]:
+                            _l3 = self._page.locator(_sel)
+                            if _l3.count() > 0 and _l3.first.is_visible():
+                                _l3.first.click()
+                                self._aguardar_ajax(90000)
+                                self._page.wait_for_timeout(2000)
+                                _b3 = (self._page.locator("body").text_content(timeout=5000) or "").lower()
+                                if "não foram encontradas pendências" in _b3 or \
+                                   "liquidação realizada" in _b3 or \
+                                   "cálculo liquidado" in _b3 or \
+                                   "operação realizada com sucesso" in _b3:
+                                    self._log("  ✓ Liquidação OK após auto-correção!")
+                                    _liquidacao_ok = True
+                                    _liquidacao_erro_msg = None
+                                else:
+                                    # Re-parsear pendências para o relatório final
+                                    _b3_full = self._page.locator("body").text_content(timeout=5000) or ""
+                                    _pendencias_estruturadas = self._parsear_pendencias(_b3_full)
+                                    self._log("  ⚠ Pendências persistem após auto-correção")
+                                break
+            except Exception as _e_ac:
+                self._log(f"  ⚠ Auto-correção falhou: {_e_ac}")
+
+        # Retry: se liquidação ainda falhou, re-abrir cálculo via Tela Inicial (nova conversação)
         if not _liquidacao_ok and _liquidacao_erro_msg:
             self._log("  → Retry: re-abrindo cálculo via Tela Inicial para nova conversação…")
             try:
@@ -11637,10 +11813,31 @@ class PJECalcPlaywright:
 
         # ── Abortar se liquidação falhou ────────────────────────────────────────
         if not _liquidacao_ok:
-            self._log("  ✗ Liquidação FALHOU — abortando exportação.")
+            self._log("  ✗ Liquidação FALHOU — gerando relatório de pendências para o usuário.")
+            # Capturar pendências finais (após todas as tentativas)
+            try:
+                _body_final = self._page.locator("body").text_content(timeout=5000) or ""
+                _pend_finais = self._parsear_pendencias(_body_final)
+                if not _pend_finais and _pendencias_estruturadas:
+                    _pend_finais = _pendencias_estruturadas
+                if _pend_finais:
+                    self._salvar_pendencias_relatorio(_pend_finais)
+                    # Lista categorizada para o usuário
+                    _por_tipo: dict[str, list[str]] = {}
+                    for _p in _pend_finais:
+                        _por_tipo.setdefault(_p["tipo"], []).append(
+                            _p.get("verba") or _p.get("raw", "")[:80]
+                        )
+                    self._log("  📋 PENDÊNCIAS A CORRIGIR MANUALMENTE NO PJE-Calc Cidadão:")
+                    for _tipo, _itens in _por_tipo.items():
+                        _exemplos = ", ".join(_itens[:5])
+                        self._log(f"    • [{_tipo}] {_exemplos}")
+            except Exception as _e_rel:
+                self._log(f"  ⚠ Geração de relatório: {_e_rel}")
             self._log(
                 "ERRO_LIQUIDACAO: Não é possível exportar .PJC sem liquidação bem-sucedida. "
-                "Verifique pendências no PJE-Calc e tente novamente."
+                "O cálculo está PRESERVADO no PJE-Calc Cidadão (mesma conversação). "
+                "Acesse o PJE-Calc, corrija as pendências listadas acima e clique Liquidar/Exportar manualmente."
             )
             return None
 
