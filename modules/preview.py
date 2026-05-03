@@ -270,7 +270,15 @@ def gerar_previa(
             pct = hon.get("percentual")
             val = hon.get("valor_informado")
             ir_hon = hon.get("apurar_ir", False)
+            # Credor — regra de negócio (2026-05-03): "ADVOGADO DA PARTE
+            # [contraparte do devedor]". CPF/CNPJ não obrigatório.
+            credor = hon.get("nome_credor") or hon.get("credor") or (
+                "ADVOGADO DA PARTE RECLAMANTE" if devedor == "RECLAMADO"
+                else "ADVOGADO DA PARTE RECLAMADA" if devedor == "RECLAMANTE"
+                else "—"
+            )
             linhas.append(f"   [{i}] Devedor: {devedor} | Tipo: {tipo}")
+            linhas.append(f"       Credor: {credor}")
             linhas.append(f"       Base de apuração: {base}")
             if pct is not None:
                 linhas.append(f"       Percentual: {_fmt_pct(pct)}")

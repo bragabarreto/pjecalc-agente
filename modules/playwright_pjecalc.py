@@ -10306,53 +10306,42 @@ class PJECalcPlaywright:
             _dados = getattr(self, "_dados", {}) or {}
             _proc = _dados.get("processo", {}) if isinstance(_dados, dict) else {}
 
+            # ── REGRA DE NEGÓCIO (2026-05-03) — Honorários Advocatícios ──
+            # Credor preferencial = "ADVOGADO DA PARTE [contraparte do devedor]"
+            # Sem CPF/CNPJ. Usuário pode override via prévia (hon["nome_credor"]).
+            #
+            # Mapeamento:
+            #   devedor=RECLAMADO  → credor = "ADVOGADO DA PARTE RECLAMANTE"
+            #   devedor=RECLAMANTE → credor = "ADVOGADO DA PARTE RECLAMADA"
             _nome_credor = hon.get("nome_credor", "") or hon.get("credor", "")
             if not _nome_credor:
-                # Fallback: nome da parte que recebe os honorários
-                # Honorários do reclamado → credor é o reclamante (ou seu advogado)
-                # Honorários do reclamante → credor é o reclamado (ou seu advogado)
                 if devedor == "RECLAMADO":
-                    _nome_credor = _proc.get("advogado_reclamante", "") or _proc.get("reclamante", "") or _dados.get("reclamante", "") or "Credor do Reclamante"
+                    _nome_credor = "ADVOGADO DA PARTE RECLAMANTE"
                 else:
-                    _nome_credor = _proc.get("advogado_reclamado", "") or _proc.get("reclamado", "") or _dados.get("reclamado", "") or "Credor do Reclamado"
+                    _nome_credor = "ADVOGADO DA PARTE RECLAMADA"
             self._preencher("nomeCredor", _nome_credor[:100], False)
-            self._log(f"  → nomeCredor: {_nome_credor[:50]}")
+            self._log(f"  → nomeCredor: {_nome_credor[:60]}")
 
+            # CPF/CNPJ do credor: NÃO obrigatórios para advogado da parte adversa
+            # (regra de negócio 2026-05-03). Só preencher se a prévia trouxer
+            # explicitamente. Sem dado → pular silenciosamente.
             _tipo_doc = hon.get("tipo_documento_credor", "") or hon.get("tipo_doc_credor", "")
             _num_doc = hon.get("numero_documento_credor", "") or hon.get("doc_credor", "")
-            if not _num_doc:
-                # Usar CPF/CNPJ da parte correspondente (VÁLIDOS — passam check digit)
-                if devedor == "RECLAMADO":
-                    # Credor é reclamante → usar CPF do reclamante
-                    _num_doc = _proc.get("cpf_reclamante", "") or _proc.get("doc_reclamante", "")
-                    if not _tipo_doc:
-                        _tipo_doc = "CPF"
-                else:
-                    # Credor é reclamado → usar CNPJ do reclamado
-                    _num_doc = _proc.get("cnpj_reclamado", "") or _proc.get("doc_reclamado", "")
-                    if not _tipo_doc:
-                        _tipo_doc = "CNPJ"
-                # Último recurso: CPFs/CNPJs válidos conhecidos
-                if not _num_doc:
-                    if _tipo_doc == "CPF" or not _tipo_doc:
-                        _num_doc = "111.444.777-35"  # CPF válido (check digit ok)
-                        _tipo_doc = "CPF"
-                    else:
-                        _num_doc = "11.444.777/0001-61"  # CNPJ válido
-            if not _tipo_doc:
-                _tipo_doc = "CPF"
-
-            # Selecionar tipo ANTES de preencher número (máscara dinâmica depende disso)
-            (self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc)
-             or self._marcar_radio("tipoDocumentoCredor", _tipo_doc)
-             or self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
-             or self._selecionar("tipoDocumentoCredor", _tipo_doc, obrigatorio=False))
-            self._aguardar_ajax()
-            self._page.wait_for_timeout(500)
-
-            (self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
-             or self._preencher("documentoFiscalCredor", _num_doc, False))
-            self._log(f"  → doc credor: {_tipo_doc} {_num_doc}")
+            if _num_doc:
+                if not _tipo_doc:
+                    _tipo_doc = "CNPJ" if len(_num_doc.replace(".", "").replace("/", "").replace("-", "")) > 11 else "CPF"
+                # Selecionar tipo ANTES de preencher número (máscara dinâmica depende disso)
+                (self._marcar_radio("tipoDocumentoFiscalCredor", _tipo_doc)
+                 or self._marcar_radio("tipoDocumentoCredor", _tipo_doc)
+                 or self._selecionar("tipoDocumentoFiscalCredor", _tipo_doc, obrigatorio=False)
+                 or self._selecionar("tipoDocumentoCredor", _tipo_doc, obrigatorio=False))
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+                (self._preencher("numeroDocumentoFiscalCredor", _num_doc, False)
+                 or self._preencher("documentoFiscalCredor", _num_doc, False))
+                self._log(f"  → doc credor: {_tipo_doc} {_num_doc}")
+            else:
+                self._log("  ℹ doc credor: pulado (advogado da parte adversa, regra de negócio)")
 
             # Apurar IR
             if hon.get("apurar_ir"):
