@@ -6006,11 +6006,22 @@ class PJECalcPlaywright:
         # Sem isso: "Para apurar a verba informada X deve existir pelo menos
         # uma ocorrência com valor devido ou valor pago diferente de zero".
         if v and _gerou:
-            _val_mensal = v.get("valor_mensal_devido") or v.get("valor_informado")
+            # FIX (2026-05-03): aceitar `valor` da prévia como fonte primária,
+            # além de campos legacy. Estrutura padrão da prévia armazena valor
+            # mensal devido em `valor`. Sem este fallback, indenizações
+            # ficavam com valorDevido=0 e Liquidar gerava pendência
+            # "Para apurar a verba informada X deve existir pelo menos uma
+            # ocorrência com valor devido ou valor pago diferente de zero".
+            _val_mensal = (
+                v.get("valor_mensal_devido")
+                or v.get("valor_informado")
+                or v.get("valor_devido")
+                or v.get("valor")
+            )
             _nome_v = (v.get("nome_pjecalc") or v.get("nome_sentenca") or "").upper()
             _is_indenizacao = any(k in _nome_v for k in [
                 "INDENIZAÇÃO", "INDENIZACAO", "ESTABILIDADE", "DOBRO",
-                "DISPENSA DISCRIMINAT", "MATERNIDADE"
+                "DISPENSA DISCRIMINAT", "MATERNIDADE", "DANO MORAL", "DANO MATERIAL"
             ])
             # Para Indenização Calculada com período pós-rescisão e Maior Remuneração,
             # o "valor devido" mensal é a Maior Remuneração (default)
@@ -11202,6 +11213,110 @@ class PJECalcPlaywright:
             pendencias.append({"tipo": tipo, "verba": verba, "raw": l[:300]})
         return pendencias
 
+    def _corrigir_ocorrencias_verba_pendente(
+        self, verba_nome: str, categoria: str
+    ) -> bool:
+        """Auto-corrige pendências per-verba abrindo a página de Ocorrências
+        da Verba e re-executando Gerar + preencher termoQuant/valorDevido + Salvar.
+
+        Resolve as 4 categorias mais comuns de pendência por verba:
+          - multiplicador_alterado    → Regerar (Sobrescrever) ocorrências individuais
+          - ocorrencia_fora_periodo   → Regerar (filtra ocorrências fora do período)
+          - ocorrencia_qtd_zero       → Preenche termoQuant em todas ocorrências ativas
+          - indenizacao_sem_valor     → Preenche valorDevido em todas ocorrências ativas
+
+        Recupera o dict da verba em self._dados['verbas'] para extrair valor/quantidade
+        a serem preenchidos. Usa fallback determinístico quando dados ausentes:
+          - HE: quantidade_horas_extras → quantidade → 22h/mês (default conservador)
+          - Indenização: valor_mensal_devido → valor → maior_remuneracao do contrato
+
+        Retorna True se algo foi corrigido com sucesso.
+        """
+        if not verba_nome:
+            return False
+        # 1. Localizar dict da verba na prévia
+        _verbas_lista = (self._dados or {}).get("verbas", []) or []
+        _verba_alvo: dict | None = None
+        _verba_norm = verba_nome.strip().upper()
+        for _v in _verbas_lista:
+            for _campo in ("nome_pjecalc", "nome_sentenca", "nome_pjecalc_unico"):
+                _nv = (_v.get(_campo) or "").strip().upper()
+                if _nv and (_nv == _verba_norm or _verba_norm in _nv or _nv in _verba_norm):
+                    _verba_alvo = _v
+                    break
+            if _verba_alvo:
+                break
+        if not _verba_alvo:
+            self._log(f"  ⚠ Auto-fix per-verba: '{verba_nome}' não encontrada em self._dados['verbas']")
+            # Construir verba sintética com nome para tentar regerar mesmo assim
+            _verba_alvo = {"nome_pjecalc": verba_nome, "nome_sentenca": verba_nome}
+
+        # 2. Garantir que estamos na listagem de Verbas (verba-calculo.jsf)
+        try:
+            if "verba-calculo" not in self._page.url:
+                self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(800)
+        except Exception:
+            pass
+
+        # 3. Estratégia de fix por categoria:
+        #    - multiplicador_alterado / ocorrencia_fora_periodo: Re-abrir Parâmetros,
+        #      re-salvar (mesmo se sem mudança, força ajuste interno) → re-abrir
+        #      Ocorrências, Gerar (regenera com parâmetros atuais) → Salvar.
+        #    - ocorrencia_qtd_zero / indenizacao_sem_valor: Re-abrir Ocorrências
+        #      DIRETAMENTE, preencher termoQuant/valorDevido, Salvar.
+        #
+        # Optei por re-executar `_configurar_ocorrencias_verba` que já contém
+        # toda a lógica testada de Gerar + preencher termoQuant + valorDevido +
+        # filtrar período + Salvar. Garantir que as fallbacks estão presentes:
+        if categoria in ("ocorrencia_qtd_zero",):
+            # Garantir que existe quantidade — usar default conservador 22h/mês se ausente
+            if not (
+                _verba_alvo.get("quantidade")
+                or _verba_alvo.get("quantidade_mensal")
+                or _verba_alvo.get("quantidade_horas_extras_mensal")
+            ):
+                _verba_alvo["quantidade_mensal"] = 22
+                self._log(
+                    f"    ℹ '{verba_nome}': quantidade ausente — usando default 22h/mês"
+                )
+
+        if categoria in ("indenizacao_sem_valor",):
+            # Garantir valor — fallback para maior_remuneracao do contrato
+            _val = (
+                _verba_alvo.get("valor_mensal_devido")
+                or _verba_alvo.get("valor_informado")
+                or _verba_alvo.get("valor_devido")
+                or _verba_alvo.get("valor")
+            )
+            if not _val:
+                _ctr = (self._dados or {}).get("contrato", {}) or {}
+                _val = _ctr.get("maior_remuneracao") or _ctr.get("ultima_remuneracao")
+                if _val:
+                    _verba_alvo["valor"] = _val
+                    self._log(
+                        f"    ℹ '{verba_nome}': valor ausente — usando "
+                        f"maior_remuneracao={_val}"
+                    )
+
+        # 4. Re-executar configuração completa de ocorrências
+        # Para multiplicador_alterado / ocorrencia_fora_periodo, re-Gerar é o
+        # fix natural (a função sempre clica "Gerar Ocorrências" e Salva).
+        try:
+            _ok = self._configurar_ocorrencias_verba(verba_nome, v=_verba_alvo)
+            if _ok:
+                self._log(
+                    f"  ✓ Auto-fix '{verba_nome}' [{categoria}]: ocorrências regeradas e salvas"
+                )
+                return True
+            else:
+                self._log(f"  ⚠ Auto-fix '{verba_nome}' [{categoria}]: _configurar_ocorrencias_verba retornou False")
+                return False
+        except Exception as _e:
+            self._log(f"  ⚠ Auto-fix '{verba_nome}' [{categoria}]: erro {_e}")
+            return False
+
     def _auto_corrigir_pendencias(self, pendencias: list[dict]) -> int:
         """Aplica correções automáticas baseadas em pendências detectadas.
         Retorna número de correções aplicadas com sucesso.
@@ -11215,16 +11330,65 @@ class PJECalcPlaywright:
         tipos = {p["tipo"] for p in pendencias}
         self._log(f"  🔧 Auto-correção iniciada — categorias detectadas: {sorted(tipos)}")
 
-        # 1. Multiplicador alterado / Ocorrências fora período → re-Regerar verbas
+        # 1a. PRIMEIRO: Regerar global na aba Verbas (Sobrescrever).
+        # Isto sincroniza a estrutura de ocorrências com os parâmetros atuais
+        # (multiplicador, divisor, base) — fix base que precede o per-verba.
+        # ORDEM CRÍTICA: rodar Regerar PRIMEIRO, depois per-verba que preenche
+        # termoQuant/valorDevido. Se a ordem fosse invertida, o Regerar
+        # subsequente sobrescreveria os valores preenchidos.
         if tipos & {"multiplicador_alterado", "ocorrencia_fora_periodo",
                     "ocorrencia_qtd_zero", "indenizacao_sem_valor"}:
-            self._log("  🔧 Regerar ocorrências de verbas (Sobrescrever)…")
+            self._log("  🔧 Regerar global ocorrências de verbas (Sobrescrever)…")
             try:
                 if self._regerar_ocorrencias_verbas():
                     n_fix += 1
-                    self._log("  ✓ Regerar OK")
+                    self._log("  ✓ Regerar global OK")
             except Exception as _e:
-                self._log(f"  ⚠ Regerar falhou: {_e}")
+                self._log(f"  ⚠ Regerar global falhou: {_e}")
+
+        # 1b. SEGUNDO: Per-verba para cada pendência com `verba` identificada.
+        # Abre a página de Ocorrências de cada verba problemática e
+        # re-executa Gerar + preencher termoQuant/valorDevido + Salvar.
+        # Esta é a correção MAIS PRECISA e garante que termoQuant != 0 e
+        # valorDevido != 0 nas linhas ativas.
+        _CATEGORIAS_PER_VERBA = {
+            "multiplicador_alterado",
+            "ocorrencia_fora_periodo",
+            "ocorrencia_qtd_zero",
+            "indenizacao_sem_valor",
+        }
+        # Agrupar por verba (uma única passagem por verba mesmo com múltiplas
+        # categorias — _configurar_ocorrencias_verba já cobre todas)
+        _verbas_a_corrigir: dict[str, str] = {}
+        for _p in pendencias:
+            _vn = (_p.get("verba") or "").strip()
+            _t = _p.get("tipo") or ""
+            if _vn and _t in _CATEGORIAS_PER_VERBA:
+                # Prioridade de categoria: indenizacao_sem_valor > ocorrencia_qtd_zero
+                # > ocorrencia_fora_periodo > multiplicador_alterado
+                _prio_atual = {"multiplicador_alterado": 1, "ocorrencia_fora_periodo": 2,
+                               "ocorrencia_qtd_zero": 3, "indenizacao_sem_valor": 4}
+                if _vn not in _verbas_a_corrigir or \
+                   _prio_atual.get(_t, 0) > _prio_atual.get(_verbas_a_corrigir[_vn], 0):
+                    _verbas_a_corrigir[_vn] = _t
+        if _verbas_a_corrigir:
+            self._log(
+                f"  🔧 Auto-fix per-verba: {len(_verbas_a_corrigir)} verba(s) "
+                f"com pendência identificada"
+            )
+            for _vn, _t in _verbas_a_corrigir.items():
+                try:
+                    if self._corrigir_ocorrencias_verba_pendente(_vn, _t):
+                        n_fix += 1
+                except Exception as _e:
+                    self._log(f"  ⚠ Per-verba fix '{_vn}' [{_t}]: {_e}")
+                # Voltar à listagem de Verbas entre cada fix
+                try:
+                    self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                except Exception:
+                    pass
 
         # 2. CS sem valor → re-executar Recuperar Devidos
         if "historico_cs_sem_valor" in tipos:
