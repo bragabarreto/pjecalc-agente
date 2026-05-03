@@ -260,9 +260,41 @@ def validar_previa(
                 if _n:
                     nomes_principais.add(_n)
 
+        # Capturar data de demissão para validar consistência ocorrência↔período
+        _demissao_str = (dados or {}).get("contrato", {}).get("demissao") or \
+                        (dados or {}).get("contrato", {}).get("data_demissao") or ""
+        from datetime import datetime as _dt_v
+        def _parse_dt(s):
+            try: return _dt_v.strptime(str(s).strip(), "%d/%m/%Y")
+            except Exception: return None
+        _demissao_dt = _parse_dt(_demissao_str)
+
         for i, v in enumerate(todas_verbas):
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or f"verba#{i}"
             prefix = f"verba[{i}] '{nome[:30]}'"
+
+            # ── Consistência ocorrência↔período (PJE-Calc valida) ──
+            # Para ocorrência ≠ Mensal (Desligamento, Dezembro, Período Aquisitivo),
+            # o periodoFinal deve ser ≤ data da demissão. Caso contrário, o
+            # PJE-Calc bloqueia o salvar com:
+            #   "A data final não pode ser maior que a data demissão, para o
+            #    caso de Ocorrências de Pagamento diferentes de Mensal"
+            # Indenizações pós-contrato (estabilidade, dispensa discriminatória,
+            # salário-maternidade pós-rescisão) DEVEM usar Mensal.
+            _ocorr = (v.get("ocorrencia") or "").lower().strip()
+            _periodo_fim = _parse_dt(v.get("periodo_fim"))
+            if (
+                _ocorr and _ocorr != "mensal"
+                and _periodo_fim and _demissao_dt
+                and _periodo_fim > _demissao_dt
+            ):
+                res.erros.append(_erro(prefix, "ocorrencia",
+                    f"Ocorrência '{v.get('ocorrencia')}' incompatível com periodo_fim "
+                    f"{v.get('periodo_fim')} POSTERIOR à demissão {_demissao_str}. "
+                    f"PJE-Calc bloqueia: para ocorrências != Mensal, periodoFinal "
+                    f"deve ser ≤ data demissão. Para verbas pós-rescisão "
+                    f"(estabilidade, dispensa discriminatória, salário-maternidade), "
+                    f"use ocorrencia='Mensal'."))
 
             # Verba reflexa precisa apontar para uma principal existente
             if (v.get("tipo") or "").lower() == "reflexa" or v.get("eh_reflexa"):

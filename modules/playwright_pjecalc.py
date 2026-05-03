@@ -6952,6 +6952,28 @@ class PJECalcPlaywright:
             }.get(carac_enum, "MENSAL")
             ocorr_label = v.get("ocorrencia", "Mensal")
             ocorr_enum = ocorr_map.get(_norm_key(ocorr_label), _carac_default_ocorr)
+            # ── AUTO-FIX: ocorrência ≠ MENSAL é incompatível com periodo_fim
+            # POSTERIOR à demissão (PJE-Calc bloqueia salvar). Forçar MENSAL
+            # quando detectar essa inconsistência. Aplicável a verbas como
+            # REMUNERAÇÃO EM DOBRO POR DISPENSA DISCRIMINATÓRIA, Estabilidade
+            # Gestante/Acidentária, Salário-maternidade pós-rescisão, etc.
+            if ocorr_enum != "MENSAL":
+                try:
+                    from datetime import datetime as _dtv
+                    _pf = v.get("periodo_fim", "")
+                    _dem = (self._dados or {}).get("contrato", {}).get("demissao") or \
+                           (self._dados or {}).get("contrato", {}).get("data_demissao") or ""
+                    _pf_dt = _dtv.strptime(_pf, "%d/%m/%Y") if _pf else None
+                    _dem_dt = _dtv.strptime(_dem, "%d/%m/%Y") if _dem else None
+                    if _pf_dt and _dem_dt and _pf_dt > _dem_dt:
+                        self._log(
+                            f"  ℹ AUTO-FIX ocorrência: '{ocorr_label}' ({ocorr_enum}) "
+                            f"incompatível com periodo_fim {_pf} > demissão {_dem}. "
+                            f"Forçando MENSAL (verba pós-rescisão)."
+                        )
+                        ocorr_enum = "MENSAL"
+                except Exception:
+                    pass
             if ocorr_enum == _carac_default_ocorr:
                 self._log(
                     f"  ↳ ocorrencia {ocorr_enum} já definida por setCaracteristica({carac_enum}) — "
