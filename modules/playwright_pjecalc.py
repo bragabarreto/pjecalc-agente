@@ -733,6 +733,7 @@ class PJECalcPlaywright:
         self._calculo_url_base: str | None = None
         self._calculo_conversation_id: str | None = None
         self._dados: dict | None = None  # dados da sentença (armazenado em preencher_calculo)
+        self._verbas_mapeadas: dict | None = None  # verbas mapeadas (armazenado em preencher_calculo)
         self._reflexos_configurados: set[str] = set()  # nomes de verbas principais cujos reflexos foram configurados via botão
         self._verbas_expresso_ok: set[str] = set()  # nomes de verbas criadas com sucesso via Expresso (reflexos auto-gerados)
         self._strategy_engine = None  # VerbaStrategyEngine — inicializado lazy em fase_verbas
@@ -12252,6 +12253,11 @@ class PJECalcPlaywright:
         """
         # Armazenar dados para uso posterior (ex: re-abrir cálculo correto na liquidação)
         self._dados = dados
+        # Armazenar verbas_mapeadas para acesso em fases anteriores a fase_verbas
+        # (ex: ajuste de dataTerminoCalculo em fase_dados precisa ler periodo_fim
+        # de cada verba; resolução de verba_principal_ref na configuração de
+        # reflexas precisa ver as Principais)
+        self._verbas_mapeadas = verbas_mapeadas
 
         # ── Estimativas de progresso (segundos acumulados) — otimizado ────────
         # Estimativas atualizadas conforme ordem do manual (19 passos)
