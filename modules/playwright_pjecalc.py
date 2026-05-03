@@ -6693,6 +6693,48 @@ class PJECalcPlaywright:
                 _principal_ref = v.get("verba_principal_ref") or ""
                 if not _principal_ref and _m_principal:
                     _principal_ref = _m_principal.group(1).strip()
+
+                # RESOLUÇÃO INTELIGENTE: se _principal_ref bate com nome_sentenca
+                # de alguma Principal mas a verba foi salva no PJE-Calc com
+                # nome_pjecalc diferente, usar nome_pjecalc para o match
+                # (ex: estabilidade gestante onde nome_sentenca="INDENIZAÇÃO
+                # SUBSTITUTIVA DA ESTABILIDADE" e nome_pjecalc="INDENIZAÇÃO
+                # POR DANO MATERIAL").
+                if _principal_ref and self._verbas_mapeadas:
+                    try:
+                        _todas_p = (
+                            (self._verbas_mapeadas.get("predefinidas") or [])
+                            + (self._verbas_mapeadas.get("personalizadas") or [])
+                        )
+                        _ref_norm = _principal_ref.upper().strip()
+                        for _vp in _todas_p:
+                            if (_vp.get("tipo") or "").lower() == "reflexa" or _vp.get("eh_reflexa"):
+                                continue
+                            # Match em qualquer dos 3 campos da Principal
+                            for _campo in ("nome_pjecalc_unico", "nome_sentenca", "nome_pjecalc"):
+                                _val = (_vp.get(_campo) or "").upper().strip()
+                                if _val and _val == _ref_norm:
+                                    # Match exato — substituir _principal_ref
+                                    # pelo nome USADO NO PJE-CALC (descricao
+                                    # salvo no form Parâmetros = nome_pjecalc_unico
+                                    # OU nome_pjecalc)
+                                    _nome_real = (
+                                        _vp.get("nome_pjecalc_unico")
+                                        or _vp.get("nome_pjecalc")
+                                        or _vp.get("nome_sentenca")
+                                    )
+                                    if _nome_real and _nome_real.upper().strip() != _ref_norm:
+                                        self._log(
+                                            f"  ℹ Reflexa: ref '{_principal_ref}' → "
+                                            f"resolvida para '{_nome_real}' (nome PJE-Calc da Principal)"
+                                        )
+                                        _principal_ref = _nome_real
+                                    break
+                            else:
+                                continue
+                            break
+                    except Exception as _e_res:
+                        self._log(f"  ⚠ Resolução verba_principal_ref: {_e_res}")
                 if _principal_ref:
                     try:
                         _sel_result = self._page.evaluate(

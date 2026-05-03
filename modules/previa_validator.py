@@ -246,11 +246,19 @@ def validar_previa(
             (verbas_mapeadas.get("predefinidas") or [])
             + (verbas_mapeadas.get("personalizadas") or [])
         )
-        nomes_principais = {
-            (v.get("nome_pjecalc") or v.get("nome_sentenca") or "").upper().strip()
-            for v in todas_verbas
-            if (v.get("tipo") or "").lower() != "reflexa" and not v.get("eh_reflexa")
-        }
+        # Aceita match contra QUALQUER nome da Principal: nome_pjecalc,
+        # nome_pjecalc_unico ou nome_sentenca. Suporta cenários onde
+        # Expresso foi renomeado (ex: estabilidade gestante usando
+        # "INDENIZAÇÃO POR DANO MATERIAL" — reflexa pode apontar para
+        # qualquer dos dois nomes).
+        nomes_principais = set()
+        for v in todas_verbas:
+            if (v.get("tipo") or "").lower() == "reflexa" or v.get("eh_reflexa"):
+                continue
+            for chave in ("nome_pjecalc", "nome_pjecalc_unico", "nome_sentenca"):
+                _n = (v.get(chave) or "").upper().strip()
+                if _n:
+                    nomes_principais.add(_n)
 
         for i, v in enumerate(todas_verbas):
             nome = v.get("nome_pjecalc") or v.get("nome_sentenca") or f"verba#{i}"

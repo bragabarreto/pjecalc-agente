@@ -179,36 +179,84 @@ verba_principal_ref — EXATAMENTE o nome_sentenca da Principal correspondente
   - Ex: `INDENIZAÇÃO SUBSTITUTIVA DA ESTABILIDADE ACIDENTÁRIA` → Manual com nome próprio
   - Ex: `REMUNERAÇÃO EM DOBRO POR DISPENSA DISCRIMINATÓRIA` → Manual
 
+### 4.1 NOMES DA VERBA — `nome_sentenca` vs `nome_pjecalc` (REGRA CRÍTICA)
+
+Cada verba Principal tem 2 nomes que podem divergir:
+
+- **`nome_sentenca`**: como aparece na decisão judicial. Ex:
+  *"INDENIZAÇÃO SUBSTITUTIVA DA ESTABILIDADE ACIDENTÁRIA"*,
+  *"DIFERENÇA SALARIAL (integração do salário pago 'por fora')"*
+- **`nome_pjecalc`**: nome EXATO da verba como será criada no PJE-Calc.
+  Para Expresso, é o nome canônico do catálogo. Ex:
+  *"INDENIZAÇÃO POR DANO MATERIAL"*, *"DIFERENÇA SALARIAL"*
+
+**Quando divergem (caso típico de Expresso renomeado)**:
+- Estabilidade Gestante/Acidentária → `nome_pjecalc = "INDENIZAÇÃO POR DANO MATERIAL"`
+- Salário-maternidade pós-rescisão → `nome_pjecalc = "INDENIZAÇÃO POR DANO MATERIAL"`
+- Diferenças do salário "por fora" → `nome_pjecalc = "DIFERENÇA SALARIAL"`
+
+**O QUE FAZER**:
+1. Sempre informe AMBOS no relatório: `nome_sentenca` (para humanos)
+   + `nome_pjecalc` (para o agente)
+2. **`verba_principal_ref` da Reflexa DEVE casar com `nome_pjecalc` da Principal**
+   (não com `nome_sentenca`). Isso é porque o agente busca a verba na listagem
+   pelo NOME REGISTRADO no PJE-Calc, que é o `nome_pjecalc`.
+3. **Se houver MAIS DE UMA Principal com mesmo `nome_pjecalc`** (ex: 2 indenizações
+   por dano material), DIFERENCIAR via `nome_pjecalc_unico` (sufixo identificador):
+   - Principal A: `nome_pjecalc = "INDENIZAÇÃO POR DANO MATERIAL"`,
+     `nome_pjecalc_unico = "INDENIZAÇÃO POR DANO MATERIAL — Estabilidade"`
+   - Principal B: `nome_pjecalc = "INDENIZAÇÃO POR DANO MATERIAL"`,
+     `nome_pjecalc_unico = "INDENIZAÇÃO POR DANO MATERIAL — Pensão"`
+   - Reflexa de A: `verba_principal_ref = "INDENIZAÇÃO POR DANO MATERIAL — Estabilidade"`
+
+> **No PJE-Calc** o usuário pode editar o nome da verba Expresso (campo
+> `descricao` no form Parâmetros) — o agente faz isso automaticamente quando
+> `nome_pjecalc_unico` é informado, sufixando para evitar colisão.
+
 ### 5. REGRA DE OURO — Vinculação Reflexa↔Principal
 
-**O `verba_principal_ref` da Reflexa DEVE ser IDÊNTICO ao `nome_sentenca` da Principal.**
-PJE-Calc faz string match — qualquer divergência (singular/plural, parênteses,
-complemento) gera erro `"verba reflexa sem principal"` e BLOQUEIA a Liquidação.
+**O `verba_principal_ref` da Reflexa DEVE ser IDÊNTICO ao `nome_pjecalc` (ou
+`nome_pjecalc_unico` quando houver colisão) da Principal correspondente.**
 
-❌ **ERRADO**:
+O agente busca a verba na **listagem de Verbas do PJE-Calc** (que mostra o
+`descricao` salvo no form Parâmetros). Se a Reflexa apontar para um nome
+diferente do registrado, o agente NÃO consegue vincular e a Liquidação falha.
+
+✅ **CORRETO** (caso simples — `nome_pjecalc` = `nome_sentenca`):
 ```
 Principal: nome_sentenca = "DIFERENÇA SALARIAL"
-Reflexa:   verba_principal_ref = "DIFERENÇAS SALARIAIS (integração do salário por fora)"
-```
-
-✅ **CORRETO** (3 abordagens válidas):
-
-**(a) Mesmo nome literal nos dois**:
-```
-Principal: nome_sentenca = "DIFERENÇA SALARIAL"
+           nome_pjecalc  = "DIFERENÇA SALARIAL"
 Reflexa:   verba_principal_ref = "DIFERENÇA SALARIAL"
 ```
 
-**(b) Nome jurídico completo nos dois**:
+✅ **CORRETO** (Expresso renomeado — `nome_pjecalc` ≠ `nome_sentenca`):
 ```
-Principal: nome_sentenca = "DIFERENÇAS SALARIAIS (integração do salário por fora)"
-Reflexa:   verba_principal_ref = "DIFERENÇAS SALARIAIS (integração do salário por fora)"
+Principal: nome_sentenca = "INDENIZAÇÃO SUBSTITUTIVA DA ESTABILIDADE ACIDENTÁRIA"
+           nome_pjecalc  = "INDENIZAÇÃO POR DANO MATERIAL"
+Reflexa:   verba_principal_ref = "INDENIZAÇÃO POR DANO MATERIAL"
+                                 ↑ usa nome_pjecalc, NÃO nome_sentenca
 ```
 
-**(c) Reflexa cita a principal pelo título da seção**:
+✅ **CORRETO** (colisão — múltiplas Principais com mesmo `nome_pjecalc`):
 ```
-Principal: nome_sentenca = "DIFERENÇAS SALARIAIS"
-Reflexa:   verba_principal_ref = "DIFERENÇAS SALARIAIS"
+Principal A: nome_sentenca = "Indenização Estabilidade Acidentária"
+             nome_pjecalc = "INDENIZAÇÃO POR DANO MATERIAL"
+             nome_pjecalc_unico = "INDENIZAÇÃO POR DANO MATERIAL — Estabilidade"
+
+Principal B: nome_sentenca = "Pensionamento por dano material"
+             nome_pjecalc = "INDENIZAÇÃO POR DANO MATERIAL"
+             nome_pjecalc_unico = "INDENIZAÇÃO POR DANO MATERIAL — Pensão"
+
+Reflexa A.1: verba_principal_ref = "INDENIZAÇÃO POR DANO MATERIAL — Estabilidade"
+Reflexa B.1: verba_principal_ref = "INDENIZAÇÃO POR DANO MATERIAL — Pensão"
+```
+
+❌ **ERRADO**:
+```
+Principal: nome_pjecalc = "INDENIZAÇÃO POR DANO MATERIAL"
+Reflexa:   verba_principal_ref = "INDENIZAÇÃO SUBSTITUTIVA DA ESTABILIDADE ACIDENTÁRIA"
+                                 ↑ aponta para nome_sentenca da Principal — NÃO casa
+                                   no PJE-Calc, agente não acha a Principal
 ```
 
 ### 5.1 Indenização Estabilidade Gestante / Acidentária (período pós-contrato)
