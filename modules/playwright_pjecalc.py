@@ -5497,14 +5497,63 @@ class PJECalcPlaywright:
                 if (t.includes('parametro') && !t.includes('ocorrencia') && !t.includes('exclui')) return true;
                 return false;
             }});
+            // Coletar diagnóstico — mapa link.id → texto da TR ancestral
+            const diag = linksUnicos.map(link => {{
+                const tr = link.closest('tr');
+                return {{
+                    id: link.id,
+                    title: link.title,
+                    trText: tr ? norm(tr.textContent).substring(0, 120) : '(sem tr)'
+                }};
+            }});
             for (const link of linksUnicos) {{
                 const tr = link.closest('tr');
                 if (!tr) continue;
+                // Estratégia 1: textContent da tr ancestral
                 const nomeTexto = norm(tr.textContent);
-                if (!nomeTexto.includes(norm(kw))) continue;
-                // achou a linha correta — clicar este link específico
-                link.click();
-                return {{ok: true, via: 'param-link-direct', id: link.id}};
+                if (nomeTexto.includes(norm(kw))) {{
+                    link.click();
+                    return {{ok: true, via: 'param-link-direct', id: link.id}};
+                }}
+                // Estratégia 2: textContent das TRs vizinhas (acima/abaixo)
+                // RichFaces às vezes coloca nome em uma tr e ações em outra.
+                let scope = tr.parentElement;
+                if (scope) {{
+                    // Pegar todas as tr filhas próximas e juntar texto
+                    const trsIrmas = Array.from(scope.querySelectorAll(':scope > tr'));
+                    const idx = trsIrmas.indexOf(tr);
+                    const vizinhas = [
+                        trsIrmas[idx-1], trsIrmas[idx], trsIrmas[idx+1]
+                    ].filter(Boolean);
+                    const textoCombinado = norm(vizinhas.map(t => t.textContent).join(' '));
+                    if (textoCombinado.includes(norm(kw))) {{
+                        link.click();
+                        return {{ok: true, via: 'param-link-vizinha', id: link.id}};
+                    }}
+                }}
+            }}
+            // Estratégia 3: usar índice posicional baseado em ordem alfabética
+            // do nome canônico (verbas Expresso são listadas alfabeticamente)
+            const ordemAlfa = [
+                'ADICIONAL DE INSALUBRIDADE 20%', 'ADICIONAL NOTURNO 20%',
+                'AVISO PRÉVIO', 'COMISSÃO', 'DIÁRIAS - INTEGRAÇÃO AO SALÁRIO',
+                'DIFERENÇA SALARIAL',
+                'FÉRIAS + 1/3', 'GORJETA',
+                'HORAS EXTRAS 50%', 'HORAS IN ITINERE',
+                'INDENIZAÇÃO ADICIONAL', 'INDENIZAÇÃO POR DANO MATERIAL',
+                'INDENIZAÇÃO POR DANO MORAL',
+                'INTERVALO INTRAJORNADA',
+                'MULTA DO ARTIGO 477 DA CLT',
+                'SALDO DE SALÁRIO', '13º SALÁRIO'
+            ];
+            const idxEsperado = ordemAlfa.findIndex(n => norm(n).includes(norm(kw)));
+            if (idxEsperado >= 0 && idxEsperado < linksUnicos.length) {{
+                linksUnicos[idxEsperado].click();
+                return {{ok: true, via: 'idx-alfa-' + idxEsperado, id: linksUnicos[idxEsperado].id}};
+            }}
+            // Diagnóstico final: nada casou — devolver dump
+            if (linksUnicos.length > 0) {{
+                return {{ok: false, motivo: 'kw="' + kw + '" não casou em nenhuma TR', diag: diag}};
             }}
             // FALLBACK: lógica antiga (para compatibilidade)
             const rows = document.querySelectorAll('tr[id^="formulario:listagem:"], tbody tr');
