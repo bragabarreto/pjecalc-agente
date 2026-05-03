@@ -1026,6 +1026,23 @@ async def editar_estrategia(
         sub_campo = campo.split(".", 1)[1]
         estrategia_atual.setdefault("parametros", {})[sub_campo] = valor
         estrategia_atual["baseado_em"] = "usuario"
+        # CORREÇÃO 2026-05-03: sincronizar parametros.X com verba.X (campo raiz)
+        # Validador e Playwright leem verba.ocorrencia / verba.caracteristica
+        # / verba.base_calculo / verba.percentual diretamente. Sem este sync,
+        # editar via UI ("Mensal") não atualiza o campo raiz e o validador
+        # continua reclamando do valor antigo ("Desligamento").
+        _SYNC_RAIZ = {
+            "ocorrencia": "ocorrencia",
+            "caracteristica": "caracteristica",
+            "base_calculo": "base_calculo",
+            "tipo_valor": "tipo_valor",
+            "multiplicador": "multiplicador",
+            "divisor": "divisor",
+            "quantidade": "quantidade",
+            "percentual": "percentual",
+        }
+        if sub_campo in _SYNC_RAIZ:
+            verba[_SYNC_RAIZ[sub_campo]] = valor
     else:
         estrategia_atual[campo] = valor
         estrategia_atual["baseado_em"] = "usuario"
