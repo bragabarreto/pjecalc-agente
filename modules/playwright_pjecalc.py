@@ -4778,9 +4778,22 @@ class PJECalcPlaywright:
             # Configurar Parâmetros + Ocorrências de cada verba
             # (período, percentual, base de cálculo — dados extraídos da sentença)
             try:
-                self._pos_expresso_parametros_ocorrencias(predefinidas)
+                _falhou_pos = self._pos_expresso_parametros_ocorrencias(predefinidas) or []
             except Exception as _e_pos:
                 self._log(f"  ⚠ Pós-expresso parâmetros: {_e_pos} — continuando")
+                _falhou_pos = []
+            # Verbas que falharam no Expresso (não casaram listagem) → enviar para Manual
+            if _falhou_pos:
+                _nomes_falhou = [
+                    (v.get("nome_pjecalc") or v.get("nome_sentenca") or "?")
+                    for v in _falhou_pos
+                ]
+                self._log(
+                    f"  → {len(_falhou_pos)} verba(s) não casaram na listagem Expresso "
+                    f"— reagendadas para Manual: {_nomes_falhou}"
+                )
+                # Acumular em _nao_encontradas para o caller adicioná-las a personalizadas
+                _nao_encontradas.extend(_nomes_falhou)
         else:
             self._log("  ⚠ Nenhuma verba marcada no Expresso")
 
@@ -6043,15 +6056,19 @@ class PJECalcPlaywright:
         self._log(f"  ✓ Ocorrências '{nome_na_lista}': {'geradas e ' if _gerou else ''}salvas")
         return True
 
-    def _pos_expresso_parametros_ocorrencias(self, predefinidas: list) -> None:
+    def _pos_expresso_parametros_ocorrencias(self, predefinidas: list) -> list:
         """Após salvar o Expresso: configura Parâmetros e Ocorrências de cada verba principal.
 
         Iteração sobre a listagem verbas-para-calculo.jsf:
         para cada verba principal (não reflexa) com dados disponíveis →
         abre Parâmetros da Verba, preenche, salva → abre Ocorrências, gera, salva.
         """
+        # Lista de verbas que falharam no Expresso (não casaram na listagem)
+        # e devem ser reprocessadas como Manual pelo caller.
+        _falhou_expresso: list = []
+
         if not predefinidas:
-            return
+            return _falhou_expresso
 
         # Garantir listagem — se page está em estado inválido (500, home), re-abrir cálculo.
         # URL real (auditada via Chrome MCP no PJE-Calc Institucional 2.15.1):
@@ -6125,15 +6142,23 @@ class PJECalcPlaywright:
             # Sempre tentar — _configurar_parametros_verba aplicará baseHistoricos
             # mesmo sem dados específicos (apenas para selecionar histórico padrão).
             try:
-                self._configurar_parametros_verba(v, nome)
+                _ok = self._configurar_parametros_verba(v, nome)
             except Exception as _e:
                 self._log(f"  ⚠ _configurar_parametros_verba('{nome}'): {_e}")
+                _ok = False
+            if not _ok:
+                # Verba não casou na listagem Expresso — fila para Manual
+                self._log(f"  ↪ '{nome}' não encontrada na listagem Expresso — adicionando a fila Manual")
+                _falhou_expresso.append(v)
+                continue
 
             # Ocorrências — sempre tentar (gerar + salvar confirma o período)
             try:
                 self._configurar_ocorrencias_verba(nome, v=v)
             except Exception as _e:
                 self._log(f"  ⚠ _configurar_ocorrencias_verba('{nome}'): {_e}")
+
+        return _falhou_expresso
 
     def _configurar_reflexos_expresso(self, verbas: list) -> None:
         """Configura reflexos de verbas Expresso via link 'Exibir' na listagem de verbas.
@@ -11320,10 +11345,20 @@ class PJECalcPlaywright:
         # Localizar botão Liquidar
         # /pages/calculo/liquidacao.xhtml: <a4j:commandButton id="liquidar" value="Liquidar">
         # /pages/verba/liquidacao.xhtml: <a4j:commandButton id="incluir" value="Liquidar">
+        # Algumas versões do PJE-Calc renderizam Liquidar como <a4j:commandLink>
+        # (anchor <a>) ao invés de input. Tentamos ambos os tipos.
         loc = None
-        for sel in ["input[id$='liquidar'][value='Liquidar']",
-                    "input[value='Liquidar']",
-                    "[id$='incluir'][value='Liquidar']"]:
+        for sel in [
+            "input[id$='liquidar'][value='Liquidar']",
+            "input[value='Liquidar']",
+            "[id$='incluir'][value='Liquidar']",
+            "input[id$=':liquidar']",
+            "a[id$='liquidar']",
+            "a[id$=':liquidar']",
+            "button[id$='liquidar']",
+            "input[type='submit'][value*='Liquidar' i]",
+            "input[type='button'][value*='Liquidar' i]",
+        ]:
             try:
                 candidate = self._page.locator(sel)
                 if candidate.count() > 0 and candidate.first.is_visible():
@@ -11333,20 +11368,95 @@ class PJECalcPlaywright:
             except Exception:
                 continue
 
+        # Tentativa adicional: locator por texto exato (anchor ou button visível)
         if loc is None:
-            # JS global fallback — click visible input/button with value "Liquidar"
+            try:
+                _by_text = self._page.get_by_role("link", name="Liquidar", exact=True)
+                if _by_text.count() > 0 and _by_text.first.is_visible():
+                    loc = _by_text.first
+                    self._log("  ℹ Botão encontrado: role=link name='Liquidar'")
+            except Exception:
+                pass
+        if loc is None:
+            try:
+                _by_text = self._page.get_by_role("button", name="Liquidar", exact=True)
+                if _by_text.count() > 0 and _by_text.first.is_visible():
+                    loc = _by_text.first
+                    self._log("  ℹ Botão encontrado: role=button name='Liquidar'")
+            except Exception:
+                pass
+
+        if loc is None:
+            # JS global fallback — varre TODOS os tipos de elemento clicável visíveis
             self._log("  Tentando Liquidar via JS global…")
+            # Diagnóstico: listar todos os candidatos visíveis com 'Liquidar' no texto
+            try:
+                _diag = self._page.evaluate("""() => {
+                    const all = [...document.querySelectorAll(
+                        'input, button, a, [onclick], [role="button"]'
+                    )];
+                    const matches = all.filter(el => {
+                        const v = (el.value || '').trim();
+                        const t = (el.textContent || '').trim();
+                        return (v === 'Liquidar' || t === 'Liquidar' ||
+                                v.toLowerCase().includes('liquidar') ||
+                                t.toLowerCase() === 'liquidar');
+                    });
+                    return matches.slice(0, 10).map(el => ({
+                        tag: el.tagName,
+                        id: el.id || '',
+                        cls: el.className || '',
+                        type: el.type || '',
+                        value: el.value || '',
+                        text: (el.textContent || '').trim().slice(0, 50),
+                        visible: el.offsetParent !== null,
+                        disabled: !!el.disabled,
+                    }));
+                }""")
+                if _diag:
+                    self._log(f"  ℹ Diag candidatos Liquidar ({len(_diag)}): {_diag}")
+            except Exception:
+                pass
             clicou = self._page.evaluate("""() => {
-                const all = [...document.querySelectorAll('input[type="submit"], button')];
+                // Buscar qualquer elemento clicável com texto/value 'Liquidar' visível
+                const all = [...document.querySelectorAll(
+                    'input[type="submit"], input[type="button"], button, a, [onclick], [role="button"]'
+                )];
                 for (const el of all) {
-                    const val = (el.value || el.textContent || '').trim();
-                    if (val === 'Liquidar' && el.offsetParent !== null) {
-                        el.click(); return true;
+                    const val = (el.value || '').trim();
+                    const txt = (el.textContent || '').trim();
+                    const isLiq = (val === 'Liquidar' || txt === 'Liquidar' ||
+                                   val.toLowerCase() === 'liquidar' ||
+                                   txt.toLowerCase() === 'liquidar');
+                    if (isLiq && el.offsetParent !== null && !el.disabled) {
+                        try { el.click(); return true; } catch(e) {}
+                        // Fallback: disparar evento click programaticamente
+                        try {
+                            el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                            return true;
+                        } catch(e) {}
                     }
                 }
                 return false;
             }""")
             if not clicou:
+                # Antes de abortar, capturar pendências e screenshot diagnóstico.
+                self._screenshot_fase("liquidacao_botao_nao_encontrado")
+                try:
+                    _pend = self._page.evaluate("""() => {
+                        const body = document.body.innerText || '';
+                        const idx = body.indexOf('Pendências');
+                        if (idx < 0) return null;
+                        const fim = body.indexOf('Total de Erros', idx);
+                        return body.slice(idx, fim > 0 ? fim : idx + 2000);
+                    }""")
+                    if _pend:
+                        _linhas = [l.strip() for l in _pend.split('\n') if l.strip()]
+                        self._log(f"  📋 Pendências antes de Liquidar ({len(_linhas)} itens):")
+                        for _l in _linhas[:25]:
+                            self._log(f"    • {_l[:200]}")
+                except Exception:
+                    pass
                 raise RuntimeError(
                     "Botão Liquidar não encontrado em nenhuma estratégia. "
                     "Verifique se todos os campos obrigatórios foram preenchidos."
