@@ -5773,13 +5773,18 @@ class PJECalcPlaywright:
             _preencheu = True
 
         if not _preencheu:
-            self._log(f"  → Parâmetros '{nome_na_lista}': sem dados a preencher — cancelando")
-            # Voltar sem salvar
+            self._log(f"  → Parâmetros '{nome_na_lista}': sem dados a preencher — mantendo defaults Expresso")
+            # Voltar sem salvar — defaults do Expresso já estão configurados
             _btn_cancelar = self._page.locator("[id$='cancelar']")
             if _btn_cancelar.count() > 0:
                 _btn_cancelar.first.click()
                 self._aguardar_ajax()
-            return False
+            # IMPORTANTE: retornar True — verba foi encontrada na listagem e Expresso
+            # já configurou defaults. Não há failure aqui; "sem dados" significa que
+            # não há ajustes adicionais a fazer (verbas como INDENIZAÇÃO POR DANO MORAL,
+            # MULTA 477 etc. não precisam de período específico — usam defaults).
+            # Retornar False aqui causaria fallback Manual indevido.
+            return True
 
         # 3. Salvar
         self._clicar_salvar()
