@@ -8155,9 +8155,103 @@ class PJECalcPlaywright:
                     self._log(f"    ✓ Acessou Parâmetros via JS: …{_js_nav[-40:]}")
                     _clicou = True
 
+            # Fallback adicional: input button id="formulario:ocorrencias"
+            # (DOM auditado 2026-05-03: na página inss.jsf, esse é o botão
+            # "Ocorrências" que abre parametrizar-inss.jsf)
+            if not _clicou:
+                try:
+                    _btn_oc = self._page.locator("input[id$='ocorrencias']")
+                    if _btn_oc.count() > 0:
+                        _btn_oc.first.click(force=True)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(1500)
+                        self._log("    ✓ Acessou Parâmetros via input[id$='ocorrencias']")
+                        _clicou = True
+                except Exception:
+                    pass
+
             if not _clicou:
                 self._log("    ⚠ Link Parâmetros das Ocorrências não encontrado — usando defaults")
                 return
+
+            # ── CORREÇÃO E12 (2026-05-03) — Recuperar valores dos históricos
+            # salariais para as ocorrências da CS. DOM auditado em
+            # parametrizar-inss.jsf:
+            #   formulario:recuperarDevidos (button) — recupera do histórico
+            #   formulario:copiarDevidos (button) — copia pagos→devidos
+            #   formulario:regerar (button "Regerar")
+            #   formulario:salvar (button "Salvar")
+            #   formulario:listagemOcorrenciasDevidos:N:baseHistoricoDevido (text)
+            # Sem isso, Liquidador alerta:
+            #   "O Histórico Salarial X não possui valor cadastrado para todas
+            #    as ocorrências da Contribuição Social sobre Salários Devidos"
+            try:
+                # 1. Recuperar valores dos históricos para os campos baseHistoricoDevido
+                _btn_rec = self._page.locator("input[id$='recuperarDevidos']")
+                if _btn_rec.count() > 0:
+                    self._page.once("dialog", lambda d: d.accept())
+                    _btn_rec.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(1500)
+                    self._log("    ✓ Recuperar Devidos clicado (puxa valores do histórico)")
+                # 2. Copiar Pagos → Devidos (caso CS sobre salários pagos seja igual)
+                _btn_cop = self._page.locator("input[id$='copiarDevidos']")
+                if _btn_cop.count() > 0:
+                    try:
+                        self._page.once("dialog", lambda d: d.accept())
+                        _btn_cop.first.click(force=True)
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(1000)
+                        self._log("    ✓ Copiar Devidos→Pagos clicado")
+                    except Exception:
+                        pass
+                # 3. Diagnóstico: contar quantas ocorrências têm valor != 0
+                _diag = self._page.evaluate("""() => {
+                    const inputs = document.querySelectorAll(
+                        'input[id*="listagemOcorrenciasDevidos"][id*="baseHistoricoDevido"]'
+                    );
+                    let total = inputs.length, naoZero = 0;
+                    inputs.forEach(i => {
+                        const v = (i.value || '').replace(',','.').trim();
+                        if (v && parseFloat(v) > 0) naoZero++;
+                    });
+                    return {total, naoZero};
+                }""")
+                self._log(f"    ℹ Ocorrências CS: {_diag.get('naoZero', 0)}/{_diag.get('total', 0)} com valor != 0")
+
+                # 4. Se ainda há linhas com valor zero E o histórico tem valor único
+                # (ex: salário base único todo o período), preencher manualmente
+                # via "Alteração em lote" usando dataInicial/Final + salariosPago + Aplicar
+                if _diag.get('naoZero', 0) < _diag.get('total', 0):
+                    try:
+                        _hist = (self._dados or {}).get("historico_salarial") or []
+                        # Ordenar por data inicial para aplicar em lote
+                        for _h in _hist:
+                            _ci = _h.get("data_inicio") or _h.get("competencia_inicial")
+                            _cf = _h.get("data_fim") or _h.get("competencia_final")
+                            _val = _h.get("valor")
+                            if not (_ci and _cf and _val is not None):
+                                continue
+                            self._preencher_data("dataInicialInputDate", _ci, obrigatorio=False)
+                            self._preencher_data("dataFinalInputDate", _cf, obrigatorio=False)
+                            self._preencher("salariosPago", _fmt_br(float(_val)), False)
+                            self._preencher("salariosDevidos", _fmt_br(float(_val)), False)
+                            # Botão "Aplicar" / "Alterar"
+                            _btn_apl = self._page.locator(
+                                "input[id$='aplicar'], input[id$='alterar'], "
+                                "input[value='Aplicar'], input[value='Alterar']"
+                            )
+                            if _btn_apl.count() > 0:
+                                _btn_apl.first.click(force=True)
+                                self._aguardar_ajax()
+                                self._page.wait_for_timeout(800)
+                                self._log(
+                                    f"    ✓ Lote CS: {_ci}→{_cf} = R$ {_val} aplicado"
+                                )
+                    except Exception as _e_lote:
+                        self._log(f"    ⚠ Alteração em lote CS: {_e_lote}")
+            except Exception as _e_e12:
+                self._log(f"    ⚠ Recuperar/Regerar CS: {_e_e12}")
 
             # ── Configurar Alíquota Segurado (se especificado) ──
             _aliq_seg = cs.get("aliquota_segurado", "")
@@ -8182,10 +8276,13 @@ class PJECalcPlaywright:
 
             _CONFIRMAR_SELS = [
                 "[id$='confirmar']",
+                "input[id$='salvar']",  # E12: na parametrizar-inss.jsf é Salvar (não Confirmar)
+                "input[value='Salvar']",
                 "input[value='Confirmar']",
                 "input[type='submit'][value='Confirmar']",
                 "input[type='button'][value='Confirmar']",
                 "button:has-text('Confirmar')",
+                "button:has-text('Salvar')",
             ]
             for _sel in _CONFIRMAR_SELS:
                 _btn = self._page.locator(_sel)
@@ -8193,7 +8290,7 @@ class PJECalcPlaywright:
                     _btn.first.click(force=True)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(2000)
-                    self._log(f"    ✓ Confirmar CS ocorrências executado ({_sel})")
+                    self._log(f"    ✓ Confirmar/Salvar CS ocorrências executado ({_sel})")
                     return
 
             # Fallback JS
