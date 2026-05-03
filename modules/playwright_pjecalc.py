@@ -10726,6 +10726,70 @@ class PJECalcPlaywright:
 
     # ── Liquidar / captura do .PJC ─────────────────────────────────────────────
 
+    def _validar_pjc_liquidado(self, pjc_path: "Path") -> dict:
+        """REGRA PROIBITIVA: valida que o PJC foi gerado pelo PJE-Calc Cidadão
+        APÓS liquidação real. Recusa qualquer arquivo com hashCodeLiquidacao=null
+        ou dataDeLiquidacao=null (templates pré-liquidação ou geradores nativos).
+
+        Returns:
+            dict com {valido: bool, motivo: str, tamanho_kb, hash_code, data_liquidacao}
+        """
+        from pathlib import Path as _Path
+        result = {
+            "valido": False, "motivo": "?",
+            "tamanho_kb": 0, "hash_code": "", "data_liquidacao": "",
+        }
+        try:
+            p = _Path(str(pjc_path))
+            if not p.exists():
+                result["motivo"] = "arquivo inexistente"
+                return result
+            tamanho = p.stat().st_size
+            result["tamanho_kb"] = tamanho // 1024
+            if tamanho < 1024:
+                result["motivo"] = f"tamanho suspeito ({tamanho} bytes)"
+                return result
+            import zipfile as _zf
+            try:
+                with _zf.ZipFile(str(p), 'r') as _z:
+                    if "calculo.xml" not in _z.namelist():
+                        result["motivo"] = "ZIP sem calculo.xml"
+                        return result
+                    if _z.testzip() is not None:
+                        result["motivo"] = "ZIP corrompido"
+                        return result
+                    xml_bytes = _z.read("calculo.xml")
+            except _zf.BadZipFile:
+                result["motivo"] = "não é ZIP válido"
+                return result
+            # Decodificar XML (PJE-Calc usa ISO-8859-1)
+            try:
+                xml_str = xml_bytes.decode("iso-8859-1", errors="replace")
+            except Exception:
+                xml_str = xml_bytes.decode("utf-8", errors="replace")
+            import re as _re
+            # Extrair hashCodeLiquidacao
+            m_hash = _re.search(r"<hashCodeLiquidacao>([^<]*)</hashCodeLiquidacao>", xml_str)
+            hash_val = (m_hash.group(1) if m_hash else "").strip()
+            result["hash_code"] = hash_val
+            if not hash_val or hash_val.lower() == "null":
+                result["motivo"] = "hashCodeLiquidacao=null (PJC NÃO LIQUIDADO)"
+                return result
+            # Extrair dataDeLiquidacao
+            m_data = _re.search(r"<dataDeLiquidacao>([^<]*)</dataDeLiquidacao>", xml_str)
+            data_val = (m_data.group(1) if m_data else "").strip()
+            result["data_liquidacao"] = data_val
+            if not data_val or data_val.lower() == "null":
+                result["motivo"] = "dataDeLiquidacao=null (PJC NÃO LIQUIDADO)"
+                return result
+            # Validações OK
+            result["valido"] = True
+            result["motivo"] = "ok"
+            return result
+        except Exception as _e:
+            result["motivo"] = f"erro inesperado: {_e}"
+            return result
+
     def _clicar_liquidar(self) -> str | None:
         """
         Executa liquidação e exportação do .PJC no PJE-Calc.
@@ -10786,26 +10850,25 @@ class PJECalcPlaywright:
                 shutil.copy2(str(dest), str(_dest_output))
             except Exception:
                 pass
-            # Verificar integridade do .PJC (deve ser ZIP com calculo.xml)
-            try:
-                tamanho = dest.stat().st_size
-                if tamanho < 1024:
-                    self._log(f"  ⚠ .PJC suspeito: apenas {tamanho} bytes — pode estar corrompido")
-                else:
-                    import zipfile as _zf
-                    try:
-                        with _zf.ZipFile(str(dest), 'r') as _z:
-                            _nomes = _z.namelist()
-                            if "calculo.xml" not in _nomes:
-                                self._log(f"  ⚠ .PJC sem calculo.xml — conteúdo: {_nomes[:5]}")
-                            elif _z.testzip() is not None:
-                                self._log(f"  ⚠ .PJC ZIP corrompido (testzip falhou)")
-                            else:
-                                self._log(f"  ✓ .PJC válido ({tamanho//1024}KB, calculo.xml presente)")
-                    except _zf.BadZipFile:
-                        self._log(f"  ⚠ .PJC não é ZIP válido ({tamanho} bytes)")
-            except Exception as _ie:
-                self._log(f"  ⚠ Não foi possível verificar integridade do .PJC: {_ie}")
+            # ── VALIDAÇÃO OBRIGATÓRIA: PJC só é VÁLIDO se foi LIQUIDADO ──
+            # REGRA PROIBITIVA: jamais aceitar PJC com hashCodeLiquidacao=null
+            # ou dataDeLiquidacao=null. Esses NULL indicam PJC pré-liquidação
+            # ou template gerado nativamente — sempre rejeitados pelo PJE-Calc.
+            _validacao = self._validar_pjc_liquidado(dest)
+            if not _validacao["valido"]:
+                self._log(
+                    f"  ✗ .PJC REJEITADO ({_validacao['motivo']}) — arquivo apagado: {dest.name}"
+                )
+                try:
+                    dest.unlink()
+                except Exception:
+                    pass
+                return None
+            self._log(
+                f"  ✓ .PJC VÁLIDO ({_validacao['tamanho_kb']}KB, "
+                f"hashCode={_validacao['hash_code'][:16]}…, "
+                f"liquidado={_validacao['data_liquidacao']})"
+            )
             self._log(f"PJC_GERADO:{dest}")
             return str(dest)
 
@@ -11670,11 +11733,18 @@ class PJECalcPlaywright:
                         )
                     _dest_a.write_bytes(_pjc_bytes)
                     self._log(
-                        f"  ✓ .PJC salvo via Fase A (auto-download): "
-                        f"{_dest_a} ({len(_pjc_bytes)} bytes)"
+                        f"  → Fase A: arquivo salvo em {_dest_a} ({len(_pjc_bytes)} bytes), validando…"
                     )
-                    self._log(f"PJC_GERADO:{_dest_a}")
-                    return str(_dest_a)
+                    _val_a = self._validar_pjc_liquidado(_dest_a)
+                    if not _val_a["valido"]:
+                        self._log(f"  ✗ Fase A REJEITADA ({_val_a['motivo']}) — apagando")
+                        try: _dest_a.unlink()
+                        except Exception: pass
+                        # Continuar para próxima fase
+                    else:
+                        self._log(f"  ✓ .PJC válido via Fase A (hash={_val_a['hash_code'][:12]}…)")
+                        self._log(f"PJC_GERADO:{_dest_a}")
+                        return str(_dest_a)
                 else:
                     self._log(
                         f"  ⚠ Fase A retornou conteúdo não-ZIP "
@@ -11840,11 +11910,17 @@ class PJECalcPlaywright:
                             _dest_e = _dest_dir_e / _nome_arq_e
                             _dest_e.write_bytes(_body_e)
                             self._log(
-                                f"  ✓ .PJC salvo via Fase E (expect_response): "
-                                f"{_dest_e} ({len(_body_e)} bytes)"
+                                f"  → Fase E salvou {_dest_e} ({len(_body_e)} bytes), validando…"
                             )
-                            self._log(f"PJC_GERADO:{_dest_e}")
-                            return str(_dest_e)
+                            _val_e = self._validar_pjc_liquidado(_dest_e)
+                            if not _val_e["valido"]:
+                                self._log(f"  ✗ Fase E REJEITADA ({_val_e['motivo']}) — apagando")
+                                try: _dest_e.unlink()
+                                except Exception: pass
+                            else:
+                                self._log(f"  ✓ .PJC válido via Fase E (hash={_val_e['hash_code'][:12]}…)")
+                                self._log(f"PJC_GERADO:{_dest_e}")
+                                return str(_dest_e)
                         else:
                             self._log(
                                 f"  ⚠ Fase E retornou HTML/conteúdo inesperado — "
@@ -11999,9 +12075,16 @@ class PJECalcPlaywright:
                                     _dest_dir.mkdir(parents=True, exist_ok=True)
                                     _dest = _dest_dir / _nome_arquivo
                                     _dest.write_bytes(_body)
-                                    self._log(f"  ✓ .PJC salvo via POST direto: {_dest} ({len(_body)} bytes)")
-                                    self._log(f"PJC_GERADO:{_dest}")
-                                    return str(_dest)
+                                    self._log(f"  → Fase D POST salvou {_dest} ({len(_body)} bytes), validando…")
+                                    _val_d = self._validar_pjc_liquidado(_dest)
+                                    if not _val_d["valido"]:
+                                        self._log(f"  ✗ Fase D REJEITADA ({_val_d['motivo']}) — apagando")
+                                        try: _dest.unlink()
+                                        except Exception: pass
+                                    else:
+                                        self._log(f"  ✓ .PJC válido via Fase D (hash={_val_d['hash_code'][:12]}…)")
+                                        self._log(f"PJC_GERADO:{_dest}")
+                                        return str(_dest)
                                 else:
                                     self._log(f"  ⚠ POST retornou HTML/conteúdo inesperado — primeiros 300 chars: {_body[:300]!r}")
                             else:

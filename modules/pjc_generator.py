@@ -1068,18 +1068,30 @@ def gerar_pjc(
     sessao_id: str,
 ) -> Path:
     """
-    Gera um arquivo .PJC (ZIP+XML ISO-8859-1) a partir dos parâmetros confirmados.
+    🚫 PROIBIDO: gerador nativo de PJC desativado por regra de negócio.
 
-    O arquivo pode ser importado no PJE-Calc (Arquivo → Importar Cálculo).
-    Após a importação, o usuário deve:
-    1. Revisar parâmetros no PJE-Calc
-    2. Clicar Operações → Validar
-    3. Clicar Operações → Liquidar
-    4. Clicar Operações → Exportar (para o .pjc final com valores calculados)
-    5. Juntar o .pjc exportado nos autos do PJe
+    REGRA INVIOLÁVEL (2026-05-03): arquivos .PJC só podem ser gerados pelo
+    PJE-Calc Cidadão via Liquidar+Exportar na automação Playwright.
+    Templates pré-liquidação (gerados nativamente em Python) têm
+    hashCodeLiquidacao=null e dataDeLiquidacao=null — sempre rejeitados
+    pelo PJE-Calc institucional na importação.
 
-    Retorna o caminho do arquivo .PJC gerado.
+    Esta função permanece no código apenas para retrocompatibilidade de
+    imports, mas LANÇA RuntimeError ao ser invocada.
+
+    Para gerar um PJC válido, use o fluxo:
+      1. Confirmar prévia
+      2. Executar automação Playwright (passa por todas as fases)
+      3. Aguardar Liquidar com sucesso (mensagem "Cálculo liquidado")
+      4. Exportar via interface PJE-Calc → arquivo é capturado pelo agente
     """
+    raise RuntimeError(
+        "🚫 Geração nativa de PJC PROIBIDA. PJC só pode ser gerado pelo "
+        "PJE-Calc Cidadão via Liquidar+Exportar na automação Playwright. "
+        "Templates nativos têm hashCodeLiquidacao=null e são rejeitados na "
+        "importação."
+    )
+    # Código abaixo permanece inalcançável — preservado apenas por histórico.
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     calc_id = _calc_id(sessao_id)

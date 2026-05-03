@@ -1317,15 +1317,53 @@ async def previa_atual_processo(
     return RedirectResponse(url=f"/previa/{calculo.sessao_id}")
 
 
+def _validar_pjc_para_download(pjc_path: str | Path) -> tuple[bool, str]:
+    """REGRA PROIBITIVA: valida hashCodeLiquidacao e dataDeLiquidacao do PJC
+    antes de servir. Arquivos com NULL nesses campos são templates inválidos
+    (gerados nativamente ou exportados antes de liquidar). Espelha
+    `_validar_pjc_liquidado` do playwright_pjecalc.py.
+    """
+    try:
+        p = Path(str(pjc_path))
+        if not p.exists():
+            return (False, "arquivo inexistente")
+        if p.stat().st_size < 1024:
+            return (False, f"tamanho suspeito ({p.stat().st_size} bytes)")
+        import zipfile as _zf, re as _re
+        try:
+            with _zf.ZipFile(str(p), 'r') as _z:
+                if "calculo.xml" not in _z.namelist():
+                    return (False, "ZIP sem calculo.xml")
+                xml_bytes = _z.read("calculo.xml")
+        except _zf.BadZipFile:
+            return (False, "não é ZIP válido")
+        try:
+            xml_str = xml_bytes.decode("iso-8859-1", errors="replace")
+        except Exception:
+            xml_str = xml_bytes.decode("utf-8", errors="replace")
+        m_hash = _re.search(r"<hashCodeLiquidacao>([^<]*)</hashCodeLiquidacao>", xml_str)
+        hv = (m_hash.group(1) if m_hash else "").strip()
+        if not hv or hv.lower() == "null":
+            return (False, "hashCodeLiquidacao=null (PJC NÃO LIQUIDADO)")
+        m_data = _re.search(r"<dataDeLiquidacao>([^<]*)</dataDeLiquidacao>", xml_str)
+        dv = (m_data.group(1) if m_data else "").strip()
+        if not dv or dv.lower() == "null":
+            return (False, "dataDeLiquidacao=null (PJC NÃO LIQUIDADO)")
+        return (True, "ok")
+    except Exception as _e:
+        return (False, f"erro validação: {_e}")
+
+
 @app.get("/download/{sessao_id}/pjc")
 async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
     """Download do arquivo .pjc exportado pelo PJE-Calc Cidadão.
 
-    REGRA DE OURO: Apenas arquivos .PJC gerados pelo próprio PJE-Calc Cidadão
-    (via Liquidar + Exportar na automação) são válidos. Arquivos gerados pelo
-    pjc_generator.py nativo são SEMPRE rejeitados pelo PJE-Calc institucional.
-    Por isso, este endpoint NÃO gera PJC sob demanda — só serve arquivos que
-    já foram exportados pela automação.
+    REGRA DE OURO PROIBITIVA: Apenas arquivos .PJC gerados pelo próprio
+    PJE-Calc Cidadão (via Liquidar + Exportar na automação) são válidos.
+    Arquivos com hashCodeLiquidacao=null ou dataDeLiquidacao=null são
+    bloqueados — sempre rejeitados pelo PJE-Calc institucional.
+    Geração nativa em Python (pjc_generator.py) está PROIBIDA por regra
+    de negócio (2026-05-03) e levanta RuntimeError se invocada.
     """
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
@@ -1357,6 +1395,21 @@ async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
                 _pjc_encontrado = _pjcs[0]
                 break
         if _pjc_encontrado:
+            # VALIDAÇÃO PROIBITIVA antes de auto-vincular
+            _ok, _motivo = _validar_pjc_para_download(_pjc_encontrado)
+            if not _ok:
+                logger.warning(
+                    f"download_pjc REJEITADO {_pjc_encontrado} → sessão {sessao_id}: {_motivo}"
+                )
+                raise HTTPException(
+                    status_code=409,
+                    detail=(
+                        f"Arquivo .PJC encontrado mas REJEITADO ({_motivo}). "
+                        "PJCs sem hashCodeLiquidacao/dataDeLiquidacao são templates "
+                        "pré-liquidação inválidos — não foram gerados pelo PJE-Calc "
+                        "Cidadão após Liquidar com sucesso. Re-execute a automação."
+                    ),
+                )
             repo.marcar_exportado(sessao_id, str(_pjc_encontrado))
             db.commit()
             calculo = repo.buscar_sessao(sessao_id)  # refresh
@@ -1373,6 +1426,21 @@ async def download_pjc(sessao_id: str, db: Session = Depends(get_db)):
             )
 
     caminho = Path(calculo.arquivo_pjc)
+    # Validação final mesmo para arquivo já vinculado (defesa em profundidade)
+    _ok_final, _motivo_final = _validar_pjc_para_download(caminho)
+    if not _ok_final:
+        logger.warning(
+            f"download_pjc REJEITADO arquivo vinculado {caminho} → sessão {sessao_id}: {_motivo_final}"
+        )
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Arquivo .PJC vinculado é INVÁLIDO ({_motivo_final}). "
+                "Foi gerado sem liquidação real do PJE-Calc Cidadão — bloqueado "
+                "pela regra de negócio. Re-execute a automação até concluir a "
+                "Liquidação com sucesso."
+            ),
+        )
     return FileResponse(
         path=str(caminho),
         filename=caminho.name,
