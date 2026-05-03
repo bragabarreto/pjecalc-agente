@@ -7094,10 +7094,12 @@ class PJECalcPlaywright:
             ocorr_enum = ocorr_map.get(_norm_key(ocorr_label), _carac_default_ocorr)
             # ── AUTO-FIX: ocorrência ≠ MENSAL é incompatível com periodo_fim
             # POSTERIOR à demissão (PJE-Calc bloqueia salvar). Forçar MENSAL
-            # quando detectar essa inconsistência. Aplicável a verbas como
-            # REMUNERAÇÃO EM DOBRO POR DISPENSA DISCRIMINATÓRIA, Estabilidade
-            # Gestante/Acidentária, Salário-maternidade pós-rescisão, etc.
-            if ocorr_enum != "MENSAL":
+            # quando detectar essa inconsistência. APENAS para verbas com
+            # caracteristica=COMUM — verbas com caract=AVISO_PREVIO/FERIAS/
+            # DECIMO_TERCEIRO têm ocorrência derivada automaticamente pelo
+            # PJE-Calc (Dezembro/Desligamento/Período Aquisitivo) e o sistema
+            # trata internamente o cálculo proporcional.
+            if ocorr_enum != "MENSAL" and carac_enum == "COMUM":
                 try:
                     from datetime import datetime as _dtv
                     _pf = v.get("periodo_fim", "")
@@ -7109,7 +7111,7 @@ class PJECalcPlaywright:
                         self._log(
                             f"  ℹ AUTO-FIX ocorrência: '{ocorr_label}' ({ocorr_enum}) "
                             f"incompatível com periodo_fim {_pf} > demissão {_dem}. "
-                            f"Forçando MENSAL (verba pós-rescisão)."
+                            f"Forçando MENSAL (verba COMUM pós-rescisão)."
                         )
                         ocorr_enum = "MENSAL"
                 except Exception:

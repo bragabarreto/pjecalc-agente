@@ -274,25 +274,36 @@ def validar_previa(
             prefix = f"verba[{i}] '{nome[:30]}'"
 
             # ── Consistência ocorrência↔período (PJE-Calc valida) ──
-            # Para ocorrência ≠ Mensal (Desligamento, Dezembro, Período Aquisitivo),
-            # o periodoFinal deve ser ≤ data da demissão. Caso contrário, o
-            # PJE-Calc bloqueia o salvar com:
-            #   "A data final não pode ser maior que a data demissão, para o
-            #    caso de Ocorrências de Pagamento diferentes de Mensal"
-            # Indenizações pós-contrato (estabilidade, dispensa discriminatória,
-            # salário-maternidade pós-rescisão) DEVEM usar Mensal.
+            # APENAS para verbas com caracteristica=Comum: se ocorrência ≠
+            # Mensal (Desligamento p/ ex.) E periodoFinal > demissão, o
+            # PJE-Calc bloqueia: "A data final não pode ser maior que a
+            # data demissão, para Ocorrências != Mensal".
+            #
+            # Verbas com caracteristica de 13o/Aviso/Ferias têm ocorrência
+            # derivada automaticamente (Dezembro/Desligamento/Período
+            # Aquisitivo) e o PJE-Calc trata internamente — não bloqueia.
+            # Por isso o validador deve EXCLUIR essas verbas, senão dá
+            # falso positivo em reflexos como "13º sobre Estabilidade",
+            # "Aviso Prévio sobre HE", "INDENIZAÇÃO ADICIONAL" (caract=Aviso).
+            _carac = (v.get("caracteristica") or "").lower().strip()
             _ocorr = (v.get("ocorrencia") or "").lower().strip()
             _periodo_fim = _parse_dt(v.get("periodo_fim"))
+            _carac_cobre = _carac in (
+                "13o salario", "13 salario", "decimo terceiro", "decimo terceiro salario",
+                "aviso previo", "aviso prévio", "ferias", "férias"
+            )
             if (
-                _ocorr and _ocorr != "mensal"
+                _carac in ("comum", "")  # apenas Comum (vazio = default Comum)
+                and not _carac_cobre
+                and _ocorr and _ocorr != "mensal"
                 and _periodo_fim and _demissao_dt
                 and _periodo_fim > _demissao_dt
             ):
                 res.erros.append(_erro(prefix, "ocorrencia",
                     f"Ocorrência '{v.get('ocorrencia')}' incompatível com periodo_fim "
                     f"{v.get('periodo_fim')} POSTERIOR à demissão {_demissao_str}. "
-                    f"PJE-Calc bloqueia: para ocorrências != Mensal, periodoFinal "
-                    f"deve ser ≤ data demissão. Para verbas pós-rescisão "
+                    f"PJE-Calc bloqueia: para verbas Comum com ocorrência != Mensal, "
+                    f"periodoFinal deve ser ≤ data demissão. Para verbas pós-rescisão "
                     f"(estabilidade, dispensa discriminatória, salário-maternidade), "
                     f"use ocorrencia='Mensal'."))
 
