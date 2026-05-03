@@ -2684,16 +2684,24 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(1000)
 
-            # Selecionar "Manter alterações realizadas nas ocorrências" (padrão seguro)
+            # Selecionar "Sobrescrever" (segundo radio — itemValue=false)
+            # CORREÇÃO E09 (2026-05-03): "Manter alterações" mantém ocorrências
+            # com multiplicador antigo, gerando alerta:
+            # "Multiplicador foi alterado após geração das ocorrências".
+            # Quando o agente alterou multiplicador em Parâmetros, é PRECISO
+            # sobrescrever as ocorrências antigas com os novos parâmetros.
             try:
-                radio_manter = self._page.locator(
-                    "input[id$='tipoRegeracao'][type='radio']"
+                radios_tipo = self._page.locator(
+                    "input[id*='tipoRegeracao'][type='radio']"
                 )
-                if radio_manter.count() >= 1:
-                    # O primeiro radio é "Manter" (itemValue=true)
-                    radio_manter.first.click(force=True)
+                if radios_tipo.count() >= 2:
+                    # Segundo radio = SOBRESCREVER (itemValue=false)
+                    radios_tipo.nth(1).click(force=True)
                     self._page.wait_for_timeout(300)
-                    self._log("    ✓ Opção: Manter alterações")
+                    self._log("    ✓ Opção: Sobrescrever (regenera com parâmetros atuais)")
+                elif radios_tipo.count() == 1:
+                    radios_tipo.first.click(force=True)
+                    self._log("    ✓ Opção: única (provavelmente Sobrescrever)")
             except Exception as e:
                 self._log(f"    ⚠ Radio tipoRegeracao: {e}")
 
@@ -5891,6 +5899,138 @@ class PJECalcPlaywright:
                         self._aguardar_ajax()
                 except Exception as _e_filt:
                     self._log(f"  ⚠ Falha ao filtrar ocorrências por período: {_e_filt}")
+
+        # ── CORREÇÃO E10 (2026-05-03) — Preencher quantidade nas linhas
+        # da grade de Ocorrências para verbas que cobram POR QUANTIDADE
+        # (HE 50%, INTERVALO INTRAJORNADA, HORAS IN ITINERE, AD NOTURNO).
+        # Sem isso, todas as ocorrências ficam com termoQuant=0 e o
+        # Liquidador alerta: "Todas as ocorrências... foram salvas com
+        # quantidade igual a zero".
+        if v and _gerou:
+            _qtd_mensal = (
+                v.get("quantidade_mensal")
+                or v.get("quantidade_horas_extras_mensal")
+                or v.get("quantidade")  # quantidade direta na verba (Parâmetros)
+            )
+            # Se não veio explícito, tentar inferir de horas extras a partir
+            # do cartão de ponto (usa jornada extra × dias úteis ~22)
+            if not _qtd_mensal:
+                _nome_v = (v.get("nome_pjecalc") or v.get("nome_sentenca") or "").upper()
+                _is_hora_extra = any(k in _nome_v for k in [
+                    "HORAS EXTRAS", "INTERVALO INTRAJORNADA", "HORAS IN ITINERE",
+                    "ADICIONAL NOTURNO", "INTERVALO INTERJORNADAS"
+                ])
+                if _is_hora_extra:
+                    try:
+                        _cp = (self._dados or {}).get("cartao_ponto") or {}
+                        _jd = float(_cp.get("jornada_diaria_h") or 8.0)
+                        # Calcular HE diárias do cartão (programação semanal)
+                        _prog = _cp.get("programacao_semanal") or []
+                        _he_dia = 0.0
+                        for _d in _prog:
+                            if _d.get("dia") in ("DOM",):
+                                continue
+                            _t1i = _d.get("turno1_inicio", "")
+                            _t1f = _d.get("turno1_fim", "")
+                            _t2i = _d.get("turno2_inicio", "")
+                            _t2f = _d.get("turno2_fim", "")
+                            _h_total = 0.0
+                            for _i, _f in [(_t1i, _t1f), (_t2i, _t2f)]:
+                                if _i and _f:
+                                    try:
+                                        _hi = int(_i.split(":")[0]) + int(_i.split(":")[1])/60
+                                        _hf = int(_f.split(":")[0]) + int(_f.split(":")[1])/60
+                                        _h_total += max(0, _hf - _hi)
+                                    except Exception:
+                                        pass
+                            if _h_total > _jd:
+                                _he_dia = max(_he_dia, _h_total - _jd)
+                        if _he_dia > 0:
+                            # Estimativa: HE/dia × ~22 dias úteis/mês
+                            _qtd_mensal = round(_he_dia * 22)
+                            self._log(f"    ℹ Quantidade HE inferida: {_he_dia}h/dia × 22 = {_qtd_mensal}h/mês")
+                    except Exception as _e_qtd:
+                        self._log(f"    ⚠ Inferência quantidade: {_e_qtd}")
+            if _qtd_mensal:
+                try:
+                    _qtd_str = str(_qtd_mensal).replace(".", ",")
+                    _n_qtd = self._page.evaluate(
+                        """(qtd) => {
+                            const inputs = document.querySelectorAll(
+                                'input[id*="termoQuant"], input[id*=":quantidade"]'
+                            );
+                            let n = 0;
+                            inputs.forEach(inp => {
+                                if (inp.disabled || inp.readOnly) return;
+                                const tr = inp.closest('tr');
+                                if (tr) {
+                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
+                                    if (cbx && !cbx.checked) return;  // só linhas ativas
+                                }
+                                inp.value = qtd;
+                                inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                n++;
+                            });
+                            return n;
+                        }""",
+                        _qtd_str,
+                    )
+                    self._log(f"  ✓ Quantidade {_qtd_str} preenchida em {_n_qtd} ocorrência(s)")
+                    if _n_qtd > 0:
+                        self._aguardar_ajax()
+                except Exception as _e_pq:
+                    self._log(f"  ⚠ Preencher quantidade nas ocorrências: {_e_pq}")
+
+        # ── CORREÇÃO E11 (2026-05-03) — Preencher VALOR DEVIDO nas linhas
+        # da grade de Ocorrências para verbas Calculadas com valor mensal
+        # informado (indenizações, estabilidade, dispensa discriminatória).
+        # Sem isso: "Para apurar a verba informada X deve existir pelo menos
+        # uma ocorrência com valor devido ou valor pago diferente de zero".
+        if v and _gerou:
+            _val_mensal = v.get("valor_mensal_devido") or v.get("valor_informado")
+            _nome_v = (v.get("nome_pjecalc") or v.get("nome_sentenca") or "").upper()
+            _is_indenizacao = any(k in _nome_v for k in [
+                "INDENIZAÇÃO", "INDENIZACAO", "ESTABILIDADE", "DOBRO",
+                "DISPENSA DISCRIMINAT", "MATERNIDADE"
+            ])
+            # Para Indenização Calculada com período pós-rescisão e Maior Remuneração,
+            # o "valor devido" mensal é a Maior Remuneração (default)
+            if not _val_mensal and _is_indenizacao and v.get("base_calculo", "").lower() in (
+                "maior remuneracao", "maior_remuneracao"
+            ):
+                _val_mensal = (self._dados or {}).get("contrato", {}).get("maior_remuneracao") or \
+                              (self._dados or {}).get("contrato", {}).get("ultima_remuneracao")
+            if _val_mensal and _is_indenizacao:
+                try:
+                    _val_str = _fmt_br(float(_val_mensal))
+                    _n_val = self._page.evaluate(
+                        """(valor) => {
+                            const inputs = document.querySelectorAll(
+                                'input[id*="valorDevido"], input[id*="termoDevido"]'
+                            );
+                            let n = 0;
+                            inputs.forEach(inp => {
+                                if (inp.disabled || inp.readOnly) return;
+                                const tr = inp.closest('tr');
+                                if (tr) {
+                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
+                                    if (cbx && !cbx.checked) return;
+                                }
+                                inp.value = valor;
+                                inp.dispatchEvent(new Event('input', {bubbles: true}));
+                                inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                n++;
+                            });
+                            return n;
+                        }""",
+                        _val_str,
+                    )
+                    self._log(f"  ✓ Valor devido {_val_str} preenchido em {_n_val} ocorrência(s) (indenização)")
+                    if _n_val > 0:
+                        self._aguardar_ajax()
+                except Exception as _e_pv:
+                    self._log(f"  ⚠ Preencher valor devido: {_e_pv}")
 
         # 3. Salvar
         self._clicar_salvar()
