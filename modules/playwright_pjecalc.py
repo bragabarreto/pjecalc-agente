@@ -5927,8 +5927,18 @@ class PJECalcPlaywright:
         if not predefinidas:
             return
 
-        # Garantir listagem — se page está em estado inválido (500, home), re-abrir cálculo
-        if "verbas-para-calculo" not in self._page.url:
+        # Garantir listagem — se page está em estado inválido (500, home), re-abrir cálculo.
+        # URL real (auditada via Chrome MCP no PJE-Calc Institucional 2.15.1):
+        #   /pjecalc/pages/calculo/verba/verba-calculo.jsf?conversationId=N
+        # NÃO existe a URL "verbas-para-calculo.jsf" (com S) em produção —
+        # bug histórico que fazia navegação cair em 404 e a Listagem nunca
+        # aparecer, impedindo _configurar_parametros_verba de encontrar
+        # os links formulario:listagem:N:j_id558.
+        _na_listagem = (
+            "verba-calculo.jsf" in self._page.url
+            or "verbas-para-calculo" in self._page.url
+        )
+        if not _na_listagem:
             # Se estamos na home ou em 500, re-abrir cálculo via Recentes primeiro
             _url_atual = self._page.url
             if "principal.jsf" in _url_atual or "9257" not in _url_atual:
@@ -5938,18 +5948,31 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(800)
             # Fallback: URL direta se menu lateral não navegou para a listagem
-            if "verbas-para-calculo" not in self._page.url:
+            _na_listagem = (
+                "verba-calculo.jsf" in self._page.url
+                or "verbas-para-calculo" in self._page.url
+            )
+            if not _na_listagem:
                 if self._calculo_url_base and self._calculo_conversation_id:
                     try:
                         _url_vl = (
-                            f"{self._calculo_url_base}verba/verbas-para-calculo.jsf"
+                            f"{self._calculo_url_base}verba/verba-calculo.jsf"
                             f"?conversationId={self._calculo_conversation_id}"
                         )
+                        self._log(f"  → URL direta: {_url_vl}")
                         self._page.goto(_url_vl, wait_until="domcontentloaded", timeout=15000)
                         self._aguardar_ajax()
                         self._page.wait_for_timeout(800)
-                    except Exception:
-                        pass
+                    except Exception as _e_goto:
+                        self._log(f"  ⚠ goto verba-calculo falhou: {_e_goto}")
+        # Confirmar visualmente quantos links Parâmetros estão na página
+        try:
+            _qtd = self._page.evaluate("""() => {
+                return document.querySelectorAll('a[id*=":listagem:"][id$=":j_id558"]').length;
+            }""")
+            self._log(f"  ℹ Listagem de verbas: {_qtd} link(s) Parâmetros encontrado(s)")
+        except Exception:
+            pass
 
         for v in predefinidas:
             # Pular verbas reflexas — não têm linha própria na listagem
