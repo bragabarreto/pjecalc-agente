@@ -174,8 +174,8 @@
 | E06 | Reflexa nome_sentenca vs nome_pjecalc | Alta | ✅ Resolvido (9ef6be7) |
 | E07 | dataTerminoCalculo curta | Alta | ✅ Resolvido (ec1a86a) |
 | E08 | Ocorrência ≠ Mensal pós-rescisão | Alta | ✅ Resolvido (5d81a1f) |
-| **E09** | Multiplicador alterado após gerar ocorrências | **Média** | ⏳ Pendente |
-| **E10** | HE 50% qtd=0 nas ocorrências | **Média** | ⏳ Pendente |
-| **E11** | Indenização Calculada sem valor na grade | **Média** | ⏳ Pendente |
-| **E12** | Histórico não vinculado à CS | **Média** | ⏳ Pendente |
+| E09 | Multiplicador alterado após gerar ocorrências | Média | ✅ Resolvido (d4c0e7a) |
+| E10 | HE 50% qtd=0 nas ocorrências | Média | ✅ Resolvido (d4c0e7a) |
+| E11 | Indenização Calculada sem valor na grade | Média | ✅ Resolvido (d4c0e7a) |
+| E12 | Histórico não vinculado à CS | Média | ✅ Resolvido (11c0fe9) |
 | E13 | FGTS datas fora do cálculo | Baixa (deriva de E07) | ✅ Resolvido (deriva) |
