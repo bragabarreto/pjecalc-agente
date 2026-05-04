@@ -524,8 +524,12 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc")
                 continue
 
-            # Re-navegar à listagem ANTES DE CADA inclusão (incluindo a 1ª)
-            # — garante que estamos na página certa em qualquer estado prévio.
+            # Reset de estado: navegar para Dados do Cálculo e voltar para
+            # Histórico Salarial. Necessário porque após save, o Seam mantém
+            # o form na view atual (botões Confirmar/Salvar/Cancelar) — URL nav
+            # direto re-renderiza o mesmo estado em vez da listagem.
+            self._navegar_menu("li_calculo_dados_do_calculo")
+            self._page.wait_for_timeout(1000)
             self._navegar_menu("li_calculo_historico_salarial")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(1500)
@@ -646,27 +650,83 @@ class PlaywrightAutomatorV2:
         self.log("  → Lançamento Expresso")
         self._clicar("lancamentoExpresso")
         self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1500)
+
+        # Diagnóstico: contar verbas disponíveis
+        diag = self._page.evaluate(
+            """() => {
+                const cbs = [...document.querySelectorAll('input[type="checkbox"]')];
+                const labels = cbs.map(cb => {
+                    // Tenta múltiplas estratégias: label[for], label parent, td adjacente
+                    let txt = '';
+                    if (cb.id) {
+                        const l = document.querySelector(`label[for="${cb.id.replace(/[^\\w-]/g, c => '\\\\'+c)}"]`);
+                        if (l) txt = l.textContent;
+                    }
+                    if (!txt) {
+                        const p = cb.closest('label, td, tr');
+                        if (p) txt = p.textContent;
+                    }
+                    return (txt || '').replace(/\\s+/g, ' ').trim();
+                }).filter(t => t.length > 2 && t.length < 100);
+                return {total: cbs.length, com_label: labels.length, primeiros: labels.slice(0, 30)};
+            }"""
+        )
+        self.log(f"    ℹ Página Expresso: {diag.get('total')} checkboxes, {diag.get('com_label')} com label")
 
         for v in verbas:
-            alvo = v.expresso_alvo
-            # Marcar checkbox via texto do label
+            alvo = (v.expresso_alvo or "").strip().upper()
+            # Estratégia: scroll até encontrar via texto (case-insensitive, normalizado)
             marcou = self._page.evaluate(
-                f"""(alvo) => {{
-                    const cbs = [...document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')];
-                    for (const cb of cbs) {{
-                        const lbl = document.querySelector(`label[for="${{CSS.escape(cb.id)}}"]`);
-                        if (lbl && lbl.textContent.trim() === alvo) {{
+                """(alvo) => {
+                    const norm = s => (s||'').replace(/\\s+/g,' ').trim().toUpperCase();
+                    const cbs = [...document.querySelectorAll('input[type="checkbox"]')];
+                    for (const cb of cbs) {
+                        // Tenta achar texto associado via label[for], label parent, ou tr/td
+                        let txt = '';
+                        if (cb.id) {
+                            const l = document.querySelector(`label[for="${CSS.escape(cb.id)}"]`);
+                            if (l) txt = l.textContent;
+                        }
+                        if (!txt) {
+                            const p = cb.closest('label, td, tr');
+                            if (p) txt = p.textContent;
+                        }
+                        if (norm(txt) === alvo) {
+                            cb.scrollIntoView({block:'center'});
                             cb.click();
                             return true;
-                        }}
-                    }}
-                    return false;
-                }}""",
+                        }
+                    }
+                    // Fallback parcial: contém o texto alvo
+                    for (const cb of cbs) {
+                        let txt = '';
+                        if (cb.id) {
+                            const l = document.querySelector(`label[for="${CSS.escape(cb.id)}"]`);
+                            if (l) txt = l.textContent;
+                        }
+                        if (!txt) {
+                            const p = cb.closest('label, td, tr');
+                            if (p) txt = p.textContent;
+                        }
+                        if (norm(txt).includes(alvo)) {
+                            cb.scrollIntoView({block:'center'});
+                            cb.click();
+                            return 'partial:'+norm(txt).slice(0,80);
+                        }
+                    }
+                    return null;
+                }""",
                 alvo,
             )
             if not marcou:
-                raise RuntimeError(f"Verba Expresso não encontrada no rol: {alvo}")
-            self.log(f"    ✓ Expresso checkbox: {alvo}")
+                # Não fatal — log e segue
+                self.log(f"    ⚠ Verba Expresso não encontrada no rol: '{alvo}' — pulando (será tentada como Manual?)")
+                continue
+            if isinstance(marcou, str) and marcou.startswith("partial:"):
+                self.log(f"    ✓ Expresso (match parcial): {alvo} ← {marcou[8:]}")
+            else:
+                self.log(f"    ✓ Expresso checkbox: {alvo}")
 
         self._clicar("salvar")
         self._aguardar_ajax(15000)
