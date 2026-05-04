@@ -193,13 +193,24 @@ class PlaywrightAutomatorV2:
         self.log(f"  ✓ radio {dom_id} = {valor}")
 
     def _marcar_checkbox(self, dom_id: str, marcado: bool) -> None:
-        loc = self._page.locator(f"[id$='{dom_id}']")
-        if loc.count() == 0:
-            self.log(f"  ⚠ checkbox {dom_id} não existe — pulando")
-            return
-        if loc.first.is_checked() != marcado:
-            loc.first.click(force=True)
-        self.log(f"  ✓ checkbox {dom_id} = {marcado}")
+        # Seletor MAIS específico: input[type=checkbox] com id terminando em ':<dom_id>' ou em '<dom_id>' exato.
+        # Evita match em outros elementos (ex.: select, radio, link) cujo id também termine no nome.
+        for sel in (
+            f"input[type='checkbox'][id='formulario:{dom_id}']",
+            f"input[type='checkbox'][id$=':{dom_id}']",
+            f"input[type='checkbox'][id$='{dom_id}']",
+        ):
+            loc = self._page.locator(sel)
+            if loc.count() > 0:
+                try:
+                    if loc.first.is_checked() != marcado:
+                        loc.first.click(force=True)
+                    self.log(f"  ✓ checkbox {dom_id} = {marcado}")
+                    return
+                except Exception as e:
+                    self.log(f"  ⚠ checkbox {dom_id}: {e} — tentando próximo seletor")
+                    continue
+        self.log(f"  ⚠ checkbox {dom_id} não existe ou não é checkbox — pulando")
 
     def _selecionar(self, dom_id: str, valor: str) -> None:
         loc = self._page.locator(f"select[id$='{dom_id}']")
