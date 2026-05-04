@@ -181,6 +181,21 @@ Verbas criadas via botão "Manual" (`id="incluir"`) precisam ter `caracteristica
 `base_calculo` preenchidos. Sem eles, a liquidação falha com HTTP 500. O modo Expresso preenche
 automaticamente esses campos.
 
+### Verba Manual — fluxo Assunto CNJ via modal-árvore
+
+Para criar verba via "Manual" (botão `incluir` da listagem com value="Manual"):
+
+1. Click `incluir` → abre `verba-calculo.jsf` em "Novo" mode (breadcrumb `Cálculo > Verbas > Novo`).
+2. Campo "Nome" (DOM id `formulario:descricao`) — digitar nome customizado.
+3. Campo "Assunto CNJ" — **NÃO digitar livre**. Click no botão lupa 🔎 → abre modal árvore.
+4. Modal mostra categorias hierárquicas (ex.: 2581 Remuneração, 2662 Férias, 1654 Contrato Individual...).
+5. Expandir folder + selecionar código específico (ex.: 2792 Horas Extras dentro de 2581).
+6. Click botão "Selecionar" no modal.
+7. Preencher demais campos (período, base, fórmula, etc.).
+8. **Salvar UMA VEZ** ao final (não é por seção).
+
+Para `_configurar_parametros_pos_expresso` (verba já criada via Expresso): o assunto CNJ JÁ vem populado, **não precisa tocar**. Só renomear via campo "Nome" se for `expresso_adaptado`.
+
 ### Reflexos — fluxo correto (PJE-Calc Cidadão, confirmado pelo usuário)
 
 Para configurar um reflexo (ex.: "Aviso Prévio sobre Horas Extras"):
