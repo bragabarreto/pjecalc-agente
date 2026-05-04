@@ -527,13 +527,38 @@ class PlaywrightAutomatorV2:
             # Re-navegar à listagem ANTES DE CADA inclusão (incluindo a 1ª)
             # — garante que estamos na página certa em qualquer estado prévio.
             self._navegar_menu("li_calculo_historico_salarial")
-            self._page.wait_for_timeout(800)
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(1500)
 
-            # Click incluir + wait robusto para form renderizar
-            try:
-                self._page.locator("input[id$='incluir'][value='Novo'], input[id$='incluir']").first.click()
-            except Exception:
-                self._clicar("incluir")
+            # Aguardar botão incluir aparecer (Tomcat pode demorar a renderizar
+            # listing após save de outro histórico). Até 20s com retry.
+            btn_incluir = None
+            for tentativa in range(3):
+                try:
+                    self._page.wait_for_selector(
+                        "input[type='button'][id$=':incluir'], input[id$=':incluir'][value]",
+                        state="visible", timeout=10000
+                    )
+                    btn_incluir = self._page.locator(
+                        "input[type='button'][id$=':incluir'], input[id$=':incluir'][value]"
+                    ).first
+                    break
+                except Exception:
+                    self.log(f"  ⚠ Botão 'incluir' não apareceu (tentativa {tentativa+1}/3) — re-navegando")
+                    self._navegar_menu("li_calculo_historico_salarial")
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+            if not btn_incluir:
+                # Diagnóstico
+                _ids = self._page.evaluate(
+                    """() => [...document.querySelectorAll('input[type=button],input[type=submit]')]
+                        .filter(e => e.id && e.offsetParent)
+                        .map(e => `${e.id}=${e.value}`).slice(0, 20)"""
+                )
+                self.log(f"  ⚠ Pulando '{hist.nome}' — botão 'incluir' não disponível. IDs: {_ids}")
+                continue
+
+            btn_incluir.click()
             self._aguardar_ajax(8000)
 
             # Espera o form aparecer — testa múltiplos seletores variantes
