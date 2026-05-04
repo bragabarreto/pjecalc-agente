@@ -675,3 +675,7 @@ class PreviaCalculoV2(BaseModel):
         if self.meta.validacao.campos_faltantes:
             self.meta.validacao.completude = "INCOMPLETO"
         return self
+
+
+# ─── Resolver forward refs (necessário quando carregado via importlib) ─────
+PreviaCalculoV2.model_rebuild()
