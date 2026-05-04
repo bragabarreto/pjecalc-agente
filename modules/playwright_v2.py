@@ -524,15 +524,29 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc")
                 continue
 
-            # Reset de estado: navegar para Dados do Cálculo e voltar para
-            # Histórico Salarial. Necessário porque após save, o Seam mantém
-            # o form na view atual (botões Confirmar/Salvar/Cancelar) — URL nav
-            # direto re-renderiza o mesmo estado em vez da listagem.
-            self._navegar_menu("li_calculo_dados_do_calculo")
-            self._page.wait_for_timeout(1000)
+            # Reset de estado: após save anterior o form fica aberto em modo edição
+            # (botões Confirmar/Salvar/Cancelar visíveis) — clicar Cancelar fecha
+            # o form e retorna à listagem.
+            try:
+                cancelar = self._page.locator("input[id$=':cancelar'], input[id='formulario:cancelar']")
+                if cancelar.count() > 0 and cancelar.first.is_visible():
+                    cancelar.first.click(force=True)
+                    self._aguardar_ajax(5000)
+                    self._page.wait_for_timeout(1000)
+            except Exception:
+                pass
+            # Navegar para listagem (com fallback double-hop se URL nav direto
+            # re-render do mesmo estado).
             self._navegar_menu("li_calculo_historico_salarial")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(1500)
+            # Se botão incluir ainda não apareceu, fazer double-hop.
+            if self._page.locator("input[id$=':incluir']").count() == 0:
+                self._navegar_menu("li_calculo_dados_do_calculo")
+                self._page.wait_for_timeout(1000)
+                self._navegar_menu("li_calculo_historico_salarial")
+                self._aguardar_ajax(10000)
+                self._page.wait_for_timeout(1500)
 
             # Aguardar botão incluir aparecer (Tomcat pode demorar a renderizar
             # listing após save de outro histórico). Até 20s com retry.
@@ -788,8 +802,61 @@ class PlaywrightAutomatorV2:
 
     def _configurar_parametros_pos_expresso(self, v) -> None:
         """Ajustar parâmetros da verba pós-Expresso (clicar ícone Parâmetros e
-        sobrescrever campos com valores da prévia)."""
+        sobrescrever campos com valores da prévia).
+
+        Estratégia para encontrar o link Parâmetros: na listagem de verbas
+        (verba-calculo.jsf), cada TR tem múltiplos ícones (Parâmetros, Excluir,
+        etc.). O ID dinâmico do JSF varia, então buscamos por:
+        - title="Parâmetros" ou
+        - icon img[src*='parametros'] ou
+        - link com texto "Parâmetros" ou
+        - PRIMEIRO link clicável da linha (heurística: ícone Parâmetros costuma ser o 1º)
+        """
         self.log(f"  → Ajustar parâmetros: {v.nome_pjecalc}")
+        # Buscar linha por nome — múltiplas estratégias
+        clicou = self._page.evaluate(
+            f"""(alvo) => {{
+                const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                const trs = [...document.querySelectorAll('tr')];
+                for (const tr of trs) {{
+                    if (!norm(tr.textContent).includes(norm(alvo))) continue;
+                    // Estratégia 1: link com title='Parâmetros'
+                    const t1 = tr.querySelector('a[title*="arâmetros"], a[title*="arametros"]');
+                    if (t1) {{ t1.click(); return 'title'; }}
+                    // Estratégia 2: img com src contendo 'parametro'
+                    const t2 = tr.querySelector('a img[src*="arametr"]');
+                    if (t2) {{ t2.closest('a').click(); return 'img-src'; }}
+                    // Estratégia 3: link com texto 'Parâmetros'
+                    const links = [...tr.querySelectorAll('a')];
+                    for (const a of links) {{
+                        if (norm(a.textContent).includes('PARÂMETROS') || norm(a.textContent).includes('PARAMETROS')) {{
+                            a.click();
+                            return 'text';
+                        }}
+                    }}
+                    // Estratégia 4 (fallback): primeiro link clicável da TR
+                    if (links.length > 0) {{
+                        links[0].click();
+                        return 'first-link';
+                    }}
+                }}
+                return null;
+            }}""",
+            v.nome_pjecalc,
+        )
+        if not clicou:
+            self.log(f"  ⚠ Verba não encontrada na listagem ou sem link Parâmetros: {v.nome_pjecalc}")
+            return
+        self.log(f"    ✓ Click Parâmetros via estratégia: {clicou}")
+        self._aguardar_ajax(8000)
+        self._preencher_form_parametros_verba(v, com_identificacao=False)
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
+
+    def _OLD_configurar_parametros_pos_expresso(self, v) -> None:
+        """[REMOVIDO — substituído por versão flexível acima]."""
+        self.log(f"  → Ajustar parâmetros (OLD): {v.nome_pjecalc}")
         # Buscar linha por nome
         clicou = self._page.evaluate(
             f"""(alvo) => {{
@@ -824,41 +891,55 @@ class PlaywrightAutomatorV2:
 
         # Expandir painel da verba principal + marcar checkbox
         self.log(f"  → Reflexo: {reflexo.nome}")
-        marcou = self._page.evaluate(
-            f"""(verbaPrincipal, alvoReflexo) => {{
-                // Encontrar a linha da verba principal pelo nome
+        # Playwright's page.evaluate accepts ONLY 1 arg (script + 1 value).
+        # Passar lista [verba, reflexo] e desestruturar dentro do JS.
+        click_exibir_ok = self._page.evaluate(
+            """([verbaPrincipal, alvoReflexo]) => {
+                const norm = s => (s||'').toUpperCase();
                 const linhas = [...document.querySelectorAll('tr')];
                 let linhaPrincipal = null;
-                for (const tr of linhas) {{
-                    if (tr.textContent.toUpperCase().includes(verbaPrincipal.toUpperCase())) {{
+                for (const tr of linhas) {
+                    if (norm(tr.textContent).includes(norm(verbaPrincipal))) {
                         linhaPrincipal = tr;
                         break;
-                    }}
-                }}
+                    }
+                }
                 if (!linhaPrincipal) return 'principal-nao-encontrada';
-
-                // Click no Exibir
-                const exibir = linhaPrincipal.querySelector('span.linkDestinacoes');
-                if (exibir) exibir.click();
-
-                // Encontrar reflexo correspondente e marcar
-                setTimeout(() => {{
-                    const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
-                    for (const cb of cbs) {{
-                        const tr = cb.closest('tr');
-                        if (tr && tr.textContent.toUpperCase().includes(alvoReflexo.toUpperCase())) {{
-                            cb.click();
-                            return true;
-                        }}
-                    }}
-                }}, 500);
-                return 'ok';
-            }}""",
-            verba_principal.nome_pjecalc,
-            reflexo.expresso_reflex_alvo,
+                // Click no Exibir (linkDestinacoes)
+                const exibir = linhaPrincipal.querySelector('span.linkDestinacoes, a.linkDestinacoes');
+                if (exibir) { exibir.click(); return 'exibir-clicked'; }
+                return 'sem-link-exibir';
+            }""",
+            [verba_principal.nome_pjecalc, reflexo.expresso_reflex_alvo or ""],
         )
+        if click_exibir_ok == "principal-nao-encontrada":
+            self.log(f"    ⚠ Verba principal '{verba_principal.nome_pjecalc}' não encontrada na listagem — pulando reflexo")
+            return
+        self._aguardar_ajax(3000)
+        self._page.wait_for_timeout(800)
+
+        # Agora marcar o checkbox do reflexo (após Exibir abrir o painel)
+        marcou = self._page.evaluate(
+            """([verbaPrincipal, alvoReflexo]) => {
+                const norm = s => (s||'').toUpperCase().trim();
+                if (!alvoReflexo) return 'sem-alvo';
+                const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
+                for (const cb of cbs) {
+                    const tr = cb.closest('tr');
+                    if (tr && norm(tr.textContent).includes(norm(alvoReflexo))) {
+                        cb.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""",
+            [verba_principal.nome_pjecalc, reflexo.expresso_reflex_alvo or ""],
+        )
+        if marcou is True:
+            self.log(f"    ✓ Reflexo marcado: {reflexo.nome}")
+        else:
+            self.log(f"    ⚠ Reflexo não encontrado: {reflexo.nome} (alvo='{reflexo.expresso_reflex_alvo}', resultado={marcou})")
         self._aguardar_ajax(5000)
-        self.log(f"    ✓ Reflexo marcado: {reflexo.nome}")
 
         # Se há overrides, abrir Parâmetros do reflexo e ajustar
         if reflexo.parametros_override:
