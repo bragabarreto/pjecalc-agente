@@ -801,47 +801,39 @@ class PlaywrightAutomatorV2:
             self._marcar_checkbox("considerarCompetenciaPaga", p.considerar_competencia_paga)
 
     def _configurar_parametros_pos_expresso(self, v) -> None:
-        """Ajustar parâmetros da verba pós-Expresso (clicar ícone Parâmetros e
-        sobrescrever campos com valores da prévia).
+        """Ajustar parâmetros da verba pós-Expresso.
 
-        Estratégia para encontrar o link Parâmetros: na listagem de verbas
-        (verba-calculo.jsf), cada TR tem múltiplos ícones (Parâmetros, Excluir,
-        etc.). O ID dinâmico do JSF varia, então buscamos por:
-        - title="Parâmetros" ou
-        - icon img[src*='parametros'] ou
-        - link com texto "Parâmetros" ou
-        - PRIMEIRO link clicável da linha (heurística: ícone Parâmetros costuma ser o 1º)
+        DOM confirmado (PJE-Calc 2.15.1, institucional+Cidadão):
+        - <a class="linkParametrizar" title="Parâmetros da Verba"> (verba principal)
+        - <a class="linkOcorrencias" title="Ocorrências da Verba"> (ocorrências)
+        - IDs JSF dinâmicos (j_id558 etc.) NÃO são confiáveis — usamos CLASSE CSS.
+        - Reflexos têm linkParametrizar com title="Parametrizar" (SEM "da Verba")
+          — disambiguar via id*=':listaReflexo:'.
         """
         self.log(f"  → Ajustar parâmetros: {v.nome_pjecalc}")
-        # Buscar linha por nome — múltiplas estratégias
         clicou = self._page.evaluate(
-            f"""(alvo) => {{
+            """(alvo) => {
                 const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
                 const trs = [...document.querySelectorAll('tr')];
-                for (const tr of trs) {{
+                for (const tr of trs) {
                     if (!norm(tr.textContent).includes(norm(alvo))) continue;
-                    // Estratégia 1: link com title='Parâmetros'
+                    // PREFERIDO: link com classe 'linkParametrizar' E title começando com 'Parâmetros'
+                    // (exclui reflexos cujo title é apenas 'Parametrizar').
+                    const a = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
+                    if (a) { a.click(); return 'class-title'; }
+                    // Fallback: primeiro a.linkParametrizar da TR (que NÃO seja reflexo)
+                    const links = [...tr.querySelectorAll('a.linkParametrizar')];
+                    for (const link of links) {
+                        if (link.id && link.id.includes(':listaReflexo:')) continue;
+                        link.click();
+                        return 'class-only';
+                    }
+                    // Último: link com title genérico
                     const t1 = tr.querySelector('a[title*="arâmetros"], a[title*="arametros"]');
-                    if (t1) {{ t1.click(); return 'title'; }}
-                    // Estratégia 2: img com src contendo 'parametro'
-                    const t2 = tr.querySelector('a img[src*="arametr"]');
-                    if (t2) {{ t2.closest('a').click(); return 'img-src'; }}
-                    // Estratégia 3: link com texto 'Parâmetros'
-                    const links = [...tr.querySelectorAll('a')];
-                    for (const a of links) {{
-                        if (norm(a.textContent).includes('PARÂMETROS') || norm(a.textContent).includes('PARAMETROS')) {{
-                            a.click();
-                            return 'text';
-                        }}
-                    }}
-                    // Estratégia 4 (fallback): primeiro link clicável da TR
-                    if (links.length > 0) {{
-                        links[0].click();
-                        return 'first-link';
-                    }}
-                }}
+                    if (t1) { t1.click(); return 'title-fallback'; }
+                }
                 return null;
-            }}""",
+            }""",
             v.nome_pjecalc,
         )
         if not clicou:
@@ -891,8 +883,9 @@ class PlaywrightAutomatorV2:
 
         # Expandir painel da verba principal + marcar checkbox
         self.log(f"  → Reflexo: {reflexo.nome}")
-        # Playwright's page.evaluate accepts ONLY 1 arg (script + 1 value).
-        # Passar lista [verba, reflexo] e desestruturar dentro do JS.
+        # DOM confirmado: span.linkDestinacoes "Exibir" abre painel com checkboxes
+        # de reflexos. Span tem classe específica `exibirItem<id>` e onclick
+        # configurado via jQuery (.exibirDetalhes).
         click_exibir_ok = self._page.evaluate(
             """([verbaPrincipal, alvoReflexo]) => {
                 const norm = s => (s||'').toUpperCase();
@@ -905,9 +898,14 @@ class PlaywrightAutomatorV2:
                     }
                 }
                 if (!linhaPrincipal) return 'principal-nao-encontrada';
-                // Click no Exibir (linkDestinacoes)
-                const exibir = linhaPrincipal.querySelector('span.linkDestinacoes, a.linkDestinacoes');
-                if (exibir) { exibir.click(); return 'exibir-clicked'; }
+                // Click no Exibir (span.linkDestinacoes — classe estável)
+                const exibir = linhaPrincipal.querySelector('span.linkDestinacoes');
+                if (exibir) {
+                    exibir.click();
+                    // jQuery handler: tentar dispatchEvent caso onclick não funcione
+                    try { exibir.dispatchEvent(new MouseEvent('click', {bubbles:true})); } catch(e) {}
+                    return 'exibir-clicked';
+                }
                 return 'sem-link-exibir';
             }""",
             [verba_principal.nome_pjecalc, reflexo.expresso_reflex_alvo or ""],
