@@ -382,7 +382,14 @@ class ParametrosReflexo(BaseModel):
 
 
 class Reflexo(BaseModel):
+    """Reflexo de uma verba principal.
+
+    OBRIGATÓRIO: `verba_principal_id` deve casar com o `id` de exatamente UMA verba
+    em `verbas_principais`. Reflexos órfãos (sem principal correspondente) são
+    rejeitados pelo validador `_verifica_reflexos_vinculados` em PreviaCalculoV2.
+    """
     id: str
+    verba_principal_id: str  # FK para VerbaPrincipal.id — obrigatório
     nome: str
     estrategia_reflexa: EstrategiaReflexa = EstrategiaReflexa.CHECKBOX_PAINEL
     indice_reflexo_listagem: Optional[int] = None
@@ -672,6 +679,45 @@ class PreviaCalculoV2(BaseModel):
 
         if avisos:
             self.meta.validacao.avisos.extend(avisos)
+        if self.meta.validacao.campos_faltantes:
+            self.meta.validacao.completude = "INCOMPLETO"
+        return self
+
+    @model_validator(mode="after")
+    def _verifica_reflexos_vinculados(self) -> "PreviaCalculoV2":
+        """Valida que todo reflexo aponta para uma verba principal existente.
+
+        Regras:
+        1. `reflexo.verba_principal_id` deve casar com algum `verbas_principais[i].id`.
+        2. O reflexo deve estar listado em `verbas_principais[i].reflexos` daquela
+           principal (consistência estrutural).
+        3. IDs de reflexos devem ser únicos no arquivo todo.
+        """
+        principais_ids = {v.id for v in self.verbas_principais}
+        reflexo_ids_globais: list[str] = []
+
+        for v in self.verbas_principais:
+            for r in v.reflexos:
+                # Regra 1: FK válida
+                if r.verba_principal_id not in principais_ids:
+                    self.meta.validacao.campos_faltantes.append(
+                        f"reflexo[{r.id}].verba_principal_id={r.verba_principal_id} "
+                        f"não corresponde a nenhuma verba_principal"
+                    )
+                # Regra 2: consistência estrutural — reflexo dentro do bloco
+                # da principal deve apontar para essa principal.
+                elif r.verba_principal_id != v.id:
+                    self.meta.validacao.campos_faltantes.append(
+                        f"reflexo[{r.id}] está aninhado em verba_principal[{v.id}] "
+                        f"mas verba_principal_id={r.verba_principal_id} aponta para outra"
+                    )
+                # Regra 3: ID global único
+                if r.id in reflexo_ids_globais:
+                    self.meta.validacao.campos_faltantes.append(
+                        f"reflexo.id={r.id} duplicado"
+                    )
+                reflexo_ids_globais.append(r.id)
+
         if self.meta.validacao.campos_faltantes:
             self.meta.validacao.completude = "INCOMPLETO"
         return self

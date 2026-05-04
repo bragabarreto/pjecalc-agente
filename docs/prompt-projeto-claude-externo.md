@@ -307,28 +307,65 @@ A verba é calculada por fórmula:
 
 ## 4.5 REFLEXOS
 
+**REGRA CRÍTICA**: Todo reflexo DEVE estar aninhado dentro de uma verba_principal,
+**E** o campo `verba_principal_id` deve casar com o `id` da principal que o contém.
+
+```
+verbas_principais: [
+  {
+    "id": "v01",                    ← id da principal
+    "nome_pjecalc": "DIFERENCA SALARIAL",
+    "reflexos": [
+      {
+        "id": "r01-01",
+        "verba_principal_id": "v01",  ← OBRIGATÓRIO: casa com id da principal acima
+        ...
+      }
+    ]
+  }
+]
+```
+
+### Catálogo de reflexos por tipo de verba principal
+
 Para cada verba principal, identificar reflexos. Padrão de incidência:
 
 | Verba principal | Reflexos típicos | estrategia_reflexa |
 |---|---|---|
-| Adicionais (insalub, pericul, noturno) | AVISO PRÉVIO, FÉRIAS+1/3, MULTA 477, 13º | checkbox_painel |
+| Adicionais (insalub, pericul, noturno) | AVISO PRÉVIO, FÉRIAS+1/3, MULTA 477, 13º, FGTS, FGTS 40% | checkbox_painel |
 | Horas Extras 50%/100% | + RSR/Feriado | checkbox_painel |
-| Comissão / Gorjeta | + RSR | checkbox_painel |
-| Diferença Salarial | AVISO PRÉVIO, FÉRIAS+1/3, MULTA 477, 13º | checkbox_painel |
-| Estabilidade pós-contrato | 13º, FÉRIAS+1/3, FGTS+40% | manual |
+| Comissão / Gorjeta | + RSR + AV. PRÉVIO + FÉRIAS+1/3 + 13º + FGTS | checkbox_painel |
+| Diferença Salarial | AVISO PRÉVIO, FÉRIAS+1/3, MULTA 477, 13º, FGTS, FGTS 40% | checkbox_painel |
+| Estabilidade pós-contrato (período > demissão) | 13º, FÉRIAS+1/3, FGTS+40% | **manual** |
+| Indenização Lei 9.029/95 (dispensa discrim.) | 13º, FÉRIAS+1/3, FGTS+40% | **manual** |
+
+### Estrutura completa de cada reflexo
 
 ```json
-"reflexos": [
-  {
-    "id": "r01-01",
-    "nome": "AVISO PRÉVIO sobre Diferença Salarial",
-    "estrategia_reflexa": "checkbox_painel",
-    "expresso_reflex_alvo": "AVISO PRÉVIO SOBRE DIFERENÇA SALARIAL",
-    "parametros_override": null,
-    "ocorrencias_override": null
-  }
-]
+{
+  "id": "r01-01",                     // único globalmente; convenção: r{principal_idx}-{reflexo_idx}
+  "verba_principal_id": "v01",        // OBRIGATÓRIO: id da principal pai
+  "nome": "AVISO PRÉVIO sobre Diferença Salarial",
+  "estrategia_reflexa": "checkbox_painel",  // ou "manual" se não houver Expresso correspondente
+  "indice_reflexo_listagem": null,    // só se múltiplos reflexos do mesmo tipo
+  "expresso_reflex_alvo": "AVISO PRÉVIO SOBRE DIFERENÇA SALARIAL",  // texto exato do label
+  "parametros_override": null,         // só se a principal tem parâmetros distintos do reflexo
+  "ocorrencias_override": null
+}
 ```
+
+### Regras de obrigatoriedade
+
+1. **Reflexos órfãos são REJEITADOS** pelo validador Pydantic. `verba_principal_id` é obrigatório.
+2. **IDs únicos globalmente**: `r01-01`, `r01-02`, `r02-01`, etc. — não pode repetir entre principais.
+3. **Estratégia "manual"** quando o catálogo Expresso não tem o pareado (ex.: reflexos de estabilidade ou Lei 9.029/95). Nesse caso `expresso_reflex_alvo` pode ser `null`.
+4. **expresso_reflex_alvo deve ser o LABEL EXATO** do checkbox no painel de reflexos do PJE-Calc, no formato `"X SOBRE Y"`. Exemplos:
+   - `"AVISO PRÉVIO SOBRE DIFERENÇA SALARIAL"`
+   - `"FERIAS + 1/3 SOBRE HORAS EXTRAS"`
+   - `"13º SALARIO SOBRE ADICIONAL DE INSALUBRIDADE"`
+   - `"FGTS SOBRE HORAS EXTRAS"`
+   - `"FGTS 40% SOBRE HORAS EXTRAS"`
+   - `"MULTA 477 SOBRE DIFERENÇA SALARIAL"`
 
 # 5. CARTAO_DE_PONTO
 
