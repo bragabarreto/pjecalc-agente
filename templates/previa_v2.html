@@ -750,22 +750,72 @@ function htmlVerba(v, idx) {
           placeholder="Notas para o cálculo (opcional)">${p.comentarios||''}</textarea>
       </details>
 
-      ${v.reflexos && v.reflexos.length > 0 ? `
-      <div class="reflexos-list">
-        <div class="fieldgroup-title">Reflexos (${v.reflexos.length})</div>
-        ${v.reflexos.map((r, ri) => `
-          <div class="reflexo-item">
-            <span class="nome">${r.nome}</span>
-            <span class="estrategia-mini ${r.estrategia_reflexa}">${r.estrategia_reflexa}</span>
-            <button onclick="if(confirm('Remover reflexo?')){previaData.verbas_principais[${idx}].reflexos.splice(${ri},1);renderVerbas()}"
-              style="color:#e74c3c; background:none; border:none; cursor:pointer;">✕</button>
-          </div>
+      <div class="fieldgroup reflexos-fieldgroup" style="border-left: 3px solid #5a8dee;">
+        <div class="fieldgroup-title">
+          🔗 Reflexos vinculados a esta verba principal
+          <span style="float:right; font-weight:400; color:#6c757d;">${(v.reflexos||[]).length} reflexo(s)</span>
+        </div>
+        ${(v.reflexos||[]).map((r, ri) => `
+          <details class="reflexo-card" style="border:1px solid #dee2e6; border-radius:5px; padding:8px 10px; margin-bottom:6px; background:#f8faff;">
+            <summary style="cursor:pointer; font-size:0.9rem; display:flex; justify-content:space-between; align-items:center;">
+              <span><strong>↳ ${r.nome || '(sem nome)'}</strong>
+                <span class="estrategia-mini ${r.estrategia_reflexa||'checkbox_painel'}" style="margin-left:8px; font-size:0.7rem; padding:2px 6px; border-radius:3px; background:${r.estrategia_reflexa==='manual'?'#fff3cd':'#d4edda'};">${r.estrategia_reflexa||'checkbox_painel'}</span>
+                <span style="margin-left:8px; font-size:0.75rem; color:#868e96;">→ ${r.verba_principal_id||v.id}</span>
+              </span>
+              <button onclick="event.preventDefault();if(confirm('Remover reflexo?')){previaData.verbas_principais[${idx}].reflexos.splice(${ri},1);renderVerbas();validarPrevia()}"
+                style="color:#e74c3c; background:none; border:none; cursor:pointer; font-size:1rem;">✕</button>
+            </summary>
+            <div style="margin-top:8px;">
+              <div class="grid-3">
+                <div class="campo">
+                  <label>ID do reflexo</label>
+                  <input type="text" value="${r.id||''}"
+                    onchange="previaData.verbas_principais[${idx}].reflexos[${ri}].id=this.value; validarPrevia()">
+                </div>
+                <div class="campo col-span-2">
+                  <label>Nome</label>
+                  <input type="text" value="${r.nome||''}"
+                    onchange="previaData.verbas_principais[${idx}].reflexos[${ri}].nome=this.value; renderVerbas()">
+                </div>
+                <div class="campo">
+                  <label>verba_principal_id (FK) <span class="obrigatorio">*</span></label>
+                  <input type="text" value="${r.verba_principal_id||v.id}" readonly
+                    style="background:#f0f0f0; cursor:not-allowed;"
+                    title="Vinculação automática à verba pai">
+                </div>
+                <div class="campo">
+                  <label>Estratégia</label>
+                  <select onchange="previaData.verbas_principais[${idx}].reflexos[${ri}].estrategia_reflexa=this.value; renderVerbas()">
+                    <option value="checkbox_painel"${r.estrategia_reflexa==='checkbox_painel'?' selected':''}>Checkbox Painel (Expresso)</option>
+                    <option value="manual"${r.estrategia_reflexa==='manual'?' selected':''}>Manual</option>
+                  </select>
+                </div>
+                <div class="campo">
+                  <label>Índice na listagem (opcional)</label>
+                  <input type="number" value="${r.indice_reflexo_listagem??''}"
+                    onchange="previaData.verbas_principais[${idx}].reflexos[${ri}].indice_reflexo_listagem=this.value?parseInt(this.value):null">
+                </div>
+                <div class="campo col-span-full">
+                  <label>Expresso reflexo alvo (label PJE-Calc, formato "X SOBRE Y")</label>
+                  <input type="text" value="${r.expresso_reflex_alvo||''}"
+                    placeholder="ex.: AVISO PRÉVIO SOBRE DIFERENÇA SALARIAL"
+                    onchange="previaData.verbas_principais[${idx}].reflexos[${ri}].expresso_reflex_alvo=this.value">
+                </div>
+                <div class="campo col-span-full">
+                  <label>Parâmetros override (JSON, opcional)</label>
+                  <textarea rows="2" placeholder="null ou {periodo_inicio, periodo_fim, ...}"
+                    onchange="try{previaData.verbas_principais[${idx}].reflexos[${ri}].parametros_override=this.value?JSON.parse(this.value):null;validarPrevia()}catch(e){alert('JSON inválido: '+e.message)}"
+                  >${r.parametros_override?JSON.stringify(r.parametros_override,null,2):''}</textarea>
+                  <span class="ajuda">Use só se o reflexo tem período/incidências distintos da principal</span>
+                </div>
+              </div>
+            </div>
+          </details>
         `).join('')}
+        <button onclick="adicionarReflexo(${idx})" style="margin-top:6px; font-size:0.85rem;">+ Adicionar reflexo a esta verba</button>
       </div>
-      ` : ''}
 
-      <button onclick="adicionarReflexo(${idx})" style="margin-top:8px; font-size:0.85rem;">+ Adicionar Reflexo</button>
-      <button onclick="if(confirm('Remover verba?')){previaData.verbas_principais.splice(${idx},1);renderVerbas();validarPrevia()}"
+      <button onclick="if(confirm('Remover verba e seus reflexos?')){previaData.verbas_principais.splice(${idx},1);renderVerbas();validarPrevia()}"
         style="margin-top:8px; font-size:0.85rem; color:#e74c3c; float:right;">🗑️ Remover Verba</button>
     </div>
   `;
