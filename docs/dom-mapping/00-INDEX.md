@@ -72,3 +72,10 @@ de período pós-contrato, replicar via `formulario:devido` na Alteração em Lo
    AVISO→DESLIGAMENTO, FERIAS→PERIODO_AQUISITIVO
 5. **Após qualquer mudança em parâmetros, Regerar (Sobrescrever)** as ocorrências —
    senão Liquidar reclama "Multiplicador alterado após geração"
+
+## Documento adicional pós-revisão
+
+| # | Arquivo | Conteúdo |
+|---|---|---|
+| 06 | [ERRATA-FASE1.md](06-ERRATA-FASE1.md) | Erros e omissões corrigidos após revisão preventiva |
+| 07 | [parametros-ocorrencias-reflexos.md](07-parametros-ocorrencias-reflexos.md) | **Página Parâmetros do REFLEXO + seção Reflexos na Ocorrências** — formulário distinto da Principal, estrutura `reflexos:N:listagem:M:*Reflexo` |
