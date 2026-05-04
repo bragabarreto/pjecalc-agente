@@ -218,18 +218,55 @@ class PlaywrightAutomatorV2:
         self.log("✓ PJE-Calc home carregado")
 
     def _criar_novo_calculo(self) -> None:
-        """Click em Criar Novo Cálculo. Ajustar para fluxo institucional/cidadão."""
-        self._page.evaluate(
-            """document.querySelectorAll('a').forEach(a => {
-                if (a.textContent.trim() === 'Criar Novo Cálculo') a.click();
-            })"""
+        """Click em "Novo" no menu lateral do PJE-Calc Cidadão.
+
+        IMPORTANTE: per CLAUDE.md, sempre usar "Novo" (não "Cálculo Externo").
+        O Cidadão NÃO tem "Criar Novo Cálculo" — apenas "Novo" no menu lateral
+        ou submenu de operações.
+        """
+        # Tentar múltiplos seletores em ordem de robustez
+        clicou = self._page.evaluate(
+            """() => {
+                // 1. li id="li_novo" no menu lateral (Cidadão)
+                const liNovo = document.getElementById('li_novo');
+                if (liNovo) {
+                    const a = liNovo.querySelector('a');
+                    if (a) { a.click(); return 'li_novo'; }
+                }
+                // 2. Qualquer <a> com texto exato "Novo" dentro de menu
+                const links = [...document.querySelectorAll('a')];
+                for (const a of links) {
+                    const t = (a.textContent||'').trim();
+                    if (t === 'Novo' || t === 'Criar Novo Cálculo' || t === 'Novo Cálculo') {
+                        a.click();
+                        return 'text-match: '+t;
+                    }
+                }
+                return null;
+            }"""
         )
-        self._aguardar_ajax(20000)
+        if not clicou:
+            raise RuntimeError(
+                "Botão 'Novo' não encontrado na home do PJE-Calc. "
+                "Verifique se está logado e em principal.jsf."
+            )
+        self.log(f"  → Click via {clicou}")
+        self._aguardar_ajax(25000)
+        # Esperar URL mudar para algo como calculo.jsf?conversationId=N
+        try:
+            self._page.wait_for_url("**/calculo*.jsf*", timeout=20000)
+        except Exception:
+            pass
         # Capturar conversationId
         url = self._page.url
         if "conversationId=" in url:
             self._calculo_conversation_id = url.split("conversationId=")[1].split("&")[0]
-        self.log(f"✓ Novo cálculo criado (conv={self._calculo_conversation_id})")
+        self.log(f"✓ Novo cálculo criado (conv={self._calculo_conversation_id}, url={url[-80:]})")
+        if not self._calculo_conversation_id:
+            raise RuntimeError(
+                f"conversationId não capturado após click em 'Novo'. URL atual: {url}. "
+                f"Pode ser que a navegação tenha falhado ou o cálculo não foi inicializado."
+            )
 
     def fase_processo(self) -> None:
         self.log("Fase 1 — Dados do Processo")
