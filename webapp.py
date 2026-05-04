@@ -2339,6 +2339,49 @@ async def executar_automacao_sse(
     )
 
 
+# ─── SSE v2: executa PlaywrightAutomatorV2 a partir de prévia v2 ─────────
+
+
+@app.get("/api/executar/v2/{sessao_id}")
+async def executar_automacao_v2_sse(sessao_id: str, request: Request):
+    """SSE que executa PlaywrightAutomatorV2 e transmite logs linha-a-linha.
+
+    Usa o mesmo padrão (`_AutomacaoRunner`) do v1, mas o generator vem do
+    schema v2 (modules.webapp_v2.executar_v2_como_generator).
+    """
+    from starlette.responses import StreamingResponse as _SR_v2
+    from modules.webapp_v2 import executar_v2_como_generator
+
+    async def gerador_sse_v2():
+        # Verificar se já existe runner — reutilizar (ex.: F5 do navegador)
+        existing = _automacao_runners.get(sessao_id)
+        if existing and not existing.done:
+            async for chunk in _sse_follow_runner(existing, sessao_id):
+                yield chunk
+            return
+
+        # Criar generator + runner
+        try:
+            gen = executar_v2_como_generator(sessao_id)
+        except Exception as e:
+            yield f"data: ERRO_EXPORTAVEL::Falha ao iniciar generator v2: {e}\n\n"
+            yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+            return
+
+        runner = _AutomacaoRunner(sessao_id)
+        _automacao_runners[sessao_id] = runner
+        runner.start_thread(gen)
+
+        async for chunk in _sse_follow_runner(runner, sessao_id):
+            yield chunk
+
+    return _SR_v2(
+        gerador_sse_v2(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/parar/{sessao_id}")
 async def parar_automacao(sessao_id: str):
     """Para a automação em execução e limpa o runner."""

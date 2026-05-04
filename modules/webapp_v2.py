@@ -106,6 +106,64 @@ async def processar_v2(payload: dict):
 # ─── GET /previa/v2/{sessao_id} ────────────────────────────────────────────
 
 
+@router_v2.get("/instrucoes/v2/{sessao_id}", response_class=HTMLResponse)
+async def instrucoes_v2(sessao_id: str, request: Request):
+    """Página que acompanha a automação v2 via SSE.
+
+    Conecta-se a /api/executar/v2/{sessao_id} e exibe os logs em tempo real.
+    """
+    html = f"""<!doctype html>
+<html lang="pt-BR"><head>
+<meta charset="utf-8"><title>Automação v2 — {sessao_id[:8]}</title>
+<style>
+body {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace; max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }}
+h1 {{ font-size: 1.1rem; }}
+.status {{ display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; }}
+.status.running {{ background: #fff3cd; color: #856404; }}
+.status.done {{ background: #d4edda; color: #155724; }}
+.status.error {{ background: #f8d7da; color: #721c24; }}
+#logs {{ background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 6px; height: 60vh; overflow-y: auto; font-size: 0.82rem; line-height: 1.4; }}
+.log-line {{ white-space: pre-wrap; word-break: break-word; }}
+.log-line.warn {{ color: #ffd166; }}
+.log-line.err {{ color: #ef476f; }}
+.log-line.ok {{ color: #06d6a0; }}
+button {{ padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }}
+</style></head><body>
+<h1>Automação v2 <span id="status" class="status running">⏳ iniciando…</span></h1>
+<p>Sessão: <code>{sessao_id}</code> · <a href="/previa/v2/{sessao_id}">← voltar à prévia</a></p>
+<div id="logs"></div>
+<p style="margin-top:1rem;">
+  <button onclick="window.location.reload()">↻ Reconectar</button>
+  <button onclick="fetch('/api/parar/{sessao_id}', {{method:'POST'}}).then(r=>r.json()).then(d=>alert(d.msg))">⏹ Parar</button>
+  <a href="/api/erros-mapping/{sessao_id}" target="_blank"><button type="button">📋 Erros de mapping</button></a>
+</p>
+<script>
+const logs = document.getElementById('logs');
+const status = document.getElementById('status');
+const es = new EventSource('/api/executar/v2/{sessao_id}');
+es.onmessage = (e) => {{
+  let txt = e.data;
+  try {{ const j = JSON.parse(txt); txt = j.msg || txt; }} catch(_) {{}}
+  const div = document.createElement('div');
+  div.className = 'log-line';
+  if (/✗|ERRO|FALHA|Traceback/.test(txt)) {{ div.classList.add('err'); }}
+  else if (/⚠|⏳/.test(txt)) {{ div.classList.add('warn'); }}
+  else if (/✓|PJC_GERADO|concluí/i.test(txt)) {{ div.classList.add('ok'); }}
+  div.textContent = txt;
+  logs.appendChild(div);
+  logs.scrollTop = logs.scrollHeight;
+  if (txt.includes('[FIM DA EXECUÇÃO')) {{
+    status.textContent = txt.includes('ERRO') ? '❌ erro' : '✓ concluído';
+    status.className = 'status ' + (txt.includes('ERRO') ? 'error' : 'done');
+    es.close();
+  }}
+}};
+es.onerror = () => {{ status.textContent = '⚠ desconectado'; status.className = 'status error'; }};
+</script>
+</body></html>"""
+    return HTMLResponse(html)
+
+
 @router_v2.get("/previa/v2/{sessao_id}", response_class=HTMLResponse)
 async def previa_v2_view(sessao_id: str, request: Request):
     """Renderiza template previa_v2.html com os dados da sessão."""
@@ -197,12 +255,94 @@ async def confirmar_previa(sessao_id: str, payload: dict):
     data["meta"]["confirmada"] = True
     _save_previa(sessao_id, data)
 
-    # TODO Fase 5: enfileirar automação aqui
     return {
         "status": "confirmada",
         "sessao_id": sessao_id,
-        "redirect_url": f"/instrucoes/{sessao_id}",
+        "redirect_url": f"/instrucoes/v2/{sessao_id}",
+        "sse_url": f"/api/executar/v2/{sessao_id}",
     }
+
+
+# ─── Generator que roda PlaywrightAutomatorV2 e yields logs ───────────────
+
+
+def executar_v2_como_generator(sessao_id: str):
+    """Generator que roda a automação v2 e yields cada linha de log.
+
+    Compatível com a infra `_AutomacaoRunner` do webapp.py: cada `yield`
+    produz uma linha de log que vai para SSE.
+    """
+    import queue
+    import threading
+    import traceback
+
+    data = _load_previa(sessao_id)
+    if not data:
+        yield f"ERRO: sessão {sessao_id} não encontrada"
+        return
+
+    # Validar antes de iniciar
+    try:
+        previa = PreviaCalculoV2.model_validate(data)
+    except Exception as e:
+        yield f"ERRO: validação Pydantic falhou: {e}"
+        return
+
+    if previa.meta.validacao.completude != "OK":
+        yield f"ERRO: prévia INCOMPLETA — {len(previa.meta.validacao.campos_faltantes)} pendência(s):"
+        for p in previa.meta.validacao.campos_faltantes[:20]:
+            yield f"  • {p}"
+        return
+
+    # Importar o automator v2
+    try:
+        from modules.playwright_v2 import PlaywrightAutomatorV2
+    except Exception as e:
+        yield f"ERRO: PlaywrightAutomatorV2 indisponível: {e}"
+        return
+
+    # Queue para passar logs do thread do bot para o generator
+    log_q: queue.Queue = queue.Queue()
+    SENTINEL = object()
+    pjc_path_holder: dict = {}
+
+    def log_fn(msg: str) -> None:
+        log_q.put(msg)
+
+    def _executar_bot() -> None:
+        try:
+            with PlaywrightAutomatorV2(previa, log_fn=log_fn) as bot:
+                pjc = bot.run()
+                pjc_path_holder["pjc"] = pjc
+                if pjc:
+                    log_q.put(f"PJC_GERADO:{pjc}")
+        except Exception as e:
+            log_q.put(f"ERRO na automação v2: {e}")
+            log_q.put(traceback.format_exc())
+        finally:
+            log_q.put(SENTINEL)
+
+    t = threading.Thread(target=_executar_bot, daemon=True)
+    t.start()
+
+    yield f"══ Automação v2 iniciada para sessão {sessao_id} ══"
+    yield f"  Processo: {previa.processo.numero_processo}"
+    yield f"  Reclamante: {previa.processo.reclamante.nome}"
+    yield f"  Verbas: {len(previa.verbas_principais)} principais + " \
+          f"{sum(len(v.reflexos) for v in previa.verbas_principais)} reflexos"
+
+    # Drenar a queue
+    while True:
+        try:
+            item = log_q.get(timeout=15)
+        except queue.Empty:
+            yield "⏳ Processando…"
+            continue
+        if item is SENTINEL:
+            break
+        yield item
+
+    yield "[FIM DA EXECUÇÃO V2]"
 
 
 # ─── Helper: converter prévia v2 → v1 (compat com automação atual) ────────
