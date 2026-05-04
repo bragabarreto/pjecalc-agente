@@ -292,9 +292,20 @@ class DivisorVerba(BaseModel):
 
 
 class QuantidadeVerba(BaseModel):
+    """Quantidade na fórmula CALCULADO.
+
+    Tolerância: se `tipo=INFORMADA` mas `valor=None`, normalizamos para
+    `tipo=CALCULADA` (sistema apura) com valor 0.
+    """
     tipo: TipoQuantidade = TipoQuantidade.INFORMADA
-    valor: float = 1.0
+    valor: Optional[float] = 1.0
     proporcionalizar: bool = False
+
+    @model_validator(mode="after")
+    def _normaliza_valor_null(self) -> "QuantidadeVerba":
+        if self.valor is None:
+            self.valor = 0.0
+        return self
 
 
 class FormulaCalculado(BaseModel):
@@ -359,6 +370,16 @@ class ParametrosVerba(BaseModel):
 
     @model_validator(mode="after")
     def _check_valor_consistency(self) -> "ParametrosVerba":
+        # Tolerância: se LLM gerou valor=CALCULADO mas formula_calculado é null
+        # E valor_devido tem valor_informado_brl, normalizamos para INFORMADO.
+        if (
+            self.valor == TipoValor.CALCULADO
+            and self.formula_calculado is None
+            and isinstance(self.valor_devido, ValorDevidoInformado)
+            and self.valor_devido.valor_informado_brl is not None
+        ):
+            self.valor = TipoValor.INFORMADO
+
         if self.valor == TipoValor.INFORMADO:
             if not isinstance(self.valor_devido, ValorDevidoInformado):
                 raise ValueError("valor=INFORMADO requer valor_devido tipo INFORMADO com valor_informado_brl")
@@ -478,13 +499,18 @@ class RecolhimentoFGTS(BaseModel):
     Cada entrada representa um período em que o empregador depositou FGTS.
     A automação só edita esta tabela se o reclamante já fez saque do FGTS
     (multa rescisória prévia, doença grave, etc.) — caso raro.
+
+    Aceita aliases legacy: `periodo_inicio` → `competencia_inicio`,
+    `periodo_fim` → `competencia_fim`, `valor_depositado_brl` → `valor_total_depositado_brl`.
     """
+    model_config = ConfigDict(populate_by_name=True)
 
     tipo: Literal["DEPOSITO_REGULAR", "SAQUE", "MULTA_RESCISORIA"] = "DEPOSITO_REGULAR"
-    competencia_inicio: str  # MM/YYYY
-    competencia_fim: str  # MM/YYYY
-    valor_total_depositado_brl: float = Field(ge=0)
+    competencia_inicio: str = Field(alias="periodo_inicio")  # MM/YYYY
+    competencia_fim: str = Field(alias="periodo_fim")  # MM/YYYY
+    valor_total_depositado_brl: float = Field(ge=0, alias="valor_depositado_brl")
     fonte: Literal["INFORMADO_PELA_PARTE", "EXTRATO_FGTS_OFICIAL", "AUTOMATICO"] = "AUTOMATICO"
+    descricao: Optional[str] = None
 
 
 class FGTS(BaseModel):
@@ -567,16 +593,37 @@ class CredorHonorario(BaseModel):
 
 
 class Honorario(BaseModel):
-    id: str
-    tipo_honorario: str  # ver enum no doc 11
-    descricao: str
-    tipo_devedor: Literal["RECLAMANTE", "RECLAMADO"]
-    tipo_valor: TipoValor
-    aliquota_pct: Optional[float] = None
-    base_para_apuracao: Optional[str] = None
-    credor: CredorHonorario
+    """Honorário (advocatício/sucumbencial/pericial).
+
+    Aceita aliases legacy do prompt: `tipo` → `tipo_honorario`,
+    `devedor` → `tipo_devedor`, `percentual` → `aliquota_pct`,
+    `base_apuracao` → `base_para_apuracao`. `id`, `descricao`, `credor`
+    têm defaults para tolerância.
+    """
+    model_config = ConfigDict(populate_by_name=True)
+
+    id: str = ""  # auto-preenchido se vazio
+    tipo_honorario: str = Field(alias="tipo")  # ver enum no doc 11
+    descricao: str = ""
+    tipo_devedor: Literal[
+        "RECLAMANTE", "RECLAMADO",
+        "RECLAMANTE_ARCADO_PELA_UNIAO",  # casos de gratuidade judiciária
+    ] = Field(alias="devedor")
+    tipo_valor: TipoValor = TipoValor.CALCULADO
+    aliquota_pct: Optional[float] = Field(default=None, alias="percentual")
+    base_para_apuracao: Optional[str] = Field(default=None, alias="base_apuracao")
+    credor: Optional[CredorHonorario] = None
     apurar_irrf: bool = False
     valor_informado_brl: Optional[float] = None
+    comentarios: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _autofill_id(self) -> "Honorario":
+        if not self.id:
+            import hashlib as _h
+            base = f"{self.tipo_honorario}-{self.tipo_devedor}-{self.aliquota_pct or self.valor_informado_brl}"
+            self.id = "h-" + _h.md5(base.encode()).hexdigest()[:8]
+        return self
 
 
 class CustasJudiciais(BaseModel):

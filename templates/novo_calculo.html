@@ -50,63 +50,29 @@
 
   <form id="form-upload" enctype="multipart/form-data">
 
-    <!-- Sentença principal -->
+    <!-- Sentença principal — APENAS JSON v2 -->
     <div style="margin-bottom:24px;">
       <h4 style="color:#1a3a6b; margin-bottom:10px;">
-        Sentença Trabalhista <span style="color:#dc3545; font-size:0.9rem;">*</span>
+        Prévia v2 — JSON do Projeto Claude <span style="color:#dc3545; font-size:0.9rem;">*</span>
       </h4>
-      <div class="doc-tabs">
-        <button type="button" class="tab-btn ativa" id="tab-sent-arquivo"
-                onclick="setarAbaSentenca('arquivo')">📄 Arquivo (PDF/DOCX/TXT)</button>
-        <button type="button" class="tab-btn" id="tab-sent-texto"
-                onclick="setarAbaSentenca('texto')">📋 Texto colado (Ctrl+V)</button>
-        <button type="button" class="tab-btn" id="tab-sent-relatorio"
-                onclick="setarAbaSentenca('relatorio')" style="border-color:#6f42c1;">
-          🤖 Relatório Estruturado
-        </button>
+      <div style="background:#f3f0ff; border:1px solid #d0bfff; border-radius:8px;
+                  padding:12px 16px; margin-bottom:12px; font-size:0.88rem; color:#5a3e99;">
+        <strong>📌 Pipeline v2 (única rota suportada)</strong><br>
+        Faça upload do <strong>JSON v2.0</strong> gerado pelo seu Projeto Claude (System Prompt em
+        <code>docs/prompt-projeto-claude-externo.md</code>). O JSON é validado por Pydantic v2 e
+        aberto para revisão na nova UI da prévia.
+        <br><br>
+        <em>Se o seu Claude ainda não gera JSON v2, atualize o System Prompt antes.</em>
       </div>
 
       <div id="aba-sent-arquivo" class="aba-conteudo ativa">
         <div class="upload-area" id="area-sentenca"
              onclick="document.getElementById('arquivo-sentenca').click()">
-          <input type="file" id="arquivo-sentenca" name="sentenca" accept=".pdf,.docx,.doc,.txt,.json">
-          <div style="font-size:2rem; color:#1a3a6b; margin-bottom:6px;">📄</div>
-          <div style="font-size:1rem; color:#1a3a6b; font-weight:600;">Clique para selecionar a sentença</div>
-          <div style="color:#6c757d; font-size:0.85rem; margin-top:4px;">PDF, DOCX, TXT ou <strong style="color:#5a3e99;">JSON v2 do Projeto Claude</strong> (auto-detectado)</div>
+          <input type="file" id="arquivo-sentenca" name="sentenca" accept=".json" required>
+          <div style="font-size:2rem; color:#5a3e99; margin-bottom:6px;">🤖</div>
+          <div style="font-size:1rem; color:#5a3e99; font-weight:600;">Clique para selecionar o JSON v2</div>
+          <div style="color:#6c757d; font-size:0.85rem; margin-top:4px;">Apenas <strong>.json</strong> com <code>meta.schema_version: "2.0"</code></div>
           <div id="nome-sentenca" style="margin-top:10px; color:#28a745; font-weight:600;"></div>
-        </div>
-      </div>
-
-      <div id="aba-sent-texto" class="aba-conteudo">
-        <textarea id="sentenca-texto"
-                  placeholder="Cole aqui o texto da sentença (Ctrl+V)..."
-                  rows="14"
-                  style="width:100%; padding:12px; border:1px solid #ced4da; border-radius:8px;
-                         font-size:0.9rem; font-family:inherit; resize:vertical; line-height:1.5;"></textarea>
-        <div id="contador-sentenca" style="text-align:right; font-size:0.8rem; color:#6c757d; margin-top:4px;">
-          0 caracteres
-        </div>
-      </div>
-
-      <div id="aba-sent-relatorio" class="aba-conteudo">
-        <div style="background:#f3f0ff; border:1px solid #d0bfff; border-radius:8px;
-                    padding:12px 16px; margin-bottom:10px; font-size:0.88rem; color:#5a3e99;">
-          <strong>Relatório Estruturado do Projeto Claude</strong> — Cole aqui a saída gerada pelo
-          seu Projeto Claude de análise de sentença. O agente fará o mapeamento direto ao PJE-Calc
-          com alta confiança, sem reprocessar a sentença do zero.
-        </div>
-        <textarea id="sentenca-relatorio"
-                  placeholder="Cole aqui o relatório gerado pelo Projeto Claude (Ctrl+V)...
-
-Exemplo de início esperado:
-✅ DADOS EXTRAÍDOS E ESTRUTURADOS PARA CALC-MACHINE
-1. INFORMAÇÕES PROCESSUAIS
-..."
-                  rows="18"
-                  style="width:100%; padding:12px; border:1px solid #d0bfff; border-radius:8px;
-                         font-size:0.88rem; font-family:inherit; resize:vertical; line-height:1.5;"></textarea>
-        <div id="contador-relatorio" style="text-align:right; font-size:0.8rem; color:#6c757d; margin-top:4px;">
-          0 caracteres
         </div>
       </div>
     </div>
@@ -182,40 +148,31 @@ Exemplo de início esperado:
 let contadorDocs = 0;
 let docsAtivos = 0;
 
-// Sentença principal — alternar abas
-function setarAbaSentenca(aba) {
-  ['arquivo', 'texto', 'relatorio'].forEach(a => {
-    document.getElementById('aba-sent-' + a).classList.toggle('ativa', a === aba);
-    document.getElementById('tab-sent-' + a).classList.toggle('ativa', a === aba);
-  });
-  // Destacar aba relatório com cor roxa quando ativa
-  const tabRel = document.getElementById('tab-sent-relatorio');
-  if (aba === 'relatorio') {
-    tabRel.style.background = '#6f42c1';
-    tabRel.style.color = '#fff';
-    tabRel.style.borderColor = '#6f42c1';
-  } else {
-    tabRel.style.background = '';
-    tabRel.style.color = '';
-  }
-}
-
-// Sentença — atualizar nome ao selecionar arquivo
+// Sentença — apenas JSON v2; valida arquivo no client antes de submit
 document.getElementById('arquivo-sentenca').addEventListener('change', function() {
   if (this.files.length > 0) {
-    document.getElementById('nome-sentenca').textContent = 'Selecionado: ' + this.files[0].name;
+    const f = this.files[0];
+    if (!f.name.toLowerCase().endsWith('.json')) {
+      alert('Apenas arquivos .json são aceitos. Atualize o System Prompt do Projeto Claude para gerar JSON v2.');
+      this.value = '';
+      return;
+    }
+    document.getElementById('nome-sentenca').textContent = 'Selecionado: ' + f.name;
     document.getElementById('area-sentenca').classList.add('tem-arquivo');
+    // Validação adicional: confirmar que tem meta.schema_version === "2.0"
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      try {
+        const j = JSON.parse(e.target.result);
+        if (!j.meta || j.meta.schema_version !== "2.0") {
+          alert('JSON sem meta.schema_version: "2.0". Verifique se o System Prompt do Projeto Claude está atualizado.');
+        }
+      } catch (err) {
+        alert('Arquivo .json mal-formado: ' + err.message);
+      }
+    };
+    reader.readAsText(f);
   }
-});
-
-// Contadores de caracteres
-document.getElementById('sentenca-texto').addEventListener('input', function() {
-  document.getElementById('contador-sentenca').textContent =
-    this.value.length.toLocaleString('pt-BR') + ' caracteres';
-});
-document.getElementById('sentenca-relatorio').addEventListener('input', function() {
-  document.getElementById('contador-relatorio').textContent =
-    this.value.length.toLocaleString('pt-BR') + ' caracteres';
 });
 
 function adicionarDocumento() {
