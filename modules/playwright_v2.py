@@ -1,0 +1,916 @@
+"""Automação PJE-Calc v2 — consume JSON v2 direto, sem inferências.
+
+Princípios:
+1. **Sem inferência**: nenhum default em código. Tudo vem da prévia v2.
+2. **Sem auto-correção**: se a Liquidação falha, é porque a prévia tinha erro.
+   Pydantic já validou antes — falhas devem ser raras.
+3. **1:1 com schema**: cada campo da prévia mapeia para uma chamada DOM específica.
+4. **Falha rápido**: campo ausente → erro imediato (não silencioso).
+5. **Logs estruturados**: cada fase loga seu progresso para o SSE stream.
+
+Substitui o monólito `playwright_pjecalc.py` (12500 linhas) por uma arquitetura
+modular onde cada fase é uma função compacta com responsabilidade única.
+"""
+from __future__ import annotations
+
+import logging
+import sys
+from pathlib import Path
+from typing import Any, Callable
+
+# Importar models v2
+_SCHEMA_PATH = Path(__file__).parent.parent / "docs" / "schema-v2"
+if str(_SCHEMA_PATH) not in sys.path:
+    sys.path.insert(0, str(_SCHEMA_PATH))
+
+import importlib.util as _il_util
+
+_spec = _il_util.spec_from_file_location(
+    "pydantic_models_v2", _SCHEMA_PATH / "99-pydantic-models.py"
+)
+_pm = _il_util.module_from_spec(_spec)
+_spec.loader.exec_module(_pm)
+
+PreviaCalculoV2 = _pm.PreviaCalculoV2
+TipoValor = _pm.TipoValor
+EstrategiaPreenchimento = _pm.EstrategiaPreenchimento
+EstrategiaReflexa = _pm.EstrategiaReflexa
+TipoBaseCalculo = _pm.TipoBaseCalculo
+
+logger = logging.getLogger(__name__)
+
+
+# ─── Helpers ────────────────────────────────────────────────────────────────
+
+
+def _fmt_br(valor: float | int) -> str:
+    """Formata número como BR: 1234.56 → '1.234,56'."""
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+def _split_cnj(numero_processo: str) -> dict:
+    """Decompõe número CNJ em campos do form: NNNNNNN-DD.AAAA.J.RR.VVVV."""
+    parts = numero_processo.replace("-", ".").split(".")
+    return {
+        "numero": parts[0],
+        "digito": parts[1],
+        "ano": parts[2],
+        "justica": parts[3],
+        "regiao": parts[4],
+        "vara": parts[5],
+    }
+
+
+# ─── Classe principal ──────────────────────────────────────────────────────
+
+
+class PlaywrightAutomatorV2:
+    """Automação PJE-Calc consumindo prévia v2.
+
+    Uso:
+        previa = PreviaCalculoV2.model_validate(json_data)
+        with PlaywrightAutomatorV2(previa, log_fn=print) as bot:
+            bot.run()
+            pjc_path = bot.get_pjc_path()
+    """
+
+    def __init__(
+        self,
+        previa: PreviaCalculoV2,
+        log_fn: Callable[[str], None] | None = None,
+        pjecalc_url: str = "http://localhost:9257/pjecalc",
+    ):
+        self.previa = previa
+        self.log = log_fn or (lambda m: logger.info(m))
+        self.pjecalc_url = pjecalc_url
+        self._page = None
+        self._browser = None
+        self._pw = None
+        self._calculo_url_base: str | None = None
+        self._calculo_conversation_id: str | None = None
+        self._pjc_path: str | None = None
+
+    # ─── Lifecycle ─────────────────────────────────────────────────────────
+
+    def __enter__(self):
+        from playwright.sync_api import sync_playwright
+
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.firefox.launch(headless=True)
+        ctx = self._browser.new_context(
+            accept_downloads=True,
+            viewport={"width": 1280, "height": 800},
+        )
+        self._page = ctx.new_page()
+        self.log("✓ Browser Firefox iniciado")
+        return self
+
+    def __exit__(self, *args):
+        try:
+            if self._browser:
+                self._browser.close()
+            if self._pw:
+                self._pw.stop()
+        except Exception:
+            pass
+
+    # ─── Pipeline principal ────────────────────────────────────────────────
+
+    def run(self) -> str | None:
+        """Executa pipeline completo. Retorna caminho do .PJC ou None."""
+        self.log("══ Iniciando automação v2 ══")
+        self._abrir_pjecalc()
+        self._criar_novo_calculo()
+
+        # Fases (sequência ordenada)
+        self.fase_processo()
+        self.fase_parametros_calculo()
+        self.fase_historico_salarial()
+        self.fase_verbas()
+        if self.previa.cartao_de_ponto:
+            self.fase_cartao_de_ponto()
+        if self.previa.faltas:
+            self.fase_faltas()
+        if self.previa.ferias.periodos:
+            self.fase_ferias()
+        self.fase_fgts()
+        self.fase_contribuicao_social()
+        self.fase_imposto_de_renda()
+        if self.previa.honorarios:
+            self.fase_honorarios()
+        self.fase_custas_judiciais()
+        self.fase_correcao_juros_multa()
+
+        # Liquidação
+        return self.fase_liquidar_e_exportar()
+
+    # ─── Helpers DOM ───────────────────────────────────────────────────────
+
+    def _preencher(self, dom_id: str, valor: Any, obrigatorio: bool = True) -> None:
+        """Preenche input por DOM ID (sufixo). Falha se obrigatório e DOM ausente."""
+        if valor is None or valor == "":
+            if obrigatorio:
+                raise ValueError(f"Campo obrigatório vazio: {dom_id}")
+            return
+        sel = f"[id$='{dom_id}']"
+        loc = self._page.locator(sel)
+        if loc.count() == 0:
+            if obrigatorio:
+                raise RuntimeError(f"DOM ID não encontrado: {dom_id}")
+            self.log(f"  ⚠ {dom_id} não existe — pulando")
+            return
+        loc.first.fill(str(valor))
+        self.log(f"  ✓ {dom_id} = {valor}")
+
+    def _marcar_radio(self, dom_id: str, valor: str) -> None:
+        sel = f"input[type='radio'][id*='{dom_id}'][value='{valor}']"
+        loc = self._page.locator(sel)
+        if loc.count() == 0:
+            raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
+        loc.first.click(force=True)
+        self.log(f"  ✓ radio {dom_id} = {valor}")
+
+    def _marcar_checkbox(self, dom_id: str, marcado: bool) -> None:
+        loc = self._page.locator(f"[id$='{dom_id}']")
+        if loc.count() == 0:
+            self.log(f"  ⚠ checkbox {dom_id} não existe — pulando")
+            return
+        if loc.first.is_checked() != marcado:
+            loc.first.click(force=True)
+        self.log(f"  ✓ checkbox {dom_id} = {marcado}")
+
+    def _selecionar(self, dom_id: str, valor: str) -> None:
+        loc = self._page.locator(f"select[id$='{dom_id}']")
+        if loc.count() == 0:
+            raise RuntimeError(f"Select não encontrado: {dom_id}")
+        try:
+            loc.first.select_option(value=valor)
+        except Exception:
+            loc.first.select_option(label=valor)
+        self.log(f"  ✓ select {dom_id} = {valor}")
+
+    def _clicar(self, dom_id: str) -> None:
+        sel = f"[id$='{dom_id}']"
+        loc = self._page.locator(sel)
+        if loc.count() == 0:
+            raise RuntimeError(f"Botão não encontrado: {dom_id}")
+        loc.first.click()
+        self.log(f"  ✓ click {dom_id}")
+
+    def _aguardar_ajax(self, timeout_ms: int = 10000) -> None:
+        try:
+            self._page.wait_for_load_state("networkidle", timeout=timeout_ms)
+        except Exception:
+            pass
+
+    def _navegar_menu(self, li_id: str) -> None:
+        self._page.evaluate(
+            f"document.getElementById('{li_id}').querySelector('a').click()"
+        )
+        self._aguardar_ajax()
+        self.log(f"  → navegou para {li_id}")
+
+    # ─── Fases ─────────────────────────────────────────────────────────────
+
+    def _abrir_pjecalc(self) -> None:
+        self._page.goto(f"{self.pjecalc_url}/pages/principal.jsf", timeout=30000)
+        self._aguardar_ajax()
+        self.log("✓ PJE-Calc home carregado")
+
+    def _criar_novo_calculo(self) -> None:
+        """Click em Criar Novo Cálculo. Ajustar para fluxo institucional/cidadão."""
+        self._page.evaluate(
+            """document.querySelectorAll('a').forEach(a => {
+                if (a.textContent.trim() === 'Criar Novo Cálculo') a.click();
+            })"""
+        )
+        self._aguardar_ajax(20000)
+        # Capturar conversationId
+        url = self._page.url
+        if "conversationId=" in url:
+            self._calculo_conversation_id = url.split("conversationId=")[1].split("&")[0]
+        self.log(f"✓ Novo cálculo criado (conv={self._calculo_conversation_id})")
+
+    def fase_processo(self) -> None:
+        self.log("Fase 1 — Dados do Processo")
+        proc = self.previa.processo
+        cnj = _split_cnj(proc.numero_processo)
+        self._preencher("numero", cnj["numero"])
+        self._preencher("digito", cnj["digito"])
+        self._preencher("ano", cnj["ano"])
+        self._preencher("justica", cnj["justica"], obrigatorio=False)
+        self._preencher("regiao", cnj["regiao"])
+        self._preencher("vara", cnj["vara"])
+        self._preencher("valorDaCausa", _fmt_br(proc.valor_da_causa_brl))
+        self._preencher("autuadoEm", proc.data_autuacao)
+
+        # Reclamante
+        self._preencher("reclamanteNome", proc.reclamante.nome)
+        self._marcar_radio("documentoFiscalReclamante", proc.reclamante.doc_fiscal.tipo.value)
+        self._preencher("reclamanteNumeroDocumentoFiscal", proc.reclamante.doc_fiscal.numero)
+
+        # Reclamado
+        self._preencher("reclamadoNome", proc.reclamado.nome)
+        self._marcar_radio("tipoDocumentoFiscalReclamado", proc.reclamado.doc_fiscal.tipo.value)
+        self._preencher("reclamadoNumeroDocumentoFiscal", proc.reclamado.doc_fiscal.numero)
+
+        self.log("Fase 1 concluída")
+
+    def fase_parametros_calculo(self) -> None:
+        self.log("Fase 2 — Parâmetros do Cálculo")
+        # Click na aba "Parâmetros do Cálculo"
+        self._page.evaluate(
+            """[...document.querySelectorAll('.rich-tab-header')].find(t =>
+                t.textContent.trim() === 'Parâmetros do Cálculo')?.click()"""
+        )
+        self._aguardar_ajax()
+
+        pc = self.previa.parametros_calculo
+        # Estado/Município
+        self._selecionar("estado", pc.estado_uf)
+        self._aguardar_ajax(3000)
+        self._selecionar("municipio", pc.municipio)
+
+        # Datas
+        self._preencher("dataAdmissaoInputDate", pc.data_admissao)
+        self._preencher("dataDemissaoInputDate", pc.data_demissao)
+        self._preencher("dataAjuizamentoInputDate", pc.data_ajuizamento)
+        self._preencher("dataInicioCalculoInputDate", pc.data_inicio_calculo)
+        self._preencher("dataTerminoCalculoInputDate", pc.data_termino_calculo)
+
+        # Prescrição
+        self._marcar_checkbox("prescricaoQuinquenal", pc.prescricao_quinquenal)
+        self._marcar_checkbox("prescricaoFgts", pc.prescricao_fgts)
+
+        # Remunerações
+        self._selecionar("tipoDaBaseTabelada", pc.tipo_base_tabelada.value)
+        self._preencher("valorMaiorRemuneracao", _fmt_br(pc.valor_maior_remuneracao_brl))
+        self._preencher("valorUltimaRemuneracao", _fmt_br(pc.valor_ultima_remuneracao_brl))
+
+        # Aviso prévio
+        self._selecionar("apuracaoPrazoDoAvisoPrevio", pc.apuracao_aviso_previo.value)
+        self._marcar_checkbox("projetaAvisoIndenizado", pc.projeta_aviso_indenizado)
+        self._marcar_checkbox("limitarAvos", pc.limitar_avos)
+        self._marcar_checkbox("zeraValorNegativo", pc.zerar_valor_negativo)
+
+        # Feriados
+        self._marcar_checkbox("consideraFeriadoEstadual", pc.considerar_feriado_estadual)
+        self._marcar_checkbox("consideraFeriadoMunicipal", pc.considerar_feriado_municipal)
+
+        # Carga horária
+        self._preencher("valorCargaHorariaPadrao", _fmt_br(pc.carga_horaria.padrao_mensal))
+
+        if pc.comentarios_jg:
+            self._preencher("comentarios", pc.comentarios_jg, obrigatorio=False)
+
+        # Salvar
+        self._clicar("salvar")
+        self._aguardar_ajax(15000)
+        self.log("Fase 2 concluída")
+
+    def fase_historico_salarial(self) -> None:
+        self.log("Fase 3 — Histórico Salarial")
+        self._navegar_menu("li_calculo_historico_salarial")
+
+        for hist in self.previa.historico_salarial:
+            self._clicar("incluir")  # botão Novo
+            self._aguardar_ajax()
+            self._preencher("nome", hist.nome)
+            self._marcar_radio("tipoVariacaoDaParcela", hist.parcela.value)
+            self._marcar_checkbox("fgts", hist.incidencias.fgts)
+            self._marcar_checkbox("inss", hist.incidencias.cs_inss)
+            self._preencher("competenciaInicialInputDate", hist.competencia_inicial)
+            self._preencher("competenciaFinalInputDate", hist.competencia_final)
+            self._marcar_radio("tipoValor", hist.tipo_valor.value)
+
+            if hist.tipo_valor == TipoValor.INFORMADO:
+                self._preencher("valorParaBaseDeCalculo", _fmt_br(hist.valor_brl))
+            else:
+                # CALCULADO: quantidade + base_referencia + cmdGerarOcorrencias
+                self._preencher("quantidade", _fmt_br(hist.calculado.quantidade_pct))
+                self._selecionar("baseDeReferencia", hist.calculado.base_referencia)
+                self._clicar("cmdGerarOcorrencias")
+                self._aguardar_ajax()
+
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            self.log(f"  ✓ Histórico '{hist.nome}' salvo")
+
+        self.log("Fase 3 concluída")
+
+    def fase_verbas(self) -> None:
+        self.log("Fase 4 — Verbas Principais")
+        self._navegar_menu("li_calculo_verbas")
+
+        # Estratégia: agrupar por tipo de preenchimento
+        verbas_expresso = [
+            v
+            for v in self.previa.verbas_principais
+            if v.estrategia_preenchimento
+            in (EstrategiaPreenchimento.EXPRESSO_DIRETO, EstrategiaPreenchimento.EXPRESSO_ADAPTADO)
+        ]
+        verbas_manual = [
+            v for v in self.previa.verbas_principais
+            if v.estrategia_preenchimento == EstrategiaPreenchimento.MANUAL
+        ]
+
+        # 4a. Expresso (lote único)
+        if verbas_expresso:
+            self._lancar_expresso(verbas_expresso)
+
+        # 4b. Manual (uma por vez)
+        for v in verbas_manual:
+            self._lancar_verba_manual(v)
+
+        # 4c. Pós-Expresso: ajustar parâmetros + reflexos
+        for v in verbas_expresso:
+            self._configurar_parametros_pos_expresso(v)
+            for r in v.reflexos:
+                self._configurar_reflexo(v, r)
+
+        self.log("Fase 4 concluída")
+
+    def _lancar_expresso(self, verbas) -> None:
+        self.log("  → Lançamento Expresso")
+        self._clicar("lancamentoExpresso")
+        self._aguardar_ajax(8000)
+
+        for v in verbas:
+            alvo = v.expresso_alvo
+            # Marcar checkbox via texto do label
+            marcou = self._page.evaluate(
+                f"""(alvo) => {{
+                    const cbs = [...document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')];
+                    for (const cb of cbs) {{
+                        const lbl = document.querySelector(`label[for="${{CSS.escape(cb.id)}}"]`);
+                        if (lbl && lbl.textContent.trim() === alvo) {{
+                            cb.click();
+                            return true;
+                        }}
+                    }}
+                    return false;
+                }}""",
+                alvo,
+            )
+            if not marcou:
+                raise RuntimeError(f"Verba Expresso não encontrada no rol: {alvo}")
+            self.log(f"    ✓ Expresso checkbox: {alvo}")
+
+        self._clicar("salvar")
+        self._aguardar_ajax(15000)
+        self.log("  ✓ Expresso salvo")
+
+    def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
+        """Preenche todos os campos do form de parâmetros de verba.
+
+        Compartilhado entre _lancar_verba_manual (com_identificacao=True, descricao+CNJ
+        precisam ser preenchidos) e _configurar_parametros_pos_expresso (False, identificação
+        já vem do Expresso e não deve ser sobrescrita exceto se EXPRESSO_ADAPTADO).
+        """
+        p = v.parametros
+
+        # 1. Identificação (apenas Manual ou Expresso_Adaptado)
+        if com_identificacao:
+            self._preencher("descricao", v.nome_pjecalc)
+            # Assunto CNJ — autocomplete: digitar código + Enter dispara seleção
+            self._preencher("codigoAssuntosCnj", str(p.assunto_cnj.codigo))
+            self._aguardar_ajax(3000)
+        elif v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_ADAPTADO:
+            self._preencher("descricao", v.nome_pjecalc, obrigatorio=False)
+
+        # 2. Valor (INFORMADO vs CALCULADO) — radio dispara AJAX que troca DOM
+        self._marcar_radio("valor", p.valor.value)
+        self._aguardar_ajax(3000)
+
+        if p.valor == TipoValor.INFORMADO:
+            self._preencher("valorInformadoDoDevido", _fmt_br(p.valor_devido.valor_informado_brl))
+        else:  # CALCULADO
+            f = p.formula_calculado
+            self._selecionar("tipoDaBaseTabelada", f.base_calculo.tipo.value)
+            self._aguardar_ajax(3000)
+            if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
+                self._selecionar("baseHistoricos", f.base_calculo.historico_nome)
+                self._aguardar_ajax(2000)
+            self._marcar_radio("tipoDeDivisor", f.divisor.tipo.value)
+            self._aguardar_ajax(2000)
+            if f.divisor.tipo.value == "OUTRO_VALOR":
+                self._preencher("outroValorDoDivisor", str(f.divisor.valor))
+            self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
+            self._marcar_radio("tipoDaQuantidade", f.quantidade.tipo.value)
+            self._aguardar_ajax(2000)
+            if f.quantidade.tipo.value == "INFORMADA":
+                self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor))
+
+        # 3. Período
+        self._preencher("periodoInicialInputDate", p.periodo_inicio)
+        self._preencher("periodoFinalInputDate", p.periodo_fim)
+
+        # 4. Características + Ocorrência + Base de Cálculo
+        self._marcar_radio("caracteristicaVerba", p.caracteristica.value)
+        self._aguardar_ajax(2000)
+        self._marcar_radio("ocorrenciaPagto", p.ocorrencia_pagamento.value)
+        self._aguardar_ajax(2000)
+        if hasattr(p, "tipo_base_calculo") and p.tipo_base_calculo:
+            self._marcar_radio("tipoDaBaseDeCalculo", p.tipo_base_calculo.value)
+
+        # 5. Incidências (FGTS / CS / IRPF / Prev. Priv. / Pensão)
+        self._marcar_checkbox("irpf", p.incidencias.irpf)
+        self._marcar_checkbox("inss", p.incidencias.cs_inss)
+        self._marcar_checkbox("fgts", p.incidencias.fgts)
+        self._marcar_checkbox("previdenciaPrivada", p.incidencias.previdencia_privada)
+        self._marcar_checkbox("pensaoAlimenticia", p.incidencias.pensao_alimenticia)
+
+        # 6. Outras flags opcionais
+        if hasattr(p, "natureza_indenizatoria") and p.natureza_indenizatoria is not None:
+            self._marcar_checkbox("naturezaIndenizatoria", p.natureza_indenizatoria)
+        if hasattr(p, "deduzir_inss_recolhido") and p.deduzir_inss_recolhido is not None:
+            self._marcar_checkbox("deduzirInssRecolhido", p.deduzir_inss_recolhido)
+        if hasattr(p, "considerar_competencia_paga") and p.considerar_competencia_paga is not None:
+            self._marcar_checkbox("considerarCompetenciaPaga", p.considerar_competencia_paga)
+
+    def _configurar_parametros_pos_expresso(self, v) -> None:
+        """Ajustar parâmetros da verba pós-Expresso (clicar ícone Parâmetros e
+        sobrescrever campos com valores da prévia)."""
+        self.log(f"  → Ajustar parâmetros: {v.nome_pjecalc}")
+        # Buscar linha por nome
+        clicou = self._page.evaluate(
+            f"""(alvo) => {{
+                const links = [...document.querySelectorAll('a[id*=":listagem:"][id$=":j_id558"]')];
+                for (const a of links) {{
+                    const tr = a.closest('tr');
+                    if (tr && tr.textContent.toUpperCase().includes(alvo.toUpperCase())) {{
+                        a.click();
+                        return true;
+                    }}
+                }}
+                return false;
+            }}""",
+            v.nome_pjecalc,
+        )
+        if not clicou:
+            self.log(f"  ⚠ Verba não encontrada na listagem: {v.nome_pjecalc}")
+            return
+        self._aguardar_ajax(8000)
+
+        self._preencher_form_parametros_verba(v, com_identificacao=False)
+
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
+
+    def _configurar_reflexo(self, verba_principal, reflexo) -> None:
+        """Marcar checkbox do reflexo no painel da verba principal."""
+        if reflexo.estrategia_reflexa == EstrategiaReflexa.MANUAL:
+            self.log(f"  → Reflexo MANUAL: {reflexo.nome} (não implementado nesta versão)")
+            return
+
+        # Expandir painel da verba principal + marcar checkbox
+        self.log(f"  → Reflexo: {reflexo.nome}")
+        marcou = self._page.evaluate(
+            f"""(verbaPrincipal, alvoReflexo) => {{
+                // Encontrar a linha da verba principal pelo nome
+                const linhas = [...document.querySelectorAll('tr')];
+                let linhaPrincipal = null;
+                for (const tr of linhas) {{
+                    if (tr.textContent.toUpperCase().includes(verbaPrincipal.toUpperCase())) {{
+                        linhaPrincipal = tr;
+                        break;
+                    }}
+                }}
+                if (!linhaPrincipal) return 'principal-nao-encontrada';
+
+                // Click no Exibir
+                const exibir = linhaPrincipal.querySelector('span.linkDestinacoes');
+                if (exibir) exibir.click();
+
+                // Encontrar reflexo correspondente e marcar
+                setTimeout(() => {{
+                    const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
+                    for (const cb of cbs) {{
+                        const tr = cb.closest('tr');
+                        if (tr && tr.textContent.toUpperCase().includes(alvoReflexo.toUpperCase())) {{
+                            cb.click();
+                            return true;
+                        }}
+                    }}
+                }}, 500);
+                return 'ok';
+            }}""",
+            verba_principal.nome_pjecalc,
+            reflexo.expresso_reflex_alvo,
+        )
+        self._aguardar_ajax(5000)
+        self.log(f"    ✓ Reflexo marcado: {reflexo.nome}")
+
+        # Se há overrides, abrir Parâmetros do reflexo e ajustar
+        if reflexo.parametros_override:
+            self.log(f"    → Aplicando overrides em {reflexo.nome}")
+            # Implementação detalhada via doc 07 — pular nesta versão MVP
+
+    def _lancar_verba_manual(self, v) -> None:
+        """Criar verba via botão Manual ('Lançamento Manual de Parcela')."""
+        self.log(f"  → Manual: {v.nome_pjecalc}")
+        self._clicar("incluir")
+        self._aguardar_ajax(8000)
+
+        self._preencher_form_parametros_verba(v, com_identificacao=True)
+
+        self._clicar("salvar")
+        self._aguardar_ajax(10000)
+
+        # Verificar mensagem de sucesso JSF
+        body = self._page.locator("body").text_content() or ""
+        if "operação realizada com sucesso" not in body.lower() and "sucesso" not in body.lower():
+            self.log(f"  ⚠ Verba '{v.nome_pjecalc}' — mensagem de sucesso não detectada")
+        self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado")
+
+    def fase_cartao_de_ponto(self) -> None:
+        """Cartão de Ponto — 63 campos opcionais. Só preenche se a prévia traz dados.
+
+        Para o MVP, se `cartao_de_ponto` for None ou um dict vazio, pula a fase.
+        Caso contrário, percorre os atributos da seção e preenche cada um por nome
+        de DOM (assumindo nome_atributo_python == dom_id, padrão do schema v2).
+        """
+        cp = getattr(self.previa, "cartao_de_ponto", None)
+        if not cp or not getattr(cp, "model_dump", None):
+            self.log("Fase 5 — Cartão de Ponto: sem dados (pulando)")
+            return
+        dados = cp.model_dump(exclude_none=True)
+        if not dados:
+            self.log("Fase 5 — Cartão de Ponto: vazio (pulando)")
+            return
+
+        self.log(f"Fase 5 — Cartão de Ponto ({len(dados)} campos)")
+        self._navegar_menu("li_calculo_cartao_de_ponto")
+
+        for chave, valor in dados.items():
+            try:
+                if isinstance(valor, bool):
+                    self._marcar_checkbox(chave, valor)
+                elif isinstance(valor, (int, float)):
+                    self._preencher(chave, _fmt_br(valor) if isinstance(valor, float) else str(valor),
+                                    obrigatorio=False)
+                elif isinstance(valor, str):
+                    # Heurística: se valor está em UPPER_SNAKE provavelmente é radio/select
+                    if valor.isupper() and "_" in valor:
+                        try:
+                            self._marcar_radio(chave, valor)
+                        except Exception:
+                            self._selecionar(chave, valor)
+                    else:
+                        self._preencher(chave, valor, obrigatorio=False)
+            except Exception as e:
+                self.log(f"  ⚠ Cartão de ponto — {chave}: {e}")
+
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log("Fase 5 concluída")
+
+    def fase_faltas(self) -> None:
+        self.log("Fase 6 — Faltas")
+        self._navegar_menu("li_calculo_faltas")
+        for f in self.previa.faltas:
+            self._preencher("dataInicioPeriodoFaltaInputDate", f.data_inicio)
+            self._preencher("dataTerminoPeriodoFaltaInputDate", f.data_fim)
+            self._marcar_checkbox("faltaJustificada", f.justificada)
+            self._marcar_checkbox("reiniciaFerias", f.reinicia_ferias)
+            if f.justificativa:
+                self._preencher("justificativaDaFalta", f.justificativa, obrigatorio=False)
+            self._clicar("cmdIncluirFalta")
+            self._aguardar_ajax()
+        self.log("Fase 6 concluída")
+
+    def fase_ferias(self) -> None:
+        """Férias — tabela com N períodos aquisitivos/concessivos.
+
+        A tabela do PJE-Calc é renderizada com botão 'Incluir' que adiciona uma
+        linha em modo edição. Cada linha tem campos com ID padrão JSF terminando
+        em sufixos como :periodoAquisitivoInicialInputDate, etc. (doc 06).
+        """
+        ferias = getattr(self.previa, "ferias", None)
+        if not ferias or not ferias.periodos:
+            self.log("Fase 7 — Férias: sem períodos (pulando)")
+            return
+
+        self.log(f"Fase 7 — Férias ({len(ferias.periodos)} período(s))")
+        self._navegar_menu("li_calculo_ferias")
+
+        if ferias.ferias_coletivas_inicio_primeiro_ano:
+            self._preencher(
+                "feriasColetivasInicioPrimeiroAnoInputDate",
+                ferias.ferias_coletivas_inicio_primeiro_ano,
+                obrigatorio=False,
+            )
+        if ferias.prazo_ferias_proporcionais:
+            self._preencher(
+                "prazoFeriasProporcionais",
+                str(ferias.prazo_ferias_proporcionais),
+                obrigatorio=False,
+            )
+
+        for i, p in enumerate(ferias.periodos):
+            self.log(f"  → Período {i+1}: {p.periodo_aquisitivo_inicio} → {p.periodo_aquisitivo_fim}")
+            self._clicar("incluir")
+            self._aguardar_ajax(5000)
+
+            self._preencher("periodoAquisitivoInicialInputDate", p.periodo_aquisitivo_inicio)
+            self._preencher("periodoAquisitivoFinalInputDate", p.periodo_aquisitivo_fim)
+            self._preencher("periodoConcessivoInicialInputDate", p.periodo_concessivo_inicio)
+            self._preencher("periodoConcessivoFinalInputDate", p.periodo_concessivo_fim)
+            self._preencher("prazoDias", str(p.prazo_dias))
+            self._marcar_radio("situacaoFerias", p.situacao)
+            self._aguardar_ajax(2000)
+            self._marcar_checkbox("dobra", p.dobra)
+            self._marcar_checkbox("abono", p.abono)
+            if p.abono and p.dias_abono:
+                self._preencher("diasAbono", str(p.dias_abono))
+
+            # Gozos (até 3) — campos só aparecem se situacao=GOZADAS ou PARCIAL_GOZADAS
+            for j, gozo in enumerate([p.gozo_1, p.gozo_2, p.gozo_3], start=1):
+                if gozo and gozo.data_inicio:
+                    try:
+                        self._preencher(f"gozoInicio{j}InputDate", gozo.data_inicio, obrigatorio=False)
+                        self._preencher(f"gozoFim{j}InputDate", gozo.data_fim, obrigatorio=False)
+                        if gozo.dobra:
+                            self._marcar_checkbox(f"gozoDobra{j}", True)
+                    except Exception as e:
+                        self.log(f"    ⚠ gozo {j}: {e}")
+
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+
+        self.log("Fase 7 concluída")
+
+    def fase_fgts(self) -> None:
+        self.log("Fase 8 — FGTS")
+        self._navegar_menu("li_calculo_fgts")
+        f = self.previa.fgts
+        self._marcar_radio("tipoDeVerba", f.tipo_verba)
+        self._marcar_radio("comporPrincipal", f.compor_principal.value)
+        self._marcar_checkbox("multa", f.multa.ativa)
+        if f.multa.ativa:
+            self._marcar_radio("tipoDoValorDaMulta", f.multa.tipo_valor)
+            self._marcar_radio("multaDoFgts", f.multa.percentual)
+        self._selecionar("incidenciaDoFgts", f.incidencia)
+        self._marcar_checkbox("multaDoArtigo467", f.multa_artigo_467)
+        self._marcar_checkbox("multa10", f.multa_10_lc110)
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log("Fase 8 concluída")
+
+    def fase_contribuicao_social(self) -> None:
+        self.log("Fase 9 — Contribuição Social")
+        self._navegar_menu("li_calculo_inss")
+        cs = self.previa.contribuicao_social
+        self._marcar_checkbox("apurarInssSeguradoDevido", cs.apurar_segurado_devido)
+        self._marcar_checkbox("cobrarDoReclamanteDevido", cs.cobrar_do_reclamante_devido)
+        self._marcar_checkbox("apurarSalariosPagos", cs.apurar_salarios_pagos)
+        self._marcar_radio("aliquotaEmpregado", cs.aliquota_segurado)
+        self._marcar_radio("aliquotaEmpregador", cs.aliquota_empregador)
+        if cs.aliquota_empregador == "FIXA":
+            self._preencher("aliquotaEmpresaFixa", str(cs.aliquota_empresa_fixa_pct or 20))
+            self._preencher("aliquotaRatFixa", str(cs.aliquota_rat_fixa_pct or 1))
+            self._preencher("aliquotaTerceirosFixa", str(cs.aliquota_terceiros_fixa_pct or 5.8))
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+
+        # Sub-página parametrizar-inss para vinculação histórico→CS
+        self._clicar("ocorrencias")
+        self._aguardar_ajax(8000)
+        self._clicar("recuperarDevidos")
+        self._aguardar_ajax(5000)
+        self._clicar("copiarDevidos")
+        self._aguardar_ajax(5000)
+
+        # Modo manual_por_periodo: aplicar Lote por intervalo
+        if cs.vinculacao_historicos_devidos.modo == "manual_por_periodo":
+            for intv in cs.vinculacao_historicos_devidos.intervalos:
+                self._preencher("dataInicialInputDate", intv.competencia_inicial)
+                self._preencher("dataFinalInputDate", intv.competencia_final)
+                self._preencher("salariosPago", _fmt_br(intv.valor_base_brl))
+                # Click "Alterar" do lote
+                self._clicar("aplicar")
+                self._aguardar_ajax()
+
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log("Fase 9 concluída")
+
+    def fase_imposto_de_renda(self) -> None:
+        self.log("Fase 10 — IRPF")
+        self._navegar_menu("li_calculo_irpf")
+        ir = self.previa.imposto_de_renda
+        self._marcar_checkbox("apurarImpostoRenda", ir.apurar_irpf)
+        self._marcar_checkbox("considerarTributacaoEmSeparado", ir.considerar_tributacao_em_separado_rra)
+        self._marcar_checkbox("regimeDeCaixa", ir.regime_de_caixa)
+        self._marcar_checkbox(
+            "deduzirContribuicaoSocialDevidaPeloReclamante", ir.deducoes.contribuicao_social
+        )
+        self._marcar_checkbox("deduzirPrevidenciaPrivada", ir.deducoes.previdencia_privada)
+        self._marcar_checkbox("deduzirPensaoAlimenticia", ir.deducoes.pensao_alimenticia)
+        self._marcar_checkbox(
+            "deduzirHonorariosDevidosPeloReclamante",
+            ir.deducoes.honorarios_devidos_pelo_reclamante,
+        )
+        if ir.possui_dependentes:
+            self._marcar_checkbox("possuiDependentes", True)
+            self._preencher("quantidadeDependentes", str(ir.quantidade_dependentes))
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log("Fase 10 concluída")
+
+    def fase_honorarios(self) -> None:
+        self.log("Fase 11 — Honorários")
+        self._navegar_menu("li_calculo_honorarios")
+        for h in self.previa.honorarios:
+            self._clicar("incluir")
+            self._aguardar_ajax(5000)
+            self._selecionar("tpHonorario", h.tipo_honorario)
+            self._preencher("descricao", h.descricao)
+            self._marcar_radio("tipoDeDevedor", h.tipo_devedor)
+            self._marcar_radio("tipoValor", h.tipo_valor.value)
+            if h.tipo_valor.value == "CALCULADO":
+                self._preencher("aliquota", _fmt_br(h.aliquota_pct))
+                self._selecionar("baseParaApuracao", h.base_para_apuracao)
+            else:
+                self._preencher("aliquota", _fmt_br(h.valor_informado_brl))
+            self._preencher("nomeCredor", h.credor.nome)
+            self._marcar_radio("tipoDocumentoFiscalCredor", h.credor.doc_fiscal_tipo.value)
+            self._preencher("numeroDocumentoFiscalCredor", h.credor.doc_fiscal_numero)
+            self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+        self.log("Fase 11 concluída")
+
+    def fase_custas_judiciais(self) -> None:
+        self.log("Fase 12 — Custas Judiciais")
+        self._navegar_menu("li_calculo_custas_judiciais")
+        c = self.previa.custas_judiciais
+        self._selecionar("baseParaCustasCalculadas", c.base_para_calculadas)
+        self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamante", c.custas_conhecimento_reclamante)
+        self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamado", c.custas_conhecimento_reclamado)
+        self._marcar_radio("tipoDeCustasDeLiquidacao", c.custas_liquidacao)
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log("Fase 12 concluída")
+
+    def fase_correcao_juros_multa(self) -> None:
+        self.log("Fase 13 — Correção, Juros e Multa")
+        self._navegar_menu("li_calculo_correcao_juros_multa")
+        c = self.previa.correcao_juros_multa
+        self._selecionar("indiceTrabalhista", c.indice_trabalhista)
+        self._selecionar("juros", c.juros)
+        self._selecionar("baseDeJurosDasVerbas", c.base_juros_verbas)
+        self._clicar("salvar")
+        self._aguardar_ajax(8000)
+        self.log("Fase 13 concluída")
+
+    def fase_liquidar_e_exportar(self) -> str | None:
+        """Liquida o cálculo e baixa o arquivo .PJC final."""
+        self.log("Fase 14 — Liquidar + Exportar")
+
+        # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
+        nav_ok = self._page.evaluate(
+            """() => {
+                const links = [...document.querySelectorAll('a')];
+                for (const a of links) {
+                    const txt = (a.textContent || '').trim();
+                    const li = a.closest('li');
+                    if (txt === 'Liquidar' && li && li.id && li.id.includes('operacoes')) {
+                        a.click();
+                        return true;
+                    }
+                }
+                return false;
+            }"""
+        )
+        if not nav_ok:
+            raise RuntimeError("Sidebar 'Liquidar' não localizado")
+        self._aguardar_ajax(15000)
+
+        # ── 14b. Preencher form de Liquidação ──────────────────────────────
+        liq = self.previa.liquidacao
+        if liq.data_de_liquidacao:
+            self._preencher("dataDeLiquidacaoInputDate", liq.data_de_liquidacao, obrigatorio=False)
+        if liq.indices_acumulados:
+            self._marcar_radio("indicesAcumulados", liq.indices_acumulados)
+
+        # ── 14c. Clicar Liquidar ───────────────────────────────────────────
+        self._clicar("liquidar")
+        self._aguardar_ajax(60000)
+
+        body = (self._page.locator("body").text_content() or "").lower()
+        if "pendência" in body and "não foram encontradas" not in body:
+            # Schema v2 deveria prevenir isso. Falhar rápido.
+            pendencias = self._page.evaluate(
+                """() => {
+                    const els = [...document.querySelectorAll('.rf-msgs-detail, .rf-msgs-sum, .ui-messages-error-summary')];
+                    return els.map(e => e.textContent.trim()).filter(t => t).slice(0, 20);
+                }"""
+            )
+            raise RuntimeError(
+                f"Liquidação retornou pendências (schema v2 deveria ter prevenido):\n"
+                + "\n".join(f"  • {p}" for p in pendencias)
+            )
+        self.log("  ✓ Liquidação OK (sem pendências)")
+
+        # ── 14d. Navegar para Exportar ─────────────────────────────────────
+        nav_exp = self._page.evaluate(
+            """() => {
+                const li = document.getElementById('li_operacoes_exportar');
+                if (!li) return false;
+                const a = li.querySelector('a');
+                if (!a) return false;
+                a.click();
+                return true;
+            }"""
+        )
+        if not nav_exp:
+            raise RuntimeError("Sidebar 'Exportar' não localizado")
+        self._aguardar_ajax(15000)
+
+        # ── 14e. Clicar Exportar e capturar .PJC ───────────────────────────
+        # Estratégia: capturar response binário via expect_response
+        from datetime import datetime as _dt
+
+        ts = _dt.now().strftime("%Y%m%d_%H%M%S")
+        num_limpo = self.previa.processo.numero_processo.replace("-", "").replace(".", "")
+        nome_pjc = f"PROCESSO_{num_limpo}_{ts}.pjc"
+        out_dir = Path("/tmp/pjecalc_exports")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        dest = out_dir / nome_pjc
+
+        try:
+            with self._page.expect_response(
+                lambda r: (
+                    "exportacao.jsf" in r.url
+                    and r.request.method == "POST"
+                    and (
+                        "zip" in (r.headers.get("content-type") or "").lower()
+                        or ".pjc" in (r.headers.get("content-disposition") or "").lower()
+                    )
+                ),
+                timeout=60000,
+            ) as resp_info:
+                # Clicar botão Exportar (input[type=submit] id termina em :exportar)
+                btn = self._page.locator("input[type='submit'][id$=':exportar']").first
+                btn.click()
+            resp = resp_info.value
+            pjc_bytes = resp.body()
+        except Exception as e:
+            raise RuntimeError(f"Falha ao capturar download .PJC: {e}")
+
+        # Validar header ZIP
+        if not pjc_bytes or pjc_bytes[:2] != b"PK":
+            raise RuntimeError(
+                f".PJC inválido (não é ZIP): {len(pjc_bytes) if pjc_bytes else 0} bytes, "
+                f"prefixo={pjc_bytes[:10] if pjc_bytes else b''!r}"
+            )
+
+        dest.write_bytes(pjc_bytes)
+        self._pjc_path = str(dest)
+        self.log(f"✓ PJC gerado: {self._pjc_path} ({len(pjc_bytes)} bytes)")
+        return self._pjc_path
+
+    def get_pjc_path(self) -> str | None:
+        return self._pjc_path

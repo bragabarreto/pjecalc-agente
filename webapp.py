@@ -231,6 +231,14 @@ app = FastAPI(
     version="1.0.0",
 )
 
+# ── Schema v2 router (Fase 5: nova arquitetura) ─────────────────────────────
+try:
+    from modules.webapp_v2 import router_v2
+    app.include_router(router_v2)
+    logging.getLogger(__name__).info("router_v2 registrado: /processar/v2, /previa/v2/{id}")
+except Exception as _e:
+    logging.getLogger(__name__).warning(f"Falha ao registrar router_v2: {_e}")
+
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)
