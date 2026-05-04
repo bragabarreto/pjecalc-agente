@@ -54,18 +54,35 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 
 _PREVIA_STORE: dict[str, dict] = {}
 # Persistência: usa volume Docker permanente em produção, fallback /tmp em dev.
-# /opt/pjecalc-data/previa_v2 sobrevive a restart de container (deploy).
+# /app/data/calculations e mapeado para /opt/pjecalc-data/calculations no host
+# via docker-compose, sobrevivendo a restart de container (deploy).
 import os as _os_v2
-_PERSIST_BASE = Path(_os_v2.environ.get(
-    "PREVIA_V2_DIR",
-    "/opt/pjecalc-data/previa_v2" if Path("/opt/pjecalc-data").exists() else "/tmp/pjecalc_previa_v2",
-))
-_STORE_DIR = _PERSIST_BASE
-try:
-    _STORE_DIR.mkdir(parents=True, exist_ok=True)
-except Exception:
+
+_CANDIDATOS = [
+    _os_v2.environ.get("PREVIA_V2_DIR"),
+    "/app/data/calculations/previa_v2",   # volume Docker em producao
+    "data/calculations/previa_v2",         # path relativo (dev local)
+    "/tmp/pjecalc_previa_v2",              # fallback efêmero
+]
+_STORE_DIR = None
+for _c in _CANDIDATOS:
+    if not _c:
+        continue
+    try:
+        _p = Path(_c)
+        _p.mkdir(parents=True, exist_ok=True)
+        # Teste de escrita
+        _t = _p / ".write_test"
+        _t.write_text("ok")
+        _t.unlink()
+        _STORE_DIR = _p
+        break
+    except Exception:
+        continue
+if _STORE_DIR is None:
     _STORE_DIR = Path("/tmp/pjecalc_previa_v2")
     _STORE_DIR.mkdir(parents=True, exist_ok=True)
+logging.getLogger(__name__).info(f"webapp_v2: _STORE_DIR = {_STORE_DIR}")
 
 
 def _save_previa(sessao_id: str, data: dict) -> None:
