@@ -889,10 +889,204 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(8000)
         self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
 
+    def _selecionar_assunto_cnj(self, codigo: int = 2581) -> bool:
+        """Seleciona Assunto CNJ via modal-árvore (lupa).
+
+        Fluxo (confirmado pelo usuário):
+        1. Click lupa do campo Assuntos CNJ.
+        2. Modal árvore abre.
+        3. Click no folder/item com o código alvo (2581 padrão = Remuneração).
+        4. Click "Selecionar".
+        Retorna True em sucesso.
+        """
+        # 1. Click lupa
+        lupa_clicado = self._page.evaluate(
+            """() => {
+                const sels = [
+                    'a[id*="assuntosCnj"][id*="btn"]',
+                    'input[id*="btnAssunto"]',
+                    '[id$="btnBuscarAssuntoCnj"]',
+                    'a[onclick*="modalCNJ"]',
+                    'a[onclick*="modalAssunto"]',
+                    'img[id*="assuntosCnj"]'
+                ];
+                for (const sel of sels) {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        (el.closest('a') || el).click();
+                        return sel;
+                    }
+                }
+                return null;
+            }"""
+        )
+        if not lupa_clicado:
+            self.log(f"    ⚠ Botão lupa Assunto CNJ não encontrado")
+            return False
+        self._aguardar_ajax(5000)
+        self._page.wait_for_timeout(1500)
+
+        # 2. Click no item com o código no modal árvore
+        item_clicado = self._page.evaluate(
+            """(codigo) => {
+                const containers = [...document.querySelectorAll(
+                    '[id*="modalCNJ"], [id*="modalAssunto"]'
+                )];
+                if (containers.length === 0) return 'sem-modal';
+                for (const c of containers) {
+                    // Procurar elemento que comece com "<codigo> -" ou "<codigo>-"
+                    const candidates = [...c.querySelectorAll('a, span, td, div')];
+                    for (const el of candidates) {
+                        const t = (el.textContent||'').trim();
+                        if (t.startsWith(codigo + ' -') || t.startsWith(codigo + '-') ||
+                            t.startsWith(codigo + ' ') || t === codigo) {
+                            // Click no row inteiro se for tr/td
+                            const tr = el.closest('tr') || el;
+                            tr.click();
+                            return 'matched';
+                        }
+                    }
+                }
+                return 'codigo-nao-encontrado';
+            }""",
+            str(codigo),
+        )
+        self.log(f"    → Modal CNJ item ({codigo}): {item_clicado}")
+        self._page.wait_for_timeout(800)
+
+        # 3. Click "Selecionar"
+        selecionado = self._page.evaluate(
+            """() => {
+                const containers = [...document.querySelectorAll(
+                    '[id*="modalCNJ"], [id*="modalAssunto"]'
+                )];
+                for (const c of containers) {
+                    const btns = [...c.querySelectorAll(
+                        'input[type="button"], input[type="submit"], button'
+                    )];
+                    for (const b of btns) {
+                        const v = (b.value || '').trim();
+                        const t = (b.textContent || '').trim();
+                        if (v === 'Selecionar' || t === 'Selecionar') {
+                            if (!b.disabled) { b.click(); return true; }
+                        }
+                    }
+                }
+                return false;
+            }"""
+        )
+        self._aguardar_ajax(5000)
+        if selecionado:
+            self.log(f"    ✓ Assunto CNJ selecionado: {codigo}")
+        else:
+            self.log(f"    ⚠ Botão Selecionar não funcionou para CNJ {codigo}")
+        return bool(selecionado)
+
+    def _criar_reflexo_manual(self, verba_principal, reflexo) -> None:
+        """Cria reflexo via Manual (verba separada com Tipo=REFLEXO).
+
+        Para reflexos `estrategia_reflexa: "manual"` que não têm equivalente
+        Expresso (ex.: reflexos de estabilidade pós-contratual, Lei 9.029/95).
+        Fluxo:
+        1. Navegar para listing de verbas.
+        2. Click "Manual" (input[id$=':incluir'][value='Manual']).
+        3. Preencher Nome (descricao), Assunto CNJ via lupa→modal, Tipo=REFLEXO.
+        4. Aplicar overrides (período, característica, ocorrência, incidências).
+        5. Configurar valor=CALCULADO com base padrão (HISTORICO_SALARIAL=ÚLTIMA REMUNERAÇÃO).
+        6. Salvar.
+        """
+        nome = (reflexo.nome or "").upper()
+        # Construir nome "X SOBRE Y" se ainda não estiver no formato
+        if "SOBRE" not in nome:
+            nome = f"{nome.upper()} SOBRE {verba_principal.nome_pjecalc.upper()}"
+        self.log(f"  → Criar reflexo MANUAL: {nome}")
+
+        # 1. Navegar para listing
+        self._navegar_menu("li_calculo_verbas")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1500)
+
+        # 2. Click "Manual" (incluir)
+        try:
+            self._page.locator(
+                "input[id$=':incluir'][value='Manual'], input[id$=':incluir']"
+            ).first.click()
+        except Exception as e:
+            self.log(f"    ⚠ Click 'Manual' falhou: {e}")
+            return
+        self._aguardar_ajax(8000)
+        # Aguardar form renderizar
+        try:
+            self._page.wait_for_selector(
+                "input[id='formulario:descricao']", state="visible", timeout=10000
+            )
+        except Exception:
+            self.log(f"    ⚠ Form Manual não abriu — pulando reflexo {reflexo.id}")
+            return
+
+        # 3. Preencher Nome
+        self._preencher("descricao", nome[:100])
+
+        # 4. Selecionar Assunto CNJ (default 2581)
+        self._selecionar_assunto_cnj(2581)
+
+        # 5. Tipo = REFLEXO
+        try:
+            self._marcar_radio("tipoDeVerba", "REFLEXO")
+        except Exception as e:
+            self.log(f"    ⚠ Tipo=REFLEXO: {e}")
+        self._aguardar_ajax(2000)
+
+        # 6. Aplicar parametros_override
+        ov = reflexo.parametros_override
+        if ov:
+            try:
+                if ov.periodo_inicio:
+                    self._preencher("periodoInicialInputDate", ov.periodo_inicio, obrigatorio=False)
+                if ov.periodo_fim:
+                    self._preencher("periodoFinalInputDate", ov.periodo_fim, obrigatorio=False)
+                if ov.caracteristica:
+                    car = ov.caracteristica.value if hasattr(ov.caracteristica, "value") else str(ov.caracteristica)
+                    self._marcar_radio("caracteristicaVerba", car)
+                    self._aguardar_ajax(2000)
+                if ov.ocorrencia_pagamento:
+                    occ = ov.ocorrencia_pagamento.value if hasattr(ov.ocorrencia_pagamento, "value") else str(ov.ocorrencia_pagamento)
+                    self._marcar_radio("ocorrenciaPagto", occ)
+                    self._aguardar_ajax(2000)
+                if ov.incidencias:
+                    self._marcar_checkbox("irpf", ov.incidencias.irpf)
+                    self._marcar_checkbox("inss", ov.incidencias.cs_inss)
+                    self._marcar_checkbox("fgts", ov.incidencias.fgts)
+            except Exception as e:
+                self.log(f"    ⚠ Aplicando override: {e}")
+
+        # 7. Valor = CALCULADO + base mínima (ÚLTIMA REMUNERAÇÃO, divisor=1, mult=1, qtd=INFORMADA=1)
+        try:
+            self._marcar_radio("valor", "CALCULADO")
+            self._aguardar_ajax(2000)
+            self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL")
+            self._aguardar_ajax(2000)
+            self._selecionar("baseHistoricos", "ÚLTIMA REMUNERAÇÃO")
+            self._aguardar_ajax(1500)
+            self._marcar_radio("tipoDeDivisor", "OUTRO_VALOR")
+            self._aguardar_ajax(1500)
+            self._preencher("outroValorDoDivisor", "1", obrigatorio=False)
+            self._preencher("outroValorDoMultiplicador", "1", obrigatorio=False)
+            self._marcar_radio("tipoDaQuantidade", "INFORMADA")
+            self._preencher("valorInformadoDaQuantidade", "1", obrigatorio=False)
+        except Exception as e:
+            self.log(f"    ⚠ Configurando fórmula CALCULADO: {e}")
+
+        # 8. Salvar
+        self._clicar("salvar")
+        self._aguardar_ajax(15000)
+        self.log(f"  ✓ Reflexo Manual '{nome}' criado")
+
     def _configurar_reflexo(self, verba_principal, reflexo) -> None:
-        """Marcar checkbox do reflexo no painel da verba principal."""
+        """Marcar checkbox do reflexo no painel da verba principal (Expresso pareado)
+        OU criar como Manual se estrategia=MANUAL."""
         if reflexo.estrategia_reflexa == EstrategiaReflexa.MANUAL:
-            self.log(f"  → Reflexo MANUAL: {reflexo.nome} (não implementado nesta versão)")
+            self._criar_reflexo_manual(verba_principal, reflexo)
             return
 
         # Expandir painel da verba principal + marcar checkbox
