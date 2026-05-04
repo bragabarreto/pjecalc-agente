@@ -11707,25 +11707,44 @@ class PJECalcPlaywright:
         except Exception:
             pass
 
-        # Acumular Índices de Correção (select na página de liquidação)
-        # Opções: MES_SUBSEQUENTE | MES_VENCIMENTO | MISTO
+        # FIX E08: Acumular Índices de Correção
+        # Campo é um RADIO (não select) com id `indicesAcumulados` (não `acumularIndices`).
+        # Confirmado via DOM mapping (docs/dom-mapping/dominios-values.json):
+        # Values canônicos: MES_SUBSEQUENTE_AO_VENCIMENTO, MES_DO_VENCIMENTO,
+        # MES_SUBSEQUENTE_E_MES_DO_VENCIMENTO.
         _acum = (self._dados or {}).get("correcao_juros", {}).get("acumular_indices", "")
         if not _acum:
             _acum = (self._dados or {}).get("acumular_indices", "")
+        # Normalizar aliases legacy → values canônicos
+        _ALIAS = {
+            "MES_SUBSEQUENTE": "MES_SUBSEQUENTE_AO_VENCIMENTO",
+            "MES_VENCIMENTO": "MES_DO_VENCIMENTO",
+            "MISTO": "MES_SUBSEQUENTE_E_MES_DO_VENCIMENTO",
+        }
+        _acum = _ALIAS.get(_acum, _acum)
         if _acum:
             try:
-                _sel_acum = self._page.locator("select[id$='acumularIndices']")
-                if _sel_acum.count() > 0:
-                    try:
-                        _sel_acum.first.select_option(value=_acum)
-                    except Exception:
-                        _sel_acum.first.select_option(label=_acum)
+                _rad_acum = self._page.locator(
+                    f"input[type='radio'][id*='indicesAcumulados'][value='{_acum}']"
+                )
+                if _rad_acum.count() > 0:
+                    _rad_acum.first.click(force=True)
                     self._aguardar_ajax()
-                    self._log(f"  ✓ Acumular índices: {_acum}")
+                    self._log(f"  ✓ Indices acumulados (radio): {_acum}")
                 else:
-                    self._log(f"  ⚠ Campo acumularIndices não encontrado na página de liquidação")
+                    # Fallback: tentar select (versão antiga do PJE-Calc)
+                    _sel_acum = self._page.locator("select[id$='indicesAcumulados'], select[id$='acumularIndices']")
+                    if _sel_acum.count() > 0:
+                        try:
+                            _sel_acum.first.select_option(value=_acum)
+                        except Exception:
+                            _sel_acum.first.select_option(label=_acum)
+                        self._aguardar_ajax()
+                        self._log(f"  ✓ Indices acumulados (select-legacy): {_acum}")
+                    else:
+                        self._log(f"  ⚠ Campo indicesAcumulados não encontrado na página de liquidação")
             except Exception as _e_acum:
-                self._log(f"  ⚠ Acumular índices: erro {_e_acum}")
+                self._log(f"  ⚠ Indices acumulados: erro {_e_acum}")
 
         # Localizar botão Liquidar
         # /pages/calculo/liquidacao.xhtml: <a4j:commandButton id="liquidar" value="Liquidar">

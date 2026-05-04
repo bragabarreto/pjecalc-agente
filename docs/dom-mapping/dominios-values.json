@@ -1,0 +1,171 @@
+{
+  "_meta": {
+    "fonte": "PJE-Calc institucional TRT7 v2.15.1, capturado via Chrome MCP em 04/05/2026, conversationId=13xxx",
+    "metodologia": "Para cada select/radio/checkbox de cada página, capturado id, value canônico, label visível e estado disabled.",
+    "uso": "Schema v2 (Pydantic) e código de automação devem usar EXATAMENTE os values listados aqui — nunca os labels.",
+    "_disabled_note": "disabled=true frequentemente reflete estado INICIAL antes da interação. Selecionar pai (ex.: tipoDeVerba) habilita filhos (ex.: aliquota). Automação deve aguardar AJAX de habilitação antes de tentar selecionar."
+  },
+
+  "fgts.jsf": {
+    "selects": {
+      "incidenciaDoFgts": [
+        "SOBRE_O_TOTAL_DEVIDO",
+        "SOBRE_DEPOSITADO_SACADO",
+        "SOBRE_DIFERENCA",
+        "SOBRE_TOTAL_DEVIDO_MAIS_SAQUE_E_OU_SALDO",
+        "SOBRE_TOTAL_DEVIDO_MENOS_SAQUE_E_OU_SALDO"
+      ]
+    },
+    "radios": {
+      "tipoDeVerba": ["PAGAR", "DEPOSITAR"],
+      "comporPrincipal": ["SIM", "NAO"],
+      "tipoDoValorDaMulta": ["CALCULADA", "INFORMADA"],
+      "multaDoFgts": ["VINTE_POR_CENTO", "QUARENTA_POR_CENTO"],
+      "aliquota": {
+        "values": ["DOIS_POR_CENTO", "OITO_POR_CENTO"],
+        "_disabled_inicial": true,
+        "_habilitado_apos": "marcar tipoDeVerba"
+      }
+    },
+    "checkboxes": [
+      "multa",
+      "excluirAvisoDaMulta",
+      "multaDoArtigo467",
+      "multa10",
+      "contribuiçãoSocial",
+      "deduzirDoFGTS"
+    ]
+  },
+
+  "inss/inss.jsf": {
+    "selects": {},
+    "radios": {
+      "aliquotaEmpregado": {
+        "values": ["SEGURADO_EMPREGADO", "EMPREGADO_DOMESTICO", "FIXA"],
+        "_disabled_inicial": true,
+        "_habilitado_apos": "marcar apurarInssSeguradoDevido"
+      },
+      "aliquotaEmpregador": {
+        "values": ["POR_ATIVIDADE_ECONOMICA", "POR_PERIODO", "FIXA"],
+        "_disabled_inicial": true,
+        "_habilitado_apos": "marcar apurarInssSeguradoDevido"
+      }
+    },
+    "checkboxes": [
+      "apurarInssSeguradoDevido",
+      "cobrarDoReclamanteDevido",
+      "corrigirDescontoReclamante",
+      "apurarSalariosPagos"
+    ]
+  },
+
+  "irpf.jsf": {
+    "selects": {},
+    "radios": {},
+    "checkboxes": [
+      "apurarImpostoRenda",
+      "incidirSobreJurosDeMora",
+      "cobrarDoReclamado",
+      "considerarTributacaoExclusiva",
+      "considerarTributacaoEmSeparado",
+      "regimeDeCaixa",
+      "deduzirContribuicaoSocialDevidaPeloReclamante",
+      "deduzirPrevidenciaPrivada",
+      "deduzirPensaoAlimenticia",
+      "deduzirHonorariosDevidosPeloReclamante",
+      "aposentadoMaiorQue65Anos",
+      "possuiDependentes"
+    ]
+  },
+
+  "honorarios.jsf": {
+    "_nota": "Os campos abaixo só aparecem APÓS click no botão 'Novo' (formulario:incluir) — form em modal/inline.",
+    "selects": {
+      "tpHonorario": [
+        "ADVOCATICIOS", "ASSISTENCIAIS", "CONTRATUAIS",
+        "PERICIAIS_CONTADOR", "PERICIAIS_DOCUMENTOSCOPIO", "PERICIAIS_ENGENHEIRO",
+        "PERICIAIS_INTERPRETE", "PERICIAIS_MEDICO", "PERICIAIS_OUTROS",
+        "SUCUMBENCIAIS", "LEILOEIRO"
+      ],
+      "baseParaApuracao": [
+        "BRUTO",
+        "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+        "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA"
+      ]
+    },
+    "radios": {
+      "tipoDeDevedor": ["RECLAMANTE", "RECLAMADO"],
+      "tipoValor": ["INFORMADO", "CALCULADO"],
+      "tipoDocumentoFiscalCredor": ["CPF", "CNPJ", "CEI"]
+    },
+    "checkboxes": ["apurarIRRF"]
+  },
+
+  "custas-judiciais.jsf": {
+    "selects": {
+      "baseParaCustasCalculadas": [
+        "BRUTO_DEVIDO_AO_RECLAMANTE",
+        "BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO"
+      ],
+      "tipoDeAuto": ["REMICAO", "ADJUDICACAO", "ARREMATACAO"]
+    },
+    "radios": {
+      "tipoDeCustasDeConhecimentoDoReclamante": [
+        "NAO_SE_APLICA", "CALCULADA_2_POR_CENTO", "INFORMADA"
+      ],
+      "tipoDeCustasDeConhecimentoDoReclamado": [
+        "NAO_SE_APLICA", "CALCULADA_2_POR_CENTO", "INFORMADA"
+      ],
+      "tipoDeCustasDeLiquidacao": [
+        "NAO_SE_APLICA", "CALCULADA_MEIO_POR_CENTO", "INFORMADA"
+      ]
+    },
+    "checkboxes": []
+  },
+
+  "parametros-atualizacao/parametros-atualizacao.jsf": {
+    "_nota": "Página REAL para 'Correção, Juros e Multa' — não correcao-juros.jsf nem outras variações tentadas anteriormente.",
+    "selects_principais": {
+      "indiceTrabalhista": [
+        "TUACDT", "TABELA_DEVEDOR_FAZENDA", "TABELA_INDEBITO_TRIBUTARIO",
+        "TABELA_UNICA_JT_MENSAL", "TABELA_UNICA_JT_DIARIO",
+        "TR", "IGPM", "INPC", "IPC", "IPCA", "IPCAE", "IPCAETR",
+        "SELIC", "SELIC_FAZENDA", "SELIC_BACEN", "SEM_CORRECAO"
+      ]
+    },
+    "_outros_selects": "5 outros selects + 8 radio groups + 19 checkboxes — capturados em snapshot mas não migrados ao schema (página complexa, requer migração dedicada). Total: 8088 chars de dump.",
+    "checkboxes_relevantes": [
+      "incidirJurosSobreCorrecao",
+      "considerarMultaDoArtigo467",
+      "aplicarTaxaSelic",
+      "aplicarLei14905",
+      "aplicarADCS58_59"
+    ]
+  },
+
+  "liquidacao.jsf": {
+    "selects": {},
+    "radios": {
+      "indicesAcumulados": [
+        "MES_SUBSEQUENTE_AO_VENCIMENTO",
+        "MES_DO_VENCIMENTO",
+        "MES_SUBSEQUENTE_E_MES_DO_VENCIMENTO"
+      ]
+    },
+    "checkboxes": [],
+    "buttons": {
+      "liquidar": "Liquidar (dispara navegação JSF — usar locator.click() não evaluate)"
+    },
+    "_correcao_e08": "O nome canônico do radio é `indicesAcumulados` (não `acumularIndices`)."
+  },
+
+  "_correcoes_aplicaveis": {
+    "E01_aliquota_OITO_POR_CENTO": "Não é erro de mapping — value existe. É AJAX timing: aguardar habilitação após tipoDeVerba.",
+    "E02_incidenciaDoFgts_disabled": "Mesmo padrão — depende de tipoDeVerba/comporPrincipal. Aguardar AJAX.",
+    "E03_BRUTO_DEVIDO_AO_RECLAMANTE": "Value canônico confirmado — prompt extraction deve gerar UPPER_SNAKE, nunca label.",
+    "E06_custas_radios": "Cascata de E04 (página correta = custas-judiciais.jsf, mas estávamos presos em parametrizar-inss).",
+    "E07_correcao_url": "Nome correto: `parametros-atualizacao/parametros-atualizacao.jsf` (já estava em URL_SECTION_MAP — bug era de cascata E04).",
+    "E08_acumularIndices": "Renomear para `indicesAcumulados` em playwright_pjecalc.py.",
+    "E09_execution_destroyed": "Já corrigido no commit c681c3c."
+  }
+}
