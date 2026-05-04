@@ -67,6 +67,15 @@
 .col-span-2 { grid-column: span 2; }
 .col-span-full { grid-column: 1 / -1; }
 @media (max-width: 700px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+/* fieldgroup colapsável (<details>) */
+details.fieldgroup > summary { list-style: none; padding: 4px 0; }
+details.fieldgroup > summary::before {
+  content: "▸ "; color: #868e96; font-size: 0.7rem;
+  display: inline-block; width: 12px;
+}
+details.fieldgroup[open] > summary::before { content: "▾ "; }
+details.fieldgroup > summary::-webkit-details-marker { display: none; }
+details.fieldgroup[open] { border-color: #adb5bd; }
 
 /* === Campos individuais === */
 .campo {
@@ -631,6 +640,116 @@ function htmlVerba(v, idx) {
         </div>
       </div>
 
+      <details class="fieldgroup">
+        <summary class="fieldgroup-title" style="cursor:pointer;">Identificação CNJ + Classificação</summary>
+        <div class="grid-3">
+          <div class="campo">
+            <label>Assunto CNJ — Código</label>
+            <input type="number" value="${p.assunto_cnj?.codigo||''}"
+              onchange="if(!previaData.verbas_principais[${idx}].parametros.assunto_cnj) previaData.verbas_principais[${idx}].parametros.assunto_cnj={codigo:0,label:''}; previaData.verbas_principais[${idx}].parametros.assunto_cnj.codigo=parseInt(this.value)||0">
+          </div>
+          <div class="campo col-span-2">
+            <label>Assunto CNJ — Descrição</label>
+            <input type="text" value="${p.assunto_cnj?.label||''}"
+              onchange="if(!previaData.verbas_principais[${idx}].parametros.assunto_cnj) previaData.verbas_principais[${idx}].parametros.assunto_cnj={codigo:0,label:''}; previaData.verbas_principais[${idx}].parametros.assunto_cnj.label=this.value">
+          </div>
+          <div class="campo">
+            <label>Tipo</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.tipo=this.value">
+              <option value="PRINCIPAL"${p.tipo==='PRINCIPAL'?' selected':''}>Principal</option>
+              <option value="REFLEXO"${p.tipo==='REFLEXO'?' selected':''}>Reflexo</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Parcela</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.parcela=this.value">
+              <option value="FIXA"${p.parcela==='FIXA'?' selected':''}>Fixa</option>
+              <option value="VARIAVEL"${p.parcela==='VARIAVEL'?' selected':''}>Variável</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Ocorrência Ajuizamento</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.ocorrencia_ajuizamento=this.value">
+              <option value="OCORRENCIAS_VENCIDAS"${p.ocorrencia_ajuizamento==='OCORRENCIAS_VENCIDAS'?' selected':''}>Apenas Vencidas</option>
+              <option value="OCORRENCIAS_VENCIDAS_E_VINCENDAS"${p.ocorrencia_ajuizamento==='OCORRENCIAS_VENCIDAS_E_VINCENDAS'?' selected':''}>Vencidas e Vincendas</option>
+            </select>
+          </div>
+        </div>
+      </details>
+
+      <details class="fieldgroup">
+        <summary class="fieldgroup-title" style="cursor:pointer;">Geração / Comportamento</summary>
+        <div class="grid-3">
+          <div class="campo">
+            <label>Gerar Reflexa</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.gerar_reflexa=this.value">
+              <option value="DEVIDO"${p.gerar_reflexa==='DEVIDO'?' selected':''}>Sobre Devido</option>
+              <option value="DIFERENCA"${p.gerar_reflexa==='DIFERENCA'?' selected':''}>Sobre Diferença</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Gerar Principal</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.gerar_principal=this.value">
+              <option value="DEVIDO"${p.gerar_principal==='DEVIDO'?' selected':''}>Sobre Devido</option>
+              <option value="DIFERENCA"${p.gerar_principal==='DIFERENCA'?' selected':''}>Sobre Diferença</option>
+            </select>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox"${p.compor_principal?' checked':''}
+              onchange="previaData.verbas_principais[${idx}].parametros.compor_principal=this.checked">
+            <label>Compor Principal</label>
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox"${p.zerar_valor_negativo?' checked':''}
+              onchange="previaData.verbas_principais[${idx}].parametros.zerar_valor_negativo=this.checked">
+            <label>Zerar Valor Negativo</label>
+          </div>
+        </div>
+      </details>
+
+      <details class="fieldgroup">
+        <summary class="fieldgroup-title" style="cursor:pointer;">Exclusões / Subtrações da Base</summary>
+        <div class="grid-4">
+          ${['faltas_justificadas','faltas_nao_justificadas','ferias_gozadas','dobrar_valor_devido'].map(ex => `
+            <div class="checkbox-row">
+              <input type="checkbox"${p.exclusoes?.[ex]?' checked':''}
+                onchange="if(!previaData.verbas_principais[${idx}].parametros.exclusoes) previaData.verbas_principais[${idx}].parametros.exclusoes={}; previaData.verbas_principais[${idx}].parametros.exclusoes['${ex}']=this.checked">
+              <label>${ex.replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase())}</label>
+            </div>
+          `).join('')}
+        </div>
+      </details>
+
+      <details class="fieldgroup">
+        <summary class="fieldgroup-title" style="cursor:pointer;">Valor Pago (já recebido pelo reclamante)</summary>
+        <div class="grid-3">
+          <div class="campo">
+            <label>Tipo</label>
+            <select onchange="if(!previaData.verbas_principais[${idx}].parametros.valor_pago) previaData.verbas_principais[${idx}].parametros.valor_pago={}; previaData.verbas_principais[${idx}].parametros.valor_pago.tipo=this.value">
+              <option value="INFORMADO"${p.valor_pago?.tipo==='INFORMADO'?' selected':''}>Informado</option>
+              <option value="CALCULADO"${p.valor_pago?.tipo==='CALCULADO'?' selected':''}>Calculado</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Valor (R$)</label>
+            <input type="number" step="0.01" value="${p.valor_pago?.valor_brl||0}"
+              onchange="if(!previaData.verbas_principais[${idx}].parametros.valor_pago) previaData.verbas_principais[${idx}].parametros.valor_pago={}; previaData.verbas_principais[${idx}].parametros.valor_pago.valor_brl=parseFloat(this.value)||0">
+          </div>
+          <div class="checkbox-row">
+            <input type="checkbox"${p.valor_pago?.proporcionalizar?' checked':''}
+              onchange="if(!previaData.verbas_principais[${idx}].parametros.valor_pago) previaData.verbas_principais[${idx}].parametros.valor_pago={}; previaData.verbas_principais[${idx}].parametros.valor_pago.proporcionalizar=this.checked">
+            <label>Proporcionalizar</label>
+          </div>
+        </div>
+      </details>
+
+      <details class="fieldgroup">
+        <summary class="fieldgroup-title" style="cursor:pointer;">Comentários / Observações</summary>
+        <textarea rows="2" style="width:100%;"
+          onchange="previaData.verbas_principais[${idx}].parametros.comentarios=this.value"
+          placeholder="Notas para o cálculo (opcional)">${p.comentarios||''}</textarea>
+      </details>
+
       ${v.reflexos && v.reflexos.length > 0 ? `
       <div class="reflexos-list">
         <div class="fieldgroup-title">Reflexos (${v.reflexos.length})</div>
@@ -696,6 +815,7 @@ function adicionarReflexo(verbaIdx) {
   const ri = v.reflexos.length;
   v.reflexos.push({
     id: `r${String(verbaIdx+1).padStart(2,'0')}-${String(ri+1).padStart(2,'0')}`,
+    verba_principal_id: v.id,  // FK obrigatória (schema v2)
     nome: 'NOVO REFLEXO',
     estrategia_reflexa: 'checkbox_painel',
     expresso_reflex_alvo: '',
@@ -703,6 +823,7 @@ function adicionarReflexo(verbaIdx) {
     ocorrencias_override: null
   });
   renderVerbas();
+  validarPrevia();
 }
 
 // ─── Validação ────────────────────────────────────────────────────────
