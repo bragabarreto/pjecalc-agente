@@ -684,6 +684,80 @@ class PreviaCalculoV2(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _verifica_ocorrencia_periodo_demissao(self) -> "PreviaCalculoV2":
+        """Valida coerência entre ocorrencia_pagamento × periodo × data_demissao.
+
+        Regras (PJE-Calc):
+        1. **DESLIGAMENTO**: usado para verbas rescisórias.
+           `periodo_fim` deve ser ≤ `data_demissao`. Se for > demissao,
+           a verba é pós-contratual (estabilidade, dispensa discriminatória)
+           e a ocorrência correta é MENSAL.
+        2. **PERIODO_AQUISITIVO** (férias): exige `periodo_aquisitivo_*` na verba.
+        3. **MENSAL** ou **DEZEMBRO**: períodos podem se estender após demissao
+           (ex.: indenização de estabilidade), mas devem estar dentro do
+           `data_termino_calculo`.
+
+        Erros vão para `meta.validacao.campos_faltantes`. A automação só roda
+        com `completude=OK`.
+        """
+        from datetime import datetime as _dt
+
+        def _parse_br(s: Optional[str]) -> Optional[_dt]:
+            if not s:
+                return None
+            try:
+                return _dt.strptime(s, "%d/%m/%Y")
+            except (ValueError, TypeError):
+                return None
+
+        d_dem = _parse_br(self.parametros_calculo.data_demissao)
+        d_fim_calc = _parse_br(self.parametros_calculo.data_termino_calculo)
+        d_adm = _parse_br(self.parametros_calculo.data_admissao)
+
+        for v in self.verbas_principais:
+            p = v.parametros
+            d_pi = _parse_br(p.periodo_inicio)
+            d_pf = _parse_br(p.periodo_fim)
+
+            # Regra 1: DESLIGAMENTO + periodo_fim > demissao = ERRO
+            if (
+                p.ocorrencia_pagamento == OcorrenciaPagamento.DESLIGAMENTO
+                and d_pf and d_dem and d_pf > d_dem
+            ):
+                self.meta.validacao.campos_faltantes.append(
+                    f"verba[{v.id}] '{v.nome_pjecalc}': ocorrencia_pagamento=DESLIGAMENTO "
+                    f"incompatível com periodo_fim={p.periodo_fim} POSTERIOR à "
+                    f"data_demissao={self.parametros_calculo.data_demissao}. "
+                    f"Use ocorrencia_pagamento=MENSAL para verbas pós-contratuais."
+                )
+
+            # Regra 2: periodo_inicio < data_admissao = ERRO
+            if d_pi and d_adm and d_pi < d_adm:
+                self.meta.validacao.campos_faltantes.append(
+                    f"verba[{v.id}] '{v.nome_pjecalc}': periodo_inicio={p.periodo_inicio} "
+                    f"ANTERIOR à data_admissao={self.parametros_calculo.data_admissao}."
+                )
+
+            # Regra 3: periodo_fim > data_termino_calculo = ERRO
+            if d_pf and d_fim_calc and d_pf > d_fim_calc:
+                self.meta.validacao.campos_faltantes.append(
+                    f"verba[{v.id}] '{v.nome_pjecalc}': periodo_fim={p.periodo_fim} "
+                    f"posterior à data_termino_calculo={self.parametros_calculo.data_termino_calculo}. "
+                    f"Estenda data_termino_calculo ou ajuste periodo_fim."
+                )
+
+            # Regra 4: periodo_inicio > periodo_fim = ERRO
+            if d_pi and d_pf and d_pi > d_pf:
+                self.meta.validacao.campos_faltantes.append(
+                    f"verba[{v.id}] '{v.nome_pjecalc}': periodo_inicio={p.periodo_inicio} "
+                    f"posterior a periodo_fim={p.periodo_fim}."
+                )
+
+        if self.meta.validacao.campos_faltantes:
+            self.meta.validacao.completude = "INCOMPLETO"
+        return self
+
+    @model_validator(mode="after")
     def _verifica_reflexos_vinculados(self) -> "PreviaCalculoV2":
         """Valida que todo reflexo aponta para uma verba principal existente.
 

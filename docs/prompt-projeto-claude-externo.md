@@ -277,6 +277,29 @@ Verba sem similar no Expresso (raro):
 | AVISO_PREVIO | DESLIGAMENTO |
 | FERIAS | PERIODO_AQUISITIVO |
 
+### REGRAS CRÍTICAS de validação ocorrência × período (validador Pydantic rejeita se violadas)
+
+1. **`DESLIGAMENTO` → `periodo_fim ≤ data_demissao`**
+   Se a verba se estende APÓS a demissão (ex.: estabilidade acidentária 12 meses pós-contrato, dispensa discriminatória Lei 9.029, indenização por estabilidade gestante), a ocorrência **NÃO** pode ser DESLIGAMENTO. Use **MENSAL**.
+
+2. **`periodo_inicio ≥ data_admissao`** sempre.
+
+3. **`periodo_fim ≤ data_termino_calculo`** sempre. Se a sentença determina período além do contrato (estabilidade, indenização contínua), estenda `data_termino_calculo` para cobrir todo o período da verba mais longa.
+
+4. **`periodo_inicio ≤ periodo_fim`** sempre.
+
+### Exemplos de classificação correta
+
+| Cenário | caracteristica | ocorrencia_pagamento | Justificativa |
+|---|---|---|---|
+| Aviso prévio indenizado | AVISO_PREVIO | DESLIGAMENTO | Pago no rescindo |
+| Multa 477 / Multa 467 | COMUM | DESLIGAMENTO | Verba rescisória |
+| Indenização estabilidade acidentária 12m pós-demissão | COMUM | **MENSAL** | Pós-contrato, NÃO use DESLIGAMENTO |
+| Indenização Lei 9.029/95 (dispensa discriminatória, dobra) | COMUM | **MENSAL** | Pós-contrato |
+| 13º salário do contrato | DECIMO_TERCEIRO_SALARIO | DEZEMBRO | Anual |
+| Férias proporcionais indenizadas | FERIAS | PERIODO_AQUISITIVO | Por aquisitivo |
+| Diferenças salariais durante contrato | COMUM | MENSAL | Recurrente
+
 ## 4.4 VALOR=INFORMADO vs VALOR=CALCULADO
 
 ### `valor=INFORMADO`
