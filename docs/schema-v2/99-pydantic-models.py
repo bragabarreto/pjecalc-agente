@@ -314,11 +314,26 @@ class OcorrenciaMensalOverride(BaseModel):
     mes: str  # MM/YYYY
     valor_devido: float
     valor_pago: float = 0.0
+    quantidade: Optional[float] = None  # ex: HE 50% qtd horas/mês
+    multiplicador: Optional[float] = None
+    divisor: Optional[float] = None
 
 
 class OcorrenciasOverride(BaseModel):
-    modo: Literal["valores_mensais"] = "valores_mensais"
-    valores: list[OcorrenciaMensalOverride]
+    """Override da tabela mensal de Ocorrências (parametrizar-ocorrencia.jsf).
+
+    Modo `alteracao_em_lote` (default): aplica os valores no header do Lote
+    e clica Alterar — propagando para todas as linhas ativas. Use quando
+    valor é uniforme em todo o período.
+
+    Modo `valores_mensais`: preenche cada linha individualmente. Use quando
+    a sentença determina valores diferentes mês a mês.
+    """
+
+    modo: Literal["alteracao_em_lote", "valores_mensais"] = "alteracao_em_lote"
+    valores_mensais: list[OcorrenciaMensalOverride] = Field(default_factory=list)
+    # quando modo=alteracao_em_lote, usar campos do verba.parametros.valor_devido
+    # (não há campos extras aqui)
 
 
 class ParametrosVerba(BaseModel):
@@ -450,6 +465,21 @@ class FGTSMulta(BaseModel):
     valor_informado_brl: Optional[float] = None
 
 
+class RecolhimentoFGTS(BaseModel):
+    """Linha de recolhimento FGTS já existente (puxado pelo botão Recuperar).
+
+    Cada entrada representa um período em que o empregador depositou FGTS.
+    A automação só edita esta tabela se o reclamante já fez saque do FGTS
+    (multa rescisória prévia, doença grave, etc.) — caso raro.
+    """
+
+    tipo: Literal["DEPOSITO_REGULAR", "SAQUE", "MULTA_RESCISORIA"] = "DEPOSITO_REGULAR"
+    competencia_inicio: str  # MM/YYYY
+    competencia_fim: str  # MM/YYYY
+    valor_total_depositado_brl: float = Field(ge=0)
+    fonte: Literal["INFORMADO_PELA_PARTE", "EXTRATO_FGTS_OFICIAL", "AUTOMATICO"] = "AUTOMATICO"
+
+
 class FGTS(BaseModel):
     tipo_verba: Literal["PAGAR", "DEPOSITAR"] = "PAGAR"
     compor_principal: SimNao = SimNao.SIM
@@ -459,7 +489,32 @@ class FGTS(BaseModel):
     multa_10_lc110: bool = False
     contribuicao_social: bool = False
     incidencia_pensao_alimenticia: bool = False
-    recolhimentos_existentes: list = Field(default_factory=list)
+    recolhimentos_existentes: list[RecolhimentoFGTS] = Field(default_factory=list)
+
+
+class VinculacaoHistoricoIntervalo(BaseModel):
+    """Vínculo de um intervalo de competências a um histórico salarial,
+    para o cálculo da CS sobre Salários Devidos."""
+
+    competencia_inicial: str  # MM/YYYY
+    competencia_final: str  # MM/YYYY
+    historico_nome: str  # nome do histórico (ex: "ÚLTIMA REMUNERAÇÃO")
+    valor_base_brl: float = Field(ge=0)
+
+
+class VinculacaoHistoricos(BaseModel):
+    """Controle da vinculação histórico → CS (sub-página parametrizar-inss.jsf).
+
+    Modo `automatica` (default): a automação clica Recuperar Devidos +
+    Copiar Devidos→Pagos automaticamente. Funciona quando o histórico
+    cobre todo o período.
+
+    Modo `manual_por_periodo`: usuário define qual histórico cobre quais
+    meses. A automação aplica via Alteração em Lote por intervalo.
+    """
+
+    modo: Literal["automatica", "manual_por_periodo"] = "automatica"
+    intervalos: list[VinculacaoHistoricoIntervalo] = Field(default_factory=list)
 
 
 class ContribuicaoSocial(BaseModel):
@@ -474,6 +529,7 @@ class ContribuicaoSocial(BaseModel):
     aliquota_terceiros_fixa_pct: Optional[float] = None
     periodo_devidos: dict = Field(default_factory=dict)
     periodo_pagos: dict = Field(default_factory=dict)
+    vinculacao_historicos_devidos: VinculacaoHistoricos = Field(default_factory=VinculacaoHistoricos)
 
 
 class IRPFDeducoes(BaseModel):
