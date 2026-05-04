@@ -390,12 +390,23 @@ class ParametrosVerba(BaseModel):
 
 
 class ParametrosReflexo(BaseModel):
-    """Override opcional dos parâmetros de um reflexo (página doc 07)."""
+    """Override opcional dos parâmetros de um reflexo (página doc 07).
 
+    Para reflexos `estrategia_reflexa: "manual"`, os campos abaixo são usados
+    pelo automator para criar a verba REFLEXO via Manual no PJE-Calc.
+    """
+    model_config = ConfigDict(extra="allow")  # tolera campos legacy/futuros
+
+    # Núcleo: comportamento e fórmula
     comportamento_reflexo: Optional[ComportamentoReflexo] = None
     tratamento_fracao_mes: Optional[Literal["INTEGRALIZAR", "NAO_INTEGRALIZAR"]] = None
     outro_valor_divisor: Optional[float] = None
     outro_valor_multiplicador: Optional[float] = None
+    # Override de classificação (necessário p/ reflexo manual)
+    valor: Optional[TipoValor] = None
+    caracteristica: Optional[CaracteristicaVerba] = None
+    ocorrencia_pagamento: Optional[OcorrenciaPagamento] = None
+    # Override de incidências e período
     incidencias: Optional[VerbaIncidencias] = None
     periodo_inicio: Optional[str] = None
     periodo_fim: Optional[str] = None

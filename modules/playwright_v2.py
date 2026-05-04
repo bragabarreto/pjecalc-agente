@@ -851,7 +851,17 @@ class PlaywrightAutomatorV2:
             candidatos,
         )
         if not clicou:
-            self.log(f"  ⚠ Verba não encontrada na listagem ou sem link Parâmetros: {v.nome_pjecalc}")
+            # Diagnóstico: dump tabela atual para identificar mismatch
+            diag = self._page.evaluate(
+                """() => {
+                    const trs = [...document.querySelectorAll('tr')];
+                    return trs.filter(tr => tr.querySelector('a.linkParametrizar'))
+                        .slice(0, 15)
+                        .map(tr => (tr.textContent||'').replace(/\\s+/g,' ').trim().slice(0, 100));
+                }"""
+            )
+            self.log(f"  ⚠ Verba não encontrada na listagem: {v.nome_pjecalc}")
+            self.log(f"     TRs com Parâmetros visíveis: {diag}")
             return
         self.log(f"    ✓ Click Parâmetros via estratégia: {clicou}")
         self._aguardar_ajax(8000)
@@ -954,33 +964,62 @@ class PlaywrightAutomatorV2:
         self.log(f"    → Modal CNJ item ({codigo}): {item_clicado}")
         self._page.wait_for_timeout(800)
 
-        # 3. Click "Selecionar"
-        selecionado = self._page.evaluate(
-            """() => {
-                const containers = [...document.querySelectorAll(
-                    '[id*="modalCNJ"], [id*="modalAssunto"]'
-                )];
-                for (const c of containers) {
-                    const btns = [...c.querySelectorAll(
-                        'input[type="button"], input[type="submit"], button'
+        # 3. Click "Selecionar" — usar Playwright locator com force=True
+        # (evaluate-only não dispara JSF/AJAX corretamente em alguns casos).
+        try:
+            btn_sel = self._page.locator(
+                "[id*='modalCNJ'] input[value='Selecionar'], "
+                "[id*='modalAssunto'] input[value='Selecionar'], "
+                "[id*='modalCNJ'] [id$='btnSelecionarCNJ']"
+            )
+            if btn_sel.count() > 0:
+                btn_sel.first.click(force=True)
+                self._aguardar_ajax(5000)
+                # Aguardar modal fechar (mask div some)
+                try:
+                    self._page.wait_for_selector(
+                        "div#modalCNJDiv", state="hidden", timeout=8000
+                    )
+                except Exception:
+                    pass
+                self.log(f"    ✓ Assunto CNJ selecionado: {codigo}")
+                return True
+        except Exception as e:
+            self.log(f"    ⚠ Botão Selecionar (locator): {e}")
+
+        # Fallback: tentar via evaluate (último recurso)
+        try:
+            self._page.evaluate(
+                """() => {
+                    const btns = [...document.querySelectorAll(
+                        '[id*="modalCNJ"] input, [id*="modalAssunto"] input'
                     )];
                     for (const b of btns) {
-                        const v = (b.value || '').trim();
-                        const t = (b.textContent || '').trim();
-                        if (v === 'Selecionar' || t === 'Selecionar') {
-                            if (!b.disabled) { b.click(); return true; }
+                        if ((b.value||'').trim() === 'Selecionar' && !b.disabled) {
+                            b.click();
+                            return true;
                         }
                     }
-                }
-                return false;
-            }"""
-        )
-        self._aguardar_ajax(5000)
-        if selecionado:
-            self.log(f"    ✓ Assunto CNJ selecionado: {codigo}")
-        else:
-            self.log(f"    ⚠ Botão Selecionar não funcionou para CNJ {codigo}")
-        return bool(selecionado)
+                    return false;
+                }"""
+            )
+            self._aguardar_ajax(5000)
+        except Exception:
+            pass
+
+        # Se modal ainda visível, fechar via Cancelar para não bloquear Salvar
+        try:
+            cancel = self._page.locator(
+                "[id*='modalCNJ'] input[value*='Cancelar'], "
+                "[id*='modalCNJ'] [id*='close']"
+            )
+            if cancel.count() > 0:
+                cancel.first.click(force=True)
+                self._aguardar_ajax(3000)
+                self.log(f"    ⚠ Modal CNJ fechado via Cancelar (CNJ {codigo} não selecionado)")
+        except Exception:
+            pass
+        return False
 
     def _criar_reflexo_manual(self, verba_principal, reflexo) -> None:
         """Cria reflexo via Manual (verba separada com Tipo=REFLEXO).
