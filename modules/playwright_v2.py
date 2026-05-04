@@ -504,14 +504,38 @@ class PlaywrightAutomatorV2:
             if idx > 0:
                 self._navegar_menu("li_calculo_historico_salarial")
 
-            self._clicar("incluir")  # botão Novo
-            # Esperar form aparecer (renderização AJAX)
+            # Click incluir + wait robusto para form renderizar
             try:
-                self._page.wait_for_selector(
-                    "[id$='nome'], input[id$=':nome']", timeout=15000
-                )
+                self._page.locator("input[id$='incluir'][value='Novo'], input[id$='incluir']").first.click()
             except Exception:
-                self._aguardar_ajax(15000)
+                self._clicar("incluir")
+            self._aguardar_ajax(8000)
+
+            # Espera o form aparecer — testa múltiplos seletores variantes
+            form_pronto = False
+            for sel in [
+                "input[id='formulario:nome']",
+                "input[id$=':nome'][type='text']",
+                "[id$='nomeBase']",
+                "input[name='formulario:nome']",
+            ]:
+                try:
+                    self._page.wait_for_selector(sel, timeout=8000, state="visible")
+                    form_pronto = True
+                    self.log(f"  ✓ form Histórico aberto via selector: {sel}")
+                    break
+                except Exception:
+                    continue
+            if not form_pronto:
+                # Diagnóstico: listar inputs visíveis na página
+                _diag = self._page.evaluate(
+                    """() => [...document.querySelectorAll('input,select,textarea')]
+                        .filter(e => e.id && e.offsetParent)
+                        .map(e => e.id).slice(0, 30)"""
+                )
+                self.log(f"  ⚠ form Histórico não abriu — IDs visíveis: {_diag}")
+                # Pula esta entrada
+                continue
 
             self._preencher("nome", hist.nome, obrigatorio=False)
             self._marcar_radio("tipoVariacaoDaParcela", hist.parcela.value)
