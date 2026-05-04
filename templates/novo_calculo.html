@@ -77,56 +77,15 @@
       </div>
     </div>
 
-    <!-- Documentos complementares -->
-    <div style="margin-bottom:24px; border-top:1px solid #e9ecef; padding-top:20px;">
-      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px;">
-        <div>
-          <h4 style="color:#1a3a6b; margin:0 0 4px;">Documentos Complementares</h4>
-          <p style="color:#6c757d; font-size:0.85rem; margin:0;">
-            Adicione contracheques, acordos, laudos, atas ou qualquer documento relevante ao cálculo.
-            A contextualização orienta a IA sobre o conteúdo de cada documento (opcional).
-            Você pode inserir arquivo, imagem/foto ou colar texto diretamente.
-          </p>
-        </div>
-        <button type="button" id="btn-add-doc" class="btn btn-secondary"
-                style="flex-shrink:0; margin-left:16px; white-space:nowrap;"
-                onclick="adicionarDocumento()">+ Adicionar Documento</button>
-      </div>
-
-      <div id="lista-docs-extras"></div>
-
-      <div id="limite-msg" style="display:none; font-size:0.85rem; color:#856404;
-           background:#fff3cd; padding:8px 12px; border-radius:4px;">
-        Limite máximo de 10 documentos adicionais atingido.
-      </div>
-    </div>
-
-    <!-- Seleção de modelo de IA -->
-    <div style="margin-bottom:20px; border-top:1px solid #e9ecef; padding-top:20px;">
-      <h4 style="color:#1a3a6b; margin-bottom:8px;">Modelo de IA para Extração</h4>
-      <div style="display:flex; gap:12px; flex-wrap:wrap;">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
-          <input type="radio" name="modelo_ia_ui" value="claude" checked
-                 onchange="document.getElementById('campo-modelo-ia').value='claude'">
-          <span>Claude (Anthropic)</span>
-        </label>
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; font-size:0.9rem;">
-          <input type="radio" name="modelo_ia_ui" value="gemini"
-                 onchange="document.getElementById('campo-modelo-ia').value='gemini'">
-          <span>Gemini 2.5 Flash (Google)</span>
-        </label>
-      </div>
-      <input type="hidden" id="campo-modelo-ia" name="modelo_ia" value="claude">
-      <p style="font-size:0.8rem; color:#888; margin:6px 0 0;">
-        O modelo escolhido será usado para extrair os parâmetros da sentença.
-        Configure as chaves de API em <code>.env</code>.
-      </p>
-    </div>
-
     <!-- Botão submit -->
     <div style="text-align:center; padding-top:12px; border-top:1px solid #e9ecef;">
+      <p style="font-size:0.82rem; color:#6c757d; margin:0 0 12px;">
+        💡 A documentação complementar (contracheques, laudos, etc.) deve ser
+        consolidada <strong>antes</strong>, no Projeto Claude externo, para gerar o JSON v2.
+        Esta página aceita apenas o JSON consolidado.
+      </p>
       <button type="submit" class="btn btn-primary" style="font-size:1rem; padding:12px 48px;">
-        Processar Sentença
+        Processar JSON v2
       </button>
     </div>
 
@@ -145,9 +104,6 @@
 
 {% block extra_script %}
 <script>
-let contadorDocs = 0;
-let docsAtivos = 0;
-
 // Sentença — apenas JSON v2; valida arquivo no client antes de submit
 document.getElementById('arquivo-sentenca').addEventListener('change', function() {
   if (this.files.length > 0) {
@@ -175,110 +131,6 @@ document.getElementById('arquivo-sentenca').addEventListener('change', function(
   }
 });
 
-function adicionarDocumento() {
-  if (docsAtivos >= 10) return;
-  const idx = contadorDocs++;
-  docsAtivos++;
-  const container = document.getElementById('lista-docs-extras');
-
-  const card = document.createElement('div');
-  card.id = `doc-card-${idx}`;
-  card.className = 'doc-card';
-  card.dataset.idx = idx;
-
-  card.innerHTML = `
-    <div class="doc-card-header">
-      <strong style="color:#1a3a6b;">Documento ${docsAtivos}</strong>
-      <button type="button" class="btn btn-danger"
-              style="padding:4px 12px; font-size:0.8rem;"
-              onclick="removerDocumento(${idx})">Remover</button>
-    </div>
-
-    <div class="doc-tabs">
-      <button type="button" class="tab-btn ativa"
-              onclick="setarAba(${idx}, 'arquivo')">📄 Arquivo (PDF/DOCX/TXT)</button>
-      <button type="button" class="tab-btn"
-              onclick="setarAba(${idx}, 'imagem')">🖼 Imagem / Foto</button>
-      <button type="button" class="tab-btn"
-              onclick="setarAba(${idx}, 'texto')">📋 Texto colado (Ctrl+V)</button>
-    </div>
-
-    <div id="aba-arquivo-${idx}" class="aba-conteudo ativa">
-      <div class="doc-file-area" onclick="document.getElementById('doc-arq-${idx}').click()">
-        <input type="file" id="doc-arq-${idx}" accept=".pdf,.docx,.doc,.txt">
-        <div style="color:#6c757d; font-size:0.9rem;">Clique para selecionar (PDF, DOCX ou TXT)</div>
-        <div id="nome-arq-${idx}" style="color:#28a745; font-size:0.85rem; margin-top:6px;"></div>
-      </div>
-    </div>
-
-    <div id="aba-imagem-${idx}" class="aba-conteudo">
-      <div class="doc-file-area" onclick="document.getElementById('doc-img-${idx}').click()">
-        <input type="file" id="doc-img-${idx}" accept="image/jpeg,image/png,image/webp,image/gif">
-        <div style="color:#6c757d; font-size:0.9rem;">Clique para selecionar imagem (JPG, PNG, WEBP)</div>
-        <div id="nome-img-${idx}" style="color:#28a745; font-size:0.85rem; margin-top:6px;"></div>
-        <div id="preview-img-${idx}" style="margin-top:8px;"></div>
-      </div>
-    </div>
-
-    <div id="aba-texto-${idx}" class="aba-conteudo">
-      <textarea id="doc-txt-${idx}"
-                placeholder="Cole aqui o texto do documento (Ctrl+V)..." rows="6"
-                style="width:100%; padding:10px; border:1px solid #dee2e6; border-radius:6px;
-                       font-size:0.88rem; font-family:inherit; resize:vertical;"></textarea>
-    </div>
-
-    <div class="contexto-area">
-      <label>Contextualização (opcional) — descreva do que trata este documento para orientar a IA:</label>
-      <textarea id="doc-ctx-${idx}" rows="2"
-                placeholder="Ex: Contracheques referentes ao período de jan/2020 a jun/2021, para verificação de horas extras e adicional noturno."></textarea>
-    </div>
-  `;
-
-  // Listeners de arquivo
-  card.querySelector(`#doc-arq-${idx}`).addEventListener('change', function() {
-    if (this.files[0]) document.getElementById(`nome-arq-${idx}`).textContent = this.files[0].name;
-  });
-  card.querySelector(`#doc-img-${idx}`).addEventListener('change', function() {
-    if (this.files[0]) {
-      document.getElementById(`nome-img-${idx}`).textContent = this.files[0].name;
-      // Preview da imagem
-      const reader = new FileReader();
-      reader.onload = e => {
-        document.getElementById(`preview-img-${idx}`).innerHTML =
-          `<img src="${e.target.result}" style="max-height:120px; max-width:100%; border-radius:4px; margin-top:4px;">`;
-      };
-      reader.readAsDataURL(this.files[0]);
-    }
-  });
-
-  container.appendChild(card);
-  atualizarUI();
-}
-
-function removerDocumento(idx) {
-  const card = document.getElementById(`doc-card-${idx}`);
-  if (card) { card.remove(); docsAtivos--; }
-  // Renumerar
-  document.querySelectorAll('.doc-card').forEach((c, i) => {
-    c.querySelector('strong').textContent = `Documento ${i + 1}`;
-  });
-  atualizarUI();
-}
-
-function setarAba(idx, aba) {
-  ['arquivo', 'imagem', 'texto'].forEach(a => {
-    document.getElementById(`aba-${a}-${idx}`).classList.toggle('ativa', a === aba);
-  });
-  const tabBtns = document.querySelectorAll(`#doc-card-${idx} .tab-btn`);
-  const ordem = {arquivo: 0, imagem: 1, texto: 2};
-  tabBtns.forEach((btn, i) => btn.classList.toggle('ativa', i === ordem[aba]));
-}
-
-function atualizarUI() {
-  document.getElementById('btn-add-doc').style.display = docsAtivos >= 10 ? 'none' : '';
-  document.getElementById('limite-msg').style.display = docsAtivos >= 10 ? 'block' : 'none';
-}
-
 // Submit do formulário
 document.getElementById('form-upload').addEventListener('submit', async function(e) {
   e.preventDefault();
@@ -293,49 +145,11 @@ document.getElementById('form-upload').addEventListener('submit', async function
   }
   formData.append('sentenca', arquivo);
 
-  // Modelo de IA selecionado
-  const modeloIA = document.getElementById('campo-modelo-ia').value;
-  if (modeloIA) formData.append('modelo_ia', modeloIA);
-
-  // Coletar docs extras na ordem visual
-  let pos = 0;
-  document.querySelectorAll('.doc-card').forEach(card => {
-    const idx = card.dataset.idx;
-    const ctx = (document.getElementById(`doc-ctx-${idx}`) || {}).value || '';
-
-    const abaArquivo = document.getElementById(`aba-arquivo-${idx}`);
-    const abaImagem  = document.getElementById(`aba-imagem-${idx}`);
-    const abaTxt     = document.getElementById(`aba-texto-${idx}`);
-
-    if (abaArquivo && abaArquivo.classList.contains('ativa')) {
-      const f = document.getElementById(`doc-arq-${idx}`).files[0];
-      if (f) {
-        formData.append(`doc_arquivo_${pos}`, f);
-        if (ctx) formData.append(`doc_contexto_${pos}`, ctx);
-        pos++;
-      }
-    } else if (abaImagem && abaImagem.classList.contains('ativa')) {
-      const f = document.getElementById(`doc-img-${idx}`).files[0];
-      if (f) {
-        formData.append(`doc_imagem_${pos}`, f);
-        if (ctx) formData.append(`doc_contexto_${pos}`, ctx);
-        pos++;
-      }
-    } else if (abaTxt && abaTxt.classList.contains('ativa')) {
-      const txt = (document.getElementById(`doc-txt-${idx}`) || {}).value || '';
-      if (txt.trim()) {
-        formData.append(`doc_texto_${pos}`, txt.trim());
-        if (ctx) formData.append(`doc_contexto_${pos}`, ctx);
-        pos++;
-      }
-    }
-  });
-
   // Ocultar formulário e exibir barra de progresso
   document.getElementById('form-upload').style.display = 'none';
   document.getElementById('status-area').style.display = 'block';
-  document.getElementById('progresso').style.width = '15%';
-  document.getElementById('mensagem-status').textContent = 'Enviando arquivos...';
+  document.getElementById('progresso').style.width = '20%';
+  document.getElementById('mensagem-status').textContent = 'Enviando JSON v2…';
 
   try {
     // Backend retorna 303 com Location para /previa/v2/{id} quando JSON v2 valida.
