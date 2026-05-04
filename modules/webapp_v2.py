@@ -53,8 +53,19 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templa
 # em memória + arquivo JSON em /tmp para retomar sessões interrompidas.
 
 _PREVIA_STORE: dict[str, dict] = {}
-_STORE_DIR = Path("/tmp/pjecalc_previa_v2")
-_STORE_DIR.mkdir(parents=True, exist_ok=True)
+# Persistência: usa volume Docker permanente em produção, fallback /tmp em dev.
+# /opt/pjecalc-data/previa_v2 sobrevive a restart de container (deploy).
+import os as _os_v2
+_PERSIST_BASE = Path(_os_v2.environ.get(
+    "PREVIA_V2_DIR",
+    "/opt/pjecalc-data/previa_v2" if Path("/opt/pjecalc-data").exists() else "/tmp/pjecalc_previa_v2",
+))
+_STORE_DIR = _PERSIST_BASE
+try:
+    _STORE_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    _STORE_DIR = Path("/tmp/pjecalc_previa_v2")
+    _STORE_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _save_previa(sessao_id: str, data: dict) -> None:
