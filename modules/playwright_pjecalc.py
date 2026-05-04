@@ -11743,28 +11743,74 @@ class PJECalcPlaywright:
                 return false;
             }""")
             if not clicou:
-                # Antes de abortar, capturar pendências e screenshot diagnóstico.
+                # IMPORTANTE: quando o botão Liquidar não aparece, é tipicamente
+                # porque a página detectou pendências e re-renderizou apenas a
+                # seção de "Pendências do Cálculo" (sem o botão). Isto NÃO é
+                # uma falha terminal — vamos parsear as pendências e tentar
+                # auto-correção, em vez de abortar.
                 self._screenshot_fase("liquidacao_botao_nao_encontrado")
                 try:
-                    _pend = self._page.evaluate("""() => {
-                        const body = document.body.innerText || '';
-                        const idx = body.indexOf('Pendências');
-                        if (idx < 0) return null;
-                        const fim = body.indexOf('Total de Erros', idx);
-                        return body.slice(idx, fim > 0 ? fim : idx + 2000);
-                    }""")
-                    if _pend:
-                        _linhas = [l.strip() for l in _pend.split('\n') if l.strip()]
-                        self._log(f"  📋 Pendências antes de Liquidar ({len(_linhas)} itens):")
-                        for _l in _linhas[:25]:
-                            self._log(f"    • {_l[:200]}")
+                    _body_pre = self._page.locator("body").text_content(timeout=5000) or ""
                 except Exception:
-                    pass
-                raise RuntimeError(
-                    "Botão Liquidar não encontrado em nenhuma estratégia. "
-                    "Verifique se todos os campos obrigatórios foram preenchidos."
-                )
-            self._aguardar_ajax(90000)
+                    _body_pre = ""
+                _tem_pendencias = "Pendências do Cálculo" in _body_pre or "pendência" in _body_pre.lower()
+                if _tem_pendencias:
+                    self._log(
+                        "  ℹ Botão Liquidar ausente porque pendências bloqueiam — "
+                        "iniciando auto-correção sem click prévio…"
+                    )
+                    # Parsear pendências + sinalizar para o bloco de auto-correção
+                    # abaixo. Não levantamos exceção, apenas marcamos a falha.
+                    _pendencias_estruturadas_local = self._parsear_pendencias(_body_pre)
+                    if _pendencias_estruturadas_local:
+                        # Sinalizadores para o bloco principal de auto-correção
+                        # (variáveis criadas mais adiante neste método). Como
+                        # estamos antes daquele bloco, criamos aqui — Python
+                        # permite shadowing limpo no escopo da função.
+                        _liquidacao_ok = False
+                        _liquidacao_erro_msg = "pendencias_bloqueiam_botao"
+                        # As variáveis abaixo serão re-usadas pelo bloco de
+                        # auto-correção (`_pendencias_estruturadas` é lida lá).
+                        # Simplesmente saímos do branch sem raise.
+                        # Listar pendências para diagnóstico
+                        self._log(
+                            f"  📋 Pendências detectadas pré-click ({len(_pendencias_estruturadas_local)} itens):"
+                        )
+                        for _p in _pendencias_estruturadas_local[:20]:
+                            _verba = _p.get("verba") or "—"
+                            self._log(f"    • [{_p.get('tipo')}] {_verba}: {_p.get('raw', '')[:150]}")
+                        # Tornar pendências visíveis para o auto-corrigir
+                        # através de atribuição via outer scope hack:
+                        # truque: usar atributo da instância como bridge
+                        self._pendencias_pre_click = _pendencias_estruturadas_local
+                    else:
+                        self._log("  ⚠ Pendências mencionadas mas parser não extraiu itens estruturados")
+                        # Fallback: tentar listagem bruta
+                        try:
+                            _pend_raw = self._page.evaluate("""() => {
+                                const body = document.body.innerText || '';
+                                const idx = body.indexOf('Pendências');
+                                if (idx < 0) return null;
+                                const fim = body.indexOf('Total de Erros', idx);
+                                return body.slice(idx, fim > 0 ? fim : idx + 2000);
+                            }""")
+                            if _pend_raw:
+                                _linhas = [l.strip() for l in _pend_raw.split('\n') if l.strip()]
+                                self._log(f"  📋 Pendências brutas ({len(_linhas)} linhas):")
+                                for _l in _linhas[:25]:
+                                    self._log(f"    • {_l[:200]}")
+                        except Exception:
+                            pass
+                        raise RuntimeError(
+                            "Botão Liquidar ausente e pendências não puderam ser parseadas."
+                        )
+                else:
+                    raise RuntimeError(
+                        "Botão Liquidar não encontrado em nenhuma estratégia. "
+                        "Verifique se todos os campos obrigatórios foram preenchidos."
+                    )
+            else:
+                self._aguardar_ajax(90000)
         else:
             self._log("  ✓ Botão Liquidar clicado (AJAX)…")
             loc.click()
@@ -11857,10 +11903,19 @@ class PJECalcPlaywright:
         # diretamente (Regerar verbas, Recuperar Devidos CS, etc.). Se algo for
         # corrigido, vale a pena tentar Liquidar de novo na MESMA conversação.
         _pendencias_estruturadas: list[dict] = []
+        # Bridge: pendências detectadas pré-click (botão Liquidar bloqueado)
+        _pendencias_pre = getattr(self, "_pendencias_pre_click", None) or []
+        if _pendencias_pre:
+            _pendencias_estruturadas = list(_pendencias_pre)
+            try:
+                delattr(self, "_pendencias_pre_click")
+            except Exception:
+                pass
         if not _liquidacao_ok and _liquidacao_erro_msg:
             try:
                 _body_now = self._page.locator("body").text_content(timeout=5000) or ""
-                _pendencias_estruturadas = self._parsear_pendencias(_body_now)
+                if not _pendencias_estruturadas:
+                    _pendencias_estruturadas = self._parsear_pendencias(_body_now)
                 if _pendencias_estruturadas:
                     self._log(f"  📊 Pendências estruturadas: {len(_pendencias_estruturadas)} item(ns)")
                     _n_fix = self._auto_corrigir_pendencias(_pendencias_estruturadas)
