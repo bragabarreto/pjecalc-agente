@@ -678,4 +678,22 @@ class PreviaCalculoV2(BaseModel):
 
 
 # ─── Resolver forward refs (necessário quando carregado via importlib) ─────
-PreviaCalculoV2.model_rebuild()
+# Quando o módulo é carregado via importlib.util.spec_from_file_location,
+# Pydantic não tem acesso ao namespace global automático. Passamos explicitamente.
+import sys as _sys
+_ns = dict(globals())
+# Garantir que o módulo está em sys.modules para resolução por nome
+_modname = __name__
+if _modname not in _sys.modules:
+    _sys.modules[_modname] = _sys.modules.get("__main__") or type(_sys)(_modname)
+    for _k, _v in _ns.items():
+        setattr(_sys.modules[_modname], _k, _v)
+
+# Rebuild em ordem topológica (bottom-up): rebuilds em filhos antes do pai
+for _cls_name in list(_ns.keys()):
+    _cls = _ns.get(_cls_name)
+    if isinstance(_cls, type) and issubclass(_cls, BaseModel) and _cls is not BaseModel:
+        try:
+            _cls.model_rebuild(_types_namespace=_ns)
+        except Exception:
+            pass
