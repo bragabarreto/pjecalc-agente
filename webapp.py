@@ -1874,6 +1874,119 @@ async def logs_python(linhas: int = 100):
     return {"log": "\n".join(_python_log_buffer[-linhas:]) or "(sem logs registrados ainda)"}
 
 
+# ─── Item 8: erros de mapping DOM (modo tolerante) ─────────────────────────
+
+import re as _re_em
+
+# Padrões de erro de mapping detectáveis no log
+_PADROES_ERRO_MAPPING = [
+    # (tipo, regex, severidade)
+    ("radio_nao_encontrado",
+     r"⚠ radio (\w+)=([^\s:]+):? não encontrado", "warning"),
+    ("radio_budget_estourado",
+     r"⚠ (\w+)=([^\s:]+):? budget de \d+s estourado", "warning"),
+    ("select_disabled",
+     r"⚠ select (\w+):? disabled — tentando JS direto", "warning"),
+    ("select_nao_encontrado",
+     r"⚠ select ([\w-]+):? não encontrado", "warning"),
+    ("campo_nao_encontrado",
+     r"⚠ Campo (\w+) não encontrado", "warning"),
+    ("dom_id_nao_encontrado",
+     r"⚠ ([\w_:]+) não existe — pulando", "info"),
+    ("url_inesperada",
+     r"⚠ (\w+): URL inesperada \(([^)]+)\)", "warning"),
+    ("botao_nao_encontrado",
+     r"⚠ Botão Novo não encontrado.* honorário (\d+)", "error"),
+    ("falha_select_value",
+     r"✗ ([\w_]+):? FALHA ao selecionar '(\w+)' — prévia indicava '([^']+)'", "error"),
+    ("salvar_sem_sucesso",
+     r"⚠ Salvar: mensagem de sucesso não detectada", "warning"),
+    ("http_404",
+     r"⚠ HTTP 404: ([^\s]+)", "warning"),
+    ("execution_destroyed",
+     r"Execution context was destroyed", "info"),
+]
+
+
+def _parsear_erros_mapping(logs: list[str]) -> list[dict]:
+    """Extrai erros de mapping DOM a partir de uma lista de linhas de log.
+
+    Retorna lista de dicts: {tipo, severidade, fase, campo, valor, raw_log, linha}
+    """
+    erros = []
+    fase_atual = "?"
+    for i, linha in enumerate(logs):
+        # Tentar capturar fase atual
+        m_fase = _re_em.search(r"Fase (\d+[a-z]?)\s*[—-]\s*([^…]+)", linha)
+        if m_fase:
+            fase_atual = f"{m_fase.group(1)} ({m_fase.group(2).strip()})"
+            continue
+        for tipo, padrao, sev in _PADROES_ERRO_MAPPING:
+            m = _re_em.search(padrao, linha)
+            if m:
+                grupos = m.groups()
+                erros.append({
+                    "tipo": tipo,
+                    "severidade": sev,
+                    "fase": fase_atual,
+                    "campo": grupos[0] if grupos else "",
+                    "valor_tentado": grupos[1] if len(grupos) > 1 else None,
+                    "raw_log": linha.strip()[-300:],
+                    "linha": i,
+                })
+                break
+    return erros
+
+
+@app.get("/api/erros-mapping/{sessao_id}")
+async def erros_mapping(sessao_id: str):
+    """Retorna erros de mapping DOM detectados durante a automação.
+
+    Útil para identificar discrepâncias entre o schema/automação e o DOM real
+    do PJE-Calc. Cada erro inclui tipo, severidade, fase, campo e log bruto.
+    """
+    # Tentar runner em memória primeiro
+    runner = _automacao_runners.get(sessao_id)
+    logs: list[str] = []
+    fonte = "n/a"
+    if runner and runner.logs:
+        logs = list(runner.logs)
+        fonte = "runner_memory"
+    else:
+        # Fallback: ler do CalculationStore
+        try:
+            from infrastructure.calculation_store import CalculationStore
+            store = CalculationStore()
+            calc = store.buscar_por_sessao(sessao_id)
+            if calc:
+                log_path = Path(calc.exec_dir) / "automacao.log"
+                if log_path.exists():
+                    logs = log_path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    fonte = "exec_dir_log"
+        except Exception:
+            pass
+
+    if not logs:
+        raise HTTPException(status_code=404, detail="Logs da sessão não encontrados")
+
+    erros = _parsear_erros_mapping(logs)
+
+    # Agrupar por tipo
+    resumo: dict[str, int] = {}
+    for e in erros:
+        resumo[e["tipo"]] = resumo.get(e["tipo"], 0) + 1
+
+    return {
+        "sessao_id": sessao_id,
+        "fonte": fonte,
+        "total_erros": len(erros),
+        "resumo_por_tipo": resumo,
+        "erros": erros,
+        "modo_estrito": os.environ.get("MAPPING_STRICT", "false").lower() == "true",
+        "_dica": "Set MAPPING_STRICT=true em ambiente de teste para abortar a fase no primeiro erro de mapping (em vez de seguir tolerante).",
+    }
+
+
 @app.get("/api/ps")
 async def listar_processos():
     """Lista processos em execução no container (diagnóstico)."""

@@ -737,6 +737,34 @@ class PJECalcPlaywright:
         self._reflexos_configurados: set[str] = set()  # nomes de verbas principais cujos reflexos foram configurados via botão
         self._verbas_expresso_ok: set[str] = set()  # nomes de verbas criadas com sucesso via Expresso (reflexos auto-gerados)
         self._strategy_engine = None  # VerbaStrategyEngine — inicializado lazy em fase_verbas
+        # Item 8: modo estrito — se MAPPING_STRICT=true, qualquer erro de mapping
+        # DOM aborta a fase imediatamente (em vez de pular o campo silenciosamente).
+        # Útil em ambiente de desenvolvimento/CI para detectar drift entre schema e DOM.
+        import os as _os_strict
+        self._strict_mapping = _os_strict.environ.get(
+            "MAPPING_STRICT", "false"
+        ).lower() in ("true", "1", "yes")
+        self._erros_mapping: list[dict] = []  # registro de erros para diagnóstico
+
+    def _registrar_erro_mapping(
+        self, tipo: str, fase: str, campo: str,
+        valor_tentado: str = "", motivo: str = ""
+    ) -> None:
+        """Registra um erro de mapping DOM. Em modo estrito, aborta com exceção."""
+        entry = {
+            "tipo": tipo,
+            "fase": fase,
+            "campo": campo,
+            "valor_tentado": valor_tentado,
+            "motivo": motivo,
+        }
+        self._erros_mapping.append(entry)
+        if self._strict_mapping:
+            raise RuntimeError(
+                f"MAPPING_STRICT: erro de mapping em fase '{fase}' — "
+                f"{tipo}: campo='{campo}' valor='{valor_tentado}' motivo='{motivo}'. "
+                f"Atualize docs/dom-mapping/dominios-values.json e o schema/automação."
+            )
 
     # ── Ciclo de vida ──────────────────────────────────────────────────────────
 
