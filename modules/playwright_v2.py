@@ -245,6 +245,26 @@ class PlaywrightAutomatorV2:
         "li_calculo_custas_judiciais": "Custas Judiciais",
         "li_calculo_correcao_juros_multa": "Correção, Juros e Multa",
     }
+    # Mapa li_id → jsf page path (para URL nav como fallback definitivo)
+    _MENU_URL_MAP = {
+        "li_calculo_dados_do_calculo": "calculo.jsf",
+        "li_calculo_faltas": "falta.jsf",
+        "li_calculo_ferias": "ferias.jsf",
+        "li_calculo_historico_salarial": "historico-salarial.jsf",
+        "li_calculo_verbas": "verba/verba-calculo.jsf",
+        "li_calculo_cartao_ponto": "../cartaodeponto/apuracao-cartaodeponto.jsf",
+        "li_calculo_salario_familia": "salario-familia.jsf",
+        "li_calculo_seguro_desemprego": "seguro-desemprego.jsf",
+        "li_calculo_fgts": "fgts.jsf",
+        "li_calculo_inss": "inss/inss.jsf",
+        "li_calculo_previdencia_privada": "previdencia-privada.jsf",
+        "li_calculo_pensao_alimenticia": "pensao-alimenticia.jsf",
+        "li_calculo_irpf": "irpf.jsf",
+        "li_calculo_multas_e_indenizacoes": "multas-indenizacoes.jsf",
+        "li_calculo_honorarios": "honorarios.jsf",
+        "li_calculo_custas_judiciais": "custas-judiciais.jsf",
+        "li_calculo_correcao_juros_multa": "parametros-atualizacao/parametros-atualizacao.jsf",
+    }
 
     def _navegar_menu(self, li_id: str) -> None:
         """Navega para item do menu lateral.
@@ -297,6 +317,24 @@ class PlaywrightAutomatorV2:
             [li_id, tail, texto],
         )
         if not clicou:
+            # 5. Fallback definitivo: URL nav direto (sem depender do menu).
+            jsf_page = self._MENU_URL_MAP.get(li_id)
+            if jsf_page and self._calculo_conversation_id:
+                url = (
+                    f"{self.pjecalc_url}/pages/calculo/{jsf_page}"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                self.log(f"  ↪ Menu não encontrado — URL nav: {jsf_page}")
+                try:
+                    self._page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(15000)
+                    self.log(f"  → navegou para {li_id} via url-nav")
+                    return
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Menu '{li_id}' falhou em todos os fallbacks (incluindo URL nav). "
+                        f"Erro: {e}"
+                    )
             raise RuntimeError(
                 f"Menu não encontrado: {li_id} (texto='{texto}'). "
                 f"Verifique se a página tem o menu lateral renderizado."
