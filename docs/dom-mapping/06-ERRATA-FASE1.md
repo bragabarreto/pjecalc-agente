@@ -117,12 +117,24 @@ Surge no lugar: `formulario:tipoImportadaCalendario` (select para escolher
 qual calendário importar).
 
 ### `tipoDaQuantidade=IMPORTADA_DO_CARTAO`
-A verificar empiricamente (não testado nesta sessão). Padrão similar
-provável: surge `formulario:tipoImportadaCartao` (select).
+✅ **Verificado**: cria múltiplos elementos novos:
+- `formulario:tipoImportadadoDoCartaoDePontoQuantidade` (select — tipo de importação)
+- `formulario:incluirCartaoDePontoQuantidade` (anchor "+" para adicionar cartão)
+- `formulario:painelListagemCartaoDePontoQuantidade` (span — tabela de cartões adicionados)
+- `formulario:panelQuantidadeImportadoCartaoDePonto` (div container)
 
-### `tipoDeDivisor != OUTRO_VALOR`
-A verificar empiricamente. Comportamento provável: `outroValorDoDivisor`
-some/desabilita.
+### `tipoDeDivisor=CARGA_HORARIA`
+✅ **Verificado**: `formulario:outroValorDoDivisor` é **REMOVIDO** do DOM
+(`existe: false`). O divisor passa a ser inferido da carga horária
+configurada nos Parâmetros do Cálculo.
+
+### `tipoDeDivisor=DIAS_UTEIS`
+A verificar (provável: mesmo comportamento — remove `outroValorDoDivisor`).
+
+### `tipoDeDivisor=IMPORTADA_DO_CARTAO`
+✅ **Verificado** (descoberto ao testar Quantidade): cria
+`formulario:panelDivisorImportadoCartaoDePonto` (div container similar
+ao da Quantidade).
 
 ### `tipoDoValorPago=CALCULADO`
 A verificar empiricamente.
@@ -184,6 +196,18 @@ Ou mais robusto (não depende do número de classe):
 Após reload da página, o `checked` do checkbox volta a refletir o estado do servidor.
 O painel volta a ficar oculto (default), mas se for re-expandido, os reflexos
 marcados aparecem corretamente.
+
+## ➕ Omissão Adicional — Lançamento Manual `tipoDeVerba=PRINCIPAL/REFLEXO`
+
+✅ **Verificado**: no Manual Novo (formulario:incluir), AMBOS os radios
+`PRINCIPAL` e `REFLEXO` estão **habilitados** (não disabled).
+
+⚠️ Atenção: na página Parâmetros pós-Expresso (formulario:listagem:N:j_id558),
+`tipoDeVerba` fica **disabled** (já foi decidido ao escolher Expresso).
+
+### Quando o usuário escolhe REFLEXO no Manual Novo
+A verificar empiricamente: provavelmente o form muda dinamicamente para a
+estrutura da página Parâmetros do REFLEXO descrita no [doc 07](07-parametros-ocorrencias-reflexos.md).
 
 ## ➕ Omissão 5 — Múltiplas competências no Histórico Salarial (Calculado)
 
