@@ -676,41 +676,27 @@ class PlaywrightAutomatorV2:
 
         for v in verbas:
             alvo = (v.expresso_alvo or "").strip().upper()
-            # Estratégia: scroll até encontrar via texto (case-insensitive, normalizado)
+            # Estrutura DOM real (PJE-Calc Cidadão 2.15.1):
+            # - Checkboxes id=formulario:j_id82:N:j_id84:M:selecionada
+            # - SEM label[for=...] — texto está no <td> adjacente (closest('td'))
+            # - 54 verbas em 3 colunas × 18 linhas, todas visíveis (sem scroll necessário)
             marcou = self._page.evaluate(
                 """(alvo) => {
                     const norm = s => (s||'').replace(/\\s+/g,' ').trim().toUpperCase();
-                    const cbs = [...document.querySelectorAll('input[type="checkbox"]')];
+                    const cbs = [...document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')];
                     for (const cb of cbs) {
-                        // Tenta achar texto associado via label[for], label parent, ou tr/td
-                        let txt = '';
-                        if (cb.id) {
-                            const l = document.querySelector(`label[for="${CSS.escape(cb.id)}"]`);
-                            if (l) txt = l.textContent;
-                        }
-                        if (!txt) {
-                            const p = cb.closest('label, td, tr');
-                            if (p) txt = p.textContent;
-                        }
+                        const td = cb.closest('td');
+                        const txt = td ? td.textContent : '';
                         if (norm(txt) === alvo) {
-                            cb.scrollIntoView({block:'center'});
                             cb.click();
                             return true;
                         }
                     }
-                    // Fallback parcial: contém o texto alvo
+                    // Fallback parcial (caso tenha espaço/acentuação adicional)
                     for (const cb of cbs) {
-                        let txt = '';
-                        if (cb.id) {
-                            const l = document.querySelector(`label[for="${CSS.escape(cb.id)}"]`);
-                            if (l) txt = l.textContent;
-                        }
-                        if (!txt) {
-                            const p = cb.closest('label, td, tr');
-                            if (p) txt = p.textContent;
-                        }
-                        if (norm(txt).includes(alvo)) {
-                            cb.scrollIntoView({block:'center'});
+                        const td = cb.closest('td');
+                        const txt = td ? td.textContent : '';
+                        if (norm(txt).includes(alvo) || alvo.includes(norm(txt))) {
                             cb.click();
                             return 'partial:'+norm(txt).slice(0,80);
                         }

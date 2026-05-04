@@ -181,11 +181,14 @@ Verbas criadas via botão "Manual" (`id="incluir"`) precisam ter `caracteristica
 `base_calculo` preenchidos. Sem eles, a liquidação falha com HTTP 500. O modo Expresso preenche
 automaticamente esses campos.
 
-### Expresso — tabela paginada
-A tabela do Lançamento Expresso (`verbas-para-calculo.xhtml`) usa `<a4j:repeat>` em layout de colunas.
-Apenas ~27 das 60+ verbas são visíveis no viewport. Verbas como "Saldo de Salário", "Férias 
-Proporcionais + 1/3", "Multa 477" ficam abaixo do scroll. Scroll via JS + re-enumeração necessários.
-(Nota: Multa 467 NÃO é verba Expresso — é checkbox FGTS `multaDoArtigo467` + reflexa automática na aba Verbas.)
+### Expresso — DOM real (verbas-para-calculo.jsf, v2.15.1, confirmado 04/05/2026)
+- **54 verbas total**, distribuídas em **3 colunas × 18 linhas** — TODAS visíveis sem scroll.
+- Checkboxes têm IDs no padrão `formulario:j_id82:N:j_id84:M:selecionada` (gerados por `<a4j:repeat>` aninhado).
+- **NÃO usa `<label for="...">`** — o texto da verba está no `<td>` que contém o checkbox.
+- Para identificar uma verba: `cb.closest('td').textContent.trim()` (NÃO procurar `label[for=cb.id]`).
+- Match deve ser por **igualdade exata** do texto canônico contra `expresso_alvo` do JSON v2.
+- Correção anterior do CLAUDE.md afirmava que "apenas ~27 verbas visíveis" e exigia scroll — INCORRETO no PJE-Calc Cidadão TRT7. Sem scroll necessário.
+- (Nota: Multa 467 NÃO é verba Expresso — é checkbox FGTS `multaDoArtigo467` + reflexa automática na aba Verbas.)
 
 ### SSE stream — keepalive obrigatório
 O SSE stream (endpoint `/api/executar/{sessao_id}`) precisa de keepalive a cada 10-15s para evitar
