@@ -280,12 +280,25 @@ class PlaywrightAutomatorV2:
     def _navegar_menu(self, li_id: str) -> None:
         """Navega para item do menu lateral.
 
-        Estratégia em cascata (similar ao v1):
-        1. li#{li_id} a — ID exato.
-        2. li[id$='{tail}'] a — sufixo do ID.
-        3. <a> com texto exato (do _MENU_TEXT_MAP) dentro de li.
-        4. <a> com texto exato em qualquer lugar.
+        Estratégia: URL nav PRIMEIRO (mais confiável quando temos conversationId),
+        click em li/texto como fallback. Texto-match é ambíguo (há "Verbas" em
+        tabelas e em cálculo) então URL é mais seguro.
         """
+        # 0. PREFERIDO: URL nav direto se temos conversationId
+        jsf_page = self._MENU_URL_MAP.get(li_id)
+        if jsf_page and self._calculo_conversation_id:
+            url = (
+                f"{self.pjecalc_url}/pages/calculo/{jsf_page}"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
+            try:
+                self._page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax(15000)
+                self.log(f"  → navegou para {li_id} via url-nav direto")
+                return
+            except Exception as e:
+                self.log(f"  ⚠ URL nav falhou ({e}) — tentando menu click")
+
         texto = self._MENU_TEXT_MAP.get(li_id, "")
         tail = li_id.replace("li_", "", 1)
 
@@ -511,9 +524,10 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc")
                 continue
 
-            # Re-navegar à listagem entre incluções (pós-salvar pode redirecionar)
-            if idx > 0:
-                self._navegar_menu("li_calculo_historico_salarial")
+            # Re-navegar à listagem ANTES DE CADA inclusão (incluindo a 1ª)
+            # — garante que estamos na página certa em qualquer estado prévio.
+            self._navegar_menu("li_calculo_historico_salarial")
+            self._page.wait_for_timeout(800)
 
             # Click incluir + wait robusto para form renderizar
             try:
