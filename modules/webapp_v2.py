@@ -171,10 +171,12 @@ async def previa_v2_view(sessao_id: str, request: Request):
     if not data:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
+    # Starlette ≥ 0.27: assinatura nova (request, name, context).
+    # A antiga (name, {"request": ...}) causa "unhashable type: 'dict'".
     return templates.TemplateResponse(
+        request,
         "previa_v2.html",
         {
-            "request": request,
             "sessao_id": sessao_id,
             "previa_json": data,
         },
