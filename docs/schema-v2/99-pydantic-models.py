@@ -1,0 +1,621 @@
+"""Modelos Pydantic v2 — Schema da Prévia v2.0
+
+Implementação canônica do schema definido em docs/schema-v2/. Cada modelo
+mapeia 1:1 para uma seção do PJE-Calc. Validação é executada na confecção
+da prévia (extração) e antes de iniciar a automação.
+
+Para usar:
+    from docs.schema_v2.pydantic_models import PreviaCalculoV2
+    previa = PreviaCalculoV2.model_validate(json_data)
+    if previa.meta.validacao.completude != "OK":
+        raise ValueError(previa.meta.validacao.campos_faltantes)
+"""
+from __future__ import annotations
+
+from datetime import datetime
+from enum import Enum
+from typing import Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+# ─── Enums ────────────────────────────────────────────────────────────────
+
+
+class DocumentoFiscalTipo(str, Enum):
+    CPF = "CPF"
+    CNPJ = "CNPJ"
+    CEI = "CEI"
+
+
+class DocumentoPrevidenciarioTipo(str, Enum):
+    PIS = "PIS"
+    PASEP = "PASEP"
+    NIT = "NIT"
+
+
+class TipoBaseTabelada(str, Enum):
+    INTEGRAL = "INTEGRAL"
+    PARCIAL = "PARCIAL"
+    INTERMITENTE = "INTERMITENTE"
+
+
+class ApuracaoAvisoPrevio(str, Enum):
+    NAO_APURAR = "NAO_APURAR"
+    APURACAO_CALCULADA = "APURACAO_CALCULADA"
+    APURACAO_INFORMADA = "APURACAO_INFORMADA"
+
+
+class TipoVariacaoParcela(str, Enum):
+    FIXA = "FIXA"
+    VARIAVEL = "VARIAVEL"
+
+
+class TipoValor(str, Enum):
+    INFORMADO = "INFORMADO"
+    CALCULADO = "CALCULADO"
+
+
+class CaracteristicaVerba(str, Enum):
+    COMUM = "COMUM"
+    DECIMO_TERCEIRO_SALARIO = "DECIMO_TERCEIRO_SALARIO"
+    AVISO_PREVIO = "AVISO_PREVIO"
+    FERIAS = "FERIAS"
+
+
+class OcorrenciaPagamento(str, Enum):
+    DESLIGAMENTO = "DESLIGAMENTO"
+    DEZEMBRO = "DEZEMBRO"
+    MENSAL = "MENSAL"
+    PERIODO_AQUISITIVO = "PERIODO_AQUISITIVO"
+
+
+class OcorrenciaAjuizamento(str, Enum):
+    OCORRENCIAS_VENCIDAS_E_VINCENDAS = "OCORRENCIAS_VENCIDAS_E_VINCENDAS"
+    OCORRENCIAS_VENCIDAS = "OCORRENCIAS_VENCIDAS"
+
+
+class TipoVerba(str, Enum):
+    PRINCIPAL = "PRINCIPAL"
+    REFLEXO = "REFLEXO"
+
+
+class GerarReflexo(str, Enum):
+    DEVIDO = "DEVIDO"
+    DIFERENCA = "DIFERENCA"
+
+
+class SimNao(str, Enum):
+    SIM = "SIM"
+    NAO = "NAO"
+
+
+class TipoBaseCalculo(str, Enum):
+    MAIOR_REMUNERACAO = "MAIOR_REMUNERACAO"
+    HISTORICO_SALARIAL = "HISTORICO_SALARIAL"
+    SALARIO_DA_CATEGORIA = "SALARIO_DA_CATEGORIA"
+    SALARIO_MINIMO = "SALARIO_MINIMO"
+    VALE_TRANSPORTE = "VALE_TRANSPORTE"
+
+
+class TipoDivisor(str, Enum):
+    OUTRO_VALOR = "OUTRO_VALOR"
+    CARGA_HORARIA = "CARGA_HORARIA"
+    DIAS_UTEIS = "DIAS_UTEIS"
+    IMPORTADA_DO_CARTAO = "IMPORTADA_DO_CARTAO"
+
+
+class TipoQuantidade(str, Enum):
+    INFORMADA = "INFORMADA"
+    IMPORTADA_DO_CALENDARIO = "IMPORTADA_DO_CALENDARIO"
+    IMPORTADA_DO_CARTAO = "IMPORTADA_DO_CARTAO"
+
+
+class EstrategiaPreenchimento(str, Enum):
+    EXPRESSO_DIRETO = "expresso_direto"
+    EXPRESSO_ADAPTADO = "expresso_adaptado"
+    MANUAL = "manual"
+
+
+class EstrategiaReflexa(str, Enum):
+    CHECKBOX_PAINEL = "checkbox_painel"
+    MANUAL = "manual"
+
+
+class ComportamentoReflexo(str, Enum):
+    VALOR_MENSAL = "VALOR_MENSAL"
+    MEDIA_PELO_VALOR = "MEDIA_PELO_VALOR"
+    MEDIA_PELO_VALOR_CORRIGIDO = "MEDIA_PELO_VALOR_CORRIGIDO"
+    MEDIA_PELA_QUANTIDADE = "MEDIA_PELA_QUANTIDADE"
+
+
+# ─── 1. Processo ──────────────────────────────────────────────────────────
+
+
+class DocumentoFiscal(BaseModel):
+    tipo: DocumentoFiscalTipo
+    numero: str
+
+
+class DocumentoPrevidenciario(BaseModel):
+    tipo: DocumentoPrevidenciarioTipo = DocumentoPrevidenciarioTipo.PIS
+    numero: Optional[str] = None
+
+
+class Advogado(BaseModel):
+    nome: str
+    oab: Optional[str] = None
+    doc_fiscal_tipo: Optional[DocumentoFiscalTipo] = None
+    doc_fiscal_numero: Optional[str] = None
+
+
+class Parte(BaseModel):
+    nome: str
+    doc_fiscal: DocumentoFiscal
+    doc_previdenciario: Optional[DocumentoPrevidenciario] = None
+    advogados: list[Advogado] = Field(default_factory=list)
+
+
+class Processo(BaseModel):
+    numero_processo: str = Field(pattern=r"^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$")
+    valor_da_causa_brl: float = Field(gt=0)
+    data_autuacao: str  # DD/MM/YYYY
+    reclamante: Parte
+    reclamado: Parte
+
+
+# ─── 2. Parâmetros do Cálculo ─────────────────────────────────────────────
+
+
+class ExcecaoCargaHoraria(BaseModel):
+    data_inicio: str
+    data_fim: str
+    valor_carga_horaria: float
+
+
+class CargaHoraria(BaseModel):
+    padrao_mensal: float = 220.0
+    excecoes: list[ExcecaoCargaHoraria] = Field(default_factory=list)
+
+
+class ExcecaoSabado(BaseModel):
+    data_inicio: str
+    data_fim: str
+
+
+class ParametrosCalculo(BaseModel):
+    estado_uf: str = Field(min_length=2, max_length=2)
+    municipio: str
+    data_admissao: str
+    data_demissao: str
+    data_ajuizamento: str
+    data_inicio_calculo: str
+    data_termino_calculo: str
+    prescricao_quinquenal: bool = True
+    prescricao_fgts: bool = False
+    tipo_base_tabelada: TipoBaseTabelada = TipoBaseTabelada.INTEGRAL
+    valor_maior_remuneracao_brl: float = Field(ge=0)
+    valor_ultima_remuneracao_brl: float = Field(ge=0)
+    apuracao_aviso_previo: ApuracaoAvisoPrevio
+    projeta_aviso_indenizado: bool = True
+    limitar_avos: bool = False
+    zerar_valor_negativo: bool = True
+    considerar_feriado_estadual: bool = True
+    considerar_feriado_municipal: bool = True
+    carga_horaria: CargaHoraria = Field(default_factory=CargaHoraria)
+    sabado_dia_util: bool = False
+    excecoes_sabado: list[ExcecaoSabado] = Field(default_factory=list)
+    pontos_facultativos_codigo: list[int] = Field(default_factory=list)
+    comentarios_jg: Optional[str] = None
+
+
+# ─── 3. Histórico Salarial ────────────────────────────────────────────────
+
+
+class HistoricoSalarialIncidencias(BaseModel):
+    fgts: bool = True
+    cs_inss: bool = True
+
+
+class HistoricoSalarialCalculado(BaseModel):
+    quantidade_pct: float
+    base_referencia: str
+
+
+class HistoricoSalarial(BaseModel):
+    nome: str
+    parcela: TipoVariacaoParcela = TipoVariacaoParcela.FIXA
+    incidencias: HistoricoSalarialIncidencias
+    competencia_inicial: str  # MM/YYYY
+    competencia_final: str  # MM/YYYY
+    tipo_valor: TipoValor
+    valor_brl: Optional[float] = None
+    calculado: Optional[HistoricoSalarialCalculado] = None
+
+    @model_validator(mode="after")
+    def _check_tipo_valor(self) -> "HistoricoSalarial":
+        if self.tipo_valor == TipoValor.INFORMADO and self.valor_brl is None:
+            raise ValueError("Histórico INFORMADO exige valor_brl")
+        if self.tipo_valor == TipoValor.CALCULADO and self.calculado is None:
+            raise ValueError("Histórico CALCULADO exige campo `calculado`")
+        return self
+
+
+# ─── 4. Verbas Principais ─────────────────────────────────────────────────
+
+
+class AssuntoCNJ(BaseModel):
+    codigo: int
+    label: str
+
+
+class VerbaIncidencias(BaseModel):
+    irpf: bool = False
+    cs_inss: bool = False
+    fgts: bool = False
+    previdencia_privada: bool = False
+    pensao_alimenticia: bool = False
+
+
+class VerbaExclusoes(BaseModel):
+    faltas_justificadas: bool = False
+    faltas_nao_justificadas: bool = False
+    ferias_gozadas: bool = False
+    dobrar_valor_devido: bool = False
+
+
+class ValorDevidoInformado(BaseModel):
+    tipo: Literal["INFORMADO"] = "INFORMADO"
+    valor_informado_brl: float = Field(gt=0)
+    proporcionalizar: bool = False
+
+
+class ValorDevidoCalculado(BaseModel):
+    tipo: Literal["CALCULADO"] = "CALCULADO"
+
+
+class BaseComposta(BaseModel):
+    verba: str
+    integralizar: SimNao = SimNao.SIM
+
+
+class BaseCalculoVerba(BaseModel):
+    tipo: TipoBaseCalculo
+    historico_nome: Optional[str] = None
+    proporcionaliza: Optional[SimNao] = None
+    bases_compostas: list[BaseComposta] = Field(default_factory=list)
+
+
+class DivisorVerba(BaseModel):
+    tipo: TipoDivisor = TipoDivisor.OUTRO_VALOR
+    valor: Optional[float] = None
+
+
+class QuantidadeVerba(BaseModel):
+    tipo: TipoQuantidade = TipoQuantidade.INFORMADA
+    valor: float = 1.0
+    proporcionalizar: bool = False
+
+
+class FormulaCalculado(BaseModel):
+    base_calculo: BaseCalculoVerba
+    divisor: DivisorVerba
+    multiplicador: float = 1.0
+    quantidade: QuantidadeVerba
+
+
+class ValorPagoVerba(BaseModel):
+    tipo: TipoValor = TipoValor.INFORMADO
+    valor_brl: float = 0.0
+    proporcionalizar: bool = False
+
+
+class OcorrenciaMensalOverride(BaseModel):
+    mes: str  # MM/YYYY
+    valor_devido: float
+    valor_pago: float = 0.0
+
+
+class OcorrenciasOverride(BaseModel):
+    modo: Literal["valores_mensais"] = "valores_mensais"
+    valores: list[OcorrenciaMensalOverride]
+
+
+class ParametrosVerba(BaseModel):
+    assunto_cnj: AssuntoCNJ
+    parcela: TipoVariacaoParcela = TipoVariacaoParcela.FIXA
+    valor: TipoValor
+    incidencias: VerbaIncidencias
+    caracteristica: CaracteristicaVerba
+    ocorrencia_pagamento: OcorrenciaPagamento
+    ocorrencia_ajuizamento: OcorrenciaAjuizamento = OcorrenciaAjuizamento.OCORRENCIAS_VENCIDAS
+    tipo: TipoVerba = TipoVerba.PRINCIPAL
+    gerar_reflexa: GerarReflexo = GerarReflexo.DIFERENCA
+    gerar_principal: GerarReflexo = GerarReflexo.DIFERENCA
+    compor_principal: bool = True
+    zerar_valor_negativo: bool = False
+    periodo_inicio: str
+    periodo_fim: str
+    exclusoes: VerbaExclusoes = Field(default_factory=VerbaExclusoes)
+    valor_devido: ValorDevidoInformado | ValorDevidoCalculado
+    formula_calculado: Optional[FormulaCalculado] = None
+    valor_pago: ValorPagoVerba = Field(default_factory=ValorPagoVerba)
+    comentarios: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _check_valor_consistency(self) -> "ParametrosVerba":
+        if self.valor == TipoValor.INFORMADO:
+            if not isinstance(self.valor_devido, ValorDevidoInformado):
+                raise ValueError("valor=INFORMADO requer valor_devido tipo INFORMADO com valor_informado_brl")
+        else:  # CALCULADO
+            if self.formula_calculado is None:
+                raise ValueError("valor=CALCULADO requer formula_calculado preenchido")
+        return self
+
+
+class ParametrosReflexo(BaseModel):
+    """Override opcional dos parâmetros de um reflexo (página doc 07)."""
+
+    comportamento_reflexo: Optional[ComportamentoReflexo] = None
+    tratamento_fracao_mes: Optional[Literal["INTEGRALIZAR", "NAO_INTEGRALIZAR"]] = None
+    outro_valor_divisor: Optional[float] = None
+    outro_valor_multiplicador: Optional[float] = None
+    incidencias: Optional[VerbaIncidencias] = None
+    periodo_inicio: Optional[str] = None
+    periodo_fim: Optional[str] = None
+    comentarios: Optional[str] = None
+
+
+class Reflexo(BaseModel):
+    id: str
+    nome: str
+    estrategia_reflexa: EstrategiaReflexa = EstrategiaReflexa.CHECKBOX_PAINEL
+    indice_reflexo_listagem: Optional[int] = None
+    expresso_reflex_alvo: Optional[str] = None
+    parametros_override: Optional[ParametrosReflexo] = None
+    ocorrencias_override: Optional[OcorrenciasOverride] = None
+
+
+class VerbaPrincipal(BaseModel):
+    id: str
+    nome_sentenca: str
+    estrategia_preenchimento: EstrategiaPreenchimento
+    expresso_alvo: Optional[str] = None
+    nome_pjecalc: str
+    parametros: ParametrosVerba
+    ocorrencias_override: Optional[OcorrenciasOverride] = None
+    reflexos: list[Reflexo] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_estrategia(self) -> "VerbaPrincipal":
+        if self.estrategia_preenchimento != EstrategiaPreenchimento.MANUAL:
+            if not self.expresso_alvo:
+                raise ValueError(
+                    f"Estratégia {self.estrategia_preenchimento} requer expresso_alvo"
+                )
+        return self
+
+
+# ─── 5-19. Outras seções (modelos compactados) ────────────────────────────
+# Para brevidade, modelos das seções 5-19 estão aqui em forma simplificada.
+# Cada um é um BaseModel com campos correspondentes ao schema docs/schema-v2/.
+
+
+class CartaoDePonto(BaseModel):
+    """Ver doc 05-cartao-ponto.md para schema completo (63 campos)."""
+
+    model_config = ConfigDict(extra="allow")  # permite campos extras durante implementação
+
+
+class Falta(BaseModel):
+    data_inicio: str
+    data_fim: str
+    justificada: bool = False
+    reinicia_ferias: bool = False
+    justificativa: Optional[str] = None
+
+
+class GozoFerias(BaseModel):
+    data_inicio: Optional[str] = None
+    data_fim: Optional[str] = None
+    dobra: bool = False
+
+
+class PeriodoFerias(BaseModel):
+    periodo_aquisitivo_inicio: str
+    periodo_aquisitivo_fim: str
+    periodo_concessivo_inicio: str
+    periodo_concessivo_fim: str
+    prazo_dias: int = 30
+    situacao: Literal["INDENIZADAS", "GOZADAS", "PARCIAL_GOZADAS", "NAO_DIREITO"] = "INDENIZADAS"
+    dobra: bool = False
+    abono: bool = False
+    dias_abono: int = 0
+    gozo_1: GozoFerias = Field(default_factory=GozoFerias)
+    gozo_2: Optional[GozoFerias] = None
+    gozo_3: Optional[GozoFerias] = None
+
+
+class FeriasSection(BaseModel):
+    periodos: list[PeriodoFerias] = Field(default_factory=list)
+    ferias_coletivas_inicio_primeiro_ano: Optional[str] = None
+    prazo_ferias_proporcionais: Optional[int] = None  # default vem do PJE-Calc
+
+
+class FGTSMulta(BaseModel):
+    ativa: bool = True
+    tipo_valor: Literal["CALCULADA", "INFORMADA"] = "CALCULADA"
+    percentual: Literal["VINTE_POR_CENTO", "QUARENTA_POR_CENTO"] = "QUARENTA_POR_CENTO"
+    excluir_aviso_da_multa: bool = False
+    valor_informado_brl: Optional[float] = None
+
+
+class FGTS(BaseModel):
+    tipo_verba: Literal["PAGAR", "DEPOSITAR"] = "PAGAR"
+    compor_principal: SimNao = SimNao.SIM
+    multa: FGTSMulta = Field(default_factory=FGTSMulta)
+    incidencia: str = "SOBRE_O_TOTAL_DEVIDO"
+    multa_artigo_467: bool = False
+    multa_10_lc110: bool = False
+    contribuicao_social: bool = False
+    incidencia_pensao_alimenticia: bool = False
+    recolhimentos_existentes: list = Field(default_factory=list)
+
+
+class ContribuicaoSocial(BaseModel):
+    apurar_segurado_devido: bool = True
+    cobrar_do_reclamante_devido: bool = False
+    corrigir_desconto_reclamante: bool = True
+    apurar_salarios_pagos: bool = True
+    aliquota_segurado: Literal["SEGURADO_EMPREGADO", "EMPREGADO_DOMESTICO", "FIXA"] = "SEGURADO_EMPREGADO"
+    aliquota_empregador: Literal["POR_ATIVIDADE_ECONOMICA", "POR_PERIODO", "FIXA"] = "POR_ATIVIDADE_ECONOMICA"
+    aliquota_empresa_fixa_pct: Optional[float] = None
+    aliquota_rat_fixa_pct: Optional[float] = None
+    aliquota_terceiros_fixa_pct: Optional[float] = None
+    periodo_devidos: dict = Field(default_factory=dict)
+    periodo_pagos: dict = Field(default_factory=dict)
+
+
+class IRPFDeducoes(BaseModel):
+    contribuicao_social: bool = True
+    previdencia_privada: bool = False
+    pensao_alimenticia: bool = False
+    honorarios_devidos_pelo_reclamante: bool = True
+
+
+class ImpostoDeRenda(BaseModel):
+    apurar_irpf: bool = True
+    incidir_sobre_juros_de_mora: bool = False
+    cobrar_do_reclamado: bool = False
+    considerar_tributacao_exclusiva: bool = False
+    considerar_tributacao_em_separado_rra: bool = True
+    regime_de_caixa: bool = False
+    deducoes: IRPFDeducoes = Field(default_factory=IRPFDeducoes)
+    aposentado_maior_65_anos: bool = False
+    possui_dependentes: bool = False
+    quantidade_dependentes: int = 0
+
+
+class CredorHonorario(BaseModel):
+    selecao_existente: Optional[str] = None
+    nome: str
+    doc_fiscal_tipo: DocumentoFiscalTipo = DocumentoFiscalTipo.CPF
+    doc_fiscal_numero: str
+
+
+class Honorario(BaseModel):
+    id: str
+    tipo_honorario: str  # ver enum no doc 11
+    descricao: str
+    tipo_devedor: Literal["RECLAMANTE", "RECLAMADO"]
+    tipo_valor: TipoValor
+    aliquota_pct: Optional[float] = None
+    base_para_apuracao: Optional[str] = None
+    credor: CredorHonorario
+    apurar_irrf: bool = False
+    valor_informado_brl: Optional[float] = None
+
+
+class CustasJudiciais(BaseModel):
+    base_para_calculadas: Literal[
+        "BRUTO_DEVIDO_AO_RECLAMANTE",
+        "BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO",
+    ] = "BRUTO_DEVIDO_AO_RECLAMANTE"
+    custas_conhecimento_reclamante: Literal["NAO_SE_APLICA", "CALCULADA_2_POR_CENTO", "INFORMADA"] = "NAO_SE_APLICA"
+    custas_conhecimento_reclamado: Literal["NAO_SE_APLICA", "CALCULADA_2_POR_CENTO", "INFORMADA"] = "CALCULADA_2_POR_CENTO"
+    custas_liquidacao: Literal["NAO_SE_APLICA", "CALCULADA_MEIO_POR_CENTO", "INFORMADA"] = "NAO_SE_APLICA"
+    data_vencimento_fixas: Optional[str] = None
+    qtd_atos: dict = Field(default_factory=dict)
+    autos: list = Field(default_factory=list)
+    armazenamentos: list = Field(default_factory=list)
+    rd: list = Field(default_factory=list)
+    rt: list = Field(default_factory=list)
+
+
+class CorrecaoJurosMulta(BaseModel):
+    """Ver doc 13 — modelo simplificado, expandir conforme implementação."""
+
+    model_config = ConfigDict(extra="allow")
+    indice_trabalhista: str = "IPCAE"
+    juros: str = "TAXA_LEGAL"
+    base_juros_verbas: Literal["VERBAS", "VERBA_INSS", "VERBA_INSS_PP"] = "VERBAS"
+
+
+class Liquidacao(BaseModel):
+    data_de_liquidacao: Optional[str] = None  # default: hoje
+    indices_acumulados: Literal[
+        "MES_SUBSEQUENTE_AO_VENCIMENTO",
+        "MES_DO_VENCIMENTO",
+        "MES_SUBSEQUENTE_E_MES_DO_VENCIMENTO",
+    ] = "MES_SUBSEQUENTE_AO_VENCIMENTO"
+
+
+# ─── Meta + Validação ─────────────────────────────────────────────────────
+
+
+class Validacao(BaseModel):
+    completude: Literal["OK", "INCOMPLETO", "ERRO"] = "OK"
+    campos_faltantes: list[str] = Field(default_factory=list)
+    avisos: list[str] = Field(default_factory=list)
+
+
+class Meta(BaseModel):
+    schema_version: Literal["2.0"] = "2.0"
+    criado_em: str = Field(default_factory=lambda: datetime.now().isoformat())
+    extraido_por: str = "Claude Sonnet 4.6"
+    validacao: Validacao = Field(default_factory=Validacao)
+
+
+# ─── Modelo Top-Level ─────────────────────────────────────────────────────
+
+
+class PreviaCalculoV2(BaseModel):
+    meta: Meta = Field(default_factory=Meta)
+    processo: Processo
+    parametros_calculo: ParametrosCalculo
+    historico_salarial: list[HistoricoSalarial] = Field(min_length=1)
+    verbas_principais: list[VerbaPrincipal] = Field(min_length=1)
+    cartao_de_ponto: Optional[CartaoDePonto] = None
+    faltas: list[Falta] = Field(default_factory=list)
+    ferias: FeriasSection = Field(default_factory=FeriasSection)
+    fgts: FGTS = Field(default_factory=FGTS)
+    contribuicao_social: ContribuicaoSocial = Field(default_factory=ContribuicaoSocial)
+    imposto_de_renda: ImpostoDeRenda = Field(default_factory=ImpostoDeRenda)
+    honorarios: list[Honorario] = Field(default_factory=list)
+    custas_judiciais: CustasJudiciais = Field(default_factory=CustasJudiciais)
+    correcao_juros_multa: CorrecaoJurosMulta = Field(default_factory=CorrecaoJurosMulta)
+    liquidacao: Liquidacao = Field(default_factory=Liquidacao)
+    salario_familia: Optional[dict] = None
+    seguro_desemprego: Optional[dict] = None
+    previdencia_privada: Optional[dict] = None
+    pensao_alimenticia: Optional[dict] = None
+    multas_indenizacoes: list[dict] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_completude(self) -> "PreviaCalculoV2":
+        """Roda validações cruzadas e atualiza self.meta.validacao."""
+        avisos: list[str] = []
+        # 1. Histórico cobre período do cálculo
+        if self.historico_salarial:
+            ult_competencia_fim = max(h.competencia_final for h in self.historico_salarial)
+            # comparação string MM/YYYY: converter para tupla (ano, mês)
+            ano_termino, mes_termino = self.parametros_calculo.data_termino_calculo.split("/")[2], self.parametros_calculo.data_termino_calculo.split("/")[1]
+            ult_mes, ult_ano = ult_competencia_fim.split("/")
+            if (int(ult_ano), int(ult_mes)) < (int(ano_termino), int(mes_termino)):
+                avisos.append(
+                    f"Histórico salarial termina em {ult_competencia_fim} mas cálculo vai até {self.parametros_calculo.data_termino_calculo}"
+                )
+
+        # 2. Verbas com valor=INFORMADO têm valor preenchido
+        for v in self.verbas_principais:
+            if v.parametros.valor == TipoValor.INFORMADO:
+                if not isinstance(v.parametros.valor_devido, ValorDevidoInformado):
+                    self.meta.validacao.campos_faltantes.append(
+                        f"verbas_principais[{v.id}].parametros.valor_devido.valor_informado_brl"
+                    )
+
+        if avisos:
+            self.meta.validacao.avisos.extend(avisos)
+        if self.meta.validacao.campos_faltantes:
+            self.meta.validacao.completude = "INCOMPLETO"
+        return self
