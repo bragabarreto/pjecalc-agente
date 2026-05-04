@@ -61,17 +61,27 @@ fórmula (ex: "ÚLTIMA REMUNERAÇÃO" + "GRATIFICAÇÃO HABITUAL" somadas).
 A automação atual já trata isso em `_adicionar_base_calculo_completa` no
 `playwright_pjecalc.py`. Manter referência neste mapeamento.
 
-## ❌ Erro 2 — `aplicarProporcionalidadeABase` é select, não checkbox
+## ❌ Erro 2 — Proporcionalidade depende do tipo de base (VERIFICADO)
 
-**No doc 01** estava classificado como `checkbox`.
+**No doc 01** classificado como `checkbox` único.
 
-**CORRETO**: na verdade é um **select** (`formulario:proporcionalizaHistorico` quando
-HISTORICO_SALARIAL, ou checkbox `aplicarProporcionalidadeABase` em outros casos —
-**a verificar** se existem dois nomes ou se foi confusão de versão).
+**CORRETO** (verificado empiricamente no DOM):
 
-⚠️ **Recomendação**: nas verificações da Fase 5, tratar `proporcionalizar_base`
-como uma string `"SIM"|"NAO"` na prévia (compatível com select), e a automação
-detecta o tipo do elemento e adapta (radio vs checkbox vs select).
+| `tipoDaBaseTabelada` | Elemento de proporcionalidade |
+|---|---|
+| `SALARIO_MINIMO` | checkbox `formulario:aplicarProporcionalidadeABase` |
+| `MAIOR_REMUNERACAO` | checkbox `formulario:aplicarProporcionalidadeABase` |
+| `SALARIO_DA_CATEGORIA` (Piso) | checkbox `formulario:aplicarProporcionalidadeABase` |
+| `VALE_TRANSPORTE` | checkbox `formulario:aplicarProporcionalidadeABase` |
+| `HISTORICO_SALARIAL` | **select `formulario:proporcionalizaHistorico`** (SIM/NAO) — checkbox NÃO existe |
+
+**Os dois NÃO coexistem**: ao alternar entre HISTORICO_SALARIAL e outros tipos,
+o PJE-Calc remove um e cria o outro via AJAX RichFaces.
+
+⚠️ **Recomendação para Fase 5**: na prévia, usar campo único `proporcionalizar_base`
+como string `"SIM"|"NAO"` (compatível com ambos). A automação detecta o tipo do
+elemento ativo (`querySelector('[id$=\"proporcionalizaHistorico\"]') || [id$=\"aplicarProporcionalidadeABase\"]`)
+e adapta a operação.
 
 ## ➕ Omissão 3 — Modal "Selecionar Assuntos CNJ"
 
@@ -90,43 +100,90 @@ e seleciona; ao confirmar, o sistema preenche `formulario:codigoAssuntosCnj`
 ⚠️ **Para automação**: preencher os dois campos diretamente via JS,
 sem precisar abrir o modal. Já tratado pelo agente atual.
 
-## ➕ Omissão 4 — Comportamento dinâmico dos demais radios
+## ➕ Omissão 4 — Comportamento dinâmico dos demais radios (VERIFICADO)
 
-A revisão original só cobriu `valor:0/1`. Outros radios também alteram o DOM:
+Verificações empíricas no formulário Parâmetros pós-Expresso (verba ADICIONAL DE INSALUBRIDADE 20%):
 
 ### `tipoVariacaoDaParcela=VARIAVEL`
-- A verificar: campos adicionais para tabela de variações? (não testado)
+✅ **Verificado**: NÃO altera o DOM visível. Lista de campos idêntica ao modo FIXA.
+Conclusão: VARIAVEL é apenas um marcador semântico para o cálculo (não há
+"tabela de variações" no DOM — pode haver lógica server-side que difere).
 
-### `tipoDaQuantidade != INFORMADA`
-- Quando `IMPORTADA_DO_CALENDARIO`: campo `valorInformadoDaQuantidade` é desabilitado.
-- Quando `IMPORTADA_DO_CARTAO`: campo `valorInformadoDaQuantidade` desabilitado +
-  acrescenta input para qual cartão (a verificar).
+### `tipoDaQuantidade=IMPORTADA_DO_CALENDARIO`
+✅ **Verificado**: o campo `formulario:valorInformadoDaQuantidade` é
+**REMOVIDO completamente** do DOM (não apenas desabilitado), e o checkbox
+`aplicarProporcionalidadeAQuantidade` também some.
+Surge no lugar: `formulario:tipoImportadaCalendario` (select para escolher
+qual calendário importar).
+
+### `tipoDaQuantidade=IMPORTADA_DO_CARTAO`
+A verificar empiricamente (não testado nesta sessão). Padrão similar
+provável: surge `formulario:tipoImportadaCartao` (select).
 
 ### `tipoDeDivisor != OUTRO_VALOR`
-- `outroValorDoDivisor` é desabilitado quando outro tipo escolhido.
+A verificar empiricamente. Comportamento provável: `outroValorDoDivisor`
+some/desabilita.
 
 ### `tipoDoValorPago=CALCULADO`
-- `valorInformadoPago` é desabilitado.
+A verificar empiricamente.
 
 ### `tipoDeVerba=REFLEXO`
-- `geraReflexo` é desabilitado (faz sentido: se já é reflexo, não gera reflexo de reflexo).
-- Pode aparecer campo "Verba Principal Vinculada" (`baseVerbaDeCalculo` torna-se obrigatório).
+✅ **Verificado**: o campo `geraReflexo` **CONTINUA presente E habilitado**
+(minha hipótese anterior estava errada — não é desabilitado).
+Os outros campos permanecem inalterados.
 
-⚠️ **Para a Fase 4**: a UI da prévia deve adaptar visibilidade de campos
-exatamente como o PJE-Calc faz, para refletir os mesmos shapes de dados
-que o backend aceita. Validador inline deve seguir essas mesmas regras.
+⚠️ **Para a Fase 4**: a UI da prévia deve replicar o comportamento dinâmico
+exato do PJE-Calc — quando um campo some no PJE-Calc, deve sumir na prévia
+(não apenas desabilitar) para evitar dados inválidos no schema.
 
-## ❌ Erro 3 — Reflexos no painel "Exibir/Ocultar"
+⚠️ **Para a Fase 5**: a automação precisa lidar com ELEMENTO INEXISTENTE
+(não disabled) ao alternar tipos. Selectors devem usar `if (el)` defensivamente.
 
-**No doc 04** afirmei que era preciso clicar "Exibir" antes de marcar reflexos.
+## ⚠️ Confirmação 3 — Reflexos no painel "Exibir/Ocultar" (REVISTA)
 
-**CORRETO** (verificado): os checkboxes `formulario:listagem:N:listaReflexo:M:ativo`
-**estão sempre presentes no DOM**, mesmo quando o painel parece "oculto" visualmente
-(é apenas CSS `display:none`). O agente pode marcar diretamente via JS sem
-precisar clicar "Exibir" primeiro.
+**REVISÃO** (após teste empírico definitivo na conversação 3770):
 
-⚠️ **Implicação**: o link "Exibir" / "Ocultar" é puramente visual (UX). A
-automação não precisa interagir com ele.
+Os checkboxes `formulario:listagem:N:listaReflexo:M:ativo` **existem no DOM
+mesmo com o painel oculto**, MAS:
+
+| Cenário | Resultado |
+|---|---|
+| `cb.click()` com painel OCULTO (offsetParent=null) | ❌ `checked` permanece `false`; AJAX não é processado |
+| `cb.click()` com painel ABERTO (após clicar Exibir) | ✅ `checked=true`, AJAX submetido, estado **persiste após reload** |
+
+**Conclusão**: a automação **PRECISA expandir o painel** antes de marcar reflexos.
+
+### Como expandir o painel
+O link "Exibir" tem estrutura:
+```html
+<span id="formulario:listagem:N:divDestinacoes">
+  <span class="linkDestinacoes linkDetalhe exibirItemNNNNNN">Exibir</span>
+</span>
+```
+
+**Selector correto** para clicar:
+```javascript
+document.querySelector(`#formulario\\:listagem\\:${N}\\:divDestinacoes .linkDestinacoes`).click()
+```
+Ou mais robusto (não depende do número de classe):
+```javascript
+[...document.querySelectorAll('span.linkDestinacoes')]
+  .find(s => s.closest('[id$=":divDestinacoes"]')?.id === `formulario:listagem:${N}:divDestinacoes`)
+  .click()
+```
+
+### Fluxo correto no agente
+1. Para cada verba principal N que tem reflexos a marcar:
+   - Click `linkDestinacoes` da linha N (abre painel)
+   - Aguardar AJAX (RichFaces atualiza visibilidade)
+   - Para cada reflexo M a marcar: `cb.click()` no checkbox `formulario:listagem:N:listaReflexo:M:ativo`
+   - Aguardar AJAX entre cada click (cada checkbox tem `A4J.AJAX.Submit` próprio)
+2. Não é necessário clicar "Ocultar" no fim — o estado persiste no servidor
+
+### Verificação de persistência
+Após reload da página, o `checked` do checkbox volta a refletir o estado do servidor.
+O painel volta a ficar oculto (default), mas se for re-expandido, os reflexos
+marcados aparecem corretamente.
 
 ## ➕ Omissão 5 — Múltiplas competências no Histórico Salarial (Calculado)
 
@@ -171,7 +228,7 @@ header de Alteração em Lote. Sem importância para o agente — basta preenche
 | 2 (proporcionalidade) | Erro | 🟡 Média | `01-verba-manual-novo.md` linha 95 |
 | 3 (modal CNJ) | Omissão | 🟢 Baixa | `01-verba-manual-novo.md` |
 | 4 (radios dinâmicos) | Omissão | 🟡 Média | `01-verba-manual-novo.md` |
-| 3 (Exibir reflexos) | Erro | 🟢 Baixa | `04-reflexos-painel.md` |
+| 3 (Exibir reflexos) | Confirmação revista | 🔴 Alta | `04-reflexos-painel.md` — PRECISA clicar Exibir antes de marcar |
 | 5 (CALCULADO) | Omissão | 🟡 Média | `05-historico-salarial.md` |
 | 6 (j_id85) | Esclarecimento | 🟢 Baixa | `03-ocorrencias-verba.md` |
 
