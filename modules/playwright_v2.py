@@ -477,26 +477,55 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(15000)
         self.log("Fase 2 concluída")
 
+    # Históricos auto-criados pelo PJE-Calc (não devem ser duplicados)
+    _HISTORICOS_DEFAULT = {
+        "ÚLTIMA REMUNERAÇÃO", "ULTIMA REMUNERACAO",
+        "SALÁRIO BASE", "SALARIO BASE",
+        "ADICIONAL DE INSALUBRIDADE PAGO",
+    }
+
     def fase_historico_salarial(self) -> None:
         self.log("Fase 3 — Histórico Salarial")
         self._navegar_menu("li_calculo_historico_salarial")
 
-        for hist in self.previa.historico_salarial:
+        def _norm(s: str) -> str:
+            tabela = str.maketrans("ÁÉÍÓÚÇáéíóúç", "AEIOUCaeiouc")
+            return (s or "").translate(tabela).upper().strip()
+
+        defaults_norm = {_norm(n) for n in self._HISTORICOS_DEFAULT}
+
+        for idx, hist in enumerate(self.previa.historico_salarial):
+            # Pular históricos default (PJE-Calc já criou em Fase 2)
+            if _norm(hist.nome) in defaults_norm:
+                self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc")
+                continue
+
+            # Re-navegar à listagem entre incluções (pós-salvar pode redirecionar)
+            if idx > 0:
+                self._navegar_menu("li_calculo_historico_salarial")
+
             self._clicar("incluir")  # botão Novo
-            self._aguardar_ajax()
-            self._preencher("nome", hist.nome)
+            # Esperar form aparecer (renderização AJAX)
+            try:
+                self._page.wait_for_selector(
+                    "[id$='nome'], input[id$=':nome']", timeout=15000
+                )
+            except Exception:
+                self._aguardar_ajax(15000)
+
+            self._preencher("nome", hist.nome, obrigatorio=False)
             self._marcar_radio("tipoVariacaoDaParcela", hist.parcela.value)
             self._marcar_checkbox("fgts", hist.incidencias.fgts)
             self._marcar_checkbox("inss", hist.incidencias.cs_inss)
-            self._preencher("competenciaInicialInputDate", hist.competencia_inicial)
-            self._preencher("competenciaFinalInputDate", hist.competencia_final)
+            self._preencher("competenciaInicialInputDate", hist.competencia_inicial, obrigatorio=False)
+            self._preencher("competenciaFinalInputDate", hist.competencia_final, obrigatorio=False)
             self._marcar_radio("tipoValor", hist.tipo_valor.value)
 
             if hist.tipo_valor == TipoValor.INFORMADO:
-                self._preencher("valorParaBaseDeCalculo", _fmt_br(hist.valor_brl))
+                self._preencher("valorParaBaseDeCalculo", _fmt_br(hist.valor_brl), obrigatorio=False)
             else:
                 # CALCULADO: quantidade + base_referencia + cmdGerarOcorrencias
-                self._preencher("quantidade", _fmt_br(hist.calculado.quantidade_pct))
+                self._preencher("quantidade", _fmt_br(hist.calculado.quantidade_pct), obrigatorio=False)
                 self._selecionar("baseDeReferencia", hist.calculado.base_referencia)
                 self._clicar("cmdGerarOcorrencias")
                 self._aguardar_ajax()
