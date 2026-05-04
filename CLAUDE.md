@@ -181,6 +181,17 @@ Verbas criadas via botão "Manual" (`id="incluir"`) precisam ter `caracteristica
 `base_calculo` preenchidos. Sem eles, a liquidação falha com HTTP 500. O modo Expresso preenche
 automaticamente esses campos.
 
+### Reflexos — fluxo correto (PJE-Calc Cidadão, confirmado pelo usuário)
+
+Para configurar um reflexo (ex.: "Aviso Prévio sobre Horas Extras"):
+
+1. **Marcar checkbox** do reflexo no painel "Exibir" da verba principal (após click em `linkDestinacoes`).
+2. **Salvar** (a verba principal — checkbox sozinho não persiste).
+3. **Voltar** à listagem e re-abrir "Exibir" da principal.
+4. Agora o **botão "Parâmetros"** do reflexo está disponível — clicar para editar parâmetros específicos (período, base, etc.).
+
+**Ocorrências do reflexo**: NÃO existe página própria. As ocorrências dos reflexos aparecem **dentro da página de Ocorrências da verba principal** (mesma tabela mensal). Para alterar valores específicos por mês de um reflexo, navegar para `parametrizar-ocorrencia.jsf` da PRINCIPAL — todas as ocorrências (principal + reflexos) estão na mesma tabela.
+
 ### Expresso — DOM real (verbas-para-calculo.jsf, v2.15.1, confirmado 04/05/2026)
 - **54 verbas total**, distribuídas em **3 colunas × 18 linhas** — TODAS visíveis sem scroll.
 - Checkboxes têm IDs no padrão `formulario:j_id82:N:j_id84:M:selecionada` (gerados por `<a4j:repeat>` aninhado).
