@@ -1587,6 +1587,45 @@ class PJECalcPlaywright:
             logger.debug(f"_marcar_checkbox({field_id}): {e}")
             return False
 
+    def _url_mudou_para_secao(self, texto: str) -> bool:
+        """Verifica se a URL atual reflete a seção solicitada.
+        Aceita correspondência parcial (lowercase) — algumas seções têm prefixos
+        de pasta (`inss/inss.jsf`, `verba/verba-calculo.jsf`).
+        """
+        _SECTION_URL_HINTS = {
+            "Histórico Salarial": ["historico-salarial"],
+            "Verbas": ["verba/verba", "verba-calculo"],
+            "FGTS": ["fgts.jsf"],
+            "Honorários": ["honorarios"],
+            "Liquidar": ["liquidacao"],
+            "Faltas": ["falta.jsf"],
+            "Férias": ["ferias.jsf"],
+            "Dados do Cálculo": ["calculo.jsf"],
+            "Contribuição Social": ["inss/inss", "inss.jsf"],
+            "Contribuicao Social": ["inss/inss", "inss.jsf"],
+            "Imposto de Renda": ["irpf.jsf"],
+            "Multas e Indenizações": ["multas-indenizacoes"],
+            "Multas": ["multas-indenizacoes"],
+            "Cartão de Ponto": ["apuracao-cartaodeponto", "cartaodeponto"],
+            "Salário-família": ["salario-familia"],
+            "Seguro-desemprego": ["seguro-desemprego"],
+            "Pensão Alimentícia": ["pensao-alimenticia"],
+            "Previdência Privada": ["previdencia-privada"],
+            "Custas Judiciais": ["custas-judiciais"],
+            "Correção, Juros e Multa": ["parametros-atualizacao", "correcao"],
+            "Correção e Juros": ["parametros-atualizacao", "correcao"],
+            "Exportar": ["exportacao"],
+            "Exportação": ["exportacao"],
+        }
+        try:
+            url = (self._page.url or "").lower()
+            hints = _SECTION_URL_HINTS.get(texto, [])
+            if not hints:
+                return True  # sem hint conhecido — assume que mudou
+            return any(h.lower() in url for h in hints)
+        except Exception:
+            return True
+
     def _clicar_menu_lateral(self, texto: str, obrigatorio: bool = True) -> bool:
         """
         Clica em link do menu lateral via JavaScript (invulnerável a visibilidade).
@@ -1665,6 +1704,44 @@ class PJECalcPlaywright:
             "Excluir":             ["operacoes_excluir", "calculo_excluir"],
             "Fechar":              ["operacoes_fechar", "calculo_fechar"],
         }
+        # ═══ FIX E04: sair de sub-páginas ANTES de tentar navegar pelo menu ═══
+        # Sub-páginas como parametrizar-inss.jsf / parametrizar-irpf.jsf /
+        # apuracao-cartaodeponto.jsf interceptam clicks no menu lateral —
+        # o link é clicado, AJAX dispara, mas o framework permanece na sub-página
+        # porque o backing bean da sub-página retém o foco. Resultado: URL não
+        # muda e a fase seguinte tenta operar com o DOM errado.
+        # Solução: detectar sub-página e forçar goto à calculo.jsf principal
+        # antes de qualquer tentativa de click.
+        try:
+            _url_atual = self._page.url or ""
+            _SUBPAGE_PATTERNS = (
+                "parametrizar-",
+                "apuracao-cartaodeponto",
+                "ocorrencias-",
+                "/inss/",  # parametrizar-inss está em /inss/
+            )
+            _em_subpagina = any(p in _url_atual for p in _SUBPAGE_PATTERNS) and (
+                "calculo.jsf" not in _url_atual.split("?")[0].split("/")[-1]
+            )
+            if _em_subpagina and self._calculo_url_base and self._calculo_conversation_id:
+                _calculo_principal = (
+                    f"{self._calculo_url_base}calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}"
+                )
+                self._log(f"  ↩ Saindo de sub-página antes de '{texto}' (era: {_url_atual[-60:]})")
+                try:
+                    self._page.goto(_calculo_principal, wait_until="domcontentloaded", timeout=10000)
+                    try:
+                        self._instalar_monitor_ajax()
+                    except Exception:
+                        pass
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(300)
+                except Exception as _e_exit:
+                    self._log(f"  ⚠ Falha ao sair da sub-página: {_e_exit}")
+        except Exception:
+            pass
+
         sel_id = _MENU_ID_MAP.get(texto)
         if sel_id:
             loc = self._page.locator(sel_id)
@@ -1673,7 +1750,10 @@ class PJECalcPlaywright:
                     loc.first.click(force=True)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(500)
-                    return True
+                    if self._url_mudou_para_secao(texto):
+                        return True
+                    # URL não mudou — caiu na navegação por URL abaixo
+                    self._log(f"  ⚠ Click '{texto}' não mudou URL — fallback para URL nav")
                 except Exception:
                     pass  # fallback para busca por texto abaixo
 
@@ -1692,7 +1772,9 @@ class PJECalcPlaywright:
                         self._aguardar_ajax()
                         self._page.wait_for_timeout(500)
                         self._log(f"  → Menu '{texto}' via li#{li_id}")
-                        return True
+                        if self._url_mudou_para_secao(texto):
+                            return True
+                        self._log(f"  ⚠ Click li#{li_id} não mudou URL — fallback para URL nav")
                     except Exception:
                         pass
         self._page.wait_for_timeout(400)
@@ -11720,28 +11802,53 @@ class PJECalcPlaywright:
                     self._log(f"  ℹ Diag candidatos Liquidar ({len(_diag)}): {_diag}")
             except Exception:
                 pass
-            clicou = self._page.evaluate("""() => {
-                // Buscar qualquer elemento clicável com texto/value 'Liquidar' visível
-                const all = [...document.querySelectorAll(
-                    'input[type="submit"], input[type="button"], button, a, [onclick], [role="button"]'
-                )];
-                for (const el of all) {
-                    const val = (el.value || '').trim();
-                    const txt = (el.textContent || '').trim();
-                    const isLiq = (val === 'Liquidar' || txt === 'Liquidar' ||
-                                   val.toLowerCase() === 'liquidar' ||
-                                   txt.toLowerCase() === 'liquidar');
-                    if (isLiq && el.offsetParent !== null && !el.disabled) {
-                        try { el.click(); return true; } catch(e) {}
-                        // Fallback: disparar evento click programaticamente
-                        try {
-                            el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
-                            return true;
-                        } catch(e) {}
+            # FIX E09: o click no Liquidar dispara navegação JSF (POST→redirect)
+            # que destrói o contexto JS antes do evaluate() retornar. Capturamos
+            # a exceção "Execution context was destroyed" como SUCESSO, porque é
+            # exatamente o comportamento esperado.
+            clicou = False
+            try:
+                clicou = self._page.evaluate("""() => {
+                    // Buscar qualquer elemento clicável com texto/value 'Liquidar' visível
+                    const all = [...document.querySelectorAll(
+                        'input[type="submit"], input[type="button"], button, a, [onclick], [role="button"]'
+                    )];
+                    for (const el of all) {
+                        const val = (el.value || '').trim();
+                        const txt = (el.textContent || '').trim();
+                        const isLiq = (val === 'Liquidar' || txt === 'Liquidar' ||
+                                       val.toLowerCase() === 'liquidar' ||
+                                       txt.toLowerCase() === 'liquidar');
+                        if (isLiq && el.offsetParent !== null && !el.disabled) {
+                            try { el.click(); return true; } catch(e) {}
+                            // Fallback: disparar evento click programaticamente
+                            try {
+                                el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                                return true;
+                            } catch(e) {}
+                        }
                     }
-                }
-                return false;
-            }""")
+                    return false;
+                }""")
+            except Exception as _e_evcls:
+                _msg = str(_e_evcls)
+                if "Execution context was destroyed" in _msg or "navigation" in _msg.lower():
+                    self._log(
+                        "  ✓ Liquidar (JS click) disparou navegação — "
+                        "contexto JS destruído como esperado"
+                    )
+                    clicou = True
+                    # Aguardar a página de resultado terminar de carregar
+                    try:
+                        self._page.wait_for_load_state("domcontentloaded", timeout=30000)
+                    except Exception:
+                        pass
+                    try:
+                        self._instalar_monitor_ajax()
+                    except Exception:
+                        pass
+                else:
+                    raise
             if not clicou:
                 # IMPORTANTE: quando o botão Liquidar não aparece, é tipicamente
                 # porque a página detectou pendências e re-renderizou apenas a
