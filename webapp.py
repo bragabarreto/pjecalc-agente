@@ -24,7 +24,7 @@ from fastapi import (
     BackgroundTasks, Depends, FastAPI, File, Form, HTTPException,
     Request, UploadFile,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -294,6 +294,9 @@ async def processar_sentenca(
     """
     Recebe o arquivo de sentença e documentos complementares (até 10),
     extrai dados e inicia o processamento em background.
+
+    Detecta automaticamente JSON v2 (gerado pelo Projeto Claude externo) e
+    desvia para o pipeline /processar/v2 (sem passar por Gemini/extraction).
     """
     sessao_id = str(uuid.uuid4())
 
@@ -303,6 +306,50 @@ async def processar_sentenca(
     tmp_path = tmp_dir / f"sentenca{sufixo}"
     with open(tmp_path, "wb") as f:
         shutil.copyfileobj(sentenca.file, f)
+
+    # ─── AUTO-DETECÇÃO de JSON v2 ──────────────────────────────────────────
+    # Se o arquivo é .json e tem meta.schema_version == "2.0", roteia direto
+    # para o pipeline v2 (sem Gemini/extraction). O usuário não precisa
+    # decidir qual rota usar — basta subir o JSON gerado pelo Projeto Claude.
+    if sufixo == ".json":
+        try:
+            with open(tmp_path, "r", encoding="utf-8") as _fjson:
+                _payload_v2 = json.load(_fjson)
+            _is_v2 = (
+                isinstance(_payload_v2, dict)
+                and isinstance(_payload_v2.get("meta"), dict)
+                and str(_payload_v2["meta"].get("schema_version")) == "2.0"
+            )
+            if _is_v2:
+                logger.info(f"[{sessao_id}] JSON v2 detectado — desviando para /processar/v2")
+                from modules.webapp_v2 import (
+                    PreviaCalculoV2 as _PreviaV2,
+                    _save_previa as _save_v2,
+                )
+                try:
+                    _previa = _PreviaV2.model_validate(_payload_v2)
+                except Exception as _e_v2:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "erro": "JSON v2 inválido",
+                            "detalhe": str(_e_v2),
+                            "_dica": (
+                                "Atualize o System Prompt do Projeto Claude com "
+                                "docs/prompt-projeto-claude-externo.md (versão atual)."
+                            ),
+                        },
+                    )
+                _save_v2(sessao_id, _previa.model_dump())
+                # Redirecionar para a UI v2
+                return RedirectResponse(
+                    url=f"/previa/v2/{sessao_id}",
+                    status_code=303,
+                )
+        except json.JSONDecodeError:
+            pass  # arquivo .json mal-formado — segue para o pipeline antigo
+        except Exception as _e_route:
+            logger.warning(f"[{sessao_id}] Falha no roteamento v2: {_e_route} — usando v1")
 
     # Coletar documentos extras do form (doc_arquivo_N, doc_imagem_N, doc_texto_N, doc_contexto_N)
     form = await request.form()
