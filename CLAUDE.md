@@ -189,7 +189,7 @@ Para criar verba via "Manual" (botão `incluir` da listagem com value="Manual"):
 2. Campo "Nome" (DOM id `formulario:descricao`) — digitar nome customizado.
 3. Campo "Assunto CNJ" — **NÃO digitar livre**. Click no botão lupa 🔎 → abre modal árvore.
 4. Modal mostra categorias hierárquicas (ex.: 2581 Remuneração, 2662 Férias, 1654 Contrato Individual...).
-5. Expandir folder + selecionar código específico (ex.: 2792 Horas Extras dentro de 2581).
+5. Expandir folder + selecionar código específico. **Preferência padrão: clicar em `2581 - Remuneração, Verbas Indenizatórias e Benefícios`** (categoria mais ampla que cobre a maior parte das verbas trabalhistas). Refinar para subcódigos (2792 HE, 1666 Insalubridade, etc.) só quando a sentença for específica e o reflexo na liquidação se beneficiar.
 6. Click botão "Selecionar" no modal.
 7. Preencher demais campos (período, base, fórmula, etc.).
 8. **Salvar UMA VEZ** ao final (não é por seção).
