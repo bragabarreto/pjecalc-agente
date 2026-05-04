@@ -147,7 +147,11 @@ class PlaywrightAutomatorV2:
     # ─── Helpers DOM ───────────────────────────────────────────────────────
 
     def _preencher(self, dom_id: str, valor: Any, obrigatorio: bool = True) -> None:
-        """Preenche input por DOM ID (sufixo). Falha se obrigatório e DOM ausente."""
+        """Preenche input por DOM ID (sufixo). Falha se obrigatório e DOM ausente.
+
+        Pula silenciosamente se o elemento está `disabled` (campo já auto-preenchido
+        pelo JSF, ex.: `justica` que é sempre "5" / Justiça do Trabalho).
+        """
         if valor is None or valor == "":
             if obrigatorio:
                 raise ValueError(f"Campo obrigatório vazio: {dom_id}")
@@ -159,6 +163,24 @@ class PlaywrightAutomatorV2:
                 raise RuntimeError(f"DOM ID não encontrado: {dom_id}")
             self.log(f"  ⚠ {dom_id} não existe — pulando")
             return
+        # Pular se elemento está disabled (auto-preenchido pelo JSF)
+        try:
+            el = loc.first
+            if not el.is_enabled():
+                # Verifica se valor atual já casa com o desejado
+                try:
+                    valor_atual = el.input_value(timeout=1000)
+                except Exception:
+                    valor_atual = None
+                if str(valor) == str(valor_atual):
+                    self.log(f"  ⊙ {dom_id} = {valor} (já preenchido / disabled)")
+                    return
+                self.log(
+                    f"  ⚠ {dom_id} disabled — atual={valor_atual!r}, desejado={valor!r} (pulando)"
+                )
+                return
+        except Exception:
+            pass
         loc.first.fill(str(valor))
         self.log(f"  ✓ {dom_id} = {valor}")
 
