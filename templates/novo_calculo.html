@@ -284,30 +284,14 @@ document.getElementById('form-upload').addEventListener('submit', async function
   e.preventDefault();
   const formData = new FormData();
 
-  const abaArquivoAtiva   = document.getElementById('aba-sent-arquivo').classList.contains('ativa');
-  const abaTextoAtiva     = document.getElementById('aba-sent-texto').classList.contains('ativa');
-  const abaRelatorioAtiva = document.getElementById('aba-sent-relatorio').classList.contains('ativa');
-
-  if (abaArquivoAtiva) {
-    const arquivo = document.getElementById('arquivo-sentenca').files[0];
-    if (!arquivo) { alert('Selecione o arquivo da sentença ou use outra aba.'); return; }
-    formData.append('sentenca', arquivo);
-    formData.append('input_type', 'arquivo');
-
-  } else if (abaTextoAtiva) {
-    const texto = document.getElementById('sentenca-texto').value.trim();
-    if (!texto) { alert('Cole o texto da sentença antes de processar.'); return; }
-    if (texto.length < 100) { alert('O texto parece muito curto. Verifique se foi colado corretamente.'); return; }
-    formData.append('sentenca', new Blob([texto], { type: 'text/plain' }), 'sentenca_colada.txt');
-    formData.append('input_type', 'texto');
-
-  } else if (abaRelatorioAtiva) {
-    const rel = document.getElementById('sentenca-relatorio').value.trim();
-    if (!rel) { alert('Cole o relatório estruturado antes de processar.'); return; }
-    if (rel.length < 200) { alert('O relatório parece incompleto. Verifique se foi colado corretamente.'); return; }
-    formData.append('sentenca', new Blob([rel], { type: 'text/plain' }), 'relatorio_estruturado.txt');
-    formData.append('input_type', 'relatorio');
+  // Pipeline v2: SO upload de arquivo .json
+  const arquivo = document.getElementById('arquivo-sentenca').files[0];
+  if (!arquivo) { alert('Selecione o arquivo .json antes de processar.'); return; }
+  if (!arquivo.name.toLowerCase().endsWith('.json')) {
+    alert('Apenas arquivos .json são aceitos (JSON v2 do Projeto Claude).');
+    return;
   }
+  formData.append('sentenca', arquivo);
 
   // Modelo de IA selecionado
   const modeloIA = document.getElementById('campo-modelo-ia').value;
@@ -354,22 +338,49 @@ document.getElementById('form-upload').addEventListener('submit', async function
   document.getElementById('mensagem-status').textContent = 'Enviando arquivos...';
 
   try {
-    const resp = await fetch('/processar', { method: 'POST', body: formData });
-    if (!resp.ok) throw new Error('Erro ao enviar: ' + resp.status);
+    // Backend retorna 303 com Location para /previa/v2/{id} quando JSON v2 valida.
+    // Usamos redirect:'manual' para detectar e seguir manualmente em vez de
+    // o fetch tentar interpretar o HTML como JSON.
+    const resp = await fetch('/processar', {
+      method: 'POST',
+      body: formData,
+      redirect: 'follow',
+    });
+
+    // Se houve redirect (caminho v2 OK), navegar para a URL final.
+    if (resp.redirected) {
+      document.getElementById('progresso').style.width = '100%';
+      document.getElementById('mensagem-status').textContent = 'Prévia v2 criada — abrindo…';
+      window.location.href = resp.url;
+      return;
+    }
+
+    if (!resp.ok) {
+      // Tentar extrair detalhe do erro JSON
+      let detalhe = '';
+      try {
+        const j = await resp.json();
+        detalhe = j.detail || j.detalhe || j.erro || '';
+        if (j._dica) detalhe += '\n\nDica: ' + j._dica;
+      } catch (_) {
+        detalhe = await resp.text().catch(()=>'');
+      }
+      throw new Error(`HTTP ${resp.status}\n\n${detalhe.slice(0, 600)}`);
+    }
+
+    // Caminho legado (não-v2): backend retorna JSON com sessao_id
     const dados = await resp.json();
-
     document.getElementById('progresso').style.width = '35%';
-    const extra = pos > 0 ? ` + ${pos} documento(s) adicional(is)` : '';
     document.getElementById('mensagem-status').textContent =
-      `Sentença recebida${extra}. Extraindo dados com IA...`;
-
+      'Sentença recebida. Processando...';
     await aguardarProcessamento(dados.sessao_id, dados.url_previa);
 
   } catch(err) {
     const box = document.getElementById('status-box');
     box.className = 'erro-box';
-    box.innerHTML = '<strong>Erro:</strong> ' + err.message +
-      '<br><button onclick="document.getElementById(\'form-upload\').style.display=\'block\';' +
+    box.innerHTML = '<strong>Erro:</strong><pre style="white-space:pre-wrap; font-size:0.85rem; margin:8px 0;">' +
+      err.message + '</pre>' +
+      '<button onclick="document.getElementById(\'form-upload\').style.display=\'block\';' +
       'document.getElementById(\'status-area\').style.display=\'none\';" ' +
       'class="btn btn-sm" style="margin-top:8px;">Tentar novamente</button>';
   }
