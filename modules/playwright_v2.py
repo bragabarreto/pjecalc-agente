@@ -225,12 +225,84 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
+    # Mapa li_id → texto visível do menu (para fallback por texto)
+    _MENU_TEXT_MAP = {
+        "li_calculo_dados_do_calculo": "Dados do Cálculo",
+        "li_calculo_faltas": "Faltas",
+        "li_calculo_ferias": "Férias",
+        "li_calculo_historico_salarial": "Histórico Salarial",
+        "li_calculo_verbas": "Verbas",
+        "li_calculo_cartao_ponto": "Cartão de Ponto",
+        "li_calculo_salario_familia": "Salário-família",
+        "li_calculo_seguro_desemprego": "Seguro-desemprego",
+        "li_calculo_fgts": "FGTS",
+        "li_calculo_inss": "Contribuição Social",
+        "li_calculo_previdencia_privada": "Previdência Privada",
+        "li_calculo_pensao_alimenticia": "Pensão Alimentícia",
+        "li_calculo_irpf": "Imposto de Renda",
+        "li_calculo_multas_e_indenizacoes": "Multas e Indenizações",
+        "li_calculo_honorarios": "Honorários",
+        "li_calculo_custas_judiciais": "Custas Judiciais",
+        "li_calculo_correcao_juros_multa": "Correção, Juros e Multa",
+    }
+
     def _navegar_menu(self, li_id: str) -> None:
-        self._page.evaluate(
-            f"document.getElementById('{li_id}').querySelector('a').click()"
+        """Navega para item do menu lateral.
+
+        Estratégia em cascata (similar ao v1):
+        1. li#{li_id} a — ID exato.
+        2. li[id$='{tail}'] a — sufixo do ID.
+        3. <a> com texto exato (do _MENU_TEXT_MAP) dentro de li.
+        4. <a> com texto exato em qualquer lugar.
+        """
+        texto = self._MENU_TEXT_MAP.get(li_id, "")
+        tail = li_id.replace("li_", "", 1)
+
+        clicou = self._page.evaluate(
+            """([liId, tail, texto]) => {
+                // 1. ID exato
+                let li = document.getElementById(liId);
+                if (li) {
+                    const a = li.querySelector('a');
+                    if (a) { a.click(); return 'id-exact:'+liId; }
+                }
+                // 2. ID por sufixo (tail)
+                if (tail) {
+                    const lis = document.querySelectorAll(`li[id$="${tail}"]`);
+                    for (const l of lis) {
+                        const a = l.querySelector('a');
+                        if (a) { a.click(); return 'id-tail:'+l.id; }
+                    }
+                }
+                // 3. <a> com texto exato dentro de <li>
+                if (texto) {
+                    const links = [...document.querySelectorAll('li a')];
+                    for (const a of links) {
+                        if ((a.textContent||'').trim() === texto) {
+                            a.click();
+                            return 'text-li:'+texto;
+                        }
+                    }
+                    // 4. <a> com texto exato em qualquer lugar
+                    const all = [...document.querySelectorAll('a')];
+                    for (const a of all) {
+                        if ((a.textContent||'').trim() === texto) {
+                            a.click();
+                            return 'text-any:'+texto;
+                        }
+                    }
+                }
+                return null;
+            }""",
+            [li_id, tail, texto],
         )
-        self._aguardar_ajax()
-        self.log(f"  → navegou para {li_id}")
+        if not clicou:
+            raise RuntimeError(
+                f"Menu não encontrado: {li_id} (texto='{texto}'). "
+                f"Verifique se a página tem o menu lateral renderizado."
+            )
+        self._aguardar_ajax(15000)
+        self.log(f"  → navegou para {li_id} via {clicou}")
 
     # ─── Fases ─────────────────────────────────────────────────────────────
 
