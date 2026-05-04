@@ -1,0 +1,798 @@
+{% extends "base.html" %}
+{% block title %}Prévia v2 — {{ sessao_id }}{% endblock %}
+
+{% block extra_style %}
+/* === Layout === */
+.previa-v2-container { display: grid; grid-template-columns: 1fr 320px; gap: 20px; align-items: start; }
+.sidebar-v2 { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+@media (max-width: 1100px) { .previa-v2-container { grid-template-columns: 1fr; } }
+
+/* === Cards de seção === */
+.card-secao {
+  border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 14px; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+}
+.card-secao header {
+  background: #1a3a6b; color: #fff; padding: 10px 16px; cursor: pointer; user-select: none;
+  display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0;
+}
+.card-secao header .titulo { font-weight: 600; }
+.card-secao header .badge {
+  font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; background: rgba(255,255,255,0.18);
+}
+.card-secao header .badge.erro { background: #e74c3c; }
+.card-secao header .badge.ok { background: #27ae60; }
+.card-secao .corpo { padding: 14px 16px; }
+.card-secao.collapsed .corpo { display: none; }
+.card-secao header::after {
+  content: "▼"; font-size: 0.7rem; opacity: 0.7; margin-left: 8px;
+  transition: transform 0.15s;
+}
+.card-secao.collapsed header::after { transform: rotate(-90deg); }
+
+/* === Verba card (sub-card) === */
+.verba-card {
+  border: 1px solid #ced4da; border-radius: 6px; margin-bottom: 10px; background: #f8f9fa;
+}
+.verba-card header {
+  background: #ffffff; color: #1a3a6b; padding: 8px 12px; cursor: pointer;
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  border-bottom: 1px solid #ced4da;
+}
+.verba-card header .nome-verba {
+  font-weight: 600; font-size: 0.92rem;
+}
+.verba-card header .meta-verba { font-size: 0.78rem; color: #6c757d; }
+.verba-card header .estrategia {
+  padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+}
+.estrategia.expresso_direto { background: #d4edda; color: #155724; }
+.estrategia.expresso_adaptado { background: #fff3cd; color: #856404; }
+.estrategia.manual { background: #f8d7da; color: #721c24; }
+.verba-card .corpo { padding: 12px; }
+.verba-card.collapsed .corpo { display: none; }
+
+/* === Grupos de campos === */
+.fieldgroup {
+  border: 1px solid #e9ecef; border-radius: 6px; padding: 10px 12px; margin-bottom: 10px;
+  background: #fff;
+}
+.fieldgroup-title {
+  font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: #495057;
+  margin-bottom: 8px; letter-spacing: 0.5px;
+}
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.col-span-2 { grid-column: span 2; }
+.col-span-full { grid-column: 1 / -1; }
+@media (max-width: 700px) { .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; } }
+
+/* === Campos individuais === */
+.campo {
+  display: flex; flex-direction: column;
+}
+.campo label {
+  font-size: 0.74rem; color: #6c757d; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.3px; margin-bottom: 3px;
+}
+.campo label .obrigatorio { color: #e74c3c; }
+.campo input[type=text], .campo input[type=number], .campo select, .campo textarea {
+  width: 100%; padding: 6px 9px; border: 1px solid #ced4da; border-radius: 4px;
+  font-size: 0.88rem; background: #fff; font-family: inherit;
+}
+.campo input:focus, .campo select:focus, .campo textarea:focus {
+  outline: none; border-color: #1a3a6b; box-shadow: 0 0 0 2px rgba(26,58,107,0.1);
+}
+.campo input.invalid, .campo select.invalid {
+  border-color: #e74c3c; background: #fef5f5;
+}
+.campo .ajuda { font-size: 0.7rem; color: #868e96; margin-top: 2px; }
+.checkbox-row { display: flex; align-items: center; gap: 6px; padding: 6px 0; }
+.checkbox-row input[type=checkbox] { width: 16px; height: 16px; }
+.checkbox-row label { margin-bottom: 0; text-transform: none; font-size: 0.85rem; color: #495057; }
+
+/* === Reflexos === */
+.reflexos-list {
+  margin-top: 10px; padding: 10px; background: #fff8e1; border-left: 3px solid #ffa726;
+  border-radius: 4px;
+}
+.reflexo-item {
+  display: flex; gap: 8px; align-items: center; padding: 6px 0; font-size: 0.86rem;
+  border-bottom: 1px dashed #ffe0a3;
+}
+.reflexo-item:last-child { border-bottom: none; }
+.reflexo-item .nome { flex: 1; }
+.reflexo-item .estrategia-mini {
+  font-size: 0.7rem; padding: 1px 6px; border-radius: 3px; font-weight: 600;
+}
+
+/* === Sidebar de validação === */
+.validador {
+  background: #fff; border-radius: 8px; padding: 14px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  border: 1px solid #dee2e6;
+}
+.validador h4 { font-size: 0.95rem; color: #1a3a6b; margin: 0 0 10px; }
+.validador .status-bar {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; border-radius: 5px; margin-bottom: 12px; font-weight: 600;
+}
+.status-bar.ok { background: #d4edda; color: #155724; }
+.status-bar.erro { background: #f8d7da; color: #721c24; }
+.status-bar.aviso { background: #fff3cd; color: #856404; }
+.lista-pendencias { list-style: none; padding: 0; margin: 0; max-height: 300px; overflow-y: auto; }
+.lista-pendencias li {
+  padding: 6px 8px; border-left: 3px solid #e74c3c; background: #fdf2f2; margin-bottom: 4px;
+  font-size: 0.82rem; border-radius: 0 4px 4px 0; color: #721c24;
+}
+.lista-pendencias li.aviso { border-color: #ffa726; background: #fff8e1; color: #856404; }
+.btn-confirmar-v2 {
+  background: #28a745; color: #fff; border: none; padding: 12px 18px; border-radius: 6px;
+  font-size: 0.95rem; font-weight: 600; width: 100%; cursor: pointer; margin-top: 12px;
+  transition: background 0.15s;
+}
+.btn-confirmar-v2:disabled { background: #adb5bd; cursor: not-allowed; }
+.btn-confirmar-v2:hover:not(:disabled) { background: #218838; }
+{% endblock %}
+
+{% block content %}
+<h1>Prévia v2.0 — {{ sessao_id }}</h1>
+<p style="color: #6c757d; font-size: 0.9rem; margin-top: -8px;">
+  Schema v2.0 — todos os campos do PJE-Calc estão editáveis. Validação inline.
+</p>
+
+<div class="previa-v2-container">
+  <div class="conteudo-principal">
+
+    <!-- ═══════════ SEÇÃO 1: META + PROCESSO ═══════════ -->
+    <div class="card-secao" data-secao="processo">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">📋 Processo</span>
+        <span class="badge ok" id="badge-processo">OK</span>
+      </header>
+      <div class="corpo">
+        <div class="grid-2">
+          <div class="campo col-span-full">
+            <label>Número do Processo <span class="obrigatorio">*</span></label>
+            <input type="text" data-campo="processo.numero_processo" placeholder="0000000-00.0000.5.00.0000">
+          </div>
+          <div class="campo">
+            <label>Valor da Causa (R$) <span class="obrigatorio">*</span></label>
+            <input type="number" step="0.01" data-campo="processo.valor_da_causa_brl">
+          </div>
+          <div class="campo">
+            <label>Data de Autuação <span class="obrigatorio">*</span></label>
+            <input type="text" data-campo="processo.data_autuacao" placeholder="DD/MM/YYYY">
+          </div>
+        </div>
+
+        <div class="fieldgroup">
+          <div class="fieldgroup-title">Reclamante</div>
+          <div class="grid-3">
+            <div class="campo col-span-full">
+              <label>Nome <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="processo.reclamante.nome">
+            </div>
+            <div class="campo">
+              <label>Tipo Doc Fiscal</label>
+              <select data-campo="processo.reclamante.doc_fiscal.tipo">
+                <option value="CPF">CPF</option><option value="CNPJ">CNPJ</option><option value="CEI">CEI</option>
+              </select>
+            </div>
+            <div class="campo col-span-2">
+              <label>Número Doc Fiscal</label>
+              <input type="text" data-campo="processo.reclamante.doc_fiscal.numero">
+            </div>
+          </div>
+        </div>
+
+        <div class="fieldgroup">
+          <div class="fieldgroup-title">Reclamado</div>
+          <div class="grid-3">
+            <div class="campo col-span-full">
+              <label>Nome <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="processo.reclamado.nome">
+            </div>
+            <div class="campo">
+              <label>Tipo Doc Fiscal</label>
+              <select data-campo="processo.reclamado.doc_fiscal.tipo">
+                <option value="CPF">CPF</option><option value="CNPJ" selected>CNPJ</option><option value="CEI">CEI</option>
+              </select>
+            </div>
+            <div class="campo col-span-2">
+              <label>Número Doc Fiscal</label>
+              <input type="text" data-campo="processo.reclamado.doc_fiscal.numero">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SEÇÃO 2: PARAMETROS DO CALCULO ═══════════ -->
+    <div class="card-secao" data-secao="parametros_calculo">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">⚙️ Parâmetros do Cálculo</span>
+        <span class="badge ok" id="badge-parametros">OK</span>
+      </header>
+      <div class="corpo">
+        <div class="fieldgroup">
+          <div class="fieldgroup-title">Local e Datas-chave</div>
+          <div class="grid-3">
+            <div class="campo">
+              <label>UF <span class="obrigatorio">*</span></label>
+              <input type="text" maxlength="2" data-campo="parametros_calculo.estado_uf">
+            </div>
+            <div class="campo col-span-2">
+              <label>Município <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="parametros_calculo.municipio">
+            </div>
+            <div class="campo">
+              <label>Admissão <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="parametros_calculo.data_admissao" placeholder="DD/MM/YYYY">
+            </div>
+            <div class="campo">
+              <label>Demissão <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="parametros_calculo.data_demissao" placeholder="DD/MM/YYYY">
+            </div>
+            <div class="campo">
+              <label>Ajuizamento <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="parametros_calculo.data_ajuizamento" placeholder="DD/MM/YYYY">
+            </div>
+            <div class="campo">
+              <label>Início Cálculo <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="parametros_calculo.data_inicio_calculo" placeholder="DD/MM/YYYY">
+            </div>
+            <div class="campo">
+              <label>Término Cálculo <span class="obrigatorio">*</span></label>
+              <input type="text" data-campo="parametros_calculo.data_termino_calculo" placeholder="DD/MM/YYYY">
+              <span class="ajuda">≥ MAX(periodo_fim de TODAS as verbas)</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="fieldgroup">
+          <div class="fieldgroup-title">Remunerações + Aviso</div>
+          <div class="grid-3">
+            <div class="campo">
+              <label>Maior Remuneração (R$) <span class="obrigatorio">*</span></label>
+              <input type="number" step="0.01" data-campo="parametros_calculo.valor_maior_remuneracao_brl">
+            </div>
+            <div class="campo">
+              <label>Última Remuneração (R$) <span class="obrigatorio">*</span></label>
+              <input type="number" step="0.01" data-campo="parametros_calculo.valor_ultima_remuneracao_brl">
+            </div>
+            <div class="campo">
+              <label>Apuração Aviso Prévio <span class="obrigatorio">*</span></label>
+              <select data-campo="parametros_calculo.apuracao_aviso_previo">
+                <option value="NAO_APURAR">Não apurar</option>
+                <option value="APURACAO_CALCULADA">Calculado</option>
+                <option value="APURACAO_INFORMADA">Informado</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Tipo Base Tabelada</label>
+              <select data-campo="parametros_calculo.tipo_base_tabelada">
+                <option value="INTEGRAL" selected>Tempo Integral</option>
+                <option value="PARCIAL">Tempo Parcial</option>
+                <option value="INTERMITENTE">Trabalho Intermitente</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Carga Horária Mensal</label>
+              <input type="number" step="0.5" data-campo="parametros_calculo.carga_horaria.padrao_mensal" value="220">
+            </div>
+          </div>
+          <div class="grid-4" style="margin-top: 10px;">
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.prescricao_quinquenal" checked> <label>Prescrição Quinquenal</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.prescricao_fgts"> <label>Prescrição FGTS</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.projeta_aviso_indenizado" checked> <label>Projeta Aviso Indenizado</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.zerar_valor_negativo" checked> <label>Zerar Valor Negativo</label></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ SEÇÃO 3: HISTÓRICO SALARIAL ═══════════ -->
+    <div class="card-secao" data-secao="historico_salarial">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">💰 Histórico Salarial</span>
+        <span class="badge ok" id="badge-historico"><span id="qtd-historicos">0</span> entradas</span>
+      </header>
+      <div class="corpo">
+        <div id="lista-historicos">
+          <!-- preenchido por JS -->
+        </div>
+        <button type="button" onclick="adicionarHistorico()" style="margin-top:8px;">+ Adicionar Histórico</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ SEÇÃO 4: VERBAS PRINCIPAIS (CORE) ═══════════ -->
+    <div class="card-secao" data-secao="verbas_principais">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">⭐ Verbas Principais</span>
+        <span class="badge ok" id="badge-verbas"><span id="qtd-verbas">0</span> verbas</span>
+      </header>
+      <div class="corpo">
+        <div id="lista-verbas">
+          <!-- preenchido por JS -->
+        </div>
+        <button type="button" onclick="adicionarVerba()" style="margin-top:8px;">+ Adicionar Verba</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ SEÇÕES SECUNDÁRIAS (collapsed por padrão) ═══════════ -->
+    {% for secao in ['cartao_de_ponto','faltas','ferias','fgts','contribuicao_social','imposto_de_renda','honorarios','custas_judiciais','correcao_juros_multa','liquidacao'] %}
+    <div class="card-secao collapsed" data-secao="{{ secao }}">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">{{ secao.replace('_',' ').title() }}</span>
+        <span class="badge ok">configurar</span>
+      </header>
+      <div class="corpo">
+        <p style="color:#6c757d; font-size:0.85rem;">
+          Campos editáveis carregados via JSON do schema v2.<br>
+          <em>(Editor inline detalhado para esta seção será expandido em sprint posterior — por hora,
+          dados são mantidos como JSON e enviados à automação.)</em>
+        </p>
+        <details>
+          <summary style="cursor:pointer; color:#1a3a6b; font-weight:600;">Ver/editar JSON</summary>
+          <textarea data-campo-json="{{ secao }}" rows="10" style="width:100%; font-family:monospace; font-size:0.82rem; margin-top:8px;"></textarea>
+        </details>
+      </div>
+    </div>
+    {% endfor %}
+
+    <!-- ═══════════ SEÇÕES OPCIONAIS (collapsed) ═══════════ -->
+    {% for secao in ['salario_familia','seguro_desemprego','previdencia_privada','pensao_alimenticia','multas_indenizacoes'] %}
+    <div class="card-secao collapsed" data-secao="{{ secao }}">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">{{ secao.replace('_',' ').title() }} <span style="opacity:0.7;font-size:0.8rem;">(opcional)</span></span>
+        <span class="badge">não aplicável</span>
+      </header>
+      <div class="corpo">
+        <textarea data-campo-json="{{ secao }}" rows="6" placeholder="null"
+          style="width:100%; font-family:monospace; font-size:0.82rem;"></textarea>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- ═══════════ SIDEBAR: VALIDAÇÃO ═══════════ -->
+  <aside class="sidebar-v2">
+    <div class="validador">
+      <h4>Validação</h4>
+      <div class="status-bar ok" id="status-bar">
+        <span id="status-texto">✓ Prévia Válida</span>
+        <span id="status-contador">0 erros</span>
+      </div>
+      <ul class="lista-pendencias" id="lista-pendencias">
+        <!-- preenchido por JS -->
+      </ul>
+      <button class="btn-confirmar-v2" id="btn-confirmar" onclick="confirmarPreviaV2()">
+        Confirmar e Iniciar Automação
+      </button>
+    </div>
+
+    <div class="validador" style="margin-top:14px;">
+      <h4>Schema v2.0</h4>
+      <p style="font-size:0.82rem; color:#6c757d; margin:0;">
+        ⭐ Sessão: <code style="font-size:0.78rem;">{{ sessao_id }}</code><br>
+        📋 Versão: 2.0<br>
+        ✅ Validação: Pydantic v2
+      </p>
+    </div>
+  </aside>
+</div>
+
+<script>
+const SESSAO_ID = "{{ sessao_id }}";
+let previaData = {{ previa_json|tojson|safe if previa_json else '{}' }};
+
+// ─── Carregar dados iniciais nos campos ────────────────────────────────
+function carregarPrevia() {
+  // Por enquanto, apenas preencher inputs simples via data-campo
+  document.querySelectorAll('[data-campo]').forEach(el => {
+    const path = el.dataset.campo;
+    const value = getValueByPath(previaData, path);
+    if (value !== undefined && value !== null) {
+      if (el.type === 'checkbox') el.checked = !!value;
+      else el.value = value;
+    }
+  });
+  // Renderizar listas dinâmicas
+  renderHistoricos();
+  renderVerbas();
+  // JSON textareas para seções não-detalhadas
+  document.querySelectorAll('[data-campo-json]').forEach(el => {
+    const secao = el.dataset.campoJson;
+    el.value = JSON.stringify(previaData[secao] ?? null, null, 2);
+  });
+  validarPrevia();
+}
+
+function getValueByPath(obj, path) {
+  return path.split('.').reduce((acc, key) => acc && acc[key] !== undefined ? acc[key] : null, obj);
+}
+
+function setValueByPath(obj, path, value) {
+  const keys = path.split('.');
+  let cursor = obj;
+  for (let i = 0; i < keys.length - 1; i++) {
+    if (cursor[keys[i]] === undefined || cursor[keys[i]] === null) cursor[keys[i]] = {};
+    cursor = cursor[keys[i]];
+  }
+  cursor[keys[keys.length - 1]] = value;
+}
+
+// ─── Auto-save em todos os inputs ───────────────────────────────────────
+document.addEventListener('change', e => {
+  const el = e.target;
+  if (el.dataset.campo) {
+    const v = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? parseFloat(el.value) : el.value);
+    setValueByPath(previaData, el.dataset.campo, v);
+    validarPrevia();
+  }
+  if (el.dataset.campoJson) {
+    try {
+      previaData[el.dataset.campoJson] = JSON.parse(el.value);
+      validarPrevia();
+    } catch (err) {
+      console.warn('JSON inválido em', el.dataset.campoJson);
+    }
+  }
+});
+
+// ─── Histórico Salarial ────────────────────────────────────────────────
+function renderHistoricos() {
+  const list = document.getElementById('lista-historicos');
+  list.innerHTML = '';
+  const arr = previaData.historico_salarial || [];
+  arr.forEach((h, idx) => list.appendChild(htmlHistorico(h, idx)));
+  document.getElementById('qtd-historicos').textContent = arr.length;
+}
+
+function htmlHistorico(h, idx) {
+  const div = document.createElement('div');
+  div.className = 'fieldgroup';
+  div.innerHTML = `
+    <div class="fieldgroup-title">${h.nome || `Histórico ${idx+1}`}
+      <button onclick="removerHistorico(${idx})" style="float:right; color:#e74c3c; background:none; border:none; cursor:pointer;">✕</button>
+    </div>
+    <div class="grid-3">
+      <div class="campo col-span-full">
+        <label>Nome</label>
+        <input type="text" value="${h.nome||''}" onchange="previaData.historico_salarial[${idx}].nome=this.value; validarPrevia()">
+      </div>
+      <div class="campo">
+        <label>Parcela</label>
+        <select onchange="previaData.historico_salarial[${idx}].parcela=this.value; validarPrevia()">
+          <option value="FIXA"${h.parcela==='FIXA'?' selected':''}>Fixa</option>
+          <option value="VARIAVEL"${h.parcela==='VARIAVEL'?' selected':''}>Variável</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label>Competência Inicial (MM/YYYY)</label>
+        <input type="text" value="${h.competencia_inicial||''}" onchange="previaData.historico_salarial[${idx}].competencia_inicial=this.value; validarPrevia()">
+      </div>
+      <div class="campo">
+        <label>Competência Final (MM/YYYY)</label>
+        <input type="text" value="${h.competencia_final||''}" onchange="previaData.historico_salarial[${idx}].competencia_final=this.value; validarPrevia()">
+      </div>
+      <div class="campo">
+        <label>Tipo Valor</label>
+        <select onchange="previaData.historico_salarial[${idx}].tipo_valor=this.value; renderHistoricos(); validarPrevia()">
+          <option value="INFORMADO"${h.tipo_valor==='INFORMADO'?' selected':''}>Informado</option>
+          <option value="CALCULADO"${h.tipo_valor==='CALCULADO'?' selected':''}>Calculado</option>
+        </select>
+      </div>
+      <div class="campo">
+        <label>Valor R$ ${h.tipo_valor==='CALCULADO'?'(N/A)':''}</label>
+        <input type="number" step="0.01" value="${h.valor_brl||''}" ${h.tipo_valor==='CALCULADO'?'disabled':''} onchange="previaData.historico_salarial[${idx}].valor_brl=parseFloat(this.value); validarPrevia()">
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="checkbox-row"><input type="checkbox"${h.incidencias?.fgts!==false?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.fgts=this.checked"> <label>FGTS</label></div>
+      <div class="checkbox-row"><input type="checkbox"${h.incidencias?.cs_inss!==false?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.cs_inss=this.checked"> <label>CS/INSS</label></div>
+    </div>
+  `;
+  return div;
+}
+
+function adicionarHistorico() {
+  if (!previaData.historico_salarial) previaData.historico_salarial = [];
+  previaData.historico_salarial.push({
+    nome: 'NOVO HISTÓRICO',
+    parcela: 'FIXA',
+    incidencias: {fgts: true, cs_inss: true},
+    competencia_inicial: '',
+    competencia_final: '',
+    tipo_valor: 'INFORMADO',
+    valor_brl: 0
+  });
+  renderHistoricos();
+}
+
+function removerHistorico(idx) {
+  if (confirm('Remover histórico?')) {
+    previaData.historico_salarial.splice(idx, 1);
+    renderHistoricos();
+    validarPrevia();
+  }
+}
+
+// ─── Verbas Principais ────────────────────────────────────────────────
+function renderVerbas() {
+  const list = document.getElementById('lista-verbas');
+  list.innerHTML = '';
+  const arr = previaData.verbas_principais || [];
+  arr.forEach((v, idx) => list.appendChild(htmlVerba(v, idx)));
+  document.getElementById('qtd-verbas').textContent = arr.length;
+}
+
+function htmlVerba(v, idx) {
+  const card = document.createElement('div');
+  card.className = 'verba-card collapsed';
+  const p = v.parametros || {};
+  const valor = p.valor_devido?.valor_informado_brl || (p.formula_calculado ? 'Calculado' : '—');
+  card.innerHTML = `
+    <header onclick="this.parentElement.classList.toggle('collapsed')">
+      <span class="nome-verba">${idx+1}. ${v.nome_pjecalc || v.nome_sentenca || '(sem nome)'}</span>
+      <span style="display:flex; gap:6px; align-items:center;">
+        <span class="meta-verba">${p.periodo_inicio || '?'} → ${p.periodo_fim || '?'}</span>
+        <span class="estrategia ${v.estrategia_preenchimento||'manual'}">${v.estrategia_preenchimento||'manual'}</span>
+        <span class="meta-verba">${typeof valor==='number' ? 'R$ '+valor.toFixed(2) : valor}</span>
+      </span>
+    </header>
+    <div class="corpo">
+      <div class="grid-2">
+        <div class="campo col-span-full">
+          <label>Nome (sentença)</label>
+          <input type="text" value="${v.nome_sentenca||''}" onchange="previaData.verbas_principais[${idx}].nome_sentenca=this.value">
+        </div>
+        <div class="campo">
+          <label>Estratégia <span class="obrigatorio">*</span></label>
+          <select onchange="previaData.verbas_principais[${idx}].estrategia_preenchimento=this.value; renderVerbas()">
+            <option value="expresso_direto"${v.estrategia_preenchimento==='expresso_direto'?' selected':''}>Expresso Direto</option>
+            <option value="expresso_adaptado"${v.estrategia_preenchimento==='expresso_adaptado'?' selected':''}>Expresso Adaptado</option>
+            <option value="manual"${v.estrategia_preenchimento==='manual'?' selected':''}>Manual</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Verba Expresso Alvo</label>
+          <input type="text" value="${v.expresso_alvo||''}" onchange="previaData.verbas_principais[${idx}].expresso_alvo=this.value">
+        </div>
+        <div class="campo col-span-full">
+          <label>Nome no PJE-Calc <span class="obrigatorio">*</span></label>
+          <input type="text" value="${v.nome_pjecalc||''}" onchange="previaData.verbas_principais[${idx}].nome_pjecalc=this.value">
+        </div>
+      </div>
+
+      <div class="fieldgroup" style="margin-top:10px;">
+        <div class="fieldgroup-title">Parâmetros — Valor</div>
+        <div class="grid-3">
+          <div class="campo">
+            <label>Tipo de Valor <span class="obrigatorio">*</span></label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.valor=this.value; renderVerbas()">
+              <option value="CALCULADO"${p.valor==='CALCULADO'?' selected':''}>Calculado</option>
+              <option value="INFORMADO"${p.valor==='INFORMADO'?' selected':''}>Informado</option>
+            </select>
+          </div>
+          ${p.valor==='INFORMADO' ? `
+            <div class="campo col-span-2">
+              <label>Valor Devido Mensal (R$) <span class="obrigatorio">*</span></label>
+              <input type="number" step="0.01" value="${p.valor_devido?.valor_informado_brl||''}"
+                onchange="if(!previaData.verbas_principais[${idx}].parametros.valor_devido) previaData.verbas_principais[${idx}].parametros.valor_devido={tipo:'INFORMADO'}; previaData.verbas_principais[${idx}].parametros.valor_devido.valor_informado_brl=parseFloat(this.value); validarPrevia()">
+            </div>
+          ` : `
+            <div class="campo col-span-2">
+              <label>Fórmula (CALCULADO)</label>
+              <textarea rows="3" onchange="try{previaData.verbas_principais[${idx}].parametros.formula_calculado=JSON.parse(this.value);validarPrevia()}catch(e){alert('JSON inválido')}">${JSON.stringify(p.formula_calculado||{}, null, 2)}</textarea>
+              <span class="ajuda">JSON: base_calculo, divisor, multiplicador, quantidade</span>
+            </div>
+          `}
+          <div class="campo">
+            <label>Característica</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.caracteristica=this.value">
+              <option value="COMUM"${p.caracteristica==='COMUM'?' selected':''}>Comum</option>
+              <option value="DECIMO_TERCEIRO_SALARIO"${p.caracteristica==='DECIMO_TERCEIRO_SALARIO'?' selected':''}>13º Salário</option>
+              <option value="AVISO_PREVIO"${p.caracteristica==='AVISO_PREVIO'?' selected':''}>Aviso Prévio</option>
+              <option value="FERIAS"${p.caracteristica==='FERIAS'?' selected':''}>Férias</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Ocorrência Pagamento</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.ocorrencia_pagamento=this.value">
+              <option value="MENSAL"${p.ocorrencia_pagamento==='MENSAL'?' selected':''}>Mensal</option>
+              <option value="DEZEMBRO"${p.ocorrencia_pagamento==='DEZEMBRO'?' selected':''}>Dezembro</option>
+              <option value="DESLIGAMENTO"${p.ocorrencia_pagamento==='DESLIGAMENTO'?' selected':''}>Desligamento</option>
+              <option value="PERIODO_AQUISITIVO"${p.ocorrencia_pagamento==='PERIODO_AQUISITIVO'?' selected':''}>Período Aquisitivo</option>
+            </select>
+          </div>
+          <div class="campo">
+            <label>Período Início <span class="obrigatorio">*</span></label>
+            <input type="text" value="${p.periodo_inicio||''}" placeholder="DD/MM/YYYY" onchange="previaData.verbas_principais[${idx}].parametros.periodo_inicio=this.value; validarPrevia()">
+          </div>
+          <div class="campo">
+            <label>Período Fim <span class="obrigatorio">*</span></label>
+            <input type="text" value="${p.periodo_fim||''}" placeholder="DD/MM/YYYY" onchange="previaData.verbas_principais[${idx}].parametros.periodo_fim=this.value; validarPrevia()">
+          </div>
+        </div>
+      </div>
+
+      <div class="fieldgroup">
+        <div class="fieldgroup-title">Incidências</div>
+        <div class="grid-4">
+          ${['irpf','cs_inss','fgts','previdencia_privada','pensao_alimenticia'].map(inc => `
+            <div class="checkbox-row">
+              <input type="checkbox"${p.incidencias?.[inc]?' checked':''}
+                onchange="if(!previaData.verbas_principais[${idx}].parametros.incidencias) previaData.verbas_principais[${idx}].parametros.incidencias={}; previaData.verbas_principais[${idx}].parametros.incidencias['${inc}']=this.checked">
+              <label>${inc.toUpperCase().replace('_',' ')}</label>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      ${v.reflexos && v.reflexos.length > 0 ? `
+      <div class="reflexos-list">
+        <div class="fieldgroup-title">Reflexos (${v.reflexos.length})</div>
+        ${v.reflexos.map((r, ri) => `
+          <div class="reflexo-item">
+            <span class="nome">${r.nome}</span>
+            <span class="estrategia-mini ${r.estrategia_reflexa}">${r.estrategia_reflexa}</span>
+            <button onclick="if(confirm('Remover reflexo?')){previaData.verbas_principais[${idx}].reflexos.splice(${ri},1);renderVerbas()}"
+              style="color:#e74c3c; background:none; border:none; cursor:pointer;">✕</button>
+          </div>
+        `).join('')}
+      </div>
+      ` : ''}
+
+      <button onclick="adicionarReflexo(${idx})" style="margin-top:8px; font-size:0.85rem;">+ Adicionar Reflexo</button>
+      <button onclick="if(confirm('Remover verba?')){previaData.verbas_principais.splice(${idx},1);renderVerbas();validarPrevia()}"
+        style="margin-top:8px; font-size:0.85rem; color:#e74c3c; float:right;">🗑️ Remover Verba</button>
+    </div>
+  `;
+  return card;
+}
+
+function adicionarVerba() {
+  if (!previaData.verbas_principais) previaData.verbas_principais = [];
+  const idx = previaData.verbas_principais.length;
+  previaData.verbas_principais.push({
+    id: `v${String(idx+1).padStart(2,'0')}`,
+    nome_sentenca: 'NOVA VERBA',
+    estrategia_preenchimento: 'expresso_direto',
+    expresso_alvo: '',
+    nome_pjecalc: 'NOVA VERBA',
+    parametros: {
+      assunto_cnj: {codigo: 0, label: ''},
+      parcela: 'FIXA',
+      valor: 'INFORMADO',
+      incidencias: {irpf: false, cs_inss: false, fgts: false, previdencia_privada: false, pensao_alimenticia: false},
+      caracteristica: 'COMUM',
+      ocorrencia_pagamento: 'MENSAL',
+      ocorrencia_ajuizamento: 'OCORRENCIAS_VENCIDAS',
+      tipo: 'PRINCIPAL',
+      gerar_reflexa: 'DIFERENCA',
+      gerar_principal: 'DIFERENCA',
+      compor_principal: true,
+      zerar_valor_negativo: false,
+      periodo_inicio: '',
+      periodo_fim: '',
+      exclusoes: {faltas_justificadas: false, faltas_nao_justificadas: false, ferias_gozadas: false, dobrar_valor_devido: false},
+      valor_devido: {tipo: 'INFORMADO', valor_informado_brl: 0, proporcionalizar: false},
+      formula_calculado: null,
+      valor_pago: {tipo: 'INFORMADO', valor_brl: 0, proporcionalizar: false},
+      comentarios: null
+    },
+    ocorrencias_override: null,
+    reflexos: []
+  });
+  renderVerbas();
+  validarPrevia();
+}
+
+function adicionarReflexo(verbaIdx) {
+  const v = previaData.verbas_principais[verbaIdx];
+  if (!v.reflexos) v.reflexos = [];
+  const ri = v.reflexos.length;
+  v.reflexos.push({
+    id: `r${String(verbaIdx+1).padStart(2,'0')}-${String(ri+1).padStart(2,'0')}`,
+    nome: 'NOVO REFLEXO',
+    estrategia_reflexa: 'checkbox_painel',
+    expresso_reflex_alvo: '',
+    parametros_override: null,
+    ocorrencias_override: null
+  });
+  renderVerbas();
+}
+
+// ─── Validação ────────────────────────────────────────────────────────
+async function validarPrevia() {
+  const lista = document.getElementById('lista-pendencias');
+  const statusBar = document.getElementById('status-bar');
+  const statusTexto = document.getElementById('status-texto');
+  const statusContador = document.getElementById('status-contador');
+  const btn = document.getElementById('btn-confirmar');
+
+  // Validação local rápida (campos obrigatórios)
+  const erros = [];
+  const obrig = [
+    ['processo.numero_processo', 'Número do processo'],
+    ['processo.reclamante.nome', 'Nome do reclamante'],
+    ['processo.reclamado.nome', 'Nome do reclamado'],
+    ['parametros_calculo.estado_uf', 'UF'],
+    ['parametros_calculo.municipio', 'Município'],
+    ['parametros_calculo.data_admissao', 'Data admissão'],
+    ['parametros_calculo.data_demissao', 'Data demissão'],
+    ['parametros_calculo.data_termino_calculo', 'Data término cálculo'],
+    ['parametros_calculo.valor_ultima_remuneracao_brl', 'Última remuneração']
+  ];
+  obrig.forEach(([path, label]) => {
+    const v = getValueByPath(previaData, path);
+    if (v === null || v === undefined || v === '') erros.push(`${label} obrigatório`);
+  });
+
+  if (!previaData.historico_salarial || previaData.historico_salarial.length === 0) {
+    erros.push('Histórico Salarial: ao menos 1 entrada');
+  }
+  if (!previaData.verbas_principais || previaData.verbas_principais.length === 0) {
+    erros.push('Verbas Principais: ao menos 1 verba deferida');
+  }
+  (previaData.verbas_principais || []).forEach((v, idx) => {
+    const p = v.parametros || {};
+    if (p.valor === 'INFORMADO' && (!p.valor_devido?.valor_informado_brl || p.valor_devido.valor_informado_brl <= 0)) {
+      erros.push(`Verba ${idx+1} (${v.nome_pjecalc||'?'}): valor informado ausente ou zero`);
+    }
+    if (p.valor === 'CALCULADO' && !p.formula_calculado) {
+      erros.push(`Verba ${idx+1} (${v.nome_pjecalc||'?'}): fórmula calculado ausente`);
+    }
+    if (!p.periodo_inicio) erros.push(`Verba ${idx+1}: período início`);
+    if (!p.periodo_fim) erros.push(`Verba ${idx+1}: período fim`);
+  });
+
+  // Render
+  lista.innerHTML = '';
+  if (erros.length === 0) {
+    statusBar.className = 'status-bar ok';
+    statusTexto.textContent = '✓ Prévia Válida';
+    statusContador.textContent = '0 erros';
+    btn.disabled = false;
+  } else {
+    statusBar.className = 'status-bar erro';
+    statusTexto.textContent = '✗ Pendências';
+    statusContador.textContent = `${erros.length} erros`;
+    erros.forEach(e => {
+      const li = document.createElement('li');
+      li.textContent = e;
+      lista.appendChild(li);
+    });
+    btn.disabled = true;
+  }
+
+  // Auto-save no servidor
+  fetch(`/api/previa/v2/${SESSAO_ID}/salvar`, {
+    method: 'PATCH',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(previaData)
+  }).catch(e => console.warn('save failed', e));
+}
+
+// ─── Confirmar ────────────────────────────────────────────────────────
+async function confirmarPreviaV2() {
+  if (!confirm('Confirmar prévia e iniciar automação?')) return;
+  const r = await fetch(`/api/previa/v2/${SESSAO_ID}/confirmar`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(previaData)
+  });
+  if (r.ok) {
+    window.location.href = `/instrucoes/${SESSAO_ID}`;
+  } else {
+    const err = await r.json();
+    alert('Erro: ' + (err.detail || 'verificar pendências'));
+  }
+}
+
+// ─── Init ────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', carregarPrevia);
+</script>
+{% endblock %}
