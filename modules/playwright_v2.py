@@ -900,126 +900,122 @@ class PlaywrightAutomatorV2:
         self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
 
     def _selecionar_assunto_cnj(self, codigo: int = 2581) -> bool:
-        """Seleciona Assunto CNJ via modal-árvore (lupa).
+        """Seleciona Assunto CNJ via modal-árvore.
 
-        Fluxo (confirmado pelo usuário):
-        1. Click lupa do campo Assuntos CNJ.
-        2. Modal árvore abre.
-        3. Click no folder/item com o código alvo (2581 padrão = Remuneração).
-        4. Click "Selecionar".
-        Retorna True em sucesso.
+        IDs reais confirmados (PJE-Calc 2.15.1, inspeção via Chrome MCP):
+        - Lupa: `formulario:linkModalAssunto` (com onclick que chama
+          Richfaces.showModalPanel('modalCNJ')).
+        - Tree node TEXT (clicável p/ selecionar): TD com id
+          `formularioModalCNJ:arv:864:{codigo}::_defaultNodeFace:text`
+          — adquire classe `rich-tree-node-selected` após click.
+        - Botão Selecionar: `btnSelecionarCNJ` (ID simples, sem prefix).
+        - Modal mask: `modalCNJDiv` (visibilidade via display style).
+        - Form do modal: `formularioModalCNJ` (separado do form principal).
         """
         # 1. Click lupa
-        lupa_clicado = self._page.evaluate(
-            """() => {
-                const sels = [
-                    'a[id*="assuntosCnj"][id*="btn"]',
-                    'input[id*="btnAssunto"]',
-                    '[id$="btnBuscarAssuntoCnj"]',
-                    'a[onclick*="modalCNJ"]',
-                    'a[onclick*="modalAssunto"]',
-                    'img[id*="assuntosCnj"]'
-                ];
-                for (const sel of sels) {
-                    const el = document.querySelector(sel);
-                    if (el) {
-                        (el.closest('a') || el).click();
-                        return sel;
-                    }
-                }
-                return null;
-            }"""
-        )
-        if not lupa_clicado:
-            self.log(f"    ⚠ Botão lupa Assunto CNJ não encontrado")
+        try:
+            lupa = self._page.locator(
+                "a[id='formulario:linkModalAssunto'], a[id$=':linkModalAssunto']"
+            )
+            if lupa.count() == 0:
+                self.log(f"    ⚠ Botão lupa Assunto CNJ não encontrado")
+                return False
+            lupa.first.click(force=True)
+        except Exception as e:
+            self.log(f"    ⚠ Click lupa: {e}")
             return False
         self._aguardar_ajax(5000)
         self._page.wait_for_timeout(1500)
 
-        # 2. Click no item com o código no modal árvore
-        item_clicado = self._page.evaluate(
+        # 2. Click no TD :text do nó (não na TABLE inteira) — só assim
+        # RichFaces aplica `rich-tree-node-selected` e habilita Selecionar.
+        # IDs do nó incluem "arv:864:{codigo}" no caminho. Há várias
+        # variações dependendo do ramo da árvore (alguns são folhas
+        # diretas, outros têm sub-nós).
+        node_clicado = self._page.evaluate(
             """(codigo) => {
-                const containers = [...document.querySelectorAll(
-                    '[id*="modalCNJ"], [id*="modalAssunto"]'
-                )];
-                if (containers.length === 0) return 'sem-modal';
-                for (const c of containers) {
-                    // Procurar elemento que comece com "<codigo> -" ou "<codigo>-"
-                    const candidates = [...c.querySelectorAll('a, span, td, div')];
-                    for (const el of candidates) {
-                        const t = (el.textContent||'').trim();
-                        if (t.startsWith(codigo + ' -') || t.startsWith(codigo + '-') ||
-                            t.startsWith(codigo + ' ') || t === codigo) {
-                            // Click no row inteiro se for tr/td
-                            const tr = el.closest('tr') || el;
-                            tr.click();
-                            return 'matched';
-                        }
+                // Tenta vários padrões de ID
+                const patterns = [
+                    `formularioModalCNJ:arv:864:${codigo}::_defaultNodeFace:text`,
+                ];
+                for (const p of patterns) {
+                    const td = document.getElementById(p);
+                    if (td) {
+                        td.click();
+                        td.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+                        td.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+                        return p;
                     }
                 }
-                return 'codigo-nao-encontrado';
+                // Fallback: buscar por texto "{codigo} -" no TD :text
+                const tds = [...document.querySelectorAll('td.rich-tree-node-text')];
+                for (const td of tds) {
+                    const t = (td.textContent||'').trim();
+                    if (t.startsWith(codigo + ' -') || t.startsWith(codigo + ' ')) {
+                        td.click();
+                        td.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}));
+                        td.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+                        return 'fallback-by-text';
+                    }
+                }
+                return null;
             }""",
             str(codigo),
         )
-        self.log(f"    → Modal CNJ item ({codigo}): {item_clicado}")
+        if not node_clicado:
+            self.log(f"    ⚠ Nó CNJ {codigo} não encontrado na árvore")
+            self._fechar_modal_cnj()
+            return False
+        self.log(f"    → Nó CNJ selecionado via: {node_clicado}")
         self._page.wait_for_timeout(800)
 
-        # 3. Click "Selecionar" — usar Playwright locator com force=True
-        # (evaluate-only não dispara JSF/AJAX corretamente em alguns casos).
+        # 3. Click "Selecionar" via locator + ID exato
         try:
-            btn_sel = self._page.locator(
-                "[id*='modalCNJ'] input[value='Selecionar'], "
-                "[id*='modalAssunto'] input[value='Selecionar'], "
-                "[id*='modalCNJ'] [id$='btnSelecionarCNJ']"
-            )
-            if btn_sel.count() > 0:
-                btn_sel.first.click(force=True)
-                self._aguardar_ajax(5000)
-                # Aguardar modal fechar (mask div some)
-                try:
-                    self._page.wait_for_selector(
-                        "div#modalCNJDiv", state="hidden", timeout=8000
-                    )
-                except Exception:
-                    pass
-                self.log(f"    ✓ Assunto CNJ selecionado: {codigo}")
-                return True
+            btn = self._page.locator("input#btnSelecionarCNJ")
+            if btn.count() == 0:
+                # Fallback: buscar por value
+                btn = self._page.locator("input[value='Selecionar'][type='button'], input[value='Selecionar'][type='submit']")
+            btn.first.click(force=True)
+            self._aguardar_ajax(5000)
         except Exception as e:
-            self.log(f"    ⚠ Botão Selecionar (locator): {e}")
+            self.log(f"    ⚠ Click btnSelecionarCNJ: {e}")
+            self._fechar_modal_cnj()
+            return False
 
-        # Fallback: tentar via evaluate (último recurso)
+        # 4. Verificar que assunto foi setado
+        try:
+            valor_atual = self._page.locator(
+                "input[id='formulario:assuntosCnj']"
+            ).input_value(timeout=3000)
+            if str(codigo) in (valor_atual or ""):
+                self.log(f"    ✓ Assunto CNJ confirmado: {valor_atual}")
+                # Garantir que modal feche
+                self._fechar_modal_cnj(silent=True)
+                return True
+        except Exception:
+            pass
+
+        self.log(f"    ⚠ Assunto CNJ não confirmou — fechando modal")
+        self._fechar_modal_cnj()
+        return False
+
+    def _fechar_modal_cnj(self, silent: bool = False) -> None:
+        """Tenta fechar modal CNJ (Cancelar/X) caso ainda visível."""
         try:
             self._page.evaluate(
                 """() => {
-                    const btns = [...document.querySelectorAll(
-                        '[id*="modalCNJ"] input, [id*="modalAssunto"] input'
-                    )];
-                    for (const b of btns) {
-                        if ((b.value||'').trim() === 'Selecionar' && !b.disabled) {
-                            b.click();
-                            return true;
-                        }
+                    if (typeof Richfaces !== 'undefined' && Richfaces.hideModalPanel) {
+                        Richfaces.hideModalPanel('modalCNJ');
+                        return true;
                     }
                     return false;
                 }"""
             )
-            self._aguardar_ajax(5000)
+            self._aguardar_ajax(2000)
+            if not silent:
+                self.log(f"    ⓘ Modal CNJ fechado via Richfaces.hideModalPanel")
         except Exception:
             pass
-
-        # Se modal ainda visível, fechar via Cancelar para não bloquear Salvar
-        try:
-            cancel = self._page.locator(
-                "[id*='modalCNJ'] input[value*='Cancelar'], "
-                "[id*='modalCNJ'] [id*='close']"
-            )
-            if cancel.count() > 0:
-                cancel.first.click(force=True)
-                self._aguardar_ajax(3000)
-                self.log(f"    ⚠ Modal CNJ fechado via Cancelar (CNJ {codigo} não selecionado)")
-        except Exception:
-            pass
-        return False
 
     def _criar_reflexo_manual(self, verba_principal, reflexo) -> None:
         """Cria reflexo via Manual (verba separada com Tipo=REFLEXO).
