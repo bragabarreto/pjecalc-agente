@@ -652,13 +652,45 @@ class PlaywrightAutomatorV2:
         for v in verbas_manual:
             self._lancar_verba_manual(v)
 
-        # 4c. Pós-Expresso: navegar à listagem + ajustar parâmetros + reflexos
-        # Após o save do Expresso, página fica em verbas-para-calculo.jsf — precisa
-        # forçar nav para verba-calculo.jsf para ver o listing das criadas.
+        # 4c. Pós-Expresso: navegar à listagem + ajustar parâmetros + reflexos.
+        # BUG CONHECIDO PJE-Calc 2.15.1: ApresentadorVerbaDeCalculo
+        # .carregarBasesParaPrincipal lança NPE após Expresso, impedindo
+        # renderização. Workaround: double-hop (Dados do Cálculo → Verbas)
+        # via menu sidebar — força re-init do bean. Se ainda 500/empty,
+        # reload da página.
         if verbas_expresso:
+            self._navegar_menu("li_calculo_dados_do_calculo")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1500)
             self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
+            # Detectar 500/NPE e tentar recovery via reload
+            tem_erro = self._page.evaluate(
+                """() => {
+                    const body = (document.body?.textContent || '');
+                    return body.includes('HTTP Status 500') ||
+                           body.includes('NullPointerException') ||
+                           body.includes('Erro inesperado') ||
+                           body.includes('ViewExpiredException');
+                }"""
+            )
+            tem_listagem = self._page.evaluate(
+                """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
+            )
+            if tem_erro or not tem_listagem:
+                self.log(f"  ⚠ verba-calculo.jsf vazia/erro — reload + retry")
+                try:
+                    self._page.reload(wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+                except Exception:
+                    pass
+                tem_listagem = self._page.evaluate(
+                    """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
+                )
+                if not tem_listagem:
+                    self.log(f"  ⚠ Listagem ainda vazia após reload — verbas Expresso podem não ter persistido")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
