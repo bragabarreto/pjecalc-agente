@@ -1890,6 +1890,31 @@ class PlaywrightAutomatorV2:
         dest = out_dir / nome_pjc
 
         try:
+            # Localizar botão Exportar — cascata de seletores (v1 confirma
+            # que pode ser type='submit' OU type='button'; class='botao').
+            btn = None
+            for sel in [
+                "input[type='submit'][id$=':exportar']",
+                "input[type='button'][id$=':exportar']",
+                "input[id$=':exportar'][value='Exportar']",
+                "input.botao[value='Exportar']",
+                "input[value='Exportar'][type='submit']",
+                "input[value='Exportar']",
+            ]:
+                loc = self._page.locator(sel)
+                if loc.count() > 0 and loc.first.is_visible():
+                    btn = loc.first
+                    self.log(f"  → Botão Exportar: {sel}")
+                    break
+            if not btn:
+                # Diagnóstico: dump inputs visíveis na página
+                _diag = self._page.evaluate(
+                    """() => [...document.querySelectorAll('input[type=submit],input[type=button]')]
+                        .filter(e => e.offsetParent)
+                        .map(e => `${e.id}=${e.value}`).slice(0, 15)"""
+                )
+                raise RuntimeError(f"Botão Exportar não encontrado. Inputs visíveis: {_diag}")
+
             with self._page.expect_response(
                 lambda r: (
                     "exportacao.jsf" in r.url
@@ -1901,9 +1926,7 @@ class PlaywrightAutomatorV2:
                 ),
                 timeout=60000,
             ) as resp_info:
-                # Clicar botão Exportar (input[type=submit] id termina em :exportar)
-                btn = self._page.locator("input[type='submit'][id$=':exportar']").first
-                btn.click()
+                btn.click(force=True)
             resp = resp_info.value
             pjc_bytes = resp.body()
         except Exception as e:
