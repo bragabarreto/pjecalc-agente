@@ -450,22 +450,30 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⚠ Processo {num} não encontrado nos Recentes ({n_opts} itens)")
                 return False
 
+            opt_text_chosen = (options.nth(found_idx).text_content() or "").strip()[:60]
+            self.log(f"  → Recentes: tentando reabrir item {found_idx+1}/{n_opts}: '{opt_text_chosen}'")
             opt_el = options.nth(found_idx)
             opt_el.click()
             self._page.wait_for_timeout(300)
-            opt_el.dblclick()
+            try:
+                opt_el.dblclick()
+            except Exception as e:
+                self.log(f"    ⚠ dblclick: {e}")
             self._aguardar_ajax(30000)
             self._page.wait_for_timeout(2000)
 
             url_after = self._page.url
+            self.log(f"  → URL pós-reabrir: {url_after[-80:]}")
             if "calculo" in url_after and "conversationId=" in url_after:
                 old_conv = self._calculo_conversation_id
                 self._calculo_conversation_id = url_after.split("conversationId=")[1].split("&")[0]
                 self.log(f"  ✓ Cálculo reaberto via Recentes (conv {old_conv} → {self._calculo_conversation_id})")
                 return True
+            self.log(f"  ⚠ Reabrir não navegou para calculo.jsf — URL atual: {url_after[-80:]}")
             return False
         except Exception as e:
-            self.log(f"  ⚠ _reabrir_calculo_via_recentes: {e}")
+            import traceback
+            self.log(f"  ⚠ _reabrir_calculo_via_recentes: {type(e).__name__}: {e}")
             return False
 
     def _abrir_pjecalc(self) -> None:
