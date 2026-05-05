@@ -394,6 +394,80 @@ class PlaywrightAutomatorV2:
 
     # ─── Fases ─────────────────────────────────────────────────────────────
 
+    def _reabrir_calculo_via_recentes(self) -> bool:
+        """Volta para principal e reabre cálculo via lista 'Recentes'.
+
+        Workaround para NPE pós-Expresso: cria nova conversação Seam limpa
+        atualizando self._calculo_conversation_id. Documentado em v1
+        (playwright_pjecalc.py linha 3058).
+
+        Returns True se reabriu com sucesso.
+        """
+        try:
+            self._page.goto(
+                f"{self.pjecalc_url}/pages/principal.jsf",
+                wait_until="domcontentloaded", timeout=15000,
+            )
+            self._page.wait_for_timeout(2000)
+            self._aguardar_ajax(8000)
+
+            listbox = self._page.locator(
+                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+            )
+            if listbox.count() == 0:
+                self.log("  ⚠ Lista de Cálculos Recentes não encontrada — pulando reabrir")
+                return False
+
+            n_opts = listbox.first.locator("option").count()
+            if n_opts == 0:
+                return False
+
+            # Achar pelo CNJ do processo
+            num = self.previa.processo.numero_processo
+            num_clean = num.replace(".", "").replace("-", "").replace("/", "")
+            found_idx = None
+            options = listbox.first.locator("option")
+            for i in range(n_opts):
+                opt_text = (options.nth(i).text_content() or "")
+                if num_clean in opt_text.replace(".", "").replace("-", "").replace("/", ""):
+                    found_idx = i
+                    break
+
+            # Fallback: pelo nome do reclamante
+            if found_idx is None:
+                rec = (self.previa.processo.reclamante.nome or "").upper()
+                if len(rec) >= 5:
+                    for i in range(n_opts):
+                        if rec in (options.nth(i).text_content() or "").upper():
+                            found_idx = i
+                            break
+
+            # Último: 1 item só na lista
+            if found_idx is None and n_opts == 1:
+                found_idx = 0
+
+            if found_idx is None:
+                self.log(f"  ⚠ Processo {num} não encontrado nos Recentes ({n_opts} itens)")
+                return False
+
+            opt_el = options.nth(found_idx)
+            opt_el.click()
+            self._page.wait_for_timeout(300)
+            opt_el.dblclick()
+            self._aguardar_ajax(30000)
+            self._page.wait_for_timeout(2000)
+
+            url_after = self._page.url
+            if "calculo" in url_after and "conversationId=" in url_after:
+                old_conv = self._calculo_conversation_id
+                self._calculo_conversation_id = url_after.split("conversationId=")[1].split("&")[0]
+                self.log(f"  ✓ Cálculo reaberto via Recentes (conv {old_conv} → {self._calculo_conversation_id})")
+                return True
+            return False
+        except Exception as e:
+            self.log(f"  ⚠ _reabrir_calculo_via_recentes: {e}")
+            return False
+
     def _abrir_pjecalc(self) -> None:
         self._page.goto(f"{self.pjecalc_url}/pages/principal.jsf", timeout=30000)
         self._aguardar_ajax()
@@ -678,16 +752,21 @@ class PlaywrightAutomatorV2:
         for v in verbas_manual:
             self._lancar_verba_manual(v)
 
-        # 4c. Pós-Expresso: navegar à listagem + ajustar parâmetros + reflexos.
-        # BUG CONHECIDO PJE-Calc 2.15.1: ApresentadorVerbaDeCalculo
-        # .carregarBasesParaPrincipal lança NPE após Expresso, impedindo
-        # renderização. Workaround: double-hop (Dados do Cálculo → Verbas)
-        # via menu sidebar — força re-init do bean. Se ainda 500/empty,
-        # reload da página.
+        # 4c. Pós-Expresso: REABRIR CÁLCULO via Recentes (workaround NPE).
+        # Bug PJE-Calc 2.15.1: ApresentadorVerbaDeCalculo.carregarBasesParaPrincipal
+        # lança NPE após Expresso save, corrompendo a conversação Seam e impedindo
+        # renderização de TODAS as views subsequentes (verba-calculo, fgts, inss,
+        # irpf, custas, correção, liquidar). Solução v1: voltar para principal e
+        # reabrir cálculo via dropdown "Cálculos Recentes" — cria nova conversação
+        # Seam limpa.
         if verbas_expresso:
-            self._navegar_menu("li_calculo_dados_do_calculo")
-            self._aguardar_ajax(8000)
-            self._page.wait_for_timeout(1500)
+            self.log("  → Workaround NPE: reabrindo cálculo via Recentes")
+            ok = self._reabrir_calculo_via_recentes()
+            if not ok:
+                # Fallback: double-hop (pode não recuperar mas tenta)
+                self._navegar_menu("li_calculo_dados_do_calculo")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
             self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
