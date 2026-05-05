@@ -1741,23 +1741,66 @@ class PlaywrightAutomatorV2:
         self.log("Fase 14 — Liquidar + Exportar")
 
         # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
+        # Antes: re-abrir cálculo via principal.jsf para garantir conv válido
+        # (NPE pós-Expresso pode ter deixado conv em estado anômalo).
+        # Sempre passar pelo Dados do Cálculo primeiro para garantir que
+        # estamos no contexto do cálculo (sidebar Operações renderiza).
+        try:
+            self._navegar_menu("li_calculo_dados_do_calculo")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1500)
+        except Exception:
+            pass
+
+        # Estratégia em cascata para localizar Liquidar
         nav_ok = self._page.evaluate(
             """() => {
+                // 1. li#li_operacoes_liquidar > a (ID confirmado em ambas versões)
+                const li1 = document.getElementById('li_operacoes_liquidar');
+                if (li1) {
+                    const a = li1.querySelector('a');
+                    if (a) { a.click(); return 'li_operacoes_liquidar'; }
+                }
+                // 2. <a> com texto exato 'Liquidar' dentro de li com 'operacoes' no id
                 const links = [...document.querySelectorAll('a')];
                 for (const a of links) {
-                    const txt = (a.textContent || '').trim();
+                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
                     const li = a.closest('li');
                     if (txt === 'Liquidar' && li && li.id && li.id.includes('operacoes')) {
                         a.click();
-                        return true;
+                        return 'text-li-operacoes';
                     }
                 }
-                return false;
+                // 3. Qualquer <a> com texto 'Liquidar' (último recurso)
+                for (const a of links) {
+                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                    if (txt === 'Liquidar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) {
+                        a.click();
+                        return 'text-any';
+                    }
+                }
+                return null;
             }"""
         )
         if not nav_ok:
+            self.log("  ⚠ Sidebar 'Liquidar' não localizado — tentando URL nav")
+            try:
+                if self._calculo_conversation_id:
+                    url_liq = (
+                        f"{self.pjecalc_url}/pages/calculo/liquidacao.jsf"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    self._page.goto(url_liq, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(15000)
+                    self._capturar_conversation_id()
+                    nav_ok = "url-nav-fallback"
+            except Exception as e:
+                self.log(f"  ⚠ URL nav Liquidar: {e}")
+        if not nav_ok:
             raise RuntimeError("Sidebar 'Liquidar' não localizado")
+        self.log(f"  ✓ Navegação Liquidar via: {nav_ok}")
         self._aguardar_ajax(15000)
+        self._page.wait_for_timeout(2000)
 
         # ── 14b. Preencher form de Liquidação ──────────────────────────────
         liq = self.previa.liquidacao
