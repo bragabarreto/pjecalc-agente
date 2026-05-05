@@ -679,7 +679,8 @@ class PlaywrightAutomatorV2:
                 """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
             )
             if tem_erro or not tem_listagem:
-                self.log(f"  ⚠ verba-calculo.jsf vazia/erro — reload + retry")
+                self.log(f"  ⚠ verba-calculo.jsf vazia/erro — tentando recovery (reload + double-hop)")
+                # Tentativa 1: reload
                 try:
                     self._page.reload(wait_until="domcontentloaded", timeout=15000)
                     self._aguardar_ajax(15000)
@@ -689,8 +690,21 @@ class PlaywrightAutomatorV2:
                 tem_listagem = self._page.evaluate(
                     """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
                 )
+                # Tentativa 2: triple-hop (Histórico → Dados → Verbas)
                 if not tem_listagem:
-                    self.log(f"  ⚠ Listagem ainda vazia após reload — verbas Expresso podem não ter persistido")
+                    self.log(f"  ⚠ Reload sem efeito — triple-hop")
+                    self._navegar_menu("li_calculo_historico_salarial")
+                    self._page.wait_for_timeout(1500)
+                    self._navegar_menu("li_calculo_dados_do_calculo")
+                    self._page.wait_for_timeout(1500)
+                    self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+                    tem_listagem = self._page.evaluate(
+                        """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
+                    )
+                if not tem_listagem:
+                    self.log(f"  ⚠ Listagem permanece vazia — possível NPE não-recuperável; verbas Expresso podem não ter persistido. Continuando para reflexos manuais.")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
@@ -1068,16 +1082,46 @@ class PlaywrightAutomatorV2:
             nome = f"{nome.upper()} SOBRE {verba_principal.nome_pjecalc.upper()}"
         self.log(f"  → Criar reflexo MANUAL: {nome}")
 
-        # 1. Navegar para listing
+        # 1. Reset state: Cancelar form anterior se ainda visível, depois
+        # double-hop (Dados → Verbas) para forçar listing limpa
+        try:
+            cancelar = self._page.locator("input[id='formulario:cancelar']")
+            if cancelar.count() > 0 and cancelar.first.is_visible():
+                cancelar.first.click(force=True)
+                self._aguardar_ajax(5000)
+                self._page.wait_for_timeout(1000)
+        except Exception:
+            pass
+        self._navegar_menu("li_calculo_dados_do_calculo")
+        self._page.wait_for_timeout(1000)
         self._navegar_menu("li_calculo_verbas")
-        self._aguardar_ajax(8000)
+        self._aguardar_ajax(10000)
         self._page.wait_for_timeout(1500)
 
-        # 2. Click "Manual" (incluir)
+        # 2. Click "Manual" (incluir) — wait_for_selector + retry
+        btn_manual = None
+        for tentativa in range(3):
+            try:
+                self._page.wait_for_selector(
+                    "input[id$=':incluir'][value='Manual']",
+                    state="visible", timeout=10000,
+                )
+                btn_manual = self._page.locator(
+                    "input[id$=':incluir'][value='Manual']"
+                ).first
+                break
+            except Exception:
+                self.log(f"    ⚠ Botão Manual não apareceu (tentativa {tentativa+1}/3)")
+                self._navegar_menu("li_calculo_dados_do_calculo")
+                self._page.wait_for_timeout(1000)
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(2000)
+        if not btn_manual:
+            self.log(f"    ⚠ Pulando reflexo {reflexo.id} — botão Manual indisponível")
+            return
         try:
-            self._page.locator(
-                "input[id$=':incluir'][value='Manual'], input[id$=':incluir']"
-            ).first.click()
+            btn_manual.click(force=True)
         except Exception as e:
             self.log(f"    ⚠ Click 'Manual' falhou: {e}")
             return
@@ -1273,9 +1317,17 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"  ⚠ Cartão de ponto — {chave}: {e}")
 
-        self._clicar("salvar")
-        self._aguardar_ajax(8000)
-        self.log("Fase 5 concluída")
+        # Salvar (graceful: não aborta se botão não existir — fase é heurística)
+        try:
+            sel_salvar = self._page.locator("input[id='formulario:salvar'], input[id$=':salvar']")
+            if sel_salvar.count() > 0:
+                sel_salvar.first.click(force=True)
+                self._aguardar_ajax(8000)
+                self.log("Fase 5 concluída")
+            else:
+                self.log("Fase 5 — sem botão Salvar (campos heurísticos não casaram). Pulando.")
+        except Exception as e:
+            self.log(f"Fase 5 — Salvar: {e} (pulando)")
 
     def fase_faltas(self) -> None:
         self.log("Fase 6 — Faltas")
