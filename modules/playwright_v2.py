@@ -117,32 +117,48 @@ class PlaywrightAutomatorV2:
     # ─── Pipeline principal ────────────────────────────────────────────────
 
     def run(self) -> str | None:
-        """Executa pipeline completo. Retorna caminho do .PJC ou None."""
+        """Executa pipeline completo. Retorna caminho do .PJC ou None.
+
+        Cada fase é envolvida em try/except — falha em uma fase não aborta
+        o pipeline. Loga erro e continua para a próxima. Liquidação tenta
+        rodar mesmo com fases anteriores parciais (PJE-Calc reporta
+        pendências e o usuário corrige manualmente).
+        """
         self.log("══ Iniciando automação v2 ══")
         self._abrir_pjecalc()
         self._criar_novo_calculo()
 
-        # Fases (sequência ordenada)
-        self.fase_processo()
-        self.fase_parametros_calculo()
-        self.fase_historico_salarial()
-        self.fase_verbas()
-        if self.previa.cartao_de_ponto:
-            self.fase_cartao_de_ponto()
-        if self.previa.faltas:
-            self.fase_faltas()
-        if self.previa.ferias.periodos:
-            self.fase_ferias()
-        self.fase_fgts()
-        self.fase_contribuicao_social()
-        self.fase_imposto_de_renda()
-        if self.previa.honorarios:
-            self.fase_honorarios()
-        self.fase_custas_judiciais()
-        self.fase_correcao_juros_multa()
+        def _run_fase(nome, fn, condicao=True):
+            if not condicao:
+                return
+            try:
+                fn()
+            except Exception as e:
+                import traceback
+                self.log(f"⚠ {nome} falhou: {type(e).__name__}: {str(e)[:200]}")
+                self.log(f"   (continuando com próxima fase para tentar Liquidação)")
 
-        # Liquidação
-        return self.fase_liquidar_e_exportar()
+        # Fases (sequência ordenada, cada uma graceful)
+        _run_fase("Fase 1 (Processo)", self.fase_processo)
+        _run_fase("Fase 2 (Parâmetros)", self.fase_parametros_calculo)
+        _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
+        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
+        _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
+        _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
+        _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
+        _run_fase("Fase 8 (FGTS)", self.fase_fgts)
+        _run_fase("Fase 9 (CS/INSS)", self.fase_contribuicao_social)
+        _run_fase("Fase 10 (IRPF)", self.fase_imposto_de_renda)
+        _run_fase("Fase 11 (Honorários)", self.fase_honorarios, bool(self.previa.honorarios))
+        _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
+        _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
+
+        # Liquidação — tenta mesmo com fases parciais
+        try:
+            return self.fase_liquidar_e_exportar()
+        except Exception as e:
+            self.log(f"⚠ Liquidação falhou: {e}")
+            return None
 
     # ─── Helpers DOM ───────────────────────────────────────────────────────
 
@@ -184,11 +200,14 @@ class PlaywrightAutomatorV2:
         loc.first.fill(str(valor))
         self.log(f"  ✓ {dom_id} = {valor}")
 
-    def _marcar_radio(self, dom_id: str, valor: str) -> None:
+    def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
         sel = f"input[type='radio'][id*='{dom_id}'][value='{valor}']"
         loc = self._page.locator(sel)
         if loc.count() == 0:
-            raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
+            if obrigatorio:
+                raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
+            self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
+            return
         loc.first.click(force=True)
         self.log(f"  ✓ radio {dom_id} = {valor}")
 
@@ -212,14 +231,21 @@ class PlaywrightAutomatorV2:
                     continue
         self.log(f"  ⚠ checkbox {dom_id} não existe ou não é checkbox — pulando")
 
-    def _selecionar(self, dom_id: str, valor: str) -> None:
+    def _selecionar(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
         loc = self._page.locator(f"select[id$='{dom_id}']")
         if loc.count() == 0:
-            raise RuntimeError(f"Select não encontrado: {dom_id}")
+            if obrigatorio:
+                raise RuntimeError(f"Select não encontrado: {dom_id}")
+            self.log(f"  ⚠ select {dom_id} não encontrado — pulando")
+            return
         try:
             loc.first.select_option(value=valor)
         except Exception:
-            loc.first.select_option(label=valor)
+            try:
+                loc.first.select_option(label=valor)
+            except Exception as e:
+                self.log(f"  ⚠ select {dom_id}={valor}: {e} — pulando")
+                return
         self.log(f"  ✓ select {dom_id} = {valor}")
 
     def _clicar(self, dom_id: str) -> None:
