@@ -320,6 +320,8 @@ class PlaywrightAutomatorV2:
             try:
                 self._page.goto(url, wait_until="domcontentloaded", timeout=15000)
                 self._aguardar_ajax(15000)
+                # Defensive: Seam pode redirect para conversation atualizada
+                self._capturar_conversation_id()
                 self.log(f"  → navegou para {li_id} via url-nav direto")
                 return
             except Exception as e:
@@ -393,6 +395,35 @@ class PlaywrightAutomatorV2:
         self.log(f"  → navegou para {li_id} via {clicou}")
 
     # ─── Fases ─────────────────────────────────────────────────────────────
+
+    def _capturar_conversation_id(self) -> bool:
+        """Re-captura o conversationId atual da URL.
+
+        CRÍTICO: o PJE-Calc/Seam pode emitir um novo conversationId após
+        certas ações (Expresso save, redirects pós-Salvar, etc.). Se
+        continuarmos usando o conversationId antigo nas URL nav seguintes,
+        elas vão para uma conversation expirada → NPE/empty pages.
+
+        Esta função extrai o conv_id da URL atual e atualiza o estado.
+        v1 chama isso após cada save crítico (linha 4880 playwright_pjecalc.py).
+
+        Returns True se o conv_id mudou.
+        """
+        import re
+        try:
+            url = self._page.url or ""
+            m = re.search(r'conversationId=(\d+)', url)
+            if m:
+                novo = m.group(1)
+                if novo != self._calculo_conversation_id:
+                    antigo = self._calculo_conversation_id
+                    self._calculo_conversation_id = novo
+                    self.log(f"  ℹ conversationId atualizado: {antigo} → {novo}")
+                    return True
+                return False
+        except Exception as e:
+            self.log(f"  ⚠ _capturar_conversation_id: {e}")
+        return False
 
     def _reabrir_calculo_via_recentes(self) -> bool:
         """Volta para principal e reabre cálculo via lista 'Recentes'.
@@ -897,6 +928,10 @@ class PlaywrightAutomatorV2:
         self._clicar("salvar")
         self._aguardar_ajax(15000)
         self.log("  ✓ Expresso salvo")
+        # CRITICO: re-capturar conversationId — Seam emite NOVO conv após
+        # Expresso save. Sem isso, URL navs subsequentes vao para conv
+        # expirada -> NPE/empty pages em todas as fases seguintes.
+        self._capturar_conversation_id()
 
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche todos os campos do form de parâmetros de verba.
