@@ -1828,20 +1828,55 @@ class PlaywrightAutomatorV2:
             )
         self.log("  ✓ Liquidação OK (sem pendências)")
 
-        # ── 14d. Navegar para Exportar ─────────────────────────────────────
+        # ── 14d. Navegar para Exportar (cascata robusta) ──────────────────
         nav_exp = self._page.evaluate(
             """() => {
-                const li = document.getElementById('li_operacoes_exportar');
-                if (!li) return false;
-                const a = li.querySelector('a');
-                if (!a) return false;
-                a.click();
-                return true;
+                // 1. li#li_operacoes_exportar > a
+                const li1 = document.getElementById('li_operacoes_exportar');
+                if (li1) {
+                    const a = li1.querySelector('a');
+                    if (a) { a.click(); return 'li_operacoes_exportar'; }
+                }
+                // 2. <a> com texto exato 'Exportar' em li com 'operacoes'
+                const links = [...document.querySelectorAll('a')];
+                for (const a of links) {
+                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                    const li = a.closest('li');
+                    if (txt === 'Exportar' && li && li.id && li.id.includes('operacoes')) {
+                        a.click();
+                        return 'text-li-operacoes';
+                    }
+                }
+                // 3. <a> com texto 'Exportar' em qualquer menu
+                for (const a of links) {
+                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                    if (txt === 'Exportar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) {
+                        a.click();
+                        return 'text-any';
+                    }
+                }
+                return null;
             }"""
         )
         if not nav_exp:
+            self.log("  ⚠ Sidebar 'Exportar' não localizado — tentando URL nav")
+            try:
+                if self._calculo_conversation_id:
+                    url_exp = (
+                        f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    self._page.goto(url_exp, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(15000)
+                    self._capturar_conversation_id()
+                    nav_exp = "url-nav-fallback"
+            except Exception as e:
+                self.log(f"  ⚠ URL nav Exportar: {e}")
+        if not nav_exp:
             raise RuntimeError("Sidebar 'Exportar' não localizado")
+        self.log(f"  ✓ Navegação Exportar via: {nav_exp}")
         self._aguardar_ajax(15000)
+        self._page.wait_for_timeout(2000)
 
         # ── 14e. Clicar Exportar e capturar .PJC ───────────────────────────
         # Estratégia: capturar response binário via expect_response
