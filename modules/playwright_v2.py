@@ -1171,20 +1171,53 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"    ⚠ Aplicando override: {e}")
 
-        # 7. Valor = CALCULADO + base mínima (ÚLTIMA REMUNERAÇÃO, divisor=1, mult=1, qtd=INFORMADA=1)
+        # 7. Valor=CALCULADO + fórmula específica baseada no tipo do reflexo
+        # (regras do vídeo: divisor/multiplicador específicos para Férias/13º/FGTS)
+        nome_upper = nome.upper()
+        is_ferias = "FÉRIAS" in nome_upper or "FERIAS" in nome_upper
+        is_13 = "13º" in nome_upper or "13o" in nome_upper.replace("º", "O") or "DÉCIMO" in nome_upper
+        is_fgts_40 = "FGTS" in nome_upper and ("40" in nome_upper or "MULTA" in nome_upper)
+        is_fgts = "FGTS" in nome_upper
+        if is_ferias:
+            divisor, multiplicador, quantidade, integralizar = "12", "1,33", "12", True
+        elif is_13:
+            divisor, multiplicador, quantidade, integralizar = "12", "1", "12", True
+        elif is_fgts_40:
+            divisor, multiplicador, quantidade, integralizar = "100", "11,2", "1", False
+        elif is_fgts:
+            divisor, multiplicador, quantidade, integralizar = "100", "8", "1", False
+        else:
+            divisor, multiplicador, quantidade, integralizar = "1", "1", "1", True
+
         try:
             self._marcar_radio("valor", "CALCULADO")
             self._aguardar_ajax(2000)
-            self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL")
-            self._aguardar_ajax(2000)
-            self._selecionar("baseHistoricos", "ÚLTIMA REMUNERAÇÃO")
+            # Base = MAIOR_REMUNERACAO (preferida pelo vídeo) com fallback HISTORICO
+            try:
+                self._selecionar("tipoDaBaseTabelada", "MAIOR_REMUNERACAO")
+            except Exception:
+                self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL")
+                self._aguardar_ajax(2000)
+                try:
+                    self._selecionar("baseHistoricos", "ÚLTIMA REMUNERAÇÃO")
+                except Exception:
+                    pass
             self._aguardar_ajax(1500)
+            # Marcar Integralizar (CRÍTICO para reflexos de estabilidade)
+            if integralizar:
+                # Schema do select integralizar: SIM/NAO
+                try:
+                    self._selecionar("integralizarBase", "SIM")
+                except Exception:
+                    # Fallback: pode ser checkbox em algumas versões
+                    self._marcar_checkbox("integralizar", True)
             self._marcar_radio("tipoDeDivisor", "OUTRO_VALOR")
             self._aguardar_ajax(1500)
-            self._preencher("outroValorDoDivisor", "1", obrigatorio=False)
-            self._preencher("outroValorDoMultiplicador", "1", obrigatorio=False)
+            self._preencher("outroValorDoDivisor", divisor, obrigatorio=False)
+            self._preencher("outroValorDoMultiplicador", multiplicador, obrigatorio=False)
             self._marcar_radio("tipoDaQuantidade", "INFORMADA")
-            self._preencher("valorInformadoDaQuantidade", "1", obrigatorio=False)
+            self._preencher("valorInformadoDaQuantidade", quantidade, obrigatorio=False)
+            self.log(f"    ✓ Fórmula: divisor={divisor} mult={multiplicador} qtd={quantidade} integraliza={integralizar}")
         except Exception as e:
             self.log(f"    ⚠ Configurando fórmula CALCULADO: {e}")
 

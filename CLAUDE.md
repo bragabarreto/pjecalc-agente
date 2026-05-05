@@ -196,6 +196,31 @@ Para criar verba via "Manual" (botão `incluir` da listagem com value="Manual"):
 
 Para `_configurar_parametros_pos_expresso` (verba já criada via Expresso): o assunto CNJ JÁ vem populado, **não precisa tocar**. Só renomear via campo "Nome" se for `expresso_adaptado`.
 
+### Reflexos pós-contratuais (Estabilidade Gestante/Acidentária, Lei 9.029) — fórmulas confirmadas via vídeo (NotebookLM)
+
+Para verbas pós-demissão (estabilidade, dispensa discriminatória), o PJE-Calc **NÃO** gera reflexos automáticos. Cada um é uma **verba Manual com Tipo=REFLEXO** vinculada à principal:
+
+| Reflexo | Característica | Divisor | Multiplicador | Quantidade | Integralizar | Ajustar Ocorrências |
+|---|---|---|---|---|---|---|
+| **Férias + 1/3** | FERIAS | 12 | **1.33** | 12 | ✅ SIM | Desmarcar meses intermediários, manter só último |
+| **13º Salário** | DECIMO_TERCEIRO_SALARIO | 12 | 1 | 12 | ✅ SIM | Mesmo ajuste |
+| **FGTS** | COMUM | 100 | **8** (ou 11.2 com multa 40%) | — | — | Mantém mensal todo período |
+
+**Armadilhas críticas**:
+1. **Esquecer "Integralizar"** → sistema puxa proporcional em vez do salário integral
+2. **Não ajustar Ocorrências** após save → 13º/Férias geram pagamento duplicado de meses cheios
+3. **Esperar FGTS automático** após demissão → não acontece; precisa Manual obrigatoriamente
+
+**Verba principal (Estabilidade)**:
+- Modo: Expresso "INDENIZAÇÃO ADICIONAL" (ou "INDENIZAÇÃO POR DANO MATERIAL" — facilidade)
+- Característica: COMUM, Ocorrência: MENSAL
+- Base: Maior Remuneração (do histórico) com **Proporcionalizar=SIM** (calcula pontas corretamente)
+- Período: dia+1 da demissão até fim da garantia
+
+Citações do vídeo (via NotebookLM):
+- "O pjt cal ele não apura fundo de garantia após a demissão de forma automática" (00:02:10)
+- "A importância de integralizar lá no reflexo: ele puxa de forma automática o valor total" (00:04:15)
+
 ### Reflexos — fluxo correto (PJE-Calc Cidadão, confirmado pelo usuário)
 
 Para configurar um reflexo (ex.: "Aviso Prévio sobre Horas Extras"):
