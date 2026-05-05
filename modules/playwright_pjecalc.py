@@ -2815,8 +2815,19 @@ class PJECalcPlaywright:
             except Exception as e:
                 self._log(f"    ⚠ Radio tipoRegeracao: {e}")
 
-            # Auto-confirmar o window.confirm do Regerar (once handler via expect_event)
-            self._page.once("dialog", lambda d: d.accept())
+            # FIX (2026-05-05): handler permanente em vez de `once`. O `once`
+            # tinha race condition com AJAX — se o dialog aparecer fora do tick
+            # imediato após click, o handler já foi consumido por outro evento
+            # e o dialog trava o Regerar (botão fica esperando confirmação que
+            # nunca vem). `on` permanece registrado durante toda a operação.
+            _dialog_msgs: list = []
+            def _accept_dialog(d):
+                _dialog_msgs.append(d.message[:80])
+                try:
+                    d.accept()
+                except Exception:
+                    pass
+            self._page.on("dialog", _accept_dialog)
 
             # Scroll para garantir que o botão Regerar fique visível
             self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
@@ -2830,14 +2841,43 @@ class PJECalcPlaywright:
                 "input[type='submit'][value*='egerar']",
                 "button:has-text('Regerar')",
             ]
+            _clicado_sel = None
             for _sel in _REGERAR_SELS:
                 _btn = self._page.locator(_sel)
                 if _btn.count() > 0:
                     _btn.first.click(force=True)
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(2000)
-                    self._log(f"  ✓ Regerar ocorrências executado ({_sel})")
-                    return True
+                    _clicado_sel = _sel
+                    break
+            if _clicado_sel:
+                # FIX (2026-05-05): aguardar mensagem JSF de sucesso para
+                # confirmar que o backend processou Regerar (e a flag
+                # "multiplicador_alterado" foi limpa para todas as verbas).
+                _sucesso = False
+                try:
+                    _msg_loc = self._page.locator(
+                        "span.rich-messages-summary, span.rich-message-summary, "
+                        "li.rich-messages-label, .rf-msgs-sum"
+                    )
+                    for _i in range(30):  # 30 × 200ms = 6s
+                        if _msg_loc.count() > 0:
+                            _txt = _msg_loc.first.text_content() or ""
+                            if "ucesso" in _txt or "uccess" in _txt:
+                                _sucesso = True
+                                break
+                        self._page.wait_for_timeout(200)
+                except Exception:
+                    pass
+                # Remover handler de dialog
+                try:
+                    self._page.remove_listener("dialog", _accept_dialog)
+                except Exception:
+                    pass
+                _info_dlg = f" | dialog(s)={len(_dialog_msgs)}" if _dialog_msgs else ""
+                _info_ok = " ✓ sucesso confirmado" if _sucesso else " (sem confirmação explícita)"
+                self._log(f"  ✓ Regerar ocorrências executado ({_clicado_sel}){_info_dlg}{_info_ok}")
+                return True
 
             # Fallback JS: buscar qualquer input/button com texto "Regerar"
             _js_clicked = self._page.evaluate("""() => {
@@ -11516,6 +11556,35 @@ class PJECalcPlaywright:
                 except Exception as _e:
                     self._log(f"  ⚠ Per-verba fix '{_vn}' [{_t}]: {_e}")
                 # Voltar à listagem de Verbas entre cada fix
+                try:
+                    self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
+                except Exception:
+                    pass
+
+            # FIX (2026-05-05): após editar parâmetros/ocorrências de cada verba,
+            # rodar Regerar global (Sobrescrever) para LIMPAR a flag
+            # "multiplicador_alterado"/"parâmetro alterado" que o backend marca
+            # toda vez que parâmetros são alterados após a primeira geração de
+            # ocorrências. Ordem CRÍTICA: Regerar **DEPOIS** das edições, não antes.
+            # Sobrescrever reseta termoQuant/valorDevido — então re-preenchemos
+            # logo em seguida com valores reais.
+            self._log("  🔧 Regerar pós-edições (Sobrescrever) — limpa flag multiplicador/parâmetro alterado…")
+            try:
+                self._regerar_ocorrencias_verbas()
+            except Exception as _e_rg:
+                self._log(f"  ⚠ Regerar pós-edições falhou: {_e_rg}")
+
+            # Re-preencher termoQuant/valorDevido após Sobrescrever (que zerou)
+            self._log("  🔧 Re-preencher ocorrências pós-Regerar…")
+            for _vn, _t in _verbas_a_corrigir.items():
+                if _t not in ("ocorrencia_qtd_zero", "indenizacao_sem_valor"):
+                    continue  # multiplicador_alterado e ocorrencia_fora_periodo já tratados
+                try:
+                    self._corrigir_ocorrencias_verba_pendente(_vn, _t)
+                except Exception as _e:
+                    self._log(f"  ⚠ Re-fill '{_vn}' [{_t}]: {_e}")
                 try:
                     self._clicar_menu_lateral("Verbas", obrigatorio=False)
                     self._aguardar_ajax()
