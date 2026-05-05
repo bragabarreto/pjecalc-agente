@@ -5993,7 +5993,9 @@ class PJECalcPlaywright:
         # O "Gerar" cria ocorrências para TODO o período do contrato; verbas
         # que só valem por N meses (ex: "Adicional Noturno de 03/2022 a 05/2023")
         # precisam ter as ocorrências fora desse intervalo desmarcadas.
-        if v and _gerou:
+        # FIX (2026-05-05): aplica filtro mesmo quando _gerou=False (ocorrências
+        # já existiam — caso típico após Regerar global precedente).
+        if v:
             _pi = v.get("periodo_inicio")
             _pf = v.get("periodo_fim")
             if _pi and _pf:
@@ -6034,7 +6036,11 @@ class PJECalcPlaywright:
         # Sem isso, todas as ocorrências ficam com termoQuant=0 e o
         # Liquidador alerta: "Todas as ocorrências... foram salvas com
         # quantidade igual a zero".
-        if v and _gerou:
+        # FIX (2026-05-05): NÃO depender de _gerou. Após Regerar global,
+        # ocorrências já existem e o botão "Gerar" não aparece → _gerou=False.
+        # Mas precisamos preencher termoQuant igualmente. Tenta sempre que
+        # houver `v` (verba) com dados.
+        if v:
             _qtd_mensal = (
                 v.get("quantidade_mensal")
                 or v.get("quantidade_horas_extras_mensal")
@@ -6115,7 +6121,8 @@ class PJECalcPlaywright:
         # informado (indenizações, estabilidade, dispensa discriminatória).
         # Sem isso: "Para apurar a verba informada X deve existir pelo menos
         # uma ocorrência com valor devido ou valor pago diferente de zero".
-        if v and _gerou:
+        # FIX (2026-05-05): mesma razão do E10 — preencher independente de _gerou.
+        if v:
             # FIX (2026-05-03): aceitar `valor` da prévia como fonte primária,
             # além de campos legacy. Estrutura padrão da prévia armazena valor
             # mensal devido em `valor`. Sem este fallback, indenizações
