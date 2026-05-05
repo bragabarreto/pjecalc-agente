@@ -11344,12 +11344,28 @@ class PJECalcPlaywright:
         """
         if not verba_nome:
             return False
-        # 1. Localizar dict da verba na prévia
-        _verbas_lista = (self._dados or {}).get("verbas", []) or []
+        # 1. Localizar dict da verba — busca em múltiplas fontes:
+        #    a) self._dados['verbas'] (legacy flat)
+        #    b) self._verbas_mapeadas['predefinidas'|'personalizadas'|'reflexas_sugeridas']
+        #       (formato real produzido por classification.py)
+        #    c) self._dados['verbas_principais'][].reflexos[] (schema v2 hierárquico)
+        _verbas_lista: list[dict] = []
+        _verbas_lista.extend((self._dados or {}).get("verbas", []) or [])
+        _vm = getattr(self, "_verbas_mapeadas", None) or {}
+        if isinstance(_vm, dict):
+            for _k in ("predefinidas", "personalizadas", "reflexas_sugeridas", "nao_reconhecidas"):
+                _verbas_lista.extend(_vm.get(_k, []) or [])
+        elif isinstance(_vm, list):
+            _verbas_lista.extend(_vm)
+        for _vp in (self._dados or {}).get("verbas_principais", []) or []:
+            _verbas_lista.append(_vp)
+            _verbas_lista.extend(_vp.get("reflexos", []) or [])
         _verba_alvo: dict | None = None
         _verba_norm = verba_nome.strip().upper()
         for _v in _verbas_lista:
-            for _campo in ("nome_pjecalc", "nome_sentenca", "nome_pjecalc_unico"):
+            if not isinstance(_v, dict):
+                continue
+            for _campo in ("nome_pjecalc", "nome_sentenca", "nome_pjecalc_unico", "expresso_alvo", "expresso_equivalente", "nome"):
                 _nv = (_v.get(_campo) or "").strip().upper()
                 if _nv and (_nv == _verba_norm or _verba_norm in _nv or _nv in _verba_norm):
                     _verba_alvo = _v
@@ -11357,7 +11373,7 @@ class PJECalcPlaywright:
             if _verba_alvo:
                 break
         if not _verba_alvo:
-            self._log(f"  ⚠ Auto-fix per-verba: '{verba_nome}' não encontrada em self._dados['verbas']")
+            self._log(f"  ⚠ Auto-fix per-verba: '{verba_nome}' não encontrada (buscou em dados['verbas'], verbas_mapeadas, verbas_principais)")
             # Construir verba sintética com nome para tentar regerar mesmo assim
             _verba_alvo = {"nome_pjecalc": verba_nome, "nome_sentenca": verba_nome}
 
