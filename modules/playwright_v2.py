@@ -1082,21 +1082,33 @@ class PlaywrightAutomatorV2:
             nome = f"{nome.upper()} SOBRE {verba_principal.nome_pjecalc.upper()}"
         self.log(f"  → Criar reflexo MANUAL: {nome}")
 
-        # 1. Reset state: Cancelar form anterior se ainda visível, depois
-        # double-hop (Dados → Verbas) para forçar listing limpa
+        # 1. Reset state agressivo: Cancelar (se visível) + page.reload() na URL
+        # da listagem com conversationId. Reload força fresh state JSF/Seam,
+        # eliminando estado pós-save que esconde botão "Manual".
         try:
             cancelar = self._page.locator("input[id='formulario:cancelar']")
             if cancelar.count() > 0 and cancelar.first.is_visible():
                 cancelar.first.click(force=True)
-                self._aguardar_ajax(5000)
-                self._page.wait_for_timeout(1000)
+                self._aguardar_ajax(3000)
+                self._page.wait_for_timeout(800)
         except Exception:
             pass
-        self._navegar_menu("li_calculo_dados_do_calculo")
-        self._page.wait_for_timeout(1000)
-        self._navegar_menu("li_calculo_verbas")
-        self._aguardar_ajax(10000)
-        self._page.wait_for_timeout(1500)
+        # Goto + reload para garantir fresh
+        if self._calculo_conversation_id:
+            url_listing = (
+                f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
+            try:
+                self._page.goto(url_listing, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax(10000)
+                self._page.wait_for_timeout(1500)
+            except Exception:
+                pass
+        else:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(1500)
 
         # 2. Click "Manual" (incluir) — wait_for_selector + retry
         btn_manual = None
@@ -1440,17 +1452,32 @@ class PlaywrightAutomatorV2:
     def fase_fgts(self) -> None:
         self.log("Fase 8 — FGTS")
         self._navegar_menu("li_calculo_fgts")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1500)
+
+        # Verificar que página renderizou (radio tipoDeVerba presente)
+        if self._page.locator("input[type='radio'][id*='tipoDeVerba']").count() == 0:
+            self.log("  ⚠ Fase 8 FGTS: página não renderizou — pulando (NPE pós-Expresso?)")
+            return
+
         f = self.previa.fgts
-        self._marcar_radio("tipoDeVerba", f.tipo_verba)
-        self._marcar_radio("comporPrincipal", f.compor_principal.value)
-        self._marcar_checkbox("multa", f.multa.ativa)
+        # Cada campo é tolerante (não aborta a fase se faltar um)
+        def _safe(callback, msg):
+            try:
+                callback()
+            except Exception as e:
+                self.log(f"  ⚠ FGTS {msg}: {e}")
+
+        _safe(lambda: self._marcar_radio("tipoDeVerba", f.tipo_verba), "tipoDeVerba")
+        _safe(lambda: self._marcar_radio("comporPrincipal", f.compor_principal.value if hasattr(f.compor_principal, 'value') else str(f.compor_principal)), "comporPrincipal")
+        _safe(lambda: self._marcar_checkbox("multa", f.multa.ativa), "multa")
         if f.multa.ativa:
-            self._marcar_radio("tipoDoValorDaMulta", f.multa.tipo_valor)
-            self._marcar_radio("multaDoFgts", f.multa.percentual)
-        self._selecionar("incidenciaDoFgts", f.incidencia)
-        self._marcar_checkbox("multaDoArtigo467", f.multa_artigo_467)
-        self._marcar_checkbox("multa10", f.multa_10_lc110)
-        self._clicar("salvar")
+            _safe(lambda: self._marcar_radio("tipoDoValorDaMulta", f.multa.tipo_valor), "tipoDoValorDaMulta")
+            _safe(lambda: self._marcar_radio("multaDoFgts", f.multa.percentual), "multaDoFgts")
+        _safe(lambda: self._selecionar("incidenciaDoFgts", f.incidencia), "incidenciaDoFgts")
+        _safe(lambda: self._marcar_checkbox("multaDoArtigo467", f.multa_artigo_467), "multaDoArtigo467")
+        _safe(lambda: self._marcar_checkbox("multa10", f.multa_10_lc110), "multa10")
+        _safe(lambda: self._clicar("salvar"), "salvar")
         self._aguardar_ajax(8000)
         self.log("Fase 8 concluída")
 
