@@ -6240,10 +6240,36 @@ class PJECalcPlaywright:
             if _val_mensal and _is_indenizacao:
                 try:
                     _val_str = _fmt_br(float(_val_mensal))
-                    # FIX (2026-05-06 v2): mesma razão da quantidade — JS evaluate
-                    # em massa dispara onblur AJAX que re-renderiza tabela e
-                    # detacha snapshot inicial. Iteração com locator + fill()
-                    # garante onblur natural por linha + ajax wait.
+                    # FIX (2026-05-06 v4): re-marcar checkboxes :ativo
+                    # desativados (mesmo problema do termoQuant — Sobrescrever
+                    # zera estado :ativo de algumas verbas). Sem isso,
+                    # DANO MORAL teve "preenchido em 0 ocorrência(s)" no Loop 2
+                    # do refactor v4 enquanto outras indenizações deram 56.
+                    try:
+                        _n_marcadas = self._page.evaluate(
+                            """() => {
+                                const rows = document.querySelectorAll('tr');
+                                let n = 0;
+                                rows.forEach(tr => {
+                                    const inp = tr.querySelector('input[id*="valorDevido"], input[id*="termoDevido"]');
+                                    if (!inp || inp.disabled || inp.readOnly) return;
+                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
+                                    if (cbx && !cbx.checked) {
+                                        cbx.click();
+                                        n++;
+                                    }
+                                });
+                                return n;
+                            }"""
+                        )
+                        if _n_marcadas:
+                            self._log(f"    ℹ Linhas reativadas (valor): {_n_marcadas}")
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(500)
+                    except Exception as _e_mark:
+                        self._log(f"    ⚠ Reativar linhas valor: {_e_mark}")
+
+                    # FIX v2: locator iterativo (re-resolve a cada iteração)
                     _n_val = 0
                     _max_linhas = 200
                     for _i in range(_max_linhas):
