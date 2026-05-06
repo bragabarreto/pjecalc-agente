@@ -863,13 +863,24 @@ class PJECalcPlaywright:
             }
         }""")
 
-    def _aguardar_ajax(self, timeout: int = 15000) -> None:
+    def _aguardar_ajax(self, timeout: int = 8000) -> None:
         """Aguarda conclusão do AJAX JSF; fallback para networkidle.
 
         Se o monitor AJAX não está instalado (ex: após page.goto()),
         reinstala automaticamente. Timeout reduzido a 5s quando monitor
         ausente para evitar hangs de 15s em páginas sem AJAX pendente.
+
+        FIX (2026-05-06 v7): timeout default reduzido de 15s → 8s. Monitor
+        AJAX pode ficar permanentemente preso em `false` após cascade de
+        navegação (a4j:ajax destrói event listener mas mantém flag). 8s já
+        cobre a maioria dos AJAXs reais; quando passar disso, fallback para
+        networkidle 5s costuma resolver. Total max: ~13s por call (era 20s).
+
+        Adiciona contador self._ajax_timeouts_consec: se 3 timeouts seguidos,
+        FORÇA reinstalação do monitor — significa que o listener morreu.
         """
+        if not hasattr(self, "_ajax_timeouts_consec"):
+            self._ajax_timeouts_consec = 0
         try:
             # Verificar se monitor está instalado; reinstalar se necessário
             _monitor_ok = False
@@ -879,14 +890,15 @@ class PJECalcPlaywright:
                 )
             except Exception as e:
                 logger.debug(f"_aguardar_ajax: check monitor failed: {e}")
-            if not _monitor_ok:
+            if not _monitor_ok or self._ajax_timeouts_consec >= 3:
+                if self._ajax_timeouts_consec >= 3:
+                    logger.debug(f"_aguardar_ajax: 3 timeouts consec — reinstalando monitor")
+                    self._ajax_timeouts_consec = 0
                 try:
                     self._instalar_monitor_ajax()
-                    # Após goto, AJAX inicial já completou — marcar como completo
                     self._page.evaluate("() => { window.__ajaxCompleto = true; }")
                 except Exception as e:
                     logger.debug(f"_aguardar_ajax: reinstall monitor failed: {e}")
-                # Sem monitor + recém-instalado → networkidle é mais confiável
                 try:
                     self._page.wait_for_load_state("networkidle", timeout=5000)
                 except Exception:
@@ -897,14 +909,15 @@ class PJECalcPlaywright:
                 "() => window.__ajaxCompleto === true",
                 timeout=timeout,
             )
-            # Reset obrigatório: sem isso a próxima espera retorna imediatamente
-            # com o true da operação anterior (falso positivo em cascata AJAX).
+            # Sucesso: reset contador
+            self._ajax_timeouts_consec = 0
             try:
                 self._page.evaluate("() => { window.__ajaxCompleto = false; }")
             except Exception as e:
                 logger.debug(f"_aguardar_ajax: reset flag failed: {e}")
         except Exception as e:
-            logger.debug(f"_aguardar_ajax: wait_for_function failed ({e}), fallback networkidle")
+            self._ajax_timeouts_consec += 1
+            logger.debug(f"_aguardar_ajax: wait_for_function failed ({e}), fallback networkidle (consec={self._ajax_timeouts_consec})")
             try:
                 self._page.wait_for_load_state("networkidle", timeout=5000)
             except Exception:
