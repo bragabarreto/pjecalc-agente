@@ -6355,47 +6355,82 @@ class PJECalcPlaywright:
         except Exception:
             pass
 
+        # ── REFATORAÇÃO 2026-05-06 v4 — Fluxo correto: Params → Regerar → Ocorrências
+        #
+        # Antes (errado): para cada verba [Params+Save → Ocorrências(fill)+Save].
+        #   Problema: editar Params APÓS o Expresso ter gerado ocorrências marca
+        #   a flag backend "multiplicador alterado". Liquidar falha. Auto-fix
+        #   precisa Regerar Sobrescrever (zera termoQuant/valorDevido) e
+        #   re-preencher tudo. Loop ineficiente + race conditions de DOM.
+        #
+        # Agora (correto): 2 loops separados por 1 Regerar global.
+        #   Loop 1: edita Params + Save em cada verba (sem tocar Ocorrências).
+        #   1× Regerar Sobrescrever: gera ocorrências NOVAS com Params atuais,
+        #                            limpa flag para todas verbas de uma vez.
+        #   Loop 2: abre Ocorrências de cada verba e preenche termoQuant/
+        #           valorDevido em linhas com fórmula já correta. Save.
+        #
+        # Resultado esperado: Liquidar passa direto na 1ª tentativa (sem
+        # auto-fix), porque flag não está mais setada e valores estão corretos.
+
+        # ── LOOP 1 — Editar Parâmetros de cada verba (sem Ocorrências) ──
+        _verbas_processadas: list[tuple[str, dict]] = []  # (nome, v) para Loop 2
         for v in predefinidas:
-            # Pular verbas reflexas — não têm linha própria na listagem
             if v.get("eh_reflexa") or (v.get("tipo") or "").lower() == "reflexa":
                 continue
             nome = (v.get("nome_pjecalc") or v.get("nome_sentenca") or "").strip()
             if not nome:
                 continue
 
-            # Parâmetros — abrir SEMPRE para verbas Expresso, mesmo sem dado extraído.
-            # Motivo: o Expresso não preenche `formulario:baseHistoricos` automaticamente,
-            # e sem ele o PJE-Calc bloqueia Liquidar com erro "Falta selecionar pelo menos
-            # um Histórico Salarial para apurar o Valor Devido da Verba {NOME}".
-            # _configurar_parametros_verba aplica defaults seguros + seleção de
-            # baseHistoricos quando tipoDaBaseTabelada=HISTORICO_SALARIAL.
-            _tem_dado = any([
-                v.get("periodo_inicio"),
-                v.get("periodo_fim"),
-                v.get("percentual") is not None,
-                v.get("base_calculo"),
-                v.get("quantidade") is not None,
-                v.get("valor_informado") is not None,  # verbas com valor fixo (ex: danos morais)
-            ])
-            # Sempre tentar — _configurar_parametros_verba aplicará baseHistoricos
-            # mesmo sem dados específicos (apenas para selecionar histórico padrão).
+            # Parâmetros — abrir SEMPRE (mesmo sem dado extraído) porque o
+            # Expresso não preenche `formulario:baseHistoricos`, e sem ele
+            # PJE-Calc bloqueia Liquidar com erro "Falta selecionar pelo
+            # menos um Histórico Salarial para apurar o Valor Devido…".
+            # _configurar_parametros_verba aplica defaults + baseHistoricos.
             try:
                 _ok = self._configurar_parametros_verba(v, nome)
             except Exception as _e:
                 self._log(f"  ⚠ _configurar_parametros_verba('{nome}'): {_e}")
                 _ok = False
             if not _ok:
-                # Verba não casou na listagem Expresso — fila para Manual
                 self._log(f"  ↪ '{nome}' não encontrada na listagem Expresso — adicionando a fila Manual")
                 _falhou_expresso.append(v)
                 continue
+            _verbas_processadas.append((nome, v))
 
-            # Ocorrências — sempre tentar (gerar + salvar confirma o período)
+        self._log(
+            f"  ✓ Loop 1 (Parâmetros): {len(_verbas_processadas)} verba(s) editada(s) e salva(s)"
+        )
+
+        # ── REGERAR GLOBAL (Sobrescrever) — limpa flag "multiplicador alterado"
+        # de TODAS as verbas de uma vez, regenera ocorrências com Params atuais.
+        if _verbas_processadas:
+            self._log("  🔄 Regerar global (Sobrescrever) entre Params e Ocorrências…")
+            try:
+                _na_listagem = (
+                    "verba-calculo.jsf" in self._page.url
+                    or "verbas-para-calculo" in self._page.url
+                )
+                if not _na_listagem:
+                    self._clicar_menu_lateral("Verbas", obrigatorio=False)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(800)
+                self._regerar_ocorrencias_verbas()
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(1500)
+            except Exception as _e_reg:
+                self._log(f"  ⚠ Regerar pós-Params (Loop 1→Loop 2) falhou: {_e_reg}")
+
+        # ── LOOP 2 — Abrir Ocorrências e preencher termoQuant/valorDevido ──
+        for nome, v in _verbas_processadas:
             try:
                 self._configurar_ocorrencias_verba(nome, v=v)
             except Exception as _e:
                 self._log(f"  ⚠ _configurar_ocorrencias_verba('{nome}'): {_e}")
 
+        self._log(
+            f"  ✓ Loop 2 (Ocorrências): {len(_verbas_processadas)} verba(s) preenchida(s) e salva(s)"
+        )
         return _falhou_expresso
 
     def _configurar_reflexos_expresso(self, verbas: list) -> None:
