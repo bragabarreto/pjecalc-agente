@@ -5781,6 +5781,79 @@ class PJECalcPlaywright:
         # 2. Preencher campos disponíveis
         _preencheu = False
 
+        # ── Característica + Ocorrência de Pagamento (FIX 2026-05-06 v5) ──
+        # Antes desta correção, _configurar_parametros_verba IGNORAVA os campos
+        # `caracteristica` e `ocorrencia_pagamento` do JSON v2 — usava defaults
+        # do Expresso (que sempre é COMUM/MENSAL). Resultado: DANO MORAL com
+        # ocorrencia=Desligamento (1 ocorrência única) era tratado como MENSAL
+        # (56 ocorrências), distorcendo a liquidação 56× para mais.
+        #
+        # SEMPRE seguir estritamente o JSON quando o campo estiver presente.
+        # IDs DOM v2.15.1 confirmados: caracteristicaVerba, ocorrenciaPagto.
+        import unicodedata as _ud_pv
+        def _norm_pv(s: str) -> str:
+            return _ud_pv.normalize("NFD", (s or "").lower()).encode("ascii", "ignore").decode().strip()
+        _CARAC_MAP_PV = {
+            "comum": "COMUM",
+            "13o salario": "DECIMO_TERCEIRO_SALARIO",
+            "13 salario": "DECIMO_TERCEIRO_SALARIO",
+            "13o": "DECIMO_TERCEIRO_SALARIO",
+            "decimo terceiro salario": "DECIMO_TERCEIRO_SALARIO",
+            "decimo terceiro": "DECIMO_TERCEIRO_SALARIO",
+            "ferias": "FERIAS",
+            "aviso previo": "AVISO_PREVIO",
+        }
+        _OCORR_MAP_PV = {
+            "mensal": "MENSAL",
+            "dezembro": "DEZEMBRO",
+            "periodo aquisitivo": "PERIODO_AQUISITIVO",
+            "desligamento": "DESLIGAMENTO",
+        }
+        _carac_label = (verba.get("caracteristica") or "").strip()
+        if _carac_label:
+            _carac_enum = _CARAC_MAP_PV.get(_norm_pv(_carac_label))
+            if _carac_enum:
+                _carac_ok = any(
+                    self._preencher_radio_ou_select(fid, _carac_enum, obrigatorio=False)
+                    for fid in ["caracteristicaVerba", "caracteristica", "caracteristicaDaVerba"]
+                )
+                if _carac_ok:
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(300)
+                    self._log(f"  ✓ caracteristica '{nome_na_lista}': {_carac_enum}")
+                    _preencheu = True
+                else:
+                    self._log(f"  ⚠ caracteristica '{nome_na_lista}' [{_carac_enum}]: NÃO preenchida")
+
+        _ocorr_label = (verba.get("ocorrencia") or verba.get("ocorrencia_pagamento") or "").strip()
+        if _ocorr_label:
+            _ocorr_enum = _OCORR_MAP_PV.get(_norm_pv(_ocorr_label))
+            if _ocorr_enum:
+                # Default automático do PJE-Calc por característica (já setado
+                # via setCaracteristica). Só clicar explicitamente se DIFERIR
+                # do default — clique redundante pode causar NPE em
+                # LegendaDaFormula.getBase via reRender painelLabelFormula.
+                _carac_atual_enum = _CARAC_MAP_PV.get(_norm_pv(_carac_label), "COMUM")
+                _default_por_carac = {
+                    "COMUM": "MENSAL",
+                    "DECIMO_TERCEIRO_SALARIO": "DEZEMBRO",
+                    "AVISO_PREVIO": "DESLIGAMENTO",
+                    "FERIAS": "PERIODO_AQUISITIVO",
+                }.get(_carac_atual_enum, "MENSAL")
+                if _ocorr_enum != _default_por_carac:
+                    _ocorr_ok = self._preencher_radio_ou_select(
+                        "ocorrenciaPagto", _ocorr_enum, obrigatorio=False
+                    )
+                    if _ocorr_ok:
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(300)
+                        self._log(f"  ✓ ocorrenciaPagto '{nome_na_lista}': {_ocorr_enum}")
+                        _preencheu = True
+                    else:
+                        self._log(f"  ⚠ ocorrenciaPagto '{nome_na_lista}' [{_ocorr_enum}]: NÃO preenchida")
+                else:
+                    self._log(f"  ℹ ocorrenciaPagto '{nome_na_lista}': {_ocorr_enum} (default da característica — não clicar)")
+
         # Período De
         _pini = verba.get("periodo_inicio")
         if _pini:
@@ -7410,30 +7483,11 @@ class PJECalcPlaywright:
             }.get(carac_enum, "MENSAL")
             ocorr_label = v.get("ocorrencia", "Mensal")
             ocorr_enum = ocorr_map.get(_norm_key(ocorr_label), _carac_default_ocorr)
-            # ── AUTO-FIX: ocorrência ≠ MENSAL é incompatível com periodo_fim
-            # POSTERIOR à demissão (PJE-Calc bloqueia salvar). Forçar MENSAL
-            # quando detectar essa inconsistência. APENAS para verbas com
-            # caracteristica=COMUM — verbas com caract=AVISO_PREVIO/FERIAS/
-            # DECIMO_TERCEIRO têm ocorrência derivada automaticamente pelo
-            # PJE-Calc (Dezembro/Desligamento/Período Aquisitivo) e o sistema
-            # trata internamente o cálculo proporcional.
-            if ocorr_enum != "MENSAL" and carac_enum == "COMUM":
-                try:
-                    from datetime import datetime as _dtv
-                    _pf = v.get("periodo_fim", "")
-                    _dem = (self._dados or {}).get("contrato", {}).get("demissao") or \
-                           (self._dados or {}).get("contrato", {}).get("data_demissao") or ""
-                    _pf_dt = _dtv.strptime(_pf, "%d/%m/%Y") if _pf else None
-                    _dem_dt = _dtv.strptime(_dem, "%d/%m/%Y") if _dem else None
-                    if _pf_dt and _dem_dt and _pf_dt > _dem_dt:
-                        self._log(
-                            f"  ℹ AUTO-FIX ocorrência: '{ocorr_label}' ({ocorr_enum}) "
-                            f"incompatível com periodo_fim {_pf} > demissão {_dem}. "
-                            f"Forçando MENSAL (verba COMUM pós-rescisão)."
-                        )
-                        ocorr_enum = "MENSAL"
-                except Exception:
-                    pass
+            # FIX 2026-05-06 v5: REMOVIDO auto-override que forçava MENSAL para
+            # verbas COMUM com periodo_fim > demissão. Decisão do usuário:
+            # automação deve seguir ESTRITAMENTE os parâmetros do JSON.
+            # Se houver inconsistência (período pós-demissão + ocorrência ≠
+            # MENSAL), o usuário corrige na prévia ou aceita o erro do PJE-Calc.
             if ocorr_enum == _carac_default_ocorr:
                 self._log(
                     f"  ↳ ocorrencia {ocorr_enum} já definida por setCaracteristica({carac_enum}) — "
