@@ -6233,14 +6233,25 @@ class PJECalcPlaywright:
                         self._log(f"    ⚠ Reativar linhas qtd: {_e_mark}")
 
                     # FIX v2: locator iterativo (re-resolve a cada iteração)
+                    # FIX v6 (2026-05-06): safety mais agressivo:
+                    #  - cap reduzido de 200 → 80 (máx. teórico ~7 anos × 12 meses)
+                    #  - early break se 5 iterações consecutivas resultam em
+                    #    "linha já correta" (loop convergiu — todas preenchidas)
+                    #  - detect "Execution context was destroyed" (navigation)
+                    #    e abortar verba graciosamente
                     _n_qtd = 0
-                    _max_linhas = 200  # safety cap
+                    _max_linhas = 80
+                    _consec_idem = 0
                     for _i in range(_max_linhas):
-                        _inputs = self._page.locator(
-                            "tr input[id*='termoQuant']:not([disabled]):not([readonly]), "
-                            "tr input[id*=':quantidade']:not([disabled]):not([readonly])"
-                        )
-                        _count = _inputs.count()
+                        try:
+                            _inputs = self._page.locator(
+                                "tr input[id*='termoQuant']:not([disabled]):not([readonly]), "
+                                "tr input[id*=':quantidade']:not([disabled]):not([readonly])"
+                            )
+                            _count = _inputs.count()
+                        except Exception as _e_count:
+                            self._log(f"    ⚠ locator count abortado (DOM detached?): {_e_count!s:.80}")
+                            break
                         if _i >= _count:
                             break
                         try:
@@ -6255,19 +6266,30 @@ class PJECalcPlaywright:
                                 }"""
                             )
                             if not _row_active:
+                                _consec_idem = 0
                                 continue
                             # Verificar se o valor já está correto (idempotente)
                             _curr = _inp.input_value(timeout=1000)
                             if _curr.replace(".", "").replace(",", "") == _qtd_str.replace(".", "").replace(",", ""):
                                 _n_qtd += 1
+                                _consec_idem += 1
+                                # Early break se 5 linhas consecutivas já estão OK
+                                # (loop convergiu — não vale a pena continuar testando)
+                                if _consec_idem >= 5:
+                                    break
                                 continue
+                            _consec_idem = 0
                             _inp.fill(_qtd_str, timeout=3000)
                             # fill() já dispara blur ao perder foco; aguardar ajax
                             self._page.wait_for_timeout(150)
                             self._aguardar_ajax()
                             _n_qtd += 1
                         except Exception as _e_inner:
-                            self._log(f"    ⚠ linha {_i}: {_e_inner!s:.80}")
+                            _msg = str(_e_inner)
+                            if "Execution context was destroyed" in _msg or "Connection closed" in _msg:
+                                self._log(f"    ⚠ contexto destruído na linha {_i} — abortando verba")
+                                break
+                            self._log(f"    ⚠ linha {_i}: {_msg[:80]}")
                             continue
                     self._log(f"  ✓ Quantidade {_qtd_str} preenchida em {_n_qtd} ocorrência(s) (locator-iter)")
                 except Exception as _e_pq:
@@ -6336,15 +6358,20 @@ class PJECalcPlaywright:
                     except Exception as _e_mark:
                         self._log(f"    ⚠ Reativar linhas valor: {_e_mark}")
 
-                    # FIX v2: locator iterativo (re-resolve a cada iteração)
+                    # FIX v2 + v6: locator iter com safety break + cap reduzido
                     _n_val = 0
-                    _max_linhas = 200
+                    _max_linhas = 80
+                    _consec_idem_v = 0
                     for _i in range(_max_linhas):
-                        _inputs = self._page.locator(
-                            "tr input[id*='valorDevido']:not([disabled]):not([readonly]), "
-                            "tr input[id*='termoDevido']:not([disabled]):not([readonly])"
-                        )
-                        _count = _inputs.count()
+                        try:
+                            _inputs = self._page.locator(
+                                "tr input[id*='valorDevido']:not([disabled]):not([readonly]), "
+                                "tr input[id*='termoDevido']:not([disabled]):not([readonly])"
+                            )
+                            _count = _inputs.count()
+                        except Exception as _e_count:
+                            self._log(f"    ⚠ locator count abortado: {_e_count!s:.80}")
+                            break
                         if _i >= _count:
                             break
                         try:
@@ -6358,19 +6385,27 @@ class PJECalcPlaywright:
                                 }"""
                             )
                             if not _row_active:
+                                _consec_idem_v = 0
                                 continue
                             _curr = _inp.input_value(timeout=1000)
-                            # Comparação numérica simples (ignorar pontos/vírgulas)
                             _norm = lambda s: s.replace(".", "").replace(",", "").lstrip("0") or "0"
                             if _norm(_curr) == _norm(_val_str):
                                 _n_val += 1
+                                _consec_idem_v += 1
+                                if _consec_idem_v >= 5:
+                                    break
                                 continue
+                            _consec_idem_v = 0
                             _inp.fill(_val_str, timeout=3000)
                             self._page.wait_for_timeout(150)
                             self._aguardar_ajax()
                             _n_val += 1
                         except Exception as _e_inner:
-                            self._log(f"    ⚠ linha {_i}: {_e_inner!s:.80}")
+                            _msg = str(_e_inner)
+                            if "Execution context was destroyed" in _msg or "Connection closed" in _msg:
+                                self._log(f"    ⚠ contexto destruído na linha {_i} — abortando verba")
+                                break
+                            self._log(f"    ⚠ linha {_i}: {_msg[:80]}")
                             continue
                     self._log(f"  ✓ Valor devido {_val_str} preenchido em {_n_val} ocorrência(s) (indenização, locator-iter)")
                 except Exception as _e_pv:
