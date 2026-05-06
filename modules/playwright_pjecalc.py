@@ -6135,41 +6135,54 @@ class PJECalcPlaywright:
             if _qtd_mensal:
                 try:
                     _qtd_str = str(_qtd_mensal).replace(".", ",")
-                    # FIX (2026-05-06): RichFaces 3 só captura valor no submit
-                    # quando o input recebe `blur` (que dispara o ajax onblur que
-                    # registra o valor no ViewState do servidor). Sem `blur`,
-                    # o `inp.value=X` fica só no DOM e é perdido no submit
-                    # → Liquidar continua vendo qtd=0. Disparamos focus+input
-                    # +change+blur explicitamente.
-                    _n_qtd = self._page.evaluate(
-                        """(qtd) => {
-                            const inputs = document.querySelectorAll(
-                                'input[id*="termoQuant"], input[id*=":quantidade"]'
-                            );
-                            let n = 0;
-                            inputs.forEach(inp => {
-                                if (inp.disabled || inp.readOnly) return;
-                                const tr = inp.closest('tr');
-                                if (tr) {
-                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
-                                    if (cbx && !cbx.checked) return;  // só linhas ativas
-                                }
-                                try { inp.focus(); } catch(e) {}
-                                inp.value = qtd;
-                                inp.dispatchEvent(new Event('input', {bubbles: true}));
-                                inp.dispatchEvent(new Event('change', {bubbles: true}));
-                                inp.dispatchEvent(new Event('blur', {bubbles: true}));
-                                n++;
-                            });
-                            return n;
-                        }""",
-                        _qtd_str,
-                    )
-                    self._log(f"  ✓ Quantidade {_qtd_str} preenchida em {_n_qtd} ocorrência(s) (com blur)")
-                    if _n_qtd > 0:
-                        # Aguardar AJAX onblur de cada input processar antes de Salvar
-                        self._aguardar_ajax()
-                        self._page.wait_for_timeout(500)
+                    # FIX (2026-05-06 v2): NÃO fazer JS evaluate em massa.
+                    # Cada blur dispara onblur AJAX (a4j:ajax) que retorna
+                    # partial-update SUBSTITUINDO o DOM da tabela.
+                    # O snapshot inicial fica detached → só os primeiros 1-2
+                    # inputs efetivamente persistiam (sintoma "preenchido em 2"
+                    # quando havia 57 linhas).
+                    #
+                    # Solução robusta: iterar com Playwright locator que re-resolve
+                    # o seletor a cada acesso, fazendo fill() (simula digitação
+                    # real + onblur natural) e aguardar ajax após cada linha.
+                    # Lento (1-3s/linha) mas evita race condition de DOM detached.
+                    _n_qtd = 0
+                    _max_linhas = 200  # safety cap
+                    for _i in range(_max_linhas):
+                        _inputs = self._page.locator(
+                            "tr input[id*='termoQuant']:not([disabled]):not([readonly]), "
+                            "tr input[id*=':quantidade']:not([disabled]):not([readonly])"
+                        )
+                        _count = _inputs.count()
+                        if _i >= _count:
+                            break
+                        try:
+                            _inp = _inputs.nth(_i)
+                            # Verificar se a linha está ativa (checkbox marcado)
+                            _row_active = _inp.evaluate(
+                                """(el) => {
+                                    const tr = el.closest('tr');
+                                    if (!tr) return true;
+                                    const cbx = tr.querySelector('input[type=checkbox][id*=":ativo"]');
+                                    return !cbx || cbx.checked;
+                                }"""
+                            )
+                            if not _row_active:
+                                continue
+                            # Verificar se o valor já está correto (idempotente)
+                            _curr = _inp.input_value(timeout=1000)
+                            if _curr.replace(".", "").replace(",", "") == _qtd_str.replace(".", "").replace(",", ""):
+                                _n_qtd += 1
+                                continue
+                            _inp.fill(_qtd_str, timeout=3000)
+                            # fill() já dispara blur ao perder foco; aguardar ajax
+                            self._page.wait_for_timeout(150)
+                            self._aguardar_ajax()
+                            _n_qtd += 1
+                        except Exception as _e_inner:
+                            self._log(f"    ⚠ linha {_i}: {_e_inner!s:.80}")
+                            continue
+                    self._log(f"  ✓ Quantidade {_qtd_str} preenchida em {_n_qtd} ocorrência(s) (locator-iter)")
                 except Exception as _e_pq:
                     self._log(f"  ⚠ Preencher quantidade nas ocorrências: {_e_pq}")
 
@@ -6207,38 +6220,46 @@ class PJECalcPlaywright:
             if _val_mensal and _is_indenizacao:
                 try:
                     _val_str = _fmt_br(float(_val_mensal))
-                    # FIX (2026-05-06): adicionar focus + blur — RichFaces 3
-                    # depende de onblur para enviar o valor ao ViewState.
-                    # Sem blur, o submit não inclui o valor preenchido →
-                    # Liquidar reclama "ocorrência com valor devido = 0".
-                    _n_val = self._page.evaluate(
-                        """(valor) => {
-                            const inputs = document.querySelectorAll(
-                                'input[id*="valorDevido"], input[id*="termoDevido"]'
-                            );
-                            let n = 0;
-                            inputs.forEach(inp => {
-                                if (inp.disabled || inp.readOnly) return;
-                                const tr = inp.closest('tr');
-                                if (tr) {
-                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
-                                    if (cbx && !cbx.checked) return;
-                                }
-                                try { inp.focus(); } catch(e) {}
-                                inp.value = valor;
-                                inp.dispatchEvent(new Event('input', {bubbles: true}));
-                                inp.dispatchEvent(new Event('change', {bubbles: true}));
-                                inp.dispatchEvent(new Event('blur', {bubbles: true}));
-                                n++;
-                            });
-                            return n;
-                        }""",
-                        _val_str,
-                    )
-                    self._log(f"  ✓ Valor devido {_val_str} preenchido em {_n_val} ocorrência(s) (indenização, com blur)")
-                    if _n_val > 0:
-                        self._aguardar_ajax()
-                        self._page.wait_for_timeout(500)
+                    # FIX (2026-05-06 v2): mesma razão da quantidade — JS evaluate
+                    # em massa dispara onblur AJAX que re-renderiza tabela e
+                    # detacha snapshot inicial. Iteração com locator + fill()
+                    # garante onblur natural por linha + ajax wait.
+                    _n_val = 0
+                    _max_linhas = 200
+                    for _i in range(_max_linhas):
+                        _inputs = self._page.locator(
+                            "tr input[id*='valorDevido']:not([disabled]):not([readonly]), "
+                            "tr input[id*='termoDevido']:not([disabled]):not([readonly])"
+                        )
+                        _count = _inputs.count()
+                        if _i >= _count:
+                            break
+                        try:
+                            _inp = _inputs.nth(_i)
+                            _row_active = _inp.evaluate(
+                                """(el) => {
+                                    const tr = el.closest('tr');
+                                    if (!tr) return true;
+                                    const cbx = tr.querySelector('input[type=checkbox][id*=":ativo"]');
+                                    return !cbx || cbx.checked;
+                                }"""
+                            )
+                            if not _row_active:
+                                continue
+                            _curr = _inp.input_value(timeout=1000)
+                            # Comparação numérica simples (ignorar pontos/vírgulas)
+                            _norm = lambda s: s.replace(".", "").replace(",", "").lstrip("0") or "0"
+                            if _norm(_curr) == _norm(_val_str):
+                                _n_val += 1
+                                continue
+                            _inp.fill(_val_str, timeout=3000)
+                            self._page.wait_for_timeout(150)
+                            self._aguardar_ajax()
+                            _n_val += 1
+                        except Exception as _e_inner:
+                            self._log(f"    ⚠ linha {_i}: {_e_inner!s:.80}")
+                            continue
+                    self._log(f"  ✓ Valor devido {_val_str} preenchido em {_n_val} ocorrência(s) (indenização, locator-iter)")
                 except Exception as _e_pv:
                     self._log(f"  ⚠ Preencher valor devido: {_e_pv}")
 
