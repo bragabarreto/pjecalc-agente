@@ -2794,31 +2794,25 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.wait_for_timeout(1000)
 
-            # Selecionar "Sobrescrever" (segundo radio — itemValue=false)
-            # CORREÇÃO E09 (2026-05-03): "Manter alterações" mantém ocorrências
-            # com multiplicador antigo, gerando alerta:
-            # "Multiplicador foi alterado após geração das ocorrências".
-            # Quando o agente alterou multiplicador em Parâmetros, é PRECISO
-            # sobrescrever as ocorrências antigas com os novos parâmetros.
+            # DECISÃO 2026-05-06 (usuário): SEMPRE usar "Manter alterações
+            # realizadas nas ocorrências" (primeiro radio, itemValue=true) em
+            # vez de Sobrescrever. Motivo: Sobrescrever zera os checkboxes
+            # :ativo de algumas verbas (HE 50%, DANO MORAL como 1ª pós-Regerar)
+            # e descarta termoQuant/valorDevido já preenchidos. Manter preserva
+            # os valores e checkboxes; o backend regenera a estrutura
+            # (multiplicador, base) do que ainda não foi tocado.
             try:
                 radios_tipo = self._page.locator(
                     "input[id*='tipoRegeracao'][type='radio']"
                 )
-                if radios_tipo.count() >= 2:
-                    # Segundo radio = SOBRESCREVER (itemValue=false)
-                    radios_tipo.nth(1).click(force=True)
-                    # FIX (2026-05-06): RichFaces dispara AJAX no change do radio
-                    # para atualizar o ViewState antes do click do Regerar.
-                    # Sem aguardar, o backend pode receber Manter (default) em vez
-                    # de Sobrescrever, e o Regerar passa a fazer no-op.
+                if radios_tipo.count() >= 1:
+                    # Primeiro radio = MANTER (itemValue=true)
+                    radios_tipo.nth(0).click(force=True)
+                    # RichFaces dispara AJAX no change do radio para atualizar
+                    # o ViewState antes do click do Regerar — aguardar.
                     self._aguardar_ajax()
                     self._page.wait_for_timeout(500)
-                    self._log("    ✓ Opção: Sobrescrever (regenera com parâmetros atuais)")
-                elif radios_tipo.count() == 1:
-                    radios_tipo.first.click(force=True)
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(500)
-                    self._log("    ✓ Opção: única (provavelmente Sobrescrever)")
+                    self._log("    ✓ Opção: Manter alterações realizadas nas ocorrências")
             except Exception as e:
                 self._log(f"    ⚠ Radio tipoRegeracao: {e}")
 
