@@ -2807,10 +2807,17 @@ class PJECalcPlaywright:
                 if radios_tipo.count() >= 2:
                     # Segundo radio = SOBRESCREVER (itemValue=false)
                     radios_tipo.nth(1).click(force=True)
-                    self._page.wait_for_timeout(300)
+                    # FIX (2026-05-06): RichFaces dispara AJAX no change do radio
+                    # para atualizar o ViewState antes do click do Regerar.
+                    # Sem aguardar, o backend pode receber Manter (default) em vez
+                    # de Sobrescrever, e o Regerar passa a fazer no-op.
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
                     self._log("    ✓ Opção: Sobrescrever (regenera com parâmetros atuais)")
                 elif radios_tipo.count() == 1:
                     radios_tipo.first.click(force=True)
+                    self._aguardar_ajax()
+                    self._page.wait_for_timeout(500)
                     self._log("    ✓ Opção: única (provavelmente Sobrescrever)")
             except Exception as e:
                 self._log(f"    ⚠ Radio tipoRegeracao: {e}")
@@ -6128,6 +6135,12 @@ class PJECalcPlaywright:
             if _qtd_mensal:
                 try:
                     _qtd_str = str(_qtd_mensal).replace(".", ",")
+                    # FIX (2026-05-06): RichFaces 3 só captura valor no submit
+                    # quando o input recebe `blur` (que dispara o ajax onblur que
+                    # registra o valor no ViewState do servidor). Sem `blur`,
+                    # o `inp.value=X` fica só no DOM e é perdido no submit
+                    # → Liquidar continua vendo qtd=0. Disparamos focus+input
+                    # +change+blur explicitamente.
                     _n_qtd = self._page.evaluate(
                         """(qtd) => {
                             const inputs = document.querySelectorAll(
@@ -6141,18 +6154,22 @@ class PJECalcPlaywright:
                                     const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
                                     if (cbx && !cbx.checked) return;  // só linhas ativas
                                 }
+                                try { inp.focus(); } catch(e) {}
                                 inp.value = qtd;
                                 inp.dispatchEvent(new Event('input', {bubbles: true}));
                                 inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                inp.dispatchEvent(new Event('blur', {bubbles: true}));
                                 n++;
                             });
                             return n;
                         }""",
                         _qtd_str,
                     )
-                    self._log(f"  ✓ Quantidade {_qtd_str} preenchida em {_n_qtd} ocorrência(s)")
+                    self._log(f"  ✓ Quantidade {_qtd_str} preenchida em {_n_qtd} ocorrência(s) (com blur)")
                     if _n_qtd > 0:
+                        # Aguardar AJAX onblur de cada input processar antes de Salvar
                         self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
                 except Exception as _e_pq:
                     self._log(f"  ⚠ Preencher quantidade nas ocorrências: {_e_pq}")
 
@@ -6190,6 +6207,10 @@ class PJECalcPlaywright:
             if _val_mensal and _is_indenizacao:
                 try:
                     _val_str = _fmt_br(float(_val_mensal))
+                    # FIX (2026-05-06): adicionar focus + blur — RichFaces 3
+                    # depende de onblur para enviar o valor ao ViewState.
+                    # Sem blur, o submit não inclui o valor preenchido →
+                    # Liquidar reclama "ocorrência com valor devido = 0".
                     _n_val = self._page.evaluate(
                         """(valor) => {
                             const inputs = document.querySelectorAll(
@@ -6203,18 +6224,21 @@ class PJECalcPlaywright:
                                     const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
                                     if (cbx && !cbx.checked) return;
                                 }
+                                try { inp.focus(); } catch(e) {}
                                 inp.value = valor;
                                 inp.dispatchEvent(new Event('input', {bubbles: true}));
                                 inp.dispatchEvent(new Event('change', {bubbles: true}));
+                                inp.dispatchEvent(new Event('blur', {bubbles: true}));
                                 n++;
                             });
                             return n;
                         }""",
                         _val_str,
                     )
-                    self._log(f"  ✓ Valor devido {_val_str} preenchido em {_n_val} ocorrência(s) (indenização)")
+                    self._log(f"  ✓ Valor devido {_val_str} preenchido em {_n_val} ocorrência(s) (indenização, com blur)")
                     if _n_val > 0:
                         self._aguardar_ajax()
+                        self._page.wait_for_timeout(500)
                 except Exception as _e_pv:
                     self._log(f"  ⚠ Preencher valor devido: {_e_pv}")
 
