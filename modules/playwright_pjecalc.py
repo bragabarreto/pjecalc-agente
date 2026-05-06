@@ -6135,17 +6135,37 @@ class PJECalcPlaywright:
             if _qtd_mensal:
                 try:
                     _qtd_str = str(_qtd_mensal).replace(".", ",")
-                    # FIX (2026-05-06 v2): NÃO fazer JS evaluate em massa.
-                    # Cada blur dispara onblur AJAX (a4j:ajax) que retorna
-                    # partial-update SUBSTITUINDO o DOM da tabela.
-                    # O snapshot inicial fica detached → só os primeiros 1-2
-                    # inputs efetivamente persistiam (sintoma "preenchido em 2"
-                    # quando havia 57 linhas).
-                    #
-                    # Solução robusta: iterar com Playwright locator que re-resolve
-                    # o seletor a cada acesso, fazendo fill() (simula digitação
-                    # real + onblur natural) e aguardar ajax após cada linha.
-                    # Lento (1-3s/linha) mas evita race condition de DOM detached.
+                    # FIX (2026-05-06 v3): ANTES de preencher, MARCAR todas as
+                    # linhas com input termoQuant que estiverem desmarcadas.
+                    # Diagnóstico: após Regerar Sobrescrever, HE 50% caiu de 57
+                    # para 1 linha ativa — Sobrescrever zera os :ativo flags
+                    # para verbas Calculadas por quantidade. Ativar ANTES do fill
+                    # garante que termoQuant pesa no submit do Liquidar.
+                    try:
+                        _n_marcadas = self._page.evaluate(
+                            """() => {
+                                const rows = document.querySelectorAll('tr');
+                                let n = 0;
+                                rows.forEach(tr => {
+                                    const inp = tr.querySelector('input[id*="termoQuant"], input[id*=":quantidade"]');
+                                    if (!inp || inp.disabled || inp.readOnly) return;
+                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
+                                    if (cbx && !cbx.checked) {
+                                        cbx.click();
+                                        n++;
+                                    }
+                                });
+                                return n;
+                            }"""
+                        )
+                        if _n_marcadas:
+                            self._log(f"    ℹ Linhas reativadas (qtd): {_n_marcadas}")
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(500)
+                    except Exception as _e_mark:
+                        self._log(f"    ⚠ Reativar linhas qtd: {_e_mark}")
+
+                    # FIX v2: locator iterativo (re-resolve a cada iteração)
                     _n_qtd = 0
                     _max_linhas = 200  # safety cap
                     for _i in range(_max_linhas):
