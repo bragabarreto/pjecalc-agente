@@ -847,53 +847,394 @@ class AplicadorPJECalc:
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
-    # FASES PENDENTES (stubs com docstrings)
+    # Helpers genéricos para listagens com botão "Novo"/"Incluir"
+    # ────────────────────────────────────────────────────────────────────────
+
+    def _clicar_novo(self) -> bool:
+        """Click no botão Novo/Incluir da listagem atual (abre form de Novo)."""
+        for sel in (
+            "input[id$='novo'][type='submit']",
+            "input[id$='incluir'][type='submit']",
+            "input[id$='Novo'][type='submit']",
+            "input[id$='novo']",
+            "input[id$='incluir']",
+        ):
+            try:
+                btn = self._page.locator(sel).first
+                if btn.count() > 0:
+                    btn.click(timeout=8000)
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(400)
+                    return True
+            except Exception:
+                continue
+        return False
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 2 — Histórico Salarial
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_historico_salarial(self, historico: list[HistoricoSalarialEntry]) -> bool:
-        """TODO 2C completa: aplicar Histórico Salarial (entries + ocorrências mensais)."""
-        self.log(f"→ Fase 2: Histórico Salarial ({len(historico)} entry(es)) — IMPL pendente")
+        """Aplica entradas de Histórico Salarial em historico-salarial.jsf.
+
+        Para cada entry:
+          1. Click Novo → abre form
+          2. Preenche nome, tipo_variacao, competências, tipo_valor, valor, fgts/inss
+          3. Salva
+        Ocorrências mensais (sub-tabela): aplicadas linha por linha após salvar.
+        """
+        if not historico:
+            return True
+        self.log(f"→ Fase 2: Histórico Salarial ({len(historico)} entry(es))")
+        if not self._navegar_url_calculo("historico-salarial.jsf"):
+            return False
+        for entry in historico:
+            if not self._clicar_novo():
+                self.log(f"  ⚠ Não conseguiu abrir 'Novo' para '{entry.nome}'")
+                continue
+            self._fill_text("nome", entry.nome)
+            self._click_radio("tipoVariacaoDaParcela",
+                              "Fixa" if entry.tipo_variacao_da_parcela == "FIXA" else "Variável")
+            self._fill_date("competenciaInicialInputDate", entry.competencia_inicial)
+            self._fill_date("competenciaFinalInputDate", entry.competencia_final)
+            self._click_radio("tipoValor",
+                              "Informado" if entry.tipo_valor == "INFORMADO" else "Calculado")
+            self._fill_decimal("valorParaBaseDeCalculo", entry.valor_para_base_de_calculo)
+            self._click_checkbox("fgts", entry.fgts)
+            self._click_checkbox("inss", entry.inss)
+            self._clicar_salvar()
+
+            # Ocorrências mensais — abrir linha do histórico e aplicar
+            if entry.ocorrencias:
+                self._aplicar_ocorrencias_historico(entry)
+            self._navegar_url_calculo("historico-salarial.jsf")
         return True
+
+    def _aplicar_ocorrencias_historico(self, entry: HistoricoSalarialEntry) -> None:
+        """Abre o link Ocorrências do histórico e aplica as linhas."""
+        try:
+            link_id = self._achar_link_acao_verba(entry.nome, "ocorrencias")
+            if not link_id:
+                return
+            self._page.locator(f"a[id='{link_id}']").first.click(timeout=8000)
+            self._aguardar_ajax(6000)
+            for oc in entry.ocorrencias:
+                cbx = self._page.locator(
+                    f"input[type='checkbox'][id$='listagem:{oc.indice}:ativo']"
+                ).first
+                if cbx.count() > 0 and cbx.is_checked() != oc.ativo:
+                    cbx.click(force=True)
+                    self._aguardar_ajax(1500)
+                if oc.valor is not None:
+                    self._fill_decimal_by_id(f"listagem:{oc.indice}:valor", oc.valor)
+                if oc.valor_incidencia_cs is not None:
+                    self._fill_decimal_by_id(
+                        f"listagem:{oc.indice}:valorIncidenciaCS", oc.valor_incidencia_cs
+                    )
+                if oc.valor_incidencia_fgts is not None:
+                    self._fill_decimal_by_id(
+                        f"listagem:{oc.indice}:valorIncidenciaFGTS", oc.valor_incidencia_fgts
+                    )
+            self._clicar_salvar()
+        except Exception as e:
+            self.log(f"  ⚠ ocorrências histórico '{entry.nome}': {e}")
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 3 — Faltas
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_faltas(self, faltas: list[Falta]) -> bool:
-        """TODO 2C completa: aplicar Faltas."""
+        """Aplica faltas em faltas.jsf (Novo → form → Salvar por entrada)."""
+        if not faltas:
+            return True
+        self.log(f"→ Fase 3: Faltas ({len(faltas)})")
+        if not self._navegar_url_calculo("faltas.jsf"):
+            return False
+        for f in faltas:
+            if not self._clicar_novo():
+                continue
+            self._fill_date("dataInicio", f.data_inicio)
+            self._fill_date("dataInicioInputDate", f.data_inicio)
+            self._fill_date("dataFim", f.data_fim)
+            self._fill_date("dataFimInputDate", f.data_fim)
+            self._click_checkbox("justificada", f.justificada)
+            self._click_checkbox("descontarRemuneracao", f.descontar_remuneracao)
+            self._click_checkbox("descontarDsr", f.descontar_dsr)
+            self._clicar_salvar()
+            self._navegar_url_calculo("faltas.jsf")
         return True
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 4 — Férias
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_ferias(self, ferias: list[FeriasEntry]) -> bool:
-        """TODO 2C completa: aplicar Férias gozadas."""
+        """Aplica férias gozadas em ferias.jsf."""
+        if not ferias:
+            return True
+        self.log(f"→ Fase 4: Férias ({len(ferias)} entrada(s))")
+        if not self._navegar_url_calculo("ferias.jsf"):
+            return False
+        for fe in ferias:
+            if not self._clicar_novo():
+                continue
+            self._fill_date("periodoAquisitivoInicioInputDate", fe.periodo_aquisitivo_inicio)
+            self._fill_date("periodoAquisitivoFimInputDate", fe.periodo_aquisitivo_fim)
+            self._fill_date("dataInicioGozoInputDate", fe.data_inicio_gozo)
+            self._fill_date("dataFimGozoInputDate", fe.data_fim_gozo)
+            self._click_checkbox("abonoPecuniario", fe.abono_pecuniario)
+            self._click_checkbox("dobra", fe.dobra)
+            self._clicar_salvar()
+            self._navegar_url_calculo("ferias.jsf")
         return True
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 6 — Cartão de Ponto
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_cartao_de_ponto(self, cp: CartaoDePonto) -> bool:
-        """TODO 2C completa: aplicar Cartão de Ponto + programação semanal."""
-        return True
+        """Aplica configuração de Cartão de Ponto + programação semanal."""
+        if not cp or (not cp.forma_de_apuracao and not cp.programacao_semanal):
+            return True
+        self.log("→ Fase 6: Cartão de Ponto")
+        if not self._navegar_url_calculo("../cartaodeponto/apuracao-cartaodeponto.jsf"):
+            # fallback path
+            self._navegar_url_calculo("cartaodeponto/apuracao-cartaodeponto.jsf")
+        if cp.forma_de_apuracao:
+            self._select_value("formaDeApuracao", cp.forma_de_apuracao)
+        if cp.jornada_diaria_h is not None:
+            self._fill_decimal("jornadaDiaria", cp.jornada_diaria_h)
+        if cp.jornada_semanal_h is not None:
+            self._fill_decimal("jornadaSemanal", cp.jornada_semanal_h)
+        if cp.intervalo_intrajornada_min is not None:
+            self._fill_text("intervaloIntrajornada", str(cp.intervalo_intrajornada_min))
+        # Programação semanal: itera dias
+        for dia_cfg in cp.programacao_semanal:
+            d = dia_cfg.dia.lower()
+            if dia_cfg.turno1_inicio:
+                self._fill_text(f"entrada1{d}", dia_cfg.turno1_inicio)
+            if dia_cfg.turno1_fim:
+                self._fill_text(f"saida1{d}", dia_cfg.turno1_fim)
+            if dia_cfg.turno2_inicio:
+                self._fill_text(f"entrada2{d}", dia_cfg.turno2_inicio)
+            if dia_cfg.turno2_fim:
+                self._fill_text(f"saida2{d}", dia_cfg.turno2_fim)
+        return self._clicar_salvar()
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 8 — Contribuição Social (INSS)
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_inss(self, inss: ContribuicaoSocial) -> bool:
-        """TODO 2C completa: aplicar Contribuição Social (INSS)."""
-        return True
+        """Aplica configuração de INSS (Contribuição Social)."""
+        if not inss or not inss.apurar:
+            self.log("→ Fase 8: INSS — apurar=False, pulando")
+            return True
+        self.log("→ Fase 8: INSS")
+        if not self._navegar_url_calculo("inss/inss.jsf"):
+            return False
+        self._click_checkbox("apurar", inss.apurar)
+        if inss.indice_atualizacao:
+            self._select_value("indiceAtualizacao", inss.indice_atualizacao)
+        if inss.aliquota_rat is not None:
+            self._fill_decimal("aliquotaRat", inss.aliquota_rat)
+            self._fill_decimal("aliquotaRAT", inss.aliquota_rat)
+        if inss.fap is not None:
+            self._fill_decimal("fap", inss.fap)
+            self._fill_decimal("FAP", inss.fap)
+        self._click_radio("regimeCaixaCompetencia",
+                          "Caixa" if inss.regime_caixa_competencia == "CAIXA" else "Competência")
+        self._click_checkbox("multaInss", inss.multa_inss)
+        self._click_checkbox("multaINSS", inss.multa_inss)
+        self._click_checkbox("jurosInss", inss.juros_inss)
+        self._click_checkbox("jurosINSS", inss.juros_inss)
+        return self._clicar_salvar()
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 9 — Imposto de Renda
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_irpf(self, ir: ImpostoRenda) -> bool:
-        """TODO 2C completa: aplicar Imposto de Renda."""
-        return True
+        """Aplica configuração de Imposto de Renda."""
+        if not ir or not ir.apurar:
+            self.log("→ Fase 9: IRPF — apurar=False, pulando")
+            return True
+        self.log("→ Fase 9: IRPF")
+        if not self._navegar_url_calculo("irpf.jsf"):
+            return False
+        self._click_checkbox("apurar", ir.apurar)
+        rt_map = {
+            "ANUAL_ATE_2014": "Anual até 2014",
+            "MENSAL_APOS_2015": "Mensal após 2015",
+            "RRA": "Regime de Acumulação (RRA)",
+            "ATUAL": "Atual",
+        }
+        self._click_radio("regimeTributacao", rt_map.get(ir.regime_tributacao, ir.regime_tributacao))
+        if ir.meses_tributaveis is not None:
+            self._fill_text("mesesTributaveis", str(ir.meses_tributaveis))
+        self._fill_text("quantidadeDependentes", str(ir.quantidade_dependentes))
+        if ir.deducoes is not None:
+            self._fill_decimal("deducoes", ir.deducoes)
+        if ir.pensao_alimenticia is not None:
+            self._fill_decimal("pensaoAlimenticia", ir.pensao_alimenticia)
+        return self._clicar_salvar()
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 10 — Honorários
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_honorarios(self, honorarios: list[Honorario]) -> bool:
-        """TODO 2C completa: aplicar Honorários (lista de N registros)."""
+        """Aplica honorários (lista de N registros)."""
+        if not honorarios:
+            return True
+        self.log(f"→ Fase 10: Honorários ({len(honorarios)})")
+        if not self._navegar_url_calculo("honorarios.jsf"):
+            return False
+        for h in honorarios:
+            if not self._clicar_novo():
+                continue
+            self._fill_text("descricao", h.descricao)
+            tp_map = {
+                "ASSISTENCIAIS": "Assistenciais",
+                "ADVOCATICIOS": "Advocatícios",
+                "PERICIAIS": "Periciais",
+                "SUCUMBENCIA": "Sucumbência",
+            }
+            self._select_value("tpHonorario", tp_map.get(h.tp_honorario, h.tp_honorario))
+            self._click_radio("tipoDeDevedor",
+                              "Reclamante" if h.tipo_de_devedor == "RECLAMANTE" else "Reclamado")
+            self._click_radio("tipoValor",
+                              "Calculado" if h.tipo_valor == "CALCULADO" else "Informado")
+            if h.aliquota is not None:
+                self._fill_decimal("aliquota", h.aliquota)
+            base_map = {
+                "BRUTO_LIQUIDO": "Bruto Líquido",
+                "BRUTO": "Bruto",
+                "LIQUIDO": "Líquido",
+                "VALOR_INFORMADO": "Valor Informado",
+            }
+            self._select_value("baseParaApuracao",
+                               base_map.get(h.base_para_apuracao, h.base_para_apuracao))
+            self._fill_text("nomeCredor", h.nome_credor)
+            self._click_radio("tipoDocumentoFiscalCredor", h.tipo_documento_fiscal_credor)
+            self._fill_text("numeroDocumentoFiscalCredor", h.numero_documento_fiscal_credor)
+            self._click_checkbox("apurarIRRF", h.apurar_irrf)
+            self._click_checkbox("incidirSobreJuros", h.incidir_sobre_juros)
+            self._click_checkbox("aplicarJuros", h.aplicar_juros)
+            self._clicar_salvar()
+            self._navegar_url_calculo("honorarios.jsf")
         return True
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 11 — Custas Judiciais
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_custas(self, custas: CustasJudiciais) -> bool:
-        """TODO 2C completa: aplicar Custas Judiciais."""
-        return True
+        """Aplica configuração de Custas Judiciais."""
+        if not custas:
+            return True
+        self.log("→ Fase 11: Custas Judiciais")
+        if not self._navegar_url_calculo("custas-judiciais.jsf"):
+            return False
+        if custas.percentual is not None:
+            self._fill_decimal("percentual", custas.percentual)
+        resp_map = {
+            "RECLAMANTE": "Reclamante",
+            "RECLAMADO": "Reclamado",
+            "AMBOS": "Ambos",
+            "NAO_INCIDE": "Não Incide",
+        }
+        self._click_radio("responsavel",
+                          resp_map.get(custas.responsavel, custas.responsavel))
+        if custas.valor_periciais is not None:
+            self._fill_decimal("valorPericiais", custas.valor_periciais)
+        return self._clicar_salvar()
+
+    # ────────────────────────────────────────────────────────────────────────
+    # FASE 12 — Correção, Juros e Multa
+    # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_correcao_juros(self, cj: CorrecaoJuros) -> bool:
-        """TODO 2C completa: aplicar Correção, Juros e Multa."""
-        return True
+        """Aplica parâmetros de atualização (correção + juros)."""
+        if not cj:
+            return True
+        self.log("→ Fase 12: Correção/Juros")
+        if not self._navegar_url_calculo("parametros-atualizacao/parametros-atualizacao.jsf"):
+            return False
+        idx_map = {
+            "TR": "TR", "IPCA_E": "IPCA-E", "IPCAE": "IPCA-E",
+            "INPC": "INPC", "SELIC": "SELIC",
+        }
+        self._select_value("indiceCorrecao",
+                           idx_map.get(cj.indice_correcao, cj.indice_correcao))
+        taxa_map = {
+            "1_AO_MES": "1% ao mês",
+            "TR_ATE_2017_E_TR_APOS": "TR (até 2017) + TR após",
+            "SELIC": "SELIC",
+            "IPCA_E_TR": "IPCA-E + TR",
+        }
+        self._select_value("taxaJuros",
+                           taxa_map.get(cj.taxa_juros, cj.taxa_juros))
+        base_map = {"VERBA": "Verba", "PRINCIPAL": "Principal", "BRUTO": "Bruto"}
+        self._click_radio("baseJuros",
+                          base_map.get(cj.base_juros, cj.base_juros))
+        return self._clicar_salvar()
+
+    # ────────────────────────────────────────────────────────────────────────
+    # LIQUIDAR + EXPORTAR
+    # ────────────────────────────────────────────────────────────────────────
 
     def liquidar_e_exportar(self) -> Optional[bytes]:
-        """TODO 2C completa: clicar Liquidar, aguardar resultado, capturar .pjc.
+        """Click Liquidar → aguardar conclusão → click Exportar → captura .pjc bytes.
 
         Retorna bytes do .pjc ou None em caso de erro.
         """
-        self.log("→ Liquidar e Exportar — IMPL pendente")
-        return None
+        self.log("→ Liquidar e Exportar")
+        try:
+            # Etapa 1 — Liquidar (menu Operações ou link direto)
+            if not self._navegar_url_calculo("liquidacao/liquidar.jsf"):
+                self._navegar_url_calculo("liquidar.jsf")
+            # Click no botão Liquidar
+            for sel in ("input[id$='liquidar']", "input[value='Liquidar']",
+                        "input[id$='confirmarLiquidacao']"):
+                btn = self._page.locator(sel).first
+                if btn.count() > 0:
+                    btn.click(timeout=8000)
+                    break
+            self._aguardar_ajax(60000)  # liquidação pode demorar
+            self._page.wait_for_timeout(2000)
+
+            # Verificar mensagem de sucesso
+            sucesso = self._page.evaluate(
+                """() => {
+                    const body = (document.body && document.body.textContent) || '';
+                    return body.includes('sucesso') || body.includes('liquidação realizada')
+                        || body.includes('Liquidação concluída');
+                }"""
+            )
+            if not sucesso:
+                self.log("  ⚠ Liquidação: mensagem de sucesso não detectada (continuando assim mesmo)")
+
+            # Etapa 2 — Exportar
+            self._navegar_url_calculo("exportar/exportar.jsf")
+            with self._page.expect_download(timeout=60000) as dl_info:
+                for sel in ("input[id$='exportar']", "input[value='Exportar']",
+                            "a:has-text('Exportar')"):
+                    btn = self._page.locator(sel).first
+                    if btn.count() > 0:
+                        btn.click(timeout=8000)
+                        break
+            download = dl_info.value
+            path = download.path()
+            if path:
+                with open(path, "rb") as f:
+                    pjc = f.read()
+                self.log(f"  ✓ .PJC capturado ({len(pjc)} bytes)")
+                return pjc
+            return None
+        except Exception as e:
+            self.log(f"  ⚠ liquidar_e_exportar: {e}")
+            return None
 
     # ────────────────────────────────────────────────────────────────────────
     # ORQUESTRADOR
