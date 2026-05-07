@@ -6194,7 +6194,7 @@ class PJECalcPlaywright:
                             "  const sampleIds = [];"
                             "  rows.forEach(tr => {"
                             "    totalRows++;"
-                            // Tentar múltiplos seletores de checkbox de linha
+                            # Tentar múltiplos seletores de checkbox de linha
                             "    let cbx = tr.querySelector('input[type=\"checkbox\"][id*=\":ativo\"]')"
                             "      || tr.querySelector('input[type=\"checkbox\"][id*=\"ativo\"]')"
                             "      || tr.querySelector('input[type=\"checkbox\"][id*=\":selecionada\"]')"
