@@ -1026,28 +1026,37 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_inss(self, inss: ContribuicaoSocial) -> bool:
-        """Aplica configuração de INSS (Contribuição Social)."""
+        """Aplica configuração de INSS (Contribuição Social).
+
+        IDs v1 confirmados: aliquotaSAT, aliquotaTerceiros, regimeDeCaixa
+        (checkbox), multaINSS/jurosINSS. Tenta múltiplas variações para
+        compatibilidade entre versões.
+        """
         if not inss or not inss.apurar:
             self.log("→ Fase 8: INSS — apurar=False, pulando")
             return True
         self.log("→ Fase 8: INSS")
         if not self._navegar_url_calculo("inss/inss.jsf"):
             return False
-        self._click_checkbox("apurar", inss.apurar)
         if inss.indice_atualizacao:
             self._select_value("indiceAtualizacao", inss.indice_atualizacao)
         if inss.aliquota_rat is not None:
-            self._fill_decimal("aliquotaRat", inss.aliquota_rat)
+            # PJE-Calc usa "RAT" (riscos ambientais) — IDs alternativos
+            self._fill_decimal("aliquotaSAT", inss.aliquota_rat)
             self._fill_decimal("aliquotaRAT", inss.aliquota_rat)
+            self._fill_decimal("aliquotaRat", inss.aliquota_rat)
         if inss.fap is not None:
             self._fill_decimal("fap", inss.fap)
             self._fill_decimal("FAP", inss.fap)
-        self._click_radio("regimeCaixaCompetencia",
-                          "Caixa" if inss.regime_caixa_competencia == "CAIXA" else "Competência")
-        self._click_checkbox("multaInss", inss.multa_inss)
+        # Regime caixa/competência — checkbox, default v1 = competência (off)
+        if inss.regime_caixa_competencia == "CAIXA":
+            self._click_checkbox("regimeDeCaixa", True)
+            self._click_checkbox("regimeCaixa", True)
+        # Multa/Juros INSS
         self._click_checkbox("multaINSS", inss.multa_inss)
-        self._click_checkbox("jurosInss", inss.juros_inss)
+        self._click_checkbox("multaInss", inss.multa_inss)
         self._click_checkbox("jurosINSS", inss.juros_inss)
+        self._click_checkbox("jurosInss", inss.juros_inss)
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
@@ -1055,28 +1064,42 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_irpf(self, ir: ImpostoRenda) -> bool:
-        """Aplica configuração de Imposto de Renda."""
+        """Aplica configuração de Imposto de Renda.
+
+        IDs auditados em produção (v1 playwright_pjecalc): a página IRPF NÃO usa
+        radio para regime — usa checkboxes booleanos: tributacaoExclusiva,
+        regimeDeCaixa, tributacaoEmSeparado. O schema v3 tem um Literal único —
+        mapeamos para a combinação correta de checkboxes.
+        """
         if not ir or not ir.apurar:
             self.log("→ Fase 9: IRPF — apurar=False, pulando")
             return True
         self.log("→ Fase 9: IRPF")
         if not self._navegar_url_calculo("irpf.jsf"):
             return False
-        self._click_checkbox("apurar", ir.apurar)
-        rt_map = {
-            "ANUAL_ATE_2014": "Anual até 2014",
-            "MENSAL_APOS_2015": "Mensal após 2015",
-            "RRA": "Regime de Acumulação (RRA)",
-            "ATUAL": "Atual",
-        }
-        self._click_radio("regimeTributacao", rt_map.get(ir.regime_tributacao, ir.regime_tributacao))
+        self._click_checkbox("apurarImpostoRenda", ir.apurar)
+        # Regime de tributação → checkboxes
+        if ir.regime_tributacao == "RRA":
+            self._click_checkbox("tributacaoEmSeparado", True)
+        elif ir.regime_tributacao == "ANUAL_ATE_2014":
+            self._click_checkbox("tributacaoExclusiva", True)
+        elif ir.regime_tributacao == "MENSAL_APOS_2015":
+            self._click_checkbox("regimeDeCaixa", True)
+        # ATUAL = nenhum checkbox (default do PJE-Calc)
+        # Deduções (todas defaults true em v1 — manter)
         if ir.meses_tributaveis is not None:
             self._fill_text("mesesTributaveis", str(ir.meses_tributaveis))
+        # Tentar IDs alternativos para dependentes (ordem v1 → v3)
         self._fill_text("quantidadeDependentes", str(ir.quantidade_dependentes))
+        self._fill_text("numeroDeDependentes", str(ir.quantidade_dependentes))
+        self._fill_text("dependentes", str(ir.quantidade_dependentes))
         if ir.deducoes is not None:
             self._fill_decimal("deducoes", ir.deducoes)
         if ir.pensao_alimenticia is not None:
-            self._fill_decimal("pensaoAlimenticia", ir.pensao_alimenticia)
+            # v1 usa valorPensao + valorDaPensao + ativa checkbox pensaoAlimenticia
+            self._click_checkbox("pensaoAlimenticia", True)
+            self._fill_decimal("valorPensao", ir.pensao_alimenticia)
+            self._fill_decimal("valorDaPensao", ir.pensao_alimenticia)
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
@@ -1130,24 +1153,35 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_custas(self, custas: CustasJudiciais) -> bool:
-        """Aplica configuração de Custas Judiciais."""
+        """Aplica configuração de Custas Judiciais.
+
+        IDs v1 confirmados (TRT7 v2.15.1): a página tem 3 radios separados —
+        custasReclamadoConhecimento, custasReclamadoLiquidacao,
+        custasReclamanteConhecimento — cada um com NAO_SE_APLICA / CALCULADA_*
+        / INFORMADA. O schema v3 simplifica em `responsavel` único; mapeamos
+        para o conhecimento (caso mais comum) e deixamos liquidação como
+        NAO_SE_APLICA (default).
+        """
         if not custas:
             return True
         self.log("→ Fase 11: Custas Judiciais")
         if not self._navegar_url_calculo("custas-judiciais.jsf"):
             return False
+        # Mapear responsavel para os radios reais
+        resp = custas.responsavel
+        if resp in ("RECLAMADO", "AMBOS"):
+            self._click_radio("custasReclamadoConhecimento", "CALCULADA_2_POR_CENTO")
+        elif resp == "NAO_INCIDE":
+            self._click_radio("custasReclamadoConhecimento", "NAO_SE_APLICA")
+        if resp in ("RECLAMANTE", "AMBOS"):
+            self._click_radio("custasReclamanteConhecimento", "CALCULADA_2_POR_CENTO")
+        # Percentual (PJE-Calc espera valor entre 0 e 100, não fração)
         if custas.percentual is not None:
-            self._fill_decimal("percentual", custas.percentual)
-        resp_map = {
-            "RECLAMANTE": "Reclamante",
-            "RECLAMADO": "Reclamado",
-            "AMBOS": "Ambos",
-            "NAO_INCIDE": "Não Incide",
-        }
-        self._click_radio("responsavel",
-                          resp_map.get(custas.responsavel, custas.responsavel))
+            self._fill_decimal("percentualCustas", custas.percentual)
+            self._fill_decimal("aliquota", custas.percentual)
         if custas.valor_periciais is not None:
             self._fill_decimal("valorPericiais", custas.valor_periciais)
+            self._fill_decimal("honorariosPericiais", custas.valor_periciais)
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
@@ -1155,29 +1189,37 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_correcao_juros(self, cj: CorrecaoJuros) -> bool:
-        """Aplica parâmetros de atualização (correção + juros)."""
+        """Aplica parâmetros de atualização (correção + juros).
+
+        Labels confirmadas em v1 (PJE-Calc TRT7 v2.15.1).
+        """
         if not cj:
             return True
         self.log("→ Fase 12: Correção/Juros")
         if not self._navegar_url_calculo("parametros-atualizacao/parametros-atualizacao.jsf"):
             return False
         idx_map = {
-            "TR": "TR", "IPCA_E": "IPCA-E", "IPCAE": "IPCA-E",
-            "INPC": "INPC", "SELIC": "SELIC",
+            "TR": "TR",
+            "IPCA_E": "IPCA-E", "IPCAE": "IPCA-E",
+            "INPC": "INPC",
+            "SELIC": "SELIC (Receita Federal)",
         }
-        self._select_value("indiceCorrecao",
-                           idx_map.get(cj.indice_correcao, cj.indice_correcao))
+        val_idx = idx_map.get(cj.indice_correcao, cj.indice_correcao)
+        self._select_value("indiceCorrecao", val_idx)
+        self._select_value("indiceTrabalhista", val_idx)
+
         taxa_map = {
-            "1_AO_MES": "1% ao mês",
-            "TR_ATE_2017_E_TR_APOS": "TR (até 2017) + TR após",
-            "SELIC": "SELIC",
-            "IPCA_E_TR": "IPCA-E + TR",
+            "1_AO_MES": "Juros Padrão",
+            "TR_ATE_2017_E_TR_APOS": "TRD Juros Simples",
+            "SELIC": "SELIC (Receita Federal)",
+            "IPCA_E_TR": "Taxa Legal",
         }
-        self._select_value("taxaJuros",
-                           taxa_map.get(cj.taxa_juros, cj.taxa_juros))
-        base_map = {"VERBA": "Verba", "PRINCIPAL": "Principal", "BRUTO": "Bruto"}
-        self._click_radio("baseJuros",
-                          base_map.get(cj.base_juros, cj.base_juros))
+        val_taxa = taxa_map.get(cj.taxa_juros, cj.taxa_juros)
+        self._select_value("taxaJuros", val_taxa)
+        self._select_value("juros", val_taxa)
+
+        # base_juros: a página parametros-atualizacao não tem radio explícito
+        # em v2.15.1 — campo mantido no schema para futuras versões.
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
