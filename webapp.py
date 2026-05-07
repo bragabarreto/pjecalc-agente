@@ -635,7 +635,9 @@ async def exibir_previa_v3(
         Verba, ParametrosVerba, OcorrenciaVerba,
     )
     verbas_v3 = []
-    verbas_v2 = dados_v2.get("verbas") or []
+    # Verbas podem estar em dados.verbas (legacy) OU em verbas_mapeadas
+    # (novo padrão — coluna verbas_json com dict {predefinidas, personalizadas, ...})
+    verbas_v2 = dados_v2.get("verbas") or calculo.verbas_mapeadas() or []
 
     def _migrar_oc(oc_v2: dict, indice: int) -> OcorrenciaVerba:
         return OcorrenciaVerba(
@@ -965,17 +967,23 @@ async def editar_campo_previa_v3(
     if campo.startswith("verbas"):
         import re as _re
 
-        # Garantir lista plana (caso v2 tenha dict {predefinidas:[]})
+        # Verbas podem estar em dados.verbas (v3 nativo) OU em verbas_mapeadas
+        # (v2 legacy — coluna verbas_json separada).
+        # Estratégia: usar dados.verbas como source of truth para v3.
+        # Na primeira edição, migra verbas_mapeadas → dados.verbas.
         verbas_atual = dados.get("verbas")
-        if isinstance(verbas_atual, dict):
-            # Achatar para lista única (perda do agrupamento, mas necessário p/ índices)
-            verbas_flat = []
-            for grupo in ("predefinidas", "personalizadas", "manuais"):
-                verbas_flat.extend(verbas_atual.get(grupo) or [])
-            verbas_atual = verbas_flat
-            dados["verbas"] = verbas_atual
-        elif not isinstance(verbas_atual, list):
-            verbas_atual = []
+        if not isinstance(verbas_atual, list):
+            # Carregar de verbas_mapeadas e achatar
+            vm = calculo.verbas_mapeadas() or {}
+            if isinstance(vm, dict):
+                verbas_flat = []
+                for grupo in ("predefinidas", "personalizadas", "manuais"):
+                    verbas_flat.extend(vm.get(grupo) or [])
+                verbas_atual = verbas_flat
+            elif isinstance(vm, list):
+                verbas_atual = list(vm)
+            else:
+                verbas_atual = []
             dados["verbas"] = verbas_atual
 
         _MAP_PV_TO_V2 = {
