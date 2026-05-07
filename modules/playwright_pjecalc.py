@@ -6116,44 +6116,70 @@ class PJECalcPlaywright:
             self._aguardar_ajax()
             self._page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
 
-        # 2b. FIX: filtrar ocorrências fora do período extraído da sentença.
-        # O "Gerar" cria ocorrências para TODO o período do contrato; verbas
-        # que só valem por N meses (ex: "Adicional Noturno de 03/2022 a 05/2023")
-        # precisam ter as ocorrências fora desse intervalo desmarcadas.
-        # FIX (2026-05-05): aplica filtro mesmo quando _gerou=False (ocorrências
-        # já existiam — caso típico após Regerar global precedente).
+        # 2b. FIX v9 (2026-05-07): filtrar ocorrências fora do período da verba.
+        # Antes usava tr.innerText (problema: JSF mistura tr de sidebar/header
+        # → regex MM/YYYY não casa).
+        # Agora: usa o ÍNDICE da linha (formulario:listagem:N:ativo) + offset
+        # do data_inicio_calculo do contrato. Linha 0 = primeiro mês do
+        # contrato; linha N = data_inicio + N meses.
         if v:
             _pi = v.get("periodo_inicio")
             _pf = v.get("periodo_fim")
             if _pi and _pf:
                 try:
                     from datetime import datetime as _dt
-                    _di = _dt.strptime(_pi, "%d/%m/%Y")
-                    _df = _dt.strptime(_pf, "%d/%m/%Y")
-                    _mes_ini = _di.year * 12 + _di.month
-                    _mes_fim = _df.year * 12 + _df.month
-                    _js_filtro = (
-                        "(args) => {"
-                        "  const {mesIni, mesFim} = args;"
-                        "  const rows = document.querySelectorAll('table tr, tbody tr');"
-                        "  let desmarcados = 0;"
-                        "  rows.forEach(tr => {"
-                        "    const txt = tr.innerText || tr.textContent || '';"
-                        "    const m = txt.match(/(\\d{2})[\\/\\-](\\d{4})/);"
-                        "    if (!m) return;"
-                        "    const mesOcc = parseInt(m[2]) * 12 + parseInt(m[1]);"
-                        "    if (mesOcc < mesIni || mesOcc > mesFim) {"
-                        "      const cbx = tr.querySelector('input[type=\"checkbox\"]');"
-                        "      if (cbx && cbx.checked) { cbx.click(); desmarcados++; }"
-                        "    }"
-                        "  });"
-                        "  return desmarcados;"
-                        "}"
-                    )
-                    _n = self._page.evaluate(_js_filtro, {"mesIni": _mes_ini, "mesFim": _mes_fim})
-                    self._log(f"  ✓ Ocorrências fora do período ({_pi}→{_pf}) desmarcadas: {_n}")
-                    if _n:
-                        self._aguardar_ajax()
+                    _ctr = (self._dados or {}).get("contrato", {}) or {}
+                    _ic = _ctr.get("data_inicio_calculo") or _ctr.get("inicio_calculo") or _ctr.get("admissao")
+                    if not _ic:
+                        self._log(f"  ⚠ Filtro período: data_inicio_calculo ausente — skip")
+                    else:
+                        _di_contrato = _dt.strptime(_ic, "%d/%m/%Y")
+                        _di_v = _dt.strptime(_pi, "%d/%m/%Y")
+                        _df_v = _dt.strptime(_pf, "%d/%m/%Y")
+                        _idx_offset_contrato = _di_contrato.year * 12 + _di_contrato.month
+                        _idx_inicio_v = _di_v.year * 12 + _di_v.month
+                        _idx_fim_v = _df_v.year * 12 + _df_v.month
+                        # Linha N corresponde ao mês idx_offset_contrato + N
+                        # Ativo se: idx_inicio_v <= (offset + N) <= idx_fim_v
+                        # Ou seja: (idx_inicio_v - offset) <= N <= (idx_fim_v - offset)
+                        _n_alvo_inicio = _idx_inicio_v - _idx_offset_contrato
+                        _n_alvo_fim = _idx_fim_v - _idx_offset_contrato
+                        _js_filtro = (
+                            "(args) => {"
+                            "  const {nIni, nFim} = args;"
+                            "  const cbxs = [...document.querySelectorAll("
+                            "    'input[type=\"checkbox\"][id*=\":listagem:\"][id$=\":ativo\"]'"
+                            "  )].filter(c => !c.id.includes('ativarTodos') && !c.id.includes('selecionarTodos')"
+                            "    && !c.id.includes('listaReflexo'));"
+                            "  let desmarcados = 0, mantidos = 0;"
+                            "  cbxs.forEach(cbx => {"
+                            "    const m = cbx.id.match(/:listagem:(\\d+):ativo$/);"
+                            "    if (!m) return;"
+                            "    const idx = parseInt(m[1]);"
+                            "    const dentroPeriodo = (idx >= nIni && idx <= nFim);"
+                            "    if (dentroPeriodo) {"
+                            "      if (!cbx.checked) cbx.click();"
+                            "      mantidos++;"
+                            "    } else {"
+                            "      if (cbx.checked) { cbx.click(); desmarcados++; }"
+                            "    }"
+                            "  });"
+                            "  return {desmarcados, mantidos, total: cbxs.length};"
+                            "}"
+                        )
+                        _r = self._page.evaluate(
+                            _js_filtro,
+                            {"nIni": _n_alvo_inicio, "nFim": _n_alvo_fim},
+                        )
+                        self._log(
+                            f"  ✓ Filtro período '{nome_na_lista}' "
+                            f"({_pi}→{_pf}, idx {_n_alvo_inicio}-{_n_alvo_fim}): "
+                            f"desmarcadas={_r.get('desmarcados', 0)}, "
+                            f"mantidas={_r.get('mantidos', 0)} (total={_r.get('total', 0)})"
+                        )
+                        if _r.get("desmarcados", 0):
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(500)
                 except Exception as _e_filt:
                     self._log(f"  ⚠ Falha ao filtrar ocorrências por período: {_e_filt}")
 
@@ -6296,35 +6322,49 @@ class PJECalcPlaywright:
             if _qtd_mensal:
                 try:
                     _qtd_str = str(_qtd_mensal).replace(".", ",")
-                    # FIX (2026-05-06 v3): ANTES de preencher, MARCAR todas as
-                    # linhas com input termoQuant que estiverem desmarcadas.
-                    # Diagnóstico: após Regerar Sobrescrever, HE 50% caiu de 57
-                    # para 1 linha ativa — Sobrescrever zera os :ativo flags
-                    # para verbas Calculadas por quantidade. Ativar ANTES do fill
-                    # garante que termoQuant pesa no submit do Liquidar.
-                    try:
-                        _n_marcadas = self._page.evaluate(
-                            """() => {
-                                const rows = document.querySelectorAll('tr');
-                                let n = 0;
-                                rows.forEach(tr => {
-                                    const inp = tr.querySelector('input[id*="termoQuant"], input[id*=":quantidade"]');
-                                    if (!inp || inp.disabled || inp.readOnly) return;
-                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
-                                    if (cbx && !cbx.checked) {
-                                        cbx.click();
-                                        n++;
-                                    }
-                                });
-                                return n;
-                            }"""
-                        )
-                        if _n_marcadas:
-                            self._log(f"    ℹ Linhas reativadas (qtd): {_n_marcadas}")
-                            self._aguardar_ajax()
-                            self._page.wait_for_timeout(500)
-                    except Exception as _e_mark:
-                        self._log(f"    ⚠ Reativar linhas qtd: {_e_mark}")
+                    # FIX v3 + v9 (2026-05-07): ANTES de preencher, MARCAR
+                    # todas as linhas com checkbox formulario:listagem:N:ativo
+                    # desmarcadas. Diagnóstico do dump v8e: cada linha de
+                    # Ocorrência tem termoQuant + :ativo no mesmo prefixo
+                    # formulario:listagem:N. O Expresso pode marcar só algumas
+                    # linhas inicialmente (ex.: HE 50% só com 2 ativas dentre
+                    # 56). Para verbas MENSAIS por quantidade, queremos TODAS
+                    # as linhas dentro do período ativas.
+                    # Skip se ocorrencia=DESLIGAMENTO (filtro DESLIGAMENTO já
+                    # cuidou de manter só a última).
+                    import unicodedata as _ud_qb
+                    _eh_desligamento = (
+                        _ud_qb.normalize("NFD", (v.get("ocorrencia") or "").lower())
+                        .encode("ascii", "ignore").decode().strip() == "desligamento"
+                    )
+                    if not _eh_desligamento:
+                        try:
+                            _n_marcadas = self._page.evaluate(
+                                """() => {
+                                    const cbxs = [...document.querySelectorAll(
+                                        'input[type="checkbox"][id*=":listagem:"][id$=":ativo"]'
+                                    )].filter(c => !c.id.includes('ativarTodos')
+                                        && !c.id.includes('selecionarTodos')
+                                        && !c.id.includes('listaReflexo'));
+                                    let n = 0;
+                                    cbxs.forEach(cbx => {
+                                        if (!cbx.checked) {
+                                            cbx.click();
+                                            n++;
+                                        }
+                                    });
+                                    return {ativadas: n, total: cbxs.length};
+                                }"""
+                            )
+                            if _n_marcadas and _n_marcadas.get("ativadas", 0):
+                                self._log(
+                                    f"    ℹ Linhas reativadas (qtd): "
+                                    f"{_n_marcadas['ativadas']}/{_n_marcadas.get('total', '?')}"
+                                )
+                                self._aguardar_ajax()
+                                self._page.wait_for_timeout(500)
+                        except Exception as _e_mark:
+                            self._log(f"    ⚠ Reativar linhas qtd: {_e_mark}")
 
                     # FIX v2: locator iterativo (re-resolve a cada iteração)
                     # FIX v6 (2026-05-06): safety mais agressivo:
@@ -6423,34 +6463,43 @@ class PJECalcPlaywright:
             if _val_mensal and _is_indenizacao:
                 try:
                     _val_str = _fmt_br(float(_val_mensal))
-                    # FIX (2026-05-06 v4): re-marcar checkboxes :ativo
-                    # desativados (mesmo problema do termoQuant — Sobrescrever
-                    # zera estado :ativo de algumas verbas). Sem isso,
-                    # DANO MORAL teve "preenchido em 0 ocorrência(s)" no Loop 2
-                    # do refactor v4 enquanto outras indenizações deram 56.
-                    try:
-                        _n_marcadas = self._page.evaluate(
-                            """() => {
-                                const rows = document.querySelectorAll('tr');
-                                let n = 0;
-                                rows.forEach(tr => {
-                                    const inp = tr.querySelector('input[id*="valorDevido"], input[id*="termoDevido"]');
-                                    if (!inp || inp.disabled || inp.readOnly) return;
-                                    const cbx = tr.querySelector('input[type="checkbox"][id*=":ativo"]');
-                                    if (cbx && !cbx.checked) {
-                                        cbx.click();
-                                        n++;
-                                    }
-                                });
-                                return n;
-                            }"""
-                        )
-                        if _n_marcadas:
-                            self._log(f"    ℹ Linhas reativadas (valor): {_n_marcadas}")
-                            self._aguardar_ajax()
-                            self._page.wait_for_timeout(500)
-                    except Exception as _e_mark:
-                        self._log(f"    ⚠ Reativar linhas valor: {_e_mark}")
+                    # FIX v4 + v9 (2026-05-07): re-marcar checkboxes
+                    # formulario:listagem:N:ativo desmarcados (skip
+                    # ativarTodos/listaReflexo). Skip se DESLIGAMENTO (já
+                    # tratado pelo filtro v9 que mantém só última linha).
+                    import unicodedata as _ud_vb
+                    _eh_des_v = (
+                        _ud_vb.normalize("NFD", (v.get("ocorrencia") or "").lower())
+                        .encode("ascii", "ignore").decode().strip() == "desligamento"
+                    )
+                    if not _eh_des_v:
+                        try:
+                            _n_marcadas = self._page.evaluate(
+                                """() => {
+                                    const cbxs = [...document.querySelectorAll(
+                                        'input[type="checkbox"][id*=":listagem:"][id$=":ativo"]'
+                                    )].filter(c => !c.id.includes('ativarTodos')
+                                        && !c.id.includes('selecionarTodos')
+                                        && !c.id.includes('listaReflexo'));
+                                    let n = 0;
+                                    cbxs.forEach(cbx => {
+                                        if (!cbx.checked) {
+                                            cbx.click();
+                                            n++;
+                                        }
+                                    });
+                                    return {ativadas: n, total: cbxs.length};
+                                }"""
+                            )
+                            if _n_marcadas and _n_marcadas.get("ativadas", 0):
+                                self._log(
+                                    f"    ℹ Linhas reativadas (valor): "
+                                    f"{_n_marcadas['ativadas']}/{_n_marcadas.get('total', '?')}"
+                                )
+                                self._aguardar_ajax()
+                                self._page.wait_for_timeout(500)
+                        except Exception as _e_mark:
+                            self._log(f"    ⚠ Reativar linhas valor: {_e_mark}")
 
                     # FIX v2 + v6: locator iter com safety break + cap reduzido
                     _n_val = 0
