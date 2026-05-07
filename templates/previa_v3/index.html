@@ -1,0 +1,125 @@
+{# Prévia v3 — entrypoint que renderiza todas as seções (uma por página do PJE-Calc) #}
+{% extends "previa_v3/_base.html" %}
+{% from "previa_v3/_macros.html" import field_text, field_date, field_decimal, field_select, field_radio, field_checkbox, field_textarea, secao %}
+
+{% block previa_body %}
+
+{# ─────────── 1. Dados do Processo ─────────── #}
+{% set d = dados.processo %}
+{% call secao("1. Dados do Processo") %}
+<div class="campos-grid col3">
+  {{ field_text("processo.numero", d.numero, "Número", required=true) }}
+  {{ field_text("processo.digito", d.digito, "Dígito", required=true) }}
+  {{ field_text("processo.ano", d.ano, "Ano", required=true) }}
+  {{ field_text("processo.regiao", d.regiao, "Tribunal (TRT)", required=true) }}
+  {{ field_text("processo.vara", d.vara, "Vara", required=true) }}
+  {{ field_decimal("processo.valor_da_causa", d.valor_da_causa, "Valor da Causa") }}
+  {{ field_date("processo.autuado_em", d.autuado_em, "Autuado em") }}
+  {{ field_text("processo.estado", d.estado, "Estado (UF código)") }}
+  {{ field_text("processo.municipio", d.municipio, "Município (código)") }}
+</div>
+{% endcall %}
+
+{# ─────────── 1.2 Reclamante ─────────── #}
+{% call secao("1.2 Reclamante") %}
+<div class="campos-grid">
+  {{ field_text("processo.reclamante_nome", d.reclamante_nome, "Nome", required=true) }}
+  {{ field_radio("processo.documento_fiscal_reclamante", d.documento_fiscal_reclamante,
+                 "Tipo Documento Fiscal",
+                 [{"value":"CPF","label":"CPF"},{"value":"CNPJ","label":"CNPJ"},{"value":"CEI","label":"CEI"}]) }}
+  {{ field_text("processo.reclamante_numero_documento_fiscal", d.reclamante_numero_documento_fiscal, "Número Documento Fiscal") }}
+  {{ field_radio("processo.reclamante_tipo_documento_previdenciario", d.reclamante_tipo_documento_previdenciario,
+                 "Tipo Documento Previdenciário",
+                 [{"value":"PIS","label":"PIS"},{"value":"PASEP","label":"PASEP"},{"value":"NIT","label":"NIT"}]) }}
+  {{ field_text("processo.reclamante_numero_documento_previdenciario", d.reclamante_numero_documento_previdenciario, "Número Documento Previdenciário") }}
+</div>
+<h4 style="margin: 14px 0 8px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">Advogado(a) do Reclamante</h4>
+<div class="campos-grid">
+  {{ field_text("processo.nome_advogado_reclamante", d.nome_advogado_reclamante, "Nome do Advogado") }}
+  {{ field_text("processo.numero_oab_advogado_reclamante", d.numero_oab_advogado_reclamante, "OAB") }}
+  {{ field_radio("processo.tipo_documento_advogado_reclamante", d.tipo_documento_advogado_reclamante,
+                 "Tipo Documento",
+                 [{"value":"CPF","label":"CPF"},{"value":"CNPJ","label":"CNPJ"},{"value":"CEI","label":"CEI"}]) }}
+  {{ field_text("processo.numero_documento_advogado_reclamante", d.numero_documento_advogado_reclamante, "Número") }}
+</div>
+{% endcall %}
+
+{# ─────────── 1.3 Reclamado ─────────── #}
+{% call secao("1.3 Reclamado") %}
+<div class="campos-grid">
+  {{ field_text("processo.reclamado_nome", d.reclamado_nome, "Nome / Razão Social", required=true) }}
+  {{ field_radio("processo.tipo_documento_fiscal_reclamado", d.tipo_documento_fiscal_reclamado,
+                 "Tipo Documento Fiscal",
+                 [{"value":"CPF","label":"CPF"},{"value":"CNPJ","label":"CNPJ"},{"value":"CEI","label":"CEI"}]) }}
+  {{ field_text("processo.reclamado_numero_documento_fiscal", d.reclamado_numero_documento_fiscal, "Número Documento Fiscal") }}
+</div>
+<h4 style="margin: 14px 0 8px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">Advogado(a) do Reclamado</h4>
+<div class="campos-grid">
+  {{ field_text("processo.nome_advogado_reclamado", d.nome_advogado_reclamado, "Nome do Advogado") }}
+  {{ field_text("processo.numero_oab_advogado_reclamado", d.numero_oab_advogado_reclamado, "OAB") }}
+  {{ field_radio("processo.tipo_documento_advogado_reclamado", d.tipo_documento_advogado_reclamado,
+                 "Tipo Documento",
+                 [{"value":"CPF","label":"CPF"},{"value":"CNPJ","label":"CNPJ"},{"value":"CEI","label":"CEI"}]) }}
+  {{ field_text("processo.numero_documento_advogado_reclamado", d.numero_documento_advogado_reclamado, "Número") }}
+</div>
+{% endcall %}
+
+{# ─────────── 1.4 Parâmetros do Cálculo ─────────── #}
+{% call secao("1.4 Parâmetros do Cálculo (datas, prescrição, remuneração)") %}
+<div class="campos-grid col3">
+  {{ field_date("processo.data_admissao", d.data_admissao, "Data de Admissão", required=true) }}
+  {{ field_date("processo.data_demissao", d.data_demissao, "Data de Demissão", required=true) }}
+  {{ field_date("processo.data_ajuizamento", d.data_ajuizamento, "Data de Ajuizamento", required=true) }}
+  {{ field_date("processo.data_inicio_calculo", d.data_inicio_calculo, "Data Início do Cálculo") }}
+  {{ field_date("processo.data_termino_calculo", d.data_termino_calculo, "Data Término do Cálculo") }}
+  {{ field_decimal("processo.valor_maior_remuneracao", d.valor_maior_remuneracao, "Maior Remuneração") }}
+  {{ field_decimal("processo.valor_ultima_remuneracao", d.valor_ultima_remuneracao, "Última Remuneração") }}
+</div>
+
+<h4 style="margin: 16px 0 8px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">Aviso Prévio</h4>
+{{ field_select("processo.apuracao_prazo_aviso_previo", d.apuracao_prazo_aviso_previo, "Apuração do Prazo",
+                [{"value":"NAO_APURAR","label":"Não Apurar"},
+                 {"value":"APURACAO_CALCULADA","label":"Apuração Calculada"},
+                 {"value":"APURACAO_INFORMADA","label":"Apuração Informada"}]) }}
+{{ field_checkbox("processo.projeta_aviso_indenizado", d.projeta_aviso_indenizado, "Projeta Aviso Prévio Indenizado") }}
+
+<h4 style="margin: 16px 0 8px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">Prescrição & Outros</h4>
+{{ field_checkbox("processo.prescricao_quinquenal", d.prescricao_quinquenal, "Aplicar Prescrição Quinquenal") }}
+{{ field_checkbox("processo.prescricao_fgts", d.prescricao_fgts, "Aplicar Prescrição FGTS (30 anos)") }}
+{{ field_checkbox("processo.zera_valor_negativo", d.zera_valor_negativo, "Zerar Valor Negativo") }}
+{{ field_checkbox("processo.considera_feriado_estadual", d.considera_feriado_estadual, "Considerar Feriado Estadual") }}
+{{ field_checkbox("processo.considera_feriado_municipal", d.considera_feriado_municipal, "Considerar Feriado Municipal") }}
+
+<h4 style="margin: 16px 0 8px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">Carga Horária</h4>
+{{ field_decimal("processo.valor_carga_horaria_padrao", d.valor_carga_horaria_padrao, "Carga Horária Padrão (h/semana)") }}
+{{ field_checkbox("processo.sabado_dia_util", d.sabado_dia_util, "Sábado é dia útil") }}
+
+{{ field_textarea("processo.comentarios", d.comentarios, "Comentários", rows=3) }}
+{% endcall %}
+
+{# ─────────── PLACEHOLDERS para próximas sub-etapas ─────────── #}
+{% call secao("2. Histórico Salarial — pendente (sub-etapa 2B.3)") %}
+<p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">
+  Esta seção será implementada na sub-etapa <strong>2B.3</strong>. Por ora, mostra apenas placeholder.
+</p>
+{% endcall %}
+
+{% call secao("3-4. Faltas e Férias — pendente (sub-etapa 2B.5)") %}
+<p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">
+  Pendente — sub-etapa <strong>2B.5</strong>.
+</p>
+{% endcall %}
+
+{% call secao("5. Verbas — pendente (sub-etapa 2B.4)") %}
+<p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">
+  Esta é a seção mais crítica. Será implementada na sub-etapa <strong>2B.4</strong>.
+</p>
+{% endcall %}
+
+{% call secao("6-11. Cartão de Ponto, FGTS, INSS, IR, Honorários, Correção — pendentes (sub-etapa 2B.5)") %}
+<p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">
+  Pendentes — sub-etapa <strong>2B.5</strong>.
+</p>
+{% endcall %}
+
+{% endblock %}

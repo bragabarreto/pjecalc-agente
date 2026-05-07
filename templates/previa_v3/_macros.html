@@ -1,0 +1,191 @@
+{#
+  Macros Jinja para a Prévia v3 — réplica perfeita do PJE-Calc Cidadão.
+
+  Uso:
+    {% from "previa_v3/_macros.html" import field_text, field_select, ... %}
+
+  Cada macro recebe:
+    - name: caminho dot-notation que mapeia para o JSON v3 (ex.: "processo.numero")
+    - value: valor atual (do model Pydantic)
+    - label: rótulo legível
+    - extras: kwargs específicos da macro
+
+  Todas as macros usam o JS `salvarCampo(name, value, el)` para PATCH inline
+  (mesma função do v2, persiste no DB via /previa/{sessao_id}/editar).
+#}
+
+{# ─────────── Campo texto simples ─────────── #}
+{% macro field_text(name, value, label, placeholder='', readonly=false, required=false) %}
+<div class="campo-form">
+  <label for="{{ name }}">{{ label }}{% if required %} *{% endif %}</label>
+  <input type="text" id="{{ name }}"
+         value="{{ value if value is not none else '' }}"
+         placeholder="{{ placeholder }}"
+         {% if readonly %}readonly{% endif %}
+         {% if required %}required{% endif %}
+         onchange="salvarCampo('{{ name }}', this.value, this)">
+</div>
+{% endmacro %}
+
+
+{# ─────────── Campo data DD/MM/YYYY ─────────── #}
+{% macro field_date(name, value, label, required=false) %}
+<div class="campo-form">
+  <label for="{{ name }}">{{ label }}{% if required %} *{% endif %}</label>
+  <input type="text" id="{{ name }}"
+         value="{{ value if value is not none else '' }}"
+         placeholder="DD/MM/AAAA"
+         maxlength="10"
+         pattern="\d{2}/\d{2}/\d{4}"
+         {% if required %}required{% endif %}
+         onchange="salvarCampo('{{ name }}', this.value, this)"
+         oninput="this.value = this.value.replace(/[^0-9/]/g, '')">
+</div>
+{% endmacro %}
+
+
+{# ─────────── Campo decimal BR (ex.: 1.234,56) ─────────── #}
+{% macro field_decimal(name, value, label, placeholder='0,00') %}
+<div class="campo-form">
+  <label for="{{ name }}">{{ label }}</label>
+  <input type="text" id="{{ name }}"
+         value="{{ value if value is not none else '' }}"
+         placeholder="{{ placeholder }}"
+         inputmode="decimal"
+         onchange="salvarCampo('{{ name }}', this.value, this)"
+         oninput="this.value = this.value.replace(/[^0-9.,]/g, '')">
+</div>
+{% endmacro %}
+
+
+{# ─────────── Select (dropdown) ─────────── #}
+{# opcoes: lista de tuplas/dicts {value, label} OU lista de strings #}
+{% macro field_select(name, value, label, opcoes, required=false, vazio_label='— selecione —', vazio_valor='') %}
+<div class="campo-form">
+  <label for="{{ name }}">{{ label }}{% if required %} *{% endif %}</label>
+  <select id="{{ name }}"
+          {% if required %}required{% endif %}
+          onchange="salvarCampo('{{ name }}', this.value, this)">
+    {% if not required %}
+    <option value="{{ vazio_valor }}" {% if value is none or value == '' or value == vazio_valor %}selected{% endif %}>{{ vazio_label }}</option>
+    {% endif %}
+    {% for opt in opcoes %}
+      {% if opt is mapping %}
+        <option value="{{ opt.value }}" {% if value == opt.value %}selected{% endif %}>{{ opt.label }}</option>
+      {% elif opt is iterable and opt is not string %}
+        <option value="{{ opt[0] }}" {% if value == opt[0] %}selected{% endif %}>{{ opt[1] }}</option>
+      {% else %}
+        <option value="{{ opt }}" {% if value == opt %}selected{% endif %}>{{ opt }}</option>
+      {% endif %}
+    {% endfor %}
+  </select>
+</div>
+{% endmacro %}
+
+
+{# ─────────── Radio group (horizontal) ─────────── #}
+{% macro field_radio(name, value, label, opcoes, inline=true) %}
+<div class="campo-form">
+  <label>{{ label }}</label>
+  <div class="radio-group {% if inline %}radio-inline{% endif %}">
+    {% for opt in opcoes %}
+      {% set vopt = opt.value if opt is mapping else (opt[0] if opt is iterable and opt is not string else opt) %}
+      {% set lopt = opt.label if opt is mapping else (opt[1] if opt is iterable and opt is not string else opt) %}
+      {% set rid = name|replace('.', '_')|replace('[', '_')|replace(']', '') ~ '_' ~ loop.index %}
+      <label class="radio-item">
+        <input type="radio" id="{{ rid }}" name="{{ name }}" value="{{ vopt }}"
+               {% if value == vopt %}checked{% endif %}
+               onchange="if(this.checked) salvarCampo('{{ name }}', this.value, this.closest('.campo-form'))">
+        <span>{{ lopt }}</span>
+      </label>
+    {% endfor %}
+  </div>
+</div>
+{% endmacro %}
+
+
+{# ─────────── Checkbox ─────────── #}
+{% macro field_checkbox(name, value, label) %}
+<div class="checkbox-row">
+  <input type="checkbox" id="{{ name }}"
+         {% if value %}checked{% endif %}
+         onchange="salvarCampo('{{ name }}', this.checked, this.closest('.checkbox-row'))">
+  <label for="{{ name }}">{{ label }}</label>
+</div>
+{% endmacro %}
+
+
+{# ─────────── Textarea ─────────── #}
+{% macro field_textarea(name, value, label, rows=3, placeholder='') %}
+<div class="campo-form campo-col2">
+  <label for="{{ name }}">{{ label }}</label>
+  <textarea id="{{ name }}" rows="{{ rows }}"
+            placeholder="{{ placeholder }}"
+            onchange="salvarCampo('{{ name }}', this.value, this)">{{ value if value is not none else '' }}</textarea>
+</div>
+{% endmacro %}
+
+
+{# ─────────── Repeater (lista editável) ─────────── #}
+{#
+  Renderiza uma lista de items (cada um um sub-objeto). Cada item é um <details>
+  expansível com botão "Remover". Footer tem botão "Adicionar".
+
+  Uso:
+    {% call(item, idx) repeater("verbas", verbas_list, "Verba") %}
+      {{ field_text("verbas[" ~ idx ~ "].descricao", item.descricao, "Descrição") }}
+      ...
+    {% endcall %}
+
+  O conteúdo do call recebe (item, idx) como variáveis.
+#}
+{% macro repeater(prefixo, items, nome_singular, nome_plural=None) %}
+{% set _np = nome_plural or (nome_singular ~ 's') %}
+<div class="repeater" data-prefix="{{ prefixo }}">
+  <div class="repeater-header">
+    <strong>{{ _np }} ({{ items|length }})</strong>
+    <button type="button" class="btn-add"
+            onclick="salvarCampo('{{ prefixo }}.add', '', this)">
+      + Adicionar {{ nome_singular }}
+    </button>
+  </div>
+  <div class="repeater-body">
+    {% if items|length == 0 %}
+      <p class="repeater-vazio">Nenhum {{ nome_singular|lower }} adicionado.</p>
+    {% else %}
+      {% for item in items %}
+        <details class="repeater-item" {% if loop.first %}open{% endif %}>
+          <summary>
+            <span class="item-titulo">
+              {{ caller(item, loop.index0)|default('') if false else nome_singular }} #{{ loop.index }}
+              {%- if item.nome %} — {{ item.nome }}{% endif %}
+              {%- if item.descricao %} — {{ item.descricao }}{% endif %}
+            </span>
+            <button type="button" class="btn-remove"
+                    onclick="event.preventDefault(); salvarCampo('{{ prefixo }}.remove[{{ loop.index0 }}]', '', this)">
+              ✕ Remover
+            </button>
+          </summary>
+          <div class="item-corpo">
+            {{ caller(item, loop.index0) }}
+          </div>
+        </details>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+
+{# ─────────── Seção / Card ─────────── #}
+{% macro secao(titulo, badge=None, recolhida=false) %}
+<section class="secao {% if recolhida %}recolhida{% endif %}">
+  <div class="secao-titulo" onclick="this.nextElementSibling.classList.toggle('recolhido')">
+    <span>{{ titulo }}</span>
+    {% if badge %}<span class="confianca-badge {{ badge.classe|default('conf-media') }}">{{ badge.texto }}</span>{% endif %}
+  </div>
+  <div class="secao-corpo {% if recolhida %}recolhido{% endif %}">
+    {{ caller() }}
+  </div>
+</section>
+{% endmacro %}

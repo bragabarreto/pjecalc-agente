@@ -517,6 +517,205 @@ async def exibir_previa_web(
     )
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Prévia v3 — réplica perfeita do PJE-Calc Cidadão (Etapa 2B em curso)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/previa_v3/{sessao_id}", response_class=HTMLResponse)
+async def exibir_previa_v3(
+    request: Request,
+    sessao_id: str,
+    db: Session = Depends(get_db),
+):
+    """Exibe a prévia v3 — réplica perfeita do PJE-Calc.
+
+    Usa o schema `infrastructure/pjecalc_pages.py` (Pydantic v3) e renderiza
+    via `templates/previa_v3/index.html` + `_macros.html` + `_base.html`.
+
+    Estado atual (sub-etapa 2B.1 + 2B.2):
+      ✓ Infraestrutura base (macros, layout, salvarCampo PATCH inline)
+      ✓ Página 1 — Dados do Processo completa
+      ⏳ Páginas 2-11 — placeholders (próximas sub-etapas 2B.3-2B.5)
+    """
+    from infrastructure.pjecalc_pages import DadosProcesso
+
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados_v2 = calculo.dados() or {}
+
+    # Migração lossy v2 → v3 (mínima — só Dados do Processo por ora).
+    # Etapa 2B.6 vai estender para todas as seções com endpoint dedicado.
+    proc_v2 = dados_v2.get("processo", {}) or {}
+    contrato_v2 = dados_v2.get("contrato", {}) or {}
+    aviso_v2 = dados_v2.get("aviso_previo", {}) or {}
+    presc_v2 = dados_v2.get("prescricao", {}) or {}
+
+    try:
+        processo_v3 = DadosProcesso(
+            numero=proc_v2.get("numero_seq") or proc_v2.get("numero", ""),
+            digito=proc_v2.get("digito_verificador") or proc_v2.get("digito", ""),
+            ano=proc_v2.get("ano", ""),
+            regiao=proc_v2.get("regiao", ""),
+            vara=proc_v2.get("vara", ""),
+            valor_da_causa=proc_v2.get("valor_da_causa"),
+            autuado_em=proc_v2.get("autuado_em") or proc_v2.get("data_autuacao"),
+            estado=proc_v2.get("estado") or proc_v2.get("uf"),
+            municipio=proc_v2.get("municipio") or proc_v2.get("cidade"),
+            reclamante_nome=proc_v2.get("reclamante") or proc_v2.get("nome_reclamante", ""),
+            documento_fiscal_reclamante=proc_v2.get("documento_fiscal_reclamante"),
+            reclamante_numero_documento_fiscal=proc_v2.get("numero_documento_reclamante", ""),
+            reclamado_nome=proc_v2.get("reclamado") or proc_v2.get("nome_reclamado", ""),
+            tipo_documento_fiscal_reclamado=proc_v2.get("tipo_documento_reclamado"),
+            reclamado_numero_documento_fiscal=proc_v2.get("numero_documento_reclamado", ""),
+            data_admissao=contrato_v2.get("admissao") or contrato_v2.get("data_admissao"),
+            data_demissao=contrato_v2.get("demissao") or contrato_v2.get("data_demissao"),
+            data_ajuizamento=contrato_v2.get("ajuizamento") or contrato_v2.get("data_ajuizamento"),
+            data_inicio_calculo=contrato_v2.get("data_inicio_calculo") or contrato_v2.get("inicio_calculo"),
+            data_termino_calculo=contrato_v2.get("data_termino_calculo") or contrato_v2.get("fim_calculo"),
+            valor_maior_remuneracao=str(contrato_v2.get("maior_remuneracao", ""))
+                if contrato_v2.get("maior_remuneracao") is not None else None,
+            valor_ultima_remuneracao=str(contrato_v2.get("ultima_remuneracao", ""))
+                if contrato_v2.get("ultima_remuneracao") is not None else None,
+            prescricao_quinquenal=bool(presc_v2.get("quinquenal", False)),
+            prescricao_fgts=bool(presc_v2.get("fgts", False)),
+            apuracao_prazo_aviso_previo=(
+                "APURACAO_CALCULADA" if aviso_v2.get("tipo") == "Calculado"
+                else "APURACAO_INFORMADA" if aviso_v2.get("tipo") == "Informado"
+                else "NAO_APURAR"
+            ),
+            projeta_aviso_indenizado=bool(aviso_v2.get("projetar", False)),
+        )
+    except Exception as e:
+        # Se migração falhar (campos extras inválidos no v2), criar vazio
+        logger.warning(f"Migração v2→v3 falhou para {sessao_id}: {e}")
+        processo_v3 = DadosProcesso()
+
+    dados_v3 = {"processo": processo_v3}
+
+    return templates.TemplateResponse(
+        request, "previa_v3/index.html",
+        {
+            "sessao_id": sessao_id,
+            "dados": dados_v3,
+            "processo_numero": calculo.processo.numero_processo if calculo.processo else None,
+            "reclamante_nome": processo_v3.reclamante_nome,
+        },
+    )
+
+
+@app.post("/previa_v3/{sessao_id}/editar")
+async def editar_campo_previa_v3(
+    sessao_id: str,
+    campo: str = Form(...),
+    valor: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    """Salva uma edição inline de campo na prévia v3.
+
+    Por ora persiste no `dados_json` v2 do calculo (migração reversa).
+    Etapa 2B.6 vai criar coluna dedicada `dados_v3_json` e migração formal.
+
+    Notação dot:
+      - "processo.numero" → dados.processo.numero
+      - "verbas[0].parametros.descricao" → dados.verbas[0].parametros.descricao
+      - "verbas[0].add" → adicionar item à lista
+      - "verbas[0].remove[2]" → remover índice 2
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        return JSONResponse(
+            {"sucesso": False, "erro": "Sessão não encontrada"}, status_code=404
+        )
+
+    # Por ora, persistência minimal — apenas processo.* mapeia de volta para
+    # dados_v2.processo / dados_v2.contrato / dados_v2.prescricao / aviso_previo.
+    dados = calculo.dados() or {}
+    proc = dados.setdefault("processo", {})
+    contrato = dados.setdefault("contrato", {})
+    presc = dados.setdefault("prescricao", {})
+    aviso = dados.setdefault("aviso_previo", {})
+
+    # Mapping campo v3 → caminho v2
+    _MAP_V3_TO_V2 = {
+        "processo.numero": ("processo", "numero_seq"),
+        "processo.digito": ("processo", "digito_verificador"),
+        "processo.ano": ("processo", "ano"),
+        "processo.regiao": ("processo", "regiao"),
+        "processo.vara": ("processo", "vara"),
+        "processo.valor_da_causa": ("processo", "valor_da_causa"),
+        "processo.autuado_em": ("processo", "autuado_em"),
+        "processo.estado": ("processo", "estado"),
+        "processo.municipio": ("processo", "municipio"),
+        "processo.reclamante_nome": ("processo", "reclamante"),
+        "processo.documento_fiscal_reclamante": ("processo", "documento_fiscal_reclamante"),
+        "processo.reclamante_numero_documento_fiscal": ("processo", "numero_documento_reclamante"),
+        "processo.reclamante_tipo_documento_previdenciario": ("processo", "tipo_documento_previdenciario_reclamante"),
+        "processo.reclamante_numero_documento_previdenciario": ("processo", "numero_documento_previdenciario_reclamante"),
+        "processo.nome_advogado_reclamante": ("processo", "nome_advogado_reclamante"),
+        "processo.numero_oab_advogado_reclamante": ("processo", "oab_advogado_reclamante"),
+        "processo.tipo_documento_advogado_reclamante": ("processo", "tipo_documento_advogado_reclamante"),
+        "processo.numero_documento_advogado_reclamante": ("processo", "numero_documento_advogado_reclamante"),
+        "processo.reclamado_nome": ("processo", "reclamado"),
+        "processo.tipo_documento_fiscal_reclamado": ("processo", "tipo_documento_reclamado"),
+        "processo.reclamado_numero_documento_fiscal": ("processo", "numero_documento_reclamado"),
+        "processo.nome_advogado_reclamado": ("processo", "nome_advogado_reclamado"),
+        "processo.numero_oab_advogado_reclamado": ("processo", "oab_advogado_reclamado"),
+        "processo.tipo_documento_advogado_reclamado": ("processo", "tipo_documento_advogado_reclamado"),
+        "processo.numero_documento_advogado_reclamado": ("processo", "numero_documento_advogado_reclamado"),
+        "processo.data_admissao": ("contrato", "admissao"),
+        "processo.data_demissao": ("contrato", "demissao"),
+        "processo.data_ajuizamento": ("contrato", "ajuizamento"),
+        "processo.data_inicio_calculo": ("contrato", "data_inicio_calculo"),
+        "processo.data_termino_calculo": ("contrato", "data_termino_calculo"),
+        "processo.valor_maior_remuneracao": ("contrato", "maior_remuneracao"),
+        "processo.valor_ultima_remuneracao": ("contrato", "ultima_remuneracao"),
+        "processo.prescricao_quinquenal": ("prescricao", "quinquenal"),
+        "processo.prescricao_fgts": ("prescricao", "fgts"),
+        "processo.projeta_aviso_indenizado": ("aviso_previo", "projetar"),
+        "processo.zera_valor_negativo": ("processo", "zera_valor_negativo"),
+        "processo.considera_feriado_estadual": ("processo", "considera_feriado_estadual"),
+        "processo.considera_feriado_municipal": ("processo", "considera_feriado_municipal"),
+        "processo.valor_carga_horaria_padrao": ("processo", "valor_carga_horaria_padrao"),
+        "processo.sabado_dia_util": ("processo", "sabado_dia_util"),
+        "processo.comentarios": ("processo", "comentarios"),
+    }
+
+    # Conversões de tipo
+    valor_normalizado: Any = valor
+    if valor in ("true", "false"):
+        valor_normalizado = (valor == "true")
+    elif valor == "" or valor == "null":
+        valor_normalizado = None
+
+    # apuracao_prazo_aviso_previo precisa map reversa
+    if campo == "processo.apuracao_prazo_aviso_previo":
+        if valor_normalizado == "APURACAO_CALCULADA":
+            aviso["tipo"] = "Calculado"
+        elif valor_normalizado == "APURACAO_INFORMADA":
+            aviso["tipo"] = "Informado"
+        else:
+            aviso["tipo"] = None
+        repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+        return JSONResponse({"sucesso": True})
+
+    if campo in _MAP_V3_TO_V2:
+        bloco_nome, atributo = _MAP_V3_TO_V2[campo]
+        bloco = dados.setdefault(bloco_nome, {})
+        bloco[atributo] = valor_normalizado
+        repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+        return JSONResponse({"sucesso": True})
+
+    # Campo não-mapeado por ora (verbas, histórico, etc.)
+    return JSONResponse(
+        {"sucesso": False, "erro": f"Campo '{campo}' ainda não mapeado v3→v2 (próximas sub-etapas)"},
+        status_code=400,
+    )
+
+
 @app.post("/previa/{sessao_id}/editar")
 async def editar_campo_previa(
     sessao_id: str,

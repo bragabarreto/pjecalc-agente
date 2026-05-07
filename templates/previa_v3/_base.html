@@ -1,0 +1,299 @@
+{# Base layout para a Prévia v3 — réplica perfeita do PJE-Calc Cidadão #}
+{% extends "base.html" %}
+
+{% block title %}Prévia v3 — {{ sessao_id[:8] }}{% endblock %}
+
+{% block extra_style %}
+/* ─────────── Layout principal ─────────── */
+.previa-container {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 20px;
+  align-items: start;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.previa-content { min-width: 0; }
+.previa-sidebar {
+  position: sticky; top: 16px;
+  background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px;
+  padding: 14px;
+  font-size: 0.85rem;
+}
+.previa-sidebar h3 { font-size: 0.9rem; margin: 0 0 8px; color: #1a3a6b; }
+.previa-sidebar ul { list-style: none; padding: 0; margin: 0; }
+.previa-sidebar li { padding: 4px 0; }
+.previa-sidebar a { color: #495057; text-decoration: none; }
+.previa-sidebar a:hover { color: #1a3a6b; }
+@media (max-width: 1000px) {
+  .previa-container { grid-template-columns: 1fr; }
+  .previa-sidebar { position: static; }
+}
+
+/* ─────────── Seções (1 por página do PJE-Calc) ─────────── */
+.secao {
+  border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 18px;
+  overflow: hidden; background: #fff;
+}
+.secao-titulo {
+  background: #1a3a6b; color: #fff; padding: 11px 16px;
+  font-size: 0.95rem; font-weight: 600;
+  display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer; user-select: none;
+}
+.secao-titulo:hover { background: #234580; }
+.secao-corpo { padding: 18px; }
+.secao-corpo.recolhido { display: none; }
+
+.confianca-badge {
+  font-size: 0.72rem; padding: 2px 8px; border-radius: 10px;
+  font-weight: 400;
+}
+.conf-alta { background: rgba(40,167,69,0.3); color: #d4edda; }
+.conf-media { background: rgba(255,193,7,0.4); color: #fff3cd; }
+.conf-baixa { background: rgba(220,53,69,0.3); color: #f8d7da; }
+
+/* ─────────── Grade de campos ─────────── */
+.campos-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px 16px;
+}
+.campos-grid.col3 { grid-template-columns: 1fr 1fr 1fr; }
+.campos-grid.col4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+.campo-col2 { grid-column: 1 / -1; }
+.campo-col3 { grid-column: 1 / span 2; }
+@media (max-width: 700px) {
+  .campos-grid, .campos-grid.col3, .campos-grid.col4 { grid-template-columns: 1fr; }
+}
+
+/* ─────────── Campo individual ─────────── */
+.campo-form { position: relative; }
+.campo-form > label {
+  display: block; font-size: 0.76rem; color: #6c757d;
+  margin-bottom: 4px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.3px;
+}
+.campo-form input[type=text],
+.campo-form input[type=number],
+.campo-form input[type=email],
+.campo-form select,
+.campo-form textarea {
+  width: 100%; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 5px;
+  font-size: 0.92rem; background: #fff;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.campo-form input:focus, .campo-form select:focus, .campo-form textarea:focus {
+  outline: none; border-color: #1a3a6b;
+  box-shadow: 0 0 0 2px rgba(26,58,107,0.12);
+}
+.campo-form input[readonly] { background: #f8f9fa; cursor: not-allowed; }
+.campo-form .campo-salvo {
+  border-color: #28a745 !important;
+  box-shadow: 0 0 0 2px rgba(40,167,69,0.18) !important;
+  transition: all 0.3s;
+}
+.campo-form .campo-erro {
+  border-color: #dc3545 !important;
+  box-shadow: 0 0 0 2px rgba(220,53,69,0.15) !important;
+}
+.campo-form textarea { resize: vertical; min-height: 60px; }
+
+/* ─────────── Radio group ─────────── */
+.radio-group { display: flex; gap: 14px; flex-wrap: wrap; padding: 4px 0; }
+.radio-group.radio-inline { flex-direction: row; }
+.radio-item {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 0.9rem; cursor: pointer; font-weight: 500;
+}
+.radio-item input[type=radio] { margin: 0; cursor: pointer; }
+.radio-item:hover { color: #1a3a6b; }
+
+/* ─────────── Checkbox ─────────── */
+.checkbox-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 0;
+}
+.checkbox-row input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; margin: 0; }
+.checkbox-row label {
+  font-size: 0.9rem; color: #333; cursor: pointer; font-weight: 500;
+  margin: 0; user-select: none;
+}
+
+/* ─────────── Repeater (lista expansível) ─────────── */
+.repeater { margin: 12px 0; }
+.repeater-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 12px; background: #e7f1ff; border-radius: 5px;
+  margin-bottom: 10px;
+}
+.repeater-header strong { color: #1a3a6b; font-size: 0.92rem; }
+.btn-add {
+  background: #28a745; color: #fff; border: none;
+  padding: 6px 14px; border-radius: 5px; cursor: pointer;
+  font-size: 0.85rem; font-weight: 600;
+}
+.btn-add:hover { background: #218838; }
+.btn-remove {
+  background: #dc3545; color: #fff; border: none;
+  padding: 4px 10px; border-radius: 4px; cursor: pointer;
+  font-size: 0.78rem;
+}
+.btn-remove:hover { background: #c82333; }
+.repeater-vazio {
+  color: #6c757d; font-style: italic; padding: 16px;
+  text-align: center; background: #f8f9fa; border-radius: 5px; margin: 0;
+}
+.repeater-item {
+  border: 1px solid #dee2e6; border-radius: 6px;
+  margin-bottom: 8px; overflow: hidden; background: #fff;
+}
+.repeater-item summary {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 14px; background: #f8f9fa; cursor: pointer;
+  user-select: none; font-weight: 500;
+}
+.repeater-item[open] summary { background: #e7f1ff; }
+.repeater-item summary::-webkit-details-marker { display: none; }
+.repeater-item .item-titulo { color: #1a3a6b; font-size: 0.9rem; }
+.repeater-item .item-corpo {
+  padding: 14px; border-top: 1px solid #dee2e6;
+}
+
+/* ─────────── Header da prévia ─────────── */
+.previa-header {
+  background: #1a3a6b; color: #fff;
+  padding: 16px 24px; border-radius: 8px;
+  margin-bottom: 18px;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.previa-header h1 { margin: 0; font-size: 1.3rem; }
+.previa-header .badge-versao {
+  background: rgba(255,255,255,0.2); padding: 4px 10px;
+  border-radius: 14px; font-size: 0.8rem;
+}
+.previa-header .badge-warn {
+  background: #ffc107; color: #000;
+}
+
+/* ─────────── Botão de ação principal ─────────── */
+.btn-acao-principal {
+  display: inline-block;
+  background: #28a745; color: #fff; border: none;
+  padding: 12px 28px; border-radius: 6px;
+  font-size: 1rem; font-weight: 600; cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+}
+.btn-acao-principal:hover { background: #218838; }
+.btn-acao-principal:disabled { background: #adb5bd; cursor: not-allowed; }
+
+/* ─────────── Toast ─────────── */
+#toast {
+  position: fixed; bottom: 24px; right: 24px;
+  padding: 10px 18px; border-radius: 6px;
+  font-size: 0.9rem; font-weight: 600; z-index: 9999;
+  display: none;
+}
+#toast.show { display: block; animation: toast-slide 3s; }
+#toast.ok { background: #28a745; color: #fff; }
+#toast.err { background: #dc3545; color: #fff; }
+@keyframes toast-slide {
+  0% { transform: translateY(20px); opacity: 0; }
+  10%, 90% { transform: translateY(0); opacity: 1; }
+  100% { transform: translateY(20px); opacity: 0; }
+}
+{% endblock %}
+
+{% block content %}
+<div class="previa-container">
+  <div class="previa-content">
+    <div class="previa-header">
+      <div>
+        <h1>Prévia — {{ processo_numero|default('—') }}</h1>
+        <small>Reclamante: {{ reclamante_nome|default('—') }}</small>
+      </div>
+      <div>
+        <span class="badge-versao">v3 (réplica PJE-Calc)</span>
+      </div>
+    </div>
+
+    {% block previa_body %}{% endblock %}
+
+    <div style="margin-top: 24px; text-align: center;">
+      {% block previa_acao %}
+      <a href="/instrucoes/{{ sessao_id }}" class="btn-acao-principal">
+        Confirmar e ir para automação →
+      </a>
+      {% endblock %}
+    </div>
+  </div>
+
+  <aside class="previa-sidebar">
+    <h3>Páginas (PJE-Calc)</h3>
+    <ul>
+      {% block sidebar_links %}
+      <li><a href="#sec-dados-processo">1. Dados do Processo</a></li>
+      <li><a href="#sec-historico">2. Histórico Salarial</a></li>
+      <li><a href="#sec-faltas">3. Faltas</a></li>
+      <li><a href="#sec-ferias">4. Férias</a></li>
+      <li><a href="#sec-verbas">5. Verbas</a></li>
+      <li><a href="#sec-cartao">6. Cartão de Ponto</a></li>
+      <li><a href="#sec-fgts">7. FGTS</a></li>
+      <li><a href="#sec-inss">8. INSS</a></li>
+      <li><a href="#sec-irpf">9. IR</a></li>
+      <li><a href="#sec-honorarios">10. Honorários</a></li>
+      <li><a href="#sec-correcao">11. Correção/Juros</a></li>
+      {% endblock %}
+    </ul>
+  </aside>
+</div>
+
+<div id="toast"></div>
+
+<script>
+const SESSAO_ID = {{ sessao_id|tojson }};
+
+async function salvarCampo(campo, valor, el) {
+  // Suporta valor true/false (checkbox) — converte para string
+  const valStr = (typeof valor === 'boolean') ? (valor ? 'true' : 'false') : String(valor);
+  try {
+    const form = new FormData();
+    form.append('campo', campo);
+    form.append('valor', valStr);
+    const resp = await fetch('/previa_v3/' + SESSAO_ID + '/editar', {
+      method: 'POST', body: form
+    });
+    const dados = await resp.json();
+    if (dados.sucesso) {
+      // add/remove → reload
+      if (campo.includes('.add') || campo.includes('.remove')) {
+        mostrarToast('Salvo — atualizando…', 'ok');
+        setTimeout(() => location.reload(), 800);
+        return;
+      }
+      if (el) {
+        el.classList.add('campo-salvo');
+        setTimeout(() => el.classList.remove('campo-salvo'), 1500);
+      }
+      mostrarToast('Salvo: ' + campo, 'ok');
+    } else {
+      if (el) el.classList.add('campo-erro');
+      mostrarToast('Erro: ' + (dados.erro || 'falha desconhecida'), 'err');
+    }
+  } catch(e) {
+    if (el) el.classList.add('campo-erro');
+    mostrarToast('Erro de rede', 'err');
+  }
+}
+
+function mostrarToast(msg, tipo) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = tipo + ' show';
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+</script>
+{% endblock %}
