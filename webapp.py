@@ -849,18 +849,20 @@ async def exibir_previa_v3(
     honorarios_v3 = []
     for h in (dados_v2.get("honorarios") or []):
         try:
-            tipo_dev = h.get("tipo_devedor") or h.get("devedor") or "RECLAMADO"
-            tipo_dev = "RECLAMADO" if str(tipo_dev).upper() in ("RECLAMADO", "RÉU") else "RECLAMANTE"
+            tipo_dev_raw = str(h.get("tipo_devedor") or h.get("devedor") or "RECLAMADO").upper()
+            tipo_dev = "RECLAMADO" if tipo_dev_raw in ("RECLAMADO", "RÉU") else "RECLAMANTE"
             tp = h.get("tipo_honorario") or h.get("tipo") or "ADVOCATICIOS"
-            if not isinstance(h.get("nome_credor"), str) or not h.get("nome_credor"):
-                continue  # campo obrigatório
+            tdc = h.get("tipo_documento_credor") or h.get("tipo_doc_credor") or "CPF"
+            if tdc not in ("CPF", "CNPJ", "CEI"):
+                tdc = "CPF"
             honorarios_v3.append(Honorario(
-                descricao=h.get("descricao", "Honorário"),
-                tp_honorario=tp,
+                descricao=h.get("descricao") or "Honorário",
+                tp_honorario=tp if tp in ("ADVOCATICIOS","ASSISTENCIAIS","CONTRATUAIS",
+                                          "PERICIAIS_CONTADOR","PERICIAIS_DOCUMENTOSCOPIO") else "ADVOCATICIOS",
                 tipo_de_devedor=tipo_dev,
                 aliquota=str(h.get("percentual") or h.get("aliquota") or ""),
-                nome_credor=h.get("nome_credor", ""),
-                tipo_documento_fiscal_credor=h.get("tipo_documento_credor") or h.get("tipo_doc_credor") or "CPF",
+                nome_credor=h.get("nome_credor") or "",
+                tipo_documento_fiscal_credor=tdc,
                 numero_documento_fiscal_credor=h.get("numero_documento_credor") or h.get("doc_credor") or "",
                 apurar_irrf=bool(h.get("apurar_irrf", True)),
             ))
@@ -898,7 +900,7 @@ async def exibir_previa_v3(
 async def editar_campo_previa_v3(
     sessao_id: str,
     campo: str = Form(...),
-    valor: str = Form(...),
+    valor: str = Form(""),  # default vazio — para .add/.remove (campo só, sem valor)
     db: Session = Depends(get_db),
 ):
     """Salva uma edição inline de campo na prévia v3.
