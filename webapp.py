@@ -3594,7 +3594,30 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
     from starlette.responses import StreamingResponse as _SR_v3
     import queue as _q
     import threading as _th
+    import time as _time_mod_v3
     from playwright.sync_api import sync_playwright
+
+    # ── Lock global v3: previne múltiplos Firefox simultâneos ──
+    if _automacao_global_lock.get("ts"):
+        _age = _time_mod_v3.time() - _automacao_global_lock["ts"]
+        _other = _automacao_global_lock.get("sessao", "?")
+        if _age < _LOCK_TIMEOUT_S and _other != sessao_id:
+            async def _v3_lock_busy():
+                yield f"data: {json.dumps({'msg': f'⚠ Outra automação em andamento (sessão {_other}). Aguarde.'})}\n\n"
+                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+            return _SR_v3(_v3_lock_busy(), media_type="text/event-stream",
+                          headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+        elif _age >= _LOCK_TIMEOUT_S:
+            _automacao_global_lock.clear()
+    # Lock para mesma sessão: se já está rodando, recusar nova execução
+    if _automacao_global_lock.get("sessao") == sessao_id:
+        async def _v3_same_busy():
+            yield f"data: {json.dumps({'msg': '⚠ Esta sessão já está em execução. Aguarde o término ou /api/parar.'})}\n\n"
+            yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+        return _SR_v3(_v3_same_busy(), media_type="text/event-stream",
+                      headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+    _automacao_global_lock["ts"] = _time_mod_v3.time()
+    _automacao_global_lock["sessao"] = sessao_id
 
     async def gerador_sse_v3():
         # Carregar prévia v3 da sessão
@@ -3681,12 +3704,17 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
         thread.start()
 
         yield f"data: {json.dumps({'msg': 'Aplicador v3 iniciado'})}\n\n"
-        while not done.is_set() or not msg_q.empty():
-            try:
-                msg = msg_q.get(timeout=2)
-                yield f"data: {json.dumps({'msg': msg})}\n\n"
-            except _q.Empty:
-                yield f"data: {json.dumps({'keepalive': True})}\n\n"
+        try:
+            while not done.is_set() or not msg_q.empty():
+                try:
+                    msg = msg_q.get(timeout=2)
+                    yield f"data: {json.dumps({'msg': msg})}\n\n"
+                except _q.Empty:
+                    yield f"data: {json.dumps({'keepalive': True})}\n\n"
+        finally:
+            # Liberar lock global ao final
+            if _automacao_global_lock.get("sessao") == sessao_id:
+                _automacao_global_lock.clear()
 
         yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
 
