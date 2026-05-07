@@ -215,8 +215,13 @@
         <h1>Prévia — {{ processo_numero|default('—') }}</h1>
         <small>Reclamante: {{ reclamante_nome|default('—') }}</small>
       </div>
-      <div>
+      <div style="display: flex; gap: 8px; align-items: center;">
         <span class="badge-versao">v3 (réplica PJE-Calc)</span>
+        <a href="/previa/{{ sessao_id }}"
+           style="background: rgba(255,255,255,0.2); color: #fff; padding: 4px 10px; border-radius: 14px; font-size: 0.78rem; text-decoration: none;"
+           title="Voltar para a prévia anterior (v2)">
+          ← v2
+        </a>
       </div>
     </div>
 

@@ -18,7 +18,7 @@ import tempfile
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 
 from fastapi import (
     BackgroundTasks, Depends, FastAPI, File, Form, HTTPException,
@@ -472,12 +472,19 @@ async def verificar_status(sessao_id: str, db: Session = Depends(get_db)):
 async def exibir_previa_web(
     request: Request,
     sessao_id: str,
+    v: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     """
     Exibe a prévia dos parâmetros do cálculo para apreciação e correção.
     Prévia fica salva no banco vinculada ao número do processo.
+
+    Query param `?v=3` redireciona para a prévia v3 (réplica perfeita do PJE-Calc).
     """
+    # Roteamento por versão (Etapa 2B.7)
+    if v == 3:
+        return RedirectResponse(url=f"/previa_v3/{sessao_id}", status_code=303)
+
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
 

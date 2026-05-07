@@ -225,6 +225,21 @@ class AplicadorPJECalc:
 
 ## Status da execução
 
+### ✅ Etapa 2B COMPLETA (todas as 7 sub-etapas)
+
+A prévia v3 já é uma **réplica funcional** das 12 páginas do PJE-Calc, com:
+- Schema Pydantic completo (`infrastructure/pjecalc_pages.py`, 13 models)
+- Templates Jinja com macros + repeaters recursivos
+- ~250+ campos editáveis com PATCH inline
+- Migração v2→v3 com relatório de warnings
+- Roteamento dual: `/previa/{sess}` (v2 atual) ↔ `/previa_v3/{sess}` (v3 nova)
+- Banner na v2 direcionando para v3
+- Link "← v2" no header da v3 para voltar
+- `?v=3` na URL v2 redireciona para v3
+
+**Coexistem em paralelo durante a transição.** A automação ainda usa v2;
+a próxima etapa (2C) refatora para aplicador puro consumindo v3.
+
 ### ✅ Etapa 2A — Concluída (commit `1ee133e`)
 
 `infrastructure/pjecalc_pages.py` — 9 Pydantic models com 441 linhas:
