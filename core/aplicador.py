@@ -21,9 +21,9 @@ Estrutura
     AplicadorPJECalc
       .aplicar(previa: PreviaCalculo)
         ├─ aplicar_dados_processo(previa.processo)
-        ├─ aplicar_historico_salarial(previa.historico_salarial)
         ├─ aplicar_faltas(previa.faltas)
         ├─ aplicar_ferias(previa.ferias)
+        ├─ aplicar_historico_salarial(previa.historico_salarial)
         ├─ aplicar_verbas(previa.verbas)               # ← núcleo
         │    ├─ aplicar_parametros_verba(v.parametros)
         │    ├─ aplicar_ocorrencias_verba(v.ocorrencias)
@@ -1258,20 +1258,25 @@ class AplicadorPJECalc:
 
         relatorio = {"sucesso": True, "fase_falhou": None, "pjc_bytes": None, "mensagens": []}
 
-        # Pipeline (apenas fases implementadas falham; pendentes retornam True silenciosamente)
+        # Pipeline na MESMA ORDEM da barra lateral do PJE-Calc:
+        # Dados → Faltas → Férias → Hist.Salarial → Verbas → Cartão Ponto →
+        # FGTS → Contribuição Social → Imposto Renda → Honorários → Custas →
+        # Correção/Juros. Itens da UI sem schema próprio (Salário-família,
+        # Seguro-desemprego, Previdência Privada, Pensão Alimentícia, Multas e
+        # Indenizações) são pulados — Multas/Indenizações entram como verba.
         fases = [
             ("Dados do Processo", lambda: self.aplicar_dados_processo(d.processo)),
-            ("Histórico Salarial", lambda: self.aplicar_historico_salarial(d.historico_salarial)),
             ("Faltas", lambda: self.aplicar_faltas(d.faltas)),
             ("Férias", lambda: self.aplicar_ferias(d.ferias)),
+            ("Histórico Salarial", lambda: self.aplicar_historico_salarial(d.historico_salarial)),
             ("Verbas", lambda: self.aplicar_verbas(d.verbas)),
             ("Cartão de Ponto", lambda: self.aplicar_cartao_de_ponto(d.cartao_de_ponto)),
             ("FGTS", lambda: self.aplicar_fgts(d.fgts)),
-            ("INSS", lambda: self.aplicar_inss(d.contribuicao_social)),
-            ("IR", lambda: self.aplicar_irpf(d.imposto_renda)),
+            ("Contribuição Social", lambda: self.aplicar_inss(d.contribuicao_social)),
+            ("Imposto de Renda", lambda: self.aplicar_irpf(d.imposto_renda)),
             ("Honorários", lambda: self.aplicar_honorarios(d.honorarios)),
-            ("Custas", lambda: self.aplicar_custas(d.custas)),
-            ("Correção/Juros", lambda: self.aplicar_correcao_juros(d.correcao_juros)),
+            ("Custas Judiciais", lambda: self.aplicar_custas(d.custas)),
+            ("Correção, Juros e Multa", lambda: self.aplicar_correcao_juros(d.correcao_juros)),
         ]
         for nome, func in fases:
             try:
