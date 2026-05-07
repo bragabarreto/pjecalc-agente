@@ -4,7 +4,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 01_dados_processo — Dados do Cálculo
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/calculo.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/calculo.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -95,7 +95,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 02_faltas_listing — Faltas
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/falta.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/falta.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -111,7 +111,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 03_ferias_listing — Férias
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/ferias.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/ferias.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -124,7 +124,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 04_historico_salarial_listing — Histórico Salarial
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/historico-salarial.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/historico-salarial.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -134,7 +134,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 05_verbas_listing — Verbas
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/verba/verba-calculo.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/verba/verba-calculo.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -151,7 +151,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 06_cartao_ponto — Cartão de Ponto
 
-- URL: `http://localhost:9257/pjecalc/pages/cartaodeponto/apuracao-cartaodeponto.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/cartaodeponto/apuracao-cartaodeponto.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -161,7 +161,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 07_salario_familia — Salário-família
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/salario-familia.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/salario-familia.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -171,7 +171,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 08_seguro_desemprego — Seguro-desemprego
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/seguro-desemprego.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/seguro-desemprego.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -181,7 +181,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 09_fgts — FGTS
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/fgts.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/fgts.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -191,7 +191,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 10_inss — Contribuição Social (INSS)
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/inss/inss.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/inss/inss.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -201,7 +201,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 11_previdencia_privada — Previdência Privada
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/previdencia-privada.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/previdencia-privada.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -211,7 +211,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 12_pensao_alimenticia — Pensão Alimentícia
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/pensao-alimenticia.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/pensao-alimenticia.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -221,7 +221,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 13_irpf — Imposto de Renda
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/irpf.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/irpf.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -231,7 +231,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 14_multas_indenizacoes — Multas e Indenizações
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/multas-indenizacoes.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/multas-indenizacoes.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -241,7 +241,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 15_honorarios — Honorários
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/honorarios.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/honorarios.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -251,7 +251,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 16_custas — Custas Judiciais
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/custas-judiciais.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/custas-judiciais.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -261,7 +261,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 17_correcao_juros — Correção, Juros e Multa
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/parametros-atualizacao/parametros-atualizacao.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/parametros-atualizacao/parametros-atualizacao.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -271,7 +271,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 04b_historico_salarial_form — Histórico Salarial — form Novo
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/historico-salarial.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/historico-salarial.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -305,7 +305,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 05b_verbas_expresso — Verbas — Lançamento Expresso
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/verba/verbas-para-calculo.jsf?conversationId=139`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/verba/verbas-para-calculo.jsf?conversationId=69`
 
 ### Campos editáveis
 
@@ -369,7 +369,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 05c_verbas_manual — Verbas — Manual (form)
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/verba/verba-calculo.jsf?conversationId=86#irTopoPagina`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/verba/verba-calculo.jsf?conversationId=6#irTopoPagina`
 
 ### Campos editáveis
 
@@ -451,7 +451,7 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 
 ## 15b_honorarios_form — Honorários — form Novo
 
-- URL: `http://localhost:9257/pjecalc/pages/calculo/honorarios.jsf?conversationId=86`
+- URL: `http://localhost:9257/pjecalc/pages/calculo/honorarios.jsf?conversationId=6`
 
 ### Campos editáveis
 
@@ -479,3 +479,107 @@ Gerado automaticamente por `scripts/cataloga_pjecalc.py`. Contém TODOS os campo
 - `formulario:tipoDeDevedor`: `RECLAMANTE`, `RECLAMADO`
 - `formulario:tipoValor`: `INFORMADO`, `CALCULADO`✓
 - `formulario:tipoDocumentoFiscalCredor`: `CPF`✓, `CNPJ`, `CEI`
+
+## 14b_multas_form — Multas e Indenizações — form Novo
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/multas-indenizacoes.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `descricao`  | text | Descrição * |  |  |
+| `valor:0`  | radio | Informado | INFORMADO |  |
+| `valor:1`  | radio | Calculado | CALCULADO |  |
+| `aliquota`  | text | Alíquota (%) * |  |  |
+| `selAcheFacil` 👻 | select-one |  |  |  |
+| `credorDevedor`  | select-one | Credor/Devedor | RECLAMANTE_RECLAMADO | `RECLAMANTE_RECLAMADO`=Reclamante e Reclamado; `RECLAMADO_RECLAMANTE`=Reclamado e Reclamante; `TERCE |
+| `tipoBaseMulta`  | select-one | Base | PRINCIPAL | `PRINCIPAL`=Principal; `PRINCIPAL_MENOS_CONTRIBUICAO_SOCIAL`=Principal (-) Contribuição Soc; `PRINCI |
+
+### Radios (grupos)
+
+- `formulario:valor`: `INFORMADO`, `CALCULADO`✓
+
+## 12b_pensao_form — 12b_pensao_form
+
+⚠️ Erro ao catalogar: `botão input[id$='incluir'] não encontrado`
+
+## 07b_salario_familia_expandido — Salário-família — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/salario-familia.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |
+
+## 08b_seguro_desemprego_expandido — Seguro-desemprego — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/seguro-desemprego.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |
+
+## 09b_fgts_expandido — FGTS — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/fgts.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |
+
+## 10b_inss_expandido — INSS — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/inss/inss.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |
+
+## 11b_previdencia_privada_expandido — Previdência Privada — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/previdencia-privada.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |
+
+## 13b_irpf_expandido — Imposto de Renda — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/irpf.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |
+
+## 16b_custas_expandido — Custas Judiciais — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/custas-judiciais.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |
+
+## 17b_correcao_expandido — Correção, Juros e Multa — expandido
+
+- URL: `http://localhost:9257/pjecalc/pages/calculo/parametros-atualizacao/parametros-atualizacao.jsf?conversationId=6`
+
+### Campos editáveis
+
+| ID | Tipo | Label | Default | Opções/Detalhes |
+|---|---|---|---|---|
+| `selAcheFacil` 👻 | select-one |  |  |  |

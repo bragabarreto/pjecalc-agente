@@ -262,6 +262,30 @@ SUBPAGINAS_INCLUIR = [
     ("verba/verba-calculo.jsf", "05b_verbas_expresso", "Verbas — Lançamento Expresso", "input[id$='lancamentoExpresso']"),
     ("verba/verba-calculo.jsf", "05c_verbas_manual", "Verbas — Manual (form)", "input[id$='incluir'][value='Manual']"),
     ("honorarios.jsf", "15b_honorarios_form", "Honorários — form Novo", "input[id$='incluir']"),
+    ("multas-indenizacoes.jsf", "14b_multas_form", "Multas e Indenizações — form Novo", "input[id$='incluir']"),
+    ("pensao-alimenticia.jsf", "12b_pensao_form", "Pensão Alimentícia — form Novo", "input[id$='incluir']"),
+]
+
+
+# Páginas com formulário inline expandido por radio/checkbox "Apurar?"
+# (jsf_path, key, nome, lista de seletores a clicar para expandir tudo)
+PAGINAS_EXPANDIR = [
+    ("salario-familia.jsf", "07b_salario_familia_expandido", "Salário-família — expandido",
+     ["input[type=checkbox][id$=':apurar']", "input[type=radio][id*=':apurar'][value='SIM']"]),
+    ("seguro-desemprego.jsf", "08b_seguro_desemprego_expandido", "Seguro-desemprego — expandido",
+     ["input[type=checkbox][id$=':apurar']"]),
+    ("fgts.jsf", "09b_fgts_expandido", "FGTS — expandido",
+     ["input[type=radio][id*='tipoDeVerba']:first-of-type"]),
+    ("inss/inss.jsf", "10b_inss_expandido", "INSS — expandido",
+     []),  # INSS provavelmente já tem form inline visível
+    ("previdencia-privada.jsf", "11b_previdencia_privada_expandido", "Previdência Privada — expandido",
+     ["input[type=checkbox][id$=':apurar']"]),
+    ("irpf.jsf", "13b_irpf_expandido", "Imposto de Renda — expandido",
+     ["input[type=checkbox][id$=':apurar']"]),
+    ("custas-judiciais.jsf", "16b_custas_expandido", "Custas Judiciais — expandido",
+     []),
+    ("parametros-atualizacao/parametros-atualizacao.jsf", "17b_correcao_expandido", "Correção, Juros e Multa — expandido",
+     []),
 ]
 
 
@@ -380,6 +404,33 @@ def main():
                     p.wait_for_load_state("networkidle", timeout=8000)
                 except Exception:
                     pass
+                d = dump_pagina(p, nome)
+                catalogo["paginas"][key] = d
+                log(f"    ✓ {nome}: {len(d.get('campos', []))} campos")
+            except Exception as e:
+                catalogo["paginas"][key] = {"erro": str(e)[:200]}
+
+        # Páginas com form inline — primeiro 1ª passada com defaults,
+        # depois expandir clicando radio/checkbox e re-dumpar
+        for jsf_path, key, nome, expand_sels in PAGINAS_EXPANDIR:
+            url = f"{url_base}{jsf_path}?conversationId={conv}"
+            if not goto_seguro(p, url, nome):
+                catalogo["paginas"][key] = {"erro": "navegação falhou"}
+                continue
+            try:
+                # Tentar expandir com cada seletor disponível
+                for sel in expand_sels:
+                    try:
+                        loc = p.locator(sel).first
+                        if loc.count() > 0:
+                            loc.click(force=True, timeout=3000)
+                            p.wait_for_timeout(2000)
+                            try:
+                                p.wait_for_load_state("networkidle", timeout=5000)
+                            except Exception:
+                                pass
+                    except Exception as _e:
+                        log(f"    ⚠ expand {sel!r}: {_e!s:.80}")
                 d = dump_pagina(p, nome)
                 catalogo["paginas"][key] = d
                 log(f"    ✓ {nome}: {len(d.get('campos', []))} campos")
