@@ -6157,6 +6157,68 @@ class PJECalcPlaywright:
                 except Exception as _e_filt:
                     self._log(f"  ⚠ Falha ao filtrar ocorrências por período: {_e_filt}")
 
+        # ── FIX 2026-05-06 v8 (estratégia B) — Filtro DESLIGAMENTO ──
+        # Quando v.ocorrencia=Desligamento, o Expresso já gerou N ocorrências
+        # mensais (porque o default era MENSAL). Mudar ocorrenciaPagto para
+        # DESLIGAMENTO em Parâmetros NÃO regenera as linhas com 'Manter'.
+        # Solução cirúrgica: desmarcar :ativo de TODAS as linhas exceto a do
+        # mês de DEMISSÃO. Resultado: 1 linha ativa = 1 ocorrência única.
+        if v:
+            import unicodedata as _ud_des
+            _norm_oc = (
+                _ud_des.normalize("NFD", (v.get("ocorrencia") or v.get("ocorrencia_pagamento") or "").lower())
+                .encode("ascii", "ignore").decode().strip()
+            )
+            if _norm_oc == "desligamento":
+                _dem = (
+                    (self._dados or {}).get("contrato", {}).get("data_demissao")
+                    or (self._dados or {}).get("contrato", {}).get("demissao")
+                    or ""
+                )
+                # Aceita formato dd/mm/yyyy
+                _mm_yyyy_alvo = ""
+                if _dem and "/" in _dem:
+                    _parts = _dem.split("/")
+                    if len(_parts) == 3:
+                        _mm_yyyy_alvo = f"{int(_parts[1]):02d}/{_parts[2]}"
+                if _mm_yyyy_alvo:
+                    try:
+                        _js_des = (
+                            "(args) => {"
+                            "  const {mmYyyy} = args;"
+                            "  const rows = document.querySelectorAll('table tr, tbody tr');"
+                            "  let desmarcados = 0, mantidos = 0;"
+                            "  rows.forEach(tr => {"
+                            "    const cbx = tr.querySelector('input[type=\"checkbox\"][id*=\":ativo\"]');"
+                            "    if (!cbx) return;"
+                            "    const txt = tr.innerText || tr.textContent || '';"
+                            "    const m = txt.match(/(\\d{2})[\\/\\-](\\d{4})/);"
+                            "    if (!m) return;"
+                            "    const rowMmYyyy = m[1] + '/' + m[2];"
+                            "    if (rowMmYyyy === mmYyyy) {"
+                            "      if (!cbx.checked) { cbx.click(); }"
+                            "      mantidos++;"
+                            "    } else {"
+                            "      if (cbx.checked) { cbx.click(); desmarcados++; }"
+                            "    }"
+                            "  });"
+                            "  return {desmarcados, mantidos};"
+                            "}"
+                        )
+                        _r = self._page.evaluate(_js_des, {"mmYyyy": _mm_yyyy_alvo})
+                        self._log(
+                            f"  ✓ Filtro DESLIGAMENTO ({_mm_yyyy_alvo}) "
+                            f"'{nome_na_lista}': desmarcadas={_r.get('desmarcados', 0)}, "
+                            f"mantidas={_r.get('mantidos', 0)}"
+                        )
+                        if _r.get("desmarcados", 0):
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(500)
+                    except Exception as _e_des:
+                        self._log(f"  ⚠ Filtro DESLIGAMENTO: {_e_des}")
+                else:
+                    self._log(f"  ⚠ ocorrencia=Desligamento mas data_demissao não disponível para '{nome_na_lista}'")
+
         # ── CORREÇÃO E10 (2026-05-03) — Preencher quantidade nas linhas
         # da grade de Ocorrências para verbas que cobram POR QUANTIDADE
         # (HE 50%, INTERVALO INTRAJORNADA, HORAS IN ITINERE, AD NOTURNO).
