@@ -6183,6 +6183,30 @@ class PJECalcPlaywright:
                         _mm_yyyy_alvo = f"{int(_parts[1]):02d}/{_parts[2]}"
                 if _mm_yyyy_alvo:
                     self._page.wait_for_timeout(1500)
+                    # FIX v8e: dump do primeiro <tr> com :ativo para ver
+                    # estrutura real (sufixos dos inputs / posição da data)
+                    try:
+                        _dump = self._page.evaluate(
+                            "() => {"
+                            "  const cbx = document.querySelector("
+                            "    'input[type=\"checkbox\"][id*=\":listagem:\"][id$=\":ativo\"]'"
+                            "  );"
+                            "  if (!cbx) return {erro: 'checkbox :ativo não encontrado'};"
+                            "  if (cbx.id.includes('ativarTodos')) return {erro: 'só achou ativarTodos'};"
+                            "  const tr = cbx.closest('tr');"
+                            "  if (!tr) return {erro: 'tr não encontrado', cbxId: cbx.id};"
+                            "  const inputs = [...tr.querySelectorAll('input, select, span[id]')]"
+                            "    .map(e => ({id: e.id, value: e.value || e.textContent || '', tag: e.tagName}))"
+                            "    .filter(e => e.id);"
+                            "  const tds = [...tr.querySelectorAll('td')].map(td => "
+                            "    (td.innerText || td.textContent || '').slice(0, 60).replace(/\\s+/g, ' ').trim()"
+                            "  );"
+                            "  return {cbxId: cbx.id, n_inputs: inputs.length, sample_inputs: inputs.slice(0, 10), n_tds: tds.length, sample_tds: tds};"
+                            "}"
+                        )
+                        self._log(f"  ℹ DUMP linha 0 ocorrência: {_dump}")
+                    except Exception as _e_d:
+                        self._log(f"  ⚠ Dump linha: {_e_d}")
                     try:
                         # FIX v8d: iterar pelos CHECKBOXES (não tr) e ler value
                         # do input dataInicial/dataFinal da MESMA LINHA via id
