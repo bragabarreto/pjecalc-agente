@@ -518,35 +518,30 @@ async def exibir_previa_web(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Prévia v3 — réplica perfeita do PJE-Calc Cidadão (Etapa 2B em curso)
+# Prévia v3 — réplica perfeita do PJE-Calc Cidadão
 # ─────────────────────────────────────────────────────────────────────────────
 
-@app.get("/previa_v3/{sessao_id}", response_class=HTMLResponse)
-async def exibir_previa_v3(
-    request: Request,
-    sessao_id: str,
-    db: Session = Depends(get_db),
-):
-    """Exibe a prévia v3 — réplica perfeita do PJE-Calc.
+def _migrar_v2_para_v3(calculo) -> tuple[dict, list[str]]:
+    """Migra dados v2 (legacy) para schema v3 Pydantic.
 
-    Usa o schema `infrastructure/pjecalc_pages.py` (Pydantic v3) e renderiza
-    via `templates/previa_v3/index.html` + `_macros.html` + `_base.html`.
+    Retorna (dados_v3_dict, warnings) onde:
+      - dados_v3_dict: dict pronto para template Jinja (cada chave é uma
+        instância de model Pydantic ou lista delas)
+      - warnings: lista de strings com avisos sobre campos descartados/inferidos
 
-    Estado atual (sub-etapa 2B.1 + 2B.2):
-      ✓ Infraestrutura base (macros, layout, salvarCampo PATCH inline)
-      ✓ Página 1 — Dados do Processo completa
-      ⏳ Páginas 2-11 — placeholders (próximas sub-etapas 2B.3-2B.5)
+    Esta função é usada tanto pelo GET (renderiza prévia) quanto pelo endpoint
+    POST /api/migrar_v3 (formaliza e valida a migração).
     """
-    from infrastructure.pjecalc_pages import DadosProcesso
+    from infrastructure.pjecalc_pages import (
+        DadosProcesso, HistoricoSalarialEntry, HistoricoSalarialOcorrencia,
+        Verba, ParametrosVerba, OcorrenciaVerba,
+        FGTS, ContribuicaoSocial, ImpostoRenda, CartaoDePonto,
+        ProgramacaoSemanalDia, Falta, FeriasEntry, CustasJudiciais,
+        CorrecaoJuros, Honorario,
+    )
 
-    repo = RepositorioCalculo(db)
-    calculo = repo.buscar_sessao(sessao_id)
-    if not calculo:
-        raise HTTPException(status_code=404, detail="Sessão não encontrada")
-
+    warnings: list[str] = []
     dados_v2 = calculo.dados() or {}
-
-    # Migração lossy v2 → v3 (Etapa 2B.6 vai criar endpoint dedicado).
     proc_v2 = dados_v2.get("processo", {}) or {}
     contrato_v2 = dados_v2.get("contrato", {}) or {}
     aviso_v2 = dados_v2.get("aviso_previo", {}) or {}
@@ -589,12 +584,10 @@ async def exibir_previa_v3(
             projeta_aviso_indenizado=bool(aviso_v2.get("projetar", False)),
         )
     except Exception as e:
-        # Se migração falhar (campos extras inválidos no v2), criar vazio
-        logger.warning(f"Migração v2→v3 falhou para {sessao_id}: {e}")
+        warnings.append(f"DadosProcesso: erro na migração — {e}")
         processo_v3 = DadosProcesso()
 
-    # Migração v2 → v3 do Histórico Salarial
-    from infrastructure.pjecalc_pages import HistoricoSalarialEntry, HistoricoSalarialOcorrencia
+    # Histórico Salarial
     historico_v3 = []
     for h in hs_v2:
         try:
@@ -606,12 +599,10 @@ async def exibir_previa_v3(
                         competencia=oc.get("competencia") or oc.get("mes_ano") or "",
                         ativo=bool(oc.get("ativo", True)),
                         valor=str(oc.get("valor")) if oc.get("valor") is not None else None,
-                        valor_incidencia_cs=(
-                            str(oc.get("valor_incidencia_cs")) if oc.get("valor_incidencia_cs") is not None else None
-                        ),
-                        valor_incidencia_fgts=(
-                            str(oc.get("valor_incidencia_fgts")) if oc.get("valor_incidencia_fgts") is not None else None
-                        ),
+                        valor_incidencia_cs=str(oc.get("valor_incidencia_cs"))
+                            if oc.get("valor_incidencia_cs") is not None else None,
+                        valor_incidencia_fgts=str(oc.get("valor_incidencia_fgts"))
+                            if oc.get("valor_incidencia_fgts") is not None else None,
                         cs_recolhida=bool(oc.get("cs_recolhida") or oc.get("contribuicoes_ja_recolhidas", False)),
                         fgts_recolhido=bool(oc.get("fgts_recolhido") or oc.get("fgts_ja_recolhido", False)),
                     ))
@@ -627,19 +618,26 @@ async def exibir_previa_v3(
                 ocorrencias=ocs,
             ))
         except Exception as e:
-            logger.warning(f"Migração HS entry falhou: {e}")
-            continue
+            warnings.append(f"Histórico '{h.get('nome', '?')}': {e}")
 
-    # Migração v2 → v3 das Verbas (com Parâmetros + Ocorrências + Reflexos)
-    from infrastructure.pjecalc_pages import (
-        Verba, ParametrosVerba, OcorrenciaVerba,
-    )
-    verbas_v3 = []
-    # Verbas podem estar em dados.verbas (legacy) OU em verbas_mapeadas
-    # (novo padrão — coluna verbas_json com dict {predefinidas, personalizadas, ...})
+    # Verbas (com reflexos recursivos)
     verbas_v2 = dados_v2.get("verbas") or calculo.verbas_mapeadas() or []
 
-    def _migrar_oc(oc_v2: dict, indice: int) -> OcorrenciaVerba:
+    def _carac(s):
+        if not s: return "COMUM"
+        s = str(s).strip().lower()
+        return {"comum":"COMUM","13o salario":"DECIMO_TERCEIRO_SALARIO","13o":"DECIMO_TERCEIRO_SALARIO",
+                "decimo terceiro":"DECIMO_TERCEIRO_SALARIO","decimo terceiro salario":"DECIMO_TERCEIRO_SALARIO",
+                "ferias":"FERIAS","férias":"FERIAS","aviso previo":"AVISO_PREVIO",
+                "aviso prévio":"AVISO_PREVIO"}.get(s, "COMUM")
+
+    def _ocorr(s):
+        if not s: return "MENSAL"
+        s = str(s).strip().lower()
+        return {"mensal":"MENSAL","dezembro":"DEZEMBRO","desligamento":"DESLIGAMENTO",
+                "periodo aquisitivo":"PERIODO_AQUISITIVO","período aquisitivo":"PERIODO_AQUISITIVO"}.get(s, "MENSAL")
+
+    def _migrar_oc_verba(oc_v2: dict, indice: int) -> OcorrenciaVerba:
         return OcorrenciaVerba(
             indice=oc_v2.get("indice", indice) if isinstance(oc_v2, dict) else indice,
             ativo=bool((oc_v2 or {}).get("ativo", True)),
@@ -650,24 +648,7 @@ async def exibir_previa_v3(
             dobra=bool((oc_v2 or {}).get("dobra", False)),
         )
 
-    def _carac_v2_para_v3(s):
-        if not s:
-            return "COMUM"
-        s = str(s).strip().lower()
-        m = {"comum":"COMUM", "13o salario":"DECIMO_TERCEIRO_SALARIO",
-             "13o":"DECIMO_TERCEIRO_SALARIO", "decimo terceiro":"DECIMO_TERCEIRO_SALARIO",
-             "ferias":"FERIAS", "férias":"FERIAS", "aviso previo":"AVISO_PREVIO",
-             "aviso prévio":"AVISO_PREVIO"}
-        return m.get(s, "COMUM")
-
-    def _ocorr_v2_para_v3(s):
-        if not s: return "MENSAL"
-        s = str(s).strip().lower()
-        m = {"mensal":"MENSAL", "dezembro":"DEZEMBRO", "desligamento":"DESLIGAMENTO",
-             "periodo aquisitivo":"PERIODO_AQUISITIVO", "período aquisitivo":"PERIODO_AQUISITIVO"}
-        return m.get(s, "MENSAL")
-
-    def _migrar_verba(v2: dict) -> Verba | None:
+    def _migrar_verba(v2: dict):
         if not isinstance(v2, dict):
             return None
         try:
@@ -676,8 +657,8 @@ async def exibir_previa_v3(
                 assuntos_cnj=str(v2.get("assuntos_cnj") or v2.get("cnj_codigo") or "2581"),
                 tipo_de_verba="REFLEXA" if (str(v2.get("tipo", "")).lower() == "reflexa" or v2.get("eh_reflexa")) else "PRINCIPAL",
                 tipo_variacao_da_parcela="VARIAVEL" if v2.get("variavel") else "FIXA",
-                caracteristica_verba=_carac_v2_para_v3(v2.get("caracteristica")),
-                ocorrencia_pagto=_ocorr_v2_para_v3(v2.get("ocorrencia") or v2.get("ocorrencia_pagamento")),
+                caracteristica_verba=_carac(v2.get("caracteristica")),
+                ocorrencia_pagto=_ocorr(v2.get("ocorrencia") or v2.get("ocorrencia_pagamento")),
                 periodo_inicial=v2.get("periodo_inicio"),
                 periodo_final=v2.get("periodo_fim"),
                 valor=("INFORMADO" if v2.get("valor_informado") is not None else "CALCULADO"),
@@ -693,11 +674,10 @@ async def exibir_previa_v3(
                     else None
                 ),
             )
-            ocs = [_migrar_oc(oc, i) for i, oc in enumerate(v2.get("ocorrencias") or [])]
+            ocs = [_migrar_oc_verba(oc, i) for i, oc in enumerate(v2.get("ocorrencias") or [])]
             refs = []
             for r2 in (v2.get("reflexos") or v2.get("reflexas_sugeridas") or []):
                 if isinstance(r2, str):
-                    # Apenas nome — cria Verba mínima
                     refs.append(Verba(parametros=ParametrosVerba(descricao=r2, tipo_de_verba="REFLEXA")))
                 else:
                     rmig = _migrar_verba(r2)
@@ -713,10 +693,10 @@ async def exibir_previa_v3(
                 expresso_alvo=v2.get("expresso_alvo") or v2.get("expresso_equivalente") or v2.get("nome_pjecalc"),
             )
         except Exception as e:
-            logger.warning(f"Migração verba falhou: {e}")
+            warnings.append(f"Verba '{v2.get('nome_pjecalc', '?')}': {e}")
             return None
 
-    # verbas_v2 pode ser lista direta ou dict {predefinidas, personalizadas, ...}
+    verbas_v3 = []
     if isinstance(verbas_v2, list):
         for v in verbas_v2:
             mig = _migrar_verba(v)
@@ -729,13 +709,7 @@ async def exibir_previa_v3(
                 if mig:
                     verbas_v3.append(mig)
 
-    # Migração v2→v3 das demais páginas auxiliares (2B.5)
-    from infrastructure.pjecalc_pages import (
-        FGTS, ContribuicaoSocial, ImpostoRenda, CartaoDePonto,
-        ProgramacaoSemanalDia, Falta, FeriasEntry, CustasJudiciais,
-        CorrecaoJuros, Honorario,
-    )
-
+    # FGTS / INSS / IR / Cartão / Faltas / Férias / Custas / Correção / Honorários
     fgts_v2 = dados_v2.get("fgts") or {}
     try:
         fgts_v3 = FGTS(
@@ -748,7 +722,8 @@ async def exibir_previa_v3(
                            "MULTA_DE_20" if fgts_v2.get("multa_20") else "MULTA_DE_40"),
             multa_do_artigo_467=bool(fgts_v2.get("multa_467") or fgts_v2.get("fgts_multa_467", False)),
         )
-    except Exception:
+    except Exception as e:
+        warnings.append(f"FGTS: {e}")
         fgts_v3 = FGTS()
 
     inss_v2 = dados_v2.get("contribuicao_social") or dados_v2.get("inss") or {}
@@ -759,7 +734,8 @@ async def exibir_previa_v3(
             aliquota_rat=str(inss_v2.get("rat") or inss_v2.get("aliquota_rat", "")) or None,
             fap=str(inss_v2.get("fap") or "") or None,
         )
-    except Exception:
+    except Exception as e:
+        warnings.append(f"INSS: {e}")
         inss_v3 = ContribuicaoSocial()
 
     ir_v2 = dados_v2.get("imposto_renda") or {}
@@ -770,7 +746,8 @@ async def exibir_previa_v3(
             meses_tributaveis=ir_v2.get("meses_tributaveis"),
             regime_tributacao=ir_v2.get("regime") or "MESES_TRIBUTAVEIS",
         )
-    except Exception:
+    except Exception as e:
+        warnings.append(f"IR: {e}")
         ir_v3 = ImpostoRenda()
 
     cp_v2 = dados_v2.get("cartao_ponto") or dados_v2.get("cartao_de_ponto") or {}
@@ -794,7 +771,8 @@ async def exibir_previa_v3(
             intervalo_intrajornada_min=cp_v2.get("intervalo_intrajornada_min") or cp_v2.get("intervalo_min"),
             programacao_semanal=prog_v3,
         )
-    except Exception:
+    except Exception as e:
+        warnings.append(f"Cartão de Ponto: {e}")
         cp_v3 = CartaoDePonto()
 
     faltas_v3 = []
@@ -806,8 +784,8 @@ async def exibir_previa_v3(
                 descontar_remuneracao=bool(f.get("descontar_remuneracao", True)),
                 descontar_dsr=bool(f.get("descontar_dsr", True)),
             ))
-        except Exception:
-            continue
+        except Exception as e:
+            warnings.append(f"Falta: {e}")
 
     ferias_v3 = []
     for fe in (dados_v2.get("ferias") or []):
@@ -820,8 +798,8 @@ async def exibir_previa_v3(
                 abono_pecuniario=bool(fe.get("abono_pecuniario", False)),
                 dobra=bool(fe.get("dobra", False)),
             ))
-        except Exception:
-            continue
+        except Exception as e:
+            warnings.append(f"Férias: {e}")
 
     custas_v2 = dados_v2.get("custas") or dados_v2.get("custas_judiciais") or {}
     try:
@@ -830,7 +808,8 @@ async def exibir_previa_v3(
             responsavel=custas_v2.get("responsavel") or custas_v2.get("responsabilidade") or "RECLAMADO",
             valor_periciais=str(custas_v2.get("valor_periciais") or "") or None,
         )
-    except Exception:
+    except Exception as e:
+        warnings.append(f"Custas: {e}")
         custas_v3 = CustasJudiciais()
 
     cj_v2 = dados_v2.get("correcao_juros") or {}
@@ -843,7 +822,8 @@ async def exibir_previa_v3(
             base_juros=cj_v2.get("base_juros") or "VERBA",
             aplicar_ec_113=bool(cj_v2.get("aplicar_ec_113", True)),
         )
-    except Exception:
+    except Exception as e:
+        warnings.append(f"Correção/Juros: {e}")
         cj_v3 = CorrecaoJuros()
 
     honorarios_v3 = []
@@ -867,10 +847,9 @@ async def exibir_previa_v3(
                 apurar_irrf=bool(h.get("apurar_irrf", True)),
             ))
         except Exception as e:
-            logger.warning(f"Migração honorário falhou: {e}")
-            continue
+            warnings.append(f"Honorário: {e}")
 
-    dados_v3 = {
+    return {
         "processo": processo_v3,
         "historico_salarial": historico_v3,
         "faltas": faltas_v3,
@@ -883,7 +862,24 @@ async def exibir_previa_v3(
         "honorarios": honorarios_v3,
         "custas": custas_v3,
         "correcao_juros": cj_v3,
-    }
+    }, warnings
+
+
+@app.get("/previa_v3/{sessao_id}", response_class=HTMLResponse)
+async def exibir_previa_v3(
+    request: Request,
+    sessao_id: str,
+    db: Session = Depends(get_db),
+):
+    """Exibe a prévia v3 — réplica perfeita do PJE-Calc."""
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    dados_v3, _warnings = _migrar_v2_para_v3(calculo)
+    if _warnings:
+        logger.info(f"Prévia v3 {sessao_id[:8]}: {len(_warnings)} avisos de migração")
 
     return templates.TemplateResponse(
         request, "previa_v3/index.html",
@@ -891,16 +887,130 @@ async def exibir_previa_v3(
             "sessao_id": sessao_id,
             "dados": dados_v3,
             "processo_numero": calculo.processo.numero_processo if calculo.processo else None,
-            "reclamante_nome": processo_v3.reclamante_nome,
+            "reclamante_nome": dados_v3.get("processo").reclamante_nome,
         },
     )
+
+
+@app.post("/api/migrar_v3/{sessao_id}")
+async def migrar_para_v3(
+    sessao_id: str,
+    db: Session = Depends(get_db),
+):
+    """Migração explícita v2 → v3 com relatório.
+
+    Diferente do GET (que migra on-the-fly silenciosamente), este endpoint:
+      1. Roda a migração formalmente
+      2. Valida o resultado com Pydantic v3 (model_dump faz model_rebuild)
+      3. Retorna relatório com:
+         - sucesso: bool
+         - resumo: dict com contagens (verbas, ocorrências, reflexos, etc.)
+         - warnings: lista de avisos de campos descartados/inferidos
+         - schema_version: "3.0"
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        return JSONResponse(
+            {"sucesso": False, "erro": "Sessão não encontrada"}, status_code=404
+        )
+
+    try:
+        dados_v3, warnings = _migrar_v2_para_v3(calculo)
+    except Exception as e:
+        return JSONResponse(
+            {"sucesso": False, "erro": f"Erro fatal na migração: {e}"},
+            status_code=500,
+        )
+
+    # Validar serialização (model_dump força validação completa)
+    erros_serializacao = []
+    for chave, valor in dados_v3.items():
+        try:
+            if isinstance(valor, list):
+                for item in valor:
+                    if hasattr(item, "model_dump"):
+                        item.model_dump()
+            elif hasattr(valor, "model_dump"):
+                valor.model_dump()
+        except Exception as e:
+            erros_serializacao.append(f"{chave}: {e}")
+
+    resumo = {
+        "verbas": len(dados_v3.get("verbas", [])),
+        "verbas_principais": sum(
+            1 for v in dados_v3.get("verbas", [])
+            if v.parametros.tipo_de_verba == "PRINCIPAL"
+        ),
+        "verbas_reflexas": sum(
+            1 for v in dados_v3.get("verbas", [])
+            if v.parametros.tipo_de_verba == "REFLEXA"
+        ),
+        "verbas_com_reflexos": sum(
+            1 for v in dados_v3.get("verbas", [])
+            if len(v.reflexos) > 0
+        ),
+        "total_ocorrencias_verbas": sum(
+            len(v.ocorrencias) for v in dados_v3.get("verbas", [])
+        ),
+        "historico_salarial_entries": len(dados_v3.get("historico_salarial", [])),
+        "historico_salarial_ocorrencias": sum(
+            len(h.ocorrencias) for h in dados_v3.get("historico_salarial", [])
+        ),
+        "honorarios": len(dados_v3.get("honorarios", [])),
+        "faltas": len(dados_v3.get("faltas", [])),
+        "ferias": len(dados_v3.get("ferias", [])),
+        "cartao_ponto_dias": len(dados_v3.get("cartao_de_ponto").programacao_semanal),
+    }
+
+    return JSONResponse({
+        "sucesso": len(erros_serializacao) == 0,
+        "schema_version": "3.0",
+        "sessao_id": sessao_id,
+        "resumo": resumo,
+        "warnings": warnings,
+        "erros_serializacao": erros_serializacao,
+        "url_previa_v3": f"/previa_v3/{sessao_id}",
+    })
+
+
+@app.get("/api/migrar_v3/{sessao_id}/preview")
+async def preview_migracao_v3(
+    sessao_id: str,
+    db: Session = Depends(get_db),
+):
+    """Preview da migração — retorna JSON v3 completo (todos os campos),
+    sem persistir. Útil para export do JSON v3 / debugging."""
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        return JSONResponse({"erro": "Sessão não encontrada"}, status_code=404)
+
+    try:
+        dados_v3, warnings = _migrar_v2_para_v3(calculo)
+    except Exception as e:
+        return JSONResponse({"erro": f"Migração falhou: {e}"}, status_code=500)
+
+    payload: dict = {"_warnings": warnings, "schema_version": "3.0"}
+    for chave, valor in dados_v3.items():
+        if isinstance(valor, list):
+            payload[chave] = [
+                item.model_dump() if hasattr(item, "model_dump") else item
+                for item in valor
+            ]
+        elif hasattr(valor, "model_dump"):
+            payload[chave] = valor.model_dump()
+        else:
+            payload[chave] = valor
+
+    return JSONResponse(payload)
 
 
 @app.post("/previa_v3/{sessao_id}/editar")
 async def editar_campo_previa_v3(
     sessao_id: str,
     campo: str = Form(...),
-    valor: str = Form(""),  # default vazio — para .add/.remove (campo só, sem valor)
+    valor: str = Form(""),
     db: Session = Depends(get_db),
 ):
     """Salva uma edição inline de campo na prévia v3.
