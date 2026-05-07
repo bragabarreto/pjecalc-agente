@@ -3598,8 +3598,16 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
                     page.wait_for_url("**/calculo*.jsf*", timeout=20000)
                     page.wait_for_load_state("networkidle", timeout=10000)
 
+                    # Capturar conversation_id do click 'Novo'
+                    conv_id = None
+                    if "conversationId=" in page.url:
+                        conv_id = page.url.split("conversationId=")[1].split("&")[0]
+                        log_cb(f"  ℹ conv_id capturado: {conv_id}")
+
                     from core.aplicador import AplicadorPJECalc
                     aplicador = AplicadorPJECalc(page, log_cb=log_cb)
+                    if conv_id:
+                        aplicador._conv_id = conv_id
                     relatorio = aplicador.aplicar(dados_v3)
                     log_cb(f"✓ Aplicador concluído: sucesso={relatorio['sucesso']}")
                     if relatorio.get("fase_falhou"):
