@@ -223,9 +223,45 @@ class AplicadorPJECalc:
 2. **Sessões existentes com schema antigo:** migração automática (lossy — campos inferidos viram defaults) ou exigir nova prévia?
 3. **Catálogo evolutivo:** rodar `cataloga_pjecalc.py` em CI para detectar mudanças do PJE-Calc?
 
-## Próxima ação proposta
+## Status da execução
 
-Começar pela **Fase 2A** com foco em:
-- `infrastructure/pjecalc_pages.py`: models para Dados do Processo, ParametrosVerba, OcorrenciaVerba (os 3 mais críticos e mais conhecidos)
-- Validação contra `docs/pjecalc-fields-catalog.json`
-- Teste de conversão a partir do JSON da sessão RICHARLEN (440c8764)
+### ✅ Etapa 2A — Concluída (commit `1ee133e`)
+
+`infrastructure/pjecalc_pages.py` — 9 Pydantic models com 441 linhas:
+- `DadosProcesso` (~70 campos), `HistoricoSalarialEntry`/`Ocorrencia`, `ParametrosVerba` (30+),
+  `OcorrenciaVerba`, `Verba` (recursivo), `Honorario`, auxiliares
+- `extra="forbid"` força fidelidade
+- `Literal` types para todos os enums
+- Validators DD/MM/YYYY e BR
+- 9 testes passaram
+
+### ⏳ Etapa 2B — Dividida em 7 sub-etapas (aprovada pelo usuário)
+
+| # | Sub-etapa | Entrega | Estimativa |
+|---|---|---|---|
+| **2B.1** | Infraestrutura base | `templates/previa_v3/_base.html` + `_macros.html` (8 macros: text, select, radio, checkbox, date, decimal, textarea, repeater) + endpoint `/previa_v3/{sessao_id}` mínimo | 1-2h |
+| **2B.2** | Página Dados do Processo | `dados_processo.html` com 70 campos via macros + salvarCampo inline; testar persistência | 2h |
+| **2B.3** | Página Histórico Salarial | `historico_salarial.html` com repeater de N entries; cada entry com sub-tabela de ocorrências mensais editáveis | 1.5h |
+| **2B.4** | **Página Verbas** (mais crítica) | `verbas.html`: lista expansível, `ParametrosVerba` 30 campos + tabela `OcorrenciaVerba` mensal + sub-lista recursiva de reflexos. Filtros visuais (DESLIGAMENTO = 1 linha) | 3h |
+| **2B.5** | Páginas auxiliares | Honorários + Cartão de Ponto + FGTS + INSS + IRPF + Custas + Correção/Juros | 2h |
+| **2B.6** | Migração v2 → v3 | `/api/migrar/{sessao_id}` converte JSON antigo, valida Pydantic, persiste | 1h |
+| **2B.7** | Integração + roteamento | `/previa/{sessao_id}` detecta versão e roteia v3 ou v2; botão "Migrar p/ v3" | 1h |
+
+**Total: ~12h** em pedaços de 1-3h cada.
+
+**Ordem recomendada de execução:** 2B.1 → 2B.2 → 2B.4 → 2B.3 → 2B.5 → 2B.6 → 2B.7
+
+---
+
+## Próxima sessão: iniciar 2B.1
+
+Recomendo começar a próxima sessão com prompt:
+
+> "Iniciar Etapa 2B.1 da refatoração documentada em `docs/refatoracao-previa-replica-pjecalc.md`. Criar `templates/previa_v3/_base.html` (layout) e `_macros.html` (8 macros: text, select, radio, checkbox, date, decimal, textarea, repeater). Adicionar endpoint mínimo `/previa_v3/{sessao_id}` que renderiza apenas Dados do Processo vazio. Testar standalone."
+
+Tudo o que a próxima sessão precisa saber está em:
+- `docs/refatoracao-previa-replica-pjecalc.md` — este documento
+- `infrastructure/pjecalc_pages.py` — schema v3 pronto
+- `docs/pjecalc-fields-catalog.json` — fonte da verdade dos campos
+- `docs/pjecalc-fields-catalog.md` — versão legível
+- `docs/sessao-2026-05-06-correcoes-sentenca-richarlen.md` — histórico de correções (contexto)
