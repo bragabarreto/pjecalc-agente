@@ -215,43 +215,117 @@ def criar_calc_minimo(p) -> str | None:
     p.fill("[id$='valorUltimaRemuneracao']", "2.500,00")
     p.click("input[id$='salvar']", force=True)
     p.wait_for_timeout(8000)
+    # Após salvar, navegar para uma página interna para "abrir" o menu lateral
+    # do cálculo (li_calculo_*). Sem isso, principal.jsf só mostra menu top.
+    try:
+        p.goto(
+            f"{BASE}/pages/calculo/historico-salarial.jsf?conversationId={conv}",
+            wait_until="domcontentloaded",
+            timeout=15000,
+        )
+        p.wait_for_load_state("networkidle", timeout=10000)
+        p.wait_for_timeout(1500)
+        log(f"  ✓ Cálculo aberto, menu lateral ativo")
+    except Exception as e:
+        log(f"  ⚠ Falha ao abrir cálculo: {e}")
     return conv
 
 
-# Ordem do menu lateral, igual ao manual oficial
-PAGINAS = [
-    ("01_dados_processo", "calculo.jsf", "Dados do Processo"),
-    ("02_historico_salarial_listing", "historico-salarial.jsf", "Histórico Salarial — listagem"),
-    ("03_faltas_listing", "falta.jsf", "Faltas — listagem"),
-    ("04_ferias_listing", "ferias.jsf", "Férias — listagem"),
-    ("05_verbas_listing", "verba/verba-calculo.jsf", "Verbas — listagem"),
-    ("06_cartao_ponto", "../cartaodeponto/apuracao-cartaodeponto.jsf", "Cartão de Ponto"),
-    ("07_salario_familia", "salario-familia.jsf", "Salário-família"),
-    ("08_seguro_desemprego", "seguro-desemprego.jsf", "Seguro-desemprego"),
-    ("09_fgts", "fgts/fgts.jsf", "FGTS"),
-    ("10_inss", "inss/inss.jsf", "Contribuição Social (INSS)"),
-    ("11_previdencia_privada", "previdencia-privada.jsf", "Previdência Privada"),
-    ("12_pensao_alimenticia", "pensao-alimenticia.jsf", "Pensão Alimentícia"),
-    ("13_irpf", "imposto-renda.jsf", "Imposto de Renda"),
-    ("14_multas_indenizacoes", "multa-indenizacao.jsf", "Multas e Indenizações"),
-    ("15_honorarios", "honorario/honorario.jsf", "Honorários"),
-    ("16_custas", "custas-judiciais.jsf", "Custas Judiciais"),
-    ("17_correcao_juros", "correcao-juros-multa.jsf", "Correção, Juros e Multa"),
+# Páginas via URL direta (mapeadas do código v1 — confirmadas em produção)
+# Formato: (key, jsf_path, label)
+PAGINAS_URL = [
+    ("01_dados_processo",            "calculo.jsf",                                "Dados do Cálculo"),
+    ("02_faltas_listing",            "falta.jsf",                                  "Faltas"),
+    ("03_ferias_listing",            "ferias.jsf",                                 "Férias"),
+    ("04_historico_salarial_listing","historico-salarial.jsf",                     "Histórico Salarial"),
+    ("05_verbas_listing",            "verba/verba-calculo.jsf",                    "Verbas"),
+    ("06_cartao_ponto",              "../cartaodeponto/apuracao-cartaodeponto.jsf","Cartão de Ponto"),
+    ("07_salario_familia",           "salario-familia.jsf",                        "Salário-família"),
+    ("08_seguro_desemprego",         "seguro-desemprego.jsf",                      "Seguro-desemprego"),
+    ("09_fgts",                      "fgts.jsf",                                   "FGTS"),
+    ("10_inss",                      "inss/inss.jsf",                              "Contribuição Social (INSS)"),
+    ("11_previdencia_privada",       "previdencia-privada.jsf",                    "Previdência Privada"),
+    ("12_pensao_alimenticia",        "pensao-alimenticia.jsf",                     "Pensão Alimentícia"),
+    ("13_irpf",                      "irpf.jsf",                                   "Imposto de Renda"),
+    ("14_multas_indenizacoes",       "multas-indenizacoes.jsf",                    "Multas e Indenizações"),
+    ("15_honorarios",                "honorarios.jsf",                             "Honorários"),
+    ("16_custas",                    "custas-judiciais.jsf",                       "Custas Judiciais"),
+    ("17_correcao_juros",            "parametros-atualizacao/parametros-atualizacao.jsf", "Correção, Juros e Multa"),
 ]
 
-# Sub-páginas críticas — clicam Novo / Incluir / Manual / Expresso para abrir form
+# Sub-páginas via clique em botão dentro de uma página alvo
+# (jsf_path, key, nome, btn_seletor)
 SUBPAGINAS_INCLUIR = [
-    ("02b_historico_salarial_form", "historico-salarial.jsf", "Histórico Salarial — form Novo", "input[id$='incluir']"),
-    ("03b_faltas_form", "falta.jsf", "Faltas — form Novo", "input[id$='incluir']"),
-    ("04b_ferias_form", "ferias.jsf", "Férias — form Novo", "input[id$='incluir']"),
-    ("05b_verbas_expresso", "verba/verba-calculo.jsf", "Verbas — Lançamento Expresso", "input[id$='lancamentoExpresso']"),
-    ("05c_verbas_manual", "verba/verba-calculo.jsf", "Verbas — Manual (form)", "input[id$='incluir'][value='Manual']"),
-    ("15b_honorarios_form", "honorario/honorario.jsf", "Honorários — form Novo", "input[id$='incluir']"),
+    ("historico-salarial.jsf", "04b_historico_salarial_form", "Histórico Salarial — form Novo", "input[id$='incluir']"),
+    ("falta.jsf", "02b_faltas_form", "Faltas — form Novo", "input[id$='incluir']"),
+    ("ferias.jsf", "03b_ferias_form", "Férias — form Novo", "input[id$='incluir']"),
+    ("verba/verba-calculo.jsf", "05b_verbas_expresso", "Verbas — Lançamento Expresso", "input[id$='lancamentoExpresso']"),
+    ("verba/verba-calculo.jsf", "05c_verbas_manual", "Verbas — Manual (form)", "input[id$='incluir'][value='Manual']"),
+    ("honorarios.jsf", "15b_honorarios_form", "Honorários — form Novo", "input[id$='incluir']"),
 ]
+
+
+def navegar_menu(p, li_id: str, label: str = "") -> bool:
+    """Clica no <a> dentro do <li id='li_id'> do menu lateral."""
+    log(f"  → menu: {li_id} ({label})")
+    try:
+        clicou = p.evaluate(
+            f"""(liId) => {{
+                const li = document.getElementById(liId);
+                if (!li) return false;
+                const a = li.querySelector('a');
+                if (!a) return false;
+                a.click();
+                return true;
+            }}""",
+            li_id,
+        )
+        if not clicou:
+            log(f"    ⚠ <li id='{li_id}'> não encontrado")
+            return False
+        p.wait_for_timeout(1500)
+        try:
+            p.wait_for_load_state("networkidle", timeout=10000)
+        except Exception:
+            pass
+        return True
+    except Exception as e:
+        log(f"    ⚠ erro: {e}")
+        return False
+
+
+def dump_menu(p):
+    """Dump dos links da sidebar com texto de páginas do cálculo."""
+    return p.evaluate(
+        """() => {
+            // Buscar links com texto típico do menu de cálculo
+            const ALVOS = ['Dados do Cálculo', 'Faltas', 'Férias', 'Histórico Salarial',
+                'Verbas', 'Cartão de Ponto', 'Salário-família', 'Seguro-desemprego',
+                'FGTS', 'Contribuição Social', 'Previdência Privada', 'Pensão Alimentícia',
+                'Imposto de Renda', 'Multas e Indenizações', 'Honorários', 'Custas Judiciais',
+                'Correção, Juros e Multa', 'Liquidar', 'Imprimir', 'Fechar', 'Exportar'];
+            const norm = s => (s||'').replace(/\\s+/g,' ').trim();
+            const out = [];
+            const links = [...document.querySelectorAll('a')];
+            for (const a of links) {
+                const t = norm(a.textContent);
+                if (!ALVOS.includes(t)) continue;
+                const li = a.closest('li');
+                out.push({
+                    txt: t,
+                    a_id: a.id || '',
+                    a_href: (a.href || '').slice(0, 100),
+                    li_id: li?.id || '',
+                    visivel: a.offsetParent !== null,
+                });
+            }
+            return out;
+        }"""
+    )
 
 
 def main():
-    catalogo = {"version": "1.0", "base_url": BASE, "paginas": {}}
+    catalogo = {"version": "2.0", "base_url": BASE, "paginas": {}}
 
     with sync_playwright() as pw:
         b = pw.firefox.launch(headless=True)
@@ -261,28 +335,41 @@ def main():
             log("ERRO: cálculo mínimo falhou")
             return 1
 
+        # Diagnóstico: estado da página + menu
+        log(f"--- ESTADO ATUAL: {p.url}")
+        log(f"--- TÍTULO: {p.title()}")
+        try:
+            menu = dump_menu(p)
+            log(f"--- DUMP MENU ({len(menu)} items)")
+            for item in menu[:25]:
+                vis = "👁" if item.get("visivel") else "👻"
+                log(f"  {vis} {item['txt']!r} → li_id={item['li_id']!r} a_id={item['a_id']!r}")
+        except Exception as e:
+            log(f"  erro dump menu: {e}")
+        log("--- FIM DUMP MENU ---")
+
         url_base = f"{BASE}/pages/calculo/"
 
-        # Páginas top-level
-        for key, jsf_path, nome in PAGINAS:
+        # Páginas top-level — navegação via URL direta
+        for key, jsf_path, label in PAGINAS_URL:
             url = f"{url_base}{jsf_path}?conversationId={conv}"
-            if not goto_seguro(p, url, nome):
+            if not goto_seguro(p, url, label):
                 catalogo["paginas"][key] = {"erro": "navegação falhou"}
                 continue
             try:
-                catalogo["paginas"][key] = dump_pagina(p, nome)
-                log(f"    ✓ {nome}: {len(catalogo['paginas'][key].get('campos', []))} campos")
+                d = dump_pagina(p, label)
+                catalogo["paginas"][key] = d
+                log(f"    ✓ {label}: {len(d.get('campos', []))} campos | url={d.get('url','')[:80]}")
             except Exception as e:
                 catalogo["paginas"][key] = {"erro": str(e)[:200]}
 
-        # Sub-páginas (form Novo / Manual)
-        for key, jsf_path, nome, btn_sel in SUBPAGINAS_INCLUIR:
+        # Sub-páginas — navega URL alvo e clica botão Novo/Manual/Expresso
+        for jsf_path, key, nome, btn_sel in SUBPAGINAS_INCLUIR:
             url = f"{url_base}{jsf_path}?conversationId={conv}"
             if not goto_seguro(p, url, nome):
                 catalogo["paginas"][key] = {"erro": "navegação falhou"}
                 continue
             try:
-                # click Novo/Incluir/Manual/Expresso
                 btn = p.locator(btn_sel).first
                 if btn.count() == 0:
                     catalogo["paginas"][key] = {"erro": f"botão {btn_sel} não encontrado"}
@@ -293,8 +380,9 @@ def main():
                     p.wait_for_load_state("networkidle", timeout=8000)
                 except Exception:
                     pass
-                catalogo["paginas"][key] = dump_pagina(p, nome)
-                log(f"    ✓ {nome}: {len(catalogo['paginas'][key].get('campos', []))} campos")
+                d = dump_pagina(p, nome)
+                catalogo["paginas"][key] = d
+                log(f"    ✓ {nome}: {len(d.get('campos', []))} campos")
             except Exception as e:
                 catalogo["paginas"][key] = {"erro": str(e)[:200]}
 
