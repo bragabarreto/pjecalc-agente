@@ -1078,14 +1078,13 @@ class AplicadorPJECalc:
         if not self._navegar_url_calculo("irpf.jsf"):
             return False
         self._click_checkbox("apurarImpostoRenda", ir.apurar)
-        # Regime de tributação → checkboxes
+        # Regime de tributação → checkboxes (schema v3:
+        # MESES_TRIBUTAVEIS / RRA / REGIME_GERAL)
         if ir.regime_tributacao == "RRA":
             self._click_checkbox("tributacaoEmSeparado", True)
-        elif ir.regime_tributacao == "ANUAL_ATE_2014":
-            self._click_checkbox("tributacaoExclusiva", True)
-        elif ir.regime_tributacao == "MENSAL_APOS_2015":
+        elif ir.regime_tributacao == "MESES_TRIBUTAVEIS":
             self._click_checkbox("regimeDeCaixa", True)
-        # ATUAL = nenhum checkbox (default do PJE-Calc)
+        # REGIME_GERAL = nenhum checkbox (default do PJE-Calc)
         # Deduções (todas defaults true em v1 — manter)
         if ir.meses_tributaveis is not None:
             self._fill_text("mesesTributaveis", str(ir.meses_tributaveis))
@@ -1167,11 +1166,12 @@ class AplicadorPJECalc:
         self.log("→ Fase 11: Custas Judiciais")
         if not self._navegar_url_calculo("custas-judiciais.jsf"):
             return False
-        # Mapear responsavel para os radios reais
+        # Mapear responsavel (schema literal: RECLAMADO/RECLAMANTE/AMBOS/NAO_SE_APLICA)
+        # para os radios reais da página
         resp = custas.responsavel
         if resp in ("RECLAMADO", "AMBOS"):
             self._click_radio("custasReclamadoConhecimento", "CALCULADA_2_POR_CENTO")
-        elif resp == "NAO_INCIDE":
+        elif resp == "NAO_SE_APLICA":
             self._click_radio("custasReclamadoConhecimento", "NAO_SE_APLICA")
         if resp in ("RECLAMANTE", "AMBOS"):
             self._click_radio("custasReclamanteConhecimento", "CALCULADA_2_POR_CENTO")
@@ -1198,9 +1198,12 @@ class AplicadorPJECalc:
         self.log("→ Fase 12: Correção/Juros")
         if not self._navegar_url_calculo("parametros-atualizacao/parametros-atualizacao.jsf"):
             return False
+        # Mapeamentos schema v3 (literals) → labels reais do PJE-Calc
         idx_map = {
             "TR": "TR",
-            "IPCA_E": "IPCA-E", "IPCAE": "IPCA-E",
+            "TRD": "TR",
+            "IPCAE": "IPCA-E",
+            "IPCA": "IPCA-E",
             "INPC": "INPC",
             "SELIC": "SELIC (Receita Federal)",
         }
@@ -1209,17 +1212,22 @@ class AplicadorPJECalc:
         self._select_value("indiceTrabalhista", val_idx)
 
         taxa_map = {
-            "1_AO_MES": "Juros Padrão",
-            "TR_ATE_2017_E_TR_APOS": "TRD Juros Simples",
+            "TRD_SIMPLES": "TRD Juros Simples",
+            "TR_SIMPLES": "Juros Padrão",
             "SELIC": "SELIC (Receita Federal)",
-            "IPCA_E_TR": "Taxa Legal",
+            "TAXA_LEGAL": "Taxa Legal",
+            "TR_FGTS": "TRD Juros Simples",
         }
         val_taxa = taxa_map.get(cj.taxa_juros, cj.taxa_juros)
         self._select_value("taxaJuros", val_taxa)
         self._select_value("juros", val_taxa)
 
-        # base_juros: a página parametros-atualizacao não tem radio explícito
-        # em v2.15.1 — campo mantido no schema para futuras versões.
+        # Súmula 439 (juros desde ajuizamento) — checkbox
+        if cj.sumula_439_juros_desde_ajuizamento:
+            self._click_checkbox("jurosDesdeAjuizamento", True)
+            self._click_checkbox("sumula439", True)
+
+        # base_juros: sem radio explícito em v2.15.1 — mantido p/ futuras versões.
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
