@@ -6183,31 +6183,60 @@ class PJECalcPlaywright:
                         _mm_yyyy_alvo = f"{int(_parts[1]):02d}/{_parts[2]}"
                 if _mm_yyyy_alvo:
                     self._page.wait_for_timeout(1500)
-                    # FIX v8e: dump do primeiro <tr> com :ativo para ver
-                    # estrutura real (sufixos dos inputs / posição da data)
+                    # FIX v9 (2026-05-07): A tabela de Ocorrências do PJE-Calc
+                    # Cidadão NÃO mostra a data por linha como input ou texto
+                    # acessível. A data é IMPLÍCITA pelo índice (linha 0 = 1º
+                    # mês do período, linha N = N+1º mês). Confirmado via DUMP
+                    # v8e: cada linha tem só termoDiv/termoMult/termoQuant/
+                    # valorDevido + checkbox :ativo, sem data.
+                    #
+                    # Para ocorrencia=DESLIGAMENTO (sem período próprio), por
+                    # construção do Expresso, a ÚLTIMA LINHA corresponde ao
+                    # mês de desligamento (Expresso gera ocorrências do início
+                    # ao FIM do período = mês de demissão).
+                    #
+                    # Estratégia: ativar APENAS a última linha, desmarcar todas
+                    # as outras.
                     try:
-                        _dump = self._page.evaluate(
+                        _js_des = (
                             "() => {"
-                            "  const cbx = document.querySelector("
+                            "  const cbxs = [...document.querySelectorAll("
                             "    'input[type=\"checkbox\"][id*=\":listagem:\"][id$=\":ativo\"]'"
-                            "  );"
-                            "  if (!cbx) return {erro: 'checkbox :ativo não encontrado'};"
-                            "  if (cbx.id.includes('ativarTodos')) return {erro: 'só achou ativarTodos'};"
-                            "  const tr = cbx.closest('tr');"
-                            "  if (!tr) return {erro: 'tr não encontrado', cbxId: cbx.id};"
-                            "  const inputs = [...tr.querySelectorAll('input, select, span[id]')]"
-                            "    .map(e => ({id: e.id, value: e.value || e.textContent || '', tag: e.tagName}))"
-                            "    .filter(e => e.id);"
-                            "  const tds = [...tr.querySelectorAll('td')].map(td => "
-                            "    (td.innerText || td.textContent || '').slice(0, 60).replace(/\\s+/g, ' ').trim()"
-                            "  );"
-                            "  return {cbxId: cbx.id, n_inputs: inputs.length, sample_inputs: inputs.slice(0, 10), n_tds: tds.length, sample_tds: tds};"
+                            "  )].filter(c => !c.id.includes('ativarTodos') && !c.id.includes('selecionarTodos')"
+                            "    && !c.id.includes('listaReflexo'));"
+                            # Extrair índice numérico de cada cbx (formulario:listagem:N:ativo)
+                            "  const indexed = cbxs.map(c => {"
+                            "    const m = c.id.match(/:listagem:(\\d+):ativo$/);"
+                            "    return {cbx: c, idx: m ? parseInt(m[1]) : -1};"
+                            "  }).filter(x => x.idx >= 0).sort((a, b) => a.idx - b.idx);"
+                            "  if (indexed.length === 0) return {erro: 'nenhum cbx :listagem:N:ativo'};"
+                            "  const ultimaIdx = indexed[indexed.length - 1].idx;"
+                            "  let desmarcados = 0, mantidos = 0;"
+                            "  indexed.forEach(({cbx, idx}) => {"
+                            "    if (idx === ultimaIdx) {"
+                            "      if (!cbx.checked) cbx.click();"
+                            "      mantidos++;"
+                            "    } else {"
+                            "      if (cbx.checked) { cbx.click(); desmarcados++; }"
+                            "    }"
+                            "  });"
+                            "  return {desmarcados, mantidos, total: indexed.length, ultimaIdx};"
                             "}"
                         )
-                        self._log(f"  ℹ DUMP linha 0 ocorrência: {_dump}")
-                    except Exception as _e_d:
-                        self._log(f"  ⚠ Dump linha: {_e_d}")
-                    try:
+                        _r = self._page.evaluate(_js_des)
+                        self._log(
+                            f"  ✓ Filtro DESLIGAMENTO '{nome_na_lista}': "
+                            f"última linha={_r.get('ultimaIdx', '?')}, "
+                            f"desmarcadas={_r.get('desmarcados', 0)}, "
+                            f"mantidas={_r.get('mantidos', 0)} (total={_r.get('total', 0)})"
+                        )
+                        if _r.get("desmarcados", 0):
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(500)
+                    except Exception as _e_des:
+                        self._log(f"  ⚠ Filtro DESLIGAMENTO: {_e_des}")
+                    # v9 substitui v8d (legado abaixo desativado)
+                    if False:  # legado
                         # FIX v8d: iterar pelos CHECKBOXES (não tr) e ler value
                         # do input dataInicial/dataFinal da MESMA LINHA via id
                         # comum (formulario:listagem:N:*). Antes tentávamos via
