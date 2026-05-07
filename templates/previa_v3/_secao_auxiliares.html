@@ -185,13 +185,46 @@
 {% set inss = dados.contribuicao_social %}
 {% call secao("8. Contribuição Social (INSS)") %}
 {{ field_checkbox("contribuicao_social.apurar", inss.apurar, "Apurar Contribuição Social") }}
+{{ field_checkbox("contribuicao_social.apurar_segurado_salarios_devidos", inss.apurar_segurado_salarios_devidos, "Apurar Segurado sobre Salários Devidos") }}
+{{ field_checkbox("contribuicao_social.apurar_sobre_salarios_pagos", inss.apurar_sobre_salarios_pagos, "Apurar sobre Salários Pagos") }}
+{{ field_checkbox("contribuicao_social.cobrar_do_reclamante", inss.cobrar_do_reclamante, "Cobrar do Reclamante") }}
+{{ field_checkbox("contribuicao_social.com_correcao_trabalhista", inss.com_correcao_trabalhista, "Com Correção Trabalhista") }}
+{{ field_checkbox("contribuicao_social.limitar_ao_teto", inss.limitar_ao_teto, "Limitar ao Teto INSS") }}
+{{ field_checkbox("contribuicao_social.lei_11941", inss.lei_11941, "Lei 11.941 (regularização tributária)") }}
+{{ field_checkbox("contribuicao_social.isencao_simples", inss.isencao_simples, "Isenção Simples Nacional") }}
+{% if inss.isencao_simples %}
 <div class="campos-grid">
-  {{ field_text("contribuicao_social.indice_atualizacao", inss.indice_atualizacao, "Índice Atualização") }}
-  {{ field_decimal("contribuicao_social.aliquota_rat", inss.aliquota_rat, "Alíquota RAT (%)") }}
-  {{ field_decimal("contribuicao_social.fap", inss.fap, "FAP") }}
+  {{ field_date("contribuicao_social.simples_inicio", inss.simples_inicio, "Simples — Início") }}
+  {{ field_date("contribuicao_social.simples_fim", inss.simples_fim, "Simples — Fim") }}
+</div>
+{% endif %}
+<h4 style="margin: 12px 0 6px; color: #6c757d; font-size: 0.82rem; text-transform: uppercase;">Atividade Econômica + Alíquotas</h4>
+<div class="campos-grid">
+  {{ field_text("contribuicao_social.atividade_economica", inss.atividade_economica, "Atividade Econômica (CNAE)") }}
+  {{ field_decimal("contribuicao_social.aliquota_empresa", inss.aliquota_empresa, "Alíquota Empresa (%)") }}
+  {{ field_decimal("contribuicao_social.aliquota_sat", inss.aliquota_sat, "Alíquota SAT/RAT (%)") }}
+  {{ field_decimal("contribuicao_social.aliquota_terceiros", inss.aliquota_terceiros, "Alíquota Terceiros (%)") }}
+  {{ field_decimal("contribuicao_social.fap", inss.fap, "FAP (Fator Acidentário)") }}
+</div>
+<div class="campos-grid">
+  {{ field_radio("contribuicao_social.tipo_aliquota_segurado", inss.tipo_aliquota_segurado or "EMPREGADO",
+                  "Tipo Alíquota Segurado",
+                  [{"value":"EMPREGADO","label":"Empregado"},
+                   {"value":"DOMESTICO","label":"Doméstico"},
+                   {"value":"FIXA","label":"Fixa"}]) }}
+  {{ field_radio("contribuicao_social.tipo_aliquota_empregador", inss.tipo_aliquota_empregador or "ATIVIDADE_ECONOMICA",
+                  "Tipo Alíquota Empregador",
+                  [{"value":"ATIVIDADE_ECONOMICA","label":"Atividade Econômica"},
+                   {"value":"PERIODO","label":"Por Período"},
+                   {"value":"FIXA","label":"Fixa"}]) }}
   {{ field_radio("contribuicao_social.regime_caixa_competencia", inss.regime_caixa_competencia,
                   "Regime",
                   [{"value":"CAIXA","label":"Caixa"},{"value":"COMPETENCIA","label":"Competência"}]) }}
+  {{ field_text("contribuicao_social.indice_atualizacao", inss.indice_atualizacao, "Índice Atualização") }}
+</div>
+<div class="campos-grid">
+  {{ field_text("contribuicao_social.periodo_incidencia_pagos", inss.periodo_incidencia_pagos, "Período Incidência (Pagos)") }}
+  {{ field_text("contribuicao_social.periodo_incidencia_devidos", inss.periodo_incidencia_devidos, "Período Incidência (Devidos)") }}
 </div>
 {{ field_checkbox("contribuicao_social.multa_inss", inss.multa_inss, "Aplicar Multa INSS") }}
 {{ field_checkbox("contribuicao_social.juros_inss", inss.juros_inss, "Aplicar Juros INSS") }}
@@ -278,13 +311,44 @@
 {% set custas = dados.custas %}
 {% call secao("11. Custas Judiciais") %}
 <div class="campos-grid">
-  {{ field_decimal("custas.percentual", custas.percentual, "Percentual (%)") }}
-  {{ field_radio("custas.responsavel", custas.responsavel, "Responsável",
-                  [{"value":"RECLAMADO","label":"Reclamado"},
-                   {"value":"RECLAMANTE","label":"Reclamante"},
-                   {"value":"AMBOS","label":"Ambos"},
-                   {"value":"NAO_SE_APLICA","label":"Não se aplica"}]) }}
-  {{ field_decimal("custas.valor_periciais", custas.valor_periciais, "Valor Periciais (R$)") }}
+  {{ field_select("custas.base_para_custas", custas.base_para_custas, "Base de Cálculo das Custas",
+                   [{"value":"BRUTO_DEVIDO_AO_RECLAMANTE","label":"Bruto Devido ao Reclamante"},
+                    {"value":"BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO","label":"Bruto + Débitos do Reclamado"}]) }}
+  {{ field_decimal("custas.percentual", custas.percentual, "Percentual Custas (%)") }}
+  {{ field_decimal("custas.valor_periciais", custas.valor_periciais, "Honorários Periciais (R$)") }}
+</div>
+<h4 style="margin: 12px 0 6px; color: #6c757d; font-size: 0.82rem; text-transform: uppercase;">Reclamado — Conhecimento</h4>
+<div class="campos-grid">
+  {{ field_radio("custas.reclamado_conhecimento", custas.reclamado_conhecimento, "Modalidade",
+                  [{"value":"NAO_SE_APLICA","label":"Não se aplica"},
+                   {"value":"CALCULADA_2_POR_CENTO","label":"Calculada (2%)"},
+                   {"value":"INFORMADA","label":"Informada"}]) }}
+  {% if custas.reclamado_conhecimento == "INFORMADA" %}
+  {{ field_decimal("custas.valor_reclamado_conhecimento", custas.valor_reclamado_conhecimento, "Valor (R$)") }}
+  {{ field_date("custas.vencimento_reclamado_conhecimento", custas.vencimento_reclamado_conhecimento, "Vencimento") }}
+  {% endif %}
+</div>
+<h4 style="margin: 12px 0 6px; color: #6c757d; font-size: 0.82rem; text-transform: uppercase;">Reclamado — Liquidação</h4>
+<div class="campos-grid">
+  {{ field_radio("custas.reclamado_liquidacao", custas.reclamado_liquidacao, "Modalidade",
+                  [{"value":"NAO_SE_APLICA","label":"Não se aplica"},
+                   {"value":"CALCULADA_MEIO_POR_CENTO","label":"Calculada (0,5%)"},
+                   {"value":"INFORMADA","label":"Informada"}]) }}
+  {% if custas.reclamado_liquidacao == "INFORMADA" %}
+  {{ field_decimal("custas.valor_reclamado_liquidacao", custas.valor_reclamado_liquidacao, "Valor (R$)") }}
+  {{ field_date("custas.vencimento_reclamado_liquidacao", custas.vencimento_reclamado_liquidacao, "Vencimento") }}
+  {% endif %}
+</div>
+<h4 style="margin: 12px 0 6px; color: #6c757d; font-size: 0.82rem; text-transform: uppercase;">Reclamante — Conhecimento</h4>
+<div class="campos-grid">
+  {{ field_radio("custas.reclamante_conhecimento", custas.reclamante_conhecimento, "Modalidade",
+                  [{"value":"NAO_SE_APLICA","label":"Não se aplica"},
+                   {"value":"CALCULADA_2_POR_CENTO","label":"Calculada (2%)"},
+                   {"value":"INFORMADA","label":"Informada"}]) }}
+  {% if custas.reclamante_conhecimento == "INFORMADA" %}
+  {{ field_decimal("custas.valor_reclamante_conhecimento", custas.valor_reclamante_conhecimento, "Valor (R$)") }}
+  {{ field_date("custas.vencimento_reclamante_conhecimento", custas.vencimento_reclamante_conhecimento, "Vencimento") }}
+  {% endif %}
 </div>
 {% endcall %}
 

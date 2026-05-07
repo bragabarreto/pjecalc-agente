@@ -458,17 +458,57 @@ class FGTS(BaseModel):
 
 
 class ContribuicaoSocial(BaseModel):
-    """Página: Contribuição Social / INSS (inss/inss.jsf)."""
+    """Página: Contribuição Social / INSS (inss/inss.jsf).
+
+    Schema reflete os campos visíveis na tela do PJE-Calc 2.15.1.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     apurar: bool = True
-    indice_atualizacao: Optional[str] = None  # SELIC, IPCAE, etc.
-    aliquota_rat: ValorBR = None  # %
-    fap: ValorBR = None  # Fator Acidentário
+    apurar_segurado_salarios_devidos: bool = True
+    apurar_sobre_salarios_pagos: bool = False
+    cobrar_do_reclamante: bool = True
+    com_correcao_trabalhista: bool = True
+    limitar_ao_teto: bool = True
+    isencao_simples: bool = False
+    simples_inicio: DataBR = None
+    simples_fim: DataBR = None
+    lei_11941: bool = False
+
+    # Atividade econômica (CNAE)
+    atividade_economica: Optional[str] = None  # código
+
+    # Alíquotas
+    aliquota_empresa: ValorBR = None  # %
+    aliquota_sat: ValorBR = None  # %  (campo aliquotaSAT — antes era aliquota_rat)
+    aliquota_terceiros: ValorBR = None  # %
+    fap: ValorBR = None  # Fator Acidentário Previdenciário
+
+    # Tipo de alíquota
+    tipo_aliquota_segurado: Optional[Literal[
+        "EMPREGADO", "DOMESTICO", "FIXA"
+    ]] = None
+    tipo_aliquota_empregador: Optional[Literal[
+        "ATIVIDADE_ECONOMICA", "PERIODO", "FIXA"
+    ]] = None
+
+    # Períodos
+    periodo_incidencia_pagos: Optional[str] = None
+    periodo_incidencia_devidos: Optional[str] = None
+
+    # Regime + multa/juros
     regime_caixa_competencia: Literal["CAIXA", "COMPETENCIA"] = "COMPETENCIA"
     multa_inss: bool = False
     juros_inss: bool = True
+
+    # Índice de atualização (legado)
+    indice_atualizacao: Optional[str] = None
+
+    # Backward compat alias (lê aliquota_rat antigo, popula aliquota_sat)
+    @property
+    def aliquota_rat(self) -> Any:  # pragma: no cover
+        return self.aliquota_sat
 
 
 class ImpostoRenda(BaseModel):
@@ -540,15 +580,43 @@ class FeriasEntry(BaseModel):
 
 
 class CustasJudiciais(BaseModel):
-    """Página: Custas Judiciais."""
+    """Página: Custas Judiciais (custas-judiciais.jsf).
+
+    Estrutura real do PJE-Calc 2.15.1: 3 radios separados (Reclamado-Conhecimento,
+    Reclamado-Liquidação, Reclamante-Conhecimento), cada um com 3 opções
+    NAO_SE_APLICA / CALCULADA_* / INFORMADA + campos condicionais.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
-    percentual: ValorBR = "2"  # 2% padrão
-    responsavel: Literal[
-        "RECLAMADO", "RECLAMANTE", "AMBOS", "NAO_SE_APLICA"
-    ] = "RECLAMADO"
-    valor_periciais: ValorBR = None
+    # Reclamado — Conhecimento (radio na tela)
+    reclamado_conhecimento: Literal[
+        "NAO_SE_APLICA", "CALCULADA_2_POR_CENTO", "INFORMADA"
+    ] = "CALCULADA_2_POR_CENTO"
+    valor_reclamado_conhecimento: ValorBR = None  # se INFORMADA
+    vencimento_reclamado_conhecimento: DataBR = None  # se INFORMADA
+
+    # Reclamado — Liquidação (radio na tela)
+    reclamado_liquidacao: Literal[
+        "NAO_SE_APLICA", "CALCULADA_MEIO_POR_CENTO", "INFORMADA"
+    ] = "NAO_SE_APLICA"
+    valor_reclamado_liquidacao: ValorBR = None  # se INFORMADA
+    vencimento_reclamado_liquidacao: DataBR = None  # se INFORMADA
+
+    # Reclamante — Conhecimento (radio na tela)
+    reclamante_conhecimento: Literal[
+        "NAO_SE_APLICA", "CALCULADA_2_POR_CENTO", "INFORMADA"
+    ] = "NAO_SE_APLICA"
+    valor_reclamante_conhecimento: ValorBR = None  # se INFORMADA
+    vencimento_reclamante_conhecimento: DataBR = None  # se INFORMADA
+
+    # Base de cálculo + parâmetros gerais
+    base_para_custas: Optional[Literal[
+        "BRUTO_DEVIDO_AO_RECLAMANTE",
+        "BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO",
+    ]] = None
+    percentual: ValorBR = "2"  # 2% padrão (campo percentualCustas)
+    valor_periciais: ValorBR = None  # honorários periciais
 
 
 class CorrecaoJuros(BaseModel):

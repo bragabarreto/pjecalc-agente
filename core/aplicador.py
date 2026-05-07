@@ -1026,37 +1026,75 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_inss(self, inss: ContribuicaoSocial) -> bool:
-        """Aplica configuração de INSS (Contribuição Social).
-
-        IDs v1 confirmados: aliquotaSAT, aliquotaTerceiros, regimeDeCaixa
-        (checkbox), multaINSS/jurosINSS. Tenta múltiplas variações para
-        compatibilidade entre versões.
-        """
+        """Aplica configuração de INSS (Contribuição Social) — schema v3 expandido."""
         if not inss or not inss.apurar:
             self.log("→ Fase 8: INSS — apurar=False, pulando")
             return True
         self.log("→ Fase 8: INSS")
         if not self._navegar_url_calculo("inss/inss.jsf"):
             return False
-        if inss.indice_atualizacao:
-            self._select_value("indiceAtualizacao", inss.indice_atualizacao)
-        if inss.aliquota_rat is not None:
-            # PJE-Calc usa "RAT" (riscos ambientais) — IDs alternativos
-            self._fill_decimal("aliquotaSAT", inss.aliquota_rat)
-            self._fill_decimal("aliquotaRAT", inss.aliquota_rat)
-            self._fill_decimal("aliquotaRat", inss.aliquota_rat)
+
+        # Checkboxes principais
+        self._click_checkbox("apurarSeguradoSalariosDevidos", inss.apurar_segurado_salarios_devidos)
+        self._click_checkbox("apurarSeguradoSaláriosDevidos", inss.apurar_segurado_salarios_devidos)
+        self._click_checkbox("apurarSobreSalariosPagos", inss.apurar_sobre_salarios_pagos)
+        self._click_checkbox("apurarSobreSaláriosPagos", inss.apurar_sobre_salarios_pagos)
+        self._click_checkbox("cobrarDoReclamante", inss.cobrar_do_reclamante)
+        self._click_checkbox("comCorrecaoTrabalhista", inss.com_correcao_trabalhista)
+        self._click_checkbox("limitarAoTeto", inss.limitar_ao_teto)
+        self._click_checkbox("isencaoSimples", inss.isencao_simples)
+        if inss.simples_inicio:
+            self._fill_date("simplesInicio", inss.simples_inicio)
+        if inss.simples_fim:
+            self._fill_date("simplesFim", inss.simples_fim)
+        self._click_checkbox("lei11941", inss.lei_11941)
+
+        # Atividade econômica (CNAE)
+        if inss.atividade_economica:
+            self._fill_text("buscaAtividadeEconomica", inss.atividade_economica)
+            self._aguardar_ajax(2000)
+
+        # Tipo de alíquota
+        if inss.tipo_aliquota_segurado:
+            self._click_radio("tipoAliquotaSegurado", inss.tipo_aliquota_segurado)
+            self._aguardar_ajax(1500)
+        if inss.tipo_aliquota_empregador:
+            self._click_radio("tipoAliquotaEmpregador", inss.tipo_aliquota_empregador)
+            self._aguardar_ajax(1500)
+
+        # Alíquotas
+        if inss.aliquota_empresa is not None:
+            self._fill_decimal("aliquotaEmpresa", inss.aliquota_empresa)
+        if inss.aliquota_sat is not None:
+            self._fill_decimal("aliquotaSAT", inss.aliquota_sat)
+            self._fill_decimal("aliquotaRAT", inss.aliquota_sat)
+        if inss.aliquota_terceiros is not None:
+            self._fill_decimal("aliquotaTerceiros", inss.aliquota_terceiros)
         if inss.fap is not None:
             self._fill_decimal("fap", inss.fap)
             self._fill_decimal("FAP", inss.fap)
+
+        # Períodos
+        if inss.periodo_incidencia_pagos:
+            self._fill_text("periodoIncidenciaPagos", inss.periodo_incidencia_pagos)
+        if inss.periodo_incidencia_devidos:
+            self._fill_text("periodoIncidenciaDevidos", inss.periodo_incidencia_devidos)
+
         # Regime caixa/competência — checkbox, default v1 = competência (off)
         if inss.regime_caixa_competencia == "CAIXA":
             self._click_checkbox("regimeDeCaixa", True)
             self._click_checkbox("regimeCaixa", True)
+
         # Multa/Juros INSS
         self._click_checkbox("multaINSS", inss.multa_inss)
         self._click_checkbox("multaInss", inss.multa_inss)
         self._click_checkbox("jurosINSS", inss.juros_inss)
         self._click_checkbox("jurosInss", inss.juros_inss)
+
+        # Índice de atualização (legado)
+        if inss.indice_atualizacao:
+            self._select_value("indiceAtualizacao", inss.indice_atualizacao)
+
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
@@ -1152,36 +1190,58 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_custas(self, custas: CustasJudiciais) -> bool:
-        """Aplica configuração de Custas Judiciais.
-
-        IDs v1 confirmados (TRT7 v2.15.1): a página tem 3 radios separados —
-        custasReclamadoConhecimento, custasReclamadoLiquidacao,
-        custasReclamanteConhecimento — cada um com NAO_SE_APLICA / CALCULADA_*
-        / INFORMADA. O schema v3 simplifica em `responsavel` único; mapeamos
-        para o conhecimento (caso mais comum) e deixamos liquidação como
-        NAO_SE_APLICA (default).
+        """Aplica configuração de Custas Judiciais — schema v3 expandido com
+        3 radios separados (Reclamado-Conhecimento, Reclamado-Liquidação,
+        Reclamante-Conhecimento) refletindo a tela real do PJE-Calc 2.15.1.
         """
         if not custas:
             return True
         self.log("→ Fase 11: Custas Judiciais")
         if not self._navegar_url_calculo("custas-judiciais.jsf"):
             return False
-        # Mapear responsavel (schema literal: RECLAMADO/RECLAMANTE/AMBOS/NAO_SE_APLICA)
-        # para os radios reais da página
-        resp = custas.responsavel
-        if resp in ("RECLAMADO", "AMBOS"):
-            self._click_radio("custasReclamadoConhecimento", "CALCULADA_2_POR_CENTO")
-        elif resp == "NAO_SE_APLICA":
-            self._click_radio("custasReclamadoConhecimento", "NAO_SE_APLICA")
-        if resp in ("RECLAMANTE", "AMBOS"):
-            self._click_radio("custasReclamanteConhecimento", "CALCULADA_2_POR_CENTO")
-        # Percentual (PJE-Calc espera valor entre 0 e 100, não fração)
+
+        # Base de cálculo
+        if custas.base_para_custas:
+            self._select_value("baseParaCustasCalculadas", custas.base_para_custas)
+            self._select_value("baseCustas", custas.base_para_custas)
+
+        # Reclamado — Conhecimento
+        self._click_radio("custasReclamadoConhecimento", custas.reclamado_conhecimento)
+        if custas.reclamado_conhecimento == "INFORMADA":
+            self._aguardar_ajax(1500)
+            if custas.valor_reclamado_conhecimento is not None:
+                self._fill_decimal("valorReclamadoConhecimento", custas.valor_reclamado_conhecimento)
+            if custas.vencimento_reclamado_conhecimento:
+                self._fill_date("vencimentoReclamadoConhecimento", custas.vencimento_reclamado_conhecimento)
+
+        # Reclamado — Liquidação
+        self._click_radio("custasReclamadoLiquidacao", custas.reclamado_liquidacao)
+        if custas.reclamado_liquidacao == "INFORMADA":
+            self._aguardar_ajax(1500)
+            if custas.valor_reclamado_liquidacao is not None:
+                self._fill_decimal("valorReclamadoLiquidacao", custas.valor_reclamado_liquidacao)
+            if custas.vencimento_reclamado_liquidacao:
+                self._fill_date("vencimentoReclamadoLiquidacao", custas.vencimento_reclamado_liquidacao)
+
+        # Reclamante — Conhecimento
+        self._click_radio("custasReclamanteConhecimento", custas.reclamante_conhecimento)
+        if custas.reclamante_conhecimento == "INFORMADA":
+            self._aguardar_ajax(1500)
+            if custas.valor_reclamante_conhecimento is not None:
+                self._fill_decimal("valorReclamanteConhecimento", custas.valor_reclamante_conhecimento)
+            if custas.vencimento_reclamante_conhecimento:
+                self._fill_date("vencimentoReclamanteConhecimento", custas.vencimento_reclamante_conhecimento)
+
+        # Percentual (entre 0 e 100, não fração)
         if custas.percentual is not None:
             self._fill_decimal("percentualCustas", custas.percentual)
             self._fill_decimal("aliquota", custas.percentual)
+
+        # Periciais (honorários)
         if custas.valor_periciais is not None:
             self._fill_decimal("valorPericiais", custas.valor_periciais)
             self._fill_decimal("honorariosPericiais", custas.valor_periciais)
+
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────

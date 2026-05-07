@@ -735,11 +735,31 @@ def _migrar_v2_para_v3(calculo) -> tuple[dict, list[str]]:
 
     inss_v2 = dados_v2.get("contribuicao_social") or dados_v2.get("inss") or {}
     try:
+        # aliquota_rat (legado) → aliquota_sat (novo)
+        rat_legado = inss_v2.get("rat") or inss_v2.get("aliquota_rat") or inss_v2.get("aliquota_sat")
         inss_v3 = ContribuicaoSocial(
             apurar=bool(inss_v2.get("apurar", True)),
-            indice_atualizacao=inss_v2.get("indice"),
-            aliquota_rat=str(inss_v2.get("rat") or inss_v2.get("aliquota_rat", "")) or None,
+            apurar_segurado_salarios_devidos=bool(
+                inss_v2.get("apurar_segurado_salarios_devidos", True)
+            ),
+            apurar_sobre_salarios_pagos=bool(inss_v2.get("apurar_sobre_salarios_pagos", False)),
+            cobrar_do_reclamante=bool(inss_v2.get("cobrar_do_reclamante", True)),
+            com_correcao_trabalhista=bool(inss_v2.get("com_correcao_trabalhista", True)),
+            limitar_ao_teto=bool(inss_v2.get("limitar_ao_teto", True)),
+            isencao_simples=bool(inss_v2.get("isencao_simples", False)),
+            simples_inicio=inss_v2.get("simples_inicio"),
+            simples_fim=inss_v2.get("simples_fim"),
+            lei_11941=bool(inss_v2.get("lei_11941", False)),
+            atividade_economica=inss_v2.get("atividade_economica"),
+            aliquota_empresa=str(inss_v2.get("aliquota_empresa") or "") or None,
+            aliquota_sat=str(rat_legado or "") or None,
+            aliquota_terceiros=str(inss_v2.get("aliquota_terceiros") or "") or None,
             fap=str(inss_v2.get("fap") or "") or None,
+            tipo_aliquota_segurado=inss_v2.get("tipo_aliquota_segurado"),
+            tipo_aliquota_empregador=inss_v2.get("tipo_aliquota_empregador"),
+            periodo_incidencia_pagos=inss_v2.get("periodo_incidencia_pagos"),
+            periodo_incidencia_devidos=inss_v2.get("periodo_incidencia_devidos"),
+            indice_atualizacao=inss_v2.get("indice"),
         )
     except Exception as e:
         warnings.append(f"INSS: {e}")
@@ -810,9 +830,27 @@ def _migrar_v2_para_v3(calculo) -> tuple[dict, list[str]]:
 
     custas_v2 = dados_v2.get("custas") or dados_v2.get("custas_judiciais") or {}
     try:
+        # Migrar `responsavel` (legado v2) para os novos 3 radios
+        resp_legado = (custas_v2.get("responsavel") or custas_v2.get("responsabilidade") or "RECLAMADO").upper()
+        rcl_conhec = "NAO_SE_APLICA"
+        rcd_conhec = "NAO_SE_APLICA"
+        if resp_legado in ("RECLAMADO", "AMBOS"):
+            rcd_conhec = "CALCULADA_2_POR_CENTO"
+        if resp_legado in ("RECLAMANTE", "AMBOS"):
+            rcl_conhec = "CALCULADA_2_POR_CENTO"
+        # Caso já tenha schema v3 nativo (chaves novas)
         custas_v3 = CustasJudiciais(
+            reclamado_conhecimento=custas_v2.get("reclamado_conhecimento") or rcd_conhec,
+            valor_reclamado_conhecimento=str(custas_v2.get("valor_reclamado_conhecimento") or "") or None,
+            vencimento_reclamado_conhecimento=custas_v2.get("vencimento_reclamado_conhecimento"),
+            reclamado_liquidacao=custas_v2.get("reclamado_liquidacao") or "NAO_SE_APLICA",
+            valor_reclamado_liquidacao=str(custas_v2.get("valor_reclamado_liquidacao") or "") or None,
+            vencimento_reclamado_liquidacao=custas_v2.get("vencimento_reclamado_liquidacao"),
+            reclamante_conhecimento=custas_v2.get("reclamante_conhecimento") or rcl_conhec,
+            valor_reclamante_conhecimento=str(custas_v2.get("valor_reclamante_conhecimento") or "") or None,
+            vencimento_reclamante_conhecimento=custas_v2.get("vencimento_reclamante_conhecimento"),
+            base_para_custas=custas_v2.get("base_para_custas"),
             percentual=str(custas_v2.get("percentual") or "2"),
-            responsavel=custas_v2.get("responsavel") or custas_v2.get("responsabilidade") or "RECLAMADO",
             valor_periciais=str(custas_v2.get("valor_periciais") or "") or None,
         )
     except Exception as e:
