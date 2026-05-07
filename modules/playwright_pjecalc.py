@@ -6188,26 +6188,46 @@ class PJECalcPlaywright:
                         _js_des = (
                             "(args) => {"
                             "  const {mmYyyy} = args;"
+                            "  const monthMap = {"
+                            "    'janeiro':'01','fevereiro':'02','marco':'03','março':'03',"
+                            "    'abril':'04','maio':'05','junho':'06','julho':'07','agosto':'08',"
+                            "    'setembro':'09','outubro':'10','novembro':'11','dezembro':'12'"
+                            "  };"
+                            "  const norm = s => s.toLowerCase()"
+                            "    .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')"
+                            "    .replace(/[^a-z0-9]+/g,' ').trim();"
                             "  const rows = document.querySelectorAll('table tr');"
                             "  let desmarcados = 0, mantidos = 0;"
                             "  let totalRows = 0, rowsComCbx = 0, rowsComMatch = 0;"
-                            "  const sampleIds = [];"
+                            "  const sampleIds = []; const sampleTxts = [];"
                             "  rows.forEach(tr => {"
                             "    totalRows++;"
-                            # Tentar múltiplos seletores de checkbox de linha
                             "    let cbx = tr.querySelector('input[type=\"checkbox\"][id*=\":ativo\"]')"
                             "      || tr.querySelector('input[type=\"checkbox\"][id*=\"ativo\"]')"
                             "      || tr.querySelector('input[type=\"checkbox\"][id*=\":selecionada\"]')"
                             "      || tr.querySelector('input[type=\"checkbox\"][id*=\"selec\"]')"
                             "      || tr.querySelector('input[type=\"checkbox\"]:first-of-type');"
                             "    if (!cbx) return;"
+                            "    if (cbx.id && cbx.id.includes('selecionarTodos')) return;"
                             "    rowsComCbx++;"
                             "    if (sampleIds.length < 3 && cbx.id) sampleIds.push(cbx.id);"
                             "    const txt = tr.innerText || tr.textContent || '';"
-                            "    const m = txt.match(/(\\d{1,2})[\\/\\-](\\d{4})/);"
-                            "    if (!m) return;"
+                            "    if (sampleTxts.length < 3 && txt) sampleTxts.push(txt.slice(0, 80));"
+                            "    let rowMmYyyy = null;"
+                            # Tenta DD/MM/YYYY ou MM/YYYY numérico
+                            "    const mNum = txt.match(/(\\d{1,2})[\\/\\-](\\d{4})/);"
+                            "    if (mNum) rowMmYyyy = mNum[1].padStart(2,'0') + '/' + mNum[2];"
+                            "    else {"
+                            # Tenta texto: "Abril 2025", "Abril/2025", "04 abril 2025"
+                            "      const txtNorm = norm(txt);"
+                            "      for (const [nome, num] of Object.entries(monthMap)) {"
+                            "        const re = new RegExp('\\\\b' + nome + '\\\\b[ /-]*(\\\\d{4})');"
+                            "        const m2 = txtNorm.match(re);"
+                            "        if (m2) { rowMmYyyy = num + '/' + m2[1]; break; }"
+                            "      }"
+                            "    }"
+                            "    if (!rowMmYyyy) return;"
                             "    rowsComMatch++;"
-                            "    const rowMmYyyy = m[1].padStart(2, '0') + '/' + m[2];"
                             "    if (rowMmYyyy === mmYyyy) {"
                             "      if (!cbx.checked) { cbx.click(); }"
                             "      mantidos++;"
@@ -6215,7 +6235,7 @@ class PJECalcPlaywright:
                             "      if (cbx.checked) { cbx.click(); desmarcados++; }"
                             "    }"
                             "  });"
-                            "  return {desmarcados, mantidos, totalRows, rowsComCbx, rowsComMatch, sampleIds};"
+                            "  return {desmarcados, mantidos, totalRows, rowsComCbx, rowsComMatch, sampleIds, sampleTxts};"
                             "}"
                         )
                         _r = self._page.evaluate(_js_des, {"mmYyyy": _mm_yyyy_alvo})
@@ -6227,6 +6247,10 @@ class PJECalcPlaywright:
                             f"com_match={_r.get('rowsComMatch', 0)}, "
                             f"ids={_r.get('sampleIds', [])}]"
                         )
+                        # Se nenhum match, log sample texts para diagnóstico
+                        if _r.get("rowsComMatch", 0) == 0 and _r.get("sampleTxts"):
+                            for i, _t in enumerate(_r.get("sampleTxts", [])):
+                                self._log(f"    ⚠ amostra linha {i}: {_t!r}")
                         if _r.get("desmarcados", 0):
                             self._aguardar_ajax()
                             self._page.wait_for_timeout(500)
