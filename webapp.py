@@ -3543,6 +3543,114 @@ async def executar_automacao_v2_sse(sessao_id: str, request: Request):
     )
 
 
+@app.get("/api/executar/v3/{sessao_id}")
+async def executar_automacao_v3_sse(sessao_id: str, request: Request):
+    """SSE que executa o Aplicador puro v3 (core.aplicador.AplicadorPJECalc).
+
+    Diferente dos endpoints v1/v2:
+      - Lê PreviaCalculo (JSON v3 validado por Pydantic)
+      - SEM auto-fix, SEM inferência: aplica EXATAMENTE o que está no JSON
+      - Etapa 2C em desenvolvimento — fases 1, 5 (Verbas) e 7 (FGTS) implementadas;
+        demais fases passam silenciosamente (placeholder)
+    """
+    from starlette.responses import StreamingResponse as _SR_v3
+    import queue as _q
+    import threading as _th
+    from playwright.sync_api import sync_playwright
+
+    async def gerador_sse_v3():
+        # Carregar prévia v3 da sessão
+        from database import SessionLocal
+        _db = SessionLocal()
+        try:
+            calculo = RepositorioCalculo(_db).buscar_sessao(sessao_id)
+            if not calculo:
+                yield f"data: {json.dumps({'msg': 'Sessão não encontrada'})}\n\n"
+                yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                return
+            dados_v3, warnings = _migrar_v2_para_v3(calculo)
+            if warnings:
+                for w in warnings[:5]:
+                    yield f"data: {json.dumps({'msg': f'⚠ migração v2→v3: {w[:150]}'})}\n\n"
+        finally:
+            _db.close()
+
+        msg_q: "_q.Queue[str]" = _q.Queue()
+        done = _th.Event()
+
+        def log_cb(msg: str) -> None:
+            msg_q.put(msg)
+
+        def runner():
+            try:
+                with sync_playwright() as pw:
+                    browser = pw.firefox.launch(headless=True)
+                    page = browser.new_page()
+                    page.goto("http://localhost:9257/pjecalc/pages/principal.jsf", timeout=30000)
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                    # Click "Novo"
+                    page.evaluate("""() => {
+                        const links = [...document.querySelectorAll('a')];
+                        for (const a of links) {
+                            if ((a.textContent||'').trim() === 'Novo') { a.click(); return; }
+                        }
+                    }""")
+                    page.wait_for_url("**/calculo*.jsf*", timeout=20000)
+                    page.wait_for_load_state("networkidle", timeout=10000)
+
+                    from core.aplicador import AplicadorPJECalc
+                    aplicador = AplicadorPJECalc(page, log_cb=log_cb)
+                    relatorio = aplicador.aplicar(dados_v3)
+                    log_cb(f"✓ Aplicador concluído: sucesso={relatorio['sucesso']}")
+                    if relatorio.get("fase_falhou"):
+                        log_cb(f"⚠ Fase falhou: {relatorio['fase_falhou']}")
+                    for m in relatorio.get("mensagens", []):
+                        log_cb(m)
+                    browser.close()
+            except Exception as e:
+                log_cb(f"✗ ERRO no runner v3: {e}")
+            finally:
+                done.set()
+
+        # PreviaCalculo Pydantic
+        from infrastructure.pjecalc_pages import PreviaCalculo
+        try:
+            # Serializar para dict + reconstruir model (validação completa)
+            payload = {}
+            for k, v in dados_v3.items():
+                if isinstance(v, list):
+                    payload[k] = [item.model_dump() if hasattr(item, "model_dump") else item for item in v]
+                elif hasattr(v, "model_dump"):
+                    payload[k] = v.model_dump()
+                else:
+                    payload[k] = v
+            previa = PreviaCalculo(**payload)
+            dados_v3 = previa  # passar Pydantic para o aplicador
+        except Exception as e:
+            yield f"data: {json.dumps({'msg': f'⚠ Validação PreviaCalculo: {e}'})}\n\n"
+            yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+            return
+
+        thread = _th.Thread(target=runner, daemon=True)
+        thread.start()
+
+        yield f"data: {json.dumps({'msg': 'Aplicador v3 iniciado'})}\n\n"
+        while not done.is_set() or not msg_q.empty():
+            try:
+                msg = msg_q.get(timeout=2)
+                yield f"data: {json.dumps({'msg': msg})}\n\n"
+            except _q.Empty:
+                yield f"data: {json.dumps({'keepalive': True})}\n\n"
+
+        yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+
+    return _SR_v3(
+        gerador_sse_v3(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 @app.post("/api/parar/{sessao_id}")
 async def parar_automacao(sessao_id: str):
     """Para a automação em execução e limpa o runner."""

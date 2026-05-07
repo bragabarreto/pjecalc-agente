@@ -568,7 +568,35 @@ class CorrecaoJuros(BaseModel):
 
 
 # ============================================================================
-# 6. Forward references resolution
+# 6. PreviaCalculo — agregador raiz (todas as páginas)
+# ============================================================================
+
+
+class PreviaCalculo(BaseModel):
+    """Raiz da prévia v3 — agrega TODAS as páginas do PJE-Calc.
+
+    Esta é a estrutura que o JSON v3 final tem. Cada campo é uma página/seção
+    do PJE-Calc Cidadão. Consumida pelo aplicador (`core/aplicador.py`).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    processo: DadosProcesso = Field(default_factory=DadosProcesso)
+    historico_salarial: List[HistoricoSalarialEntry] = Field(default_factory=list)
+    faltas: List[Falta] = Field(default_factory=list)
+    ferias: List[FeriasEntry] = Field(default_factory=list)
+    verbas: List[Verba] = Field(default_factory=list)
+    cartao_de_ponto: CartaoDePonto = Field(default_factory=CartaoDePonto)
+    fgts: FGTS = Field(default_factory=FGTS)
+    contribuicao_social: ContribuicaoSocial = Field(default_factory=ContribuicaoSocial)
+    imposto_renda: ImpostoRenda = Field(default_factory=ImpostoRenda)
+    honorarios: List[Honorario] = Field(default_factory=list)
+    custas: CustasJudiciais = Field(default_factory=CustasJudiciais)
+    correcao_juros: CorrecaoJuros = Field(default_factory=CorrecaoJuros)
+
+
+# ============================================================================
+# 7. Forward references resolution
 # ============================================================================
 
 
@@ -576,3 +604,4 @@ DadosProcesso.model_rebuild()
 HistoricoSalarialEntry.model_rebuild()
 Verba.model_rebuild()
 CartaoDePonto.model_rebuild()
+PreviaCalculo.model_rebuild()
