@@ -443,48 +443,120 @@ class AplicadorPJECalc:
             self.log(f"  ⚠ criar Manual '{v.parametros.descricao}': {e}")
             return False
 
+    def _achar_link_acao_verba(self, descricao: str, kind: str) -> Optional[str]:
+        """Localiza ID do link de ação (Parâmetros/Ocorrências/Exibir) para a
+        verba cuja linha contenha `descricao`. Estratégia em camadas:
+          1. j_id558 (Parâmetros) / j_id559 (Ocorrências) — IDs auditados em DOM
+          2. fallback por title (case-insensitive, sem acento)
+          3. match de linha: exato → inclusão → palavras-chave (≥3 letras)
+        kind: "parametros" | "ocorrencias" | "exibir"
+        """
+        idfix = {"parametros": "j_id558", "ocorrencias": "j_id559"}.get(kind, "")
+        title_kw = {
+            "parametros": ["PARAMETRO"],
+            "ocorrencias": ["OCORRENCIA"],
+            "exibir": ["EXIBIR", "REFLEXA", "REFLEXO"],
+        }.get(kind, [])
+        return self._page.evaluate(
+            """(args) => {
+                const {nome, idfix, titleKw} = args;
+                const norm = s => (s||'').toUpperCase()
+                    .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                    .replace(/\\s+/g, ' ').trim();
+                const alvo = norm(nome);
+                // Coleta TODOS os links candidatos, agrupados por linha
+                const trs = [...document.querySelectorAll('tr')];
+                const candidatos = trs.map(tr => {
+                    let txt = tr.textContent.replace(/\\s+/g,' ').trim();
+                    // tira labels do final (Exibir, Reflexa) para casar nome
+                    const nomeLinha = txt.replace(/Exibir.*$/i, '').trim();
+                    const links = [...tr.querySelectorAll('a, input[type=image], input[type=button], input[type=submit]')];
+                    let link = null;
+                    // Camada 1: ID fixo
+                    if (idfix) {
+                        link = links.find(a => a.id && a.id.includes(':listagem:') && a.id.endsWith(':' + idfix));
+                    }
+                    // Camada 2: title/value/text contendo keyword
+                    if (!link && titleKw && titleKw.length) {
+                        link = links.find(a => {
+                            const t = norm((a.title||'') + ' ' + (a.value||'') + ' ' + (a.alt||'') + ' ' + (a.textContent||''));
+                            // exibir não pode confundir com Excluir
+                            if (titleKw.includes('PARAMETRO') && (t.includes('OCORRENCIA') || t.includes('EXCLUI'))) return false;
+                            if (titleKw.includes('OCORRENCIA') && (t.includes('PARAMETRO') || t.includes('EXCLUI'))) return false;
+                            return titleKw.some(kw => t.includes(kw));
+                        });
+                    }
+                    return {tr, nome: nomeLinha, normNome: norm(nomeLinha), link};
+                }).filter(c => c.link);
+
+                // Match exato
+                for (const c of candidatos) if (c.normNome === alvo) return c.link.id;
+                // Inclusão mútua
+                for (const c of candidatos) {
+                    if (c.normNome.includes(alvo) || alvo.includes(c.normNome)) return c.link.id;
+                }
+                // Palavras-chave (≥3 letras, todas presentes)
+                const palavras = alvo.split(' ').filter(p => p.length >= 3);
+                for (const c of candidatos) {
+                    if (palavras.length && palavras.every(p => c.normNome.includes(p))) return c.link.id;
+                }
+                return null;
+            }""",
+            {"nome": descricao, "idfix": idfix, "titleKw": title_kw},
+        )
+
+    def _detectar_erro_pagina(self) -> bool:
+        """Detecta HTTP 500/NPE/ViewExpired na página atual de verbas (bug
+        conhecido do PJE-Calc após Expresso). Retorna True se houver erro."""
+        try:
+            return bool(self._page.evaluate(
+                """() => {
+                    const body = (document.body && document.body.textContent) || '';
+                    return body.includes('HTTP Status 500') ||
+                           body.includes('NullPointerException') ||
+                           body.includes('Erro inesperado') ||
+                           body.includes('ViewExpiredException');
+                }"""
+            ))
+        except Exception:
+            return False
+
     def _aplicar_verba_completa(self, v: Verba) -> bool:
         """Abre página Parâmetros da verba pelo nome, aplica TUDO + ocorrências."""
         self.log(f"  → Aplicar verba completa: '{v.parametros.descricao}'")
         try:
-            # Identificar link Parâmetros pela linha que contém o nome exato
-            link_id = self._page.evaluate(
-                """(nome) => {
-                    const norm = s => (s||'').toUpperCase()
-                        .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
-                        .replace(/\\s+/g, ' ').trim();
-                    const alvo = norm(nome);
-                    const trs = [...document.querySelectorAll('tr')];
-                    for (const tr of trs) {
-                        if (norm(tr.textContent).indexOf(alvo) === -1) continue;
-                        const a = tr.querySelector('a[id*=":listagem:"][id$=":j_id558"]');
-                        if (a) return a.id;
-                    }
-                    return null;
-                }""",
-                v.parametros.descricao,
-            )
+            # Garantir que estamos na listagem (verba-calculo.jsf)
+            if "verba-calculo" not in self._page.url or "verbas-para-calculo" in self._page.url:
+                self._navegar_url_calculo("verba/verba-calculo.jsf")
+            if self._detectar_erro_pagina():
+                self.log(f"    ⚠ verba-calculo.jsf em erro 500/NPE — pulando '{v.parametros.descricao}'")
+                return False
+
+            link_id = self._achar_link_acao_verba(v.parametros.descricao, "parametros")
             if not link_id:
                 self.log(f"    ⚠ link Parâmetros de '{v.parametros.descricao}' não encontrado")
                 return False
-            self._page.locator(f"a[id='{link_id}']").click(force=True)
-            self._aguardar_ajax(5000)
+            try:
+                self._page.locator(f"a[id='{link_id}']").first.click(timeout=8000)
+            except Exception:
+                self._page.evaluate(f"() => {{ const e = document.getElementById({link_id!r}); if (e) e.click(); }}")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(600)
 
             # Aplicar Parâmetros + Salvar
             self._aplicar_parametros_verba(v.parametros)
             self._clicar_salvar()
 
-            # Voltar à listagem e abrir Ocorrências (linkOcorrencias)
+            # Voltar à listagem e abrir Ocorrências
             if v.ocorrencias:
                 self._navegar_url_calculo("verba/verba-calculo.jsf")
-                self._abrir_ocorrencias_verba(v.parametros.descricao)
-                self._aplicar_ocorrencias_verba(v.ocorrencias)
-                self._clicar_salvar()
+                if self._abrir_ocorrencias_verba(v.parametros.descricao):
+                    self._aplicar_ocorrencias_verba(v.ocorrencias)
+                    self._clicar_salvar()
 
-            # Aplicar reflexos (cada reflexo é uma Verba — recursão)
+            # Reflexos (cada reflexo é uma Verba — fluxo Exibir+Parâmetros)
             for ref in v.reflexos:
                 self._navegar_url_calculo("verba/verba-calculo.jsf")
-                # Reflexos: marcar no Exibir + abrir Parâmetros + aplicar
                 self._aplicar_reflexo(v.parametros.descricao, ref)
 
             return True
@@ -578,31 +650,20 @@ class AplicadorPJECalc:
         self._fill_text("comentarios", p.comentarios)
 
     def _abrir_ocorrencias_verba(self, descricao: str) -> bool:
-        """Click no link Ocorrências da Verba (j_id559) da linha com descricao."""
-        try:
-            link_id = self._page.evaluate(
-                """(nome) => {
-                    const norm = s => (s||'').toUpperCase()
-                        .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
-                        .replace(/\\s+/g, ' ').trim();
-                    const alvo = norm(nome);
-                    const trs = [...document.querySelectorAll('tr')];
-                    for (const tr of trs) {
-                        if (norm(tr.textContent).indexOf(alvo) === -1) continue;
-                        const a = tr.querySelector('a[id*=":listagem:"][id$=":j_id559"]');
-                        if (a) return a.id;
-                    }
-                    return null;
-                }""",
-                descricao,
-            )
-            if not link_id:
-                return False
-            self._page.locator(f"a[id='{link_id}']").click(force=True)
-            self._aguardar_ajax(5000)
-            return True
-        except Exception:
+        """Click no link Ocorrências (j_id559 ou title='Ocorrências da Verba')
+        da linha com `descricao`. Usa fallback robusto via
+        _achar_link_acao_verba."""
+        link_id = self._achar_link_acao_verba(descricao, "ocorrencias")
+        if not link_id:
+            self.log(f"    ⚠ link Ocorrências de '{descricao}' não encontrado")
             return False
+        try:
+            self._page.locator(f"a[id='{link_id}']").first.click(timeout=8000)
+        except Exception:
+            self._page.evaluate(f"() => {{ const e = document.getElementById({link_id!r}); if (e) e.click(); }}")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(500)
+        return True
 
     def _aplicar_ocorrencias_verba(self, ocorrencias: list[OcorrenciaVerba]) -> None:
         """Para cada ocorrência do JSON, ativa/desativa e preenche valores
@@ -651,14 +712,114 @@ class AplicadorPJECalc:
             self.log(f"      ⚠ fill_by_id {sufixo}: {e}")
 
     def _aplicar_reflexo(self, verba_principal: str, ref: Verba) -> None:
-        """Marca reflexo no painel Exibir + abre Parâmetros + aplica + Ocorrências.
+        """Aplica um reflexo da verba principal.
 
-        TODO Etapa 2C completa: implementação detalhada do fluxo de reflexos
-        (clicar Exibir, marcar checkbox do reflexo, salvar, abrir parâmetros do
-        reflexo, aplicar). Por ora apenas log.
+        Fluxo confirmado pelo usuário (CLAUDE.md):
+          1. Click "Exibir" da verba principal → abre painel inline com checkboxes
+          2. Marca o checkbox cujo texto canônico = ref.expresso_alvo (ou descricao)
+          3. Salva (refresh da listagem)
+          4. Re-abre "Exibir" da principal — agora o botão "Parâmetros" do reflexo
+             está disponível
+          5. Click no Parâmetros do reflexo → aplica ParametrosVerba completos
+          6. Salva
+          7. Se ref.ocorrencias: abrir Ocorrências do reflexo via mesma listagem
+             (a tabela mensal mostra principal + reflexos juntos — usamos a
+             ocorrencias da PRINCIPAL nesse caso, então só aplicar se o caller
+             explicitamente passar ocorrencias do reflexo)
         """
-        self.log(f"  → reflexo de '{verba_principal}': '{ref.parametros.descricao}' "
-                 f"(IMPL pendente — TODO 2C completa)")
+        nome_ref = (ref.expresso_alvo or ref.parametros.descricao or "").strip()
+        if not nome_ref:
+            return
+        self.log(f"  → reflexo de '{verba_principal}': '{nome_ref}'")
+        try:
+            # Etapa 1: clicar "Exibir" da principal
+            exibir_id = self._achar_link_acao_verba(verba_principal, "exibir")
+            if not exibir_id:
+                self.log(f"    ⚠ link Exibir de '{verba_principal}' não encontrado")
+                return
+            try:
+                self._page.locator(f"#{exibir_id.replace(':', chr(92)+':')}").first.click(timeout=8000)
+            except Exception:
+                self._page.evaluate(f"() => {{ const e = document.getElementById({exibir_id!r}); if (e) e.click(); }}")
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(400)
+
+            # Etapa 2: marcar checkbox do reflexo desejado
+            marcou = self._page.evaluate(
+                """(rNome) => {
+                    const norm = s => (s||'').toUpperCase()
+                        .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                        .replace(/\\s+/g, ' ').trim();
+                    const alvo = norm(rNome);
+                    const palavras = alvo.split(' ').filter(p => p.length >= 3);
+                    const cbs = [...document.querySelectorAll(
+                        'input[type=checkbox][id*="listaReflexo"],' +
+                        'input[type=checkbox][id*="reflexo"],' +
+                        'input[type=checkbox][id*="Reflexo"]'
+                    )];
+                    for (const cb of cbs) {
+                        if (cb.disabled) continue;
+                        const ctx = cb.closest('td,tr,li,div') || cb.parentElement;
+                        const txt = norm((ctx && ctx.textContent) || '');
+                        const match = txt === alvo
+                            || txt.includes(alvo)
+                            || (palavras.length && palavras.every(p => txt.includes(p)));
+                        if (match) {
+                            if (!cb.checked) cb.click();
+                            return cb.id || 'ok';
+                        }
+                    }
+                    return null;
+                }""",
+                nome_ref,
+            )
+            if not marcou:
+                self.log(f"    ⚠ checkbox reflexo '{nome_ref}' não encontrado")
+                return
+            self.log(f"    ✓ reflexo marcado ({marcou})")
+
+            # Etapa 3: salvar (necessário para checkbox persistir)
+            self._clicar_salvar()
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(500)
+
+            # Etapa 4-5: re-navegar para listagem, re-abrir Exibir, achar Parâmetros do reflexo
+            if not (ref.parametros and (ref.parametros.descricao or ref.parametros.assuntos_cnj)):
+                # Sem parâmetros adicionais — reflexo apenas marcado
+                return
+            self._navegar_url_calculo("verba/verba-calculo.jsf")
+            exibir_id2 = self._achar_link_acao_verba(verba_principal, "exibir")
+            if exibir_id2:
+                try:
+                    self._page.locator(f"#{exibir_id2.replace(':', chr(92)+':')}").first.click(timeout=8000)
+                except Exception:
+                    self._page.evaluate(f"() => {{ const e = document.getElementById({exibir_id2!r}); if (e) e.click(); }}")
+                self._aguardar_ajax(5000)
+
+            # Achar link Parâmetros do reflexo (linha do reflexo agora visível)
+            link_param_ref = self._achar_link_acao_verba(nome_ref, "parametros")
+            if not link_param_ref:
+                self.log(f"    ⚠ Parâmetros do reflexo '{nome_ref}' não encontrado")
+                return
+            try:
+                self._page.locator(f"a[id='{link_param_ref}']").first.click(timeout=8000)
+            except Exception:
+                self._page.evaluate(f"() => {{ const e = document.getElementById({link_param_ref!r}); if (e) e.click(); }}")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(500)
+
+            # Etapa 6: aplicar parâmetros + salvar
+            self._aplicar_parametros_verba(ref.parametros)
+            self._clicar_salvar()
+
+            # Etapa 7: ocorrências do reflexo (compartilha tabela com principal)
+            if ref.ocorrencias:
+                self._navegar_url_calculo("verba/verba-calculo.jsf")
+                if self._abrir_ocorrencias_verba(verba_principal):
+                    self._aplicar_ocorrencias_verba(ref.ocorrencias)
+                    self._clicar_salvar()
+        except Exception as e:
+            self.log(f"    ⚠ _aplicar_reflexo '{nome_ref}': {e}")
 
     # ────────────────────────────────────────────────────────────────────────
     # FASE 7 — FGTS
