@@ -815,11 +815,17 @@ def _migrar_v2_para_v3(calculo) -> tuple[dict, list[str]]:
     cj_v2 = dados_v2.get("correcao_juros") or {}
     _ind_corr_map = {"IPCA-E": "IPCAE", "IPCAE": "IPCAE", "TR": "TR", "INPC": "INPC",
                      "SELIC": "SELIC", "IPCA": "IPCA", "TRD": "TRD"}
+    _base_juros_map = {"verbas": "VERBA", "verba": "VERBA",
+                       "principal": "PRINCIPAL", "bruto": "BRUTO"}
+    _taxa_juros_map = {"trd_simples": "TRD_SIMPLES", "tr_simples": "TR_SIMPLES",
+                       "trd simples": "TRD_SIMPLES", "tr simples": "TR_SIMPLES",
+                       "selic": "SELIC", "taxa_legal": "TAXA_LEGAL", "taxa legal": "TAXA_LEGAL",
+                       "tr_fgts": "TR_FGTS", "tr fgts": "TR_FGTS"}
     try:
         cj_v3 = CorrecaoJuros(
             indice_correcao=_ind_corr_map.get(cj_v2.get("correcao_indice") or cj_v2.get("indice"), "IPCAE"),
-            taxa_juros=cj_v2.get("juros_taxa") or "TRD_SIMPLES",
-            base_juros=cj_v2.get("base_juros") or "VERBA",
+            taxa_juros=_taxa_juros_map.get(str(cj_v2.get("juros_taxa") or "").lower(), "TRD_SIMPLES"),
+            base_juros=_base_juros_map.get(str(cj_v2.get("base_juros") or "").lower(), "VERBA"),
             aplicar_ec_113=bool(cj_v2.get("aplicar_ec_113", True)),
         )
     except Exception as e:
