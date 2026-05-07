@@ -3619,6 +3619,10 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
     _automacao_global_lock["ts"] = _time_mod_v3.time()
     _automacao_global_lock["sessao"] = sessao_id
 
+    def _liberar_lock_v3():
+        if _automacao_global_lock.get("sessao") == sessao_id:
+            _automacao_global_lock.clear()
+
     async def gerador_sse_v3():
         # Carregar prévia v3 da sessão
         from database import SessionLocal
@@ -3628,6 +3632,7 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
             if not calculo:
                 yield f"data: {json.dumps({'msg': 'Sessão não encontrada'})}\n\n"
                 yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                _liberar_lock_v3()
                 return
             dados_v3, warnings = _migrar_v2_para_v3(calculo)
             if warnings:
@@ -3698,6 +3703,7 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
         except Exception as e:
             yield f"data: {json.dumps({'msg': f'⚠ Validação PreviaCalculo: {e}'})}\n\n"
             yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+            _liberar_lock_v3()
             return
 
         thread = _th.Thread(target=runner, daemon=True)
@@ -3713,8 +3719,7 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
                     yield f"data: {json.dumps({'keepalive': True})}\n\n"
         finally:
             # Liberar lock global ao final
-            if _automacao_global_lock.get("sessao") == sessao_id:
-                _automacao_global_lock.clear()
+            _liberar_lock_v3()
 
         yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
 
