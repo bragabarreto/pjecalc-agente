@@ -432,10 +432,147 @@ class Honorario(BaseModel):
 
 
 # ============================================================================
-# 5. Forward references resolution
+# 5. FGTS / INSS / IRPF / Cartão de Ponto / Faltas / Férias / Custas / Correção
+# ============================================================================
+
+
+class FGTS(BaseModel):
+    """Página: FGTS (fgts.jsf)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    apurar: bool = True
+    tipo_de_verba: Literal["NORMAL", "VERBA_RESCISORIA"] = "NORMAL"
+    compor_principal: Literal["SIM", "NAO"] = "SIM"
+    aliquota: Literal["8", "2", "INFORMADO"] = "8"  # %
+    aliquota_informada: ValorBR = None
+    multa_do_fgts: Literal["MULTA_DE_40", "MULTA_DE_20", "SEM_MULTA"] = "MULTA_DE_40"
+    tipo_do_valor_da_multa: Literal["CALCULADO", "INFORMADO"] = "CALCULADO"
+    multa_informada: ValorBR = None
+    multa_do_artigo_467: bool = False
+    incidencia_do_fgts: Literal[
+        "VERBAS_REMUNERATORIAS",
+        "VERBAS_REMUNERATORIAS_E_INDENIZATORIAS",
+        "TODAS_AS_VERBAS",
+    ] = "VERBAS_REMUNERATORIAS"
+
+
+class ContribuicaoSocial(BaseModel):
+    """Página: Contribuição Social / INSS (inss/inss.jsf)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    apurar: bool = True
+    indice_atualizacao: Optional[str] = None  # SELIC, IPCAE, etc.
+    aliquota_rat: ValorBR = None  # %
+    fap: ValorBR = None  # Fator Acidentário
+    regime_caixa_competencia: Literal["CAIXA", "COMPETENCIA"] = "COMPETENCIA"
+    multa_inss: bool = False
+    juros_inss: bool = True
+
+
+class ImpostoRenda(BaseModel):
+    """Página: Imposto de Renda (irpf.jsf)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    apurar: bool = True
+    regime_tributacao: Literal[
+        "MESES_TRIBUTAVEIS", "RRA", "REGIME_GERAL"
+    ] = "MESES_TRIBUTAVEIS"
+    meses_tributaveis: Optional[int] = None
+    quantidade_dependentes: int = 0
+    deducoes: ValorBR = None
+    pensao_alimenticia: ValorBR = None
+
+
+class ProgramacaoSemanalDia(BaseModel):
+    """Configuração de jornada por dia da semana."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    dia: Literal["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"]
+    turno1_inicio: Optional[str] = None  # HH:MM
+    turno1_fim: Optional[str] = None
+    turno2_inicio: Optional[str] = None
+    turno2_fim: Optional[str] = None
+
+
+class CartaoDePonto(BaseModel):
+    """Página: Cartão de Ponto."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    forma_de_apuracao: Optional[Literal[
+        "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
+        "HORAS_EXTRAS_PELA_JORNADA_REAL",
+        "HORAS_EXTRAS_PELA_JORNADA_PADRAO",
+    ]] = None
+    jornada_diaria_h: ValorBR = None
+    jornada_semanal_h: ValorBR = None
+    intervalo_intrajornada_min: Optional[int] = None
+    programacao_semanal: List[ProgramacaoSemanalDia] = Field(default_factory=list)
+
+
+class Falta(BaseModel):
+    """Lançamento de falta."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    data_inicio: DataBR = None
+    data_fim: DataBR = None
+    justificada: bool = False
+    descontar_remuneracao: bool = True
+    descontar_dsr: bool = True
+
+
+class FeriasEntry(BaseModel):
+    """Lançamento de Férias gozadas."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    periodo_aquisitivo_inicio: DataBR = None
+    periodo_aquisitivo_fim: DataBR = None
+    data_inicio_gozo: DataBR = None
+    data_fim_gozo: DataBR = None
+    abono_pecuniario: bool = False
+    dobra: bool = False
+
+
+class CustasJudiciais(BaseModel):
+    """Página: Custas Judiciais."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    percentual: ValorBR = "2"  # 2% padrão
+    responsavel: Literal[
+        "RECLAMADO", "RECLAMANTE", "AMBOS", "NAO_SE_APLICA"
+    ] = "RECLAMADO"
+    valor_periciais: ValorBR = None
+
+
+class CorrecaoJuros(BaseModel):
+    """Página: Correção, Juros e Multa (parametros-atualizacao)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    indice_correcao: Literal[
+        "IPCAE", "TR", "INPC", "SELIC", "IPCA", "TRD"
+    ] = "IPCAE"
+    taxa_juros: Literal[
+        "TRD_SIMPLES", "TR_SIMPLES", "SELIC", "TAXA_LEGAL", "TR_FGTS"
+    ] = "TRD_SIMPLES"
+    base_juros: Literal["VERBA", "PRINCIPAL", "BRUTO"] = "VERBA"
+    aplicar_ec_113: bool = True  # IPCA-E + SELIC pós ADC 58
+    sumula_439_juros_desde_ajuizamento: bool = False
+
+
+# ============================================================================
+# 6. Forward references resolution
 # ============================================================================
 
 
 DadosProcesso.model_rebuild()
 HistoricoSalarialEntry.model_rebuild()
 Verba.model_rebuild()
+CartaoDePonto.model_rebuild()

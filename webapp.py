@@ -729,10 +729,158 @@ async def exibir_previa_v3(
                 if mig:
                     verbas_v3.append(mig)
 
+    # Migração v2→v3 das demais páginas auxiliares (2B.5)
+    from infrastructure.pjecalc_pages import (
+        FGTS, ContribuicaoSocial, ImpostoRenda, CartaoDePonto,
+        ProgramacaoSemanalDia, Falta, FeriasEntry, CustasJudiciais,
+        CorrecaoJuros, Honorario,
+    )
+
+    fgts_v2 = dados_v2.get("fgts") or {}
+    try:
+        fgts_v3 = FGTS(
+            apurar=bool(fgts_v2.get("apurar", True)),
+            tipo_de_verba=fgts_v2.get("tipo_de_verba", "NORMAL"),
+            compor_principal=fgts_v2.get("compor_principal", "SIM"),
+            aliquota=str(fgts_v2.get("aliquota", "8")) if fgts_v2.get("aliquota") in ("8","2",8,2,"INFORMADO",8.0,2.0) or not fgts_v2.get("aliquota") else "8",
+            multa_do_fgts=fgts_v2.get("multa") or fgts_v2.get("multa_do_fgts") or
+                          ("MULTA_DE_40" if fgts_v2.get("multa_40") else
+                           "MULTA_DE_20" if fgts_v2.get("multa_20") else "MULTA_DE_40"),
+            multa_do_artigo_467=bool(fgts_v2.get("multa_467") or fgts_v2.get("fgts_multa_467", False)),
+        )
+    except Exception:
+        fgts_v3 = FGTS()
+
+    inss_v2 = dados_v2.get("contribuicao_social") or dados_v2.get("inss") or {}
+    try:
+        inss_v3 = ContribuicaoSocial(
+            apurar=bool(inss_v2.get("apurar", True)),
+            indice_atualizacao=inss_v2.get("indice"),
+            aliquota_rat=str(inss_v2.get("rat") or inss_v2.get("aliquota_rat", "")) or None,
+            fap=str(inss_v2.get("fap") or "") or None,
+        )
+    except Exception:
+        inss_v3 = ContribuicaoSocial()
+
+    ir_v2 = dados_v2.get("imposto_renda") or {}
+    try:
+        ir_v3 = ImpostoRenda(
+            apurar=bool(ir_v2.get("apurar", True)),
+            quantidade_dependentes=int(ir_v2.get("dependentes") or ir_v2.get("quantidade_dependentes") or 0),
+            meses_tributaveis=ir_v2.get("meses_tributaveis"),
+            regime_tributacao=ir_v2.get("regime") or "MESES_TRIBUTAVEIS",
+        )
+    except Exception:
+        ir_v3 = ImpostoRenda()
+
+    cp_v2 = dados_v2.get("cartao_ponto") or dados_v2.get("cartao_de_ponto") or {}
+    try:
+        prog_v3 = []
+        for d in (cp_v2.get("programacao_semanal") or []):
+            try:
+                prog_v3.append(ProgramacaoSemanalDia(
+                    dia=d.get("dia", "SEG"),
+                    turno1_inicio=d.get("turno1_inicio"),
+                    turno1_fim=d.get("turno1_fim"),
+                    turno2_inicio=d.get("turno2_inicio"),
+                    turno2_fim=d.get("turno2_fim"),
+                ))
+            except Exception:
+                continue
+        cp_v3 = CartaoDePonto(
+            forma_de_apuracao=cp_v2.get("forma_apuracao") or cp_v2.get("forma_de_apuracao"),
+            jornada_diaria_h=str(cp_v2.get("jornada_diaria_h") or "") or None,
+            jornada_semanal_h=str(cp_v2.get("jornada_semanal_h") or cp_v2.get("carga_horaria") or "") or None,
+            intervalo_intrajornada_min=cp_v2.get("intervalo_intrajornada_min") or cp_v2.get("intervalo_min"),
+            programacao_semanal=prog_v3,
+        )
+    except Exception:
+        cp_v3 = CartaoDePonto()
+
+    faltas_v3 = []
+    for f in (dados_v2.get("faltas") or []):
+        try:
+            faltas_v3.append(Falta(
+                data_inicio=f.get("data_inicio"), data_fim=f.get("data_fim"),
+                justificada=bool(f.get("justificada", False)),
+                descontar_remuneracao=bool(f.get("descontar_remuneracao", True)),
+                descontar_dsr=bool(f.get("descontar_dsr", True)),
+            ))
+        except Exception:
+            continue
+
+    ferias_v3 = []
+    for fe in (dados_v2.get("ferias") or []):
+        try:
+            ferias_v3.append(FeriasEntry(
+                periodo_aquisitivo_inicio=fe.get("periodo_aquisitivo_inicio") or fe.get("aquisitivo_inicio"),
+                periodo_aquisitivo_fim=fe.get("periodo_aquisitivo_fim") or fe.get("aquisitivo_fim"),
+                data_inicio_gozo=fe.get("data_inicio_gozo") or fe.get("gozo_inicio"),
+                data_fim_gozo=fe.get("data_fim_gozo") or fe.get("gozo_fim"),
+                abono_pecuniario=bool(fe.get("abono_pecuniario", False)),
+                dobra=bool(fe.get("dobra", False)),
+            ))
+        except Exception:
+            continue
+
+    custas_v2 = dados_v2.get("custas") or dados_v2.get("custas_judiciais") or {}
+    try:
+        custas_v3 = CustasJudiciais(
+            percentual=str(custas_v2.get("percentual") or "2"),
+            responsavel=custas_v2.get("responsavel") or custas_v2.get("responsabilidade") or "RECLAMADO",
+            valor_periciais=str(custas_v2.get("valor_periciais") or "") or None,
+        )
+    except Exception:
+        custas_v3 = CustasJudiciais()
+
+    cj_v2 = dados_v2.get("correcao_juros") or {}
+    _ind_corr_map = {"IPCA-E": "IPCAE", "IPCAE": "IPCAE", "TR": "TR", "INPC": "INPC",
+                     "SELIC": "SELIC", "IPCA": "IPCA", "TRD": "TRD"}
+    try:
+        cj_v3 = CorrecaoJuros(
+            indice_correcao=_ind_corr_map.get(cj_v2.get("correcao_indice") or cj_v2.get("indice"), "IPCAE"),
+            taxa_juros=cj_v2.get("juros_taxa") or "TRD_SIMPLES",
+            base_juros=cj_v2.get("base_juros") or "VERBA",
+            aplicar_ec_113=bool(cj_v2.get("aplicar_ec_113", True)),
+        )
+    except Exception:
+        cj_v3 = CorrecaoJuros()
+
+    honorarios_v3 = []
+    for h in (dados_v2.get("honorarios") or []):
+        try:
+            tipo_dev = h.get("tipo_devedor") or h.get("devedor") or "RECLAMADO"
+            tipo_dev = "RECLAMADO" if str(tipo_dev).upper() in ("RECLAMADO", "RÉU") else "RECLAMANTE"
+            tp = h.get("tipo_honorario") or h.get("tipo") or "ADVOCATICIOS"
+            if not isinstance(h.get("nome_credor"), str) or not h.get("nome_credor"):
+                continue  # campo obrigatório
+            honorarios_v3.append(Honorario(
+                descricao=h.get("descricao", "Honorário"),
+                tp_honorario=tp,
+                tipo_de_devedor=tipo_dev,
+                aliquota=str(h.get("percentual") or h.get("aliquota") or ""),
+                nome_credor=h.get("nome_credor", ""),
+                tipo_documento_fiscal_credor=h.get("tipo_documento_credor") or h.get("tipo_doc_credor") or "CPF",
+                numero_documento_fiscal_credor=h.get("numero_documento_credor") or h.get("doc_credor") or "",
+                apurar_irrf=bool(h.get("apurar_irrf", True)),
+            ))
+        except Exception as e:
+            logger.warning(f"Migração honorário falhou: {e}")
+            continue
+
     dados_v3 = {
         "processo": processo_v3,
         "historico_salarial": historico_v3,
+        "faltas": faltas_v3,
+        "ferias": ferias_v3,
         "verbas": verbas_v3,
+        "cartao_de_ponto": cp_v3,
+        "fgts": fgts_v3,
+        "contribuicao_social": inss_v3,
+        "imposto_renda": ir_v3,
+        "honorarios": honorarios_v3,
+        "custas": custas_v3,
+        "correcao_juros": cj_v3,
     }
 
     return templates.TemplateResponse(
@@ -1227,9 +1375,133 @@ async def editar_campo_previa_v3(
             status_code=400,
         )
 
-    # Campo não-mapeado por ora (cartão de ponto, FGTS, INSS, IR, etc.)
+    # ── Páginas auxiliares (sub-etapa 2B.5) ──
+    # Handler genérico para FGTS, INSS, IR, Custas, Correção, Cartão de Ponto,
+    # Honorários, Faltas, Férias. Suporta:
+    #   <secao>.<campo>                — escalar
+    #   <secao>.<lista>.add            — adicionar item à lista
+    #   <secao>.<lista>.remove[N]      — remover item N
+    #   <secao>[N].<campo>             — para listas top-level (faltas, ferias, honorarios)
+    #   <secao>[N].<lista>.add/remove  — listas aninhadas
+    #
+    # Mapeia para secao v2 equivalente (ex.: cartao_de_ponto → cartao_ponto)
+    _SECAO_V3_TO_V2 = {
+        "fgts": "fgts",
+        "contribuicao_social": "contribuicao_social",
+        "imposto_renda": "imposto_renda",
+        "cartao_de_ponto": "cartao_ponto",
+        "custas": "custas",
+        "correcao_juros": "correcao_juros",
+        "honorarios": "honorarios",
+        "faltas": "faltas",
+        "ferias": "ferias",
+    }
+
+    def _vazio_auxiliar(secao: str) -> dict:
+        templates_v = {
+            "honorarios": {"descricao":"","tp_honorario":"ADVOCATICIOS","tipo_de_devedor":"RECLAMADO",
+                           "tipo_valor":"CALCULADO","aliquota":None,"nome_credor":"",
+                           "tipo_documento_fiscal_credor":"CPF","numero_documento_fiscal_credor":""},
+            "faltas": {"data_inicio":None,"data_fim":None,"justificada":False,
+                       "descontar_remuneracao":True,"descontar_dsr":True},
+            "ferias": {"periodo_aquisitivo_inicio":None,"periodo_aquisitivo_fim":None,
+                       "data_inicio_gozo":None,"data_fim_gozo":None,
+                       "abono_pecuniario":False,"dobra":False},
+        }
+        return templates_v.get(secao, {})
+
+    import re as _re
+    primeiro_seg = campo.split(".")[0].split("[")[0]
+    if primeiro_seg in _SECAO_V3_TO_V2:
+        v2_key = _SECAO_V3_TO_V2[primeiro_seg]
+        is_lista = primeiro_seg in ("honorarios", "faltas", "ferias")
+
+        # Pattern 1: <secao>.<campo escalar>
+        m_simple = _re.match(rf"^{primeiro_seg}\.(\w+)$", campo)
+        if m_simple and not is_lista:
+            attr = m_simple.group(1)
+            bloco = dados.setdefault(v2_key, {})
+            bloco[attr] = valor_normalizado
+            repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+            return JSONResponse({"sucesso": True})
+
+        # Pattern 2: <secao>.<lista>.add (cartao_de_ponto.programacao_semanal.add)
+        m_listadd = _re.match(rf"^{primeiro_seg}\.(\w+)\.add$", campo)
+        if m_listadd and not is_lista:
+            attr = m_listadd.group(1)
+            bloco = dados.setdefault(v2_key, {})
+            lst = bloco.setdefault(attr, [])
+            if attr == "programacao_semanal":
+                lst.append({"dia": "SEG", "turno1_inicio": None, "turno1_fim": None,
+                            "turno2_inicio": None, "turno2_fim": None})
+            else:
+                lst.append({})
+            repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+            return JSONResponse({"sucesso": True})
+
+        # Pattern 3: <secao>.<lista>.remove[N]
+        m_listrem = _re.match(rf"^{primeiro_seg}\.(\w+)\.remove\[(\d+)\]$", campo)
+        if m_listrem and not is_lista:
+            attr = m_listrem.group(1)
+            i = int(m_listrem.group(2))
+            bloco = dados.setdefault(v2_key, {})
+            lst = bloco.get(attr) or []
+            if 0 <= i < len(lst):
+                lst.pop(i)
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+        # Pattern 4: <secao>.<lista>[N].<campo>
+        m_listidx = _re.match(rf"^{primeiro_seg}\.(\w+)\[(\d+)\]\.(\w+)$", campo)
+        if m_listidx and not is_lista:
+            attr_lst = m_listidx.group(1)
+            i = int(m_listidx.group(2))
+            attr_item = m_listidx.group(3)
+            bloco = dados.setdefault(v2_key, {})
+            lst = bloco.setdefault(attr_lst, [])
+            while len(lst) <= i:
+                lst.append({})
+            lst[i][attr_item] = valor_normalizado
+            repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+            return JSONResponse({"sucesso": True})
+
+        # Pattern 5: <listapadrao>.add (top-level: honorarios.add, faltas.add)
+        if campo == f"{primeiro_seg}.add" and is_lista:
+            lst = dados.setdefault(v2_key, [])
+            lst.append(_vazio_auxiliar(primeiro_seg))
+            repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+            return JSONResponse({"sucesso": True})
+
+        # Pattern 6: <listapadrao>.remove[N]
+        m_topr = _re.match(rf"^{primeiro_seg}\.remove\[(\d+)\]$", campo)
+        if m_topr and is_lista:
+            i = int(m_topr.group(1))
+            lst = dados.setdefault(v2_key, [])
+            if 0 <= i < len(lst):
+                lst.pop(i)
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+        # Pattern 7: <listapadrao>[N].<campo>
+        m_topidx = _re.match(rf"^{primeiro_seg}\[(\d+)\]\.(\w+)$", campo)
+        if m_topidx and is_lista:
+            i = int(m_topidx.group(1))
+            attr = m_topidx.group(2)
+            lst = dados.setdefault(v2_key, [])
+            while len(lst) <= i:
+                lst.append(_vazio_auxiliar(primeiro_seg))
+            lst[i][attr] = valor_normalizado
+            repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+            return JSONResponse({"sucesso": True})
+
+        return JSONResponse(
+            {"sucesso": False, "erro": f"Padrão '{campo}' não reconhecido em '{primeiro_seg}.*'"},
+            status_code=400,
+        )
+
+    # Campo não-mapeado
     return JSONResponse(
-        {"sucesso": False, "erro": f"Campo '{campo}' ainda não mapeado v3→v2 (próximas sub-etapas)"},
+        {"sucesso": False, "erro": f"Campo '{campo}' ainda não mapeado v3→v2"},
         status_code=400,
     )
 

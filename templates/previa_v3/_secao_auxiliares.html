@@ -1,0 +1,315 @@
+{# Sub-etapa 2B.5 — Páginas auxiliares: Honorários, Cartão de Ponto, FGTS,
+   INSS, IRPF, Custas, Correção/Juros, Faltas, Férias.
+#}
+{% from "previa_v3/_macros.html" import field_text, field_date, field_decimal, field_select, field_radio, field_checkbox, field_textarea, secao %}
+
+{# ─────────── 3. Faltas ─────────── #}
+{% set faltas = dados.faltas or [] %}
+{% call secao("3. Faltas") %}
+<div class="repeater" data-prefix="faltas">
+  <div class="repeater-header">
+    <strong>Faltas ({{ faltas|length }})</strong>
+    <button type="button" class="btn-add" onclick="salvarCampo('faltas.add', '', this)">+ Adicionar</button>
+  </div>
+  <div class="repeater-body">
+    {% if faltas|length == 0 %}
+      <p class="repeater-vazio">Nenhuma falta cadastrada.</p>
+    {% else %}
+      {% for f in faltas %}
+        {% set fi = loop.index0 %}
+        <details class="repeater-item">
+          <summary>
+            <span class="item-titulo">Falta #{{ loop.index }} — {{ f.data_inicio or '?' }} → {{ f.data_fim or '?' }}</span>
+            <button type="button" class="btn-remove" onclick="event.preventDefault(); salvarCampo('faltas.remove[{{ fi }}]', '', this)">✕</button>
+          </summary>
+          <div class="item-corpo">
+            <div class="campos-grid">
+              {{ field_date("faltas[" ~ fi ~ "].data_inicio", f.data_inicio, "Início") }}
+              {{ field_date("faltas[" ~ fi ~ "].data_fim", f.data_fim, "Fim") }}
+            </div>
+            {{ field_checkbox("faltas[" ~ fi ~ "].justificada", f.justificada, "Justificada") }}
+            {{ field_checkbox("faltas[" ~ fi ~ "].descontar_remuneracao", f.descontar_remuneracao, "Descontar Remuneração") }}
+            {{ field_checkbox("faltas[" ~ fi ~ "].descontar_dsr", f.descontar_dsr, "Descontar DSR") }}
+          </div>
+        </details>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endcall %}
+
+{# ─────────── 4. Férias ─────────── #}
+{% set ferias = dados.ferias or [] %}
+{% call secao("4. Férias Gozadas") %}
+<div class="repeater" data-prefix="ferias">
+  <div class="repeater-header">
+    <strong>Períodos de Férias ({{ ferias|length }})</strong>
+    <button type="button" class="btn-add" onclick="salvarCampo('ferias.add', '', this)">+ Adicionar</button>
+  </div>
+  <div class="repeater-body">
+    {% if ferias|length == 0 %}
+      <p class="repeater-vazio">Nenhuma férias cadastrada.</p>
+    {% else %}
+      {% for fe in ferias %}
+        {% set fei = loop.index0 %}
+        <details class="repeater-item">
+          <summary>
+            <span class="item-titulo">Férias #{{ loop.index }} — Aquisitivo {{ fe.periodo_aquisitivo_inicio or '?' }} → {{ fe.periodo_aquisitivo_fim or '?' }}</span>
+            <button type="button" class="btn-remove" onclick="event.preventDefault(); salvarCampo('ferias.remove[{{ fei }}]', '', this)">✕</button>
+          </summary>
+          <div class="item-corpo">
+            <div class="campos-grid col2">
+              {{ field_date("ferias[" ~ fei ~ "].periodo_aquisitivo_inicio", fe.periodo_aquisitivo_inicio, "Aquisitivo Início") }}
+              {{ field_date("ferias[" ~ fei ~ "].periodo_aquisitivo_fim", fe.periodo_aquisitivo_fim, "Aquisitivo Fim") }}
+              {{ field_date("ferias[" ~ fei ~ "].data_inicio_gozo", fe.data_inicio_gozo, "Início Gozo") }}
+              {{ field_date("ferias[" ~ fei ~ "].data_fim_gozo", fe.data_fim_gozo, "Fim Gozo") }}
+            </div>
+            {{ field_checkbox("ferias[" ~ fei ~ "].abono_pecuniario", fe.abono_pecuniario, "Abono Pecuniário (1/3 dos dias)") }}
+            {{ field_checkbox("ferias[" ~ fei ~ "].dobra", fe.dobra, "Dobra (gozadas após período concessivo)") }}
+          </div>
+        </details>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endcall %}
+
+{# ─────────── 6. Cartão de Ponto ─────────── #}
+{% set cp = dados.cartao_de_ponto %}
+{% call secao("6. Cartão de Ponto") %}
+<div class="campos-grid">
+  {{ field_select("cartao_de_ponto.forma_de_apuracao", cp.forma_de_apuracao, "Forma de Apuração",
+                   [{"value":"HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL","label":"Pelo critério mais favorável"},
+                    {"value":"HORAS_EXTRAS_PELA_JORNADA_REAL","label":"Pela jornada real"},
+                    {"value":"HORAS_EXTRAS_PELA_JORNADA_PADRAO","label":"Pela jornada padrão"}]) }}
+  {{ field_decimal("cartao_de_ponto.jornada_diaria_h", cp.jornada_diaria_h, "Jornada Diária (h)") }}
+  {{ field_decimal("cartao_de_ponto.jornada_semanal_h", cp.jornada_semanal_h, "Jornada Semanal (h)") }}
+  {{ field_text("cartao_de_ponto.intervalo_intrajornada_min", cp.intervalo_intrajornada_min, "Intervalo Intrajornada (min)") }}
+</div>
+
+<h4 style="margin: 14px 0 8px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase; display: flex; justify-content: space-between; align-items: center;">
+  <span>Programação Semanal ({{ cp.programacao_semanal|length }} dias)</span>
+  <button type="button" class="btn-add" style="font-size: 0.78rem; padding: 4px 10px;"
+          onclick="salvarCampo('cartao_de_ponto.programacao_semanal.add', '', this)">
+    + Adicionar Dia
+  </button>
+</h4>
+{% if cp.programacao_semanal|length == 0 %}
+  <p class="repeater-vazio">Sem programação semanal cadastrada.</p>
+{% else %}
+  <div style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+      <thead>
+        <tr style="background: #f8f9fa;">
+          <th style="padding: 6px; border: 1px solid #dee2e6;">Dia</th>
+          <th style="padding: 6px; border: 1px solid #dee2e6;">Turno 1 Início</th>
+          <th style="padding: 6px; border: 1px solid #dee2e6;">Turno 1 Fim</th>
+          <th style="padding: 6px; border: 1px solid #dee2e6;">Turno 2 Início</th>
+          <th style="padding: 6px; border: 1px solid #dee2e6;">Turno 2 Fim</th>
+          <th style="padding: 6px; border: 1px solid #dee2e6; width: 40px;">✕</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for psd in cp.programacao_semanal %}
+          {% set pi = loop.index0 %}
+          <tr>
+            <td style="padding: 4px; border: 1px solid #dee2e6;">
+              <select onchange="salvarCampo('cartao_de_ponto.programacao_semanal[{{ pi }}].dia', this.value, this)" style="width: 100%; padding: 3px;">
+                {% for d in ["DOM","SEG","TER","QUA","QUI","SEX","SAB"] %}
+                  <option value="{{ d }}" {% if psd.dia == d %}selected{% endif %}>{{ d }}</option>
+                {% endfor %}
+              </select>
+            </td>
+            <td style="padding: 4px; border: 1px solid #dee2e6;">
+              <input type="text" value="{{ psd.turno1_inicio or '' }}" placeholder="HH:MM" maxlength="5"
+                     style="width: 100%; padding: 3px;"
+                     onchange="salvarCampo('cartao_de_ponto.programacao_semanal[{{ pi }}].turno1_inicio', this.value, this)">
+            </td>
+            <td style="padding: 4px; border: 1px solid #dee2e6;">
+              <input type="text" value="{{ psd.turno1_fim or '' }}" placeholder="HH:MM" maxlength="5"
+                     style="width: 100%; padding: 3px;"
+                     onchange="salvarCampo('cartao_de_ponto.programacao_semanal[{{ pi }}].turno1_fim', this.value, this)">
+            </td>
+            <td style="padding: 4px; border: 1px solid #dee2e6;">
+              <input type="text" value="{{ psd.turno2_inicio or '' }}" placeholder="HH:MM" maxlength="5"
+                     style="width: 100%; padding: 3px;"
+                     onchange="salvarCampo('cartao_de_ponto.programacao_semanal[{{ pi }}].turno2_inicio', this.value, this)">
+            </td>
+            <td style="padding: 4px; border: 1px solid #dee2e6;">
+              <input type="text" value="{{ psd.turno2_fim or '' }}" placeholder="HH:MM" maxlength="5"
+                     style="width: 100%; padding: 3px;"
+                     onchange="salvarCampo('cartao_de_ponto.programacao_semanal[{{ pi }}].turno2_fim', this.value, this)">
+            </td>
+            <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+              <button type="button" class="btn-remove" style="padding: 2px 6px; font-size: 0.7rem;"
+                      onclick="salvarCampo('cartao_de_ponto.programacao_semanal.remove[{{ pi }}]', '', this)">✕</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endif %}
+{% endcall %}
+
+{# ─────────── 7. FGTS ─────────── #}
+{% set fgts = dados.fgts %}
+{% call secao("7. FGTS") %}
+{{ field_checkbox("fgts.apurar", fgts.apurar, "Apurar FGTS") }}
+<div class="campos-grid">
+  {{ field_radio("fgts.tipo_de_verba", fgts.tipo_de_verba, "Tipo de Verba",
+                  [{"value":"NORMAL","label":"Normal"},{"value":"VERBA_RESCISORIA","label":"Verba Rescisória"}]) }}
+  {{ field_radio("fgts.compor_principal", fgts.compor_principal, "Compor Principal",
+                  [{"value":"SIM","label":"Sim"},{"value":"NAO","label":"Não"}]) }}
+  {{ field_select("fgts.aliquota", fgts.aliquota, "Alíquota",
+                   [{"value":"8","label":"8% (CLT)"},
+                    {"value":"2","label":"2% (Doméstico)"},
+                    {"value":"INFORMADO","label":"Informado"}]) }}
+  {{ field_decimal("fgts.aliquota_informada", fgts.aliquota_informada, "Alíquota Informada (%)") }}
+  {{ field_select("fgts.multa_do_fgts", fgts.multa_do_fgts, "Multa do FGTS",
+                   [{"value":"MULTA_DE_40","label":"40% (sem justa causa)"},
+                    {"value":"MULTA_DE_20","label":"20% (rescisão indireta)"},
+                    {"value":"SEM_MULTA","label":"Sem multa"}]) }}
+  {{ field_radio("fgts.tipo_do_valor_da_multa", fgts.tipo_do_valor_da_multa, "Tipo Valor Multa",
+                  [{"value":"CALCULADO","label":"Calculado"},{"value":"INFORMADO","label":"Informado"}]) }}
+  {{ field_decimal("fgts.multa_informada", fgts.multa_informada, "Multa Informada (R$)") }}
+  {{ field_select("fgts.incidencia_do_fgts", fgts.incidencia_do_fgts, "Incidência do FGTS",
+                   [{"value":"VERBAS_REMUNERATORIAS","label":"Verbas Remuneratórias"},
+                    {"value":"VERBAS_REMUNERATORIAS_E_INDENIZATORIAS","label":"Remuneratórias + Indenizatórias"},
+                    {"value":"TODAS_AS_VERBAS","label":"Todas as Verbas"}]) }}
+</div>
+{{ field_checkbox("fgts.multa_do_artigo_467", fgts.multa_do_artigo_467, "Multa do Art. 467 CLT (50% sobre verbas incontroversas)") }}
+{% endcall %}
+
+{# ─────────── 8. Contribuição Social (INSS) ─────────── #}
+{% set inss = dados.contribuicao_social %}
+{% call secao("8. Contribuição Social (INSS)") %}
+{{ field_checkbox("contribuicao_social.apurar", inss.apurar, "Apurar Contribuição Social") }}
+<div class="campos-grid">
+  {{ field_text("contribuicao_social.indice_atualizacao", inss.indice_atualizacao, "Índice Atualização") }}
+  {{ field_decimal("contribuicao_social.aliquota_rat", inss.aliquota_rat, "Alíquota RAT (%)") }}
+  {{ field_decimal("contribuicao_social.fap", inss.fap, "FAP") }}
+  {{ field_radio("contribuicao_social.regime_caixa_competencia", inss.regime_caixa_competencia,
+                  "Regime",
+                  [{"value":"CAIXA","label":"Caixa"},{"value":"COMPETENCIA","label":"Competência"}]) }}
+</div>
+{{ field_checkbox("contribuicao_social.multa_inss", inss.multa_inss, "Aplicar Multa INSS") }}
+{{ field_checkbox("contribuicao_social.juros_inss", inss.juros_inss, "Aplicar Juros INSS") }}
+{% endcall %}
+
+{# ─────────── 9. Imposto de Renda ─────────── #}
+{% set ir = dados.imposto_renda %}
+{% call secao("9. Imposto de Renda") %}
+{{ field_checkbox("imposto_renda.apurar", ir.apurar, "Apurar IR") }}
+<div class="campos-grid">
+  {{ field_select("imposto_renda.regime_tributacao", ir.regime_tributacao, "Regime Tributação",
+                   [{"value":"MESES_TRIBUTAVEIS","label":"Meses Tributáveis"},
+                    {"value":"RRA","label":"RRA"},
+                    {"value":"REGIME_GERAL","label":"Regime Geral"}]) }}
+  {{ field_text("imposto_renda.meses_tributaveis", ir.meses_tributaveis, "Meses Tributáveis (RRA)") }}
+  {{ field_text("imposto_renda.quantidade_dependentes", ir.quantidade_dependentes, "Qtde de Dependentes") }}
+  {{ field_decimal("imposto_renda.deducoes", ir.deducoes, "Deduções (R$)") }}
+  {{ field_decimal("imposto_renda.pensao_alimenticia", ir.pensao_alimenticia, "Pensão Alimentícia (R$)") }}
+</div>
+{% endcall %}
+
+{# ─────────── 10. Honorários ─────────── #}
+{% set honorarios = dados.honorarios or [] %}
+{% call secao("10. Honorários (Advocatícios, Periciais, etc.)") %}
+<div class="repeater" data-prefix="honorarios">
+  <div class="repeater-header">
+    <strong>Honorários ({{ honorarios|length }})</strong>
+    <button type="button" class="btn-add" onclick="salvarCampo('honorarios.add', '', this)">+ Adicionar Honorário</button>
+  </div>
+  <div class="repeater-body">
+    {% if honorarios|length == 0 %}
+      <p class="repeater-vazio">Nenhum honorário cadastrado.</p>
+    {% else %}
+      {% for h in honorarios %}
+        {% set hi = loop.index0 %}
+        <details class="repeater-item" {% if loop.first %}open{% endif %}>
+          <summary>
+            <span class="item-titulo">
+              Honorário #{{ loop.index }} — <strong>{{ h.descricao or '?' }}</strong>
+              {% if h.aliquota %}<span style="color: #6c757d; font-size: 0.78rem;"> ({{ h.aliquota }}%)</span>{% endif %}
+            </span>
+            <button type="button" class="btn-remove" onclick="event.preventDefault(); salvarCampo('honorarios.remove[{{ hi }}]', '', this)">✕</button>
+          </summary>
+          <div class="item-corpo">
+            <div class="campos-grid">
+              {{ field_text("honorarios[" ~ hi ~ "].descricao", h.descricao, "Descrição", required=true) }}
+              {{ field_select("honorarios[" ~ hi ~ "].tp_honorario", h.tp_honorario, "Tipo de Honorário",
+                               [{"value":"ADVOCATICIOS","label":"Advocatícios (Sucumbenciais)"},
+                                {"value":"ASSISTENCIAIS","label":"Assistenciais"},
+                                {"value":"CONTRATUAIS","label":"Contratuais"},
+                                {"value":"PERICIAIS_CONTADOR","label":"Periciais (Contador)"},
+                                {"value":"PERICIAIS_DOCUMENTOSCOPIO","label":"Periciais (Documentoscopia)"}], required=true) }}
+              {{ field_radio("honorarios[" ~ hi ~ "].tipo_de_devedor", h.tipo_de_devedor, "Tipo Devedor",
+                              [{"value":"RECLAMADO","label":"Reclamado"},{"value":"RECLAMANTE","label":"Reclamante (JG suspensa)"}]) }}
+              {{ field_radio("honorarios[" ~ hi ~ "].tipo_valor", h.tipo_valor, "Tipo Valor",
+                              [{"value":"CALCULADO","label":"Calculado"},{"value":"INFORMADO","label":"Informado"}]) }}
+              {{ field_decimal("honorarios[" ~ hi ~ "].aliquota", h.aliquota, "Alíquota (%) ou Valor Fixo") }}
+              {{ field_select("honorarios[" ~ hi ~ "].base_para_apuracao", h.base_para_apuracao, "Base para Apuração",
+                               [{"value":"BRUTO","label":"Bruto"},
+                                {"value":"BRUTO_MENOS_CONTRIBUICAO_SOCIAL","label":"Bruto (-) CS"},
+                                {"value":"BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA","label":"Bruto (-) CS (-) PrevPriv"},
+                                {"value":"VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL","label":"Verbas que não compõem o Principal"}]) }}
+            </div>
+            <h4 style="margin: 12px 0 6px; color: #6c757d; font-size: 0.82rem; text-transform: uppercase;">Credor</h4>
+            <div class="campos-grid">
+              {{ field_text("honorarios[" ~ hi ~ "].nome_credor", h.nome_credor, "Nome Credor", required=true) }}
+              {{ field_radio("honorarios[" ~ hi ~ "].tipo_documento_fiscal_credor", h.tipo_documento_fiscal_credor,
+                              "Tipo Doc Fiscal",
+                              [{"value":"CPF","label":"CPF"},{"value":"CNPJ","label":"CNPJ"},{"value":"CEI","label":"CEI"}]) }}
+              {{ field_text("honorarios[" ~ hi ~ "].numero_documento_fiscal_credor", h.numero_documento_fiscal_credor, "Número") }}
+            </div>
+            {{ field_checkbox("honorarios[" ~ hi ~ "].apurar_irrf", h.apurar_irrf, "Apurar IRRF sobre o honorário") }}
+            {{ field_checkbox("honorarios[" ~ hi ~ "].incidir_sobre_juros", h.incidir_sobre_juros, "Incidir sobre Juros") }}
+            {{ field_checkbox("honorarios[" ~ hi ~ "].aplicar_juros", h.aplicar_juros, "Aplicar Juros sobre o Honorário") }}
+          </div>
+        </details>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+{% endcall %}
+
+{# ─────────── 11. Custas Judiciais ─────────── #}
+{% set custas = dados.custas %}
+{% call secao("11. Custas Judiciais") %}
+<div class="campos-grid">
+  {{ field_decimal("custas.percentual", custas.percentual, "Percentual (%)") }}
+  {{ field_radio("custas.responsavel", custas.responsavel, "Responsável",
+                  [{"value":"RECLAMADO","label":"Reclamado"},
+                   {"value":"RECLAMANTE","label":"Reclamante"},
+                   {"value":"AMBOS","label":"Ambos"},
+                   {"value":"NAO_SE_APLICA","label":"Não se aplica"}]) }}
+  {{ field_decimal("custas.valor_periciais", custas.valor_periciais, "Valor Periciais (R$)") }}
+</div>
+{% endcall %}
+
+{# ─────────── 12. Correção, Juros e Multa ─────────── #}
+{% set cj = dados.correcao_juros %}
+{% call secao("12. Correção, Juros e Multa") %}
+<div class="campos-grid">
+  {{ field_select("correcao_juros.indice_correcao", cj.indice_correcao, "Índice de Correção",
+                   [{"value":"IPCAE","label":"IPCA-E"},
+                    {"value":"TR","label":"TR"},
+                    {"value":"INPC","label":"INPC"},
+                    {"value":"SELIC","label":"SELIC"},
+                    {"value":"IPCA","label":"IPCA"},
+                    {"value":"TRD","label":"TRD"}]) }}
+  {{ field_select("correcao_juros.taxa_juros", cj.taxa_juros, "Taxa de Juros",
+                   [{"value":"TRD_SIMPLES","label":"TRD Simples"},
+                    {"value":"TR_SIMPLES","label":"TR Simples"},
+                    {"value":"SELIC","label":"SELIC"},
+                    {"value":"TAXA_LEGAL","label":"Taxa Legal"},
+                    {"value":"TR_FGTS","label":"TR FGTS"}]) }}
+  {{ field_radio("correcao_juros.base_juros", cj.base_juros, "Base dos Juros",
+                  [{"value":"VERBA","label":"Verba"},
+                   {"value":"PRINCIPAL","label":"Principal"},
+                   {"value":"BRUTO","label":"Bruto"}]) }}
+</div>
+{{ field_checkbox("correcao_juros.aplicar_ec_113", cj.aplicar_ec_113, "Aplicar EC 113/2021 (IPCA-E + SELIC pós ADC 58)") }}
+{{ field_checkbox("correcao_juros.sumula_439_juros_desde_ajuizamento", cj.sumula_439_juros_desde_ajuizamento, "Súmula 439 TST — Juros desde Ajuizamento") }}
+{% endcall %}
