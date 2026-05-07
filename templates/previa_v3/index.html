@@ -97,12 +97,9 @@
 {{ field_textarea("processo.comentarios", d.comentarios, "Comentários", rows=3) }}
 {% endcall %}
 
-{# ─────────── PLACEHOLDERS para próximas sub-etapas ─────────── #}
-{% call secao("2. Histórico Salarial — pendente (sub-etapa 2B.3)") %}
-<p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">
-  Esta seção será implementada na sub-etapa <strong>2B.3</strong>. Por ora, mostra apenas placeholder.
-</p>
-{% endcall %}
+{# ─────────── 2. Histórico Salarial (sub-etapa 2B.3) ─────────── #}
+{% set historico_salarial = dados.historico_salarial or [] %}
+{% include "previa_v3/_secao_historico.html" %}
 
 {% call secao("3-4. Faltas e Férias — pendente (sub-etapa 2B.5)") %}
 <p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">

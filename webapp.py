@@ -546,12 +546,12 @@ async def exibir_previa_v3(
 
     dados_v2 = calculo.dados() or {}
 
-    # Migração lossy v2 → v3 (mínima — só Dados do Processo por ora).
-    # Etapa 2B.6 vai estender para todas as seções com endpoint dedicado.
+    # Migração lossy v2 → v3 (Etapa 2B.6 vai criar endpoint dedicado).
     proc_v2 = dados_v2.get("processo", {}) or {}
     contrato_v2 = dados_v2.get("contrato", {}) or {}
     aviso_v2 = dados_v2.get("aviso_previo", {}) or {}
     presc_v2 = dados_v2.get("prescricao", {}) or {}
+    hs_v2 = dados_v2.get("historico_salarial") or []
 
     try:
         processo_v3 = DadosProcesso(
@@ -593,7 +593,47 @@ async def exibir_previa_v3(
         logger.warning(f"Migração v2→v3 falhou para {sessao_id}: {e}")
         processo_v3 = DadosProcesso()
 
-    dados_v3 = {"processo": processo_v3}
+    # Migração v2 → v3 do Histórico Salarial
+    from infrastructure.pjecalc_pages import HistoricoSalarialEntry, HistoricoSalarialOcorrencia
+    historico_v3 = []
+    for h in hs_v2:
+        try:
+            ocs = []
+            for i, oc in enumerate(h.get("ocorrencias", []) or []):
+                if isinstance(oc, dict):
+                    ocs.append(HistoricoSalarialOcorrencia(
+                        indice=i,
+                        competencia=oc.get("competencia") or oc.get("mes_ano") or "",
+                        ativo=bool(oc.get("ativo", True)),
+                        valor=str(oc.get("valor")) if oc.get("valor") is not None else None,
+                        valor_incidencia_cs=(
+                            str(oc.get("valor_incidencia_cs")) if oc.get("valor_incidencia_cs") is not None else None
+                        ),
+                        valor_incidencia_fgts=(
+                            str(oc.get("valor_incidencia_fgts")) if oc.get("valor_incidencia_fgts") is not None else None
+                        ),
+                        cs_recolhida=bool(oc.get("cs_recolhida") or oc.get("contribuicoes_ja_recolhidas", False)),
+                        fgts_recolhido=bool(oc.get("fgts_recolhido") or oc.get("fgts_ja_recolhido", False)),
+                    ))
+            historico_v3.append(HistoricoSalarialEntry(
+                nome=h.get("nome", ""),
+                tipo_variacao_da_parcela="VARIAVEL" if h.get("variavel") else "FIXA",
+                competencia_inicial=h.get("data_inicio") or h.get("competencia_inicial"),
+                competencia_final=h.get("data_fim") or h.get("competencia_final"),
+                tipo_valor="INFORMADO" if (h.get("tipo_valor") == "Informado" or h.get("valor") is not None) else "CALCULADO",
+                valor_para_base_de_calculo=str(h.get("valor")) if h.get("valor") is not None else None,
+                fgts=bool(h.get("incidencia_fgts", True)),
+                inss=bool(h.get("incidencia_cs", h.get("incidencia_inss", True))),
+                ocorrencias=ocs,
+            ))
+        except Exception as e:
+            logger.warning(f"Migração HS entry falhou: {e}")
+            continue
+
+    dados_v3 = {
+        "processo": processo_v3,
+        "historico_salarial": historico_v3,
+    }
 
     return templates.TemplateResponse(
         request, "previa_v3/index.html",
@@ -709,7 +749,110 @@ async def editar_campo_previa_v3(
         repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
         return JSONResponse({"sucesso": True})
 
-    # Campo não-mapeado por ora (verbas, histórico, etc.)
+    # ── Histórico Salarial (sub-etapa 2B.3) ──
+    # Padrões aceitos:
+    #   historico_salarial.add                          → adicionar entry vazia
+    #   historico_salarial.remove[N]                    → remover entry N
+    #   historico_salarial[N].<campo>                   → editar campo da entry N
+    #   historico_salarial[N].ocorrencias.add           → adicionar ocorrência
+    #   historico_salarial[N].ocorrencias.remove[M]     → remover ocorrência M
+    #   historico_salarial[N].ocorrencias[M].<campo>    → editar campo da ocorrência
+    if campo.startswith("historico_salarial"):
+        import re as _re
+        hs_list = dados.setdefault("historico_salarial", [])
+
+        # Normalização: campos v3 → chaves v2 do dict de cada entry
+        _MAP_HS_FIELD = {
+            "nome": "nome",
+            "tipo_variacao_da_parcela": "tipo_variacao_da_parcela",
+            "competencia_inicial": "data_inicio",
+            "competencia_final": "data_fim",
+            "tipo_valor": "tipo_valor",
+            "valor_para_base_de_calculo": "valor",
+            "fgts": "incidencia_fgts",
+            "inss": "incidencia_cs",
+        }
+        _MAP_OC_FIELD = {
+            "competencia": "competencia",
+            "ativo": "ativo",
+            "valor": "valor",
+            "valor_incidencia_cs": "valor_incidencia_cs",
+            "valor_incidencia_fgts": "valor_incidencia_fgts",
+            "cs_recolhida": "cs_recolhida",
+            "fgts_recolhido": "fgts_recolhido",
+        }
+
+        # 1. add / remove de entry
+        if campo == "historico_salarial.add":
+            hs_list.append({"nome": "", "data_inicio": "", "data_fim": "", "valor": None,
+                            "incidencia_fgts": True, "incidencia_cs": True, "ocorrencias": []})
+            repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+            return JSONResponse({"sucesso": True})
+
+        m = _re.match(r"^historico_salarial\.remove\[(\d+)\]$", campo)
+        if m:
+            idx = int(m.group(1))
+            if 0 <= idx < len(hs_list):
+                hs_list.pop(idx)
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+            return JSONResponse({"sucesso": False, "erro": f"índice {idx} fora de range"}, status_code=400)
+
+        # 2. add / remove de ocorrência: historico_salarial[N].ocorrencias.add
+        m = _re.match(r"^historico_salarial\[(\d+)\]\.ocorrencias\.add$", campo)
+        if m:
+            hi = int(m.group(1))
+            if 0 <= hi < len(hs_list):
+                ocs = hs_list[hi].setdefault("ocorrencias", [])
+                ocs.append({"competencia": "", "ativo": True, "valor": None,
+                            "valor_incidencia_cs": None, "valor_incidencia_fgts": None,
+                            "cs_recolhida": False, "fgts_recolhido": False})
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+        m = _re.match(r"^historico_salarial\[(\d+)\]\.ocorrencias\.remove\[(\d+)\]$", campo)
+        if m:
+            hi, oi = int(m.group(1)), int(m.group(2))
+            if 0 <= hi < len(hs_list):
+                ocs = hs_list[hi].get("ocorrencias", [])
+                if 0 <= oi < len(ocs):
+                    ocs.pop(oi)
+                    repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                    return JSONResponse({"sucesso": True})
+
+        # 3. editar campo da ocorrência: historico_salarial[N].ocorrencias[M].<campo>
+        m = _re.match(r"^historico_salarial\[(\d+)\]\.ocorrencias\[(\d+)\]\.(\w+)$", campo)
+        if m:
+            hi, oi, attr = int(m.group(1)), int(m.group(2)), m.group(3)
+            if 0 <= hi < len(hs_list):
+                ocs = hs_list[hi].setdefault("ocorrencias", [])
+                while len(ocs) <= oi:
+                    ocs.append({})
+                v2_attr = _MAP_OC_FIELD.get(attr, attr)
+                ocs[oi][v2_attr] = valor_normalizado
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+        # 4. editar campo da entry: historico_salarial[N].<campo>
+        m = _re.match(r"^historico_salarial\[(\d+)\]\.(\w+)$", campo)
+        if m:
+            hi, attr = int(m.group(1)), m.group(2)
+            if 0 <= hi < len(hs_list):
+                v2_attr = _MAP_HS_FIELD.get(attr, attr)
+                # Caso especial: tipo_variacao_da_parcela vira flag 'variavel' booleano
+                if attr == "tipo_variacao_da_parcela":
+                    hs_list[hi]["variavel"] = (valor_normalizado == "VARIAVEL")
+                else:
+                    hs_list[hi][v2_attr] = valor_normalizado
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+        return JSONResponse(
+            {"sucesso": False, "erro": f"Padrão '{campo}' não reconhecido em historico_salarial.*"},
+            status_code=400,
+        )
+
+    # Campo não-mapeado por ora (verbas, etc.)
     return JSONResponse(
         {"sucesso": False, "erro": f"Campo '{campo}' ainda não mapeado v3→v2 (próximas sub-etapas)"},
         status_code=400,

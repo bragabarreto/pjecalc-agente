@@ -1,0 +1,160 @@
+{# Sub-etapa 2B.3 — Página Histórico Salarial #}
+{% from "previa_v3/_macros.html" import field_text, field_date, field_decimal, field_select, field_radio, field_checkbox, secao %}
+
+{% call secao("2. Histórico Salarial") %}
+
+<p style="font-size: 0.85rem; color: #6c757d; margin-bottom: 12px;">
+  Cada entrada representa um Histórico Salarial cadastrado (ex.: "ÚLTIMA REMUNERAÇÃO",
+  "SALÁRIO PAGO POR FORA"). Para cada uma, o PJE-Calc gera <em>ocorrências mensais</em>
+  com valores que podem ser ajustados individualmente (importante para preencher
+  Contribuição Social e FGTS por mês).
+</p>
+
+<div class="repeater" data-prefix="historico_salarial">
+  <div class="repeater-header">
+    <strong>Entradas ({{ historico_salarial|length }})</strong>
+    <button type="button" class="btn-add"
+            onclick="salvarCampo('historico_salarial.add', '', this)">
+      + Adicionar Entrada
+    </button>
+  </div>
+
+  <div class="repeater-body">
+    {% if historico_salarial|length == 0 %}
+      <p class="repeater-vazio">Nenhuma entrada de Histórico Salarial. Clique em <strong>+ Adicionar Entrada</strong>.</p>
+    {% else %}
+      {% for hs in historico_salarial %}
+        {% set hi = loop.index0 %}
+        <details class="repeater-item" {% if loop.first %}open{% endif %}>
+          <summary>
+            <span class="item-titulo">
+              Entrada #{{ loop.index }}
+              {%- if hs.nome %} — <strong>{{ hs.nome }}</strong>{% endif %}
+              {%- if hs.competencia_inicial and hs.competencia_final %}
+                ({{ hs.competencia_inicial }} → {{ hs.competencia_final }})
+              {% endif %}
+            </span>
+            <button type="button" class="btn-remove"
+                    onclick="event.preventDefault(); salvarCampo('historico_salarial.remove[{{ hi }}]', '', this)">
+              ✕ Remover
+            </button>
+          </summary>
+          <div class="item-corpo">
+            {# Campos básicos da entry #}
+            <div class="campos-grid">
+              {{ field_text("historico_salarial[" ~ hi ~ "].nome", hs.nome,
+                            "Nome", required=true,
+                            placeholder="Ex.: ÚLTIMA REMUNERAÇÃO, SALÁRIO PAGO POR FORA") }}
+              {{ field_radio("historico_salarial[" ~ hi ~ "].tipo_variacao_da_parcela",
+                              hs.tipo_variacao_da_parcela,
+                              "Tipo Variação",
+                              [{"value":"FIXA","label":"Fixa"},
+                               {"value":"VARIAVEL","label":"Variável"}]) }}
+              {{ field_date("historico_salarial[" ~ hi ~ "].competencia_inicial",
+                             hs.competencia_inicial, "Competência Inicial", required=true) }}
+              {{ field_date("historico_salarial[" ~ hi ~ "].competencia_final",
+                             hs.competencia_final, "Competência Final", required=true) }}
+              {{ field_radio("historico_salarial[" ~ hi ~ "].tipo_valor",
+                              hs.tipo_valor,
+                              "Tipo Valor",
+                              [{"value":"INFORMADO","label":"Informado"},
+                               {"value":"CALCULADO","label":"Calculado"}]) }}
+              {{ field_decimal("historico_salarial[" ~ hi ~ "].valor_para_base_de_calculo",
+                                hs.valor_para_base_de_calculo,
+                                "Valor (R$)") }}
+            </div>
+
+            <h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">Incidências</h4>
+            <div style="display: flex; gap: 18px; flex-wrap: wrap;">
+              {{ field_checkbox("historico_salarial[" ~ hi ~ "].fgts", hs.fgts, "Incide FGTS") }}
+              {{ field_checkbox("historico_salarial[" ~ hi ~ "].inss", hs.inss, "Incide INSS / Contribuição Social") }}
+            </div>
+
+            {# ── Sub-tabela: Ocorrências mensais ── #}
+            {% set ocs = hs.ocorrencias or [] %}
+            <h4 style="margin: 18px 0 8px; color: #1a3a6b; font-size: 0.9rem; display: flex; justify-content: space-between; align-items: center;">
+              <span>Ocorrências mensais ({{ ocs|length }})</span>
+              <button type="button" class="btn-add" style="font-size: 0.78rem; padding: 4px 10px;"
+                      onclick="salvarCampo('historico_salarial[{{ hi }}].ocorrencias.add', '', this)">
+                + Adicionar Mês
+              </button>
+            </h4>
+
+            {% if ocs|length == 0 %}
+              <p style="color: #6c757d; font-style: italic; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.85rem; margin: 0;">
+                Sem ocorrências cadastradas. Quando a automação gerar (via "Gerar Ocorrências" no PJE-Calc),
+                cada mês do período aparecerá aqui editável.
+              </p>
+            {% else %}
+              <div style="overflow-x: auto;">
+                <table class="ocorrencias-tabela" style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                  <thead>
+                    <tr style="background: #f8f9fa;">
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6; width: 40px;">Ativo</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Competência (MM/YYYY)</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Valor</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Valor CS Devidos</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Valor FGTS</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">CS Recolhida</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">FGTS Recolhido</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for oc in ocs %}
+                      {% set oi = loop.index0 %}
+                      <tr>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+                          <input type="checkbox" {% if oc.ativo %}checked{% endif %}
+                                 onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ oi }}].ativo', this.checked, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.competencia or '' }}"
+                                 placeholder="MM/AAAA" maxlength="7"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.85rem;"
+                                 onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ oi }}].competencia', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.valor or '' }}"
+                                 placeholder="0,00" inputmode="decimal"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.85rem; text-align: right;"
+                                 onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ oi }}].valor', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.valor_incidencia_cs or '' }}"
+                                 placeholder="0,00" inputmode="decimal"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.85rem; text-align: right;"
+                                 onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ oi }}].valor_incidencia_cs', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.valor_incidencia_fgts or '' }}"
+                                 placeholder="0,00" inputmode="decimal"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.85rem; text-align: right;"
+                                 onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ oi }}].valor_incidencia_fgts', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+                          <input type="checkbox" {% if oc.cs_recolhida %}checked{% endif %}
+                                 onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ oi }}].cs_recolhida', this.checked, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+                          <input type="checkbox" {% if oc.fgts_recolhido %}checked{% endif %}
+                                 onchange="salvarCampo('historico_salarial[{{ hi }}].ocorrencias[{{ oi }}].fgts_recolhido', this.checked, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+                          <button type="button" class="btn-remove" style="padding: 2px 6px; font-size: 0.7rem;"
+                                  onclick="salvarCampo('historico_salarial[{{ hi }}].ocorrencias.remove[{{ oi }}]', '', this)">✕</button>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+          </div>
+        </details>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+{% endcall %}
