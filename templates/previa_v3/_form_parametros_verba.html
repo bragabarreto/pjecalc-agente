@@ -1,0 +1,191 @@
+{# Partial: form de Parâmetros da Verba (~30 campos).
+
+   Reutilizável para verba principal e reflexos (recursivo).
+
+   Variáveis esperadas:
+     - prefix: caminho da verba (ex.: "verbas[0]" ou "verbas[0].reflexos[1]")
+     - p: instância de ParametrosVerba
+
+   Não inclui ocorrências nem reflexos — apenas Parâmetros.
+#}
+{% from "previa_v3/_macros.html" import field_text, field_date, field_decimal, field_select, field_radio, field_checkbox, field_textarea %}
+
+{# ── Identificação ── #}
+<div class="campos-grid">
+  {{ field_text(prefix ~ ".parametros.descricao", p.descricao, "Descrição (Nome da Verba)", required=true) }}
+  {{ field_text(prefix ~ ".parametros.assuntos_cnj", p.assuntos_cnj, "Assunto CNJ",
+                placeholder="ex.: 2581 (Remuneração)") }}
+</div>
+
+{# ── Tipo + Característica + Ocorrência ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Tipo, Característica e Ocorrência
+</h4>
+<div class="campos-grid">
+  {{ field_radio(prefix ~ ".parametros.tipo_de_verba", p.tipo_de_verba, "Tipo de Verba",
+                  [{"value":"PRINCIPAL","label":"Principal"},
+                   {"value":"REFLEXA","label":"Reflexa"}]) }}
+  {{ field_radio(prefix ~ ".parametros.tipo_variacao_da_parcela", p.tipo_variacao_da_parcela,
+                  "Tipo Variação",
+                  [{"value":"FIXA","label":"Fixa"},
+                   {"value":"VARIAVEL","label":"Variável"}]) }}
+  {{ field_radio(prefix ~ ".parametros.caracteristica_verba", p.caracteristica_verba,
+                  "Característica",
+                  [{"value":"COMUM","label":"Comum"},
+                   {"value":"DECIMO_TERCEIRO_SALARIO","label":"13º Salário"},
+                   {"value":"AVISO_PREVIO","label":"Aviso Prévio"},
+                   {"value":"FERIAS","label":"Férias"}]) }}
+  {{ field_radio(prefix ~ ".parametros.ocorrencia_pagto", p.ocorrencia_pagto,
+                  "Ocorrência de Pagamento",
+                  [{"value":"MENSAL","label":"Mensal"},
+                   {"value":"DEZEMBRO","label":"Dezembro"},
+                   {"value":"DESLIGAMENTO","label":"Desligamento"},
+                   {"value":"PERIODO_AQUISITIVO","label":"Período Aquisitivo"}]) }}
+</div>
+
+{# ── Período ── #}
+<div class="campos-grid">
+  {{ field_date(prefix ~ ".parametros.periodo_inicial", p.periodo_inicial, "Período Inicial") }}
+  {{ field_date(prefix ~ ".parametros.periodo_final", p.periodo_final, "Período Final") }}
+</div>
+
+{# ── Reflexa-only (visíveis quando tipo_de_verba=REFLEXA) ── #}
+{% if p.tipo_de_verba == "REFLEXA" %}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Configuração da Reflexa
+</h4>
+<div class="campos-grid">
+  {{ field_radio(prefix ~ ".parametros.gera_reflexo", p.gera_reflexo,
+                  "Gera Reflexo Sobre",
+                  [{"value":"DEVIDO","label":"Devido"},
+                   {"value":"DIFERENCA","label":"Diferença"}]) }}
+  {{ field_radio(prefix ~ ".parametros.gerar_principal", p.gerar_principal,
+                  "Gerar Principal Sobre",
+                  [{"value":"DEVIDO","label":"Devido"},
+                   {"value":"DIFERENCA","label":"Diferença"}]) }}
+  {{ field_radio(prefix ~ ".parametros.compor_principal", p.compor_principal,
+                  "Compor Principal",
+                  [{"value":"SIM","label":"Sim"},
+                   {"value":"NAO","label":"Não"}]) }}
+</div>
+{% endif %}
+
+{# ── Valor / Calculado ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Valor
+</h4>
+<div class="campos-grid">
+  {{ field_radio(prefix ~ ".parametros.valor", p.valor,
+                  "Tipo Valor",
+                  [{"value":"CALCULADO","label":"Calculado"},
+                   {"value":"INFORMADO","label":"Informado"}]) }}
+  {{ field_decimal(prefix ~ ".parametros.valor_informado", p.valor_informado,
+                    "Valor Informado (R$) — para Indenizações") }}
+</div>
+
+{# ── Incidências ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Incidências
+</h4>
+<div style="display: flex; gap: 18px; flex-wrap: wrap;">
+  {{ field_checkbox(prefix ~ ".parametros.fgts", p.fgts, "FGTS") }}
+  {{ field_checkbox(prefix ~ ".parametros.inss", p.inss, "INSS") }}
+  {{ field_checkbox(prefix ~ ".parametros.irpf", p.irpf, "IRPF") }}
+  {{ field_checkbox(prefix ~ ".parametros.previdencia_privada", p.previdencia_privada, "Previdência Privada") }}
+  {{ field_checkbox(prefix ~ ".parametros.pensao_alimenticia", p.pensao_alimenticia, "Pensão Alimentícia") }}
+</div>
+
+{# ── Súmula 439 (juros desde ajuizamento) ── #}
+<div style="margin-top: 12px;">
+  {{ field_radio(prefix ~ ".parametros.ocorrencia_ajuizamento", p.ocorrencia_ajuizamento,
+                  "Ocorrência (Juros desde) — Súmula 439 TST",
+                  [{"value":"OCORRENCIAS_VENCIDAS","label":"Vencidas (arbitramento)"},
+                   {"value":"OCORRENCIAS_VENCIDAS_E_VINCENDAS","label":"Vencidas e Vincendas (ajuizamento)"}]) }}
+</div>
+
+{# ── Base de Cálculo ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Base de Cálculo
+</h4>
+<div class="campos-grid">
+  {{ field_select(prefix ~ ".parametros.tipo_da_base_tabelada", p.tipo_da_base_tabelada,
+                   "Tipo da Base Tabelada",
+                   [{"value":"MAIOR_REMUNERACAO","label":"Maior Remuneração"},
+                    {"value":"HISTORICO_SALARIAL","label":"Histórico Salarial"},
+                    {"value":"SALARIO_DA_CATEGORIA","label":"Salário da Categoria"},
+                    {"value":"SALARIO_MINIMO","label":"Salário Mínimo"},
+                    {"value":"VALOR_INFORMADO","label":"Valor Informado"}]) }}
+  {{ field_text(prefix ~ ".parametros.base_historicos", p.base_historicos,
+                 "Base Histórico (se HISTORICO_SALARIAL)",
+                 placeholder="ex.: ULTIMA_REMUNERACAO") }}
+  {{ field_select(prefix ~ ".parametros.integralizar_base", p.integralizar_base,
+                   "Integralizar Base",
+                   [{"value":"SIM","label":"Sim"},{"value":"NAO","label":"Não"}]) }}
+</div>
+
+{# ── Divisor / Multiplicador ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Fórmula (Divisor / Multiplicador)
+</h4>
+<div class="campos-grid">
+  {{ field_radio(prefix ~ ".parametros.tipo_de_divisor", p.tipo_de_divisor,
+                  "Tipo Divisor",
+                  [{"value":"INFORMADO","label":"Informado"},
+                   {"value":"CARGA_HORARIA","label":"Carga Horária"},
+                   {"value":"DIAS_UTEIS","label":"Dias Úteis"},
+                   {"value":"IMPORTADO_CARTAO_PONTO","label":"Cartão de Ponto"}]) }}
+  {{ field_decimal(prefix ~ ".parametros.outro_valor_do_divisor", p.outro_valor_do_divisor,
+                    "Valor Divisor (se INFORMADO)") }}
+  {{ field_decimal(prefix ~ ".parametros.outro_valor_do_multiplicador",
+                    p.outro_valor_do_multiplicador,
+                    "Multiplicador (ex.: 1,50 para HE 50%)") }}
+</div>
+
+{# ── Quantidade ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Quantidade
+</h4>
+<div class="campos-grid">
+  {{ field_radio(prefix ~ ".parametros.tipo_da_quantidade", p.tipo_da_quantidade,
+                  "Tipo Quantidade",
+                  [{"value":"INFORMADA","label":"Informada"},
+                   {"value":"IMPORTADA_CALENDARIO","label":"Calendário"},
+                   {"value":"IMPORTADA_CARTAO_PONTO","label":"Cartão de Ponto"}]) }}
+  {{ field_decimal(prefix ~ ".parametros.valor_informado_da_quantidade",
+                    p.valor_informado_da_quantidade,
+                    "Quantidade Informada (h, dias)") }}
+  {{ field_checkbox(prefix ~ ".parametros.aplicar_proporcionalidade_quantidade",
+                     p.aplicar_proporcionalidade_quantidade,
+                     "Aplicar Proporcionalidade à Quantidade") }}
+</div>
+
+{# ── Valor Pago (deduções) ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Valor Pago (deduções)
+</h4>
+<div class="campos-grid">
+  {{ field_radio(prefix ~ ".parametros.tipo_do_valor_pago", p.tipo_do_valor_pago,
+                  "Tipo Valor Pago",
+                  [{"value":"CALCULADO","label":"Calculado"},
+                   {"value":"INFORMADO","label":"Informado"}]) }}
+  {{ field_decimal(prefix ~ ".parametros.valor_informado_pago", p.valor_informado_pago,
+                    "Valor Pago Informado") }}
+  {{ field_checkbox(prefix ~ ".parametros.aplicar_proporcionalidade_valor_pago",
+                     p.aplicar_proporcionalidade_valor_pago,
+                     "Aplicar Proporcionalidade ao Valor Pago") }}
+</div>
+
+{# ── Outros ── #}
+<h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">
+  Outros parâmetros
+</h4>
+<div style="display: flex; gap: 18px; flex-wrap: wrap;">
+  {{ field_checkbox(prefix ~ ".parametros.zera_valor_negativo", p.zera_valor_negativo, "Zerar Valor Negativo") }}
+  {{ field_checkbox(prefix ~ ".parametros.excluir_falta_justificada", p.excluir_falta_justificada, "Excluir Falta Justificada") }}
+  {{ field_checkbox(prefix ~ ".parametros.excluir_falta_nao_justificada", p.excluir_falta_nao_justificada, "Excluir Falta Não-Justificada") }}
+  {{ field_checkbox(prefix ~ ".parametros.excluir_ferias_gozadas", p.excluir_ferias_gozadas, "Excluir Férias Gozadas") }}
+  {{ field_checkbox(prefix ~ ".parametros.dobra_valor_devido", p.dobra_valor_devido, "Dobrar Valor Devido") }}
+  {{ field_checkbox(prefix ~ ".parametros.aplicar_proporcionalidade_a_base", p.aplicar_proporcionalidade_a_base, "Aplicar Proporcionalidade à Base") }}
+</div>
+
+{{ field_textarea(prefix ~ ".parametros.comentarios", p.comentarios, "Comentários", rows=2) }}

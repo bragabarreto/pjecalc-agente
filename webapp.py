@@ -630,9 +630,107 @@ async def exibir_previa_v3(
             logger.warning(f"Migração HS entry falhou: {e}")
             continue
 
+    # Migração v2 → v3 das Verbas (com Parâmetros + Ocorrências + Reflexos)
+    from infrastructure.pjecalc_pages import (
+        Verba, ParametrosVerba, OcorrenciaVerba,
+    )
+    verbas_v3 = []
+    verbas_v2 = dados_v2.get("verbas") or []
+
+    def _migrar_oc(oc_v2: dict, indice: int) -> OcorrenciaVerba:
+        return OcorrenciaVerba(
+            indice=oc_v2.get("indice", indice) if isinstance(oc_v2, dict) else indice,
+            ativo=bool((oc_v2 or {}).get("ativo", True)),
+            termo_div=str((oc_v2 or {}).get("termo_div") or "") or None,
+            termo_mult=str((oc_v2 or {}).get("termo_mult") or "") or None,
+            termo_quant=str((oc_v2 or {}).get("termo_quant") or (oc_v2 or {}).get("quantidade") or "") or None,
+            valor_devido=str((oc_v2 or {}).get("valor_devido") or (oc_v2 or {}).get("valor") or "") or None,
+            dobra=bool((oc_v2 or {}).get("dobra", False)),
+        )
+
+    def _carac_v2_para_v3(s):
+        if not s:
+            return "COMUM"
+        s = str(s).strip().lower()
+        m = {"comum":"COMUM", "13o salario":"DECIMO_TERCEIRO_SALARIO",
+             "13o":"DECIMO_TERCEIRO_SALARIO", "decimo terceiro":"DECIMO_TERCEIRO_SALARIO",
+             "ferias":"FERIAS", "férias":"FERIAS", "aviso previo":"AVISO_PREVIO",
+             "aviso prévio":"AVISO_PREVIO"}
+        return m.get(s, "COMUM")
+
+    def _ocorr_v2_para_v3(s):
+        if not s: return "MENSAL"
+        s = str(s).strip().lower()
+        m = {"mensal":"MENSAL", "dezembro":"DEZEMBRO", "desligamento":"DESLIGAMENTO",
+             "periodo aquisitivo":"PERIODO_AQUISITIVO", "período aquisitivo":"PERIODO_AQUISITIVO"}
+        return m.get(s, "MENSAL")
+
+    def _migrar_verba(v2: dict) -> Verba | None:
+        if not isinstance(v2, dict):
+            return None
+        try:
+            params = ParametrosVerba(
+                descricao=v2.get("nome_pjecalc") or v2.get("nome_sentenca") or v2.get("nome", ""),
+                assuntos_cnj=str(v2.get("assuntos_cnj") or v2.get("cnj_codigo") or "2581"),
+                tipo_de_verba="REFLEXA" if (str(v2.get("tipo", "")).lower() == "reflexa" or v2.get("eh_reflexa")) else "PRINCIPAL",
+                tipo_variacao_da_parcela="VARIAVEL" if v2.get("variavel") else "FIXA",
+                caracteristica_verba=_carac_v2_para_v3(v2.get("caracteristica")),
+                ocorrencia_pagto=_ocorr_v2_para_v3(v2.get("ocorrencia") or v2.get("ocorrencia_pagamento")),
+                periodo_inicial=v2.get("periodo_inicio"),
+                periodo_final=v2.get("periodo_fim"),
+                valor=("INFORMADO" if v2.get("valor_informado") is not None else "CALCULADO"),
+                valor_informado=str(v2.get("valor_informado")) if v2.get("valor_informado") is not None else None,
+                fgts=bool(v2.get("incidencia_fgts", True)),
+                inss=bool(v2.get("incidencia_inss", v2.get("incidencia_cs", True))),
+                irpf=bool(v2.get("incidencia_ir", v2.get("incidencia_irpf", False))),
+                outro_valor_do_multiplicador=str(v2.get("percentual") or "") or None,
+                tipo_da_base_tabelada=(
+                    "MAIOR_REMUNERACAO" if str(v2.get("base_calculo","")).lower() in ("maior remuneracao","maior_remuneracao")
+                    else "HISTORICO_SALARIAL" if str(v2.get("base_calculo","")).lower() in ("historico salarial","historico_salarial")
+                    else "SALARIO_MINIMO" if str(v2.get("base_calculo","")).lower() in ("salario minimo","salario_minimo")
+                    else None
+                ),
+            )
+            ocs = [_migrar_oc(oc, i) for i, oc in enumerate(v2.get("ocorrencias") or [])]
+            refs = []
+            for r2 in (v2.get("reflexos") or v2.get("reflexas_sugeridas") or []):
+                if isinstance(r2, str):
+                    # Apenas nome — cria Verba mínima
+                    refs.append(Verba(parametros=ParametrosVerba(descricao=r2, tipo_de_verba="REFLEXA")))
+                else:
+                    rmig = _migrar_verba(r2)
+                    if rmig:
+                        rmig.parametros.tipo_de_verba = "REFLEXA"
+                        refs.append(rmig)
+            return Verba(
+                parametros=params,
+                ocorrencias=ocs,
+                reflexos=refs,
+                lancamento=("EXPRESSO" if (v2.get("lancamento") or "").lower() == "expresso" else
+                            ("EXPRESSO" if v2.get("expresso_alvo") or v2.get("expresso_equivalente") else "MANUAL")),
+                expresso_alvo=v2.get("expresso_alvo") or v2.get("expresso_equivalente") or v2.get("nome_pjecalc"),
+            )
+        except Exception as e:
+            logger.warning(f"Migração verba falhou: {e}")
+            return None
+
+    # verbas_v2 pode ser lista direta ou dict {predefinidas, personalizadas, ...}
+    if isinstance(verbas_v2, list):
+        for v in verbas_v2:
+            mig = _migrar_verba(v)
+            if mig:
+                verbas_v3.append(mig)
+    elif isinstance(verbas_v2, dict):
+        for grupo in ("predefinidas", "personalizadas", "manuais"):
+            for v in (verbas_v2.get(grupo) or []):
+                mig = _migrar_verba(v)
+                if mig:
+                    verbas_v3.append(mig)
+
     dados_v3 = {
         "processo": processo_v3,
         "historico_salarial": historico_v3,
+        "verbas": verbas_v3,
     }
 
     return templates.TemplateResponse(
@@ -852,7 +950,276 @@ async def editar_campo_previa_v3(
             status_code=400,
         )
 
-    # Campo não-mapeado por ora (verbas, etc.)
+    # ── Verbas (sub-etapa 2B.4) ──
+    # Padrões aceitos:
+    #   verbas.add / verbas.remove[N]
+    #   verbas[N].lancamento / .expresso_alvo
+    #   verbas[N].parametros.<campo>
+    #   verbas[N].ocorrencias.add / .remove[M]
+    #   verbas[N].ocorrencias[M].<campo>
+    #   verbas[N].reflexos.add / .remove[M]
+    #   verbas[N].reflexos[M].lancamento / .expresso_alvo
+    #   verbas[N].reflexos[M].parametros.<campo>
+    #   verbas[N].reflexos[M].ocorrencias.add / .remove[K]
+    #   verbas[N].reflexos[M].ocorrencias[K].<campo>
+    if campo.startswith("verbas"):
+        import re as _re
+
+        # Garantir lista plana (caso v2 tenha dict {predefinidas:[]})
+        verbas_atual = dados.get("verbas")
+        if isinstance(verbas_atual, dict):
+            # Achatar para lista única (perda do agrupamento, mas necessário p/ índices)
+            verbas_flat = []
+            for grupo in ("predefinidas", "personalizadas", "manuais"):
+                verbas_flat.extend(verbas_atual.get(grupo) or [])
+            verbas_atual = verbas_flat
+            dados["verbas"] = verbas_atual
+        elif not isinstance(verbas_atual, list):
+            verbas_atual = []
+            dados["verbas"] = verbas_atual
+
+        _MAP_PV_TO_V2 = {
+            "descricao": "nome_pjecalc",
+            "assuntos_cnj": "assuntos_cnj",
+            "tipo_de_verba": "tipo",
+            "tipo_variacao_da_parcela": "_tipo_variacao",
+            "caracteristica_verba": "caracteristica",
+            "ocorrencia_pagto": "ocorrencia",
+            "ocorrencia_ajuizamento": "_ocorrencia_ajuizamento",
+            "periodo_inicial": "periodo_inicio",
+            "periodo_final": "periodo_fim",
+            "gera_reflexo": "_gera_reflexo",
+            "gerar_principal": "_gerar_principal",
+            "compor_principal": "_compor_principal",
+            "valor": "_valor_tipo",
+            "valor_informado": "valor_informado",
+            "irpf": "incidencia_ir",
+            "inss": "incidencia_inss",
+            "fgts": "incidencia_fgts",
+            "previdencia_privada": "_previdencia_privada",
+            "pensao_alimenticia": "_pensao_alimenticia",
+            "tipo_da_base_tabelada": "_tipo_base_tabelada",
+            "base_historicos": "_base_historicos",
+            "integralizar_base": "_integralizar_base",
+            "tipo_de_divisor": "_tipo_divisor",
+            "outro_valor_do_divisor": "_valor_divisor",
+            "outro_valor_do_multiplicador": "percentual",
+            "tipo_da_quantidade": "_tipo_quantidade",
+            "valor_informado_da_quantidade": "quantidade",
+            "aplicar_proporcionalidade_quantidade": "_prop_quantidade",
+            "tipo_do_valor_pago": "_tipo_valor_pago",
+            "valor_informado_pago": "_valor_pago",
+            "aplicar_proporcionalidade_valor_pago": "_prop_valor_pago",
+            "zera_valor_negativo": "_zera_valor_negativo",
+            "excluir_falta_justificada": "_excluir_falta_justificada",
+            "excluir_falta_nao_justificada": "_excluir_falta_nao_justificada",
+            "excluir_ferias_gozadas": "_excluir_ferias_gozadas",
+            "dobra_valor_devido": "_dobra_valor_devido",
+            "aplicar_proporcionalidade_a_base": "_prop_base",
+            "comentarios": "_comentarios",
+        }
+
+        _MAP_OCV_TO_V2 = {
+            "ativo": "ativo", "termo_div": "termo_div", "termo_mult": "termo_mult",
+            "termo_quant": "termo_quant", "valor_devido": "valor_devido", "dobra": "dobra",
+        }
+
+        _verba_vazia = lambda: {
+            "nome_pjecalc": "", "tipo": "Principal", "caracteristica": "Comum",
+            "ocorrencia": "Mensal", "ocorrencias": [], "reflexos": [],
+        }
+
+        def _navegar_verba(idx: int, sub_indices: list[int] = None):
+            """Retorna (verba_dict, lista_pai). sub_indices = [reflexo_idx, ...]."""
+            if not (0 <= idx < len(verbas_atual)):
+                return None, None
+            verba = verbas_atual[idx]
+            pai = verbas_atual
+            if sub_indices:
+                for ri in sub_indices:
+                    refs = verba.setdefault("reflexos", [])
+                    if not (0 <= ri < len(refs)):
+                        return None, None
+                    pai = refs
+                    verba = refs[ri]
+            return verba, pai
+
+        # 1. verbas.add
+        if campo == "verbas.add":
+            verbas_atual.append(_verba_vazia())
+            repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+            return JSONResponse({"sucesso": True})
+
+        # 2. verbas.remove[N]
+        m = _re.match(r"^verbas\.remove\[(\d+)\]$", campo)
+        if m:
+            i = int(m.group(1))
+            if 0 <= i < len(verbas_atual):
+                verbas_atual.pop(i)
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+        # 3-9. verbas[N].* — múltiplos padrões
+        m = _re.match(r"^verbas\[(\d+)\](.+)$", campo)
+        if m:
+            vi = int(m.group(1))
+            resto = m.group(2)
+            verba, _ = _navegar_verba(vi)
+            if verba is None:
+                return JSONResponse({"sucesso": False, "erro": f"verba[{vi}] não existe"}, status_code=400)
+
+            # 3. verbas[N].lancamento
+            if resto == ".lancamento":
+                verba["lancamento"] = valor_normalizado
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+            # 4. verbas[N].expresso_alvo
+            if resto == ".expresso_alvo":
+                verba["expresso_alvo"] = valor_normalizado
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+            # 5. verbas[N].parametros.<campo>
+            mp = _re.match(r"^\.parametros\.(\w+)$", resto)
+            if mp:
+                attr = mp.group(1)
+                v2_attr = _MAP_PV_TO_V2.get(attr, attr)
+                # Casos especiais (mapping reverso de Literal v3 → v2 PT-BR)
+                if attr == "tipo_de_verba":
+                    verba["tipo"] = "Reflexa" if valor_normalizado == "REFLEXA" else "Principal"
+                elif attr == "caracteristica_verba":
+                    _rev = {"COMUM":"Comum","DECIMO_TERCEIRO_SALARIO":"13o Salario",
+                            "AVISO_PREVIO":"Aviso Previo","FERIAS":"Ferias"}
+                    verba["caracteristica"] = _rev.get(valor_normalizado, valor_normalizado)
+                elif attr == "ocorrencia_pagto":
+                    _rev = {"MENSAL":"Mensal","DEZEMBRO":"Dezembro","DESLIGAMENTO":"Desligamento",
+                            "PERIODO_AQUISITIVO":"Periodo Aquisitivo"}
+                    verba["ocorrencia"] = _rev.get(valor_normalizado, valor_normalizado)
+                elif attr == "tipo_da_base_tabelada":
+                    _rev = {"MAIOR_REMUNERACAO":"Maior Remuneracao","HISTORICO_SALARIAL":"Historico Salarial",
+                            "SALARIO_DA_CATEGORIA":"Salario da Categoria","SALARIO_MINIMO":"Salario Minimo",
+                            "VALOR_INFORMADO":"Valor Informado"}
+                    verba["base_calculo"] = _rev.get(valor_normalizado, valor_normalizado)
+                else:
+                    verba[v2_attr] = valor_normalizado
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+            # 6. verbas[N].ocorrencias.add
+            if resto == ".ocorrencias.add":
+                ocs = verba.setdefault("ocorrencias", [])
+                ocs.append({"indice": len(ocs), "ativo": True, "termo_div": None,
+                            "termo_mult": None, "termo_quant": None, "valor_devido": None, "dobra": False})
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+            # 7. verbas[N].ocorrencias.remove[M]
+            mr = _re.match(r"^\.ocorrencias\.remove\[(\d+)\]$", resto)
+            if mr:
+                oi = int(mr.group(1))
+                ocs = verba.get("ocorrencias", [])
+                if 0 <= oi < len(ocs):
+                    ocs.pop(oi)
+                    repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                    return JSONResponse({"sucesso": True})
+
+            # 8. verbas[N].ocorrencias[M].<campo>
+            mo = _re.match(r"^\.ocorrencias\[(\d+)\]\.(\w+)$", resto)
+            if mo:
+                oi = int(mo.group(1))
+                attr = mo.group(2)
+                ocs = verba.setdefault("ocorrencias", [])
+                while len(ocs) <= oi:
+                    ocs.append({})
+                v2_attr = _MAP_OCV_TO_V2.get(attr, attr)
+                ocs[oi][v2_attr] = valor_normalizado
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+            # 9. verbas[N].reflexos.add / .remove[M] / [M].xxx (recursivo)
+            if resto == ".reflexos.add":
+                refs = verba.setdefault("reflexos", [])
+                refs.append({"nome_pjecalc": "", "tipo": "Reflexa", "caracteristica": "Comum",
+                             "ocorrencia": "Mensal", "ocorrencias": [], "reflexos": []})
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+            mrr = _re.match(r"^\.reflexos\.remove\[(\d+)\]$", resto)
+            if mrr:
+                ri = int(mrr.group(1))
+                refs = verba.get("reflexos", [])
+                if 0 <= ri < len(refs):
+                    refs.pop(ri)
+                    repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                    return JSONResponse({"sucesso": True})
+
+            # 10. verbas[N].reflexos[M].xxx (delegar recursivo: aplicar a cada nível)
+            mrf = _re.match(r"^\.reflexos\[(\d+)\](.+)$", resto)
+            if mrf:
+                ri = int(mrf.group(1))
+                resto2 = mrf.group(2)
+                refs = verba.setdefault("reflexos", [])
+                while len(refs) <= ri:
+                    refs.append({"nome_pjecalc":"","tipo":"Reflexa","caracteristica":"Comum",
+                                 "ocorrencia":"Mensal","ocorrencias":[],"reflexos":[]})
+                ref = refs[ri]
+                # Re-aplicar a lógica acima sobre o reflexo (parâmetros + ocorrências)
+                if resto2 == ".lancamento":
+                    ref["lancamento"] = valor_normalizado
+                elif resto2 == ".expresso_alvo":
+                    ref["expresso_alvo"] = valor_normalizado
+                else:
+                    mp2 = _re.match(r"^\.parametros\.(\w+)$", resto2)
+                    if mp2:
+                        attr = mp2.group(1)
+                        if attr == "tipo_de_verba":
+                            ref["tipo"] = "Reflexa" if valor_normalizado == "REFLEXA" else "Principal"
+                        elif attr == "caracteristica_verba":
+                            _rev = {"COMUM":"Comum","DECIMO_TERCEIRO_SALARIO":"13o Salario",
+                                    "AVISO_PREVIO":"Aviso Previo","FERIAS":"Ferias"}
+                            ref["caracteristica"] = _rev.get(valor_normalizado, valor_normalizado)
+                        elif attr == "ocorrencia_pagto":
+                            _rev = {"MENSAL":"Mensal","DEZEMBRO":"Dezembro","DESLIGAMENTO":"Desligamento",
+                                    "PERIODO_AQUISITIVO":"Periodo Aquisitivo"}
+                            ref["ocorrencia"] = _rev.get(valor_normalizado, valor_normalizado)
+                        else:
+                            ref[_MAP_PV_TO_V2.get(attr, attr)] = valor_normalizado
+                    else:
+                        # ocorrências do reflexo
+                        if resto2 == ".ocorrencias.add":
+                            roc = ref.setdefault("ocorrencias", [])
+                            roc.append({"indice": len(roc), "ativo": True, "termo_mult": None,
+                                        "termo_quant": None, "valor_devido": None})
+                        else:
+                            mor = _re.match(r"^\.ocorrencias\.remove\[(\d+)\]$", resto2)
+                            if mor:
+                                rooi = int(mor.group(1))
+                                roc = ref.get("ocorrencias", [])
+                                if 0 <= rooi < len(roc):
+                                    roc.pop(rooi)
+                            else:
+                                moo = _re.match(r"^\.ocorrencias\[(\d+)\]\.(\w+)$", resto2)
+                                if moo:
+                                    rooi = int(moo.group(1))
+                                    attr = moo.group(2)
+                                    roc = ref.setdefault("ocorrencias", [])
+                                    while len(roc) <= rooi:
+                                        roc.append({})
+                                    roc[rooi][_MAP_OCV_TO_V2.get(attr, attr)] = valor_normalizado
+                                else:
+                                    return JSONResponse(
+                                        {"sucesso": False, "erro": f"Padrão recursivo '{resto2}' não reconhecido"},
+                                        status_code=400,
+                                    )
+                repo.atualizar_dados(sessao_id, dados, calculo.verbas_mapeadas())
+                return JSONResponse({"sucesso": True})
+
+        return JSONResponse(
+            {"sucesso": False, "erro": f"Padrão '{campo}' não reconhecido em verbas.*"},
+            status_code=400,
+        )
+
+    # Campo não-mapeado por ora (cartão de ponto, FGTS, INSS, IR, etc.)
     return JSONResponse(
         {"sucesso": False, "erro": f"Campo '{campo}' ainda não mapeado v3→v2 (próximas sub-etapas)"},
         status_code=400,

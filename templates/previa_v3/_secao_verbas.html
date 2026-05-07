@@ -1,0 +1,293 @@
+{# Sub-etapa 2B.4 — Página Verbas (PRINCIPAL página crítica)
+
+   Estrutura por verba:
+     1. Lançamento (EXPRESSO ou MANUAL) + nome no Expresso (se EXPRESSO)
+     2. Parâmetros (~30 campos via _form_parametros_verba.html)
+     3. Ocorrências mensais (sub-tabela editável)
+     4. Reflexos (lista recursiva — cada reflexo é outra Verba)
+
+   Filtros visuais:
+     - Verbas com ocorrencia_pagto=DESLIGAMENTO destacam aviso "1 ocorrência única"
+#}
+{% from "previa_v3/_macros.html" import field_text, field_decimal, field_select, field_radio, field_checkbox, secao %}
+
+{% call secao("5. Verbas (Principais + Reflexas)") %}
+
+<p style="font-size: 0.85rem; color: #6c757d; margin-bottom: 12px;">
+  Cada verba é uma <strong>Principal</strong> com seus próprios parâmetros, ocorrências mensais
+  e reflexos. Para verbas com <em>Ocorrência: Desligamento</em> (DANO MORAL, MULTA 477), apenas
+  a linha do mês de demissão fica ativa.
+</p>
+
+<div class="repeater" data-prefix="verbas">
+  <div class="repeater-header">
+    <strong>Verbas Principais ({{ verbas|length }})</strong>
+    <button type="button" class="btn-add"
+            onclick="salvarCampo('verbas.add', '', this)">
+      + Adicionar Verba Principal
+    </button>
+  </div>
+
+  <div class="repeater-body">
+    {% if verbas|length == 0 %}
+      <p class="repeater-vazio">Nenhuma verba cadastrada.</p>
+    {% else %}
+      {% for v in verbas %}
+        {% set vi = loop.index0 %}
+        {% set p = v.parametros %}
+        {% set ocs = v.ocorrencias or [] %}
+        {% set refs = v.reflexos or [] %}
+        <details class="repeater-item" {% if loop.first %}open{% endif %}>
+          <summary>
+            <span class="item-titulo">
+              Verba #{{ loop.index }}
+              {%- if p.descricao %} — <strong>{{ p.descricao }}</strong>{% endif %}
+              {%- if p.ocorrencia_pagto == "DESLIGAMENTO" %}
+                <span style="background: #ffc107; color: #000; padding: 1px 6px; border-radius: 8px; font-size: 0.7rem; margin-left: 6px;">
+                  DESLIGAMENTO • 1 ocorrência
+                </span>
+              {% endif %}
+              {%- if v.lancamento == "EXPRESSO" %}
+                <span style="background: #17a2b8; color: #fff; padding: 1px 6px; border-radius: 8px; font-size: 0.7rem; margin-left: 6px;">
+                  Expresso
+                </span>
+              {% else %}
+                <span style="background: #6c757d; color: #fff; padding: 1px 6px; border-radius: 8px; font-size: 0.7rem; margin-left: 6px;">
+                  Manual
+                </span>
+              {% endif %}
+              {%- if refs|length > 0 %}
+                <span style="color: #1a3a6b; font-size: 0.78rem; margin-left: 6px;">
+                  ({{ refs|length }} {{ "reflexo" if refs|length == 1 else "reflexos" }})
+                </span>
+              {% endif %}
+            </span>
+            <button type="button" class="btn-remove"
+                    onclick="event.preventDefault(); salvarCampo('verbas.remove[{{ vi }}]', '', this)">
+              ✕ Remover Verba
+            </button>
+          </summary>
+          <div class="item-corpo">
+
+            {# ── Lançamento (EXPRESSO ou MANUAL) ── #}
+            <div class="campos-grid">
+              {{ field_radio("verbas[" ~ vi ~ "].lancamento", v.lancamento,
+                              "Lançamento",
+                              [{"value":"EXPRESSO","label":"Expresso (verba pré-definida do PJE-Calc)"},
+                               {"value":"MANUAL","label":"Manual"}]) }}
+              {{ field_text("verbas[" ~ vi ~ "].expresso_alvo", v.expresso_alvo,
+                             "Nome no Lançamento Expresso (se aplicável)",
+                             placeholder="ex.: HORAS EXTRAS 50%, INDENIZAÇÃO POR DANO MORAL") }}
+            </div>
+
+            {# ── Parâmetros (partial reutilizável) ── #}
+            <div style="border-top: 1px solid #dee2e6; margin-top: 12px; padding-top: 12px;">
+              {% with prefix="verbas[" ~ vi ~ "]", p=p %}
+                {% include "previa_v3/_form_parametros_verba.html" %}
+              {% endwith %}
+            </div>
+
+            {# ── Sub-tabela: Ocorrências mensais ── #}
+            <h4 style="margin: 18px 0 8px; color: #1a3a6b; font-size: 0.92rem; display: flex; justify-content: space-between; align-items: center;">
+              <span>Ocorrências mensais ({{ ocs|length }})</span>
+              <button type="button" class="btn-add" style="font-size: 0.78rem; padding: 4px 10px;"
+                      onclick="salvarCampo('verbas[{{ vi }}].ocorrencias.add', '', this)">
+                + Adicionar Ocorrência
+              </button>
+            </h4>
+
+            {% if p.ocorrencia_pagto == "DESLIGAMENTO" %}
+              <p style="color: #856404; padding: 10px 14px; background: #fff8e1; border-radius: 4px; font-size: 0.85rem; margin: 0 0 8px; border-left: 3px solid #ffc107;">
+                <strong>⚠ Verba com Ocorrência: Desligamento.</strong>
+                Apenas <strong>1 ocorrência</strong> deve ficar ativa (mês de demissão).
+                Os demais meses devem permanecer desativados.
+              </p>
+            {% endif %}
+
+            {% if ocs|length == 0 %}
+              <p style="color: #6c757d; font-style: italic; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.85rem; margin: 0;">
+                Sem ocorrências cadastradas. Quando a automação gerar (Lançamento Expresso),
+                cada mês do período aparecerá aqui editável.
+              </p>
+            {% else %}
+              <div style="overflow-x: auto;">
+                <table class="ocorrencias-tabela" style="width: 100%; border-collapse: collapse; font-size: 0.82rem;">
+                  <thead>
+                    <tr style="background: #f8f9fa;">
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6; width: 50px;">Linha</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6; width: 50px;">Ativo</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Divisor (termoDiv)</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Multiplicador (termoMult)</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Quantidade (termoQuant)</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6;">Valor Devido</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6; width: 50px;">Dobra</th>
+                      <th style="padding: 6px 8px; border: 1px solid #dee2e6; width: 40px;">✕</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for oc in ocs %}
+                      {% set oi = loop.index0 %}
+                      <tr {% if not oc.ativo %}style="opacity: 0.5;"{% endif %}>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center; font-weight: 600; color: #6c757d;">
+                          {{ oc.indice if oc.indice is not none else loop.index0 }}
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+                          <input type="checkbox" {% if oc.ativo %}checked{% endif %}
+                                 onchange="salvarCampo('verbas[{{ vi }}].ocorrencias[{{ oi }}].ativo', this.checked, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.termo_div or '' }}"
+                                 placeholder="0,00" inputmode="decimal"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.82rem; text-align: right;"
+                                 onchange="salvarCampo('verbas[{{ vi }}].ocorrencias[{{ oi }}].termo_div', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.termo_mult or '' }}"
+                                 placeholder="0,00" inputmode="decimal"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.82rem; text-align: right;"
+                                 onchange="salvarCampo('verbas[{{ vi }}].ocorrencias[{{ oi }}].termo_mult', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.termo_quant or '' }}"
+                                 placeholder="0,00" inputmode="decimal"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.82rem; text-align: right;"
+                                 onchange="salvarCampo('verbas[{{ vi }}].ocorrencias[{{ oi }}].termo_quant', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6;">
+                          <input type="text" value="{{ oc.valor_devido or '' }}"
+                                 placeholder="0,00" inputmode="decimal"
+                                 style="width: 100%; padding: 3px 5px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.82rem; text-align: right;"
+                                 onchange="salvarCampo('verbas[{{ vi }}].ocorrencias[{{ oi }}].valor_devido', this.value, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+                          <input type="checkbox" {% if oc.dobra %}checked{% endif %}
+                                 onchange="salvarCampo('verbas[{{ vi }}].ocorrencias[{{ oi }}].dobra', this.checked, this)">
+                        </td>
+                        <td style="padding: 4px; border: 1px solid #dee2e6; text-align: center;">
+                          <button type="button" class="btn-remove" style="padding: 2px 6px; font-size: 0.7rem;"
+                                  onclick="salvarCampo('verbas[{{ vi }}].ocorrencias.remove[{{ oi }}]', '', this)">✕</button>
+                        </td>
+                      </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            {% endif %}
+
+            {# ── Reflexos (lista recursiva — cada reflexo é uma Verba completa) ── #}
+            <h4 style="margin: 18px 0 8px; color: #1a3a6b; font-size: 0.92rem; display: flex; justify-content: space-between; align-items: center;">
+              <span>Reflexos ({{ refs|length }})</span>
+              <button type="button" class="btn-add" style="font-size: 0.78rem; padding: 4px 10px;"
+                      onclick="salvarCampo('verbas[{{ vi }}].reflexos.add', '', this)">
+                + Adicionar Reflexo
+              </button>
+            </h4>
+
+            {% if refs|length == 0 %}
+              <p style="color: #6c757d; font-style: italic; padding: 10px; background: #f8f9fa; border-radius: 4px; font-size: 0.85rem; margin: 0;">
+                Sem reflexos cadastrados.
+                {% if p.descricao and "horas extras" in p.descricao|lower %}
+                  Verbas como Horas Extras geralmente têm reflexos: 13º, Férias+1/3, RSR, Aviso Prévio, FGTS+40%.
+                {% endif %}
+              </p>
+            {% else %}
+              <div style="border-left: 3px solid #1a3a6b; padding-left: 12px; margin-top: 8px;">
+                {% for ref in refs %}
+                  {% set ri = loop.index0 %}
+                  {% set rp = ref.parametros %}
+                  {% set roc = ref.ocorrencias or [] %}
+                  <details class="repeater-item" style="background: #f8f9ff;">
+                    <summary>
+                      <span class="item-titulo">
+                        Reflexo #{{ loop.index }}
+                        {%- if rp.descricao %} — <strong>{{ rp.descricao }}</strong>{% endif %}
+                        {%- if rp.caracteristica_verba == "DECIMO_TERCEIRO_SALARIO" %}
+                          <span style="font-size: 0.7rem; color: #6c757d;"> (13º)</span>
+                        {%- elif rp.caracteristica_verba == "FERIAS" %}
+                          <span style="font-size: 0.7rem; color: #6c757d;"> (Férias)</span>
+                        {%- elif rp.caracteristica_verba == "AVISO_PREVIO" %}
+                          <span style="font-size: 0.7rem; color: #6c757d;"> (Aviso Prévio)</span>
+                        {% endif %}
+                      </span>
+                      <button type="button" class="btn-remove"
+                              onclick="event.preventDefault(); salvarCampo('verbas[{{ vi }}].reflexos.remove[{{ ri }}]', '', this)">
+                        ✕ Remover Reflexo
+                      </button>
+                    </summary>
+                    <div class="item-corpo">
+                      {# Reusa o mesmo partial recursivamente — prefix aninhado #}
+                      {% with prefix="verbas[" ~ vi ~ "].reflexos[" ~ ri ~ "]", p=rp %}
+                        {% include "previa_v3/_form_parametros_verba.html" %}
+                      {% endwith %}
+
+                      {# Ocorrências do reflexo (sub-sub-tabela compacta) #}
+                      <h5 style="margin: 12px 0 6px; color: #6c757d; font-size: 0.82rem;">
+                        Ocorrências do reflexo ({{ roc|length }})
+                        <button type="button" class="btn-add" style="font-size: 0.72rem; padding: 2px 8px; margin-left: 8px;"
+                                onclick="salvarCampo('verbas[{{ vi }}].reflexos[{{ ri }}].ocorrencias.add', '', this)">
+                          + Adicionar
+                        </button>
+                      </h5>
+                      {% if roc|length == 0 %}
+                        <p style="font-size: 0.78rem; color: #6c757d; margin: 0;">Nenhuma — geradas automaticamente pelo PJE-Calc a partir da principal.</p>
+                      {% else %}
+                        <div style="overflow-x: auto;">
+                          <table style="width: 100%; border-collapse: collapse; font-size: 0.78rem;">
+                            <thead>
+                              <tr style="background: #f0f0f0;">
+                                <th style="padding: 4px; border: 1px solid #dee2e6; width: 40px;">#</th>
+                                <th style="padding: 4px; border: 1px solid #dee2e6; width: 40px;">Ativo</th>
+                                <th style="padding: 4px; border: 1px solid #dee2e6;">Mult</th>
+                                <th style="padding: 4px; border: 1px solid #dee2e6;">Quant</th>
+                                <th style="padding: 4px; border: 1px solid #dee2e6;">Valor Devido</th>
+                                <th style="padding: 4px; border: 1px solid #dee2e6; width: 30px;">✕</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {% for roo in roc %}
+                                {% set rooi = loop.index0 %}
+                                <tr {% if not roo.ativo %}style="opacity: 0.5;"{% endif %}>
+                                  <td style="padding: 3px; border: 1px solid #dee2e6; text-align: center;">{{ roo.indice if roo.indice is not none else loop.index0 }}</td>
+                                  <td style="padding: 3px; border: 1px solid #dee2e6; text-align: center;">
+                                    <input type="checkbox" {% if roo.ativo %}checked{% endif %}
+                                           onchange="salvarCampo('verbas[{{ vi }}].reflexos[{{ ri }}].ocorrencias[{{ rooi }}].ativo', this.checked, this)">
+                                  </td>
+                                  <td style="padding: 3px; border: 1px solid #dee2e6;">
+                                    <input type="text" value="{{ roo.termo_mult or '' }}" placeholder="0,00"
+                                           style="width: 100%; padding: 2px 4px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.78rem; text-align: right;"
+                                           onchange="salvarCampo('verbas[{{ vi }}].reflexos[{{ ri }}].ocorrencias[{{ rooi }}].termo_mult', this.value, this)">
+                                  </td>
+                                  <td style="padding: 3px; border: 1px solid #dee2e6;">
+                                    <input type="text" value="{{ roo.termo_quant or '' }}" placeholder="0,00"
+                                           style="width: 100%; padding: 2px 4px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.78rem; text-align: right;"
+                                           onchange="salvarCampo('verbas[{{ vi }}].reflexos[{{ ri }}].ocorrencias[{{ rooi }}].termo_quant', this.value, this)">
+                                  </td>
+                                  <td style="padding: 3px; border: 1px solid #dee2e6;">
+                                    <input type="text" value="{{ roo.valor_devido or '' }}" placeholder="0,00"
+                                           style="width: 100%; padding: 2px 4px; border: 1px solid #ced4da; border-radius: 3px; font-size: 0.78rem; text-align: right;"
+                                           onchange="salvarCampo('verbas[{{ vi }}].reflexos[{{ ri }}].ocorrencias[{{ rooi }}].valor_devido', this.value, this)">
+                                  </td>
+                                  <td style="padding: 3px; border: 1px solid #dee2e6; text-align: center;">
+                                    <button type="button" class="btn-remove" style="padding: 1px 4px; font-size: 0.65rem;"
+                                            onclick="salvarCampo('verbas[{{ vi }}].reflexos[{{ ri }}].ocorrencias.remove[{{ rooi }}]', '', this)">✕</button>
+                                  </td>
+                                </tr>
+                              {% endfor %}
+                            </tbody>
+                          </table>
+                        </div>
+                      {% endif %}
+                    </div>
+                  </details>
+                {% endfor %}
+              </div>
+            {% endif %}
+
+          </div>
+        </details>
+      {% endfor %}
+    {% endif %}
+  </div>
+</div>
+
+{% endcall %}

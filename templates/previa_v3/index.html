@@ -107,11 +107,9 @@
 </p>
 {% endcall %}
 
-{% call secao("5. Verbas — pendente (sub-etapa 2B.4)") %}
-<p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">
-  Esta é a seção mais crítica. Será implementada na sub-etapa <strong>2B.4</strong>.
-</p>
-{% endcall %}
+{# ─────────── 5. Verbas (sub-etapa 2B.4) ─────────── #}
+{% set verbas = dados.verbas or [] %}
+{% include "previa_v3/_secao_verbas.html" %}
 
 {% call secao("6-11. Cartão de Ponto, FGTS, INSS, IR, Honorários, Correção — pendentes (sub-etapa 2B.5)") %}
 <p style="color: #6c757d; padding: 16px; background: #fff8e1; border-radius: 4px; margin: 0;">
