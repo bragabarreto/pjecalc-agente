@@ -438,10 +438,15 @@ class AplicadorPJECalc:
         verbas_expresso = [v for v in verbas if v.lancamento == "EXPRESSO" and v.expresso_alvo]
         if verbas_expresso:
             self._lancar_expresso(verbas_expresso)
-            # Após save do Expresso, REVOLTAR para verba-calculo.jsf:
-            # PJE-Calc redireciona para verbas-para-calculo.jsf (página de
-            # seleção); precisamos navegar de volta para a listagem onde
-            # estão os links Parâmetros (j_id558) de cada verba criada.
+            # Capturar conv_id atual (Expresso save pode iniciar nova conv)
+            url_pos = self._page.url
+            self.log(f"  🔍 URL pós-Expresso save: {url_pos[-80:]}")
+            if "conversationId=" in url_pos:
+                novo_conv = url_pos.split("conversationId=")[1].split("&")[0].split("#")[0]
+                if novo_conv != self._conv_id:
+                    self.log(f"  ↺ conv_id atualizado: {self._conv_id} → {novo_conv}")
+                    self._conv_id = novo_conv
+            # REVOLTAR para verba-calculo.jsf usando conv atualizado
             self._navegar_url_calculo("verba/verba-calculo.jsf")
             self._page.wait_for_timeout(2500)
             if self._detectar_erro_pagina():
@@ -546,76 +551,12 @@ class AplicadorPJECalc:
             self._clicar_salvar()
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1500)
-            # PJE-Calc abre modal Assunto CNJ se alguma verba não tem código.
-            # Per CLAUDE.md: preferência = 2581 (Remuneração). Auto-handle.
-            self._handle_modal_cnj_se_aberto()
+            # NB: modal Assunto CNJ NÃO se abre em Expresso/Expresso Adaptado
+            # (apenas em verbas Manuais). Se rendered no DOM, está hidden.
             return True
         except Exception as e:
             self.log(f"  ⚠ Lançamento Expresso: {e}")
             return False
-
-    def _handle_modal_cnj_se_aberto(self) -> bool:
-        """Detecta modal de Assunto CNJ aberto pós-save e seleciona 2581
-        (Remuneração — categoria padrão). Repete até modal fechar (uma
-        verba pode pedir CNJ por vez)."""
-        for tentativa in range(20):
-            modal_aberto = self._page.evaluate(
-                """() => {
-                    const modal = document.querySelector('[id*="formularioModalCNJ"], [id*="modalAssunto"], [id*="ModalCNJ"]');
-                    if (!modal) return false;
-                    // Verifica se está visível (display != none, opacity > 0)
-                    const r = modal.getBoundingClientRect();
-                    return r.height > 50 && r.width > 50;
-                }"""
-            )
-            if not modal_aberto:
-                if tentativa > 0:
-                    self.log(f"  ✓ modal CNJ fechado após {tentativa} seleção(ões)")
-                return True
-            self.log(f"  → modal Assunto CNJ aberto (tentativa {tentativa+1}); selecionando 2581")
-            # Selecionar nó "2581 - Remuneração..." na árvore CNJ
-            clicou = self._page.evaluate(
-                """() => {
-                    // Tier 1: ID que contenha :2581:
-                    const linhas = [...document.querySelectorAll('tr[id*="formularioModalCNJ:arv"]')];
-                    let alvo = linhas.find(tr => tr.id.includes(':2581:') && tr.id.endsWith(':mainRow'));
-                    if (!alvo) {
-                        // Tier 2: texto começando com "2581 -"
-                        alvo = linhas.find(tr => (tr.textContent||'').trim().startsWith('2581 '));
-                    }
-                    if (!alvo) {
-                        // Tier 3: primeiro link que contenha "Remuneração"
-                        const cell = [...document.querySelectorAll('a, span')].find(e => (e.textContent||'').trim().startsWith('2581 - Remunera'));
-                        if (cell) alvo = cell.closest('tr');
-                    }
-                    if (!alvo) return null;
-                    // Clicar no link/radio dentro da linha
-                    const clic = alvo.querySelector('a, input[type=radio]') || alvo;
-                    clic.click();
-                    return alvo.id || 'clicado';
-                }"""
-            )
-            if clicou:
-                self._aguardar_ajax(3000)
-                self._page.wait_for_timeout(500)
-                # Click "Selecionar"
-                btn = self._page.evaluate(
-                    """() => {
-                        const btn = [...document.querySelectorAll('input[type=submit], input[type=button], button')].find(b => {
-                            const t = ((b.value||'') + ' ' + (b.textContent||'')).trim().toLowerCase();
-                            return t === 'selecionar' || t.startsWith('selecionar');
-                        });
-                        if (btn) { btn.click(); return btn.id || 'ok'; }
-                        return null;
-                    }"""
-                )
-                self._aguardar_ajax(5000)
-                self._page.wait_for_timeout(800)
-            else:
-                self.log("  ⚠ não foi possível clicar 2581 na árvore CNJ")
-                return False
-        self.log("  ⚠ modal CNJ persistiu após 20 tentativas")
-        return False
 
     def _criar_verba_manual(self, v: Verba) -> bool:
         """Click 'Manual' → abre form Novo. Preenche descrição mínima.
