@@ -367,6 +367,34 @@ class AplicadorPJECalc:
         if self._clicar_menu_lateral(nome_menu):
             self.log(f"  ✓ form '{nome_menu}' renderizado via menu lateral")
             return True
+        # Passo 3: menu lateral falhou — checar se contexto cálculo foi perdido
+        # (DOM exibe items globais li_calculo_novo/li_tabelas_* em vez do
+        # submenu li_calculo_dados_do_calculo/...). Se sim, reabrir via
+        # Recentes e tentar novamente.
+        contexto_perdido = self._page.evaluate(
+            """() => {
+                const lis = [...document.querySelectorAll('li[id^=\"li_calculo_\"]')]
+                    .map(li => li.id);
+                // submenu cálculo tem ids como li_calculo_dados_do_calculo,
+                // li_calculo_ferias, etc. Items globais: li_calculo_novo,
+                // li_calculo_externo_novo, li_calculo_buscar, li_calculo_importar
+                const submenu = lis.filter(id =>
+                    /li_calculo_(dados_do_calculo|ferias|historico|verbas|fgts|inss|irpf|honorarios|custas|correcao|cartao|salario_familia|seguro|previdencia|pensao|multas|relatorios|faltas)/i.test(id)
+                );
+                return submenu.length === 0;
+            }"""
+        )
+        if contexto_perdido and self._processo_numero:
+            self.log(f"  ↺ contexto cálculo perdido — reabrindo via Recentes para '{nome_menu}'")
+            if self._reabrir_calculo_recentes(
+                processo_numero=self._processo_numero,
+                reclamante_nome=self._reclamante_nome,
+            ):
+                # Reabriu — re-tentar URL direta + menu lateral
+                if self._navegar_url_calculo(jsf_path_fallback):
+                    if self._clicar_menu_lateral(nome_menu):
+                        self.log(f"  ✓ form '{nome_menu}' renderizado pós-Recentes")
+                        return True
         # Mesmo sem menu, a URL direta pode bastar para algumas páginas
         # (listagens como Honorários funcionam sem menu lateral)
         self.log(f"  ↻ menu '{nome_menu}' não disponível — usando estado da URL direta")
