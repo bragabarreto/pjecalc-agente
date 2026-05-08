@@ -378,12 +378,13 @@ class AplicadorPJECalc:
         "Custas Judiciais": "li#li_calculo_custas_judiciais",
         "Correção, Juros e Multa": "li#li_calculo_correcao_juros_multa",
         "Relatórios": "li#li_calculo_relatorios",
-        # ── Aba "Operações" ──
+        # ── Aba "Operações" (5 itens confirmados via DOM live) ──
         "Liquidar": "li#li_operacoes_liquidar",
         "Fechar": "li#li_operacoes_fechar",
         "Excluir": "li#li_operacoes_excluir",
         "Exportar": "li#li_operacoes_exportar",
-        "Validar": "li#li_operacoes_validar",
+        # CURIOSIDADE: id = 'validar' mas label = "Enviar para o PJe"
+        "Enviar para o PJe": "li#li_operacoes_validar",
         # ── Aba "Tabelas" (referências globais) ──
         "Salário Mínimo": "li#li_tabelas_salario_minimo",
         "Salário Categoria": "li#li_tabelas_salario_categoria",
