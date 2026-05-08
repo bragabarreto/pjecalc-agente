@@ -322,13 +322,26 @@ class AplicadorPJECalc:
             return False
 
     def _clicar_salvar(self) -> bool:
+        """Click 'Salvar' via dispatchEvent (compatible com A4J.AJAX.Submit).
+
+        DOM real (Chrome MCP): id='formulario:salvar' type='button' com
+        onclick=A4J.AJAX.Submit. Playwright .click() pode não disparar
+        AJAX corretamente em alguns casos — dispatchEvent é mais confiável.
+        """
         try:
-            btn = self._page.locator("input[id$='salvar']").first
-            if btn.count() == 0:
+            clicou = self._page.evaluate(
+                """() => {
+                    const b = document.querySelector('input[id="formulario:salvar"], input[id$=":salvar"]');
+                    if (!b) return null;
+                    b.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                    return b.id || 'ok';
+                }"""
+            )
+            if not clicou:
                 self.log("  ⚠ botão Salvar não encontrado")
                 return False
-            btn.click(force=True)
-            self._aguardar_ajax(8000)
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(1500)
             return True
         except Exception as e:
             self.log(f"  ⚠ salvar: {e}")
@@ -1365,66 +1378,51 @@ class AplicadorPJECalc:
     def _clicar_novo(self) -> bool:
         """Click no botão Novo/Incluir da listagem atual.
 
-        DOM audit confirmou: histórico-salarial.jsf usa `formulario:incluir`
-        com value='Novo'. faltas/ferias usam padrões similares. Estratégia
-        em 5 tiers para cobrir todos os casos.
+        Confirmado via Chrome MCP live: histórico-salarial.jsf usa
+        `formulario:incluir` value='Novo' type='button' com onclick=
+        A4J.AJAX.Submit. dispatchEvent('click') via JS evaluate é o
+        método mais confiável (Playwright .click() pode não disparar
+        A4J corretamente em alguns casos).
         """
-        # Tier 1: id+value exato
-        for sel in (
-            "input[id$='incluir'][value='Novo']",
-            "input[id$='novo'][value='Novo']",
-            "input[id$='incluir'][type='submit']",
-            "input[id$='novo'][type='submit']",
-        ):
-            try:
-                btn = self._page.locator(sel).first
-                if btn.count() > 0:
-                    btn.click(timeout=8000)
-                    self._aguardar_ajax(6000)
-                    self._page.wait_for_timeout(500)
-                    return True
-            except Exception:
-                continue
-        # Tier 2: por value visível
-        for valor in ("Novo", "Incluir", "Adicionar"):
-            try:
-                btn = self._page.locator(f"input[type='submit'][value='{valor}']").first
-                if btn.count() > 0:
-                    btn.click(timeout=8000)
-                    self._aguardar_ajax(6000)
-                    self._page.wait_for_timeout(500)
-                    return True
-            except Exception:
-                continue
-        # Tier 3: id$=incluir (qualquer, mas só se único — evita Manual)
-        try:
-            sel = "input[id$='incluir']"
-            n = self._page.locator(sel).count()
-            if n == 1:
-                self._page.locator(sel).click(timeout=8000)
-                self._aguardar_ajax(6000)
-                self._page.wait_for_timeout(500)
-                return True
-        except Exception:
-            pass
-        # Tier 4: JS evaluate por texto/value 'Novo'
+        # JS evaluate é a estratégia primária — busca por id e value/textContent
         try:
             clicou = self._page.evaluate(
                 """() => {
-                    const cands = [...document.querySelectorAll(
-                        'input[type=submit], input[type=button], button, a'
-                    )].filter(e => /^novo$/i.test((e.value||'').trim()) ||
-                                   /^novo$/i.test((e.textContent||'').trim()));
-                    if (cands.length > 0) { cands[0].click(); return cands[0].id || 'ok'; }
-                    return null;
+                    // Tier 1: id$='incluir' com value='Novo'
+                    let cands = [...document.querySelectorAll('input[id$=":incluir"], input[id$="incluir"]')]
+                        .filter(e => /^novo$/i.test((e.value||'').trim()));
+                    // Tier 2: id$='novo'
+                    if (cands.length === 0) {
+                        cands = [...document.querySelectorAll('input[id$=":novo"], input[id$="novo"]')];
+                    }
+                    // Tier 3: value='Novo' qualquer input
+                    if (cands.length === 0) {
+                        cands = [...document.querySelectorAll('input[type="button"], input[type="submit"]')]
+                            .filter(e => /^novo$/i.test((e.value||'').trim()));
+                    }
+                    // Tier 4: value='Adicionar' / 'Incluir' (fallback)
+                    if (cands.length === 0) {
+                        cands = [...document.querySelectorAll('input[type="button"], input[type="submit"]')]
+                            .filter(e => /^(adicionar|incluir)$/i.test((e.value||'').trim()));
+                    }
+                    // Tier 5: link <a> com texto 'Novo'
+                    if (cands.length === 0) {
+                        cands = [...document.querySelectorAll('a')]
+                            .filter(a => /^novo$/i.test((a.textContent||'').trim()));
+                    }
+                    if (cands.length === 0) return null;
+                    const el = cands[0];
+                    el.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                    return el.id || el.value || el.textContent || 'ok';
                 }"""
             )
             if clicou:
+                self.log(f"  ✓ Novo clicado: {clicou}")
                 self._aguardar_ajax(6000)
-                self._page.wait_for_timeout(500)
+                self._page.wait_for_timeout(800)
                 return True
-        except Exception:
-            pass
+        except Exception as e:
+            self.log(f"  ⚠ _clicar_novo evaluate: {e}")
         return False
 
     # ────────────────────────────────────────────────────────────────────────
