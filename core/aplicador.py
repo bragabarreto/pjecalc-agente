@@ -1381,9 +1381,26 @@ class AplicadorPJECalc:
         Confirmado via Chrome MCP live: histórico-salarial.jsf usa
         `formulario:incluir` value='Novo' type='button' com onclick=
         A4J.AJAX.Submit. dispatchEvent('click') via JS evaluate é o
-        método mais confiável (Playwright .click() pode não disparar
-        A4J corretamente em alguns casos).
+        método mais confiável.
+
+        Se form já está aberto (input nome/descricao + Salvar visíveis),
+        retorna True imediatamente (idempotente).
         """
+        # Pre-check: form já aberto?
+        try:
+            ja_aberto = self._page.evaluate(
+                """() => {
+                    const nome = document.querySelector('input[id$=":nome"], input[id$=":descricao"]');
+                    const sv = document.querySelector('input[id="formulario:salvar"]');
+                    return !!(nome && sv);
+                }"""
+            )
+            if ja_aberto:
+                self.log("  ✓ form já aberto (idempotente)")
+                return True
+        except Exception:
+            pass
+
         # JS evaluate é a estratégia primária — busca por id e value/textContent
         try:
             clicou = self._page.evaluate(
@@ -1405,10 +1422,12 @@ class AplicadorPJECalc:
                         cands = [...document.querySelectorAll('input[type="button"], input[type="submit"]')]
                             .filter(e => /^(adicionar|incluir)$/i.test((e.value||'').trim()));
                     }
-                    // Tier 5: link <a> com texto 'Novo'
+                    // Tier 5: link <a> com texto 'Novo' MAS NÃO em menu lateral
+                    // (menu lateral tem id formato 'formulario:j_id38:N:j_id41:M:j_id46')
                     if (cands.length === 0) {
                         cands = [...document.querySelectorAll('a')]
-                            .filter(a => /^novo$/i.test((a.textContent||'').trim()));
+                            .filter(a => /^novo$/i.test((a.textContent||'').trim()))
+                            .filter(a => !/j_id38/.test(a.id || ''));
                     }
                     if (cands.length === 0) return null;
                     const el = cands[0];
