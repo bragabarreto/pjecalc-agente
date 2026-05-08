@@ -362,7 +362,13 @@ class AplicadorPJECalc:
         return self._navegar_url_calculo(jsf_path_fallback)
 
     def _navegar_url_calculo(self, jsf_path: str) -> bool:
-        """Navega via URL direta para uma página do cálculo."""
+        """Navega via URL direta. Sempre lê conv_id ATUAL da URL antes
+        (pode ter mudado por save/Seam) e refresca pós-goto."""
+        if "conversationId=" in self._page.url:
+            atual = self._page.url.split("conversationId=")[1].split("&")[0].split("#")[0]
+            if atual.isdigit() and atual != self._conv_id:
+                self.log(f"  ↻ conv refresh: {self._conv_id} → {atual}")
+                self._conv_id = atual
         if not self._conv_id:
             self.log("  ⚠ conversation_id ausente — não é possível navegar")
             return False
@@ -370,6 +376,10 @@ class AplicadorPJECalc:
         try:
             self._page.goto(url, wait_until="domcontentloaded", timeout=20000)
             self._aguardar_ajax(8000)
+            if "conversationId=" in self._page.url:
+                novo = self._page.url.split("conversationId=")[1].split("&")[0].split("#")[0]
+                if novo.isdigit() and novo != self._conv_id:
+                    self._conv_id = novo
             self._page.wait_for_timeout(400)
             return True
         except Exception as e:
