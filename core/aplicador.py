@@ -359,6 +359,12 @@ class AplicadorPJECalc:
           1. Navegar URL direta (estabelece página + carrega menu lateral).
           2. Click menu lateral correspondente (Seam renderiza form via A4J).
         """
+        # Passo 0: tentar menu lateral SEM navegação prévia. Se a página atual
+        # já está no contexto do cálculo (ex.: pós-save Fase 1), o menu lateral
+        # estará disponível e este path preserva a conversation Seam.
+        if self._clicar_menu_lateral(nome_menu):
+            self.log(f"  ✓ form '{nome_menu}' renderizado via menu lateral (sem navegação)")
+            return True
         # Passo 1: URL direta (estabelece contexto da página)
         url_ok = self._navegar_url_calculo(jsf_path_fallback)
         if not url_ok:
@@ -496,19 +502,26 @@ class AplicadorPJECalc:
             # "<id_calc> / <processo> / <reclamante>".
             select_id = self._page.evaluate(
                 """() => {
+                    // Excluir explicitamente selects de busca livre (Ache Fácil)
+                    const SKIP = new Set(['selAcheFacil']);
                     // Tier 1: select cuja primeira opção tem formato "NNNNNN / ..."
+                    // (ID interno / CNJ / Reclamante — formato canônico do dropdown
+                    // Cálculos Recentes do PJE-Calc Cidadão).
                     for (const s of document.querySelectorAll('select')) {
+                        if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
                         if (s.options.length > 0) {
                             const txt = (s.options[0].text || '');
                             if (/^\\d{4,}\\s*\\//.test(txt)) return s.name || s.id;
                         }
                     }
-                    // Tier 2: por label próximo "Cálculos Recentes"
-                    const fs = [...document.querySelectorAll('fieldset, legend, label, h3, h4, span, div')]
-                        .find(e => /c[áa]lculos\\s*recentes/i.test(e.textContent || ''));
-                    if (fs) {
-                        const sel = fs.parentElement && fs.parentElement.querySelector('select');
-                        if (sel) return sel.name || sel.id;
+                    // Tier 2: select cujo conteúdo agregado de TODAS as opções
+                    // contém padrão de CNJ — robusto contra primeira opção vazia
+                    for (const s of document.querySelectorAll('select')) {
+                        if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                        const blob = [...s.options].map(o => o.text || '').join(' | ');
+                        if (/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob)) {
+                            return s.name || s.id;
+                        }
                     }
                     return null;
                 }"""
