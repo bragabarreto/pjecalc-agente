@@ -322,22 +322,20 @@ class AplicadorPJECalc:
                         const a = document.querySelector(args.sel_exato);
                         if (a) { a.click(); return 'tier1:' + (a.id || 'ok'); }
                     }
-                    // Tier 2: link com texto/title casando
-                    const links = [...document.querySelectorAll('a')];
-                    for (const a of links) {
+                    // Tier 2: link cujo texto/title casa, mas DENTRO de li#li_calculo_*
+                    // (preserva contexto do cálculo, evita menus Tabelas/Adm)
+                    const linksCalc = [...document.querySelectorAll('li[id^="li_calculo_"] a')];
+                    for (const a of linksCalc) {
                         const t = norm((a.textContent||'') + ' ' + (a.title||''));
                         if (t === alvo || t.includes(alvo)) {
-                            // evitar links de breadcrumb/header
-                            const li = a.closest('li');
-                            if (!li || !li.id || !li.id.startsWith('li_')) continue;
                             a.click();
-                            return 'tier2:' + (a.id || a.href || 'ok');
+                            return 'tier2:' + (a.closest('li').id);
                         }
                     }
-                    // Tier 3: qualquer li[id^=li_] cuja primeira palavra do alvo casa
+                    // Tier 3: qualquer li#li_calculo_* cuja primeira palavra do alvo casa
                     const palavra1 = alvo.split(' ')[0];
-                    const lis = [...document.querySelectorAll('li[id^="li_"]')];
-                    for (const li of lis) {
+                    const lisCalc = [...document.querySelectorAll('li[id^="li_calculo_"]')];
+                    for (const li of lisCalc) {
                         if (norm(li.id).includes(palavra1) || norm(li.textContent).includes(alvo)) {
                             const a = li.querySelector('a');
                             if (a) { a.click(); return 'tier3:' + li.id; }
