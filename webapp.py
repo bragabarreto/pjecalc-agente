@@ -3624,6 +3624,8 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
             _automacao_global_lock.clear()
 
     async def gerador_sse_v3():
+        # Yield imediato para forçar envio de headers HTTP
+        yield f"data: {json.dumps({'msg': '⟳ v3 endpoint iniciado'})}\n\n"
         # Carregar prévia v3 da sessão
         from database import SessionLocal
         _db = SessionLocal()
@@ -3706,6 +3708,7 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
             _liberar_lock_v3()
             return
 
+        yield f"data: {json.dumps({'msg': '⟳ Pydantic OK; iniciando runner thread…'})}\n\n"
         thread = _th.Thread(target=runner, daemon=True)
         thread.start()
 
