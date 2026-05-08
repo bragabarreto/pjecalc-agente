@@ -1492,38 +1492,46 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_irpf(self, ir: ImpostoRenda) -> bool:
-        """Aplica configuração de Imposto de Renda.
-
-        IDs auditados em produção (v1 playwright_pjecalc): a página IRPF NÃO usa
-        radio para regime — usa checkboxes booleanos: tributacaoExclusiva,
-        regimeDeCaixa, tributacaoEmSeparado. O schema v3 tem um Literal único —
-        mapeamos para a combinação correta de checkboxes.
-        """
+        """Aplica IRPF (irpf.jsf) — schema v3 expandido conforme tela real."""
         if not ir or not ir.apurar:
             self.log("→ Fase 9: IRPF — apurar=False, pulando")
             return True
         self.log("→ Fase 9: IRPF")
         if not self._navegar_url_calculo("irpf.jsf"):
             return False
+        # Checkbox principal
         self._click_checkbox("apurarImpostoRenda", ir.apurar)
-        # Regime de tributação → checkboxes (schema v3:
-        # MESES_TRIBUTAVEIS / RRA / REGIME_GERAL)
+        # 5 checkboxes de configuração
+        self._click_checkbox("incidirSobreJurosDeMora", ir.incidir_sobre_juros_de_mora)
+        self._click_checkbox("cobrarDoReclamado", ir.cobrar_do_reclamado)
+        self._click_checkbox("tributacaoExclusiva", ir.tributacao_exclusiva)
+        self._click_checkbox("tributacaoEmSeparado", ir.tributacao_em_separado)
+        self._click_checkbox("aplicarRegimeDeCaixa", ir.aplicar_regime_de_caixa)
+        self._click_checkbox("regimeDeCaixa", ir.aplicar_regime_de_caixa)
+        # Deduzir da Base do IR (panel)
+        self._click_checkbox("deduzirContribuicaoSocial", ir.deduzir_contribuicao_social)
+        self._click_checkbox("deduzirPrevidenciaPrivada", ir.deduzir_previdencia_privada)
+        self._click_checkbox("deduzirPensaoAlimenticia", ir.deduzir_pensao_alimenticia)
+        self._click_checkbox("deduzirHonorariosReclamante", ir.deduzir_honorarios_reclamante)
+        self._click_checkbox("deducaoInss", ir.deduzir_contribuicao_social)  # legado
+        self._click_checkbox("deducaoHonorariosReclamante", ir.deduzir_honorarios_reclamante)  # legado
+        # Aposentado / Dependentes
+        self._click_checkbox("aposentadoMaior65", ir.aposentado_maior_65)
+        # Dependentes — checkbox com count
+        if ir.quantidade_dependentes > 0:
+            self._click_checkbox("possuiDependentes", True)
+            self._click_checkbox("dependentes", True)
+            self._aguardar_ajax(1500)
+            self._fill_text("quantidadeDependentes", str(ir.quantidade_dependentes))
+            self._fill_text("numeroDeDependentes", str(ir.quantidade_dependentes))
+        # Compat legado (regime_tributacao + meses + valores)
         if ir.regime_tributacao == "RRA":
             self._click_checkbox("tributacaoEmSeparado", True)
-        elif ir.regime_tributacao == "MESES_TRIBUTAVEIS":
-            self._click_checkbox("regimeDeCaixa", True)
-        # REGIME_GERAL = nenhum checkbox (default do PJE-Calc)
-        # Deduções (todas defaults true em v1 — manter)
         if ir.meses_tributaveis is not None:
             self._fill_text("mesesTributaveis", str(ir.meses_tributaveis))
-        # Tentar IDs alternativos para dependentes (ordem v1 → v3)
-        self._fill_text("quantidadeDependentes", str(ir.quantidade_dependentes))
-        self._fill_text("numeroDeDependentes", str(ir.quantidade_dependentes))
-        self._fill_text("dependentes", str(ir.quantidade_dependentes))
         if ir.deducoes is not None:
             self._fill_decimal("deducoes", ir.deducoes)
         if ir.pensao_alimenticia is not None:
-            # v1 usa valorPensao + valorDaPensao + ativa checkbox pensaoAlimenticia
             self._click_checkbox("pensaoAlimenticia", True)
             self._fill_decimal("valorPensao", ir.pensao_alimenticia)
             self._fill_decimal("valorDaPensao", ir.pensao_alimenticia)
@@ -1632,52 +1640,162 @@ class AplicadorPJECalc:
             self._fill_decimal("valorPericiais", custas.valor_periciais)
             self._fill_decimal("honorariosPericiais", custas.valor_periciais)
 
-        return self._clicar_salvar()
+        # ── Custas Fixas (vencimento + 9 checkboxes) ──
+        if custas.custas_fixas_vencimento:
+            self._fill_date("custasFixasVencimento", custas.custas_fixas_vencimento)
+        self._click_checkbox("atosOfJusticaZonaUrbana", custas.custas_fixas_atos_oj_urbana)
+        self._click_checkbox("atosOfJusticaZonaRural", custas.custas_fixas_atos_oj_rural)
+        self._click_checkbox("agravoInstrumento", custas.custas_fixas_agravo_instrumento)
+        self._click_checkbox("agravoPeticao", custas.custas_fixas_agravo_peticao)
+        self._click_checkbox("impugnacaoSentencaLiquidacao", custas.custas_fixas_impugnacao_sentenca)
+        self._click_checkbox("embargosArrematacao", custas.custas_fixas_embargos_arrematacao)
+        self._click_checkbox("embargosExecucao", custas.custas_fixas_embargos_execucao)
+        self._click_checkbox("embargosTerceiros", custas.custas_fixas_embargos_terceiros)
+        self._click_checkbox("recursoRevista", custas.custas_fixas_recurso_revista)
+
+        # ── Autos 5% (lista) ──
+        for auto in custas.autos_5pct:
+            if auto.tipo_de_auto:
+                self._select_value("tipoDeAuto", auto.tipo_de_auto)
+                self._fill_date("vencimentoAuto", auto.vencimento)
+                self._fill_decimal("valorBemAuto", auto.valor_do_bem)
+                # Click "+" para adicionar (id típico: btnAdicionarAuto / btnIncluirAuto)
+                self._page.evaluate(
+                    """() => {
+                        const b = [...document.querySelectorAll('input[type=image], input[type=submit], input[type=button]')]
+                            .find(e => /(adicionar|incluir).*auto/i.test((e.title||'') + (e.alt||'') + (e.value||'')));
+                        if (b) b.click();
+                    }"""
+                )
+                self._aguardar_ajax(2000)
+
+        # ── Armazenamento 0,1% (lista) ──
+        for arm in custas.armazenamento_0_1pct:
+            if arm.inicio:
+                self._fill_date("inicioArmazenamento", arm.inicio)
+                self._fill_date("terminoArmazenamento", arm.termino)
+                self._fill_decimal("valorBemArmazenamento", arm.valor_do_bem)
+                self._page.evaluate(
+                    """() => {
+                        const b = [...document.querySelectorAll('input[type=image], input[type=submit], input[type=button]')]
+                            .find(e => /(adicionar|incluir).*armazen/i.test((e.title||'') + (e.alt||'') + (e.value||'')));
+                        if (b) b.click();
+                    }"""
+                )
+                self._aguardar_ajax(2000)
+
+        ok = self._clicar_salvar()
+
+        # ── Tab "Custas Recolhidas" ──
+        if (custas.recolhidas_reclamado_valor or custas.recolhidas_reclamante_valor):
+            try:
+                self._page.evaluate(
+                    """() => {
+                        const tab = [...document.querySelectorAll('.rich-tab-header, td')]
+                            .find(t => /custas\\s*recolhidas/i.test((t.textContent||'').trim()));
+                        if (tab) tab.click();
+                    }"""
+                )
+                self._aguardar_ajax(3000)
+                if custas.recolhidas_reclamado_valor:
+                    self._fill_date("vencimentoRecolhidoReclamado", custas.recolhidas_reclamado_vencimento)
+                    self._fill_decimal("valorRecolhidoReclamado", custas.recolhidas_reclamado_valor)
+                if custas.recolhidas_reclamante_valor:
+                    self._fill_date("vencimentoRecolhidoReclamante", custas.recolhidas_reclamante_vencimento)
+                    self._fill_decimal("valorRecolhidoReclamante", custas.recolhidas_reclamante_valor)
+                self._clicar_salvar()
+            except Exception as e:
+                self.log(f"  ⚠ Custas Recolhidas: {e}")
+
+        return ok
 
     # ────────────────────────────────────────────────────────────────────────
     # FASE 12 — Correção, Juros e Multa
     # ────────────────────────────────────────────────────────────────────────
 
-    def aplicar_correcao_juros(self, cj: CorrecaoJuros) -> bool:
-        """Aplica parâmetros de atualização (correção + juros).
+    # Labels reais dos dropdowns (Correção/Juros) — capturados em screenshot
+    _IDX_CORRECAO_LABEL = {
+        "TUACDT": "Tabela Única de Atualização e Conversão de Débitos Trabalhistas",
+        "DEVEDOR_FAZENDA_PUBLICA": "Devedor Fazenda Pública",
+        "REPETICAO_INDEBITO": "Repetição de Indébito Tributário",
+        "TJT_MENSAL": "Tabela JT Mensal",
+        "TJT_DIARIA": "Tabela JT Diária",
+        "TR": "TR",
+        "IGP_M": "IGP-M",
+        "INPC": "INPC",
+        "IPC": "IPC",
+        "IPCA": "IPCA",
+        "IPCAE": "IPCA-E",
+        "IPCAE_TR": "IPCA-E/TR",
+        "SELIC_RECEITA": "SELIC (Receita Federal)",
+        "SELIC_SIMPLES": "SELIC Simples",
+        "SELIC_COMPOSTA": "SELIC Composta",
+        "SEM_CORRECAO": "Sem Correção",
+    }
+    _TAXA_JUROS_LABEL = {
+        "JUROS_PADRAO": "Juros Padrão",
+        "CADERNETA_POUPANCA": "Juros Caderneta de Poupança",
+        "FAZENDA_PUBLICA": "Juros Fazenda Pública",
+        "SIMPLES_0_5_AM": "Juros Simples 0,5% a.m.",
+        "SIMPLES_1_AM": "Juros Simples 1,0% a.m.",
+        "SIMPLES_0_0333333_AD": "Juros Simples 0,0333333% a.d.",
+        "SELIC_RECEITA": "SELIC (Receita Federal)",
+        "SELIC_SIMPLES": "SELIC Simples",
+        "SELIC_COMPOSTA": "SELIC Composta",
+        "TRD_SIMPLES": "TRD Juros Simples",
+        "TRD_COMPOSTOS": "TRD Juros Compostos",
+        "TAXA_LEGAL": "Taxa Legal",
+        "SEM_JUROS": "Sem Juros",
+    }
 
-        Labels confirmadas em v1 (PJE-Calc TRT7 v2.15.1).
-        """
+    def aplicar_correcao_juros(self, cj: CorrecaoJuros) -> bool:
+        """Aplica Correção/Juros (parametros-atualizacao.jsf) — schema v3 expandido."""
         if not cj:
             return True
         self.log("→ Fase 12: Correção/Juros")
         if not self._navegar_url_calculo("parametros-atualizacao/parametros-atualizacao.jsf"):
             return False
-        # Mapeamentos schema v3 (literals) → labels reais do PJE-Calc
-        idx_map = {
-            "TR": "TR",
-            "TRD": "TR",
-            "IPCAE": "IPCA-E",
-            "IPCA": "IPCA-E",
-            "INPC": "INPC",
-            "SELIC": "SELIC (Receita Federal)",
-        }
-        val_idx = idx_map.get(cj.indice_correcao, cj.indice_correcao)
-        self._select_value("indiceCorrecao", val_idx)
-        self._select_value("indiceTrabalhista", val_idx)
 
-        taxa_map = {
-            "TRD_SIMPLES": "TRD Juros Simples",
-            "TR_SIMPLES": "Juros Padrão",
-            "SELIC": "SELIC (Receita Federal)",
-            "TAXA_LEGAL": "Taxa Legal",
-            "TR_FGTS": "TRD Juros Simples",
-        }
-        val_taxa = taxa_map.get(cj.taxa_juros, cj.taxa_juros)
+        # ── Correção Monetária ──
+        val_idx = self._IDX_CORRECAO_LABEL.get(cj.indice_correcao, cj.indice_correcao)
+        self._select_value("indiceTrabalhista", val_idx)
+        self._select_value("indiceCorrecao", val_idx)
+        self._click_checkbox("combinarOutroIndice", cj.combinar_com_outro_indice)
+        self._click_checkbox("ignorarTaxaNegativa", cj.ignorar_taxa_negativa)
+
+        # ── Juros de Mora ──
+        self._click_checkbox("aplicarJurosFasePreJudicial", cj.aplicar_juros_pre_judicial)
+        self._click_checkbox("aplicarJurosPreJudicial", cj.aplicar_juros_pre_judicial)
+        val_taxa = self._TAXA_JUROS_LABEL.get(cj.taxa_juros, cj.taxa_juros)
+        self._select_value("tabelaJuros", val_taxa)
         self._select_value("taxaJuros", val_taxa)
         self._select_value("juros", val_taxa)
 
-        # Súmula 439 (juros desde ajuizamento) — checkbox
+        # Combinar com Outra Tabela de Juros + lista
+        if cj.combinar_outra_tabela_juros or cj.tabelas_juros_adicionais:
+            self._click_checkbox("combinarOutraTabelaJuros", True)
+            self._click_checkbox("combinarOutroJuros", True)
+            self._aguardar_ajax(2000)
+            for tab in cj.tabelas_juros_adicionais:
+                lbl = self._TAXA_JUROS_LABEL.get(tab.tabela, tab.tabela)
+                self._select_value("tabelaJurosAdicional", lbl)
+                self._fill_date("aPartirDeJuros", tab.a_partir_de)
+                self._fill_date("dataAPartirDeJuros", tab.a_partir_de)
+                # Click "+" para adicionar linha
+                self._page.evaluate(
+                    """() => {
+                        const b = [...document.querySelectorAll('input[type=image], input[type=submit], input[type=button]')]
+                            .find(e => /(adicionar|incluir).*juros/i.test((e.title||'') + (e.alt||'') + (e.value||'')));
+                        if (b) b.click();
+                    }"""
+                )
+                self._aguardar_ajax(2000)
+
+        # Súmula 439
         if cj.sumula_439_juros_desde_ajuizamento:
             self._click_checkbox("jurosDesdeAjuizamento", True)
             self._click_checkbox("sumula439", True)
 
-        # base_juros: sem radio explícito em v2.15.1 — mantido p/ futuras versões.
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────

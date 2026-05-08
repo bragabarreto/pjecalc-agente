@@ -514,18 +514,48 @@ class ContribuicaoSocial(BaseModel):
 
 
 class ImpostoRenda(BaseModel):
-    """Página: Imposto de Renda (irpf.jsf)."""
+    """Página: Imposto de Renda (irpf.jsf).
+
+    Campos reais conforme screenshot da tela do PJE-Calc 2.15.1:
+      - "Apurar Imposto de Renda" (checkbox principal)
+      - 5 checkboxes de configuração: Incidir sobre Juros de Mora,
+        Cobrar do Reclamado, Tributação Exclusiva, Tributação em Separado,
+        Aplicar Regime de Caixa
+      - Bloco "Deduzir da Base do Imposto de Renda": 4 checkboxes
+        (Contribuição Social, Previdência Privada, Pensão Alimentícia,
+        Honorários devidos pelo Reclamante)
+      - Aposentado maior de 65 Anos (checkbox)
+      - Dependentes (checkbox + input numérico)
+    """
 
     model_config = ConfigDict(extra="forbid")
 
     apurar: bool = True
-    regime_tributacao: Literal[
-        "MESES_TRIBUTAVEIS", "RRA", "REGIME_GERAL"
-    ] = "MESES_TRIBUTAVEIS"
-    meses_tributaveis: Optional[int] = None
+
+    # Configurações de tributação / cobrança
+    incidir_sobre_juros_de_mora: bool = False
+    cobrar_do_reclamado: bool = False
+    tributacao_exclusiva: bool = False
+    tributacao_em_separado: bool = False
+    aplicar_regime_de_caixa: bool = False
+
+    # Deduzir da Base do IR (todos default True na UI)
+    deduzir_contribuicao_social: bool = True
+    deduzir_previdencia_privada: bool = True
+    deduzir_pensao_alimenticia: bool = True
+    deduzir_honorarios_reclamante: bool = True
+
+    # Aposentado / Dependentes
+    aposentado_maior_65: bool = False
     quantidade_dependentes: int = 0
+
+    # Compat (legado v2)
+    regime_tributacao: Optional[Literal[
+        "MESES_TRIBUTAVEIS", "RRA", "REGIME_GERAL"
+    ]] = None
+    meses_tributaveis: Optional[int] = None
     deducoes: ValorBR = None
-    pensao_alimenticia: ValorBR = None
+    pensao_alimenticia: ValorBR = None  # valor da pensão para dedução
 
 
 class ProgramacaoSemanalDia(BaseModel):
@@ -620,21 +650,121 @@ class CustasJudiciais(BaseModel):
     percentual: ValorBR = "2"  # 2% padrão (campo percentualCustas)
     valor_periciais: ValorBR = None  # honorários periciais
 
+    # ── Custas Fixas (1 vencimento + 9 checkboxes de tipos) ──
+    custas_fixas_vencimento: DataBR = None
+    custas_fixas_atos_oj_urbana: bool = False
+    custas_fixas_atos_oj_rural: bool = False
+    custas_fixas_agravo_instrumento: bool = False
+    custas_fixas_agravo_peticao: bool = False
+    custas_fixas_impugnacao_sentenca: bool = False
+    custas_fixas_embargos_arrematacao: bool = False
+    custas_fixas_embargos_execucao: bool = False
+    custas_fixas_embargos_terceiros: bool = False
+    custas_fixas_recurso_revista: bool = False
+
+    # ── Autos 5% (lista) ──
+    autos_5pct: List["CustasAuto5pct"] = Field(default_factory=list)
+    # ── Armazenamento 0,1% (lista) ──
+    armazenamento_0_1pct: List["CustasArmazenamento"] = Field(default_factory=list)
+
+    # ── Tab "Custas Recolhidas" ──
+    recolhidas_reclamado_vencimento: DataBR = None
+    recolhidas_reclamado_valor: ValorBR = None
+    recolhidas_reclamante_vencimento: DataBR = None
+    recolhidas_reclamante_valor: ValorBR = None
+
+
+class CustasAuto5pct(BaseModel):
+    """Linha do bloco 'Autos 5%' em Custas Judiciais > Custas Devidas."""
+    model_config = ConfigDict(extra="forbid")
+    tipo_de_auto: Optional[str] = None  # select obrigatório (catálogo PJE-Calc)
+    vencimento: DataBR = None
+    valor_do_bem: ValorBR = None
+
+
+class CustasArmazenamento(BaseModel):
+    """Linha do bloco 'Armazenamento 0,1%' em Custas Judiciais."""
+    model_config = ConfigDict(extra="forbid")
+    inicio: DataBR = None
+    termino: DataBR = None
+    valor_do_bem: ValorBR = None
+
 
 class CorrecaoJuros(BaseModel):
-    """Página: Correção, Juros e Multa (parametros-atualizacao)."""
+    """Página: Correção, Juros e Multa (parametros-atualizacao.jsf).
+
+    Conforme dropdowns reais do PJE-Calc 2.15.1 (screenshots):
+      Tab "Dados Gerais":
+        - Correção Monetária: Índice Trabalhista (16 opções), Combinar
+          com Outro Índice, Ignorar Taxa Negativa
+        - Juros de Mora: Aplicar Juros Pré-Judicial, Tabela de Juros
+          (13 opções), Combinar com Outra Tabela (lista de
+          tabelas adicionais)
+      Tab "Dados Específicos" (não capturado ainda)
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    # ── Correção Monetária (select Índice Trabalhista) ──
     indice_correcao: Literal[
-        "IPCAE", "TR", "INPC", "SELIC", "IPCA", "TRD"
-    ] = "IPCAE"
+        "TUACDT",  # Tabela Única de Atualização e Conversão de Débitos Trabalhistas
+        "DEVEDOR_FAZENDA_PUBLICA",
+        "REPETICAO_INDEBITO",
+        "TJT_MENSAL",
+        "TJT_DIARIA",
+        "TR",
+        "IGP_M",
+        "INPC",
+        "IPC",
+        "IPCA",
+        "IPCAE",
+        "IPCAE_TR",
+        "SELIC_RECEITA",
+        "SELIC_SIMPLES",
+        "SELIC_COMPOSTA",
+        "SEM_CORRECAO",
+    ] = "IPCA"
+    combinar_com_outro_indice: bool = False
+    ignorar_taxa_negativa: bool = False
+
+    # ── Juros de Mora ──
+    aplicar_juros_pre_judicial: bool = True
     taxa_juros: Literal[
-        "TRD_SIMPLES", "TR_SIMPLES", "SELIC", "TAXA_LEGAL", "TR_FGTS"
+        "JUROS_PADRAO",
+        "CADERNETA_POUPANCA",
+        "FAZENDA_PUBLICA",
+        "SIMPLES_0_5_AM",
+        "SIMPLES_1_AM",
+        "SIMPLES_0_0333333_AD",
+        "SELIC_RECEITA",
+        "SELIC_SIMPLES",
+        "SELIC_COMPOSTA",
+        "TRD_SIMPLES",
+        "TRD_COMPOSTOS",
+        "TAXA_LEGAL",
+        "SEM_JUROS",
     ] = "TRD_SIMPLES"
+    combinar_outra_tabela_juros: bool = False
+    # Lista de tabelas adicionais (ex.: Taxa Legal a partir de 25/09/2025)
+    tabelas_juros_adicionais: List["CorrecaoJurosTabelaAdicional"] = Field(default_factory=list)
+
+    # ── Compat (campos legados ainda usados por v2) ──
     base_juros: Literal["VERBA", "PRINCIPAL", "BRUTO"] = "VERBA"
-    aplicar_ec_113: bool = True  # IPCA-E + SELIC pós ADC 58
+    aplicar_ec_113: bool = True
     sumula_439_juros_desde_ajuizamento: bool = False
+
+
+class CorrecaoJurosTabelaAdicional(BaseModel):
+    """Linha de combinar com outra tabela de juros (e.g. Taxa Legal a partir
+    de uma data marco — Lei 14.905/2024 → 30/08/2024)."""
+    model_config = ConfigDict(extra="forbid")
+    tabela: Literal[
+        "JUROS_PADRAO", "CADERNETA_POUPANCA", "FAZENDA_PUBLICA",
+        "SIMPLES_0_5_AM", "SIMPLES_1_AM", "SIMPLES_0_0333333_AD",
+        "SELIC_RECEITA", "SELIC_SIMPLES", "SELIC_COMPOSTA",
+        "TRD_SIMPLES", "TRD_COMPOSTOS", "TAXA_LEGAL", "SEM_JUROS",
+    ]
+    a_partir_de: DataBR = None
 
 
 # ============================================================================
