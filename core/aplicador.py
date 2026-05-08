@@ -421,13 +421,22 @@ class AplicadorPJECalc:
             self._page.wait_for_timeout(1500)
 
             listbox = self._page.locator(
-                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes'],"
+                "select[id*='listaCalculosRecentes'], select[id*='calculosRecentes'],"
+                "select[id*='calculos'], select[name*='Recente']"
             )
             if listbox.count() == 0:
-                self.log("  ⚠ select 'listaCalculosRecentes' não encontrado")
+                # Diag: listar todos os <select> da page
+                selects = self._page.evaluate(
+                    """() => [...document.querySelectorAll('select')]
+                            .slice(0,10).map(s => ({id: s.id, name: s.name, cls: s.className.slice(0,40), n_opts: s.options.length}))"""
+                )
+                self.log(f"  ⚠ select 'listaCalculosRecentes' não encontrado")
+                self.log(f"    selects disponíveis: {selects[:8]}")
                 return False
             opts = listbox.first.locator("option")
             n = opts.count()
+            self.log(f"  → Recentes: {n} opções")
             if n == 0:
                 return False
 
