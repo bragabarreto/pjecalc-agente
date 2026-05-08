@@ -622,6 +622,10 @@ def _migrar_v2_para_v3(calculo) -> tuple[dict, list[str]]:
                 valor_para_base_de_calculo=str(h.get("valor")) if h.get("valor") is not None else None,
                 fgts=bool(h.get("incidencia_fgts", True)),
                 inss=bool(h.get("incidencia_cs", h.get("incidencia_inss", True))),
+                proporcionalizar_cs=bool(
+                    h.get("proporcionalizar_cs",
+                          h.get("proporcionalizar_contribuicao_social", False))
+                ),
                 ocorrencias=ocs,
             ))
         except Exception as e:

@@ -301,6 +301,11 @@ PAGINAS_AUDITORIA = [
         "sidebar_id": "menuHistoricoSalarial",
         "jsf": "calculo/historico-salarial.jsf",
         "descricao": "Parcelas salariais, gerar ocorrencias",
+        "abrir_form": True,
+        "botao_incluir_seletores": [
+            "input[id$='incluir']", "input[value='Incluir']",
+            "a[id$='incluir']",
+        ],
     },
     {
         "nome": "ferias",
@@ -309,6 +314,7 @@ PAGINAS_AUDITORIA = [
         "sidebar_id": "menuFerias",
         "jsf": "calculo/ferias.jsf",
         "descricao": "Periodos aquisitivos, situacao, dias gozados",
+        # Férias mostra automaticamente após gerar ocorrências — não precisa Incluir
     },
     {
         "nome": "faltas",
@@ -349,6 +355,7 @@ PAGINAS_AUDITORIA = [
         "sidebar_id": "menuFGTS",
         "jsf": "fgts/fgts.jsf",
         "descricao": "Tipo verba, aliquota, multas, incidencia",
+        # FGTS é formulário direto — não precisa clicar Incluir
     },
     {
         "nome": "contribuicao_social",
@@ -373,39 +380,49 @@ PAGINAS_AUDITORIA = [
         "sidebar_id": "menuHonorarios",
         "jsf": "honorarios/honorarios.jsf",
         "descricao": "Tipo, devedor, percentual, base apuracao",
-    },
-    {
-        "nome": "multas_indenizacoes",
-        "titulo": "Multas e Indenizacoes",
-        "sidebar_texto": "Multas e Indenizações",
-        "sidebar_id": "menuMultas",
-        "jsf": "calculo/multas-indenizacoes.jsf",
-        "descricao": "Multas diversas, indenizacoes, base de calculo",
+        # Honorários é lista — clicar "Incluir" para abrir formulário de edição
         "abrir_form": True,
-        "botao_incluir_seletores": ["input[value='Incluir']", "[id$='incluir']"],
+        "botao_incluir_seletores": [
+            "input[id$='incluir']", "input[value='Incluir']",
+            "a[id$='incluir']", "input[value*='Novo']",
+            "input[id$='novo']",
+        ],
     },
     {
         "nome": "correcao_juros_multa",
         "titulo": "Correcao, Juros e Multa",
         "sidebar_texto": "Correção, Juros e Multa",
         "sidebar_id": None,
-        "jsf": "calculo/correcao-juros.jsf",
+        "jsf": "correcao-juros.jsf",
         "descricao": "Indice correcao, taxa juros, multa 523",
+    },
+    {
+        "nome": "multas_indenizacoes",
+        "titulo": "Multas e Indenizacoes",
+        "sidebar_texto": "Multas e Indenizações",
+        "sidebar_id": None,
+        "jsf": "multas-indenizacoes.jsf",
+        "descricao": "Multa 477, multa 467, indenizacoes art. 9 Lei 7238",
+        "abrir_form": True,
+        "botao_incluir_seletores": [
+            "input[id$='incluir']", "input[value='Incluir']",
+            "a[id$='incluir']",
+        ],
     },
     {
         "nome": "custas_judiciais",
         "titulo": "Custas Judiciais",
         "sidebar_texto": "Custas Judiciais",
-        "sidebar_id": "menuCustas",
-        "jsf": "calculo/custas-judiciais.jsf",
-        "descricao": "Base custas, percentual, devedor, vencimento",
+        "sidebar_id": None,
+        "jsf": "custas-judiciais.jsf",
+        "descricao": "Custas judiciais, isencao",
     },
     {
         "nome": "salario_familia",
         "titulo": "Salario Familia",
         "sidebar_texto": "Salário Família",
         "sidebar_id": "menuSalarioFamilia",
-        "jsf": "calculo/salario-familia.jsf",
+        "jsf": "salario-familia.jsf",
         "descricao": "Apurar, competencias, quantidade filhos",
     },
     {
@@ -413,7 +430,7 @@ PAGINAS_AUDITORIA = [
         "titulo": "Seguro Desemprego",
         "sidebar_texto": "Seguro Desemprego",
         "sidebar_id": "menuSeguroDesemprego",
-        "jsf": "calculo/seguro-desemprego.jsf",
+        "jsf": "seguro-desemprego.jsf",
         "descricao": "Apurar seguro desemprego",
     },
     {
@@ -421,7 +438,7 @@ PAGINAS_AUDITORIA = [
         "titulo": "Pensao Alimenticia",
         "sidebar_texto": "Pensão Alimentícia",
         "sidebar_id": "menuPensaoAlimenticia",
-        "jsf": "calculo/pensao-alimenticia.jsf",
+        "jsf": "pensao-alimenticia.jsf",
         "descricao": "Percentual, beneficiario",
     },
     {
@@ -429,7 +446,7 @@ PAGINAS_AUDITORIA = [
         "titulo": "Previdencia Privada",
         "sidebar_texto": "Previdência Privada",
         "sidebar_id": "menuPrevidenciaPrivada",
-        "jsf": "calculo/previdencia-privada.jsf",
+        "jsf": "previdencia-privada.jsf",
         "descricao": "Percentual previdencia privada",
     },
     {
@@ -996,6 +1013,50 @@ class DOMAuditor:
                     "elementos": [],
                 }
                 continue
+
+            # For pages that show a list, click "Incluir" to open the edit form
+            if pagina.get("abrir_form"):
+                _abriu_form = False
+                # First capture list page elements
+                self._capturar_ids()
+                resultado_lista = self._extrair_pagina(
+                    {**pagina, "nome": f"{nome}_lista", "titulo": f"{pagina['titulo']} - Listagem"}
+                )
+                self._results["paginas"][f"{nome}_lista"] = resultado_lista
+                print(f"[auditor]   Lista capturada ({resultado_lista.get('total_elementos', 0)} el.)")
+
+                # Now try to open the form
+                for sel in pagina.get("botao_incluir_seletores", []):
+                    loc = self._page.locator(sel)
+                    if loc.count() > 0:
+                        try:
+                            loc.first.click(force=True, timeout=5000)
+                            self._aguardar_ajax()
+                            self._page.wait_for_timeout(2000)
+                            _abriu_form = True
+                            print(f"[auditor]   Formulario aberto via: {sel}")
+                            break
+                        except Exception as _e:
+                            print(f"[auditor]   Falha em {sel}: {_e}")
+                            continue
+
+                # JS fallback: look for any button with "Incluir"/"Novo" text
+                if not _abriu_form:
+                    _abriu_form = self._page.evaluate("""() => {
+                        const btns = [...document.querySelectorAll('input, button, a')];
+                        const incluir = btns.find(b =>
+                            (b.value || b.textContent || '').trim().match(/^(Incluir|Novo|Adicionar)$/i)
+                        );
+                        if (incluir) { incluir.click(); return true; }
+                        return false;
+                    }""")
+                    if _abriu_form:
+                        self._aguardar_ajax()
+                        self._page.wait_for_timeout(2000)
+                        print("[auditor]   Formulario aberto via JS fallback")
+
+                if not _abriu_form:
+                    print(f"[auditor]   ⚠ Nao conseguiu abrir formulario para {nome}")
 
             # Extract page elements
             self._capturar_ids()

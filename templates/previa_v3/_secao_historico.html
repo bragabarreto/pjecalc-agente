@@ -66,8 +66,9 @@
 
             <h4 style="margin: 14px 0 6px; color: #6c757d; font-size: 0.85rem; text-transform: uppercase;">Incidências</h4>
             <div style="display: flex; gap: 18px; flex-wrap: wrap;">
-              {{ field_checkbox("historico_salarial[" ~ hi ~ "].fgts", hs.fgts, "Incide FGTS") }}
-              {{ field_checkbox("historico_salarial[" ~ hi ~ "].inss", hs.inss, "Incide INSS / Contribuição Social") }}
+              {{ field_checkbox("historico_salarial[" ~ hi ~ "].fgts", hs.fgts, "FGTS") }}
+              {{ field_checkbox("historico_salarial[" ~ hi ~ "].inss", hs.inss, "Contribuição Social") }}
+              {{ field_checkbox("historico_salarial[" ~ hi ~ "].proporcionalizar_cs", hs.proporcionalizar_cs, "Proporcionalizar Contribuição Social") }}
             </div>
 
             {# ── Sub-tabela: Ocorrências mensais ── #}

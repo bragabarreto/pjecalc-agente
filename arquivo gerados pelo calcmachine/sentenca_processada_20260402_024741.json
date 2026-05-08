@@ -1,0 +1,326 @@
+{
+  "numero": "0002020",
+  "dígito": "61",
+  "ano": "2025",
+  "regiao": "07",
+  "vara": "0003",
+  "reclamante": "FRANCISCO DE ASSIS BANDEIRA DA SILVA JÚNIOR",
+  "reclamado": "VANTECH – VANGUARD TECNOLOGIA, IMPORTAÇÃO, EXPORTAÇÃO, COMÉRCIO E SERVIÇOS TÉCNICOS LTDA",
+  "estado": "5",
+  "municipio": "Fortaleza",
+  "valor_causa": "98795.37",
+  "data_admissao": "2022-08-26",
+  "data_demissao": "2025-12-03",
+  "data_ajuizamento": "2025-12-22",
+  "data_final_calculo": "2026-04-30",
+  "remuneracao": "2761.69",
+  "saldo_fgts": "0",
+  "carga_horaria_padrao": 210,
+  "usar_cartao": true,
+  "tipo_cartao": "escala",
+  "data_inicial_cartao": "2022-08-26",
+  "data_final_cartao": "2025-12-03",
+  "honorarios": [
+    {
+      "calcular": true,
+      "tipo": "SUCUMBENCIAIS",
+      "tipo_devedor": "RECLAMADO",
+      "nome_credor": "FRANCISCO DE ASSIS BANDEIRA DA SILVA JÚNIOR",
+      "aliquota": 7.5
+    },
+    {
+      "calcular": true,
+      "tipo": "SUCUMBENCIAIS",
+      "tipo_devedor": "RECLAMANTE",
+      "nome_credor": "VANTECH – VANGUARD TECNOLOGIA, IMPORTAÇÃO, EXPORTAÇÃO, COMÉRCIO E SERVIÇOS TÉCNICOS LTDA",
+      "aliquota": 7.5,
+      "exigibilidade_suspensa": true
+    }
+  ],
+  "jornada": [
+    {
+      "calcular": true,
+      "tipo": "INTRAJORNADA",
+      "percentual": 50,
+      "quantidade": 15,
+      "data_inicial": "2022-08-26",
+      "data_final": "2025-12-03",
+      "origem": "informar",
+      "aplicar_oj_394": false,
+      "reflexos": {
+        "ferias": false,
+        "decimo_terceiro": false,
+        "aviso_previo": false,
+        "dsr": false
+      },
+      "usar_insalubridade_base": false,
+      "usar_periculosidade_base": false,
+      "verbas_base": [],
+      "proporcionalizar": false,
+      "valor_pago": 0
+    }
+  ],
+  "verbas": [],
+  "salario_retido": false,
+  "salario_retido_data_inicial": "2024-10-21",
+  "salario_retido_data_final": "2024-10-21",
+  "calcular multa do art. 467": "não",
+  "aplicar prescricao": "não",
+  "aviso indenizado": "sim",
+  "ajustar ocorrencias fgts": "sim",
+  "calcular FGTS sobre salários pagos": "não",
+  "calcular multa do FGTS": "não",
+  "calcular_seguro_desemprego": "não",
+  "cadastrar historico": "sim",
+  "usar_salario_minimo": "não",
+  "marcar ferias": "não",
+  "lancar_deducao": "sim",
+  "valor_deducao": "8169.11",
+  "remuneracao_mensal": [
+    {
+      "mes": "08/2022",
+      "valor": 2639.29
+    },
+    {
+      "mes": "09/2022",
+      "valor": 2639.29
+    },
+    {
+      "mes": "10/2022",
+      "valor": 2639.29
+    },
+    {
+      "mes": "11/2022",
+      "valor": 2639.29
+    },
+    {
+      "mes": "12/2022",
+      "valor": 2639.29
+    },
+    {
+      "mes": "01/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "02/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "03/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "04/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "05/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "06/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "07/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "08/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "09/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "10/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "11/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "12/2023",
+      "valor": 2682.49
+    },
+    {
+      "mes": "01/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "02/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "03/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "04/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "05/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "06/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "07/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "08/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "09/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "10/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "11/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "12/2024",
+      "valor": 2719.29
+    },
+    {
+      "mes": "01/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "02/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "03/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "04/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "05/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "06/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "07/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "08/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "09/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "10/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "11/2025",
+      "valor": 2761.69
+    },
+    {
+      "mes": "12/2025",
+      "valor": 2761.69
+    }
+  ],
+  "decimos_terceiros_selecionados": [],
+  "ferias_selecionadas": [],
+  "cartao_ponto": [],
+  "verbas_mensais": [
+    {
+      "calcular": true,
+      "nome_gratificacao": "DEVOLUÇÃO DESCONTO DIA DE TRABALHO",
+      "tipo": "historico_salarial",
+      "data_inicial": "2024-10-21",
+      "data_final": "2024-10-21",
+      "valor": "0.00",
+      "valor_pago": "0.00",
+      "percentual": "100",
+      "proporcionalizar": false,
+      "reflexos": {
+        "ferias": false,
+        "decimo_terceiro": false,
+        "aviso_previo": false,
+        "fgts": false
+      }
+    },
+    {
+      "calcular": true,
+      "nome_gratificacao": "RESTITUIÇÃO EXAME TOXICOLÓGICO",
+      "tipo": "valor fixo",
+      "data_inicial": "2022-08-26",
+      "data_final": "2025-12-03",
+      "valor": "100",
+      "valor_pago": "0.00",
+      "percentual": "100",
+      "proporcionalizar": false,
+      "reflexos": {
+        "ferias": false,
+        "decimo_terceiro": false,
+        "aviso_previo": false,
+        "fgts": false
+      }
+    }
+  ],
+  "insalubridade": {
+    "calcular": false,
+    "percentual": "40",
+    "data_inicial": "2022-08-26",
+    "data_final": "2025-12-03",
+    "valor_pago": "",
+    "proporcionalizar": false,
+    "reflexos": {
+      "ferias": true,
+      "decimo_terceiro": true,
+      "aviso_previo": true
+    }
+  },
+  "periculosidade": {
+    "calcular": false,
+    "percentual": "30",
+    "data_inicial": "",
+    "data_final": "",
+    "valor_pago": "0.00",
+    "proporcionalizar": false,
+    "reflexos": {
+      "ferias": false,
+      "decimo_terceiro": false,
+      "aviso_previo": false
+    }
+  },
+  "danos_morais": {
+    "calcular": true,
+    "valor": "3000",
+    "data_danos_morais": "2026-04-01",
+    "aplicar_sumula_439": true
+  },
+  "contribuicao_social": {
+    "calcular": true,
+    "aliquota_empregador": "20",
+    "aliquota_sat": "2",
+    "optante_simples": false,
+    "data_inicial": "2022-08-26",
+    "data_final": "2025-12-03"
+  },
+  "escala_tipo": "DOZE_POR_TRINTA_E_SEIS",
+  "escala_hora_inicio": "07:00"
+}

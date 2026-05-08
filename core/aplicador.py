@@ -165,23 +165,86 @@ class AplicadorPJECalc:
         return self._fill_text(sufixo, valor)
 
     def _click_radio(self, name_or_sufixo: str, valor: str) -> bool:
-        """Clica radio com name=name_or_sufixo e value=valor. None/'' no-op."""
+        """Clica radio com name=name_or_sufixo. Aceita value (DOM) OU label
+        visível ao usuário (texto adjacente). None/'' no-op.
+
+        Tiers:
+          1. value exato (ex: 'FIXA', 'INFORMADO')
+          2. label exato (ex: 'Fixa', 'Variável', 'Informado')
+          3. label includes case-insensitive
+        """
         if not valor:
             return False
         try:
-            # Tentar por nome primeiro, depois por id
-            sel = (
+            # Tier 1: value exato
+            sel_value = (
                 f"input[type='radio'][name='formulario:{name_or_sufixo}'][value='{valor}'],"
                 f"input[type='radio'][name$=':{name_or_sufixo}'][value='{valor}'],"
                 f"input[type='radio'][id*='{name_or_sufixo}'][value='{valor}']"
             )
-            loc = self._page.locator(sel).first
-            if loc.count() == 0:
-                self.log(f"  ⚠ radio '{name_or_sufixo}={valor}' não encontrado")
-                return False
-            loc.click(force=True)
-            self._aguardar_ajax(3000)
-            return True
+            loc = self._page.locator(sel_value).first
+            if loc.count() > 0:
+                loc.click(force=True)
+                self._aguardar_ajax(3000)
+                return True
+
+            # Tier 2/3: por label adjacente (JSF radio: <input/> + <label for>)
+            clicou = self._page.evaluate(
+                """(args) => {
+                    const norm = s => (s||'').toUpperCase()
+                        .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                        .replace(/\\s+/g,' ').trim();
+                    const alvo = norm(args.valor);
+                    const radios = [...document.querySelectorAll(
+                        `input[type=radio][name*=':${args.nome}'], input[type=radio][id*='${args.nome}']`
+                    )];
+                    for (const r of radios) {
+                        // Procurar label associada
+                        let txt = '';
+                        if (r.id) {
+                            const lbl = document.querySelector(`label[for="${r.id}"]`);
+                            if (lbl) txt = norm(lbl.textContent || '');
+                        }
+                        // Fallback: irmãos (comum em JSF radio sem label for)
+                        if (!txt) {
+                            let s = r.nextSibling;
+                            while (s && !txt) {
+                                txt = norm(s.textContent || s.nodeValue || '');
+                                s = s.nextSibling;
+                                if (txt) break;
+                            }
+                        }
+                        // Tier 2: exato
+                        if (txt === alvo) { r.click(); return 'tier2:' + r.id; }
+                    }
+                    // Tier 3: includes
+                    for (const r of radios) {
+                        let txt = '';
+                        if (r.id) {
+                            const lbl = document.querySelector(`label[for="${r.id}"]`);
+                            if (lbl) txt = norm(lbl.textContent || '');
+                        }
+                        if (!txt) {
+                            let s = r.nextSibling;
+                            while (s && !txt) {
+                                txt = norm(s.textContent || s.nodeValue || '');
+                                s = s.nextSibling;
+                                if (txt) break;
+                            }
+                        }
+                        if (txt && (txt.includes(alvo) || alvo.includes(txt))) {
+                            r.click(); return 'tier3:' + r.id;
+                        }
+                    }
+                    return null;
+                }""",
+                {"nome": name_or_sufixo, "valor": valor},
+            )
+            if clicou:
+                self._aguardar_ajax(3000)
+                return True
+            self.log(f"  ⚠ radio '{name_or_sufixo}={valor}' não encontrado")
+            return False
         except Exception as e:
             self.log(f"  ⚠ click_radio {name_or_sufixo}={valor}: {e}")
             return False
@@ -1116,15 +1179,29 @@ class AplicadorPJECalc:
                 self.log(f"  ⚠ Não conseguiu abrir 'Novo' para '{entry.nome}'")
                 continue
             self._fill_text("nome", entry.nome)
+            # Parcela radio: schema FIXA/VARIAVEL → labels "Fixa" / "Variável"
             self._click_radio("tipoVariacaoDaParcela",
                               "Fixa" if entry.tipo_variacao_da_parcela == "FIXA" else "Variável")
+            # Incidências (3 checkboxes na seção "Incidência" do form)
+            self._click_checkbox("fgts", entry.fgts)
+            # checkbox rotulado "Contribuição Social" — id no DOM é "inss"
+            # ou "contribuicaoSocial"; tentar ambos
+            self._click_checkbox("inss", entry.inss)
+            self._click_checkbox("contribuicaoSocial", entry.inss)
+            # checkbox "Proporcionalizar Contribuição Social" — só faz sentido
+            # se inss=True; AJAX habilita ao marcar inss
+            if entry.inss:
+                self._aguardar_ajax(2000)
+                self._click_checkbox("proporcionalizarContribuicaoSocial",
+                                     entry.proporcionalizar_cs)
+                self._click_checkbox("proporcionalizarCS",
+                                     entry.proporcionalizar_cs)
+            # Período / Tipo Valor (na seção Ocorrências do form)
             self._fill_date("competenciaInicialInputDate", entry.competencia_inicial)
             self._fill_date("competenciaFinalInputDate", entry.competencia_final)
             self._click_radio("tipoValor",
                               "Informado" if entry.tipo_valor == "INFORMADO" else "Calculado")
             self._fill_decimal("valorParaBaseDeCalculo", entry.valor_para_base_de_calculo)
-            self._click_checkbox("fgts", entry.fgts)
-            self._click_checkbox("inss", entry.inss)
             self._clicar_salvar()
 
             # Ocorrências mensais — abrir linha do histórico e aplicar

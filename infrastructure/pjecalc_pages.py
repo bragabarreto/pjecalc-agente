@@ -213,9 +213,11 @@ class HistoricoSalarialEntry(BaseModel):
     tipo_valor: Literal["INFORMADO", "CALCULADO"] = "INFORMADO"
     valor_para_base_de_calculo: ValorBR = None  # se INFORMADO
 
-    # Incidências (checkboxes do form)
+    # Incidências (checkboxes do form). Labels reais na UI:
+    #   "FGTS" / "Contribuição Social" / "Proporcionalizar Contribuição Social"
     fgts: bool = True
-    inss: bool = True
+    inss: bool = True  # rotulado "Contribuição Social" no form
+    proporcionalizar_cs: bool = False  # condicional — aparece quando inss=True
 
     # Ocorrências mensais geradas
     ocorrencias: List[HistoricoSalarialOcorrencia] = Field(default_factory=list)
