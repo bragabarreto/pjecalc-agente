@@ -349,20 +349,61 @@ class AplicadorPJECalc:
             self.log(f"  ⚠ navegar {jsf_path}: {e}")
             return False
 
-    # Mapa nome → seletor CSS do menu lateral (li#li_calculo_*)
+    # Mapa nome → seletor CSS do menu lateral.
+    # Estrutura confirmada via screenshots (3 accordions: Cálculo / Operações
+    # / Atualização / Tabelas). Tabelas são referências globais — não fazem
+    # parte do cálculo individual (não usadas pelo aplicador, mas listadas
+    # para evitar match cruzado em tier 2/3).
     _MENU_SELECTORS = {
+        # ── Aba "Cálculo" ──
         "Dados do Cálculo": "li#li_calculo_dados a",
-        "Histórico Salarial": "li#li_calculo_historico_salarial a",
         "Faltas": "li#li_calculo_faltas a",
         "Férias": "li#li_calculo_ferias a",
+        "Histórico Salarial": "li#li_calculo_historico_salarial a",
         "Verbas": "li#li_calculo_verbas a",
         "Cartão de Ponto": "li#li_calculo_cartao_ponto a",
+        "Salário-família": "li#li_calculo_salario_familia a",
+        "Seguro-desemprego": "li#li_calculo_seguro_desemprego a",
         "FGTS": "li#li_calculo_fgts a",
         "Contribuição Social": "li#li_calculo_contribuicao_social a",
+        "Previdência Privada": "li#li_calculo_previdencia_privada a",
+        "Pensão Alimentícia": "li#li_calculo_pensao_alimenticia a",
         "Imposto de Renda": "li#li_calculo_imposto_renda a",
+        "Multas e Indenizações": "li#li_calculo_multas a",
         "Honorários": "li#li_calculo_honorarios a",
         "Custas Judiciais": "li#li_calculo_custas a",
         "Correção, Juros e Multa": "li#li_calculo_correcao_juros a",
+        # ── Aba "Operações" ──
+        "Liquidar": "li#li_operacoes_liquidar a, li[id*='liquidar']:not([id*='atualiza']) a",
+        "Imprimir": "li#li_operacoes_imprimir a, li[id*='imprimir']:not([id*='atualiza']) a",
+        "Fechar": "li#li_operacoes_fechar a",
+        "Excluir": "li#li_operacoes_excluir a",
+        "Exportar": "li#li_operacoes_exportar a",
+        "Enviar para o PJe": "li#li_operacoes_enviar_pje a, li[id*='enviar_pje']:not([id*='atualiza']) a",
+        # ── Aba "Atualização" (re-cálculo de cálculo já liquidado) ──
+        "Dados do Pagamento": "li#li_atualizacao_dados_pagamento a",
+        "Pensão Alimentícia (Atualização)": "li#li_atualizacao_pensao_alimenticia a",
+        "Multas e Indenizações (Atualização)": "li#li_atualizacao_multas a",
+        "Honorários (Atualização)": "li#li_atualizacao_honorarios a",
+        "Custas Judiciais (Atualização)": "li#li_atualizacao_custas a",
+        "Liquidar Atualização": "li#li_atualizacao_liquidar a",
+        "Imprimir Atualização": "li#li_atualizacao_imprimir a",
+        "Enviar para o PJe (Atualização)": "li#li_atualizacao_enviar_pje a",
+        # ── Aba "Tabelas" (referências globais — não usadas pelo aplicador
+        #     no cálculo individual, listadas para excluí-las de tiers 2/3) ──
+        "Salário Mínimo": "li#li_tabelas_salario_minimo a",
+        "Pisos Salariais": "li#li_tabelas_pisos_salariais a",
+        "Salário-família (Tabelas)": "li#li_tabelas_salario_familia a",
+        "Seguro-desemprego (Tabelas)": "li#li_tabelas_seguro_desemprego a",
+        "Vale-transporte": "li#li_tabelas_vale_transporte a",
+        "Feriados e Pontos Facultativos": "li#li_tabelas_feriado a",
+        "Verbas (Tabelas)": "li#li_tabelas_verbas a",
+        "Contribuição Social (Tabelas)": "li#li_tabelas_inss a",
+        "Imposto de Renda (Tabelas)": "li#li_tabela_irpf a",
+        "Custas Judiciais (Tabelas)": "li#li_tabelas_custas a",
+        "Correção Monetária": "li#li_tabelas_correcao_monetaria a",
+        "Juros de Mora": "li#li_tabelas_juros_mora a",
+        "Log de Infra": "li#li_tabelas_log_infra a",
     }
 
     def _reabrir_calculo_recentes(self, processo_numero: str = "", reclamante_nome: str = "") -> bool:
@@ -1803,41 +1844,54 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def liquidar_e_exportar(self) -> Optional[bytes]:
-        """Click Liquidar → aguardar conclusão → click Exportar → captura .pjc bytes.
+        """Click Liquidar (menu Operações) → aguardar → Exportar → captura .pjc bytes.
 
-        Retorna bytes do .pjc ou None em caso de erro.
+        Confirmado via screenshot do menu lateral expandido (aba Operações):
+          Liquidar / Imprimir / Fechar / Excluir / Exportar / Enviar para o PJe
         """
         self.log("→ Liquidar e Exportar")
         try:
-            # Etapa 1 — Liquidar (menu Operações ou link direto)
-            if not self._navegar_url_calculo("liquidacao/liquidar.jsf"):
-                self._navegar_url_calculo("liquidar.jsf")
-            # Click no botão Liquidar
-            for sel in ("input[id$='liquidar']", "input[value='Liquidar']",
-                        "input[id$='confirmarLiquidacao']"):
+            # Etapa 1 — Liquidar via menu lateral (aba Operações)
+            if not self._clicar_menu_lateral("Liquidar"):
+                self.log("  ⚠ menu Liquidar falhou — tentando fallback URL")
+                self._navegar_url_calculo("liquidacao/liquidar.jsf") or \
+                    self._navegar_url_calculo("liquidar.jsf")
+            self._aguardar_ajax(15000)
+            self._page.wait_for_timeout(2000)
+            # Click confirmação dentro da página de Liquidar (botão "Liquidar"/"Confirmar")
+            for sel in ("input[id$='confirmarLiquidacao']", "input[value='Liquidar']",
+                        "input[id$='liquidar']:not([id*='Atualiza'])"):
                 btn = self._page.locator(sel).first
                 if btn.count() > 0:
                     btn.click(timeout=8000)
                     break
-            self._aguardar_ajax(60000)  # liquidação pode demorar
-            self._page.wait_for_timeout(2000)
+            self._aguardar_ajax(120000)  # liquidação pode demorar minutos
+            self._page.wait_for_timeout(3000)
 
-            # Verificar mensagem de sucesso
             sucesso = self._page.evaluate(
                 """() => {
                     const body = (document.body && document.body.textContent) || '';
-                    return body.includes('sucesso') || body.includes('liquidação realizada')
-                        || body.includes('Liquidação concluída');
+                    return body.includes('sucesso') ||
+                           body.includes('Liquidação') ||
+                           body.includes('liquidad');
                 }"""
             )
             if not sucesso:
-                self.log("  ⚠ Liquidação: mensagem de sucesso não detectada (continuando assim mesmo)")
+                self.log("  ⚠ Liquidação: sem mensagem de sucesso (continuando)")
 
-            # Etapa 2 — Exportar
-            self._navegar_url_calculo("exportar/exportar.jsf")
+            # Etapa 2 — Exportar via menu lateral
+            if not self._clicar_menu_lateral("Exportar"):
+                self.log("  ⚠ menu Exportar falhou — tentando fallback URL")
+                self._navegar_url_calculo("exportar/exportar.jsf")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1500)
+
+            # Capturar download do .pjc
             with self._page.expect_download(timeout=60000) as dl_info:
+                # Click no botão de download (formato .pjc)
                 for sel in ("input[id$='exportar']", "input[value='Exportar']",
-                            "a:has-text('Exportar')"):
+                            "input[value='Salvar']", "a:has-text('PJC')",
+                            "a[href*='.pjc']", "input[type='submit']"):
                     btn = self._page.locator(sel).first
                     if btn.count() > 0:
                         btn.click(timeout=8000)
@@ -1847,7 +1901,7 @@ class AplicadorPJECalc:
             if path:
                 with open(path, "rb") as f:
                     pjc = f.read()
-                self.log(f"  ✓ .PJC capturado ({len(pjc)} bytes)")
+                self.log(f"  ✓ .PJC capturado ({len(pjc)} bytes) via menu Operações>Exportar")
                 return pjc
             return None
         except Exception as e:
