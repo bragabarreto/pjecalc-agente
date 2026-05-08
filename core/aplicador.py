@@ -476,6 +476,24 @@ class AplicadorPJECalc:
                 self.log(f"  🔍 n_all_trs={dump.get('n_all_trs',0)} n_listagem={dump.get('n_listagem_trs',0)} tem_verba={dump.get('tem_verba_no_body',False)} erro_500={dump.get('tem_erro_500',False)}")
                 self.log(f"  🔍 tabelas={dump.get('tabelas',[])[:3]}")
                 self.log(f"  🔍 tr_ids={dump.get('tr_ids_sample',[])[:5]}")
+                # Dump extra: snippet do body + IDs únicos das primeiras tabelas
+                extra = self._page.evaluate(
+                    """() => {
+                        const body = (document.body.textContent || '').replace(/\\s+/g,' ').trim();
+                        const start_erro = body.search(/(erro|exception|500|npe)/i);
+                        const trs_com_id = [...document.querySelectorAll('tr[id]')].slice(0, 10).map(tr => tr.id);
+                        const trs_links = [...document.querySelectorAll('tr')].filter(tr => tr.querySelector('a[id]'));
+                        return {
+                            body_around_erro: start_erro >= 0 ? body.slice(Math.max(0,start_erro-50), start_erro+200) : '',
+                            tr_ids_with_id: trs_com_id,
+                            n_trs_com_link: trs_links.length,
+                            sample_link_ids: trs_links.slice(0,3).map(tr => [...tr.querySelectorAll('a')].slice(0,3).map(a => a.id || '<no-id>')),
+                        };
+                    }"""
+                )
+                self.log(f"  🔍 body_perto_erro: {(extra.get('body_around_erro','')[:200])}")
+                self.log(f"  🔍 trs_com_id={extra.get('tr_ids_with_id',[])[:6]}")
+                self.log(f"  🔍 n_trs_com_link={extra.get('n_trs_com_link',0)} sample_links={extra.get('sample_link_ids',[])[:3]}")
             except Exception as e:
                 self.log(f"  ⚠ diagnóstico DOM falhou: {e}")
 
