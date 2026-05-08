@@ -354,56 +354,50 @@ class AplicadorPJECalc:
     # / Atualização / Tabelas). Tabelas são referências globais — não fazem
     # parte do cálculo individual (não usadas pelo aplicador, mas listadas
     # para evitar match cruzado em tier 2/3).
+    # IDs CONFIRMADOS via inspeção DOM live (Chrome MCP, 2026-05-08).
+    # Estrutura: li#li_<aba>_<secao>. NÃO há <a>, é o <li> que tem onclick;
+    # mas seletor 'li#X a' funciona se houver link interno. Caso contrário,
+    # o JS click no <li> dispara o handler.
     _MENU_SELECTORS = {
         # ── Aba "Cálculo" ──
-        "Dados do Cálculo": "li#li_calculo_dados a",
-        "Faltas": "li#li_calculo_faltas a",
-        "Férias": "li#li_calculo_ferias a",
-        "Histórico Salarial": "li#li_calculo_historico_salarial a",
-        "Verbas": "li#li_calculo_verbas a",
-        "Cartão de Ponto": "li#li_calculo_cartao_ponto a",
-        "Salário-família": "li#li_calculo_salario_familia a",
-        "Seguro-desemprego": "li#li_calculo_seguro_desemprego a",
-        "FGTS": "li#li_calculo_fgts a",
-        "Contribuição Social": "li#li_calculo_contribuicao_social a",
-        "Previdência Privada": "li#li_calculo_previdencia_privada a",
-        "Pensão Alimentícia": "li#li_calculo_pensao_alimenticia a",
-        "Imposto de Renda": "li#li_calculo_imposto_renda a",
-        "Multas e Indenizações": "li#li_calculo_multas a",
-        "Honorários": "li#li_calculo_honorarios a",
-        "Custas Judiciais": "li#li_calculo_custas a",
-        "Correção, Juros e Multa": "li#li_calculo_correcao_juros a",
+        "Dados do Cálculo": "li#li_calculo_dados_do_calculo",
+        "Faltas": "li#li_calculo_faltas",
+        "Férias": "li#li_calculo_ferias",
+        "Histórico Salarial": "li#li_calculo_historico_salarial",
+        "Verbas": "li#li_calculo_verbas",
+        "Cartão de Ponto": "li#li_calculo_cartao_ponto",
+        "Salário-família": "li#li_calculo_salario_familia",
+        "Seguro-desemprego": "li#li_calculo_seguro_desemprego",
+        "FGTS": "li#li_calculo_fgts",
+        "Contribuição Social": "li#li_calculo_inss",
+        "Previdência Privada": "li#li_calculo_previdencia_privada",
+        "Pensão Alimentícia": "li#li_calculo_pensao_alimenticia",
+        "Imposto de Renda": "li#li_calculo_irpf",
+        "Multas e Indenizações": "li#li_calculo_multas_e_indenizacoes",
+        "Honorários": "li#li_calculo_honorarios",
+        "Custas Judiciais": "li#li_calculo_custas_judiciais",
+        "Correção, Juros e Multa": "li#li_calculo_correcao_juros_multa",
+        "Relatórios": "li#li_calculo_relatorios",
         # ── Aba "Operações" ──
-        "Liquidar": "li#li_operacoes_liquidar a, li[id*='liquidar']:not([id*='atualiza']) a",
-        "Imprimir": "li#li_operacoes_imprimir a, li[id*='imprimir']:not([id*='atualiza']) a",
-        "Fechar": "li#li_operacoes_fechar a",
-        "Excluir": "li#li_operacoes_excluir a",
-        "Exportar": "li#li_operacoes_exportar a",
-        "Enviar para o PJe": "li#li_operacoes_enviar_pje a, li[id*='enviar_pje']:not([id*='atualiza']) a",
-        # ── Aba "Atualização" (re-cálculo de cálculo já liquidado) ──
-        "Dados do Pagamento": "li#li_atualizacao_dados_pagamento a",
-        "Pensão Alimentícia (Atualização)": "li#li_atualizacao_pensao_alimenticia a",
-        "Multas e Indenizações (Atualização)": "li#li_atualizacao_multas a",
-        "Honorários (Atualização)": "li#li_atualizacao_honorarios a",
-        "Custas Judiciais (Atualização)": "li#li_atualizacao_custas a",
-        "Liquidar Atualização": "li#li_atualizacao_liquidar a",
-        "Imprimir Atualização": "li#li_atualizacao_imprimir a",
-        "Enviar para o PJe (Atualização)": "li#li_atualizacao_enviar_pje a",
-        # ── Aba "Tabelas" (referências globais — não usadas pelo aplicador
-        #     no cálculo individual, listadas para excluí-las de tiers 2/3) ──
-        "Salário Mínimo": "li#li_tabelas_salario_minimo a",
-        "Pisos Salariais": "li#li_tabelas_pisos_salariais a",
-        "Salário-família (Tabelas)": "li#li_tabelas_salario_familia a",
-        "Seguro-desemprego (Tabelas)": "li#li_tabelas_seguro_desemprego a",
-        "Vale-transporte": "li#li_tabelas_vale_transporte a",
-        "Feriados e Pontos Facultativos": "li#li_tabelas_feriado a",
-        "Verbas (Tabelas)": "li#li_tabelas_verbas a",
-        "Contribuição Social (Tabelas)": "li#li_tabelas_inss a",
-        "Imposto de Renda (Tabelas)": "li#li_tabela_irpf a",
-        "Custas Judiciais (Tabelas)": "li#li_tabelas_custas a",
-        "Correção Monetária": "li#li_tabelas_correcao_monetaria a",
-        "Juros de Mora": "li#li_tabelas_juros_mora a",
-        "Log de Infra": "li#li_tabelas_log_infra a",
+        "Liquidar": "li#li_operacoes_liquidar",
+        "Fechar": "li#li_operacoes_fechar",
+        "Excluir": "li#li_operacoes_excluir",
+        "Exportar": "li#li_operacoes_exportar",
+        "Validar": "li#li_operacoes_validar",
+        # ── Aba "Tabelas" (referências globais) ──
+        "Salário Mínimo": "li#li_tabelas_salario_minimo",
+        "Salário Categoria": "li#li_tabelas_salario_categoria",
+        "Salário-família (Tabelas)": "li#li_tabelas_salario_familia",
+        "Seguro-desemprego (Tabelas)": "li#li_tabelas_seguro_desemprego",
+        "Vale-transporte": "li#li_tabelas_vale_transporte",
+        "Feriados": "li#li_tabelas_feriado",
+        "Verbas (Tabelas)": "li#li_tabelas_verbas",
+        "Contribuição Social (Tabelas)": "li#li_tabelas_inss",
+        "Imposto de Renda (Tabelas)": "li#li_tabela_irpf",
+        "Parâmetros Custas": "li#li_tabelas_parametros_custas",
+        "Índices Gerais": "li#li_tabelas_indices_gerais",
+        "Juros": "li#li_tabelas_juros",
+        "Log de Infra": "li#li_tabelas_loginfra",
     }
 
     def _reabrir_calculo_recentes(self, processo_numero: str = "", reclamante_nome: str = "") -> bool:
@@ -420,19 +414,36 @@ class AplicadorPJECalc:
             self._aguardar_ajax(5000)
             self._page.wait_for_timeout(1500)
 
+            # IDs do select são dinâmicos (formulario:j_idXX). Localizar por
+            # label adjacente "Abrir Cálculos Recentes" + opções no formato
+            # "<id_calc> / <processo> / <reclamante>".
+            select_id = self._page.evaluate(
+                """() => {
+                    // Tier 1: select cuja primeira opção tem formato "NNNNNN / ..."
+                    for (const s of document.querySelectorAll('select')) {
+                        if (s.options.length > 0) {
+                            const txt = (s.options[0].text || '');
+                            if (/^\\d{4,}\\s*\\//.test(txt)) return s.name || s.id;
+                        }
+                    }
+                    // Tier 2: por label próximo "Cálculos Recentes"
+                    const fs = [...document.querySelectorAll('fieldset, legend, label, h3, h4, span, div')]
+                        .find(e => /c[áa]lculos\\s*recentes/i.test(e.textContent || ''));
+                    if (fs) {
+                        const sel = fs.parentElement && fs.parentElement.querySelector('select');
+                        if (sel) return sel.name || sel.id;
+                    }
+                    return null;
+                }"""
+            )
+            if not select_id:
+                self.log("  ⚠ select de Recentes não encontrado")
+                return False
+            self.log(f"  → select Recentes: {select_id}")
             listbox = self._page.locator(
-                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes'],"
-                "select[id*='listaCalculosRecentes'], select[id*='calculosRecentes'],"
-                "select[id*='calculos'], select[name*='Recente']"
+                f"select[name='{select_id}'], select[id='{select_id}']"
             )
             if listbox.count() == 0:
-                # Diag: listar todos os <select> da page
-                selects = self._page.evaluate(
-                    """() => [...document.querySelectorAll('select')]
-                            .slice(0,10).map(s => ({id: s.id, name: s.name, cls: s.className.slice(0,40), n_opts: s.options.length}))"""
-                )
-                self.log(f"  ⚠ select 'listaCalculosRecentes' não encontrado")
-                self.log(f"    selects disponíveis: {selects[:8]}")
                 return False
             opts = listbox.first.locator("option")
             n = opts.count()
