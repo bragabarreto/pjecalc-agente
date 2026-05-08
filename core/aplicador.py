@@ -1418,8 +1418,16 @@ class AplicadorPJECalc:
             )
             if clicou:
                 self.log(f"  ✓ Novo clicado: {clicou}")
-                self._aguardar_ajax(6000)
-                self._page.wait_for_timeout(800)
+                self._aguardar_ajax(10000)
+                # JSF/A4J render do form pode demorar — aguardar visível
+                try:
+                    self._page.wait_for_function(
+                        "() => document.querySelector('input[id$=\":nome\"], input[id$=\":descricao\"], input[id=\"formulario:salvar\"]') != null",
+                        timeout=15000,
+                    )
+                except Exception:
+                    pass
+                self._page.wait_for_timeout(1500)
                 return True
         except Exception as e:
             self.log(f"  ⚠ _clicar_novo evaluate: {e}")
