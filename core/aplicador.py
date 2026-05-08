@@ -97,6 +97,10 @@ class AplicadorPJECalc:
         self._base_url = base_url.rstrip("/")
         self._log_cb = log_cb or (lambda msg: logger.info(msg))
         self._conv_id: Optional[str] = None
+        # Cache para re-abrir cálculo via Recentes quando conv pós-Expresso
+        # for disjunta. Preenchidos em aplicar_dados_processo.
+        self._processo_numero: str = ""
+        self._reclamante_nome: str = ""
 
     # ── Logging ──
     def log(self, msg: str) -> None:
@@ -361,6 +365,71 @@ class AplicadorPJECalc:
         "Correção, Juros e Multa": "li#li_calculo_correcao_juros a",
     }
 
+    def _reabrir_calculo_recentes(self, processo_numero: str = "", reclamante_nome: str = "") -> bool:
+        """Volta para principal.jsf e re-abre o cálculo via Recentes.
+        Necessário quando a conversation atual está corrompida (ex: pós-Expresso
+        save abre conv disjunta sem menu lateral do cálculo).
+
+        Tiers de busca: CNJ → reclamante → 1º item se só houver 1.
+        """
+        try:
+            self.log("  ↺ Re-abrindo cálculo via Recentes…")
+            home = f"{self._base_url}/pages/principal.jsf"
+            self._page.goto(home, wait_until="domcontentloaded", timeout=15000)
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(1500)
+
+            listbox = self._page.locator(
+                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+            )
+            if listbox.count() == 0:
+                self.log("  ⚠ select 'listaCalculosRecentes' não encontrado")
+                return False
+            opts = listbox.first.locator("option")
+            n = opts.count()
+            if n == 0:
+                return False
+
+            num_clean = (processo_numero or "").replace(".", "").replace("-", "").replace("/", "")
+            found = None
+            if num_clean:
+                for i in range(n):
+                    txt = (opts.nth(i).text_content() or "")
+                    if num_clean in txt.replace(".", "").replace("-", "").replace("/", ""):
+                        found = i
+                        break
+            if found is None and reclamante_nome and len(reclamante_nome) >= 5:
+                up = reclamante_nome.strip().upper()
+                for i in range(n):
+                    if up in (opts.nth(i).text_content() or "").upper():
+                        found = i
+                        break
+            if found is None and n == 1:
+                self.log("  → Apenas 1 cálculo — usando")
+                found = 0
+            if found is None:
+                amostra = [(opts.nth(i).text_content() or "")[:80] for i in range(min(n, 5))]
+                self.log(f"  ⚠ Cálculo não encontrado. Recentes ({n}): {amostra}")
+                return False
+
+            opt_el = opts.nth(found)
+            opt_el.click()
+            self._page.wait_for_timeout(300)
+            opt_el.dblclick()
+            self._aguardar_ajax(20000)
+            self._page.wait_for_timeout(2000)
+
+            url = self._page.url
+            if "calculo" in url and "conversationId" in url:
+                novo = url.split("conversationId=")[1].split("&")[0].split("#")[0]
+                self.log(f"  ✓ Cálculo re-aberto: conv_id={novo}")
+                self._conv_id = novo
+                return True
+            return False
+        except Exception as e:
+            self.log(f"  ⚠ _reabrir_calculo_recentes: {e}")
+            return False
+
     def _clicar_menu_lateral(self, secao: str) -> bool:
         """Clica em link do menu lateral via JS (preserva conversation Seam,
         diferente de _navegar_url_calculo que faz goto direto e pode iniciar
@@ -442,6 +511,15 @@ class AplicadorPJECalc:
         "RR":"22","SC":"23","SP":"24","SE":"25","TO":"26",
     }
 
+    def _set_processo_cache(self, p: DadosProcesso) -> None:
+        """Salva número CNJ + nome reclamante para uso em re-abrir Recentes."""
+        try:
+            cnj = f"{p.numero}-{p.digito}.{p.ano}.5.{p.regiao}.{p.vara}"
+            self._processo_numero = cnj
+            self._reclamante_nome = p.reclamante_nome or ""
+        except Exception:
+            pass
+
     def aplicar_dados_processo(self, p: DadosProcesso) -> bool:
         """Preenche a página 1 (calculo.jsf) com TODOS os campos não-vazios
         de DadosProcesso. Salva ao final.
@@ -452,6 +530,7 @@ class AplicadorPJECalc:
           - estado usa ÍNDICE NUMÉRICO (0=AC, 5=CE…), não a sigla.
         """
         self.log("→ Fase 1: Dados do Processo")
+        self._set_processo_cache(p)
         if not self._navegar_url_calculo("calculo.jsf"):
             return False
 
@@ -594,12 +673,23 @@ class AplicadorPJECalc:
                 if novo_conv != self._conv_id:
                     self.log(f"  ↺ conv_id atualizado: {self._conv_id} → {novo_conv}")
                     self._conv_id = novo_conv
-            # USAR MENU LATERAL — preserva conversation Seam (URL direta inicia
-            # nova conv com listagem vazia). v1 confirmou: menu lateral
-            # 'Verbas' é o caminho oficial pós-Expresso.
-            if not self._clicar_menu_lateral("Verbas"):
-                self.log("  ⚠ menu Verbas falhou; fallback URL direta")
-                self._navegar_url_calculo("verba/verba-calculo.jsf")
+            # Estratégia 1: menu lateral (preserva Seam)
+            menu_ok = self._clicar_menu_lateral("Verbas")
+            # Estratégia 2: re-abrir cálculo via Recentes (conv pós-Expresso é
+            # disjunta — não tem li_calculo_*; precisa restaurar contexto
+            # Seam buscando o cálculo na lista da home)
+            if not menu_ok:
+                self.log("  ⚠ menu Verbas falhou — re-abrindo via Recentes")
+                if self._reabrir_calculo_recentes(
+                    processo_numero=self._processo_numero,
+                    reclamante_nome=self._reclamante_nome,
+                ):
+                    # Após re-abrir, navegar para Verbas via menu (agora disponível)
+                    if not self._clicar_menu_lateral("Verbas"):
+                        self.log("  ⚠ menu Verbas continua indisponível pós-Recentes")
+                        self._navegar_url_calculo("verba/verba-calculo.jsf")
+                else:
+                    self._navegar_url_calculo("verba/verba-calculo.jsf")
             self._page.wait_for_timeout(2500)
             if self._detectar_erro_pagina():
                 self.log("  ⚠ Listagem em erro 500/NPE pós-Expresso — pulando aplicação detalhada")
