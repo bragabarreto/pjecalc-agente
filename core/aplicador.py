@@ -1519,32 +1519,73 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_cartao_de_ponto(self, cp: CartaoDePonto) -> bool:
-        """Aplica configuração de Cartão de Ponto + programação semanal."""
-        if not cp or (not cp.forma_de_apuracao and not cp.programacao_semanal):
+        """Aplica Cartão de Ponto (apuracao-cartaodeponto.jsf) — DOM real.
+
+        Pulado silenciosamente se apurar=False E programação semanal vazia
+        (caso típico: sentença não envolve cartão de ponto).
+        """
+        if not cp:
+            return True
+        # Skip se nada explícito a aplicar
+        tem_dados = (
+            cp.apurar
+            or cp.tipo_apuracao_horas_extras
+            or any([cp.valor_jornada_segunda, cp.valor_jornada_terca,
+                    cp.valor_jornada_quarta, cp.valor_jornada_quinta,
+                    cp.valor_jornada_sexta, cp.valor_jornada_sabado,
+                    cp.valor_jornada_dom])
+            or cp.competencia_inicial
+        )
+        if not tem_dados:
             return True
         self.log("→ Fase 6: Cartão de Ponto")
         if not self._navegar_url_calculo("../cartaodeponto/apuracao-cartaodeponto.jsf"):
-            # fallback path
             self._navegar_url_calculo("cartaodeponto/apuracao-cartaodeponto.jsf")
-        if cp.forma_de_apuracao:
-            self._select_value("formaDeApuracao", cp.forma_de_apuracao)
-        if cp.jornada_diaria_h is not None:
-            self._fill_decimal("jornadaDiaria", cp.jornada_diaria_h)
-        if cp.jornada_semanal_h is not None:
-            self._fill_decimal("jornadaSemanal", cp.jornada_semanal_h)
-        if cp.intervalo_intrajornada_min is not None:
-            self._fill_text("intervaloIntrajornada", str(cp.intervalo_intrajornada_min))
-        # Programação semanal: itera dias
+
+        # Tipo de apuração HE (radio com 7 opções)
+        if cp.tipo_apuracao_horas_extras:
+            self._click_radio("tipoApuracaoHorasExtras", cp.tipo_apuracao_horas_extras)
+
+        # Competência
+        if cp.competencia_inicial:
+            self._fill_date("competenciaInicialInputDate", cp.competencia_inicial)
+        if cp.competencia_final:
+            self._fill_date("competenciaFinalInputDate", cp.competencia_final)
+
+        # Jornadas por dia (HH:MM como total do dia)
+        if cp.valor_jornada_segunda:
+            self._fill_text("valorJornadaSegunda", cp.valor_jornada_segunda)
+        if cp.valor_jornada_terca:
+            self._fill_text("valorJornadaTerca", cp.valor_jornada_terca)
+        if cp.valor_jornada_quarta:
+            self._fill_text("valorJornadaQuarta", cp.valor_jornada_quarta)
+        if cp.valor_jornada_quinta:
+            self._fill_text("valorJornadaQuinta", cp.valor_jornada_quinta)
+        if cp.valor_jornada_sexta:
+            self._fill_text("valorJornadaSexta", cp.valor_jornada_sexta)
+        if cp.valor_jornada_sabado:
+            self._fill_text("valorJornadaDiariaSabado", cp.valor_jornada_sabado)
+        if cp.valor_jornada_dom:
+            self._fill_text("valorJornadaDiariaDom", cp.valor_jornada_dom)
+
+        # Totais
+        if cp.qt_jornada_semanal:
+            self._fill_text("qtJornadaSemanal", cp.qt_jornada_semanal)
+        if cp.qt_jornada_mensal:
+            self._fill_text("qtJornadaMensal", cp.qt_jornada_mensal)
+
+        # Compat: programação semanal v2 (mapear dia → valor_jornada)
         for dia_cfg in cp.programacao_semanal:
-            d = dia_cfg.dia.lower()
-            if dia_cfg.turno1_inicio:
-                self._fill_text(f"entrada1{d}", dia_cfg.turno1_inicio)
-            if dia_cfg.turno1_fim:
-                self._fill_text(f"saida1{d}", dia_cfg.turno1_fim)
-            if dia_cfg.turno2_inicio:
-                self._fill_text(f"entrada2{d}", dia_cfg.turno2_inicio)
-            if dia_cfg.turno2_fim:
-                self._fill_text(f"saida2{d}", dia_cfg.turno2_fim)
+            if dia_cfg.valor_jornada:
+                map_dia = {
+                    "SEG": "valorJornadaSegunda", "TER": "valorJornadaTerca",
+                    "QUA": "valorJornadaQuarta", "QUI": "valorJornadaQuinta",
+                    "SEX": "valorJornadaSexta", "SAB": "valorJornadaDiariaSabado",
+                    "DOM": "valorJornadaDiariaDom",
+                }
+                campo = map_dia.get(dia_cfg.dia)
+                if campo:
+                    self._fill_text(campo, dia_cfg.valor_jornada)
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────

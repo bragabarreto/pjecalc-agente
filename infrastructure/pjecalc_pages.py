@@ -559,22 +559,60 @@ class ImpostoRenda(BaseModel):
 
 
 class ProgramacaoSemanalDia(BaseModel):
-    """Configuração de jornada por dia da semana."""
+    """Configuração de jornada por dia (DOM auditado: PJE-Calc usa formato
+    HH:MM como JORNADA TOTAL DO DIA, não turnos com entrada/saída)."""
 
     model_config = ConfigDict(extra="forbid")
 
     dia: Literal["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"]
-    turno1_inicio: Optional[str] = None  # HH:MM
+    valor_jornada: Optional[str] = None  # HH:MM (ex.: '08:00')
+    # Compat — turnos não usados pelo PJE-Calc Cidadão (legado v2)
+    turno1_inicio: Optional[str] = None
     turno1_fim: Optional[str] = None
     turno2_inicio: Optional[str] = None
     turno2_fim: Optional[str] = None
 
 
 class CartaoDePonto(BaseModel):
-    """Página: Cartão de Ponto."""
+    """Página: Cartão de Ponto (apuracao-cartaodeponto.jsf).
+
+    DOM auditado v2.15.1 — campos reais (não usa entrada/saída):
+      tipoApuracaoHorasExtras (7 opções), competenciaInicialInputDate /
+      competenciaFinalInputDate, valorJornadaSegunda/Terca/.../Sabado/Dom,
+      qtJornadaSemanal, qtJornadaMensal + checkboxes diversos.
+    """
 
     model_config = ConfigDict(extra="forbid")
 
+    apurar: bool = False  # default: não apurar (sentença raramente envolve)
+
+    # Tipo de apuração de horas extras (7 opções)
+    tipo_apuracao_horas_extras: Optional[Literal[
+        "NAO_APURAR_HORAS_EXTRAS",
+        "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA",
+        "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",  # default UI
+        "HORAS_EXTRAS_CONFORME_SUMULA_85",
+        "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO",
+        "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL",
+        "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL",
+    ]] = None
+
+    # Competência (período do cartão)
+    competencia_inicial: Optional[str] = None  # MM/AAAA
+    competencia_final: Optional[str] = None  # MM/AAAA
+
+    # Jornadas por dia (HH:MM total do dia)
+    valor_jornada_segunda: Optional[str] = None
+    valor_jornada_terca: Optional[str] = None
+    valor_jornada_quarta: Optional[str] = None
+    valor_jornada_quinta: Optional[str] = None
+    valor_jornada_sexta: Optional[str] = None
+    valor_jornada_sabado: Optional[str] = None
+    valor_jornada_dom: Optional[str] = None
+    qt_jornada_semanal: Optional[str] = None  # HH:MM
+    qt_jornada_mensal: Optional[str] = None  # HH:MM
+
+    # Compat (legado v2 — não corresponde ao DOM real)
     forma_de_apuracao: Optional[Literal[
         "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
         "HORAS_EXTRAS_PELA_JORNADA_REAL",
