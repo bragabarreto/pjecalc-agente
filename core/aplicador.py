@@ -781,7 +781,7 @@ class AplicadorPJECalc:
                         self._navegar_url_calculo("verba/verba-calculo.jsf")
                 else:
                     self._navegar_url_calculo("verba/verba-calculo.jsf")
-            self._page.wait_for_timeout(2500)
+            self._page.wait_for_timeout(5000)  # Expresso save + AJAX render listagem demora
             if self._detectar_erro_pagina():
                 self.log("  ⚠ Listagem em erro 500/NPE pós-Expresso — pulando aplicação detalhada")
                 return False
@@ -1444,8 +1444,12 @@ class AplicadorPJECalc:
             return False
         for entry in historico:
             if not self._clicar_novo():
-                self.log(f"  ⚠ Não conseguiu abrir 'Novo' para '{entry.nome}'")
+                self.log(f"  ⚠ Não conseguiu abrir 'Novo' para '{entry.nome}' — skip")
+                # Importante: continuar SEM tentar preencher campos do form
+                # (que não existe). Skip evita warnings em cascata.
                 continue
+            self._aguardar_ajax(3000)
+            self._page.wait_for_timeout(800)
             self._fill_text("nome", entry.nome)
             # Parcela radio: schema FIXA/VARIAVEL → labels "Fixa" / "Variável"
             self._click_radio("tipoVariacaoDaParcela",
