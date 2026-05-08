@@ -302,24 +302,61 @@ class AplicadorPJECalc:
         """Clica em link do menu lateral via JS (preserva conversation Seam,
         diferente de _navegar_url_calculo que faz goto direto e pode iniciar
         nova conversation). Use APÓS save de operações que mudam conv_id
-        (ex: Expresso save) ou para navegar entre páginas do cálculo."""
-        sel = self._MENU_SELECTORS.get(secao)
-        if not sel:
-            self.log(f"  ⚠ menu lateral '{secao}' sem seletor")
-            return False
+        (ex: Expresso save) ou para navegar entre páginas do cálculo.
+
+        Estratégia em 3 tiers:
+          1. Seletor exato `li#li_calculo_X a`
+          2. Link <a> cujo texto/title casa o nome da seção (case-insensitive)
+          3. <li> qualquer cuja substring inclua palavra-chave da seção
+        """
+        sel_exato = self._MENU_SELECTORS.get(secao, "")
         try:
             clicou = self._page.evaluate(
-                """(sel) => {
-                    const a = document.querySelector(sel);
-                    if (!a) return null;
-                    a.click();
-                    return a.id || a.href || 'ok';
+                """(args) => {
+                    const norm = s => (s||'').toUpperCase()
+                        .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                        .replace(/\\s+/g,' ').trim();
+                    const alvo = norm(args.secao);
+                    // Tier 1: ID fixo
+                    if (args.sel_exato) {
+                        const a = document.querySelector(args.sel_exato);
+                        if (a) { a.click(); return 'tier1:' + (a.id || 'ok'); }
+                    }
+                    // Tier 2: link com texto/title casando
+                    const links = [...document.querySelectorAll('a')];
+                    for (const a of links) {
+                        const t = norm((a.textContent||'') + ' ' + (a.title||''));
+                        if (t === alvo || t.includes(alvo)) {
+                            // evitar links de breadcrumb/header
+                            const li = a.closest('li');
+                            if (!li || !li.id || !li.id.startsWith('li_')) continue;
+                            a.click();
+                            return 'tier2:' + (a.id || a.href || 'ok');
+                        }
+                    }
+                    // Tier 3: qualquer li[id^=li_] cuja primeira palavra do alvo casa
+                    const palavra1 = alvo.split(' ')[0];
+                    const lis = [...document.querySelectorAll('li[id^="li_"]')];
+                    for (const li of lis) {
+                        if (norm(li.id).includes(palavra1) || norm(li.textContent).includes(alvo)) {
+                            const a = li.querySelector('a');
+                            if (a) { a.click(); return 'tier3:' + li.id; }
+                        }
+                    }
+                    return null;
                 }""",
-                sel,
+                {"sel_exato": sel_exato, "secao": secao},
             )
             if not clicou:
-                self.log(f"  ⚠ menu lateral '{secao}': link não encontrado ({sel})")
+                # Diagnóstico: listar menus disponíveis
+                lis_disponiveis = self._page.evaluate(
+                    """() => [...document.querySelectorAll('li[id^="li_"]')]
+                            .slice(0,20).map(li => li.id)"""
+                )
+                self.log(f"  ⚠ menu lateral '{secao}': não encontrado")
+                self.log(f"    disponíveis: {lis_disponiveis[:15]}")
                 return False
+            self.log(f"  ✓ menu lateral '{secao}': {clicou}")
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(800)
             # Capturar conv_id atual
