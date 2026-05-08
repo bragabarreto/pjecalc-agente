@@ -3965,6 +3965,59 @@ class PJECalcPlaywright:
             else:
                 self._log("  ⚠ conversationId ainda ausente — prosseguindo (risco de IIDCALCULO NULL)")
 
+        # Após salvar um cálculo NOVO, o Seam fica em modo "criação" — o menu lateral
+        # mostra apenas itens globais (li_calculo_novo) e nunca os itens per-seção
+        # (li_calculo_ferias, li_calculo_historico_salarial, etc.).
+        # Isso causa falha silenciosa nas fases seguintes: _clicar_menu_lateral não
+        # encontra os <li> e o fallback de URL direta pode ser rejeitado pelo backing bean.
+        #
+        # Estratégia: verificar se o menu está completo. Se não estiver, tentar:
+        # 1. goto(calculo.jsf?conversationId=X) — pode transicionar se Seam aceitar
+        # 2. Se ainda incompleto, _reabrir_calculo_recentes() — cria nova conversa Seam
+        #    via duplo-clique nos Recentes (mecanismo que um humano usaria).
+        _menu_completo = self._page.locator(
+            "li[id*='li_calculo_ferias'], li[id*='li_calculo_historico']"
+        ).count() > 0
+        if _menu_completo:
+            self._log("  ✓ Menu lateral completo (modo edição já ativo)")
+        elif self._calculo_url_base and self._calculo_conversation_id:
+            self._log("  → Menu lateral incompleto após save — tentando abrir cálculo em modo edição…")
+            # Tentativa 1: reload da mesma URL (pode transicionar Seam se aceitar)
+            _url_edit = (
+                f"{self._calculo_url_base}calculo.jsf"
+                f"?conversationId={self._calculo_conversation_id}"
+            )
+            try:
+                self._page.goto(_url_edit, wait_until="domcontentloaded", timeout=15000)
+                try:
+                    self._instalar_monitor_ajax()
+                except Exception:
+                    pass
+                self._aguardar_ajax()
+                self._page.wait_for_timeout(500)
+            except Exception as _e_reload:
+                self._log(f"  ⚠ Reload calculo.jsf: {_e_reload}")
+
+            _menu_completo = self._page.locator(
+                "li[id*='li_calculo_ferias'], li[id*='li_calculo_historico']"
+            ).count() > 0
+            if _menu_completo:
+                self._log("  ✓ Menu lateral completo após reload (modo edição ativo)")
+            else:
+                # Tentativa 2: reabrir via Recentes — cria nova conversa Seam em edit mode
+                self._log("  → Reload insuficiente — reabrindo via Recentes para criar conversa Seam em edit mode…")
+                _reabriu = self._reabrir_calculo_recentes()
+                if _reabriu:
+                    _menu_ok = self._page.locator(
+                        "li[id*='li_calculo_ferias'], li[id*='li_calculo_historico']"
+                    ).count() > 0
+                    if _menu_ok:
+                        self._log("  ✓ Menu lateral completo após reabrir via Recentes")
+                    else:
+                        self._log("  ⚠ Menu ainda incompleto após Recentes — fases seguintes usarão URL nav fallback")
+                else:
+                    self._log("  ⚠ Reabrir via Recentes falhou — fases seguintes usarão URL nav fallback")
+
         self._log("Fase 1 concluída.")
 
     # ── Utilitário de screenshot por fase ──────────────────────────────────────
@@ -3999,6 +4052,13 @@ class PJECalcPlaywright:
         Chamado com `passo_2_parametros_gerais` do parametrizacao.json.
         """
         self._log("Fase 2a — Parâmetros Gerais…")
+
+        # Garantir que a aba "Parâmetros do Cálculo" está ativa antes de preencher.
+        # Após fase_dados_processo reabrir via Recentes (para transitar Seam a edit mode),
+        # a página começa na aba "Dados do Processo" — campos da aba Parâmetros ficam
+        # ocultos (display:none) e _localizar retorna None pois usa is_visible().
+        self._clicar_aba("tabParametrosCalculo")
+        self._page.wait_for_timeout(400)
 
         data_inicial = parametros.get("data_inicial_apuracao")
         data_final = parametros.get("data_final_apuracao")

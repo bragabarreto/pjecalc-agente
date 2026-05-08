@@ -166,6 +166,30 @@ Além dos 5 modelos existentes, 3 novos para o Learning Engine:
 
 ## Descobertas críticas (abril/2026)
 
+### Novo cálculo: Seam em modo "criação" após save — menu lateral incompleto
+
+Ao iniciar um **novo cálculo** (`Cálculo > Novo`), mesmo após o Salvar da Fase 1 (URL passa a
+ter `conversationId`), a **conversa Seam permanece em modo "criação"**. Nesse estado, o menu
+lateral exibe apenas itens globais (`li_calculo_novo`) e nunca os itens per-seção
+(`li_calculo_ferias`, `li_calculo_historico_salarial`, etc.) — porque o backing bean JSF ainda
+não "abriu" o cálculo para edição.
+
+Isso **não se aplica** a cálculos já existentes abertos via Recentes ou URL direta numa sessão
+ativa — nesses casos o menu lateral já aparece completo desde o carregamento.
+
+**Consequência para a automação:** `_clicar_menu_lateral` não encontra os `<li>` per-seção e
+cai no fallback de URL direta (`goto(historico-salarial.jsf?conversationId=X)`). Se o Seam
+rejeitar essa URL no modo "criação", as seções são **puladas silenciosamente**.
+
+**Correção implementada** (em `fase_dados_processo`, após o save):
+1. Verificar se menu lateral tem `li_calculo_ferias` ou `li_calculo_historico` no DOM.
+2. Se não tiver: tentar `goto(calculo.jsf?conversationId=X)` (pode transicionar Seam).
+3. Se ainda incompleto: `_reabrir_calculo_recentes()` — cria nova conversa Seam em edit mode
+   via duplo-clique nos Recentes (mesmo mecanismo que um humano usaria).
+
+**Atenção:** após `_reabrir_calculo_recentes()`, `fase_parametros_gerais` deve clicar
+explicitamente na aba "Parâmetros do Cálculo" — já implementado nessa função.
+
 ### Arquivo .PJC — gerador nativo vs exportação PJE-Calc
 O `pjc_generator.py` gera um template **pré-liquidação** (~52KB) que o PJE-Calc **rejeita** na importação.
 Arquivos válidos são **pós-liquidação** (~60-560KB) exportados pelo próprio PJE-Calc via botão Exportar.

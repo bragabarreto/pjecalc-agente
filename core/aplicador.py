@@ -809,6 +809,32 @@ class AplicadorPJECalc:
             raw = self._page.url.split("conversationId=")[1]
             self._conv_id = raw.split("&")[0].split("#")[0]
             self.log(f"  ✓ Fase 1 OK | conv={self._conv_id}")
+
+        # Após salvar um cálculo NOVO, o Seam fica em modo "criação" — menu lateral
+        # exibe apenas itens globais (li_calculo_novo) sem os itens per-seção
+        # (li_calculo_ferias, li_calculo_historico_salarial, etc.).
+        # _navegar_secao já detecta isso reativamente (Passo 3 → _reabrir_calculo_recentes),
+        # mas a reativação proativa evita tentativas de URL direta que podem ser
+        # rejeitadas pelo backing bean Seam em modo "criação".
+        if ok:
+            submenu_ok = self._page.evaluate(
+                """() => {
+                    const lis = [...document.querySelectorAll('li[id^="li_calculo_"]')]
+                        .map(li => li.id);
+                    return lis.some(id =>
+                        /li_calculo_(ferias|historico|verbas|fgts)/.test(id)
+                    );
+                }"""
+            )
+            if submenu_ok:
+                self.log("  ✓ submenu cálculo presente (modo edição)")
+            else:
+                self.log("  ↺ submenu ausente após Fase 1 — reabrindo via Recentes…")
+                self._reabrir_calculo_recentes(
+                    processo_numero=self._processo_numero,
+                    reclamante_nome=self._reclamante_nome,
+                )
+
         return ok
 
     # ────────────────────────────────────────────────────────────────────────
