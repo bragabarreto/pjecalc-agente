@@ -754,16 +754,19 @@ class AplicadorPJECalc:
 
         # Lançamento Expresso em batch para verbas com lancamento=EXPRESSO
         verbas_expresso = [v for v in verbas if v.lancamento == "EXPRESSO" and v.expresso_alvo]
+        # Salvar conv ORIGINAL antes do Expresso (preserva contexto do cálculo)
+        conv_original = self._conv_id
         if verbas_expresso:
             self._lancar_expresso(verbas_expresso)
-            # Capturar conv_id atual (Expresso save pode iniciar nova conv)
+            # IMPORTANTE: NÃO atualizar self._conv_id pós-save Expresso!
+            # A conv pós-save é "flutuante" (sem menu lateral do cálculo).
+            # Manter conv original permite que fases seguintes (FGTS, INSS,
+            # IR, Honorários, Custas, Correção/Juros) re-naveguem com o
+            # cálculo ainda no contexto Seam.
             url_pos = self._page.url
             self.log(f"  🔍 URL pós-Expresso save: {url_pos[-80:]}")
-            if "conversationId=" in url_pos:
-                novo_conv = url_pos.split("conversationId=")[1].split("&")[0].split("#")[0]
-                if novo_conv != self._conv_id:
-                    self.log(f"  ↺ conv_id atualizado: {self._conv_id} → {novo_conv}")
-                    self._conv_id = novo_conv
+            self.log(f"  ↺ Mantendo conv original: {conv_original}")
+            self._conv_id = conv_original
             # Estratégia 1: menu lateral (preserva Seam)
             menu_ok = self._clicar_menu_lateral("Verbas")
             # Estratégia 2: re-abrir cálculo via Recentes (conv pós-Expresso é
