@@ -912,11 +912,19 @@ class AplicadorPJECalc:
 
     def _achar_link_acao_verba(self, descricao: str, kind: str) -> Optional[str]:
         """Localiza ID do link de ação (Parâmetros/Ocorrências/Exibir) para a
-        verba cuja linha contenha `descricao`. Estratégia em camadas:
-          1. j_id558 (Parâmetros) / j_id559 (Ocorrências) — IDs auditados em DOM
-          2. fallback por title (case-insensitive, sem acento)
-          3. match de linha: exato → inclusão → palavras-chave (≥3 letras)
-        kind: "parametros" | "ocorrencias" | "exibir"
+        verba cuja linha contenha `descricao`.
+
+        DOM auditado v2.15.1 via Chrome MCP live (2026-05-08):
+          - Tabela: table[id='formulario:listagem']
+          - Linhas verba: tr.rich-table-firstrow (SEM id próprio!)
+          - Linhas reflexos: tr.rich-table-row.linha-par-exibir
+          - Links na linha: a[id='formulario:listagem:N:j_id558'] (Parâmetros),
+            j_id559 (Ocorrências), j_id560 (Excluir)
+          - Title sempre presente: 'Parâmetros da Verba', 'Ocorrências da Verba',
+            'Excluir'
+
+        Estratégia em camadas: identifica linha por texto da primeira célula
+        (nome da verba); pega link do tipo desejado por title OU j_id5XX.
         """
         idfix = {"parametros": "j_id558", "ocorrencias": "j_id559"}.get(kind, "")
         title_kw = {
@@ -931,23 +939,30 @@ class AplicadorPJECalc:
                     .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
                     .replace(/\\s+/g, ' ').trim();
                 const alvo = norm(nome);
-                // Coleta TODOS os links candidatos, agrupados por linha
-                const trs = [...document.querySelectorAll('tr')];
+                // DOM REAL: tabela 'formulario:listagem'; linhas tr.rich-table-firstrow
+                // (uma por verba) sem id próprio. Linhas reflexos têm classe
+                // .linha-par-exibir / .linha-impar-exibir (excluídas).
+                const tbl = document.querySelector('table[id="formulario:listagem"]');
+                let trs;
+                if (tbl) {
+                    trs = [...tbl.querySelectorAll('tr.rich-table-firstrow, tr.rich-table-row')]
+                        .filter(tr => !tr.className.includes('exibir'));
+                } else {
+                    trs = [...document.querySelectorAll('tr')];
+                }
                 const candidatos = trs.map(tr => {
                     let txt = tr.textContent.replace(/\\s+/g,' ').trim();
-                    // tira labels do final (Exibir, Reflexa) para casar nome
                     const nomeLinha = txt.replace(/Exibir.*$/i, '').trim();
                     const links = [...tr.querySelectorAll('a, input[type=image], input[type=button], input[type=submit]')];
                     let link = null;
-                    // Camada 1: ID fixo
+                    // Camada 1: ID fixo (j_id558/559)
                     if (idfix) {
                         link = links.find(a => a.id && a.id.includes(':listagem:') && a.id.endsWith(':' + idfix));
                     }
-                    // Camada 2: title/value/text contendo keyword
+                    // Camada 2: title preciso (mais robusto que j_id que muda)
                     if (!link && titleKw && titleKw.length) {
                         link = links.find(a => {
                             const t = norm((a.title||'') + ' ' + (a.value||'') + ' ' + (a.alt||'') + ' ' + (a.textContent||''));
-                            // exibir não pode confundir com Excluir
                             if (titleKw.includes('PARAMETRO') && (t.includes('OCORRENCIA') || t.includes('EXCLUI'))) return false;
                             if (titleKw.includes('OCORRENCIA') && (t.includes('PARAMETRO') || t.includes('EXCLUI'))) return false;
                             return titleKw.some(kw => t.includes(kw));
