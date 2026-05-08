@@ -443,10 +443,34 @@ class AplicadorPJECalc:
             # seleção); precisamos navegar de volta para a listagem onde
             # estão os links Parâmetros (j_id558) de cada verba criada.
             self._navegar_url_calculo("verba/verba-calculo.jsf")
-            self._page.wait_for_timeout(1500)
+            self._page.wait_for_timeout(2500)
             if self._detectar_erro_pagina():
                 self.log("  ⚠ Listagem em erro 500/NPE pós-Expresso — pulando aplicação detalhada")
                 return False
+            # Diagnóstico: dump dos links da listagem
+            try:
+                dump = self._page.evaluate(
+                    """() => {
+                        const trs = [...document.querySelectorAll('tr[id*=":listagem:"]')];
+                        return {
+                            url: location.pathname + location.search,
+                            n_rows: trs.length,
+                            ids_first_3: trs.slice(0,3).map(tr => {
+                                const links = [...tr.querySelectorAll('a, input[type=image], input[type=button], input[type=submit]')];
+                                return {
+                                    row_id: tr.id,
+                                    text: tr.textContent.replace(/\\s+/g,' ').trim().slice(0,80),
+                                    link_ids: links.map(l => ({id: l.id, title: l.title||'', value: l.value||''}))
+                                };
+                            }),
+                        };
+                    }"""
+                )
+                self.log(f"  🔍 Listagem pós-Expresso: {dump.get('n_rows', 0)} linhas | url={dump.get('url', '?')}")
+                for r in dump.get('ids_first_3', []):
+                    self.log(f"    └ {r.get('row_id', '?')}: {r.get('text', '?')[:60]} | links={r.get('link_ids', [])[:3]}")
+            except Exception as e:
+                self.log(f"  ⚠ diagnóstico DOM falhou: {e}")
 
         # Verbas Manual (criadas individualmente via Manual)
         for v in verbas:
