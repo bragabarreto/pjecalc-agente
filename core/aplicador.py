@@ -348,18 +348,29 @@ class AplicadorPJECalc:
             return False
 
     def _navegar_secao(self, nome_menu: str, jsf_path_fallback: str) -> bool:
-        """Navega para uma seção do cálculo. Estratégia preferida: click no
-        menu lateral (preserva Seam conversation). Se falhar, fallback para
-        URL direta com conv_id atual.
+        """Navega para uma seção do cálculo.
 
-        Confirmado via Chrome MCP live: cada fase navegada via menu lateral
-        renderiza com Seam corretamente, mostrando todos os campos do form.
-        URL direta pode levar a conv inválida com modal CNJ flutuante.
+        DESCOBERTA CRÍTICA via Chrome MCP live:
+        - URL direta para fgts.jsf?conv=N NÃO renderiza form (n_radios=0).
+        - Click no menu lateral 'FGTS' DENTRO da página → Seam dispara A4J e
+          renderiza o form completo (n_radios=10).
+
+        Estratégia em 2 passos:
+          1. Navegar URL direta (estabelece página + carrega menu lateral).
+          2. Click menu lateral correspondente (Seam renderiza form via A4J).
         """
+        # Passo 1: URL direta (estabelece contexto da página)
+        url_ok = self._navegar_url_calculo(jsf_path_fallback)
+        if not url_ok:
+            return False
+        # Passo 2: click menu lateral para renderizar form
         if self._clicar_menu_lateral(nome_menu):
+            self.log(f"  ✓ form '{nome_menu}' renderizado via menu lateral")
             return True
-        self.log(f"  ⚠ menu '{nome_menu}' falhou — fallback URL {jsf_path_fallback}")
-        return self._navegar_url_calculo(jsf_path_fallback)
+        # Mesmo sem menu, a URL direta pode bastar para algumas páginas
+        # (listagens como Honorários funcionam sem menu lateral)
+        self.log(f"  ↻ menu '{nome_menu}' não disponível — usando estado da URL direta")
+        return True
 
     def _navegar_url_calculo(self, jsf_path: str) -> bool:
         """Navega via URL direta. Sempre lê conv_id ATUAL da URL antes
