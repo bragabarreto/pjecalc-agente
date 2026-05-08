@@ -3125,8 +3125,38 @@ class PJECalcPlaywright:
             except Exception:
                 pass
 
+            # Descoberta (commit a581152): o select de Recentes tem ID dinâmico
+            # (formulario:j_id92) e NÃO tem class/name 'listaCalculosRecentes'.
+            # Usar JS para encontrar o select correto, igual ao core/aplicador.py.
+            # Excluir selAcheFacil (busca livre — sempre 0 resultados válidos).
+            _select_id = self._page.evaluate(
+                """() => {
+                    const SKIP = new Set(['selAcheFacil']);
+                    // Tier 1: primeira opção no formato "NNNNNN / ..."
+                    for (const s of document.querySelectorAll('select')) {
+                        if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                        if (s.options.length > 0) {
+                            const txt = (s.options[0].text || '');
+                            if (/^\\d{4,}\\s*\\//.test(txt)) return s.name || s.id;
+                        }
+                    }
+                    // Tier 2: blob de todas as opções contém padrão CNJ
+                    for (const s of document.querySelectorAll('select')) {
+                        if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                        const blob = [...s.options].map(o => o.text || '').join(' | ');
+                        if (/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob)) {
+                            return s.name || s.id;
+                        }
+                    }
+                    return null;
+                }"""
+            )
+            if not _select_id:
+                self._log("  ⚠ Lista de cálculos recentes não encontrada")
+                return False
+            self._log(f"  → select Recentes: {_select_id}")
             _listbox = self._page.locator(
-                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
+                f"select[name='{_select_id}'], select[id='{_select_id}']"
             )
             if _listbox.count() == 0:
                 self._log("  ⚠ Lista de cálculos recentes não encontrada")
@@ -3162,7 +3192,6 @@ class PJECalcPlaywright:
                             break
 
             if _found_idx is None:
-                # Diagnóstico: listar todos os itens disponíveis
                 _nome_recl2 = ""
                 try:
                     _r = (self._dados or {}).get("processo", {}).get("reclamante", {})
@@ -3174,8 +3203,6 @@ class PJECalcPlaywright:
                     _opt_text = (_options.nth(_idx).text_content() or "").strip()
                     self._log(f"    item {_idx+1}: '{_opt_text[:100]}'")
 
-                # Último recurso: se há apenas 1 item nos recentes, é provável que seja o nosso
-                # (H2 foi limpo antes, então só existe o cálculo que acabamos de criar)
                 if _n_opts == 1:
                     self._log("  → Apenas 1 cálculo nos recentes — usando-o como fallback")
                     _found_idx = 0
@@ -3199,6 +3226,35 @@ class PJECalcPlaywright:
         except Exception as _e:
             self._log(f"  ⚠ _reabrir_calculo_recentes: {_e}")
             return False
+
+    def _localizar_select_recentes(self):
+        """Localiza o <select> de Cálculos Recentes via JS (ID dinâmico).
+
+        O select de Recentes tem ID dinâmico (ex: formulario:j_id92) e NÃO tem
+        class/name 'listaCalculosRecentes'. Usar JS para encontrá-lo é necessário.
+        Retorna o Playwright Locator ou None se não encontrado.
+        """
+        _select_id = self._page.evaluate(
+            """() => {
+                const SKIP = new Set(['selAcheFacil']);
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    if (s.options.length > 0 && /^\\d{4,}\\s*\\//.test(s.options[0].text || ''))
+                        return s.name || s.id;
+                }
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    const blob = [...s.options].map(o => o.text || '').join(' | ');
+                    if (/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob))
+                        return s.name || s.id;
+                }
+                return null;
+            }"""
+        )
+        if not _select_id:
+            return None
+        loc = self._page.locator(f"select[name='{_select_id}'], select[id='{_select_id}']")
+        return loc if loc.count() > 0 else None
 
     def _capturar_base_calculo(self) -> None:
         """Captura a URL base e conversationId do cálculo ativo para navegação por URL.
@@ -3261,10 +3317,8 @@ class PJECalcPlaywright:
             self._page.wait_for_timeout(2000)
 
             # Verificar se há cálculos na lista de Recentes
-            _listbox = self._page.locator(
-                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
-            )
-            if _listbox.count() == 0:
+            _listbox = self._localizar_select_recentes()
+            if _listbox is None:
                 self._log("  ✓ Nenhuma lista de recentes encontrada — banco limpo")
                 return True
 
@@ -3281,10 +3335,8 @@ class PJECalcPlaywright:
             for _i in range(_max_exclusoes):
                 try:
                     # Re-ler a lista (pode ter mudado após exclusão)
-                    _listbox = self._page.locator(
-                        "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
-                    )
-                    if _listbox.count() == 0:
+                    _listbox = self._localizar_select_recentes()
+                    if _listbox is None:
                         break
                     _opts = _listbox.first.locator("option")
                     if _opts.count() == 0:
@@ -8288,11 +8340,8 @@ class PJECalcPlaywright:
                 _home = f"{self.PJECALC_BASE}/pages/principal.jsf"
                 self._page.goto(_home, wait_until="networkidle", timeout=15000)
                 self._page.wait_for_timeout(1500)
-                _lb = self._page.locator(
-                    "select[class*='listaCalculosRecentes'], "
-                    "select[name*='listaCalculosRecentes']"
-                )
-                if _lb.count() > 0:
+                _lb = self._localizar_select_recentes()
+                if _lb is not None:
                     _lb.first.locator("option").first.click()
                     _lb.first.dblclick()
                     self._page.wait_for_timeout(3000)
@@ -12621,8 +12670,8 @@ class PJECalcPlaywright:
                     pass
 
                 _reabriu = False
-                _listbox = self._page.locator("select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']")
-                if _listbox.count() > 0:
+                _listbox = self._localizar_select_recentes()
+                if _listbox is not None:
                     _options = _listbox.first.locator("option")
                     if _options.count() > 0:
                         _options.first.click()
