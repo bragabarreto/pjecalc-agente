@@ -282,6 +282,56 @@ class AplicadorPJECalc:
             self.log(f"  ⚠ navegar {jsf_path}: {e}")
             return False
 
+    # Mapa nome → seletor CSS do menu lateral (li#li_calculo_*)
+    _MENU_SELECTORS = {
+        "Dados do Cálculo": "li#li_calculo_dados a",
+        "Histórico Salarial": "li#li_calculo_historico_salarial a",
+        "Faltas": "li#li_calculo_faltas a",
+        "Férias": "li#li_calculo_ferias a",
+        "Verbas": "li#li_calculo_verbas a",
+        "Cartão de Ponto": "li#li_calculo_cartao_ponto a",
+        "FGTS": "li#li_calculo_fgts a",
+        "Contribuição Social": "li#li_calculo_contribuicao_social a",
+        "Imposto de Renda": "li#li_calculo_imposto_renda a",
+        "Honorários": "li#li_calculo_honorarios a",
+        "Custas Judiciais": "li#li_calculo_custas a",
+        "Correção, Juros e Multa": "li#li_calculo_correcao_juros a",
+    }
+
+    def _clicar_menu_lateral(self, secao: str) -> bool:
+        """Clica em link do menu lateral via JS (preserva conversation Seam,
+        diferente de _navegar_url_calculo que faz goto direto e pode iniciar
+        nova conversation). Use APÓS save de operações que mudam conv_id
+        (ex: Expresso save) ou para navegar entre páginas do cálculo."""
+        sel = self._MENU_SELECTORS.get(secao)
+        if not sel:
+            self.log(f"  ⚠ menu lateral '{secao}' sem seletor")
+            return False
+        try:
+            clicou = self._page.evaluate(
+                """(sel) => {
+                    const a = document.querySelector(sel);
+                    if (!a) return null;
+                    a.click();
+                    return a.id || a.href || 'ok';
+                }""",
+                sel,
+            )
+            if not clicou:
+                self.log(f"  ⚠ menu lateral '{secao}': link não encontrado ({sel})")
+                return False
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(800)
+            # Capturar conv_id atual
+            if "conversationId=" in self._page.url:
+                novo = self._page.url.split("conversationId=")[1].split("&")[0].split("#")[0]
+                if novo != self._conv_id:
+                    self._conv_id = novo
+            return True
+        except Exception as e:
+            self.log(f"  ⚠ menu lateral '{secao}': {e}")
+            return False
+
     # ────────────────────────────────────────────────────────────────────────
     # FASE 1 — Dados do Processo
     # ────────────────────────────────────────────────────────────────────────
@@ -446,8 +496,12 @@ class AplicadorPJECalc:
                 if novo_conv != self._conv_id:
                     self.log(f"  ↺ conv_id atualizado: {self._conv_id} → {novo_conv}")
                     self._conv_id = novo_conv
-            # REVOLTAR para verba-calculo.jsf usando conv atualizado
-            self._navegar_url_calculo("verba/verba-calculo.jsf")
+            # USAR MENU LATERAL — preserva conversation Seam (URL direta inicia
+            # nova conv com listagem vazia). v1 confirmou: menu lateral
+            # 'Verbas' é o caminho oficial pós-Expresso.
+            if not self._clicar_menu_lateral("Verbas"):
+                self.log("  ⚠ menu Verbas falhou; fallback URL direta")
+                self._navegar_url_calculo("verba/verba-calculo.jsf")
             self._page.wait_for_timeout(2500)
             if self._detectar_erro_pagina():
                 self.log("  ⚠ Listagem em erro 500/NPE pós-Expresso — pulando aplicação detalhada")
