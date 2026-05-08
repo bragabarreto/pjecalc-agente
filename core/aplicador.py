@@ -347,6 +347,20 @@ class AplicadorPJECalc:
             self.log(f"  ⚠ salvar: {e}")
             return False
 
+    def _navegar_secao(self, nome_menu: str, jsf_path_fallback: str) -> bool:
+        """Navega para uma seção do cálculo. Estratégia preferida: click no
+        menu lateral (preserva Seam conversation). Se falhar, fallback para
+        URL direta com conv_id atual.
+
+        Confirmado via Chrome MCP live: cada fase navegada via menu lateral
+        renderiza com Seam corretamente, mostrando todos os campos do form.
+        URL direta pode levar a conv inválida com modal CNJ flutuante.
+        """
+        if self._clicar_menu_lateral(nome_menu):
+            return True
+        self.log(f"  ⚠ menu '{nome_menu}' falhou — fallback URL {jsf_path_fallback}")
+        return self._navegar_url_calculo(jsf_path_fallback)
+
     def _navegar_url_calculo(self, jsf_path: str) -> bool:
         """Navega via URL direta para uma página do cálculo."""
         if not self._conv_id:
@@ -762,7 +776,7 @@ class AplicadorPJECalc:
           4. Para cada reflexo: idem (recursivo via marcar reflex no Exibir)
         """
         self.log(f"→ Fase 5: Verbas ({len(verbas)} principais)")
-        if not self._navegar_url_calculo("verba/verba-calculo.jsf"):
+        if not self._navegar_secao("Verbas", "verba/verba-calculo.jsf"):
             return False
 
         # Lançamento Expresso em batch para verbas com lancamento=EXPRESSO
@@ -942,6 +956,7 @@ class AplicadorPJECalc:
         Estratégia em camadas: identifica linha por texto da primeira célula
         (nome da verba); pega link do tipo desejado por title OU j_id5XX.
         """
+        # Map kind → ID sufixo confirmado via Chrome MCP live
         idfix = {"parametros": "j_id558", "ocorrencias": "j_id559"}.get(kind, "")
         title_kw = {
             "parametros": ["PARAMETRO"],
@@ -955,45 +970,42 @@ class AplicadorPJECalc:
                     .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
                     .replace(/\\s+/g, ' ').trim();
                 const alvo = norm(nome);
-                // DOM REAL: tabela 'formulario:listagem'; linhas tr.rich-table-firstrow
-                // (uma por verba) sem id próprio. Linhas reflexos têm classe
-                // .linha-par-exibir / .linha-impar-exibir (excluídas).
-                const tbl = document.querySelector('table[id="formulario:listagem"]');
-                let trs;
-                if (tbl) {
-                    trs = [...tbl.querySelectorAll('tr.rich-table-firstrow, tr.rich-table-row')]
-                        .filter(tr => !tr.className.includes('exibir'));
-                } else {
-                    trs = [...document.querySelectorAll('tr')];
-                }
-                const candidatos = trs.map(tr => {
-                    let txt = tr.textContent.replace(/\\s+/g,' ').trim();
-                    const nomeLinha = txt.replace(/Exibir.*$/i, '').trim();
-                    const links = [...tr.querySelectorAll('a, input[type=image], input[type=button], input[type=submit]')];
-                    let link = null;
-                    // Camada 1: ID fixo (j_id558/559)
-                    if (idfix) {
-                        link = links.find(a => a.id && a.id.includes(':listagem:') && a.id.endsWith(':' + idfix));
-                    }
-                    // Camada 2: title preciso (mais robusto que j_id que muda)
-                    if (!link && titleKw && titleKw.length) {
-                        link = links.find(a => {
-                            const t = norm((a.title||'') + ' ' + (a.value||'') + ' ' + (a.alt||'') + ' ' + (a.textContent||''));
+
+                // ESTRATÉGIA NOVA (Chrome MCP confirmed): iterar DIRETO pelos
+                // links j_id558/559 — cada um corresponde a uma verba principal.
+                // closest('tr').textContent dá nome da verba + ' Exibir'.
+                let links_alvo;
+                if (idfix) {
+                    links_alvo = [...document.querySelectorAll(
+                        `a[id*=":listagem:"][id$=":${idfix}"]`
+                    )];
+                } else if (titleKw && titleKw.length) {
+                    links_alvo = [...document.querySelectorAll('a[id*=":listagem:"]')]
+                        .filter(a => {
+                            const t = norm((a.title||'') + ' ' + (a.alt||'') + ' ' + (a.textContent||''));
                             if (titleKw.includes('PARAMETRO') && (t.includes('OCORRENCIA') || t.includes('EXCLUI'))) return false;
                             if (titleKw.includes('OCORRENCIA') && (t.includes('PARAMETRO') || t.includes('EXCLUI'))) return false;
                             return titleKw.some(kw => t.includes(kw));
                         });
-                    }
-                    return {tr, nome: nomeLinha, normNome: norm(nomeLinha), link};
-                }).filter(c => c.link);
+                } else {
+                    links_alvo = [];
+                }
 
-                // Match exato
+                const candidatos = links_alvo.map(link => {
+                    const tr = link.closest('tr');
+                    let nomeLinha = '';
+                    if (tr) {
+                        nomeLinha = tr.textContent.replace(/\\s+/g,' ').trim()
+                            .replace(/Exibir.*$/i, '').trim();
+                    }
+                    return {link, nomeLinha, normNome: norm(nomeLinha)};
+                });
+
+                // Match exato → inclusão → palavras-chave
                 for (const c of candidatos) if (c.normNome === alvo) return c.link.id;
-                // Inclusão mútua
                 for (const c of candidatos) {
                     if (c.normNome.includes(alvo) || alvo.includes(c.normNome)) return c.link.id;
                 }
-                // Palavras-chave (≥3 letras, todas presentes)
                 const palavras = alvo.split(' ').filter(p => p.length >= 3);
                 for (const c of candidatos) {
                     if (palavras.length && palavras.every(p => c.normNome.includes(p))) return c.link.id;
@@ -1337,7 +1349,7 @@ class AplicadorPJECalc:
             self.log("→ Fase 7: FGTS — apurar=False, pulando")
             return True
         self.log("→ Fase 7: FGTS")
-        if not self._navegar_url_calculo("fgts.jsf"):
+        if not self._navegar_secao("FGTS", "fgts.jsf"):
             return False
         # tipoDeVerba: schema NORMAL → PAGAR; VERBA_RESCISORIA → DEPOSITAR
         tdv = "DEPOSITAR" if fgts.tipo_de_verba == "VERBA_RESCISORIA" else "PAGAR"
@@ -1468,7 +1480,7 @@ class AplicadorPJECalc:
         if not historico:
             return True
         self.log(f"→ Fase 2: Histórico Salarial ({len(historico)} entry(es))")
-        if not self._navegar_url_calculo("historico-salarial.jsf"):
+        if not self._navegar_secao("Histórico Salarial", "historico-salarial.jsf"):
             return False
         for entry in historico:
             if not self._clicar_novo():
@@ -1548,7 +1560,7 @@ class AplicadorPJECalc:
         if not faltas:
             return True
         self.log(f"→ Fase 3: Faltas ({len(faltas)})")
-        if not self._navegar_url_calculo("faltas.jsf"):
+        if not self._navegar_secao("Faltas", "faltas.jsf"):
             return False
         for f in faltas:
             if not self._clicar_novo():
@@ -1573,7 +1585,7 @@ class AplicadorPJECalc:
         if not ferias:
             return True
         self.log(f"→ Fase 4: Férias ({len(ferias)} entrada(s))")
-        if not self._navegar_url_calculo("ferias.jsf"):
+        if not self._navegar_secao("Férias", "ferias.jsf"):
             return False
         for fe in ferias:
             if not self._clicar_novo():
@@ -1613,7 +1625,7 @@ class AplicadorPJECalc:
         if not tem_dados:
             return True
         self.log("→ Fase 6: Cartão de Ponto")
-        if not self._navegar_url_calculo("../cartaodeponto/apuracao-cartaodeponto.jsf"):
+        if not self._navegar_secao("Cartão de Ponto", "../cartaodeponto/apuracao-cartaodeponto.jsf"):
             self._navegar_url_calculo("cartaodeponto/apuracao-cartaodeponto.jsf")
 
         # Tipo de apuração HE (radio com 7 opções)
@@ -1672,7 +1684,7 @@ class AplicadorPJECalc:
             self.log("→ Fase 8: INSS — apurar=False, pulando")
             return True
         self.log("→ Fase 8: INSS")
-        if not self._navegar_url_calculo("inss/inss.jsf"):
+        if not self._navegar_secao("Contribuição Social", "inss/inss.jsf"):
             return False
 
         # ── Checkboxes (DOM-confirmados) ──
@@ -1734,7 +1746,7 @@ class AplicadorPJECalc:
             self.log("→ Fase 9: IRPF — apurar=False, pulando")
             return True
         self.log("→ Fase 9: IRPF")
-        if not self._navegar_url_calculo("irpf.jsf"):
+        if not self._navegar_secao("Imposto de Renda", "irpf.jsf"):
             return False
         # ── Checkboxes (DOM IDs confirmados v2.15.1) ──
         self._click_checkbox("apurarImpostoRenda", ir.apurar)
@@ -1778,7 +1790,7 @@ class AplicadorPJECalc:
         if not honorarios:
             return True
         self.log(f"→ Fase 10: Honorários ({len(honorarios)})")
-        if not self._navegar_url_calculo("honorarios.jsf"):
+        if not self._navegar_secao("Honorários", "honorarios.jsf"):
             return False
         for h in honorarios:
             if not self._clicar_novo():
@@ -1827,7 +1839,7 @@ class AplicadorPJECalc:
         if not custas:
             return True
         self.log("→ Fase 11: Custas Judiciais")
-        if not self._navegar_url_calculo("custas-judiciais.jsf"):
+        if not self._navegar_secao("Custas Judiciais", "custas-judiciais.jsf"):
             return False
 
         # Base de cálculo
@@ -2002,7 +2014,7 @@ class AplicadorPJECalc:
         if not cj:
             return True
         self.log("→ Fase 12: Correção/Juros")
-        if not self._navegar_url_calculo("parametros-atualizacao/parametros-atualizacao.jsf"):
+        if not self._navegar_secao("Correção, Juros e Multa", "parametros-atualizacao/parametros-atualizacao.jsf"):
             return False
 
         # ── Correção Monetária ──
@@ -2045,64 +2057,61 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def liquidar_e_exportar(self) -> Optional[bytes]:
-        """Click Liquidar (menu Operações) → aguardar → Exportar → captura .pjc bytes.
+        """Click Liquidar → aguardar → Exportar → captura .pjc bytes.
 
-        Confirmado via screenshot do menu lateral expandido (aba Operações):
-          Liquidar / Imprimir / Fechar / Excluir / Exportar / Enviar para o PJe
+        URLs e IDs confirmados via Chrome MCP live (PJE-Calc TRT7 v2.15.1):
+          - Liquidar: navega para liquidacao.jsf via menu lateral
+            (li#li_operacoes_liquidar). Dentro: input[id='formulario:liquidar']
+            value='Liquidar' type='button'.
+          - Exportar: navega para exportacao.jsf (li#li_operacoes_exportar).
+            Dentro: input[id='formulario:exportar'].
         """
         self.log("→ Liquidar e Exportar")
         try:
-            # Etapa 1 — Liquidar via menu lateral (aba Operações)
+            # Etapa 1 — Click 'Liquidar' menu lateral (vai para liquidacao.jsf)
             if not self._clicar_menu_lateral("Liquidar"):
-                self.log("  ⚠ menu Liquidar falhou — tentando fallback URL")
-                self._navegar_url_calculo("liquidacao/liquidar.jsf") or \
-                    self._navegar_url_calculo("liquidar.jsf")
-            self._aguardar_ajax(15000)
+                self.log("  ⚠ menu Liquidar falhou — fallback URL direta")
+                self._navegar_url_calculo("liquidacao.jsf")
+            self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
-            # Click confirmação dentro da página de Liquidar (botão "Liquidar"/"Confirmar")
-            for sel in ("input[id$='confirmarLiquidacao']", "input[value='Liquidar']",
-                        "input[id$='liquidar']:not([id*='Atualiza'])"):
-                btn = self._page.locator(sel).first
-                if btn.count() > 0:
-                    btn.click(timeout=8000)
-                    break
-            self._aguardar_ajax(120000)  # liquidação pode demorar minutos
-            self._page.wait_for_timeout(3000)
 
-            sucesso = self._page.evaluate(
+            # Etapa 2 — Click confirmação 'formulario:liquidar' (via dispatchEvent)
+            clicou = self._page.evaluate(
                 """() => {
-                    const body = (document.body && document.body.textContent) || '';
-                    return body.includes('sucesso') ||
-                           body.includes('Liquidação') ||
-                           body.includes('liquidad');
+                    const b = document.querySelector('input[id="formulario:liquidar"]');
+                    if (!b) return null;
+                    b.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                    return 'ok';
                 }"""
             )
-            if not sucesso:
-                self.log("  ⚠ Liquidação: sem mensagem de sucesso (continuando)")
+            if not clicou:
+                self.log("  ⚠ botão 'formulario:liquidar' não encontrado")
+                return None
+            self.log("  → Liquidação disparada — aguardando processamento")
+            self._aguardar_ajax(120000)  # pode demorar minutos
+            self._page.wait_for_timeout(5000)
 
-            # Etapa 2 — Exportar via menu lateral
+            # Etapa 3 — Click 'Exportar' menu lateral (vai para exportacao.jsf)
             if not self._clicar_menu_lateral("Exportar"):
-                self.log("  ⚠ menu Exportar falhou — tentando fallback URL")
-                self._navegar_url_calculo("exportar/exportar.jsf")
-            self._aguardar_ajax(8000)
+                self.log("  ⚠ menu Exportar falhou — fallback URL direta")
+                self._navegar_url_calculo("exportacao.jsf")
+            self._aguardar_ajax(10000)
             self._page.wait_for_timeout(1500)
 
-            # Capturar download do .pjc
-            with self._page.expect_download(timeout=60000) as dl_info:
-                # Click no botão de download (formato .pjc)
-                for sel in ("input[id$='exportar']", "input[value='Exportar']",
-                            "input[value='Salvar']", "a:has-text('PJC')",
-                            "a[href*='.pjc']", "input[type='submit']"):
-                    btn = self._page.locator(sel).first
-                    if btn.count() > 0:
-                        btn.click(timeout=8000)
-                        break
+            # Etapa 4 — Capturar download .pjc via 'formulario:exportar'
+            with self._page.expect_download(timeout=120000) as dl_info:
+                self._page.evaluate(
+                    """() => {
+                        const b = document.querySelector('input[id="formulario:exportar"]');
+                        if (b) b.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                    }"""
+                )
             download = dl_info.value
             path = download.path()
             if path:
                 with open(path, "rb") as f:
                     pjc = f.read()
-                self.log(f"  ✓ .PJC capturado ({len(pjc)} bytes) via menu Operações>Exportar")
+                self.log(f"  ✓ .PJC capturado ({len(pjc)} bytes) — sufixo: {download.suggested_filename}")
                 return pjc
             return None
         except Exception as e:
