@@ -447,28 +447,35 @@ class AplicadorPJECalc:
             if self._detectar_erro_pagina():
                 self.log("  ⚠ Listagem em erro 500/NPE pós-Expresso — pulando aplicação detalhada")
                 return False
-            # Diagnóstico: dump dos links da listagem
+            # Diagnóstico: dump de TODOS os <tr> + título + qualquer <table>
             try:
                 dump = self._page.evaluate(
                     """() => {
-                        const trs = [...document.querySelectorAll('tr[id*=":listagem:"]')];
+                        const all_trs = [...document.querySelectorAll('tr')];
+                        const tabelas = [...document.querySelectorAll('table')].map(t => ({
+                            id: t.id, n_rows: t.rows.length, classe: t.className.slice(0, 60)
+                        }));
                         return {
                             url: location.pathname + location.search,
-                            n_rows: trs.length,
-                            ids_first_3: trs.slice(0,3).map(tr => {
-                                const links = [...tr.querySelectorAll('a, input[type=image], input[type=button], input[type=submit]')];
-                                return {
-                                    row_id: tr.id,
-                                    text: tr.textContent.replace(/\\s+/g,' ').trim().slice(0,80),
-                                    link_ids: links.map(l => ({id: l.id, title: l.title||'', value: l.value||''}))
-                                };
-                            }),
+                            title: document.title,
+                            heading: (document.querySelector('h1, h2, .title, .rich-page-title') || {}).textContent || '',
+                            n_all_trs: all_trs.length,
+                            n_listagem_trs: document.querySelectorAll('tr[id*=":listagem:"]').length,
+                            tabelas: tabelas.slice(0, 5),
+                            // primeiros IDs de tr existentes
+                            tr_ids_sample: all_trs.slice(0, 8).map(tr => tr.id || '<sem-id>'),
+                            // procurar palavra "verba" no body
+                            tem_verba_no_body: (document.body.textContent||'').toLowerCase().includes('verba'),
+                            // procurar mensagens de erro
+                            tem_erro_500: (document.body.textContent||'').includes('500') || (document.body.textContent||'').includes('NPE') || (document.body.textContent||'').includes('Erro'),
                         };
                     }"""
                 )
-                self.log(f"  🔍 Listagem pós-Expresso: {dump.get('n_rows', 0)} linhas | url={dump.get('url', '?')}")
-                for r in dump.get('ids_first_3', []):
-                    self.log(f"    └ {r.get('row_id', '?')}: {r.get('text', '?')[:60]} | links={r.get('link_ids', [])[:3]}")
+                self.log(f"  🔍 url={dump.get('url', '?')}")
+                self.log(f"  🔍 title='{dump.get('title','?')[:60]}' heading='{dump.get('heading','?')[:60]}'")
+                self.log(f"  🔍 n_all_trs={dump.get('n_all_trs',0)} n_listagem={dump.get('n_listagem_trs',0)} tem_verba={dump.get('tem_verba_no_body',False)} erro_500={dump.get('tem_erro_500',False)}")
+                self.log(f"  🔍 tabelas={dump.get('tabelas',[])[:3]}")
+                self.log(f"  🔍 tr_ids={dump.get('tr_ids_sample',[])[:5]}")
             except Exception as e:
                 self.log(f"  ⚠ diagnóstico DOM falhou: {e}")
 
