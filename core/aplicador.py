@@ -639,18 +639,47 @@ class AplicadorPJECalc:
                         p.numero_documento_advogado_reclamado)
 
         # ── Aba "Parâmetros do Cálculo" (clicar ANTES de estado/municipio/datas) ──
-        try:
-            self._page.evaluate(
-                """() => {
-                    const tabs = [...document.querySelectorAll('.rich-tab-header, td.rich-tab-header')];
-                    const t = tabs.find(t => (t.textContent||'').trim().includes('Parâmetros'));
-                    if (t) t.click();
-                }"""
-            )
-            self._aguardar_ajax(5000)
-            self._page.wait_for_timeout(800)
-        except Exception:
-            pass
+        # Estratégia em 4 tiers (espelha v1 _clicar_aba):
+        #   1. id$='tabParametrosCalculo_lbl' (label da tab)
+        #   2. id$='tabParametrosCalculo_header'
+        #   3. .rich-tab-header com texto 'Parâmetros'
+        #   4. <td>/<th> com texto 'Parâmetros do Cálculo'
+        tab_clicado = False
+        for sel in (
+            "[id$='tabParametrosCalculo_lbl']",
+            "[id$='tabParametrosCalculo_header']",
+            "[id$='tabParametrosCalculo'] span",
+        ):
+            try:
+                loc = self._page.locator(sel).first
+                if loc.count() > 0:
+                    loc.click(timeout=5000)
+                    tab_clicado = True
+                    self.log(f"  ✓ tab Parâmetros via {sel}")
+                    break
+            except Exception:
+                continue
+        if not tab_clicado:
+            try:
+                clicou = self._page.evaluate(
+                    """() => {
+                        const cands = [...document.querySelectorAll(
+                            '.rich-tab-header, td.rich-tab-header, td.rich-tab, .rich-tab-label, span.rich-tab-label, td'
+                        )];
+                        const t = cands.find(e => /par[âa]metros\\s*do\\s*c[áa]lculo/i.test((e.textContent||'').trim()));
+                        if (t) { t.click(); return t.id || 'ok'; }
+                        return null;
+                    }"""
+                )
+                if clicou:
+                    self.log(f"  ✓ tab Parâmetros via JS evaluate: {clicou}")
+                    tab_clicado = True
+            except Exception:
+                pass
+        if not tab_clicado:
+            self.log("  ⚠ tab 'Parâmetros do Cálculo' não encontrada — selects estado/municipio podem falhar")
+        self._aguardar_ajax(5000)
+        self._page.wait_for_timeout(1200)
 
         # Estado: schema v3 tem sigla (CE), DOM espera ÍNDICE
         if p.estado:
@@ -1289,23 +1318,68 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def _clicar_novo(self) -> bool:
-        """Click no botão Novo/Incluir da listagem atual (abre form de Novo)."""
+        """Click no botão Novo/Incluir da listagem atual.
+
+        DOM audit confirmou: histórico-salarial.jsf usa `formulario:incluir`
+        com value='Novo'. faltas/ferias usam padrões similares. Estratégia
+        em 5 tiers para cobrir todos os casos.
+        """
+        # Tier 1: id+value exato
         for sel in (
-            "input[id$='novo'][type='submit']",
+            "input[id$='incluir'][value='Novo']",
+            "input[id$='novo'][value='Novo']",
             "input[id$='incluir'][type='submit']",
-            "input[id$='Novo'][type='submit']",
-            "input[id$='novo']",
-            "input[id$='incluir']",
+            "input[id$='novo'][type='submit']",
         ):
             try:
                 btn = self._page.locator(sel).first
                 if btn.count() > 0:
                     btn.click(timeout=8000)
                     self._aguardar_ajax(6000)
-                    self._page.wait_for_timeout(400)
+                    self._page.wait_for_timeout(500)
                     return True
             except Exception:
                 continue
+        # Tier 2: por value visível
+        for valor in ("Novo", "Incluir", "Adicionar"):
+            try:
+                btn = self._page.locator(f"input[type='submit'][value='{valor}']").first
+                if btn.count() > 0:
+                    btn.click(timeout=8000)
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(500)
+                    return True
+            except Exception:
+                continue
+        # Tier 3: id$=incluir (qualquer, mas só se único — evita Manual)
+        try:
+            sel = "input[id$='incluir']"
+            n = self._page.locator(sel).count()
+            if n == 1:
+                self._page.locator(sel).click(timeout=8000)
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(500)
+                return True
+        except Exception:
+            pass
+        # Tier 4: JS evaluate por texto/value 'Novo'
+        try:
+            clicou = self._page.evaluate(
+                """() => {
+                    const cands = [...document.querySelectorAll(
+                        'input[type=submit], input[type=button], button, a'
+                    )].filter(e => /^novo$/i.test((e.value||'').trim()) ||
+                                   /^novo$/i.test((e.textContent||'').trim()));
+                    if (cands.length > 0) { cands[0].click(); return cands[0].id || 'ok'; }
+                    return null;
+                }"""
+            )
+            if clicou:
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(500)
+                return True
+        except Exception:
+            pass
         return False
 
     # ────────────────────────────────────────────────────────────────────────
