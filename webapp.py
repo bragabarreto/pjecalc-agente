@@ -838,15 +838,30 @@ def _migrar_v2_para_v3(calculo) -> tuple[dict, list[str]]:
             rcd_conhec = "CALCULADA_2_POR_CENTO"
         if resp_legado in ("RECLAMANTE", "AMBOS"):
             rcl_conhec = "CALCULADA_2_POR_CENTO"
+        # Mapear valores legados v1/v2 para enums v3
+        _custas_legacy_map = {
+            "CALCULADA": "CALCULADA_2_POR_CENTO",
+            "CALCULADA_2PCT": "CALCULADA_2_POR_CENTO",
+            "CALCULADA_2_POR_CENTO": "CALCULADA_2_POR_CENTO",
+            "CALCULADA_05PCT": "CALCULADA_MEIO_POR_CENTO",
+            "CALCULADA_MEIO_PCT": "CALCULADA_MEIO_POR_CENTO",
+            "CALCULADA_MEIO_POR_CENTO": "CALCULADA_MEIO_POR_CENTO",
+            "INFORMADA": "INFORMADA",
+            "NAO_SE_APLICA": "NAO_SE_APLICA",
+        }
+        def _map_custas(raw, default):
+            if not raw:
+                return default
+            return _custas_legacy_map.get(str(raw).upper(), default)
         # Caso já tenha schema v3 nativo (chaves novas)
         custas_v3 = CustasJudiciais(
-            reclamado_conhecimento=custas_v2.get("reclamado_conhecimento") or rcd_conhec,
+            reclamado_conhecimento=_map_custas(custas_v2.get("reclamado_conhecimento"), rcd_conhec),
             valor_reclamado_conhecimento=str(custas_v2.get("valor_reclamado_conhecimento") or "") or None,
             vencimento_reclamado_conhecimento=custas_v2.get("vencimento_reclamado_conhecimento"),
-            reclamado_liquidacao=custas_v2.get("reclamado_liquidacao") or "NAO_SE_APLICA",
+            reclamado_liquidacao=_map_custas(custas_v2.get("reclamado_liquidacao"), "NAO_SE_APLICA"),
             valor_reclamado_liquidacao=str(custas_v2.get("valor_reclamado_liquidacao") or "") or None,
             vencimento_reclamado_liquidacao=custas_v2.get("vencimento_reclamado_liquidacao"),
-            reclamante_conhecimento=custas_v2.get("reclamante_conhecimento") or rcl_conhec,
+            reclamante_conhecimento=_map_custas(custas_v2.get("reclamante_conhecimento"), rcl_conhec),
             valor_reclamante_conhecimento=str(custas_v2.get("valor_reclamante_conhecimento") or "") or None,
             vencimento_reclamante_conhecimento=custas_v2.get("vencimento_reclamante_conhecimento"),
             base_para_custas=custas_v2.get("base_para_custas"),

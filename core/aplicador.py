@@ -249,13 +249,28 @@ class AplicadorPJECalc:
     # FASE 1 — Dados do Processo
     # ────────────────────────────────────────────────────────────────────────
 
+    # UF → índice numérico do select PJE-Calc (DOM: <option value="N">UF</option>)
+    _UF_INDEX = {
+        "AC":"0","AL":"1","AP":"2","AM":"3","BA":"4","CE":"5","DF":"6","ES":"7",
+        "GO":"8","MA":"9","MT":"10","MS":"11","MG":"12","PA":"13","PB":"14",
+        "PR":"15","PE":"16","PI":"17","RJ":"18","RN":"19","RS":"20","RO":"21",
+        "RR":"22","SC":"23","SP":"24","SE":"25","TO":"26",
+    }
+
     def aplicar_dados_processo(self, p: DadosProcesso) -> bool:
         """Preenche a página 1 (calculo.jsf) com TODOS os campos não-vazios
-        de DadosProcesso. Salva ao final."""
+        de DadosProcesso. Salva ao final.
+
+        Importante (DOM auditado v1):
+          - estado/municipio estão na aba "Parâmetros do Cálculo" (não na
+            "Dados do Processo"). Precisa clicar tab antes.
+          - estado usa ÍNDICE NUMÉRICO (0=AC, 5=CE…), não a sigla.
+        """
         self.log("→ Fase 1: Dados do Processo")
         if not self._navegar_url_calculo("calculo.jsf"):
             return False
 
+        # ── Aba "Dados do Processo" (default, mas garantir) ──
         # Identificação
         self._fill_text("numero", p.numero)
         self._fill_text("digito", p.digito)
@@ -264,8 +279,6 @@ class AplicadorPJECalc:
         self._fill_text("vara", p.vara)
         self._fill_decimal("valorDaCausa", p.valor_da_causa)
         self._fill_date("autuadoEm", p.autuado_em)
-        self._select_value("estado", p.estado or "")
-        self._select_value("municipio", p.municipio or "")
 
         # Reclamante
         if p.documento_fiscal_reclamante:
@@ -299,15 +312,29 @@ class AplicadorPJECalc:
         self._fill_text("numeroDocumentoAdvogadoReclamado",
                         p.numero_documento_advogado_reclamado)
 
-        # Aba Parâmetros do Cálculo
+        # ── Aba "Parâmetros do Cálculo" (clicar ANTES de estado/municipio/datas) ──
         try:
             self._page.evaluate(
-                """[...document.querySelectorAll('.rich-tab-header')].find(t =>
-                    t.textContent.trim() === 'Parâmetros do Cálculo')?.click()"""
+                """() => {
+                    const tabs = [...document.querySelectorAll('.rich-tab-header, td.rich-tab-header')];
+                    const t = tabs.find(t => (t.textContent||'').trim().includes('Parâmetros'));
+                    if (t) t.click();
+                }"""
             )
+            self._aguardar_ajax(5000)
             self._page.wait_for_timeout(800)
         except Exception:
             pass
+
+        # Estado: schema v3 tem sigla (CE), DOM espera ÍNDICE
+        if p.estado:
+            idx_estado = self._UF_INDEX.get(p.estado.upper())
+            if idx_estado:
+                self._select_value("estado", idx_estado)
+                self._aguardar_ajax(2000)
+        # Município: select dependente do estado, popula via AJAX após estado escolhido
+        if p.municipio:
+            self._select_value("municipio", p.municipio)
 
         self._fill_date("dataAdmissaoInputDate", p.data_admissao)
         self._fill_date("dataDemissaoInputDate", p.data_demissao)
@@ -373,11 +400,22 @@ class AplicadorPJECalc:
         verbas_expresso = [v for v in verbas if v.lancamento == "EXPRESSO" and v.expresso_alvo]
         if verbas_expresso:
             self._lancar_expresso(verbas_expresso)
+            # Após save do Expresso, REVOLTAR para verba-calculo.jsf:
+            # PJE-Calc redireciona para verbas-para-calculo.jsf (página de
+            # seleção); precisamos navegar de volta para a listagem onde
+            # estão os links Parâmetros (j_id558) de cada verba criada.
+            self._navegar_url_calculo("verba/verba-calculo.jsf")
+            self._page.wait_for_timeout(1500)
+            if self._detectar_erro_pagina():
+                self.log("  ⚠ Listagem em erro 500/NPE pós-Expresso — pulando aplicação detalhada")
+                return False
 
         # Verbas Manual (criadas individualmente via Manual)
         for v in verbas:
             if v.lancamento != "EXPRESSO":
                 self._criar_verba_manual(v)
+                # após criar manual, voltar para listagem
+                self._navegar_url_calculo("verba/verba-calculo.jsf")
 
         # Para cada verba (Expresso ou Manual): aplicar Parâmetros + Ocorrências
         for v in verbas:
