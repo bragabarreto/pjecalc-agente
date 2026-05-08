@@ -3714,12 +3714,18 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
 
         yield f"data: {json.dumps({'msg': 'Aplicador v3 iniciado'})}\n\n"
         try:
+            import asyncio as _asyncio_v3
             while not done.is_set() or not msg_q.empty():
+                # Não usar msg_q.get(timeout=...) — é sync e bloqueia o
+                # event loop asyncio, impedindo uvicorn de flushar yields
+                # já produzidos. Em vez disso: poll não-bloqueante + sleep async.
                 try:
-                    msg = msg_q.get(timeout=2)
+                    msg = msg_q.get_nowait()
                     yield f"data: {json.dumps({'msg': msg})}\n\n"
                 except _q.Empty:
-                    yield f"data: {json.dumps({'keepalive': True})}\n\n"
+                    await _asyncio_v3.sleep(0.5)
+                    if msg_q.empty() and not done.is_set():
+                        yield f"data: {json.dumps({'keepalive': True})}\n\n"
         finally:
             # Liberar lock global ao final
             _liberar_lock_v3()
