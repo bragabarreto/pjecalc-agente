@@ -3684,7 +3684,8 @@ async def executar_automacao_v3_sse(sessao_id: str, request: Request):
                     # Capturar conversation_id do click 'Novo'
                     conv_id = None
                     if "conversationId=" in page.url:
-                        conv_id = page.url.split("conversationId=")[1].split("&")[0]
+                        _raw = page.url.split("conversationId=")[1]
+                        conv_id = _raw.split("&")[0].split("#")[0]
                         log_cb(f"  ℹ conv_id capturado: {conv_id}")
 
                     from core.aplicador import AplicadorPJECalc

@@ -187,7 +187,13 @@ class AplicadorPJECalc:
             return False
 
     def _select_value(self, sufixo: str, valor: str) -> bool:
-        """Seleciona option por value em select com sufixo. None/'' no-op."""
+        """Seleciona option em select com sufixo. None/'' no-op.
+
+        Tenta em ordem: por value exato → por label/texto exato →
+        por texto contém (case-insensitive). Cobre selects que usam
+        índice numérico (estado), texto direto (município nome),
+        ou enum (tipoDaBaseTabelada).
+        """
         if not valor:
             return False
         try:
@@ -195,9 +201,40 @@ class AplicadorPJECalc:
             if loc.count() == 0:
                 self.log(f"  ⚠ select '{sufixo}' não encontrado")
                 return False
-            loc.select_option(value=valor)
-            self._aguardar_ajax(3000)
-            return True
+            # Tier 1: por value
+            try:
+                loc.select_option(value=valor, timeout=3000)
+                self._aguardar_ajax(3000)
+                return True
+            except Exception:
+                pass
+            # Tier 2: por label exato
+            try:
+                loc.select_option(label=valor, timeout=3000)
+                self._aguardar_ajax(3000)
+                return True
+            except Exception:
+                pass
+            # Tier 3: case-insensitive label match via JS
+            opt_idx = self._page.evaluate(
+                """(args) => {
+                    const sel = document.querySelector('select[id$="' + args.sufixo + '"]');
+                    if (!sel) return null;
+                    const alvo = (args.valor||'').toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+                    for (const o of [...sel.options]) {
+                        const t = (o.textContent||'').toUpperCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').trim();
+                        if (t === alvo || t.startsWith(alvo) || (alvo.length >= 4 && t.includes(alvo))) return o.value;
+                    }
+                    return null;
+                }""",
+                {"sufixo": sufixo, "valor": valor},
+            )
+            if opt_idx is not None:
+                loc.select_option(value=opt_idx, timeout=3000)
+                self._aguardar_ajax(3000)
+                return True
+            self.log(f"  ⚠ select {sufixo}={valor}: nenhuma estratégia casou")
+            return False
         except Exception as e:
             self.log(f"  ⚠ select {sufixo}={valor}: {e}")
             return False
@@ -359,10 +396,11 @@ class AplicadorPJECalc:
         self._fill_decimal("valorCargaHorariaPadrao", p.valor_carga_horaria_padrao)
         self._fill_text("comentarios", p.comentarios)
 
-        # Salvar e capturar conversation_id
+        # Salvar e capturar conversation_id (remove anchor # também)
         ok = self._clicar_salvar()
         if ok and "conversationId=" in self._page.url:
-            self._conv_id = self._page.url.split("conversationId=")[1].split("&")[0]
+            raw = self._page.url.split("conversationId=")[1]
+            self._conv_id = raw.split("&")[0].split("#")[0]
             self.log(f"  ✓ Fase 1 OK | conv={self._conv_id}")
         return ok
 
