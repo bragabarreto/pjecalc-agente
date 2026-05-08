@@ -1293,23 +1293,50 @@ class AplicadorPJECalc:
     # ────────────────────────────────────────────────────────────────────────
 
     def aplicar_fgts(self, fgts: FGTS) -> bool:
-        """Aplica configuração de FGTS na fgts.jsf."""
+        """Aplica FGTS (fgts.jsf) — DOM v2.15.1 confirmado.
+
+        Radios usam values DOM-corretos (não labels):
+          tipoDeVerba: PAGAR* / DEPOSITAR
+          aliquota: DOIS_POR_CENTO / OITO_POR_CENTO*
+          multaDoFgts: VINTE_POR_CENTO / QUARENTA_POR_CENTO* / SEM_MULTA
+          tipoDoValorDaMulta: CALCULADA* / INFORMADA
+          comporPrincipal: SIM* / NAO
+        """
+        if not fgts or not fgts.apurar:
+            self.log("→ Fase 7: FGTS — apurar=False, pulando")
+            return True
         self.log("→ Fase 7: FGTS")
         if not self._navegar_url_calculo("fgts.jsf"):
             return False
-        self._click_radio("tipoDeVerba", fgts.tipo_de_verba)
-        self._click_radio("comporPrincipal", "Sim" if fgts.compor_principal == "SIM" else "Não")
-        self._click_radio("aliquota",
-                          "8%" if fgts.aliquota == "8" else
-                          "2%" if fgts.aliquota == "2" else "Informado")
+        # tipoDeVerba: schema NORMAL → PAGAR; VERBA_RESCISORIA → DEPOSITAR
+        tdv = "DEPOSITAR" if fgts.tipo_de_verba == "VERBA_RESCISORIA" else "PAGAR"
+        self._click_radio("tipoDeVerba", tdv)
+        self._click_radio("comporPrincipal", fgts.compor_principal)  # SIM/NAO
+
+        # aliquota
+        aliq_map = {"8": "OITO_POR_CENTO", "2": "DOIS_POR_CENTO", "INFORMADO": "INFORMADO"}
+        self._click_radio("aliquota", aliq_map.get(fgts.aliquota, fgts.aliquota))
         self._fill_decimal("aliquotaInformada", fgts.aliquota_informada)
-        self._click_radio("multaDoFgts",
-                          "40%" if fgts.multa_do_fgts == "MULTA_DE_40" else
-                          "20%" if fgts.multa_do_fgts == "MULTA_DE_20" else "Sem Multa")
+
+        # multaDoFgts
+        mfg_map = {
+            "MULTA_DE_40": "QUARENTA_POR_CENTO",
+            "MULTA_DE_20": "VINTE_POR_CENTO",
+            "SEM_MULTA": "SEM_MULTA",
+        }
+        self._click_radio("multaDoFgts", mfg_map.get(fgts.multa_do_fgts, fgts.multa_do_fgts))
+
+        # tipoDoValorDaMulta
+        tvm_map = {"CALCULADO": "CALCULADA", "INFORMADO": "INFORMADA"}
         self._click_radio("tipoDoValorDaMulta",
-                          "Calculado" if fgts.tipo_do_valor_da_multa == "CALCULADO" else "Informado")
+                          tvm_map.get(fgts.tipo_do_valor_da_multa, fgts.tipo_do_valor_da_multa))
         self._fill_decimal("multaInformada", fgts.multa_informada)
+
+        # Checkboxes
+        self._click_checkbox("multa", True)  # apurar multa rescisória (default true)
         self._click_checkbox("multaDoArtigo467", fgts.multa_do_artigo_467)
+
+        # Select
         self._select_value("incidenciaDoFgts", fgts.incidencia_do_fgts)
         return self._clicar_salvar()
 
@@ -1601,35 +1628,43 @@ class AplicadorPJECalc:
         if not self._navegar_url_calculo("inss/inss.jsf"):
             return False
 
-        # Checkboxes principais
-        self._click_checkbox("apurarSeguradoSalariosDevidos", inss.apurar_segurado_salarios_devidos)
-        self._click_checkbox("apurarSeguradoSaláriosDevidos", inss.apurar_segurado_salarios_devidos)
-        self._click_checkbox("apurarSobreSalariosPagos", inss.apurar_sobre_salarios_pagos)
-        self._click_checkbox("apurarSobreSaláriosPagos", inss.apurar_sobre_salarios_pagos)
-        self._click_checkbox("cobrarDoReclamante", inss.cobrar_do_reclamante)
-        self._click_checkbox("comCorrecaoTrabalhista", inss.com_correcao_trabalhista)
-        self._click_checkbox("limitarAoTeto", inss.limitar_ao_teto)
-        self._click_checkbox("isencaoSimples", inss.isencao_simples)
-        if inss.simples_inicio:
-            self._fill_date("simplesInicio", inss.simples_inicio)
-        if inss.simples_fim:
-            self._fill_date("simplesFim", inss.simples_fim)
-        self._click_checkbox("lei11941", inss.lei_11941)
+        # ── Checkboxes (DOM-confirmados) ──
+        # apurarInssSeguradoDevido (true*) — schema apurar_segurado_salarios_devidos
+        self._click_checkbox("apurarInssSeguradoDevido", inss.apurar_segurado_salarios_devidos)
+        # apurarSalariosPagos (false*)
+        self._click_checkbox("apurarSalariosPagos", inss.apurar_sobre_salarios_pagos)
+        # cobrarDoReclamanteDevido (true*) — schema cobrar_do_reclamante
+        self._click_checkbox("cobrarDoReclamanteDevido", inss.cobrar_do_reclamante)
+        # corrigirDescontoReclamante (false*) — sem mapping direto, usar com_correcao_trabalhista
+        self._click_checkbox("corrigirDescontoReclamante", inss.com_correcao_trabalhista)
 
-        # Atividade econômica (CNAE)
+        # ── Radios (DOM-confirmados) ──
+        # aliquotaEmpregado: SEGURADO_EMPREGADO* / EMPREGADO_DOMESTICO / FIXA
+        seg_map = {
+            "EMPREGADO": "SEGURADO_EMPREGADO",
+            "DOMESTICO": "EMPREGADO_DOMESTICO",
+            "FIXA": "FIXA",
+        }
+        if inss.tipo_aliquota_segurado:
+            self._click_radio("aliquotaEmpregado",
+                              seg_map.get(inss.tipo_aliquota_segurado, inss.tipo_aliquota_segurado))
+        # aliquotaEmpregador: POR_ATIVIDADE_ECONOMICA / POR_PERIODO / FIXA*
+        emp_map = {
+            "ATIVIDADE_ECONOMICA": "POR_ATIVIDADE_ECONOMICA",
+            "PERIODO": "POR_PERIODO",
+            "FIXA": "FIXA",
+        }
+        if inss.tipo_aliquota_empregador:
+            self._click_radio("aliquotaEmpregador",
+                              emp_map.get(inss.tipo_aliquota_empregador, inss.tipo_aliquota_empregador))
+            self._aguardar_ajax(1500)
+
+        # ── Atividade econômica (CNAE) — quando ATIVIDADE_ECONOMICA ──
         if inss.atividade_economica:
             self._fill_text("buscaAtividadeEconomica", inss.atividade_economica)
             self._aguardar_ajax(2000)
 
-        # Tipo de alíquota
-        if inss.tipo_aliquota_segurado:
-            self._click_radio("tipoAliquotaSegurado", inss.tipo_aliquota_segurado)
-            self._aguardar_ajax(1500)
-        if inss.tipo_aliquota_empregador:
-            self._click_radio("tipoAliquotaEmpregador", inss.tipo_aliquota_empregador)
-            self._aguardar_ajax(1500)
-
-        # Alíquotas
+        # ── Alíquotas (quando FIXA) ──
         if inss.aliquota_empresa is not None:
             self._fill_decimal("aliquotaEmpresa", inss.aliquota_empresa)
         if inss.aliquota_sat is not None:
@@ -1639,28 +1674,6 @@ class AplicadorPJECalc:
             self._fill_decimal("aliquotaTerceiros", inss.aliquota_terceiros)
         if inss.fap is not None:
             self._fill_decimal("fap", inss.fap)
-            self._fill_decimal("FAP", inss.fap)
-
-        # Períodos
-        if inss.periodo_incidencia_pagos:
-            self._fill_text("periodoIncidenciaPagos", inss.periodo_incidencia_pagos)
-        if inss.periodo_incidencia_devidos:
-            self._fill_text("periodoIncidenciaDevidos", inss.periodo_incidencia_devidos)
-
-        # Regime caixa/competência — checkbox, default v1 = competência (off)
-        if inss.regime_caixa_competencia == "CAIXA":
-            self._click_checkbox("regimeDeCaixa", True)
-            self._click_checkbox("regimeCaixa", True)
-
-        # Multa/Juros INSS
-        self._click_checkbox("multaINSS", inss.multa_inss)
-        self._click_checkbox("multaInss", inss.multa_inss)
-        self._click_checkbox("jurosINSS", inss.juros_inss)
-        self._click_checkbox("jurosInss", inss.juros_inss)
-
-        # Índice de atualização (legado)
-        if inss.indice_atualizacao:
-            self._select_value("indiceAtualizacao", inss.indice_atualizacao)
 
         return self._clicar_salvar()
 
@@ -1676,31 +1689,26 @@ class AplicadorPJECalc:
         self.log("→ Fase 9: IRPF")
         if not self._navegar_url_calculo("irpf.jsf"):
             return False
-        # Checkbox principal
+        # ── Checkboxes (DOM IDs confirmados v2.15.1) ──
         self._click_checkbox("apurarImpostoRenda", ir.apurar)
-        # 5 checkboxes de configuração
-        self._click_checkbox("incidirSobreJurosDeMora", ir.incidir_sobre_juros_de_mora)
-        self._click_checkbox("cobrarDoReclamado", ir.cobrar_do_reclamado)
-        self._click_checkbox("tributacaoExclusiva", ir.tributacao_exclusiva)
-        self._click_checkbox("tributacaoEmSeparado", ir.tributacao_em_separado)
-        self._click_checkbox("aplicarRegimeDeCaixa", ir.aplicar_regime_de_caixa)
         self._click_checkbox("regimeDeCaixa", ir.aplicar_regime_de_caixa)
-        # Deduzir da Base do IR (panel)
-        self._click_checkbox("deduzirContribuicaoSocial", ir.deduzir_contribuicao_social)
-        self._click_checkbox("deduzirPrevidenciaPrivada", ir.deduzir_previdencia_privada)
+        self._click_checkbox("aposentadoMaiorQue65Anos", ir.aposentado_maior_65)
+        self._click_checkbox("cobrarDoReclamado", ir.cobrar_do_reclamado)
+        self._click_checkbox("incidirSobreJurosDeMora", ir.incidir_sobre_juros_de_mora)
+        self._click_checkbox("considerarTributacaoEmSeparado", ir.tributacao_em_separado)
+        self._click_checkbox("considerarTributacaoExclusiva", ir.tributacao_exclusiva)
+        # Deduções (4 checkboxes — DOM IDs longos confirmados)
+        self._click_checkbox("deduzirContribuicaoSocialDevidaPeloReclamante",
+                             ir.deduzir_contribuicao_social)
+        self._click_checkbox("deduzirHonorariosDevidosPeloReclamante",
+                             ir.deduzir_honorarios_reclamante)
         self._click_checkbox("deduzirPensaoAlimenticia", ir.deduzir_pensao_alimenticia)
-        self._click_checkbox("deduzirHonorariosReclamante", ir.deduzir_honorarios_reclamante)
-        self._click_checkbox("deducaoInss", ir.deduzir_contribuicao_social)  # legado
-        self._click_checkbox("deducaoHonorariosReclamante", ir.deduzir_honorarios_reclamante)  # legado
-        # Aposentado / Dependentes
-        self._click_checkbox("aposentadoMaior65", ir.aposentado_maior_65)
-        # Dependentes — checkbox com count
+        self._click_checkbox("deduzirPrevidenciaPrivada", ir.deduzir_previdencia_privada)
+        # Dependentes (checkbox + texto)
         if ir.quantidade_dependentes > 0:
             self._click_checkbox("possuiDependentes", True)
-            self._click_checkbox("dependentes", True)
             self._aguardar_ajax(1500)
             self._fill_text("quantidadeDependentes", str(ir.quantidade_dependentes))
-            self._fill_text("numeroDeDependentes", str(ir.quantidade_dependentes))
         # Compat legado (regime_tributacao + meses + valores)
         if ir.regime_tributacao == "RRA":
             self._click_checkbox("tributacaoEmSeparado", True)
@@ -1780,8 +1788,11 @@ class AplicadorPJECalc:
             self._select_value("baseParaCustasCalculadas", custas.base_para_custas)
             self._select_value("baseCustas", custas.base_para_custas)
 
-        # Reclamado — Conhecimento
-        self._click_radio("custasReclamadoConhecimento", custas.reclamado_conhecimento)
+        # ── Radios DOM-confirmados (IDs longos do PJE-Calc) ──
+        # tipoDeCustasDeConhecimentoDoReclamado:
+        #   NAO_SE_APLICA / CALCULADA_2_POR_CENTO* / INFORMADA
+        self._click_radio("tipoDeCustasDeConhecimentoDoReclamado",
+                          custas.reclamado_conhecimento)
         if custas.reclamado_conhecimento == "INFORMADA":
             self._aguardar_ajax(1500)
             if custas.valor_reclamado_conhecimento is not None:
@@ -1789,8 +1800,9 @@ class AplicadorPJECalc:
             if custas.vencimento_reclamado_conhecimento:
                 self._fill_date("vencimentoReclamadoConhecimento", custas.vencimento_reclamado_conhecimento)
 
-        # Reclamado — Liquidação
-        self._click_radio("custasReclamadoLiquidacao", custas.reclamado_liquidacao)
+        # tipoDeCustasDeLiquidacao:
+        #   NAO_SE_APLICA* / CALCULADA_MEIO_POR_CENTO / INFORMADA
+        self._click_radio("tipoDeCustasDeLiquidacao", custas.reclamado_liquidacao)
         if custas.reclamado_liquidacao == "INFORMADA":
             self._aguardar_ajax(1500)
             if custas.valor_reclamado_liquidacao is not None:
@@ -1798,8 +1810,10 @@ class AplicadorPJECalc:
             if custas.vencimento_reclamado_liquidacao:
                 self._fill_date("vencimentoReclamadoLiquidacao", custas.vencimento_reclamado_liquidacao)
 
-        # Reclamante — Conhecimento
-        self._click_radio("custasReclamanteConhecimento", custas.reclamante_conhecimento)
+        # tipoDeCustasDeConhecimentoDoReclamante:
+        #   NAO_SE_APLICA* / CALCULADA_2_POR_CENTO / INFORMADA
+        self._click_radio("tipoDeCustasDeConhecimentoDoReclamante",
+                          custas.reclamante_conhecimento)
         if custas.reclamante_conhecimento == "INFORMADA":
             self._aguardar_ajax(1500)
             if custas.valor_reclamante_conhecimento is not None:
@@ -1817,18 +1831,29 @@ class AplicadorPJECalc:
             self._fill_decimal("valorPericiais", custas.valor_periciais)
             self._fill_decimal("honorariosPericiais", custas.valor_periciais)
 
-        # ── Custas Fixas (vencimento + 9 checkboxes) ──
+        # ── Custas Fixas (DOM real: campos texto qtde* + dataVencimentoCustasFixasInputDate) ──
+        # NOTA: schema atual usa booleans (checkboxes), DOM usa quantidades (textos).
+        # Schema bool=True → quantidade=1; bool=False → quantidade vazia.
         if custas.custas_fixas_vencimento:
-            self._fill_date("custasFixasVencimento", custas.custas_fixas_vencimento)
-        self._click_checkbox("atosOfJusticaZonaUrbana", custas.custas_fixas_atos_oj_urbana)
-        self._click_checkbox("atosOfJusticaZonaRural", custas.custas_fixas_atos_oj_rural)
-        self._click_checkbox("agravoInstrumento", custas.custas_fixas_agravo_instrumento)
-        self._click_checkbox("agravoPeticao", custas.custas_fixas_agravo_peticao)
-        self._click_checkbox("impugnacaoSentencaLiquidacao", custas.custas_fixas_impugnacao_sentenca)
-        self._click_checkbox("embargosArrematacao", custas.custas_fixas_embargos_arrematacao)
-        self._click_checkbox("embargosExecucao", custas.custas_fixas_embargos_execucao)
-        self._click_checkbox("embargosTerceiros", custas.custas_fixas_embargos_terceiros)
-        self._click_checkbox("recursoRevista", custas.custas_fixas_recurso_revista)
+            self._fill_date("dataVencimentoCustasFixasInputDate", custas.custas_fixas_vencimento)
+        if custas.custas_fixas_atos_oj_urbana:
+            self._fill_text("qtdeAtosUrbanos", "1")
+        if custas.custas_fixas_atos_oj_rural:
+            self._fill_text("qtdeAtosRurais", "1")
+        if custas.custas_fixas_agravo_instrumento:
+            self._fill_text("qtdeAgravosDeInstrumento", "1")
+        if custas.custas_fixas_agravo_peticao:
+            self._fill_text("qtdeAgravosDePeticao", "1")
+        if custas.custas_fixas_impugnacao_sentenca:
+            self._fill_text("qtdeImpugnacaoSentenca", "1")
+        if custas.custas_fixas_embargos_arrematacao:
+            self._fill_text("qtdeEmbargosArrematacao", "1")
+        if custas.custas_fixas_embargos_execucao:
+            self._fill_text("qtdeEmbargosExecucao", "1")
+        if custas.custas_fixas_embargos_terceiros:
+            self._fill_text("qtdeEmbargosTerceiros", "1")
+        if custas.custas_fixas_recurso_revista:
+            self._fill_text("qtdeRecursoRevista", "1")
 
         # ── Autos 5% (lista) ──
         for auto in custas.autos_5pct:
@@ -1890,39 +1915,39 @@ class AplicadorPJECalc:
     # FASE 12 — Correção, Juros e Multa
     # ────────────────────────────────────────────────────────────────────────
 
-    # Labels reais dos dropdowns (Correção/Juros) — capturados em screenshot
-    _IDX_CORRECAO_LABEL = {
-        "TUACDT": "Tabela Única de Atualização e Conversão de Débitos Trabalhistas",
-        "DEVEDOR_FAZENDA_PUBLICA": "Devedor Fazenda Pública",
-        "REPETICAO_INDEBITO": "Repetição de Indébito Tributário",
-        "TJT_MENSAL": "Tabela JT Mensal",
-        "TJT_DIARIA": "Tabela JT Diária",
+    # DOM values reais (confirmados via knowledge/pjecalc_dom_audit_trt7_2026-05-01_addendum.md)
+    _IDX_CORRECAO_VALUE = {  # schema v3 → DOM option value
+        "TUACDT": "TUACDT",
+        "DEVEDOR_FAZENDA_PUBLICA": "TABELA_DEVEDOR_FAZENDA",
+        "REPETICAO_INDEBITO": "TABELA_INDEBITO_TRIBUTARIO",
+        "TJT_MENSAL": "TABELA_UNICA_JT_MENSAL",
+        "TJT_DIARIA": "TABELA_UNICA_JT_DIARIO",
         "TR": "TR",
-        "IGP_M": "IGP-M",
+        "IGP_M": "IGPM",
         "INPC": "INPC",
         "IPC": "IPC",
         "IPCA": "IPCA",
-        "IPCAE": "IPCA-E",
-        "IPCAE_TR": "IPCA-E/TR",
-        "SELIC_RECEITA": "SELIC (Receita Federal)",
-        "SELIC_SIMPLES": "SELIC Simples",
-        "SELIC_COMPOSTA": "SELIC Composta",
-        "SEM_CORRECAO": "Sem Correção",
+        "IPCAE": "IPCAE",
+        "IPCAE_TR": "IPCAETR",
+        "SELIC_RECEITA": "SELIC",
+        "SELIC_SIMPLES": "SELIC_FAZENDA",
+        "SELIC_COMPOSTA": "SELIC_BACEN",
+        "SEM_CORRECAO": "SEM_CORRECAO",
     }
-    _TAXA_JUROS_LABEL = {
-        "JUROS_PADRAO": "Juros Padrão",
-        "CADERNETA_POUPANCA": "Juros Caderneta de Poupança",
-        "FAZENDA_PUBLICA": "Juros Fazenda Pública",
-        "SIMPLES_0_5_AM": "Juros Simples 0,5% a.m.",
-        "SIMPLES_1_AM": "Juros Simples 1,0% a.m.",
-        "SIMPLES_0_0333333_AD": "Juros Simples 0,0333333% a.d.",
-        "SELIC_RECEITA": "SELIC (Receita Federal)",
-        "SELIC_SIMPLES": "SELIC Simples",
-        "SELIC_COMPOSTA": "SELIC Composta",
-        "TRD_SIMPLES": "TRD Juros Simples",
-        "TRD_COMPOSTOS": "TRD Juros Compostos",
-        "TAXA_LEGAL": "Taxa Legal",
-        "SEM_JUROS": "Sem Juros",
+    _TAXA_JUROS_VALUE = {  # schema v3 → DOM option value
+        "JUROS_PADRAO": "JUROS_PADRAO",
+        "CADERNETA_POUPANCA": "JUROS_POUPANCA",
+        "FAZENDA_PUBLICA": "FAZENDA_PUBLICA",
+        "SIMPLES_0_5_AM": "JUROS_MEIO_PORCENTO",
+        "SIMPLES_1_AM": "JUROS_UM_PORCENTO",
+        "SIMPLES_0_0333333_AD": "JUROS_ZERO_TRINTA_TRES",
+        "SELIC_RECEITA": "SELIC",
+        "SELIC_SIMPLES": "SELIC_FAZENDA",
+        "SELIC_COMPOSTA": "SELIC_BACEN",
+        "TRD_SIMPLES": "TRD_SIMPLES",
+        "TRD_COMPOSTOS": "TRD_COMPOSTOS",
+        "TAXA_LEGAL": "TAXA_LEGAL",
+        "SEM_JUROS": "SEM_JUROS",
     }
 
     def aplicar_correcao_juros(self, cj: CorrecaoJuros) -> bool:
@@ -1934,39 +1959,32 @@ class AplicadorPJECalc:
             return False
 
         # ── Correção Monetária ──
-        val_idx = self._IDX_CORRECAO_LABEL.get(cj.indice_correcao, cj.indice_correcao)
+        val_idx = self._IDX_CORRECAO_VALUE.get(cj.indice_correcao, cj.indice_correcao)
         self._select_value("indiceTrabalhista", val_idx)
-        self._select_value("indiceCorrecao", val_idx)
         self._click_checkbox("combinarOutroIndice", cj.combinar_com_outro_indice)
         self._click_checkbox("ignorarTaxaNegativa", cj.ignorar_taxa_negativa)
 
         # ── Juros de Mora ──
+        # DOM: aplicarJurosFasePreJudicial (true*)
         self._click_checkbox("aplicarJurosFasePreJudicial", cj.aplicar_juros_pre_judicial)
-        self._click_checkbox("aplicarJurosPreJudicial", cj.aplicar_juros_pre_judicial)
-        val_taxa = self._TAXA_JUROS_LABEL.get(cj.taxa_juros, cj.taxa_juros)
-        self._select_value("tabelaJuros", val_taxa)
-        self._select_value("taxaJuros", val_taxa)
+        val_taxa = self._TAXA_JUROS_VALUE.get(cj.taxa_juros, cj.taxa_juros)
+        # DOM: select 'juros' (não taxaJuros nem tabelaJuros)
         self._select_value("juros", val_taxa)
 
-        # Combinar com Outra Tabela de Juros + lista
+        # Combinar Outro Juros (DOM: combinarOutroJuros + select 'outroJuros')
         if cj.combinar_outra_tabela_juros or cj.tabelas_juros_adicionais:
-            self._click_checkbox("combinarOutraTabelaJuros", True)
             self._click_checkbox("combinarOutroJuros", True)
             self._aguardar_ajax(2000)
             for tab in cj.tabelas_juros_adicionais:
-                lbl = self._TAXA_JUROS_LABEL.get(tab.tabela, tab.tabela)
-                self._select_value("tabelaJurosAdicional", lbl)
-                self._fill_date("aPartirDeJuros", tab.a_partir_de)
-                self._fill_date("dataAPartirDeJuros", tab.a_partir_de)
-                # Click "+" para adicionar linha
-                self._page.evaluate(
-                    """() => {
-                        const b = [...document.querySelectorAll('input[type=image], input[type=submit], input[type=button]')]
-                            .find(e => /(adicionar|incluir).*juros/i.test((e.title||'') + (e.alt||'') + (e.value||'')));
-                        if (b) b.click();
-                    }"""
-                )
+                val = self._TAXA_JUROS_VALUE.get(tab.tabela, tab.tabela)
+                self._select_value("outroJuros", val)
+                if tab.a_partir_de:
+                    self._fill_date("apartirDeOutroJurosInputDate", tab.a_partir_de)
                 self._aguardar_ajax(2000)
+
+        # Base de Juros das Verbas (DOM: baseDeJurosDasVerbas, default VERBAS)
+        base_map = {"VERBA": "VERBAS", "PRINCIPAL": "VERBA_INSS", "BRUTO": "VERBA_INSS_PP"}
+        self._select_value("baseDeJurosDasVerbas", base_map.get(cj.base_juros, cj.base_juros))
 
         # Súmula 439
         if cj.sumula_439_juros_desde_ajuizamento:
