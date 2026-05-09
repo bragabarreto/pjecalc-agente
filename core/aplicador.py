@@ -1318,17 +1318,22 @@ class AplicadorPJECalc:
     def _aplicar_verba_completa(self, v: Verba) -> bool:
         """Abre página Parâmetros da verba pelo nome, aplica TUDO + ocorrências."""
         self.log(f"  → Aplicar verba completa: '{v.parametros.descricao}'")
+        # Verbas Expresso aparecem na listagem com o nome canônico do Expresso
+        # (ex: "HORAS EXTRAS 50%"), não com o nome da sentença. Usar expresso_alvo
+        # como chave de busca; manter descricao para verbas Manuais.
+        nome_busca = (v.expresso_alvo if v.lancamento == "EXPRESSO" and v.expresso_alvo
+                      else v.parametros.descricao)
         try:
             # Garantir que estamos na listagem (verba-calculo.jsf)
             if "verba-calculo" not in self._page.url or "verbas-para-calculo" in self._page.url:
                 self._navegar_url_calculo("verba/verba-calculo.jsf")
             if self._detectar_erro_pagina():
-                self.log(f"    ⚠ verba-calculo.jsf em erro 500/NPE — pulando '{v.parametros.descricao}'")
+                self.log(f"    ⚠ verba-calculo.jsf em erro 500/NPE — pulando '{nome_busca}'")
                 return False
 
-            link_id = self._achar_link_acao_verba(v.parametros.descricao, "parametros")
+            link_id = self._achar_link_acao_verba(nome_busca, "parametros")
             if not link_id:
-                self.log(f"    ⚠ link Parâmetros de '{v.parametros.descricao}' não encontrado")
+                self.log(f"    ⚠ link Parâmetros de '{nome_busca}' não encontrado")
                 return False
             try:
                 self._page.locator(f"a[id='{link_id}']").first.click(timeout=8000)
@@ -1344,18 +1349,18 @@ class AplicadorPJECalc:
             # Voltar à listagem e abrir Ocorrências
             if v.ocorrencias:
                 self._navegar_url_calculo("verba/verba-calculo.jsf")
-                if self._abrir_ocorrencias_verba(v.parametros.descricao):
+                if self._abrir_ocorrencias_verba(nome_busca):
                     self._aplicar_ocorrencias_verba(v.ocorrencias)
                     self._clicar_salvar()
 
             # Reflexos (cada reflexo é uma Verba — fluxo Exibir+Parâmetros)
             for ref in v.reflexos:
                 self._navegar_url_calculo("verba/verba-calculo.jsf")
-                self._aplicar_reflexo(v.parametros.descricao, ref)
+                self._aplicar_reflexo(nome_busca, ref)
 
             return True
         except Exception as e:
-            self.log(f"  ⚠ aplicar_verba_completa '{v.parametros.descricao}': {e}")
+            self.log(f"  ⚠ aplicar_verba_completa '{nome_busca}': {e}")
             return False
 
     def _aplicar_parametros_verba(self, p: ParametrosVerba) -> None:

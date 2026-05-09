@@ -306,7 +306,7 @@ A verba é calculada por fórmula. Preencher:
   "base_calculo": {"tipo": "HISTORICO_SALARIAL", "historico_nome": "ÚLTIMA REMUNERAÇÃO", "proporcionaliza": "NAO"},
   "divisor": {"tipo": "OUTRO_VALOR", "valor": 220},
   "multiplicador": 1.50,
-  "quantidade": {"tipo": "INFORMADA", "valor": 22.00, "proporcionalizar": false}
+  "quantidade": {"tipo": "INFORMADA", "valor_mensal": 44.0}
 }
 ```
 
@@ -316,6 +316,36 @@ Tipos de base:
 - `SALARIO_DA_CATEGORIA` — piso da categoria
 - `SALARIO_MINIMO` — salário mínimo nacional
 - `VALE_TRANSPORTE` — específico
+
+### Campo `quantidade` — regra de preenchimento para Horas Extras
+
+O PJE-Calc sempre apura HE a partir da **quantidade mensal**. O campo `quantidade` é OBRIGATÓRIO
+para verbas de HE calculadas. Existem dois caminhos mutuamente exclusivos:
+
+#### Opção A — Quantidade mensal informada (sentença fixa quantidade de HE)
+Usar quando a sentença especifica diretamente quantas horas extras o reclamante fazia.
+Converter para horas/mês e preencher:
+```json
+"quantidade": {"tipo": "INFORMADA", "valor_mensal": <float>}
+```
+Regras de conversão:
+- Sentença diz **X horas extras diárias** → `valor_mensal = X × 22` (dias úteis médios/mês)
+- Sentença diz **X horas extras semanais** → `valor_mensal = round(X × 4.33, 1)`
+- Sentença diz **X horas extras mensais** → `valor_mensal = X` (usar direto)
+- Sentença menciona "excedentes da 44ª semanal" com escala 6×1 → `valor_mensal = 26` (1d×26sem/mês)
+
+#### Opção B — Importada do Cartão de Ponto (sentença fixa jornada/horário)
+Usar quando a sentença descreve a jornada de trabalho (horários de entrada/saída, escalas,
+intervalos) mas não fixa uma quantidade exata de HE. O PJE-Calc calculará as HE com base
+no Cartão de Ponto preenchido.
+```json
+"quantidade": {"tipo": "IMPORTADA_DO_CARTAO"}
+```
+Nesse caso, preencher obrigatoriamente `cartao_de_ponto` (seção 5) com a jornada extraída
+da sentença e usar as mesmas datas `data_inicial`/`data_final` da verba HE.
+
+**Nunca** omitir `quantidade` nem deixar como `null` quando `valor=CALCULADO` — o PJE-Calc
+calculará 0 e a verba terá valor zero.
 
 ## 4.5 REFLEXOS
 
@@ -347,21 +377,39 @@ Cada reflexo:
 
 # 5. CARTAO_DE_PONTO
 
-Incluir `cartao_de_ponto` (objeto não-null) APENAS quando a sentença determina apuração de horas extras com base em jornada extraordinária.
-Quando a sentença determina HE por quantidade fixa/mês ou não há HE, deixar `null`.
+Preencher **somente na Opção B** (ver seção 4.4): sentença fixa jornada/horário de trabalho
+mas não especifica quantidade de HE — o PJE-Calc apurará as HE a partir da jornada cadastrada.
+
+Deixar `null` quando:
+- Opção A foi usada (quantidade informada diretamente), ou
+- Não há horas extras no cálculo.
 
 ```json
 {
-  "data_inicial": "DD/MM/YYYY", "data_final": "DD/MM/YYYY",
-  "apuracao": {"tipo": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL", "qtd_sumula85_hhmm": "02:00", "qtd_hora_separado_hhmm": "02:00"},
-  "extras_separados": {"considerar_feriado": true, ...},
-  "tolerancia": {"ativa": false, ...},
-  "jornada_padrao": {"segunda_hhmm": "08:00", ..., "semanal_h": 44.0, "mensal_media_h": 188.57},
-  "descansos": {...},
-  "horario_noturno": {"atividade": "ATIVIDADE_URBANA", ...},
-  "preenchimento": {"tipo": "PROGRAMACAO", "programacao_semanal": [{"dia_semana": "SEG", "turno1_inicio": "07:00", ...}]}
+  "data_inicial": "DD/MM/YYYY",
+  "data_final":   "DD/MM/YYYY",
+  "apuracao": {
+    "tipo": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL"
+  },
+  "jornada_padrao": {
+    "segunda_hhmm": "08:00",
+    "terca_hhmm":   "08:00",
+    "quarta_hhmm":  "08:00",
+    "quinta_hhmm":  "08:00",
+    "sexta_hhmm":   "08:00",
+    "sabado_hhmm":  "04:00",
+    "domingo_hhmm": null
+  }
 }
 ```
+
+Valores de `apuracao.tipo` (usar o mais adequado à sentença):
+- `HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL` — padrão; PJE-Calc compara diária vs semanal
+- `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA` — só conta excedentes do limite diário
+- `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL` — só conta excedentes do limite semanal
+- `HORAS_EXTRAS_CONFORME_SUMULA_85` — escalas especiais com RSR compensado
+
+`data_inicial`/`data_final`: mesmas datas da verba HE no JSON (`periodo_inicio`/`periodo_fim`).
 
 # 6. FALTAS, FERIAS
 
