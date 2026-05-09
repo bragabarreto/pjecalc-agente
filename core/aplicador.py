@@ -59,7 +59,7 @@ import logging
 import time
 from typing import Any, Callable, Optional, TYPE_CHECKING
 
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, Locator, TimeoutError as PlaywrightTimeout
 
 from infrastructure.pjecalc_pages import (
     DadosProcesso, HistoricoSalarialEntry, Verba, ParametrosVerba,
@@ -108,31 +108,44 @@ class AplicadorPJECalc:
 
     # ── Helpers de DOM ──
     def _aguardar_ajax(self, timeout_ms: int = 8000) -> None:
-        """Aguarda AJAX JSF concluir (espelha lógica do legado simplificada)."""
+        """Aguarda AJAX JSF/RichFaces concluir.
+
+        Estratégia: networkidle (sem requisições por 500ms) como wait primário,
+        com timeout configurável. Mais confiável que monitorar window.__ajaxCompleto
+        que depende de listeners nunca instalados no PJE-Calc.
+        """
         try:
-            self._page.wait_for_function(
-                "() => typeof window.__ajaxCompleto === 'undefined' "
-                "|| window.__ajaxCompleto === true",
-                timeout=timeout_ms,
+            self._page.wait_for_load_state(
+                "networkidle", timeout=min(timeout_ms, 15000)
             )
-        except PlaywrightTimeout:
+        except Exception:
+            self._page.wait_for_timeout(min(timeout_ms // 4, 2000))
+
+    def _loc_visivel(self, seletor: str, timeout_ms: int = 500) -> Optional[Locator]:
+        """Retorna primeiro locator visível e habilitado que casa com seletor.
+        Ignora elementos hidden (modais ocultos) e disabled (campos somente-leitura)."""
+        locs = self._page.locator(seletor)
+        total = locs.count()
+        if total == 0:
+            return None
+        for i in range(total):
             try:
-                self._page.wait_for_load_state("networkidle", timeout=4000)
+                candidate = locs.nth(i)
+                if (candidate.is_visible(timeout=timeout_ms) and
+                        candidate.is_enabled(timeout=timeout_ms)):
+                    return candidate
             except Exception:
-                self._page.wait_for_timeout(800)
-        else:
-            try:
-                self._page.evaluate("() => { window.__ajaxCompleto = false; }")
-            except Exception:
-                pass
+                continue
+        return None  # nenhum visível+habilitado; chamador decide o fallback
 
     def _fill_text(self, sufixo: str, valor: Optional[str]) -> bool:
-        """Preenche input text com sufixo de id. None/'' = no-op."""
+        """Preenche input text com sufixo de id. None/'' = no-op.
+        Prefere o primeiro elemento VISÍVEL para evitar conflito com modais ocultos."""
         if valor is None or valor == "":
             return False
         try:
-            loc = self._page.locator(f"input[id$='{sufixo}']").first
-            if loc.count() == 0:
+            loc = self._loc_visivel(f"input[id$='{sufixo}']")
+            if loc is None:
                 self.log(f"  ⚠ campo '{sufixo}' não encontrado")
                 return False
             loc.fill(str(valor))
@@ -147,8 +160,8 @@ class AplicadorPJECalc:
         if not valor_br:
             return False
         try:
-            loc = self._page.locator(f"input[id$='{sufixo}']").first
-            if loc.count() == 0:
+            loc = self._loc_visivel(f"input[id$='{sufixo}']")
+            if loc is None:
                 self.log(f"  ⚠ data '{sufixo}' não encontrada")
                 return False
             loc.focus()
@@ -264,8 +277,8 @@ class AplicadorPJECalc:
         if not valor:
             return False
         try:
-            loc = self._page.locator(f"select[id$='{sufixo}']").first
-            if loc.count() == 0:
+            loc = self._loc_visivel(f"select[id$='{sufixo}']")
+            if loc is None:
                 self.log(f"  ⚠ select '{sufixo}' não encontrado")
                 return False
             # Tier 1: por value
@@ -581,6 +594,47 @@ class AplicadorPJECalc:
             self.log(f"  ⚠ _reabrir_calculo_recentes: {e}")
             return False
 
+    def _garantir_contexto_calculo(self) -> bool:
+        """Verifica se menu lateral mostra itens per-calc; se não, tenta restaurar.
+        Estratégia:
+          1. Se menu OK → pronto.
+          2. Salvar conv_id da URL atual (se disponível).
+          3. Tentar _reabrir_calculo_recentes.
+          4. Se falhou mas temos conv_id → navegar direto para calculo.jsf e tentar menu.
+        """
+        tem_submenu = self._page.evaluate(
+            """() => !!document.querySelector(
+                'li[id*="li_calculo_dados"], li[id*="li_calculo_ferias"], '
+                + 'li[id*="li_calculo_verbas"], li[id*="li_operacoes_"]'
+            )"""
+        )
+        if tem_submenu:
+            return True
+
+        # Salvar conv_id atual ANTES de qualquer navegação
+        if "conversationId=" in self._page.url:
+            atual = self._page.url.split("conversationId=")[1].split("&")[0].split("#")[0]
+            if atual.isdigit():
+                self._conv_id = atual
+                self.log(f"  ↺ conv_id capturado: {self._conv_id}")
+
+        self.log("  ↺ contexto cálculo perdido — reabrindo via Recentes")
+        ok = self._reabrir_calculo_recentes(
+            processo_numero=self._processo_numero,
+            reclamante_nome=self._reclamante_nome,
+        )
+        if ok:
+            return True
+        # Fallback: se temos conv_id, navegar direto e verificar menu
+        if self._conv_id:
+            self.log(f"  ↺ Recentes falhou — tentando URL direta conv={self._conv_id}")
+            self._navegar_url_calculo("calculo.jsf")
+            tem = self._page.evaluate(
+                """() => !!document.querySelector('li[id*="li_operacoes_"], li[id*="li_calculo_verbas"]')"""
+            )
+            return tem
+        return False
+
     def _clicar_menu_lateral(self, secao: str) -> bool:
         """Clica em link do menu lateral via JS (preserva conversation Seam,
         diferente de _navegar_url_calculo que faz goto direto e pode iniciar
@@ -600,10 +654,14 @@ class AplicadorPJECalc:
                         .normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
                         .replace(/\\s+/g,' ').trim();
                     const alvo = norm(args.secao);
-                    // Tier 1: ID fixo
+                    // Tier 1: ID fixo — preferir <a> filho (onclick/href pode estar no link)
                     if (args.sel_exato) {
-                        const a = document.querySelector(args.sel_exato);
-                        if (a) { a.click(); return 'tier1:' + (a.id || 'ok'); }
+                        const el = document.querySelector(args.sel_exato);
+                        if (el) {
+                            const a = el.tagName === 'A' ? el : (el.querySelector('a') || el);
+                            a.click();
+                            return 'tier1:' + (el.id || 'ok');
+                        }
                     }
                     // Tier 2: link cujo texto/title casa, mas DENTRO de li#li_calculo_*
                     // (preserva contexto do cálculo, evita menus Tabelas/Adm)
@@ -671,6 +729,49 @@ class AplicadorPJECalc:
         except Exception:
             pass
 
+    def _iniciar_novo_calculo(self) -> bool:
+        """Navega para o formulário de busca de cálculos via 'Cálculo > Buscar'.
+        Retorna True quando o formulário de busca estiver visível.
+        O conv_id real é obtido depois de selecionar um resultado."""
+        try:
+            if "principal.jsf" not in self._page.url and "calculo.jsf" not in self._page.url:
+                self._page.goto(
+                    f"{self._base_url}/pages/principal.jsf",
+                    wait_until="domcontentloaded", timeout=15000
+                )
+                self._aguardar_ajax(4000)
+            # Clicar "Buscar" no menu Cálculo (li_calculo_buscar ou link com texto "Buscar")
+            clicou = self._page.evaluate(
+                """() => {
+                    const el = document.querySelector('li#li_calculo_buscar a')
+                        || document.querySelector('li#li_calculo_buscar')
+                        || [...document.querySelectorAll('ul.rf-cdp-item a, .rich-ddmenu-item a')]
+                            .find(a => /^buscar$/i.test((a.textContent||'').trim()));
+                    if (el) { el.click(); return el.id || el.textContent?.trim() || 'ok'; }
+                    return null;
+                }"""
+            )
+            if not clicou:
+                # Fallback: navegar diretamente para calculo.jsf sem conversationId
+                self._page.goto(
+                    f"{self._base_url}/pages/calculo/calculo.jsf",
+                    wait_until="domcontentloaded", timeout=15000
+                )
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(1000)
+            # Verificar se estamos num formulário de busca (com numeroProcessoBusca ou idCalculo)
+            tem_busca = self._page.evaluate(
+                """() => !!(
+                    document.querySelector('input[id$="numeroProcessoBusca"]') ||
+                    document.querySelector('input[id="formulario:idCalculo"]')
+                )"""
+            )
+            self.log(f"  ✓ nav busca: clicou={clicou} tem_busca={tem_busca}")
+            return True  # o fill dos campos de busca ocorre em aplicar_dados_processo
+        except Exception as e:
+            self.log(f"  ⚠ _iniciar_novo_calculo: {e}")
+            return False
+
     def aplicar_dados_processo(self, p: DadosProcesso) -> bool:
         """Preenche a página 1 (calculo.jsf) com TODOS os campos não-vazios
         de DadosProcesso. Salva ao final.
@@ -682,16 +783,103 @@ class AplicadorPJECalc:
         """
         self.log("→ Fase 1: Dados do Processo")
         self._set_processo_cache(p)
-        if not self._navegar_url_calculo("calculo.jsf"):
-            return False
+        # Sem conv_id: estamos em uma sessão nova; iniciar via menu "Novo"
+        if not self._conv_id:
+            if not self._iniciar_novo_calculo():
+                return False
+        else:
+            if not self._navegar_url_calculo("calculo.jsf"):
+                return False
 
-        # ── Aba "Dados do Processo" (default, mas garantir) ──
-        # Identificação
-        self._fill_text("numero", p.numero)
-        self._fill_text("digito", p.digito)
-        self._fill_text("ano", p.ano)
-        self._fill_text("regiao", p.regiao)
-        self._fill_text("vara", p.vara)
+        # ── Detectar modo: "busca" (nova calc) vs "edição" (calc já carregada) ──
+        # Em modo busca os campos visíveis têm sufixo 'ProcessoBusca'.
+        # Aguardar explicitamente o render do form antes de verificar o modo.
+        try:
+            self._page.wait_for_selector(
+                'input[id$="numeroProcessoBusca"], input[id$="reclamanteNome"]',
+                timeout=8000, state="visible",
+            )
+        except Exception:
+            self._page.wait_for_timeout(2000)
+
+        # Detectar exatamente qual formulário está visível após o Novo/nav:
+        #   modo A — "busca processo": campos formulario:numeroProcessoBusca (busca por processo PJE)
+        #   modo B — "busca calc":     campos formulario:idCalculo / formulario:numero (busca calc existente)
+        #   modo C — "edição direta":  campo formulario:reclamanteNome visível
+        dbg = self._page.evaluate(
+            """() => {
+                const vis = (sel) => {
+                    const el = document.querySelector(sel);
+                    return !!(el && el.offsetParent !== null);
+                };
+                return {
+                    modoA: vis('input[id$="numeroProcessoBusca"]'),
+                    modoB: vis('input[id="formulario:idCalculo"]') || vis('input[id="formulario:numero"]'),
+                    modoC: vis('input[id$="reclamanteNome"]'),
+                    ids: [...document.querySelectorAll('input[type="text"]')]
+                         .filter(e => e.offsetParent !== null).map(e => e.id).slice(0,6)
+                };
+            }"""
+        )
+
+        def _buscar_e_abrir(numero_campo: str, valor: str) -> bool:
+            """Preenche campo de busca (se fornecido), clica Buscar, seleciona resultado."""
+            if numero_campo and valor:
+                inp = self._page.locator(f'input[id$="{numero_campo}"]').first
+                if inp.count() > 0:
+                    inp.fill(valor)
+            # Clicar Buscar
+            clicou = self._page.evaluate(
+                """() => {
+                    const bt = document.querySelector('input[id$="buscar"]')
+                        || document.querySelector('input[value="Buscar"]');
+                    if (bt) { bt.click(); return bt.id || bt.value || 'ok'; }
+                    return null;
+                }"""
+            )
+            if not clicou:
+                return False
+            self.log(f"  ✓ Buscar clicado: {clicou}")
+            self._aguardar_ajax(12000)
+            self._page.wait_for_timeout(2000)
+            # Selecionar primeiro resultado (link ícone — texto vazio; id contém j_id, não "duplicar")
+            selecionou = self._page.evaluate(
+                """() => {
+                    const cands = [...document.querySelectorAll('a[id*="listagem"][id*="j_id"]')]
+                        .filter(e => e.offsetParent !== null && !e.id.includes('duplicar'));
+                    if (cands.length > 0) { cands[0].click(); return cands[0].id; }
+                    return null;
+                }"""
+            )
+            if selecionou:
+                self.log(f"  ✓ Resultado selecionado: {selecionou}")
+                self._aguardar_ajax(10000)
+                self._page.wait_for_timeout(2000)
+                if "conversationId=" in self._page.url:
+                    novo = self._page.url.split("conversationId=")[1].split("&")[0].split("#")[0]
+                    self._conv_id = novo
+                    self.log(f"  ✓ conv_id atualizado: {self._conv_id}")
+                return True
+            else:
+                self.log("  ⚠ nenhum resultado na tabela de busca")
+                return False
+
+        if dbg.get("modoA"):
+            self.log("  → modo A: busca por processo PJE")
+            self._fill_text("numeroProcessoBusca", p.numero)
+            self._fill_text("digitoProcessoBusca", p.digito)
+            self._fill_text("anoProcessoBusca", p.ano)
+            self._fill_text("regiaoBusca", p.regiao)
+            self._fill_text("varaProcessoBusca", p.vara)
+            _buscar_e_abrir("", "")
+        elif dbg.get("modoB"):
+            self.log("  → modo B: formulário de busca de calc — preenchendo searchText")
+            # formulario:numero está DISABLED neste form; usar searchText (busca livre)
+            _buscar_e_abrir("searchText", p.numero)
+
+        # ── Aba "Dados do Processo" (campos editáveis pós-busca) ──
+        # Em nova calc os campos reclamante/reclamado são preenchidos pela busca PJE
+        # e ficam disabled. Apenas valorDaCausa e autuadoEm podem ser editados.
         self._fill_decimal("valorDaCausa", p.valor_da_causa)
         self._fill_date("autuadoEm", p.autuado_em)
 
@@ -767,8 +955,16 @@ class AplicadorPJECalc:
                 pass
         if not tab_clicado:
             self.log("  ⚠ tab 'Parâmetros do Cálculo' não encontrada — selects estado/municipio podem falhar")
-        self._aguardar_ajax(5000)
-        self._page.wait_for_timeout(1200)
+        self._aguardar_ajax(8000)
+        # Aguardar render do conteúdo da tab — 'estado' é o primeiro campo crítico
+        if tab_clicado:
+            try:
+                self._page.wait_for_selector(
+                    "select[id$='estado'], input[id$='dataAdmissaoInputDate']",
+                    timeout=10000,
+                )
+            except Exception:
+                self._page.wait_for_timeout(2000)
 
         # Estado: schema v3 tem sigla (CE), DOM espera ÍNDICE
         if p.estado:
@@ -1571,6 +1767,15 @@ class AplicadorPJECalc:
         if not self._navegar_secao("Histórico Salarial", "historico-salarial.jsf"):
             return False
         for entry in historico:
+            # Aguardar botão Novo antes de clicar (página pode ainda estar carregando)
+            try:
+                self._page.wait_for_selector(
+                    "input[id='formulario:incluir'][value='Novo']",
+                    timeout=8000,
+                    state="visible",
+                )
+            except Exception:
+                pass
             if not self._clicar_novo():
                 self.log(f"  ⚠ Não conseguiu abrir 'Novo' para '{entry.nome}' — skip")
                 # Importante: continuar SEM tentar preencher campos do form
@@ -2156,44 +2361,47 @@ class AplicadorPJECalc:
         """
         self.log("→ Liquidar e Exportar")
         try:
-            # Etapa 1 — Click 'Liquidar' menu lateral (vai para liquidacao.jsf)
+            # Restaurar contexto Seam caso tenha sido perdido durante as fases
+            self._garantir_contexto_calculo()
+
+            # Etapa 1 — Navegar para liquidacao.jsf
             if not self._clicar_menu_lateral("Liquidar"):
                 self.log("  ⚠ menu Liquidar falhou — fallback URL direta")
-                self._navegar_url_calculo("liquidacao.jsf")
+                if not self._navegar_url_calculo("liquidacao.jsf"):
+                    self.log("  ⚠ falha ao navegar liquidacao.jsf")
+                    return None
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
 
-            # Etapa 2 — Click confirmação 'formulario:liquidar' (via dispatchEvent)
-            clicou = self._page.evaluate(
-                """() => {
-                    const b = document.querySelector('input[id="formulario:liquidar"]');
-                    if (!b) return null;
-                    b.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
-                    return 'ok';
-                }"""
-            )
-            if not clicou:
+            # Etapa 2 — Click 'formulario:liquidar' (botão real, não dispatchEvent)
+            try:
+                loc_liq = self._page.locator('input[id="formulario:liquidar"]')
+                loc_liq.wait_for(timeout=8000, state="visible")
+                loc_liq.click(timeout=10000)
+            except Exception:
                 self.log("  ⚠ botão 'formulario:liquidar' não encontrado")
                 return None
             self.log("  → Liquidação disparada — aguardando processamento")
             self._aguardar_ajax(120000)  # pode demorar minutos
             self._page.wait_for_timeout(5000)
 
-            # Etapa 3 — Click 'Exportar' menu lateral (vai para exportacao.jsf)
+            # Etapa 3 — Navegar para exportacao.jsf
             if not self._clicar_menu_lateral("Exportar"):
                 self.log("  ⚠ menu Exportar falhou — fallback URL direta")
                 self._navegar_url_calculo("exportacao.jsf")
             self._aguardar_ajax(10000)
-            self._page.wait_for_timeout(1500)
+            self._page.wait_for_timeout(2000)
 
-            # Etapa 4 — Capturar download .pjc via 'formulario:exportar'
-            with self._page.expect_download(timeout=120000) as dl_info:
-                self._page.evaluate(
-                    """() => {
-                        const b = document.querySelector('input[id="formulario:exportar"]');
-                        if (b) b.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
-                    }"""
-                )
+            # Etapa 4 — Download .pjc via click nativo (Playwright intercepta download)
+            try:
+                loc_exp = self._page.locator('input[id="formulario:exportar"]')
+                loc_exp.wait_for(timeout=8000, state="visible")
+                with self._page.expect_download(timeout=120000) as dl_info:
+                    loc_exp.click(timeout=10000)
+            except Exception as e:
+                self.log(f"  ⚠ exportar click: {e}")
+                return None
+
             download = dl_info.value
             path = download.path()
             if path:
