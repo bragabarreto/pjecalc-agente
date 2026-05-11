@@ -559,49 +559,98 @@ class ImpostoRenda(BaseModel):
 
 
 class ProgramacaoSemanalDia(BaseModel):
-    """Configuração de jornada por dia (DOM auditado: PJE-Calc usa formato
-    HH:MM como JORNADA TOTAL DO DIA, não turnos com entrada/saída)."""
+    """Legado v2 — uso interno. Preferir ProgramacaoSemanalHorario para v3."""
 
     model_config = ConfigDict(extra="forbid")
 
     dia: Literal["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SAB"]
-    valor_jornada: Optional[str] = None  # HH:MM (ex.: '08:00')
-    # Compat — turnos não usados pelo PJE-Calc Cidadão (legado v2)
+    valor_jornada: Optional[str] = None  # HH:MM total do dia (jornada padrão)
     turno1_inicio: Optional[str] = None
     turno1_fim: Optional[str] = None
     turno2_inicio: Optional[str] = None
     turno2_fim: Optional[str] = None
 
 
-class CartaoDePonto(BaseModel):
-    """Página: Cartão de Ponto (apuracao-cartaodeponto.jsf).
+class ProgramacaoSemanalHorario(BaseModel):
+    """Grade semanal (formulario:listagemProgramacao) — DOM confirmado v2.15.1.
 
-    DOM auditado v2.15.1 — campos reais (não usa entrada/saída):
-      tipoApuracaoHorasExtras (7 opções), competenciaInicialInputDate /
-      competenciaFinalInputDate, valorJornadaSegunda/Terca/.../Sabado/Dom,
-      qtJornadaSemanal, qtJornadaMensal + checkboxes diversos.
+    Índices: SEG=0, TER=1, QUA=2, QUI=3, SEX=4, SAB=5, DOM=6, FERIADO=7.
+    Cada linha tem 6 turnos (entrada1/saida1 … entrada6/saida6).
+    Os campos usam timeMask jQuery — preencher com HH:MM.
     """
 
     model_config = ConfigDict(extra="forbid")
 
-    apurar: bool = False  # default: não apurar (sentença raramente envolve)
+    dia: Literal["SEG", "TER", "QUA", "QUI", "SEX", "SAB", "DOM", "FERIADO"]
+    entrada1: Optional[str] = None; saida1: Optional[str] = None
+    entrada2: Optional[str] = None; saida2: Optional[str] = None
+    entrada3: Optional[str] = None; saida3: Optional[str] = None
+    entrada4: Optional[str] = None; saida4: Optional[str] = None
+    entrada5: Optional[str] = None; saida5: Optional[str] = None
+    entrada6: Optional[str] = None; saida6: Optional[str] = None
+
+
+class EscalaConfig(BaseModel):
+    """Configuração do modo Escala (formulario:escalas + campos auxiliares)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    tipo: Literal[
+        "OUTRA", "DOZE_POR_DOZE", "DOZE_POR_VINTE_QUATRO", "DOZE_POR_TRINTA_E_SEIS",
+        "DOZE_POR_QUARENTA_E_OITO", "CINCO_POR_UM", "SEIS_POR_UM", "OITO_DOIS",
+    ] = "OUTRA"
+    inicio_hhmm: Optional[str] = None   # formulario:valorHoraInicioEscala
+    qt_dias: Optional[int] = None       # formulario:qtdDiasTrabalhados
+
+
+class PreenchimentoJornadas(BaseModel):
+    """Seção 'Preenchimento de Jornadas' (formulario:preenchimentoJornadasCartao).
+
+    DOM confirmado v2.15.1:
+      radio values: LIVRE / PROGRAMACAO / ESCALA
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    modo: Literal["LIVRE", "PROGRAMACAO", "ESCALA"] = "LIVRE"
+    programacao_semanal: List[ProgramacaoSemanalHorario] = Field(default_factory=list)
+    escala: Optional[EscalaConfig] = None
+
+
+class CartaoDePonto(BaseModel):
+    """Página: Cartão de Ponto (apuracao-cartaodeponto.jsf).
+
+    DOM auditado v2.15.1.
+
+    Estrutura de dois níveis:
+      1. Jornada Padrão — horas contratuais por dia (referência para HE).
+         Campos: valorJornadaSegunda/Terca/.../Sabado/Dom, qtJornadaSemanal/Mensal
+      2. Preenchimento de Jornadas — horas efetivamente trabalhadas.
+         Modo LIVRE: preenchimento manual na grade de ocorrências.
+         Modo PROGRAMACAO: grade semanal com entrada/saída por turno.
+         Modo ESCALA: tipo de escala + horário de início.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    apurar: bool = False
 
     # Tipo de apuração de horas extras (7 opções)
     tipo_apuracao_horas_extras: Optional[Literal[
         "NAO_APURAR_HORAS_EXTRAS",
         "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA",
-        "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",  # default UI
+        "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
         "HORAS_EXTRAS_CONFORME_SUMULA_85",
         "APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO",
         "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL",
         "HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL",
     ]] = None
 
-    # Competência (período do cartão)
-    competencia_inicial: Optional[str] = None  # MM/AAAA
-    competencia_final: Optional[str] = None  # MM/AAAA
+    # Competência (período do cartão) — MM/AAAA
+    competencia_inicial: Optional[str] = None
+    competencia_final: Optional[str] = None
 
-    # Jornadas por dia (HH:MM total do dia)
+    # Jornada Padrão — horas contratuais por dia (HH:MM total líquido)
     valor_jornada_segunda: Optional[str] = None
     valor_jornada_terca: Optional[str] = None
     valor_jornada_quarta: Optional[str] = None
@@ -609,10 +658,13 @@ class CartaoDePonto(BaseModel):
     valor_jornada_sexta: Optional[str] = None
     valor_jornada_sabado: Optional[str] = None
     valor_jornada_dom: Optional[str] = None
-    qt_jornada_semanal: Optional[str] = None  # HH:MM
-    qt_jornada_mensal: Optional[str] = None  # HH:MM
+    qt_jornada_semanal: Optional[str] = None
+    qt_jornada_mensal: Optional[str] = None
 
-    # Compat (legado v2 — não corresponde ao DOM real)
+    # Preenchimento de Jornadas — horas efetivas trabalhadas
+    preenchimento_jornadas: Optional[PreenchimentoJornadas] = None
+
+    # Compat legado v2
     forma_de_apuracao: Optional[Literal[
         "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
         "HORAS_EXTRAS_PELA_JORNADA_REAL",
@@ -841,5 +893,6 @@ class PreviaCalculo(BaseModel):
 DadosProcesso.model_rebuild()
 HistoricoSalarialEntry.model_rebuild()
 Verba.model_rebuild()
+PreenchimentoJornadas.model_rebuild()
 CartaoDePonto.model_rebuild()
 PreviaCalculo.model_rebuild()

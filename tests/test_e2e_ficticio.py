@@ -1205,9 +1205,9 @@ JSON_V2_RICHARLEN = {
      "parametros": {"incidencias": {"irpf": True, "cs_inss": True, "fgts": True},
                     "periodo_inicio": "25/09/2020", "periodo_fim": "01/04/2025",
                     "formula_calculado": {
-                      "divisor": {"tipo": "OUTRO_VALOR", "valor": 220},
+                      "divisor": {"tipo": "CARGA_HORARIA"},
                       "multiplicador": 1.50,
-                      "quantidade": {"tipo": "INFORMADA", "valor": 44.0}
+                      "quantidade": {"tipo": "IMPORTADA_DO_CARTAO"}
                     }},
      "reflexos": [
        {"id": "r01-01", "nome": "RSR sobre Horas Extras",      "expresso_reflex_alvo": "REPOUSO SEMANAL REMUNERADO SOBRE HORAS EXTRAS"},
@@ -1294,6 +1294,33 @@ JSON_V2_RICHARLEN = {
   },
   "custas_judiciais": {
     "custas_conhecimento_reclamado": "CALCULADA_2_POR_CENTO",
+  },
+  "cartao_de_ponto": {
+    "data_inicial": "25/09/2020",
+    "data_final": "31/03/2025",
+    "apuracao": {"tipo": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL"},
+    "jornada_padrao": {
+      # Horas contratuais por dia (referência legal — 44h/sem)
+      "segunda_hhmm": "08:00",
+      "terca_hhmm":   "08:00",
+      "quarta_hhmm":  "08:00",
+      "quinta_hhmm":  "08:00",
+      "sexta_hhmm":   "08:00",
+      "sabado_hhmm":  "04:00",
+      "domingo_hhmm": None,
+    },
+    "preenchimento_jornadas": {
+      # Horas efetivamente trabalhadas: Seg–Sáb, 07:00–19:00, intervalo 12:00–13:00
+      "modo": "PROGRAMACAO",
+      "programacao_semanal": [
+        {"dia": "SEG", "entrada1": "07:00", "saida1": "12:00", "entrada2": "13:00", "saida2": "19:00"},
+        {"dia": "TER", "entrada1": "07:00", "saida1": "12:00", "entrada2": "13:00", "saida2": "19:00"},
+        {"dia": "QUA", "entrada1": "07:00", "saida1": "12:00", "entrada2": "13:00", "saida2": "19:00"},
+        {"dia": "QUI", "entrada1": "07:00", "saida1": "12:00", "entrada2": "13:00", "saida2": "19:00"},
+        {"dia": "SEX", "entrada1": "07:00", "saida1": "12:00", "entrada2": "13:00", "saida2": "19:00"},
+        {"dia": "SAB", "entrada1": "07:00", "saida1": "12:00", "entrada2": "13:00", "saida2": "19:00"},
+      ],
+    },
   },
 }
 

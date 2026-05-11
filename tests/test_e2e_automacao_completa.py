@@ -27,6 +27,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 FIREFOX_PROFILE = os.path.expanduser(
     "~/Library/Application Support/Firefox/Profiles/kku6n0pr.default-release"
 )
+CHROME_PROFILE = os.path.expanduser(
+    "~/Library/Application Support/Google/Chrome/Default"
+)
+# Seleciona browser: PJECALC_BROWSER=chromium usa Chrome (sessão ativa no desktop)
+_USE_CHROMIUM = os.getenv("PJECALC_BROWSER", "firefox").lower() == "chromium"
 PJECALC_URL = "https://pje.trt7.jus.br/pjecalc"
 OUTPUT_DIR = Path("/tmp/pjecalc_testes")
 
@@ -57,6 +62,7 @@ def converter_json_v2_para_previa(j: dict):
         Verba, ParametrosVerba, FGTS, Honorario,
         ContribuicaoSocial, ImpostoRenda, CustasJudiciais, CorrecaoJuros,
         CorrecaoJurosTabelaAdicional, CartaoDePonto,
+        ProgramacaoSemanalHorario, EscalaConfig, PreenchimentoJornadas,
     )
 
     proc = j["processo"]
@@ -368,8 +374,6 @@ def converter_json_v2_para_previa(j: dict):
     )
 
     # ── Cartão de Ponto ───────────────────────────────────────────────────
-    # Opção B: sentença define jornada → apurar via cartão de ponto.
-    # Opção A (quantidade informada) não precisa de cartão de ponto.
     cp_j = j.get("cartao_de_ponto") or {}
     if cp_j:
         _CP_TIPO_MAP = {
@@ -390,14 +394,39 @@ def converter_json_v2_para_previa(j: dict):
                 return data_br[3:5] + "/" + data_br[6:]
             return data_br or ""
 
+        # Preenchimento de Jornadas (horas efetivas)
+        pj_j = cp_j.get("preenchimento_jornadas") or {}
+        preenchimento_jornadas = None
+        if pj_j:
+            modo_pj = pj_j.get("modo", "LIVRE")
+            prog_semanal = []
+            for d in pj_j.get("programacao_semanal") or []:
+                prog_semanal.append(ProgramacaoSemanalHorario(
+                    dia=d["dia"],
+                    entrada1=d.get("entrada1"), saida1=d.get("saida1"),
+                    entrada2=d.get("entrada2"), saida2=d.get("saida2"),
+                    entrada3=d.get("entrada3"), saida3=d.get("saida3"),
+                    entrada4=d.get("entrada4"), saida4=d.get("saida4"),
+                    entrada5=d.get("entrada5"), saida5=d.get("saida5"),
+                    entrada6=d.get("entrada6"), saida6=d.get("saida6"),
+                ))
+            escala_j = pj_j.get("escala")
+            escala = EscalaConfig(**escala_j) if escala_j else None
+            preenchimento_jornadas = PreenchimentoJornadas(
+                modo=modo_pj,
+                programacao_semanal=prog_semanal,
+                escala=escala,
+            )
+
         cartao_de_ponto = CartaoDePonto(
             apurar=True,
             tipo_apuracao_horas_extras=_CP_TIPO_MAP.get(
                 apuracao_j.get("tipo", "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL"),
                 "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
             ),
-            competencia_inicial=_ddmm_para_mmaa(cp_j.get("data_inicial")),
-            competencia_final=_ddmm_para_mmaa(cp_j.get("data_final")),
+            # Cartão de ponto usa DD/MM/AAAA (diferente do histórico salarial que usa MM/AAAA)
+            competencia_inicial=cp_j.get("data_inicial"),
+            competencia_final=cp_j.get("data_final"),
             valor_jornada_segunda=jornada_j.get("segunda_hhmm"),
             valor_jornada_terca=jornada_j.get("terca_hhmm"),
             valor_jornada_quarta=jornada_j.get("quarta_hhmm"),
@@ -405,6 +434,7 @@ def converter_json_v2_para_previa(j: dict):
             valor_jornada_sexta=jornada_j.get("sexta_hhmm"),
             valor_jornada_sabado=jornada_j.get("sabado_hhmm"),
             valor_jornada_dom=jornada_j.get("domingo_hhmm"),
+            preenchimento_jornadas=preenchimento_jornadas,
         )
     else:
         cartao_de_ponto = CartaoDePonto()
@@ -468,14 +498,30 @@ class TestConversorJsonV2ParaPrevia:
         assert v01.expresso_alvo == "HORAS EXTRAS 50%"
 
     def test_he_quantidade_mapeada(self, previa):
-        """Opção A: quantidade mensal deve ser mapeada para ParametrosVerba."""
+        """Opção B: quantidade cartão de ponto — tipo IMPORTADA_CARTAO_PONTO, sem valor fixo."""
         v01 = next(v for v in previa.verbas if v.expresso_alvo == "HORAS EXTRAS 50%")
-        assert v01.parametros.tipo_da_quantidade == "INFORMADA"
-        assert v01.parametros.valor_informado_da_quantidade == "44,0"  # 44.0 → "44,0" (BR decimal)
+        assert v01.parametros.tipo_da_quantidade == "IMPORTADA_CARTAO_PONTO"
+        assert v01.parametros.valor_informado_da_quantidade is None
 
-    def test_cartao_ponto_nulo_quando_opcao_a(self, previa):
-        """Opção A: cartao_de_ponto.apurar deve ser False (JSON sem cartao_de_ponto)."""
-        assert previa.cartao_de_ponto.apurar is False
+    def test_cartao_ponto_opcao_b(self, previa):
+        """Opção B: jornada padrão (contratual) + preenchimento semanal (efetivo)."""
+        cp = previa.cartao_de_ponto
+        assert cp.apurar is True
+        assert cp.tipo_apuracao_horas_extras is not None
+        # Jornada padrão: horas contratuais (44h/sem)
+        assert cp.valor_jornada_segunda == "08:00"
+        assert cp.valor_jornada_sabado == "04:00"
+        assert cp.valor_jornada_dom is None
+        # Preenchimento: Programação Semanal com horários efetivos
+        pj = cp.preenchimento_jornadas
+        assert pj is not None
+        assert pj.modo == "PROGRAMACAO"
+        assert len(pj.programacao_semanal) == 6
+        seg = next(d for d in pj.programacao_semanal if d.dia == "SEG")
+        assert seg.entrada1 == "07:00"
+        assert seg.saida2 == "19:00"
+        sab = next(d for d in pj.programacao_semanal if d.dia == "SAB")
+        assert sab.entrada1 == "07:00"
 
     def test_he_reflexos_checkpoint(self, previa):
         v01 = next(v for v in previa.verbas if v.expresso_alvo == "HORAS EXTRAS 50%")
@@ -530,6 +576,42 @@ class TestE2EAutomacaoCompleta:
         import shutil
         import tempfile
         from playwright.sync_api import sync_playwright
+
+        if _USE_CHROMIUM:
+            # Extrai cookies do Chrome ativo via browser_cookie3 (descriptografa keychain macOS)
+            try:
+                import browser_cookie3
+                cj = browser_cookie3.chrome(domain_name="pje.trt7.jus.br")
+                chrome_cookies = [
+                    {"name": c.name, "value": c.value, "domain": c.domain or "pje.trt7.jus.br",
+                     "path": c.path or "/", "httpOnly": bool(c.has_nonstandard_attr("HttpOnly")),
+                     "secure": bool(c.secure)}
+                    for c in cj
+                ]
+            except Exception as e:
+                pytest.skip(f"Não foi possível extrair cookies do Chrome: {e}")
+                return
+
+            try:
+                headless = os.getenv("PJECALC_HEADLESS", "0") != "0"
+                with sync_playwright() as pw:
+                    browser = pw.chromium.launch(
+                        headless=headless,
+                        slow_mo=60,
+                        args=["--no-sandbox", "--disable-dev-shm-usage"],
+                    )
+                    ctx = browser.new_context(
+                        ignore_https_errors=True,
+                    )
+                    # Injeta cookies da sessão ativa do Chrome
+                    ctx.add_cookies(chrome_cookies)
+                    yield ctx
+                    ctx.close()
+                    browser.close()
+            except Exception as e:
+                pytest.skip(f"Erro ao criar contexto Chromium: {e}")
+                return
+            return
 
         src = Path(FIREFOX_PROFILE)
         if not src.exists():
@@ -629,46 +711,76 @@ class TestE2EAutomacaoCompleta:
         ok = aplicador.aplicar_fgts(previa.fgts)
         assert ok, "aplicar_fgts falhou.\n" + "\n".join(aplicador._logs[-20:])
 
-    # ── Fase 5: Contribuição Social ───────────────────────────────────────
+    # ── Fase 6: Cartão de Ponto ───────────────────────────────────────────
 
-    def test_06_inss(self, page, aplicador, previa):
+    def test_06_cartao_ponto(self, page, aplicador, previa):
+        ok = aplicador.aplicar_cartao_de_ponto(previa.cartao_de_ponto)
+        assert ok, "aplicar_cartao_de_ponto falhou.\n" + "\n".join(aplicador._logs[-20:])
+
+        page.wait_for_timeout(2000)
+
+        # Verificação funcional: PJE-Calc mantém o formulário em modo edição após Salvar.
+        # Lemos os valores da forma atual (já estamos em modo edição) e verificamos persistência.
+        erros = page.evaluate("""() =>
+            [...document.querySelectorAll('[id*="Erro"], .rf-msg, .rf-msgs-err')]
+                .map(el => el.textContent.trim().slice(0, 120))
+                .filter(Boolean)
+        """)
+        assert not erros, f"Erros JSF após salvar cartão de ponto: {erros}"
+
+        seg = page.evaluate("() => document.querySelector('input[id$=\"valorJornadaSegunda\"]')?.value")
+        sab = page.evaluate("() => document.querySelector('input[id$=\"valorJornadaDiariaSabado\"]')?.value")
+        modo = page.evaluate("() => document.querySelector('input[name$=\"preenchimentoJornadasCartao\"]:checked')?.value")
+        e1_seg = page.evaluate("() => document.querySelector('input[id$=\"listagemProgramacao:0:entrada1\"]')?.value")
+        s2_seg = page.evaluate("() => document.querySelector('input[id$=\"listagemProgramacao:0:saida2\"]')?.value")
+        print(f"\n  [VERIFY] seg={seg!r} sab={sab!r} modo={modo!r} prog_e1={e1_seg!r} prog_s2={s2_seg!r}")
+
+        assert seg == "08:00", f"Jornada padrão seg={seg!r}, esperado 08:00"
+        assert sab == "04:00", f"Jornada padrão sab={sab!r}, esperado 04:00"
+        assert modo == "PROGRAMACAO", f"Modo={modo!r}, esperado PROGRAMACAO"
+        assert e1_seg == "07:00", f"Prog.semanal seg entrada1={e1_seg!r}, esperado 07:00"
+        assert s2_seg == "19:00", f"Prog.semanal seg saida2={s2_seg!r}, esperado 19:00"
+
+    # ── Fase 7: Contribuição Social ───────────────────────────────────────
+
+    def test_07_inss(self, page, aplicador, previa):
         ok = aplicador.aplicar_inss(previa.contribuicao_social)
         assert ok, "aplicar_inss falhou.\n" + "\n".join(aplicador._logs[-20:])
 
-    # ── Fase 6: Imposto de Renda ──────────────────────────────────────────
+    # ── Fase 8: Imposto de Renda ──────────────────────────────────────────
 
-    def test_07_irpf(self, page, aplicador, previa):
+    def test_09_irpf(self, page, aplicador, previa):
         ok = aplicador.aplicar_irpf(previa.imposto_renda)
         assert ok, "aplicar_irpf falhou.\n" + "\n".join(aplicador._logs[-20:])
 
-    # ── Fase 7: Honorários ────────────────────────────────────────────────
+    # ── Fase 9: Honorários ────────────────────────────────────────────────
 
-    def test_08_honorarios(self, page, aplicador, previa):
+    def test_10_honorarios(self, page, aplicador, previa):
         ok = aplicador.aplicar_honorarios(previa.honorarios)
         assert ok, "aplicar_honorarios falhou.\n" + "\n".join(aplicador._logs[-20:])
 
-    # ── Fase 8: Custas ────────────────────────────────────────────────────
+    # ── Fase 10: Custas ───────────────────────────────────────────────────
 
-    def test_09_custas(self, page, aplicador, previa):
+    def test_11_custas(self, page, aplicador, previa):
         ok = aplicador.aplicar_custas(previa.custas)
         assert ok, "aplicar_custas falhou.\n" + "\n".join(aplicador._logs[-20:])
 
-    # ── Fase 9: Correção e Juros ──────────────────────────────────────────
+    # ── Fase 11: Correção e Juros ─────────────────────────────────────────
 
-    def test_10_correcao_juros(self, page, aplicador, previa):
+    def test_12_correcao_juros(self, page, aplicador, previa):
         ok = aplicador.aplicar_correcao_juros(previa.correcao_juros)
         assert ok, "aplicar_correcao_juros falhou.\n" + "\n".join(aplicador._logs[-20:])
 
-    # ── Fase 10: Verbas (por último — Expresso reseta conv Seam) ─────────
+    # ── Fase 12: Verbas (por último — Expresso reseta conv Seam) ─────────
 
-    def test_11_verbas(self, page, aplicador, previa):
+    def test_13_verbas(self, page, aplicador, previa):
         ok = aplicador.aplicar_verbas(previa.verbas)
         assert ok, "aplicar_verbas falhou.\n" + "\n".join(aplicador._logs[-20:])
         print(f"\n  URL após Verbas: {page.url}")
 
-    # ── Fase 11: Liquidar + Exportar ─────────────────────────────────────
+    # ── Fase 13: Liquidar + Exportar ─────────────────────────────────────
 
-    def test_12_liquidar_e_exportar(self, page, aplicador):
+    def test_14_liquidar_e_exportar(self, page, aplicador):
         OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
         pjc_bytes = aplicador.liquidar_e_exportar()
@@ -703,7 +815,7 @@ class TestE2EAutomacaoCompleta:
 
     # ── Resumo ────────────────────────────────────────────────────────────
 
-    def test_13_resumo_logs(self, aplicador):
+    def test_15_resumo_logs(self, aplicador):
         """Imprime todos os logs da automação."""
         print("\n=== LOGS COMPLETOS DA AUTOMAÇÃO ===")
         for i, msg in enumerate(aplicador._logs, 1):

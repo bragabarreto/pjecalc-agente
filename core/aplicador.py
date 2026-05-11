@@ -154,6 +154,38 @@ class AplicadorPJECalc:
             self.log(f"  ⚠ fill {sufixo}: {e}")
             return False
 
+    def _fill_hhmm(self, sufixo: str, valor: Optional[str]) -> bool:
+        """Preenche campo HH:MM usando teclado + dispatch change via JS.
+
+        Não usa Tab (Tab aciona onfocus/timeMask do próximo campo, causando
+        interferência quando vários campos são preenchidos em sequência).
+        Usa blur() + dispatchEvent('change') para notificar RichFaces sem mover foco.
+        """
+        if not valor:
+            return False
+        try:
+            loc = self._loc_visivel(f"input[id$='{sufixo}']")
+            if loc is None:
+                self.log(f"  ⚠ campo '{sufixo}' não encontrado")
+                return False
+            loc.click()
+            self._page.keyboard.press("Control+a")
+            self._page.keyboard.type(valor, delay=40)
+            # Disparar change sem mover foco para o próximo campo
+            field_id = loc.get_attribute("id")
+            self._page.evaluate(f"""() => {{
+                const el = document.getElementById('{field_id}');
+                if (el) {{
+                    el.blur();
+                    el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                }}
+            }}""")
+            self._page.wait_for_timeout(100)
+            return True
+        except Exception as e:
+            self.log(f"  ⚠ fill_hhmm {sufixo}: {e}")
+            return False
+
     def _fill_date(self, sufixo: str, valor_br: Optional[str]) -> bool:
         """Preenche campo de data (formato DD/MM/YYYY). RichFaces calendar:
         usa press_sequentially para evitar abrir popup."""
@@ -730,9 +762,9 @@ class AplicadorPJECalc:
             pass
 
     def _iniciar_novo_calculo(self) -> bool:
-        """Navega para o formulário de busca de cálculos via 'Cálculo > Buscar'.
-        Retorna True quando o formulário de busca estiver visível.
-        O conv_id real é obtido depois de selecionar um resultado."""
+        """Navega para o formulário de busca de cálculos via 'Cálculo > Buscar' ou 'Novo'.
+        Retorna True quando o formulário estiver visível.
+        O conv_id real é obtido depois de selecionar/salvar."""
         try:
             if "principal.jsf" not in self._page.url and "calculo.jsf" not in self._page.url:
                 self._page.goto(
@@ -740,33 +772,72 @@ class AplicadorPJECalc:
                     wait_until="domcontentloaded", timeout=15000
                 )
                 self._aguardar_ajax(4000)
-            # Clicar "Buscar" no menu Cálculo (li_calculo_buscar ou link com texto "Buscar")
+
+            # Logar DOM para diagnóstico: IDs dos <li> visíveis no topo
+            dom_diag = self._page.evaluate(
+                """() => ({
+                    url: location.href,
+                    liIds: [...document.querySelectorAll('li')].map(e=>e.id).filter(Boolean).slice(0,20),
+                    aTexts: [...document.querySelectorAll('a')].map(e=>(e.textContent||'').trim())
+                             .filter(t=>t&&t.length<30).slice(0,30),
+                })"""
+            )
+            self.log(f"  [DOM] url={dom_diag['url']}")
+            self.log(f"  [DOM] liIds={dom_diag['liIds']}")
+            self.log(f"  [DOM] links={dom_diag['aTexts']}")
+
+            # Tentar hover Playwright real no "Cálculo" do menu, depois clicar Buscar/Novo
+            clicou = None
+            for sel_pai in ['li#li_calculo', 'a:has-text("Cálculo")', 'span:has-text("Cálculo")']:
+                try:
+                    el = self._page.locator(sel_pai).first
+                    if el.count() > 0:
+                        el.hover(timeout=3000)
+                        self._page.wait_for_timeout(600)
+                        break
+                except Exception:
+                    pass
+
+            # Agora tentar clicar Buscar ou Novo via JS
             clicou = self._page.evaluate(
                 """() => {
-                    const el = document.querySelector('li#li_calculo_buscar a')
+                    const buscar = document.querySelector('li#li_calculo_buscar a')
                         || document.querySelector('li#li_calculo_buscar')
-                        || [...document.querySelectorAll('ul.rf-cdp-item a, .rich-ddmenu-item a')]
-                            .find(a => /^buscar$/i.test((a.textContent||'').trim()));
-                    if (el) { el.click(); return el.id || el.textContent?.trim() || 'ok'; }
+                        || [...document.querySelectorAll('a')].find(a =>
+                            /^buscar$/i.test((a.textContent||'').trim()));
+                    if (buscar) { buscar.click(); return 'buscar:' + (buscar.id || buscar.textContent?.trim()); }
+                    const novo = document.querySelector('li#li_calculo_novo a')
+                        || document.querySelector('li#li_calculo_novo')
+                        || [...document.querySelectorAll('a')].find(a =>
+                            /^novo$/i.test((a.textContent||'').trim()));
+                    if (novo) { novo.click(); return 'novo:' + (novo.id || novo.textContent?.trim()); }
                     return null;
                 }"""
             )
             if not clicou:
-                # Fallback: navegar diretamente para calculo.jsf sem conversationId
+                # Último fallback: URL direta — cria nova conversa Seam
                 self._page.goto(
                     f"{self._base_url}/pages/calculo/calculo.jsf",
                     wait_until="domcontentloaded", timeout=15000
                 )
             self._aguardar_ajax(6000)
             self._page.wait_for_timeout(1000)
-            # Verificar se estamos num formulário de busca (com numeroProcessoBusca ou idCalculo)
             tem_busca = self._page.evaluate(
                 """() => !!(
                     document.querySelector('input[id$="numeroProcessoBusca"]') ||
                     document.querySelector('input[id="formulario:idCalculo"]')
                 )"""
             )
+            # Logar DOM pós-navegação
+            dom_pos = self._page.evaluate(
+                """() => ({
+                    url: location.href,
+                    inputs: [...document.querySelectorAll('input[type="text"]')]
+                             .map(e=>e.id).filter(Boolean).slice(0,10),
+                })"""
+            )
             self.log(f"  ✓ nav busca: clicou={clicou} tem_busca={tem_busca}")
+            self.log(f"  [DOM pós] url={dom_pos['url']} inputs={dom_pos['inputs']}")
             return True  # o fill dos campos de busca ocorre em aplicar_dados_processo
         except Exception as e:
             self.log(f"  ⚠ _iniciar_novo_calculo: {e}")
@@ -1926,31 +1997,94 @@ class AplicadorPJECalc:
         if not self._navegar_secao("Cartão de Ponto", "../cartaodeponto/apuracao-cartaodeponto.jsf"):
             self._navegar_url_calculo("cartaodeponto/apuracao-cartaodeponto.jsf")
 
+        # Upsert: se já existe entrada na listagem → clicar Alterar; senão → Novo
+        # Evita erro "datas coincidentes com períodos já cadastrados" em re-runs
+        # Botão Alterar é ícone-link id="formulario:listagem:0:alterarApuracao" (sem texto)
+        tem_form = self._page.evaluate(
+            """() => !!(document.querySelector('input[id$="valorJornadaSegunda"]')
+                        && document.querySelector('input[id$="valorJornadaSegunda"]').offsetParent)"""
+        )
+        if not tem_form:
+            # Tentar Alterar em entrada existente primeiro (busca por ID, não texto)
+            clicou_alterar = self._page.evaluate(
+                """() => {
+                    const bt = document.querySelector('[id*="alterarApuracao"]')
+                        || [...document.querySelectorAll('a, input[type=button]')]
+                            .find(el => /lterar/i.test(el.textContent || el.value));
+                    if (bt) { bt.click(); return bt.id || bt.textContent.trim(); }
+                    return null;
+                }"""
+            )
+            if clicou_alterar:
+                self._aguardar_ajax(5000)
+                self.log(f"  ✓ Alterar Cartão de Ponto clicado (upsert): {clicou_alterar}")
+                try:
+                    self._page.wait_for_selector(
+                        'input[id$="valorJornadaSegunda"]',
+                        state="visible", timeout=15000
+                    )
+                    self.log("  ✓ campos de jornada visíveis (modo Alterar)")
+                except Exception:
+                    self.log("  ⚠ timeout aguardando campos após Alterar")
+            else:
+                # Não existe entrada → criar Novo
+                clicou_novo = self._page.evaluate(
+                    """() => {
+                        const bt = document.getElementById('formulario:incluir')
+                            || document.querySelector('input[value="Novo"]');
+                        if (bt) { bt.click(); return bt.id; }
+                        return null;
+                    }"""
+                )
+                if clicou_novo:
+                    self._aguardar_ajax(5000)
+                    self.log(f"  ✓ Novo Cartão de Ponto clicado: {clicou_novo}")
+                    try:
+                        self._page.wait_for_selector(
+                            'input[id$="valorJornadaSegunda"]',
+                            state="visible", timeout=15000
+                        )
+                        self.log("  ✓ campos de jornada visíveis")
+                    except Exception:
+                        self.log("  ⚠ timeout aguardando campos de jornada após Novo")
+                else:
+                    self.log("  ⚠ botão Novo não encontrado no Cartão de Ponto")
+
         # Tipo de apuração HE (radio com 7 opções)
         if cp.tipo_apuracao_horas_extras:
             self._click_radio("tipoApuracaoHorasExtras", cp.tipo_apuracao_horas_extras)
 
-        # Competência
+        # Competência — formato DD/MM/AAAA via JS direto (bypassa máscara jQuery)
         if cp.competencia_inicial:
-            self._fill_date("competenciaInicialInputDate", cp.competencia_inicial)
+            self._page.evaluate(
+                f"""() => {{
+                    const el = document.querySelector('input[id$="competenciaInicialInputDate"]');
+                    if (el) el.value = "{cp.competencia_inicial}";
+                }}"""
+            )
         if cp.competencia_final:
-            self._fill_date("competenciaFinalInputDate", cp.competencia_final)
+            self._page.evaluate(
+                f"""() => {{
+                    const el = document.querySelector('input[id$="competenciaFinalInputDate"]');
+                    if (el) el.value = "{cp.competencia_final}";
+                }}"""
+            )
 
-        # Jornadas por dia (HH:MM como total do dia)
+        # Jornadas por dia (HH:MM como total do dia) — usa teclado para disparar events RichFaces
         if cp.valor_jornada_segunda:
-            self._fill_text("valorJornadaSegunda", cp.valor_jornada_segunda)
+            self._fill_hhmm("valorJornadaSegunda", cp.valor_jornada_segunda)
         if cp.valor_jornada_terca:
-            self._fill_text("valorJornadaTerca", cp.valor_jornada_terca)
+            self._fill_hhmm("valorJornadaTerca", cp.valor_jornada_terca)
         if cp.valor_jornada_quarta:
-            self._fill_text("valorJornadaQuarta", cp.valor_jornada_quarta)
+            self._fill_hhmm("valorJornadaQuarta", cp.valor_jornada_quarta)
         if cp.valor_jornada_quinta:
-            self._fill_text("valorJornadaQuinta", cp.valor_jornada_quinta)
+            self._fill_hhmm("valorJornadaQuinta", cp.valor_jornada_quinta)
         if cp.valor_jornada_sexta:
-            self._fill_text("valorJornadaSexta", cp.valor_jornada_sexta)
+            self._fill_hhmm("valorJornadaSexta", cp.valor_jornada_sexta)
         if cp.valor_jornada_sabado:
-            self._fill_text("valorJornadaDiariaSabado", cp.valor_jornada_sabado)
+            self._fill_hhmm("valorJornadaDiariaSabado", cp.valor_jornada_sabado)
         if cp.valor_jornada_dom:
-            self._fill_text("valorJornadaDiariaDom", cp.valor_jornada_dom)
+            self._fill_hhmm("valorJornadaDiariaDom", cp.valor_jornada_dom)
 
         # Totais
         if cp.qt_jornada_semanal:
@@ -1958,7 +2092,7 @@ class AplicadorPJECalc:
         if cp.qt_jornada_mensal:
             self._fill_text("qtJornadaMensal", cp.qt_jornada_mensal)
 
-        # Compat: programação semanal v2 (mapear dia → valor_jornada)
+        # Compat: programação semanal v2 (mapear dia → valor_jornada padrão)
         for dia_cfg in cp.programacao_semanal:
             if dia_cfg.valor_jornada:
                 map_dia = {
@@ -1969,7 +2103,60 @@ class AplicadorPJECalc:
                 }
                 campo = map_dia.get(dia_cfg.dia)
                 if campo:
-                    self._fill_text(campo, dia_cfg.valor_jornada)
+                    self._fill_hhmm(campo, dia_cfg.valor_jornada)
+
+        # Preenchimento de Jornadas — horas efetivamente trabalhadas
+        pj = cp.preenchimento_jornadas
+        if pj:
+            self._click_radio("preenchimentoJornadasCartao", pj.modo)
+            self._aguardar_ajax(3000)
+            self.log(f"  ✓ modo preenchimento: {pj.modo}")
+
+            if pj.modo == "PROGRAMACAO" and pj.programacao_semanal:
+                # Aguardar renderização da grade listagemProgramacao pelo AJAX do radio
+                try:
+                    self._page.wait_for_selector(
+                        'input[id*="listagemProgramacao"]',
+                        state="attached", timeout=15000
+                    )
+                    self.log("  ✓ tabela listagemProgramacao renderizada")
+                except Exception:
+                    self.log("  ⚠ tabela listagemProgramacao não renderizou após 15s")
+
+                _DIA_IDX = {
+                    "SEG": 0, "TER": 1, "QUA": 2, "QUI": 3,
+                    "SEX": 4, "SAB": 5, "DOM": 6, "FERIADO": 7,
+                }
+                assignments: list[tuple[str, str]] = []
+                for dia_cfg in pj.programacao_semanal:
+                    idx = _DIA_IDX.get(dia_cfg.dia)
+                    if idx is None:
+                        continue
+                    for t in range(1, 7):
+                        for tipo in ("entrada", "saida"):
+                            val = getattr(dia_cfg, f"{tipo}{t}", None)
+                            if val:
+                                assignments.append((
+                                    f"listagemProgramacao:{idx}:{tipo}{t}", val
+                                ))
+                if assignments:
+                    js = "() => {"
+                    for sufixo, val in assignments:
+                        js += (
+                            f'  var el=document.querySelector(\'input[id$="{sufixo}"]\');'
+                            f'  if(el) el.value="{val}";'
+                        )
+                    js += "}"
+                    self._page.evaluate(js)
+                    self.log(f"  ✓ {len(assignments)} campos programação semanal preenchidos via JS")
+
+            elif pj.modo == "ESCALA" and pj.escala:
+                self._select_value("escalas", pj.escala.tipo)
+                if pj.escala.inicio_hhmm:
+                    self._fill_hhmm("valorHoraInicioEscala", pj.escala.inicio_hhmm)
+                if pj.escala.qt_dias is not None:
+                    self._fill_text("qtdDiasTrabalhados", str(pj.escala.qt_dias))
+
         return self._clicar_salvar()
 
     # ────────────────────────────────────────────────────────────────────────
