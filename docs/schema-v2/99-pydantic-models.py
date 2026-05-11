@@ -506,9 +506,11 @@ class FeriasSection(BaseModel):
 
 
 class FGTSMulta(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     ativa: bool = True
-    tipo_valor: Literal["CALCULADA", "INFORMADA"] = "CALCULADA"
-    percentual: Literal["VINTE_POR_CENTO", "QUARENTA_POR_CENTO"] = "QUARENTA_POR_CENTO"
+    tipo_valor: Optional[Literal["CALCULADA", "INFORMADA", "NAO_APURAR"]] = "CALCULADA"
+    percentual: Optional[Literal["VINTE_POR_CENTO", "QUARENTA_POR_CENTO"]] = None
     excluir_aviso_da_multa: bool = False
     valor_informado_brl: Optional[float] = None
 
@@ -522,13 +524,14 @@ class RecolhimentoFGTS(BaseModel):
 
     Aceita aliases legacy: `periodo_inicio` → `competencia_inicio`,
     `periodo_fim` → `competencia_fim`, `valor_depositado_brl` → `valor_total_depositado_brl`.
+    Aceita também `competencia` (chave curta usada por alguns prompts).
     """
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     tipo: Literal["DEPOSITO_REGULAR", "SAQUE", "MULTA_RESCISORIA"] = "DEPOSITO_REGULAR"
-    competencia_inicio: str = Field(alias="periodo_inicio")  # MM/YYYY
-    competencia_fim: str = Field(alias="periodo_fim")  # MM/YYYY
-    valor_total_depositado_brl: float = Field(ge=0, alias="valor_depositado_brl")
+    competencia_inicio: Optional[str] = Field(default=None, alias="periodo_inicio")  # MM/YYYY
+    competencia_fim: Optional[str] = Field(default=None, alias="periodo_fim")  # MM/YYYY
+    valor_total_depositado_brl: Optional[float] = Field(default=None, ge=0, alias="valor_depositado_brl")
     fonte: Literal["INFORMADO_PELA_PARTE", "EXTRATO_FGTS_OFICIAL", "AUTOMATICO"] = "AUTOMATICO"
     descricao: Optional[str] = None
 
