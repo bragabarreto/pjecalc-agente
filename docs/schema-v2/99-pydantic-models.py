@@ -729,6 +729,10 @@ class PreviaCalculoV2(BaseModel):
     @model_validator(mode="after")
     def _validate_completude(self) -> "PreviaCalculoV2":
         """Roda validações cruzadas e atualiza self.meta.validacao."""
+        # Resetar estado de validação (payload pode trazer erros de execuções anteriores)
+        self.meta.validacao.campos_faltantes = []
+        self.meta.validacao.avisos = []
+        self.meta.validacao.completude = "OK"
         avisos: list[str] = []
         # 1. Histórico cobre período do cálculo
         if self.historico_salarial:
