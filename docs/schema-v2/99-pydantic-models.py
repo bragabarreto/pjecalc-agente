@@ -844,15 +844,15 @@ class PreviaCalculoV2(BaseModel):
 
         for v in self.verbas_principais:
             for r in v.reflexos:
-                # Regra 1: FK válida
-                if r.verba_principal_id not in principais_ids:
+                # Regra 1: FK válida (ignorar quando None — campo opcional)
+                if r.verba_principal_id is not None and r.verba_principal_id not in principais_ids:
                     self.meta.validacao.campos_faltantes.append(
                         f"reflexo[{r.id}].verba_principal_id={r.verba_principal_id} "
                         f"não corresponde a nenhuma verba_principal"
                     )
                 # Regra 2: consistência estrutural — reflexo dentro do bloco
                 # da principal deve apontar para essa principal.
-                elif r.verba_principal_id != v.id:
+                elif r.verba_principal_id is not None and r.verba_principal_id != v.id:
                     self.meta.validacao.campos_faltantes.append(
                         f"reflexo[{r.id}] está aninhado em verba_principal[{v.id}] "
                         f"mas verba_principal_id={r.verba_principal_id} aponta para outra"
