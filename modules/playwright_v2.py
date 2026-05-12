@@ -1984,10 +1984,64 @@ class PlaywrightAutomatorV2:
                     except Exception as e_e:
                         self.log(f"  ⚠ Fase E: {str(e_e)[:200]}")
                 else:
-                    self.log(f"  ⚠ linkDownloadArquivo não apareceu em 15s")
+                    self.log(f"  ⚠ linkDownloadArquivo não apareceu em 45s")
+                    # Diagnóstico: dump elementos presentes na página
+                    try:
+                        _diag = self._page.evaluate("""() => {
+                            const ids = [...document.querySelectorAll('[id]')]
+                                .map(e => e.id).filter(Boolean);
+                            const inputs = [...document.querySelectorAll('input,a,button')]
+                                .filter(e => e.offsetParent)
+                                .map(e => (e.id || e.textContent?.trim()?.slice(0,20) || '?') + ':' + e.tagName);
+                            const msgs = [...document.querySelectorAll('.rf-msgs,.rf-msg,.rich-messages,span[class*=error],span[class*=warn]')]
+                                .map(e => e.textContent.trim().slice(0,100)).filter(Boolean);
+                            return {
+                                url: location.href.split('?')[0].split('/').pop(),
+                                ids: ids.filter(i => i.includes('Download') || i.includes('export') || i.includes('link')).slice(0,10),
+                                inputs: inputs.slice(0,15),
+                                msgs: msgs.slice(0,5)
+                            };
+                        }""")
+                        self.log(f"  [DIAG-export] {_diag}")
+                    except Exception:
+                        pass
+
+                    # Fase F: POST direto com parâmetros jsfcljs do linkDownloadArquivo
+                    try:
+                        _vstate = self._page.evaluate("""() => {
+                            const f = document.getElementById('formulario');
+                            if (!f) return null;
+                            const vs = f.querySelector('[name="javax.faces.ViewState"]');
+                            return vs ? vs.value : null;
+                        }""")
+                        if _vstate:
+                            self.log(f"  → Fase F: POST direto com ViewState ({len(_vstate)} chars)")
+                            with self._page.expect_response(
+                                lambda r: "exportacao.jsf" in r.url and r.request.method == "POST",
+                                timeout=60000,
+                            ) as _rf_info:
+                                self._page.evaluate(f"""() => {{
+                                    const form = document.getElementById('formulario');
+                                    if (!form) return;
+                                    const addHidden = (n, v) => {{
+                                        let el = form.querySelector('[name="' + n + '"]');
+                                        if (!el) {{ el = document.createElement('input'); el.type='hidden'; el.name=n; form.appendChild(el); }}
+                                        el.value = v;
+                                    }};
+                                    addHidden('formulario:linkDownloadArquivo', 'formulario:linkDownloadArquivo');
+                                    form.submit();
+                                }}""")
+                            _rf = _rf_info.value
+                            _fb = _rf.body()
+                            self.log(f"  → Fase F: HTTP {_rf.status} ct={_rf.headers.get('content-type','')[:40]} {len(_fb)} bytes")
+                            if _fb and _fb[:2] == b"PK":
+                                pjc_bytes = _fb
+                                self.log(f"  ✓ Fase F capturou .PJC: {len(pjc_bytes)} bytes")
+                    except Exception as e_f:
+                        self.log(f"  ⚠ Fase F: {str(e_f)[:150]}")
 
             if not pjc_bytes:
-                raise RuntimeError("Falha ao capturar download .PJC: Fase A e Fase E timeout")
+                raise RuntimeError("Falha ao capturar download .PJC: Fase A, E e F timeout")
         except RuntimeError:
             raise
         except Exception as e:
