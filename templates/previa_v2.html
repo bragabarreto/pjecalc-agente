@@ -961,7 +961,12 @@ async function confirmarPreviaV2() {
     window.location.href = data.redirect_url || `/instrucoes/v2/${SESSAO_ID}`;
   } else {
     const err = await r.json();
-    alert('Erro: ' + (err.detail || 'verificar pendências'));
+    const det = err.detail;
+    const msg = typeof det === 'string' ? det
+      : det?.campos_faltantes?.length
+        ? 'Campos pendentes:\n• ' + det.campos_faltantes.slice(0, 5).join('\n• ')
+        : JSON.stringify(det, null, 2).slice(0, 400);
+    alert('Erro ao confirmar:\n\n' + msg);
   }
 }
 
