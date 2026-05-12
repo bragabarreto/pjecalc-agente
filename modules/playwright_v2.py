@@ -160,21 +160,25 @@ class PlaywrightAutomatorV2:
         #   5. Fase 4 (Verbas/Expresso) → Seam cria conv_expresso.
         #   6. Liquidação + Export em conv_expresso (calculoAberto ok via edit mode).
         _run_fase("Fase 1 (Processo)", self.fase_processo)
+        _run_fase("Fase 2 (Parâmetros)", self.fase_parametros_calculo)
 
         # ── Reabrir via Recentes (criação → edição) ──────────────────────────
-        # Fase 1 salvou o cálculo no DB. Agora abrimos via Recentes para obter
-        # uma nova conv em modo edição onde TODOS os beans Seam se inicializam.
+        # Após Fase 2 (segunda save) o H2 DB tem o cálculo commitado.
+        # Navegamos para principal.jsf e tentamos reabrir via Recentes para
+        # obter uma nova conv em modo edição onde TODOS os beans Seam inicializam.
+        # Em sessões FRESCAS (sem calcs anteriores), Recentes pode estar vazio
+        # mesmo após Fase 2 — nesse caso continuamos em modo criação e aceitamos
+        # que FGTS/CS/IRPF/Honorários podem retornar frames vazias (graceful skip).
         try:
-            self.log("  → Transitando criação→edição via Recentes...")
+            self.log("  → Tentando transição criação→edição via Recentes...")
             ok_recentes = self._reabrir_calculo_via_recentes()
             if ok_recentes:
                 self.log(f"  ✓ Modo edição ativo — conv={self._calculo_conversation_id}")
             else:
-                self.log("  ⚠ Recentes reabrir falhou — continuando em modo criação (beans podem não init)")
+                self.log("  ⚠ Recentes vazio — continuando em modo criação")
         except Exception as e_rec:
-            self.log(f"  ⚠ Recentes reabrir erro: {e_rec} — continuando")
+            self.log(f"  ⚠ Recentes erro: {e_rec} — continuando")
 
-        _run_fase("Fase 2 (Parâmetros)", self.fase_parametros_calculo)
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
