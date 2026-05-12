@@ -551,6 +551,8 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_timeout(1000)
 
             # Preencher campos de busca com CNJ do processo
+            # IMPORTANTE: usar [id='...'] (attribute selector) e NÃO #id:campo
+            # porque colons em IDs são inválidos em seletores CSS (#id:colon).
             cnj = _split_cnj(self.previa.processo.numero_processo)
             for field_id, valor in [
                 ("formulario:numeroProcessoBusca", cnj.get("numero", "")),
@@ -561,12 +563,12 @@ class PlaywrightAutomatorV2:
             ]:
                 if not valor:
                     continue
-                loc = self._page.locator(f"#{field_id}")
+                loc = self._page.locator(f"[id='{field_id}']")
                 if loc.count() > 0:
                     loc.first.fill(valor)
 
-            # Click Buscar
-            btn_buscar = self._page.locator("#formulario\\:buscar")
+            # Click Buscar — usar attribute selector (colons inválidos em CSS)
+            btn_buscar = self._page.locator("[id='formulario:buscar']")
             if btn_buscar.count() == 0:
                 self.log("  ⚠ Botão Buscar não encontrado")
                 return False
@@ -2072,76 +2074,64 @@ class PlaywrightAutomatorV2:
                 )
                 raise RuntimeError(f"Botão Exportar não encontrado. Inputs visíveis: {_diag}")
 
-            # Fase A: click + expect ZIP response (esperança que JSF auto-submit
-            # do jsfcljs() dispare o download).
-            pjc_bytes = None
-            try:
-                with self._page.expect_response(
-                    lambda r: (
-                        "exportacao.jsf" in r.url
-                        and r.request.method == "POST"
-                        and (
-                            "zip" in (r.headers.get("content-type") or "").lower()
-                            or ".pjc" in (r.headers.get("content-disposition") or "").lower()
-                        )
-                    ),
-                    timeout=30000,
-                ) as resp_info:
-                    btn.click(force=True)
-                resp = resp_info.value
-                pjc_bytes = resp.body()
-                self.log(f"  ✓ Fase A capturou .PJC: {len(pjc_bytes)} bytes")
-            except Exception as e_a:
-                self.log(f"  ⚠ Fase A: {str(e_a)[:120]} — tentando Fase B/E")
+            # ── Captura do download ──────────────────────────────────────────────
+            # O fluxo real do PJE-Calc (confirmado 12/05/2026):
+            #   1. Clicar Exportar (a4j:commandButton) → AJAX re-render (text/xml, ~28KB)
+            #   2. O AJAX re-render inclui <s:span rendered="downloadDisponivel"> com
+            #      linkDownloadArquivo + <script> que auto-dispara jsfcljs()
+            #   3. O browser executa o script inline → POST para exportacao.jsf
+            #   4. Server chama downloadArquivo() → Content-Type:application/zip → ZIP bytes
+            #   5. Playwright emite evento "download" com o arquivo ZIP
+            #
+            # CRITICAL: o auto-jsfcljs dispara IMEDIATAMENTE no AJAX re-render (passo 2→3),
+            # ANTES de qualquer poll/wait nosso. Devemos registrar o listener de download
+            # ANTES de clicar Exportar para não perder o evento.
+            pjc_bytes: bytes | None = None
+            _dl_data: list[bytes] = []
+            _resp_data: list[bytes] = []
 
-            # Fase B + E: aguardar linkDownloadArquivo aparecer + disparar jsfcljs
-            if not pjc_bytes:
-                # Poll por linkDownloadArquivo (até 15s)
-                link_ok = False
-                for i in range(30):
-                    if self._page.locator("[id$='linkDownloadArquivo']").count() > 0:
-                        link_ok = True
-                        self.log(f"  ✓ linkDownloadArquivo detectado após {i*0.5:.1f}s")
-                        break
-                    self._page.wait_for_timeout(500)
+            def _on_download(dl) -> None:
+                try:
+                    path = dl.path()
+                    data = __import__("pathlib").Path(path).read_bytes() if path else b""
+                    _dl_data.append(data)
+                    self.log(f"  📥 Download event: {dl.suggested_filename} ({len(data)}B)")
+                except Exception as ex:
+                    self.log(f"  ⚠ on_download error: {ex}")
 
-                if link_ok:
-                    try:
-                        with self._page.expect_response(
-                            lambda r: (
-                                "exportacao.jsf" in r.url
-                                and r.request.method == "POST"
-                            ),
-                            timeout=60000,
-                        ) as resp_info:
-                            metodo = self._page.evaluate(
-                                """() => {
-                                    const form = document.getElementById('formulario');
-                                    if (form && typeof jsfcljs === 'function') {
-                                        jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
-                                        return 'jsfcljs';
-                                    }
-                                    const link = document.querySelector("[id$='linkDownloadArquivo']");
-                                    if (link) { link.click(); return 'click'; }
-                                    return null;
-                                }"""
-                            )
-                            self.log(f"  → Fase E método: {metodo}")
-                        resp = resp_info.value
-                        ct = resp.headers.get("content-type", "")
-                        cd = resp.headers.get("content-disposition", "")
-                        self.log(f"  → Fase E HTTP {resp.status} content-type={ct} disposition={cd[:80]}")
+            def _on_response(resp) -> None:
+                try:
+                    ct = (resp.headers.get("content-type") or "").lower()
+                    cd = (resp.headers.get("content-disposition") or "").lower()
+                    if "zip" in ct or ".pjc" in cd or "attachment" in cd:
                         body = resp.body()
-                        if body and body[:2] == b"PK":
-                            pjc_bytes = body
-                            self.log(f"  ✓ Fase E capturou .PJC: {len(pjc_bytes)} bytes")
-                    except Exception as e_e:
-                        self.log(f"  ⚠ Fase E: {str(e_e)[:200]}")
-                else:
-                    self.log(f"  ⚠ linkDownloadArquivo não apareceu em 15s")
+                        if body[:2] == b"PK":
+                            _resp_data.append(body)
+                            self.log(f"  📦 ZIP via response: {len(body)}B ct={ct[:40]}")
+                except Exception:
+                    pass
+
+            self._page.on("download", _on_download)
+            self._page.on("response", _on_response)
+
+            try:
+                btn.click(force=True)
+                # Aguardar: AJAX re-render (~2s) + inline jsfcljs script (~1s) + download (~2s)
+                self._page.wait_for_timeout(15000)
+            finally:
+                self._page.remove_listener("download", _on_download)
+                self._page.remove_listener("response", _on_response)
+
+            # Prioridade: download event > response intercept
+            if _dl_data and _dl_data[0][:2] == b"PK":
+                pjc_bytes = _dl_data[0]
+                self.log(f"  ✓ .PJC via download event: {len(pjc_bytes)} bytes")
+            elif _resp_data:
+                pjc_bytes = _resp_data[0]
+                self.log(f"  ✓ .PJC via response intercept: {len(pjc_bytes)} bytes")
 
             if not pjc_bytes:
-                raise RuntimeError("Falha ao capturar download .PJC: Fase A e Fase E timeout")
+                raise RuntimeError("Falha ao capturar download .PJC: nenhum ZIP recebido após click Exportar")
         except RuntimeError:
             raise
         except Exception as e:
