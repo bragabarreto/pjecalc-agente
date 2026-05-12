@@ -1292,6 +1292,9 @@ class PlaywrightAutomatorV2:
 
     def fase_verbas(self) -> None:
         self.log("Fase 4 — Verbas Principais")
+        if not self.previa.verbas_principais:
+            self.log("  ⏭ Sem verbas principais — pulando (condenação pode ser só FGTS via saldo a deduzir)")
+            return
         self._navegar_menu("li_calculo_verbas")
 
         # Estratégia: agrupar por tipo de preenchimento
@@ -2264,6 +2267,69 @@ class PlaywrightAutomatorV2:
         _safe(lambda: self._selecionar("incidenciaDoFgts", f.incidencia), "incidenciaDoFgts")
         _safe(lambda: self._marcar_checkbox("multaDoArtigo467", f.multa_artigo_467), "multaDoArtigo467")
         _safe(lambda: self._marcar_checkbox("multa10", f.multa_10_lc110), "multa10")
+
+        # Seção "Saldo e/ou Saque" — saldo FGTS já depositado a ser deduzido.
+        # Documentado pelo usuário 12/05/2026: NÃO é uma verba Expresso, mas
+        # sim um campo da própria página FGTS. Para cada saldo:
+        #   1. Preencher data + valor
+        #   2. Clicar botão "+" (adicionar) — adiciona à tabela
+        #   3. Marcar checkbox "Deduzir do FGTS"
+        saldos = getattr(f, "saldos_a_deduzir", None) or []
+        for idx, saldo in enumerate(saldos):
+            try:
+                self.log(f"  → Adicionando saldo FGTS a deduzir [{idx+1}/{len(saldos)}]: {saldo.data} = {saldo.valor_brl}")
+                # IDs prováveis: formulario:dataSaldoFGTS, formulario:valorSaldoFGTS
+                # ou similar. Vamos tentar variantes.
+                preenchido = False
+                for data_suf in ("dataSaldoFGTSInputDate", "dataSaldoFGTS", "saldoFGTSInputDate"):
+                    if self._page.locator(f"[id$='{data_suf}']").count() > 0:
+                        self._preencher(data_suf, saldo.data, obrigatorio=False)
+                        preenchido = True
+                        break
+                if not preenchido:
+                    self.log(f"    ⚠ campo data saldo FGTS não encontrado")
+                for val_suf in ("valorSaldoFGTS", "valorDeducao", "saldoValor"):
+                    if self._page.locator(f"[id$='{val_suf}']").count() > 0:
+                        self._preencher(val_suf, _fmt_br(saldo.valor_brl), obrigatorio=False)
+                        break
+                # Clicar botão "+" (adicionar)
+                added = self._page.evaluate(
+                    """() => {
+                        const btns = [...document.querySelectorAll('input[type="image"], input[type="submit"], input[type="button"], button, a')];
+                        for (const b of btns) {
+                            const txt = (b.value || b.textContent || '').trim();
+                            const alt = (b.alt || b.title || '').trim();
+                            const src = (b.src || '').toLowerCase();
+                            if (txt === '+' || alt.includes('Adicionar') || alt.includes('Incluir')
+                                || src.includes('add.png') || src.includes('mais') || src.includes('plus')) {
+                                // Confirmar contexto: próximo dos campos de saldo
+                                const container = b.closest('table, fieldset, div');
+                                if (container && /saldo|deduz/i.test(container.textContent || '')) {
+                                    b.click();
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    }"""
+                )
+                if added:
+                    self.log(f"    ✓ Saldo adicionado à tabela")
+                    self._aguardar_ajax(5000)
+            except Exception as e:
+                self.log(f"    ⚠ Falha ao adicionar saldo FGTS: {e}")
+
+        # Marcar checkbox "Deduzir do FGTS"
+        if getattr(f, "deduzir_do_fgts", False) or saldos:
+            for cb_suf in ("deduzirDoFgts", "deduzirFGTS", "fazerDeducao"):
+                try:
+                    if self._page.locator(f"input[type='checkbox'][id$=':{cb_suf}']").count() > 0:
+                        self._marcar_checkbox(cb_suf, True)
+                        self.log(f"  ✓ 'Deduzir do FGTS' marcado")
+                        break
+                except Exception:
+                    continue
+
         _safe(lambda: self._clicar("salvar"), "salvar")
         self._aguardar_ajax(8000)
         self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)

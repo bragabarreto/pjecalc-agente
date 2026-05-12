@@ -526,6 +526,20 @@ class RecolhimentoFGTS(BaseModel):
     descricao: Optional[str] = None
 
 
+class SaldoFGTSADeduzir(BaseModel):
+    """Saldo do FGTS a deduzir (campo 'Saldo e/ou Saque' da página FGTS).
+
+    Representa valor já depositado na conta vinculada do empregado que deve
+    ser deduzido do que está sendo calculado. Diferente de
+    `recolhimentos_existentes` (tabela de depósitos por competência), este é
+    um único par data+valor (snapshot do extrato FGTS).
+
+    Após preenchido, o checkbox 'Deduzir do FGTS' deve estar marcado.
+    """
+    data: str  # DD/MM/YYYY — data do extrato FGTS ou última atualização
+    valor_brl: float = Field(ge=0)  # saldo total a deduzir
+
+
 class FGTS(BaseModel):
     model_config = ConfigDict(extra="allow")
     tipo_verba: Literal["PAGAR", "DEPOSITAR"] = "PAGAR"
@@ -537,6 +551,11 @@ class FGTS(BaseModel):
     contribuicao_social: bool = False
     incidencia_pensao_alimenticia: bool = False
     recolhimentos_existentes: list[RecolhimentoFGTS] = Field(default_factory=list)
+    # Saldo FGTS já depositado na conta vinculada — vai na seção
+    # "Saldo e/ou Saque" da página FGTS, com checkbox "Deduzir do FGTS" marcado.
+    # NÃO é uma verba Expresso "VALOR PAGO" (que é classificação incorreta).
+    saldos_a_deduzir: list[SaldoFGTSADeduzir] = Field(default_factory=list)
+    deduzir_do_fgts: bool = False  # marca o checkbox "Deduzir do FGTS"
 
 
 class VinculacaoHistoricoIntervalo(BaseModel):
@@ -699,8 +718,10 @@ class PreviaCalculoV2(BaseModel):
     meta: Meta = Field(default_factory=Meta)
     processo: Processo
     parametros_calculo: ParametrosCalculo
-    historico_salarial: list[HistoricoSalarial] = Field(min_length=1)
-    verbas_principais: list[VerbaPrincipal] = Field(min_length=1)
+    historico_salarial: list[HistoricoSalarial] = Field(default_factory=list)
+    # verbas_principais pode estar vazia — caso típico: condenação só de FGTS
+    # depósitos em atraso, que vai via fgts.saldos_a_deduzir (não como verba).
+    verbas_principais: list[VerbaPrincipal] = Field(default_factory=list)
     cartao_de_ponto: Optional[CartaoDePonto] = None
     faltas: list[Falta] = Field(default_factory=list)
     ferias: FeriasSection = Field(default_factory=FeriasSection)

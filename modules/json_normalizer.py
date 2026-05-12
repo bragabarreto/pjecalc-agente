@@ -21,7 +21,7 @@ import copy
 from typing import Any
 
 
-def _norm_fgts(fgts: dict[str, Any]) -> dict[str, Any]:
+def _norm_fgts(fgts: dict[str, Any], *, parametros: dict | None = None) -> dict[str, Any]:
     multa = fgts.get("multa")
     if isinstance(multa, dict):
         tv = multa.get("tipo_valor")
@@ -54,6 +54,29 @@ def _norm_fgts(fgts: dict[str, Any]) -> dict[str, Any]:
             nr.setdefault("tipo", "DEPOSITO_REGULAR")
             nrecs.append(nr)
         fgts["recolhimentos_existentes"] = nrecs
+
+    # Saldo a deduzir: se o JSON tem recolhimentos mas não tem saldos_a_deduzir,
+    # auto-gerar a partir do total dos recolhimentos.
+    # Usuário documentou (12/05/2026): a verba Expresso "VALOR PAGO" estava
+    # representando incorretamente o saldo FGTS depositado. A forma certa é
+    # preencher a seção "Saldo e/ou Saque" da página FGTS.
+    saldos = fgts.get("saldos_a_deduzir")
+    if not saldos and fgts.get("recolhimentos_existentes"):
+        total = sum(
+            r.get("valor_total_depositado_brl", 0) or 0
+            for r in fgts["recolhimentos_existentes"]
+            if isinstance(r, dict)
+        )
+        if total > 0:
+            # Data: usar data_demissao se disponível, senão hoje
+            data_extrato = None
+            if parametros and isinstance(parametros, dict):
+                data_extrato = parametros.get("data_demissao")
+            if not data_extrato:
+                from datetime import date as _date
+                data_extrato = _date.today().strftime("%d/%m/%Y")
+            fgts["saldos_a_deduzir"] = [{"data": data_extrato, "valor_brl": round(total, 2)}]
+            fgts["deduzir_do_fgts"] = True
     return fgts
 
 
@@ -233,9 +256,32 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(data.get("parametros_calculo"), dict):
         data["parametros_calculo"] = _norm_parametros(data["parametros_calculo"])
 
-    # 2. FGTS — multa + recolhimentos
+    # 2. FGTS — multa + recolhimentos + saldo a deduzir
     if isinstance(data.get("fgts"), dict):
-        data["fgts"] = _norm_fgts(data["fgts"])
+        params = data.get("parametros_calculo")
+        data["fgts"] = _norm_fgts(data["fgts"], parametros=params if isinstance(params, dict) else None)
+
+    # 2b. Filtrar verbas Expresso que representam SALDO FGTS (errôneamente
+    # classificadas como verba). O agente externo às vezes coloca o saldo a
+    # deduzir como verba 'VALOR PAGO - NÃO TRIBUTÁVEL' (Expresso), mas isso é
+    # incorreto — o saldo deve ir em fgts.saldos_a_deduzir, não como verba.
+    # Detectamos pelo nome_pjecalc + presence de recolhimentos no fgts.
+    verbas = data.get("verbas_principais")
+    if isinstance(verbas, list) and data.get("fgts", {}).get("saldos_a_deduzir"):
+        novas_verbas = []
+        for v in verbas:
+            if isinstance(v, dict):
+                nome = (v.get("nome_pjecalc") or "").upper()
+                expr = (v.get("expresso_alvo") or "").upper()
+                # Detectar verbas que são na verdade saldo FGTS
+                if "FGTS DEP" in nome and "ATRASO" in nome:
+                    continue  # pular - saldo já vai via fgts.saldos_a_deduzir
+                if "VALOR PAGO" in expr and "TRIBUT" in expr and "FGTS DEP" in nome:
+                    continue
+            novas_verbas.append(v)
+        # Só substituir se algo foi filtrado (preserva lista quando não há match)
+        if len(novas_verbas) < len(verbas):
+            data["verbas_principais"] = novas_verbas
 
     # 3. Honorários — tipo + base_apuracao + auto-credor
     hons = data.get("honorarios")
