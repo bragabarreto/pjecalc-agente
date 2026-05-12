@@ -317,9 +317,9 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ {dom_id}: fallback falhou: {e}")
 
     def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
-        # Cascata de seletores: id substring, name match (JSF h:selectOneRadio
-        # cria múltiplos inputs com name=`formulario:dom_id` mas IDs sufixados
-        # com :0, :1, :2...). Padrão observado no Calc Machine.
+        # Cascata de seletores. JSF h:selectOneRadio com <s:convertEnum> pode
+        # renderizar value como ordinal (0/1/2) ou texto. Tentamos múltiplas
+        # variantes incluindo lookup via texto/label da option.
         selectors = [
             f"input[type='radio'][id$=':{dom_id}'][value='{valor}']",
             f"input[type='radio'][id*='{dom_id}'][value='{valor}']",
@@ -335,6 +335,50 @@ class PlaywrightAutomatorV2:
                     return
                 except Exception:
                     continue
+
+        # Fallback JS: enumerar radios com id/name match e tentar por value OU label
+        marcou = self._page.evaluate(
+            """({dom_id, valor}) => {
+                const norm = s => (s||'').replace(/\\s+/g,' ').trim().toUpperCase();
+                const tgt = norm(valor);
+                // Cobrir IDs JSF tipo formulario:indicesAcumulados:0/:1/...
+                const radios = [...document.querySelectorAll('input[type="radio"]')]
+                    .filter(r => (r.id||'').includes(dom_id) || (r.name||'').includes(dom_id));
+                // 1) Match por value exato
+                for (const r of radios) {
+                    if (norm(r.value) === tgt) { r.click(); return 'value:'+r.value; }
+                }
+                // 2) Match por label[for=r.id] textContent
+                for (const r of radios) {
+                    if (!r.id) continue;
+                    const label = document.querySelector('label[for="'+r.id.replace(/[^\\w-]/g, c => '\\\\'+c)+'"]');
+                    if (label) {
+                        const txt = norm(label.textContent);
+                        if (txt === tgt || txt.includes(tgt) || tgt.includes(txt)) {
+                            r.click();
+                            return 'label:'+txt.slice(0,40);
+                        }
+                    }
+                }
+                // 3) Match por texto do <td> ou <li> adjacente (RichFaces)
+                for (const r of radios) {
+                    const cell = r.closest('td, li, label');
+                    if (cell) {
+                        const txt = norm(cell.textContent);
+                        if (txt && (txt === tgt || txt.includes(tgt) || tgt.includes(txt))) {
+                            r.click();
+                            return 'cell:'+txt.slice(0,40);
+                        }
+                    }
+                }
+                return null;
+            }""",
+            {"dom_id": dom_id, "valor": valor},
+        )
+        if marcou:
+            self.log(f"  ✓ radio {dom_id} = {valor} (via {marcou})")
+            return
+
         if obrigatorio:
             raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
         self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
@@ -1553,9 +1597,54 @@ class PlaywrightAutomatorV2:
         self.log(f"    ✓ Click Parâmetros via estratégia: {clicou}")
         self._aguardar_ajax(8000)
         self._preencher_form_parametros_verba(v, com_identificacao=False)
+
+        # CRÍTICO (pendência observada 12/05/2026): após alterar parâmetro
+        # "Ocorrência de Pagamento" na página de parâmetros da verba, é
+        # OBRIGATÓRIO clicar "Regerar Ocorrências" antes de salvar. Sem isso,
+        # o PJE-Calc bloqueia a liquidação com:
+        #   "O parâmetro Ocorrência de Pagamento foi alterado na página
+        #    Verbas, após a geração das ocorrências da verba X"
+        # Tentar regerar; se botão não existir, tudo bem (alguns Expresso já
+        # têm ocorrências corretas e o botão pode não aparecer).
+        try:
+            self._clicar("regerarOcorrencias", timeout_ms=3000)
+            self._aguardar_ajax(8000)
+            # PJE-Calc pode mostrar confirm dialog "Deseja regerar as ocorrências?"
+            try:
+                self._clicar("confirmarRegerar", timeout_ms=2000)
+                self._aguardar_ajax(5000)
+            except Exception:
+                pass
+            self.log(f"  ✓ Ocorrências regeradas para '{v.nome_pjecalc}'")
+        except Exception as e:
+            # Tentar via texto da página (botão pode ter id diferente)
+            try:
+                regerou = self._page.evaluate(
+                    """() => {
+                        const btns = [...document.querySelectorAll('input[type="button"], input[type="submit"], a, button')];
+                        for (const b of btns) {
+                            const txt = (b.value || b.textContent || '').replace(/\\s+/g,' ').trim();
+                            if (/^Regerar(\\s+Ocorr|$)/i.test(txt)) {
+                                b.click();
+                                return true;
+                            }
+                        }
+                        return false;
+                    }"""
+                )
+                if regerou:
+                    self.log(f"  ✓ Ocorrências regeradas (via text-match) para '{v.nome_pjecalc}'")
+                    self._aguardar_ajax(8000)
+            except Exception:
+                pass
+
         self._clicar("salvar")
         self._aguardar_ajax(8000)
-        self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+        if sucesso:
+            self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
+        else:
+            self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
 
     def _OLD_configurar_parametros_pos_expresso(self, v) -> None:
         """[REMOVIDO — substituído por versão flexível acima]."""
