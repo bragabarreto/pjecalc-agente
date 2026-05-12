@@ -139,14 +139,41 @@ class PlaywrightAutomatorV2:
                 self.log(f"   (continuando com próxima fase para tentar Liquidação)")
 
         # ── Sequência de fases — ordem crítica ────────────────────────────────
-        # IMPORTANTE: Fases 5–13 devem rodar ANTES de Fase 4 (Verbas/Expresso).
-        # Motivo: _lancar_expresso() salva o lote e o Seam cria uma NOVA conversation
-        # (ex: conv=6 → conv=42). Na nova conv, apenas CalculoMB é inicializado.
-        # FgtsMB, InssMB, IrpfMB, HonorariosMB etc. NÃO se inicializam em conv=42
-        # (renderizam páginas-frame vazias sem campos reais).
-        # Na conv=6 original (criada pelo fluxo "Novo"), TODOS os beans estão ativos.
-        # Por isso rodamos FGTS/CS/IRPF/Honorários/Custas/Correção antes do Expresso.
+        # ARQUITETURA SEAM — DOIS MODOS DE CONVERSA:
+        #
+        # CRIAÇÃO (conv=6): criado por "Cálculo > Novo". Nesse modo:
+        #   - Menu lateral mostra apenas itens globais (não per-seção).
+        #   - URL nav para fgts.jsf, inss.jsf etc. retorna frame vazia (beans não init).
+        #   - Apenas HistoricoSalarialMB e CalculoMB inicializam via URL nav.
+        #   - calculoAberto.calculo = null → Export NPE.
+        #
+        # EDIÇÃO (conv=novo via Recentes): criado ao reabrir o cálculo da lista.
+        #   - Menu lateral mostra TODOS os itens per-seção.
+        #   - FgtsMB, InssMB, IrpfMB, HonorariosMB, ApresentadorExportacao todos ok.
+        #   - calculoAberto.calculo corretamente populado → Export funciona.
+        #
+        # ESTRATÉGIA:
+        #   1. Fase 1 salva o processo (cria registro no DB → aparece em Recentes).
+        #   2. Reabrir via Recentes → troca para conv_edit (modo edição).
+        #   3. Fases 2-3 em conv_edit (Parâmetros + Histórico).
+        #   4. Fases 5-13 em conv_edit (FGTS/CS/IRPF/Honorários/Custas/Correção).
+        #   5. Fase 4 (Verbas/Expresso) → Seam cria conv_expresso.
+        #   6. Liquidação + Export em conv_expresso (calculoAberto ok via edit mode).
         _run_fase("Fase 1 (Processo)", self.fase_processo)
+
+        # ── Reabrir via Recentes (criação → edição) ──────────────────────────
+        # Fase 1 salvou o cálculo no DB. Agora abrimos via Recentes para obter
+        # uma nova conv em modo edição onde TODOS os beans Seam se inicializam.
+        try:
+            self.log("  → Transitando criação→edição via Recentes...")
+            ok_recentes = self._reabrir_calculo_via_recentes()
+            if ok_recentes:
+                self.log(f"  ✓ Modo edição ativo — conv={self._calculo_conversation_id}")
+            else:
+                self.log("  ⚠ Recentes reabrir falhou — continuando em modo criação (beans podem não init)")
+        except Exception as e_rec:
+            self.log(f"  ⚠ Recentes reabrir erro: {e_rec} — continuando")
+
         _run_fase("Fase 2 (Parâmetros)", self.fase_parametros_calculo)
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
@@ -158,7 +185,7 @@ class PlaywrightAutomatorV2:
         _run_fase("Fase 11 (Honorários)", self.fase_honorarios, bool(self.previa.honorarios))
         _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
         _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
-        # Expresso/Manual é a ÚLTIMA fase substantiva — muda conv para conv_pós
+        # Expresso é a ÚLTIMA fase substantiva — muda conv para conv_expresso
         _run_fase("Fase 4 (Verbas)", self.fase_verbas)
 
         # Liquidação — tenta mesmo com fases parciais
