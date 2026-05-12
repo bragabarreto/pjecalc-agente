@@ -1740,18 +1740,31 @@ class PlaywrightAutomatorV2:
         """Liquida o cálculo e baixa o arquivo .PJC final."""
         self.log("Fase 14 — Liquidar + Exportar")
 
-        # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
-        # Antes: re-abrir cálculo via principal.jsf para garantir conv válido
-        # (NPE pós-Expresso pode ter deixado conv em estado anômalo).
-        # Sempre passar pelo Dados do Cálculo primeiro para garantir que
-        # estamos no contexto do cálculo (sidebar Operações renderiza).
-        try:
-            self._navegar_menu("li_calculo_dados_do_calculo")
-            self._aguardar_ajax(8000)
-            self._page.wait_for_timeout(1500)
-        except Exception:
-            pass
+        # ── 14a. Entrar em Edit Mode via Recentes (CRÍTICO para Exportar) ──
+        # Em creation mode, `ApresentadorExportacao.iniciar()` não é chamado
+        # quando URL-navegamos para exportacao.jsf → `this.nome` fica null →
+        # Exportador.exportar(calculo, null, ...) lança InfraException → "Erro: 4".
+        #
+        # Solução confirmada pelo access log de 05/04: navegar para principal.jsf,
+        # reabrir via Recentes (POST principal.jsf → calculo.jsf?conv=77 em EDIT MODE),
+        # e então usar sidebar Liquidar → sidebar Exportar. O sidebar chama iniciar()
+        # que seta this.nome → exportação funciona.
+        edit_mode = self._reabrir_calculo_via_recentes()
+        if edit_mode:
+            self.log("  ✓ Edit mode via Recentes — sidebar Liquidar/Exportar disponível")
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(1000)
+        else:
+            self.log("  ⚠ Recentes falhou — continuando em creation mode (pode falhar no Exportar)")
+            # Fallback: pelo menos garantir contexto do cálculo via Dados do Cálculo
+            try:
+                self._navegar_menu("li_calculo_dados_do_calculo")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+            except Exception:
+                pass
 
+        # ── 14b. Navegar para Liquidar via sidebar JSF ─────────────────────
         # Estratégia em cascata para localizar Liquidar
         nav_ok = self._page.evaluate(
             """() => {
@@ -1802,14 +1815,14 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(15000)
         self._page.wait_for_timeout(2000)
 
-        # ── 14b. Preencher form de Liquidação ──────────────────────────────
+        # ── 14c. Preencher form de Liquidação ──────────────────────────────
         liq = self.previa.liquidacao
         if liq.data_de_liquidacao:
             self._preencher("dataDeLiquidacaoInputDate", liq.data_de_liquidacao, obrigatorio=False)
         if liq.indices_acumulados:
             self._marcar_radio("indicesAcumulados", liq.indices_acumulados)
 
-        # ── 14c. Clicar Liquidar ───────────────────────────────────────────
+        # ── 14d. Clicar Liquidar ───────────────────────────────────────────
         self._clicar("liquidar")
         self._aguardar_ajax(60000)
 
@@ -1828,7 +1841,11 @@ class PlaywrightAutomatorV2:
             )
         self.log("  ✓ Liquidação OK (sem pendências)")
 
-        # ── 14d. Navegar para Exportar (cascata robusta) ──────────────────
+        # ── 14e. Navegar para Exportar (cascata robusta) ──────────────────
+        # Em edit mode: sidebar li_operacoes_exportar chama iniciar() via JSF navigation rule
+        # que seta this.nome = Exportador.gerarNomeDoArquivo(calculo) — OBRIGATÓRIO.
+        # Em creation mode (fallback): URL nav direto vai para exportacao.jsf mas NÃO
+        # chama iniciar() → nome=null → "Erro: 4". Por isso edit mode é crítico.
         nav_exp = self._page.evaluate(
             """() => {
                 // 1. li#li_operacoes_exportar > a
@@ -1878,7 +1895,7 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(15000)
         self._page.wait_for_timeout(2000)
 
-        # ── 14e. Clicar Exportar e capturar .PJC ───────────────────────────
+        # ── 14f. Clicar Exportar e capturar .PJC ───────────────────────────
         # Estratégia: capturar response binário via expect_response
         from datetime import datetime as _dt
 
