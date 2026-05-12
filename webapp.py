@@ -327,6 +327,8 @@ async def processar_sentenca(
                     _save_previa as _save_v2,
                 )
                 try:
+                    from modules.json_normalizer import normalize_v2_json
+                    _payload_v2 = normalize_v2_json(_payload_v2)
                     _previa = _PreviaV2.model_validate(_payload_v2)
                 except Exception as _e_v2:
                     return JSONResponse(

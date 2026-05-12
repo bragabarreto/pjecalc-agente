@@ -157,6 +157,7 @@ class Parte(BaseModel):
 
 
 class Processo(BaseModel):
+    model_config = ConfigDict(extra="allow")  # tolera campos extras (ex: reclamado_subsidiario)
     numero_processo: str = Field(pattern=r"^\d{7}-\d{2}\.\d{4}\.\d\.\d{2}\.\d{4}$")
     valor_da_causa_brl: float = Field(gt=0)
     data_autuacao: str  # DD/MM/YYYY
@@ -184,6 +185,7 @@ class ExcecaoSabado(BaseModel):
 
 
 class ParametrosCalculo(BaseModel):
+    model_config = ConfigDict(extra="allow")
     estado_uf: str = Field(min_length=2, max_length=2)
     municipio: str
     data_admissao: str
@@ -525,6 +527,7 @@ class RecolhimentoFGTS(BaseModel):
 
 
 class FGTS(BaseModel):
+    model_config = ConfigDict(extra="allow")
     tipo_verba: Literal["PAGAR", "DEPOSITAR"] = "PAGAR"
     compor_principal: SimNao = SimNao.SIM
     multa: FGTSMulta = Field(default_factory=FGTSMulta)
@@ -638,6 +641,7 @@ class Honorario(BaseModel):
 
 
 class CustasJudiciais(BaseModel):
+    model_config = ConfigDict(extra="allow")  # tolera valor_informado_brl, base_calculo_informada_brl
     base_para_calculadas: Literal[
         "BRUTO_DEVIDO_AO_RECLAMANTE",
         "BRUTO_DEVIDO_AO_RECLAMANTE_MAIS_DEBITOS_RECLAMADO",
@@ -691,6 +695,7 @@ class Meta(BaseModel):
 
 
 class PreviaCalculoV2(BaseModel):
+    model_config = ConfigDict(extra="allow")  # tolera honorarios_periciais, _periciais_obs, etc.
     meta: Meta = Field(default_factory=Meta)
     processo: Processo
     parametros_calculo: ParametrosCalculo

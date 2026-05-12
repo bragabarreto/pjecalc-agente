@@ -114,6 +114,9 @@ async def processar_v2(payload: dict):
     Retorna: {sessao_id, redirect_url}
     """
     try:
+        # Normalizar legacy → canônico antes de validar
+        from modules.json_normalizer import normalize_v2_json
+        payload = normalize_v2_json(payload)
         # Validar via Pydantic (sanity check inicial)
         previa = PreviaCalculoV2.model_validate(payload)
     except Exception as e:
