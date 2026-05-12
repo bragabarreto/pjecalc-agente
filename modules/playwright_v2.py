@@ -877,8 +877,8 @@ class PlaywrightAutomatorV2:
                 if not tem_listagem:
                     self.log("  ⚠ verba-calculo.jsf vazia mesmo após reabrir via Recentes")
             else:
-                # Recentes vazia ou falhou → permanecer em conv=47, navegar para verbas
-                self.log("  → Navegando para verba-calculo.jsf em conv=47 (sem detour principal.jsf)")
+                # Recentes vazia ou falhou → navegar para verbas em conv atual
+                self.log(f"  → Navegando para verba-calculo.jsf (conv atual={self._calculo_conversation_id})")
                 self._navegar_menu("li_calculo_verbas")
                 self._aguardar_ajax(10000)
                 self._page.wait_for_timeout(2000)
@@ -886,7 +886,25 @@ class PlaywrightAutomatorV2:
                     """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
                 )
                 if not tem_listagem:
-                    self.log("  ⚠ verba-calculo.jsf vazia/NPE em conv=47 — parâmetros de verba serão pulados")
+                    # Fallback: tentar com conv PRÉ-Expresso (conv=6) se ainda está viva
+                    conv_fallback = getattr(self, '_conv_pre_expresso', None)
+                    if conv_fallback and conv_fallback != self._calculo_conversation_id:
+                        self.log(f"  → Testando conv pré-Expresso como fallback: {conv_fallback}")
+                        conv_atual = self._calculo_conversation_id
+                        self._calculo_conversation_id = conv_fallback
+                        self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(8000)
+                        self._page.wait_for_timeout(1500)
+                        tem_listagem = self._page.evaluate(
+                            """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
+                        )
+                        if tem_listagem:
+                            self.log(f"  ✓ Conv pré-Expresso ({conv_fallback}) funciona — usando para fases seguintes")
+                        else:
+                            self.log(f"  ⚠ Conv pré-Expresso ({conv_fallback}) também vazia — restaurando conv={conv_atual}")
+                            self._calculo_conversation_id = conv_atual
+                    if not tem_listagem:
+                        self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros de verba serão pulados")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
@@ -963,13 +981,29 @@ class PlaywrightAutomatorV2:
             else:
                 self.log(f"    ✓ Expresso checkbox: {alvo}")
 
+        # Guardar conv anterior antes do save (para fallback pós-Expresso)
+        _conv_pre_expresso = self._calculo_conversation_id
+
         self._clicar("salvar")
         self._aguardar_ajax(15000)
         self.log("  ✓ Expresso salvo")
         # CRITICO: re-capturar conversationId — Seam emite NOVO conv após
         # Expresso save. Sem isso, URL navs subsequentes vao para conv
         # expirada -> NPE/empty pages em todas as fases seguintes.
-        self._capturar_conversation_id()
+        mudou = self._capturar_conversation_id()
+
+        # Diagnóstico: logar URL atual pós-Expresso
+        try:
+            _url_pos = self._page.url
+            self.log(f"  ℹ URL pós-Expresso: {_url_pos[-80:]}")
+        except Exception:
+            pass
+
+        # Guardar conv pré-Expresso como fallback se nova conv (47+) tiver NPE
+        if mudou and _conv_pre_expresso:
+            self._conv_pre_expresso = _conv_pre_expresso
+        else:
+            self._conv_pre_expresso = None
 
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche todos os campos do form de parâmetros de verba.
