@@ -185,6 +185,12 @@ class PlaywrightAutomatorV2:
 
         Pula silenciosamente se o elemento está `disabled` (campo já auto-preenchido
         pelo JSF, ex.: `justica` que é sempre "5" / Justiça do Trabalho).
+
+        Para campos `*InputDate` ou `competencia*InputDate`: usa padrão especial
+        focus → type sequencial → press Tab para disparar o blur do RichFaces
+        Calendar e garantir que o backing bean receba o valor. Sem isso, o save
+        falha com "Campo obrigatório: <data>" porque o calendar aceita o input
+        mas não submete o valor ao server (bug documentado 12/05/2026).
         """
         if valor is None or valor == "":
             if obrigatorio:
@@ -215,8 +221,70 @@ class PlaywrightAutomatorV2:
                 return
         except Exception:
             pass
-        loc.first.fill(str(valor))
-        self.log(f"  ✓ {dom_id} = {valor}")
+
+        # Detectar campo de data RichFaces Calendar
+        is_data_field = dom_id.lower().endswith("inputdate") or "data" in dom_id.lower()
+        if is_data_field:
+            self._preencher_data_richfaces(loc.first, dom_id, str(valor))
+        else:
+            loc.first.fill(str(valor))
+            # Disparar change para campos input genéricos (alguns RichFaces components
+            # só ouvem change/blur — fill dispara apenas input)
+            try:
+                loc.first.dispatch_event("change")
+            except Exception:
+                pass
+            self.log(f"  ✓ {dom_id} = {valor}")
+
+    def _preencher_data_richfaces(self, locator, dom_id: str, valor: str) -> None:
+        """Preenche um campo `<rich:calendar>` corretamente.
+
+        O RichFaces Calendar 3.3.x tem:
+        - `<input id=":InputDate">` (input do usuário)
+        - Popup picker que pode interceptar eventos
+        - Backing bean que só recebe o valor após o `blur` com `onchange` AJAX
+
+        Padrão correto:
+        1. Focus no input
+        2. Limpar valor existente (Ctrl+A + Delete)
+        3. press_sequentially do valor (cada char dispara keydown/keyup)
+        4. Press Escape para fechar popup se aberto
+        5. Press Tab para disparar blur → backing bean recebe valor
+        6. Aguardar a4j ajax estabilizar (curto)
+        """
+        try:
+            locator.scroll_into_view_if_needed(timeout=2000)
+        except Exception:
+            pass
+        try:
+            locator.focus(timeout=3000)
+        except Exception:
+            pass
+        try:
+            # Limpar conteúdo existente
+            locator.press("Control+a")
+            locator.press("Delete")
+        except Exception:
+            pass
+        try:
+            # Type char-by-char (RichFaces escuta keyup)
+            locator.press_sequentially(valor, delay=30)
+        except Exception:
+            # Fallback: fill direto
+            locator.fill(valor)
+        # Fechar popup (se abriu)
+        try:
+            self._page.keyboard.press("Escape")
+        except Exception:
+            pass
+        # Tab para disparar blur + onchange AJAX → backing bean recebe valor
+        try:
+            locator.press("Tab")
+        except Exception:
+            pass
+        # Aguardar AJAX curto (RichFaces calendar dispara a4j on blur)
+        self._aguardar_ajax(3000)
+        self.log(f"  ✓ {dom_id} = {valor} (data RichFaces)")
 
     def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
         sel = f"input[type='radio'][id*='{dom_id}'][value='{valor}']"
