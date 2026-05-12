@@ -379,6 +379,71 @@ class PlaywrightAutomatorV2:
         except Exception:
             return None
 
+    def _diagnostico_pagina(self, contexto: str = "") -> None:
+        """Captura forense completa da página após save (para depurar quando
+        save não recebe confirmação esperada).
+
+        Lista TODAS as mensagens visíveis (rf-msgs-*, rich-message, ui-message,
+        .alert, etc.) + classes invalid em inputs + erros 500/NPE + URL atual.
+        """
+        try:
+            diag = self._page.evaluate(
+                """() => {
+                    const out = {
+                        url: location.href,
+                        title: document.title,
+                        msgs: [],
+                        invalids: [],
+                        h_tags: [],
+                        breadcrumb: '',
+                    };
+                    // Coletar TODAS as mensagens visíveis (qualquer rf-msg* ou .rich-message*)
+                    const sels = [
+                        '.rf-msgs', '.rf-msg', '.rf-msgs-sum', '.rf-msgs-detail',
+                        '.rf-msgs-err', '.rf-msgs-info', '.rf-msgs-ok', '.rf-msgs-warn',
+                        '.rich-message', '.rich-messages',
+                        '.ui-message', '.messageError', '.messageSuccess', '.alert',
+                        '[class*="message"]', '[class*="msg"]',
+                    ];
+                    const seen = new Set();
+                    for (const s of sels) {
+                        for (const el of document.querySelectorAll(s)) {
+                            const txt = (el.textContent || '').replace(/\\s+/g,' ').trim();
+                            if (txt && txt.length > 3 && txt.length < 500 && !seen.has(txt)) {
+                                seen.add(txt);
+                                out.msgs.push({sel: s, txt: txt.slice(0, 200)});
+                            }
+                        }
+                    }
+                    // Inputs com classe invalid
+                    for (const el of document.querySelectorAll('input.invalid, input.rf-im-inv, [aria-invalid="true"]')) {
+                        out.invalids.push({id: el.id, name: el.name, value: (el.value || '').slice(0, 40)});
+                    }
+                    // H tags (geralmente trazem contexto da página)
+                    for (const h of document.querySelectorAll('h1, h2, h3')) {
+                        const t = (h.textContent || '').trim().slice(0, 100);
+                        if (t) out.h_tags.push(t);
+                    }
+                    // Breadcrumb
+                    const bc = document.querySelector('.breadcrumb, [class*="breadcrumb"]');
+                    if (bc) out.breadcrumb = (bc.textContent || '').replace(/\\s+/g,' ').trim().slice(0, 200);
+                    return out;
+                }"""
+            )
+            self.log(f"  📋 DIAGNÓSTICO {contexto}:")
+            self.log(f"     url: {diag.get('url', '')[:100]}")
+            self.log(f"     title: {diag.get('title')}")
+            if diag.get('breadcrumb'):
+                self.log(f"     breadcrumb: {diag['breadcrumb']}")
+            if diag.get('h_tags'):
+                self.log(f"     h: {diag['h_tags'][:3]}")
+            for m in diag.get('msgs', [])[:8]:
+                self.log(f"     msg [{m['sel']}]: {m['txt']}")
+            for inv in diag.get('invalids', [])[:5]:
+                self.log(f"     INVALID: {inv['id']} = '{inv['value']}'")
+        except Exception as e:
+            self.log(f"  ⚠ diagnóstico falhou: {e}")
+
     # Mapa li_id → texto visível do menu (para fallback por texto)
     _MENU_TEXT_MAP = {
         "li_calculo_dados_do_calculo": "Dados do Cálculo",
@@ -897,10 +962,14 @@ class PlaywrightAutomatorV2:
             erro = self._verificar_erro_jsf()
             if erro:
                 self.log(f"  ⚠ Erro JSF detectado: {erro[:200]}")
+            # Diagnóstico forense: o que o JSF está mostrando depois do save?
+            self._diagnostico_pagina(contexto="pós-save Fase 2")
         # Extrair número do cálculo — prova de persistência no banco
         num = self._extrair_numero_calculo()
         if not num:
             self.log("  ⚠ Número do cálculo não detectado no DOM — persistência incerta")
+            if sucesso:  # sucesso mas sem número = situação rara
+                self._diagnostico_pagina(contexto="sucesso sem número")
         self._capturar_conversation_id()
         self.log("Fase 2 concluída")
 
