@@ -90,13 +90,23 @@ _TIPO_HONORARIO_MAP = {
     "LEILOEIRO": "LEILOEIRO",
 }
 
+# PJE-Calc BaseParaApuracaoDeHonorarioEnum (extraído via javap):
+#   BRUTO, BRUTO_MENOS_CONTRIBUICAO_SOCIAL,
+#   BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA,
+#   VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL.
+# Nota: BRUTO_DEVIDO_AO_RECLAMANTE é para Custas, NÃO para Honorários.
 _BASE_APURACAO_MAP = {
-    "BRUTO": "BRUTO_DEVIDO_AO_RECLAMANTE",
-    "LIQUIDO": "LIQUIDO_DEVIDO_AO_RECLAMANTE",
+    "BRUTO": "BRUTO",
+    "BRUTO_DEVIDO_AO_RECLAMANTE": "BRUTO",  # legacy alias
+    "LIQUIDO": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+    "LIQUIDO_DEVIDO_AO_RECLAMANTE": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+    "BRUTO_MENOS_CS": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL",
+    "BRUTO_MENOS_CS_MENOS_PP": "BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA",
+    "SOBRE_O_VALOR_DA_CAUSA": "VERBAS_QUE_NAO_COMPOE_O_PRINCIPAL",
 }
 
 
-def _norm_honorario(h: dict[str, Any]) -> dict[str, Any]:
+def _norm_honorario(h: dict[str, Any], *, processo: dict | None = None) -> dict[str, Any]:
     # Normalizar tipo_honorario/tipo para enum canônico do PJE-Calc
     # (independe de se veio com alias "tipo" ou explicito "tipo_honorario").
     for key in ("tipo_honorario", "tipo"):
@@ -109,6 +119,26 @@ def _norm_honorario(h: dict[str, Any]) -> dict[str, Any]:
             val = h[key]
             if isinstance(val, str) and val in _BASE_APURACAO_MAP:
                 h[key] = _BASE_APURACAO_MAP[val]
+
+    # Auto-credor: PJE-Calc exige nome+doc do credor obrigatório.
+    # Se ausente, gerar a partir do oposto do devedor:
+    #   devedor=RECLAMADO → credor = reclamante
+    #   devedor=RECLAMANTE → credor = reclamado
+    if not h.get("credor") and processo:
+        devedor = h.get("tipo_devedor") or h.get("devedor")
+        if devedor == "RECLAMADO":
+            parte = processo.get("reclamante", {})
+        elif devedor in ("RECLAMANTE", "RECLAMANTE_ARCADO_PELA_UNIAO"):
+            parte = processo.get("reclamado", {})
+        else:
+            parte = None
+        if parte and parte.get("nome"):
+            df = parte.get("doc_fiscal") or {}
+            h["credor"] = {
+                "nome": parte["nome"],
+                "doc_fiscal_tipo": df.get("tipo", "CPF"),
+                "doc_fiscal_numero": df.get("numero", ""),
+            }
     return h
 
 
@@ -207,11 +237,13 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(data.get("fgts"), dict):
         data["fgts"] = _norm_fgts(data["fgts"])
 
-    # 3. Honorários — tipo + base_apuracao
+    # 3. Honorários — tipo + base_apuracao + auto-credor
     hons = data.get("honorarios")
     if isinstance(hons, list):
+        proc = data.get("processo") or {}
         data["honorarios"] = [
-            _norm_honorario(dict(h)) if isinstance(h, dict) else h for h in hons
+            _norm_honorario(dict(h), processo=proc) if isinstance(h, dict) else h
+            for h in hons
         ]
 
     # 4. Correção/juros — IPCA-E
