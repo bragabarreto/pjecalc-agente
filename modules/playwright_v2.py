@@ -849,81 +849,76 @@ class PlaywrightAutomatorV2:
         #   3. verba-calculo.jsf pode NPE — isso é tolerado; FGTS/CS/Honorários em conv=47
         #      devem funcionar se não navegarmos para principal.jsf
         if verbas_expresso:
-            # Tentar Recentes SOMENTE se tiver itens (não navegar se for desperdiçar conv=47)
+            # Pós-Expresso: Seam criou nova conversation (ex: conv=6 → conv=42).
+            # A nova conv pode não ter os beans inicializados via fluxo normal de
+            # "abertura de cálculo" — precisamos forçar a inicialização navegando
+            # para calculo.jsf?conversationId=42 (CLAUDE.md, Correção implementada, passo 2).
+            #
+            # NOTA CRÍTICA (aprendida em 2026-05-12): conv pré-Expresso (conv=6) renderiza
+            # páginas SEM CONTEÚDO — apenas frame com Salvar/Ocorrências. Não usar conv=6
+            # para FGTS/CS/Honorários.
             ok = False
-            try:
-                _recentes_count = self._page.evaluate("""() => {
-                    const SKIP = new Set(['selAcheFacil']);
-                    for (const s of document.querySelectorAll('select')) {
-                        if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
-                        if (s.size > 1 && (s.name || '').startsWith('formulario:'))
-                            return s.options.length;
-                    }
-                    return -1;  // não encontrado na página atual
-                }""")
-                self.log(f"  ℹ Recentes count na página atual: {_recentes_count}")
-                if _recentes_count > 0:
-                    self.log("  → Tentando reabrir via Recentes (lista não-vazia)")
-                    ok = self._reabrir_calculo_via_recentes()
-                else:
-                    self.log("  ℹ Recentes vazio — mantendo conv=47 (não navegamos para principal.jsf)")
-            except Exception as _e_rec:
-                self.log(f"  ⚠ Erro ao checar Recentes: {_e_rec}")
 
-            if ok:
-                # Reabriu com nova conv → navegar para verbas normalmente
-                self._navegar_menu("li_calculo_verbas")
-                self._aguardar_ajax(10000)
-                self._page.wait_for_timeout(2000)
-                tem_listagem = self._page.evaluate(
-                    """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
-                )
-                if not tem_listagem:
-                    self.log("  ⚠ verba-calculo.jsf vazia mesmo após reabrir via Recentes")
-            else:
-                # Recentes vazia ou falhou → navegar para verbas em conv atual
-                self.log(f"  → Navegando para verba-calculo.jsf (conv atual={self._calculo_conversation_id})")
-                self._navegar_menu("li_calculo_verbas")
-                self._aguardar_ajax(10000)
-                self._page.wait_for_timeout(2000)
-                tem_listagem = self._page.evaluate(
-                    """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
-                )
-                if not tem_listagem:
-                    # Fallback: tentar com conv PRÉ-Expresso (conv=6) se ainda está viva
-                    # NOTA: conv=6 pode ter verba list VAZIA (verbas foram salvas em conv=48),
-                    # mas o PAGE RENDER deve funcionar (form presente, sem 500).
-                    # Se a página renderizou, usar conv=6 para fases seguintes (FGTS, CS etc.)
-                    conv_fallback = getattr(self, '_conv_pre_expresso', None)
-                    if conv_fallback and conv_fallback != self._calculo_conversation_id:
-                        self.log(f"  → Testando conv pré-Expresso como fallback: {conv_fallback}")
-                        conv_atual = self._calculo_conversation_id
-                        self._calculo_conversation_id = conv_fallback
-                        self._navegar_menu("li_calculo_verbas")
-                        self._aguardar_ajax(8000)
-                        self._page.wait_for_timeout(1500)
-                        # Checar se PAGE RENDERIZOU (não só se tem verbas)
-                        _page_ok_conv6 = self._page.evaluate(
-                            """() => {
-                                const body = (document.body?.textContent || '');
-                                const tem_500 = body.includes('HTTP Status 500') ||
-                                               body.includes('NullPointerException') ||
-                                               body.includes('ViewExpiredException');
-                                const tem_form = !!document.getElementById('formulario');
-                                const n_verbas = document.querySelectorAll('a.linkParametrizar').length;
-                                return {tem_500, tem_form, n_verbas};
-                            }"""
-                        )
-                        self.log(f"  [DIAG-conv6] verba-calculo em conv=6: {_page_ok_conv6}")
-                        if not _page_ok_conv6.get('tem_500') and _page_ok_conv6.get('tem_form'):
-                            self.log(f"  ✓ Conv pré-Expresso ({conv_fallback}) renderiza — usando para FGTS/CS/Honorários")
-                            # Verbas do Expresso estão no DB (conv=48 apenas muda conv de sessão)
-                            # Usar conv=6 para fases seguintes resolve o NPE em FGTS/CS
-                        else:
-                            self.log(f"  ⚠ Conv pré-Expresso ({conv_fallback}) também sem form (500 ou expirada) — restaurando conv={conv_atual}")
-                            self._calculo_conversation_id = conv_atual
-                    if not tem_listagem:
-                        self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros de verba serão pulados")
+            # Passo A: Forçar inicialização do bean Seam em conv pós-Expresso
+            _conv_pos = self._calculo_conversation_id
+            if _conv_pos:
+                try:
+                    self.log(f"  → Inicializando beans Seam: calculo.jsf?conversationId={_conv_pos}")
+                    url_calc = f"{self.pjecalc_url}/pages/calculo/calculo.jsf?conversationId={_conv_pos}"
+                    self._page.goto(url_calc, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(10000)
+                    self._page.wait_for_timeout(1500)
+                    self._capturar_conversation_id()
+                    _diag_init = self._page.evaluate("""() => {
+                        const body = document.body?.textContent || '';
+                        return {
+                            url: location.href.slice(-60),
+                            tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
+                            tem_form: !!document.getElementById('formulario'),
+                            n_inputs: document.querySelectorAll('input,select').length,
+                            n_fields: document.querySelectorAll('input[type=text],input[type=radio],input[type=checkbox],select').length
+                        };
+                    }""")
+                    self.log(f"  [DIAG-seam-init] calculo.jsf em conv={_conv_pos}: {_diag_init}")
+                    if not _diag_init['tem_500'] and _diag_init['n_fields'] > 5:
+                        self.log(f"  ✓ Bean Seam inicializado em conv={self._calculo_conversation_id} — FGTS/CS/Honorários devem funcionar")
+                        ok = True
+                    else:
+                        self.log(f"  ⚠ calculo.jsf sem campos em conv={_conv_pos} — tentando Recentes")
+                except Exception as _e_init:
+                    self.log(f"  ⚠ Erro ao inicializar bean Seam: {_e_init}")
+
+            # Passo B: Tentar Recentes SOMENTE se inicialização falhou e tiver itens
+            if not ok:
+                try:
+                    _recentes_count = self._page.evaluate("""() => {
+                        const SKIP = new Set(['selAcheFacil']);
+                        for (const s of document.querySelectorAll('select')) {
+                            if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                            if (s.size > 1 && (s.name || '').startsWith('formulario:'))
+                                return s.options.length;
+                        }
+                        return -1;
+                    }""")
+                    self.log(f"  ℹ Recentes count: {_recentes_count}")
+                    if _recentes_count > 0:
+                        self.log("  → Tentando reabrir via Recentes (lista não-vazia)")
+                        ok = self._reabrir_calculo_via_recentes()
+                    else:
+                        self.log(f"  ℹ Recentes vazio — prosseguindo com conv={self._calculo_conversation_id}")
+                except Exception as _e_rec:
+                    self.log(f"  ⚠ Erro ao checar Recentes: {_e_rec}")
+
+            # Navegar para verbas para ajuste de parâmetros pós-Expresso
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(2000)
+            tem_listagem = self._page.evaluate(
+                """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
+            )
+            if not tem_listagem:
+                self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros de verba serão pulados")
+                self.log(f"  ℹ Usando conv={self._calculo_conversation_id} para FGTS/CS/Honorários")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
@@ -1722,6 +1717,20 @@ class PlaywrightAutomatorV2:
         if _diag_fgts['tem_500'] or not _diag_fgts['tem_form']:
             self.log("  ⚠ Fase 8 FGTS: página não renderizou (HTTP 500 ou sem formulário) — pulando")
             return
+        # Checar se há campos reais de FGTS (radios ou checkboxes) — não só a frame da página.
+        # Conv pré-Expresso renderiza a frame (Salvar/Ocorrências) mas sem campos reais.
+        _n_form_fields = _diag_fgts.get('radios_id', 0) + _diag_fgts.get('radios_name', 0)
+        if _n_form_fields == 0:
+            # Contar radios+checkboxes no DOM diretamente
+            _n_actual = self._page.evaluate(
+                """() => document.querySelectorAll(
+                    'input[type=radio],input[type=checkbox]'
+                ).length"""
+            )
+            self.log(f"  [DIAG-fgts-fields] radios+checkboxes na página: {_n_actual}")
+            if _n_actual == 0:
+                self.log("  ⚠ Fase 8 FGTS: página renderizou frame mas sem campos FGTS — conv sem bean FGTS, pulando")
+                return
 
         f = self.previa.fgts
         # Cada campo é tolerante (não aborta a fase se faltar um)
@@ -1931,15 +1940,26 @@ class PlaywrightAutomatorV2:
         self._clicar("liquidar")
         self._aguardar_ajax(60000)
 
-        body = (self._page.locator("body").text_content() or "").lower()
-        if "pendência" in body and "não foram encontradas" not in body:
-            # Schema v2 deveria prevenir isso. Falhar rápido.
-            pendencias = self._page.evaluate(
-                """() => {
-                    const els = [...document.querySelectorAll('.rf-msgs-detail, .rf-msgs-sum, .ui-messages-error-summary')];
-                    return els.map(e => e.textContent.trim()).filter(t => t).slice(0, 20);
-                }"""
-            )
+        # Verificar resultado da liquidação — incluindo sinais de sucesso reais
+        _liq_result = self._page.evaluate("""() => {
+            const body = document.body?.textContent || '';
+            const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.ui-messages-error-summary,.rich-messages-label')]
+                .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
+            return {
+                body_lower: body.toLowerCase().slice(0, 500),
+                msgs: msgs,
+                tem_pendencia: body.toLowerCase().includes('pendência'),
+                nao_encontradas: body.toLowerCase().includes('não foram encontradas'),
+                tem_liquidado: body.toLowerCase().includes('liquidado') || body.toLowerCase().includes('liquidação realizada'),
+                tem_erro: body.includes('HTTP Status 500') || body.includes('NullPointerException') || body.includes('Erro inesperado') || body.toLowerCase().includes('erro:')
+            };
+        }""")
+        self.log(f"  [DIAG-liquidar] msgs={_liq_result['msgs']} pendencia={_liq_result['tem_pendencia']} ok={_liq_result['nao_encontradas']} erro={_liq_result['tem_erro']}")
+
+        if _liq_result['tem_erro']:
+            raise RuntimeError(f"Liquidação retornou erro: {_liq_result['msgs']}")
+        if _liq_result['tem_pendencia'] and not _liq_result['nao_encontradas']:
+            pendencias = _liq_result['msgs']
             raise RuntimeError(
                 f"Liquidação retornou pendências (schema v2 deveria ter prevenido):\n"
                 + "\n".join(f"  • {p}" for p in pendencias)
