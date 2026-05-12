@@ -461,7 +461,7 @@ class PlaywrightAutomatorV2:
 
             _select_id = self._page.evaluate("""() => {
                 const SKIP = new Set(['selAcheFacil']);
-                // Tier 1: primeira opção começa com dígitos + "/"
+                // Tier 1: primeira opção começa com dígitos + "/" (padrão "ID / RECLAMANTE")
                 for (const s of document.querySelectorAll('select')) {
                     if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
                     if (s.options.length > 0 && /^\\d{4,}\\s*\\//.test(s.options[0].text || ''))
@@ -474,20 +474,17 @@ class PlaywrightAutomatorV2:
                     if (/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob))
                         return s.name || s.id;
                 }
-                // Tier 3: qualquer select com size > 1 (listbox) e ≥ 1 opção (exceto pesquisa)
+                // Tier 3: listbox (size>1) com nome prefixado 'formulario:' e ≥1 opção
                 for (const s of document.querySelectorAll('select')) {
                     if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
-                    if (s.size > 1 && s.options.length > 0) return s.name || s.id;
-                }
-                // Tier 4: qualquer select com ≥ 1 opção exceto selAcheFacil
-                for (const s of document.querySelectorAll('select')) {
-                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
-                    if (s.options.length > 0) return s.name || s.id;
+                    const n = s.name || s.id || '';
+                    if (s.size > 1 && n.startsWith('formulario:') && s.options.length > 0)
+                        return n;
                 }
                 return null;
             }""")
             if not _select_id:
-                self.log("  ⚠ Lista de Cálculos Recentes não encontrada — pulando reabrir")
+                self.log("  ⚠ Lista de Cálculos Recentes não encontrada ou vazia — pulando reabrir")
                 return False
             listbox = self._page.locator(f"select[name='{_select_id}'], select[id='{_select_id}']")
             if listbox.count() == 0:
@@ -837,64 +834,59 @@ class PlaywrightAutomatorV2:
         for v in verbas_manual:
             self._lancar_verba_manual(v)
 
-        # 4c. Pós-Expresso: REABRIR CÁLCULO via Recentes (workaround NPE).
-        # Bug PJE-Calc 2.15.1: ApresentadorVerbaDeCalculo.carregarBasesParaPrincipal
-        # lança NPE após Expresso save, corrompendo a conversação Seam e impedindo
-        # renderização de TODAS as views subsequentes (verba-calculo, fgts, inss,
-        # irpf, custas, correção, liquidar). Solução v1: voltar para principal e
-        # reabrir cálculo via dropdown "Cálculos Recentes" — cria nova conversação
-        # Seam limpa.
+        # 4c. Pós-Expresso: Verificar/recuperar contexto Seam.
+        # Bug PJE-Calc 2.15.1: Expresso save muda conversationId (ex: 6→47).
+        # Na nova conversation, verba-calculo.jsf pode ter NPE em carregarBasesParaPrincipal.
+        # IMPORTANTE: NÃO navegar para principal.jsf — isso DESTRÓI o contexto de conv=47.
+        # Estratégia:
+        #   1. Tentar reabrir via Recentes (cria nova conv limpa) — só se Recentes não estiver vazia
+        #   2. Se Recentes vazia (sessão nova), ficar em conv=47 e ir direto às fases seguintes
+        #      sem visitar principal.jsf
+        #   3. verba-calculo.jsf pode NPE — isso é tolerado; FGTS/CS/Honorários em conv=47
+        #      devem funcionar se não navegarmos para principal.jsf
         if verbas_expresso:
-            self.log("  → Workaround NPE: reabrindo cálculo via Recentes")
-            ok = self._reabrir_calculo_via_recentes()
-            if not ok:
-                # Fallback: double-hop (pode não recuperar mas tenta)
-                self._navegar_menu("li_calculo_dados_do_calculo")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(1500)
-            self._navegar_menu("li_calculo_verbas")
-            self._aguardar_ajax(10000)
-            self._page.wait_for_timeout(2000)
-            # Detectar 500/NPE e tentar recovery via reload
-            tem_erro = self._page.evaluate(
-                """() => {
-                    const body = (document.body?.textContent || '');
-                    return body.includes('HTTP Status 500') ||
-                           body.includes('NullPointerException') ||
-                           body.includes('Erro inesperado') ||
-                           body.includes('ViewExpiredException');
-                }"""
-            )
-            tem_listagem = self._page.evaluate(
-                """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
-            )
-            if tem_erro or not tem_listagem:
-                self.log(f"  ⚠ verba-calculo.jsf vazia/erro — tentando recovery (reload + double-hop)")
-                # Tentativa 1: reload
-                try:
-                    self._page.reload(wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(15000)
-                    self._page.wait_for_timeout(2000)
-                except Exception:
-                    pass
+            # Tentar Recentes SOMENTE se tiver itens (não navegar se for desperdiçar conv=47)
+            ok = False
+            try:
+                _recentes_count = self._page.evaluate("""() => {
+                    const SKIP = new Set(['selAcheFacil']);
+                    for (const s of document.querySelectorAll('select')) {
+                        if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                        if (s.size > 1 && (s.name || '').startsWith('formulario:'))
+                            return s.options.length;
+                    }
+                    return -1;  // não encontrado na página atual
+                }""")
+                self.log(f"  ℹ Recentes count na página atual: {_recentes_count}")
+                if _recentes_count > 0:
+                    self.log("  → Tentando reabrir via Recentes (lista não-vazia)")
+                    ok = self._reabrir_calculo_via_recentes()
+                else:
+                    self.log("  ℹ Recentes vazio — mantendo conv=47 (não navegamos para principal.jsf)")
+            except Exception as _e_rec:
+                self.log(f"  ⚠ Erro ao checar Recentes: {_e_rec}")
+
+            if ok:
+                # Reabriu com nova conv → navegar para verbas normalmente
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(10000)
+                self._page.wait_for_timeout(2000)
                 tem_listagem = self._page.evaluate(
                     """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
                 )
-                # Tentativa 2: triple-hop (Histórico → Dados → Verbas)
                 if not tem_listagem:
-                    self.log(f"  ⚠ Reload sem efeito — triple-hop")
-                    self._navegar_menu("li_calculo_historico_salarial")
-                    self._page.wait_for_timeout(1500)
-                    self._navegar_menu("li_calculo_dados_do_calculo")
-                    self._page.wait_for_timeout(1500)
-                    self._navegar_menu("li_calculo_verbas")
-                    self._aguardar_ajax(15000)
-                    self._page.wait_for_timeout(2000)
-                    tem_listagem = self._page.evaluate(
-                        """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
-                    )
+                    self.log("  ⚠ verba-calculo.jsf vazia mesmo após reabrir via Recentes")
+            else:
+                # Recentes vazia ou falhou → permanecer em conv=47, navegar para verbas
+                self.log("  → Navegando para verba-calculo.jsf em conv=47 (sem detour principal.jsf)")
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(10000)
+                self._page.wait_for_timeout(2000)
+                tem_listagem = self._page.evaluate(
+                    """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
+                )
                 if not tem_listagem:
-                    self.log(f"  ⚠ Listagem permanece vazia — possível NPE não-recuperável; verbas Expresso podem não ter persistido. Continuando para reflexos manuais.")
+                    self.log("  ⚠ verba-calculo.jsf vazia/NPE em conv=47 — parâmetros de verba serão pulados")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
