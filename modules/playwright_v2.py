@@ -672,6 +672,11 @@ class PlaywrightAutomatorV2:
 
     def fase_parametros_calculo(self) -> None:
         self.log("Fase 2 — Parâmetros do Cálculo")
+        # Garantir que estamos em calculo.jsf (aba principal com Parâmetros).
+        # Após Recentes reopen, calculo.jsf já é a página ativa, mas nav explícita
+        # é necessária caso a função seja chamada de outra página.
+        self._navegar_menu("li_calculo_dados_do_calculo")
+        self._aguardar_ajax(5000)
         # Click na aba "Parâmetros do Cálculo"
         self._page.evaluate(
             """[...document.querySelectorAll('.rich-tab-header')].find(t =>
