@@ -2059,6 +2059,9 @@ class PlaywrightAutomatorV2:
             """Tenta clicar Exportar via sidebar; retorna chave-diagnóstico ou None."""
             resultado = self._page.evaluate(
                 """() => {
+                    // DIAG: dump sidebar items para diagnóstico
+                    const sidebarItems = [...document.querySelectorAll('li[id^=li_]')]
+                        .map(li => li.id).join(',');
                     const li1 = document.getElementById('li_operacoes_exportar');
                     if (li1) { const a = li1.querySelector('a'); if (a) { a.click(); return 'li_operacoes_exportar'; } }
                     const links = [...document.querySelectorAll('a')];
@@ -2073,9 +2076,16 @@ class PlaywrightAutomatorV2:
                         const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
                         if (txt === 'Exportar') { a.click(); return 'text-any:' + (a.id || 'noId').slice(0,30); }
                     }
+                    // Retornar null mas com DIAG de sidebar para debug
                     return null;
                 }"""
             )
+            # DIAG: log sidebar state when not found
+            if not resultado:
+                _sidebar_diag = self._page.evaluate(
+                    """() => [...document.querySelectorAll('li[id^=li_]')].map(li => li.id)"""
+                )
+                self.log(f"  [DIAG-sidebar-exportar] items={_sidebar_diag[:15]}")
             return resultado
 
         def _verificar_exportacao_ok() -> dict:
@@ -2145,8 +2155,48 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"  ⚠ Tentativa 3 (dados+sidebar): {e}")
 
+        # 4ª tentativa: principal.jsf → Recentes (pós-liquidação) → sidebar Exportar
+        # Após liquidação o calc está no H2 com estado LIQUIDADO.
+        # Tentar reabrir via Recentes para obter nova conv em edit-mode onde
+        # calculoAberto.calculo está corretamente populado.
         if not nav_exp:
-            raise RuntimeError("Exportar não localizado após 3 tentativas (sidebar, URL-nav, dados+sidebar)")
+            self.log("  → Tentativa 4: principal.jsf → Recentes → conv_edit → Exportar")
+            try:
+                ok_rec4 = self._reabrir_calculo_via_recentes()
+                if ok_rec4:
+                    self.log(f"  ✓ Reaberto via Recentes — conv={self._calculo_conversation_id}")
+                    # Agora navegar para o Exportar via sidebar
+                    _sid4 = _tentar_sidebar_exportar()
+                    if not _sid4:
+                        # Sidebar pode não mostrar Exportar ainda — navegar para calculo.jsf primeiro
+                        self._navegar_menu("li_calculo_dados_do_calculo")
+                        self._aguardar_ajax(5000)
+                        _sid4 = _tentar_sidebar_exportar()
+                    if _sid4:
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(2000)
+                        _diag4 = _verificar_exportacao_ok()
+                        self.log(f"  [DIAG-exp] recentes+sidebar={_sid4} {_diag4}")
+                        if not _diag4['tem_500']:
+                            nav_exp = f"recentes+sidebar:{_sid4}"
+                    # Fallback: URL nav com nova conv
+                    if not nav_exp and self._calculo_conversation_id:
+                        url_exp4 = (
+                            f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        self._page.goto(url_exp4, wait_until="domcontentloaded", timeout=15000)
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(1500)
+                        _diag4b = _verificar_exportacao_ok()
+                        self.log(f"  [DIAG-exp] recentes+url-nav {_diag4b}")
+                        if not _diag4b['tem_500'] and not _diag4b['tem_erro_5'] and _diag4b['tem_form']:
+                            nav_exp = f"recentes+url-nav"
+            except Exception as e4:
+                self.log(f"  ⚠ Tentativa 4 (recentes pós-liq): {e4}")
+
+        if not nav_exp:
+            raise RuntimeError("Exportar não localizado após 4 tentativas (sidebar, URL-nav, dados+sidebar, recentes)")
         self.log(f"  ✓ Navegação Exportar via: {nav_exp}")
 
         # ── 14e. Clicar Exportar e capturar .PJC ───────────────────────────
