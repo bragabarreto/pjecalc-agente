@@ -131,6 +131,21 @@ def _norm_parametros(p: dict[str, Any]) -> dict[str, Any]:
         except ValueError:
             pass
 
+    # Validação cruzada: prescrição quinquenal só é possível se período
+    # entre admissão e ajuizamento for >= 5 anos.
+    if p.get("prescricao_quinquenal") and isinstance(adm, str) and len(adm) == 10:
+        aj = p.get("data_ajuizamento")
+        if isinstance(aj, str) and len(aj) == 10:
+            try:
+                from datetime import datetime as _dt
+                d_adm2 = _dt.strptime(adm, "%d/%m/%Y")
+                d_aj = _dt.strptime(aj, "%d/%m/%Y")
+                anos = (d_aj - d_adm2).days / 365.25
+                if anos < 5:
+                    p["prescricao_quinquenal"] = False
+            except ValueError:
+                pass
+
     # Validação cruzada: data_termino_calculo deve ser <= data_demissao
     # (se houver demissão). Se for maior, usar data_demissao.
     dem = p.get("data_demissao")
