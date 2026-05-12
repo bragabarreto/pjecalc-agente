@@ -444,18 +444,45 @@ class PlaywrightAutomatorV2:
 
             # O select de Recentes tem ID dinâmico (ex: formulario:j_id92) e NÃO
             # tem class/name 'listaCalculosRecentes' — usar JS para localizá-lo.
+            # Diagnóstico: logar todos os selects encontrados para debug
+            _diag_selects = self._page.evaluate("""() => {
+                const result = [];
+                for (const s of document.querySelectorAll('select')) {
+                    result.push({
+                        id: s.id, name: s.name, size: s.size,
+                        nOpts: s.options.length,
+                        first: s.options.length > 0 ? (s.options[0].text || '').slice(0, 60) : '',
+                        blob: [...s.options].map(o => o.text || '').join(' | ').slice(0, 100)
+                    });
+                }
+                return result;
+            }""")
+            self.log(f"  [DIAG-recentes] selects={_diag_selects}")
+
             _select_id = self._page.evaluate("""() => {
                 const SKIP = new Set(['selAcheFacil']);
+                // Tier 1: primeira opção começa com dígitos + "/"
                 for (const s of document.querySelectorAll('select')) {
                     if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
                     if (s.options.length > 0 && /^\\d{4,}\\s*\\//.test(s.options[0].text || ''))
                         return s.name || s.id;
                 }
+                // Tier 2: blob contém padrão CNJ TRT (NNNNNNN-NN.NNNN.5.NN.NNNN)
                 for (const s of document.querySelectorAll('select')) {
                     if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
                     const blob = [...s.options].map(o => o.text || '').join(' | ');
                     if (/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob))
                         return s.name || s.id;
+                }
+                // Tier 3: qualquer select com size > 1 (listbox) e ≥ 1 opção (exceto pesquisa)
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    if (s.size > 1 && s.options.length > 0) return s.name || s.id;
+                }
+                // Tier 4: qualquer select com ≥ 1 opção exceto selAcheFacil
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    if (s.options.length > 0) return s.name || s.id;
                 }
                 return null;
             }""")
