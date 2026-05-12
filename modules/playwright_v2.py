@@ -239,52 +239,82 @@ class PlaywrightAutomatorV2:
     def _preencher_data_richfaces(self, locator, dom_id: str, valor: str) -> None:
         """Preenche um campo `<rich:calendar>` corretamente.
 
-        O RichFaces Calendar 3.3.x tem:
-        - `<input id=":InputDate">` (input do usuário)
-        - Popup picker que pode interceptar eventos
-        - Backing bean que só recebe o valor após o `blur` com `onchange` AJAX
-
-        Padrão correto:
-        1. Focus no input
-        2. Limpar valor existente (Ctrl+A + Delete)
-        3. press_sequentially do valor (cada char dispara keydown/keyup)
-        4. Press Escape para fechar popup se aberto
-        5. Press Tab para disparar blur → backing bean recebe valor
-        6. Aguardar a4j ajax estabilizar (curto)
+        Em RichFaces 3.3.x o calendar tem um InputDate visível + hidden inputs.
+        O backing bean só recebe o valor se o `onchange` AJAX for disparado.
+        Setar `value` via JavaScript + dispatch nativo de `change` é mais
+        confiável que keyboard events (que podem ser interceptados pelo popup).
         """
+        # Resolver elemento element handle do locator
         try:
             locator.scroll_into_view_if_needed(timeout=2000)
         except Exception:
             pass
+
+        # Capturar id real do elemento
         try:
-            locator.focus(timeout=3000)
+            real_id = locator.get_attribute("id")
         except Exception:
-            pass
-        try:
-            # Limpar conteúdo existente
-            locator.press("Control+a")
-            locator.press("Delete")
-        except Exception:
-            pass
-        try:
-            # Type char-by-char (RichFaces escuta keyup)
-            locator.press_sequentially(valor, delay=30)
-        except Exception:
-            # Fallback: fill direto
-            locator.fill(valor)
-        # Fechar popup (se abriu)
-        try:
-            self._page.keyboard.press("Escape")
-        except Exception:
-            pass
-        # Tab para disparar blur + onchange AJAX → backing bean recebe valor
-        try:
-            locator.press("Tab")
-        except Exception:
-            pass
-        # Aguardar AJAX curto (RichFaces calendar dispara a4j on blur)
+            real_id = None
+        if not real_id:
+            self.log(f"  ⚠ data {dom_id}: id não obtido — fallback fill")
+            try:
+                locator.fill(valor)
+            except Exception:
+                pass
+            return
+
+        # Estratégia JS: setar value + disparar evento change que o RichFaces escuta
+        # No RichFaces 3.3.x, o calendar tem um listener .onchange registrado no input
+        # InputDate. Setar value + disparar change + blur faz o handler rodar.
+        ok = self._page.evaluate(
+            """({id, valor}) => {
+                const el = document.getElementById(id);
+                if (!el) return 'no-element';
+                // Setar valor diretamente
+                el.value = valor;
+                // Disparar todos os eventos relevantes em sequência
+                ['focus','input','keyup','change','blur'].forEach(evt => {
+                    try {
+                        el.dispatchEvent(new Event(evt, {bubbles: true, cancelable: true}));
+                    } catch (e) {}
+                });
+                // Tentar API RichFaces se disponível (calendar component)
+                try {
+                    if (typeof RichFaces !== 'undefined' && RichFaces.calendar) {
+                        // O hidden input pode estar em id_input ou similar
+                        const hid = document.getElementById(id.replace(/InputDate$/, ''));
+                        if (hid) {
+                            hid.value = valor;
+                            hid.dispatchEvent(new Event('change', {bubbles: true}));
+                        }
+                    }
+                } catch (e) {}
+                return 'ok';
+            }""",
+            {"id": real_id, "valor": valor},
+        )
+        # Aguardar AJAX a4j que o onchange dispara
         self._aguardar_ajax(3000)
-        self.log(f"  ✓ {dom_id} = {valor} (data RichFaces)")
+        self._page.wait_for_timeout(500)
+        # Verificar se valor está realmente no DOM
+        try:
+            valor_atual = locator.input_value(timeout=1000)
+            if valor_atual == valor:
+                self.log(f"  ✓ {dom_id} = {valor} (data: js+events, confirmed)")
+                return
+            else:
+                self.log(f"  ⚠ data {dom_id}: setou={valor!r} mas DOM tem={valor_atual!r}")
+        except Exception:
+            pass
+
+        # Fallback: tentar fill + Tab
+        try:
+            locator.fill(valor)
+            locator.press("Tab")
+            self._aguardar_ajax(3000)
+            self.log(f"  ✓ {dom_id} = {valor} (data: fallback fill+Tab)")
+        except Exception as e:
+            self.log(f"  ⚠ {dom_id}: fallback falhou: {e}")
 
     def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
         sel = f"input[type='radio'][id*='{dom_id}'][value='{valor}']"
