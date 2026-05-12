@@ -201,15 +201,19 @@ class PlaywrightAutomatorV2:
         self.log(f"  ✓ {dom_id} = {valor}")
 
     def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
-        sel = f"input[type='radio'][id*='{dom_id}'][value='{valor}']"
-        loc = self._page.locator(sel)
-        if loc.count() == 0:
-            if obrigatorio:
-                raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
-            self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
-            return
-        loc.first.click(force=True)
-        self.log(f"  ✓ radio {dom_id} = {valor}")
+        # Tentar id*= primeiro (radios com id fixo); fallback name*= (JSF com IDs dinâmicos j_id*)
+        for sel in (
+            f"input[type='radio'][id*='{dom_id}'][value='{valor}']",
+            f"input[type='radio'][name*='{dom_id}'][value='{valor}']",
+        ):
+            loc = self._page.locator(sel)
+            if loc.count() > 0:
+                loc.first.click(force=True)
+                self.log(f"  ✓ radio {dom_id} = {valor}")
+                return
+        if obrigatorio:
+            raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
+        self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
 
     def _marcar_checkbox(self, dom_id: str, marcado: bool) -> None:
         # Seletor MAIS específico: input[type=checkbox] com id terminando em ':<dom_id>' ou em '<dom_id>' exato.
@@ -1690,24 +1694,33 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(1500)
 
-        # Diagnóstico FGTS
+        # Diagnóstico FGTS — inclui dump completo de ids/names para depuração
         _diag_fgts = self._page.evaluate("""() => {
             const body = document.body?.textContent || '';
+            const allInputs = [...document.querySelectorAll('input,select')].map(el => ({
+                tag: el.tagName, type: el.type || '', id: (el.id||'').slice(-40),
+                name: (el.name||'').slice(-40), value: (el.value||'').slice(0,20)
+            }));
             return {
                 url: location.href.slice(-60),
                 tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
                 tem_form: !!document.getElementById('formulario'),
-                radios_tipo: document.querySelectorAll('input[type=radio][id*=tipoDeVerba]').length,
-                todos_inputs: document.querySelectorAll('input,select').length,
+                radios_id: document.querySelectorAll('input[type=radio][id*=tipoDeVerba]').length,
+                radios_name: document.querySelectorAll('input[type=radio][name*=tipoDeVerba]').length,
+                todos_inputs: allInputs.length,
+                inputs_dump: allInputs.slice(0, 25),
                 msgs: [...document.querySelectorAll('.rich-messages-label,.rf-msgs-sum')]
                     .map(e=>(e.textContent||'').trim()).slice(0,3)
             };
         }""")
-        self.log(f"  [DIAG-fgts] {_diag_fgts}")
+        self.log(f"  [DIAG-fgts] url={_diag_fgts['url']} tem_form={_diag_fgts['tem_form']} "
+                 f"tem_500={_diag_fgts['tem_500']} radios_id={_diag_fgts['radios_id']} "
+                 f"radios_name={_diag_fgts['radios_name']} n_inputs={_diag_fgts['todos_inputs']}")
+        self.log(f"  [DIAG-fgts-inputs] {_diag_fgts['inputs_dump']}")
 
-        # Verificar que página renderizou (radio tipoDeVerba presente)
-        if self._page.locator("input[type='radio'][id*='tipoDeVerba']").count() == 0:
-            self.log("  ⚠ Fase 8 FGTS: página não renderizou — pulando (NPE pós-Expresso?)")
+        # Verificar que página renderizou — usar tem_form (não tipoDeVerba, que pode ter ID dinâmico)
+        if _diag_fgts['tem_500'] or not _diag_fgts['tem_form']:
+            self.log("  ⚠ Fase 8 FGTS: página não renderizou (HTTP 500 ou sem formulário) — pulando")
             return
 
         f = self.previa.fgts
@@ -1748,12 +1761,15 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(8000)
 
         # Sub-página parametrizar-inss para vinculação histórico→CS
-        self._clicar("ocorrencias")
-        self._aguardar_ajax(8000)
-        self._clicar("recuperarDevidos")
-        self._aguardar_ajax(5000)
-        self._clicar("copiarDevidos")
-        self._aguardar_ajax(5000)
+        try:
+            self._clicar("ocorrencias")
+            self._aguardar_ajax(8000)
+            self._clicar("recuperarDevidos")
+            self._aguardar_ajax(5000)
+            self._clicar("copiarDevidos")
+            self._aguardar_ajax(5000)
+        except Exception as e:
+            self.log(f"  ⚠ CS sub-página ocorrencias/recuperar/copiar: {e} — continuando")
 
         # Modo manual_por_periodo: aplicar Lote por intervalo
         if cs.vinculacao_historicos_devidos.modo == "manual_por_periodo":
@@ -1843,16 +1859,16 @@ class PlaywrightAutomatorV2:
         self.log("Fase 14 — Liquidar + Exportar")
 
         # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
-        # Antes: re-abrir cálculo via principal.jsf para garantir conv válido
-        # (NPE pós-Expresso pode ter deixado conv em estado anômalo).
         # Sempre passar pelo Dados do Cálculo primeiro para garantir que
         # estamos no contexto do cálculo (sidebar Operações renderiza).
+        self.log(f"  [DIAG-liq] conv_id no início: {self._calculo_conversation_id}")
         try:
             self._navegar_menu("li_calculo_dados_do_calculo")
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1500)
         except Exception:
             pass
+        self.log(f"  [DIAG-liq] conv_id após dados_do_calculo: {self._calculo_conversation_id}")
 
         # Estratégia em cascata para localizar Liquidar
         nav_ok = self._page.evaluate(
@@ -1930,55 +1946,69 @@ class PlaywrightAutomatorV2:
             )
         self.log("  ✓ Liquidação OK (sem pendências)")
 
-        # ── 14d. Navegar para Exportar (cascata robusta) ──────────────────
-        nav_exp = self._page.evaluate(
-            """() => {
-                // 1. li#li_operacoes_exportar > a
-                const li1 = document.getElementById('li_operacoes_exportar');
-                if (li1) {
-                    const a = li1.querySelector('a');
-                    if (a) { a.click(); return 'li_operacoes_exportar'; }
-                }
-                // 2. <a> com texto exato 'Exportar' em li com 'operacoes'
-                const links = [...document.querySelectorAll('a')];
-                for (const a of links) {
-                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
-                    const li = a.closest('li');
-                    if (txt === 'Exportar' && li && li.id && li.id.includes('operacoes')) {
-                        a.click();
-                        return 'text-li-operacoes';
-                    }
-                }
-                // 3. <a> com texto 'Exportar' em qualquer menu
-                for (const a of links) {
-                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
-                    if (txt === 'Exportar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) {
-                        a.click();
-                        return 'text-any';
-                    }
-                }
-                return null;
-            }"""
-        )
-        if not nav_exp:
-            self.log("  ⚠ Sidebar 'Exportar' não localizado — tentando URL nav")
+        # Capturar conv_id pós-liquidação — Seam pode ter redirecionado para nova conv
+        self._capturar_conversation_id()
+        _conv_pos_liq = self._calculo_conversation_id
+        self.log(f"  [DIAG-liq] conv_id pós-liquidação: {_conv_pos_liq}")
+
+        # ── 14d. Navegar para Exportar via URL nav direto (mais confiável)
+        # EVITAR sidebar JS click para export: Seam pode ter criado nova conv
+        # após liquidação onde calculoAberto.calculo = null (→ NPE Java:244).
+        # URL nav para exportacao.jsf com conv pós-liquidação é mais seguro.
+        nav_exp = None
+        if _conv_pos_liq:
+            url_exp = (
+                f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
+                f"?conversationId={_conv_pos_liq}"
+            )
             try:
-                if self._calculo_conversation_id:
-                    url_exp = (
-                        f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
-                        f"?conversationId={self._calculo_conversation_id}"
-                    )
-                    self._page.goto(url_exp, wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(15000)
-                    self._capturar_conversation_id()
-                    nav_exp = "url-nav-fallback"
+                self._page.goto(url_exp, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(1500)
+                # Verificar se página renderizou sem 500
+                _diag_exp = self._page.evaluate("""() => {
+                    const body = document.body?.textContent || '';
+                    return {
+                        url: location.href.slice(-60),
+                        tem_form: !!document.getElementById('formulario'),
+                        tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
+                        tem_export_btn: !!document.querySelector('input[id$=exportar]') ||
+                            !!document.querySelector('input[value=Exportar]')
+                    };
+                }""")
+                self.log(f"  [DIAG-exp] {_diag_exp}")
+                if not _diag_exp['tem_500'] and _diag_exp['tem_form']:
+                    nav_exp = "url-nav-direto"
             except Exception as e:
                 self.log(f"  ⚠ URL nav Exportar: {e}")
+
+        if not nav_exp:
+            # Fallback: sidebar JS click
+            self.log("  → Tentando nav Exportar via sidebar JS")
+            nav_exp = self._page.evaluate(
+                """() => {
+                    const li1 = document.getElementById('li_operacoes_exportar');
+                    if (li1) { const a = li1.querySelector('a'); if (a) { a.click(); return 'li_operacoes_exportar'; } }
+                    const links = [...document.querySelectorAll('a')];
+                    for (const a of links) {
+                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                        const li = a.closest('li');
+                        if (txt === 'Exportar' && li && li.id && li.id.includes('operacoes')) { a.click(); return 'text-li-operacoes'; }
+                    }
+                    for (const a of links) {
+                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                        if (txt === 'Exportar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) { a.click(); return 'text-any'; }
+                    }
+                    return null;
+                }"""
+            )
+            if nav_exp:
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(2000)
+
         if not nav_exp:
             raise RuntimeError("Sidebar 'Exportar' não localizado")
         self.log(f"  ✓ Navegação Exportar via: {nav_exp}")
-        self._aguardar_ajax(15000)
-        self._page.wait_for_timeout(2000)
 
         # ── 14e. Clicar Exportar e capturar .PJC ───────────────────────────
         # Estratégia: capturar response binário via expect_response
