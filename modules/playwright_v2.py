@@ -1497,11 +1497,41 @@ class PlaywrightAutomatorV2:
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche todos os campos do form de parâmetros de verba.
 
-        Compartilhado entre _lancar_verba_manual (com_identificacao=True, descricao+CNJ
-        precisam ser preenchidos) e _configurar_parametros_pos_expresso (False, identificação
-        já vem do Expresso e não deve ser sobrescrita exceto se EXPRESSO_ADAPTADO).
+        Em EXPRESSO_DIRETO: o Expresso já configurou tudo (característica,
+        ocorrência, incidências, valor, fórmula). MINIMIZAMOS alterações para
+        evitar pendências do tipo "parâmetro X foi alterado após geração de
+        ocorrências". Apenas alteramos período (datas) que normalmente precisam
+        de ajuste para a sentença.
+
+        Em EXPRESSO_ADAPTADO: alteramos descrição + tudo que diferenciar do
+        Expresso original (nome customizado).
+
+        Em MANUAL: preenchemos tudo (com_identificacao=True).
         """
         p = v.parametros
+        # EXPRESSO_DIRETO: NÃO ALTERAR nada que o Expresso já configurou.
+        # Apenas garantir período correto.
+        if (not com_identificacao
+                and v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_DIRETO):
+            self.log(f"    ℹ EXPRESSO_DIRETO: ajustando apenas período (mantendo config Expresso)")
+            # Ajustar apenas período (datas) — comum ser diferente do default
+            for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
+                try:
+                    if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                        self._preencher(sufixo, p.periodo_inicio, obrigatorio=False)
+                        break
+                except Exception:
+                    continue
+            for sufixo in ("periodoFinalInputDate", "periodoFinal", "dataFimInputDate"):
+                try:
+                    if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                        self._preencher(sufixo, p.periodo_fim, obrigatorio=False)
+                        break
+                except Exception:
+                    continue
+            return
+
+        # MANUAL ou EXPRESSO_ADAPTADO: configuração completa
 
         # 1. Identificação (apenas Manual ou Expresso_Adaptado)
         if com_identificacao:
@@ -1527,9 +1557,6 @@ class PlaywrightAutomatorV2:
                 self._aguardar_ajax(2000)
             self._marcar_radio("tipoDeDivisor", f.divisor.tipo.value)
             self._aguardar_ajax(2000)
-            # Só preenche outroValorDoDivisor se valor explicitamente fornecido.
-            # JSONs sem divisor (FGTS sobre rem.: só multiplicador 0.08) têm
-            # divisor.valor=None — não tentar preencher (campo nem renderiza).
             if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
                 self._preencher("outroValorDoDivisor", _fmt_br(f.divisor.valor), obrigatorio=False)
             self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador), obrigatorio=False)
@@ -1538,8 +1565,7 @@ class PlaywrightAutomatorV2:
             if f.quantidade.tipo.value == "INFORMADA" and f.quantidade.valor is not None:
                 self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor), obrigatorio=False)
 
-        # 3. Período — IDs podem variar (periodoInicial/dataInicio/periodoInicialInputDate)
-        # Tentar variantes em ordem
+        # 3. Período
         for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
             try:
                 if self._page.locator(f"[id$='{sufixo}']").count() > 0:
@@ -1547,8 +1573,6 @@ class PlaywrightAutomatorV2:
                     break
             except Exception:
                 continue
-        else:
-            self.log(f"  ⚠ campo periodoInicial não encontrado — pulando")
         for sufixo in ("periodoFinalInputDate", "periodoFinal", "dataFimInputDate"):
             try:
                 if self._page.locator(f"[id$='{sufixo}']").count() > 0:
@@ -1565,7 +1589,7 @@ class PlaywrightAutomatorV2:
         if hasattr(p, "tipo_base_calculo") and p.tipo_base_calculo:
             self._marcar_radio("tipoDaBaseDeCalculo", p.tipo_base_calculo.value)
 
-        # 5. Incidências (FGTS / CS / IRPF / Prev. Priv. / Pensão)
+        # 5. Incidências
         self._marcar_checkbox("irpf", p.incidencias.irpf)
         self._marcar_checkbox("inss", p.incidencias.cs_inss)
         self._marcar_checkbox("fgts", p.incidencias.fgts)
