@@ -887,6 +887,9 @@ class PlaywrightAutomatorV2:
                 )
                 if not tem_listagem:
                     # Fallback: tentar com conv PRÉ-Expresso (conv=6) se ainda está viva
+                    # NOTA: conv=6 pode ter verba list VAZIA (verbas foram salvas em conv=48),
+                    # mas o PAGE RENDER deve funcionar (form presente, sem 500).
+                    # Se a página renderizou, usar conv=6 para fases seguintes (FGTS, CS etc.)
                     conv_fallback = getattr(self, '_conv_pre_expresso', None)
                     if conv_fallback and conv_fallback != self._calculo_conversation_id:
                         self.log(f"  → Testando conv pré-Expresso como fallback: {conv_fallback}")
@@ -895,13 +898,25 @@ class PlaywrightAutomatorV2:
                         self._navegar_menu("li_calculo_verbas")
                         self._aguardar_ajax(8000)
                         self._page.wait_for_timeout(1500)
-                        tem_listagem = self._page.evaluate(
-                            """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
+                        # Checar se PAGE RENDERIZOU (não só se tem verbas)
+                        _page_ok_conv6 = self._page.evaluate(
+                            """() => {
+                                const body = (document.body?.textContent || '');
+                                const tem_500 = body.includes('HTTP Status 500') ||
+                                               body.includes('NullPointerException') ||
+                                               body.includes('ViewExpiredException');
+                                const tem_form = !!document.getElementById('formulario');
+                                const n_verbas = document.querySelectorAll('a.linkParametrizar').length;
+                                return {tem_500, tem_form, n_verbas};
+                            }"""
                         )
-                        if tem_listagem:
-                            self.log(f"  ✓ Conv pré-Expresso ({conv_fallback}) funciona — usando para fases seguintes")
+                        self.log(f"  [DIAG-conv6] verba-calculo em conv=6: {_page_ok_conv6}")
+                        if not _page_ok_conv6.get('tem_500') and _page_ok_conv6.get('tem_form'):
+                            self.log(f"  ✓ Conv pré-Expresso ({conv_fallback}) renderiza — usando para FGTS/CS/Honorários")
+                            # Verbas do Expresso estão no DB (conv=48 apenas muda conv de sessão)
+                            # Usar conv=6 para fases seguintes resolve o NPE em FGTS/CS
                         else:
-                            self.log(f"  ⚠ Conv pré-Expresso ({conv_fallback}) também vazia — restaurando conv={conv_atual}")
+                            self.log(f"  ⚠ Conv pré-Expresso ({conv_fallback}) também sem form (500 ou expirada) — restaurando conv={conv_atual}")
                             self._calculo_conversation_id = conv_atual
                     if not tem_listagem:
                         self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros de verba serão pulados")
