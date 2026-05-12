@@ -2650,8 +2650,31 @@ class PlaywrightAutomatorV2:
             if erro:
                 self.log(f"  ⚠ JSF reportou erro: {erro[:200]}")
 
+        # PJE-Calc tem uma seção "Pendências do Cálculo" SEMPRE presente na
+        # página, com legenda de ícones (Erro/Alerta). Detectamos pendência
+        # REAL via classe .validacaoErro (não confundir com .validacaoAlerta
+        # que é só warning não-bloqueador). Se a página confirmou
+        # "Operação realizada com sucesso" via _aguardar_operacao_sucesso,
+        # consideramos a liquidação BEM-SUCEDIDA mesmo se houver alertas.
         body = (self._page.locator("body").text_content() or "").lower()
-        if "pendência" in body and "não foram encontradas" not in body:
+        tem_erro_real = self._page.evaluate(
+            """() => {
+                // Só conta como erro REAL os elementos com class validacaoErro
+                // (legenda: 'Erro: Impede a liquidação do cálculo'). validacaoAlerta
+                // (legenda: 'Alerta: Não impede a liquidação') NÃO é bloqueador.
+                const erros = [...document.querySelectorAll('.validacaoErro')];
+                // Filtrar para não pegar a label da legenda em si
+                const reais = erros.filter(el => {
+                    const txt = (el.textContent || '').toLowerCase();
+                    return !txt.includes('legenda') && !txt.startsWith('erro:');
+                });
+                return reais.length > 0;
+            }"""
+        )
+        if (sucesso_liq or self._calculo_numero) and not tem_erro_real:
+            # Liquidação bem-sucedida confirmada
+            self.log("  ✓ Liquidação CONCLUÍDA com sucesso")
+        elif tem_erro_real:
             # Pendências = erros que IMPEDEM a liquidação. O cálculo NÃO foi
             # liquidado e o .PJC exportado terá hashCodeLiquidacao=null +
             # valores zerados. Capturar TODAS as mensagens para depurar.
@@ -2688,7 +2711,8 @@ class PlaywrightAutomatorV2:
             if not pendencias:
                 self._diagnostico_pagina(contexto="pendências Liquidação (sem captura direta)")
         else:
-            self.log("  ✓ Liquidação OK")
+            # Alertas existem mas não bloqueiam; liquidação foi bem-sucedida.
+            self.log("  ✓ Liquidação OK (alertas não-bloqueadores podem existir)")
 
         # ── 14e. Navegar para Exportar (cascata robusta) ──────────────────
         # Em edit mode: sidebar li_operacoes_exportar chama iniciar() via JSF navigation rule
