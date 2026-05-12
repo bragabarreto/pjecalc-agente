@@ -341,6 +341,7 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <div class="campo"><label>Hora Início Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_inicio" placeholder="08:00"></div>
           <div class="campo"><label>Hora Fim Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_fim" placeholder="17:00"></div>
           <div class="campo"><label>Intervalo (min)</label><input type="number" data-campo="cartao_de_ponto.intervalo_minutos" placeholder="60"></div>
+          <div class="campo"><label>Dias Trabalhados/Semana</label><input type="number" min="1" max="7" data-campo="cartao_de_ponto.dias_semana" value="5"></div>
           <div class="campo"><label>HE mensais (média)</label><input type="number" step="0.5" data-campo="cartao_de_ponto.quantidade_mensal_he"></div>
           <div class="campo"><label>Adicional HE (%)</label><input type="number" step="1" data-campo="cartao_de_ponto.adicional_he_pct" placeholder="50"></div>
         </div>
@@ -422,7 +423,7 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <div class="grid-3">
             <div class="campo">
               <label>Tipo Multa</label>
-              <select data-campo="fgts.multa.tipo_valor">
+              <select data-campo="fgts.multa.tipo_valor" onchange="document.getElementById('fgts-multa-valor-row').style.display=(this.value==='INFORMADA'?'block':'none')">
                 <option value="CALCULADA">Calculada</option>
                 <option value="INFORMADA">Informada</option>
               </select>
@@ -434,7 +435,7 @@ details.fieldgroup[open] { border-color: #adb5bd; }
                 <option value="VINTE_POR_CENTO">20%</option>
               </select>
             </div>
-            <div class="campo">
+            <div class="campo" id="fgts-multa-valor-row" style="display:none;">
               <label>Valor Informado (R$)</label>
               <input type="number" step="0.01" data-campo="fgts.multa.valor_informado_brl" placeholder="0.00">
             </div>
@@ -474,11 +475,30 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           </div>
           <div class="campo">
             <label>Alíquota Empregador</label>
-            <select data-campo="contribuicao_social.aliquota_empregador">
+            <select data-campo="contribuicao_social.aliquota_empregador" onchange="document.getElementById('cs-aliquotas-fixas').style.display=(this.value==='FIXA'?'block':'none')">
               <option value="POR_ATIVIDADE_ECONOMICA">Por Atividade Econômica</option>
               <option value="POR_PERIODO">Por Período</option>
-              <option value="FIXA">Fixa</option>
+              <option value="FIXA">Fixa (%)</option>
             </select>
+          </div>
+        </div>
+        <div id="cs-aliquotas-fixas" style="display:none; margin-top:10px;">
+          <div class="fieldgroup">
+            <div class="fieldgroup-title">Alíquotas Fixas (Empregador)</div>
+            <div class="grid-3">
+              <div class="campo">
+                <label>Alíquota Empresa Fixa (%)</label>
+                <input type="number" step="0.01" data-campo="contribuicao_social.aliquota_empresa_fixa_pct">
+              </div>
+              <div class="campo">
+                <label>Alíquota RAT Fixa (%)</label>
+                <input type="number" step="0.01" data-campo="contribuicao_social.aliquota_rat_fixa_pct">
+              </div>
+              <div class="campo">
+                <label>Alíquota Terceiros Fixa (%)</label>
+                <input type="number" step="0.01" data-campo="contribuicao_social.aliquota_terceiros_fixa_pct">
+              </div>
+            </div>
           </div>
         </div>
         <div class="grid-4" style="margin-top:10px;">
@@ -486,6 +506,15 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.cobrar_do_reclamante_devido"> <label>Cobrar do Reclamante</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.corrigir_desconto_reclamante" checked> <label>Corrigir Desconto Reclamante</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.apurar_salarios_pagos" checked> <label>Apurar Salários Pagos</label></div>
+        </div>
+        <div class="grid-2" style="margin-top:10px;">
+          <div class="campo">
+            <label>Vinculação Históricos Devidos</label>
+            <select data-campo="contribuicao_social.vinculacao_historicos_devidos">
+              <option value="automatica" selected>Automática (Recuperar + Copiar)</option>
+              <option value="manual_por_periodo">Manual por Período</option>
+            </select>
+          </div>
         </div>
       </div>
     </div>
@@ -502,6 +531,7 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.considerar_tributacao_em_separado_rra" checked> <label>RRA (tributação separada)</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.incidir_sobre_juros_de_mora"> <label>Incidir sobre Juros de Mora</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.cobrar_do_reclamado"> <label>Cobrar do Reclamado</label></div>
+          <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.considerar_tributacao_exclusiva_na_fonte"> <label>Tributação Exclusiva na Fonte</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.regime_de_caixa"> <label>Regime de Caixa</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.aposentado_maior_65_anos"> <label>Aposentado ≥ 65 anos</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.possui_dependentes" onchange="toggleDependentes(this.checked)"> <label>Possui Dependentes</label></div>
@@ -595,17 +625,22 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             <label>Índice Trabalhista</label>
             <select data-campo="correcao_juros_multa.indice_trabalhista">
               <option value="IPCAE" selected>IPCA-E</option>
-              <option value="TR">TR</option>
+              <option value="IPCA">IPCA</option>
               <option value="INPC">INPC</option>
               <option value="IGP_M">IGP-M</option>
+              <option value="TR">TR</option>
+              <option value="IPC">IPC</option>
+              <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
+              <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
+              <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
             </select>
           </div>
           <div class="campo">
             <label>Juros</label>
             <select data-campo="correcao_juros_multa.juros">
               <option value="TAXA_LEGAL" selected>Taxa Legal (1% a.m.)</option>
-              <option value="SELIC">Selic</option>
-              <option value="SEM_JUROS">Sem Juros</option>
+              <option value="TAXA_SELIC_FAZENDA_PUBLICA">Selic / Fazenda Pública</option>
+              <option value="NAO_APLICAR">Não aplicar</option>
             </select>
           </div>
           <div class="campo">
@@ -1322,18 +1357,38 @@ function renderFerias() {
         <div class="campo"><label>Período Concessivo Início</label><input type="text" placeholder="DD/MM/YYYY" value="${p.periodo_concessivo_inicio||''}" onchange="previaData.ferias.periodos[${idx}].periodo_concessivo_inicio=this.value;validarPrevia()"></div>
         <div class="campo"><label>Período Concessivo Fim</label><input type="text" placeholder="DD/MM/YYYY" value="${p.periodo_concessivo_fim||''}" onchange="previaData.ferias.periodos[${idx}].periodo_concessivo_fim=this.value;validarPrevia()"></div>
         <div class="campo"><label>Situação</label>
-          <select onchange="previaData.ferias.periodos[${idx}].situacao=this.value;validarPrevia()">
+          <select onchange="previaData.ferias.periodos[${idx}].situacao=this.value;toggleGozos(${idx},this.closest('.fieldgroup'));validarPrevia()">
             <option value="INDENIZADAS"${sit==='INDENIZADAS'?' selected':''}>Indenizadas</option>
             <option value="GOZADAS"${sit==='GOZADAS'?' selected':''}>Gozadas</option>
-            <option value="PARCIAL_GOZADAS"${sit==='PARCIAL_GOZADAS'?' selected':''}>Parcial Gozadas</option>
-            <option value="NAO_DIREITO"${sit==='NAO_DIREITO'?' selected':''}>Não tem direito</option>
+            <option value="PARCIAL_GOZADAS"${sit==='PARCIAL_GOZADAS'?' selected':''}>Parcialmente Gozadas</option>
+            <option value="NAO_DIREITO"${sit==='NAO_DIREITO'?' selected':''}>Sem Direito</option>
           </select>
         </div>
       </div>
       <div class="grid-3">
         <div class="checkbox-row"><input type="checkbox"${p.dobra?' checked':''} onchange="previaData.ferias.periodos[${idx}].dobra=this.checked;validarPrevia()"> <label>Dobra</label></div>
-        <div class="checkbox-row"><input type="checkbox"${p.abono?' checked':''} onchange="previaData.ferias.periodos[${idx}].abono=this.checked;validarPrevia()"> <label>Abono Pecuniário</label></div>
+        <div class="checkbox-row"><input type="checkbox"${p.abono?' checked':''} onchange="previaData.ferias.periodos[${idx}].abono=this.checked;toggleGozos(${idx},this.closest('.fieldgroup'))"> <label>Abono Pecuniário</label></div>
         <div class="campo"><label>Dias Abono</label><input type="number" value="${p.dias_abono||0}" onchange="previaData.ferias.periodos[${idx}].dias_abono=parseInt(this.value);validarPrevia()"></div>
+      </div>
+      <div class="gozo-section" style="display:${(sit==='GOZADAS'||sit==='PARCIAL_GOZADAS')?'block':'none'}; margin-top:8px;">
+        <div class="fieldgroup-title" style="margin-top:6px;">Gozo 1</div>
+        <div class="grid-3">
+          <div class="campo"><label>Gozo 1 — Data Início</label><input type="text" placeholder="DD/MM/YYYY" value="${(p.gozos&&p.gozos[0])?p.gozos[0].inicio||'':''}" onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[0].inicio=this.value;validarPrevia()"></div>
+          <div class="campo"><label>Gozo 1 — Data Fim</label><input type="text" placeholder="DD/MM/YYYY" value="${(p.gozos&&p.gozos[0])?p.gozos[0].fim||'':''}" onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[0].fim=this.value;validarPrevia()"></div>
+          <div class="checkbox-row"><input type="checkbox"${(p.gozos&&p.gozos[0]&&p.gozos[0].dobra)?' checked':''} onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[0].dobra=this.checked;validarPrevia()"> <label>Dobra Gozo 1</label></div>
+        </div>
+        <div class="fieldgroup-title" style="margin-top:6px;">Gozo 2 <span style="font-weight:400;color:#868e96;">(opcional)</span></div>
+        <div class="grid-3">
+          <div class="campo"><label>Gozo 2 — Data Início</label><input type="text" placeholder="DD/MM/YYYY" value="${(p.gozos&&p.gozos[1])?p.gozos[1].inicio||'':''}" onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[1].inicio=this.value;validarPrevia()"></div>
+          <div class="campo"><label>Gozo 2 — Data Fim</label><input type="text" placeholder="DD/MM/YYYY" value="${(p.gozos&&p.gozos[1])?p.gozos[1].fim||'':''}" onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[1].fim=this.value;validarPrevia()"></div>
+          <div class="checkbox-row"><input type="checkbox"${(p.gozos&&p.gozos[1]&&p.gozos[1].dobra)?' checked':''} onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[1].dobra=this.checked;validarPrevia()"> <label>Dobra Gozo 2</label></div>
+        </div>
+        <div class="fieldgroup-title" style="margin-top:6px;">Gozo 3 <span style="font-weight:400;color:#868e96;">(opcional)</span></div>
+        <div class="grid-3">
+          <div class="campo"><label>Gozo 3 — Data Início</label><input type="text" placeholder="DD/MM/YYYY" value="${(p.gozos&&p.gozos[2])?p.gozos[2].inicio||'':''}" onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[2].inicio=this.value;validarPrevia()"></div>
+          <div class="campo"><label>Gozo 3 — Data Fim</label><input type="text" placeholder="DD/MM/YYYY" value="${(p.gozos&&p.gozos[2])?p.gozos[2].fim||'':''}" onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[2].fim=this.value;validarPrevia()"></div>
+          <div class="checkbox-row"><input type="checkbox"${(p.gozos&&p.gozos[2]&&p.gozos[2].dobra)?' checked':''} onchange="if(!previaData.ferias.periodos[${idx}].gozos)previaData.ferias.periodos[${idx}].gozos=[{},{},{}];previaData.ferias.periodos[${idx}].gozos[2].dobra=this.checked;validarPrevia()"> <label>Dobra Gozo 3</label></div>
+        </div>
       </div>`;
     list.appendChild(div);
   });
@@ -1428,12 +1483,31 @@ function renderHonorarios() {
         <div class="campo"><label>Valor Informado (R$)</label><input type="number" step="0.01" value="${h.valor_informado_brl||''}" ${tv==='CALCULADO'?'disabled':''} onchange="previaData.honorarios[${idx}].valor_informado_brl=parseFloat(this.value);validarPrevia()"></div>
         <div class="campo"><label>Base de Apuração</label>
           <select onchange="previaData.honorarios[${idx}].base_para_apuracao=this.value;validarPrevia()">
-            ${['LIQUIDO_DEVIDO_AO_RECLAMANTE','BRUTO_DEVIDO_AO_RECLAMANTE','SOBRE_O_VALOR_DA_CAUSA'].map(b=>`<option value="${b}"${(h.base_para_apuracao||h.base_apuracao)===b?' selected':''}>${b.replace(/_/g,' ')}</option>`).join('')}
+            <option value="LIQUIDO_DEVIDO_AO_RECLAMANTE"${(h.base_para_apuracao||h.base_apuracao)==='LIQUIDO_DEVIDO_AO_RECLAMANTE'?' selected':''}>Líquido devido ao reclamante</option>
+            <option value="BRUTO_DEVIDO_AO_RECLAMANTE"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_DEVIDO_AO_RECLAMANTE'?' selected':''}>Bruto devido ao reclamante</option>
+            <option value="BRUTO_MENOS_CS"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_MENOS_CS'?' selected':''}>Bruto (-CS)</option>
+            <option value="BRUTO_MENOS_CS_MENOS_PP"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_MENOS_CS_MENOS_PP'?' selected':''}>Bruto (-CS-PP)</option>
+            <option value="SOBRE_O_VALOR_DA_CAUSA"${(h.base_para_apuracao||h.base_apuracao)==='SOBRE_O_VALOR_DA_CAUSA'?' selected':''}>Sobre o valor da causa</option>
           </select>
         </div>
       </div>
       <div class="grid-2">
-        <div class="checkbox-row"><input type="checkbox"${h.apurar_irrf?' checked':''} onchange="previaData.honorarios[${idx}].apurar_irrf=this.checked;validarPrevia()"> <label>Apurar IRRF</label></div>
+        <div class="campo"><label>Descrição</label><input type="text" value="${h.descricao||''}" onchange="previaData.honorarios[${idx}].descricao=this.value;validarPrevia()"></div>
+        <div class="checkbox-row" style="align-self:flex-end;"><input type="checkbox"${h.apurar_irrf?' checked':''} onchange="previaData.honorarios[${idx}].apurar_irrf=this.checked;validarPrevia()"> <label>Apurar IRRF</label></div>
+      </div>
+      <div class="fieldgroup" style="margin-top:8px;">
+        <div class="fieldgroup-title">Credor <span class="obrigatorio">*</span></div>
+        <div class="grid-3">
+          <div class="campo col-span-full"><label>Nome do Credor <span class="obrigatorio">*</span></label><input type="text" value="${(h.credor&&h.credor.nome)||''}" onchange="if(!previaData.honorarios[${idx}].credor)previaData.honorarios[${idx}].credor={};previaData.honorarios[${idx}].credor.nome=this.value;validarPrevia()"></div>
+          <div class="campo"><label>Tipo Doc Fiscal</label>
+            <select onchange="if(!previaData.honorarios[${idx}].credor)previaData.honorarios[${idx}].credor={};previaData.honorarios[${idx}].credor.tipo_doc_fiscal=this.value;validarPrevia()">
+              <option value="CPF"${(h.credor&&h.credor.tipo_doc_fiscal)==='CPF'?' selected':''}>CPF</option>
+              <option value="CNPJ"${(h.credor&&h.credor.tipo_doc_fiscal)==='CNPJ'?' selected':''}>CNPJ</option>
+              <option value="CEI"${(h.credor&&h.credor.tipo_doc_fiscal)==='CEI'?' selected':''}>CEI</option>
+            </select>
+          </div>
+          <div class="campo col-span-2"><label>Número Doc Fiscal</label><input type="text" value="${(h.credor&&h.credor.numero_doc_fiscal)||''}" onchange="if(!previaData.honorarios[${idx}].credor)previaData.honorarios[${idx}].credor={};previaData.honorarios[${idx}].credor.numero_doc_fiscal=this.value;validarPrevia()"></div>
+        </div>
       </div>`;
     list.appendChild(div);
   });
@@ -1443,13 +1517,23 @@ function renderHonorarios() {
 
 function adicionarHonorario() {
   if (!previaData.honorarios) previaData.honorarios = [];
-  previaData.honorarios.push({tipo_honorario:'ADVOCATICIO_SUCUMBENCIAL',tipo_devedor:'RECLAMADO',tipo_valor:'CALCULADO',aliquota_pct:10,base_para_apuracao:'LIQUIDO_DEVIDO_AO_RECLAMANTE',apurar_irrf:false});
+  previaData.honorarios.push({tipo_honorario:'ADVOCATICIO_SUCUMBENCIAL',tipo_devedor:'RECLAMADO',tipo_valor:'CALCULADO',aliquota_pct:10,base_para_apuracao:'LIQUIDO_DEVIDO_AO_RECLAMANTE',apurar_irrf:false,descricao:'',credor:{nome:'',tipo_doc_fiscal:'CPF',numero_doc_fiscal:''}});
   renderHonorarios(); validarPrevia();
 }
 
 function toggleDependentes(checked) {
   const row = document.getElementById('qtd-dependentes-row');
   if (row) row.style.display = checked ? 'block' : 'none';
+}
+
+function toggleGozos(idx, fieldgroupEl) {
+  if (!fieldgroupEl) return;
+  const sit = (previaData.ferias && previaData.ferias.periodos && previaData.ferias.periodos[idx])
+    ? previaData.ferias.periodos[idx].situacao : 'INDENIZADAS';
+  const show = sit === 'GOZADAS' || sit === 'PARCIAL_GOZADAS';
+  const gozoSection = fieldgroupEl.querySelector('.gozo-section');
+  if (gozoSection) gozoSection.style.display = show ? 'block' : 'none';
+  validarPrevia();
 }
 
 window.addEventListener('DOMContentLoaded', carregarPrevia);
