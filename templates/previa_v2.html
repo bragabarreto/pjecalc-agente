@@ -454,6 +454,22 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <div id="lista-recolhimentos-fgts"></div>
           <button type="button" onclick="adicionarRecolhimentoFGTS()" style="margin-top:6px; font-size:0.83rem;">+ Adicionar Recolhimento</button>
         </div>
+
+        <!-- Saldo e/ou Saque (Dedução) — espelha seção da página FGTS no PJE-Calc -->
+        <div class="fieldgroup" style="margin-top:10px; background:#fff8e1; border-color:#ffa726;">
+          <div class="fieldgroup-title">💰 Saldo e/ou Saque (Dedução do FGTS)</div>
+          <p style="font-size:0.8rem; color:#6c757d; margin:4px 0 8px;">
+            Saldo já depositado na conta vinculada do empregado (extrato FGTS) que deve ser
+            <strong>deduzido</strong> do total calculado. Por exemplo: se houver R$ 2.000 já depositados,
+            e o cálculo apurar R$ 5.000 de FGTS devido, o valor final será R$ 3.000.
+          </p>
+          <div class="checkbox-row" style="margin-bottom:8px;">
+            <input type="checkbox" id="cb-deduzir-fgts" data-campo="fgts.deduzir_do_fgts">
+            <label for="cb-deduzir-fgts"><strong>☑ Deduzir do FGTS</strong> (marque para ativar)</label>
+          </div>
+          <div id="lista-saldos-fgts"></div>
+          <button type="button" onclick="adicionarSaldoFGTS()" style="margin-top:6px; font-size:0.83rem;">+ Adicionar Saldo a Deduzir</button>
+        </div>
       </div>
     </div>
 
@@ -742,6 +758,7 @@ function carregarPrevia() {
   renderFaltas();
   renderFerias();
   renderRecolhimentosFGTS();
+  renderSaldosFGTS();
   renderHonorarios();
   // toggle dependentes IRPF
   const _depEl = document.querySelector('[data-campo="imposto_de_renda.possui_dependentes"]');
@@ -1443,6 +1460,51 @@ function adicionarRecolhimentoFGTS() {
   if (!previaData.fgts.recolhimentos_existentes) previaData.fgts.recolhimentos_existentes = [];
   previaData.fgts.recolhimentos_existentes.push({tipo:'DEPOSITO_REGULAR',competencia_inicio:'',competencia_fim:'',valor_total_depositado_brl:0});
   renderRecolhimentosFGTS(); validarPrevia();
+}
+
+// ─── Saldo FGTS a Deduzir (espelha "Saldo e/ou Saque" do PJE-Calc) ───
+function renderSaldosFGTS() {
+  const list = document.getElementById('lista-saldos-fgts');
+  if (!list) return;
+  list.innerHTML = '';
+  const arr = (previaData.fgts || {}).saldos_a_deduzir || [];
+  arr.forEach((s, idx) => {
+    const div = document.createElement('div');
+    div.className = 'fieldgroup';
+    div.style.marginBottom = '6px';
+    div.innerHTML = `
+      <div class="grid-3" style="align-items:end;">
+        <div class="campo">
+          <label>Data <span class="ajuda">(extrato FGTS ou última atualização)</span></label>
+          <input type="text" placeholder="DD/MM/YYYY" value="${s.data||''}"
+            onchange="previaData.fgts.saldos_a_deduzir[${idx}].data=this.value;validarPrevia()">
+        </div>
+        <div class="campo">
+          <label>Valor R$ <span class="ajuda">(saldo a deduzir)</span></label>
+          <input type="number" step="0.01" value="${s.valor_brl||''}"
+            onchange="previaData.fgts.saldos_a_deduzir[${idx}].valor_brl=parseFloat(this.value);validarPrevia()">
+        </div>
+        <div style="display:flex;align-items:flex-end;padding-bottom:4px;">
+          <button onclick="previaData.fgts.saldos_a_deduzir.splice(${idx},1);renderSaldosFGTS();validarPrevia()"
+            style="color:#e74c3c;background:none;border:1px solid #e74c3c;border-radius:4px;padding:4px 8px;cursor:pointer;">
+            ✕ Remover
+          </button>
+        </div>
+      </div>
+    `;
+    list.appendChild(div);
+  });
+}
+
+function adicionarSaldoFGTS() {
+  if (!previaData.fgts) previaData.fgts = {};
+  if (!previaData.fgts.saldos_a_deduzir) previaData.fgts.saldos_a_deduzir = [];
+  previaData.fgts.saldos_a_deduzir.push({data:'', valor_brl: 0});
+  previaData.fgts.deduzir_do_fgts = true; // marca o checkbox auto ao adicionar
+  // Atualizar checkbox no DOM
+  const cb = document.getElementById('cb-deduzir-fgts');
+  if (cb) cb.checked = true;
+  renderSaldosFGTS(); validarPrevia();
 }
 
 // ─── Honorários ────────────────────────────────────────────────────────

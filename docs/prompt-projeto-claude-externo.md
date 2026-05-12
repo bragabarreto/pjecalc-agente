@@ -239,6 +239,16 @@ TÍQUETE-ALIMENTAÇÃO, VALE TRANSPORTE,
 VALOR PAGO - NÃO TRIBUTÁVEL, VALOR PAGO - TRIBUTÁVEL
 ```
 
+> ⚠️ **NUNCA use `VALOR PAGO - NÃO TRIBUTÁVEL` ou `VALOR PAGO - TRIBUTÁVEL` para
+> representar FGTS já depositado na conta vinculada do empregado.** Essas duas
+> verbas Expresso são para casos diferentes (parcelas pagas pelo empregador
+> diretamente ao trabalhador, fora da folha — ex.: rescisão por liberalidade).
+>
+> Para **dedução de FGTS já depositado** (saldo da conta vinculada do empregado
+> que será descontado do total calculado), use a seção `fgts.saldos_a_deduzir`
+> ou `fgts.recolhimentos_existentes` na seção FGTS (NÃO como verba principal).
+> Ver detalhes na seção `fgts` mais abaixo.
+
 ### `expresso_adaptado`
 Verba não existe literal mas pode adaptar:
 | Verba sentença | expresso_alvo | nome_pjecalc adaptado |
@@ -430,7 +440,28 @@ Incluir apenas se HE com base em jornada extraordinária. Ver doc 05.
   "multa_10_lc110": false,
   "contribuicao_social": false,
   "incidencia_pensao_alimenticia": false,
-  "recolhimentos_existentes": []
+  "recolhimentos_existentes": [
+    // EXEMPLO: lista de depósitos FGTS já efetuados (mês a mês), do extrato anexo
+    // {"competencia_inicio": "08/2023", "competencia_fim": "08/2023", "valor_total_depositado_brl": 98.46, "tipo": "DEPOSITO_REGULAR", "descricao": "Depósito agosto/2023"}
+  ],
+  // ⚠️ IMPORTANTE — Saldo FGTS já depositado a deduzir do total calculado:
+  //
+  // Há DUAS formas equivalentes de informar:
+  //   (a) recolhimentos_existentes — lista mês a mês, ideal quando há extrato detalhado
+  //   (b) saldos_a_deduzir — total único snapshot (data + valor), ideal quando só temos
+  //       o saldo final do extrato (ex.: "saldo atual em DD/MM/AAAA: R$ X")
+  //
+  // NUNCA usar a verba Expresso "VALOR PAGO - NÃO TRIBUTÁVEL" para representar
+  // FGTS já depositado — isso é classificação INCORRETA (essa verba é informada
+  // pelo empregador, não tem cálculo automático). Use saldos_a_deduzir.
+  //
+  // Quando há ambos, recolhimentos_existentes têm precedência (normalizer
+  // auto-gera saldos_a_deduzir a partir do total dos recolhimentos se vazio).
+  "saldos_a_deduzir": [
+    // EXEMPLO: extrato anexo mostra R$ 2.011,49 em 30/06/2025
+    // {"data": "30/06/2025", "valor_brl": 2011.49}
+  ],
+  "deduzir_do_fgts": false   // marcar true se houver saldos_a_deduzir (ou auto)
 },
 "contribuicao_social": {
   "apurar_segurado_devido": true,
