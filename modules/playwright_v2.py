@@ -1358,7 +1358,49 @@ class PlaywrightAutomatorV2:
             for r in v.reflexos:
                 self._configurar_reflexo(v, r)
 
+        # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
+        # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
+        # na LISTAGEM (botão regerarOcorrencias com rendered=emModoListagem).
+        # Sem isso a liquidação retorna:
+        #   "O parâmetro Ocorrência de Pagamento foi alterado na página
+        #    Verbas, após a geração das ocorrências da verba X"
+        if verbas_expresso:
+            self._regerar_ocorrencias_verbas()
+
         self.log("Fase 4 concluída")
+
+    def _regerar_ocorrencias_verbas(self) -> None:
+        """Volta à listagem de Verbas e clica Regerar Ocorrências.
+
+        Botão `regerarOcorrencias` (a4j:commandButton, only `rendered=emModoListagem`).
+        Dispara confirm dialog 'Deseja regerar?' que precisa OK.
+        """
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(1500)
+            # Listar botões disponíveis para diagnóstico
+            btn_regerar = self._page.locator(
+                "input[id$=':regerarOcorrencias'], input[id*=':regerarOcorrencias']"
+            )
+            if btn_regerar.count() == 0:
+                # Fallback por value
+                btn_regerar = self._page.locator("input[type='submit'][value='Regerar'], input[type='button'][value='Regerar']")
+            if btn_regerar.count() == 0:
+                self.log("  ⚠ Botão Regerar não encontrado na listagem — pulando regerar")
+                return
+            # Aceitar confirm dialog antes do click
+            self._page.once("dialog", lambda d: d.accept())
+            btn_regerar.first.click(force=True)
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(2000)
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            if sucesso:
+                self.log("  ✓ Ocorrências regeradas em todas as verbas")
+            else:
+                self.log("  ⚠ Regerar disparou mas sem confirmação")
+        except Exception as e:
+            self.log(f"  ⚠ Falha ao regerar ocorrências: {e}")
 
     def _lancar_expresso(self, verbas) -> None:
         """Lança verbas via página Expresso — UMA POR VEZ (padrão Calc Machine).
@@ -1598,45 +1640,10 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(8000)
         self._preencher_form_parametros_verba(v, com_identificacao=False)
 
-        # CRÍTICO (pendência observada 12/05/2026): após alterar parâmetro
-        # "Ocorrência de Pagamento" na página de parâmetros da verba, é
-        # OBRIGATÓRIO clicar "Regerar Ocorrências" antes de salvar. Sem isso,
-        # o PJE-Calc bloqueia a liquidação com:
-        #   "O parâmetro Ocorrência de Pagamento foi alterado na página
-        #    Verbas, após a geração das ocorrências da verba X"
-        # Tentar regerar; se botão não existir, tudo bem (alguns Expresso já
-        # têm ocorrências corretas e o botão pode não aparecer).
-        try:
-            self._clicar("regerarOcorrencias", timeout_ms=3000)
-            self._aguardar_ajax(8000)
-            # PJE-Calc pode mostrar confirm dialog "Deseja regerar as ocorrências?"
-            try:
-                self._clicar("confirmarRegerar", timeout_ms=2000)
-                self._aguardar_ajax(5000)
-            except Exception:
-                pass
-            self.log(f"  ✓ Ocorrências regeradas para '{v.nome_pjecalc}'")
-        except Exception as e:
-            # Tentar via texto da página (botão pode ter id diferente)
-            try:
-                regerou = self._page.evaluate(
-                    """() => {
-                        const btns = [...document.querySelectorAll('input[type="button"], input[type="submit"], a, button')];
-                        for (const b of btns) {
-                            const txt = (b.value || b.textContent || '').replace(/\\s+/g,' ').trim();
-                            if (/^Regerar(\\s+Ocorr|$)/i.test(txt)) {
-                                b.click();
-                                return true;
-                            }
-                        }
-                        return false;
-                    }"""
-                )
-                if regerou:
-                    self.log(f"  ✓ Ocorrências regeradas (via text-match) para '{v.nome_pjecalc}'")
-                    self._aguardar_ajax(8000)
-            except Exception:
-                pass
+        # NOTA (12/05/2026): "Regerar Ocorrências" só existe em modo LISTAGEM
+        # (rendered="#{apresentador.emModoListagem}"). Não está disponível neste
+        # form de parâmetros. Movido para _regerar_ocorrencias_verbas() chamado
+        # após fim do loop de parametrização (fim da Fase 4).
 
         self._clicar("salvar")
         self._aguardar_ajax(8000)
@@ -2499,8 +2506,43 @@ class PlaywrightAutomatorV2:
         liq = self.previa.liquidacao
         if liq.data_de_liquidacao:
             self._preencher("dataDeLiquidacaoInputDate", liq.data_de_liquidacao, obrigatorio=False)
+
+        # Diagnóstico: dumpar radios indicesAcumulados na página atual
+        radios_diag = self._page.evaluate(
+            """() => {
+                return [...document.querySelectorAll('input[type="radio"]')]
+                    .filter(r => (r.id||'').includes('indicesAcumulados') || (r.name||'').includes('indicesAcumulados'))
+                    .map(r => {
+                        const label = document.querySelector(`label[for="${r.id.replace(/[^\\w-]/g, c => '\\\\' + c)}"]`);
+                        return {id: r.id, name: r.name, value: r.value, label: label ? label.textContent.replace(/\\s+/g, ' ').trim() : null};
+                    });
+            }"""
+        )
+        if radios_diag:
+            self.log(f"  📋 Radios indicesAcumulados disponíveis: {radios_diag}")
+
         if liq.indices_acumulados:
             self._marcar_radio("indicesAcumulados", liq.indices_acumulados)
+            # Fallback: se ainda não marcou, clicar no primeiro radio (default = MES_SUBSEQUENTE_AO_VENCIMENTO)
+            try:
+                already_checked = self._page.evaluate(
+                    """() => [...document.querySelectorAll('input[type="radio"]')]
+                        .filter(r => (r.id||'').includes('indicesAcumulados') || (r.name||'').includes('indicesAcumulados'))
+                        .some(r => r.checked)"""
+                )
+                if not already_checked:
+                    clicou = self._page.evaluate(
+                        """() => {
+                            const r = [...document.querySelectorAll('input[type="radio"]')]
+                                .filter(r => (r.id||'').includes('indicesAcumulados') || (r.name||'').includes('indicesAcumulados'))[0];
+                            if (r) { r.click(); return r.value; }
+                            return null;
+                        }"""
+                    )
+                    if clicou:
+                        self.log(f"  ✓ radio indicesAcumulados marcado no primeiro (fallback): {clicou}")
+            except Exception as e:
+                self.log(f"  ⚠ fallback indicesAcumulados: {e}")
 
         # ── 14d. Clicar Liquidar e aguardar (não-bloqueante, padrão Calc Machine) ──
         self.log("  → Clicando no botão de liquidar...")
