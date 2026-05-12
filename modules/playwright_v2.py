@@ -364,13 +364,32 @@ class PlaywrightAutomatorV2:
                 return
         self.log(f"  ✓ select {dom_id} = {valor}")
 
-    def _clicar(self, dom_id: str) -> None:
-        sel = f"[id$='{dom_id}']"
-        loc = self._page.locator(sel)
-        if loc.count() == 0:
-            raise RuntimeError(f"Botão não encontrado: {dom_id}")
-        loc.first.click()
-        self.log(f"  ✓ click {dom_id}")
+    def _clicar(self, dom_id: str, timeout_ms: int = 8000) -> None:
+        """Clica botão por sufixo de DOM ID. Aguarda elemento ficar visível
+        antes de clicar (timeout 8s default). Padrão Calc Machine: tenta
+        cascata de seletores quando o ID exato não existe.
+        """
+        # Cascata de seletores: input[id$=':NAME'], input[id$='NAME'], a[id$=...]
+        selectors = [
+            f"input[id$=':{dom_id}']",
+            f"input[id$='{dom_id}']",
+            f"a[id$=':{dom_id}']",
+            f"button[id$=':{dom_id}']",
+            f"[id$=':{dom_id}']",
+            f"[id$='{dom_id}']",
+        ]
+        for sel in selectors:
+            loc = self._page.locator(sel)
+            if loc.count() > 0:
+                try:
+                    loc.first.wait_for(state="visible", timeout=timeout_ms)
+                    loc.first.click()
+                    self.log(f"  ✓ click {dom_id}")
+                    return
+                except Exception as e:
+                    # Tenta próximo seletor
+                    continue
+        raise RuntimeError(f"Botão não encontrado: {dom_id}")
 
     def _aguardar_ajax(self, timeout_ms: int = 10000) -> None:
         try:
@@ -1186,11 +1205,20 @@ class PlaywrightAutomatorV2:
             if hist.tipo_valor == TipoValor.INFORMADO:
                 self._preencher("valorParaBaseDeCalculo", _fmt_br(hist.valor_brl), obrigatorio=False)
             else:
-                # CALCULADO: quantidade + base_referencia + cmdGerarOcorrencias
+                # CALCULADO: quantidade + base_referencia
                 self._preencher("quantidade", _fmt_br(hist.calculado.quantidade_pct), obrigatorio=False)
                 self._selecionar("baseDeReferencia", hist.calculado.base_referencia)
+
+            # CRÍTICO (descoberto via Calc Machine 12/05/2026): tanto INFORMADO
+            # quanto CALCULADO precisam clicar "Gerar Ocorrências" antes do save.
+            # Sem isso, PJE-Calc retorna 'Deve haver pelo menos um registro de Ocorrências.'
+            try:
                 self._clicar("cmdGerarOcorrencias")
-                self._aguardar_ajax()
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                self.log(f"  ✓ Ocorrências geradas para '{hist.nome}'")
+            except Exception as e:
+                self.log(f"  ⚠ Falha ao gerar ocorrências '{hist.nome}': {e}")
 
             self._clicar("salvar")
             self._aguardar_ajax(8000)
@@ -1401,13 +1429,16 @@ class PlaywrightAutomatorV2:
                 self._aguardar_ajax(2000)
             self._marcar_radio("tipoDeDivisor", f.divisor.tipo.value)
             self._aguardar_ajax(2000)
-            if f.divisor.tipo.value == "OUTRO_VALOR":
-                self._preencher("outroValorDoDivisor", str(f.divisor.valor))
-            self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
+            # Só preenche outroValorDoDivisor se valor explicitamente fornecido.
+            # JSONs sem divisor (FGTS sobre rem.: só multiplicador 0.08) têm
+            # divisor.valor=None — não tentar preencher (campo nem renderiza).
+            if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
+                self._preencher("outroValorDoDivisor", _fmt_br(f.divisor.valor), obrigatorio=False)
+            self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador), obrigatorio=False)
             self._marcar_radio("tipoDaQuantidade", f.quantidade.tipo.value)
             self._aguardar_ajax(2000)
-            if f.quantidade.tipo.value == "INFORMADA":
-                self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor))
+            if f.quantidade.tipo.value == "INFORMADA" and f.quantidade.valor is not None:
+                self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor), obrigatorio=False)
 
         # 3. Período
         self._preencher("periodoInicialInputDate", p.periodo_inicio)
@@ -2001,8 +2032,26 @@ class PlaywrightAutomatorV2:
 
         for i, p in enumerate(ferias.periodos):
             self.log(f"  → Período {i+1}: {p.periodo_aquisitivo_inicio} → {p.periodo_aquisitivo_fim}")
-            self._clicar("incluir")
+            # Aguardar página renderizar completamente (pode ter atraso JSF)
+            try:
+                self._page.wait_for_selector(
+                    "input[id$=':incluir'][value], input[type='button'][id$=':incluir']",
+                    state="visible", timeout=15000
+                )
+            except Exception:
+                # Diagnóstico
+                self._diagnostico_pagina(contexto="pré-incluir Férias")
+                # Re-navegar para forçar render
+                self._navegar_menu("li_calculo_ferias")
+                self._aguardar_ajax(10000)
+                self._page.wait_for_timeout(2000)
+            try:
+                self._clicar("incluir")
+            except Exception as e:
+                self.log(f"  ⚠ Pulando período {i+1}: {e}")
+                continue
             self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(1500)
 
             self._preencher("periodoAquisitivoInicialInputDate", p.periodo_aquisitivo_inicio)
             self._preencher("periodoAquisitivoFinalInputDate", p.periodo_aquisitivo_fim)
@@ -2027,8 +2076,16 @@ class PlaywrightAutomatorV2:
                     except Exception as e:
                         self.log(f"    ⚠ gozo {j}: {e}")
 
-            self._clicar("salvar")
-            self._aguardar_ajax(8000)
+            try:
+                self._clicar("salvar")
+                self._aguardar_ajax(8000)
+                sucesso = self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+                if sucesso:
+                    self.log(f"  ✓ Período {i+1} de férias salvo")
+                else:
+                    self._diagnostico_pagina(contexto=f"pós-save Período {i+1} Férias")
+            except Exception as e:
+                self.log(f"  ⚠ Falha ao salvar período {i+1}: {e}")
 
         self.log("Fase 7 concluída")
 
@@ -2075,33 +2132,57 @@ class PlaywrightAutomatorV2:
         self._marcar_radio("aliquotaEmpregado", cs.aliquota_segurado)
         self._marcar_radio("aliquotaEmpregador", cs.aliquota_empregador)
         if cs.aliquota_empregador == "FIXA":
-            self._preencher("aliquotaEmpresaFixa", str(cs.aliquota_empresa_fixa_pct or 20))
-            self._preencher("aliquotaRatFixa", str(cs.aliquota_rat_fixa_pct or 1))
-            self._preencher("aliquotaTerceirosFixa", str(cs.aliquota_terceiros_fixa_pct or 5.8))
-        self._clicar("salvar")
-        self._aguardar_ajax(8000)
+            self._preencher("aliquotaEmpresaFixa", str(cs.aliquota_empresa_fixa_pct or 20), obrigatorio=False)
+            self._preencher("aliquotaRatFixa", str(cs.aliquota_rat_fixa_pct or 1), obrigatorio=False)
+            self._preencher("aliquotaTerceirosFixa", str(cs.aliquota_terceiros_fixa_pct or 5.8), obrigatorio=False)
+        try:
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+        except Exception as e:
+            self.log(f"  ⚠ save CS falhou: {e}")
 
-        # Sub-página parametrizar-inss para vinculação histórico→CS
-        self._clicar("ocorrencias")
-        self._aguardar_ajax(8000)
-        self._clicar("recuperarDevidos")
-        self._aguardar_ajax(5000)
-        self._clicar("copiarDevidos")
-        self._aguardar_ajax(5000)
+        # Sub-página parametrizar-inss SÓ se CS está realmente sendo apurada.
+        # Casos como Santiago (apurar_segurado_devido=false) não precisam
+        # rodar Ocorrências/Recuperar/Copiar — esses controles podem nem existir.
+        if cs.apurar_segurado_devido or cs.apurar_salarios_pagos:
+            try:
+                self._clicar("ocorrencias")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                try:
+                    self._clicar("recuperarDevidos")
+                    self._aguardar_ajax(5000)
+                except Exception as e:
+                    self.log(f"  ⚠ recuperarDevidos indisponível: {e}")
+                try:
+                    self._clicar("copiarDevidos")
+                    self._aguardar_ajax(5000)
+                except Exception as e:
+                    self.log(f"  ⚠ copiarDevidos indisponível: {e}")
 
-        # Modo manual_por_periodo: aplicar Lote por intervalo
-        if cs.vinculacao_historicos_devidos.modo == "manual_por_periodo":
-            for intv in cs.vinculacao_historicos_devidos.intervalos:
-                self._preencher("dataInicialInputDate", intv.competencia_inicial)
-                self._preencher("dataFinalInputDate", intv.competencia_final)
-                self._preencher("salariosPago", _fmt_br(intv.valor_base_brl))
-                # Click "Alterar" do lote
-                self._clicar("aplicar")
-                self._aguardar_ajax()
+                # Modo manual_por_periodo: aplicar Lote por intervalo
+                if cs.vinculacao_historicos_devidos.modo == "manual_por_periodo":
+                    for intv in cs.vinculacao_historicos_devidos.intervalos:
+                        try:
+                            self._preencher("dataInicialInputDate", intv.competencia_inicial)
+                            self._preencher("dataFinalInputDate", intv.competencia_final)
+                            self._preencher("salariosPago", _fmt_br(intv.valor_base_brl))
+                            self._clicar("aplicar")
+                            self._aguardar_ajax()
+                        except Exception as e:
+                            self.log(f"  ⚠ intervalo CS {intv.competencia_inicial}: {e}")
 
-        self._clicar("salvar")
-        self._aguardar_ajax(8000)
-        self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+                try:
+                    self._clicar("salvar")
+                    self._aguardar_ajax(8000)
+                    self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+                except Exception as e:
+                    self.log(f"  ⚠ save ocorrências CS: {e}")
+            except Exception as e:
+                self.log(f"  ⚠ Sub-página Ocorrências CS indisponível: {e}")
+        else:
+            self.log("  ⏭ CS sem apuração — pulando ocorrências")
         self.log("Fase 9 concluída")
 
     def fase_imposto_de_renda(self) -> None:
@@ -2132,26 +2213,58 @@ class PlaywrightAutomatorV2:
         self.log("Fase 11 — Honorários")
         self._navegar_menu("li_calculo_honorarios")
         for h in self.previa.honorarios:
-            self._clicar("incluir")
+            self.log(f"  → Processando honorário: {h.tipo_honorario} / {h.tipo_devedor}")
+            try:
+                self._clicar("incluir")
+            except Exception as e:
+                self.log(f"  ⚠ Botão Incluir indisponível para honorário: {e}")
+                continue
             self._aguardar_ajax(5000)
-            self._selecionar("tpHonorario", h.tipo_honorario)
-            self._preencher("descricao", h.descricao)
+            self._page.wait_for_timeout(1000)
+
+            # Selecionar tipo (campo obrigatório)
+            try:
+                self._selecionar("tpHonorario", h.tipo_honorario)
+                self._aguardar_ajax(2000)
+            except Exception as e:
+                self.log(f"  ⚠ select tpHonorario: {e} — pulando este honorário")
+                continue
+
+            # Descrição: usar valor explícito ou gerar default a partir do tipo/devedor
+            descricao_final = (h.descricao or "").strip() or f"{h.tipo_honorario} / {h.tipo_devedor}"
+            self._preencher("descricao", descricao_final, obrigatorio=False)
+
             self._marcar_radio("tipoDeDevedor", h.tipo_devedor)
+            self._aguardar_ajax(1500)
             self._marcar_radio("tipoValor", h.tipo_valor.value)
+            self._aguardar_ajax(2000)
+
             if h.tipo_valor.value == "CALCULADO":
-                self._preencher("aliquota", _fmt_br(h.aliquota_pct))
-                self._selecionar("baseParaApuracao", h.base_para_apuracao)
+                if h.aliquota_pct is not None:
+                    # PJE-Calc espera percentual em formato decimal (15.0 não 0.15)
+                    # O JSON pode vir como 0.15 ou 15 — normalizar
+                    pct = h.aliquota_pct * 100 if h.aliquota_pct < 1 else h.aliquota_pct
+                    self._preencher("aliquota", _fmt_br(pct), obrigatorio=False)
+                if h.base_para_apuracao:
+                    self._selecionar("baseParaApuracao", h.base_para_apuracao, obrigatorio=False)
             else:
-                self._preencher("aliquota", _fmt_br(h.valor_informado_brl))
-            self._preencher("nomeCredor", h.credor.nome)
-            self._marcar_radio("tipoDocumentoFiscalCredor", h.credor.doc_fiscal_tipo.value)
-            self._preencher("numeroDocumentoFiscalCredor", h.credor.doc_fiscal_numero)
+                if h.valor_informado_brl is not None:
+                    self._preencher("aliquota", _fmt_br(h.valor_informado_brl), obrigatorio=False)
+
+            # Credor: campos opcionais — usar default reclamado se ausente
+            if h.credor:
+                self._preencher("nomeCredor", h.credor.nome, obrigatorio=False)
+                self._marcar_radio("tipoDocumentoFiscalCredor", h.credor.doc_fiscal_tipo.value)
+                self._preencher("numeroDocumentoFiscalCredor", h.credor.doc_fiscal_numero, obrigatorio=False)
             self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
+
             self._clicar("salvar")
             self._aguardar_ajax(8000)
             sucesso = self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
             if sucesso:
                 self.log(f"  ✓ Honorário {h.tipo_honorario}/{h.tipo_devedor} salvo com sucesso")
+            else:
+                self._diagnostico_pagina(contexto=f"pós-save Honorário {h.tipo_honorario}/{h.tipo_devedor}")
         self.log("Fase 11 concluída")
 
     def fase_custas_judiciais(self) -> None:
