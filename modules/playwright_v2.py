@@ -138,11 +138,17 @@ class PlaywrightAutomatorV2:
                 self.log(f"⚠ {nome} falhou: {type(e).__name__}: {str(e)[:200]}")
                 self.log(f"   (continuando com próxima fase para tentar Liquidação)")
 
-        # Fases (sequência ordenada, cada uma graceful)
+        # ── Sequência de fases — ordem crítica ────────────────────────────────
+        # IMPORTANTE: Fases 5–13 devem rodar ANTES de Fase 4 (Verbas/Expresso).
+        # Motivo: _lancar_expresso() salva o lote e o Seam cria uma NOVA conversation
+        # (ex: conv=6 → conv=42). Na nova conv, apenas CalculoMB é inicializado.
+        # FgtsMB, InssMB, IrpfMB, HonorariosMB etc. NÃO se inicializam em conv=42
+        # (renderizam páginas-frame vazias sem campos reais).
+        # Na conv=6 original (criada pelo fluxo "Novo"), TODOS os beans estão ativos.
+        # Por isso rodamos FGTS/CS/IRPF/Honorários/Custas/Correção antes do Expresso.
         _run_fase("Fase 1 (Processo)", self.fase_processo)
         _run_fase("Fase 2 (Parâmetros)", self.fase_parametros_calculo)
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
-        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
         _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
@@ -152,6 +158,8 @@ class PlaywrightAutomatorV2:
         _run_fase("Fase 11 (Honorários)", self.fase_honorarios, bool(self.previa.honorarios))
         _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
         _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
+        # Expresso/Manual é a ÚLTIMA fase substantiva — muda conv para conv_pós
+        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
 
         # Liquidação — tenta mesmo com fases parciais
         try:
@@ -838,32 +846,20 @@ class PlaywrightAutomatorV2:
         for v in verbas_manual:
             self._lancar_verba_manual(v)
 
-        # 4c. Pós-Expresso: Verificar/recuperar contexto Seam.
-        # Bug PJE-Calc 2.15.1: Expresso save muda conversationId (ex: 6→47).
-        # Na nova conversation, verba-calculo.jsf pode ter NPE em carregarBasesParaPrincipal.
-        # IMPORTANTE: NÃO navegar para principal.jsf — isso DESTRÓI o contexto de conv=47.
-        # Estratégia:
-        #   1. Tentar reabrir via Recentes (cria nova conv limpa) — só se Recentes não estiver vazia
-        #   2. Se Recentes vazia (sessão nova), ficar em conv=47 e ir direto às fases seguintes
-        #      sem visitar principal.jsf
-        #   3. verba-calculo.jsf pode NPE — isso é tolerado; FGTS/CS/Honorários em conv=47
-        #      devem funcionar se não navegarmos para principal.jsf
+        # 4c. Pós-Expresso: verificar contexto Seam para ajuste de parâmetros de verbas.
+        # Bug PJE-Calc 2.15.1: Expresso save muda conversationId (ex: 6→42).
+        # Na nova conv, verba-calculo.jsf pode ter NPE em carregarBasesParaPrincipal.
+        # NOTA: FGTS/CS/IRPF/Honorários/Custas/Correção já rodaram antes do Expresso
+        # na conv=6 original — não precisamos mais nos preocupar com eles aqui.
+        # Só precisamos de verba-calculo.jsf para configurar parâmetros pós-Expresso.
         if verbas_expresso:
             # Pós-Expresso: Seam criou nova conversation (ex: conv=6 → conv=42).
-            # A nova conv pode não ter os beans inicializados via fluxo normal de
-            # "abertura de cálculo" — precisamos forçar a inicialização navegando
-            # para calculo.jsf?conversationId=42 (CLAUDE.md, Correção implementada, passo 2).
-            #
-            # NOTA CRÍTICA (aprendida em 2026-05-12): conv pré-Expresso (conv=6) renderiza
-            # páginas SEM CONTEÚDO — apenas frame com Salvar/Ocorrências. Não usar conv=6
-            # para FGTS/CS/Honorários.
+            # Forçar inicialização via calculo.jsf?conversationId={nova_conv}.
             ok = False
-
-            # Passo A: Forçar inicialização do bean Seam em conv pós-Expresso
             _conv_pos = self._calculo_conversation_id
             if _conv_pos:
                 try:
-                    self.log(f"  → Inicializando beans Seam: calculo.jsf?conversationId={_conv_pos}")
+                    self.log(f"  → Inicializando contexto pós-Expresso: calculo.jsf?conversationId={_conv_pos}")
                     url_calc = f"{self.pjecalc_url}/pages/calculo/calculo.jsf?conversationId={_conv_pos}"
                     self._page.goto(url_calc, wait_until="domcontentloaded", timeout=15000)
                     self._aguardar_ajax(10000)
@@ -875,20 +871,19 @@ class PlaywrightAutomatorV2:
                             url: location.href.slice(-60),
                             tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
                             tem_form: !!document.getElementById('formulario'),
-                            n_inputs: document.querySelectorAll('input,select').length,
                             n_fields: document.querySelectorAll('input[type=text],input[type=radio],input[type=checkbox],select').length
                         };
                     }""")
                     self.log(f"  [DIAG-seam-init] calculo.jsf em conv={_conv_pos}: {_diag_init}")
                     if not _diag_init['tem_500'] and _diag_init['n_fields'] > 5:
-                        self.log(f"  ✓ Bean Seam inicializado em conv={self._calculo_conversation_id} — FGTS/CS/Honorários devem funcionar")
+                        self.log(f"  ✓ Contexto pós-Expresso ok: conv={self._calculo_conversation_id}")
                         ok = True
                     else:
                         self.log(f"  ⚠ calculo.jsf sem campos em conv={_conv_pos} — tentando Recentes")
                 except Exception as _e_init:
-                    self.log(f"  ⚠ Erro ao inicializar bean Seam: {_e_init}")
+                    self.log(f"  ⚠ Erro ao inicializar contexto pós-Expresso: {_e_init}")
 
-            # Passo B: Tentar Recentes SOMENTE se inicialização falhou e tiver itens
+            # Tentativa B: reabrir via Recentes (só se inicialização falhou)
             if not ok:
                 try:
                     _recentes_count = self._page.evaluate("""() => {
@@ -909,7 +904,7 @@ class PlaywrightAutomatorV2:
                 except Exception as _e_rec:
                     self.log(f"  ⚠ Erro ao checar Recentes: {_e_rec}")
 
-            # Navegar para verbas para ajuste de parâmetros pós-Expresso
+            # Navegar para listagem de verbas para ajuste de parâmetros pós-Expresso
             self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
@@ -917,8 +912,7 @@ class PlaywrightAutomatorV2:
                 """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
             )
             if not tem_listagem:
-                self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros de verba serão pulados")
-                self.log(f"  ℹ Usando conv={self._calculo_conversation_id} para FGTS/CS/Honorários")
+                self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros pós-Expresso serão pulados")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
@@ -1756,6 +1750,16 @@ class PlaywrightAutomatorV2:
     def fase_contribuicao_social(self) -> None:
         self.log("Fase 9 — Contribuição Social")
         self._navegar_menu("li_calculo_inss")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        # Render guard (mesma lógica do FGTS: frame vazia = bean não inicializado)
+        _n_cs = self._page.evaluate(
+            """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
+        )
+        self.log(f"  [DIAG-cs] radios+checkboxes={_n_cs}")
+        if _n_cs == 0:
+            self.log("  ⚠ Fase 9 CS: página sem campos — pulando")
+            return
         cs = self.previa.contribuicao_social
         self._marcar_checkbox("apurarInssSeguradoDevido", cs.apurar_segurado_devido)
         self._marcar_checkbox("cobrarDoReclamanteDevido", cs.cobrar_do_reclamante_devido)
@@ -1797,6 +1801,15 @@ class PlaywrightAutomatorV2:
     def fase_imposto_de_renda(self) -> None:
         self.log("Fase 10 — IRPF")
         self._navegar_menu("li_calculo_irpf")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        _n_ir = self._page.evaluate(
+            """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
+        )
+        self.log(f"  [DIAG-irpf] radios+checkboxes={_n_ir}")
+        if _n_ir == 0:
+            self.log("  ⚠ Fase 10 IRPF: página sem campos — pulando")
+            return
         ir = self.previa.imposto_de_renda
         self._marcar_checkbox("apurarImpostoRenda", ir.apurar_irpf)
         self._marcar_checkbox("considerarTributacaoEmSeparado", ir.considerar_tributacao_em_separado_rra)
@@ -1820,6 +1833,17 @@ class PlaywrightAutomatorV2:
     def fase_honorarios(self) -> None:
         self.log("Fase 11 — Honorários")
         self._navegar_menu("li_calculo_honorarios")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        # Verificar que a listagem de honorários renderizou (tem botão Incluir)
+        _tem_incluir = self._page.evaluate(
+            """() => !!(document.querySelector('input[id$=incluir]') ||
+               document.querySelector('input[value=Incluir]') ||
+               document.querySelector('a[id$=incluir]'))"""
+        )
+        if not _tem_incluir:
+            self.log("  ⚠ Fase 11 Honorários: página sem botão Incluir — pulando")
+            return
         for h in self.previa.honorarios:
             self._clicar("incluir")
             self._aguardar_ajax(5000)
@@ -1843,6 +1867,15 @@ class PlaywrightAutomatorV2:
     def fase_custas_judiciais(self) -> None:
         self.log("Fase 12 — Custas Judiciais")
         self._navegar_menu("li_calculo_custas_judiciais")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        _n_cst = self._page.evaluate(
+            """() => document.querySelectorAll('input[type=radio],select').length"""
+        )
+        self.log(f"  [DIAG-custas] campos={_n_cst}")
+        if _n_cst == 0:
+            self.log("  ⚠ Fase 12 Custas: página sem campos — pulando")
+            return
         c = self.previa.custas_judiciais
         self._selecionar("baseParaCustasCalculadas", c.base_para_calculadas)
         self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamante", c.custas_conhecimento_reclamante)
@@ -1855,6 +1888,15 @@ class PlaywrightAutomatorV2:
     def fase_correcao_juros_multa(self) -> None:
         self.log("Fase 13 — Correção, Juros e Multa")
         self._navegar_menu("li_calculo_correcao_juros_multa")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        _n_cor = self._page.evaluate(
+            """() => document.querySelectorAll('select').length"""
+        )
+        self.log(f"  [DIAG-correcao] selects={_n_cor}")
+        if _n_cor == 0:
+            self.log("  ⚠ Fase 13 Correção: página sem campos — pulando")
+            return
         c = self.previa.correcao_juros_multa
         self._selecionar("indiceTrabalhista", c.indice_trabalhista)
         self._selecionar("juros", c.juros)
@@ -1971,12 +2013,69 @@ class PlaywrightAutomatorV2:
         _conv_pos_liq = self._calculo_conversation_id
         self.log(f"  [DIAG-liq] conv_id pós-liquidação: {_conv_pos_liq}")
 
-        # ── 14d. Navegar para Exportar via URL nav direto (mais confiável)
-        # EVITAR sidebar JS click para export: Seam pode ter criado nova conv
-        # após liquidação onde calculoAberto.calculo = null (→ NPE Java:244).
-        # URL nav para exportacao.jsf com conv pós-liquidação é mais seguro.
+        # ── 14d. Navegar para Exportar ─────────────────────────────────────────
+        # ESTRATÉGIA: sidebar PRIMEIRO (enquanto ainda estamos na página de liquidação
+        # que tem o contexto Seam correto com calculoAberto inicializado).
+        # URL nav direto causa NPE Java:244 porque exportacao.jsf abre nova conv
+        # sem calculoAberto. Sidebar navega dentro da conv ativa.
+
+        def _tentar_sidebar_exportar() -> str | None:
+            """Tenta clicar Exportar via sidebar; retorna chave-diagnóstico ou None."""
+            resultado = self._page.evaluate(
+                """() => {
+                    const li1 = document.getElementById('li_operacoes_exportar');
+                    if (li1) { const a = li1.querySelector('a'); if (a) { a.click(); return 'li_operacoes_exportar'; } }
+                    const links = [...document.querySelectorAll('a')];
+                    for (const a of links) {
+                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                        const li = a.closest('li');
+                        if (txt === 'Exportar' && li && li.id && li.id.includes('operacoes')) {
+                            a.click(); return 'text-li-operacoes';
+                        }
+                    }
+                    for (const a of links) {
+                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                        if (txt === 'Exportar') { a.click(); return 'text-any:' + (a.id || 'noId').slice(0,30); }
+                    }
+                    return null;
+                }"""
+            )
+            return resultado
+
+        def _verificar_exportacao_ok() -> dict:
+            return self._page.evaluate("""() => {
+                const body = document.body?.textContent || '';
+                return {
+                    url: location.href.slice(-70),
+                    tem_form: !!document.getElementById('formulario'),
+                    tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
+                    tem_export_btn: !!(document.querySelector('input[id$=exportar]') ||
+                        document.querySelector('input[value=Exportar]')),
+                    tem_erro_5: body.includes('Erro: 5') || body.includes('erro: 5')
+                };
+            }""")
+
         nav_exp = None
-        if _conv_pos_liq:
+
+        # 1ª tentativa: sidebar estando na página de resultado da liquidação
+        self.log("  → Tentando nav Exportar via sidebar (pós-liquidação)...")
+        try:
+            nav_exp = _tentar_sidebar_exportar()
+            if nav_exp:
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(2000)
+                _diag_exp = _verificar_exportacao_ok()
+                self.log(f"  [DIAG-exp] sidebar={nav_exp} {_diag_exp}")
+                if _diag_exp['tem_500'] or _diag_exp['tem_erro_5']:
+                    self.log("  ⚠ Sidebar→Exportar retornou erro (NPE?) — tentando URL nav")
+                    nav_exp = None  # vai tentar URL nav
+        except Exception as e:
+            self.log(f"  ⚠ Sidebar exportar erro: {e}")
+            nav_exp = None
+
+        # 2ª tentativa: URL nav com conv pós-liquidação
+        if not nav_exp and _conv_pos_liq:
+            self.log(f"  → Tentando URL nav exportacao.jsf?conversationId={_conv_pos_liq}")
             url_exp = (
                 f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
                 f"?conversationId={_conv_pos_liq}"
@@ -1985,49 +2084,33 @@ class PlaywrightAutomatorV2:
                 self._page.goto(url_exp, wait_until="domcontentloaded", timeout=15000)
                 self._aguardar_ajax(15000)
                 self._page.wait_for_timeout(1500)
-                # Verificar se página renderizou sem 500
-                _diag_exp = self._page.evaluate("""() => {
-                    const body = document.body?.textContent || '';
-                    return {
-                        url: location.href.slice(-60),
-                        tem_form: !!document.getElementById('formulario'),
-                        tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
-                        tem_export_btn: !!document.querySelector('input[id$=exportar]') ||
-                            !!document.querySelector('input[value=Exportar]')
-                    };
-                }""")
-                self.log(f"  [DIAG-exp] {_diag_exp}")
-                if not _diag_exp['tem_500'] and _diag_exp['tem_form']:
+                _diag_exp = _verificar_exportacao_ok()
+                self.log(f"  [DIAG-exp] url-nav {_diag_exp}")
+                if not _diag_exp['tem_500'] and not _diag_exp['tem_erro_5'] and _diag_exp['tem_form']:
                     nav_exp = "url-nav-direto"
             except Exception as e:
                 self.log(f"  ⚠ URL nav Exportar: {e}")
 
+        # 3ª tentativa: dados_do_calculo → sidebar novamente (re-inicializa beans)
         if not nav_exp:
-            # Fallback: sidebar JS click
-            self.log("  → Tentando nav Exportar via sidebar JS")
-            nav_exp = self._page.evaluate(
-                """() => {
-                    const li1 = document.getElementById('li_operacoes_exportar');
-                    if (li1) { const a = li1.querySelector('a'); if (a) { a.click(); return 'li_operacoes_exportar'; } }
-                    const links = [...document.querySelectorAll('a')];
-                    for (const a of links) {
-                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
-                        const li = a.closest('li');
-                        if (txt === 'Exportar' && li && li.id && li.id.includes('operacoes')) { a.click(); return 'text-li-operacoes'; }
-                    }
-                    for (const a of links) {
-                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
-                        if (txt === 'Exportar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) { a.click(); return 'text-any'; }
-                    }
-                    return null;
-                }"""
-            )
-            if nav_exp:
-                self._aguardar_ajax(15000)
-                self._page.wait_for_timeout(2000)
+            self.log("  → Tentando reabrir cálculo via Dados do Cálculo + sidebar Exportar")
+            try:
+                self._navegar_menu("li_calculo_dados_do_calculo")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                _sid3 = _tentar_sidebar_exportar()
+                if _sid3:
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+                    _diag3 = _verificar_exportacao_ok()
+                    self.log(f"  [DIAG-exp] dados+sidebar={_sid3} {_diag3}")
+                    if not _diag3['tem_500'] and not _diag3['tem_erro_5']:
+                        nav_exp = f"dados+sidebar:{_sid3}"
+            except Exception as e:
+                self.log(f"  ⚠ Tentativa 3 (dados+sidebar): {e}")
 
         if not nav_exp:
-            raise RuntimeError("Sidebar 'Exportar' não localizado")
+            raise RuntimeError("Exportar não localizado após 3 tentativas (sidebar, URL-nav, dados+sidebar)")
         self.log(f"  ✓ Navegação Exportar via: {nav_exp}")
 
         # ── 14e. Clicar Exportar e capturar .PJC ───────────────────────────
