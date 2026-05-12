@@ -265,6 +265,63 @@ Para configurar um reflexo (ex.: "Aviso Prévio sobre Horas Extras"):
 - Correção anterior do CLAUDE.md afirmava que "apenas ~27 verbas visíveis" e exigia scroll — INCORRETO no PJE-Calc Cidadão TRT7. Sem scroll necessário.
 - (Nota: Multa 467 NÃO é verba Expresso — é checkbox FGTS `multaDoArtigo467` + reflexa automática na aba Verbas.)
 
+### Exportar .PJC — captura via listener pré-clique (confirmado 12/05/2026)
+
+O fluxo real de exportação no PJE-Calc (verificado inspecionando `exportacao.xhtml`):
+
+1. Clicar botão "Exportar" (`a4j:commandButton id="exportar"`) → AJAX re-render (text/xml, ~28KB)
+2. O AJAX re-render inclui `<s:span rendered="#{downloadDisponivel}">` com `linkDownloadArquivo`
+   e um **`<script>` inline** que auto-dispara `jsfcljs(form, {'formulario:linkDownloadArquivo':...}, '')`
+   **imediatamente** durante o processamento do re-render (antes de qualquer código Python poder reagir)
+3. O browser executa o script → POST para exportacao.jsf → ZIP bytes → Playwright emite evento `"download"`
+
+**CRÍTICO**: registrar `page.on("download", ...)` e `page.on("response", ...)` **ANTES** de clicar
+Exportar. O auto-jsfcljs dispara durante o AJAX, o evento `download` já foi emitido antes que qualquer
+polling nosso execute. O código antigo (Fase A com `expect_response`, Fase B/E com poll por
+`linkDownloadArquivo`) perdia o evento por chegar tarde.
+
+Implementação correta (em `_exportar_pjc()`):
+```python
+_dl_data: list[bytes] = []
+self._page.on("download", lambda dl: _dl_data.append(pathlib.Path(dl.path()).read_bytes()))
+self._page.on("response", _on_response)  # também captura ZIP via HTTP
+try:
+    btn.click(force=True)
+    self._page.wait_for_timeout(15000)
+finally:
+    self._page.remove_listener("download", _on_download)
+    self._page.remove_listener("response", _on_response)
+```
+
+Validado: capturou `PROCESSO_..._CALCULO_71_DATA_12052026_HORA_005357.PJC` (8065 bytes) ✅
+
+### Seam EPC FlushMode.MANUAL — cálculos novos NÃO persistem no H2 local (confirmado 12/05/2026)
+
+**Descoberta crítica**: no PJE-Calc Cidadão com banco H2 local, cálculos criados via automação
+("Cálculo > Novo") **nunca aparecem em Buscar/Recentes na mesma sessão** — ou em sessões posteriores.
+
+**Causa raiz**: Seam 2 usa `FlushMode.MANUAL` para o Extended Persistence Context (EPC). A transação
+JTA abrange **toda a conversa Seam** (não por request). Nenhuma entidade é commitada no H2 até que
+`@End` seja disparado explicitamente.
+
+`@End` só ocorre quando um bean retorna um navigation outcome mapeado em `pages.xml` com
+`<end-conversation before-redirect="true"/>` — exemplos: `if-outcome="exportacao"` (chamado por
+`apresentadorExportacao.iniciar()`), `if-outcome="calculo"`, etc.
+
+**Em modo "criação"** (nova conversa Seam após "Cálculo > Novo"):
+- O sidebar NÃO renderiza `li_operacoes_exportar` → `iniciar()` não pode ser chamado pelo menu
+- Force-POST do component ID `formulario:j_id38:2:j_id41:4:j_id46` não funciona (JSF bloqueia
+  ações de componentes não renderizados)
+- Clicar links globais (`li_calculo_novo`, `li_tela_inicial`, `li_tabelas_*`) cria **novas conversas**
+  mas NÃO faz flush do EPC da conversa pai
+
+**Consequência para testes locais**: o fluxo Criar Novo → Preencher → Liquidar → Exportar só pode
+ser validado end-to-end em produção (TRT7) com PostgreSQL. O H2 local retém tudo na memória JTA
+sem commit.
+
+**O que funciona localmente**: abrir cálculo existente via Recentes (duplo-clique) → edit mode → Exportar.
+A conversa Seam em edit mode chama `iniciar()` corretamente via `li_operacoes_exportar`.
+
 ### SSE stream — keepalive obrigatório
 O SSE stream (endpoint `/api/executar/{sessao_id}`) precisa de keepalive a cada 10-15s para evitar
 que o frontend (EventSource) desconecte durante operações longas (browser restart, AJAX pesado).
