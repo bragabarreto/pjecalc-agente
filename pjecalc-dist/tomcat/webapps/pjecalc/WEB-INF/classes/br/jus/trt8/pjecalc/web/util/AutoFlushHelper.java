@@ -17,9 +17,11 @@ import org.jboss.seam.log.Logging;
  *
  * Sem este componente, cálculos criados via "Novo" nunca persistem no H2 porque o
  * Seam EPC usa FlushMode.MANUAL e o @End que dispararia flush só acontece em paths
- * específicos.
+ * específicos (exportacao) que requerem o cálculo já estar no banco — chicken-and-egg.
  *
- * Métodos sem argumentos para compatibilidade com event binding via XML.
+ * Este componente escuta múltiplos eventos Seam e força:
+ *   1) FlushMode.AUTO no EPC sempre que possível
+ *   2) Flush explícito em pontos-chave do ciclo de vida da requisição
  */
 @Name("autoFlushHelper")
 @Scope(ScopeType.APPLICATION)
@@ -30,14 +32,19 @@ public class AutoFlushHelper {
     private static int flushCount = 0;
     private static int eventCount = 0;
 
+    /**
+     * Cobre todos os eventos comuns do ciclo da requisição/conversa em Seam 2.x.
+     * Em qualquer ponto, tenta promover FlushMode para AUTO e flushar.
+     */
     @Observer({
         "org.jboss.seam.beginConversation",
         "org.jboss.seam.beginNestedConversation",
         "org.jboss.seam.endConversation",
         "org.jboss.seam.preRenderView",
-        "org.jboss.seam.afterPhase"
+        "org.jboss.seam.afterPhase",
+        "org.jboss.seam.postSetVariable.entityManager"
     })
-    public void forceFlush() {
+    public void forceFlush(String eventName) {
         eventCount++;
         try {
             EntityManager em = (EntityManager) Component.getInstance("entityManager", false);
@@ -48,12 +55,12 @@ public class AutoFlushHelper {
             }
             em.flush();
             flushCount++;
-            if (flushCount <= 30 || flushCount % 25 == 0) {
-                log.info("[AutoFlushHelper] flush #" + flushCount + " (evt#" + eventCount + ") cur_mode=" + cur);
+            if (flushCount <= 20 || flushCount % 10 == 0) {
+                log.info("[AutoFlushHelper] flush #" + flushCount + " (event evt#" + eventCount + ") FlushMode was " + cur);
             }
         } catch (Throwable t) {
-            if (eventCount <= 10) {
-                log.warn("[AutoFlushHelper] flush falhou: " + t.getClass().getSimpleName() + ": " + t.getMessage());
+            if (eventCount <= 5) {
+                log.warn("[AutoFlushHelper] flush falhou (evt#" + eventCount + "): " + t.getClass().getSimpleName() + ": " + t.getMessage());
             }
         }
     }

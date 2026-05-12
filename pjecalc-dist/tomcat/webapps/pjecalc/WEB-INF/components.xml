@@ -15,8 +15,11 @@
 	<persistence:managed-persistence-context auto-create="true" entity-manager-factory="#{pjeCalc}" name="entityManager"/>
 	<transaction:entity-transaction entity-manager="#{entityManager}"/>
 
-	<!-- AutoFlushHelper: @Name no Java registra; @Observer escuta eventos. Sem XML binding. -->
-
+	<!-- AutoFlushHelper: já registrado via @Name no Java; aqui só ligamos events via XML
+	     porque @Observer no Java não estava disparando. -->
+	<event type="org.jboss.seam.beginConversation"><action execute="#{autoFlushHelper.forceFlush('beginConversation')}"/></event>
+	<event type="org.jboss.seam.endConversation"><action execute="#{autoFlushHelper.forceFlush('endConversation')}"/></event>
+	<event type="org.jboss.seam.preRenderView"><action execute="#{autoFlushHelper.forceFlush('preRenderView')}"/></event>
 
 	<core:resource-loader>
 		<core:bundle-names>
