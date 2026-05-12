@@ -1440,9 +1440,24 @@ class PlaywrightAutomatorV2:
             if f.quantidade.tipo.value == "INFORMADA" and f.quantidade.valor is not None:
                 self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor), obrigatorio=False)
 
-        # 3. Período
-        self._preencher("periodoInicialInputDate", p.periodo_inicio)
-        self._preencher("periodoFinalInputDate", p.periodo_fim)
+        # 3. Período — IDs podem variar (periodoInicial/dataInicio/periodoInicialInputDate)
+        # Tentar variantes em ordem
+        for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
+            try:
+                if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                    self._preencher(sufixo, p.periodo_inicio, obrigatorio=False)
+                    break
+            except Exception:
+                continue
+        else:
+            self.log(f"  ⚠ campo periodoInicial não encontrado — pulando")
+        for sufixo in ("periodoFinalInputDate", "periodoFinal", "dataFimInputDate"):
+            try:
+                if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                    self._preencher(sufixo, p.periodo_fim, obrigatorio=False)
+                    break
+            except Exception:
+                continue
 
         # 4. Características + Ocorrência + Base de Cálculo
         self._marcar_radio("caracteristicaVerba", p.caracteristica.value)
