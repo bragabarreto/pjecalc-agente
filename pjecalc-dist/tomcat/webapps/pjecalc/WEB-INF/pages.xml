@@ -45,12 +45,6 @@
 				<redirect view-id="/pages/principal.xhtml"/>
 			</rule>
 			<rule if="#{not servicoDeCalculo.calculoAberto}" if-outcome="calculo">
-				<!-- end-conversation adicionado 12/05/2026 para forçar flush EPC ao H2
-				     quando salvando fases de um cálculo recém-criado. Sem isso, o
-				     calculoAberto=false (modo criação) causava o save retornar 'calculo'
-				     sem disparar @End → EPC nunca commitava → calc não aparecia em Recentes.
-				     A regra simétrica na linha ~201 (calculoAberto=true) já tinha end-conversation. -->
-				<end-conversation before-redirect="true"/>
 				<raise-event type="SESSION_CLEAN"/>
 				<redirect view-id="/pages/calculo/calculo.xhtml"/>
 			</rule>
