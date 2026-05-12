@@ -114,6 +114,36 @@ def _norm_parametros(p: dict[str, Any]) -> dict[str, Any]:
         p["data_inicio_calculo"] = _norm_data(p["data_inicio_calculo"], is_fim=False)
     if "data_termino_calculo" in p:
         p["data_termino_calculo"] = _norm_data(p["data_termino_calculo"], is_fim=True)
+
+    # Validação cruzada: data_inicio_calculo deve ser >= data_admissao
+    # (regra do PJE-Calc). Se não for, usar data_admissao como início.
+    # Caso típico: usuário especificou MM/YYYY (ex: "08/2023") que virou
+    # 01/08/2023 mas admissão foi 04/08/2023.
+    adm = p.get("data_admissao")
+    ini = p.get("data_inicio_calculo")
+    if isinstance(adm, str) and isinstance(ini, str) and len(adm) == 10 and len(ini) == 10:
+        try:
+            from datetime import datetime as _dt
+            d_adm = _dt.strptime(adm, "%d/%m/%Y")
+            d_ini = _dt.strptime(ini, "%d/%m/%Y")
+            if d_ini < d_adm:
+                p["data_inicio_calculo"] = adm
+        except ValueError:
+            pass
+
+    # Validação cruzada: data_termino_calculo deve ser <= data_demissao
+    # (se houver demissão). Se for maior, usar data_demissao.
+    dem = p.get("data_demissao")
+    fim = p.get("data_termino_calculo")
+    if isinstance(dem, str) and isinstance(fim, str) and len(dem) == 10 and len(fim) == 10:
+        try:
+            from datetime import datetime as _dt
+            d_dem = _dt.strptime(dem, "%d/%m/%Y")
+            d_fim = _dt.strptime(fim, "%d/%m/%Y")
+            if d_fim > d_dem:
+                p["data_termino_calculo"] = dem
+        except ValueError:
+            pass
     return p
 
 
