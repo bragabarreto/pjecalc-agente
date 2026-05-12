@@ -12,6 +12,12 @@
 		</locale-config>
 	</application>
 
+	<!-- Lifecycle: PhaseListener para forçar EPC flush ao H2 após INVOKE_APPLICATION/RENDER_RESPONSE.
+	     Workaround para bug de persistência Seam FlushMode.MANUAL (cálculos novos não persistem). -->
+	<lifecycle>
+		<phase-listener>br.jus.trt8.pjecalc.web.util.FlushPhaseListener</phase-listener>
+	</lifecycle>
+
 	<!-- 
 	<validator>
 		<validator-id>validadorDinamico</validator-id>
