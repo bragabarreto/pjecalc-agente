@@ -57,13 +57,37 @@ def _norm_fgts(fgts: dict[str, Any]) -> dict[str, Any]:
     return fgts
 
 
+# PJE-Calc TipoHonorarioEnum (descoberto via javap em pjecalc-negocio-2.14.0.jar):
+#   ADVOCATICIOS, ASSISTENCIAIS, CONTRATUAIS, PERICIAIS_CONTADOR,
+#   PERICIAIS_DOCUMENTOSCOPIO, PERICIAIS_ENGENHEIRO, PERICIAIS_INTERPRETE,
+#   PERICIAIS_MEDICO, PERICIAIS_OUTROS, SUCUMBENCIAIS, LEILOEIRO
+# Mapeamos valores legacy do agente externo para o nome canônico do PJE-Calc.
 _TIPO_HONORARIO_MAP = {
-    "SUCUMBENCIAIS": "ADVOCATICIO_SUCUMBENCIAL",
-    "SUCUMBENCIAL": "ADVOCATICIO_SUCUMBENCIAL",
-    "CONTRATUAIS": "ADVOCATICIO_CONTRATUAIS",
-    "CONTRATUAL": "ADVOCATICIO_CONTRATUAIS",
-    "PERICIAIS": "PERICIAL",
-    "PERICIAL": "PERICIAL",
+    # Sucumbenciais
+    "SUCUMBENCIAIS": "SUCUMBENCIAIS",
+    "SUCUMBENCIAL": "SUCUMBENCIAIS",
+    "ADVOCATICIO_SUCUMBENCIAL": "SUCUMBENCIAIS",
+    "ADVOCATICIOS_SUCUMBENCIAIS": "SUCUMBENCIAIS",
+    # Contratuais
+    "CONTRATUAIS": "CONTRATUAIS",
+    "CONTRATUAL": "CONTRATUAIS",
+    "ADVOCATICIO_CONTRATUAIS": "CONTRATUAIS",
+    "ADVOCATICIOS_CONTRATUAIS": "CONTRATUAIS",
+    # Advocatícios genéricos
+    "ADVOCATICIOS": "ADVOCATICIOS",
+    "ADVOCATICIO": "ADVOCATICIOS",
+    # Periciais
+    "PERICIAIS": "PERICIAIS_OUTROS",
+    "PERICIAL": "PERICIAIS_OUTROS",
+    "PERICIAIS_OUTROS": "PERICIAIS_OUTROS",
+    "PERICIAIS_CONTADOR": "PERICIAIS_CONTADOR",
+    "PERICIAIS_MEDICO": "PERICIAIS_MEDICO",
+    "PERICIAIS_ENGENHEIRO": "PERICIAIS_ENGENHEIRO",
+    "PERICIAIS_INTERPRETE": "PERICIAIS_INTERPRETE",
+    "PERICIAIS_DOCUMENTOSCOPIO": "PERICIAIS_DOCUMENTOSCOPIO",
+    # Outros
+    "ASSISTENCIAIS": "ASSISTENCIAIS",
+    "LEILOEIRO": "LEILOEIRO",
 }
 
 _BASE_APURACAO_MAP = {
@@ -73,15 +97,18 @@ _BASE_APURACAO_MAP = {
 
 
 def _norm_honorario(h: dict[str, Any]) -> dict[str, Any]:
-    # Apenas traduz valores se o campo ainda for legacy (não tipo_honorario explicit)
-    if "tipo_honorario" not in h:
-        tipo = h.get("tipo")
-        if isinstance(tipo, str) and tipo in _TIPO_HONORARIO_MAP:
-            h["tipo"] = _TIPO_HONORARIO_MAP[tipo]
-    if "base_para_apuracao" not in h:
-        base = h.get("base_apuracao")
-        if isinstance(base, str) and base in _BASE_APURACAO_MAP:
-            h["base_apuracao"] = _BASE_APURACAO_MAP[base]
+    # Normalizar tipo_honorario/tipo para enum canônico do PJE-Calc
+    # (independe de se veio com alias "tipo" ou explicito "tipo_honorario").
+    for key in ("tipo_honorario", "tipo"):
+        if key in h:
+            val = h[key]
+            if isinstance(val, str) and val in _TIPO_HONORARIO_MAP:
+                h[key] = _TIPO_HONORARIO_MAP[val]
+    for key in ("base_para_apuracao", "base_apuracao"):
+        if key in h:
+            val = h[key]
+            if isinstance(val, str) and val in _BASE_APURACAO_MAP:
+                h[key] = _BASE_APURACAO_MAP[val]
     return h
 
 
