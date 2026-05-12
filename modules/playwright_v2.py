@@ -1690,6 +1690,21 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(1500)
 
+        # Diagnóstico FGTS
+        _diag_fgts = self._page.evaluate("""() => {
+            const body = document.body?.textContent || '';
+            return {
+                url: location.href.slice(-60),
+                tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
+                tem_form: !!document.getElementById('formulario'),
+                radios_tipo: document.querySelectorAll('input[type=radio][id*=tipoDeVerba]').length,
+                todos_inputs: document.querySelectorAll('input,select').length,
+                msgs: [...document.querySelectorAll('.rich-messages-label,.rf-msgs-sum')]
+                    .map(e=>(e.textContent||'').trim()).slice(0,3)
+            };
+        }""")
+        self.log(f"  [DIAG-fgts] {_diag_fgts}")
+
         # Verificar que página renderizou (radio tipoDeVerba presente)
         if self._page.locator("input[type='radio'][id*='tipoDeVerba']").count() == 0:
             self.log("  ⚠ Fase 8 FGTS: página não renderizou — pulando (NPE pós-Expresso?)")
