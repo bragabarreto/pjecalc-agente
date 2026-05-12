@@ -1915,33 +1915,36 @@ class PlaywrightAutomatorV2:
                 )
                 raise RuntimeError(f"Botão Exportar não encontrado. Inputs visíveis: {_diag}")
 
-            # Fase A: click + expect ZIP response (esperança que JSF auto-submit
-            # do jsfcljs() dispare o download).
+            # Fase A: click + expect ANY POST response a exportacao.jsf
+            # (pode ser HTML com linkDownloadArquivo, ou diretamente ZIP).
             pjc_bytes = None
             try:
                 with self._page.expect_response(
                     lambda r: (
                         "exportacao.jsf" in r.url
                         and r.request.method == "POST"
-                        and (
-                            "zip" in (r.headers.get("content-type") or "").lower()
-                            or ".pjc" in (r.headers.get("content-disposition") or "").lower()
-                        )
                     ),
                     timeout=30000,
                 ) as resp_info:
                     btn.click(force=True)
                 resp = resp_info.value
-                pjc_bytes = resp.body()
-                self.log(f"  ✓ Fase A capturou .PJC: {len(pjc_bytes)} bytes")
+                ct = resp.headers.get("content-type", "")
+                cd = resp.headers.get("content-disposition", "")
+                self.log(f"  → Fase A resposta: HTTP {resp.status} ct={ct[:60]} cd={cd[:60]}")
+                body_a = resp.body()
+                if body_a and body_a[:2] == b"PK":
+                    pjc_bytes = body_a
+                    self.log(f"  ✓ Fase A capturou .PJC direto: {len(pjc_bytes)} bytes")
+                else:
+                    self.log(f"  → Fase A: resposta HTML ({len(body_a)} bytes) — buscando linkDownloadArquivo")
             except Exception as e_a:
                 self.log(f"  ⚠ Fase A: {str(e_a)[:120]} — tentando Fase B/E")
 
             # Fase B + E: aguardar linkDownloadArquivo aparecer + disparar jsfcljs
             if not pjc_bytes:
-                # Poll por linkDownloadArquivo (até 15s)
+                # Poll por linkDownloadArquivo (até 45s — server pode ser lento)
                 link_ok = False
-                for i in range(30):
+                for i in range(90):
                     if self._page.locator("[id$='linkDownloadArquivo']").count() > 0:
                         link_ok = True
                         self.log(f"  ✓ linkDownloadArquivo detectado após {i*0.5:.1f}s")
