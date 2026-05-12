@@ -1200,6 +1200,7 @@ class PlaywrightAutomatorV2:
                 erro = self._verificar_erro_jsf()
                 if erro:
                     self.log(f"  ⚠ Erro ao salvar histórico '{hist.nome}': {erro[:200]}")
+                self._diagnostico_pagina(contexto=f"pós-save histórico '{hist.nome}'")
             else:
                 self.log(f"  ✓ Histórico '{hist.nome}' salvo")
 
