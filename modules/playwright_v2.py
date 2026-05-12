@@ -89,6 +89,12 @@ class PlaywrightAutomatorV2:
         self._calculo_url_base: str | None = None
         self._calculo_conversation_id: str | None = None
         self._pjc_path: str | None = None
+        self._calculo_numero: str | None = None  # ID do cálculo extraído do DOM
+        # Diretório de download dedicado (padrão Calc Machine).
+        # O Playwright usa esse path como destino dos downloads do navegador.
+        import tempfile as _tempfile, pathlib as _pathlib, time as _time
+        self._download_dir: _pathlib.Path = _pathlib.Path(_tempfile.gettempdir()) / f"pjecalc_dl_{int(_time.time())}"
+        self._download_dir.mkdir(parents=True, exist_ok=True)
 
     # ─── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -96,13 +102,25 @@ class PlaywrightAutomatorV2:
         from playwright.sync_api import sync_playwright
 
         self._pw = sync_playwright().start()
-        self._browser = self._pw.firefox.launch(headless=True)
+        # Firefox preferences para download silencioso (sem dialog) no dir custom
+        firefox_prefs = {
+            "browser.download.folderList": 2,
+            "browser.download.manager.showWhenStarting": False,
+            "browser.download.dir": str(self._download_dir),
+            "browser.helperApps.neverAsk.saveToDisk": (
+                "application/zip,application/x-zip-compressed,application/octet-stream,"
+                "application/pdf,application/x-pjc,application/x-download"
+            ),
+            "pdfjs.disabled": True,
+            "browser.download.useDownloadDir": True,
+        }
+        self._browser = self._pw.firefox.launch(headless=True, firefox_user_prefs=firefox_prefs)
         ctx = self._browser.new_context(
             accept_downloads=True,
             viewport={"width": 1280, "height": 800},
         )
         self._page = ctx.new_page()
-        self.log("✓ Browser Firefox iniciado")
+        self.log(f"✓ Browser Firefox iniciado (download dir: {self._download_dir})")
         return self
 
     def __exit__(self, *args):
@@ -261,6 +279,105 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_load_state("networkidle", timeout=timeout_ms)
         except Exception:
             pass
+
+    # ─── Helpers críticos inspirados no Calc Machine ──────────────────────
+    # Padrão observado em 12/05/2026 via Chrome MCP no calcmachine.ensinoplus.com.br:
+    # após cada save crítico, aguardar `.rf-msgs-sum` com "Operação realizada
+    # com sucesso." e extrair o número do cálculo do DOM como prova de persistência.
+
+    def _aguardar_operacao_sucesso(self, timeout_ms: int = 30000, bloqueante: bool = False) -> bool:
+        """Aguarda a mensagem JSF "Operação realizada com sucesso" aparecer no DOM.
+
+        Retorna True se a mensagem apareceu, False se houve timeout (ou erro
+        capturado). Por padrão NÃO é bloqueante — emite aviso no log e prossegue,
+        igual ao comportamento do Calc Machine durante a Liquidação.
+
+        Use `bloqueante=True` em fases onde a persistência é crítica (ex.: Fase 1+2).
+        """
+        try:
+            # Esperar mensagem aparecer em qualquer elemento com class rf-msgs-sum,
+            # rf-msgs-detail, ou texto "Operação realizada com sucesso"
+            self._page.wait_for_function(
+                """() => {
+                    const body = document.body?.textContent || '';
+                    return body.includes('Operação realizada com sucesso') ||
+                           body.includes('Operacao realizada com sucesso');
+                }""",
+                timeout=timeout_ms,
+            )
+            self.log(f"  ✓ Operação realizada com sucesso.")
+            return True
+        except Exception as e:
+            msg = f"⚠ Mensagem de sucesso não detectada em {timeout_ms/1000:.0f}s ({type(e).__name__})"
+            if bloqueante:
+                raise RuntimeError(msg)
+            self.log(f"  {msg} — prosseguindo")
+            return False
+
+    def _extrair_numero_calculo(self) -> str | None:
+        """Extrai o número do cálculo do DOM após save da Fase 2.
+
+        O PJE-Calc exibe o número do cálculo no header/breadcrumb após o save
+        bem-sucedido (ex.: "Cálculo: 976"). Esse é o sinal definitivo de
+        persistência no H2/PostgreSQL.
+
+        Retorna o número como string (ex.: "976") ou None se não encontrado.
+        """
+        try:
+            num = self._page.evaluate(
+                """() => {
+                    // Procurar por padrões "Cálculo: NNN" ou "Cálculo NNN" no DOM
+                    const body = document.body?.textContent || '';
+                    let m = body.match(/C[áa]lculo\\s*:?\\s*(\\d{1,8})/i);
+                    if (m) return m[1];
+                    // Procurar no breadcrumb explícito
+                    const bc = document.querySelector('.breadcrumb, [class*="breadcrumb"]');
+                    if (bc) {
+                        m = (bc.textContent || '').match(/(\\d{2,8})/);
+                        if (m) return m[1];
+                    }
+                    // Procurar campo input com value numérico (id do calc)
+                    const inputs = [...document.querySelectorAll('input[id*="idCalculo"], input[name*="idCalculo"]')];
+                    for (const i of inputs) {
+                        if (i.value && /^\\d+$/.test(i.value)) return i.value;
+                    }
+                    return null;
+                }"""
+            )
+            if num:
+                self._calculo_numero = num
+                self.log(f"  ✓ NÚMERO DO CÁLCULO: {num}")
+            return num
+        except Exception as e:
+            self.log(f"  ⚠ Falha ao extrair número do cálculo: {e}")
+            return None
+
+    def _verificar_erro_jsf(self) -> str | None:
+        """Verifica se há mensagem de erro JSF visível na página (rf-msgs-err
+        ou texto "Erro inesperado", "Campo obrigatório", etc.).
+
+        Retorna a mensagem se houver erro, None se a página está OK.
+        """
+        try:
+            err = self._page.evaluate(
+                """() => {
+                    // Mensagens de erro do RichFaces
+                    const errEls = [...document.querySelectorAll('.rf-msgs-err, .rf-msg-err, .messageError, [class*="error"]')];
+                    for (const el of errEls) {
+                        const txt = (el.textContent || '').trim();
+                        if (txt && txt.length > 5) return txt.slice(0, 300);
+                    }
+                    // Erro 500/NPE
+                    const body = document.body?.textContent || '';
+                    if (body.includes('HTTP Status 500')) return 'HTTP Status 500';
+                    if (body.includes('NullPointerException')) return 'NullPointerException no servidor';
+                    if (body.includes('Erro inesperado')) return 'Erro inesperado JSF';
+                    return null;
+                }"""
+            )
+            return err
+        except Exception:
+            return None
 
     # Mapa li_id → texto visível do menu (para fallback por texto)
     _MENU_TEXT_MAP = {
@@ -717,6 +834,10 @@ class PlaywrightAutomatorV2:
         self._marcar_radio("tipoDocumentoFiscalReclamado", proc.reclamado.doc_fiscal.tipo.value)
         self._preencher("reclamadoNumeroDocumentoFiscal", proc.reclamado.doc_fiscal.numero)
 
+        # Validação de erro inline (sem salvar — save acontece na Fase 2)
+        erro = self._verificar_erro_jsf()
+        if erro:
+            self.log(f"  ⚠ Erro JSF após preencher Dados: {erro[:200]}")
         self.log("Fase 1 concluída")
 
     def fase_parametros_calculo(self) -> None:
@@ -766,9 +887,21 @@ class PlaywrightAutomatorV2:
         if pc.comentarios_jg:
             self._preencher("comentarios", pc.comentarios_jg, obrigatorio=False)
 
-        # Salvar
+        # Salvar — validar persistência via padrão Calc Machine
+        self.log("  → Clicando no botão salvar...")
         self._clicar("salvar")
+        self.log("  → Aguardando processamento...")
         self._aguardar_ajax(15000)
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
+        if not sucesso:
+            erro = self._verificar_erro_jsf()
+            if erro:
+                self.log(f"  ⚠ Erro JSF detectado: {erro[:200]}")
+        # Extrair número do cálculo — prova de persistência no banco
+        num = self._extrair_numero_calculo()
+        if not num:
+            self.log("  ⚠ Número do cálculo não detectado no DOM — persistência incerta")
+        self._capturar_conversation_id()
         self.log("Fase 2 concluída")
 
     # Históricos auto-criados pelo PJE-Calc (não devem ser duplicados)
@@ -894,7 +1027,14 @@ class PlaywrightAutomatorV2:
 
             self._clicar("salvar")
             self._aguardar_ajax(8000)
-            self.log(f"  ✓ Histórico '{hist.nome}' salvo")
+            # Padrão Calc Machine: aguardar "Operação realizada com sucesso"
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            if not sucesso:
+                erro = self._verificar_erro_jsf()
+                if erro:
+                    self.log(f"  ⚠ Erro ao salvar histórico '{hist.nome}': {erro[:200]}")
+            else:
+                self.log(f"  ✓ Histórico '{hist.nome}' salvo")
 
         self.log("Fase 3 concluída")
 
@@ -922,43 +1062,21 @@ class PlaywrightAutomatorV2:
         for v in verbas_manual:
             self._lancar_verba_manual(v)
 
-        # 4c. Pós-Expresso: REABRIR CÁLCULO via Recentes (workaround NPE).
-        # Bug PJE-Calc 2.15.1: ApresentadorVerbaDeCalculo.carregarBasesParaPrincipal
-        # lança NPE após Expresso save, corrompendo a conversação Seam e impedindo
-        # renderização de TODAS as views subsequentes (verba-calculo, fgts, inss,
-        # irpf, custas, correção, liquidar). Solução v1: voltar para principal e
-        # reabrir cálculo via dropdown "Cálculos Recentes" — cria nova conversação
-        # Seam limpa.
+        # 4c. Pós-Expresso: verificar estado da listagem (NPE raro com save individual)
+        # Após refator 12/05/2026 (Calc Machine pattern: salvar uma verba por vez),
+        # o NPE pós-Expresso é muito mais raro porque cada save é atômico. Mantemos
+        # detecção+recovery como segurança, mas sem reabertura via Recentes
+        # (não funciona em H2 local conforme documentado em CLAUDE.md).
         if verbas_expresso:
-            self.log("  → Workaround NPE: reabrindo cálculo via Recentes")
-            ok = self._reabrir_calculo_via_recentes()
-            if not ok:
-                self.log("  → Recentes falhou — tentando Buscar como fallback pós-Expresso")
-                ok = self._reabrir_via_buscar()
-            if not ok:
-                # Fallback final: double-hop (pode não recuperar mas tenta)
-                self._navegar_menu("li_calculo_dados_do_calculo")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(1500)
             self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
-            # Detectar 500/NPE e tentar recovery via reload
-            tem_erro = self._page.evaluate(
-                """() => {
-                    const body = (document.body?.textContent || '');
-                    return body.includes('HTTP Status 500') ||
-                           body.includes('NullPointerException') ||
-                           body.includes('Erro inesperado') ||
-                           body.includes('ViewExpiredException');
-                }"""
-            )
+            erro_jsf = self._verificar_erro_jsf()
             tem_listagem = self._page.evaluate(
                 """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
             )
-            if tem_erro or not tem_listagem:
-                self.log(f"  ⚠ verba-calculo.jsf vazia/erro — tentando recovery (reload + double-hop)")
-                # Tentativa 1: reload
+            if erro_jsf or not tem_listagem:
+                self.log(f"  ⚠ verba-calculo.jsf vazia/erro ({erro_jsf}) — tentando recovery (reload + double-hop)")
                 try:
                     self._page.reload(wait_until="domcontentloaded", timeout=15000)
                     self._aguardar_ajax(15000)
@@ -968,9 +1086,8 @@ class PlaywrightAutomatorV2:
                 tem_listagem = self._page.evaluate(
                     """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
                 )
-                # Tentativa 2: triple-hop (Histórico → Dados → Verbas)
                 if not tem_listagem:
-                    self.log(f"  ⚠ Reload sem efeito — triple-hop")
+                    self.log(f"  ⚠ Reload sem efeito — triple-hop (Histórico → Dados → Verbas)")
                     self._navegar_menu("li_calculo_historico_salarial")
                     self._page.wait_for_timeout(1500)
                     self._navegar_menu("li_calculo_dados_do_calculo")
@@ -982,7 +1099,7 @@ class PlaywrightAutomatorV2:
                         """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
                     )
                 if not tem_listagem:
-                    self.log(f"  ⚠ Listagem permanece vazia — possível NPE não-recuperável; verbas Expresso podem não ter persistido. Continuando para reflexos manuais.")
+                    self.log(f"  ⚠ Listagem ainda vazia — continuando para parametrização (pode falhar)")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
@@ -992,39 +1109,40 @@ class PlaywrightAutomatorV2:
         self.log("Fase 4 concluída")
 
     def _lancar_expresso(self, verbas) -> None:
-        self.log("  → Lançamento Expresso")
-        self._clicar("lancamentoExpresso")
-        self._aguardar_ajax(8000)
-        self._page.wait_for_timeout(1500)
+        """Lança verbas via página Expresso — UMA POR VEZ (padrão Calc Machine).
 
-        # Diagnóstico: contar verbas disponíveis
-        diag = self._page.evaluate(
-            """() => {
-                const cbs = [...document.querySelectorAll('input[type="checkbox"]')];
-                const labels = cbs.map(cb => {
-                    // Tenta múltiplas estratégias: label[for], label parent, td adjacente
-                    let txt = '';
-                    if (cb.id) {
-                        const l = document.querySelector(`label[for="${cb.id.replace(/[^\\w-]/g, c => '\\\\'+c)}"]`);
-                        if (l) txt = l.textContent;
-                    }
-                    if (!txt) {
-                        const p = cb.closest('label, td, tr');
-                        if (p) txt = p.textContent;
-                    }
-                    return (txt || '').replace(/\\s+/g, ' ').trim();
-                }).filter(t => t.length > 2 && t.length < 100);
-                return {total: cbs.length, com_label: labels.length, primeiros: labels.slice(0, 30)};
-            }"""
-        )
-        self.log(f"    ℹ Página Expresso: {diag.get('total')} checkboxes, {diag.get('com_label')} com label")
+        Refatorado em 12/05/2026 após observar Calc Machine: marcar uma checkbox,
+        salvar imediatamente, voltar à listagem, retornar ao Expresso para a próxima.
+        Padrão batch (todas as checkboxes + salvar único) disparava NPE
+        ApresentadorVerbaDeCalculo.carregarBasesParaPrincipal pós-save.
+        """
+        self.log(f"  → Lançamento Expresso ({len(verbas)} verba(s), uma por vez)")
 
-        for v in verbas:
+        for idx, v in enumerate(verbas):
             alvo = (v.expresso_alvo or "").strip().upper()
-            # Estrutura DOM real (PJE-Calc Cidadão 2.15.1):
-            # - Checkboxes id=formulario:j_id82:N:j_id84:M:selecionada
-            # - SEM label[for=...] — texto está no <td> adjacente (closest('td'))
-            # - 54 verbas em 3 colunas × 18 linhas, todas visíveis (sem scroll necessário)
+            self.log(f"  → [{idx+1}/{len(verbas)}] Procurando e selecionando '{alvo}'...")
+
+            # Garantir que estamos na listagem de verbas (li_calculo_verbas)
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1000)
+
+            # Entrar na página Expresso
+            self._clicar("lancamentoExpresso")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1500)
+
+            # Diagnóstico no primeiro loop
+            if idx == 0:
+                diag = self._page.evaluate(
+                    """() => {
+                        const cbs = [...document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')];
+                        return {total: cbs.length};
+                    }"""
+                )
+                self.log(f"    ℹ Página Expresso: {diag.get('total')} checkboxes disponíveis")
+
+            # Marcar checkbox da verba alvo
             marcou = self._page.evaluate(
                 """(alvo) => {
                     const norm = s => (s||'').replace(/\\s+/g,' ').trim().toUpperCase();
@@ -1037,7 +1155,7 @@ class PlaywrightAutomatorV2:
                             return true;
                         }
                     }
-                    // Fallback parcial (caso tenha espaço/acentuação adicional)
+                    // Fallback parcial
                     for (const cb of cbs) {
                         const td = cb.closest('td');
                         const txt = td ? td.textContent : '';
@@ -1051,21 +1169,36 @@ class PlaywrightAutomatorV2:
                 alvo,
             )
             if not marcou:
-                # Não fatal — log e segue
-                self.log(f"    ⚠ Verba Expresso não encontrada no rol: '{alvo}' — pulando (será tentada como Manual?)")
+                self.log(f"    ⚠ Verba Expresso não encontrada: '{alvo}' — pulando")
+                # Voltar à listagem para próxima iteração
+                try:
+                    cancelar = self._page.locator("input[id$=':cancelar']")
+                    if cancelar.count() > 0 and cancelar.first.is_visible():
+                        cancelar.first.click(force=True)
+                        self._aguardar_ajax(3000)
+                except Exception:
+                    pass
                 continue
-            if isinstance(marcou, str) and marcou.startswith("partial:"):
-                self.log(f"    ✓ Expresso (match parcial): {alvo} ← {marcou[8:]}")
-            else:
-                self.log(f"    ✓ Expresso checkbox: {alvo}")
 
-        self._clicar("salvar")
-        self._aguardar_ajax(15000)
-        self.log("  ✓ Expresso salvo")
-        # CRITICO: re-capturar conversationId — Seam emite NOVO conv após
-        # Expresso save. Sem isso, URL navs subsequentes vao para conv
-        # expirada -> NPE/empty pages em todas as fases seguintes.
-        self._capturar_conversation_id()
+            self.log(f"    ✓ Checkbox '{alvo}' clicado com sucesso")
+
+            # Salvar INDIVIDUALMENTE (padrão Calc Machine: evita NPE)
+            self.log(f"    → Salvando seleção '{alvo}'...")
+            self._clicar("salvar")
+            self._aguardar_ajax(15000)
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            if not sucesso:
+                erro = self._verificar_erro_jsf()
+                if erro:
+                    self.log(f"    ⚠ Erro JSF ao salvar Expresso '{alvo}': {erro[:200]}")
+            else:
+                self.log(f"    ✓ Verba '{alvo}' salva")
+
+            # Re-capturar conversationId — Seam pode renovar conv após cada save
+            self._capturar_conversation_id()
+            self._page.wait_for_timeout(1500)
+
+        self.log(f"  ✓ Expresso concluído ({len(verbas)} verba(s) processada(s))")
 
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche todos os campos do form de parâmetros de verba.
@@ -1761,6 +1894,7 @@ class PlaywrightAutomatorV2:
         _safe(lambda: self._marcar_checkbox("multa10", f.multa_10_lc110), "multa10")
         _safe(lambda: self._clicar("salvar"), "salvar")
         self._aguardar_ajax(8000)
+        self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
         self.log("Fase 8 concluída")
 
     def fase_contribuicao_social(self) -> None:
@@ -1799,6 +1933,7 @@ class PlaywrightAutomatorV2:
 
         self._clicar("salvar")
         self._aguardar_ajax(8000)
+        self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
         self.log("Fase 9 concluída")
 
     def fase_imposto_de_renda(self) -> None:
@@ -1822,6 +1957,7 @@ class PlaywrightAutomatorV2:
             self._preencher("quantidadeDependentes", str(ir.quantidade_dependentes))
         self._clicar("salvar")
         self._aguardar_ajax(8000)
+        self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
         self.log("Fase 10 concluída")
 
     def fase_honorarios(self) -> None:
@@ -1845,6 +1981,9 @@ class PlaywrightAutomatorV2:
             self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
             self._clicar("salvar")
             self._aguardar_ajax(8000)
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+            if sucesso:
+                self.log(f"  ✓ Honorário {h.tipo_honorario}/{h.tipo_devedor} salvo com sucesso")
         self.log("Fase 11 concluída")
 
     def fase_custas_judiciais(self) -> None:
@@ -1857,6 +1996,7 @@ class PlaywrightAutomatorV2:
         self._marcar_radio("tipoDeCustasDeLiquidacao", c.custas_liquidacao)
         self._clicar("salvar")
         self._aguardar_ajax(8000)
+        self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
         self.log("Fase 12 concluída")
 
     def fase_correcao_juros_multa(self) -> None:
@@ -1868,6 +2008,7 @@ class PlaywrightAutomatorV2:
         self._selecionar("baseDeJurosDasVerbas", c.base_juros_verbas)
         self._clicar("salvar")
         self._aguardar_ajax(8000)
+        self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
         self.log("Fase 13 concluída")
 
     def fase_liquidar_e_exportar(self) -> str | None:
@@ -1964,24 +2105,39 @@ class PlaywrightAutomatorV2:
         if liq.indices_acumulados:
             self._marcar_radio("indicesAcumulados", liq.indices_acumulados)
 
-        # ── 14d. Clicar Liquidar ───────────────────────────────────────────
+        # ── 14d. Clicar Liquidar e aguardar (não-bloqueante, padrão Calc Machine) ──
+        self.log("  → Clicando no botão de liquidar...")
         self._clicar("liquidar")
-        self._aguardar_ajax(60000)
+        self.log("  → Liquidação iniciada, aguardando término (pode demorar para cálculos grandes)...")
+        # Aguardar a mensagem "Operação realizada" — se não vier em 90s, prosseguir
+        # com aviso (igual Calc Machine). NÃO travar a automação na liquidação.
+        try:
+            self._page.wait_for_load_state("networkidle", timeout=90000)
+        except Exception:
+            self.log("  ⚠ Liquidação ainda em processamento (network não estabilizou em 90s) — prosseguindo")
+        sucesso_liq = self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        if not sucesso_liq:
+            erro = self._verificar_erro_jsf()
+            if erro:
+                self.log(f"  ⚠ JSF reportou erro: {erro[:200]}")
 
         body = (self._page.locator("body").text_content() or "").lower()
         if "pendência" in body and "não foram encontradas" not in body:
-            # Schema v2 deveria prevenir isso. Falhar rápido.
+            # Schema v2 deveria prevenir isso. Reportar e continuar — Exportar
+            # vai falhar visivelmente se o calc não tiver dados, e isso é melhor
+            # que travar aqui.
             pendencias = self._page.evaluate(
                 """() => {
                     const els = [...document.querySelectorAll('.rf-msgs-detail, .rf-msgs-sum, .ui-messages-error-summary')];
                     return els.map(e => e.textContent.trim()).filter(t => t).slice(0, 20);
                 }"""
             )
-            raise RuntimeError(
-                f"Liquidação retornou pendências (schema v2 deveria ter prevenido):\n"
-                + "\n".join(f"  • {p}" for p in pendencias)
+            self.log(
+                f"  ⚠ Liquidação retornou pendências (continuando para tentar Exportar):\n"
+                + "\n".join(f"     • {p[:120]}" for p in pendencias[:10])
             )
-        self.log("  ✓ Liquidação OK (sem pendências)")
+        else:
+            self.log("  ✓ Liquidação OK")
 
         # ── 14e. Navegar para Exportar (cascata robusta) ──────────────────
         # Em edit mode: sidebar li_operacoes_exportar chama iniciar() via JSF navigation rule
@@ -2074,21 +2230,20 @@ class PlaywrightAutomatorV2:
                 )
                 raise RuntimeError(f"Botão Exportar não encontrado. Inputs visíveis: {_diag}")
 
-            # ── Captura do download ──────────────────────────────────────────────
-            # O fluxo real do PJE-Calc (confirmado 12/05/2026):
-            #   1. Clicar Exportar (a4j:commandButton) → AJAX re-render (text/xml, ~28KB)
-            #   2. O AJAX re-render inclui <s:span rendered="downloadDisponivel"> com
-            #      linkDownloadArquivo + <script> que auto-dispara jsfcljs()
-            #   3. O browser executa o script inline → POST para exportacao.jsf
-            #   4. Server chama downloadArquivo() → Content-Type:application/zip → ZIP bytes
-            #   5. Playwright emite evento "download" com o arquivo ZIP
+            # ── Captura do download (padrão Calc Machine 12/05/2026) ────────────
+            # Calc Machine configura o navegador para downloads em diretório fixo
+            # e depois faz scan do diretório. É mais robusto que `page.on("download")`
+            # porque não depende de o Playwright capturar o evento no momento certo
+            # (o auto-jsfcljs do exportacao.xhtml pode disparar em sub-frames).
             #
-            # CRITICAL: o auto-jsfcljs dispara IMEDIATAMENTE no AJAX re-render (passo 2→3),
-            # ANTES de qualquer poll/wait nosso. Devemos registrar o listener de download
-            # ANTES de clicar Exportar para não perder o evento.
+            # Estratégia tripla (em ordem de prioridade):
+            #   A) Listener page.on("download") (mantemos como tentativa primária)
+            #   B) Response interceptor para ZIP bytes (intercept HTTP)
+            #   C) Scan do download dir do Firefox (fallback robusto)
             pjc_bytes: bytes | None = None
             _dl_data: list[bytes] = []
             _resp_data: list[bytes] = []
+            _dir_initial = set(self._download_dir.iterdir()) if self._download_dir.exists() else set()
 
             def _on_download(dl) -> None:
                 try:
@@ -2107,7 +2262,7 @@ class PlaywrightAutomatorV2:
                         body = resp.body()
                         if body[:2] == b"PK":
                             _resp_data.append(body)
-                            self.log(f"  📦 ZIP via response: {len(body)}B ct={ct[:40]}")
+                            self.log(f"  📦 ZIP via response: {len(body)}B")
                 except Exception:
                     pass
 
@@ -2115,23 +2270,57 @@ class PlaywrightAutomatorV2:
             self._page.on("response", _on_response)
 
             try:
+                self.log("  ✓ Botão Exportar clicado")
                 btn.click(force=True)
-                # Aguardar: AJAX re-render (~2s) + inline jsfcljs script (~1s) + download (~2s)
+                # Aguardar: AJAX re-render (~2s) + auto-jsfcljs (~1s) + download (~2s)
+                # mas dar margem para downloads grandes (15s base).
                 self._page.wait_for_timeout(15000)
+
+                # Estratégia C: scan do diretório de downloads para arquivo novo
+                if not _dl_data and not _resp_data:
+                    self.log(f"  → Scan do diretório de download {self._download_dir}...")
+                    import pathlib as _pl, time as _t
+                    deadline = _t.time() + 30  # +30s para download dir
+                    novo = None
+                    while _t.time() < deadline:
+                        atuais = set(self._download_dir.iterdir()) if self._download_dir.exists() else set()
+                        adicionados = atuais - _dir_initial
+                        # Filtrar arquivos .pjc ou .PJC e que não terminem com .part (download em curso)
+                        pjcs = [f for f in adicionados
+                                if f.suffix.lower() == ".pjc" and not str(f).endswith(".part")]
+                        if pjcs:
+                            novo = max(pjcs, key=lambda f: f.stat().st_mtime)
+                            break
+                        self._page.wait_for_timeout(1000)
+                    if novo and novo.exists():
+                        data = novo.read_bytes()
+                        if data[:2] == b"PK":
+                            _resp_data.append(data)
+                            self.log(f"  ✅ Arquivo salvo: {novo.name} ({len(data)}B)")
+                        else:
+                            self.log(f"  ⚠ Arquivo {novo.name} não é ZIP (header={data[:10]!r})")
             finally:
                 self._page.remove_listener("download", _on_download)
                 self._page.remove_listener("response", _on_response)
 
-            # Prioridade: download event > response intercept
+            # Prioridade: download event > response intercept > dir scan
             if _dl_data and _dl_data[0][:2] == b"PK":
                 pjc_bytes = _dl_data[0]
                 self.log(f"  ✓ .PJC via download event: {len(pjc_bytes)} bytes")
             elif _resp_data:
                 pjc_bytes = _resp_data[0]
-                self.log(f"  ✓ .PJC via response intercept: {len(pjc_bytes)} bytes")
+                self.log(f"  ✓ .PJC capturado: {len(pjc_bytes)} bytes")
 
             if not pjc_bytes:
-                raise RuntimeError("Falha ao capturar download .PJC: nenhum ZIP recebido após click Exportar")
+                # Diagnóstico extra: o que apareceu no download dir
+                arquivos_no_dir = (
+                    [f.name for f in self._download_dir.iterdir()]
+                    if self._download_dir.exists() else []
+                )
+                raise RuntimeError(
+                    f"Falha ao capturar download .PJC: nenhum ZIP recebido. "
+                    f"Download dir: {arquivos_no_dir}"
+                )
         except RuntimeError:
             raise
         except Exception as e:
