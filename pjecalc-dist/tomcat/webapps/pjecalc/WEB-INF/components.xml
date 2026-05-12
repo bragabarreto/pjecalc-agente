@@ -1,7 +1,13 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <components xmlns="http://jboss.com/products/seam/components" xmlns:async="http://jboss.com/products/seam/async" xmlns:cache="http://jboss.com/products/seam/cache" xmlns:core="http://jboss.com/products/seam/core" xmlns:persistence="http://jboss.com/products/seam/persistence" xmlns:security="http://jboss.com/products/seam/security" xmlns:transaction="http://jboss.com/products/seam/transaction" xmlns:web="http://jboss.com/products/seam/web" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jboss.com/products/seam/core http://jboss.com/products/seam/core-2.2.xsd          http://jboss.com/products/seam/web http://jboss.com/products/seam/web-2.2.xsd           http://jboss.com/products/seam/components http://jboss.com/products/seam/components-2.2.xsd          http://jboss.com/products/seam/security http://jboss.com/products/seam/security-2.2.xsd          http://jboss.com/products/seam/persistence http://jboss.com/products/seam/persistence-2.2.xsd          http://jboss.com/products/seam/transaction http://jboss.com/products/seam/transaction-2.2.xsd          http://jboss.com/products/seam/cache http://jboss.com/products/seam/cache-2.2.xsd          http://jboss.com/products/seam/async http://jboss.com/products/seam/async-2.2.xsd">
 
-	<core:manager concurrent-request-timeout="5000" conversation-timeout="30000" default-flush-mode="MANUAL"/>
+	<!-- FlushMode mudado MANUAL→AUTO para permitir persistência de cálculos novos no H2.
+	     Bug: cálculos criados via "Novo" não eram commitados ao banco com MANUAL porque
+	     @End só dispara em paths específicos (exportacao, etc.). Com AUTO, cada request
+	     JSF commita o EPC ao banco, permitindo que o cálculo seja achado em Recentes/Buscar.
+	     pages.xml linha 21 já força flushMode=MANUAL no `alterar()` para preservar
+	     comportamento de edição (não comita até user salvar). -->
+	<core:manager concurrent-request-timeout="5000" conversation-timeout="30000" default-flush-mode="AUTO"/>
 	
 	<security:identity authenticate-method="#{autenticador.autenticar}"/>
 
