@@ -317,15 +317,27 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ {dom_id}: fallback falhou: {e}")
 
     def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
-        sel = f"input[type='radio'][id*='{dom_id}'][value='{valor}']"
-        loc = self._page.locator(sel)
-        if loc.count() == 0:
-            if obrigatorio:
-                raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
-            self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
-            return
-        loc.first.click(force=True)
-        self.log(f"  ✓ radio {dom_id} = {valor}")
+        # Cascata de seletores: id substring, name match (JSF h:selectOneRadio
+        # cria múltiplos inputs com name=`formulario:dom_id` mas IDs sufixados
+        # com :0, :1, :2...). Padrão observado no Calc Machine.
+        selectors = [
+            f"input[type='radio'][id$=':{dom_id}'][value='{valor}']",
+            f"input[type='radio'][id*='{dom_id}'][value='{valor}']",
+            f"input[type='radio'][name$=':{dom_id}'][value='{valor}']",
+            f"input[type='radio'][name*='{dom_id}'][value='{valor}']",
+        ]
+        for sel in selectors:
+            loc = self._page.locator(sel)
+            if loc.count() > 0:
+                try:
+                    loc.first.click(force=True)
+                    self.log(f"  ✓ radio {dom_id} = {valor}")
+                    return
+                except Exception:
+                    continue
+        if obrigatorio:
+            raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
+        self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
 
     def _marcar_checkbox(self, dom_id: str, marcado: bool) -> None:
         # Seletor MAIS específico: input[type=checkbox] com id terminando em ':<dom_id>' ou em '<dom_id>' exato.
@@ -2419,19 +2431,41 @@ class PlaywrightAutomatorV2:
 
         body = (self._page.locator("body").text_content() or "").lower()
         if "pendência" in body and "não foram encontradas" not in body:
-            # Schema v2 deveria prevenir isso. Reportar e continuar — Exportar
-            # vai falhar visivelmente se o calc não tiver dados, e isso é melhor
-            # que travar aqui.
+            # Pendências = erros que IMPEDEM a liquidação. O cálculo NÃO foi
+            # liquidado e o .PJC exportado terá hashCodeLiquidacao=null +
+            # valores zerados. Capturar TODAS as mensagens para depurar.
             pendencias = self._page.evaluate(
                 """() => {
-                    const els = [...document.querySelectorAll('.rf-msgs-detail, .rf-msgs-sum, .ui-messages-error-summary')];
-                    return els.map(e => e.textContent.trim()).filter(t => t).slice(0, 20);
+                    const sels = [
+                        '.rf-msgs-detail', '.rf-msgs-sum', '.rf-msgs-err',
+                        '.ui-messages-error-summary',
+                        '.rich-messages', '.rich-message',
+                        '.validacaoErro', '.validacaoAlerta',
+                        '.boxSpanTitulo', '.boxModuloValidacao',
+                        '[class*="erro"]', '[class*="error"]', '[class*="pendencia"]'
+                    ];
+                    const seen = new Set();
+                    const out = [];
+                    for (const s of sels) {
+                        for (const el of document.querySelectorAll(s)) {
+                            const txt = (el.textContent || '').replace(/\\s+/g, ' ').trim();
+                            if (txt && txt.length > 4 && txt.length < 400 && !seen.has(txt)) {
+                                seen.add(txt);
+                                out.push(txt);
+                            }
+                        }
+                    }
+                    return out.slice(0, 30);
                 }"""
             )
             self.log(
-                f"  ⚠ Liquidação retornou pendências (continuando para tentar Exportar):\n"
-                + "\n".join(f"     • {p[:120]}" for p in pendencias[:10])
+                f"  ⚠ Liquidação NÃO PERSISTIDA (pendências bloquearam — PJC sairá pré-liquidação):"
             )
+            for p in pendencias[:15]:
+                self.log(f"     • {p[:250]}")
+            # Diagnóstico completo se pendências veio vazio
+            if not pendencias:
+                self._diagnostico_pagina(contexto="pendências Liquidação (sem captura direta)")
         else:
             self.log("  ✓ Liquidação OK")
 
