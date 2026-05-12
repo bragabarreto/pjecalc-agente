@@ -312,9 +312,9 @@ class QuantidadeVerba(BaseModel):
 
 class FormulaCalculado(BaseModel):
     base_calculo: BaseCalculoVerba
-    divisor: DivisorVerba
+    divisor: DivisorVerba = Field(default_factory=DivisorVerba)
     multiplicador: float = 1.0
-    quantidade: QuantidadeVerba
+    quantidade: QuantidadeVerba = Field(default_factory=QuantidadeVerba)
 
 
 class ValorPagoVerba(BaseModel):
