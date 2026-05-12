@@ -442,12 +442,31 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_timeout(2000)
             self._aguardar_ajax(8000)
 
-            listbox = self._page.locator(
-                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
-            )
+            # O select de Recentes tem ID dinâmico (ex: formulario:j_id92) e NÃO
+            # tem class/name 'listaCalculosRecentes' — usar JS para localizá-lo.
+            _select_id = self._page.evaluate("""() => {
+                const SKIP = new Set(['selAcheFacil']);
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    if (s.options.length > 0 && /^\\d{4,}\\s*\\//.test(s.options[0].text || ''))
+                        return s.name || s.id;
+                }
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    const blob = [...s.options].map(o => o.text || '').join(' | ');
+                    if (/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob))
+                        return s.name || s.id;
+                }
+                return null;
+            }""")
+            if not _select_id:
+                self.log("  ⚠ Lista de Cálculos Recentes não encontrada — pulando reabrir")
+                return False
+            listbox = self._page.locator(f"select[name='{_select_id}'], select[id='{_select_id}']")
             if listbox.count() == 0:
                 self.log("  ⚠ Lista de Cálculos Recentes não encontrada — pulando reabrir")
                 return False
+            self.log(f"  → select Recentes encontrado: {_select_id}")
 
             n_opts = listbox.first.locator("option").count()
             if n_opts == 0:
