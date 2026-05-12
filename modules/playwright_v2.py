@@ -478,7 +478,13 @@ class PlaywrightAutomatorV2:
                 found_idx = 0
 
             if found_idx is None:
+                # Log all Recentes items for diagnostics
+                all_texts = [
+                    (options.nth(i).text_content() or "").strip()[:80]
+                    for i in range(min(n_opts, 10))
+                ]
                 self.log(f"  ⚠ Processo {num} não encontrado nos Recentes ({n_opts} itens)")
+                self.log(f"  ℹ Recentes items: {all_texts}")
                 return False
 
             opt_text_chosen = (options.nth(found_idx).text_content() or "").strip()[:60]
@@ -505,6 +511,129 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             import traceback
             self.log(f"  ⚠ _reabrir_calculo_via_recentes: {type(e).__name__}: {e}")
+            return False
+
+    def _reabrir_via_buscar(self) -> bool:
+        """Fallback: usa sidebar Buscar para pesquisar o cálculo e abri-lo em edit mode.
+
+        Alternativa quando Recentes não inclui o calc atual (comum em sessões locais
+        onde TBCALCULOSRECENTESUSUARIO não registrou o novo cálculo).
+
+        Fluxo:
+        1. Click em li_calculo_buscar → calculo.jsf?conversationId=N (Buscar page)
+        2. Preencher campos de busca com numero/digito/ano/regiao/vara do processo
+        3. Click botão 'Buscar'
+        4. Aguardar resultados e clicar no primeiro item correspondente
+        5. Verificar se URL mudou para calculo.jsf em modo edição
+
+        Returns True se reabriu com sucesso.
+        """
+        try:
+            self.log("  → Tentando Buscar como fallback de Recentes...")
+            # Navegar para principal primeiro (garante sidebar disponível)
+            self._page.goto(
+                f"{self.pjecalc_url}/pages/principal.jsf",
+                wait_until="domcontentloaded", timeout=15000,
+            )
+            self._aguardar_ajax(5000)
+
+            # Click em Buscar no sidebar
+            clicou = self._page.evaluate("""() => {
+                const li = document.getElementById('li_calculo_buscar');
+                if (li) { const a = li.querySelector('a'); if (a) { a.click(); return 'ok'; } }
+                return null;
+            }""")
+            if not clicou:
+                self.log("  ⚠ li_calculo_buscar não encontrado no sidebar")
+                return False
+
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1000)
+
+            # Preencher campos de busca com CNJ do processo
+            cnj = _split_cnj(self.previa.processo.numero_processo)
+            for field_id, valor in [
+                ("formulario:numeroProcessoBusca", cnj.get("numero", "")),
+                ("formulario:digitoProcessoBusca", cnj.get("digito", "")),
+                ("formulario:anoProcessoBusca", cnj.get("ano", "")),
+                ("formulario:regiaoBusca", cnj.get("regiao", "")),
+                ("formulario:varaProcessoBusca", cnj.get("vara", "")),
+            ]:
+                if not valor:
+                    continue
+                loc = self._page.locator(f"#{field_id}")
+                if loc.count() > 0:
+                    loc.first.fill(valor)
+
+            # Click Buscar
+            btn_buscar = self._page.locator("#formulario\\:buscar")
+            if btn_buscar.count() == 0:
+                self.log("  ⚠ Botão Buscar não encontrado")
+                return False
+            btn_buscar.first.click()
+            self._aguardar_ajax(15000)
+            self._page.wait_for_timeout(2000)
+
+            # Procurar resultado na listagem
+            # Os resultados geralmente aparecem em uma tabela com links "Abrir"
+            num_cnj = self.previa.processo.numero_processo
+            num_clean = num_cnj.replace(".", "").replace("-", "").replace("/", "")
+
+            resultado_link = self._page.evaluate(
+                f"""() => {{
+                    // Procurar link/botão que abre o cálculo nos resultados
+                    const links = [...document.querySelectorAll('a, input[type=button], input[type=submit]')];
+                    // Procurar na tabela de resultados: linhas com o número do processo
+                    const rows = [...document.querySelectorAll('tr')];
+                    for (const row of rows) {{
+                        const rowText = row.textContent.replace(/[\\s.\\-\\/]/g, '');
+                        if (rowText.includes('{num_clean}')) {{
+                            // Encontrou a linha — clicar no primeiro link/botão
+                            const link = row.querySelector('a') || row.querySelector('input[type=button]');
+                            if (link) {{
+                                link.click();
+                                return 'row-link: ' + (link.textContent || link.value || '').trim().slice(0,30);
+                            }}
+                        }}
+                    }}
+                    // Fallback: primeiro link após busca que contenha o número
+                    for (const a of links) {{
+                        if ((a.textContent || '').replace(/[\\s.\\-\\/]/g, '').includes('{num_clean}')) {{
+                            a.click();
+                            return 'direct-link';
+                        }}
+                    }}
+                    return null;
+                }}"""
+            )
+
+            if not resultado_link:
+                # Log resultados disponíveis para diagnóstico
+                resultados = self._page.evaluate("""() => {
+                    return [...document.querySelectorAll('tr')]
+                        .filter(r => r.cells && r.cells.length > 1)
+                        .map(r => r.textContent.trim().slice(0, 80))
+                        .filter(t => t)
+                        .slice(0, 5);
+                }""")
+                self.log(f"  ⚠ Processo não encontrado na busca. Resultados: {resultados}")
+                return False
+
+            self.log(f"  → Busca abriu: {resultado_link}")
+            self._aguardar_ajax(15000)
+            self._page.wait_for_timeout(2000)
+
+            url_after = self._page.url
+            self.log(f"  → URL pós-buscar: {url_after[-80:]}")
+            if "calculo" in url_after and "conversationId=" in url_after:
+                old_conv = self._calculo_conversation_id
+                self._calculo_conversation_id = url_after.split("conversationId=")[1].split("&")[0]
+                self.log(f"  ✓ Cálculo reaberto via Buscar (conv {old_conv} → {self._calculo_conversation_id})")
+                return True
+            self.log(f"  ⚠ Buscar não navegou para calculo.jsf — URL: {url_after[-80:]}")
+            return False
+        except Exception as e:
+            self.log(f"  ⚠ _reabrir_via_buscar: {type(e).__name__}: {e}")
             return False
 
     def _abrir_pjecalc(self) -> None:
@@ -802,7 +931,10 @@ class PlaywrightAutomatorV2:
             self.log("  → Workaround NPE: reabrindo cálculo via Recentes")
             ok = self._reabrir_calculo_via_recentes()
             if not ok:
-                # Fallback: double-hop (pode não recuperar mas tenta)
+                self.log("  → Recentes falhou — tentando Buscar como fallback pós-Expresso")
+                ok = self._reabrir_via_buscar()
+            if not ok:
+                # Fallback final: double-hop (pode não recuperar mas tenta)
                 self._navegar_menu("li_calculo_dados_do_calculo")
                 self._aguardar_ajax(8000)
                 self._page.wait_for_timeout(1500)
@@ -1755,14 +1887,22 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(5000)
             self._page.wait_for_timeout(1000)
         else:
-            self.log("  ⚠ Recentes falhou — continuando em creation mode (pode falhar no Exportar)")
-            # Fallback: pelo menos garantir contexto do cálculo via Dados do Cálculo
-            try:
-                self._navegar_menu("li_calculo_dados_do_calculo")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(1500)
-            except Exception:
-                pass
+            # Fallback: tentar Buscar se Recentes não incluiu o calc atual
+            self.log("  → Recentes falhou — tentando Buscar como fallback")
+            edit_mode = self._reabrir_via_buscar()
+            if edit_mode:
+                self.log("  ✓ Edit mode via Buscar — sidebar Liquidar/Exportar disponível")
+                self._aguardar_ajax(5000)
+                self._page.wait_for_timeout(1000)
+            else:
+                self.log("  ⚠ Buscar também falhou — continuando em creation mode (pode falhar no Exportar)")
+                # Último recurso: garantir contexto do cálculo via Dados do Cálculo
+                try:
+                    self._navegar_menu("li_calculo_dados_do_calculo")
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(1500)
+                except Exception:
+                    pass
 
         # ── 14b. Navegar para Liquidar via sidebar JSF ─────────────────────
         # Estratégia em cascata para localizar Liquidar
