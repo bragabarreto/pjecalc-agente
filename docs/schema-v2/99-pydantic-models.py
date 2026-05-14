@@ -392,8 +392,18 @@ class ParametrosVerba(BaseModel):
             if not isinstance(self.valor_devido, ValorDevidoInformado):
                 raise ValueError("valor=INFORMADO requer valor_devido tipo INFORMADO com valor_informado_brl")
         else:  # CALCULADO
-            if self.formula_calculado is None:
-                raise ValueError("valor=CALCULADO requer formula_calculado preenchido")
+            # Tolerância p/ verbas Expresso: Férias+1/3, 13º, etc. — o PJE-Calc
+            # gera a fórmula automaticamente a partir da característica
+            # (FERIAS, DECIMO_TERCEIRO_SALARIO) + ocorrência. Não exigir
+            # formula_calculado quando característica permitir auto-cálculo.
+            caract = getattr(self, "caracteristica", None)
+            caract_val = getattr(caract, "value", caract) if caract else None
+            auto_calc_caracteristicas = {"FERIAS", "DECIMO_TERCEIRO_SALARIO", "AVISO_PREVIO"}
+            if self.formula_calculado is None and caract_val not in auto_calc_caracteristicas:
+                raise ValueError(
+                    f"valor=CALCULADO requer formula_calculado preenchido "
+                    f"(característica={caract_val} não está em {auto_calc_caracteristicas})"
+                )
         return self
 
 
@@ -486,8 +496,11 @@ class GozoFerias(BaseModel):
 class PeriodoFerias(BaseModel):
     periodo_aquisitivo_inicio: str
     periodo_aquisitivo_fim: str
-    periodo_concessivo_inicio: str
-    periodo_concessivo_fim: str
+    # Concessivo é opcional: para o período proporcional final (do último ano
+    # da relação trabalhista) o período concessivo NÃO existe ainda — a
+    # rescisão acontece antes. PJE-Calc aceita período concessivo vazio.
+    periodo_concessivo_inicio: Optional[str] = None
+    periodo_concessivo_fim: Optional[str] = None
     prazo_dias: int = 30
     situacao: Literal["INDENIZADAS", "GOZADAS", "PARCIAL_GOZADAS", "NAO_DIREITO"] = "INDENIZADAS"
     dobra: bool = False
