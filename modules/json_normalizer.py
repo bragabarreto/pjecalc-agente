@@ -226,17 +226,27 @@ def _norm_parametros(p: dict[str, Any]) -> dict[str, Any]:
             except ValueError:
                 pass
 
-    # Validação cruzada: data_termino_calculo deve ser <= data_demissao
-    # (se houver demissão). Se for maior, usar data_demissao.
+    # Validação cruzada: data_termino_calculo deve ser <= data_demissao + (projeção AP)
+    # Quando projeta_aviso_indenizado=True, o cálculo legitimamente vai ALÉM
+    # da data_demissao, até demissao + dias projetados (até 90 dias na Lei
+    # 12.506/2011). NÃO comprimir nesse caso.
+    # Quando projeta_aviso_indenizado=False, limitar a data_demissao + 90 dias
+    # como safety (não exatamente demissao — alguns JSONs usam datas com
+    # aviso prévio embutido).
     dem = p.get("data_demissao")
     fim = p.get("data_termino_calculo")
+    projeta_ap = p.get("projeta_aviso_indenizado", False)
     if isinstance(dem, str) and isinstance(fim, str) and len(dem) == 10 and len(fim) == 10:
         try:
-            from datetime import datetime as _dt
+            from datetime import datetime as _dt, timedelta as _td
             d_dem = _dt.strptime(dem, "%d/%m/%Y")
             d_fim = _dt.strptime(fim, "%d/%m/%Y")
-            if d_fim > d_dem:
-                p["data_termino_calculo"] = dem
+            # Lei 12.506/2011: até 90 dias de aviso prévio (30 base + 60 prop)
+            # Margem de segurança: 100 dias para acomodar avos arredondados
+            margem_max = _td(days=100 if projeta_ap else 100)
+            limite = d_dem + margem_max
+            if d_fim > limite:
+                p["data_termino_calculo"] = dem  # comprimir ao demissao em caso extremo
         except ValueError:
             pass
     return p
