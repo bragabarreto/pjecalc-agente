@@ -1111,6 +1111,27 @@ class PlaywrightAutomatorV2:
 
         # Aviso prévio
         self._selecionar("apuracaoPrazoDoAvisoPrevio", pc.apuracao_aviso_previo.value)
+        self._aguardar_ajax(2000)
+        # Quando APURACAO_INFORMADA, o PJE-Calc renderiza o campo
+        # 'prazoAvisoInformado' (obrigatório). Preencher com valor do JSON ou
+        # calcular automaticamente conforme Lei 12.506/2011:
+        #   30 dias base + 3 dias por ano completo trabalhado, máximo 90 dias.
+        if pc.apuracao_aviso_previo.value == "APURACAO_INFORMADA":
+            dias = getattr(pc, "prazo_aviso_previo_dias", None)
+            if dias is None:
+                # Auto-calcular: anos completos entre admissao e demissao
+                try:
+                    from datetime import datetime as _dt
+                    d_adm = _dt.strptime(pc.data_admissao, "%d/%m/%Y")
+                    d_dem = _dt.strptime(pc.data_demissao, "%d/%m/%Y")
+                    anos = (d_dem - d_adm).days / 365.25
+                    anos_completos = int(anos)
+                    dias = min(30 + 3 * anos_completos, 90)
+                    self.log(f"  ℹ prazo_aviso_previo_dias auto-calculado: {dias} (30 + 3×{anos_completos} anos)")
+                except Exception as e:
+                    dias = 30
+                    self.log(f"  ⚠ falha auto-cálculo prazo aviso ({e}); usando 30")
+            self._preencher("prazoAvisoInformado", str(dias), obrigatorio=False)
         self._marcar_checkbox("projetaAvisoIndenizado", pc.projeta_aviso_indenizado)
         self._marcar_checkbox("limitarAvos", pc.limitar_avos)
         self._marcar_checkbox("zeraValorNegativo", pc.zerar_valor_negativo)

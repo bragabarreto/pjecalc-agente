@@ -199,6 +199,9 @@ class ParametrosCalculo(BaseModel):
     valor_maior_remuneracao_brl: float = Field(ge=0)
     valor_ultima_remuneracao_brl: float = Field(ge=0)
     apuracao_aviso_previo: ApuracaoAvisoPrevio
+    # Dias do aviso prévio (obrigatório quando apuracao_aviso_previo=APURACAO_INFORMADA).
+    # Lei 12.506/2011: 30 dias base + 3 dias por ano trabalhado, limite 90 dias.
+    prazo_aviso_previo_dias: Optional[int] = None
     projeta_aviso_indenizado: bool = True
     limitar_avos: bool = False
     zerar_valor_negativo: bool = True

@@ -111,6 +111,7 @@ Pydantic e então usada por um agente automático que preenche o PJE-Calc.
   "valor_maior_remuneracao_brl": 2700.00,
   "valor_ultima_remuneracao_brl": 2700.00,
   "apuracao_aviso_previo": "NAO_APURAR|APURACAO_CALCULADA|APURACAO_INFORMADA",
+  "prazo_aviso_previo_dias": null,   // OBRIGATÓRIO quando APURACAO_INFORMADA
   "projeta_aviso_indenizado": true,
   "limitar_avos": false,
   "zerar_valor_negativo": true,
@@ -131,10 +132,15 @@ Pydantic e então usada por um agente automático que preenche o PJE-Calc.
 - Sem isso, ocorrências de verbas ficam fora do período de cálculo e a CS
   sobre essas ocorrências fica zero.
 
-⚠️ **`apuracao_aviso_previo`**:
-- Aviso INDENIZADO + dispensa SJC → "APURACAO_CALCULADA"
-- Aviso TRABALHADO → "APURACAO_INFORMADA"
-- Pedido de demissão / justa causa → "NAO_APURAR"
+⚠️ **`apuracao_aviso_previo`** + **`prazo_aviso_previo_dias`**:
+- Aviso INDENIZADO + dispensa SJC → `"APURACAO_CALCULADA"` (bot calcula auto)
+- Aviso TRABALHADO ou rescisão indireta com AP definido em sentença →
+  `"APURACAO_INFORMADA"` + `prazo_aviso_previo_dias: 30|33|...|90`
+  (Lei 12.506/2011: 30 dias base + 3 dias/ano completo, máx 90)
+- Pedido de demissão / justa causa → `"NAO_APURAR"`
+
+Se `prazo_aviso_previo_dias=null` com `APURACAO_INFORMADA`, o bot auto-calcula
+pela Lei 12.506/2011 a partir de `data_admissao`/`data_demissao`.
 
 # 3. HISTORICO_SALARIAL ✅ (lista — mínimo 1)
 
