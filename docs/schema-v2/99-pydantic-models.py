@@ -372,6 +372,80 @@ class OcorrenciasOverride(BaseModel):
     # (não há campos extras aqui)
 
 
+# ─── Tabela detalhada de Ocorrências (Fase 2 — espelho parametrizar-ocorrencia.jsf) ──
+
+
+class LinhaOcorrencia(BaseModel):
+    """Uma linha da tabela mensal de Ocorrências da verba.
+
+    Espelha as colunas da página parametrizar-ocorrencia.jsf (manual §9.9):
+    Ativo?, Data Inicial, Data Final, Valor (CALCULADO/INFORMADO),
+    Divisor, Multiplicador, Quantidade, Dobra, Devido, Pago.
+
+    Cada ocorrência = 1 mês calendário, gerada automaticamente pelo
+    PJE-Calc com base em (Período × Ocorrência de Pagamento).
+    """
+    model_config = ConfigDict(extra="allow")
+
+    ativo: bool = True
+    data_inicial: str  # DD/MM/YYYY
+    data_final: str    # DD/MM/YYYY
+    valor: TipoValor = TipoValor.CALCULADO
+    divisor: Optional[float] = None
+    multiplicador: Optional[float] = None
+    quantidade: Optional[float] = None
+    proporcionalizar_quantidade: bool = False
+    dobra: bool = False
+    devido_brl: Optional[float] = None   # quando valor=CALCULADO: o sistema calcula
+    proporcionalizar_devido: bool = False
+    pago_brl: float = 0.0
+    proporcionalizar_pago: bool = False
+
+
+class AlteracaoEmLote(BaseModel):
+    """Bloco "Alteração em Lote" do topo da página de Ocorrências.
+
+    Permite aplicar um conjunto de valores a TODAS as linhas dentro de um
+    intervalo de datas, clicando "Alterar". Use quando o sentenciado tem
+    valor uniforme em um sub-período (ex.: "férias 30 dias × 1,33").
+    """
+    model_config = ConfigDict(extra="allow")
+
+    data_inicial: Optional[str] = None
+    data_final: Optional[str] = None
+    divisor: Optional[float] = None
+    multiplicador: Optional[float] = None
+    quantidade: Optional[float] = None
+    proporcionalizar_quantidade: bool = False
+    dobra: bool = False
+    devido_brl: Optional[float] = None
+    proporcionalizar_devido: bool = False
+    pago_brl: Optional[float] = None
+    proporcionalizar_pago: bool = False
+
+
+class TabelaOcorrenciasMensais(BaseModel):
+    """Tabela de Ocorrências da verba (página parametrizar-ocorrencia.jsf).
+
+    Modo de uso:
+    - `alteracoes_em_lote`: 0+ blocos a aplicar via header "Alteração em Lote"
+      (mais eficiente quando o valor é uniforme em sub-período)
+    - `linhas`: override mês a mês de linhas específicas (use quando ≥ 1
+      ocorrência tem valor distinto da regra do lote)
+    - `regerar_ao_abrir`: clicar "Regerar Ocorrências" antes de editar
+      (necessário quando parâmetros da verba foram alterados)
+
+    Os dois modos podem coexistir: lote define o padrão, linhas sobrescrevem
+    exceções específicas.
+    """
+    model_config = ConfigDict(extra="allow")
+
+    regerar_ao_abrir: bool = False
+    sobrescrever_ao_regerar: bool = False  # "Manter alterações" vs "Sobrescrever"
+    alteracoes_em_lote: list[AlteracaoEmLote] = Field(default_factory=list)
+    linhas: list[LinhaOcorrencia] = Field(default_factory=list)
+
+
 class ParametrosVerba(BaseModel):
     """Parâmetros de uma verba principal.
 
@@ -470,7 +544,10 @@ class VerbaPrincipal(BaseModel):
     expresso_alvo: Optional[str] = None
     nome_pjecalc: Optional[str] = None  # pode ser omitido; cai-back para nome_sentenca
     parametros: ParametrosVerba
+    # Override "antigo" (modo simples — lote ou mensal genérico)
     ocorrencias_override: Optional[OcorrenciasOverride] = None
+    # Override "detalhado" (Fase 2 — espelha parametrizar-ocorrencia.jsf)
+    tabela_ocorrencias: Optional[TabelaOcorrenciasMensais] = None
     reflexos: list[Reflexo] = Field(default_factory=list)
 
     @model_validator(mode="after")

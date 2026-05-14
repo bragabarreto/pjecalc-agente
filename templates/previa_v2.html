@@ -1035,6 +1035,246 @@ function htmlFormulaCalculado(v, idx) {
   `;
 }
 
+// ─── Editor visual de Parâmetros do Reflexo (subset de ParametrosVerba) ────
+// Reflexos têm campos próprios: comportamento_reflexo, tratamento_fracao_mes,
+// outro_valor_divisor/multiplicador, e overrides opcionais de caracteristica,
+// ocorrencia_pagamento, incidências, período.
+function htmlParametrosReflexo(v, idx, r, ri) {
+  const po = r.parametros_override || {};
+  if (!r.parametros_override) {
+    previaData.verbas_principais[idx].reflexos[ri].parametros_override = po;
+  }
+  const ipath = `previaData.verbas_principais[${idx}].reflexos[${ri}].parametros_override`;
+  return `
+  <details class="fieldgroup" style="background:#fff; margin-top:6px;">
+    <summary class="fieldgroup-title" style="cursor:pointer; font-size:0.85rem;">⚙️ Parâmetros do Reflexo (override)</summary>
+    <div class="grid-3">
+      <div class="campo"><label>Comportamento</label>
+        <select onchange="${ipath}.comportamento_reflexo=this.value">
+          <option value="">— mantém da principal —</option>
+          <option value="VALOR_MENSAL"${po.comportamento_reflexo==='VALOR_MENSAL'?' selected':''}>Valor Mensal</option>
+          <option value="MEDIA_PELO_VALOR"${po.comportamento_reflexo==='MEDIA_PELO_VALOR'?' selected':''}>Média pelo Valor Absoluto</option>
+          <option value="MEDIA_PELO_VALOR_CORRIGIDO"${po.comportamento_reflexo==='MEDIA_PELO_VALOR_CORRIGIDO'?' selected':''}>Média pelo Valor Corrigido</option>
+          <option value="MEDIA_PELA_QUANTIDADE"${po.comportamento_reflexo==='MEDIA_PELA_QUANTIDADE'?' selected':''}>Média pela Quantidade</option>
+        </select></div>
+      <div class="campo"><label>Tratamento Fração Mês</label>
+        <select onchange="${ipath}.tratamento_fracao_mes=this.value">
+          <option value="">— mantém —</option>
+          <option value="INTEGRALIZAR"${po.tratamento_fracao_mes==='INTEGRALIZAR'?' selected':''}>Integralizar</option>
+          <option value="NAO_INTEGRALIZAR"${po.tratamento_fracao_mes==='NAO_INTEGRALIZAR'?' selected':''}>Manter</option>
+        </select></div>
+      <div class="campo"><label>Característica (override)</label>
+        <select onchange="${ipath}.caracteristica=this.value||null">
+          <option value="">— mantém da principal —</option>
+          <option value="COMUM"${po.caracteristica==='COMUM'?' selected':''}>Comum</option>
+          <option value="DECIMO_TERCEIRO_SALARIO"${po.caracteristica==='DECIMO_TERCEIRO_SALARIO'?' selected':''}>13º Salário</option>
+          <option value="AVISO_PREVIO"${po.caracteristica==='AVISO_PREVIO'?' selected':''}>Aviso Prévio</option>
+          <option value="FERIAS"${po.caracteristica==='FERIAS'?' selected':''}>Férias</option>
+        </select></div>
+      <div class="campo"><label>Ocorrência Pagto (override)</label>
+        <select onchange="${ipath}.ocorrencia_pagamento=this.value||null">
+          <option value="">— mantém —</option>
+          <option value="MENSAL"${po.ocorrencia_pagamento==='MENSAL'?' selected':''}>Mensal</option>
+          <option value="DEZEMBRO"${po.ocorrencia_pagamento==='DEZEMBRO'?' selected':''}>Dezembro</option>
+          <option value="DESLIGAMENTO"${po.ocorrencia_pagamento==='DESLIGAMENTO'?' selected':''}>Desligamento</option>
+          <option value="PERIODO_AQUISITIVO"${po.ocorrencia_pagamento==='PERIODO_AQUISITIVO'?' selected':''}>Período Aquisitivo</option>
+        </select></div>
+      <div class="campo"><label>Divisor (Outro Valor)</label>
+        <input type="number" step="0.01" value="${po.outro_valor_divisor??''}"
+          onchange="${ipath}.outro_valor_divisor=this.value?parseFloat(this.value):null"></div>
+      <div class="campo"><label>Multiplicador (Outro Valor)</label>
+        <input type="number" step="0.00000001" value="${po.outro_valor_multiplicador??''}"
+          onchange="${ipath}.outro_valor_multiplicador=this.value?parseFloat(this.value):null"></div>
+      <div class="campo"><label>Período Início (override)</label>
+        <input type="text" placeholder="DD/MM/YYYY" value="${po.periodo_inicio||''}"
+          onchange="${ipath}.periodo_inicio=this.value||null"></div>
+      <div class="campo"><label>Período Fim (override)</label>
+        <input type="text" placeholder="DD/MM/YYYY" value="${po.periodo_fim||''}"
+          onchange="${ipath}.periodo_fim=this.value||null"></div>
+      <div class="campo col-span-full">
+        <label>Incidências (override) — deixe em branco para herdar da principal</label>
+        <div class="grid-4">
+          ${['irpf','cs_inss','fgts','previdencia_privada','pensao_alimenticia'].map(inc => `
+            <div class="checkbox-row">
+              <input type="checkbox"${po.incidencias?.[inc]?' checked':''}
+                onchange="if(!${ipath}.incidencias) ${ipath}.incidencias={}; ${ipath}.incidencias['${inc}']=this.checked">
+              <label>${inc.toUpperCase().replace('_',' ')}</label>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="campo col-span-full">
+        <label>Comentários do reflexo</label>
+        <textarea rows="2" onchange="${ipath}.comentarios=this.value||null">${po.comentarios||''}</textarea>
+      </div>
+    </div>
+  </details>
+  `;
+}
+
+// ─── Editor visual de Ocorrências do Reflexo (reusa OcorrenciasOverride) ────
+function htmlOcorrenciasReflexo(v, idx, r, ri) {
+  const oo = r.ocorrencias_override || {modo: 'alteracao_em_lote', valores_mensais: []};
+  if (!r.ocorrencias_override) {
+    previaData.verbas_principais[idx].reflexos[ri].ocorrencias_override = oo;
+  }
+  const ipath = `previaData.verbas_principais[${idx}].reflexos[${ri}].ocorrencias_override`;
+  return `
+  <details class="fieldgroup" style="background:#fff; margin-top:6px;">
+    <summary class="fieldgroup-title" style="cursor:pointer; font-size:0.85rem;">📊 Ocorrências do Reflexo (override mês a mês)</summary>
+    <div class="grid-3">
+      <div class="campo"><label>Modo</label>
+        <select onchange="${ipath}.modo=this.value; renderVerbas()">
+          <option value="alteracao_em_lote"${oo.modo==='alteracao_em_lote'?' selected':''}>Alteração em Lote (default)</option>
+          <option value="valores_mensais"${oo.modo==='valores_mensais'?' selected':''}>Valores Mensais (override por mês)</option>
+        </select></div>
+    </div>
+    ${oo.modo==='valores_mensais' ? `
+      <div style="margin-top:6px;">
+        ${(oo.valores_mensais||[]).map((m, mi) => `
+          <div class="grid-4" style="border:1px dashed #ddd; padding:6px; margin-bottom:6px;">
+            <div class="campo"><label>Mês (MM/YYYY)</label>
+              <input type="text" placeholder="MM/AAAA" value="${m.mes||''}"
+                onchange="${ipath}.valores_mensais[${mi}].mes=this.value"></div>
+            <div class="campo"><label>Devido (R$)</label>
+              <input type="number" step="0.01" value="${m.valor_devido??''}"
+                onchange="${ipath}.valores_mensais[${mi}].valor_devido=parseFloat(this.value)"></div>
+            <div class="campo"><label>Pago (R$)</label>
+              <input type="number" step="0.01" value="${m.valor_pago??0}"
+                onchange="${ipath}.valores_mensais[${mi}].valor_pago=parseFloat(this.value)||0"></div>
+            <button style="color:#e74c3c; background:none; border:none; cursor:pointer; font-size:0.85rem;"
+              onclick="${ipath}.valores_mensais.splice(${mi},1); renderVerbas()">✕ Remover</button>
+          </div>
+        `).join('')}
+        <button style="font-size:0.85rem;"
+          onclick="if(!${ipath}.valores_mensais) ${ipath}.valores_mensais=[]; ${ipath}.valores_mensais.push({mes:'',valor_devido:0,valor_pago:0}); renderVerbas()">+ Adicionar mês</button>
+      </div>
+    ` : '<span class="ajuda">Modo lote — usa o valor_devido da principal aplicado a todas as ocorrências</span>'}
+  </details>
+  `;
+}
+
+// ─── Editor visual da Tabela de Ocorrências (parametrizar-ocorrencia.jsf) ───
+// Espelha as colunas reais: Ativo?, Data Inicial, Data Final, Valor (Calc/Inf),
+// Divisor, Multiplicador, Quantidade, Dobra, Devido, Pago.
+// Bloco superior "Alteração em Lote" permite aplicar valores a sub-período.
+function htmlTabelaOcorrencias(v, idx) {
+  const t = v.tabela_ocorrencias || {
+    regerar_ao_abrir: false,
+    sobrescrever_ao_regerar: false,
+    alteracoes_em_lote: [],
+    linhas: []
+  };
+  if (!v.tabela_ocorrencias) previaData.verbas_principais[idx].tabela_ocorrencias = t;
+  const escSingle = s => String(s||'').replace(/'/g, "\\'");
+
+  const headerCols = ['Ativo?', 'Data Inicial', 'Data Final', 'Valor', 'Divisor', 'Multiplicador', 'Quantidade', 'Dobra', 'Devido (R$)', 'Pago (R$)', ''];
+
+  return `
+  <details class="fieldgroup" style="background:#fffaf0; border-left:3px solid #f0ad4e;">
+    <summary class="fieldgroup-title" style="cursor:pointer;">📊 Tabela de Ocorrências — espelho da página parametrizar-ocorrencia.jsf</summary>
+
+    <div style="display:flex; gap:12px; margin-bottom:8px; align-items:center; flex-wrap:wrap;">
+      <div class="checkbox-row">
+        <input type="checkbox"${t.regerar_ao_abrir?' checked':''}
+          onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.regerar_ao_abrir=this.checked">
+        <label>Regerar Ocorrências ao abrir</label>
+      </div>
+      ${t.regerar_ao_abrir ? `
+        <div class="checkbox-row">
+          <input type="checkbox"${t.sobrescrever_ao_regerar?' checked':''}
+            onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.sobrescrever_ao_regerar=this.checked">
+          <label>Sobrescrever (vs. Manter alterações)</label>
+        </div>
+      ` : ''}
+    </div>
+
+    <div class="fieldgroup" style="background:#fff; margin:6px 0; padding:8px;">
+      <div class="fieldgroup-title" style="font-size:0.85rem;">Alterações em Lote (aplicar a sub-período de linhas)</div>
+      ${(t.alteracoes_em_lote||[]).map((lote, li) => `
+        <div class="grid-4" style="border:1px dashed #f0ad4e; padding:6px; margin-bottom:6px; border-radius:4px;">
+          <div class="campo"><label>Data Inicial</label>
+            <input type="text" placeholder="DD/MM/YYYY" value="${lote.data_inicial||''}"
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].data_inicial=this.value"></div>
+          <div class="campo"><label>Data Final</label>
+            <input type="text" placeholder="DD/MM/YYYY" value="${lote.data_final||''}"
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].data_final=this.value"></div>
+          <div class="campo"><label>Divisor</label>
+            <input type="number" step="0.01" value="${lote.divisor??''}"
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].divisor=this.value?parseFloat(this.value):null"></div>
+          <div class="campo"><label>Multiplicador</label>
+            <input type="number" step="0.00000001" value="${lote.multiplicador??''}"
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].multiplicador=this.value?parseFloat(this.value):null"></div>
+          <div class="campo"><label>Quantidade</label>
+            <input type="number" step="0.01" value="${lote.quantidade??''}"
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].quantidade=this.value?parseFloat(this.value):null"></div>
+          <div class="checkbox-row" style="grid-column:span 1;">
+            <input type="checkbox"${lote.dobra?' checked':''}
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].dobra=this.checked">
+            <label>Dobra</label></div>
+          <div class="campo"><label>Devido (R$)</label>
+            <input type="number" step="0.01" value="${lote.devido_brl??''}"
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].devido_brl=this.value?parseFloat(this.value):null"></div>
+          <div class="campo"><label>Pago (R$)</label>
+            <input type="number" step="0.01" value="${lote.pago_brl??''}"
+              onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote[${li}].pago_brl=this.value?parseFloat(this.value):null"></div>
+          <button style="grid-column:span 4; color:#e74c3c; background:none; border:none; cursor:pointer; font-size:0.85rem; justify-self:start;"
+            onclick="previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote.splice(${li},1); renderVerbas()">✕ Remover lote</button>
+        </div>
+      `).join('')}
+      <button style="font-size:0.85rem;"
+        onclick="if(!previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote) previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote=[]; previaData.verbas_principais[${idx}].tabela_ocorrencias.alteracoes_em_lote.push({}); renderVerbas()">+ Adicionar bloco de Alteração em Lote</button>
+    </div>
+
+    <div class="fieldgroup" style="background:#fff; margin:6px 0; padding:8px;">
+      <div class="fieldgroup-title" style="font-size:0.85rem;">Linhas Mensais (override por linha)</div>
+      ${(t.linhas||[]).length > 0 ? `
+        <table style="width:100%; font-size:0.82rem; border-collapse:collapse;">
+          <thead>
+            <tr style="background:#fff3cd;">
+              ${headerCols.map(c => `<th style="padding:4px 6px; text-align:left; border-bottom:1px solid #f0ad4e;">${c}</th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${t.linhas.map((linha, ri) => `
+              <tr style="border-bottom:1px solid #eee;">
+                <td><input type="checkbox"${linha.ativo!==false?' checked':''}
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].ativo=this.checked"></td>
+                <td><input type="text" style="width:90px" placeholder="DD/MM/AAAA" value="${linha.data_inicial||''}"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].data_inicial=this.value"></td>
+                <td><input type="text" style="width:90px" placeholder="DD/MM/AAAA" value="${linha.data_final||''}"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].data_final=this.value"></td>
+                <td><select style="width:95px"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].valor=this.value">
+                    <option value="CALCULADO"${linha.valor==='CALCULADO'?' selected':''}>Calculado</option>
+                    <option value="INFORMADO"${linha.valor==='INFORMADO'?' selected':''}>Informado</option>
+                  </select></td>
+                <td><input type="number" style="width:70px" step="0.01" value="${linha.divisor??''}"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].divisor=this.value?parseFloat(this.value):null"></td>
+                <td><input type="number" style="width:90px" step="0.00000001" value="${linha.multiplicador??''}"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].multiplicador=this.value?parseFloat(this.value):null"></td>
+                <td><input type="number" style="width:70px" step="0.01" value="${linha.quantidade??''}"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].quantidade=this.value?parseFloat(this.value):null"></td>
+                <td><input type="checkbox"${linha.dobra?' checked':''}
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].dobra=this.checked"></td>
+                <td><input type="number" style="width:85px" step="0.01" value="${linha.devido_brl??''}"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].devido_brl=this.value?parseFloat(this.value):null"></td>
+                <td><input type="number" style="width:85px" step="0.01" value="${linha.pago_brl??''}"
+                  onchange="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas[${ri}].pago_brl=this.value?parseFloat(this.value):null"></td>
+                <td><button style="color:#e74c3c; background:none; border:none; cursor:pointer;"
+                  onclick="previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas.splice(${ri},1); renderVerbas()">✕</button></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      ` : '<div style="color:#6c757d; font-size:0.85rem; padding:8px 0;">Sem linhas mensais. O PJE-Calc gera automaticamente após salvar. Use lotes acima ou adicione overrides manuais abaixo.</div>'}
+      <button style="font-size:0.85rem; margin-top:6px;"
+        onclick="if(!previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas) previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas=[]; previaData.verbas_principais[${idx}].tabela_ocorrencias.linhas.push({ativo:true,data_inicial:'',data_final:'',valor:'CALCULADO',dobra:false,pago_brl:0}); renderVerbas()">+ Adicionar linha mensal</button>
+    </div>
+  </details>
+  `;
+}
+
 function htmlVerba(v, idx) {
   const card = document.createElement('div');
   card.className = 'verba-card collapsed';
@@ -1242,6 +1482,8 @@ function htmlVerba(v, idx) {
         </div>
       </details>
 
+      ${htmlTabelaOcorrencias(v, idx)}
+
       <details class="fieldgroup">
         <summary class="fieldgroup-title" style="cursor:pointer;">Comentários / Observações</summary>
         <textarea rows="2" style="width:100%;"
@@ -1300,14 +1542,9 @@ function htmlVerba(v, idx) {
                     placeholder="ex.: AVISO PRÉVIO SOBRE DIFERENÇA SALARIAL"
                     onchange="previaData.verbas_principais[${idx}].reflexos[${ri}].expresso_reflex_alvo=this.value">
                 </div>
-                <div class="campo col-span-full">
-                  <label>Parâmetros override (JSON, opcional)</label>
-                  <textarea rows="2" placeholder="null ou {periodo_inicio, periodo_fim, ...}"
-                    onchange="try{previaData.verbas_principais[${idx}].reflexos[${ri}].parametros_override=this.value?JSON.parse(this.value):null;validarPrevia()}catch(e){alert('JSON inválido: '+e.message)}"
-                  >${r.parametros_override?JSON.stringify(r.parametros_override,null,2):''}</textarea>
-                  <span class="ajuda">Use só se o reflexo tem período/incidências distintos da principal</span>
-                </div>
               </div>
+              ${htmlParametrosReflexo(v, idx, r, ri)}
+              ${htmlOcorrenciasReflexo(v, idx, r, ri)}
             </div>
           </details>
         `).join('')}

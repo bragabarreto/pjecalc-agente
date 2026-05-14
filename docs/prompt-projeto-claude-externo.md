@@ -191,6 +191,7 @@ pós-rescisão, ESTENDA "ÚLTIMA REMUNERAÇÃO" até `data_termino_calculo`.
       "caracteristica": "COMUM|DECIMO_TERCEIRO_SALARIO|AVISO_PREVIO|FERIAS",
       "ocorrencia_pagamento": "MENSAL|DEZEMBRO|DESLIGAMENTO|PERIODO_AQUISITIVO",
       "ocorrencia_ajuizamento": "OCORRENCIAS_VENCIDAS|OCORRENCIAS_VENCIDAS_E_VINCENDAS",
+      "juros_aplicar_sumula_439": false,   // "Juros - Aplicar Súmula 439/TST" (PJE-Calc)
       "tipo": "PRINCIPAL",
       "gerar_reflexa": "DEVIDO|DIFERENCA",
       "gerar_principal": "DEVIDO|DIFERENCA",
@@ -343,6 +344,37 @@ A verba é calculada por fórmula:
   "quantidade": {"tipo": "INFORMADA", "valor": 22.00, "proporcionalizar": false}
 }
 ```
+
+### `TipoQuantidade` por característica (manual §9.3)
+
+| Característica | quantidade.tipo correto |
+|---|---|
+| COMUM | `INFORMADA` (com `valor`) ou `IMPORTADA_DO_CALENDARIO`/`IMPORTADA_DO_CARTAO` |
+| DECIMO_TERCEIRO_SALARIO | **`AVOS`** (sistema apura — não informar valor) |
+| FERIAS | **`AVOS`** |
+| AVISO_PREVIO + `apuracao=NAO_APURAR` | `INFORMADA` com valor 30 |
+| AVISO_PREVIO + `apuracao=APURACAO_INFORMADA` | `INFORMADA` com `prazo_aviso_previo_dias` |
+| AVISO_PREVIO + `apuracao=APURACAO_CALCULADA` | **`APURADA`** |
+
+### Tabela de Ocorrências (opcional — `tabela_ocorrencias`)
+
+Para override mês a mês (raro — só quando a sentença determina valores
+diferentes por mês), adicionar dentro de cada verba:
+
+```json
+"tabela_ocorrencias": {
+  "regerar_ao_abrir": false,
+  "sobrescrever_ao_regerar": false,
+  "alteracoes_em_lote": [
+    {"data_inicial": "01/01/2024", "data_final": "31/12/2024", "multiplicador": 1.5, "dobra": false}
+  ],
+  "linhas": [
+    {"ativo": true, "data_inicial": "01/03/2024", "data_final": "31/03/2024",
+     "valor": "INFORMADO", "devido_brl": 1234.56, "pago_brl": 0.00, "dobra": false}
+  ]
+}
+```
+Default: `null` (PJE-Calc gera automaticamente a tabela mensal a partir do `período` × `ocorrencia_pagamento`).
 
 ## 4.5 REFLEXOS
 
