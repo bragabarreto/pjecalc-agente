@@ -3131,38 +3131,57 @@ class PlaywrightAutomatorV2:
             if erro:
                 self.log(f"  ⚠ JSF reportou erro: {erro[:200]}")
 
-        # Verificar resultado da liquidação — incluindo sinais de sucesso reais
+        # Verificar resultado da liquidação — pendência/erro só são REAIS se
+        # aparecerem nas MENSAGENS JSF (.rf-msgs-*), não em qualquer lugar do body.
+        # Bug anterior: substring no body inteiro causava falso positivo (a palavra
+        # "pendência" pode aparecer em sidebar/menus mesmo com liquidação OK).
         _liq_result = self._page.evaluate("""() => {
             const body = document.body?.textContent || '';
             const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.ui-messages-error-summary,.rich-messages-label')]
                 .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
+            const msgs_lower = msgs.map(m => m.toLowerCase()).join('\\n');
+            const has_real_error =
+                body.includes('HTTP Status 500')
+                || body.includes('NullPointerException')
+                || body.toLowerCase().includes('erro inesperado')
+                || msgs_lower.includes('erro:');
+            const has_pendencia_msg = msgs.some(m => /pend[êe]ncia/i.test(m));
+            const has_sucesso_msg = msgs.some(m =>
+                /opera[cç][ãa]o realizada com sucesso/i.test(m)
+                || /liquida[cç][ãa]o realizada/i.test(m)
+            );
             return {
-                body_lower: body.toLowerCase().slice(0, 500),
                 msgs: msgs,
-                tem_pendencia: body.toLowerCase().includes('pendência'),
-                nao_encontradas: body.toLowerCase().includes('não foram encontradas'),
-                tem_liquidado: body.toLowerCase().includes('liquidado') || body.toLowerCase().includes('liquidação realizada'),
-                tem_erro: body.includes('HTTP Status 500') || body.includes('NullPointerException') || body.includes('Erro inesperado') || body.toLowerCase().includes('erro:')
+                tem_pendencia: has_pendencia_msg,
+                nao_encontradas: msgs_lower.includes('não foram encontradas'),
+                tem_liquidado: body.toLowerCase().includes('liquidação realizada')
+                    || body.toLowerCase().includes('liquidado em '),
+                tem_erro: has_real_error,
+                tem_sucesso: has_sucesso_msg
             };
         }""")
-        self.log(f"  [DIAG-liquidar] msgs={_liq_result['msgs']} pendencia={_liq_result['tem_pendencia']} ok={_liq_result['nao_encontradas']} erro={_liq_result['tem_erro']}")
+        self.log(
+            f"  [DIAG-liquidar] msgs={_liq_result['msgs']} "
+            f"pendencia={_liq_result['tem_pendencia']} "
+            f"sucesso={_liq_result['tem_sucesso']} "
+            f"erro={_liq_result['tem_erro']}"
+        )
 
-        if _liq_result['tem_erro']:
+        # Prioridade: mensagem JSF de sucesso explícito > erro > pendência
+        # (Calc Machine faz exatamente isso — sucesso "veta" os demais sinais.)
+        if _liq_result['tem_sucesso']:
+            self.log("  ✓ Liquidação OK (mensagem JSF de sucesso explícita)")
+        elif _liq_result['tem_erro']:
             raise RuntimeError(f"Liquidação retornou erro: {_liq_result['msgs']}")
-        if _liq_result['tem_pendencia'] and not _liq_result['nao_encontradas']:
+        elif _liq_result['tem_pendencia'] and not _liq_result['nao_encontradas']:
             pendencias = _liq_result['msgs']
             raise RuntimeError(
                 f"Liquidação retornou pendências (schema v2 deveria ter prevenido):\n"
                 + "\n".join(f"  • {p}" for p in pendencias)
             )
-            for p in pendencias[:15]:
-                self.log(f"     • {p[:250]}")
-            # Diagnóstico completo se pendências veio vazio
-            if not pendencias:
-                self._diagnostico_pagina(contexto="pendências Liquidação (sem captura direta)")
         else:
-            # Alertas existem mas não bloqueiam; liquidação foi bem-sucedida.
-            self.log("  ✓ Liquidação OK (alertas não-bloqueadores podem existir)")
+            # Sem mensagens conclusivas — assumimos OK (alertas não-bloqueadores)
+            self.log("  ✓ Liquidação OK (sem mensagens bloqueadoras)")
 
         # Capturar conv_id pós-liquidação — Seam pode ter redirecionado para nova conv
         self._capturar_conversation_id()
