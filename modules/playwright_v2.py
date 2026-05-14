@@ -1540,7 +1540,10 @@ class PlaywrightAutomatorV2:
         if com_identificacao:
             self._preencher("descricao", v.nome_pjecalc)
             # Assunto CNJ — autocomplete: digitar código + Enter dispara seleção
-            self._preencher("codigoAssuntosCnj", str(p.assunto_cnj.codigo))
+            # Default 2581 (Remuneração, Verbas Indenizatórias e Benefícios)
+            # quando codigo é None — categoria ampla que cobre majoritárias.
+            codigo_cnj = p.assunto_cnj.codigo if p.assunto_cnj and p.assunto_cnj.codigo else 2581
+            self._preencher("codigoAssuntosCnj", str(codigo_cnj))
             self._aguardar_ajax(3000)
         elif v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_ADAPTADO:
             self._preencher("descricao", v.nome_pjecalc, obrigatorio=False)

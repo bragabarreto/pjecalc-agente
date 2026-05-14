@@ -247,8 +247,14 @@ class HistoricoSalarial(BaseModel):
 
 
 class AssuntoCNJ(BaseModel):
-    codigo: int
-    label: str
+    # codigo é Optional: pode vir null quando o agente externo não sabe ou
+    # quando a verba não exige código específico (ex.: Saldo de Salário,
+    # Aviso Prévio, Férias, 13º — verbas trabalhistas padrão).
+    # Default 2581 (Remuneração, Verbas Indenizatórias e Benefícios) é
+    # aplicado pelo bot quando codigo é None — categoria mais ampla que
+    # cobre a maior parte das verbas trabalhistas.
+    codigo: Optional[int] = None
+    label: str = ""
 
 
 class VerbaIncidencias(BaseModel):
