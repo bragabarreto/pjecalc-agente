@@ -65,15 +65,39 @@
         <em>Se o seu Claude ainda não gera JSON v2, atualize o System Prompt antes.</em>
       </div>
 
+      <!-- Tabs: arquivo vs colar -->
+      <div class="doc-tabs">
+        <button type="button" class="tab-btn ativa" data-aba="aba-sent-arquivo" onclick="trocarAba(this)">
+          📂 Selecionar arquivo
+        </button>
+        <button type="button" class="tab-btn" data-aba="aba-sent-colar" onclick="trocarAba(this)">
+          📋 Colar JSON
+        </button>
+      </div>
+
       <div id="aba-sent-arquivo" class="aba-conteudo ativa">
         <div class="upload-area" id="area-sentenca"
              onclick="document.getElementById('arquivo-sentenca').click()">
-          <input type="file" id="arquivo-sentenca" name="sentenca" accept=".json" required>
+          <input type="file" id="arquivo-sentenca" accept=".json">
           <div style="font-size:2rem; color:#5a3e99; margin-bottom:6px;">🤖</div>
           <div style="font-size:1rem; color:#5a3e99; font-weight:600;">Clique para selecionar o JSON v2</div>
           <div style="color:#6c757d; font-size:0.85rem; margin-top:4px;">Apenas <strong>.json</strong> com <code>meta.schema_version: "2.0"</code></div>
           <div id="nome-sentenca" style="margin-top:10px; color:#28a745; font-weight:600;"></div>
         </div>
+      </div>
+
+      <div id="aba-sent-colar" class="aba-conteudo">
+        <textarea id="json-colado" rows="14" placeholder='Cole aqui o JSON v2 completo, ex:
+{
+  "meta": {"schema_version": "2.0", ...},
+  "processo": {...},
+  "parametros_calculo": {...},
+  ...
+}'
+          style="width:100%; padding:10px; border:1px solid #ced4da; border-radius:4px;
+                 font-family: ui-monospace, SFMono-Regular, Monaco, monospace;
+                 font-size:0.82rem; resize:vertical; min-height:240px;"></textarea>
+        <div id="status-colado" style="margin-top:8px; font-size:0.85rem;"></div>
       </div>
     </div>
 
@@ -104,6 +128,15 @@
 
 {% block extra_script %}
 <script>
+// Trocar entre abas Arquivo / Colar
+function trocarAba(btn) {
+  const aba = btn.dataset.aba;
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('ativa'));
+  document.querySelectorAll('.aba-conteudo').forEach(c => c.classList.remove('ativa'));
+  btn.classList.add('ativa');
+  document.getElementById(aba).classList.add('ativa');
+}
+
 // Sentença — apenas JSON v2; valida arquivo no client antes de submit
 document.getElementById('arquivo-sentenca').addEventListener('change', function() {
   if (this.files.length > 0) {
@@ -131,19 +164,63 @@ document.getElementById('arquivo-sentenca').addEventListener('change', function(
   }
 });
 
+// Validação inline do JSON colado
+document.getElementById('json-colado').addEventListener('input', function() {
+  const txt = this.value.trim();
+  const status = document.getElementById('status-colado');
+  if (!txt) {
+    status.innerHTML = '';
+    return;
+  }
+  try {
+    const j = JSON.parse(txt);
+    if (!j.meta || j.meta.schema_version !== "2.0") {
+      status.innerHTML = '<span style="color:#dc3545;">⚠ JSON sem <code>meta.schema_version: "2.0"</code></span>';
+    } else {
+      const tamKB = (new Blob([txt]).size / 1024).toFixed(1);
+      status.innerHTML = `<span style="color:#28a745;">✓ JSON v2 válido (${tamKB} KB)</span>`;
+    }
+  } catch (err) {
+    status.innerHTML = '<span style="color:#dc3545;">✗ JSON mal-formado: ' + err.message.slice(0, 100) + '</span>';
+  }
+});
+
 // Submit do formulário
 document.getElementById('form-upload').addEventListener('submit', async function(e) {
   e.preventDefault();
   const formData = new FormData();
 
-  // Pipeline v2: SO upload de arquivo .json
-  const arquivo = document.getElementById('arquivo-sentenca').files[0];
-  if (!arquivo) { alert('Selecione o arquivo .json antes de processar.'); return; }
-  if (!arquivo.name.toLowerCase().endsWith('.json')) {
-    alert('Apenas arquivos .json são aceitos (JSON v2 do Projeto Claude).');
-    return;
+  // Detectar qual aba está ativa: arquivo ou colado
+  const abaArquivoAtiva = document.getElementById('aba-sent-arquivo').classList.contains('ativa');
+
+  if (abaArquivoAtiva) {
+    const arquivo = document.getElementById('arquivo-sentenca').files[0];
+    if (!arquivo) { alert('Selecione o arquivo .json antes de processar.'); return; }
+    if (!arquivo.name.toLowerCase().endsWith('.json')) {
+      alert('Apenas arquivos .json são aceitos (JSON v2 do Projeto Claude).');
+      return;
+    }
+    formData.append('sentenca', arquivo);
+  } else {
+    // Aba "Colar JSON": construir Blob a partir do textarea
+    const txt = document.getElementById('json-colado').value.trim();
+    if (!txt) { alert('Cole o JSON v2 antes de processar.'); return; }
+    let payload;
+    try {
+      payload = JSON.parse(txt);
+    } catch (err) {
+      alert('JSON colado mal-formado: ' + err.message);
+      return;
+    }
+    if (!payload.meta || payload.meta.schema_version !== "2.0") {
+      if (!confirm('JSON sem meta.schema_version: "2.0". Continuar mesmo assim?')) return;
+    }
+    // Criar um File a partir do conteúdo, com nome amigável
+    const blob = new Blob([txt], { type: 'application/json' });
+    const proc = (payload.processo && payload.processo.numero_processo) || 'colado';
+    const nomeArq = `previa_${proc.replace(/[^\w]/g, '_')}.json`;
+    formData.append('sentenca', new File([blob], nomeArq, { type: 'application/json' }));
   }
-  formData.append('sentenca', arquivo);
 
   // Ocultar formulário e exibir barra de progresso
   document.getElementById('form-upload').style.display = 'none';
