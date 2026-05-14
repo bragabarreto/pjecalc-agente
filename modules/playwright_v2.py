@@ -156,11 +156,48 @@ class PlaywrightAutomatorV2:
                 self.log(f"⚠ {nome} falhou: {type(e).__name__}: {str(e)[:200]}")
                 self.log(f"   (continuando com próxima fase para tentar Liquidação)")
 
-        # Fases (sequência ordenada, cada uma graceful)
+        # ── Sequência de fases — ordem crítica ────────────────────────────────
+        # ARQUITETURA SEAM — DOIS MODOS DE CONVERSA:
+        #
+        # CRIAÇÃO (conv=6): criado por "Cálculo > Novo". Nesse modo:
+        #   - Menu lateral mostra apenas itens globais (não per-seção).
+        #   - URL nav para fgts.jsf, inss.jsf etc. retorna frame vazia (beans não init).
+        #   - Apenas HistoricoSalarialMB e CalculoMB inicializam via URL nav.
+        #   - calculoAberto.calculo = null → Export NPE.
+        #
+        # EDIÇÃO (conv=novo via Recentes): criado ao reabrir o cálculo da lista.
+        #   - Menu lateral mostra TODOS os itens per-seção.
+        #   - FgtsMB, InssMB, IrpfMB, HonorariosMB, ApresentadorExportacao todos ok.
+        #   - calculoAberto.calculo corretamente populado → Export funciona.
+        #
+        # ESTRATÉGIA:
+        #   1. Fase 1 salva o processo (cria registro no DB → aparece em Recentes).
+        #   2. Reabrir via Recentes → troca para conv_edit (modo edição).
+        #   3. Fases 2-3 em conv_edit (Parâmetros + Histórico).
+        #   4. Fases 5-13 em conv_edit (FGTS/CS/IRPF/Honorários/Custas/Correção).
+        #   5. Fase 4 (Verbas/Expresso) → Seam cria conv_expresso.
+        #   6. Liquidação + Export em conv_expresso (calculoAberto ok via edit mode).
         _run_fase("Fase 1 (Processo)", self.fase_processo)
         _run_fase("Fase 2 (Parâmetros)", self.fase_parametros_calculo)
+
+        # ── Reabrir via Recentes (criação → edição) ──────────────────────────
+        # Após Fase 2 (segunda save) o H2 DB tem o cálculo commitado.
+        # Navegamos para principal.jsf e tentamos reabrir via Recentes para
+        # obter uma nova conv em modo edição onde TODOS os beans Seam inicializam.
+        # Em sessões FRESCAS (sem calcs anteriores), Recentes pode estar vazio
+        # mesmo após Fase 2 — nesse caso continuamos em modo criação e aceitamos
+        # que FGTS/CS/IRPF/Honorários podem retornar frames vazias (graceful skip).
+        try:
+            self.log("  → Tentando transição criação→edição via Recentes...")
+            ok_recentes = self._reabrir_calculo_via_recentes()
+            if ok_recentes:
+                self.log(f"  ✓ Modo edição ativo — conv={self._calculo_conversation_id}")
+            else:
+                self.log("  ⚠ Recentes vazio — continuando em modo criação")
+        except Exception as e_rec:
+            self.log(f"  ⚠ Recentes erro: {e_rec} — continuando")
+
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
-        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
         _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
@@ -170,6 +207,8 @@ class PlaywrightAutomatorV2:
         _run_fase("Fase 11 (Honorários)", self.fase_honorarios, bool(self.previa.honorarios))
         _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
         _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
+        # Expresso é a ÚLTIMA fase substantiva — muda conv para conv_expresso
+        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
 
         # Liquidação — tenta mesmo com fases parciais
         try:
@@ -317,68 +356,16 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ {dom_id}: fallback falhou: {e}")
 
     def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
-        # Cascata de seletores. JSF h:selectOneRadio com <s:convertEnum> pode
-        # renderizar value como ordinal (0/1/2) ou texto. Tentamos múltiplas
-        # variantes incluindo lookup via texto/label da option.
-        selectors = [
-            f"input[type='radio'][id$=':{dom_id}'][value='{valor}']",
+        # Tentar id*= primeiro (radios com id fixo); fallback name*= (JSF com IDs dinâmicos j_id*)
+        for sel in (
             f"input[type='radio'][id*='{dom_id}'][value='{valor}']",
-            f"input[type='radio'][name$=':{dom_id}'][value='{valor}']",
             f"input[type='radio'][name*='{dom_id}'][value='{valor}']",
-        ]
-        for sel in selectors:
+        ):
             loc = self._page.locator(sel)
             if loc.count() > 0:
-                try:
-                    loc.first.click(force=True)
-                    self.log(f"  ✓ radio {dom_id} = {valor}")
-                    return
-                except Exception:
-                    continue
-
-        # Fallback JS: enumerar radios com id/name match e tentar por value OU label
-        marcou = self._page.evaluate(
-            """({dom_id, valor}) => {
-                const norm = s => (s||'').replace(/\\s+/g,' ').trim().toUpperCase();
-                const tgt = norm(valor);
-                // Cobrir IDs JSF tipo formulario:indicesAcumulados:0/:1/...
-                const radios = [...document.querySelectorAll('input[type="radio"]')]
-                    .filter(r => (r.id||'').includes(dom_id) || (r.name||'').includes(dom_id));
-                // 1) Match por value exato
-                for (const r of radios) {
-                    if (norm(r.value) === tgt) { r.click(); return 'value:'+r.value; }
-                }
-                // 2) Match por label[for=r.id] textContent
-                for (const r of radios) {
-                    if (!r.id) continue;
-                    const label = document.querySelector('label[for="'+r.id.replace(/[^\\w-]/g, c => '\\\\'+c)+'"]');
-                    if (label) {
-                        const txt = norm(label.textContent);
-                        if (txt === tgt || txt.includes(tgt) || tgt.includes(txt)) {
-                            r.click();
-                            return 'label:'+txt.slice(0,40);
-                        }
-                    }
-                }
-                // 3) Match por texto do <td> ou <li> adjacente (RichFaces)
-                for (const r of radios) {
-                    const cell = r.closest('td, li, label');
-                    if (cell) {
-                        const txt = norm(cell.textContent);
-                        if (txt && (txt === tgt || txt.includes(tgt) || tgt.includes(txt))) {
-                            r.click();
-                            return 'cell:'+txt.slice(0,40);
-                        }
-                    }
-                }
-                return null;
-            }""",
-            {"dom_id": dom_id, "valor": valor},
-        )
-        if marcou:
-            self.log(f"  ✓ radio {dom_id} = {valor} (via {marcou})")
-            return
-
+                loc.first.click(force=True)
+                self.log(f"  ✓ radio {dom_id} = {valor}")
+                return
         if obrigatorio:
             raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
         self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
@@ -866,12 +853,55 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_timeout(2000)
             self._aguardar_ajax(8000)
 
-            listbox = self._page.locator(
-                "select[class*='listaCalculosRecentes'], select[name*='listaCalculosRecentes']"
-            )
+            # O select de Recentes tem ID dinâmico (ex: formulario:j_id92) e NÃO
+            # tem class/name 'listaCalculosRecentes' — usar JS para localizá-lo.
+            # Diagnóstico: logar todos os selects encontrados para debug
+            _diag_selects = self._page.evaluate("""() => {
+                const result = [];
+                for (const s of document.querySelectorAll('select')) {
+                    result.push({
+                        id: s.id, name: s.name, size: s.size,
+                        nOpts: s.options.length,
+                        first: s.options.length > 0 ? (s.options[0].text || '').slice(0, 60) : '',
+                        blob: [...s.options].map(o => o.text || '').join(' | ').slice(0, 100)
+                    });
+                }
+                return result;
+            }""")
+            self.log(f"  [DIAG-recentes] selects={_diag_selects}")
+
+            _select_id = self._page.evaluate("""() => {
+                const SKIP = new Set(['selAcheFacil']);
+                // Tier 1: primeira opção começa com dígitos + "/" (padrão "ID / RECLAMANTE")
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    if (s.options.length > 0 && /^\\d{4,}\\s*\\//.test(s.options[0].text || ''))
+                        return s.name || s.id;
+                }
+                // Tier 2: blob contém padrão CNJ TRT (NNNNNNN-NN.NNNN.5.NN.NNNN)
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    const blob = [...s.options].map(o => o.text || '').join(' | ');
+                    if (/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob))
+                        return s.name || s.id;
+                }
+                // Tier 3: listbox (size>1) com nome prefixado 'formulario:' e ≥1 opção
+                for (const s of document.querySelectorAll('select')) {
+                    if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                    const n = s.name || s.id || '';
+                    if (s.size > 1 && n.startsWith('formulario:') && s.options.length > 0)
+                        return n;
+                }
+                return null;
+            }""")
+            if not _select_id:
+                self.log("  ⚠ Lista de Cálculos Recentes não encontrada ou vazia — pulando reabrir")
+                return False
+            listbox = self._page.locator(f"select[name='{_select_id}'], select[id='{_select_id}']")
             if listbox.count() == 0:
                 self.log("  ⚠ Lista de Cálculos Recentes não encontrada — pulando reabrir")
                 return False
+            self.log(f"  → select Recentes encontrado: {_select_id}")
 
             n_opts = listbox.first.locator("option").count()
             if n_opts == 0:
@@ -1149,6 +1179,11 @@ class PlaywrightAutomatorV2:
 
     def fase_parametros_calculo(self) -> None:
         self.log("Fase 2 — Parâmetros do Cálculo")
+        # Garantir que estamos em calculo.jsf (aba principal com Parâmetros).
+        # Após Recentes reopen, calculo.jsf já é a página ativa, mas nav explícita
+        # é necessária caso a função seja chamada de outra página.
+        self._navegar_menu("li_calculo_dados_do_calculo")
+        self._aguardar_ajax(5000)
         # Click na aba "Parâmetros do Cálculo"
         self._page.evaluate(
             """[...document.querySelectorAll('.rich-tab-header')].find(t =>
@@ -1409,44 +1444,73 @@ class PlaywrightAutomatorV2:
         for v in verbas_manual:
             self._lancar_verba_manual(v)
 
-        # 4c. Pós-Expresso: verificar estado da listagem (NPE raro com save individual)
-        # Após refator 12/05/2026 (Calc Machine pattern: salvar uma verba por vez),
-        # o NPE pós-Expresso é muito mais raro porque cada save é atômico. Mantemos
-        # detecção+recovery como segurança, mas sem reabertura via Recentes
-        # (não funciona em H2 local conforme documentado em CLAUDE.md).
+        # 4c. Pós-Expresso: verificar contexto Seam para ajuste de parâmetros de verbas.
+        # Bug PJE-Calc 2.15.1: Expresso save muda conversationId (ex: 6→42).
+        # Na nova conv, verba-calculo.jsf pode ter NPE em carregarBasesParaPrincipal.
+        # NOTA: FGTS/CS/IRPF/Honorários/Custas/Correção já rodaram antes do Expresso
+        # na conv=6 original — não precisamos mais nos preocupar com eles aqui.
+        # Só precisamos de verba-calculo.jsf para configurar parâmetros pós-Expresso.
         if verbas_expresso:
+            # Pós-Expresso: Seam criou nova conversation (ex: conv=6 → conv=42).
+            # Forçar inicialização via calculo.jsf?conversationId={nova_conv}.
+            ok = False
+            _conv_pos = self._calculo_conversation_id
+            if _conv_pos:
+                try:
+                    self.log(f"  → Inicializando contexto pós-Expresso: calculo.jsf?conversationId={_conv_pos}")
+                    url_calc = f"{self.pjecalc_url}/pages/calculo/calculo.jsf?conversationId={_conv_pos}"
+                    self._page.goto(url_calc, wait_until="domcontentloaded", timeout=15000)
+                    self._aguardar_ajax(10000)
+                    self._page.wait_for_timeout(1500)
+                    self._capturar_conversation_id()
+                    _diag_init = self._page.evaluate("""() => {
+                        const body = document.body?.textContent || '';
+                        return {
+                            url: location.href.slice(-60),
+                            tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
+                            tem_form: !!document.getElementById('formulario'),
+                            n_fields: document.querySelectorAll('input[type=text],input[type=radio],input[type=checkbox],select').length
+                        };
+                    }""")
+                    self.log(f"  [DIAG-seam-init] calculo.jsf em conv={_conv_pos}: {_diag_init}")
+                    if not _diag_init['tem_500'] and _diag_init['n_fields'] > 5:
+                        self.log(f"  ✓ Contexto pós-Expresso ok: conv={self._calculo_conversation_id}")
+                        ok = True
+                    else:
+                        self.log(f"  ⚠ calculo.jsf sem campos em conv={_conv_pos} — tentando Recentes")
+                except Exception as _e_init:
+                    self.log(f"  ⚠ Erro ao inicializar contexto pós-Expresso: {_e_init}")
+
+            # Tentativa B: reabrir via Recentes (só se inicialização falhou)
+            if not ok:
+                try:
+                    _recentes_count = self._page.evaluate("""() => {
+                        const SKIP = new Set(['selAcheFacil']);
+                        for (const s of document.querySelectorAll('select')) {
+                            if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                            if (s.size > 1 && (s.name || '').startsWith('formulario:'))
+                                return s.options.length;
+                        }
+                        return -1;
+                    }""")
+                    self.log(f"  ℹ Recentes count: {_recentes_count}")
+                    if _recentes_count > 0:
+                        self.log("  → Tentando reabrir via Recentes (lista não-vazia)")
+                        ok = self._reabrir_calculo_via_recentes()
+                    else:
+                        self.log(f"  ℹ Recentes vazio — prosseguindo com conv={self._calculo_conversation_id}")
+                except Exception as _e_rec:
+                    self.log(f"  ⚠ Erro ao checar Recentes: {_e_rec}")
+
+            # Navegar para listagem de verbas para ajuste de parâmetros pós-Expresso
             self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
-            erro_jsf = self._verificar_erro_jsf()
             tem_listagem = self._page.evaluate(
                 """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
             )
-            if erro_jsf or not tem_listagem:
-                self.log(f"  ⚠ verba-calculo.jsf vazia/erro ({erro_jsf}) — tentando recovery (reload + double-hop)")
-                try:
-                    self._page.reload(wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(15000)
-                    self._page.wait_for_timeout(2000)
-                except Exception:
-                    pass
-                tem_listagem = self._page.evaluate(
-                    """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
-                )
-                if not tem_listagem:
-                    self.log(f"  ⚠ Reload sem efeito — triple-hop (Histórico → Dados → Verbas)")
-                    self._navegar_menu("li_calculo_historico_salarial")
-                    self._page.wait_for_timeout(1500)
-                    self._navegar_menu("li_calculo_dados_do_calculo")
-                    self._page.wait_for_timeout(1500)
-                    self._navegar_menu("li_calculo_verbas")
-                    self._aguardar_ajax(15000)
-                    self._page.wait_for_timeout(2000)
-                    tem_listagem = self._page.evaluate(
-                        """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
-                    )
-                if not tem_listagem:
-                    self.log(f"  ⚠ Listagem ainda vazia — continuando para parametrização (pode falhar)")
+            if not tem_listagem:
+                self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros pós-Expresso serão pulados")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
@@ -1569,25 +1633,29 @@ class PlaywrightAutomatorV2:
                     pass
                 continue
 
-            self.log(f"    ✓ Checkbox '{alvo}' clicado com sucesso")
+        # Guardar conv anterior antes do save (para fallback pós-Expresso)
+        _conv_pre_expresso = self._calculo_conversation_id
 
-            # Salvar INDIVIDUALMENTE (padrão Calc Machine: evita NPE)
-            self.log(f"    → Salvando seleção '{alvo}'...")
-            self._clicar("salvar")
-            self._aguardar_ajax(15000)
-            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
-            if not sucesso:
-                erro = self._verificar_erro_jsf()
-                if erro:
-                    self.log(f"    ⚠ Erro JSF ao salvar Expresso '{alvo}': {erro[:200]}")
-            else:
-                self.log(f"    ✓ Verba '{alvo}' salva")
+        self._clicar("salvar")
+        self._aguardar_ajax(15000)
+        self.log("  ✓ Expresso salvo")
+        # CRITICO: re-capturar conversationId — Seam emite NOVO conv após
+        # Expresso save. Sem isso, URL navs subsequentes vao para conv
+        # expirada -> NPE/empty pages em todas as fases seguintes.
+        mudou = self._capturar_conversation_id()
 
-            # Re-capturar conversationId — Seam pode renovar conv após cada save
-            self._capturar_conversation_id()
-            self._page.wait_for_timeout(1500)
+        # Diagnóstico: logar URL atual pós-Expresso
+        try:
+            _url_pos = self._page.url
+            self.log(f"  ℹ URL pós-Expresso: {_url_pos[-80:]}")
+        except Exception:
+            pass
 
-        self.log(f"  ✓ Expresso concluído ({len(verbas)} verba(s) processada(s))")
+        # Guardar conv pré-Expresso como fallback se nova conv (47+) tiver NPE
+        if mudou and _conv_pre_expresso:
+            self._conv_pre_expresso = _conv_pre_expresso
+        else:
+            self._conv_pre_expresso = None
 
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche todos os campos do form de parâmetros de verba.
@@ -2340,10 +2408,48 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(1500)
 
-        # Verificar que página renderizou (radio tipoDeVerba presente)
-        if self._page.locator("input[type='radio'][id*='tipoDeVerba']").count() == 0:
-            self.log("  ⚠ Fase 8 FGTS: página não renderizou — pulando (NPE pós-Expresso?)")
+        # Diagnóstico FGTS — inclui dump completo de ids/names para depuração
+        _diag_fgts = self._page.evaluate("""() => {
+            const body = document.body?.textContent || '';
+            const allInputs = [...document.querySelectorAll('input,select')].map(el => ({
+                tag: el.tagName, type: el.type || '', id: (el.id||'').slice(-40),
+                name: (el.name||'').slice(-40), value: (el.value||'').slice(0,20)
+            }));
+            return {
+                url: location.href.slice(-60),
+                tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
+                tem_form: !!document.getElementById('formulario'),
+                radios_id: document.querySelectorAll('input[type=radio][id*=tipoDeVerba]').length,
+                radios_name: document.querySelectorAll('input[type=radio][name*=tipoDeVerba]').length,
+                todos_inputs: allInputs.length,
+                inputs_dump: allInputs.slice(0, 25),
+                msgs: [...document.querySelectorAll('.rich-messages-label,.rf-msgs-sum')]
+                    .map(e=>(e.textContent||'').trim()).slice(0,3)
+            };
+        }""")
+        self.log(f"  [DIAG-fgts] url={_diag_fgts['url']} tem_form={_diag_fgts['tem_form']} "
+                 f"tem_500={_diag_fgts['tem_500']} radios_id={_diag_fgts['radios_id']} "
+                 f"radios_name={_diag_fgts['radios_name']} n_inputs={_diag_fgts['todos_inputs']}")
+        self.log(f"  [DIAG-fgts-inputs] {_diag_fgts['inputs_dump']}")
+
+        # Verificar que página renderizou — usar tem_form (não tipoDeVerba, que pode ter ID dinâmico)
+        if _diag_fgts['tem_500'] or not _diag_fgts['tem_form']:
+            self.log("  ⚠ Fase 8 FGTS: página não renderizou (HTTP 500 ou sem formulário) — pulando")
             return
+        # Checar se há campos reais de FGTS (radios ou checkboxes) — não só a frame da página.
+        # Conv pré-Expresso renderiza a frame (Salvar/Ocorrências) mas sem campos reais.
+        _n_form_fields = _diag_fgts.get('radios_id', 0) + _diag_fgts.get('radios_name', 0)
+        if _n_form_fields == 0:
+            # Contar radios+checkboxes no DOM diretamente
+            _n_actual = self._page.evaluate(
+                """() => document.querySelectorAll(
+                    'input[type=radio],input[type=checkbox]'
+                ).length"""
+            )
+            self.log(f"  [DIAG-fgts-fields] radios+checkboxes na página: {_n_actual}")
+            if _n_actual == 0:
+                self.log("  ⚠ Fase 8 FGTS: página renderizou frame mas sem campos FGTS — conv sem bean FGTS, pulando")
+                return
 
         f = self.previa.fgts
         # Cada campo é tolerante (não aborta a fase se faltar um)
@@ -2433,6 +2539,16 @@ class PlaywrightAutomatorV2:
     def fase_contribuicao_social(self) -> None:
         self.log("Fase 9 — Contribuição Social")
         self._navegar_menu("li_calculo_inss")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        # Render guard (mesma lógica do FGTS: frame vazia = bean não inicializado)
+        _n_cs = self._page.evaluate(
+            """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
+        )
+        self.log(f"  [DIAG-cs] radios+checkboxes={_n_cs}")
+        if _n_cs == 0:
+            self.log("  ⚠ Fase 9 CS: página sem campos — pulando")
+            return
         cs = self.previa.contribuicao_social
         self._marcar_checkbox("apurarInssSeguradoDevido", cs.apurar_segurado_devido)
         self._marcar_checkbox("cobrarDoReclamanteDevido", cs.cobrar_do_reclamante_devido)
@@ -2450,24 +2566,16 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"  ⚠ save CS falhou: {e}")
 
-        # Sub-página parametrizar-inss SÓ se CS está realmente sendo apurada.
-        # Casos como Santiago (apurar_segurado_devido=false) não precisam
-        # rodar Ocorrências/Recuperar/Copiar — esses controles podem nem existir.
-        if cs.apurar_segurado_devido or cs.apurar_salarios_pagos:
-            try:
-                self._clicar("ocorrencias")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(1500)
-                try:
-                    self._clicar("recuperarDevidos")
-                    self._aguardar_ajax(5000)
-                except Exception as e:
-                    self.log(f"  ⚠ recuperarDevidos indisponível: {e}")
-                try:
-                    self._clicar("copiarDevidos")
-                    self._aguardar_ajax(5000)
-                except Exception as e:
-                    self.log(f"  ⚠ copiarDevidos indisponível: {e}")
+        # Sub-página parametrizar-inss para vinculação histórico→CS
+        try:
+            self._clicar("ocorrencias")
+            self._aguardar_ajax(8000)
+            self._clicar("recuperarDevidos")
+            self._aguardar_ajax(5000)
+            self._clicar("copiarDevidos")
+            self._aguardar_ajax(5000)
+        except Exception as e:
+            self.log(f"  ⚠ CS sub-página ocorrencias/recuperar/copiar: {e} — continuando")
 
                 # Modo manual_por_periodo: aplicar Lote por intervalo
                 if cs.vinculacao_historicos_devidos.modo == "manual_por_periodo":
@@ -2496,6 +2604,15 @@ class PlaywrightAutomatorV2:
     def fase_imposto_de_renda(self) -> None:
         self.log("Fase 10 — IRPF")
         self._navegar_menu("li_calculo_irpf")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        _n_ir = self._page.evaluate(
+            """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
+        )
+        self.log(f"  [DIAG-irpf] radios+checkboxes={_n_ir}")
+        if _n_ir == 0:
+            self.log("  ⚠ Fase 10 IRPF: página sem campos — pulando")
+            return
         ir = self.previa.imposto_de_renda
         self._marcar_checkbox("apurarImpostoRenda", ir.apurar_irpf)
         self._marcar_checkbox("considerarTributacaoEmSeparado", ir.considerar_tributacao_em_separado_rra)
@@ -2520,6 +2637,17 @@ class PlaywrightAutomatorV2:
     def fase_honorarios(self) -> None:
         self.log("Fase 11 — Honorários")
         self._navegar_menu("li_calculo_honorarios")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        # Verificar que a listagem de honorários renderizou (tem botão Incluir)
+        _tem_incluir = self._page.evaluate(
+            """() => !!(document.querySelector('input[id$=incluir]') ||
+               document.querySelector('input[value=Incluir]') ||
+               document.querySelector('a[id$=incluir]'))"""
+        )
+        if not _tem_incluir:
+            self.log("  ⚠ Fase 11 Honorários: página sem botão Incluir — pulando")
+            return
         for h in self.previa.honorarios:
             self.log(f"  → Processando honorário: {h.tipo_honorario} / {h.tipo_devedor}")
             try:
@@ -2578,6 +2706,15 @@ class PlaywrightAutomatorV2:
     def fase_custas_judiciais(self) -> None:
         self.log("Fase 12 — Custas Judiciais")
         self._navegar_menu("li_calculo_custas_judiciais")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        _n_cst = self._page.evaluate(
+            """() => document.querySelectorAll('input[type=radio],select').length"""
+        )
+        self.log(f"  [DIAG-custas] campos={_n_cst}")
+        if _n_cst == 0:
+            self.log("  ⚠ Fase 12 Custas: página sem campos — pulando")
+            return
         c = self.previa.custas_judiciais
         self._selecionar("baseParaCustasCalculadas", c.base_para_calculadas)
         self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamante", c.custas_conhecimento_reclamante)
@@ -2591,6 +2728,15 @@ class PlaywrightAutomatorV2:
     def fase_correcao_juros_multa(self) -> None:
         self.log("Fase 13 — Correção, Juros e Multa")
         self._navegar_menu("li_calculo_correcao_juros_multa")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        _n_cor = self._page.evaluate(
+            """() => document.querySelectorAll('select').length"""
+        )
+        self.log(f"  [DIAG-correcao] selects={_n_cor}")
+        if _n_cor == 0:
+            self.log("  ⚠ Fase 13 Correção: página sem campos — pulando")
+            return
         c = self.previa.correcao_juros_multa
         self._selecionar("indiceTrabalhista", c.indice_trabalhista)
         self._selecionar("juros", c.juros)
@@ -2604,37 +2750,17 @@ class PlaywrightAutomatorV2:
         """Liquida o cálculo e baixa o arquivo .PJC final."""
         self.log("Fase 14 — Liquidar + Exportar")
 
-        # ── 14a. Entrar em Edit Mode via Recentes (CRÍTICO para Exportar) ──
-        # Em creation mode, `ApresentadorExportacao.iniciar()` não é chamado
-        # quando URL-navegamos para exportacao.jsf → `this.nome` fica null →
-        # Exportador.exportar(calculo, null, ...) lança InfraException → "Erro: 4".
-        #
-        # Solução confirmada pelo access log de 05/04: navegar para principal.jsf,
-        # reabrir via Recentes (POST principal.jsf → calculo.jsf?conv=77 em EDIT MODE),
-        # e então usar sidebar Liquidar → sidebar Exportar. O sidebar chama iniciar()
-        # que seta this.nome → exportação funciona.
-        edit_mode = self._reabrir_calculo_via_recentes()
-        if edit_mode:
-            self.log("  ✓ Edit mode via Recentes — sidebar Liquidar/Exportar disponível")
-            self._aguardar_ajax(5000)
-            self._page.wait_for_timeout(1000)
-        else:
-            # Fallback: tentar Buscar se Recentes não incluiu o calc atual
-            self.log("  → Recentes falhou — tentando Buscar como fallback")
-            edit_mode = self._reabrir_via_buscar()
-            if edit_mode:
-                self.log("  ✓ Edit mode via Buscar — sidebar Liquidar/Exportar disponível")
-                self._aguardar_ajax(5000)
-                self._page.wait_for_timeout(1000)
-            else:
-                self.log("  ⚠ Buscar também falhou — continuando em creation mode (pode falhar no Exportar)")
-                # Último recurso: garantir contexto do cálculo via Dados do Cálculo
-                try:
-                    self._navegar_menu("li_calculo_dados_do_calculo")
-                    self._aguardar_ajax(8000)
-                    self._page.wait_for_timeout(1500)
-                except Exception:
-                    pass
+        # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
+        # Sempre passar pelo Dados do Cálculo primeiro para garantir que
+        # estamos no contexto do cálculo (sidebar Operações renderiza).
+        self.log(f"  [DIAG-liq] conv_id no início: {self._calculo_conversation_id}")
+        try:
+            self._navegar_menu("li_calculo_dados_do_calculo")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1500)
+        except Exception:
+            pass
+        self.log(f"  [DIAG-liq] conv_id após dados_do_calculo: {self._calculo_conversation_id}")
 
         # ── 14b. Navegar para Liquidar via sidebar JSF ─────────────────────
         # Estratégia em cascata para localizar Liquidar
@@ -2745,60 +2871,29 @@ class PlaywrightAutomatorV2:
             if erro:
                 self.log(f"  ⚠ JSF reportou erro: {erro[:200]}")
 
-        # PJE-Calc tem uma seção "Pendências do Cálculo" SEMPRE presente na
-        # página, com legenda de ícones (Erro/Alerta). Detectamos pendência
-        # REAL via classe .validacaoErro (não confundir com .validacaoAlerta
-        # que é só warning não-bloqueador). Se a página confirmou
-        # "Operação realizada com sucesso" via _aguardar_operacao_sucesso,
-        # consideramos a liquidação BEM-SUCEDIDA mesmo se houver alertas.
-        body = (self._page.locator("body").text_content() or "").lower()
-        tem_erro_real = self._page.evaluate(
-            """() => {
-                // Só conta como erro REAL os elementos com class validacaoErro
-                // (legenda: 'Erro: Impede a liquidação do cálculo'). validacaoAlerta
-                // (legenda: 'Alerta: Não impede a liquidação') NÃO é bloqueador.
-                const erros = [...document.querySelectorAll('.validacaoErro')];
-                // Filtrar para não pegar a label da legenda em si
-                const reais = erros.filter(el => {
-                    const txt = (el.textContent || '').toLowerCase();
-                    return !txt.includes('legenda') && !txt.startsWith('erro:');
-                });
-                return reais.length > 0;
-            }"""
-        )
-        if (sucesso_liq or self._calculo_numero) and not tem_erro_real:
-            # Liquidação bem-sucedida confirmada
-            self.log("  ✓ Liquidação CONCLUÍDA com sucesso")
-        elif tem_erro_real:
-            # Pendências = erros que IMPEDEM a liquidação. O cálculo NÃO foi
-            # liquidado e o .PJC exportado terá hashCodeLiquidacao=null +
-            # valores zerados. Capturar TODAS as mensagens para depurar.
-            pendencias = self._page.evaluate(
-                """() => {
-                    const sels = [
-                        '.rf-msgs-detail', '.rf-msgs-sum', '.rf-msgs-err',
-                        '.ui-messages-error-summary',
-                        '.rich-messages', '.rich-message',
-                        '.validacaoErro', '.validacaoAlerta',
-                        '.boxSpanTitulo', '.boxModuloValidacao',
-                        '[class*="erro"]', '[class*="error"]', '[class*="pendencia"]'
-                    ];
-                    const seen = new Set();
-                    const out = [];
-                    for (const s of sels) {
-                        for (const el of document.querySelectorAll(s)) {
-                            const txt = (el.textContent || '').replace(/\\s+/g, ' ').trim();
-                            if (txt && txt.length > 4 && txt.length < 400 && !seen.has(txt)) {
-                                seen.add(txt);
-                                out.push(txt);
-                            }
-                        }
-                    }
-                    return out.slice(0, 30);
-                }"""
-            )
-            self.log(
-                f"  ⚠ Liquidação NÃO PERSISTIDA (pendências bloquearam — PJC sairá pré-liquidação):"
+        # Verificar resultado da liquidação — incluindo sinais de sucesso reais
+        _liq_result = self._page.evaluate("""() => {
+            const body = document.body?.textContent || '';
+            const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.ui-messages-error-summary,.rich-messages-label')]
+                .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
+            return {
+                body_lower: body.toLowerCase().slice(0, 500),
+                msgs: msgs,
+                tem_pendencia: body.toLowerCase().includes('pendência'),
+                nao_encontradas: body.toLowerCase().includes('não foram encontradas'),
+                tem_liquidado: body.toLowerCase().includes('liquidado') || body.toLowerCase().includes('liquidação realizada'),
+                tem_erro: body.includes('HTTP Status 500') || body.includes('NullPointerException') || body.includes('Erro inesperado') || body.toLowerCase().includes('erro:')
+            };
+        }""")
+        self.log(f"  [DIAG-liquidar] msgs={_liq_result['msgs']} pendencia={_liq_result['tem_pendencia']} ok={_liq_result['nao_encontradas']} erro={_liq_result['tem_erro']}")
+
+        if _liq_result['tem_erro']:
+            raise RuntimeError(f"Liquidação retornou erro: {_liq_result['msgs']}")
+        if _liq_result['tem_pendencia'] and not _liq_result['nao_encontradas']:
+            pendencias = _liq_result['msgs']
+            raise RuntimeError(
+                f"Liquidação retornou pendências (schema v2 deveria ter prevenido):\n"
+                + "\n".join(f"  • {p}" for p in pendencias)
             )
             for p in pendencias[:15]:
                 self.log(f"     • {p[:250]}")
@@ -2809,59 +2904,160 @@ class PlaywrightAutomatorV2:
             # Alertas existem mas não bloqueiam; liquidação foi bem-sucedida.
             self.log("  ✓ Liquidação OK (alertas não-bloqueadores podem existir)")
 
-        # ── 14e. Navegar para Exportar (cascata robusta) ──────────────────
-        # Em edit mode: sidebar li_operacoes_exportar chama iniciar() via JSF navigation rule
-        # que seta this.nome = Exportador.gerarNomeDoArquivo(calculo) — OBRIGATÓRIO.
-        # Em creation mode (fallback): URL nav direto vai para exportacao.jsf mas NÃO
-        # chama iniciar() → nome=null → "Erro: 4". Por isso edit mode é crítico.
-        nav_exp = self._page.evaluate(
-            """() => {
-                // 1. li#li_operacoes_exportar > a
-                const li1 = document.getElementById('li_operacoes_exportar');
-                if (li1) {
-                    const a = li1.querySelector('a');
-                    if (a) { a.click(); return 'li_operacoes_exportar'; }
-                }
-                // 2. <a> com texto exato 'Exportar' em li com 'operacoes'
-                const links = [...document.querySelectorAll('a')];
-                for (const a of links) {
-                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
-                    const li = a.closest('li');
-                    if (txt === 'Exportar' && li && li.id && li.id.includes('operacoes')) {
-                        a.click();
-                        return 'text-li-operacoes';
+        # Capturar conv_id pós-liquidação — Seam pode ter redirecionado para nova conv
+        self._capturar_conversation_id()
+        _conv_pos_liq = self._calculo_conversation_id
+        self.log(f"  [DIAG-liq] conv_id pós-liquidação: {_conv_pos_liq}")
+
+        # ── 14d. Navegar para Exportar ─────────────────────────────────────────
+        # ESTRATÉGIA: sidebar PRIMEIRO (enquanto ainda estamos na página de liquidação
+        # que tem o contexto Seam correto com calculoAberto inicializado).
+        # URL nav direto causa NPE Java:244 porque exportacao.jsf abre nova conv
+        # sem calculoAberto. Sidebar navega dentro da conv ativa.
+
+        def _tentar_sidebar_exportar() -> str | None:
+            """Tenta clicar Exportar via sidebar; retorna chave-diagnóstico ou None."""
+            resultado = self._page.evaluate(
+                """() => {
+                    // DIAG: dump sidebar items para diagnóstico
+                    const sidebarItems = [...document.querySelectorAll('li[id^=li_]')]
+                        .map(li => li.id).join(',');
+                    const li1 = document.getElementById('li_operacoes_exportar');
+                    if (li1) { const a = li1.querySelector('a'); if (a) { a.click(); return 'li_operacoes_exportar'; } }
+                    const links = [...document.querySelectorAll('a')];
+                    for (const a of links) {
+                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                        const li = a.closest('li');
+                        if (txt === 'Exportar' && li && li.id && li.id.includes('operacoes')) {
+                            a.click(); return 'text-li-operacoes';
+                        }
                     }
-                }
-                // 3. <a> com texto 'Exportar' em qualquer menu
-                for (const a of links) {
-                    const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
-                    if (txt === 'Exportar' && a.id && (a.id.includes('menu') || a.id.includes('j_id'))) {
-                        a.click();
-                        return 'text-any';
+                    for (const a of links) {
+                        const txt = (a.textContent || '').replace(/\\s+/g,' ').trim();
+                        if (txt === 'Exportar') { a.click(); return 'text-any:' + (a.id || 'noId').slice(0,30); }
                     }
-                }
-                return null;
-            }"""
-        )
-        if not nav_exp:
-            self.log("  ⚠ Sidebar 'Exportar' não localizado — tentando URL nav")
+                    // Retornar null mas com DIAG de sidebar para debug
+                    return null;
+                }"""
+            )
+            # DIAG: log sidebar state when not found
+            if not resultado:
+                _sidebar_diag = self._page.evaluate(
+                    """() => [...document.querySelectorAll('li[id^=li_]')].map(li => li.id)"""
+                )
+                self.log(f"  [DIAG-sidebar-exportar] items={_sidebar_diag[:15]}")
+            return resultado
+
+        def _verificar_exportacao_ok() -> dict:
+            return self._page.evaluate("""() => {
+                const body = document.body?.textContent || '';
+                return {
+                    url: location.href.slice(-70),
+                    tem_form: !!document.getElementById('formulario'),
+                    tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
+                    tem_export_btn: !!(document.querySelector('input[id$=exportar]') ||
+                        document.querySelector('input[value=Exportar]')),
+                    tem_erro_5: body.includes('Erro: 5') || body.includes('erro: 5')
+                };
+            }""")
+
+        nav_exp = None
+
+        # 1ª tentativa: sidebar estando na página de resultado da liquidação
+        self.log("  → Tentando nav Exportar via sidebar (pós-liquidação)...")
+        try:
+            nav_exp = _tentar_sidebar_exportar()
+            if nav_exp:
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(2000)
+                _diag_exp = _verificar_exportacao_ok()
+                self.log(f"  [DIAG-exp] sidebar={nav_exp} {_diag_exp}")
+                if _diag_exp['tem_500'] or _diag_exp['tem_erro_5']:
+                    self.log("  ⚠ Sidebar→Exportar retornou erro (NPE?) — tentando URL nav")
+                    nav_exp = None  # vai tentar URL nav
+        except Exception as e:
+            self.log(f"  ⚠ Sidebar exportar erro: {e}")
+            nav_exp = None
+
+        # 2ª tentativa: URL nav com conv pós-liquidação
+        if not nav_exp and _conv_pos_liq:
+            self.log(f"  → Tentando URL nav exportacao.jsf?conversationId={_conv_pos_liq}")
+            url_exp = (
+                f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
+                f"?conversationId={_conv_pos_liq}"
+            )
             try:
-                if self._calculo_conversation_id:
-                    url_exp = (
-                        f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
-                        f"?conversationId={self._calculo_conversation_id}"
-                    )
-                    self._page.goto(url_exp, wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(15000)
-                    self._capturar_conversation_id()
-                    nav_exp = "url-nav-fallback"
+                self._page.goto(url_exp, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(1500)
+                _diag_exp = _verificar_exportacao_ok()
+                self.log(f"  [DIAG-exp] url-nav {_diag_exp}")
+                if not _diag_exp['tem_500'] and not _diag_exp['tem_erro_5'] and _diag_exp['tem_form']:
+                    nav_exp = "url-nav-direto"
             except Exception as e:
                 self.log(f"  ⚠ URL nav Exportar: {e}")
+
+        # 3ª tentativa: dados_do_calculo → sidebar novamente (re-inicializa beans)
         if not nav_exp:
-            raise RuntimeError("Sidebar 'Exportar' não localizado")
+            self.log("  → Tentando reabrir cálculo via Dados do Cálculo + sidebar Exportar")
+            try:
+                self._navegar_menu("li_calculo_dados_do_calculo")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                _sid3 = _tentar_sidebar_exportar()
+                if _sid3:
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+                    _diag3 = _verificar_exportacao_ok()
+                    self.log(f"  [DIAG-exp] dados+sidebar={_sid3} {_diag3}")
+                    if not _diag3['tem_500'] and not _diag3['tem_erro_5']:
+                        nav_exp = f"dados+sidebar:{_sid3}"
+            except Exception as e:
+                self.log(f"  ⚠ Tentativa 3 (dados+sidebar): {e}")
+
+        # 4ª tentativa: principal.jsf → Recentes (pós-liquidação) → sidebar Exportar
+        # Após liquidação o calc está no H2 com estado LIQUIDADO.
+        # Tentar reabrir via Recentes para obter nova conv em edit-mode onde
+        # calculoAberto.calculo está corretamente populado.
+        if not nav_exp:
+            self.log("  → Tentativa 4: principal.jsf → Recentes → conv_edit → Exportar")
+            try:
+                ok_rec4 = self._reabrir_calculo_via_recentes()
+                if ok_rec4:
+                    self.log(f"  ✓ Reaberto via Recentes — conv={self._calculo_conversation_id}")
+                    # Agora navegar para o Exportar via sidebar
+                    _sid4 = _tentar_sidebar_exportar()
+                    if not _sid4:
+                        # Sidebar pode não mostrar Exportar ainda — navegar para calculo.jsf primeiro
+                        self._navegar_menu("li_calculo_dados_do_calculo")
+                        self._aguardar_ajax(5000)
+                        _sid4 = _tentar_sidebar_exportar()
+                    if _sid4:
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(2000)
+                        _diag4 = _verificar_exportacao_ok()
+                        self.log(f"  [DIAG-exp] recentes+sidebar={_sid4} {_diag4}")
+                        if not _diag4['tem_500']:
+                            nav_exp = f"recentes+sidebar:{_sid4}"
+                    # Fallback: URL nav com nova conv
+                    if not nav_exp and self._calculo_conversation_id:
+                        url_exp4 = (
+                            f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
+                            f"?conversationId={self._calculo_conversation_id}"
+                        )
+                        self._page.goto(url_exp4, wait_until="domcontentloaded", timeout=15000)
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(1500)
+                        _diag4b = _verificar_exportacao_ok()
+                        self.log(f"  [DIAG-exp] recentes+url-nav {_diag4b}")
+                        if not _diag4b['tem_500'] and not _diag4b['tem_erro_5'] and _diag4b['tem_form']:
+                            nav_exp = f"recentes+url-nav"
+            except Exception as e4:
+                self.log(f"  ⚠ Tentativa 4 (recentes pós-liq): {e4}")
+
+        if not nav_exp:
+            raise RuntimeError("Exportar não localizado após 4 tentativas (sidebar, URL-nav, dados+sidebar, recentes)")
         self.log(f"  ✓ Navegação Exportar via: {nav_exp}")
-        self._aguardar_ajax(15000)
-        self._page.wait_for_timeout(2000)
 
         # ── 14f. Clicar Exportar e capturar .PJC ───────────────────────────
         # Estratégia: capturar response binário via expect_response
@@ -2900,29 +3096,41 @@ class PlaywrightAutomatorV2:
                 )
                 raise RuntimeError(f"Botão Exportar não encontrado. Inputs visíveis: {_diag}")
 
-            # ── Captura do download (padrão Calc Machine 12/05/2026) ────────────
-            # Calc Machine configura o navegador para downloads em diretório fixo
-            # e depois faz scan do diretório. É mais robusto que `page.on("download")`
-            # porque não depende de o Playwright capturar o evento no momento certo
-            # (o auto-jsfcljs do exportacao.xhtml pode disparar em sub-frames).
-            #
-            # Estratégia tripla (em ordem de prioridade):
-            #   A) Listener page.on("download") (mantemos como tentativa primária)
-            #   B) Response interceptor para ZIP bytes (intercept HTTP)
-            #   C) Scan do download dir do Firefox (fallback robusto)
-            pjc_bytes: bytes | None = None
-            _dl_data: list[bytes] = []
-            _resp_data: list[bytes] = []
-            _dir_initial = set(self._download_dir.iterdir()) if self._download_dir.exists() else set()
+            # Fase A: click + expect ANY POST response a exportacao.jsf
+            # (pode ser HTML com linkDownloadArquivo, ou diretamente ZIP).
+            pjc_bytes = None
+            try:
+                with self._page.expect_response(
+                    lambda r: (
+                        "exportacao.jsf" in r.url
+                        and r.request.method == "POST"
+                    ),
+                    timeout=30000,
+                ) as resp_info:
+                    btn.click(force=True)
+                resp = resp_info.value
+                ct = resp.headers.get("content-type", "")
+                cd = resp.headers.get("content-disposition", "")
+                self.log(f"  → Fase A resposta: HTTP {resp.status} ct={ct[:60]} cd={cd[:60]}")
+                body_a = resp.body()
+                if body_a and body_a[:2] == b"PK":
+                    pjc_bytes = body_a
+                    self.log(f"  ✓ Fase A capturou .PJC direto: {len(pjc_bytes)} bytes")
+                else:
+                    self.log(f"  → Fase A: resposta HTML ({len(body_a)} bytes) — buscando linkDownloadArquivo")
+            except Exception as e_a:
+                self.log(f"  ⚠ Fase A: {str(e_a)[:120]} — tentando Fase B/E")
 
-            def _on_download(dl) -> None:
-                try:
-                    path = dl.path()
-                    data = __import__("pathlib").Path(path).read_bytes() if path else b""
-                    _dl_data.append(data)
-                    self.log(f"  📥 Download event: {dl.suggested_filename} ({len(data)}B)")
-                except Exception as ex:
-                    self.log(f"  ⚠ on_download error: {ex}")
+            # Fase B + E: aguardar linkDownloadArquivo aparecer + disparar jsfcljs
+            if not pjc_bytes:
+                # Poll por linkDownloadArquivo (até 45s — server pode ser lento)
+                link_ok = False
+                for i in range(90):
+                    if self._page.locator("[id$='linkDownloadArquivo']").count() > 0:
+                        link_ok = True
+                        self.log(f"  ✓ linkDownloadArquivo detectado após {i*0.5:.1f}s")
+                        break
+                    self._page.wait_for_timeout(500)
 
             def _on_response(resp) -> None:
                 try:
@@ -2930,67 +3138,70 @@ class PlaywrightAutomatorV2:
                     cd = (resp.headers.get("content-disposition") or "").lower()
                     if "zip" in ct or ".pjc" in cd or "attachment" in cd:
                         body = resp.body()
-                        if body[:2] == b"PK":
-                            _resp_data.append(body)
-                            self.log(f"  📦 ZIP via response: {len(body)}B")
-                except Exception:
-                    pass
+                        if body and body[:2] == b"PK":
+                            pjc_bytes = body
+                            self.log(f"  ✓ Fase E capturou .PJC: {len(pjc_bytes)} bytes")
+                    except Exception as e_e:
+                        self.log(f"  ⚠ Fase E: {str(e_e)[:200]}")
+                else:
+                    self.log(f"  ⚠ linkDownloadArquivo não apareceu em 45s")
+                    # Diagnóstico: dump elementos presentes na página
+                    try:
+                        _diag = self._page.evaluate("""() => {
+                            const ids = [...document.querySelectorAll('[id]')]
+                                .map(e => e.id).filter(Boolean);
+                            const inputs = [...document.querySelectorAll('input,a,button')]
+                                .filter(e => e.offsetParent)
+                                .map(e => (e.id || e.textContent?.trim()?.slice(0,20) || '?') + ':' + e.tagName);
+                            const msgs = [...document.querySelectorAll('.rf-msgs,.rf-msg,.rich-messages,span[class*=error],span[class*=warn]')]
+                                .map(e => e.textContent.trim().slice(0,100)).filter(Boolean);
+                            return {
+                                url: location.href.split('?')[0].split('/').pop(),
+                                ids: ids.filter(i => i.includes('Download') || i.includes('export') || i.includes('link')).slice(0,10),
+                                inputs: inputs.slice(0,15),
+                                msgs: msgs.slice(0,5)
+                            };
+                        }""")
+                        self.log(f"  [DIAG-export] {_diag}")
+                    except Exception:
+                        pass
 
-            self._page.on("download", _on_download)
-            self._page.on("response", _on_response)
-
-            try:
-                self.log("  ✓ Botão Exportar clicado")
-                btn.click(force=True)
-                # Aguardar: AJAX re-render (~2s) + auto-jsfcljs (~1s) + download (~2s)
-                # mas dar margem para downloads grandes (15s base).
-                self._page.wait_for_timeout(15000)
-
-                # Estratégia C: scan do diretório de downloads para arquivo novo
-                if not _dl_data and not _resp_data:
-                    self.log(f"  → Scan do diretório de download {self._download_dir}...")
-                    import pathlib as _pl, time as _t
-                    deadline = _t.time() + 30  # +30s para download dir
-                    novo = None
-                    while _t.time() < deadline:
-                        atuais = set(self._download_dir.iterdir()) if self._download_dir.exists() else set()
-                        adicionados = atuais - _dir_initial
-                        # Filtrar arquivos .pjc ou .PJC e que não terminem com .part (download em curso)
-                        pjcs = [f for f in adicionados
-                                if f.suffix.lower() == ".pjc" and not str(f).endswith(".part")]
-                        if pjcs:
-                            novo = max(pjcs, key=lambda f: f.stat().st_mtime)
-                            break
-                        self._page.wait_for_timeout(1000)
-                    if novo and novo.exists():
-                        data = novo.read_bytes()
-                        if data[:2] == b"PK":
-                            _resp_data.append(data)
-                            self.log(f"  ✅ Arquivo salvo: {novo.name} ({len(data)}B)")
-                        else:
-                            self.log(f"  ⚠ Arquivo {novo.name} não é ZIP (header={data[:10]!r})")
-            finally:
-                self._page.remove_listener("download", _on_download)
-                self._page.remove_listener("response", _on_response)
-
-            # Prioridade: download event > response intercept > dir scan
-            if _dl_data and _dl_data[0][:2] == b"PK":
-                pjc_bytes = _dl_data[0]
-                self.log(f"  ✓ .PJC via download event: {len(pjc_bytes)} bytes")
-            elif _resp_data:
-                pjc_bytes = _resp_data[0]
-                self.log(f"  ✓ .PJC capturado: {len(pjc_bytes)} bytes")
+                    # Fase F: POST direto com parâmetros jsfcljs do linkDownloadArquivo
+                    try:
+                        _vstate = self._page.evaluate("""() => {
+                            const f = document.getElementById('formulario');
+                            if (!f) return null;
+                            const vs = f.querySelector('[name="javax.faces.ViewState"]');
+                            return vs ? vs.value : null;
+                        }""")
+                        if _vstate:
+                            self.log(f"  → Fase F: POST direto com ViewState ({len(_vstate)} chars)")
+                            with self._page.expect_response(
+                                lambda r: "exportacao.jsf" in r.url and r.request.method == "POST",
+                                timeout=60000,
+                            ) as _rf_info:
+                                self._page.evaluate(f"""() => {{
+                                    const form = document.getElementById('formulario');
+                                    if (!form) return;
+                                    const addHidden = (n, v) => {{
+                                        let el = form.querySelector('[name="' + n + '"]');
+                                        if (!el) {{ el = document.createElement('input'); el.type='hidden'; el.name=n; form.appendChild(el); }}
+                                        el.value = v;
+                                    }};
+                                    addHidden('formulario:linkDownloadArquivo', 'formulario:linkDownloadArquivo');
+                                    form.submit();
+                                }}""")
+                            _rf = _rf_info.value
+                            _fb = _rf.body()
+                            self.log(f"  → Fase F: HTTP {_rf.status} ct={_rf.headers.get('content-type','')[:40]} {len(_fb)} bytes")
+                            if _fb and _fb[:2] == b"PK":
+                                pjc_bytes = _fb
+                                self.log(f"  ✓ Fase F capturou .PJC: {len(pjc_bytes)} bytes")
+                    except Exception as e_f:
+                        self.log(f"  ⚠ Fase F: {str(e_f)[:150]}")
 
             if not pjc_bytes:
-                # Diagnóstico extra: o que apareceu no download dir
-                arquivos_no_dir = (
-                    [f.name for f in self._download_dir.iterdir()]
-                    if self._download_dir.exists() else []
-                )
-                raise RuntimeError(
-                    f"Falha ao capturar download .PJC: nenhum ZIP recebido. "
-                    f"Download dir: {arquivos_no_dir}"
-                )
+                raise RuntimeError("Falha ao capturar download .PJC: Fase A, E e F timeout")
         except RuntimeError:
             raise
         except Exception as e:

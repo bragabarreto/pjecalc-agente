@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -320,10 +320,12 @@ class QuantidadeVerba(BaseModel):
 
 
 class FormulaCalculado(BaseModel):
-    base_calculo: BaseCalculoVerba
-    divisor: DivisorVerba = Field(default_factory=DivisorVerba)
+    model_config = ConfigDict(extra="allow")
+
+    base_calculo: Optional[BaseCalculoVerba] = None
+    divisor: Optional[DivisorVerba] = None
     multiplicador: float = 1.0
-    quantidade: QuantidadeVerba = Field(default_factory=QuantidadeVerba)
+    quantidade: Optional[QuantidadeVerba] = None
 
 
 class ValorPagoVerba(BaseModel):
@@ -359,28 +361,39 @@ class OcorrenciasOverride(BaseModel):
 
 
 class ParametrosVerba(BaseModel):
-    assunto_cnj: AssuntoCNJ
+    """Parâmetros de uma verba principal.
+
+    Todos os campos de classificação são Optional para tolerar o JSON gerado
+    pelo Projeto Claude externo, que não inclui assunto_cnj, valor, caracteristica
+    etc. (campos preenchidos automaticamente pelo PJE-Calc no modo Expresso).
+    """
+    model_config = ConfigDict(extra="allow")
+
+    assunto_cnj: Optional[AssuntoCNJ] = None
     parcela: TipoVariacaoParcela = TipoVariacaoParcela.FIXA
-    valor: TipoValor
-    incidencias: VerbaIncidencias
-    caracteristica: CaracteristicaVerba
-    ocorrencia_pagamento: OcorrenciaPagamento
+    valor: Optional[TipoValor] = None
+    incidencias: Optional[VerbaIncidencias] = None
+    caracteristica: Optional[CaracteristicaVerba] = None
+    ocorrencia_pagamento: Optional[OcorrenciaPagamento] = None
     ocorrencia_ajuizamento: OcorrenciaAjuizamento = OcorrenciaAjuizamento.OCORRENCIAS_VENCIDAS
     tipo: TipoVerba = TipoVerba.PRINCIPAL
     gerar_reflexa: GerarReflexo = GerarReflexo.DIFERENCA
     gerar_principal: GerarReflexo = GerarReflexo.DIFERENCA
     compor_principal: bool = True
     zerar_valor_negativo: bool = False
-    periodo_inicio: str
-    periodo_fim: str
+    periodo_inicio: Optional[str] = None
+    periodo_fim: Optional[str] = None
     exclusoes: VerbaExclusoes = Field(default_factory=VerbaExclusoes)
-    valor_devido: ValorDevidoInformado | ValorDevidoCalculado
+    valor_devido: Optional[Union[ValorDevidoInformado, ValorDevidoCalculado]] = None
     formula_calculado: Optional[FormulaCalculado] = None
     valor_pago: ValorPagoVerba = Field(default_factory=ValorPagoVerba)
     comentarios: Optional[str] = None
 
     @model_validator(mode="after")
     def _check_valor_consistency(self) -> "ParametrosVerba":
+        # Pular validação quando valor não foi especificado (modo Expresso)
+        if self.valor is None:
+            return self
         # Tolerância: se LLM gerou valor=CALCULADO mas formula_calculado é null
         # E valor_devido tem valor_informado_brl, normalizamos para INFORMADO.
         if (
@@ -390,23 +403,6 @@ class ParametrosVerba(BaseModel):
             and self.valor_devido.valor_informado_brl is not None
         ):
             self.valor = TipoValor.INFORMADO
-
-        if self.valor == TipoValor.INFORMADO:
-            if not isinstance(self.valor_devido, ValorDevidoInformado):
-                raise ValueError("valor=INFORMADO requer valor_devido tipo INFORMADO com valor_informado_brl")
-        else:  # CALCULADO
-            # Tolerância p/ verbas Expresso: Férias+1/3, 13º, etc. — o PJE-Calc
-            # gera a fórmula automaticamente a partir da característica
-            # (FERIAS, DECIMO_TERCEIRO_SALARIO) + ocorrência. Não exigir
-            # formula_calculado quando característica permitir auto-cálculo.
-            caract = getattr(self, "caracteristica", None)
-            caract_val = getattr(caract, "value", caract) if caract else None
-            auto_calc_caracteristicas = {"FERIAS", "DECIMO_TERCEIRO_SALARIO", "AVISO_PREVIO"}
-            if self.formula_calculado is None and caract_val not in auto_calc_caracteristicas:
-                raise ValueError(
-                    f"valor=CALCULADO requer formula_calculado preenchido "
-                    f"(característica={caract_val} não está em {auto_calc_caracteristicas})"
-                )
         return self
 
 
@@ -435,15 +431,16 @@ class ParametrosReflexo(BaseModel):
 
 
 class Reflexo(BaseModel):
-    """Reflexo de uma verba principal.
+    """Reflexo de uma verba principal (embutido em VerbaPrincipal.reflexos).
 
-    OBRIGATÓRIO: `verba_principal_id` deve casar com o `id` de exatamente UMA verba
-    em `verbas_principais`. Reflexos órfãos (sem principal correspondente) são
-    rejeitados pelo validador `_verifica_reflexos_vinculados` em PreviaCalculoV2.
+    `verba_principal_id` e `nome` são Optional pois o Projeto Claude externo
+    os omite quando os reflexos estão aninhados dentro da verba principal.
     """
+    model_config = ConfigDict(extra="allow")
+
     id: str
-    verba_principal_id: str  # FK para VerbaPrincipal.id — obrigatório
-    nome: str
+    verba_principal_id: Optional[str] = None  # implícito quando aninhado em VerbaPrincipal
+    nome: Optional[str] = None
     estrategia_reflexa: EstrategiaReflexa = EstrategiaReflexa.CHECKBOX_PAINEL
     indice_reflexo_listagem: Optional[int] = None
     expresso_reflex_alvo: Optional[str] = None
@@ -452,11 +449,13 @@ class Reflexo(BaseModel):
 
 
 class VerbaPrincipal(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     id: str
     nome_sentenca: str
     estrategia_preenchimento: EstrategiaPreenchimento
     expresso_alvo: Optional[str] = None
-    nome_pjecalc: str
+    nome_pjecalc: Optional[str] = None  # pode ser omitido; cai-back para nome_sentenca
     parametros: ParametrosVerba
     ocorrencias_override: Optional[OcorrenciasOverride] = None
     reflexos: list[Reflexo] = Field(default_factory=list)
@@ -521,9 +520,11 @@ class FeriasSection(BaseModel):
 
 
 class FGTSMulta(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     ativa: bool = True
-    tipo_valor: Literal["CALCULADA", "INFORMADA"] = "CALCULADA"
-    percentual: Literal["VINTE_POR_CENTO", "QUARENTA_POR_CENTO"] = "QUARENTA_POR_CENTO"
+    tipo_valor: Optional[Literal["CALCULADA", "INFORMADA", "NAO_APURAR"]] = "CALCULADA"
+    percentual: Optional[Literal["VINTE_POR_CENTO", "QUARENTA_POR_CENTO"]] = None
     excluir_aviso_da_multa: bool = False
     valor_informado_brl: Optional[float] = None
 
@@ -537,13 +538,14 @@ class RecolhimentoFGTS(BaseModel):
 
     Aceita aliases legacy: `periodo_inicio` → `competencia_inicio`,
     `periodo_fim` → `competencia_fim`, `valor_depositado_brl` → `valor_total_depositado_brl`.
+    Aceita também `competencia` (chave curta usada por alguns prompts).
     """
-    model_config = ConfigDict(populate_by_name=True)
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
     tipo: Literal["DEPOSITO_REGULAR", "SAQUE", "MULTA_RESCISORIA"] = "DEPOSITO_REGULAR"
-    competencia_inicio: str = Field(alias="periodo_inicio")  # MM/YYYY
-    competencia_fim: str = Field(alias="periodo_fim")  # MM/YYYY
-    valor_total_depositado_brl: float = Field(ge=0, alias="valor_depositado_brl")
+    competencia_inicio: Optional[str] = Field(default=None, alias="periodo_inicio")  # MM/YYYY
+    competencia_fim: Optional[str] = Field(default=None, alias="periodo_fim")  # MM/YYYY
+    valor_total_depositado_brl: Optional[float] = Field(default=None, ge=0, alias="valor_depositado_brl")
     fonte: Literal["INFORMADO_PELA_PARTE", "EXTRATO_FGTS_OFICIAL", "AUTOMATICO"] = "AUTOMATICO"
     descricao: Optional[str] = None
 
@@ -736,7 +738,8 @@ class Meta(BaseModel):
 
 
 class PreviaCalculoV2(BaseModel):
-    model_config = ConfigDict(extra="allow")  # tolera honorarios_periciais, _periciais_obs, etc.
+    model_config = ConfigDict(extra="allow")  # tolera campos extras/futuros do Projeto Claude
+
     meta: Meta = Field(default_factory=Meta)
     processo: Processo
     parametros_calculo: ParametrosCalculo
@@ -763,6 +766,10 @@ class PreviaCalculoV2(BaseModel):
     @model_validator(mode="after")
     def _validate_completude(self) -> "PreviaCalculoV2":
         """Roda validações cruzadas e atualiza self.meta.validacao."""
+        # Resetar estado de validação (payload pode trazer erros de execuções anteriores)
+        self.meta.validacao.campos_faltantes = []
+        self.meta.validacao.avisos = []
+        self.meta.validacao.completude = "OK"
         avisos: list[str] = []
         # 1. Histórico cobre período do cálculo
         if self.historico_salarial:
@@ -831,7 +838,7 @@ class PreviaCalculoV2(BaseModel):
                 and d_pf and d_dem and d_pf > d_dem
             ):
                 self.meta.validacao.campos_faltantes.append(
-                    f"verba[{v.id}] '{v.nome_pjecalc}': ocorrencia_pagamento=DESLIGAMENTO "
+                    f"verba[{v.id}] '{v.nome_pjecalc or v.nome_sentenca}': ocorrencia_pagamento=DESLIGAMENTO "
                     f"incompatível com periodo_fim={p.periodo_fim} POSTERIOR à "
                     f"data_demissao={self.parametros_calculo.data_demissao}. "
                     f"Use ocorrencia_pagamento=MENSAL para verbas pós-contratuais."
@@ -840,14 +847,14 @@ class PreviaCalculoV2(BaseModel):
             # Regra 2: periodo_inicio < data_admissao = ERRO
             if d_pi and d_adm and d_pi < d_adm:
                 self.meta.validacao.campos_faltantes.append(
-                    f"verba[{v.id}] '{v.nome_pjecalc}': periodo_inicio={p.periodo_inicio} "
+                    f"verba[{v.id}] '{v.nome_pjecalc or v.nome_sentenca}': periodo_inicio={p.periodo_inicio} "
                     f"ANTERIOR à data_admissao={self.parametros_calculo.data_admissao}."
                 )
 
             # Regra 3: periodo_fim > data_termino_calculo = ERRO
             if d_pf and d_fim_calc and d_pf > d_fim_calc:
                 self.meta.validacao.campos_faltantes.append(
-                    f"verba[{v.id}] '{v.nome_pjecalc}': periodo_fim={p.periodo_fim} "
+                    f"verba[{v.id}] '{v.nome_pjecalc or v.nome_sentenca}': periodo_fim={p.periodo_fim} "
                     f"posterior à data_termino_calculo={self.parametros_calculo.data_termino_calculo}. "
                     f"Estenda data_termino_calculo ou ajuste periodo_fim."
                 )
@@ -855,7 +862,7 @@ class PreviaCalculoV2(BaseModel):
             # Regra 4: periodo_inicio > periodo_fim = ERRO
             if d_pi and d_pf and d_pi > d_pf:
                 self.meta.validacao.campos_faltantes.append(
-                    f"verba[{v.id}] '{v.nome_pjecalc}': periodo_inicio={p.periodo_inicio} "
+                    f"verba[{v.id}] '{v.nome_pjecalc or v.nome_sentenca}': periodo_inicio={p.periodo_inicio} "
                     f"posterior a periodo_fim={p.periodo_fim}."
                 )
 
@@ -878,15 +885,15 @@ class PreviaCalculoV2(BaseModel):
 
         for v in self.verbas_principais:
             for r in v.reflexos:
-                # Regra 1: FK válida
-                if r.verba_principal_id not in principais_ids:
+                # Regra 1: FK válida (ignorar quando None — campo opcional)
+                if r.verba_principal_id is not None and r.verba_principal_id not in principais_ids:
                     self.meta.validacao.campos_faltantes.append(
                         f"reflexo[{r.id}].verba_principal_id={r.verba_principal_id} "
                         f"não corresponde a nenhuma verba_principal"
                     )
                 # Regra 2: consistência estrutural — reflexo dentro do bloco
                 # da principal deve apontar para essa principal.
-                elif r.verba_principal_id != v.id:
+                elif r.verba_principal_id is not None and r.verba_principal_id != v.id:
                     self.meta.validacao.campos_faltantes.append(
                         f"reflexo[{r.id}] está aninhado em verba_principal[{v.id}] "
                         f"mas verba_principal_id={r.verba_principal_id} aponta para outra"

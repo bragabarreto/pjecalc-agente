@@ -11,33 +11,44 @@
 .progress-bar { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; margin: 16px 0; }
 .progress-fill { height: 100%; background: #1a3a6b; width: 0%; transition: width 0.4s; }
 #status-area { display: none; }
-.doc-card {
-  border: 1px solid #dee2e6; border-radius: 8px; padding: 16px;
-  margin-bottom: 12px; background: #fafafa;
+
+/* Abas entrada */
+.entrada-tabs { display: flex; gap: 0; margin-bottom: 0; border-bottom: 2px solid #dee2e6; }
+.entrada-tab {
+  padding: 9px 22px; cursor: pointer; font-size: 0.9rem; font-weight: 500;
+  border: 1px solid transparent; border-bottom: none; border-radius: 6px 6px 0 0;
+  background: #f8f9fa; color: #6c757d; transition: all 0.15s; margin-bottom: -2px;
 }
-.doc-card-header {
-  display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;
+.entrada-tab:hover { background: #e9ecef; color: #343a40; }
+.entrada-tab.ativa {
+  background: #fff; color: #1a3a6b; border-color: #dee2e6;
+  border-bottom-color: #fff; font-weight: 600;
 }
-.doc-tabs { display: flex; gap: 4px; margin-bottom: 12px; flex-wrap: wrap; }
-.tab-btn {
-  padding: 6px 14px; border: 1px solid #dee2e6; border-radius: 4px;
-  background: #fff; cursor: pointer; font-size: 0.85rem; transition: all 0.2s;
+.entrada-painel { display: none; padding: 18px 0 0; }
+.entrada-painel.ativa { display: block; }
+
+/* Área de colar JSON */
+#area-colar {
+  border: 2px dashed #5a3e99; border-radius: 8px; padding: 0;
+  background: #f8f5ff; transition: border-color 0.2s;
 }
-.tab-btn.ativa { background: #1a3a6b; color: #fff; border-color: #1a3a6b; }
-.aba-conteudo { display: none; }
-.aba-conteudo.ativa { display: block; }
-.doc-file-area {
-  border: 1px dashed #adb5bd; border-radius: 6px; padding: 20px;
-  text-align: center; cursor: pointer; background: #fff;
+#area-colar:focus-within { border-color: #1a3a6b; }
+#json-colado {
+  width: 100%; min-height: 200px; max-height: 380px;
+  padding: 14px 16px; border: none; border-radius: 8px;
+  font-family: 'Courier New', monospace; font-size: 0.82rem;
+  background: transparent; resize: vertical; outline: none;
+  box-sizing: border-box; color: #212529;
 }
-.doc-file-area:hover { background: #f0f4ff; border-color: #1a3a6b; }
-.doc-file-area input[type=file] { display: none; }
-.contexto-area { margin-top: 10px; }
-.contexto-area label { display: block; font-size: 0.82rem; color: #6c757d; margin-bottom: 3px; }
-.contexto-area textarea {
-  width: 100%; padding: 8px; border: 1px solid #dee2e6; border-radius: 4px;
-  font-size: 0.88rem; resize: vertical; font-family: inherit;
+#json-colado::placeholder { color: #adb5bd; }
+.colar-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px; border-top: 1px solid #e0d6f5; background: #f0eaff;
+  border-radius: 0 0 7px 7px; font-size: 0.82rem; color: #6c757d;
 }
+#colar-status { font-weight: 500; }
+#colar-status.ok { color: #28a745; }
+#colar-status.erro { color: #dc3545; }
 {% endblock %}
 
 {% block content %}
@@ -50,35 +61,36 @@
 
   <form id="form-upload" enctype="multipart/form-data">
 
-    <!-- Sentença principal — APENAS JSON v2 -->
+    <!-- Sentença principal — JSON v2 -->
     <div style="margin-bottom:24px;">
       <h4 style="color:#1a3a6b; margin-bottom:10px;">
         Prévia v2 — JSON do Projeto Claude <span style="color:#dc3545; font-size:0.9rem;">*</span>
       </h4>
       <div style="background:#f3f0ff; border:1px solid #d0bfff; border-radius:8px;
-                  padding:12px 16px; margin-bottom:12px; font-size:0.88rem; color:#5a3e99;">
+                  padding:12px 16px; margin-bottom:14px; font-size:0.88rem; color:#5a3e99;">
         <strong>📌 Pipeline v2 (única rota suportada)</strong><br>
-        Faça upload do <strong>JSON v2.0</strong> gerado pelo seu Projeto Claude (System Prompt em
-        <code>docs/prompt-projeto-claude-externo.md</code>). O JSON é validado por Pydantic v2 e
-        aberto para revisão na nova UI da prévia.
+        Faça upload ou cole o <strong>JSON v2.0</strong> gerado pelo seu Projeto Claude
+        (System Prompt em <code>docs/prompt-projeto-claude-externo.md</code>).
+        O JSON é validado por Pydantic v2 e aberto para revisão na nova UI da prévia.
         <br><br>
         <em>Se o seu Claude ainda não gera JSON v2, atualize o System Prompt antes.</em>
       </div>
 
-      <!-- Tabs: arquivo vs colar -->
-      <div class="doc-tabs">
-        <button type="button" class="tab-btn ativa" data-aba="aba-sent-arquivo" onclick="trocarAba(this)">
+      <!-- Abas: Arquivo / Colar JSON -->
+      <div class="entrada-tabs">
+        <div class="entrada-tab ativa" id="tab-arquivo" onclick="trocarAba('arquivo')">
           📂 Selecionar arquivo
-        </button>
-        <button type="button" class="tab-btn" data-aba="aba-sent-colar" onclick="trocarAba(this)">
+        </div>
+        <div class="entrada-tab" id="tab-colar" onclick="trocarAba('colar')">
           📋 Colar JSON
-        </button>
+        </div>
       </div>
 
-      <div id="aba-sent-arquivo" class="aba-conteudo ativa">
+      <!-- Painel: upload de arquivo -->
+      <div class="entrada-painel ativa" id="painel-arquivo">
         <div class="upload-area" id="area-sentenca"
              onclick="document.getElementById('arquivo-sentenca').click()">
-          <input type="file" id="arquivo-sentenca" accept=".json">
+          <input type="file" id="arquivo-sentenca" name="sentenca" accept=".json">
           <div style="font-size:2rem; color:#5a3e99; margin-bottom:6px;">🤖</div>
           <div style="font-size:1rem; color:#5a3e99; font-weight:600;">Clique para selecionar o JSON v2</div>
           <div style="color:#6c757d; font-size:0.85rem; margin-top:4px;">Apenas <strong>.json</strong> com <code>meta.schema_version: "2.0"</code></div>
@@ -86,18 +98,24 @@
         </div>
       </div>
 
-      <div id="aba-sent-colar" class="aba-conteudo">
-        <textarea id="json-colado" rows="14" placeholder='Cole aqui o JSON v2 completo, ex:
+      <!-- Painel: colar JSON -->
+      <div class="entrada-painel" id="painel-colar">
+        <div id="area-colar">
+          <textarea id="json-colado" placeholder='Cole aqui o conteúdo do JSON v2...
 {
-  "meta": {"schema_version": "2.0", ...},
-  "processo": {...},
-  "parametros_calculo": {...},
+  "meta": { "schema_version": "2.0", ... },
+  "processo": { ... },
   ...
-}'
-          style="width:100%; padding:10px; border:1px solid #ced4da; border-radius:4px;
-                 font-family: ui-monospace, SFMono-Regular, Monaco, monospace;
-                 font-size:0.82rem; resize:vertical; min-height:240px;"></textarea>
-        <div id="status-colado" style="margin-top:8px; font-size:0.85rem;"></div>
+}'></textarea>
+          <div class="colar-footer">
+            <span id="colar-status">Aguardando conteúdo…</span>
+            <button type="button" onclick="limparColado()"
+                    style="padding:3px 10px; font-size:0.8rem; border:1px solid #adb5bd;
+                           border-radius:4px; background:#fff; cursor:pointer; color:#6c757d;">
+              Limpar
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -128,117 +146,124 @@
 
 {% block extra_script %}
 <script>
-// Trocar entre abas Arquivo / Colar
-function trocarAba(btn) {
-  const aba = btn.dataset.aba;
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('ativa'));
-  document.querySelectorAll('.aba-conteudo').forEach(c => c.classList.remove('ativa'));
-  btn.classList.add('ativa');
-  document.getElementById(aba).classList.add('ativa');
+// ── Controle de abas ──────────────────────────────────────────────────────────
+let abaAtiva = 'arquivo';
+
+function trocarAba(aba) {
+  abaAtiva = aba;
+  document.querySelectorAll('.entrada-tab').forEach(t => t.classList.remove('ativa'));
+  document.querySelectorAll('.entrada-painel').forEach(p => p.classList.remove('ativa'));
+  document.getElementById('tab-' + aba).classList.add('ativa');
+  document.getElementById('painel-' + aba).classList.add('ativa');
 }
 
-// Sentença — apenas JSON v2; valida arquivo no client antes de submit
+// ── Upload de arquivo ─────────────────────────────────────────────────────────
 document.getElementById('arquivo-sentenca').addEventListener('change', function() {
-  if (this.files.length > 0) {
-    const f = this.files[0];
-    if (!f.name.toLowerCase().endsWith('.json')) {
-      alert('Apenas arquivos .json são aceitos. Atualize o System Prompt do Projeto Claude para gerar JSON v2.');
-      this.value = '';
-      return;
-    }
-    document.getElementById('nome-sentenca').textContent = 'Selecionado: ' + f.name;
-    document.getElementById('area-sentenca').classList.add('tem-arquivo');
-    // Validação adicional: confirmar que tem meta.schema_version === "2.0"
-    const reader = new FileReader();
-    reader.onload = function(e) {
-      try {
-        const j = JSON.parse(e.target.result);
-        if (!j.meta || j.meta.schema_version !== "2.0") {
-          alert('JSON sem meta.schema_version: "2.0". Verifique se o System Prompt do Projeto Claude está atualizado.');
-        }
-      } catch (err) {
-        alert('Arquivo .json mal-formado: ' + err.message);
-      }
-    };
-    reader.readAsText(f);
-  }
-});
-
-// Validação inline do JSON colado
-document.getElementById('json-colado').addEventListener('input', function() {
-  const txt = this.value.trim();
-  const status = document.getElementById('status-colado');
-  if (!txt) {
-    status.innerHTML = '';
+  if (!this.files.length) return;
+  const f = this.files[0];
+  if (!f.name.toLowerCase().endsWith('.json')) {
+    alert('Apenas arquivos .json são aceitos.');
+    this.value = '';
     return;
   }
-  try {
-    const j = JSON.parse(txt);
-    if (!j.meta || j.meta.schema_version !== "2.0") {
-      status.innerHTML = '<span style="color:#dc3545;">⚠ JSON sem <code>meta.schema_version: "2.0"</code></span>';
-    } else {
-      const tamKB = (new Blob([txt]).size / 1024).toFixed(1);
-      status.innerHTML = `<span style="color:#28a745;">✓ JSON v2 válido (${tamKB} KB)</span>`;
-    }
-  } catch (err) {
-    status.innerHTML = '<span style="color:#dc3545;">✗ JSON mal-formado: ' + err.message.slice(0, 100) + '</span>';
-  }
+  document.getElementById('nome-sentenca').textContent = 'Selecionado: ' + f.name;
+  document.getElementById('area-sentenca').classList.add('tem-arquivo');
+  validarJsonBlob(f, function(err) {
+    if (err) alert(err);
+  });
 });
 
-// Submit do formulário
+// ── Colar JSON ────────────────────────────────────────────────────────────────
+const txtArea = document.getElementById('json-colado');
+const statusEl = document.getElementById('colar-status');
+
+txtArea.addEventListener('input', debounce(validarColado, 400));
+
+function validarColado() {
+  const txt = txtArea.value.trim();
+  if (!txt) { statusEl.textContent = 'Aguardando conteúdo…'; statusEl.className = ''; return; }
+  try {
+    const j = JSON.parse(txt);
+    if (!j.meta || j.meta.schema_version !== '2.0') {
+      statusEl.textContent = '⚠ JSON sem meta.schema_version: "2.0"';
+      statusEl.className = 'erro';
+    } else {
+      statusEl.textContent = '✓ JSON v2 válido';
+      statusEl.className = 'ok';
+    }
+  } catch(e) {
+    statusEl.textContent = '✗ JSON mal-formado: ' + e.message.slice(0, 60);
+    statusEl.className = 'erro';
+  }
+}
+
+function limparColado() {
+  txtArea.value = '';
+  statusEl.textContent = 'Aguardando conteúdo…';
+  statusEl.className = '';
+}
+
+function validarJsonBlob(blob, cb) {
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const j = JSON.parse(e.target.result);
+      if (!j.meta || j.meta.schema_version !== '2.0')
+        cb('JSON sem meta.schema_version: "2.0". Verifique o System Prompt do Projeto Claude.');
+      else cb(null);
+    } catch(err) { cb('Arquivo .json mal-formado: ' + err.message); }
+  };
+  reader.readAsText(blob);
+}
+
+function debounce(fn, ms) {
+  let t; return function() { clearTimeout(t); t = setTimeout(fn, ms); };
+}
+
+// ── Submit ────────────────────────────────────────────────────────────────────
 document.getElementById('form-upload').addEventListener('submit', async function(e) {
   e.preventDefault();
-  const formData = new FormData();
 
-  // Detectar qual aba está ativa: arquivo ou colado
-  const abaArquivoAtiva = document.getElementById('aba-sent-arquivo').classList.contains('ativa');
+  let blob;
 
-  if (abaArquivoAtiva) {
-    const arquivo = document.getElementById('arquivo-sentenca').files[0];
-    if (!arquivo) { alert('Selecione o arquivo .json antes de processar.'); return; }
-    if (!arquivo.name.toLowerCase().endsWith('.json')) {
-      alert('Apenas arquivos .json são aceitos (JSON v2 do Projeto Claude).');
-      return;
+  if (abaAtiva === 'arquivo') {
+    const arq = document.getElementById('arquivo-sentenca').files[0];
+    if (!arq) { alert('Selecione o arquivo .json antes de processar.'); return; }
+    if (!arq.name.toLowerCase().endsWith('.json')) {
+      alert('Apenas arquivos .json são aceitos (JSON v2 do Projeto Claude).'); return;
     }
-    formData.append('sentenca', arquivo);
+    blob = arq;
   } else {
-    // Aba "Colar JSON": construir Blob a partir do textarea
-    const txt = document.getElementById('json-colado').value.trim();
-    if (!txt) { alert('Cole o JSON v2 antes de processar.'); return; }
-    let payload;
+    // Aba "Colar JSON"
+    const txt = txtArea.value.trim();
+    if (!txt) { alert('Cole o conteúdo do JSON v2 antes de processar.'); return; }
     try {
-      payload = JSON.parse(txt);
-    } catch (err) {
-      alert('JSON colado mal-formado: ' + err.message);
-      return;
+      const j = JSON.parse(txt);
+      if (!j.meta || j.meta.schema_version !== '2.0') {
+        if (!confirm('O JSON não possui meta.schema_version: "2.0". Continuar mesmo assim?')) return;
+      }
+    } catch(err) {
+      alert('JSON mal-formado: ' + err.message); return;
     }
-    if (!payload.meta || payload.meta.schema_version !== "2.0") {
-      if (!confirm('JSON sem meta.schema_version: "2.0". Continuar mesmo assim?')) return;
-    }
-    // Criar um File a partir do conteúdo, com nome amigável
-    const blob = new Blob([txt], { type: 'application/json' });
-    const proc = (payload.processo && payload.processo.numero_processo) || 'colado';
-    const nomeArq = `previa_${proc.replace(/[^\w]/g, '_')}.json`;
-    formData.append('sentenca', new File([blob], nomeArq, { type: 'application/json' }));
+    blob = new Blob([txt], { type: 'application/json' });
   }
 
-  // Ocultar formulário e exibir barra de progresso
+  const formData = new FormData();
+  formData.append('sentenca', blob, 'sentenca.json');
+
+  // Ocultar formulário e exibir progresso
   document.getElementById('form-upload').style.display = 'none';
   document.getElementById('status-area').style.display = 'block';
   document.getElementById('progresso').style.width = '20%';
   document.getElementById('mensagem-status').textContent = 'Enviando JSON v2…';
 
   try {
-    // Backend retorna 303 com Location para /previa/v2/{id} quando JSON v2 valida.
-    // Usamos redirect:'manual' para detectar e seguir manualmente em vez de
-    // o fetch tentar interpretar o HTML como JSON.
     const resp = await fetch('/processar', {
       method: 'POST',
       body: formData,
       redirect: 'follow',
     });
 
-    // Se houve redirect (caminho v2 OK), navegar para a URL final.
     if (resp.redirected) {
       document.getElementById('progresso').style.width = '100%';
       document.getElementById('mensagem-status').textContent = 'Prévia v2 criada — abrindo…';
@@ -247,23 +272,19 @@ document.getElementById('form-upload').addEventListener('submit', async function
     }
 
     if (!resp.ok) {
-      // Tentar extrair detalhe do erro JSON
       let detalhe = '';
       try {
         const j = await resp.json();
         detalhe = j.detail || j.detalhe || j.erro || '';
         if (j._dica) detalhe += '\n\nDica: ' + j._dica;
-      } catch (_) {
-        detalhe = await resp.text().catch(()=>'');
-      }
+      } catch (_) { detalhe = await resp.text().catch(() => ''); }
       throw new Error(`HTTP ${resp.status}\n\n${detalhe.slice(0, 600)}`);
     }
 
-    // Caminho legado (não-v2): backend retorna JSON com sessao_id
+    // Caminho legado (não-v2)
     const dados = await resp.json();
     document.getElementById('progresso').style.width = '35%';
-    document.getElementById('mensagem-status').textContent =
-      'Sentença recebida. Processando...';
+    document.getElementById('mensagem-status').textContent = 'Sentença recebida. Processando...';
     await aguardarProcessamento(dados.sessao_id, dados.url_previa);
 
   } catch(err) {
@@ -279,7 +300,7 @@ document.getElementById('form-upload').addEventListener('submit', async function
 
 async function aguardarProcessamento(sessaoId, urlPrevia) {
   let tentativas = 0;
-  const max = 120; // 10 minutos
+  const max = 120;
   while (tentativas < max) {
     await new Promise(r => setTimeout(r, 5000));
     tentativas++;
@@ -299,10 +320,9 @@ async function aguardarProcessamento(sessaoId, urlPrevia) {
       if (status.status === 'erro_ia') {
         const alertas = status.alertas || [];
         const detalhe = alertas.find(a => a && !a.startsWith('BLOQUEADO')) || alertas[0] || '';
-        const msg = detalhe
+        throw new Error(detalhe
           ? 'IA indisponível: ' + detalhe
-          : 'IA indisponível: verifique créditos da API e reenvie o documento.';
-        throw new Error(msg);
+          : 'IA indisponível: verifique créditos da API e reenvie o documento.');
       }
       document.getElementById('mensagem-status').textContent =
         'Processando com IA... (' + (tentativas * 5) + 's)';
