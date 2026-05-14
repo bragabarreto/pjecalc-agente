@@ -484,7 +484,8 @@ class PlaywrightAutomatorV2:
                 }"""
             )
             if real_id:
-                encontrado = self._page.locator(f"#{real_id.replace(':', '\\:')}")
+                escaped_id = real_id.replace(":", "\\:")
+                encontrado = self._page.locator(f"#{escaped_id}")
                 self.log(f"  ✓ prazoAvisoInformado via JS scan: id={real_id}")
             else:
                 self.log("  ⚠ prazoAvisoInformado não renderizado — radio APURACAO_INFORMADA pode não ter disparado AJAX")
@@ -2567,18 +2568,18 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ save CS falhou: {e}")
 
         # Sub-página parametrizar-inss para vinculação histórico→CS
-        try:
-            self._clicar("ocorrencias")
-            self._aguardar_ajax(8000)
-            self._clicar("recuperarDevidos")
-            self._aguardar_ajax(5000)
-            self._clicar("copiarDevidos")
-            self._aguardar_ajax(5000)
-        except Exception as e:
-            self.log(f"  ⚠ CS sub-página ocorrencias/recuperar/copiar: {e} — continuando")
+        if cs.apurar_segurado_devido or cs.apurar_salarios_pagos:
+            try:
+                self._clicar("ocorrencias")
+                self._aguardar_ajax(8000)
+                self._clicar("recuperarDevidos")
+                self._aguardar_ajax(5000)
+                self._clicar("copiarDevidos")
+                self._aguardar_ajax(5000)
 
                 # Modo manual_por_periodo: aplicar Lote por intervalo
-                if cs.vinculacao_historicos_devidos.modo == "manual_por_periodo":
+                if (getattr(cs, "vinculacao_historicos_devidos", None) is not None
+                        and cs.vinculacao_historicos_devidos.modo == "manual_por_periodo"):
                     for intv in cs.vinculacao_historicos_devidos.intervalos:
                         try:
                             self._preencher("dataInicialInputDate", intv.competencia_inicial)
@@ -3132,11 +3133,32 @@ class PlaywrightAutomatorV2:
                         break
                     self._page.wait_for_timeout(500)
 
-            def _on_response(resp) -> None:
-                try:
-                    ct = (resp.headers.get("content-type") or "").lower()
-                    cd = (resp.headers.get("content-disposition") or "").lower()
-                    if "zip" in ct or ".pjc" in cd or "attachment" in cd:
+                if link_ok:
+                    try:
+                        with self._page.expect_response(
+                            lambda r: (
+                                "exportacao.jsf" in r.url
+                                and r.request.method == "POST"
+                            ),
+                            timeout=60000,
+                        ) as resp_info:
+                            metodo = self._page.evaluate(
+                                """() => {
+                                    const form = document.getElementById('formulario');
+                                    if (form && typeof jsfcljs === 'function') {
+                                        jsfcljs(form, {'formulario:linkDownloadArquivo':'formulario:linkDownloadArquivo'}, '');
+                                        return 'jsfcljs';
+                                    }
+                                    const link = document.querySelector("[id$='linkDownloadArquivo']");
+                                    if (link) { link.click(); return 'click'; }
+                                    return null;
+                                }"""
+                            )
+                            self.log(f"  → Fase E método: {metodo}")
+                        resp = resp_info.value
+                        ct = resp.headers.get("content-type", "")
+                        cd = resp.headers.get("content-disposition", "")
+                        self.log(f"  → Fase E HTTP {resp.status} content-type={ct} disposition={cd[:80]}")
                         body = resp.body()
                         if body and body[:2] == b"PK":
                             pjc_bytes = body
