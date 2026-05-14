@@ -890,6 +890,151 @@ function renderVerbas() {
   document.getElementById('qtd-verbas').textContent = arr.length;
 }
 
+// ─── Editor visual de Fórmula CALCULADO ─────────────────────────────
+// Espelha o bloco "Fórmula" da página verba-calculo.jsf do PJE-Calc Cidadão.
+// Campos: Base de Cálculo (Bases Cadastradas + Verba + Integralizar + Proporcionalizar),
+// Divisor (Carga Horária | Dias Úteis | Cartão | Informado+valor), Multiplicador,
+// Quantidade (Informada+valor | Avos | Apurada | Importada do Calendário/Cartão | Proporcionalizar).
+//
+// Variações por Característica (manual §9.3):
+// - DECIMO_TERCEIRO_SALARIO: Quantidade=AVOS forçada (disabled)
+// - FERIAS: Quantidade=AVOS forçada (disabled)
+// - AVISO_PREVIO + apuracao_aviso_previo === APURACAO_CALCULADA: Quantidade=APURADA forçada
+// - AVISO_PREVIO + NAO_APURAR: Quantidade=INFORMADA com hint "padrão 30"
+//
+// Inicialização lazy: se p.formula_calculado é null mas p.valor==='CALCULADO',
+// criamos um objeto vazio com defaults sensatos no primeiro render.
+function htmlFormulaCalculado(v, idx) {
+  const p = v.parametros || {};
+  if (!p.formula_calculado) {
+    p.formula_calculado = {
+      base_calculo: {tipo: 'MAIOR_REMUNERACAO', proporcionaliza: 'NAO'},
+      divisor: {tipo: 'OUTRO_VALOR', valor: 1},
+      multiplicador: 1.0,
+      quantidade: {tipo: 'INFORMADA', valor: 1, proporcionalizar: false}
+    };
+    previaData.verbas_principais[idx].parametros.formula_calculado = p.formula_calculado;
+  }
+  const f = p.formula_calculado;
+  const car = p.caracteristica;
+  const apAviso = previaData?.parametros_calculo?.apuracao_aviso_previo;
+
+  // Determina opções e default de Quantidade conforme característica
+  const quantForcada =
+    (car === 'DECIMO_TERCEIRO_SALARIO' || car === 'FERIAS') ? 'AVOS'
+    : (car === 'AVISO_PREVIO' && apAviso === 'APURACAO_CALCULADA') ? 'APURADA'
+    : null;
+  const quantTipo = quantForcada || f.quantidade?.tipo || 'INFORMADA';
+  if (quantForcada && f.quantidade?.tipo !== quantForcada) {
+    f.quantidade = f.quantidade || {};
+    f.quantidade.tipo = quantForcada;
+  }
+
+  const opt = (tipoSel, value, label, dis=false) =>
+    `<option value="${value}"${tipoSel===value?' selected':''}${dis?' disabled':''}>${label}</option>`;
+
+  return `
+  <div class="fieldgroup" style="background:#fafbff; border-left:3px solid #5a8dee;">
+    <div class="fieldgroup-title">🧮 Fórmula (CALCULADO) — espelho da página verba-calculo.jsf</div>
+
+    <div class="fieldgroup" style="margin:6px 0; background:#fff;">
+      <div class="fieldgroup-title" style="font-size:0.85rem;">Base de Cálculo</div>
+      <div class="grid-3">
+        <div class="campo">
+          <label>Bases Cadastradas</label>
+          <select onchange="if(!previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo) previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo={}; previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.tipo=this.value; renderVerbas()">
+            ${opt(f.base_calculo?.tipo, 'MAIOR_REMUNERACAO', 'Maior Remuneração')}
+            ${opt(f.base_calculo?.tipo, 'HISTORICO_SALARIAL', 'Histórico Salarial')}
+            ${opt(f.base_calculo?.tipo, 'SALARIO_DA_CATEGORIA', 'Salário da Categoria')}
+            ${opt(f.base_calculo?.tipo, 'SALARIO_MINIMO', 'Salário Mínimo')}
+            ${opt(f.base_calculo?.tipo, 'VALE_TRANSPORTE', 'Vale Transporte')}
+          </select>
+        </div>
+        ${f.base_calculo?.tipo==='HISTORICO_SALARIAL' ? `
+          <div class="campo">
+            <label>Histórico (nome)</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.historico_nome=this.value">
+              <option value="">— escolher —</option>
+              ${(previaData.historico_salarial||[]).map(h => `
+                <option value="${h.nome}"${f.base_calculo?.historico_nome===h.nome?' selected':''}>${h.nome}</option>
+              `).join('')}
+            </select>
+          </div>
+        ` : '<div class="campo"></div>'}
+        <div class="campo">
+          <label>Proporcionalizar</label>
+          <select onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.proporcionaliza=this.value">
+            ${opt(f.base_calculo?.proporcionaliza, 'NAO', 'Não')}
+            ${opt(f.base_calculo?.proporcionaliza, 'SIM', 'Sim')}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-3" style="margin-top:6px;">
+      <div class="campo">
+        <label>Divisor — Tipo</label>
+        <select onchange="if(!previaData.verbas_principais[${idx}].parametros.formula_calculado.divisor) previaData.verbas_principais[${idx}].parametros.formula_calculado.divisor={}; previaData.verbas_principais[${idx}].parametros.formula_calculado.divisor.tipo=this.value; renderVerbas()">
+          ${opt(f.divisor?.tipo, 'OUTRO_VALOR', 'Informado (Outro Valor)')}
+          ${opt(f.divisor?.tipo, 'CARGA_HORARIA', 'Carga Horária')}
+          ${opt(f.divisor?.tipo, 'DIAS_UTEIS', 'Dias Úteis')}
+          ${opt(f.divisor?.tipo, 'IMPORTADA_DO_CARTAO', 'Importada do Cartão de Ponto')}
+        </select>
+      </div>
+      ${(f.divisor?.tipo==='OUTRO_VALOR' || !f.divisor?.tipo) ? `
+        <div class="campo">
+          <label>Divisor — Valor</label>
+          <input type="number" step="0.01" value="${f.divisor?.valor??1}"
+            onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.divisor.valor=parseFloat(this.value)">
+        </div>
+      ` : '<div class="campo"></div>'}
+      <div class="campo">
+        <label>Multiplicador</label>
+        <input type="number" step="0.00000001" value="${f.multiplicador??1}"
+          onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.multiplicador=parseFloat(this.value)">
+        <span class="ajuda">8 casas decimais (ex.: 1.33333333 p/ Férias+1/3)</span>
+      </div>
+    </div>
+
+    <div class="grid-3" style="margin-top:6px;">
+      <div class="campo">
+        <label>Quantidade — Tipo ${quantForcada ? `<small style="color:#5a8dee;">(forçado por ${car})</small>` : ''}</label>
+        <select ${quantForcada?'disabled':''} onchange="if(!previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade) previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade={}; previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade.tipo=this.value; renderVerbas()">
+          ${opt(quantTipo, 'INFORMADA', 'Informada')}
+          ${opt(quantTipo, 'AVOS', 'Avos (apurado por ocorrência)')}
+          ${opt(quantTipo, 'APURADA', 'Apurada (sistema calcula)')}
+          ${opt(quantTipo, 'IMPORTADA_DO_CALENDARIO', 'Importar do Calendário')}
+          ${opt(quantTipo, 'IMPORTADA_DO_CARTAO', 'Importar do Cartão')}
+        </select>
+      </div>
+      ${quantTipo==='INFORMADA' ? `
+        <div class="campo">
+          <label>Quantidade — Valor</label>
+          <input type="number" step="0.01" value="${f.quantidade?.valor??1}"
+            onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade.valor=parseFloat(this.value)">
+          ${car==='AVISO_PREVIO' && apAviso==='NAO_APURAR' ? '<span class="ajuda" style="color:#856404">Sugestão: 30 (NAO_APURAR padrão)</span>' : ''}
+        </div>
+      ` : '<div class="campo"></div>'}
+      <div class="campo">
+        <div class="checkbox-row" style="margin-top:24px;">
+          <input type="checkbox"${f.quantidade?.proporcionalizar?' checked':''}
+            onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade.proporcionalizar=this.checked">
+          <label>Proporcionalizar</label>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:8px; padding:6px 10px; background:#eef3ff; border-radius:4px; font-size:0.85rem; font-family:monospace;">
+      <strong>Fórmula resultante:</strong>
+      ((${(f.base_calculo?.tipo||'BASE').replace(/_/g,' ')})${f.base_calculo?.proporcionaliza==='SIM'?' propor.':''}
+      ÷ ${f.divisor?.tipo==='OUTRO_VALOR' ? (f.divisor?.valor??'?') : (f.divisor?.tipo||'?').replace(/_/g,' ').toLowerCase()})
+      × ${f.multiplicador??1}
+      × ${quantTipo==='INFORMADA' ? (f.quantidade?.valor??'?') : quantTipo.replace(/_/g,' ').toLowerCase()}${f.quantidade?.proporcionalizar?' propor.':''}
+    </div>
+  </div>
+  `;
+}
+
 function htmlVerba(v, idx) {
   const card = document.createElement('div');
   card.className = 'verba-card collapsed';
@@ -944,13 +1089,7 @@ function htmlVerba(v, idx) {
               <input type="number" step="0.01" value="${p.valor_devido?.valor_informado_brl||''}"
                 onchange="if(!previaData.verbas_principais[${idx}].parametros.valor_devido) previaData.verbas_principais[${idx}].parametros.valor_devido={tipo:'INFORMADO'}; previaData.verbas_principais[${idx}].parametros.valor_devido.valor_informado_brl=parseFloat(this.value); validarPrevia()">
             </div>
-          ` : `
-            <div class="campo col-span-2">
-              <label>Fórmula (CALCULADO)</label>
-              <textarea rows="3" onchange="try{previaData.verbas_principais[${idx}].parametros.formula_calculado=JSON.parse(this.value);validarPrevia()}catch(e){alert('JSON inválido')}">${JSON.stringify(p.formula_calculado||{}, null, 2)}</textarea>
-              <span class="ajuda">JSON: base_calculo, divisor, multiplicador, quantidade</span>
-            </div>
-          `}
+          ` : `<div class="campo col-span-2"></div>`}
           <div class="campo">
             <label>Característica</label>
             <select onchange="previaData.verbas_principais[${idx}].parametros.caracteristica=this.value">
@@ -979,6 +1118,8 @@ function htmlVerba(v, idx) {
           </div>
         </div>
       </div>
+
+      ${p.valor==='CALCULADO' ? htmlFormulaCalculado(v, idx) : ''}
 
       <div class="fieldgroup">
         <div class="fieldgroup-title">Incidências</div>
@@ -1056,6 +1197,11 @@ function htmlVerba(v, idx) {
             <input type="checkbox"${p.zerar_valor_negativo?' checked':''}
               onchange="previaData.verbas_principais[${idx}].parametros.zerar_valor_negativo=this.checked">
             <label>Zerar Valor Negativo</label>
+          </div>
+          <div class="checkbox-row" title="Juros - Aplicar Súmula nº 439 do TST">
+            <input type="checkbox"${p.juros_aplicar_sumula_439?' checked':''}
+              onchange="previaData.verbas_principais[${idx}].parametros.juros_aplicar_sumula_439=this.checked">
+            <label>Juros — Súmula 439/TST</label>
           </div>
         </div>
       </details>

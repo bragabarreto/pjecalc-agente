@@ -106,9 +106,21 @@ class TipoDivisor(str, Enum):
 
 
 class TipoQuantidade(str, Enum):
+    """Opções no dropdown Quantidade da fórmula CALCULADO (manual §9.3).
+
+    Variações por Característica:
+    - COMUM: INFORMADA, IMPORTADA_DO_CALENDARIO, IMPORTADA_DO_CARTAO
+    - DECIMO_TERCEIRO_SALARIO: AVOS (auto-selecionado, sistema apura)
+    - FERIAS: AVOS (auto-selecionado, sistema apura)
+    - AVISO_PREVIO + apuracao=NAO_APURAR: INFORMADA com valor 30
+    - AVISO_PREVIO + apuracao=APURACAO_INFORMADA: INFORMADA com valor digitado
+    - AVISO_PREVIO + apuracao=APURACAO_CALCULADA: APURADA (sistema calcula)
+    """
     INFORMADA = "INFORMADA"
     IMPORTADA_DO_CALENDARIO = "IMPORTADA_DO_CALENDARIO"
     IMPORTADA_DO_CARTAO = "IMPORTADA_DO_CARTAO"
+    AVOS = "AVOS"
+    APURADA = "APURADA"
 
 
 class EstrategiaPreenchimento(str, Enum):
@@ -376,6 +388,7 @@ class ParametrosVerba(BaseModel):
     caracteristica: Optional[CaracteristicaVerba] = None
     ocorrencia_pagamento: Optional[OcorrenciaPagamento] = None
     ocorrencia_ajuizamento: OcorrenciaAjuizamento = OcorrenciaAjuizamento.OCORRENCIAS_VENCIDAS
+    juros_aplicar_sumula_439: bool = False  # "Juros - Aplicar Súmula nº 439 do TST"
     tipo: TipoVerba = TipoVerba.PRINCIPAL
     gerar_reflexa: GerarReflexo = GerarReflexo.DIFERENCA
     gerar_principal: GerarReflexo = GerarReflexo.DIFERENCA
