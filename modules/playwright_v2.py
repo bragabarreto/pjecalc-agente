@@ -1634,29 +1634,45 @@ class PlaywrightAutomatorV2:
                     pass
                 continue
 
-        # Guardar conv anterior antes do save (para fallback pós-Expresso)
-        _conv_pre_expresso = self._calculo_conversation_id
+            # ── SAVE POR VERBA (corrigido 14/05/2026) ─────────────────────
+            # Bug anterior: este bloco estava FORA do for, o que fazia o bot
+            # marcar checkbox da verba N, voltar à listagem, re-entrar no Expresso
+            # (zerando a marcação), marcar verba N+1, ... e só salvar a última.
+            # Resultado: 7 das 8 verbas se perdiam.
+            #
+            # Comportamento correto (docstring do método + Calc Machine): marcar
+            # uma checkbox, salvar imediatamente, voltar à listagem, retornar ao
+            # Expresso para a próxima.
+            _conv_pre_expresso = self._calculo_conversation_id
+            try:
+                self._clicar("salvar")
+                self._aguardar_ajax(15000)
+                sucesso = self._aguardar_operacao_sucesso(
+                    timeout_ms=15000, bloqueante=False
+                )
+                self.log(
+                    f"  ✓ Expresso salvo [{idx+1}/{len(verbas)}: {alvo}] sucesso={sucesso}"
+                )
+            except Exception as e:
+                self.log(
+                    f"  ⚠ Expresso save [{idx+1}/{len(verbas)}: {alvo}] falhou: {e}"
+                )
 
-        self._clicar("salvar")
-        self._aguardar_ajax(15000)
-        self.log("  ✓ Expresso salvo")
-        # CRITICO: re-capturar conversationId — Seam emite NOVO conv após
-        # Expresso save. Sem isso, URL navs subsequentes vao para conv
-        # expirada -> NPE/empty pages em todas as fases seguintes.
-        mudou = self._capturar_conversation_id()
+            # CRITICO: re-capturar conversationId — Seam emite NOVO conv após
+            # Expresso save. Sem isso, URL navs subsequentes vão para conv
+            # expirada -> NPE/empty pages em todas as fases seguintes.
+            mudou = self._capturar_conversation_id()
+            try:
+                _url_pos = self._page.url
+                self.log(f"    ℹ URL pós-save [{idx+1}/{len(verbas)}]: {_url_pos[-80:]}")
+            except Exception:
+                pass
 
-        # Diagnóstico: logar URL atual pós-Expresso
-        try:
-            _url_pos = self._page.url
-            self.log(f"  ℹ URL pós-Expresso: {_url_pos[-80:]}")
-        except Exception:
-            pass
-
-        # Guardar conv pré-Expresso como fallback se nova conv (47+) tiver NPE
-        if mudou and _conv_pre_expresso:
-            self._conv_pre_expresso = _conv_pre_expresso
-        else:
-            self._conv_pre_expresso = None
+            # Guardar conv pré-Expresso como fallback se nova conv tiver NPE
+            if mudou and _conv_pre_expresso:
+                self._conv_pre_expresso = _conv_pre_expresso
+            else:
+                self._conv_pre_expresso = None
 
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche todos os campos do form de parâmetros de verba.
@@ -2317,11 +2333,23 @@ class PlaywrightAutomatorV2:
         self.log("Fase 6 concluída")
 
     def fase_ferias(self) -> None:
-        """Férias — tabela com N períodos aquisitivos/concessivos.
+        """Férias — tabela auto-gerada pelo PJE-Calc a partir de admissão/desligamento.
 
-        A tabela do PJE-Calc é renderizada com botão 'Incluir' que adiciona uma
-        linha em modo edição. Cada linha tem campos com ID padrão JSF terminando
-        em sufixos como :periodoAquisitivoInicialInputDate, etc. (doc 06).
+        IMPORTANTE (corrigido 14/05/2026): conforme manual oficial
+        (knowledge/pje_calc_official/manual_completo.md §7, linha 207):
+
+            "O sistema gera automaticamente os dados de ferias a partir de:
+             datas de admissao/desligamento, regime de trabalho e faltas"
+            "O usuario DEVE verificar e modificar os status sugeridos, marcar
+             abonos, e informar periodos de gozo efetivos"
+            "CRITICO: Clicar 'Salvar' apos modificacoes" (UM único save)
+
+        Bug anterior: este método clicava `[id$=':incluir']` para cada período,
+        mas a página ferias.jsf não tem botão Incluir (períodos já vêm
+        pré-populados). 4 períodos pulados com "Botão não encontrado: incluir".
+
+        Estratégia correta: localizar linhas auto-geradas, editar
+        (status/abono/dobra/gozos) por índice, UM save no final.
         """
         ferias = getattr(self.previa, "ferias", None)
         if not ferias or not ferias.periodos:
@@ -2330,7 +2358,10 @@ class PlaywrightAutomatorV2:
 
         self.log(f"Fase 7 — Férias ({len(ferias.periodos)} período(s))")
         self._navegar_menu("li_calculo_ferias")
+        self._aguardar_ajax(10000)
+        self._page.wait_for_timeout(1500)
 
+        # Campos globais (no topo da página)
         if ferias.ferias_coletivas_inicio_primeiro_ano:
             self._preencher(
                 "feriasColetivasInicioPrimeiroAnoInputDate",
@@ -2344,62 +2375,173 @@ class PlaywrightAutomatorV2:
                 obrigatorio=False,
             )
 
+        # Diagnóstico DOM: descobrir id real das linhas auto-geradas
+        diag = self._page.evaluate(
+            """() => {
+                const rows = [...document.querySelectorAll(
+                    'tr[id*="dataTable"], tr[id*="listagem"], tr[id*="rowData"]'
+                )];
+                const sample = rows.slice(0, 5).map(r => ({
+                    id: r.id,
+                    cells: [...r.querySelectorAll('td')].length,
+                    has_radio: !!r.querySelector('input[type=radio]'),
+                    has_checkbox: !!r.querySelector('input[type=checkbox]'),
+                    has_select: !!r.querySelector('select'),
+                    inputs_inside: [...r.querySelectorAll('input,select')]
+                        .map(e => (e.id||e.name||'').split(':').pop()).filter(Boolean).slice(0, 8)
+                }));
+                // descobrir prefixo comum (até o último ":")
+                const prefixos = rows.map(r => r.id.split(':').slice(0,-1).join(':'))
+                    .filter(Boolean);
+                const prefixo_comum = prefixos.length ? prefixos[0] : null;
+                // todos campos editáveis com id contendo gozo/situacao/abono/dobra
+                const editaveis = [...document.querySelectorAll('input,select')]
+                    .filter(e => /situacao|abono|dobra|gozo|prazo/i.test(e.id||''))
+                    .map(e => e.id).slice(0, 40);
+                return {
+                    n_rows: rows.length,
+                    sample,
+                    prefixo_comum,
+                    editaveis
+                };
+            }"""
+        )
+        self.log(f"  ℹ Diagnóstico Férias: {diag.get('n_rows')} linha(s) auto-geradas")
+        if diag.get("sample"):
+            self.log(f"  ℹ Sample linha[0]: {diag['sample'][0]}")
+        if diag.get("editaveis"):
+            self.log(f"  ℹ Campos editáveis (até 10): {diag['editaveis'][:10]}")
+
+        prefixo = diag.get("prefixo_comum") or ""
+        n_linhas = diag.get("n_rows") or 0
+
+        # Editar cada período — tentar mapear por índice ao JSON
         for i, p in enumerate(ferias.periodos):
-            self.log(f"  → Período {i+1}: {p.periodo_aquisitivo_inicio} → {p.periodo_aquisitivo_fim}")
-            # Aguardar página renderizar completamente (pode ter atraso JSF)
-            try:
-                self._page.wait_for_selector(
-                    "input[id$=':incluir'][value], input[type='button'][id$=':incluir']",
-                    state="visible", timeout=15000
+            self.log(
+                f"  → Período {i+1}: aquisitivo "
+                f"{p.periodo_aquisitivo_inicio} → {p.periodo_aquisitivo_fim}"
+            )
+            if i >= n_linhas:
+                self.log(
+                    f"    ⚠ JSON tem {len(ferias.periodos)} períodos, mas só {n_linhas} "
+                    f"linhas auto-geradas — pulando excedente"
                 )
-            except Exception:
-                # Diagnóstico
-                self._diagnostico_pagina(contexto="pré-incluir Férias")
-                # Re-navegar para forçar render
-                self._navegar_menu("li_calculo_ferias")
-                self._aguardar_ajax(10000)
-                self._page.wait_for_timeout(2000)
-            try:
-                self._clicar("incluir")
-            except Exception as e:
-                self.log(f"  ⚠ Pulando período {i+1}: {e}")
                 continue
-            self._aguardar_ajax(5000)
-            self._page.wait_for_timeout(1500)
 
-            self._preencher("periodoAquisitivoInicialInputDate", p.periodo_aquisitivo_inicio)
-            self._preencher("periodoAquisitivoFinalInputDate", p.periodo_aquisitivo_fim)
-            self._preencher("periodoConcessivoInicialInputDate", p.periodo_concessivo_inicio)
-            self._preencher("periodoConcessivoFinalInputDate", p.periodo_concessivo_fim)
-            self._preencher("prazoDias", str(p.prazo_dias))
-            self._marcar_radio("situacaoFerias", p.situacao)
-            self._aguardar_ajax(2000)
-            self._marcar_checkbox("dobra", p.dobra)
-            self._marcar_checkbox("abono", p.abono)
-            if p.abono and p.dias_abono:
-                self._preencher("diasAbono", str(p.dias_abono))
+            # Cascata de seletores para cada campo da linha i
+            row_prefix_candidates = []
+            if prefixo:
+                # JSF dataTable padrão: prefixo:N:campo
+                row_prefix_candidates.append(f"{prefixo}:{i}:")
+            row_prefix_candidates.extend([
+                f"dataTable:{i}:",
+                f"listagem:{i}:",
+                f"rowData:{i}:",
+            ])
 
-            # Gozos (até 3) — campos só aparecem se situacao=GOZADAS ou PARCIAL_GOZADAS
-            for j, gozo in enumerate([p.gozo_1, p.gozo_2, p.gozo_3], start=1):
-                if gozo and gozo.data_inicio:
-                    try:
-                        self._preencher(f"gozoInicio{j}InputDate", gozo.data_inicio, obrigatorio=False)
-                        self._preencher(f"gozoFim{j}InputDate", gozo.data_fim, obrigatorio=False)
-                        if gozo.dobra:
-                            self._marcar_checkbox(f"gozoDobra{j}", True)
-                    except Exception as e:
-                        self.log(f"    ⚠ gozo {j}: {e}")
+            def _try_field(suffixes_per_row, valor_callback, kind="preencher"):
+                """Tenta cada combinação prefixo+sufixo até achar campo."""
+                for rp in row_prefix_candidates:
+                    for suf in suffixes_per_row:
+                        full = rp + suf
+                        loc = self._page.locator(f"[id$='{full}']")
+                        if loc.count() > 0:
+                            try:
+                                valor_callback(full)
+                                return True
+                            except Exception:
+                                continue
+                return False
 
+            # Situação (radio ou select)
             try:
-                self._clicar("salvar")
-                self._aguardar_ajax(8000)
-                sucesso = self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
-                if sucesso:
-                    self.log(f"  ✓ Período {i+1} de férias salvo")
-                else:
-                    self._diagnostico_pagina(contexto=f"pós-save Período {i+1} Férias")
+                ok = _try_field(
+                    ["situacaoFerias", "situacao", "tipoSituacao"],
+                    lambda f: self._marcar_radio(f, p.situacao, obrigatorio=False),
+                )
+                if not ok:
+                    # tentar como select
+                    for rp in row_prefix_candidates:
+                        sel = self._page.locator(f"select[id$='{rp}situacaoFerias']")
+                        if sel.count() > 0:
+                            self._selecionar(f"{rp}situacaoFerias", p.situacao)
+                            ok = True
+                            break
+                if not ok:
+                    self.log(f"    ⚠ situacao período {i+1}: campo não localizado")
             except Exception as e:
-                self.log(f"  ⚠ Falha ao salvar período {i+1}: {e}")
+                self.log(f"    ⚠ situacao período {i+1}: {e}")
+
+            self._aguardar_ajax(2000)
+
+            # Dobra (checkbox)
+            try:
+                for rp in row_prefix_candidates:
+                    cb = self._page.locator(f"input[type='checkbox'][id$='{rp}dobra']")
+                    if cb.count() > 0:
+                        if cb.first.is_checked() != p.dobra:
+                            cb.first.click(force=True)
+                        break
+            except Exception as e:
+                self.log(f"    ⚠ dobra período {i+1}: {e}")
+
+            # Abono (checkbox + dias)
+            try:
+                for rp in row_prefix_candidates:
+                    cb = self._page.locator(f"input[type='checkbox'][id$='{rp}abono']")
+                    if cb.count() > 0:
+                        if cb.first.is_checked() != p.abono:
+                            cb.first.click(force=True)
+                        if p.abono and p.dias_abono:
+                            self._preencher(
+                                f"{rp}diasAbono", str(p.dias_abono),
+                                obrigatorio=False
+                            )
+                        break
+            except Exception as e:
+                self.log(f"    ⚠ abono período {i+1}: {e}")
+
+            # Gozos (até 3)
+            for j, gozo in enumerate([p.gozo_1, p.gozo_2, p.gozo_3], start=1):
+                if not (gozo and gozo.data_inicio):
+                    continue
+                for rp in row_prefix_candidates:
+                    inicio = self._page.locator(
+                        f"input[id$='{rp}gozoInicio{j}InputDate']"
+                    )
+                    if inicio.count() > 0:
+                        try:
+                            self._preencher(
+                                f"{rp}gozoInicio{j}InputDate",
+                                gozo.data_inicio,
+                                obrigatorio=False,
+                            )
+                            self._preencher(
+                                f"{rp}gozoFim{j}InputDate",
+                                gozo.data_fim,
+                                obrigatorio=False,
+                            )
+                            if gozo.dobra:
+                                cb_dobra = self._page.locator(
+                                    f"input[type='checkbox'][id$='{rp}gozoDobra{j}']"
+                                )
+                                if cb_dobra.count() > 0 and not cb_dobra.first.is_checked():
+                                    cb_dobra.first.click(force=True)
+                        except Exception as e:
+                            self.log(f"    ⚠ gozo {j} período {i+1}: {e}")
+                        break
+
+        # UM ÚNICO SAVE no final (manual oficial: "Clicar 'Salvar' após modificações")
+        try:
+            self._clicar("salvar")
+            self._aguardar_ajax(10000)
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            if sucesso:
+                self.log("  ✓ Férias salvas")
+            else:
+                self._diagnostico_pagina(contexto="pós-save Férias")
+        except Exception as e:
+            self.log(f"  ⚠ save Férias: {e}")
 
         self.log("Fase 7 concluída")
 
