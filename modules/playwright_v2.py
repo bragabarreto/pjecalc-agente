@@ -515,6 +515,54 @@ class PlaywrightAutomatorV2:
     # após cada save crítico, aguardar `.rf-msgs-sum` com "Operação realizada
     # com sucesso." e extrair o número do cálculo do DOM como prova de persistência.
 
+    def _clicar_salvar_flex(self, timeout_ms: int = 8000) -> bool:
+        """Tenta clicar botão de save em cascata flexível.
+
+        Sub-formulários JSF podem nomear o submit como `salvar`, `confirmar`,
+        `gravar`, `aplicar` ou `atualizar`. Este helper varre essa cascata por
+        sufixo de DOM ID e clica o primeiro visível. Retorna True se clicou.
+        """
+        nomes = ["salvar", "confirmar", "gravar", "aplicar", "atualizar"]
+        for nome in nomes:
+            seletores = [
+                f"input[type='submit'][id$=':{nome}']",
+                f"input[type='button'][id$=':{nome}']",
+                f"input[id$=':{nome}']",
+                f"input[id$='{nome}']",
+                f"button[id$=':{nome}']",
+            ]
+            for sel in seletores:
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    try:
+                        loc.first.wait_for(state="visible", timeout=timeout_ms)
+                        loc.first.click(force=True)
+                        self.log(f"  ✓ click {nome} (cascata flex via {sel!r})")
+                        return True
+                    except Exception:
+                        continue
+        # Último recurso: qualquer input value="Salvar"|"Confirmar"|"Gravar"
+        try:
+            clicou = self._page.evaluate(
+                """() => {
+                    const norm = s => (s||'').trim().toUpperCase();
+                    const alvos = ['SALVAR','CONFIRMAR','GRAVAR','APLICAR','ATUALIZAR'];
+                    const inputs = [...document.querySelectorAll('input[type=submit],input[type=button],button')];
+                    for (const v of inputs) {
+                        const t = norm(v.value || v.textContent);
+                        if (alvos.includes(t)) { v.click(); return 'value:'+t; }
+                    }
+                    return null;
+                }"""
+            )
+            if clicou:
+                self.log(f"  ✓ click salvar (cascata flex via value: {clicou})")
+                return True
+        except Exception:
+            pass
+        self.log("  ⚠ Nenhum botão Salvar/Confirmar/Gravar encontrado (cascata flex)")
+        return False
+
     def _aguardar_operacao_sucesso(self, timeout_ms: int = 30000, bloqueante: bool = False) -> bool:
         """Aguarda a mensagem JSF "Operação realizada com sucesso" aparecer no DOM.
 
@@ -1852,7 +1900,12 @@ class PlaywrightAutomatorV2:
         # form de parâmetros. Movido para _regerar_ocorrencias_verbas() chamado
         # após fim do loop de parametrização (fim da Fase 4).
 
-        self._clicar("salvar")
+        # Cascata flex: form de parâmetros pode ter botão "Salvar", "Confirmar"
+        # ou "Gravar" dependendo da versão/contexto JSF.
+        clicou_save = self._clicar_salvar_flex(timeout_ms=8000)
+        if not clicou_save:
+            self.log(f"  ⚠ Parâmetros '{v.nome_pjecalc}': sem botão save — pulando ajuste")
+            return
         self._aguardar_ajax(8000)
         sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
         if sucesso:
@@ -2375,6 +2428,35 @@ class PlaywrightAutomatorV2:
                 obrigatorio=False,
             )
 
+        # Tentar clicar "Regerar Férias" (manual oficial §7 linha 248) para
+        # forçar o sistema a gerar as linhas auto-populadas a partir de
+        # admissão/desligamento. Sem isso, a tabela pode vir vazia quando
+        # esta fase roda antes da Fase 4 (Verbas).
+        regerou = self._page.evaluate(
+            """() => {
+                const norm = s => (s||'').trim().toUpperCase();
+                // Tentar por sufixo de id primeiro
+                const ids = ['regerarFerias','regerar','recuperarFerias','gerarFerias'];
+                for (const idSuf of ids) {
+                    const inp = document.querySelector(`input[id$=':${idSuf}'], input[id$='${idSuf}']`);
+                    if (inp && inp.offsetParent) { inp.click(); return 'id:'+idSuf; }
+                }
+                // Fallback por texto do botão
+                const inputs = [...document.querySelectorAll('input[type=submit],input[type=button],button,a')];
+                for (const v of inputs) {
+                    const t = norm(v.value || v.textContent);
+                    if (t.includes('REGERAR') && t.includes('F')) { v.click(); return 'text:'+t.slice(0,30); }
+                }
+                return null;
+            }"""
+        )
+        if regerou:
+            self.log(f"  ✓ Regerar Férias acionado: {regerou}")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(2000)
+        else:
+            self.log("  ℹ Botão 'Regerar Férias' não encontrado — prosseguindo com diagnóstico DOM")
+
         # Diagnóstico DOM: descobrir id real das linhas auto-geradas
         diag = self._page.evaluate(
             """() => {
@@ -2532,16 +2614,21 @@ class PlaywrightAutomatorV2:
                         break
 
         # UM ÚNICO SAVE no final (manual oficial: "Clicar 'Salvar' após modificações")
-        try:
-            self._clicar("salvar")
-            self._aguardar_ajax(10000)
-            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
-            if sucesso:
-                self.log("  ✓ Férias salvas")
-            else:
-                self._diagnostico_pagina(contexto="pós-save Férias")
-        except Exception as e:
-            self.log(f"  ⚠ save Férias: {e}")
+        # Cascata flex porque página pode ter salvar/confirmar/aplicar dependendo do estado.
+        if n_linhas > 0:
+            try:
+                clicou = self._clicar_salvar_flex(timeout_ms=8000)
+                if clicou:
+                    self._aguardar_ajax(10000)
+                    sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+                    if sucesso:
+                        self.log("  ✓ Férias salvas")
+                    else:
+                        self._diagnostico_pagina(contexto="pós-save Férias")
+            except Exception as e:
+                self.log(f"  ⚠ save Férias: {e}")
+        else:
+            self.log("  ℹ Sem linhas de férias para salvar (página vazia)")
 
         self.log("Fase 7 concluída")
 
@@ -2960,6 +3047,36 @@ class PlaywrightAutomatorV2:
         liq = self.previa.liquidacao
         if liq.data_de_liquidacao:
             self._preencher("dataDeLiquidacaoInputDate", liq.data_de_liquidacao, obrigatorio=False)
+
+        # Aguardar render completo da página de Liquidação. AJAX inicial após
+        # navegação pelo sidebar pode levar até 15s — sem este wait, radios
+        # ainda não estão no DOM e o diagnóstico volta vazio.
+        try:
+            self._page.wait_for_selector(
+                "input[type='radio'][id*='indicesAcumulados'], "
+                "input[type='radio'][name*='indicesAcumulados']",
+                state="attached", timeout=15000
+            )
+            self.log("  ✓ Radios indicesAcumulados renderizados no DOM")
+        except Exception:
+            self.log("  ⚠ Radios indicesAcumulados não apareceram em 15s — diagnóstico:")
+            # Dump completo da página para entender o que falta
+            try:
+                _dump = self._page.evaluate(
+                    """() => ({
+                        url: location.href.split('?')[0].split('/').pop(),
+                        n_radios: document.querySelectorAll('input[type=radio]').length,
+                        n_inputs: document.querySelectorAll('input').length,
+                        ids_radios: [...document.querySelectorAll('input[type=radio]')]
+                            .map(r => r.id||r.name).slice(0,10),
+                        title: document.title,
+                        msgs: [...document.querySelectorAll('.rf-msgs,.rich-messages,.error,.warning')]
+                            .map(e => (e.textContent||'').trim().slice(0,80)).filter(Boolean).slice(0,5)
+                    })"""
+                )
+                self.log(f"  [DIAG-liq-radios] {_dump}")
+            except Exception:
+                pass
 
         # Diagnóstico: dumpar radios indicesAcumulados na página atual
         radios_diag = self._page.evaluate(
