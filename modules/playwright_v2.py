@@ -453,6 +453,75 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
+    def _preencher_prazo_aviso_informado(self, dias: int) -> None:
+        """Preenche o campo 'prazoAvisoInformado' que aparece condicionalmente
+        após selecionar 'APURACAO_INFORMADA' no campo apuracaoPrazoDoAvisoPrevio.
+
+        O JSF re-renderiza o componente via AJAX, então precisamos aguardar
+        explicitamente a visibilidade do input antes de tentar preencher.
+        Cascata de seletores: id literal, id sufixo, name sufixo, name parcial.
+        Tooltip de erro indica que o id real é `formulario:prazoAvisoInformado`.
+        """
+        seletores = [
+            "input#formulario\\:prazoAvisoInformado",
+            "input[id='formulario:prazoAvisoInformado']",
+            "input[id$=':prazoAvisoInformado']",
+            "input[id$='prazoAvisoInformado']",
+            "input[name$=':prazoAvisoInformado']",
+            "input[name$='prazoAvisoInformado']",
+        ]
+        encontrado = None
+        for sel in seletores:
+            try:
+                self._page.wait_for_selector(sel, state="visible", timeout=4000)
+                loc = self._page.locator(sel)
+                if loc.count() > 0:
+                    encontrado = loc.first
+                    self.log(f"  ✓ prazoAvisoInformado encontrado via {sel!r}")
+                    break
+            except Exception:
+                continue
+
+        if encontrado is None:
+            # Fallback JS: localizar pelo id contendo 'prazoAviso' E type number/text
+            real_id = self._page.evaluate(
+                """() => {
+                    const inputs = [...document.querySelectorAll('input')];
+                    const cand = inputs.find(i =>
+                        (i.id||'').toLowerCase().includes('prazoaviso') &&
+                        !(i.id||'').toLowerCase().includes('erro') &&
+                        (i.type === 'text' || i.type === 'number') &&
+                        i.offsetParent !== null
+                    );
+                    return cand ? cand.id : null;
+                }"""
+            )
+            if real_id:
+                encontrado = self._page.locator(f"#{real_id.replace(':', '\\:')}")
+                self.log(f"  ✓ prazoAvisoInformado via JS scan: id={real_id}")
+            else:
+                self.log("  ⚠ prazoAvisoInformado não renderizado — radio APURACAO_INFORMADA pode não ter disparado AJAX")
+                return
+
+        try:
+            encontrado.scroll_into_view_if_needed(timeout=2000)
+        except Exception:
+            pass
+        try:
+            encontrado.fill(str(dias))
+            try:
+                encontrado.dispatch_event("change")
+            except Exception:
+                pass
+            try:
+                encontrado.press("Tab")
+            except Exception:
+                pass
+            self._aguardar_ajax(2000)
+            self.log(f"  ✓ prazoAvisoInformado = {dias}")
+        except Exception as e:
+            self.log(f"  ⚠ falha ao preencher prazoAvisoInformado: {e}")
+
     # ─── Helpers críticos inspirados no Calc Machine ──────────────────────
     # Padrão observado em 12/05/2026 via Chrome MCP no calcmachine.ensinoplus.com.br:
     # após cada save crítico, aguardar `.rf-msgs-sum` com "Operação realizada
@@ -1111,7 +1180,7 @@ class PlaywrightAutomatorV2:
 
         # Aviso prévio
         self._selecionar("apuracaoPrazoDoAvisoPrevio", pc.apuracao_aviso_previo.value)
-        self._aguardar_ajax(2000)
+        self._aguardar_ajax(3000)
         # Quando APURACAO_INFORMADA, o PJE-Calc renderiza o campo
         # 'prazoAvisoInformado' (obrigatório). Preencher com valor do JSON ou
         # calcular automaticamente conforme Lei 12.506/2011:
@@ -1131,7 +1200,9 @@ class PlaywrightAutomatorV2:
                 except Exception as e:
                     dias = 30
                     self.log(f"  ⚠ falha auto-cálculo prazo aviso ({e}); usando 30")
-            self._preencher("prazoAvisoInformado", str(dias), obrigatorio=False)
+            # O campo prazoAvisoInformado é renderizado condicionalmente via AJAX
+            # após selecionar APURACAO_INFORMADA. Aguardar explicitamente a renderização.
+            self._preencher_prazo_aviso_informado(dias)
         self._marcar_checkbox("projetaAvisoIndenizado", pc.projeta_aviso_indenizado)
         self._marcar_checkbox("limitarAvos", pc.limitar_avos)
         self._marcar_checkbox("zeraValorNegativo", pc.zerar_valor_negativo)
