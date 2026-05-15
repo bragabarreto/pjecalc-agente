@@ -1768,8 +1768,7 @@ class PlaywrightAutomatorV2:
             # Default 2581 (Remuneração, Verbas Indenizatórias e Benefícios)
             # quando codigo é None — categoria ampla que cobre majoritárias.
             codigo_cnj = p.assunto_cnj.codigo if p.assunto_cnj and p.assunto_cnj.codigo else 2581
-            self._preencher("codigoAssuntosCnj", str(codigo_cnj))
-            self._aguardar_ajax(3000)
+            self._selecionar_assunto_cnj(codigo_cnj)
         elif v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_ADAPTADO:
             self._preencher("descricao", v.nome_pjecalc, obrigatorio=False)
 
@@ -2497,6 +2496,27 @@ class PlaywrightAutomatorV2:
         prefixo = diag.get("prefixo_comum") or ""
         n_linhas = diag.get("n_rows") or 0
 
+        # Férias rows: tr[id*="dataTable|listagem|rowData"] NÃO corresponde ao DOM real.
+        # As linhas auto-geradas usam formulario:j_id106:N:campo — detectar via editaveis.
+        if n_linhas == 0:
+            import re as _re
+            _editaveis = diag.get("editaveis", [])
+            _sit_ids = [e for e in _editaveis if e.endswith(":situacao")]
+            if _sit_ids:
+                _m = _re.match(r"^(.+):\d+:situacao$", _sit_ids[0])
+                if _m:
+                    prefixo = _m.group(1)
+                    _indices = []
+                    for _sid in _sit_ids:
+                        _m2 = _re.match(r"^.+:(\d+):situacao$", _sid)
+                        if _m2:
+                            _indices.append(int(_m2.group(1)))
+                    n_linhas = max(_indices) + 1 if _indices else len(_sit_ids)
+                    self.log(
+                        f"  ℹ Férias: prefixo real='{prefixo}', {n_linhas} linha(s) "
+                        f"(extraído de editaveis)"
+                    )
+
         # Editar cada período — tentar mapear por índice ao JSON
         for i, p in enumerate(ferias.periodos):
             self.log(
@@ -2535,21 +2555,24 @@ class PlaywrightAutomatorV2:
                                 continue
                 return False
 
-            # Situação (radio ou select)
+            # Situação (select ou radio) — select PRIMEIRO para evitar falso-positivo
+            # com _marcar_radio(obrigatorio=False) que retorna silenciosamente em selects.
             try:
-                ok = _try_field(
-                    ["situacaoFerias", "situacao", "tipoSituacao"],
-                    lambda f: self._marcar_radio(f, p.situacao, obrigatorio=False),
-                )
-                if not ok:
-                    # tentar como select
-                    for rp in row_prefix_candidates:
-                        sel = self._page.locator(f"select[id$='{rp}situacaoFerias']")
-                        if sel.count() > 0:
-                            self._selecionar(f"{rp}situacaoFerias", p.situacao)
-                            ok = True
+                _sit_ok = False
+                for _rp in row_prefix_candidates:
+                    for _suf in ("situacaoFerias", "situacao", "tipoSituacao"):
+                        _full_sit = _rp + _suf
+                        if self._page.locator(f"select[id$='{_full_sit}']").count() > 0:
+                            self._selecionar(_full_sit, p.situacao, obrigatorio=False)
+                            _sit_ok = True
                             break
-                if not ok:
+                        if self._page.locator(f"input[type='radio'][id*='{_full_sit}']").count() > 0:
+                            self._marcar_radio(_full_sit, p.situacao, obrigatorio=False)
+                            _sit_ok = True
+                            break
+                    if _sit_ok:
+                        break
+                if not _sit_ok:
                     self.log(f"    ⚠ situacao período {i+1}: campo não localizado")
             except Exception as e:
                 self.log(f"    ⚠ situacao período {i+1}: {e}")
