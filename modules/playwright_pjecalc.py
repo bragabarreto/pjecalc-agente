@@ -2587,8 +2587,49 @@ class PJECalcPlaywright:
                     self._log(f"    ⚠ Falha ao desmarcar prescrição: {_ce}")
                 continue
 
+            # ── Documento fiscal (CPF/CNPJ) — check prioritário por campo_id ──
+            # DEVE vir antes do check de "data" pois mensagens de erro JSF contêm
+            # "<![CDATA[" fazendo "data" in _msg disparar falso positivo.
+            if _fid in ("reclamanteNumeroDocumentoFiscal", "reclamadoNumeroDocumentoFiscal"):
+                import re as _re_doc
+                try:
+                    _val_atual = self._page.evaluate(
+                        f"""() => {{
+                            const el = document.querySelector('[id$="{_fid}"]');
+                            return el ? el.value : null;
+                        }}"""
+                    )
+                    if _val_atual:
+                        _limpo = _re_doc.sub(r'[^\d]', '', _val_atual)
+                        if _limpo and _limpo != _val_atual:
+                            # Estratégia 1: reformatar (remover pontuação)
+                            if self._preencher(_fid, _limpo, obrigatorio=False):
+                                self._log(f"    → Correção: {_fid} reformatado ({_val_atual} → {_limpo})")
+                                _corrigiu = True
+                        else:
+                            # Estratégia 2: DV inválido → limpar (CPF opcional para liquidação)
+                            self._page.evaluate(
+                                f"""() => {{
+                                    const el = document.querySelector('[id$="{_fid}"]');
+                                    if (el) {{
+                                        el.value = '';
+                                        el.dispatchEvent(new Event('input', {{bubbles: true}}));
+                                        el.dispatchEvent(new Event('change', {{bubbles: true}}));
+                                        el.dispatchEvent(new Event('blur', {{bubbles: true}}));
+                                    }}
+                                }}"""
+                            )
+                            self._log(
+                                f"    → Correção: {_fid} LIMPO (DV inválido — "
+                                f"campo opcional para liquidação)"
+                            )
+                            _corrigiu = True
+                except Exception as _e_doc:
+                    self._log(f"    ⚠ Falha ao corrigir {_fid}: {_e_doc}")
+
             # ── Data obrigatória vazia ou formato inválido ──
-            if "data" in _campo or "data" in _fid or "data" in _msg:
+            # Nota: checar _campo/_fid, não _msg (evitar falso positivo com CDATA nas msgs JSF)
+            elif "data" in _campo or "data" in _fid:
                 import datetime
                 _hoje = datetime.date.today().strftime("%d/%m/%Y")
                 # Campos de data comuns que podem estar vazios
@@ -5024,18 +5065,9 @@ class PJECalcPlaywright:
                 else:
                     self._log("  ✓ Verbas Expresso salvas")
             else:
-                self._log("  ⚠ btnSalvarExpresso não encontrado — tentando Enter")
-                try:
-                    self._page.keyboard.press("Enter")
-                    self._aguardar_ajax()
-                    self._page.wait_for_timeout(1500)
-                    # Verificar erros após Enter
-                    _erros_enter = self._detectar_erros_formulario("Fase 3 Expresso (Enter)")
-                    if _erros_enter:
-                        self._log(f"  ⚠ Verbas Expresso: erros após Enter")
-                        _salvou = False
-                except Exception:
-                    pass
+                # NÃO pressionar Enter — causaria navegação para nova conversa Seam,
+                # perdendo conversationId e quebrando todas as fases subsequentes.
+                self._log("  ⚠ Expresso save falhou — prosseguindo sem navegar (preserva conversationId)")
 
             # HEALTH CHECK pós-salvamento
             if not self._tomcat_esta_vivo():
@@ -5510,13 +5542,14 @@ class PJECalcPlaywright:
                         }
                     }
 
-                    // 4ª: token-overlap Jaccard ≥ 0.40
+                    // 4ª: token-overlap Jaccard ≥ 0.70 (elevado de 0.40 para evitar
+                    // matches espúrios como "Salário-Família" → "13º SALÁRIO" = 0.50)
                     let best = 0, bestCb = null, bestTxt = null;
                     for (const {cb, txt} of pairs) {
                         const s = score(nome, txt);
                         if (s > best) { best = s; bestCb = cb; bestTxt = txt; }
                     }
-                    if (best >= 0.40 && bestCb) {
+                    if (best >= 0.70 && bestCb) {
                         if (!bestCb.checked) bestCb.click();
                         return '~' + bestTxt + ' (score=' + best.toFixed(2) + ')';
                     }
@@ -10051,6 +10084,19 @@ class PJECalcPlaywright:
         # "PROPORCIONAIS" NÃO existe — é o resultado automático da rescisão
         # quando há período não completo (gerado pelo PJE-Calc, não cadastrado).
         _ENUMS_FERIAS_VALIDOS = {"GOZADAS", "GOZADAS_PARCIALMENTE", "INDENIZADAS", "PERDIDAS"}
+        # Mapeamento de termos comuns (extração LLM) → enum PJE-Calc
+        _SITUACAO_MAP = {
+            "VENCIDAS": "INDENIZADAS",       # férias vencidas = indenizadas
+            "INDENIZADA": "INDENIZADAS",
+            "NAO_GOZADAS": "INDENIZADAS",
+            "NÃO_GOZADAS": "INDENIZADAS",
+            "GOZADA": "GOZADAS",
+            "GOZADAS_PARCIAL": "GOZADAS_PARCIALMENTE",
+            "PARCIALMENTE_GOZADAS": "GOZADAS_PARCIALMENTE",
+            "PERDIDA": "PERDIDAS",
+            "CADUCADA": "PERDIDAS",
+            "CADUCADAS": "PERDIDAS",
+        }
         _alterou_alguma = False
         for entrada in ferias:
             _situacao_raw = (entrada.get("situacao") or "").strip()
@@ -10060,8 +10106,14 @@ class PJECalcPlaywright:
                 self._log(f"  ℹ Férias '{_situacao_raw}' — proporcionais geradas auto pelo PJE-Calc (skip)")
                 _situacao = ""  # não tentar configurar
             elif _situacao_norm and _situacao_norm not in _ENUMS_FERIAS_VALIDOS:
-                self._log(f"  ⚠ Férias situação '{_situacao_raw}' inválida — opções: {_ENUMS_FERIAS_VALIDOS}")
-                _situacao = ""
+                # Tentar mapeamento de termos alternativos
+                _situacao_mapped = _SITUACAO_MAP.get(_situacao_norm, "")
+                if _situacao_mapped:
+                    self._log(f"  ℹ Férias situação '{_situacao_raw}' → mapeado para '{_situacao_mapped}'")
+                    _situacao = _situacao_mapped
+                else:
+                    self._log(f"  ⚠ Férias situação '{_situacao_raw}' inválida — opções: {_ENUMS_FERIAS_VALIDOS}")
+                    _situacao = ""
             else:
                 _situacao = _situacao_norm
             _dobra = bool(entrada.get("dobra"))
