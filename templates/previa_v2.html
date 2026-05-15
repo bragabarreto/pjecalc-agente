@@ -340,10 +340,21 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             </div>
           </div>
           <div class="grid-4" style="margin-top: 10px;">
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.sabado_como_dia_util" checked> <label>Sábado como Dia Útil</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.considerar_feriado_estadual"> <label>Feriado Estadual</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.considerar_feriado_municipal"> <label>Feriado Municipal</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.limitar_avos_ao_periodo"> <label>Limitar Avos ao Período</label></div>
             <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.prescricao_quinquenal" checked> <label>Prescrição Quinquenal</label></div>
             <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.prescricao_fgts"> <label>Prescrição FGTS</label></div>
             <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.projeta_aviso_indenizado" checked> <label>Projeta Aviso Indenizado</label></div>
             <div class="checkbox-row"><input type="checkbox" data-campo="parametros_calculo.zerar_valor_negativo" checked> <label>Zerar Valor Negativo</label></div>
+          </div>
+        </div>
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Comentários</div>
+          <div class="campo">
+            <label>Comentários (até 255 caracteres)</label>
+            <textarea maxlength="255" rows="3" data-campo="parametros_calculo.comentarios" placeholder="Exibido no relatório Resumo do Cálculo (máx. 255 caracteres)"></textarea>
           </div>
         </div>
       </div>
@@ -428,14 +439,43 @@ details.fieldgroup[open] { border-color: #adb5bd; }
         <span class="badge ok">configurar</span>
       </header>
       <div class="corpo">
-        <p style="color:#6c757d; font-size:0.85rem; margin-bottom:8px;">Jornada contratual. Deixe em branco se não houver horas extras apuradas por cartão.</p>
-        <div class="grid-3">
-          <div class="campo"><label>Hora Início Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_inicio" placeholder="08:00"></div>
-          <div class="campo"><label>Hora Fim Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_fim" placeholder="17:00"></div>
-          <div class="campo"><label>Intervalo (min)</label><input type="number" data-campo="cartao_de_ponto.intervalo_minutos" placeholder="60"></div>
-          <div class="campo"><label>Dias Trabalhados/Semana</label><input type="number" min="1" max="7" data-campo="cartao_de_ponto.dias_semana" value="5"></div>
-          <div class="campo"><label>HE mensais (média)</label><input type="number" step="0.5" data-campo="cartao_de_ponto.quantidade_mensal_he"></div>
-          <div class="campo"><label>Adicional HE (%)</label><input type="number" step="1" data-campo="cartao_de_ponto.adicional_he_pct" placeholder="50"></div>
+        <p style="color:#6c757d; font-size:0.85rem; margin-bottom:8px;">Critérios de Apuração — Cartão de Ponto. Deixe em branco se não houver horas extras apuradas por cartão.</p>
+        <div class="fieldgroup">
+          <div class="fieldgroup-title">Forma de Apuração de HE</div>
+          <div class="campo">
+            <label>Forma de Apuração de HE</label>
+            <select data-campo="cartao_de_ponto.apuracao_he">
+              <option value="NAO_APURAR">Não apurar horas extras</option>
+              <option value="EXCEDENTES_DIARIO">Excedentes da jornada diária</option>
+              <option value="EXCEDENTES_SEMANAL">Excedentes da jornada semanal</option>
+              <option value="CRITERIO_MAIS_FAVORAVEL">Critério mais favorável (diário vs semanal)</option>
+              <option value="EXCEDENTES_MENSAL">Excedentes da jornada mensal</option>
+              <option value="SUMULA_85">Súmula 85 TST</option>
+              <option value="PRIMEIRAS_HE_EM_SEPARADO">Primeiras HE em separado</option>
+            </select>
+          </div>
+        </div>
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Jornada de Trabalho Padrão (HH:MM)</div>
+          <div class="grid-4">
+            <div class="campo"><label>Segunda</label><input type="text" data-campo="cartao_de_ponto.jornada_segunda" placeholder="HH:MM"></div>
+            <div class="campo"><label>Terça</label><input type="text" data-campo="cartao_de_ponto.jornada_terca" placeholder="HH:MM"></div>
+            <div class="campo"><label>Quarta</label><input type="text" data-campo="cartao_de_ponto.jornada_quarta" placeholder="HH:MM"></div>
+            <div class="campo"><label>Quinta</label><input type="text" data-campo="cartao_de_ponto.jornada_quinta" placeholder="HH:MM"></div>
+            <div class="campo"><label>Sexta</label><input type="text" data-campo="cartao_de_ponto.jornada_sexta" placeholder="HH:MM"></div>
+            <div class="campo"><label>Sábado</label><input type="text" data-campo="cartao_de_ponto.jornada_sabado" placeholder="HH:MM"></div>
+            <div class="campo"><label>Domingo</label><input type="text" data-campo="cartao_de_ponto.jornada_domingo" placeholder="HH:MM"></div>
+            <div class="campo"><label>Dia Fechamento Mensal</label><input type="number" min="1" max="31" data-campo="cartao_de_ponto.dia_fechamento_mensal" placeholder="ex: 30"></div>
+          </div>
+        </div>
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Períodos de Descanso e Noturno</div>
+          <div class="grid-2">
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.apurar_intervalos_intrajornada"> <label>Apurar Supressão Intervalo Intrajornada</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.apurar_intervalos_interjornadas"> <label>Apurar Intervalo Interjornadas</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.apurar_adicional_noturno"> <label>Apurar Adicional Noturno</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.horario_noturno_urbano"> <label>Noturno Urbano (22h-05h)</label></div>
+          </div>
         </div>
       </div>
     </div>
@@ -539,10 +579,10 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       <div class="corpo">
         <div class="grid-3">
           <div class="campo">
-            <label>Tipo Verba</label>
+            <label>Destino</label>
             <select data-campo="fgts.tipo_verba">
-              <option value="PAGAR">Pagar (saldo)</option>
-              <option value="DEPOSITAR">Depositar</option>
+              <option value="PAGAR_AO_RECLAMANTE">Pagar ao reclamante</option>
+              <option value="RECOLHER_EM_CONTA_VINCULADA">Recolher em conta vinculada</option>
             </select>
           </div>
           <div class="campo">
@@ -552,43 +592,54 @@ details.fieldgroup[open] { border-color: #adb5bd; }
               <option value="NAO">Não</option>
             </select>
           </div>
-          <div class="campo">
-            <label>Incidência</label>
-            <select data-campo="fgts.incidencia">
-              <option value="SOBRE_O_TOTAL_DEVIDO">Sobre o total devido</option>
-              <option value="SOBRE_O_SALDO_DEVEDOR">Sobre o saldo devedor</option>
-            </select>
-          </div>
         </div>
         <div class="fieldgroup" style="margin-top:10px;">
           <div class="fieldgroup-title">Multa FGTS</div>
           <div class="grid-3">
             <div class="campo">
               <label>Tipo Multa</label>
-              <select data-campo="fgts.multa.tipo_valor" onchange="document.getElementById('fgts-multa-valor-row').style.display=(this.value==='INFORMADA'?'block':'none')">
+              <select data-campo="fgts.multa.tipo_multa" onchange="
+                var calc = this.value==='CALCULADA';
+                var inf = this.value==='INFORMADA';
+                document.getElementById('fgts-multa-calc-fields').style.display=(calc?'grid':'none');
+                document.getElementById('fgts-multa-valor-row').style.display=(inf?'block':'none')">
+                <option value="NAO_APURAR">Não apurar</option>
                 <option value="CALCULADA">Calculada</option>
                 <option value="INFORMADA">Informada</option>
               </select>
             </div>
+          </div>
+          <div id="fgts-multa-calc-fields" class="grid-3" style="display:none; margin-top:8px;">
             <div class="campo">
               <label>Percentual Multa</label>
               <select data-campo="fgts.multa.percentual">
-                <option value="QUARENTA_POR_CENTO">40%</option>
                 <option value="VINTE_POR_CENTO">20%</option>
+                <option value="QUARENTA_POR_CENTO">40%</option>
               </select>
             </div>
-            <div class="campo" id="fgts-multa-valor-row" style="display:none;">
-              <label>Valor Informado (R$)</label>
-              <input type="number" step="0.01" data-campo="fgts.multa.valor_informado_brl" placeholder="0.00">
+            <div class="campo col-span-2">
+              <label>Base da Multa</label>
+              <select data-campo="fgts.multa.base_multa">
+                <option value="DEVIDO">Devido</option>
+                <option value="DIFERENCA">Diferença</option>
+                <option value="SALDO_E_OU_SAQUE">Saldo e/ou Saque</option>
+                <option value="DEVIDO_MENOS_SALDO">Devido (-) Saldo</option>
+                <option value="DEVIDO_MAIS_SALDO">Devido (+) Saldo</option>
+              </select>
             </div>
           </div>
+          <div class="campo" id="fgts-multa-valor-row" style="display:none; margin-top:8px;">
+            <label>Valor Informado (R$)</label>
+            <input type="number" step="0.01" data-campo="fgts.multa.valor_informado_brl" placeholder="0.00">
+          </div>
           <div class="grid-4" style="margin-top:8px;">
-            <div class="checkbox-row"><input type="checkbox" data-campo="fgts.multa.ativa" checked> <label>Multa Ativa</label></div>
             <div class="checkbox-row"><input type="checkbox" data-campo="fgts.multa.excluir_aviso_da_multa"> <label>Excluir Aviso da Multa</label></div>
             <div class="checkbox-row"><input type="checkbox" data-campo="fgts.multa_artigo_467"> <label>Multa Art. 467</label></div>
-            <div class="checkbox-row"><input type="checkbox" data-campo="fgts.multa_10_lc110"> <label>Multa 10% LC 110</label></div>
-            <div class="checkbox-row"><input type="checkbox" data-campo="fgts.contribuicao_social"> <label>Contribuição Social</label></div>
-            <div class="checkbox-row"><input type="checkbox" data-campo="fgts.incidencia_pensao_alimenticia"> <label>Pensão Alimentícia</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="fgts.contribuicao_lc110_0_5pct"> <label>Contrib. Social 0,5% (LC 110/2001)</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="fgts.contribuicao_lc110_10pct"> <label>Contrib. Social 10% (LC 110/2001)</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="fgts.incidencia_pensao_alimenticia" id="cb-fgts-pa"
+              onchange="document.getElementById('fgts-pa-multa-row').style.display=(this.checked?'flex':'none')"> <label>Pensão Alimentícia sobre FGTS</label></div>
+            <div class="checkbox-row" id="fgts-pa-multa-row" style="display:none"><input type="checkbox" data-campo="fgts.pensao_sobre_multa_fgts"> <label>Pensão Alimentícia sobre Multa FGTS</label></div>
           </div>
         </div>
         <div class="fieldgroup" style="margin-top:10px;">
@@ -624,15 +675,15 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       <div class="corpo">
         <div class="grid-2">
           <div class="campo">
-            <label>Alíquota Segurado</label>
+            <label>Alíquota do Segurado</label>
             <select data-campo="contribuicao_social.aliquota_segurado">
               <option value="SEGURADO_EMPREGADO">Segurado Empregado</option>
               <option value="EMPREGADO_DOMESTICO">Empregado Doméstico</option>
-              <option value="FIXA">Fixa</option>
+              <option value="FIXA">Fixa (%)</option>
             </select>
           </div>
           <div class="campo">
-            <label>Alíquota Empregador</label>
+            <label>Alíquota do Empregador</label>
             <select data-campo="contribuicao_social.aliquota_empregador" onchange="document.getElementById('cs-aliquotas-fixas').style.display=(this.value==='FIXA'?'block':'none')">
               <option value="POR_ATIVIDADE_ECONOMICA">Por Atividade Econômica</option>
               <option value="POR_PERIODO">Por Período</option>
@@ -660,10 +711,10 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           </div>
         </div>
         <div class="grid-4" style="margin-top:10px;">
-          <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.apurar_segurado_devido" checked> <label>Apurar Segurado Devido</label></div>
+          <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.apurar_segurado_devido" checked> <label>Apurar Contribuição do Segurado</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.cobrar_do_reclamante_devido"> <label>Cobrar do Reclamante</label></div>
-          <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.corrigir_desconto_reclamante" checked> <label>Corrigir Desconto Reclamante</label></div>
-          <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.apurar_salarios_pagos" checked> <label>Apurar Salários Pagos</label></div>
+          <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.corrigir_desconto_reclamante" checked> <label>Corrigir Desconto do Reclamante</label></div>
+          <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.apurar_salarios_pagos" checked> <label>Apurar CS sobre Salários Pagos</label></div>
         </div>
         <div class="grid-2" style="margin-top:10px;">
           <div class="campo">
@@ -735,10 +786,10 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       <div class="corpo">
         <div class="grid-4">
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.apurar_irpf" checked> <label>Apurar IRPF</label></div>
-          <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.considerar_tributacao_em_separado_rra" checked> <label>RRA (tributação separada)</label></div>
+          <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.considerar_tributacao_em_separado_rra" checked> <label>Tributação em Separado (Férias)</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.incidir_sobre_juros_de_mora"> <label>Incidir sobre Juros de Mora</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.cobrar_do_reclamado"> <label>Cobrar do Reclamado</label></div>
-          <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.considerar_tributacao_exclusiva_na_fonte"> <label>Tributação Exclusiva na Fonte</label></div>
+          <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.considerar_tributacao_exclusiva_na_fonte"> <label>Tributação Exclusiva na Fonte (13º Salário)</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.regime_de_caixa"> <label>Regime de Caixa</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.aposentado_maior_65_anos"> <label>Aposentado ≥ 65 anos</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="imposto_de_renda.possui_dependentes" onchange="toggleDependentes(this.checked)"> <label>Possui Dependentes</label></div>
@@ -842,35 +893,73 @@ details.fieldgroup[open] { border-color: #adb5bd; }
         <span class="badge ok">configurar</span>
       </header>
       <div class="corpo">
-        <div class="grid-3">
+        <div class="fieldgroup">
+          <div class="fieldgroup-title">Dados Gerais — Índice de Correção</div>
+          <div class="grid-3">
+            <div class="campo">
+              <label>Índice Trabalhista</label>
+              <select data-campo="correcao_juros_multa.indice_trabalhista" id="sel-indice-trabalhista">
+                <option value="IPCAE" selected>IPCA-E</option>
+                <option value="IPCA">IPCA</option>
+                <option value="INPC">INPC</option>
+                <option value="IGP_M">IGP-M</option>
+                <option value="TR">TR</option>
+                <option value="IPC">IPC</option>
+                <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
+                <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
+                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
+              </select>
+            </div>
+          </div>
+          <div class="checkbox-row" style="margin-top:8px;">
+            <input type="checkbox" data-campo="correcao_juros_multa.combinar_com_outro_indice" id="cb-combinar-indice"
+              onchange="document.getElementById('combinar-indice-fields').style.display=(this.checked?'grid':'none')">
+            <label>Combinar com Outro Índice</label>
+          </div>
+          <div id="combinar-indice-fields" class="grid-2" style="display:none; margin-top:8px;">
+            <div class="campo">
+              <label>Segundo Índice</label>
+              <select data-campo="correcao_juros_multa.segundo_indice">
+                <option value="IPCAE">IPCA-E</option>
+                <option value="IPCA">IPCA</option>
+                <option value="INPC">INPC</option>
+                <option value="IGP_M">IGP-M</option>
+                <option value="TR">TR</option>
+                <option value="IPC">IPC</option>
+                <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
+                <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
+                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Combinar a partir de</label>
+              <input type="text" data-campo="correcao_juros_multa.combinar_a_partir_de" placeholder="DD/MM/YYYY">
+            </div>
+          </div>
+          <div class="checkbox-row" style="margin-top:8px;">
+            <input type="checkbox" data-campo="correcao_juros_multa.ignorar_taxa_negativa">
+            <label>Ignorar Taxa Negativa</label>
+          </div>
+        </div>
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Juros de Mora</div>
           <div class="campo">
-            <label>Índice Trabalhista</label>
-            <select data-campo="correcao_juros_multa.indice_trabalhista">
-              <option value="IPCAE" selected>IPCA-E</option>
-              <option value="IPCA">IPCA</option>
-              <option value="INPC">INPC</option>
-              <option value="IGP_M">IGP-M</option>
-              <option value="TR">TR</option>
-              <option value="IPC">IPC</option>
-              <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
-              <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
-              <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
+            <label>Juros de Mora</label>
+            <select data-campo="correcao_juros_multa.juros_mora">
+              <option value="SIMPLES_1PCT" selected>Simples 1% a.m. (padrão)</option>
+              <option value="FAZENDA_PUBLICA">Fazenda Pública (SELIC limitado a 70%)</option>
+              <option value="NAO_APLICAR">Não Aplicar Juros</option>
             </select>
           </div>
+        </div>
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Dados Específicos — Base de Juros</div>
           <div class="campo">
-            <label>Juros</label>
-            <select data-campo="correcao_juros_multa.juros">
-              <option value="TAXA_LEGAL" selected>Taxa Legal (1% a.m.)</option>
-              <option value="TAXA_SELIC_FAZENDA_PUBLICA">Selic / Fazenda Pública</option>
-              <option value="NAO_APLICAR">Não aplicar</option>
-            </select>
-          </div>
-          <div class="campo">
-            <label>Base Juros sobre Verbas</label>
+            <label>Base de Juros sobre Verbas</label>
             <select data-campo="correcao_juros_multa.base_juros_verbas">
               <option value="VERBAS" selected>Verbas</option>
-              <option value="VERBA_INSS">Verba + INSS</option>
-              <option value="VERBA_INSS_PP">Verba + INSS + Prev. Privada</option>
+              <option value="VERBAS_MENOS_CS">Verbas (-) CS</option>
+              <option value="VERBAS_MENOS_CS_MENOS_PP">Verbas (-) CS (-) PP</option>
             </select>
           </div>
         </div>
@@ -2077,7 +2166,11 @@ function renderHonorarios() {
       <div class="grid-3">
         <div class="campo"><label>Tipo Honorário</label>
           <select onchange="previaData.honorarios[${idx}].tipo_honorario=this.value;renderHonorarios();validarPrevia()">
-            ${['ADVOCATICIO_SUCUMBENCIAL','ADVOCATICIO_CONTRATUAIS','PERICIAL','OUTROS'].map(t=>`<option value="${t}"${(h.tipo_honorario||h.tipo)===t?' selected':''}>${t.replace(/_/g,' ')}</option>`).join('')}
+            <option value="ADVOCATICIO_SUCUMBENCIAL"${(h.tipo_honorario||h.tipo)==='ADVOCATICIO_SUCUMBENCIAL'?' selected':''}>Honorários Advocatícios Sucumbenciais</option>
+            <option value="ADVOCATICIO_CONTRATUAIS"${(h.tipo_honorario||h.tipo)==='ADVOCATICIO_CONTRATUAIS'?' selected':''}>Honorários Advocatícios Contratuais</option>
+            <option value="PERICIAL_CONTADOR"${(h.tipo_honorario||h.tipo)==='PERICIAL_CONTADOR'?' selected':''}>Honorários Periciais — Contador</option>
+            <option value="PERICIAL_ENGENHEIRO"${(h.tipo_honorario||h.tipo)==='PERICIAL_ENGENHEIRO'?' selected':''}>Honorários Periciais — Engenheiro</option>
+            <option value="PERICIAL_MEDICO"${(h.tipo_honorario||h.tipo)==='PERICIAL_MEDICO'?' selected':''}>Honorários Periciais — Médico</option>
           </select>
         </div>
         <div class="campo"><label>Devedor</label>
@@ -2107,7 +2200,28 @@ function renderHonorarios() {
       </div>
       <div class="grid-2">
         <div class="campo"><label>Descrição</label><input type="text" value="${h.descricao||''}" onchange="previaData.honorarios[${idx}].descricao=this.value;validarPrevia()"></div>
-        <div class="checkbox-row" style="align-self:flex-end;"><input type="checkbox"${h.apurar_irrf?' checked':''} onchange="previaData.honorarios[${idx}].apurar_irrf=this.checked;validarPrevia()"> <label>Apurar IRRF</label></div>
+      </div>
+      <div class="fieldgroup" style="margin-top:8px;">
+        <div class="fieldgroup-title">Imposto de Renda sobre Honorários</div>
+        <div class="checkbox-row">
+          <input type="checkbox"${h.apurar_irrf?' checked':''} id="hon-ir-cb-${idx}"
+            onchange="previaData.honorarios[${idx}].apurar_irrf=this.checked;document.getElementById('hon-ir-${idx}').style.display=(this.checked?'block':'none');validarPrevia()">
+          <label>Apurar IR sobre Honorários</label>
+        </div>
+        <div id="hon-ir-${idx}" style="display:${h.apurar_irrf?'block':'none'};">
+          <div class="grid-2" style="margin-top:8px;">
+            <div class="campo"><label>Tipo IR</label>
+              <select onchange="previaData.honorarios[${idx}].ir_tipo=this.value;validarPrevia()">
+                <option value="IRPF"${(h.ir_tipo||'IRPF')==='IRPF'?' selected':''}>IRPF (tabela progressiva mensal)</option>
+                <option value="IRPJ"${h.ir_tipo==='IRPJ'?' selected':''}>IRPJ (1,5% fixo)</option>
+              </select>
+            </div>
+            <div class="checkbox-row" style="align-self:flex-end;">
+              <input type="checkbox"${h.ir_incidir_sobre_juros?' checked':''} onchange="previaData.honorarios[${idx}].ir_incidir_sobre_juros=this.checked;validarPrevia()">
+              <label>Incidir sobre Juros</label>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="fieldgroup" style="margin-top:8px;">
         <div class="fieldgroup-title">Credor <span class="obrigatorio">*</span></div>
@@ -2131,7 +2245,7 @@ function renderHonorarios() {
 
 function adicionarHonorario() {
   if (!previaData.honorarios) previaData.honorarios = [];
-  previaData.honorarios.push({tipo_honorario:'ADVOCATICIO_SUCUMBENCIAL',tipo_devedor:'RECLAMADO',tipo_valor:'CALCULADO',aliquota_pct:10,base_para_apuracao:'LIQUIDO_DEVIDO_AO_RECLAMANTE',apurar_irrf:false,descricao:'',credor:{nome:'',tipo_doc_fiscal:'CPF',numero_doc_fiscal:''}});
+  previaData.honorarios.push({tipo_honorario:'ADVOCATICIO_SUCUMBENCIAL',tipo_devedor:'RECLAMADO',tipo_valor:'CALCULADO',aliquota_pct:10,base_para_apuracao:'LIQUIDO_DEVIDO_AO_RECLAMANTE',apurar_irrf:false,ir_tipo:'IRPF',ir_incidir_sobre_juros:false,descricao:'',credor:{nome:'',tipo_doc_fiscal:'CPF',numero_doc_fiscal:''}});
   renderHonorarios(); validarPrevia();
 }
 
@@ -2223,11 +2337,15 @@ function renderMultas() {
         </div>
         <div class="campo">
           <label>Credor</label>
-          <select onchange="previaData.multas_indenizacoes[${idx}].credor=this.value;validarPrevia()">
+          <select onchange="previaData.multas_indenizacoes[${idx}].credor=this.value;document.getElementById('mi-terceiro-nome-${idx}').style.display=(this.value==='TERCEIRO'?'block':'none');validarPrevia()">
             <option value="RECLAMANTE"${(m.credor||'RECLAMANTE')==='RECLAMANTE'?' selected':''}>Reclamante</option>
             <option value="RECLAMADO"${m.credor==='RECLAMADO'?' selected':''}>Reclamado</option>
             <option value="TERCEIRO"${m.credor==='TERCEIRO'?' selected':''}>Terceiro</option>
           </select>
+        </div>
+        <div class="campo" id="mi-terceiro-nome-${idx}" style="display:${m.credor==='TERCEIRO'?'block':'none'}">
+          <label>Nome do Terceiro</label>
+          <input type="text" value="${m.terceiro_nome||''}" onchange="previaData.multas_indenizacoes[${idx}].terceiro_nome=this.value;validarPrevia()">
         </div>
         <div class="campo">
           <label>Devedor</label>
