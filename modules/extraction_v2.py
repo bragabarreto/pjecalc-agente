@@ -250,6 +250,13 @@ TÍQUETE-ALIMENTAÇÃO, VALE TRANSPORTE,
 VALOR PAGO - NÃO TRIBUTÁVEL, VALOR PAGO - TRIBUTÁVEL
 ```
 
+⚠️ **REGRA CRÍTICA — FÉRIAS + 1/3**: Mesmo que a sentença defira múltiplos períodos de férias
+(ex: 4 períodos aquisitivos vencidos + férias proporcionais), criar APENAS UMA entrada em
+`verbas_principais` com `estrategia_preenchimento: "expresso_direto"` e
+`expresso_alvo: "FÉRIAS + 1/3"`. Os períodos específicos vão EXCLUSIVAMENTE no array
+`ferias.periodos`. O PJE-Calc gerencia os períodos na página Férias — não como verbas autônomas
+separadas. NUNCA criar múltiplas verbas "Férias" em `verbas_principais`.
+
 ### `expresso_adaptado`
 A verba não existe literal, mas pode adaptar uma similar:
 - "Estabilidade Gestante / Acidentária" → expresso_alvo="INDENIZAÇÃO ADICIONAL", nome_pjecalc adaptado
