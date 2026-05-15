@@ -3,12 +3,14 @@
 # Trigger: push na branch main
 #
 # Secrets necessários no GitHub (Settings → Secrets → Actions):
-#   ORACLE_SSH_KEY     — chave privada SSH (.pem) da VM
-#   ORACLE_HOST        — IP público da VM
-#   ORACLE_USER        — usuário SSH (padrão: opc)
-#   ANTHROPIC_API_KEY  — chave da API Anthropic
-#   GEMINI_API_KEY     — chave da API Gemini (opcional)
-#   POSTGRES_PASSWORD  — senha do Postgres
+#   ORACLE_SSH_KEY          — chave privada SSH (.pem) da VM
+#   ORACLE_HOST             — IP público da VM
+#   ORACLE_USER             — usuário SSH (padrão: opc)
+#   ANTHROPIC_API_KEY       — chave da API Anthropic
+#   GEMINI_API_KEY          — chave da API Gemini (opcional)
+#   POSTGRES_PASSWORD       — senha do Postgres
+#   PJECALC_CALCULO_TESTE   — número CNJ de cálculo de teste existente no PJE-Calc H2
+#                             (opcional; quando vazio, automação cria novo cálculo)
 
 name: Deploy to Oracle Cloud
 
@@ -34,6 +36,7 @@ jobs:
             ANTHROPIC_API_KEY=${{ secrets.ANTHROPIC_API_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+            PJECALC_CALCULO_TESTE=${{ secrets.PJECALC_CALCULO_TESTE }}
             ENVEOF
 
             # Pull do código mais recente
