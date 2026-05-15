@@ -513,7 +513,7 @@ function executarAutomacao() {
 
 function abrirSSE() {
   evtSource = new EventSource(
-    `/api/executar/${SESSAO_ID}?modo_oculto=${modoOcultoAtual}`
+    `/api/executar/v2/${SESSAO_ID}?modo_oculto=${modoOcultoAtual}`
   );
   evtSource.onmessage = (e) => {
     const raw = e.data;
