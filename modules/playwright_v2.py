@@ -3398,30 +3398,26 @@ class PlaywrightAutomatorV2:
                 )
                 raise RuntimeError(f"Botão Exportar não encontrado. Inputs visíveis: {_diag}")
 
-            # Fase A: click + expect ANY POST response a exportacao.jsf
-            # (pode ser HTML com linkDownloadArquivo, ou diretamente ZIP).
+            # Fase A — CRÍTICO: expect_download PRÉ-REGISTRADO antes do clique.
+            # O botão Exportar dispara um POST A4J (text/xml) que contém um
+            # <script> inline com jsfcljs(...) que auto-dispara o download ZIP
+            # DURANTE o processamento AJAX — antes de qualquer polling reagir.
+            # expect_response capturava só o text/xml (não o ZIP); expect_download
+            # é registrado antes do clique e captura o evento download corretamente.
+            import pathlib as _pl
             pjc_bytes = None
             try:
-                with self._page.expect_response(
-                    lambda r: (
-                        "exportacao.jsf" in r.url
-                        and r.request.method == "POST"
-                    ),
-                    timeout=30000,
-                ) as resp_info:
+                with self._page.expect_download(timeout=25000) as _dl_info:
                     btn.click(force=True)
-                resp = resp_info.value
-                ct = resp.headers.get("content-type", "")
-                cd = resp.headers.get("content-disposition", "")
-                self.log(f"  → Fase A resposta: HTTP {resp.status} ct={ct[:60]} cd={cd[:60]}")
-                body_a = resp.body()
-                if body_a and body_a[:2] == b"PK":
-                    pjc_bytes = body_a
-                    self.log(f"  ✓ Fase A capturou .PJC direto: {len(pjc_bytes)} bytes")
+                _dl = _dl_info.value
+                _dl_path = _dl.path()
+                if _dl_path:
+                    pjc_bytes = _pl.Path(_dl_path).read_bytes()
+                    self.log(f"  ✓ Fase A capturou .PJC via download event: {len(pjc_bytes)} bytes")
                 else:
-                    self.log(f"  → Fase A: resposta HTML ({len(body_a)} bytes) — buscando linkDownloadArquivo")
+                    self.log(f"  ⚠ Fase A: download.path() vazio — tentando Fase E")
             except Exception as e_a:
-                self.log(f"  ⚠ Fase A: {str(e_a)[:120]} — tentando Fase B/E")
+                self.log(f"  ⚠ Fase A expect_download: {str(e_a)[:120]} — tentando Fase E")
 
             # Fase B + E: aguardar linkDownloadArquivo aparecer + disparar jsfcljs
             if not pjc_bytes:
