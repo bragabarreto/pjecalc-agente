@@ -176,7 +176,7 @@
  		   <property name="jboss.as.jpa.providerModule" value="application"/>
 		   <property name="jboss.as.jpa.managed" value="false"/>
 		   <property name="hibernate.dialect" value="br.jus.trt8.pjecalc.base.comum.DialetoH2"/>
-	       <property name="hibernate.hbm2ddl.auto" value="validate"/>
+	       <property name="hibernate.hbm2ddl.auto" value="update"/>
    		   <property name="hibernate.show_sql" value="false"/>
 		   <property name="hibernate.validator.autoregister_listeners" value="false"/>
 		   <property name="hibernate.current_session_context_class" value="managed"/>
