@@ -2184,9 +2184,10 @@ function renderFerias() {
         <div class="campo"><label>Período Concessivo Fim</label><input type="text" placeholder="DD/MM/YYYY" value="${p.periodo_concessivo_fim||''}" onchange="previaData.ferias.periodos[${idx}].periodo_concessivo_fim=this.value;validarPrevia()"></div>
         <div class="campo"><label>Situação</label>
           <select onchange="previaData.ferias.periodos[${idx}].situacao=this.value;toggleGozos(${idx},this.closest('.fieldgroup'));validarPrevia()">
-            <option value="INDENIZADAS"${sit==='INDENIZADAS'?' selected':''}>Indenizadas</option>
             <option value="GOZADAS"${sit==='GOZADAS'?' selected':''}>Gozadas</option>
-            <option value="PARCIAL_GOZADAS"${sit==='PARCIAL_GOZADAS'?' selected':''}>Parcialmente Gozadas</option>
+            <option value="PARCIAL_GOZADAS"${sit==='PARCIAL_GOZADAS'?' selected':''}>Gozadas Parcialmente</option>
+            <option value="INDENIZADAS"${sit==='INDENIZADAS'?' selected':''}>Indenizadas</option>
+            <option value="PERDIDAS"${sit==='PERDIDAS'?' selected':''}>Perdidas</option>
             <option value="NAO_DIREITO"${sit==='NAO_DIREITO'?' selected':''}>Sem Direito</option>
           </select>
         </div>
