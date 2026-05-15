@@ -1253,10 +1253,10 @@ function htmlFormulaCalculado(v, idx) {
   const p = v.parametros || {};
   if (!p.formula_calculado) {
     p.formula_calculado = {
-      base_calculo: {tipo: 'HISTORICO_SALARIAL', historico_nome: '', proporcionaliza: 'NAO', integralizar: 'SIM'},
-      divisor: {tipo: 'CARGA_HORARIA'},
-      multiplicador: 1.5,
-      quantidade: {tipo: 'INFORMADA', valor: 0, proporcionalizar: false}
+      base_calculo: {tipo: 'MAIOR_REMUNERACAO', proporcionaliza: 'NAO', integralizar: 'SIM'},
+      divisor: {tipo: 'OUTRO_VALOR', valor: 1},
+      multiplicador: 1.0,
+      quantidade: {tipo: 'INFORMADA', valor: 1, proporcionalizar: false}
     };
     previaData.verbas_principais[idx].parametros.formula_calculado = p.formula_calculado;
   }
@@ -1711,47 +1711,6 @@ function htmlVerba(v, idx) {
         </div>
       </div>
 
-      ${(function(){
-        const n = (v.expresso_alvo||v.nome_pjecalc||'').toUpperCase();
-        if (n.includes('DIFERENÇA SALARIAL')) return `
-          <div style="margin:8px 0; padding:10px 12px; background:#fff3cd; border-left:3px solid #ffc107; border-radius:4px; font-size:0.83rem;">
-            <strong>💡 Equiparação Salarial — passo a passo</strong><br>
-            1. Crie dois <em>Históricos Salariais</em>: <code>SALÁRIO DO PARADIGMA</code> e <code>SALÁRIO DO AUTOR</code><br>
-            2. <strong>Bases Cadastradas → Histórico Salarial → selecionar "SALÁRIO DO PARADIGMA"</strong><br>
-            3. Em <em>Valor Pago</em>: tipo <strong>Calculado</strong> → Histórico → "SALÁRIO DO AUTOR"<br>
-            4. <em>Gerar Principal = Diferença</em> (padrão correto — o sistema subtrai pago do devido)
-          </div>`;
-        if (n.includes('DIÁRIA') && n.includes('INTEGRAÇÃO')) return `
-          <div style="margin:8px 0; padding:10px 12px; background:#d1ecf1; border-left:3px solid #17a2b8; border-radius:4px; font-size:0.83rem;">
-            <strong>💡 Diárias — Integração ao Salário</strong><br>
-            • Crie um <em>Histórico Salarial</em> com os <strong>valores mensais das diárias recebidas</strong><br>
-            • Parcela = <strong>Variável</strong> | Compor Principal = <strong>Não</strong> | Proporcionalizar = <strong>Não</strong><br>
-            • Gera reflexos automáticos (13º, Férias+1/3, RSR, etc.)
-          </div>`;
-        if (n.includes('HORAS EXTRAS') || n.includes('HORA EXTRA') || n.includes('IN ITINERE')) return `
-          <div style="margin:8px 0; padding:10px 12px; background:#d4edda; border-left:3px solid #28a745; border-radius:4px; font-size:0.83rem;">
-            <strong>💡 Horas Extras</strong><br>
-            • Divisor = <strong>Carga Horária</strong> | Multiplicador: 1,5 (50%) · 2,0 (100%) · 1,0 (in itinere)<br>
-            • Quantidade = <strong>nº horas extras/mês</strong> (Informada ou Importada do Cartão de Ponto)<br>
-            • Parcela = <strong>Variável</strong>; Base = Histórico Salarial (salário base)
-          </div>`;
-        if (n.includes('ADICIONAL NOTURNO')) return `
-          <div style="margin:8px 0; padding:10px 12px; background:#d4edda; border-left:3px solid #28a745; border-radius:4px; font-size:0.83rem;">
-            <strong>💡 Adicional Noturno 20%</strong><br>
-            • Divisor = <strong>Carga Horária</strong> | Multiplicador = <strong>0,20</strong><br>
-            • Quantidade = <strong>nº horas noturnas/mês</strong> (Informada)<br>
-            • Proporcionalizar = Não | Parcela = <strong>Variável</strong>
-          </div>`;
-        if (n.includes('INTERVALO')) return `
-          <div style="margin:8px 0; padding:10px 12px; background:#d4edda; border-left:3px solid #28a745; border-radius:4px; font-size:0.83rem;">
-            <strong>💡 Intervalo Intra/Interjornadas</strong><br>
-            • Divisor = <strong>Carga Horária</strong> | Multiplicador = <strong>1,5</strong><br>
-            • Quantidade = <strong>horas de intervalo não concedidas/mês</strong><br>
-            • Parcela = <strong>Variável</strong>
-          </div>`;
-        return '';
-      })()}
-
       ${p.valor==='CALCULADO' ? htmlFormulaCalculado(v, idx) : ''}
 
       <div class="fieldgroup">
@@ -1980,12 +1939,12 @@ function adicionarVerba() {
   previaData.verbas_principais.push({
     id: `v${String(idx+1).padStart(2,'0')}`,
     nome_sentenca: 'NOVA VERBA',
-    estrategia_preenchimento: 'expresso_direto',
+    estrategia_preenchimento: 'manual',
     expresso_alvo: '',
     nome_pjecalc: 'NOVA VERBA',
     parametros: {
       assunto_cnj: {codigo: 0, label: ''},
-      parcela: 'VARIAVEL',
+      parcela: 'FIXA',
       valor: 'CALCULADO',
       incidencias: {irpf: true, cs_inss: true, fgts: true, previdencia_privada: false, pensao_alimenticia: false},
       caracteristica: 'COMUM',
@@ -2000,12 +1959,7 @@ function adicionarVerba() {
       periodo_fim: previaData?.parametros_calculo?.data_demissao || '',
       exclusoes: {faltas_justificadas: true, faltas_nao_justificadas: true, ferias_gozadas: true, dobrar_valor_devido: false},
       valor_devido: {tipo: 'INFORMADO', valor_informado_brl: 0, proporcionalizar: false},
-      formula_calculado: {
-        base_calculo: {tipo: 'HISTORICO_SALARIAL', historico_nome: '', proporcionaliza: 'NAO', integralizar: 'SIM'},
-        divisor: {tipo: 'CARGA_HORARIA'},
-        multiplicador: 1.5,
-        quantidade: {tipo: 'INFORMADA', valor: 0, proporcionalizar: false}
-      },
+      formula_calculado: null,
       valor_pago: {tipo: 'INFORMADO', valor_brl: 0, proporcionalizar: false},
       comentarios: null
     },
