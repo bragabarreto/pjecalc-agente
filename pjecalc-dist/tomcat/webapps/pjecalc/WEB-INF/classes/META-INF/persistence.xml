@@ -60,7 +60,6 @@
 		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.jam.IndiceJAM</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.precatorios.IndicePrecatorioFederal</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.precatorios.IndicePrecatorioEstadual</class>
-		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.precatorios.IndicePrecatorioEC1362025</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.tabelaunica.IndiceTabelaUnicaJTMensal</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.tabelaunica.IndiceTabelaUnicaJTDiario</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.indices.tabelaunica.IndiceTabelaUnicaDebitoTrabalhista</class>
@@ -104,7 +103,6 @@
 		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.selicinss.JurosSelicInss</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.selicirpf.JurosSelicIrpf</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.taxalegal.JurosTaxaLegal</class>
-		<class>br.jus.trt8.pjecalc.negocio.dominio.juros.precatorios.JurosPrecatorioEC1362025</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.multa.Multa</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.honorarios.Honorario</class>
 		<class>br.jus.trt8.pjecalc.negocio.dominio.calculo.honorarios.HonorarioVerbaDeCalculo</class>

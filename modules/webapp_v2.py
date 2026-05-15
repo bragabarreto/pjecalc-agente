@@ -375,7 +375,7 @@ def executar_v2_como_generator(sessao_id: str):
             break
         yield item
 
-    yield "[FIM DA EXECUÇÃO V2]"
+    yield "[FIM DA EXECUÇÃO]"
 
 
 # ─── Helper: converter prévia v2 → v1 (compat com automação atual) ────────
