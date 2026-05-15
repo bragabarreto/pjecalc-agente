@@ -249,53 +249,102 @@ a sentença (ex.: data de admissão errada, nome de verba trocado).
 
 > **Este é o plano mais valioso a longo prazo.** Enquanto o Plano 1 corrige erros de leitura,
 > o Plano 2 aprende **como configurar corretamente os parâmetros do PJE-Calc para cada
-> situação jurídica** — a estratégia de preenchimento — a partir de cálculos que foram
+> verba em cada situação jurídica** — a estratégia de preenchimento — a partir de cálculos
 > revisados, confirmados e exportados com sucesso pelo usuário.
 
 **Gatilho:** quando um cálculo atinge `status = 'pjc_exportado'` → disparar
 `EstrategiaEngine.extrair_estrategia(calculo)` como background task.
 
-**O que é extraído:** o engine analisa o JSON completo do cálculo finalizado — verbas,
-parâmetros de cada verba (base, divisor, multiplicador, integralizar, valor_pago, etc.),
-históricos salariais, incidências — em conjunto com o contexto jurídico identificado na
-sentença, e extrai padrões reutilizáveis.
+#### Granularidade: por verba + gatilho contextual (CRÍTICO)
 
-**Exemplos de padrões aprendidos (`EstrategiaAprendida`):**
-- "Quando houver equiparação salarial → DIFERENÇA SALARIAL com `gerarPrincipal=DIFERENCA`,
-  `tipoDoValorPago=CALCULADO`, `base_historico=<historico_paradigma>`,
-  `valor_pago_historico=<historico_autor>`"
-- "Quando houver DIÁRIAS - INTEGRAÇÃO AO SALÁRIO → `comporPrincipal=NAO`,
-  `proporcionalizar=NAO`"
-- "Quando houver estabilidade pós-demissão → criar verbas manuais de Férias+1/3, 13º e
-  FGTS com `integralizarBase=SIM` e ajuste de ocorrências"
-- "Quando houver adicional de insalubridade → base = Salário Mínimo Nacional com
-  alíquota 10/20/40 conforme grau"
+> **A estratégia é sempre aprendida por verba individual, nunca por "tipo de processo".**
+>
+> Razão: um cálculo pode ter DIFERENÇA SALARIAL + ADICIONAL NOTURNO + DIÁRIAS. Num processo
+> futuro, aparecem apenas DIFERENÇA SALARIAL + DIÁRIAS. O sistema deve aplicar as estratégias
+> aprendidas para cada verba de forma independente — sem exigir que o contexto global do
+> processo seja idêntico.
 
-**Pipeline do Plano 2:**
+A unidade de aprendizado é o par `(nome_verba, gatilho_contexto)`:
+
+| nome_verba | gatilho_contexto | parametros_aprendidos |
+|---|---|---|
+| DIFERENÇA SALARIAL | `{motivo: "equiparação_salarial"}` | gerarPrincipal=DIFERENCA, valor_pago=CALCULADO/historico_autor, base=historico_paradigma |
+| DIFERENÇA SALARIAL | `{motivo: "desvio_de_funcao"}` | gerarPrincipal=DIFERENCA, valor_pago=INFORMADO, base=maior_remuneracao |
+| DIÁRIAS - INTEGRAÇÃO AO SALÁRIO | `{}` (invariante — sempre igual) | comporPrincipal=NAO, proporcionalizar=NAO |
+| ADICIONAL DE INSALUBRIDADE | `{grau: "medio"}` | base=SALARIO_MINIMO, mult=0.20 |
+| ADICIONAL DE INSALUBRIDADE | `{grau: "maximo"}` | base=SALARIO_MINIMO, mult=0.40 |
+
+**`gatilho_contexto`** é um dict com os sinais mínimos extraídos da sentença que são
+específicos àquela verba — não ao processo como um todo. Verbas invariantes (DIÁRIAS) têm
+`gatilho_contexto = {}`. Verbas dependentes de grau/motivo têm o sinal correspondente.
+
+#### Identificação robusta do gatilho em novos processos
+
+O problema central é: dado um novo processo, como saber que a DIFERENÇA SALARIAL desse caso
+corresponde ao cenário `equiparação_salarial` e não a `desvio_de_funcao`?
+
+**Abordagem híbrida (do mais rápido ao mais robusto):**
+
+1. **Match direto por palavras-chave extraídas** (primeiro filtro, O(1)):
+   O `extraction.py` já extrai o `motivo` de cada verba deferida. Se o JSON contiver
+   `{verba: "DIFERENÇA SALARIAL", motivo: "equiparação salarial"}` → match exato com
+   `{motivo: "equiparação_salarial"}`. Resolve a maioria dos casos.
+
+2. **Julgamento LLM por similaridade semântica** (fallback para ambíguos):
+   Quando o match direto não é conclusivo, o `rule_injector.py` envia ao Claude:
+   - O trecho da sentença relativo àquela verba
+   - As estratégias candidatas disponíveis para `nome_verba`
+   - Pergunta: "Qual dessas estratégias se aplica a este caso? Ou nenhuma?"
+   O LLM responde com o ID da estratégia ou `null` (aplicar defaults).
+
+3. **Sem match → defaults neutros** (fallback final):
+   Se nenhuma estratégia for identificada com confiança suficiente, o sistema usa os
+   parâmetros padrão — nunca força uma estratégia errada.
+
+#### Ciclo de vida da confiança
+
+```
+EstrategiaAprendida nasce com confiança = 0.5  (1ª ocorrência)
+    │
+    ├─ Aplicada em novo caso → usuário não alterou os params na prévia
+    │       → confiança += 0.1  (estratégia validada)
+    │
+    ├─ Aplicada em novo caso → usuário alterou os params na prévia
+    │       → confiança -= 0.2  (estratégia inadequada para esse caso)
+    │       → registrar a correção como CorrecaoUsuario (Plano 1 também aprende)
+    │
+    └─ confiança < 0.2 → estratégia arquivada (não injetada mais em prompts)
+```
+
+#### Pipeline do Plano 2
+
 ```
 Cálculo exportado (pjc_exportado)
     │
     ▼
-EstrategiaEngine.extrair_estrategia()
-    │  Envia ao Claude:
-    │  • JSON completo do cálculo (verbas + params + históricos)
-    │  • Contexto jurídico (verbas presentes, tipo de pedido inferido)
-    │  Pergunta: "Quais padrões de configuração de parâmetros são
-    │             generalizáveis para casos similares?"
+EstrategiaEngine.extrair_estrategia(calculo)
+    │  Para cada verba no cálculo:
+    │  • Extrai (nome_verba, params_usados, contexto_verba_na_sentença)
+    │  • Verifica se já existe EstrategiaAprendida para esse par (nome, gatilho)
+    │    → SIM: incrementa n_calculos_origem, ajusta confiança
+    │    → NÃO: Claude analisa se os params são generalizáveis → cria nova entrada
     │
     ▼
-EstrategiaAprendida (DB)
-    │  Armazenada com:
-    │  • cenario_juridico: fingerprint do tipo de caso
-    │  • nome_verba: verba à qual se aplica
-    │  • parametros: dict de params confirmados como corretos
-    │  • confianca: 0–1 (sobe com reuso bem-sucedido)
-    │  • calculos_origem: lista de sessao_id dos cálculos fonte
+EstrategiaAprendida (DB) — por verba
+    │  • nome_verba: str          # ex.: "DIFERENÇA SALARIAL"
+    │  • gatilho_contexto: dict   # ex.: {"motivo": "equiparação_salarial"}
+    │  • parametros: dict         # params confirmados (base, divisor, mult, etc.)
+    │  • confianca: float         # 0–1
+    │  • n_calculos_origem: int
+    │  • calculos_origem: list[str]   # sessao_ids
     │
     ▼
-rule_injector.py
-    │  Injeta EstrategiasAprendidas no system prompt de
-    │  classification.py e extraction.py para casos futuros
+rule_injector.py (em extraction.py / classification.py)
+    │  Para cada verba identificada na sentença:
+    │  • Busca EstrategiasAprendidas com nome_verba == verba.nome
+    │  • Tenta match de gatilho_contexto (direto ou LLM)
+    │  • Injeta parametros como defaults no JSON de saída
+    │  • IA pode sobrescrever se o caso apresentar sinais distintos
 ```
 
 **Diferença fundamental entre os dois planos:**
@@ -374,6 +423,29 @@ Para criar verba via "Manual" (botão `incluir` da listagem com value="Manual"):
 8. **Salvar UMA VEZ** ao final (não é por seção).
 
 Para `_configurar_parametros_pos_expresso` (verba já criada via Expresso): o assunto CNJ JÁ vem populado, **não precisa tocar**. Só renomear via campo "Nome" se for `expresso_adaptado`.
+
+### Verba Manual tipo REFLEXA — ⚠️ DOM NÃO MAPEADO (lacuna pendente)
+
+> **Atenção:** os campos e o comportamento de `verba-calculo.jsf` quando o campo `tipo`
+> é alterado de `PRINCIPAL` para `REFLEXA` **não foram inspecionados diretamente no DOM**.
+> Esta é uma lacuna de conhecimento confirmada.
+
+O que se sabe (via manual, não por inspeção):
+- Ao selecionar Tipo=REFLEXA, o formulário provavelmente exibe um seletor da verba principal
+  à qual o reflexo se vincula
+- Alguns parâmetros podem ser herdados da principal (período, base) ou configuráveis
+  independentemente
+- A característica (`FERIAS`, `DECIMO_TERCEIRO_SALARIO`, `COMUM`) permanece configurável
+
+O que **não se sabe** (requer inspeção DOM):
+- ID do seletor de "verba principal vinculada"
+- Quais campos somem / aparecem com Tipo=REFLEXA
+- Se o campo "Assunto CNJ" permanece obrigatório
+- Como o sistema valida o vínculo principal→reflexa no save
+
+**Ação necessária:** inspecionar `verba-calculo.jsf` com Tipo=REFLEXA selecionado e
+documentar os IDs e comportamentos aqui. Até isso ser feito, usar o **fluxo via painel
+"Exibir"** (seção "Reflexos — fluxo correto" abaixo) que foi confirmado pelo usuário.
 
 ### Reflexos pós-contratuais (Estabilidade Gestante/Acidentária, Lei 9.029) — fórmulas confirmadas via vídeo (NotebookLM)
 
