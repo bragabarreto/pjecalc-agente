@@ -570,9 +570,9 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             <div class="campo">
               <label>Tipo de Solicitação</label>
               <select data-campo="seguro_desemprego.tipo_solicitacao">
-                <option value="PRIMEIRA">Primeira</option>
-                <option value="SEGUNDA">Segunda</option>
-                <option value="DEMAIS">Demais</option>
+                <option value="PRIMEIRA">Primeira Solicitação</option>
+                <option value="SEGUNDA">Segunda Solicitação</option>
+                <option value="DEMAIS">Demais Solicitações</option>
               </select>
             </div>
             <div class="campo">
@@ -934,17 +934,18 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             <div class="campo">
               <label>Índice Trabalhista</label>
               <select data-campo="correcao_juros_multa.indice_trabalhista" id="sel-indice-trabalhista">
-                <option value="TABELA_UNICA_JT_DIARIO" selected>Tabela Única JT (diário)</option>
-                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
-                <option value="IPCAE">IPCA-E</option>
-                <option value="IPCA">IPCA</option>
-                <option value="INPC">INPC</option>
-                <option value="IGP_M">IGP-M</option>
-                <option value="TR">TR</option>
-                <option value="IPC">IPC</option>
-                <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
+                <option value="TABELA_UNICA" selected>Tabela Única de Atualização e Conversão de Débitos Trabalhistas</option>
                 <option value="FAZENDA_PUBLICA">Devedor Fazenda Pública</option>
                 <option value="REPETICAO_INDBITO">Repetição de Indébito Tributário</option>
+                <option value="TABELA_UNICA_JT_MENSAL">Tabela JT Mensal</option>
+                <option value="TABELA_UNICA_JT_DIARIO">Tabela JT Diária</option>
+                <option value="TR">TR</option>
+                <option value="IGP_M">IGP-M</option>
+                <option value="INPC">INPC</option>
+                <option value="IPC">IPC</option>
+                <option value="IPCA">IPCA</option>
+                <option value="IPCAE">IPCA-E</option>
+                <option value="IPCAE_TR">IPCA-E/TR</option>
                 <option value="SELIC_RF">SELIC (Receita Federal)</option>
                 <option value="SELIC_SIMPLES">SELIC Simples</option>
                 <option value="SELIC_COMPOSTA">SELIC Composta</option>
@@ -961,17 +962,18 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             <div class="campo">
               <label>Segundo Índice</label>
               <select data-campo="correcao_juros_multa.segundo_indice">
-                <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
-                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
-                <option value="IPCAE">IPCA-E</option>
-                <option value="IPCA">IPCA</option>
-                <option value="INPC">INPC</option>
-                <option value="IGP_M">IGP-M</option>
-                <option value="TR">TR</option>
-                <option value="IPC">IPC</option>
-                <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
+                <option value="TABELA_UNICA">Tabela Única de Atualização e Conversão de Débitos Trabalhistas</option>
                 <option value="FAZENDA_PUBLICA">Devedor Fazenda Pública</option>
                 <option value="REPETICAO_INDBITO">Repetição de Indébito Tributário</option>
+                <option value="TABELA_UNICA_JT_MENSAL">Tabela JT Mensal</option>
+                <option value="TABELA_UNICA_JT_DIARIO">Tabela JT Diária</option>
+                <option value="TR">TR</option>
+                <option value="IGP_M">IGP-M</option>
+                <option value="INPC">INPC</option>
+                <option value="IPC">IPC</option>
+                <option value="IPCA">IPCA</option>
+                <option value="IPCAE">IPCA-E</option>
+                <option value="IPCAE_TR">IPCA-E/TR</option>
                 <option value="SELIC_RF">SELIC (Receita Federal)</option>
                 <option value="SELIC_SIMPLES">SELIC Simples</option>
                 <option value="SELIC_COMPOSTA">SELIC Composta</option>
@@ -990,15 +992,19 @@ details.fieldgroup[open] { border-color: #adb5bd; }
         </div>
         <div class="fieldgroup" style="margin-top:10px;">
           <div class="fieldgroup-title">Juros de Mora</div>
+          <div class="checkbox-row" style="margin-bottom:8px;">
+            <input type="checkbox" data-campo="correcao_juros_multa.aplicar_juros_pre_judicial" id="cb-juros-pre">
+            <label for="cb-juros-pre">Aplicar Juros na Fase Pré-Judicial</label>
+          </div>
           <div class="campo">
-            <label>Juros de Mora</label>
+            <label>Tabela de Juros</label>
             <select data-campo="correcao_juros_multa.juros_mora">
               <option value="JUROS_PADRAO" selected>Juros Padrão</option>
-              <option value="CADERNETA_POUPANCA">Caderneta de Poupança</option>
-              <option value="FAZENDA_PUBLICA">Fazenda Pública (SELIC limitado a 70%)</option>
-              <option value="SIMPLES_05PCT">Simples 0,5% a.m.</option>
-              <option value="SIMPLES_1PCT">Simples 1,0% a.m.</option>
-              <option value="SIMPLES_DIARIO">Simples 0,0333333% a.d.</option>
+              <option value="CADERNETA_POUPANCA">Juros Caderneta de Poupança</option>
+              <option value="FAZENDA_PUBLICA">Juros Fazenda Pública</option>
+              <option value="SIMPLES_05PCT">Juros Simples 0,5% a.m.</option>
+              <option value="SIMPLES_1PCT">Juros Simples 1,0% a.m.</option>
+              <option value="SIMPLES_DIARIO">Juros Simples 0,0333333% a.d.</option>
               <option value="SELIC_RF">SELIC (Receita Federal)</option>
               <option value="SELIC_SIMPLES">SELIC Simples</option>
               <option value="SELIC_COMPOSTA">SELIC Composta</option>
@@ -1007,6 +1013,35 @@ details.fieldgroup[open] { border-color: #adb5bd; }
               <option value="TAXA_LEGAL">Taxa Legal</option>
               <option value="NAO_APLICAR">Sem Juros</option>
             </select>
+          </div>
+          <div class="checkbox-row" style="margin-top:8px;">
+            <input type="checkbox" data-campo="correcao_juros_multa.combinar_com_outro_juros" id="cb-combinar-juros"
+              onchange="document.getElementById('combinar-juros-fields').style.display=(this.checked?'grid':'none')">
+            <label for="cb-combinar-juros">Combinar com Outra Tabela de Juros</label>
+          </div>
+          <div id="combinar-juros-fields" class="grid-2" style="display:none; margin-top:8px;">
+            <div class="campo">
+              <label>Tabela Juros</label>
+              <select data-campo="correcao_juros_multa.outro_juros">
+                <option value="JUROS_PADRAO">Juros Padrão</option>
+                <option value="CADERNETA_POUPANCA">Juros Caderneta de Poupança</option>
+                <option value="FAZENDA_PUBLICA">Juros Fazenda Pública</option>
+                <option value="SIMPLES_05PCT">Juros Simples 0,5% a.m.</option>
+                <option value="SIMPLES_1PCT">Juros Simples 1,0% a.m.</option>
+                <option value="SIMPLES_DIARIO">Juros Simples 0,0333333% a.d.</option>
+                <option value="SELIC_RF">SELIC (Receita Federal)</option>
+                <option value="SELIC_SIMPLES">SELIC Simples</option>
+                <option value="SELIC_COMPOSTA">SELIC Composta</option>
+                <option value="TRD_SIMPLES">TRD Juros Simples</option>
+                <option value="TRD_COMPOSTA">TRD Juros Compostos</option>
+                <option value="TAXA_LEGAL">Taxa Legal</option>
+                <option value="NAO_APLICAR">Sem Juros</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>A partir de (DD/MM/YYYY)</label>
+              <input type="text" data-campo="correcao_juros_multa.outro_juros_a_partir_de" placeholder="DD/MM/YYYY">
+            </div>
           </div>
         </div>
         <div class="fieldgroup" style="margin-top:10px;">
@@ -2037,7 +2072,7 @@ function renderFaltas() {
       </div>
       <div class="grid-2">
         <div class="checkbox-row"><input type="checkbox"${f.justificada?' checked':''} onchange="previaData.faltas[${idx}].justificada=this.checked;validarPrevia()"> <label>Justificada</label></div>
-        <div class="checkbox-row"><input type="checkbox"${f.reinicia_ferias?' checked':''} onchange="previaData.faltas[${idx}].reinicia_ferias=this.checked;validarPrevia()"> <label>Reinicia Período de Férias</label></div>
+        <div class="checkbox-row"><input type="checkbox"${f.reinicia_ferias?' checked':''} onchange="previaData.faltas[${idx}].reinicia_ferias=this.checked;validarPrevia()"> <label>Reiniciar Período Aquisitivo</label></div>
       </div>`;
     list.appendChild(div);
   });
@@ -2223,15 +2258,16 @@ function renderHonorarios() {
       <div class="grid-3">
         <div class="campo"><label>Tipo Honorário</label>
           <select onchange="previaData.honorarios[${idx}].tipo_honorario=this.value;renderHonorarios();validarPrevia()">
-            <option value="ADVOCATICIO_SUCUMBENCIAL"${(h.tipo_honorario||h.tipo)==='ADVOCATICIO_SUCUMBENCIAL'?' selected':''}>Honorários Advocatícios Sucumbenciais</option>
-            <option value="ADVOCATICIO_CONTRATUAIS"${(h.tipo_honorario||h.tipo)==='ADVOCATICIO_CONTRATUAIS'?' selected':''}>Honorários Advocatícios Contratuais</option>
-            <option value="PERICIAL_CONTADOR"${(h.tipo_honorario||h.tipo)==='PERICIAL_CONTADOR'?' selected':''}>Honorários Periciais — Contador</option>
-            <option value="PERICIAL_ENGENHEIRO"${(h.tipo_honorario||h.tipo)==='PERICIAL_ENGENHEIRO'?' selected':''}>Honorários Periciais — Engenheiro</option>
-            <option value="PERICIAL_MEDICO"${(h.tipo_honorario||h.tipo)==='PERICIAL_MEDICO'?' selected':''}>Honorários Periciais — Médico</option>
+            <option value="ADVOCATICIO"${(h.tipo_honorario||h.tipo)==='ADVOCATICIO'?' selected':''}>Honorários Advocatícios</option>
             <option value="ASSISTENCIAIS"${(h.tipo_honorario||h.tipo)==='ASSISTENCIAIS'?' selected':''}>Honorários Assistenciais</option>
-            <option value="PERICIAL_DOCUMENTOSCOPIO"${(h.tipo_honorario||h.tipo)==='PERICIAL_DOCUMENTOSCOPIO'?' selected':''}>Honorários Periciais — Documentoscópio</option>
-            <option value="PERICIAL_INTERPRETE"${(h.tipo_honorario||h.tipo)==='PERICIAL_INTERPRETE'?' selected':''}>Honorários Periciais — Intérprete</option>
-            <option value="PERICIAL_OUTROS"${(h.tipo_honorario||h.tipo)==='PERICIAL_OUTROS'?' selected':''}>Honorários Periciais — Outros</option>
+            <option value="CONTRATUAL"${(['CONTRATUAL','ADVOCATICIO_CONTRATUAIS'].includes(h.tipo_honorario||h.tipo))?' selected':''}>Honorários Contratuais</option>
+            <option value="PERICIAL_CONTADOR"${(h.tipo_honorario||h.tipo)==='PERICIAL_CONTADOR'?' selected':''}>Honorários Periciais - Contador</option>
+            <option value="PERICIAL_DOCUMENTOSCOPIO"${(h.tipo_honorario||h.tipo)==='PERICIAL_DOCUMENTOSCOPIO'?' selected':''}>Honorários Periciais - Documentoscópio</option>
+            <option value="PERICIAL_ENGENHEIRO"${(h.tipo_honorario||h.tipo)==='PERICIAL_ENGENHEIRO'?' selected':''}>Honorários Periciais - Engenheiro</option>
+            <option value="PERICIAL_INTERPRETE"${(h.tipo_honorario||h.tipo)==='PERICIAL_INTERPRETE'?' selected':''}>Honorários Periciais - Intérprete</option>
+            <option value="PERICIAL_MEDICO"${(h.tipo_honorario||h.tipo)==='PERICIAL_MEDICO'?' selected':''}>Honorários Periciais - Médico</option>
+            <option value="PERICIAL_OUTROS"${(h.tipo_honorario||h.tipo)==='PERICIAL_OUTROS'?' selected':''}>Honorários Periciais - Outros</option>
+            <option value="SUCUMBENCIAL"${(['SUCUMBENCIAL','ADVOCATICIO_SUCUMBENCIAL'].includes(h.tipo_honorario||h.tipo))?' selected':''}>Honorários de Sucumbência</option>
             <option value="LEILOEIRO"${(h.tipo_honorario||h.tipo)==='LEILOEIRO'?' selected':''}>Leiloeiro</option>
           </select>
         </div>
@@ -2252,11 +2288,9 @@ function renderHonorarios() {
         <div class="campo"><label>Valor Informado (R$)</label><input type="number" step="0.01" value="${h.valor_informado_brl||''}" ${tv==='CALCULADO'?'disabled':''} onchange="previaData.honorarios[${idx}].valor_informado_brl=parseFloat(this.value);validarPrevia()"></div>
         <div class="campo"><label>Base de Apuração</label>
           <select onchange="previaData.honorarios[${idx}].base_para_apuracao=this.value;validarPrevia()">
-            <option value="LIQUIDO_DEVIDO_AO_RECLAMANTE"${(h.base_para_apuracao||h.base_apuracao)==='LIQUIDO_DEVIDO_AO_RECLAMANTE'?' selected':''}>Líquido devido ao reclamante</option>
-            <option value="BRUTO_DEVIDO_AO_RECLAMANTE"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_DEVIDO_AO_RECLAMANTE'?' selected':''}>Bruto devido ao reclamante</option>
-            <option value="BRUTO_MENOS_CS"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_MENOS_CS'?' selected':''}>Bruto (-CS)</option>
-            <option value="BRUTO_MENOS_CS_MENOS_PP"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_MENOS_CS_MENOS_PP'?' selected':''}>Bruto (-CS-PP)</option>
-            <option value="SOBRE_O_VALOR_DA_CAUSA"${(h.base_para_apuracao||h.base_apuracao)==='SOBRE_O_VALOR_DA_CAUSA'?' selected':''}>Sobre o valor da causa</option>
+            <option value="BRUTO"${(['BRUTO','BRUTO_DEVIDO_AO_RECLAMANTE','LIQUIDO_DEVIDO_AO_RECLAMANTE'].includes(h.base_para_apuracao||h.base_apuracao))?' selected':''}>Bruto</option>
+            <option value="BRUTO_MENOS_CS"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_MENOS_CS'?' selected':''}>Bruto (-) Contribuição Social</option>
+            <option value="BRUTO_MENOS_CS_MENOS_PP"${(h.base_para_apuracao||h.base_apuracao)==='BRUTO_MENOS_CS_MENOS_PP'?' selected':''}>Bruto (-) Contribuição Social (-) Previdência Privada</option>
           </select>
         </div>
       </div>
@@ -2307,7 +2341,7 @@ function renderHonorarios() {
 
 function adicionarHonorario() {
   if (!previaData.honorarios) previaData.honorarios = [];
-  previaData.honorarios.push({tipo_honorario:'ADVOCATICIO_SUCUMBENCIAL',tipo_devedor:'RECLAMADO',tipo_valor:'CALCULADO',aliquota_pct:10,base_para_apuracao:'LIQUIDO_DEVIDO_AO_RECLAMANTE',apurar_irrf:false,ir_tipo:'IRPF',ir_incidir_sobre_juros:false,descricao:'',credor:{nome:'',tipo_doc_fiscal:'CPF',numero_doc_fiscal:''}});
+  previaData.honorarios.push({tipo_honorario:'SUCUMBENCIAL',tipo_devedor:'RECLAMADO',tipo_valor:'CALCULADO',aliquota_pct:10,base_para_apuracao:'BRUTO',apurar_irrf:false,ir_tipo:'IRPF',ir_incidir_sobre_juros:false,descricao:'',credor:{nome:'',tipo_doc_fiscal:'CPF',numero_doc_fiscal:''}});
   renderHonorarios(); validarPrevia();
 }
 
@@ -2510,23 +2544,17 @@ function renderMultas() {
           <input type="text" value="${m.descricao||''}" onchange="previaData.multas_indenizacoes[${idx}].descricao=this.value;renderMultas();validarPrevia()">
         </div>
         <div class="campo">
-          <label>Credor</label>
-          <select onchange="previaData.multas_indenizacoes[${idx}].credor=this.value;document.getElementById('mi-terceiro-nome-${idx}').style.display=(this.value==='TERCEIRO'?'block':'none');validarPrevia()">
-            <option value="RECLAMANTE"${(m.credor||'RECLAMANTE')==='RECLAMANTE'?' selected':''}>Reclamante</option>
-            <option value="RECLAMADO"${m.credor==='RECLAMADO'?' selected':''}>Reclamado</option>
-            <option value="TERCEIRO"${m.credor==='TERCEIRO'?' selected':''}>Terceiro</option>
+          <label>Credor / Devedor</label>
+          <select onchange="var v=this.value;previaData.multas_indenizacoes[${idx}].credor_devedor=v;var hasTer=v.startsWith('TERCEIRO');document.getElementById('mi-terceiro-nome-${idx}').style.display=(hasTer?'block':'none');validarPrevia()">
+            <option value="RECLAMANTE_E_RECLAMADO"${(m.credor_devedor||'RECLAMANTE_E_RECLAMADO')==='RECLAMANTE_E_RECLAMADO'?' selected':''}>Reclamante e Reclamado</option>
+            <option value="RECLAMADO_E_RECLAMANTE"${m.credor_devedor==='RECLAMADO_E_RECLAMANTE'?' selected':''}>Reclamado e Reclamante</option>
+            <option value="TERCEIRO_E_RECLAMANTE"${m.credor_devedor==='TERCEIRO_E_RECLAMANTE'?' selected':''}>Terceiro e Reclamante</option>
+            <option value="TERCEIRO_E_RECLAMADO"${m.credor_devedor==='TERCEIRO_E_RECLAMADO'?' selected':''}>Terceiro e Reclamado</option>
           </select>
         </div>
-        <div class="campo" id="mi-terceiro-nome-${idx}" style="display:${m.credor==='TERCEIRO'?'block':'none'}">
+        <div class="campo" id="mi-terceiro-nome-${idx}" style="display:${(m.credor_devedor||'').startsWith('TERCEIRO')?'block':'none'}">
           <label>Nome do Terceiro</label>
           <input type="text" value="${m.terceiro_nome||''}" onchange="previaData.multas_indenizacoes[${idx}].terceiro_nome=this.value;validarPrevia()">
-        </div>
-        <div class="campo">
-          <label>Devedor</label>
-          <select onchange="previaData.multas_indenizacoes[${idx}].devedor=this.value;validarPrevia()">
-            <option value="RECLAMADO"${(m.devedor||'RECLAMADO')==='RECLAMADO'?' selected':''}>Reclamado</option>
-            <option value="RECLAMANTE"${m.devedor==='RECLAMANTE'?' selected':''}>Reclamante</option>
-          </select>
         </div>
         <div class="campo">
           <label>Tipo de Valor</label>
