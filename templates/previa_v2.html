@@ -145,18 +145,66 @@ details.fieldgroup[open] { border-color: #adb5bd; }
 {% endblock %}
 
 {% block content %}
-<h1>Prévia v2.0 — {{ sessao_id }}</h1>
-<p style="color: #6c757d; font-size: 0.9rem; margin-top: -8px;">
-  Schema v2.0 — todos os campos do PJE-Calc estão editáveis. Validação inline.
-</p>
+<div style="display:flex; gap:0; min-height:calc(100vh - 80px);">
 
-<div class="previa-v2-container">
-  <div class="conteudo-principal">
+  <!-- ══════════════════════════════════════════════════════════════════
+       MENU LATERAL — espelho do menu lateral do PJE-Calc Cidadão
+       ══════════════════════════════════════════════════════════════════ -->
+  <nav id="pje-nav" style="
+    width:220px; min-width:220px; background:#1a3a6b; color:#fff;
+    padding:12px 0; position:sticky; top:0; height:100vh; overflow-y:auto;
+    font-size:0.83rem; flex-shrink:0;">
+    <div style="padding:10px 14px 6px; font-size:0.72rem; opacity:0.6; text-transform:uppercase; letter-spacing:0.8px;">Prévia do Cálculo</div>
+    {% set nav_items = [
+      ('dados-processo','📋 Dados do Processo'),
+      ('parametros-calculo','⚙️ Parâmetros do Cálculo'),
+      ('faltas','📅 Faltas'),
+      ('ferias','🏖️ Férias'),
+      ('historico-salarial','💰 Histórico Salarial'),
+      ('verbas','⭐ Verbas'),
+      ('cartao-ponto','🕐 Cartão de Ponto'),
+      ('salario-familia','👶 Salário-família'),
+      ('seguro-desemprego','🧾 Seguro-desemprego'),
+      ('fgts','🏦 FGTS'),
+      ('contribuicao-social','🏛️ Contribuição Social'),
+      ('previdencia-privada','🔒 Previdência Privada'),
+      ('pensao-alimenticia','💍 Pensão Alimentícia'),
+      ('imposto-renda','📊 Imposto de Renda'),
+      ('multas-indenizacoes','⚠️ Multas e Indenizações'),
+      ('honorarios','⚖️ Honorários'),
+      ('custas-judiciais','🏛️ Custas Judiciais'),
+      ('correcao-juros','📈 Correção, Juros e Multa'),
+    ] %}
+    {% for id, label in nav_items %}
+    <a href="#sec-{{id}}" onclick="scrollParaSecao('sec-{{id}}')" style="
+      display:block; padding:8px 16px; color:rgba(255,255,255,0.85);
+      text-decoration:none; border-left:3px solid transparent;
+      transition:all 0.1s;" id="nav-{{id}}"
+      onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+      onmouseout="this.style.background=''">{{label}}</a>
+    {% endfor %}
+    <div style="margin:12px 14px; border-top:1px solid rgba(255,255,255,0.2); padding-top:10px;">
+      <button class="btn-confirmar-v2" id="btn-confirmar-nav" onclick="confirmarPreviaV2()"
+        style="font-size:0.82rem; padding:8px 10px;">
+        ▶ Confirmar e Iniciar
+      </button>
+    </div>
+  </nav>
 
-    <!-- ═══════════ SEÇÃO 1: META + PROCESSO ═══════════ -->
-    <div class="card-secao" data-secao="processo">
+  <!-- ══════════════════════════════════════════════════════════════════
+       CONTEÚDO PRINCIPAL + SIDEBAR VALIDAÇÃO
+       ══════════════════════════════════════════════════════════════════ -->
+  <div style="flex:1; display:grid; grid-template-columns:1fr 280px; gap:16px; padding:16px; align-items:start; min-width:0;">
+  <div class="conteudo-principal" style="min-width:0;">
+    <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+      <h1 style="margin:0; font-size:1.1rem;">Prévia — {{ sessao_id[:8] }}</h1>
+      <span style="font-size:0.78rem; color:#6c757d;">Espelho do PJE-Calc Cidadão — edite antes de iniciar a automação</span>
+    </div>
+
+    <!-- ═══════════ 1. DADOS DO PROCESSO ═══════════ -->
+    <div class="card-secao" data-secao="dados-processo" id="sec-dados-processo">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
-        <span class="titulo">📋 Processo</span>
+        <span class="titulo">📋 Dados do Processo</span>
         <span class="badge ok" id="badge-processo">OK</span>
       </header>
       <div class="corpo">
@@ -217,8 +265,8 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ SEÇÃO 2: PARAMETROS DO CALCULO ═══════════ -->
-    <div class="card-secao" data-secao="parametros_calculo">
+    <!-- ═══════════ 2. PARÂMETROS DO CÁLCULO ═══════════ -->
+    <div class="card-secao" data-secao="parametros_calculo" id="sec-parametros-calculo">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">⚙️ Parâmetros do Cálculo</span>
         <span class="badge ok" id="badge-parametros">OK</span>
@@ -301,79 +349,36 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ SEÇÃO 3: HISTÓRICO SALARIAL ═══════════ -->
-    <div class="card-secao" data-secao="historico_salarial">
-      <header onclick="this.parentElement.classList.toggle('collapsed')">
-        <span class="titulo">💰 Histórico Salarial</span>
-        <span class="badge ok" id="badge-historico"><span id="qtd-historicos">0</span> entradas</span>
-      </header>
-      <div class="corpo">
-        <div id="lista-historicos">
-          <!-- preenchido por JS -->
-        </div>
-        <button type="button" onclick="adicionarHistorico()" style="margin-top:8px;">+ Adicionar Histórico</button>
-      </div>
-    </div>
-
-    <!-- ═══════════ SEÇÃO 4: VERBAS PRINCIPAIS (CORE) ═══════════ -->
-    <div class="card-secao" data-secao="verbas_principais">
-      <header onclick="this.parentElement.classList.toggle('collapsed')">
-        <span class="titulo">⭐ Verbas Principais</span>
-        <span class="badge ok" id="badge-verbas"><span id="qtd-verbas">0</span> verbas</span>
-      </header>
-      <div class="corpo">
-        <div id="lista-verbas">
-          <!-- preenchido por JS -->
-        </div>
-        <button type="button" onclick="adicionarVerba()" style="margin-top:8px;">+ Adicionar Verba</button>
-      </div>
-    </div>
-
-    <!-- ═══════════ CARTÃO DE PONTO ═══════════ -->
-    <div class="card-secao collapsed" data-secao="cartao_de_ponto">
-      <header onclick="this.parentElement.classList.toggle('collapsed')">
-        <span class="titulo">🕐 Cartão de Ponto</span>
-        <span class="badge ok">configurar</span>
-      </header>
-      <div class="corpo">
-        <p style="color:#6c757d; font-size:0.85rem; margin-bottom:8px;">Jornada contratual e banco de horas. Deixe em branco se não houver horas extras.</p>
-        <div class="grid-3">
-          <div class="campo"><label>Hora Início Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_inicio" placeholder="08:00"></div>
-          <div class="campo"><label>Hora Fim Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_fim" placeholder="17:00"></div>
-          <div class="campo"><label>Intervalo (min)</label><input type="number" data-campo="cartao_de_ponto.intervalo_minutos" placeholder="60"></div>
-          <div class="campo"><label>Dias Trabalhados/Semana</label><input type="number" min="1" max="7" data-campo="cartao_de_ponto.dias_semana" value="5"></div>
-          <div class="campo"><label>HE mensais (média)</label><input type="number" step="0.5" data-campo="cartao_de_ponto.quantidade_mensal_he"></div>
-          <div class="campo"><label>Adicional HE (%)</label><input type="number" step="1" data-campo="cartao_de_ponto.adicional_he_pct" placeholder="50"></div>
-        </div>
-        <details style="margin-top:10px;">
-          <summary style="cursor:pointer; color:#1a3a6b; font-weight:600; font-size:0.85rem;">Ver/editar JSON completo</summary>
-          <textarea data-campo-json="cartao_de_ponto" rows="8" style="width:100%; font-family:monospace; font-size:0.8rem; margin-top:6px;"></textarea>
-        </details>
-      </div>
-    </div>
-
-    <!-- ═══════════ FALTAS ═══════════ -->
-    <div class="card-secao collapsed" data-secao="faltas">
+    <!-- ═══════════ 3. FALTAS ═══════════ -->
+    <div class="card-secao collapsed" data-secao="faltas" id="sec-faltas">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">📅 Faltas</span>
         <span class="badge ok" id="badge-faltas">0 faltas</span>
       </header>
       <div class="corpo">
+        <p style="color:#6c757d; font-size:0.85rem; margin-bottom:8px;">Lançar cada período de falta separadamente. Faltas não justificadas reduzem os dias de férias.</p>
         <div id="lista-faltas"></div>
         <button type="button" onclick="adicionarFalta()" style="margin-top:8px;">+ Adicionar Falta</button>
       </div>
     </div>
 
-    <!-- ═══════════ FÉRIAS ═══════════ -->
-    <div class="card-secao collapsed" data-secao="ferias">
+    <!-- ═══════════ 4. FÉRIAS ═══════════ -->
+    <div class="card-secao collapsed" data-secao="ferias" id="sec-ferias">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">🏖️ Férias</span>
         <span class="badge ok" id="badge-ferias">0 períodos</span>
       </header>
       <div class="corpo">
+        <div class="fieldgroup" style="background:#fff8e1; border-color:#ffa726; margin-bottom:10px;">
+          <p style="margin:0; font-size:0.83rem; color:#856404;">
+            <strong>ℹ️ Uma única verba "FÉRIAS + 1/3"</strong> é lançada em Verbas (via Expresso).
+            Os períodos abaixo configuram a <strong>página Férias</strong> do PJE-Calc (situação, datas de gozo, dobra).
+          </p>
+        </div>
         <div id="lista-ferias"></div>
         <button type="button" onclick="adicionarPeriodoFerias()" style="margin-top:8px;">+ Adicionar Período</button>
         <div class="fieldgroup" style="margin-top:12px;">
+          <div class="fieldgroup-title">Configurações Gerais de Férias</div>
           <div class="grid-2">
             <div class="campo">
               <label>Férias Coletivas — Início 1º Ano</label>
@@ -388,8 +393,145 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ FGTS ═══════════ -->
-    <div class="card-secao collapsed" data-secao="fgts">
+    <!-- ═══════════ 5. HISTÓRICO SALARIAL ═══════════ -->
+    <div class="card-secao" data-secao="historico_salarial" id="sec-historico-salarial">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">💰 Histórico Salarial</span>
+        <span class="badge ok" id="badge-historico"><span id="qtd-historicos">0</span> entradas</span>
+      </header>
+      <div class="corpo">
+        <div id="lista-historicos">
+          <!-- preenchido por JS -->
+        </div>
+        <button type="button" onclick="adicionarHistorico()" style="margin-top:8px;">+ Adicionar Histórico</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ 6. VERBAS ═══════════ -->
+    <div class="card-secao" data-secao="verbas_principais" id="sec-verbas">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">⭐ Verbas</span>
+        <span class="badge ok" id="badge-verbas"><span id="qtd-verbas">0</span> verbas</span>
+      </header>
+      <div class="corpo">
+        <div id="lista-verbas">
+          <!-- preenchido por JS -->
+        </div>
+        <button type="button" onclick="adicionarVerba()" style="margin-top:8px;">+ Adicionar Verba</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ 7. CARTÃO DE PONTO ═══════════ -->
+    <div class="card-secao collapsed" data-secao="cartao_de_ponto" id="sec-cartao-ponto">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">🕐 Cartão de Ponto</span>
+        <span class="badge ok">configurar</span>
+      </header>
+      <div class="corpo">
+        <p style="color:#6c757d; font-size:0.85rem; margin-bottom:8px;">Jornada contratual. Deixe em branco se não houver horas extras apuradas por cartão.</p>
+        <div class="grid-3">
+          <div class="campo"><label>Hora Início Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_inicio" placeholder="08:00"></div>
+          <div class="campo"><label>Hora Fim Jornada</label><input type="text" data-campo="cartao_de_ponto.hora_fim" placeholder="17:00"></div>
+          <div class="campo"><label>Intervalo (min)</label><input type="number" data-campo="cartao_de_ponto.intervalo_minutos" placeholder="60"></div>
+          <div class="campo"><label>Dias Trabalhados/Semana</label><input type="number" min="1" max="7" data-campo="cartao_de_ponto.dias_semana" value="5"></div>
+          <div class="campo"><label>HE mensais (média)</label><input type="number" step="0.5" data-campo="cartao_de_ponto.quantidade_mensal_he"></div>
+          <div class="campo"><label>Adicional HE (%)</label><input type="number" step="1" data-campo="cartao_de_ponto.adicional_he_pct" placeholder="50"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 8. SALÁRIO-FAMÍLIA ═══════════ -->
+    <div class="card-secao collapsed" data-secao="salario_familia" id="sec-salario-familia">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">👶 Salário-família</span>
+        <span class="badge" id="badge-salario-familia">não apurar</span>
+      </header>
+      <div class="corpo">
+        <div class="checkbox-row" style="margin-bottom:12px;">
+          <input type="checkbox" data-campo="salario_familia.apurar" id="cb-sf"
+            onchange="toggleSF(this.checked);previaData.salario_familia=previaData.salario_familia||{};previaData.salario_familia.apurar=this.checked;validarPrevia()">
+          <label for="cb-sf" style="font-weight:600;">Apurar Salário-família</label>
+        </div>
+        <div id="sf-campos" style="display:none;">
+          <div class="grid-3">
+            <div class="campo">
+              <label>Compor Principal</label>
+              <select data-campo="salario_familia.compor_principal">
+                <option value="SIM">Sim</option><option value="NAO">Não</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Competência Inicial (MM/YYYY)</label>
+              <input type="text" data-campo="salario_familia.competencia_inicial" placeholder="MM/YYYY">
+            </div>
+            <div class="campo">
+              <label>Competência Final (MM/YYYY)</label>
+              <input type="text" data-campo="salario_familia.competencia_final" placeholder="MM/YYYY">
+            </div>
+            <div class="campo">
+              <label>Remuneração — Salários Pagos</label>
+              <select data-campo="salario_familia.remuneracao_pagos">
+                <option value="NENHUM">Nenhum</option>
+                <option value="MAIOR_REMUNERACAO">Maior Remuneração</option>
+                <option value="HISTORICO_SALARIAL">Histórico Salarial</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Qtd. Filhos &lt; 14 anos</label>
+              <input type="number" min="0" data-campo="salario_familia.quantidade_filhos_ate_14_anos" value="0">
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 9. SEGURO-DESEMPREGO ═══════════ -->
+    <div class="card-secao collapsed" data-secao="seguro_desemprego" id="sec-seguro-desemprego">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">🧾 Seguro-desemprego</span>
+        <span class="badge" id="badge-seguro-desemprego">não apurar</span>
+      </header>
+      <div class="corpo">
+        <div class="checkbox-row" style="margin-bottom:12px;">
+          <input type="checkbox" data-campo="seguro_desemprego.apurar" id="cb-sd"
+            onchange="toggleSD(this.checked);previaData.seguro_desemprego=previaData.seguro_desemprego||{};previaData.seguro_desemprego.apurar=this.checked;validarPrevia()">
+          <label for="cb-sd" style="font-weight:600;">Apurar Seguro-desemprego</label>
+        </div>
+        <div id="sd-campos" style="display:none;">
+          <div class="grid-3">
+            <div class="campo">
+              <label>Compor Principal</label>
+              <select data-campo="seguro_desemprego.compor_principal">
+                <option value="SIM">Sim</option><option value="NAO">Não</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Qtd. Parcelas</label>
+              <input type="number" min="1" max="5" data-campo="seguro_desemprego.quantidade_parcelas" value="3">
+            </div>
+            <div class="campo">
+              <label>Tipo de Solicitação</label>
+              <select data-campo="seguro_desemprego.tipo_solicitacao">
+                <option value="PRIMEIRA">Primeira</option>
+                <option value="SEGUNDA">Segunda</option>
+                <option value="DEMAIS">Demais</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Remuneração — Salários Pagos</label>
+              <select data-campo="seguro_desemprego.remuneracao_pagos">
+                <option value="NENHUM">Nenhum</option>
+                <option value="MAIOR_REMUNERACAO">Maior Remuneração</option>
+                <option value="HISTORICO_SALARIAL">Histórico Salarial</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 10. FGTS ═══════════ -->
+    <div class="card-secao collapsed" data-secao="fgts" id="sec-fgts">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">💼 FGTS</span>
         <span class="badge ok">configurar</span>
@@ -473,8 +615,8 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ CONTRIBUIÇÃO SOCIAL ═══════════ -->
-    <div class="card-secao collapsed" data-secao="contribuicao_social">
+    <!-- ═══════════ 11. CONTRIBUIÇÃO SOCIAL ═══════════ -->
+    <div class="card-secao collapsed" data-secao="contribuicao_social" id="sec-contribuicao-social">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">🏛️ Contribuição Social (INSS)</span>
         <span class="badge ok">configurar</span>
@@ -535,8 +677,57 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ IMPOSTO DE RENDA ═══════════ -->
-    <div class="card-secao collapsed" data-secao="imposto_de_renda">
+    <!-- ═══════════ 12. PREVIDÊNCIA PRIVADA ═══════════ -->
+    <div class="card-secao collapsed" data-secao="previdencia_privada" id="sec-previdencia-privada">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">🔒 Previdência Privada</span>
+        <span class="badge" id="badge-previdencia-privada">não apurar</span>
+      </header>
+      <div class="corpo">
+        <div class="checkbox-row" style="margin-bottom:12px;">
+          <input type="checkbox" data-campo="previdencia_privada.apurar" id="cb-pp"
+            onchange="togglePP(this.checked);previaData.previdencia_privada=previaData.previdencia_privada||{};previaData.previdencia_privada.apurar=this.checked;validarPrevia()">
+          <label for="cb-pp" style="font-weight:600;">Apurar Previdência Privada</label>
+        </div>
+        <div id="pp-campos" style="display:none;">
+          <p style="color:#6c757d; font-size:0.83rem; margin-bottom:8px;">
+            Informe a alíquota e o período de vigência. A base é definida nas Incidências de cada verba.
+          </p>
+          <div id="lista-previdencia-privada"></div>
+          <button type="button" onclick="adicionarPeriodoPP()" style="margin-top:8px;">+ Adicionar Período/Alíquota</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 13. PENSÃO ALIMENTÍCIA ═══════════ -->
+    <div class="card-secao collapsed" data-secao="pensao_alimenticia" id="sec-pensao-alimenticia">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">💍 Pensão Alimentícia</span>
+        <span class="badge" id="badge-pensao-alimenticia">não apurar</span>
+      </header>
+      <div class="corpo">
+        <div class="checkbox-row" style="margin-bottom:12px;">
+          <input type="checkbox" data-campo="pensao_alimenticia.apurar" id="cb-pa"
+            onchange="togglePA(this.checked);previaData.pensao_alimenticia=previaData.pensao_alimenticia||{};previaData.pensao_alimenticia.apurar=this.checked;validarPrevia()">
+          <label for="cb-pa" style="font-weight:600;">Apurar Pensão Alimentícia</label>
+        </div>
+        <div id="pa-campos" style="display:none;">
+          <div class="grid-3">
+            <div class="campo">
+              <label>Alíquota (%)</label>
+              <input type="number" step="0.01" data-campo="pensao_alimenticia.aliquota_pct" placeholder="20.00">
+            </div>
+            <div class="checkbox-row" style="align-self:flex-end; padding-bottom:8px;">
+              <input type="checkbox" data-campo="pensao_alimenticia.incidir_sobre_juros">
+              <label>Incidir sobre Juros de Mora</label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════════ 14. IMPOSTO DE RENDA ═══════════ -->
+    <div class="card-secao collapsed" data-secao="imposto_de_renda" id="sec-imposto-renda">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">📊 Imposto de Renda (IRPF)</span>
         <span class="badge ok">configurar</span>
@@ -570,8 +761,23 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ HONORÁRIOS ═══════════ -->
-    <div class="card-secao collapsed" data-secao="honorarios">
+    <!-- ═══════════ 15. MULTAS E INDENIZAÇÕES ═══════════ -->
+    <div class="card-secao collapsed" data-secao="multas_indenizacoes" id="sec-multas-indenizacoes">
+      <header onclick="this.parentElement.classList.toggle('collapsed')">
+        <span class="titulo">⚠️ Multas e Indenizações</span>
+        <span class="badge ok" id="badge-multas">0 itens</span>
+      </header>
+      <div class="corpo">
+        <p style="color:#6c757d; font-size:0.83rem; margin-bottom:8px;">
+          Multas CLT (art. 477, art. 467), multas convencionais, indenizações não lançadas como verbas.
+        </p>
+        <div id="lista-multas-indenizacoes"></div>
+        <button type="button" onclick="adicionarMulta()" style="margin-top:8px;">+ Adicionar Multa/Indenização</button>
+      </div>
+    </div>
+
+    <!-- ═══════════ 16. HONORÁRIOS ═══════════ -->
+    <div class="card-secao collapsed" data-secao="honorarios" id="sec-honorarios">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">⚖️ Honorários</span>
         <span class="badge ok" id="badge-honorarios">0 honorários</span>
@@ -582,8 +788,8 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ CUSTAS JUDICIAIS ═══════════ -->
-    <div class="card-secao collapsed" data-secao="custas_judiciais">
+    <!-- ═══════════ 17. CUSTAS JUDICIAIS ═══════════ -->
+    <div class="card-secao collapsed" data-secao="custas_judiciais" id="sec-custas-judiciais">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">🏛️ Custas Judiciais</span>
         <span class="badge ok">configurar</span>
@@ -629,8 +835,8 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ CORREÇÃO / JUROS / MULTA ═══════════ -->
-    <div class="card-secao collapsed" data-secao="correcao_juros_multa">
+    <!-- ═══════════ 18. CORREÇÃO, JUROS E MULTA ═══════════ -->
+    <div class="card-secao collapsed" data-secao="correcao_juros_multa" id="sec-correcao-juros">
       <header onclick="this.parentElement.classList.toggle('collapsed')">
         <span class="titulo">📈 Correção / Juros / Multa</span>
         <span class="badge ok">configurar</span>
@@ -671,47 +877,10 @@ details.fieldgroup[open] { border-color: #adb5bd; }
       </div>
     </div>
 
-    <!-- ═══════════ LIQUIDAÇÃO ═══════════ -->
-    <div class="card-secao collapsed" data-secao="liquidacao">
-      <header onclick="this.parentElement.classList.toggle('collapsed')">
-        <span class="titulo">🔨 Liquidação</span>
-        <span class="badge ok">configurar</span>
-      </header>
-      <div class="corpo">
-        <div class="grid-2">
-          <div class="campo">
-            <label>Data de Liquidação</label>
-            <input type="text" data-campo="liquidacao.data_de_liquidacao" placeholder="DD/MM/YYYY (vazio = hoje)">
-          </div>
-          <div class="campo">
-            <label>Acumular Índices de Correção</label>
-            <select data-campo="liquidacao.indices_acumulados">
-              <option value="MES_SUBSEQUENTE_AO_VENCIMENTO" selected>A partir do mês subsequente ao vencimento das verbas</option>
-              <option value="MES_DO_VENCIMENTO">A partir do mês de vencimento das verbas</option>
-              <option value="MES_SUBSEQUENTE_E_MES_DO_VENCIMENTO">Mês subsequente (mensais) + mês vencimento (anuais/rescisórias)</option>
-            </select>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ═══════════ SEÇÕES OPCIONAIS (collapsed) ═══════════ -->
-    {% for secao in ['salario_familia','seguro_desemprego','previdencia_privada','pensao_alimenticia','multas_indenizacoes'] %}
-    <div class="card-secao collapsed" data-secao="{{ secao }}">
-      <header onclick="this.parentElement.classList.toggle('collapsed')">
-        <span class="titulo">{{ secao.replace('_',' ').title() }} <span style="opacity:0.7;font-size:0.8rem;">(opcional)</span></span>
-        <span class="badge">não aplicável</span>
-      </header>
-      <div class="corpo">
-        <textarea data-campo-json="{{ secao }}" rows="6" placeholder="null"
-          style="width:100%; font-family:monospace; font-size:0.82rem;"></textarea>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
+  </div><!-- /conteudo-principal -->
 
   <!-- ═══════════ SIDEBAR: VALIDAÇÃO ═══════════ -->
-  <aside class="sidebar-v2">
+  <aside class="sidebar-v2" style="position:sticky; top:16px; max-height:calc(100vh - 32px); overflow-y:auto;">
     <div class="validador">
       <h4>Validação</h4>
       <div class="status-bar ok" id="status-bar">
@@ -722,20 +891,18 @@ details.fieldgroup[open] { border-color: #adb5bd; }
         <!-- preenchido por JS -->
       </ul>
       <button class="btn-confirmar-v2" id="btn-confirmar" onclick="confirmarPreviaV2()">
-        Confirmar e Iniciar Automação
+        ▶ Confirmar e Iniciar Automação
       </button>
     </div>
-
-    <div class="validador" style="margin-top:14px;">
-      <h4>Schema v2.0</h4>
-      <p style="font-size:0.82rem; color:#6c757d; margin:0;">
-        ⭐ Sessão: <code style="font-size:0.78rem;">{{ sessao_id }}</code><br>
-        📋 Versão: 2.0<br>
-        ✅ Validação: Pydantic v2
+    <div class="validador" style="margin-top:12px;">
+      <p style="font-size:0.8rem; color:#6c757d; margin:0;">
+        Sessão: <code style="font-size:0.76rem;">{{ sessao_id[:12] }}…</code>
       </p>
     </div>
   </aside>
-</div>
+
+  </div><!-- /grid interno -->
+</div><!-- /flex container -->
 
 <script>
 const SESSAO_ID = "{{ sessao_id }}";
@@ -760,14 +927,11 @@ function carregarPrevia() {
   renderRecolhimentosFGTS();
   renderSaldosFGTS();
   renderHonorarios();
+  renderMultas();
+  renderPP();
   // toggle dependentes IRPF
   const _depEl = document.querySelector('[data-campo="imposto_de_renda.possui_dependentes"]');
   if (_depEl) toggleDependentes(_depEl.checked);
-  // JSON textareas para seções não-detalhadas
-  document.querySelectorAll('[data-campo-json]').forEach(el => {
-    const secao = el.dataset.campoJson;
-    el.value = JSON.stringify(previaData[secao] ?? null, null, 2);
-  });
   validarPrevia();
 }
 
@@ -1986,6 +2150,171 @@ function toggleGozos(idx, fieldgroupEl) {
   validarPrevia();
 }
 
-window.addEventListener('DOMContentLoaded', carregarPrevia);
+// ─── Toggle seções opcionais ────────────────────────────────────────
+function toggleSF(on) {
+  document.getElementById('sf-campos').style.display = on ? 'block' : 'none';
+  const b = document.getElementById('badge-salario-familia');
+  if (b) b.textContent = on ? 'apurar' : 'não apurar';
+}
+function toggleSD(on) {
+  document.getElementById('sd-campos').style.display = on ? 'block' : 'none';
+  const b = document.getElementById('badge-seguro-desemprego');
+  if (b) b.textContent = on ? 'apurar' : 'não apurar';
+}
+function togglePP(on) {
+  document.getElementById('pp-campos').style.display = on ? 'block' : 'none';
+  const b = document.getElementById('badge-previdencia-privada');
+  if (b) b.textContent = on ? 'apurar' : 'não apurar';
+  if (on) renderPP();
+}
+function togglePA(on) {
+  document.getElementById('pa-campos').style.display = on ? 'block' : 'none';
+  const b = document.getElementById('badge-pensao-alimenticia');
+  if (b) b.textContent = on ? 'apurar' : 'não apurar';
+}
+
+// ─── Previdência Privada ────────────────────────────────────────────
+function renderPP() {
+  const list = document.getElementById('lista-previdencia-privada');
+  if (!list) return;
+  const arr = (previaData.previdencia_privada||{}).periodos || [];
+  list.innerHTML = '';
+  arr.forEach((p, idx) => {
+    const div = document.createElement('div');
+    div.className = 'fieldgroup';
+    div.innerHTML = `
+      <div class="fieldgroup-title">Período ${idx+1}
+        <button onclick="previaData.previdencia_privada.periodos.splice(${idx},1);renderPP()" style="float:right;color:#e74c3c;background:none;border:none;cursor:pointer;">✕</button>
+      </div>
+      <div class="grid-3">
+        <div class="campo"><label>Alíquota (%)</label><input type="number" step="0.01" value="${p.aliquota_pct||''}" onchange="previaData.previdencia_privada.periodos[${idx}].aliquota_pct=parseFloat(this.value);validarPrevia()"></div>
+        <div class="campo"><label>Competência Inicial (MM/YYYY)</label><input type="text" value="${p.competencia_inicial||''}" onchange="previaData.previdencia_privada.periodos[${idx}].competencia_inicial=this.value;validarPrevia()"></div>
+        <div class="campo"><label>Competência Final (MM/YYYY)</label><input type="text" value="${p.competencia_final||''}" onchange="previaData.previdencia_privada.periodos[${idx}].competencia_final=this.value;validarPrevia()"></div>
+      </div>`;
+    list.appendChild(div);
+  });
+}
+
+function adicionarPeriodoPP() {
+  if (!previaData.previdencia_privada) previaData.previdencia_privada = {apurar:true, periodos:[]};
+  if (!previaData.previdencia_privada.periodos) previaData.previdencia_privada.periodos = [];
+  previaData.previdencia_privada.periodos.push({aliquota_pct:0, competencia_inicial:'', competencia_final:''});
+  renderPP(); validarPrevia();
+}
+
+// ─── Multas e Indenizações ──────────────────────────────────────────
+function renderMultas() {
+  const list = document.getElementById('lista-multas-indenizacoes');
+  if (!list) return;
+  const arr = previaData.multas_indenizacoes || [];
+  list.innerHTML = '';
+  arr.forEach((m, idx) => {
+    const tv = m.tipo_valor || 'CALCULADO';
+    const div = document.createElement('div');
+    div.className = 'fieldgroup';
+    div.innerHTML = `
+      <div class="fieldgroup-title">Item ${idx+1}: ${m.descricao||'(sem descrição)'}
+        <button onclick="previaData.multas_indenizacoes.splice(${idx},1);renderMultas();validarPrevia()" style="float:right;color:#e74c3c;background:none;border:none;cursor:pointer;">✕</button>
+      </div>
+      <div class="grid-3">
+        <div class="campo col-span-full">
+          <label>Descrição</label>
+          <input type="text" value="${m.descricao||''}" onchange="previaData.multas_indenizacoes[${idx}].descricao=this.value;renderMultas();validarPrevia()">
+        </div>
+        <div class="campo">
+          <label>Credor</label>
+          <select onchange="previaData.multas_indenizacoes[${idx}].credor=this.value;validarPrevia()">
+            <option value="RECLAMANTE"${(m.credor||'RECLAMANTE')==='RECLAMANTE'?' selected':''}>Reclamante</option>
+            <option value="RECLAMADO"${m.credor==='RECLAMADO'?' selected':''}>Reclamado</option>
+            <option value="TERCEIRO"${m.credor==='TERCEIRO'?' selected':''}>Terceiro</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Devedor</label>
+          <select onchange="previaData.multas_indenizacoes[${idx}].devedor=this.value;validarPrevia()">
+            <option value="RECLAMADO"${(m.devedor||'RECLAMADO')==='RECLAMADO'?' selected':''}>Reclamado</option>
+            <option value="RECLAMANTE"${m.devedor==='RECLAMANTE'?' selected':''}>Reclamante</option>
+          </select>
+        </div>
+        <div class="campo">
+          <label>Tipo de Valor</label>
+          <select onchange="previaData.multas_indenizacoes[${idx}].tipo_valor=this.value;renderMultas();validarPrevia()">
+            <option value="CALCULADO"${tv==='CALCULADO'?' selected':''}>Calculado (%)</option>
+            <option value="INFORMADO"${tv==='INFORMADO'?' selected':''}>Informado (R$)</option>
+          </select>
+        </div>
+        ${tv==='CALCULADO' ? `
+          <div class="campo">
+            <label>Alíquota (%)</label>
+            <input type="number" step="0.01" value="${m.aliquota_pct||''}" onchange="previaData.multas_indenizacoes[${idx}].aliquota_pct=parseFloat(this.value);validarPrevia()">
+          </div>
+          <div class="campo">
+            <label>Base de Cálculo</label>
+            <select onchange="previaData.multas_indenizacoes[${idx}].base=this.value;validarPrevia()">
+              <option value="PRINCIPAL"${(m.base||'PRINCIPAL')==='PRINCIPAL'?' selected':''}>Principal</option>
+              <option value="PRINCIPAL_MENOS_CS"${m.base==='PRINCIPAL_MENOS_CS'?' selected':''}>Principal (-CS)</option>
+              <option value="PRINCIPAL_MENOS_CS_MENOS_PP"${m.base==='PRINCIPAL_MENOS_CS_MENOS_PP'?' selected':''}>Principal (-CS-PP)</option>
+            </select>
+          </div>
+        ` : `
+          <div class="campo">
+            <label>Valor (R$)</label>
+            <input type="number" step="0.01" value="${m.valor_brl||''}" onchange="previaData.multas_indenizacoes[${idx}].valor_brl=parseFloat(this.value);validarPrevia()">
+          </div>
+          <div class="campo">
+            <label>Vencimento</label>
+            <input type="text" placeholder="DD/MM/YYYY" value="${m.vencimento||''}" onchange="previaData.multas_indenizacoes[${idx}].vencimento=this.value;validarPrevia()">
+          </div>
+        `}
+        <div class="campo">
+          <label>Índice de Correção</label>
+          <select onchange="previaData.multas_indenizacoes[${idx}].indice_correcao=this.value">
+            <option value="INDICE_TRABALHISTA"${(m.indice_correcao||'INDICE_TRABALHISTA')==='INDICE_TRABALHISTA'?' selected':''}>Índice Trabalhista</option>
+            <option value="OUTRO_INDICE"${m.indice_correcao==='OUTRO_INDICE'?' selected':''}>Outro Índice</option>
+          </select>
+        </div>
+        <div class="checkbox-row" style="align-self:flex-end; padding-bottom:6px;">
+          <input type="checkbox"${m.juros?' checked':''} onchange="previaData.multas_indenizacoes[${idx}].juros=this.checked;validarPrevia()">
+          <label>Juros de Mora</label>
+        </div>
+      </div>`;
+    list.appendChild(div);
+  });
+  const badge = document.getElementById('badge-multas');
+  if (badge) badge.textContent = arr.length + ' itens';
+}
+
+function adicionarMulta() {
+  if (!previaData.multas_indenizacoes) previaData.multas_indenizacoes = [];
+  previaData.multas_indenizacoes.push({
+    descricao:'', credor:'RECLAMANTE', devedor:'RECLAMADO',
+    tipo_valor:'CALCULADO', aliquota_pct:0, base:'PRINCIPAL',
+    indice_correcao:'INDICE_TRABALHISTA', juros:true
+  });
+  renderMultas(); validarPrevia();
+}
+
+// ─── Navegação lateral (scroll) ───────────────────────────────────
+function scrollParaSecao(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.remove('collapsed');
+  setTimeout(() => el.scrollIntoView({behavior:'smooth', block:'start'}), 50);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  carregarPrevia();
+  // Ativar toggles para seções opcionais carregadas do JSON
+  const sf = getValueByPath(previaData, 'salario_familia.apurar');
+  if (sf) { document.getElementById('cb-sf').checked=true; toggleSF(true); }
+  const sd = getValueByPath(previaData, 'seguro_desemprego.apurar');
+  if (sd) { document.getElementById('cb-sd').checked=true; toggleSD(true); }
+  const pp = getValueByPath(previaData, 'previdencia_privada.apurar');
+  if (pp) { document.getElementById('cb-pp').checked=true; togglePP(true); }
+  const pa = getValueByPath(previaData, 'pensao_alimenticia.apurar');
+  if (pa) { document.getElementById('cb-pa').checked=true; togglePA(true); }
+  renderMultas();
+  renderPP();
+});
 </script>
 {% endblock %}
