@@ -2950,6 +2950,25 @@ class PlaywrightAutomatorV2:
         self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamante", c.custas_conhecimento_reclamante)
         self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamado", c.custas_conhecimento_reclamado)
         self._marcar_radio("tipoDeCustasDeLiquidacao", c.custas_liquidacao)
+        # Preencher dataVencimento* — validador do PJE-Calc exige data não-nula
+        # mesmo para tipos CALCULADA/NAO_SE_APLICA (NPE em DataVencimentoValidRule
+        # ao exportar). Usar data_ajuizamento como padrão (valida: vencimento >= aj.).
+        _dt_venc = (
+            getattr(self.previa.parametros_calculo, "data_ajuizamento", None)
+            or getattr(self.previa.parametros_calculo, "data_termino_calculo", None)
+        )
+        if _dt_venc:
+            self._aguardar_ajax(2000)
+            for _fid in [
+                "dataVencimentoConhecimentoDoReclamado",
+                "dataVencimentoConhecimentoDoReclamante",
+                "dataVencimentoCustasDeLiquidacao",
+                "dataVencimentoCustasFixas",
+            ]:
+                # Tentar InputDate (visível, RichFaces) e base ID (hidden input)
+                self._preencher(f"{_fid}InputDate", _dt_venc, obrigatorio=False)
+                self._preencher(_fid, _dt_venc, obrigatorio=False)
+            self.log(f"  ✓ dataVencimento custas = {_dt_venc}")
         self._clicar("salvar")
         self._aguardar_ajax(8000)
         self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
