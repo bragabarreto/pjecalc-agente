@@ -2,6 +2,89 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## DISTINÇÃO ARQUITETURAL FUNDAMENTAL — Prévia vs. Estratégia de Preenchimento
+
+> **Esta distinção é crítica e NUNCA pode ser violada. Qualquer confusão entre esses dois
+> conceitos causa bugs graves na interface e na automação.**
+
+### O que é a Prévia (`templates/previa_v2.html`)
+
+A prévia é um **espelho fiel do PJE-Calc Cidadão**. Cada campo, label, opção de select e
+estrutura de formulário na prévia deve corresponder **exatamente** ao que o PJE-Calc exibe
+em sua interface. Nada a mais, nada a menos.
+
+**Regra absoluta:** NUNCA adicionar à prévia qualquer conteúdo que não seja um campo real
+do PJE-Calc. Isso inclui:
+- ❌ Dicas de fluxo de trabalho ("💡 Para equiparação salarial, configure assim...")
+- ❌ Explicações sobre estratégia jurídica ou contábil
+- ❌ Orientações sobre como a IA vai preencher
+- ❌ Campos inventados que não existem no PJE-Calc
+- ❌ Guias, hints, alertas ou qualquer texto instrucional
+
+A prévia existe para que o **usuário revise e edite os dados** antes de submeter à automação,
+exatamente como faria olhando para a tela do PJE-Calc.
+
+### O que é a Estratégia de Preenchimento
+
+A estratégia de preenchimento é a **lógica que a IA usa para configurar os parâmetros do
+PJE-Calc para cada situação jurídica específica**. Ela vive no JSON gerado pela extração
+(`extraction.py` + `classification.py`), não na tela.
+
+Exemplos de estratégia de preenchimento (NUNCA visíveis na prévia):
+- Para equiparação salarial → DIFERENÇA SALARIAL com `base=historico_paradigma`,
+  `valor_pago.tipo=CALCULADO`, `valor_pago.base_historico=historico_autor`
+- Para DIÁRIAS - INTEGRAÇÃO AO SALÁRIO → `comporPrincipal=NAO`, `proporcionalizar=NAO`
+- Para estabilidade pós-demissão → reflexos manuais (Férias+1/3, 13º, FGTS) com `integralizar=SIM`
+
+A IA lê a sentença, compreende o caso jurídico e produz os valores corretos desses parâmetros
+no JSON. A prévia simplesmente **exibe esses valores** para revisão humana antes de enviar
+à automação.
+
+### Separação de responsabilidades
+
+```
+Sentença (PDF/DOCX)
+    │
+    ▼
+extraction.py + classification.py (IA)
+    │  Lê a sentença, entende o caso, decide:
+    │  • Quais verbas lançar
+    │  • Qual base de cálculo usar para cada verba
+    │  • Se usar valor_pago CALCULADO ou INFORMADO
+    │  • Período, multiplicador, divisor, incidências
+    │  → Produz JSON com estratégia de preenchimento
+    │
+    ▼
+previa_v2.html (Espelho do PJE-Calc)
+    │  Exibe os campos do JSON em formulários
+    │  idênticos aos do PJE-Calc para revisão humana
+    │  O usuário pode editar qualquer campo
+    │  NÃO mostra dicas de estratégia — só campos
+    │
+    ▼
+playwright_pjecalc.py (Automação)
+    │  Usa o JSON (possivelmente editado na prévia)
+    │  para preencher o PJE-Calc campo a campo
+    │  Segue a estratégia definida no JSON
+```
+
+### Teste rápido: "Isso pertence à prévia ou à estratégia?"
+
+**Pertence à prévia** (campo real do PJE-Calc):
+- `tipoDaBaseTabelada`: seletor Maior Remuneração / Histórico Salarial / Piso Salarial
+- `tipoDoValorPago`: INFORMADO | CALCULADO
+- `integralizarBase`: Sim | Não
+- `proporcionalizaHistorico`: Sim | Não
+- `gerarPrincipal`: DEVIDO | DIFERENÇA
+- `comporPrincipal`: SIM | NAO
+
+**Pertence à estratégia** (lógica no JSON, invisível na prévia):
+- "Para equiparação salarial, configure tipoDoValorPago=CALCULADO"
+- "Para DIÁRIAS, use comporPrincipal=NAO"
+- "Para estabilidade, crie reflexo manual de FGTS com integralizar=SIM"
+
+---
+
 ## Regra obrigatória — Consultar manual antes de qualquer alteração
 
 > **ANTES de corrigir, ajustar ou implementar qualquer funcionalidade relacionada ao PJE-Calc,
