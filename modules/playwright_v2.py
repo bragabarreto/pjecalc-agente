@@ -14,6 +14,7 @@ modular onde cada fase é uma função compacta com responsabilidade única.
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any, Callable
@@ -90,6 +91,12 @@ class PlaywrightAutomatorV2:
         self._calculo_conversation_id: str | None = None
         self._pjc_path: str | None = None
         self._calculo_numero: str | None = None  # ID do cálculo extraído do DOM
+        # Modo teste: abre cálculo existente em vez de criar novo.
+        # Lido de PJECALC_CALCULO_TESTE (número CNJ do processo, ex: "0000948-78.2021.5.07.0003").
+        # Quando definido, `run()` pula `_criar_novo_calculo()` e abre o cálculo existente
+        # via Recentes, evitando o problema de FlushMode.MANUAL no H2.
+        self._calculo_teste_processo: str | None = os.environ.get("PJECALC_CALCULO_TESTE")
+        self._modo_edicao_inicial: bool = False
         # Diretório de download dedicado (padrão Calc Machine).
         # O Playwright usa esse path como destino dos downloads do navegador.
         import tempfile as _tempfile, pathlib as _pathlib, time as _time
@@ -144,7 +151,21 @@ class PlaywrightAutomatorV2:
         """
         self.log("══ Iniciando automação v2 ══")
         self._abrir_pjecalc()
-        self._criar_novo_calculo()
+
+        # ── Inicialização do cálculo ───────────────────────────────────────────
+        if self._calculo_teste_processo:
+            self.log(f"  [TESTE] Abrindo cálculo existente: proc={self._calculo_teste_processo}")
+            ok_teste = self._reabrir_calculo_via_recentes(
+                processo_override=self._calculo_teste_processo
+            )
+            if ok_teste:
+                self._modo_edicao_inicial = True
+                self.log(f"  ✓ [TESTE] Modo edição ativo — conv={self._calculo_conversation_id}")
+            else:
+                self.log("  ⚠ [TESTE] Cálculo teste não encontrado nos Recentes — criando novo")
+                self._criar_novo_calculo()
+        else:
+            self._criar_novo_calculo()
 
         def _run_fase(nome, fn, condicao=True):
             if not condicao:
@@ -187,15 +208,19 @@ class PlaywrightAutomatorV2:
         # Em sessões FRESCAS (sem calcs anteriores), Recentes pode estar vazio
         # mesmo após Fase 2 — nesse caso continuamos em modo criação e aceitamos
         # que FGTS/CS/IRPF/Honorários podem retornar frames vazias (graceful skip).
-        try:
-            self.log("  → Tentando transição criação→edição via Recentes...")
-            ok_recentes = self._reabrir_calculo_via_recentes()
-            if ok_recentes:
-                self.log(f"  ✓ Modo edição ativo — conv={self._calculo_conversation_id}")
-            else:
-                self.log("  ⚠ Recentes vazio — continuando em modo criação")
-        except Exception as e_rec:
-            self.log(f"  ⚠ Recentes erro: {e_rec} — continuando")
+        # EXCEÇÃO: modo PJECALC_CALCULO_TESTE — já estamos em edição desde o início.
+        if self._modo_edicao_inicial:
+            self.log("  ℹ [TESTE] Já em modo edição — skip transição Recentes pós-Fase2")
+        else:
+            try:
+                self.log("  → Tentando transição criação→edição via Recentes...")
+                ok_recentes = self._reabrir_calculo_via_recentes()
+                if ok_recentes:
+                    self.log(f"  ✓ Modo edição ativo — conv={self._calculo_conversation_id}")
+                else:
+                    self.log("  ⚠ Recentes vazio — continuando em modo criação")
+            except Exception as e_rec:
+                self.log(f"  ⚠ Recentes erro: {e_rec} — continuando")
 
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
@@ -885,12 +910,18 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ _capturar_conversation_id: {e}")
         return False
 
-    def _reabrir_calculo_via_recentes(self) -> bool:
+    def _reabrir_calculo_via_recentes(self, processo_override: str | None = None) -> bool:
         """Volta para principal e reabre cálculo via lista 'Recentes'.
 
         Workaround para NPE pós-Expresso: cria nova conversação Seam limpa
         atualizando self._calculo_conversation_id. Documentado em v1
         (playwright_pjecalc.py linha 3058).
+
+        Args:
+            processo_override: Número CNJ a buscar no Recentes em vez do processo
+                da prévia atual. Usado por PJECALC_CALCULO_TESTE para achar o
+                cálculo de teste sem que ele precise ter sido criado agora.
+                Quando set, desativa o fallback por nome de reclamante e "1 item".
 
         Returns True se reabriu com sucesso.
         """
@@ -956,8 +987,8 @@ class PlaywrightAutomatorV2:
             if n_opts == 0:
                 return False
 
-            # Achar pelo CNJ do processo
-            num = self.previa.processo.numero_processo
+            # Achar pelo CNJ do processo (ou processo_override em modo TESTE)
+            num = processo_override or self.previa.processo.numero_processo
             num_clean = num.replace(".", "").replace("-", "").replace("/", "")
             found_idx = None
             options = listbox.first.locator("option")
@@ -967,8 +998,8 @@ class PlaywrightAutomatorV2:
                     found_idx = i
                     break
 
-            # Fallback: pelo nome do reclamante
-            if found_idx is None:
+            # Fallback: pelo nome do reclamante (só se NÃO estiver usando override de teste)
+            if found_idx is None and processo_override is None:
                 rec = (self.previa.processo.reclamante.nome or "").upper()
                 if len(rec) >= 5:
                     for i in range(n_opts):
@@ -976,8 +1007,8 @@ class PlaywrightAutomatorV2:
                             found_idx = i
                             break
 
-            # Último: 1 item só na lista
-            if found_idx is None and n_opts == 1:
+            # Último fallback: 1 item só na lista (só se NÃO for override de teste)
+            if found_idx is None and n_opts == 1 and processo_override is None:
                 found_idx = 0
 
             if found_idx is None:

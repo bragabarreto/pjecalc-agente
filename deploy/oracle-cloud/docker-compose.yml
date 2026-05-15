@@ -43,6 +43,10 @@ services:
       EXPRESSO_CRASH_PROTECTION: "true"
       H2_CLEANUP_ENABLED: "true"
       CALCULATION_PERSISTENCE: "true"
+      # Modo teste: número CNJ do cálculo existente no PJE-Calc H2 a usar em vez de criar novo.
+      # Ex: PJECALC_CALCULO_TESTE=0000948-78.2021.5.07.0003
+      # Deixar vazio para modo normal (cria cálculo novo a cada automação).
+      PJECALC_CALCULO_TESTE: ${PJECALC_CALCULO_TESTE:-}
     volumes:
       - /opt/pjecalc-data/calculations:/app/data/calculations
       - /opt/pjecalc-data/pjecalc-dados:/opt/pjecalc/.dados
