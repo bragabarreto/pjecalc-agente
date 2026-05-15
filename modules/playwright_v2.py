@@ -160,10 +160,18 @@ class PlaywrightAutomatorV2:
             )
             if ok_teste:
                 self._modo_edicao_inicial = True
-                self.log(f"  ✓ [TESTE] Modo edição ativo — conv={self._calculo_conversation_id}")
+                self.log(f"  ✓ [TESTE] Modo edição ativo via Recentes — conv={self._calculo_conversation_id}")
             else:
-                self.log("  ⚠ [TESTE] Cálculo teste não encontrado nos Recentes — criando novo")
-                self._criar_novo_calculo()
+                self.log("  ⚠ [TESTE] Não encontrado nos Recentes — tentando Buscar...")
+                ok_buscar = self._reabrir_via_buscar(
+                    processo_override=self._calculo_teste_processo
+                )
+                if ok_buscar:
+                    self._modo_edicao_inicial = True
+                    self.log(f"  ✓ [TESTE] Modo edição ativo via Buscar — conv={self._calculo_conversation_id}")
+                else:
+                    self.log("  ⚠ [TESTE] Cálculo teste não encontrado (Recentes + Buscar) — criando novo")
+                    self._criar_novo_calculo()
         else:
             self._criar_novo_calculo()
 
@@ -1047,11 +1055,16 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ _reabrir_calculo_via_recentes: {type(e).__name__}: {e}")
             return False
 
-    def _reabrir_via_buscar(self) -> bool:
+    def _reabrir_via_buscar(self, processo_override: str | None = None) -> bool:
         """Fallback: usa sidebar Buscar para pesquisar o cálculo e abri-lo em edit mode.
 
         Alternativa quando Recentes não inclui o calc atual (comum em sessões locais
         onde TBCALCULOSRECENTESUSUARIO não registrou o novo cálculo).
+
+        Args:
+            processo_override: Número CNJ a buscar em vez do processo da prévia.
+                Usado por PJECALC_CALCULO_TESTE para localizar o cálculo de teste
+                mesmo quando não está em Recentes.
 
         Fluxo:
         1. Click em li_calculo_buscar → calculo.jsf?conversationId=N (Buscar page)
@@ -1063,7 +1076,8 @@ class PlaywrightAutomatorV2:
         Returns True se reabriu com sucesso.
         """
         try:
-            self.log("  → Tentando Buscar como fallback de Recentes...")
+            num_busca = processo_override or self.previa.processo.numero_processo
+            self.log(f"  → Tentando Buscar como fallback de Recentes: {num_busca}")
             # Navegar para principal primeiro (garante sidebar disponível)
             self._page.goto(
                 f"{self.pjecalc_url}/pages/principal.jsf",
@@ -1087,7 +1101,7 @@ class PlaywrightAutomatorV2:
             # Preencher campos de busca com CNJ do processo
             # IMPORTANTE: usar [id='...'] (attribute selector) e NÃO #id:campo
             # porque colons em IDs são inválidos em seletores CSS (#id:colon).
-            cnj = _split_cnj(self.previa.processo.numero_processo)
+            cnj = _split_cnj(num_busca)
             for field_id, valor in [
                 ("formulario:numeroProcessoBusca", cnj.get("numero", "")),
                 ("formulario:digitoProcessoBusca", cnj.get("digito", "")),
@@ -1112,7 +1126,7 @@ class PlaywrightAutomatorV2:
 
             # Procurar resultado na listagem
             # Os resultados geralmente aparecem em uma tabela com links "Abrir"
-            num_cnj = self.previa.processo.numero_processo
+            num_cnj = num_busca  # usa processo_override se definido
             num_clean = num_cnj.replace(".", "").replace("-", "").replace("/", "")
 
             resultado_link = self._page.evaluate(
