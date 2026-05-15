@@ -516,9 +516,23 @@ details.fieldgroup[open] { border-color: #adb5bd; }
                 <option value="HISTORICO_SALARIAL">Histórico Salarial</option>
               </select>
             </div>
-            <div class="campo">
-              <label>Qtd. Filhos &lt; 14 anos</label>
-              <input type="number" min="0" data-campo="salario_familia.quantidade_filhos_ate_14_anos" value="0">
+          </div>
+          <!-- Quantidade de filhos com variações por data -->
+          <div class="fieldgroup" style="margin-top:10px;">
+            <div class="fieldgroup-title">Qtd. Filhos &lt; 14 anos
+              <button type="button" onclick="sfAdicionarVariacaoFilhos()" style="float:right;font-size:0.8rem;padding:2px 8px;">+ Adicionar variação</button>
+            </div>
+            <div id="sf-filhos-lista">
+              <!-- preenchido por renderSFFilhos() -->
+            </div>
+          </div>
+          <!-- Remuneração Mensal — Salários Devidos -->
+          <div class="fieldgroup" style="margin-top:10px;">
+            <div class="fieldgroup-title">Remuneração Mensal — Salários Devidos
+              <button type="button" onclick="sfAdicionarVerbaDevida()" style="float:right;font-size:0.8rem;padding:2px 8px;">+ Adicionar verba</button>
+            </div>
+            <div id="sf-verbas-devidas-lista">
+              <!-- preenchido por renderSFVerbasDevidas() -->
             </div>
           </div>
         </div>
@@ -538,6 +552,10 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <label for="cb-sd" style="font-weight:600;">Apurar Seguro-desemprego</label>
         </div>
         <div id="sd-campos" style="display:none;">
+          <div class="checkbox-row" style="margin-bottom:10px;">
+            <input type="checkbox" data-campo="seguro_desemprego.empregado_domestico" id="cb-sd-domestico">
+            <label for="cb-sd-domestico">Empregado Doméstico</label>
+          </div>
           <div class="grid-3">
             <div class="campo">
               <label>Compor Principal</label>
@@ -558,12 +576,28 @@ details.fieldgroup[open] { border-color: #adb5bd; }
               </select>
             </div>
             <div class="campo">
+              <label>Tipo de Valor</label>
+              <select data-campo="seguro_desemprego.tipo_valor">
+                <option value="CALCULADO">Calculado</option>
+                <option value="INFORMADO">Informado</option>
+              </select>
+            </div>
+            <div class="campo">
               <label>Remuneração — Salários Pagos</label>
               <select data-campo="seguro_desemprego.remuneracao_pagos">
                 <option value="NENHUM">Nenhum</option>
                 <option value="MAIOR_REMUNERACAO">Maior Remuneração</option>
                 <option value="HISTORICO_SALARIAL">Histórico Salarial</option>
               </select>
+            </div>
+          </div>
+          <!-- Remuneração Mensal — Salários Devidos -->
+          <div class="fieldgroup" style="margin-top:10px;">
+            <div class="fieldgroup-title">Remuneração Mensal — Salários Devidos
+              <button type="button" onclick="sdAdicionarVerbaDevida()" style="float:right;font-size:0.8rem;padding:2px 8px;">+ Adicionar verba</button>
+            </div>
+            <div id="sd-verbas-devidas-lista">
+              <!-- preenchido por renderSDVerbasDevidas() -->
             </div>
           </div>
         </div>
@@ -713,6 +747,7 @@ details.fieldgroup[open] { border-color: #adb5bd; }
         <div class="grid-4" style="margin-top:10px;">
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.apurar_segurado_devido" checked> <label>Apurar Contribuição do Segurado</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.cobrar_do_reclamante_devido"> <label>Cobrar do Reclamante</label></div>
+          <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.com_correcao_trabalhista" checked> <label>Com Correção Trabalhista</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.corrigir_desconto_reclamante" checked> <label>Corrigir Desconto do Reclamante</label></div>
           <div class="checkbox-row"><input type="checkbox" data-campo="contribuicao_social.apurar_salarios_pagos" checked> <label>Apurar CS sobre Salários Pagos</label></div>
         </div>
@@ -899,15 +934,21 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             <div class="campo">
               <label>Índice Trabalhista</label>
               <select data-campo="correcao_juros_multa.indice_trabalhista" id="sel-indice-trabalhista">
-                <option value="IPCAE" selected>IPCA-E</option>
+                <option value="TABELA_UNICA_JT_DIARIO" selected>Tabela Única JT (diário)</option>
+                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
+                <option value="IPCAE">IPCA-E</option>
                 <option value="IPCA">IPCA</option>
                 <option value="INPC">INPC</option>
                 <option value="IGP_M">IGP-M</option>
                 <option value="TR">TR</option>
                 <option value="IPC">IPC</option>
                 <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
-                <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
-                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
+                <option value="FAZENDA_PUBLICA">Devedor Fazenda Pública</option>
+                <option value="REPETICAO_INDBITO">Repetição de Indébito Tributário</option>
+                <option value="SELIC_RF">SELIC (Receita Federal)</option>
+                <option value="SELIC_SIMPLES">SELIC Simples</option>
+                <option value="SELIC_COMPOSTA">SELIC Composta</option>
+                <option value="SEM_CORRECAO">Sem Correção</option>
               </select>
             </div>
           </div>
@@ -920,6 +961,8 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             <div class="campo">
               <label>Segundo Índice</label>
               <select data-campo="correcao_juros_multa.segundo_indice">
+                <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
+                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
                 <option value="IPCAE">IPCA-E</option>
                 <option value="IPCA">IPCA</option>
                 <option value="INPC">INPC</option>
@@ -927,8 +970,12 @@ details.fieldgroup[open] { border-color: #adb5bd; }
                 <option value="TR">TR</option>
                 <option value="IPC">IPC</option>
                 <option value="IPCAE_TR">IPCA-E / TR (misto)</option>
-                <option value="TABELA_UNICA_JT_DIARIO">Tabela Única JT (diário)</option>
-                <option value="TABELA_UNICA_JT_MENSAL">Tabela Única JT (mensal)</option>
+                <option value="FAZENDA_PUBLICA">Devedor Fazenda Pública</option>
+                <option value="REPETICAO_INDBITO">Repetição de Indébito Tributário</option>
+                <option value="SELIC_RF">SELIC (Receita Federal)</option>
+                <option value="SELIC_SIMPLES">SELIC Simples</option>
+                <option value="SELIC_COMPOSTA">SELIC Composta</option>
+                <option value="SEM_CORRECAO">Sem Correção</option>
               </select>
             </div>
             <div class="campo">
@@ -946,9 +993,19 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <div class="campo">
             <label>Juros de Mora</label>
             <select data-campo="correcao_juros_multa.juros_mora">
-              <option value="SIMPLES_1PCT" selected>Simples 1% a.m. (padrão)</option>
+              <option value="JUROS_PADRAO" selected>Juros Padrão</option>
+              <option value="CADERNETA_POUPANCA">Caderneta de Poupança</option>
               <option value="FAZENDA_PUBLICA">Fazenda Pública (SELIC limitado a 70%)</option>
-              <option value="NAO_APLICAR">Não Aplicar Juros</option>
+              <option value="SIMPLES_05PCT">Simples 0,5% a.m.</option>
+              <option value="SIMPLES_1PCT">Simples 1,0% a.m.</option>
+              <option value="SIMPLES_DIARIO">Simples 0,0333333% a.d.</option>
+              <option value="SELIC_RF">SELIC (Receita Federal)</option>
+              <option value="SELIC_SIMPLES">SELIC Simples</option>
+              <option value="SELIC_COMPOSTA">SELIC Composta</option>
+              <option value="TRD_SIMPLES">TRD Juros Simples</option>
+              <option value="TRD_COMPOSTA">TRD Juros Compostos</option>
+              <option value="TAXA_LEGAL">Taxa Legal</option>
+              <option value="NAO_APLICAR">Sem Juros</option>
             </select>
           </div>
         </div>
@@ -2171,6 +2228,11 @@ function renderHonorarios() {
             <option value="PERICIAL_CONTADOR"${(h.tipo_honorario||h.tipo)==='PERICIAL_CONTADOR'?' selected':''}>Honorários Periciais — Contador</option>
             <option value="PERICIAL_ENGENHEIRO"${(h.tipo_honorario||h.tipo)==='PERICIAL_ENGENHEIRO'?' selected':''}>Honorários Periciais — Engenheiro</option>
             <option value="PERICIAL_MEDICO"${(h.tipo_honorario||h.tipo)==='PERICIAL_MEDICO'?' selected':''}>Honorários Periciais — Médico</option>
+            <option value="ASSISTENCIAIS"${(h.tipo_honorario||h.tipo)==='ASSISTENCIAIS'?' selected':''}>Honorários Assistenciais</option>
+            <option value="PERICIAL_DOCUMENTOSCOPIO"${(h.tipo_honorario||h.tipo)==='PERICIAL_DOCUMENTOSCOPIO'?' selected':''}>Honorários Periciais — Documentoscópio</option>
+            <option value="PERICIAL_INTERPRETE"${(h.tipo_honorario||h.tipo)==='PERICIAL_INTERPRETE'?' selected':''}>Honorários Periciais — Intérprete</option>
+            <option value="PERICIAL_OUTROS"${(h.tipo_honorario||h.tipo)==='PERICIAL_OUTROS'?' selected':''}>Honorários Periciais — Outros</option>
+            <option value="LEILOEIRO"${(h.tipo_honorario||h.tipo)==='LEILOEIRO'?' selected':''}>Leiloeiro</option>
           </select>
         </div>
         <div class="campo"><label>Devedor</label>
@@ -2269,11 +2331,123 @@ function toggleSF(on) {
   document.getElementById('sf-campos').style.display = on ? 'block' : 'none';
   const b = document.getElementById('badge-salario-familia');
   if (b) b.textContent = on ? 'apurar' : 'não apurar';
+  if (on) { renderSFFilhos(); renderSFVerbasDevidas(); }
 }
 function toggleSD(on) {
   document.getElementById('sd-campos').style.display = on ? 'block' : 'none';
   const b = document.getElementById('badge-seguro-desemprego');
   if (b) b.textContent = on ? 'apurar' : 'não apurar';
+  if (on) renderSDVerbasDevidas();
+}
+
+// ─── Salário-família helpers ────────────────────────────────────────
+function renderSFFilhos() {
+  const list = document.getElementById('sf-filhos-lista');
+  if (!list) return;
+  const sf = previaData.salario_familia = previaData.salario_familia || {};
+  const arr = sf.variacoes_filhos = sf.variacoes_filhos || [];
+  if (!arr.length) arr.push({quantidade: 1, data_inicio: ''});
+  list.innerHTML = '';
+  arr.forEach((v, idx) => {
+    const row = document.createElement('div');
+    row.className = 'grid-3';
+    row.style.marginBottom = '6px';
+    row.innerHTML = `
+      <div class="campo"><label>Qtd. Filhos &lt; 14 anos</label>
+        <input type="number" min="0" value="${v.quantidade||1}" onchange="previaData.salario_familia.variacoes_filhos[${idx}].quantidade=parseInt(this.value);validarPrevia()">
+      </div>
+      <div class="campo"><label>A partir de (DD/MM/YYYY)</label>
+        <input type="text" placeholder="DD/MM/YYYY" value="${v.data_inicio||''}" onchange="previaData.salario_familia.variacoes_filhos[${idx}].data_inicio=this.value;validarPrevia()">
+      </div>
+      <div class="campo" style="align-self:flex-end;">
+        ${idx>0?`<button type="button" onclick="previaData.salario_familia.variacoes_filhos.splice(${idx},1);renderSFFilhos()" style="color:#e74c3c;background:none;border:1px solid #e74c3c;padding:4px 8px;border-radius:4px;cursor:pointer;">✕ Remover</button>`:''}
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
+function sfAdicionarVariacaoFilhos() {
+  const sf = previaData.salario_familia = previaData.salario_familia || {};
+  sf.variacoes_filhos = sf.variacoes_filhos || [];
+  sf.variacoes_filhos.push({quantidade: 1, data_inicio: ''});
+  renderSFFilhos(); validarPrevia();
+}
+
+function renderSFVerbasDevidas() {
+  const list = document.getElementById('sf-verbas-devidas-lista');
+  if (!list) return;
+  const sf = previaData.salario_familia = previaData.salario_familia || {};
+  const arr = sf.verbas_devidas = sf.verbas_devidas || [];
+  list.innerHTML = '';
+  if (!arr.length) {
+    list.innerHTML = '<p style="color:#999;font-size:0.85rem;margin:6px 0;">Nenhuma verba devida adicionada.</p>';
+    return;
+  }
+  arr.forEach((v, idx) => {
+    const row = document.createElement('div');
+    row.className = 'grid-3';
+    row.style.marginBottom = '6px';
+    row.innerHTML = `
+      <div class="campo"><label>Verba</label>
+        <input type="text" value="${v.nome||''}" placeholder="Nome da verba" onchange="previaData.salario_familia.verbas_devidas[${idx}].nome=this.value;validarPrevia()">
+      </div>
+      <div class="campo"><label>Integralizar</label>
+        <select onchange="previaData.salario_familia.verbas_devidas[${idx}].integralizar=this.value;validarPrevia()">
+          <option value="SIM"${(v.integralizar||'SIM')==='SIM'?' selected':''}>Sim</option>
+          <option value="NAO"${v.integralizar==='NAO'?' selected':''}>Não</option>
+        </select>
+      </div>
+      <div class="campo" style="align-self:flex-end;">
+        <button type="button" onclick="previaData.salario_familia.verbas_devidas.splice(${idx},1);renderSFVerbasDevidas()" style="color:#e74c3c;background:none;border:1px solid #e74c3c;padding:4px 8px;border-radius:4px;cursor:pointer;">✕ Remover</button>
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
+function sfAdicionarVerbaDevida() {
+  const sf = previaData.salario_familia = previaData.salario_familia || {};
+  sf.verbas_devidas = sf.verbas_devidas || [];
+  sf.verbas_devidas.push({nome: '', integralizar: 'SIM'});
+  renderSFVerbasDevidas(); validarPrevia();
+}
+
+// ─── Seguro-desemprego helpers ──────────────────────────────────────
+function renderSDVerbasDevidas() {
+  const list = document.getElementById('sd-verbas-devidas-lista');
+  if (!list) return;
+  const sd = previaData.seguro_desemprego = previaData.seguro_desemprego || {};
+  const arr = sd.verbas_devidas = sd.verbas_devidas || [];
+  list.innerHTML = '';
+  if (!arr.length) {
+    list.innerHTML = '<p style="color:#999;font-size:0.85rem;margin:6px 0;">Nenhuma verba devida adicionada.</p>';
+    return;
+  }
+  arr.forEach((v, idx) => {
+    const row = document.createElement('div');
+    row.className = 'grid-3';
+    row.style.marginBottom = '6px';
+    row.innerHTML = `
+      <div class="campo"><label>Verba</label>
+        <input type="text" value="${v.nome||''}" placeholder="Nome da verba" onchange="previaData.seguro_desemprego.verbas_devidas[${idx}].nome=this.value;validarPrevia()">
+      </div>
+      <div class="campo"><label>Integralizar</label>
+        <select onchange="previaData.seguro_desemprego.verbas_devidas[${idx}].integralizar=this.value;validarPrevia()">
+          <option value="SIM"${(v.integralizar||'SIM')==='SIM'?' selected':''}>Sim</option>
+          <option value="NAO"${v.integralizar==='NAO'?' selected':''}>Não</option>
+        </select>
+      </div>
+      <div class="campo" style="align-self:flex-end;">
+        <button type="button" onclick="previaData.seguro_desemprego.verbas_devidas.splice(${idx},1);renderSDVerbasDevidas()" style="color:#e74c3c;background:none;border:1px solid #e74c3c;padding:4px 8px;border-radius:4px;cursor:pointer;">✕ Remover</button>
+      </div>`;
+    list.appendChild(row);
+  });
+}
+
+function sdAdicionarVerbaDevida() {
+  const sd = previaData.seguro_desemprego = previaData.seguro_desemprego || {};
+  sd.verbas_devidas = sd.verbas_devidas || [];
+  sd.verbas_devidas.push({nome: '', integralizar: 'SIM'});
+  renderSDVerbasDevidas(); validarPrevia();
 }
 function togglePP(on) {
   document.getElementById('pp-campos').style.display = on ? 'block' : 'none';
@@ -2372,6 +2546,7 @@ function renderMultas() {
               <option value="PRINCIPAL"${(m.base||'PRINCIPAL')==='PRINCIPAL'?' selected':''}>Principal</option>
               <option value="PRINCIPAL_MENOS_CS"${m.base==='PRINCIPAL_MENOS_CS'?' selected':''}>Principal (-CS)</option>
               <option value="PRINCIPAL_MENOS_CS_MENOS_PP"${m.base==='PRINCIPAL_MENOS_CS_MENOS_PP'?' selected':''}>Principal (-CS-PP)</option>
+              <option value="VALOR_CORRIGIDO_DA_CAUSA"${m.base==='VALOR_CORRIGIDO_DA_CAUSA'?' selected':''}>Valor Corrigido da Causa</option>
             </select>
           </div>
         ` : `
