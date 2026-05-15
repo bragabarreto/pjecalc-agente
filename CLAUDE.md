@@ -232,20 +232,92 @@ Implementado em `core/llm_orchestrator.py`. O orquestrador também injeta automa
 
 ## Learning Engine
 
+O Learning Engine opera em **dois planos de aprendizado complementares**:
+
+### Plano 1 — Correções na Prévia (reativo, campo a campo)
+
 A cada edição bem-sucedida na tela de Prévia:
 1. `learning/correction_tracker.py` → `CorrectionTracker.record_field_correction()` salva a correção no DB (`CorrecaoUsuario`)
 2. Ao atingir `LEARNING_FEEDBACK_THRESHOLD` (padrão: 10) correções não incorporadas → dispara `LearningEngine.run_learning_session()` como background task
 3. O `LearningEngine` envia os pares (extração_original, correção) ao Claude → gera `RegrasAprendidas`
 4. As regras são injetadas nos prompts futuros via `learning/rule_injector.py`
 
+Esse plano captura **erros de extração**: o usuário corrigiu um campo porque a IA leu errado
+a sentença (ex.: data de admissão errada, nome de verba trocado).
+
+### Plano 2 — Estratégia de Preenchimento a partir de Cálculos Finalizados (generativo)
+
+> **Este é o plano mais valioso a longo prazo.** Enquanto o Plano 1 corrige erros de leitura,
+> o Plano 2 aprende **como configurar corretamente os parâmetros do PJE-Calc para cada
+> situação jurídica** — a estratégia de preenchimento — a partir de cálculos que foram
+> revisados, confirmados e exportados com sucesso pelo usuário.
+
+**Gatilho:** quando um cálculo atinge `status = 'pjc_exportado'` → disparar
+`EstrategiaEngine.extrair_estrategia(calculo)` como background task.
+
+**O que é extraído:** o engine analisa o JSON completo do cálculo finalizado — verbas,
+parâmetros de cada verba (base, divisor, multiplicador, integralizar, valor_pago, etc.),
+históricos salariais, incidências — em conjunto com o contexto jurídico identificado na
+sentença, e extrai padrões reutilizáveis.
+
+**Exemplos de padrões aprendidos (`EstrategiaAprendida`):**
+- "Quando houver equiparação salarial → DIFERENÇA SALARIAL com `gerarPrincipal=DIFERENCA`,
+  `tipoDoValorPago=CALCULADO`, `base_historico=<historico_paradigma>`,
+  `valor_pago_historico=<historico_autor>`"
+- "Quando houver DIÁRIAS - INTEGRAÇÃO AO SALÁRIO → `comporPrincipal=NAO`,
+  `proporcionalizar=NAO`"
+- "Quando houver estabilidade pós-demissão → criar verbas manuais de Férias+1/3, 13º e
+  FGTS com `integralizarBase=SIM` e ajuste de ocorrências"
+- "Quando houver adicional de insalubridade → base = Salário Mínimo Nacional com
+  alíquota 10/20/40 conforme grau"
+
+**Pipeline do Plano 2:**
+```
+Cálculo exportado (pjc_exportado)
+    │
+    ▼
+EstrategiaEngine.extrair_estrategia()
+    │  Envia ao Claude:
+    │  • JSON completo do cálculo (verbas + params + históricos)
+    │  • Contexto jurídico (verbas presentes, tipo de pedido inferido)
+    │  Pergunta: "Quais padrões de configuração de parâmetros são
+    │             generalizáveis para casos similares?"
+    │
+    ▼
+EstrategiaAprendida (DB)
+    │  Armazenada com:
+    │  • cenario_juridico: fingerprint do tipo de caso
+    │  • nome_verba: verba à qual se aplica
+    │  • parametros: dict de params confirmados como corretos
+    │  • confianca: 0–1 (sobe com reuso bem-sucedido)
+    │  • calculos_origem: lista de sessao_id dos cálculos fonte
+    │
+    ▼
+rule_injector.py
+    │  Injeta EstrategiasAprendidas no system prompt de
+    │  classification.py e extraction.py para casos futuros
+```
+
+**Diferença fundamental entre os dois planos:**
+
+| | Plano 1 — Correções | Plano 2 — Estratégia |
+|---|---|---|
+| **Gatilho** | Edição na Prévia | Exportação do PJC |
+| **Sinal** | Erro corrigido | Acerto confirmado |
+| **Aprende** | O que a IA leu errado | Como configurar certo |
+| **Escopo** | Campo individual | Combinação de parâmetros por verba/cenário |
+| **DB** | `CorrecaoUsuario` | `EstrategiaAprendida` |
+| **Natureza** | Reativo | Generativo |
+
 Dashboard em `/admin/aprendizado`. Trigger manual via `POST /api/aprendizado/executar`.
 
 ## Banco de dados — novos modelos (infrastructure/database.py)
 
-Além dos 5 modelos existentes, 3 novos para o Learning Engine:
-- `CorrecaoUsuario` — cada correção do usuário na prévia (campo, valor_antes, valor_depois, confiança_ia)
-- `RegrasAprendidas` — regras geradas pelo LLM (condição, ação, confiança, aplicações/acertos)
-- `SessaoAprendizado` — sessões periódicas de análise (status, N correções, N regras, resumo)
+Além dos 5 modelos existentes, **4 novos** para o Learning Engine:
+- `CorrecaoUsuario` — cada correção do usuário na prévia (campo, valor_antes, valor_depois, confiança_ia) [Plano 1]
+- `RegrasAprendidas` — regras de extração geradas pelo LLM a partir de correções (condição, ação, confiança, aplicações/acertos) [Plano 1]
+- `SessaoAprendizado` — sessões periódicas de análise (status, N correções, N regras, resumo) [Plano 1]
+- `EstrategiaAprendida` — padrões de parametrização do PJE-Calc extraídos de cálculos finalizados (cenario_juridico, nome_verba, parametros JSON, confiança, calculos_origem) [Plano 2]
 
 ## Descobertas críticas (abril/2026)
 
