@@ -3573,14 +3573,23 @@ async def executar_automacao_v2_sse(sessao_id: str, request: Request):
     from modules.webapp_v2 import executar_v2_como_generator
 
     async def gerador_sse_v2():
-        # Verificar se já existe runner — reutilizar (ex.: F5 do navegador)
+        # Verificar se já existe runner — CRÍTICO: se done=True, fazer replay sem
+        # criar nova automação. Sem este check, cada reconexão SSE (onerror) após
+        # o término da automação criava um novo Firefox. Bug root cause do loop.
         existing = _automacao_runners.get(sessao_id)
-        if existing and not existing.done:
-            async for chunk in _sse_follow_runner(existing, sessao_id):
-                yield chunk
+        if existing:
+            if existing.done:
+                # Automação concluída: replay todos os logs (inclui [FIM DA EXECUÇÃO])
+                # para que o frontend detecte e defina automacaoConcluida=true
+                for msg in existing.logs:
+                    yield f"data: {json.dumps({'msg': msg})}\n\n"
+            else:
+                # Ainda rodando: seguir o runner sem criar novo
+                async for chunk in _sse_follow_runner(existing, sessao_id):
+                    yield chunk
             return
 
-        # Criar generator + runner
+        # Nenhum runner existente — iniciar nova automação
         try:
             gen = executar_v2_como_generator(sessao_id)
         except Exception as e:
