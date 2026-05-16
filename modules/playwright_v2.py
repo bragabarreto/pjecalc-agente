@@ -1197,50 +1197,84 @@ class PlaywrightAutomatorV2:
         IMPORTANTE: per CLAUDE.md, sempre usar "Novo" (não "Cálculo Externo").
         O Cidadão NÃO tem "Criar Novo Cálculo" — apenas "Novo" no menu lateral
         ou submenu de operações.
+
+        Inclui retry automático para lidar com Tomcat recém-inicializado: o servlet
+        pode responder na porta 9257 mas os beans JSF ainda não estarem prontos,
+        causando navegação para principal.jsf sem transição para calculo.jsf.
         """
-        # Tentar múltiplos seletores em ordem de robustez
-        clicou = self._page.evaluate(
-            """() => {
-                // 1. li id="li_novo" no menu lateral (Cidadão)
-                const liNovo = document.getElementById('li_novo');
-                if (liNovo) {
-                    const a = liNovo.querySelector('a');
-                    if (a) { a.click(); return 'li_novo'; }
-                }
-                // 2. Qualquer <a> com texto exato "Novo" dentro de menu
-                const links = [...document.querySelectorAll('a')];
-                for (const a of links) {
-                    const t = (a.textContent||'').trim();
-                    if (t === 'Novo' || t === 'Criar Novo Cálculo' || t === 'Novo Cálculo') {
-                        a.click();
-                        return 'text-match: '+t;
+        _MAX_TENTATIVAS = 4
+        _ESPERA_ENTRE_TENTATIVAS_MS = 15000
+
+        for tentativa in range(1, _MAX_TENTATIVAS + 1):
+            if tentativa > 1:
+                self.log(f"  ⏳ Aguardando {_ESPERA_ENTRE_TENTATIVAS_MS // 1000}s para Tomcat inicializar (tentativa {tentativa}/{_MAX_TENTATIVAS})...")
+                self._page.wait_for_timeout(_ESPERA_ENTRE_TENTATIVAS_MS)
+                # Recarregar principal.jsf para garantir estado limpo
+                try:
+                    self._page.goto(
+                        "http://localhost:9257/pjecalc/pages/principal.jsf",
+                        wait_until="networkidle",
+                        timeout=30000,
+                    )
+                except Exception:
+                    pass
+
+            # Tentar múltiplos seletores em ordem de robustez
+            clicou = self._page.evaluate(
+                """() => {
+                    // 1. li id="li_novo" no menu lateral (Cidadão)
+                    const liNovo = document.getElementById('li_novo');
+                    if (liNovo) {
+                        const a = liNovo.querySelector('a');
+                        if (a) { a.click(); return 'li_novo'; }
                     }
-                }
-                return null;
-            }"""
+                    // 2. Qualquer <a> com texto exato "Novo" dentro de menu
+                    const links = [...document.querySelectorAll('a')];
+                    for (const a of links) {
+                        const t = (a.textContent||'').trim();
+                        if (t === 'Novo' || t === 'Criar Novo Cálculo' || t === 'Novo Cálculo') {
+                            a.click();
+                            return 'text-match: '+t;
+                        }
+                    }
+                    return null;
+                }"""
+            )
+            if not clicou:
+                self.log(f"  ⚠ Botão 'Novo' não encontrado (tentativa {tentativa}/{_MAX_TENTATIVAS})")
+                if tentativa == _MAX_TENTATIVAS:
+                    raise RuntimeError(
+                        "Botão 'Novo' não encontrado na home do PJE-Calc após "
+                        f"{_MAX_TENTATIVAS} tentativas. Verifique se está logado e em principal.jsf."
+                    )
+                continue
+
+            self.log(f"  → Click via {clicou} (tentativa {tentativa}/{_MAX_TENTATIVAS})")
+            self._aguardar_ajax(25000)
+            # Esperar URL mudar para algo como calculo.jsf?conversationId=N
+            try:
+                self._page.wait_for_url("**/calculo*.jsf*", timeout=20000)
+            except Exception:
+                pass
+            # Capturar conversationId
+            url = self._page.url
+            if "conversationId=" in url:
+                self._calculo_conversation_id = url.split("conversationId=")[1].split("&")[0]
+
+            if self._calculo_conversation_id:
+                self.log(f"✓ Novo cálculo criado (conv={self._calculo_conversation_id}, url={url[-80:]})")
+                return
+
+            self.log(
+                f"  ⚠ conversationId não capturado após click em 'Novo' "
+                f"(tentativa {tentativa}/{_MAX_TENTATIVAS}). URL: {url[-80:]}"
+            )
+
+        raise RuntimeError(
+            f"conversationId não capturado após {_MAX_TENTATIVAS} tentativas em 'Novo'. "
+            f"URL atual: {self._page.url}. "
+            f"Tomcat pode estar ainda inicializando ou beans JSF não prontos."
         )
-        if not clicou:
-            raise RuntimeError(
-                "Botão 'Novo' não encontrado na home do PJE-Calc. "
-                "Verifique se está logado e em principal.jsf."
-            )
-        self.log(f"  → Click via {clicou}")
-        self._aguardar_ajax(25000)
-        # Esperar URL mudar para algo como calculo.jsf?conversationId=N
-        try:
-            self._page.wait_for_url("**/calculo*.jsf*", timeout=20000)
-        except Exception:
-            pass
-        # Capturar conversationId
-        url = self._page.url
-        if "conversationId=" in url:
-            self._calculo_conversation_id = url.split("conversationId=")[1].split("&")[0]
-        self.log(f"✓ Novo cálculo criado (conv={self._calculo_conversation_id}, url={url[-80:]})")
-        if not self._calculo_conversation_id:
-            raise RuntimeError(
-                f"conversationId não capturado após click em 'Novo'. URL atual: {url}. "
-                f"Pode ser que a navegação tenha falhado ou o cálculo não foi inicializado."
-            )
 
     def fase_processo(self) -> None:
         self.log("Fase 1 — Dados do Processo")
