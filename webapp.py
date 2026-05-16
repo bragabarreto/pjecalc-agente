@@ -2577,9 +2577,16 @@ def _validar_pjc_para_download(pjc_path: str | Path) -> tuple[bool, str]:
         import zipfile as _zf, re as _re
         try:
             with _zf.ZipFile(str(p), 'r') as _z:
-                if "calculo.xml" not in _z.namelist():
-                    return (False, "ZIP sem calculo.xml")
-                xml_bytes = _z.read("calculo.xml")
+                names = _z.namelist()
+                # O PJE-Calc Cidadão exporta o XML com nome CALCULO_*_DATA_*_HORA_*.PJC
+                # dentro do ZIP. Suporta também "calculo.xml" (estrutura legada).
+                _xml_entry = next(
+                    (n for n in names if n.lower() == "calculo.xml"),
+                    next((n for n in names if n.lower().endswith(".pjc") or n.lower().endswith(".xml")), None)
+                )
+                if not _xml_entry:
+                    return (False, f"ZIP sem entrada XML/PJC (conteúdo: {names})")
+                xml_bytes = _z.read(_xml_entry)
         except _zf.BadZipFile:
             return (False, "não é ZIP válido")
         try:
