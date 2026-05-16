@@ -3466,8 +3466,18 @@ class PlaywrightAutomatorV2:
         ts = _dt.now().strftime("%Y%m%d_%H%M%S")
         num_limpo = self.previa.processo.numero_processo.replace("-", "").replace(".", "")
         nome_pjc = f"PROCESSO_{num_limpo}_{ts}.pjc"
-        out_dir = Path("/tmp/pjecalc_exports")
-        out_dir.mkdir(parents=True, exist_ok=True)
+        # Usar volume persistente para sobreviver a restarts/deploys.
+        # Candidatos em ordem: volume Docker mapeado → fallback /tmp (dev local).
+        for _candidate in [Path("/app/data/calculations/pjc_exports"), Path("/tmp/pjecalc_exports")]:
+            try:
+                _candidate.mkdir(parents=True, exist_ok=True)
+                out_dir = _candidate
+                break
+            except OSError:
+                continue
+        else:
+            out_dir = Path("/tmp/pjecalc_exports")
+            out_dir.mkdir(parents=True, exist_ok=True)
         dest = out_dir / nome_pjc
 
         try:
