@@ -288,6 +288,38 @@ async def confirmar_previa(sessao_id: str, payload: dict):
     data["meta"]["confirmada"] = True
     _save_previa(sessao_id, data)
 
+    # Criar registro no DB para que marcar_exportado funcione ao final da automação.
+    # Sem isso, _sse_follow_runner lança ValueError ao tentar vincular o PJC gerado.
+    try:
+        from infrastructure.database import SessionLocal, Processo, Calculo
+        db = SessionLocal()
+        try:
+            proc = previa.processo
+            numero = proc.numero_processo
+            reclamante = proc.reclamante.nome if hasattr(proc.reclamante, "nome") else str(proc.reclamante or "")
+            reclamado  = proc.reclamado.nome  if hasattr(proc.reclamado, "nome")  else str(proc.reclamado or "")
+
+            proc_db = db.query(Processo).filter(Processo.numero_processo == numero).first()
+            if not proc_db:
+                proc_db = Processo(numero_processo=numero, reclamante=reclamante, reclamado=reclamado)
+                db.add(proc_db)
+                db.flush()
+
+            calculo_existente = db.query(Calculo).filter(Calculo.sessao_id == sessao_id).first()
+            if not calculo_existente:
+                calculo = Calculo(
+                    sessao_id=sessao_id,
+                    processo_id=proc_db.id,
+                    status="confirmado",
+                    dados_json=json.dumps(data),
+                )
+                db.add(calculo)
+            db.commit()
+        finally:
+            db.close()
+    except Exception as _e_db:
+        logger.warning("confirmar_previa: falha ao criar registro DB para %s: %s", sessao_id, _e_db)
+
     return {
         "status": "confirmada",
         "sessao_id": sessao_id,
