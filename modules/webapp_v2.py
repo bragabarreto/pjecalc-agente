@@ -159,10 +159,13 @@ h1 {{ font-size: 1.1rem; }}
 .log-line.err {{ color: #ef476f; }}
 .log-line.ok {{ color: #06d6a0; }}
 button {{ padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }}
+.download-pjc {{ display:inline-block; margin-top:1rem; padding:10px 20px; background:#198754; color:#fff; text-decoration:none; border-radius:6px; font-weight:600; font-size:1rem; }}
+.download-pjc:hover {{ background:#157347; }}
 </style></head><body>
 <h1>Automação v2 <span id="status" class="status running">⏳ iniciando…</span></h1>
 <p>Sessão: <code>{sessao_id}</code> · <a href="/previa/v2/{sessao_id}">← voltar à prévia</a></p>
 <div id="logs"></div>
+<div id="download-area"></div>
 <p style="margin-top:1rem;">
   <button onclick="window.location.reload()">↻ Reconectar</button>
   <button onclick="fetch('/api/parar/{sessao_id}', {{method:'POST'}}).then(r=>r.json()).then(d=>alert(d.msg))">⏹ Parar</button>
@@ -171,10 +174,18 @@ button {{ padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }}
 <script>
 const logs = document.getElementById('logs');
 const status = document.getElementById('status');
+const downloadArea = document.getElementById('download-area');
 const es = new EventSource('/api/executar/v2/{sessao_id}');
 es.onmessage = (e) => {{
   let txt = e.data;
   try {{ const j = JSON.parse(txt); txt = j.msg || txt; }} catch(_) {{}}
+
+  if (txt.startsWith('DOWNLOAD_LINK_CALC:')) {{
+    const url = txt.split('DOWNLOAD_LINK_CALC:')[1].trim();
+    downloadArea.innerHTML = '<a class="download-pjc" href="' + url + '">⬇ Baixar .PJC</a>';
+    return;
+  }}
+
   const div = document.createElement('div');
   div.className = 'log-line';
   if (/✗|ERRO|FALHA|Traceback/.test(txt)) {{ div.classList.add('err'); }}
