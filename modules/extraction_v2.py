@@ -439,13 +439,15 @@ Deixar `null` quando:
   "tolerancia_por_dia": "00:10",
 
   "jornada_padrao": {
-    "segunda_hhmm": "08:00",
-    "terca_hhmm":   "08:00",
-    "quarta_hhmm":  "08:00",
-    "quinta_hhmm":  "08:00",
-    "sexta_hhmm":   "08:00",
-    "sabado_hhmm":  "00:00",
-    "domingo_hhmm": "00:00"
+    "segunda_hhmm":        "08:00",
+    "terca_hhmm":          "08:00",
+    "quarta_hhmm":         "08:00",
+    "quinta_hhmm":         "08:00",
+    "sexta_hhmm":          "08:00",
+    "sabado_hhmm":         "00:00",
+    "domingo_hhmm":        "00:00",
+    "jornada_semanal":     "44,00",
+    "jornada_mensal_media": "188,57"
   },
 
   "jornada_feriado_trabalhado": false,

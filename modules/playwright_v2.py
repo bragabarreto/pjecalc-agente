@@ -2486,6 +2486,10 @@ class PlaywrightAutomatorV2:
             self._preencher("valorJornadaDiariaSabado", getattr(j, "sabado_hhmm", "00:00"))
             self._preencher("valorJornadaDiariaDom",    getattr(j, "domingo_hhmm", "00:00"))
             self._aguardar_ajax(1000)
+            if getattr(j, "jornada_semanal", None):
+                self._preencher("qtJornadaSemanal",    j.jornada_semanal, obrigatorio=False)
+            if getattr(j, "jornada_mensal_media", None):
+                self._preencher("qtJornadaMensal", j.jornada_mensal_media, obrigatorio=False)
         self._marcar_checkbox("jornadaDiariaFeriadoTrabalhado",    cp.jornada_feriado_trabalhado)
         self._marcar_checkbox("jornadaDiariaFeriadoNaoTrabalhado", cp.jornada_feriado_nao_trabalhado)
 

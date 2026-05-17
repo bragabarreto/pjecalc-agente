@@ -577,7 +577,7 @@ class CartaoDePontoApuracao(BaseModel):
 
 
 class CartaoDePontoJornada(BaseModel):
-    """Jornada diária padrão por dia da semana (HH:MM)."""
+    """Jornada diária padrão por dia da semana (HH:MM) + totais semanal/mensal."""
     segunda_hhmm: str = "08:00"
     terca_hhmm: str = "08:00"
     quarta_hhmm: str = "08:00"
@@ -585,6 +585,8 @@ class CartaoDePontoJornada(BaseModel):
     sexta_hhmm: str = "08:00"
     sabado_hhmm: str = "00:00"
     domingo_hhmm: str = "00:00"
+    jornada_semanal: Optional[str] = None       # ex.: "44,00" → qtJornadaSemanal
+    jornada_mensal_media: Optional[str] = None  # ex.: "188,57" → qtJornadaMensal
 
 
 class CartaoDePontoDescanso(BaseModel):
