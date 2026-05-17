@@ -559,6 +559,28 @@ O prompt de extração deve extrair histórico salarial SEMPRE (mesmo salário u
 Campos: nome, data_inicio, data_fim, valor, incidencia_fgts, incidencia_cs. O usuário pode
 adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 
+### Cartão de Ponto — Jornada regular × irregular (confirmado 17/05/2026)
+
+**Decisão fundamental ao extrair sentença com Cartão de Ponto**:
+
+| Tipo de jornada | Característica | `preenchimento` | Onde lançar |
+|---|---|---|---|
+| **REGULAR semanal** | Padrão repete a cada semana (ex: seg-sex 7h-18h) | `PROGRAMACAO` | `programacao_semanal` (8 dias × 6 turnos) |
+| **REGULAR em escala** | Ciclo não-semanal (12x36, 5x1, etc) | `ESCALA` | `escala` (tipo + início + qtd_dias + jornadas) |
+| **IRREGULAR** | Padrão semanal MAS com exceções (sábados alternados, plantões) | `PROGRAMACAO` ou `ESCALA` + `ocorrencias_override` | Padrão dominante na tabela + cada exceção em `ocorrencias_override` |
+| **TOTALMENTE LIVRE** | Sem padrão (cada dia diferente) | `LIVRE` | `ocorrencias_override` listando cada dia |
+
+**Mapeamento DOM confirmado** (v2.15.1):
+- Programação: `formulario:listagemProgramacao:{D}:entradaM` / `:saidaM` onde D=0..7 (Seg..Feriado), M=1..6
+- Escala: `formulario:escalas` (select), `formulario:valorHoraInicioEscala` (data), `formulario:qtdDiasTrabalhados`, `formulario:listagemEscala:{D}:entradaM`/`:saidaM`
+- Tipos de escala (enum): `OUTRA`, `DOZE_POR_DOZE`, `DOZE_POR_VINTE_QUATRO`, `DOZE_POR_TRINTA_E_SEIS`, `DOZE_POR_QUARENTA_E_OITO`, `CINCO_POR_UM`, `SEIS_POR_UM`, `OITO_DOIS`
+
+**Fluxo da automação**:
+1. Salvar parâmetros do cartão (período, apuração, descanso, noturno, tolerância)
+2. Preencher tabela Programação OU Escala conforme `preenchimento`
+3. Salvar (PJE-Calc replica padrão para todo o período)
+4. Para overrides: navegar Grade de Ocorrências → selecionar Mês/Ano → ajustar linhas pelas datas → salvar mês a mês
+
 ## Documentos de referência
 
 @docs/diagnostico-falhas-automacao.md

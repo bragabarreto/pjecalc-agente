@@ -631,6 +631,90 @@ class CartaoDePontoNoturno(BaseModel):
     forcar_prorrogacao: bool = False
 
 
+class TurnoJornada(BaseModel):
+    """Par entrada/saída de um turno (até 6 turnos por dia).
+
+    Use HH:MM (ex: "07:00", "12:00"). String vazia "" = turno não trabalhado.
+    """
+    entrada: str = ""
+    saida: str = ""
+
+
+class JornadaDiaria(BaseModel):
+    """Jornada de um dia (até 6 turnos entrada/saída).
+
+    Exemplo seg-sex 7h-12h e 13h-18h (com 1h almoço):
+        turnos = [{entrada:"07:00", saida:"12:00"}, {entrada:"13:00", saida:"18:00"}]
+    """
+    turnos: list[TurnoJornada] = Field(default_factory=list, max_length=6)
+
+
+class ProgramacaoSemanal(BaseModel):
+    """Programação semanal — jornadas por dia da semana + feriado.
+
+    Mapeamento DOM (formulario:listagemProgramacao:N:entradaM/saidaM):
+        N=0 → segunda, N=1 → terça, ..., N=6 → domingo, N=7 → feriado
+        M=1..6 → turno 1..6
+
+    Quando preenchimento="PROGRAMACAO", o PJE-Calc auto-replica essas jornadas
+    para todas as semanas do período do cartão. Não trabalha = turnos vazios.
+    """
+    segunda:  JornadaDiaria = Field(default_factory=JornadaDiaria)
+    terca:    JornadaDiaria = Field(default_factory=JornadaDiaria)
+    quarta:   JornadaDiaria = Field(default_factory=JornadaDiaria)
+    quinta:   JornadaDiaria = Field(default_factory=JornadaDiaria)
+    sexta:    JornadaDiaria = Field(default_factory=JornadaDiaria)
+    sabado:   JornadaDiaria = Field(default_factory=JornadaDiaria)
+    domingo:  JornadaDiaria = Field(default_factory=JornadaDiaria)
+    feriado:  JornadaDiaria = Field(default_factory=JornadaDiaria)
+
+
+class TipoEscala(str, Enum):
+    """Tipos pré-cadastrados de escala no PJE-Calc.
+
+    OUTRA = escala custom (preenche tabela manualmente).
+    """
+    OUTRA                     = "OUTRA"
+    DOZE_POR_DOZE             = "DOZE_POR_DOZE"
+    DOZE_POR_VINTE_QUATRO     = "DOZE_POR_VINTE_QUATRO"
+    DOZE_POR_TRINTA_E_SEIS    = "DOZE_POR_TRINTA_E_SEIS"
+    DOZE_POR_QUARENTA_E_OITO  = "DOZE_POR_QUARENTA_E_OITO"
+    CINCO_POR_UM              = "CINCO_POR_UM"
+    SEIS_POR_UM               = "SEIS_POR_UM"
+    OITO_DOIS                 = "OITO_DOIS"
+
+
+class EscalaCartao(BaseModel):
+    """Escala de trabalho — usar quando o ciclo NÃO é semanal.
+
+    DOM:
+      - formulario:escalas          → tipo
+      - formulario:valorHoraInicioEscala → inicio (DD/MM/YYYY)
+      - formulario:qtdDiasTrabalhados    → quantidade_dias (1..N)
+      - formulario:listagemEscala:D:entradaM/saidaM → jornadas[D].turnos[M-1]
+    """
+    tipo: TipoEscala = TipoEscala.OUTRA
+    inicio: str                                 # DD/MM/YYYY — data do dia 1 do ciclo
+    quantidade_dias: int = Field(ge=1, default=1)
+    jornadas: list[JornadaDiaria] = Field(default_factory=list)
+
+
+class OcorrenciaJornada(BaseModel):
+    """Override manual de jornada em uma data específica (Grade de Ocorrências).
+
+    Use para JORNADAS IRREGULARES que não cabem em ProgramaçãoSemanal/Escala —
+    p. ex.: sábados ALTERNADOS, semanas com plantão extraordinário, etc.
+
+    Após o PJE-Calc preencher os defaults via Programação/Escala, esses overrides
+    são aplicados na tela `visualizar-ocorrencias.jsf` (Grade de Ocorrências) por
+    mês, sobrescrevendo o lançamento daquele dia específico.
+
+    turnos=[] significa "apagar todos os turnos do dia" (dia não trabalhado).
+    """
+    data: str                                   # DD/MM/YYYY
+    turnos: list[TurnoJornada] = Field(default_factory=list, max_length=6)
+
+
 class CartaoDePonto(BaseModel):
     """Cartão de Ponto — espelha o formulário Novo do PJE-Calc Cidadão v2.15.1.
 
@@ -656,7 +740,7 @@ class CartaoDePonto(BaseModel):
     tolerancia_por_turno: str = "00:05"
     tolerancia_por_dia: str = "00:10"
 
-    # Jornada padrão
+    # Jornada padrão (metadados gerais)
     jornada_padrao: CartaoDePontoJornada = Field(default_factory=CartaoDePontoJornada)
 
     # Jornada em feriados
@@ -669,8 +753,15 @@ class CartaoDePonto(BaseModel):
     # Horário noturno
     noturno: Optional[CartaoDePontoNoturno] = None
 
-    # Preenchimento de jornadas
+    # Preenchimento de jornadas — controla qual modo de preenchimento usar
     preenchimento: str = "LIVRE"  # LIVRE | PROGRAMACAO | ESCALA
+
+    # Tabela de jornadas (depende de `preenchimento`)
+    programacao_semanal: Optional[ProgramacaoSemanal] = None  # se preenchimento=PROGRAMACAO
+    escala: Optional[EscalaCartao] = None                     # se preenchimento=ESCALA
+
+    # Overrides manuais por data (Grade de Ocorrências) — jornadas IRREGULARES
+    ocorrencias_override: list[OcorrenciaJornada] = Field(default_factory=list)
 
 
 class Falta(BaseModel):
