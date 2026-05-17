@@ -598,7 +598,7 @@ class PeriodoFerias(BaseModel):
     dobra: bool = False
     abono: bool = False
     dias_abono: int = 0
-    gozo_1: GozoFerias = Field(default_factory=GozoFerias)
+    gozo_1: Optional[GozoFerias] = None
     gozo_2: Optional[GozoFerias] = None
     gozo_3: Optional[GozoFerias] = None
 
