@@ -478,6 +478,42 @@ Valores de `apuracao.tipo` (usar o mais adequado à sentença):
 }
 ```
 
+## HONORÁRIOS — regras obrigatórias
+
+### Devedor do honorário
+`tipo_devedor`: `RECLAMADO` ou `RECLAMANTE`.
+
+⚠️ Quando `tipo_devedor = "RECLAMANTE"`, preencher sempre:
+```json
+"forma_cobranca": "COBRAR"
+```
+**NUNCA** usar `"DESCONTAR"` — o sistema sempre cobra diretamente do reclamante.
+
+### Credor dos honorários SUCUMBENCIAIS
+Para `tipo_honorario = "SUCUMBENCIAIS"`, o credor é **sempre o advogado da parte contrária**:
+- `tipo_devedor = "RECLAMANTE"` → `credor.nome = "ADVOGADO DO RECLAMADO"`
+- `tipo_devedor = "RECLAMADO"` → `credor.nome = "ADVOGADO DO RECLAMANTE"`
+
+`credor.doc_fiscal_tipo`: usar `"CPNJ"` quando desconhecido (escritório de advocacia).
+`credor.doc_fiscal_numero`: deixar `""` quando não informado na sentença.
+
+### Tipos válidos de honorário
+`tipo_honorario` ∈ {`SUCUMBENCIAIS`, `ADVOCATICIOS`, `ASSISTENCIAIS`, `CONTRATUAIS`,
+`PERICIAIS_MEDICO`, `PERICIAIS_CONTADOR`, `PERICIAIS_ENGENHEIRO`, `PERICIAIS_OUTROS`}
+
+### Sucumbência parcial — reclamante devedor com Justiça Gratuita (JG)
+Quando a sentença condena o reclamante em honorários sucumbenciais mas ele é
+beneficiário da Justiça Gratuita (art. 791-A, § 4º da CLT):
+1. Incluir o honorário normalmente: `tipo_devedor = "RECLAMANTE"`, `forma_cobranca = "COBRAR"`
+2. **Obrigatoriamente** preencher `parametros_calculo.comentarios_jg` com o texto:
+   `"Suspensão de exigibilidade dos honorários devidos pela parte beneficiária da Justiça Gratuita (art. 791-A, § 4º da CLT)."`
+
+Critérios para detectar JG + sucumbência do reclamante:
+- A sentença menciona "benefício da justiça gratuita" ou "gratuidade da justiça" para o reclamante, E
+- Condena o reclamante em honorários sucumbenciais (sucumbência recíproca ou improcedência parcial)
+
+Se não há menção a JG na sentença, deixar `comentarios_jg: null`.
+
 # 8. SECUNDÁRIAS (incluir somente se a sentença mencionar)
 
 - `salario_familia`, `seguro_desemprego`, `previdencia_privada`, `pensao_alimenticia`: `null` se não mencionado
@@ -497,6 +533,9 @@ Valores de `apuracao.tipo` (usar o mais adequado à sentença):
 - [ ] Cada verba expresso_direto/expresso_adaptado tem `expresso_alvo` válido
 - [ ] Cada reflexo tem `expresso_reflex_alvo` no formato "X SOBRE Y"
 - [ ] Características COMUM/13o/Aviso/Férias com ocorrência derivada correta
+- [ ] Honorários SUCUMBENCIAIS com devedor=RECLAMANTE têm `forma_cobranca="COBRAR"` e `credor.nome="ADVOGADO DO RECLAMADO"`
+- [ ] Honorários SUCUMBENCIAIS com devedor=RECLAMADO têm `credor.nome="ADVOGADO DO RECLAMANTE"`
+- [ ] Se reclamante tem JG e é condenado em sucumbenciais → `parametros_calculo.comentarios_jg` preenchido com texto de suspensão
 
 Lembre-se: SOMENTE JSON na resposta. Sem texto extra."""
 
