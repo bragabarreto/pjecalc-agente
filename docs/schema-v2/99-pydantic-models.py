@@ -1065,12 +1065,29 @@ class PreviaCalculoV2(BaseModel):
                     f"Histórico salarial termina em {ult_competencia_fim} mas cálculo vai até {self.parametros_calculo.data_termino_calculo}"
                 )
 
-        # 2. Verbas com valor=INFORMADO têm valor preenchido
+        # 2. Verbas com valor=INFORMADO têm valor preenchido (> 0)
+        # Sem isso, o PJE-Calc rejeita liquidação com "Para apurar a verba informada
+        # X deve existir pelo menos uma ocorrência com valor diferente de zero"
         for v in self.verbas_principais:
-            if v.parametros.valor == TipoValor.INFORMADO:
-                if not isinstance(v.parametros.valor_devido, ValorDevidoInformado):
+            p = v.parametros
+            if p.valor == TipoValor.INFORMADO:
+                if not isinstance(p.valor_devido, ValorDevidoInformado):
                     self.meta.validacao.campos_faltantes.append(
-                        f"verbas_principais[{v.id}].parametros.valor_devido.valor_informado_brl"
+                        f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
+                        f"valor=INFORMADO requer valor_devido com valor_informado_brl > 0"
+                    )
+                elif p.valor_devido.valor_informado_brl <= 0:
+                    self.meta.validacao.campos_faltantes.append(
+                        f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
+                        f"valor_informado_brl deve ser > 0 (atual: {p.valor_devido.valor_informado_brl}). "
+                        f"PJE-Calc rejeita liquidação de verba INFORMADO sem valor."
+                    )
+            elif p.valor == TipoValor.CALCULADO:
+                # CALCULADO requer formula_calculado com base+divisor+multiplicador+quantidade
+                if not p.formula_calculado:
+                    self.meta.validacao.campos_faltantes.append(
+                        f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
+                        f"valor=CALCULADO requer formula_calculado completa"
                     )
 
         if avisos:
