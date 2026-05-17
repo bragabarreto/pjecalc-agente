@@ -322,6 +322,24 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(data.get("correcao_juros_multa"), dict):
         data["correcao_juros_multa"] = _norm_correcao(data["correcao_juros_multa"])
 
+    # 4b. Cartão de Ponto — campos HH:MM nulos → default "00:00"
+    cp = data.get("cartao_de_ponto")
+    if isinstance(cp, dict):
+        jp = cp.get("jornada_padrao")
+        if isinstance(jp, dict):
+            _JP_DEFAULTS: dict[str, str] = {
+                "segunda_hhmm": "08:00",
+                "terca_hhmm":   "08:00",
+                "quarta_hhmm":  "08:00",
+                "quinta_hhmm":  "08:00",
+                "sexta_hhmm":   "08:00",
+                "sabado_hhmm":  "00:00",
+                "domingo_hhmm": "00:00",
+            }
+            for campo, default in _JP_DEFAULTS.items():
+                if jp.get(campo) is None:
+                    jp[campo] = default
+
     # 5. Enums de fórmula CALCULADO — mapear variantes geradas pelo Projeto Claude
     #    para os valores canônicos do Pydantic (idempotente).
     _DIVISOR_MAP = {
