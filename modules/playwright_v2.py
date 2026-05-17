@@ -2435,15 +2435,73 @@ class PlaywrightAutomatorV2:
 
         self.log("Fase 5 — Cartão de Ponto")
         self._navegar_menu("li_calculo_cartao_ponto")
+        self._aguardar_ajax(3000)
 
-        # Clicar em Novo para abrir formulário de criação
-        try:
-            novo_btn = self._page.locator("input[value='Novo'], button:has-text('Novo')").first
-            novo_btn.click(force=True)
-            self._aguardar_ajax(5000)
-        except Exception as e:
-            self.log(f"  ⚠ Botão Novo não encontrado: {e} — pulando Cartão de Ponto")
-            return
+        # Clicar em Novo para abrir formulário de criação.
+        # A listagem (cartaodeponto.jsf) tem 3 botões: Novo / Grade de Ocorrências / Visualizar Cartão.
+        # Usar seletor restrito ao painel principal e fallback via JS por value="Novo".
+        ja_no_form = self._page.locator("[id$='competenciaInicialInputDate']").count() > 0
+        if not ja_no_form:
+            clicou_novo = False
+            for sel in [
+                "input[type='button'][value='Novo']:not([id*='menu'])",
+                "input[type='submit'][value='Novo']:not([id*='menu'])",
+                "form input[value='Novo']",
+            ]:
+                try:
+                    loc = self._page.locator(sel).first
+                    if loc.count() > 0:
+                        loc.click(force=True)
+                        clicou_novo = True
+                        self.log(f"  → click 'Novo' via {sel!r}")
+                        break
+                except Exception:
+                    continue
+            # Fallback JS: localizar input/button cujo texto/value seja exatamente "Novo"
+            # e que esteja dentro do form principal (não no menu lateral)
+            if not clicou_novo:
+                try:
+                    self._page.evaluate("""
+                        () => {
+                          const candidatos = Array.from(document.querySelectorAll(
+                            "input[value='Novo'], button"
+                          )).filter(el => {
+                            const txt = (el.value || el.textContent || '').trim();
+                            return txt === 'Novo' && !el.closest('[id*=menu]');
+                          });
+                          if (candidatos[0]) candidatos[0].click();
+                        }
+                    """)
+                    clicou_novo = True
+                    self.log("  → click 'Novo' via JS-fallback")
+                except Exception as e:
+                    self.log(f"  ⚠ Botão 'Novo' não encontrado nem via JS: {e}")
+
+            # Aguardar navegação para o formulário Novo
+            self._aguardar_ajax(4000)
+            try:
+                self._page.wait_for_selector(
+                    "[id$='competenciaInicialInputDate']", state="visible", timeout=10000
+                )
+            except Exception:
+                # Fallback final: navegar diretamente para apuracao-cartaodeponto.jsf
+                conv_id = getattr(self, "_calculo_conversation_id", None)
+                if conv_id:
+                    base = self._page.url.split("/pjecalc/")[0]
+                    direct = f"{base}/pjecalc/pages/cartaodeponto/apuracao-cartaodeponto.jsf?conversationId={conv_id}"
+                    self.log(f"  → fallback URL direto: {direct}")
+                    self._page.goto(direct, wait_until="domcontentloaded")
+                    self._aguardar_ajax(3000)
+                    try:
+                        self._page.wait_for_selector(
+                            "[id$='competenciaInicialInputDate']", state="visible", timeout=10000
+                        )
+                    except Exception as e:
+                        self.log(f"  ⚠ Formulário Novo não carregou após fallback URL: {e} — pulando Cartão de Ponto")
+                        return
+                else:
+                    self.log("  ⚠ Formulário Novo não carregou e não há conversationId — pulando Cartão de Ponto")
+                    return
 
         # ── Período ──────────────────────────────────────────────────────────
         if cp.data_inicial:
