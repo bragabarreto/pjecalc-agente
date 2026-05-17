@@ -2800,10 +2800,22 @@ class PlaywrightAutomatorV2:
                             self.log(f"  [DIAG-cartao-save] modal: {diag['modal_text']}")
                 except Exception as e_diag:
                     self.log(f"  [DIAG-cartao-save] falha capturar: {e_diag}")
-            # Aplicar overrides via Grade de Ocorrências, se houver
+            # Aplicar overrides via Grade de Ocorrências, se houver.
+            # CRÍTICO: isolar em try/except para evitar invalidar a conv Seam
+            # (sem isso, FGTS/CS/IRPF subsequentes ficam sem bean → liquidação falha).
             overrides = list(getattr(cp, "ocorrencias_override", []) or [])
             if overrides:
-                self._aplicar_ocorrencias_override(overrides)
+                try:
+                    self._aplicar_ocorrencias_override(overrides)
+                except Exception as e_ov:
+                    self.log(f"  ⚠ Overrides falharam (não-crítico): {e_ov}")
+                # SEMPRE retornar para o calculo.jsf via menu para restaurar contexto Seam
+                try:
+                    self._navegar_menu("li_calculo_dados_do_calculo")
+                    self._aguardar_ajax(2000)
+                    self.log("  ✓ Contexto Seam restaurado pós-overrides")
+                except Exception:
+                    pass
             self.log("Fase 5 concluída")
         except Exception as e:
             self.log(f"  ⚠ Fase 5 — Salvar: {e}")
@@ -2822,8 +2834,14 @@ class PlaywrightAutomatorV2:
         # Agrupar por (mes, ano)
         from collections import defaultdict
         por_mes: dict[str, list] = defaultdict(list)
+        def _campo(o, k, default=None):
+            """Acessa campo em Pydantic OU dict, sem quebrar."""
+            if isinstance(o, dict):
+                return o.get(k, default)
+            return getattr(o, k, default)
+
         for oc in overrides:
-            data = getattr(oc, "data", None) or (oc.get("data") if isinstance(oc, dict) else None)
+            data = _campo(oc, "data")
             if not data or "/" not in data:
                 continue
             dd, mm, yyyy = data.split("/")
@@ -2859,14 +2877,14 @@ class PlaywrightAutomatorV2:
                         continue
             # Para cada ocorrência: localizar linha pela data e preencher turnos
             for oc in ocs:
-                data = getattr(oc, "data", None) or oc.get("data")
-                turnos = getattr(oc, "turnos", None) or oc.get("turnos") or []
+                data = _campo(oc, "data")
+                turnos = _campo(oc, "turnos") or []
                 try:
                     row = self._page.locator(f"tr:has(td:has-text('{data}'))").first
                     for t_idx, turno in enumerate(turnos[:6]):
                         m = t_idx + 1
-                        ent = getattr(turno, "entrada", None) or (turno.get("entrada") if isinstance(turno, dict) else "")
-                        sai = getattr(turno, "saida", None) or (turno.get("saida") if isinstance(turno, dict) else "")
+                        ent = _campo(turno, "entrada", "")
+                        sai = _campo(turno, "saida", "")
                         if ent:
                             row.locator(f"input[id$='entrada{m}']").first.fill(ent)
                         if sai:
