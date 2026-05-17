@@ -3628,7 +3628,11 @@ class PlaywrightAutomatorV2:
 
     def fase_custas_judiciais(self) -> None:
         self.log("Fase 12 — Custas Judiciais")
-        self._navegar_menu("li_calculo_custas_judiciais")
+        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean.
+        # CRÍTICO: sem isso os campos dataVencimento* não existem na DOM e ficam
+        # vazios → liquidação rejeita por "Vencimento deve ser >= {data}".
+        if not self._navegar_menu_via_click("li_calculo_custas_judiciais"):
+            self._navegar_menu("li_calculo_custas_judiciais")
         self._aguardar_ajax(6000)
         self._page.wait_for_timeout(800)
         _n_cst = self._page.evaluate(
