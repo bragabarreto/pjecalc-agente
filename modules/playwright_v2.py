@@ -2535,7 +2535,14 @@ class PlaywrightAutomatorV2:
 
         # ── Jornada Padrão ────────────────────────────────────────────────────
         j = cp.jornada_padrao if cp.jornada_padrao else None
-        if j:
+        # Em modo PROGRAMACAO/ESCALA, a fonte de verdade é a tabela detalhada de turnos.
+        # Os campos "Jornada Diária Padrão" (Seg-Dom) e os totais Jornada Semanal/Mensal
+        # têm DEFAULTS no PJE-Calc consistentes com qtJornadaSemanal=44 (Sáb=08:00).
+        # Sobrescrevê-los com valores inconsistentes (ex.: Sáb=00:00 + Sem=44,00) faz
+        # o backend disparar "Erro inesperado JSF" no save.
+        # Estratégia: só preencher esses campos no modo LIVRE (fora dele, deixar defaults).
+        modo_atual = getattr(cp, "preenchimento", "LIVRE")
+        if j and modo_atual == "LIVRE":
             self._preencher("valorJornadaSegunda", getattr(j, "segunda_hhmm", "08:00"))
             self._preencher("valorJornadaTerca",   getattr(j, "terca_hhmm",   "08:00"))
             self._preencher("valorJornadaQuarta",  getattr(j, "quarta_hhmm",  "08:00"))
@@ -2548,6 +2555,8 @@ class PlaywrightAutomatorV2:
                 self._preencher("qtJornadaSemanal",    j.jornada_semanal, obrigatorio=False)
             if getattr(j, "jornada_mensal_media", None):
                 self._preencher("qtJornadaMensal", j.jornada_mensal_media, obrigatorio=False)
+        elif j:
+            self.log(f"  ℹ Pulando jornada padrão (modo={modo_atual}) — defaults preservados")
         self._marcar_checkbox("jornadaDiariaFeriadoTrabalhado",    cp.jornada_feriado_trabalhado)
         self._marcar_checkbox("jornadaDiariaFeriadoNaoTrabalhado", cp.jornada_feriado_nao_trabalhado)
 
