@@ -314,9 +314,19 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
         "DIARIO":        "OUTRO_VALOR",
     }
     _QUANTIDADE_MAP = {
-        "AVOS_CONTRATO": "AVOS",
-        "AVOS_PROPORCIONAL": "AVOS",
-        "CALCULADA":    "APURADA",
+        "AVOS_CONTRATO":         "AVOS",
+        "AVOS_PROPORCIONAL":     "AVOS",
+        "CALCULADA":             "APURADA",
+        "DIAS_UTEIS_TRABALHADOS": "INFORMADA",
+        "DIAS_TRABALHADOS":      "INFORMADA",
+        "DIAS_CORRIDOS":         "INFORMADA",
+    }
+    # base_calculo.tipo (TipoBaseTabelada): OUTRO_VALOR não é válido aqui —
+    # o Projeto Claude usa OUTRO_VALOR quando não sabe qual base usar;
+    # padronizar para HISTORICO_SALARIAL (base mais comum).
+    _BASE_CALCULO_MAP = {
+        "OUTRO_VALOR": "HISTORICO_SALARIAL",
+        "SALARIO_BASE": "HISTORICO_SALARIAL",
     }
     for v in data.get("verbas_principais", []):
         if not isinstance(v, dict):
@@ -337,5 +347,8 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
             qtd = fc.get("quantidade")
             if isinstance(qtd, dict) and qtd.get("tipo") in _QUANTIDADE_MAP:
                 qtd["tipo"] = _QUANTIDADE_MAP[qtd["tipo"]]
+            bc = fc.get("base_calculo")
+            if isinstance(bc, dict) and bc.get("tipo") in _BASE_CALCULO_MAP:
+                bc["tipo"] = _BASE_CALCULO_MAP[bc["tipo"]]
 
     return data
