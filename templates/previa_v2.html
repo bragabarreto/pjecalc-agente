@@ -593,11 +593,65 @@ details.fieldgroup[open] { border-color: #adb5bd; }
           <div class="fieldgroup-title">Preenchimento de Jornadas</div>
           <div class="campo">
             <label>Modo de preenchimento</label>
-            <select data-campo="cartao_de_ponto.preenchimento">
+            <select data-campo="cartao_de_ponto.preenchimento" onchange="cpTrocarModo(this.value)">
               <option value="LIVRE">Livre</option>
               <option value="PROGRAMACAO">Programação Semanal</option>
               <option value="ESCALA">Escala</option>
             </select>
+          </div>
+        </div>
+
+        <!-- ── Programação Semanal — tabela 8 linhas × 12 colunas ─────── -->
+        <div class="fieldgroup" id="cp-bloco-programacao" style="margin-top:10px; display:none;">
+          <div class="fieldgroup-title">Programação Semanal (8 dias × até 6 turnos)</div>
+          <div id="cp-tabela-programacao" style="overflow-x:auto;">
+            <!-- renderizado por renderProgramacaoSemanal() -->
+          </div>
+        </div>
+
+        <!-- ── Escala — tipo + início + qtd dias + tabela N×12 ────────── -->
+        <div class="fieldgroup" id="cp-bloco-escala" style="margin-top:10px; display:none;">
+          <div class="fieldgroup-title">Escala</div>
+          <div class="grid-3">
+            <div class="campo">
+              <label>Tipo de Escala</label>
+              <select data-campo="cartao_de_ponto.escala.tipo" onchange="cpEscalaTipoChange(this.value)">
+                <option value="OUTRA">Outra</option>
+                <option value="DOZE_POR_DOZE">12x12</option>
+                <option value="DOZE_POR_VINTE_QUATRO">12x24</option>
+                <option value="DOZE_POR_TRINTA_E_SEIS">12x36</option>
+                <option value="DOZE_POR_QUARENTA_E_OITO">12x48</option>
+                <option value="CINCO_POR_UM">5x1</option>
+                <option value="SEIS_POR_UM">6x1</option>
+                <option value="OITO_DOIS">8x2</option>
+              </select>
+            </div>
+            <div class="campo">
+              <label>Início Escala (DD/MM/YYYY)</label>
+              <input type="text" data-campo="cartao_de_ponto.escala.inicio" placeholder="01/01/2020">
+            </div>
+            <div class="campo">
+              <label>Quantidade de Dias do Ciclo</label>
+              <input type="number" min="1" data-campo="cartao_de_ponto.escala.quantidade_dias"
+                onchange="cpEscalaResize(parseInt(this.value)||1)">
+            </div>
+          </div>
+          <div id="cp-tabela-escala" style="overflow-x:auto; margin-top:8px;">
+            <!-- renderizado por renderEscala() -->
+          </div>
+        </div>
+
+        <!-- ── Ocorrências Override — JORNADAS IRREGULARES ───────────── -->
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Ocorrências Manuais (jornadas irregulares)
+            <button type="button" onclick="cpAdicionarOcorrencia()" style="float:right;font-size:0.8rem;padding:2px 8px;">+ Adicionar</button>
+          </div>
+          <div style="font-size:0.85em; color:#666; margin-bottom:6px;">
+            Use para sobrescrever a jornada padrão em datas específicas (ex: sábados alternados,
+            plantões, dias de greve). Cada item é aplicado na Grade de Ocorrências do PJE-Calc.
+          </div>
+          <div id="cp-ocorrencias-lista">
+            <!-- renderizado por renderOcorrenciasOverride() -->
           </div>
         </div>
       </div>
@@ -1233,10 +1287,176 @@ function carregarPrevia() {
   renderHonorarios();
   renderMultas();
   renderPP();
+  // Cartão de Ponto — modo de preenchimento + tabelas
+  const _modoEl = document.querySelector('[data-campo="cartao_de_ponto.preenchimento"]');
+  if (_modoEl) cpTrocarModo(_modoEl.value || 'LIVRE');
+  renderProgramacaoSemanal();
+  renderEscala();
+  renderOcorrenciasOverride();
   // toggle dependentes IRPF
   const _depEl = document.querySelector('[data-campo="imposto_de_renda.possui_dependentes"]');
   if (_depEl) toggleDependentes(_depEl.checked);
   validarPrevia();
+}
+
+// ─── Cartão de Ponto — Programação Semanal / Escala / Overrides ─────────
+const _CP_DIAS = ['segunda','terca','quarta','quinta','sexta','sabado','domingo','feriado'];
+const _CP_DIAS_LABEL = {segunda:'Segunda',terca:'Terça',quarta:'Quarta',quinta:'Quinta',sexta:'Sexta',sabado:'Sábado',domingo:'Domingo',feriado:'Feriado'};
+
+function _cpEnsureCartao() {
+  if (!previaData.cartao_de_ponto) previaData.cartao_de_ponto = {};
+  return previaData.cartao_de_ponto;
+}
+
+function cpTrocarModo(modo) {
+  _cpEnsureCartao().preenchimento = modo;
+  document.getElementById('cp-bloco-programacao').style.display = (modo === 'PROGRAMACAO') ? 'block' : 'none';
+  document.getElementById('cp-bloco-escala').style.display = (modo === 'ESCALA') ? 'block' : 'none';
+  if (modo === 'PROGRAMACAO' && !_cpEnsureCartao().programacao_semanal) {
+    _cpEnsureCartao().programacao_semanal = {};
+    _CP_DIAS.forEach(d => { _cpEnsureCartao().programacao_semanal[d] = {turnos: []}; });
+  }
+  if (modo === 'ESCALA' && !_cpEnsureCartao().escala) {
+    _cpEnsureCartao().escala = {tipo:'OUTRA', inicio:'', quantidade_dias:1, jornadas:[{turnos:[]}]};
+  }
+  renderProgramacaoSemanal();
+  renderEscala();
+}
+
+function renderProgramacaoSemanal() {
+  const cp = _cpEnsureCartao();
+  const ps = cp.programacao_semanal;
+  const cont = document.getElementById('cp-tabela-programacao');
+  if (!cont) return;
+  if (!ps) { cont.innerHTML = ''; return; }
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85em;">';
+  html += '<thead><tr><th style="text-align:left;padding:4px;">Dia</th>';
+  for (let m = 1; m <= 6; m++) {
+    html += `<th style="padding:4px;">E${m}</th><th style="padding:4px;">S${m}</th>`;
+  }
+  html += '</tr></thead><tbody>';
+  _CP_DIAS.forEach(d => {
+    const jd = ps[d] || {turnos:[]};
+    if (!ps[d]) ps[d] = jd;
+    html += `<tr><td style="padding:4px;font-weight:600;">${_CP_DIAS_LABEL[d]}</td>`;
+    for (let m = 0; m < 6; m++) {
+      const t = jd.turnos[m] || {entrada:'', saida:''};
+      html += `<td style="padding:2px;"><input type="text" value="${t.entrada||''}" placeholder="--:--" style="width:50px;font-size:0.85em;" onchange="cpProgSetTurno('${d}',${m},'entrada',this.value)"></td>`;
+      html += `<td style="padding:2px;"><input type="text" value="${t.saida||''}" placeholder="--:--" style="width:50px;font-size:0.85em;" onchange="cpProgSetTurno('${d}',${m},'saida',this.value)"></td>`;
+    }
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+}
+
+function cpProgSetTurno(dia, idx, campo, valor) {
+  const ps = _cpEnsureCartao().programacao_semanal;
+  if (!ps[dia]) ps[dia] = {turnos:[]};
+  while (ps[dia].turnos.length <= idx) ps[dia].turnos.push({entrada:'', saida:''});
+  ps[dia].turnos[idx][campo] = valor;
+  // limpar turnos vazios no final
+  while (ps[dia].turnos.length && !ps[dia].turnos[ps[dia].turnos.length-1].entrada && !ps[dia].turnos[ps[dia].turnos.length-1].saida) {
+    ps[dia].turnos.pop();
+  }
+  if (typeof validarPrevia === 'function') validarPrevia();
+}
+
+function cpEscalaTipoChange(tipo) {
+  const cp = _cpEnsureCartao();
+  if (!cp.escala) cp.escala = {tipo, inicio:'', quantidade_dias:1, jornadas:[{turnos:[]}]};
+  cp.escala.tipo = tipo;
+  if (typeof validarPrevia === 'function') validarPrevia();
+}
+
+function cpEscalaResize(n) {
+  const cp = _cpEnsureCartao();
+  if (!cp.escala) cp.escala = {tipo:'OUTRA', inicio:'', quantidade_dias:n, jornadas:[]};
+  cp.escala.quantidade_dias = n;
+  while (cp.escala.jornadas.length < n) cp.escala.jornadas.push({turnos:[]});
+  cp.escala.jornadas.length = n;
+  renderEscala();
+}
+
+function renderEscala() {
+  const cp = _cpEnsureCartao();
+  const esc = cp.escala;
+  const cont = document.getElementById('cp-tabela-escala');
+  if (!cont) return;
+  if (!esc) { cont.innerHTML = ''; return; }
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:0.85em;">';
+  html += '<thead><tr><th style="padding:4px;">Dia</th>';
+  for (let m = 1; m <= 6; m++) html += `<th style="padding:4px;">E${m}</th><th style="padding:4px;">S${m}</th>`;
+  html += '</tr></thead><tbody>';
+  for (let d = 0; d < esc.quantidade_dias; d++) {
+    if (!esc.jornadas[d]) esc.jornadas[d] = {turnos:[]};
+    const jd = esc.jornadas[d];
+    html += `<tr><td style="padding:4px;font-weight:600;">${d+1}</td>`;
+    for (let m = 0; m < 6; m++) {
+      const t = jd.turnos[m] || {entrada:'', saida:''};
+      html += `<td style="padding:2px;"><input type="text" value="${t.entrada||''}" placeholder="--:--" style="width:50px;font-size:0.85em;" onchange="cpEscSetTurno(${d},${m},'entrada',this.value)"></td>`;
+      html += `<td style="padding:2px;"><input type="text" value="${t.saida||''}" placeholder="--:--" style="width:50px;font-size:0.85em;" onchange="cpEscSetTurno(${d},${m},'saida',this.value)"></td>`;
+    }
+    html += '</tr>';
+  }
+  html += '</tbody></table>';
+  cont.innerHTML = html;
+}
+
+function cpEscSetTurno(d, idx, campo, valor) {
+  const esc = _cpEnsureCartao().escala;
+  if (!esc.jornadas[d]) esc.jornadas[d] = {turnos:[]};
+  while (esc.jornadas[d].turnos.length <= idx) esc.jornadas[d].turnos.push({entrada:'', saida:''});
+  esc.jornadas[d].turnos[idx][campo] = valor;
+  while (esc.jornadas[d].turnos.length && !esc.jornadas[d].turnos[esc.jornadas[d].turnos.length-1].entrada && !esc.jornadas[d].turnos[esc.jornadas[d].turnos.length-1].saida) {
+    esc.jornadas[d].turnos.pop();
+  }
+  if (typeof validarPrevia === 'function') validarPrevia();
+}
+
+function renderOcorrenciasOverride() {
+  const cp = _cpEnsureCartao();
+  if (!cp.ocorrencias_override) cp.ocorrencias_override = [];
+  const cont = document.getElementById('cp-ocorrencias-lista');
+  if (!cont) return;
+  const lista = cp.ocorrencias_override;
+  if (!lista.length) { cont.innerHTML = '<div style="font-size:0.85em;color:#999;padding:8px;">Nenhuma ocorrência override.</div>'; return; }
+  let html = '';
+  lista.forEach((oc, i) => {
+    if (!oc.turnos) oc.turnos = [];
+    html += `<div style="border:1px solid #ddd;padding:6px;margin-bottom:6px;border-radius:4px;">`;
+    html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">`;
+    html += `<input type="text" value="${oc.data||''}" placeholder="DD/MM/YYYY" style="width:120px;" onchange="previaData.cartao_de_ponto.ocorrencias_override[${i}].data=this.value;validarPrevia()">`;
+    html += `<button type="button" style="font-size:0.8rem;padding:2px 8px;" onclick="previaData.cartao_de_ponto.ocorrencias_override.splice(${i},1);renderOcorrenciasOverride()">✕ Remover</button>`;
+    html += `</div><div style="display:flex;gap:4px;flex-wrap:wrap;">`;
+    for (let m = 0; m < 6; m++) {
+      const t = oc.turnos[m] || {entrada:'', saida:''};
+      html += `<div style="display:flex;gap:2px;">`;
+      html += `<input type="text" value="${t.entrada||''}" placeholder="E${m+1}" style="width:55px;font-size:0.85em;" onchange="cpOvrSetTurno(${i},${m},'entrada',this.value)">`;
+      html += `<input type="text" value="${t.saida||''}" placeholder="S${m+1}" style="width:55px;font-size:0.85em;" onchange="cpOvrSetTurno(${i},${m},'saida',this.value)">`;
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  });
+  cont.innerHTML = html;
+}
+
+function cpAdicionarOcorrencia() {
+  const cp = _cpEnsureCartao();
+  if (!cp.ocorrencias_override) cp.ocorrencias_override = [];
+  cp.ocorrencias_override.push({data:'', turnos:[]});
+  renderOcorrenciasOverride();
+}
+
+function cpOvrSetTurno(i, idx, campo, valor) {
+  const oc = _cpEnsureCartao().ocorrencias_override[i];
+  if (!oc.turnos) oc.turnos = [];
+  while (oc.turnos.length <= idx) oc.turnos.push({entrada:'', saida:''});
+  oc.turnos[idx][campo] = valor;
+  while (oc.turnos.length && !oc.turnos[oc.turnos.length-1].entrada && !oc.turnos[oc.turnos.length-1].saida) {
+    oc.turnos.pop();
+  }
+  if (typeof validarPrevia === 'function') validarPrevia();
 }
 
 function getValueByPath(obj, path) {

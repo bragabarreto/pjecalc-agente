@@ -2541,6 +2541,53 @@ class PlaywrightAutomatorV2:
         # ── Preenchimento de Jornadas ─────────────────────────────────────────
         preenchimento = getattr(cp, "preenchimento", "LIVRE")
         self._marcar_radio("preenchimentoJornadasCartao", preenchimento)
+        self._aguardar_ajax(1500)
+
+        # ── Programação Semanal — tabela 8 dias × 6 turnos ────────────────────
+        # Mapeamento DOM: formulario:listagemProgramacao:{D}:{entradaM|saidaM}
+        # D=0 Segunda, 1 Terça, ..., 6 Domingo, 7 Feriado; M=1..6
+        if preenchimento == "PROGRAMACAO":
+            ps = getattr(cp, "programacao_semanal", None)
+            if ps:
+                _CP_DIA_IDX = {"segunda":0, "terca":1, "quarta":2, "quinta":3,
+                               "sexta":4, "sabado":5, "domingo":6, "feriado":7}
+                for dia_nome, idx in _CP_DIA_IDX.items():
+                    jd = getattr(ps, dia_nome, None)
+                    if not jd:
+                        continue
+                    for t_idx, turno in enumerate(getattr(jd, "turnos", [])[:6]):
+                        m = t_idx + 1
+                        if getattr(turno, "entrada", ""):
+                            self._preencher(f"listagemProgramacao:{idx}:entrada{m}", turno.entrada, obrigatorio=False)
+                        if getattr(turno, "saida", ""):
+                            self._preencher(f"listagemProgramacao:{idx}:saida{m}",   turno.saida,   obrigatorio=False)
+
+        # ── Escala — tipo + início + qtd_dias + tabela N × 6 turnos ────────────
+        # Mapeamento DOM:
+        #   formulario:escalas (select)
+        #   formulario:valorHoraInicioEscala (text DD/MM/YYYY)
+        #   formulario:qtdDiasTrabalhados (text número)
+        #   formulario:listagemEscala:{D}:{entradaM|saidaM}
+        elif preenchimento == "ESCALA":
+            esc = getattr(cp, "escala", None)
+            if esc:
+                tipo_escala = getattr(esc, "tipo", "OUTRA")
+                if hasattr(tipo_escala, "value"):
+                    tipo_escala = tipo_escala.value
+                self._selecionar("escalas", tipo_escala)
+                self._aguardar_ajax(800)
+                if getattr(esc, "inicio", ""):
+                    self._preencher("valorHoraInicioEscala", esc.inicio, obrigatorio=False)
+                qtd = int(getattr(esc, "quantidade_dias", 1) or 1)
+                self._preencher("qtdDiasTrabalhados", str(qtd), obrigatorio=False)
+                self._aguardar_ajax(800)
+                for d_idx, jd in enumerate(getattr(esc, "jornadas", [])[:qtd]):
+                    for t_idx, turno in enumerate(getattr(jd, "turnos", [])[:6]):
+                        m = t_idx + 1
+                        if getattr(turno, "entrada", ""):
+                            self._preencher(f"listagemEscala:{d_idx}:entrada{m}", turno.entrada, obrigatorio=False)
+                        if getattr(turno, "saida", ""):
+                            self._preencher(f"listagemEscala:{d_idx}:saida{m}",   turno.saida,   obrigatorio=False)
 
         # ── Salvar ────────────────────────────────────────────────────────────
         try:
@@ -2551,9 +2598,86 @@ class PlaywrightAutomatorV2:
                 erro = self._verificar_erro_jsf()
                 if erro:
                     self.log(f"  ⚠ Erro ao salvar Cartão de Ponto: {erro[:200]}")
+            # Aplicar overrides via Grade de Ocorrências, se houver
+            overrides = list(getattr(cp, "ocorrencias_override", []) or [])
+            if overrides:
+                self._aplicar_ocorrencias_override(overrides)
             self.log("Fase 5 concluída")
         except Exception as e:
             self.log(f"  ⚠ Fase 5 — Salvar: {e}")
+
+    def _aplicar_ocorrencias_override(self, overrides: list) -> None:
+        """Aplica overrides de jornada na Grade de Ocorrências (apuracao-cartaodeponto).
+
+        Para cada override (data, turnos), navega para a Grade do mês correspondente,
+        localiza a linha pela data e preenche entradaM/saidaM.
+
+        ⚠️ Mapeamento DOM da Grade ainda PARCIAL — confirmar IDs por inspeção direta.
+        """
+        if not overrides:
+            return
+        self.log(f"  → Aplicando {len(overrides)} ocorrências override na Grade")
+        # Agrupar por (mes, ano)
+        from collections import defaultdict
+        por_mes: dict[str, list] = defaultdict(list)
+        for oc in overrides:
+            data = getattr(oc, "data", None) or (oc.get("data") if isinstance(oc, dict) else None)
+            if not data or "/" not in data:
+                continue
+            dd, mm, yyyy = data.split("/")
+            por_mes[f"{mm}/{yyyy}"].append(oc)
+
+        # Navegar para a Grade — botão "Grade de Ocorrências" na listagem do Cartão de Ponto
+        try:
+            # Voltar à listagem do cartão de ponto (botão Voltar/Fechar ou navegação direta)
+            self._navegar_menu("li_calculo_cartao_ponto")
+            self._aguardar_ajax(2000)
+            grade_btn = self._page.locator(
+                "input[value='Grade de Ocorrências'], button:has-text('Grade de Ocorrências'), a:has-text('Grade de Ocorrências')"
+            ).first
+            grade_btn.click(force=True)
+            self._aguardar_ajax(3000)
+        except Exception as e:
+            self.log(f"  ⚠ Grade de Ocorrências não acessível: {e}")
+            return
+
+        # Para cada mês, selecionar via dropdown Mês/Ano e aplicar overrides
+        for mes_ano, ocs in por_mes.items():
+            try:
+                self._selecionar("mesAno", mes_ano)
+                self._aguardar_ajax(2000)
+            except Exception:
+                # Tentar IDs alternativos do dropdown
+                for alt_id in ("competenciaApuracao", "mesAnoApuracao", "filtroMesAno"):
+                    try:
+                        self._selecionar(alt_id, mes_ano)
+                        self._aguardar_ajax(2000)
+                        break
+                    except Exception:
+                        continue
+            # Para cada ocorrência: localizar linha pela data e preencher turnos
+            for oc in ocs:
+                data = getattr(oc, "data", None) or oc.get("data")
+                turnos = getattr(oc, "turnos", None) or oc.get("turnos") or []
+                try:
+                    row = self._page.locator(f"tr:has(td:has-text('{data}'))").first
+                    for t_idx, turno in enumerate(turnos[:6]):
+                        m = t_idx + 1
+                        ent = getattr(turno, "entrada", None) or (turno.get("entrada") if isinstance(turno, dict) else "")
+                        sai = getattr(turno, "saida", None) or (turno.get("saida") if isinstance(turno, dict) else "")
+                        if ent:
+                            row.locator(f"input[id$='entrada{m}']").first.fill(ent)
+                        if sai:
+                            row.locator(f"input[id$='saida{m}']").first.fill(sai)
+                except Exception as e:
+                    self.log(f"    ⚠ Falha ao aplicar override {data}: {e}")
+            # Salvar mês
+            try:
+                self._clicar("salvar")
+                self._aguardar_ajax(3000)
+            except Exception:
+                pass
+        self.log(f"  ✓ Overrides aplicados")
 
     def fase_faltas(self) -> None:
         self.log("Fase 6 — Faltas")
