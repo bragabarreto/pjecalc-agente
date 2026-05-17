@@ -3881,6 +3881,50 @@ class PlaywrightAutomatorV2:
             raise RuntimeError(f"Liquidação retornou erro: {_liq_result['msgs']}")
         elif _liq_result['tem_pendencia'] and not _liq_result['nao_encontradas']:
             pendencias = _liq_result['msgs']
+            # Capturar detalhes das pendências — clicar em "Verificar Pendências" ou
+            # navegar para sidebar/popup com a tabela de pendências detalhadas.
+            try:
+                self._page.evaluate("""
+                    () => {
+                      // Tentar clicar em qualquer link/botão de "Verificar Pendências"
+                      const cands = [...document.querySelectorAll('a, input, button')]
+                        .filter(el => /verificar.*pend[êe]nc|listar.*pend[êe]nc|pend[êe]nc/i.test(
+                          (el.value || el.textContent || '').trim()
+                        ));
+                      if (cands[0]) cands[0].click();
+                    }
+                """)
+                self._aguardar_ajax(3000)
+            except Exception:
+                pass
+            # Capturar TODAS as tabelas/listas de pendências detalhadas
+            try:
+                detalhes = self._page.evaluate("""() => {
+                    const result = {linhas: [], tabelas: [], modal: null};
+                    // Linhas de tabela com pendência (rich-table)
+                    document.querySelectorAll('table.rich-table tr, table[id*="pendenc"] tr, table[id*="Pendenc"] tr').forEach(tr => {
+                      const cells = [...tr.querySelectorAll('td,th')].map(c => (c.textContent||'').trim()).filter(t => t);
+                      if (cells.length) result.linhas.push(cells.join(' | '));
+                    });
+                    // Texto de modais/dialogs
+                    const modal = document.querySelector('.rf-pp-cnt, .rich-modalpanel-content, .ui-dialog-content');
+                    if (modal) result.modal = (modal.textContent||'').trim().substring(0, 2000);
+                    // Spans com classe de detalhe
+                    document.querySelectorAll('.rich-message-detail, .rf-msg-det, .rf-msgs-det').forEach(el => {
+                      const t = (el.textContent||'').trim();
+                      if (t.length > 5 && t.length < 500) result.tabelas.push(t);
+                    });
+                    return result;
+                }""")
+                self.log(f"  [DIAG-pendencias] tabela_linhas={len(detalhes.get('linhas', []))}")
+                for ln in (detalhes.get('linhas') or [])[:30]:
+                    self.log(f"  [DIAG-pendencias] {ln[:300]}")
+                for tb in (detalhes.get('tabelas') or [])[:10]:
+                    self.log(f"  [DIAG-pendencias] detail: {tb[:250]}")
+                if detalhes.get('modal'):
+                    self.log(f"  [DIAG-pendencias] modal: {detalhes['modal']}")
+            except Exception as e:
+                self.log(f"  ⚠ Falha capturar detalhes de pendências: {e}")
             raise RuntimeError(
                 f"Liquidação retornou pendências (schema v2 deveria ter prevenido):\n"
                 + "\n".join(f"  • {p}" for p in pendencias)
