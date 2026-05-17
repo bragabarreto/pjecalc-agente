@@ -3230,8 +3230,25 @@ class PlaywrightAutomatorV2:
             )
             self.log(f"  [DIAG-fgts-fields] radios+checkboxes na página: {_n_actual}")
             if _n_actual == 0:
-                self.log("  ⚠ Fase 8 FGTS: página renderizou frame mas sem campos FGTS — conv sem bean FGTS, pulando")
-                return
+                # Tentar recuperar conv Seam reabrindo cálculo via Recentes
+                self.log("  ⚠ Fase 8 FGTS: bean ausente — tentando reabrir cálculo via Recentes")
+                try:
+                    if self._reabrir_calculo_via_recentes():
+                        self._navegar_menu("li_calculo_fgts")
+                        self._aguardar_ajax(5000)
+                        _n_retry = self._page.evaluate(
+                            """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
+                        )
+                        self.log(f"  [DIAG-fgts-retry] radios+checkboxes pós-reabrir: {_n_retry}")
+                        if _n_retry == 0:
+                            self.log("  ⚠ Fase 8 FGTS: ainda sem campos após reabrir — pulando")
+                            return
+                    else:
+                        self.log("  ⚠ Reabertura via Recentes falhou — pulando FGTS")
+                        return
+                except Exception as e:
+                    self.log(f"  ⚠ Falha ao reabrir cálculo para FGTS: {e} — pulando")
+                    return
 
         f = self.previa.fgts
         # Cada campo é tolerante (não aborta a fase se faltar um)
@@ -3329,8 +3346,24 @@ class PlaywrightAutomatorV2:
         )
         self.log(f"  [DIAG-cs] radios+checkboxes={_n_cs}")
         if _n_cs == 0:
-            self.log("  ⚠ Fase 9 CS: página sem campos — pulando")
-            return
+            self.log("  ⚠ Fase 9 CS: bean ausente — tentando reabrir cálculo via Recentes")
+            try:
+                if self._reabrir_calculo_via_recentes():
+                    self._navegar_menu("li_calculo_inss")
+                    self._aguardar_ajax(5000)
+                    _n_cs_retry = self._page.evaluate(
+                        """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
+                    )
+                    self.log(f"  [DIAG-cs-retry] radios+checkboxes pós-reabrir: {_n_cs_retry}")
+                    if _n_cs_retry == 0:
+                        self.log("  ⚠ Fase 9 CS: ainda sem campos — pulando")
+                        return
+                else:
+                    self.log("  ⚠ Reabertura falhou — pulando CS")
+                    return
+            except Exception as e:
+                self.log(f"  ⚠ Falha reabrir para CS: {e} — pulando")
+                return
         cs = self.previa.contribuicao_social
         self._marcar_checkbox("apurarInssSeguradoDevido", cs.apurar_segurado_devido)
         self._marcar_checkbox("cobrarDoReclamanteDevido", cs.cobrar_do_reclamante_devido)
@@ -3393,8 +3426,24 @@ class PlaywrightAutomatorV2:
         )
         self.log(f"  [DIAG-irpf] radios+checkboxes={_n_ir}")
         if _n_ir == 0:
-            self.log("  ⚠ Fase 10 IRPF: página sem campos — pulando")
-            return
+            self.log("  ⚠ Fase 10 IRPF: bean ausente — tentando reabrir cálculo via Recentes")
+            try:
+                if self._reabrir_calculo_via_recentes():
+                    self._navegar_menu("li_calculo_irpf")
+                    self._aguardar_ajax(5000)
+                    _n_ir_retry = self._page.evaluate(
+                        """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
+                    )
+                    self.log(f"  [DIAG-irpf-retry] radios+checkboxes pós-reabrir: {_n_ir_retry}")
+                    if _n_ir_retry == 0:
+                        self.log("  ⚠ Fase 10 IRPF: ainda sem campos — pulando")
+                        return
+                else:
+                    self.log("  ⚠ Reabertura falhou — pulando IRPF")
+                    return
+            except Exception as e:
+                self.log(f"  ⚠ Falha reabrir para IRPF: {e} — pulando")
+                return
         ir = self.previa.imposto_de_renda
         self._marcar_checkbox("apurarImpostoRenda", ir.apurar_irpf)
         self._marcar_checkbox("considerarTributacaoEmSeparado", ir.considerar_tributacao_em_separado_rra)
