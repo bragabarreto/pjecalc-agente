@@ -1115,10 +1115,21 @@ class PreviaCalculoV2(BaseModel):
             d_pi = _parse_br(p.periodo_inicio)
             d_pf = _parse_br(p.periodo_fim)
 
+            # AVISO PRÉVIO INDENIZADO projeta o contrato por 30+3/ano (Lei 12.506/2011)
+            # → periodo_fim PODE/DEVE ser data_demissao + N dias (N até 90).
+            # Excluir essas verbas da Regra 1 e validar separadamente o limite legal.
+            is_aviso_previo = (
+                p.caracteristica == CaracteristicaVerba.AVISO_PREVIO
+                or (v.expresso_alvo and "AVISO PRÉVIO" in v.expresso_alvo.upper())
+                or (v.nome_pjecalc and "AVISO PRÉVIO" in v.nome_pjecalc.upper())
+            )
+
             # Regra 1: DESLIGAMENTO + periodo_fim > demissao = ERRO
+            # EXCEÇÃO: AVISO_PREVIO (projeção legal — manual PJE-Calc §3.5)
             if (
                 p.ocorrencia_pagamento == OcorrenciaPagamento.DESLIGAMENTO
                 and d_pf and d_dem and d_pf > d_dem
+                and not is_aviso_previo
             ):
                 self.meta.validacao.campos_faltantes.append(
                     f"verba[{v.id}] '{v.nome_pjecalc or v.nome_sentenca}': ocorrencia_pagamento=DESLIGAMENTO "
@@ -1126,6 +1137,16 @@ class PreviaCalculoV2(BaseModel):
                     f"data_demissao={self.parametros_calculo.data_demissao}. "
                     f"Use ocorrencia_pagamento=MENSAL para verbas pós-contratuais."
                 )
+
+            # Regra 1.1: AVISO PRÉVIO — limite legal de 90 dias (Lei 12.506/2011)
+            if is_aviso_previo and d_pf and d_dem and d_pf > d_dem:
+                delta_dias = (d_pf - d_dem).days
+                if delta_dias > 90:
+                    self.meta.validacao.campos_faltantes.append(
+                        f"verba[{v.id}] AVISO PRÉVIO: projeção de {delta_dias} dias excede o "
+                        f"máximo legal de 90 dias (Lei 12.506/2011 — 30 dias base + 3 dias por "
+                        f"ano completo, limite 90). Ajuste periodo_fim."
+                    )
 
             # Regra 2: periodo_inicio < data_admissao = ERRO
             if d_pi and d_adm and d_pi < d_adm:
