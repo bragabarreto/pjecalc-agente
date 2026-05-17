@@ -306,4 +306,36 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(data.get("correcao_juros_multa"), dict):
         data["correcao_juros_multa"] = _norm_correcao(data["correcao_juros_multa"])
 
+    # 5. Enums de fórmula CALCULADO — mapear variantes geradas pelo Projeto Claude
+    #    para os valores canônicos do Pydantic (idempotente).
+    _DIVISOR_MAP = {
+        "PADRAO_MENSAL": "OUTRO_VALOR",   # divisor=30 já deve estar em .valor
+        "MENSAL":        "OUTRO_VALOR",
+        "DIARIO":        "OUTRO_VALOR",
+    }
+    _QUANTIDADE_MAP = {
+        "AVOS_CONTRATO": "AVOS",
+        "AVOS_PROPORCIONAL": "AVOS",
+        "CALCULADA":    "APURADA",
+    }
+    for v in data.get("verbas_principais", []):
+        if not isinstance(v, dict):
+            continue
+        for _key in ("parametros", "parametros_reflexo"):
+            p = v.get(_key)
+            if not isinstance(p, dict):
+                continue
+            fc = p.get("formula_calculado")
+            if not isinstance(fc, dict):
+                continue
+            div = fc.get("divisor")
+            if isinstance(div, dict) and div.get("tipo") in _DIVISOR_MAP:
+                div["tipo"] = _DIVISOR_MAP[div["tipo"]]
+                # PADRAO_MENSAL implica divisor=30 se valor ainda não foi definido
+                if div["tipo"] == "OUTRO_VALOR" and div.get("valor") is None:
+                    div["valor"] = 30.0
+            qtd = fc.get("quantidade")
+            if isinstance(qtd, dict) and qtd.get("tipo") in _QUANTIDADE_MAP:
+                qtd["tipo"] = _QUANTIDADE_MAP[qtd["tipo"]]
+
     return data
