@@ -2654,16 +2654,32 @@ class PlaywrightAutomatorV2:
                     self._aguardar_ajax(3000)
                 _CP_DIA_IDX = {"segunda":0, "terca":1, "quarta":2, "quinta":3,
                                "sexta":4, "sabado":5, "domingo":6, "feriado":7}
+                # CRÍTICO: preencher + Tab para forçar blur natural após cada campo.
+                # Sem isso o JSF backing bean não recebe os valores e o save falha
+                # com "A jornada deve ter pelo menos um período de lançamento" ou NPE.
+                campos_preenchidos: list[str] = []
                 for dia_nome, idx in _CP_DIA_IDX.items():
                     jd = getattr(ps, dia_nome, None)
                     if not jd:
                         continue
                     for t_idx, turno in enumerate(getattr(jd, "turnos", [])[:6]):
                         m = t_idx + 1
-                        if getattr(turno, "entrada", ""):
-                            self._preencher(f"listagemProgramacao:{idx}:entrada{m}", turno.entrada, obrigatorio=False)
-                        if getattr(turno, "saida", ""):
-                            self._preencher(f"listagemProgramacao:{idx}:saida{m}",   turno.saida,   obrigatorio=False)
+                        for campo, valor in (("entrada", getattr(turno, "entrada", "")),
+                                             ("saida",   getattr(turno, "saida",   ""))):
+                            if not valor:
+                                continue
+                            sel = f"[id$='listagemProgramacao:{idx}:{campo}{m}']"
+                            try:
+                                loc = self._page.locator(sel).first
+                                loc.fill(str(valor))
+                                # Disparar input + change + blur via Tab (forma natural)
+                                loc.press("Tab")
+                                campos_preenchidos.append(f"listagemProgramacao:{idx}:{campo}{m}")
+                                self.log(f"  ✓ listagemProgramacao:{idx}:{campo}{m} = {valor}")
+                            except Exception as e:
+                                self.log(f"  ⚠ Falha ao preencher listagemProgramacao:{idx}:{campo}{m}: {e}")
+                self._aguardar_ajax(1500)
+                self.log(f"  ✓ {len(campos_preenchidos)} campos da Programação preenchidos com Tab/blur natural")
 
                 # CRÍTICO: disparar blur+change em TODOS os campos da listagemProgramacao
                 # (preenchidos e vazios), garantindo que o JSF backing bean receba
