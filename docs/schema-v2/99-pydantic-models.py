@@ -965,6 +965,23 @@ class Honorario(BaseModel):
             self.id = "h-" + _h.md5(base.encode()).hexdigest()[:8]
         return self
 
+    @model_validator(mode="after")
+    def _exigir_aliquota_ou_valor(self) -> "Honorario":
+        """PJE-Calc bloqueia liquidação quando honorário CALCULADO não tem
+        alíquota OU honorário INFORMADO não tem valor. Rejeitar a prévia
+        aqui evita falha tardia na automação."""
+        if self.tipo_valor == TipoValor.CALCULADO and self.aliquota_pct is None:
+            raise ValueError(
+                f"Honorário {self.tipo_honorario}/{self.tipo_devedor} CALCULADO "
+                "requer 'aliquota_pct' (percentual da sentença, ex: 0.15 para 15%)."
+            )
+        if self.tipo_valor == TipoValor.INFORMADO and not self.valor_informado_brl:
+            raise ValueError(
+                f"Honorário {self.tipo_honorario}/{self.tipo_devedor} INFORMADO "
+                "requer 'valor_informado_brl' > 0."
+            )
+        return self
+
 
 class CustasJudiciais(BaseModel):
     model_config = ConfigDict(extra="allow")  # tolera valor_informado_brl, base_calculo_informada_brl

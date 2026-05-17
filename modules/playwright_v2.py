@@ -413,6 +413,21 @@ class PlaywrightAutomatorV2:
             loc = self._page.locator(sel)
             if loc.count() > 0:
                 loc.first.click(force=True)
+                # Forçar dispatch dos eventos JSF/RichFaces. force=True às vezes
+                # não dispara `change` nativo, e o a4j:support escuta esse evento
+                # para re-renderizar campos dependentes (ex.: dataVencimento* nas
+                # Custas só aparecem após `change` no radio tipoDeCustas*).
+                try:
+                    loc.first.evaluate(
+                        """el => {
+                            el.checked = true;
+                            el.dispatchEvent(new Event('click', {bubbles: true}));
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                        }"""
+                    )
+                except Exception:
+                    pass
                 self.log(f"  ✓ radio {dom_id} = {valor}")
                 return
         if obrigatorio:
@@ -1918,6 +1933,11 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ✓ valor_informado_brl = {p.valor_devido.valor_informado_brl}")
                 except Exception as e:
                     self.log(f"    ⚠ Falha preencher valor_informado: {e}")
+            # Aguardar AJAX (rerender JSF disparado pelos blurs dos campos
+            # acima) antes de o caller chamar _clicar_salvar_flex. Sem isso, o
+            # botão Salvar pode estar em re-mount e a cascata flex falha com
+            # "Nenhum botão Salvar/Confirmar/Gravar encontrado".
+            self._aguardar_ajax(3000)
             return
 
         # MANUAL ou EXPRESSO_ADAPTADO: configuração completa
@@ -2063,6 +2083,14 @@ class PlaywrightAutomatorV2:
         # Cascata flex: form de parâmetros pode ter botão "Salvar", "Confirmar"
         # ou "Gravar" dependendo da versão/contexto JSF.
         clicou_save = self._clicar_salvar_flex(timeout_ms=8000)
+        if not clicou_save:
+            # Segunda tentativa: aguardar AJAX em voo (rerender pode estar
+            # repondo o botão) e tentar de novo. Observado em EXPRESSO_DIRETO
+            # quando preenchimento de valorInformadoDoDevido dispara blur AJAX
+            # que remove temporariamente o botão Salvar do DOM.
+            self.log(f"  → retry save após AJAX-wait extra")
+            self._aguardar_ajax(5000)
+            clicou_save = self._clicar_salvar_flex(timeout_ms=8000)
         if not clicou_save:
             self.log(f"  ⚠ Parâmetros '{v.nome_pjecalc}': sem botão save — pulando ajuste")
             return

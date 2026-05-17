@@ -746,6 +746,8 @@ Se não há menção a JG na sentença, deixar `comentarios_jg: null`.
 - [ ] Características COMUM/13o/Aviso/Férias com ocorrência derivada correta
 - [ ] Honorários SUCUMBENCIAIS com devedor=RECLAMANTE têm `forma_cobranca="COBRAR"` e `credor.nome="ADVOGADO DO RECLAMADO"`
 - [ ] Honorários SUCUMBENCIAIS com devedor=RECLAMADO têm `credor.nome="ADVOGADO DO RECLAMANTE"`
+- [ ] Cada honorário com `tipo_valor=CALCULADO` tem `aliquota_pct` (ex.: 0.15 para 15%) — sentença sempre fixa a alíquota dos sucumbenciais (art. 791-A CLT: 5% a 15%)
+- [ ] Cada honorário com `tipo_valor=INFORMADO` tem `valor_informado_brl > 0`
 - [ ] Se reclamante tem JG e é condenado em sucumbenciais → `parametros_calculo.comentarios_jg` preenchido com texto de suspensão
 
 Lembre-se: SOMENTE JSON na resposta. Sem texto extra."""
