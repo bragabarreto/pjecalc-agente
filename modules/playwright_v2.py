@@ -230,7 +230,25 @@ class PlaywrightAutomatorV2:
             except Exception as e_rec:
                 self.log(f"  ⚠ Recentes erro: {e_rec} — continuando")
 
+        # ORDEM CONFORME MANUAL OFICIAL PJE-Calc (§"Sequencia de Preenchimento Recomendada"):
+        # 3.Histórico → 4.Verbas → 5.Cartão Ponto → 6.Faltas → 7.Férias → 8.FGTS → 9.CS
+        # → 10.IRPF → 11.Honorários → 12.Custas → 13.Correção → 14.Liquidar
+        #
+        # Verbas vêm ANTES de FGTS/CS/IRPF porque essas fases precisam que a base de
+        # cálculo (verbas + reflexos) esteja populada — sem isso o PJE-Calc não
+        # inicializa os beans dependentes e renderiza as páginas sem campos.
+        #
+        # Como Verbas muda o conv_id (cada Expresso cria nova conv), reabrir via
+        # Recentes APÓS verbas para restaurar conv estável com tudo populado.
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
+        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
+        # Reabertura pós-Verbas: garantir conv estável com base de cálculo populada
+        try:
+            self.log("  → Reabrindo cálculo via Recentes pós-Verbas (restaurar conv)...")
+            if self._reabrir_calculo_via_recentes():
+                self.log(f"  ✓ Conv pós-Verbas: {self._calculo_conversation_id}")
+        except Exception as e:
+            self.log(f"  ⚠ Reabertura pós-Verbas falhou: {e}")
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
         _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
@@ -240,8 +258,6 @@ class PlaywrightAutomatorV2:
         _run_fase("Fase 11 (Honorários)", self.fase_honorarios, bool(self.previa.honorarios))
         _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
         _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
-        # Expresso é a ÚLTIMA fase substantiva — muda conv para conv_expresso
-        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
 
         # Liquidação — tenta mesmo com fases parciais
         try:
