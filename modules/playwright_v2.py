@@ -2597,9 +2597,27 @@ class PlaywrightAutomatorV2:
             self._marcar_checkbox("forcarProrrogacao",               getattr(n, "forcar_prorrogacao", False))
 
         # ── Preenchimento de Jornadas ─────────────────────────────────────────
+        # CRÍTICO: o radio dispara AJAX que renderiza a tabela (listagemProgramacao ou
+        # listagemEscala). Disparar change explicitamente e aguardar a tabela aparecer
+        # antes de tentar preencher os turnos — sem isso, os campos não existem ainda.
         preenchimento = getattr(cp, "preenchimento", "LIVRE")
         self._marcar_radio("preenchimentoJornadasCartao", preenchimento)
-        self._aguardar_ajax(1500)
+        # Disparar evento change para garantir trigger do RichFaces AJAX
+        try:
+            self._page.evaluate("""
+                (val) => {
+                  const r = document.querySelector(
+                    `input[type='radio'][name*='preenchimentoJornadasCartao'][value='${val}']`
+                  );
+                  if (r) {
+                    r.dispatchEvent(new Event('click', {bubbles:true}));
+                    r.dispatchEvent(new Event('change', {bubbles:true}));
+                  }
+                }
+            """, preenchimento)
+        except Exception:
+            pass
+        self._aguardar_ajax(2500)
 
         # ── Programação Semanal — tabela 8 dias × 6 turnos ────────────────────
         # Mapeamento DOM: formulario:listagemProgramacao:{D}:{entradaM|saidaM}
@@ -2607,6 +2625,24 @@ class PlaywrightAutomatorV2:
         if preenchimento == "PROGRAMACAO":
             ps = getattr(cp, "programacao_semanal", None)
             if ps:
+                # Aguardar a tabela renderizar via AJAX (até 10s)
+                try:
+                    self._page.wait_for_selector(
+                        "[id$='listagemProgramacao:0:entrada1']",
+                        state="visible",
+                        timeout=10000,
+                    )
+                except Exception:
+                    self.log("  ⚠ Tabela Programação Semanal não renderizou — tentando recliclar radio")
+                    self._page.evaluate("""
+                        () => {
+                          const r = document.querySelector(
+                            "input[type='radio'][value='PROGRAMACAO']"
+                          );
+                          if (r && !r.checked) r.click();
+                        }
+                    """)
+                    self._aguardar_ajax(3000)
                 _CP_DIA_IDX = {"segunda":0, "terca":1, "quarta":2, "quinta":3,
                                "sexta":4, "sabado":5, "domingo":6, "feriado":7}
                 for dia_nome, idx in _CP_DIA_IDX.items():
@@ -2629,6 +2665,13 @@ class PlaywrightAutomatorV2:
         elif preenchimento == "ESCALA":
             esc = getattr(cp, "escala", None)
             if esc:
+                # Aguardar campos da Escala renderizarem após radio ESCALA
+                try:
+                    self._page.wait_for_selector(
+                        "[id$='escalas']", state="visible", timeout=10000,
+                    )
+                except Exception:
+                    self.log("  ⚠ Campos da Escala não renderizaram após radio ESCALA")
                 tipo_escala = getattr(esc, "tipo", "OUTRA")
                 if hasattr(tipo_escala, "value"):
                     tipo_escala = tipo_escala.value
@@ -2638,7 +2681,15 @@ class PlaywrightAutomatorV2:
                     self._preencher("valorHoraInicioEscala", esc.inicio, obrigatorio=False)
                 qtd = int(getattr(esc, "quantidade_dias", 1) or 1)
                 self._preencher("qtdDiasTrabalhados", str(qtd), obrigatorio=False)
-                self._aguardar_ajax(800)
+                self._aguardar_ajax(1500)
+                try:
+                    self._page.wait_for_selector(
+                        "[id$='listagemEscala:0:entrada1']",
+                        state="visible",
+                        timeout=8000,
+                    )
+                except Exception:
+                    self.log("  ⚠ Tabela Escala não renderizou após qtdDiasTrabalhados")
                 for d_idx, jd in enumerate(getattr(esc, "jornadas", [])[:qtd]):
                     for t_idx, turno in enumerate(getattr(jd, "turnos", [])[:6]):
                         m = t_idx + 1
