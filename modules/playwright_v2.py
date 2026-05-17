@@ -2665,6 +2665,28 @@ class PlaywrightAutomatorV2:
                         if getattr(turno, "saida", ""):
                             self._preencher(f"listagemProgramacao:{idx}:saida{m}",   turno.saida,   obrigatorio=False)
 
+                # CRÍTICO: disparar blur+change em TODOS os campos da listagemProgramacao
+                # (preenchidos e vazios), garantindo que o JSF backing bean receba
+                # strings vazias em vez de null. Sem isso, CartaoDePontoUtils.preencherTurno
+                # dá NullPointerException ao iterar.
+                try:
+                    self._page.evaluate("""
+                        () => {
+                          const inputs = document.querySelectorAll(
+                            "input[id*='listagemProgramacao']"
+                          );
+                          inputs.forEach(el => {
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                          });
+                        }
+                    """)
+                    self._aguardar_ajax(1500)
+                    self.log("  ✓ blur+change disparados em todos os campos listagemProgramacao")
+                except Exception as e:
+                    self.log(f"  ⚠ Falha ao disparar blur na Programação: {e}")
+
         # ── Escala — tipo + início + qtd_dias + tabela N × 6 turnos ────────────
         # Mapeamento DOM:
         #   formulario:escalas (select)
