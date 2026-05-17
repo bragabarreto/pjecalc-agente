@@ -1885,12 +1885,14 @@ class PlaywrightAutomatorV2:
         Em MANUAL: preenchemos tudo (com_identificacao=True).
         """
         p = v.parametros
-        # EXPRESSO_DIRETO: NÃO ALTERAR nada que o Expresso já configurou.
-        # Apenas garantir período correto.
+        # EXPRESSO_DIRETO: NÃO ALTERAR nada que o Expresso já configurou,
+        # MAS preencher valor_informado quando aplicável (sem isso, verbas como
+        # RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA, DANO MORAL ficam com valor 0 →
+        # liquidação rejeita por pendência "deve existir ocorrência com valor != 0").
         if (not com_identificacao
                 and v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_DIRETO):
-            self.log(f"    ℹ EXPRESSO_DIRETO: ajustando apenas período (mantendo config Expresso)")
-            # Ajustar apenas período (datas) — comum ser diferente do default
+            self.log(f"    ℹ EXPRESSO_DIRETO: ajustando período + valor_informado se aplicável")
+            # Ajustar período (datas)
             for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
                 try:
                     if self._page.locator(f"[id$='{sufixo}']").count() > 0:
@@ -1905,6 +1907,17 @@ class PlaywrightAutomatorV2:
                         break
                 except Exception:
                     continue
+            # Preencher valor_informado_brl quando valor=INFORMADO
+            if p.valor == TipoValor.INFORMADO and p.valor_devido and p.valor_devido.valor_informado_brl:
+                try:
+                    self._preencher(
+                        "valorInformadoDoDevido",
+                        _fmt_br(p.valor_devido.valor_informado_brl),
+                        obrigatorio=False,
+                    )
+                    self.log(f"    ✓ valor_informado_brl = {p.valor_devido.valor_informado_brl}")
+                except Exception as e:
+                    self.log(f"    ⚠ Falha preencher valor_informado: {e}")
             return
 
         # MANUAL ou EXPRESSO_ADAPTADO: configuração completa
