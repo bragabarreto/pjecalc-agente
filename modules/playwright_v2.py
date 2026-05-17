@@ -2658,6 +2658,10 @@ class PlaywrightAutomatorV2:
                 # Sem isso o JSF backing bean não recebe os valores e o save falha
                 # com "A jornada deve ter pelo menos um período de lançamento" ou NPE.
                 campos_preenchidos: list[str] = []
+                # Estratégia: fill() + dispatch change + dispatch blur via JS direto
+                # (sem usar Tab, que pode mover foco para campo errado e disparar
+                # AJAX em ordem errada). Aguardar pouco AJAX entre cada campo para
+                # garantir que o RichFaces atualize o backing bean.
                 for dia_nome, idx in _CP_DIA_IDX.items():
                     jd = getattr(ps, dia_nome, None)
                     if not jd:
@@ -2672,14 +2676,22 @@ class PlaywrightAutomatorV2:
                             try:
                                 loc = self._page.locator(sel).first
                                 loc.fill(str(valor))
-                                # Disparar input + change + blur via Tab (forma natural)
-                                loc.press("Tab")
+                                # Disparar change + blur diretamente no campo (sem mudar foco)
+                                # — simula final de digitação humana naquele campo específico.
+                                loc.evaluate("""
+                                  el => {
+                                    el.dispatchEvent(new Event('change', {bubbles:true}));
+                                    el.dispatchEvent(new Event('blur', {bubbles:true}));
+                                  }
+                                """)
+                                # Aguardar AJAX RichFaces processar o blur (pequeno wait)
+                                self._page.wait_for_timeout(200)
                                 campos_preenchidos.append(f"listagemProgramacao:{idx}:{campo}{m}")
                                 self.log(f"  ✓ listagemProgramacao:{idx}:{campo}{m} = {valor}")
                             except Exception as e:
                                 self.log(f"  ⚠ Falha ao preencher listagemProgramacao:{idx}:{campo}{m}: {e}")
-                self._aguardar_ajax(1500)
-                self.log(f"  ✓ {len(campos_preenchidos)} campos da Programação preenchidos com Tab/blur natural")
+                self._aguardar_ajax(2000)
+                self.log(f"  ✓ {len(campos_preenchidos)} campos da Programação preenchidos (change+blur direto)")
 
         # ── Escala — tipo + início + qtd_dias + tabela N × 6 turnos ────────────
         # Mapeamento DOM:
