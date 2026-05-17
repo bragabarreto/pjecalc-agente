@@ -3246,18 +3246,31 @@ class PlaywrightAutomatorV2:
             )
             self.log(f"  [DIAG-fgts-fields] radios+checkboxes na página: {_n_actual}")
             if _n_actual == 0:
-                # Tentar recuperar conv Seam reabrindo cálculo via Recentes
-                self.log("  ⚠ Fase 8 FGTS: bean ausente — tentando reabrir cálculo via Recentes")
+                # Tentar recuperar conv Seam reabrindo + CLICK no menu (não URL direta!)
+                # URL direta com conversationId NÃO dispara init() do bean Seam — só
+                # o click sidebar invoca o handler JSF que carrega o bean.
+                self.log("  ⚠ Fase 8 FGTS: bean ausente — tentando reabrir cálculo + click menu lateral")
                 try:
                     if self._reabrir_calculo_via_recentes():
-                        self._navegar_menu("li_calculo_fgts")
-                        self._aguardar_ajax(5000)
+                        # CLICK NO MENU em vez de URL direta — essencial para Seam init
+                        clicou = self._page.evaluate("""() => {
+                            const li = document.getElementById('li_calculo_fgts');
+                            if (li) { const a = li.querySelector('a'); if (a) { a.click(); return true; } }
+                            return false;
+                        }""")
+                        if clicou:
+                            self._aguardar_ajax(8000)
+                            self._capturar_conversation_id()
+                            self.log(f"  ✓ Click menu FGTS — conv: {self._calculo_conversation_id}")
+                        else:
+                            self.log("  ⚠ li_calculo_fgts não encontrado no menu")
+                            return
                         _n_retry = self._page.evaluate(
                             """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
                         )
-                        self.log(f"  [DIAG-fgts-retry] radios+checkboxes pós-reabrir: {_n_retry}")
+                        self.log(f"  [DIAG-fgts-retry] radios+checkboxes pós-click-menu: {_n_retry}")
                         if _n_retry == 0:
-                            self.log("  ⚠ Fase 8 FGTS: ainda sem campos após reabrir — pulando")
+                            self.log("  ⚠ Fase 8 FGTS: ainda sem campos após click menu — pulando")
                             return
                     else:
                         self.log("  ⚠ Reabertura via Recentes falhou — pulando FGTS")
@@ -3362,15 +3375,21 @@ class PlaywrightAutomatorV2:
         )
         self.log(f"  [DIAG-cs] radios+checkboxes={_n_cs}")
         if _n_cs == 0:
-            self.log("  ⚠ Fase 9 CS: bean ausente — tentando reabrir cálculo via Recentes")
+            self.log("  ⚠ Fase 9 CS: bean ausente — tentando reabrir + click menu (Seam init)")
             try:
                 if self._reabrir_calculo_via_recentes():
-                    self._navegar_menu("li_calculo_inss")
-                    self._aguardar_ajax(5000)
+                    clicou = self._page.evaluate("""() => {
+                        const li = document.getElementById('li_calculo_inss');
+                        if (li) { const a = li.querySelector('a'); if (a) { a.click(); return true; } }
+                        return false;
+                    }""")
+                    if clicou:
+                        self._aguardar_ajax(8000)
+                        self._capturar_conversation_id()
                     _n_cs_retry = self._page.evaluate(
                         """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
                     )
-                    self.log(f"  [DIAG-cs-retry] radios+checkboxes pós-reabrir: {_n_cs_retry}")
+                    self.log(f"  [DIAG-cs-retry] radios+checkboxes pós-click-menu: {_n_cs_retry}")
                     if _n_cs_retry == 0:
                         self.log("  ⚠ Fase 9 CS: ainda sem campos — pulando")
                         return
@@ -3442,15 +3461,21 @@ class PlaywrightAutomatorV2:
         )
         self.log(f"  [DIAG-irpf] radios+checkboxes={_n_ir}")
         if _n_ir == 0:
-            self.log("  ⚠ Fase 10 IRPF: bean ausente — tentando reabrir cálculo via Recentes")
+            self.log("  ⚠ Fase 10 IRPF: bean ausente — tentando reabrir + click menu (Seam init)")
             try:
                 if self._reabrir_calculo_via_recentes():
-                    self._navegar_menu("li_calculo_irpf")
-                    self._aguardar_ajax(5000)
+                    clicou = self._page.evaluate("""() => {
+                        const li = document.getElementById('li_calculo_irpf');
+                        if (li) { const a = li.querySelector('a'); if (a) { a.click(); return true; } }
+                        return false;
+                    }""")
+                    if clicou:
+                        self._aguardar_ajax(8000)
+                        self._capturar_conversation_id()
                     _n_ir_retry = self._page.evaluate(
                         """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
                     )
-                    self.log(f"  [DIAG-irpf-retry] radios+checkboxes pós-reabrir: {_n_ir_retry}")
+                    self.log(f"  [DIAG-irpf-retry] radios+checkboxes pós-click-menu: {_n_ir_retry}")
                     if _n_ir_retry == 0:
                         self.log("  ⚠ Fase 10 IRPF: ainda sem campos — pulando")
                         return
