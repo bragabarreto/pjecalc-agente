@@ -1299,10 +1299,17 @@ class PlaywrightAutomatorV2:
         self._marcar_radio("tipoDocumentoFiscalReclamado", proc.reclamado.doc_fiscal.tipo.value)
         self._preencher("reclamadoNumeroDocumentoFiscal", proc.reclamado.doc_fiscal.numero)
 
-        # Validação de erro inline (sem salvar — save acontece na Fase 2)
-        erro = self._verificar_erro_jsf()
-        if erro:
-            self.log(f"  ⚠ Erro JSF após preencher Dados: {erro[:200]}")
+        # Salvar Dados do Processo — OBRIGATÓRIO antes de fase_parametros_calculo
+        # que chama _navegar_menu → page.goto(), descartando todo estado DOM não salvo.
+        self.log("  → Salvando Dados do Processo...")
+        self._clicar("salvar")
+        self._aguardar_ajax(12000)
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=25000, bloqueante=False)
+        if not sucesso:
+            erro = self._verificar_erro_jsf()
+            if erro:
+                self.log(f"  ⚠ Erro JSF ao salvar Dados do Processo: {erro[:200]}")
+        self._capturar_conversation_id()
         self.log("Fase 1 concluída")
 
     def fase_parametros_calculo(self) -> None:
@@ -1377,8 +1384,20 @@ class PlaywrightAutomatorV2:
         # Carga horária
         self._preencher("valorCargaHorariaPadrao", _fmt_br(pc.carga_horaria.padrao_mensal))
 
-        if pc.comentarios_jg:
-            self._preencher("comentarios", pc.comentarios_jg, obrigatorio=False)
+        # Comentários JG — usa valor explícito; fallback: auto-detecta JG via honorários
+        jg_text = getattr(pc, "comentarios_jg", None)
+        if not jg_text:
+            for hon in self.previa.honorarios:
+                if (getattr(hon, "tipo_honorario", "") == "SUCUMBENCIAIS"
+                        and getattr(hon, "tipo_devedor", "") == "RECLAMANTE"):
+                    jg_text = (
+                        "Suspensão de exigibilidade dos honorários devidos pela parte "
+                        "beneficiária da Justiça Gratuita (art. 791-A, § 4º da CLT)."
+                    )
+                    self.log("  ℹ JG auto-detectado via honorários — preenchendo comentários")
+                    break
+        if jg_text:
+            self._preencher("comentarios", jg_text, obrigatorio=False)
 
         # Salvar — validar persistência via padrão Calc Machine
         self.log("  → Clicando no botão salvar...")
@@ -3081,17 +3100,159 @@ class PlaywrightAutomatorV2:
         self._navegar_menu("li_calculo_correcao_juros_multa")
         self._aguardar_ajax(6000)
         self._page.wait_for_timeout(800)
-        _n_cor = self._page.evaluate(
-            """() => document.querySelectorAll('select').length"""
+
+        _n_campos = self._page.evaluate(
+            """() => document.querySelectorAll('select, input[type=checkbox], input[type=radio]').length"""
         )
-        self.log(f"  [DIAG-correcao] selects={_n_cor}")
-        if _n_cor == 0:
+        self.log(f"  [DIAG-correcao] campos={_n_campos}")
+        if _n_campos == 0:
             self.log("  ⚠ Fase 13 Correção: página sem campos — pulando")
             return
+
         c = self.previa.correcao_juros_multa
-        self._selecionar("indiceTrabalhista", c.indice_trabalhista)
-        self._selecionar("juros", c.juros)
-        self._selecionar("baseDeJurosDasVerbas", c.base_juros_verbas)
+
+        # Mapeamentos JSON → valores DOM (confirmados via dom_map_condensed.json v2.15.1)
+        _INDICE_MAP = {
+            "IPCAE": "IPCA_E", "IPCAETR": "IPCA_E_TR",
+            "IGPM": "IGP_M",
+            "SELIC": "SELIC_SIMPLES", "SELIC_FAZENDA": "SELIC_RECEITA",
+            "SELIC_BACEN": "SELIC_COMPOSTA",
+            "TUACDT": "TABELA_UNICA",
+            "TABELA_DEVEDOR_FAZENDA": "DEVEDOR_FAZENDA_PUBLICA",
+            "TABELA_INDEBITO_TRIBUTARIO": "REPETICAO_INDEBITO_TRIBUTARIO",
+        }
+        _JUROS_MAP = {
+            "JUROS_PADRAO": "PADRAO", "JUROS_POUPANCA": "CADERNETA_POUPANCA",
+            "JUROS_MEIO_PORCENTO": "SIMPLES_0_5_MES",
+            "JUROS_UM_PORCENTO": "SIMPLES_1_MES",
+            "JUROS_ZERO_TRINTA_TRES": "SIMPLES_0_0333333_DIA",
+            "SELIC": "SELIC_SIMPLES", "SELIC_FAZENDA": "SELIC_RECEITA",
+            "SELIC_BACEN": "SELIC_COMPOSTA",
+            "FAZENDA_PUBLICA": "FAZENDA_PUBLICA",
+        }
+        _BASE_JUROS_MAP = {
+            "VERBAS": "VERBA", "VERBA": "VERBA",
+            "VERBA_INSS": "VERBA_MENOS_CS",
+            "VERBA_INSS_PP": "VERBA_MENOS_CS_MENOS_PP",
+        }
+        _FGTS_CORR_MAP = {
+            "UTILIZAR_INDICE_TRABALHISTA": "INDICE_TRABALHISTA",
+            "UTILIZAR_INDICE_JAM": "JAM",
+            "UTILIZAR_INDICE_JAM_E_TRABALHISTA": "JAM_MAIS_TRABALHISTA",
+        }
+
+        # ── Índice de Correção Trabalhista (sufixo real: indiceCorrecao) ─────
+        indice_val = _INDICE_MAP.get(c.indice_trabalhista, c.indice_trabalhista)
+        self._selecionar("indiceCorrecao", indice_val)
+
+        # ── Combinar com segundo índice de correção ──────────────────────────
+        combinar_indice = (
+            getattr(c, "combinar_outro_indice", False)
+            or getattr(c, "combinar_com_outro_indice", False)
+        )
+        segundo = getattr(c, "segundo_indice", None) or getattr(c, "indice_correcao_pos", None)
+        data_inicio_2 = getattr(c, "data_inicio_segundo_indice", None)
+        if combinar_indice and segundo:
+            self._marcar_checkbox("combinarComOutro", True)
+            self._aguardar_ajax(2000)
+            self._selecionar("segundoIndice", _INDICE_MAP.get(segundo, segundo))
+            if data_inicio_2:
+                self._preencher("dataInicioSegundoIndiceInputDate", data_inicio_2, obrigatorio=False)
+
+        # ── Ignorar Taxa Negativa ────────────────────────────────────────────
+        ignorar_neg = getattr(c, "ignorar_taxa_negativa", None)
+        if ignorar_neg is not None:
+            self._marcar_checkbox("ignorarTaxaNegativa", bool(ignorar_neg))
+
+        # ── Taxa de Juros (sufixo real: taxaJuros) ───────────────────────────
+        juros_val = _JUROS_MAP.get(c.juros, c.juros)
+        self._selecionar("taxaJuros", juros_val)
+
+        # ── Combinar com outro juros (Lei 14.905 / taxa a partir de data) ────
+        combinar_juros = (
+            getattr(c, "combinar_com_outro_juros", False)
+            or getattr(c, "combinar_outro_juros", False)
+        )
+        outro_juros = getattr(c, "outro_juros", None)
+        outro_juros_de = getattr(c, "outro_juros_a_partir_de", None)
+        if combinar_juros and outro_juros:
+            self._marcar_checkbox("combinarComOutroJuros", True)
+            self._aguardar_ajax(1500)
+            self._selecionar("outroJuros", _JUROS_MAP.get(outro_juros, outro_juros))
+            if outro_juros_de:
+                self._preencher("outroJurosAPartirDeInputDate", outro_juros_de, obrigatorio=False)
+
+        # ── Lei 14.905 ───────────────────────────────────────────────────────
+        lei_14905 = getattr(c, "lei_14905", None)
+        if lei_14905 is not None:
+            self._marcar_checkbox("lei14905", bool(lei_14905))
+            if lei_14905:
+                data_tl = getattr(c, "data_taxa_legal", None)
+                if data_tl:
+                    self._preencher("dataTaxaLegalInputDate", data_tl, obrigatorio=False)
+
+        # ── Base de Juros das Verbas ─────────────────────────────────────────
+        base_val = _BASE_JUROS_MAP.get(c.base_juros_verbas, c.base_juros_verbas)
+        self._selecionar("baseDeJurosDasVerbas", base_val)
+
+        # ── FGTS: Correção (radio: INDICE_TRABALHISTA / JAM / JAM_MAIS_TRABALHISTA)
+        fgts_c = getattr(c, "fgts", None)
+        if fgts_c:
+            fc_raw = (
+                fgts_c.get("indice_correcao") if isinstance(fgts_c, dict)
+                else getattr(fgts_c, "indice_correcao", None)
+            )
+            if fc_raw:
+                self._marcar_radio("fgtsCorrecao", _FGTS_CORR_MAP.get(fc_raw, fc_raw))
+
+        # ── Lei 11.941/2009 (CS) ─────────────────────────────────────────────
+        lei11941 = getattr(c, "lei_11941", None)
+        if lei11941:
+            lei_ativa = (
+                lei11941.get("correcao_ativa", False) if isinstance(lei11941, dict)
+                else getattr(lei11941, "correcao_ativa", False)
+            )
+            self._marcar_checkbox("lei11941", bool(lei_ativa))
+
+        # ── Previdência Privada ──────────────────────────────────────────────
+        pp = getattr(c, "previdencia_privada", None)
+        if pp:
+            aplicar_juros_pp = (
+                pp.get("aplicar_juros", False) if isinstance(pp, dict)
+                else getattr(pp, "aplicar_juros", False)
+            )
+            indice_pp = (
+                pp.get("indice_correcao") if isinstance(pp, dict)
+                else getattr(pp, "indice_correcao", None)
+            )
+            self._marcar_checkbox("jurosPrevidenciaPrivada", bool(aplicar_juros_pp))
+            if indice_pp:
+                _pp_map = {"UTILIZAR_INDICE_TRABALHISTA": "TRABALHISTA"}
+                self._selecionar("indicePrevidenciaPrivada", _pp_map.get(indice_pp, "TRABALHISTA"))
+
+        # ── Custas ───────────────────────────────────────────────────────────
+        custas_c = getattr(c, "custas", None)
+        if custas_c:
+            corr_ativa = (
+                custas_c.get("correcao_ativa", False) if isinstance(custas_c, dict)
+                else getattr(custas_c, "correcao_ativa", False)
+            )
+            juros_ativos = (
+                custas_c.get("juros_ativos", False) if isinstance(custas_c, dict)
+                else getattr(custas_c, "juros_ativos", False)
+            )
+            indice_custas = (
+                custas_c.get("indice_correcao") if isinstance(custas_c, dict)
+                else getattr(custas_c, "indice_correcao", None)
+            )
+            self._marcar_checkbox("atualizarCustas", bool(corr_ativa))
+            if corr_ativa:
+                self._aguardar_ajax(2000)
+                if indice_custas:
+                    _c_map = {"UTILIZAR_INDICE_TRABALHISTA": "TRABALHISTA"}
+                    self._selecionar("indiceCustas", _c_map.get(indice_custas, "TRABALHISTA"))
+            self._marcar_checkbox("jurosCustas", bool(juros_ativos))
+
         self._clicar("salvar")
         self._aguardar_ajax(8000)
         self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
