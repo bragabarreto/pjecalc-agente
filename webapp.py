@@ -3101,6 +3101,56 @@ async def logs_python(linhas: int = 100):
     return {"log": "\n".join(_python_log_buffer[-linhas:]) or "(sem logs registrados ainda)"}
 
 
+# ─── PJE-Calc Proxy — acesso manual ao Tomcat localhost:9257 ────────────────
+import httpx as _httpx_proxy
+from fastapi import Request as _FastAPIRequest, Response as _FastAPIResponse
+from fastapi.responses import StreamingResponse as _StreamingResponse
+
+@app.api_route("/pjecalc-proxy/{path:path}", methods=["GET", "POST", "PUT", "DELETE"])
+async def pjecalc_proxy(path: str, request: _FastAPIRequest):
+    """Proxy reverso para o Tomcat embarcado em localhost:9257.
+
+    Permite inspeção manual do PJE-Calc do navegador externo. Faz pass-through
+    de headers, query, body e cookies — preservando a sessão Seam.
+    Reescreve URLs absolutas localhost:9257 → /pjecalc-proxy/ nas responses HTML.
+    """
+    upstream_url = f"http://localhost:9257/{path}"
+    if request.url.query:
+        upstream_url += f"?{request.url.query}"
+    # Forward headers (exceto host) + cookies
+    headers = {k: v for k, v in request.headers.items()
+               if k.lower() not in ("host", "content-length")}
+    body = await request.body()
+    try:
+        async with _httpx_proxy.AsyncClient(timeout=30.0, follow_redirects=False) as client:
+            resp = await client.request(
+                method=request.method,
+                url=upstream_url,
+                headers=headers,
+                content=body,
+                cookies=request.cookies,
+            )
+        # Reescrever URLs absolutas em respostas HTML para passar pelo proxy
+        resp_headers = {k: v for k, v in resp.headers.items()
+                        if k.lower() not in ("content-encoding", "transfer-encoding", "content-length")}
+        content_type = resp.headers.get("content-type", "")
+        body_out = resp.content
+        if "text/html" in content_type or "text/css" in content_type or "javascript" in content_type:
+            try:
+                text = body_out.decode(resp.encoding or "ISO-8859-1", errors="replace")
+                text = text.replace("http://localhost:9257/", "/pjecalc-proxy/")
+                text = text.replace("https://localhost:9257/", "/pjecalc-proxy/")
+                # URLs relativas começando com /pjecalc/ → /pjecalc-proxy/pjecalc/
+                # mas só se forem links/forms (cuidado com ":" de timestamps etc)
+                body_out = text.encode("utf-8")
+                resp_headers["content-type"] = content_type.split(";")[0] + "; charset=utf-8"
+            except Exception:
+                pass
+        return _FastAPIResponse(content=body_out, status_code=resp.status_code, headers=resp_headers)
+    except Exception as e:
+        return _FastAPIResponse(content=f"Proxy error: {e}".encode(), status_code=502)
+
+
 # ─── Item 8: erros de mapping DOM (modo tolerante) ─────────────────────────
 
 import re as _re_em

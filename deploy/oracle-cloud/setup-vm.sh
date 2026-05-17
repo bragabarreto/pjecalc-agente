@@ -53,14 +53,16 @@ echo "[5/5] Configurando firewall..."
 # Oracle Linux usa firewalld
 if command -v firewall-cmd &>/dev/null; then
     sudo firewall-cmd --permanent --add-port=8000/tcp
+    sudo firewall-cmd --permanent --add-port=9257/tcp
     sudo firewall-cmd --permanent --add-port=80/tcp
     sudo firewall-cmd --permanent --add-port=443/tcp
     sudo firewall-cmd --reload
-    echo "  Portas 80, 443, 8000 abertas no firewalld"
+    echo "  Portas 80, 443, 8000, 9257 abertas no firewalld"
 fi
 
 # iptables (fallback / regras internas Oracle Cloud)
 sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 8000 -j ACCEPT 2>/dev/null || true
+sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 9257 -j ACCEPT 2>/dev/null || true
 sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
 sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
 
