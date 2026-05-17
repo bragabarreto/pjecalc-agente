@@ -421,29 +421,90 @@ Deixar `null` quando:
 ```json
 {
   "data_inicial": "DD/MM/YYYY",
-  "data_final":   "DD/MM/YYYY",
+  "data_final": "DD/MM/YYYY",
+
   "apuracao": {
-    "tipo": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL"
+    "tipo": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
+    "qtsumulatst": null,
+    "qthoraseparado": null
   },
+
+  "considerar_feriados": true,
+  "extras_feriados_separado": false,
+  "extras_domingos_separado": false,
+  "extras_sabados_domingos_separado": false,
+
+  "tolerancia_ativa": false,
+  "tolerancia_por_turno": "00:05",
+  "tolerancia_por_dia": "00:10",
+
   "jornada_padrao": {
     "segunda_hhmm": "08:00",
     "terca_hhmm":   "08:00",
     "quarta_hhmm":  "08:00",
     "quinta_hhmm":  "08:00",
     "sexta_hhmm":   "08:00",
-    "sabado_hhmm":  "04:00",
-    "domingo_hhmm": null
-  }
+    "sabado_hhmm":  "00:00",
+    "domingo_hhmm": "00:00"
+  },
+
+  "jornada_feriado_trabalhado": false,
+  "jornada_feriado_nao_trabalhado": false,
+
+  "descanso": {
+    "apurar_feriados_trabalhados": false,
+    "apurar_domingos_trabalhados": false,
+    "apurar_sabados_domingos": false,
+    "apurar_intervalo_384": false,
+    "apurar_intervalo_72": false,
+    "apurar_intervalo_insalubridade": false,
+    "tempo_trabalho_art253": "01:40",
+    "tempo_descanso_art253": "00:20",
+    "descanso_entre_jornadas": false,
+    "valor_descanso_entre_jornadas": "11:00",
+    "valor_descanso_entre_semanas": "35:00",
+    "intervalo_sup_4h_6h": false,
+    "tolerancia_sup_4h_6h": "00:15",
+    "intervalo_sup_6h": false,
+    "valor_intervalo_sup_6h": "01:00",
+    "tolerancia_sup_6h": "00:05",
+    "considerar_fracionamento": false,
+    "apurar_supressao_integral": false,
+    "apurar_supressao_reforma": false,
+    "apurar_excesso_sumula118": false,
+    "valor_intervalo_max_sumula118": "02:00",
+    "apurar_apenas_excesso_jornada": false
+  },
+
+  "noturno": {
+    "tipo_atividade": "ATIVIDADE_URBANA",
+    "apurar_horas_noturnas": false,
+    "apurar_horas_extras_noturnas": false,
+    "reducao_ficta": true,
+    "horario_prorrogado_sumula60": false,
+    "forcar_prorrogacao": false
+  },
+
+  "preenchimento": "LIVRE"
 }
 ```
 
-Valores de `apuracao.tipo` (usar o mais adequado à sentença):
+**`apuracao.tipo`** — escolher o mais adequado à sentença:
 - `HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL` — padrão; PJE-Calc compara diária vs semanal
-- `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA` — só conta excedentes do limite diário
-- `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL` — só conta excedentes do limite semanal
+- `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA` — excedentes do limite diário
+- `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL` — excedentes do limite semanal
+- `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL` — excedentes do limite mensal
 - `HORAS_EXTRAS_CONFORME_SUMULA_85` — escalas especiais com RSR compensado
+- `APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO` — primeiras HE em separado
+- `NAO_APURAR_HORAS_EXTRAS` — sem apuração de HE
 
-`data_inicial`/`data_final`: mesmas datas da verba HE no JSON (`periodo_inicio`/`periodo_fim`).
+**`noturno.tipo_atividade`** ∈ {`ATIVIDADE_URBANA`, `ATIVIDADE_AGRICOLA`, `ATIVIDADE_PECUARIA`}
+**`preenchimento`** ∈ {`LIVRE`, `PROGRAMACAO`, `ESCALA`} — padrão: `LIVRE`
+
+`data_inicial`/`data_final`: mesmas datas da verba HE (`periodo_inicio`/`periodo_fim`).
+
+Preencher `descanso` e `noturno` somente quando a sentença mencionar expressamente
+supressão de intervalos ou trabalho noturno. Caso contrário, deixar `null`.
 
 # 6. FALTAS, FERIAS
 

@@ -565,10 +565,110 @@ class VerbaPrincipal(BaseModel):
 # Cada um é um BaseModel com campos correspondentes ao schema docs/schema-v2/.
 
 
-class CartaoDePonto(BaseModel):
-    """Ver doc 05-cartao-ponto.md para schema completo (63 campos)."""
+class CartaoDePontoApuracao(BaseModel):
+    """Critérios de apuração de HE — mapeado para tipoApuracaoHorasExtras no DOM."""
+    tipo: str = "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL"
+    # Valores: NAO_APURAR_HORAS_EXTRAS | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA |
+    # HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL | HORAS_EXTRAS_CONFORME_SUMULA_85 |
+    # APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO | HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL |
+    # HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL
+    qtsumulatst: Optional[str] = None       # HH:MM — para SUMULA_85 (default "02:00")
+    qthoraseparado: Optional[str] = None    # HH:MM — para PRIMEIRAS_HE_EM_SEPARADO
 
-    model_config = ConfigDict(extra="allow")  # permite campos extras durante implementação
+
+class CartaoDePontoJornada(BaseModel):
+    """Jornada diária padrão por dia da semana (HH:MM)."""
+    segunda_hhmm: str = "08:00"
+    terca_hhmm: str = "08:00"
+    quarta_hhmm: str = "08:00"
+    quinta_hhmm: str = "08:00"
+    sexta_hhmm: str = "08:00"
+    sabado_hhmm: str = "00:00"
+    domingo_hhmm: str = "00:00"
+
+
+class CartaoDePontoDescanso(BaseModel):
+    """Períodos de descanso — seções Descanso + Interjornadas + Intrajornada."""
+    # Descanso semanal
+    apurar_feriados_trabalhados: bool = False
+    apurar_domingos_trabalhados: bool = False
+    apurar_sabados_domingos: bool = False
+    # Intervalos especiais (Art. 384, 72, 253 CLT)
+    apurar_intervalo_384: bool = False
+    apurar_intervalo_72: bool = False
+    apurar_intervalo_insalubridade: bool = False
+    tempo_trabalho_art253: str = "01:40"
+    tempo_descanso_art253: str = "00:20"
+    # Interjornadas
+    descanso_entre_jornadas: bool = False
+    valor_descanso_entre_jornadas: str = "11:00"   # select: 10:00|11:00|12:00|14:00|17:00
+    valor_descanso_entre_semanas: str = "35:00"    # select: 35:00|11:00
+    # Intrajornada >4h até 6h
+    intervalo_sup_4h_6h: bool = False
+    tolerancia_sup_4h_6h: str = "00:15"
+    # Intrajornada >6h
+    intervalo_sup_6h: bool = False
+    valor_intervalo_sup_6h: str = "01:00"
+    tolerancia_sup_6h: str = "00:05"
+    # Outros intrajornada
+    considerar_fracionamento: bool = False
+    apurar_supressao_integral: bool = False
+    apurar_supressao_reforma: bool = False          # §4º Art. 71 CLT
+    apurar_excesso_sumula118: bool = False
+    valor_intervalo_max_sumula118: str = "02:00"
+    apurar_apenas_excesso_jornada: bool = False
+
+
+class CartaoDePontoNoturno(BaseModel):
+    """Horário noturno."""
+    tipo_atividade: str = "ATIVIDADE_URBANA"  # ATIVIDADE_AGRICOLA|ATIVIDADE_PECUARIA|ATIVIDADE_URBANA
+    apurar_horas_noturnas: bool = False
+    apurar_horas_extras_noturnas: bool = False
+    reducao_ficta: bool = True                      # default ligado no PJE-Calc
+    horario_prorrogado_sumula60: bool = False
+    forcar_prorrogacao: bool = False
+
+
+class CartaoDePonto(BaseModel):
+    """Cartão de Ponto — espelha o formulário Novo do PJE-Calc Cidadão v2.15.1.
+
+    Mapeamento DOM: formulario:<campo> em cartaodeponto/apuracao-cartaodeponto.jsf
+    """
+    model_config = ConfigDict(extra="allow")
+
+    # Período
+    data_inicial: str                               # DD/MM/YYYY
+    data_final: str                                 # DD/MM/YYYY
+
+    # Formas de apuração
+    apuracao: CartaoDePontoApuracao = Field(default_factory=CartaoDePontoApuracao)
+
+    # Considerar Feriados
+    considerar_feriados: bool = True
+    extras_feriados_separado: bool = False
+    extras_domingos_separado: bool = False
+    extras_sabados_domingos_separado: bool = False
+
+    # Tolerância geral
+    tolerancia_ativa: bool = False
+    tolerancia_por_turno: str = "00:05"
+    tolerancia_por_dia: str = "00:10"
+
+    # Jornada padrão
+    jornada_padrao: CartaoDePontoJornada = Field(default_factory=CartaoDePontoJornada)
+
+    # Jornada em feriados
+    jornada_feriado_trabalhado: bool = False
+    jornada_feriado_nao_trabalhado: bool = False
+
+    # Períodos de descanso (seção Períodos de Descanso + Intervalo)
+    descanso: Optional[CartaoDePontoDescanso] = None
+
+    # Horário noturno
+    noturno: Optional[CartaoDePontoNoturno] = None
+
+    # Preenchimento de jornadas
+    preenchimento: str = "LIVRE"  # LIVRE | PROGRAMACAO | ESCALA
 
 
 class Falta(BaseModel):

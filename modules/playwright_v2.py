@@ -2419,54 +2419,137 @@ class PlaywrightAutomatorV2:
         self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado")
 
     def fase_cartao_de_ponto(self) -> None:
-        """Cartão de Ponto — 63 campos opcionais. Só preenche se a prévia traz dados.
+        """Cartão de Ponto — cria novo cartão via formulário Novo do PJE-Calc.
 
-        Para o MVP, se `cartao_de_ponto` for None ou um dict vazio, pula a fase.
-        Caso contrário, percorre os atributos da seção e preenche cada um por nome
-        de DOM (assumindo nome_atributo_python == dom_id, padrão do schema v2).
+        Mapeamento DOM baseado em inspeção direta de
+        cartaodeponto/apuracao-cartaodeponto.jsf (v2.15.1, 17/05/2026).
         """
         cp = getattr(self.previa, "cartao_de_ponto", None)
-        if not cp or not getattr(cp, "model_dump", None):
+        if not cp:
             self.log("Fase 5 — Cartão de Ponto: sem dados (pulando)")
             return
-        dados = cp.model_dump(exclude_none=True)
+        dados = cp.model_dump(exclude_none=True) if hasattr(cp, "model_dump") else {}
         if not dados:
             self.log("Fase 5 — Cartão de Ponto: vazio (pulando)")
             return
 
-        self.log(f"Fase 5 — Cartão de Ponto ({len(dados)} campos)")
+        self.log("Fase 5 — Cartão de Ponto")
         self._navegar_menu("li_calculo_cartao_ponto")
 
-        for chave, valor in dados.items():
-            try:
-                if isinstance(valor, bool):
-                    self._marcar_checkbox(chave, valor)
-                elif isinstance(valor, (int, float)):
-                    self._preencher(chave, _fmt_br(valor) if isinstance(valor, float) else str(valor),
-                                    obrigatorio=False)
-                elif isinstance(valor, str):
-                    # Heurística: se valor está em UPPER_SNAKE provavelmente é radio/select
-                    if valor.isupper() and "_" in valor:
-                        try:
-                            self._marcar_radio(chave, valor)
-                        except Exception:
-                            self._selecionar(chave, valor)
-                    else:
-                        self._preencher(chave, valor, obrigatorio=False)
-            except Exception as e:
-                self.log(f"  ⚠ Cartão de ponto — {chave}: {e}")
-
-        # Salvar (graceful: não aborta se botão não existir — fase é heurística)
+        # Clicar em Novo para abrir formulário de criação
         try:
-            sel_salvar = self._page.locator("input[id='formulario:salvar'], input[id$=':salvar']")
-            if sel_salvar.count() > 0:
-                sel_salvar.first.click(force=True)
-                self._aguardar_ajax(8000)
-                self.log("Fase 5 concluída")
-            else:
-                self.log("Fase 5 — sem botão Salvar (campos heurísticos não casaram). Pulando.")
+            novo_btn = self._page.locator("input[value='Novo'], button:has-text('Novo')").first
+            novo_btn.click(force=True)
+            self._aguardar_ajax(5000)
         except Exception as e:
-            self.log(f"Fase 5 — Salvar: {e} (pulando)")
+            self.log(f"  ⚠ Botão Novo não encontrado: {e} — pulando Cartão de Ponto")
+            return
+
+        # ── Período ──────────────────────────────────────────────────────────
+        if cp.data_inicial:
+            self._preencher("competenciaInicialInputDate", cp.data_inicial)
+            self._aguardar_ajax(1000)
+        if cp.data_final:
+            self._preencher("competenciaFinalInputDate", cp.data_final)
+            self._aguardar_ajax(1000)
+
+        # ── Formas de Apuração ────────────────────────────────────────────────
+        apu = cp.apuracao if cp.apuracao else None
+        tipo_apu = getattr(apu, "tipo", "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL")
+        self._marcar_radio("tipoApuracaoHorasExtras", tipo_apu)
+        self._aguardar_ajax(500)
+        if getattr(apu, "qtsumulatst", None):
+            self._preencher("qtsumulatst", apu.qtsumulatst, obrigatorio=False)
+        if getattr(apu, "qthoraseparado", None):
+            self._preencher("qthoraseparado", apu.qthoraseparado, obrigatorio=False)
+
+        # ── Considerar Feriados ───────────────────────────────────────────────
+        self._marcar_checkbox("considerarFeriado", cp.considerar_feriados)
+        self._marcar_checkbox("extraFeriadoSeparado", cp.extras_feriados_separado)
+        self._marcar_checkbox("extraDescansoSeparado", cp.extras_domingos_separado)
+        self._marcar_checkbox("extraSabadoDomingoSeparado", cp.extras_sabados_domingos_separado)
+
+        # ── Tolerância ────────────────────────────────────────────────────────
+        self._marcar_checkbox("tolerancia", cp.tolerancia_ativa)
+        if cp.tolerancia_ativa:
+            self._preencher("toleranciaPorTurno", cp.tolerancia_por_turno, obrigatorio=False)
+            self._preencher("toleranciaPorDia", cp.tolerancia_por_dia, obrigatorio=False)
+
+        # ── Jornada Padrão ────────────────────────────────────────────────────
+        j = cp.jornada_padrao if cp.jornada_padrao else None
+        if j:
+            self._preencher("valorJornadaSegunda", getattr(j, "segunda_hhmm", "08:00"))
+            self._preencher("valorJornadaTerca",   getattr(j, "terca_hhmm",   "08:00"))
+            self._preencher("valorJornadaQuarta",  getattr(j, "quarta_hhmm",  "08:00"))
+            self._preencher("valorJornadaQuinta",  getattr(j, "quinta_hhmm",  "08:00"))
+            self._preencher("valorJornadaSexta",   getattr(j, "sexta_hhmm",   "08:00"))
+            self._preencher("valorJornadaDiariaSabado", getattr(j, "sabado_hhmm", "00:00"))
+            self._preencher("valorJornadaDiariaDom",    getattr(j, "domingo_hhmm", "00:00"))
+            self._aguardar_ajax(1000)
+        self._marcar_checkbox("jornadaDiariaFeriadoTrabalhado",    cp.jornada_feriado_trabalhado)
+        self._marcar_checkbox("jornadaDiariaFeriadoNaoTrabalhado", cp.jornada_feriado_nao_trabalhado)
+
+        # ── Períodos de Descanso ──────────────────────────────────────────────
+        d = cp.descanso if cp.descanso else None
+        if d:
+            self._marcar_checkbox("apurarFeriadosTrabalhados",        getattr(d, "apurar_feriados_trabalhados", False))
+            self._marcar_checkbox("apurarDomingosTrabalhados",         getattr(d, "apurar_domingos_trabalhados", False))
+            self._marcar_checkbox("apurarSabadosDomingosTrabalhados",  getattr(d, "apurar_sabados_domingos", False))
+            self._marcar_checkbox("apurarSupressaoIntervalo384",       getattr(d, "apurar_intervalo_384", False))
+            self._marcar_checkbox("apurarSupressaoIntervalo72",        getattr(d, "apurar_intervalo_72", False))
+            self._marcar_checkbox("apurarSupressaoIntervaloArt253",    getattr(d, "apurar_intervalo_insalubridade", False))
+            if getattr(d, "apurar_intervalo_insalubridade", False):
+                self._preencher("valorTrabalhoArt253",  getattr(d, "tempo_trabalho_art253", "01:40"), obrigatorio=False)
+                self._preencher("valorDescansoArt253",  getattr(d, "tempo_descanso_art253", "00:20"), obrigatorio=False)
+            # Interjornadas
+            self._marcar_checkbox("descansoEntreJornadas", getattr(d, "descanso_entre_jornadas", False))
+            if getattr(d, "descanso_entre_jornadas", False):
+                self._selecionar("valorDescansoEntreJornadas", getattr(d, "valor_descanso_entre_jornadas", "11:00"))
+                self._selecionar("valorDescansoEntreSemanas",  getattr(d, "valor_descanso_entre_semanas", "35:00"))
+            # Intrajornada >4h–6h
+            self._marcar_checkbox("intervaloIntraJornadaSupQuatroSeis", getattr(d, "intervalo_sup_4h_6h", False))
+            if getattr(d, "intervalo_sup_4h_6h", False):
+                self._preencher("valorIntervaloIntraJornadaSupQuatroSeis", getattr(d, "tolerancia_sup_4h_6h", "00:15"), obrigatorio=False)
+            # Intrajornada >6h (nota: DOM tem typo "intervalor" → preservado)
+            self._marcar_checkbox("intervalorIntraJornadaSupSeis", getattr(d, "intervalo_sup_6h", False))
+            if getattr(d, "intervalo_sup_6h", False):
+                self._preencher("valorIntervalorIntraJornadaSupSeis",        getattr(d, "valor_intervalo_sup_6h", "01:00"), obrigatorio=False)
+                self._preencher("toleranciaIntervaloIntraJornadaSupSeis",    getattr(d, "tolerancia_sup_6h", "00:05"), obrigatorio=False)
+            self._marcar_checkbox("considerarFracionamentoIntra",          getattr(d, "considerar_fracionamento", False))
+            self._marcar_checkbox("apurarSupressaoIntervaloIntraIntegral", getattr(d, "apurar_supressao_integral", False))
+            self._marcar_checkbox("apurarSupressaoIntervaloIntraReforma",  getattr(d, "apurar_supressao_reforma", False))
+            self._marcar_checkbox("apurarExcessoIntervaloIntra",           getattr(d, "apurar_excesso_sumula118", False))
+            if getattr(d, "apurar_excesso_sumula118", False):
+                self._preencher("valorIntervaloIntrajornadaMaximo", getattr(d, "valor_intervalo_max_sumula118", "02:00"), obrigatorio=False)
+            self._marcar_checkbox("apurarApenasExcessoAcimaJornada", getattr(d, "apurar_apenas_excesso_jornada", False))
+
+        # ── Horário Noturno ───────────────────────────────────────────────────
+        n = cp.noturno if cp.noturno else None
+        if n:
+            tipo_not = getattr(n, "tipo_atividade", "ATIVIDADE_URBANA")
+            self._marcar_radio("horarioNoturnoApuracaroCartao", tipo_not)
+            self._marcar_checkbox("apurarHorasNoturnas",             getattr(n, "apurar_horas_noturnas", False))
+            self._marcar_checkbox("apurarHorasExtrasNoturnas",       getattr(n, "apurar_horas_extras_noturnas", False))
+            self._marcar_checkbox("considerarReducaoFictaDaHoraNoturna", getattr(n, "reducao_ficta", True))
+            self._marcar_checkbox("horarioProrrogadoSumula60",       getattr(n, "horario_prorrogado_sumula60", False))
+            self._marcar_checkbox("forcarProrrogacao",               getattr(n, "forcar_prorrogacao", False))
+
+        # ── Preenchimento de Jornadas ─────────────────────────────────────────
+        preenchimento = getattr(cp, "preenchimento", "LIVRE")
+        self._marcar_radio("preenchimentoJornadasCartao", preenchimento)
+
+        # ── Salvar ────────────────────────────────────────────────────────────
+        try:
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            if not sucesso:
+                erro = self._verificar_erro_jsf()
+                if erro:
+                    self.log(f"  ⚠ Erro ao salvar Cartão de Ponto: {erro[:200]}")
+            self.log("Fase 5 concluída")
+        except Exception as e:
+            self.log(f"  ⚠ Fase 5 — Salvar: {e}")
 
     def fase_faltas(self) -> None:
         self.log("Fase 6 — Faltas")
