@@ -812,6 +812,40 @@ class PlaywrightAutomatorV2:
         "li_calculo_correcao_juros_multa": "parametros-atualizacao/parametros-atualizacao.jsf",
     }
 
+    def _navegar_menu_via_click(self, li_id: str) -> bool:
+        """Navega clicando no <a> do menu sidebar — necessário para Seam init.
+
+        Diferente de _navegar_menu (que faz goto URL direta), este método
+        SEMPRE clica no menu lateral, o que dispara o handler JSF que invoca
+        @PostConstruct do bean Seam. Essencial para FGTS/CS/IRPF/Correção,
+        que requerem init() do bean para renderizar campos.
+
+        Returns True se conseguiu clicar.
+        """
+        try:
+            clicou = self._page.evaluate("""(liId) => {
+                const li = document.getElementById(liId);
+                if (li) { const a = li.querySelector('a'); if (a) { a.click(); return true; } }
+                // Fallback: id por sufixo (alguns menus têm prefixo)
+                const tail = liId.replace('li_', '');
+                const matches = document.querySelectorAll(`li[id$="${tail}"]`);
+                for (const l of matches) {
+                    const a = l.querySelector('a');
+                    if (a) { a.click(); return true; }
+                }
+                return false;
+            }""", li_id)
+            if clicou:
+                self._aguardar_ajax(10000)
+                self._capturar_conversation_id()
+                self.log(f"  → navegou para {li_id} via click sidebar (Seam init)")
+                return True
+            self.log(f"  ⚠ menu {li_id} não encontrado no sidebar")
+            return False
+        except Exception as e:
+            self.log(f"  ⚠ _navegar_menu_via_click({li_id}): {e}")
+            return False
+
     def _navegar_menu(self, li_id: str) -> None:
         """Navega para item do menu lateral.
 
@@ -3202,7 +3236,9 @@ class PlaywrightAutomatorV2:
 
     def fase_fgts(self) -> None:
         self.log("Fase 8 — FGTS")
-        self._navegar_menu("li_calculo_fgts")
+        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
+        if not self._navegar_menu_via_click("li_calculo_fgts"):
+            self._navegar_menu("li_calculo_fgts")  # fallback URL direta
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(1500)
 
@@ -3366,7 +3402,9 @@ class PlaywrightAutomatorV2:
 
     def fase_contribuicao_social(self) -> None:
         self.log("Fase 9 — Contribuição Social")
-        self._navegar_menu("li_calculo_inss")
+        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
+        if not self._navegar_menu_via_click("li_calculo_inss"):
+            self._navegar_menu("li_calculo_inss")
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(1000)
         # Render guard (mesma lógica do FGTS: frame vazia = bean não inicializado)
@@ -3453,7 +3491,9 @@ class PlaywrightAutomatorV2:
 
     def fase_imposto_de_renda(self) -> None:
         self.log("Fase 10 — IRPF")
-        self._navegar_menu("li_calculo_irpf")
+        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
+        if not self._navegar_menu_via_click("li_calculo_irpf"):
+            self._navegar_menu("li_calculo_irpf")
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(1000)
         _n_ir = self._page.evaluate(
@@ -3629,7 +3669,9 @@ class PlaywrightAutomatorV2:
 
     def fase_correcao_juros_multa(self) -> None:
         self.log("Fase 13 — Correção, Juros e Multa")
-        self._navegar_menu("li_calculo_correcao_juros_multa")
+        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
+        if not self._navegar_menu_via_click("li_calculo_correcao_juros_multa"):
+            self._navegar_menu("li_calculo_correcao_juros_multa")
         self._aguardar_ajax(6000)
         self._page.wait_for_timeout(800)
 
