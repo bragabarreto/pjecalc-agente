@@ -2658,10 +2658,11 @@ class PlaywrightAutomatorV2:
                 # Sem isso o JSF backing bean não recebe os valores e o save falha
                 # com "A jornada deve ter pelo menos um período de lançamento" ou NPE.
                 campos_preenchidos: list[str] = []
-                # Estratégia: fill() + dispatch change + dispatch blur via JS direto
-                # (sem usar Tab, que pode mover foco para campo errado e disparar
-                # AJAX em ordem errada). Aguardar pouco AJAX entre cada campo para
-                # garantir que o RichFaces atualize o backing bean.
+                # Estratégia: simular digitação humana real:
+                # 1. click() — foca + posiciona cursor
+                # 2. type() — digita caractere por caractere (dispara keydown/keyup/input)
+                # 3. press("Tab") — blur natural saindo do campo (dispara change + a4j:support)
+                # Aguardar AJAX entre cada campo para o RichFaces atualizar backing bean.
                 for dia_nome, idx in _CP_DIA_IDX.items():
                     jd = getattr(ps, dia_nome, None)
                     if not jd:
@@ -2675,23 +2676,21 @@ class PlaywrightAutomatorV2:
                             sel = f"[id$='listagemProgramacao:{idx}:{campo}{m}']"
                             try:
                                 loc = self._page.locator(sel).first
-                                loc.fill(str(valor))
-                                # Disparar change + blur diretamente no campo (sem mudar foco)
-                                # — simula final de digitação humana naquele campo específico.
-                                loc.evaluate("""
-                                  el => {
-                                    el.dispatchEvent(new Event('change', {bubbles:true}));
-                                    el.dispatchEvent(new Event('blur', {bubbles:true}));
-                                  }
-                                """)
-                                # Aguardar AJAX RichFaces processar o blur (pequeno wait)
-                                self._page.wait_for_timeout(200)
+                                # Foca + seleciona tudo + limpa + digita
+                                loc.click()
+                                loc.press("Control+a")
+                                loc.press("Delete")
+                                loc.type(str(valor), delay=20)
+                                # Blur via Tab — RichFaces precisa para disparar a4j:support
+                                loc.press("Tab")
+                                # Aguardar AJAX do blur (RichFaces atualiza backing bean)
+                                self._page.wait_for_timeout(300)
                                 campos_preenchidos.append(f"listagemProgramacao:{idx}:{campo}{m}")
                                 self.log(f"  ✓ listagemProgramacao:{idx}:{campo}{m} = {valor}")
                             except Exception as e:
                                 self.log(f"  ⚠ Falha ao preencher listagemProgramacao:{idx}:{campo}{m}: {e}")
                 self._aguardar_ajax(2000)
-                self.log(f"  ✓ {len(campos_preenchidos)} campos da Programação preenchidos (change+blur direto)")
+                self.log(f"  ✓ {len(campos_preenchidos)} campos da Programação preenchidos (click+type+Tab)")
 
         # ── Escala — tipo + início + qtd_dias + tabela N × 6 turnos ────────────
         # Mapeamento DOM:
