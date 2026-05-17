@@ -317,12 +317,39 @@ A verba é calculada por fórmula. Preencher:
 }
 ```
 
-Tipos de base:
-- `MAIOR_REMUNERACAO` — usa o valor do contrato
-- `HISTORICO_SALARIAL` — referencia um histórico cadastrado por nome
-- `SALARIO_DA_CATEGORIA` — piso da categoria
-- `SALARIO_MINIMO` — salário mínimo nacional
-- `VALE_TRANSPORTE` — específico
+**`base_calculo.tipo` — ENUM OBRIGATÓRIO (exatamente um destes 5 valores):**
+| Valor | Quando usar |
+|---|---|
+| `MAIOR_REMUNERACAO` | Usa o valor do contrato (maior remuneração cadastrada) |
+| `HISTORICO_SALARIAL` | Referencia um histórico cadastrado por nome (`historico_nome`) |
+| `SALARIO_DA_CATEGORIA` | Piso da categoria profissional |
+| `SALARIO_MINIMO` | Salário mínimo nacional |
+| `VALE_TRANSPORTE` | Específico para vale-transporte |
+
+⚠️ **PROIBIDO**: `OUTRO_VALOR`, `SALARIO_BASE`, `SALARIO_CONTRATUAL`, qualquer outro valor.
+Se a sentença não indica claramente a base, usar `HISTORICO_SALARIAL`.
+
+**`divisor.tipo` — ENUM OBRIGATÓRIO (exatamente um destes 4 valores):**
+| Valor | Quando usar |
+|---|---|
+| `OUTRO_VALOR` | Divisor numérico explícito (preencher `valor` obrigatoriamente) |
+| `CARGA_HORARIA` | PJE-Calc usa a carga horária mensal cadastrada |
+| `DIAS_UTEIS` | PJE-Calc usa os dias úteis do período |
+| `IMPORTADA_DO_CARTAO` | PJE-Calc calcula a partir do cartão de ponto |
+
+⚠️ **PROIBIDO**: `PADRAO_MENSAL`, `MENSAL`, `DIARIO`, `HORAS_MENSAIS`, qualquer outro valor.
+
+**`quantidade.tipo` — ENUM OBRIGATÓRIO (exatamente um destes 5 valores):**
+| Valor | Quando usar |
+|---|---|
+| `INFORMADA` | Quantidade explícita fixada na sentença (preencher `valor_mensal`) |
+| `IMPORTADA_DO_CALENDARIO` | PJE-Calc calcula a partir do calendário configurado |
+| `IMPORTADA_DO_CARTAO` | PJE-Calc apura a partir do cartão de ponto |
+| `AVOS` | Frações de período (ex: avos de 13º, avos de férias) |
+| `APURADA` | PJE-Calc apura automaticamente com base nos parâmetros |
+
+⚠️ **PROIBIDO**: `DIAS_UTEIS_TRABALHADOS`, `DIAS_TRABALHADOS`, `DIAS_CORRIDOS`,
+`AVOS_CONTRATO`, `AVOS_PROPORCIONAL`, `CALCULADA`, qualquer outro valor.
 
 ### Campo `quantidade` — regra de preenchimento para Horas Extras
 
@@ -464,6 +491,9 @@ Valores de `apuracao.tipo` (usar o mais adequado à sentença):
 - [ ] `historico_salarial` cobre data_inicio_calculo até data_termino_calculo
 - [ ] Cada verba com `valor=INFORMADO` tem `valor_devido.valor_informado_brl > 0`
 - [ ] Cada verba com `valor=CALCULADO` tem `formula_calculado` preenchido
+- [ ] `formula_calculado.base_calculo.tipo` ∈ {MAIOR_REMUNERACAO, HISTORICO_SALARIAL, SALARIO_DA_CATEGORIA, SALARIO_MINIMO, VALE_TRANSPORTE}
+- [ ] `formula_calculado.divisor.tipo` ∈ {OUTRO_VALOR, CARGA_HORARIA, DIAS_UTEIS, IMPORTADA_DO_CARTAO}
+- [ ] `formula_calculado.quantidade.tipo` ∈ {INFORMADA, IMPORTADA_DO_CALENDARIO, IMPORTADA_DO_CARTAO, AVOS, APURADA}
 - [ ] Cada verba expresso_direto/expresso_adaptado tem `expresso_alvo` válido
 - [ ] Cada reflexo tem `expresso_reflex_alvo` no formato "X SOBRE Y"
 - [ ] Características COMUM/13o/Aviso/Férias com ocorrência derivada correta
