@@ -2711,30 +2711,53 @@ class PlaywrightAutomatorV2:
                 try:
                     diag = self._page.evaluate(r"""
                         () => {
-                          const result = {url: location.href, msgs: [], invalids: [], modal_text: null};
-                          // Capturar TODAS as mensagens RichFaces
-                          ['.rf-msg-err', '.rf-msgs-err', '.rich-message',
-                           '.rich-messages-marker', '.rf-msgs-sum', '.rf-msg-sum',
-                           '[id$=\"aliquotaErro\"]', '.messageError'].forEach(sel => {
+                          const result = {url: location.href, msgs: [], invalids: [], modal_text: null, body_excerpts: []};
+                          // 1. Capturar mensagens RichFaces específicas com texto
+                          ['.rf-msg-err', '.rf-msgs-err', '.rich-message', '.rich-messages',
+                           '.rich-messages-marker', '.rich-message-detail',
+                           '.rf-msgs-sum', '.rf-msg-sum', '.rf-msgs', '.rf-msg',
+                           '.messageError', '.errorMessage',
+                           "[id*='Erro']", "[id$='Error']", "[id*='msgs']",
+                           "span.rich-message-detail", "span.rich-message-summary"].forEach(sel => {
                             document.querySelectorAll(sel).forEach(el => {
                               const t = (el.textContent || '').trim();
-                              if (t && t.length > 2 && t.length < 400) result.msgs.push(`${sel}: ${t}`);
+                              if (t && t.length > 3 && t.length < 500 && !t.match(/^(Erro|\.|\s+)$/)) {
+                                result.msgs.push(`${sel}: ${t}`);
+                              }
                             });
                           });
-                          // Inputs inválidos
-                          document.querySelectorAll('.rich-message-marker, input.invalid, [aria-invalid="true"]').forEach(el => {
+                          // 2. tooltip / title de elementos com erro
+                          document.querySelectorAll('[title], [data-tooltip]').forEach(el => {
+                            const tt = el.title || el.getAttribute('data-tooltip') || '';
+                            if (tt && /obrigat|inv[áa]lido|erro|requir/i.test(tt) && tt.length < 300) {
+                              result.msgs.push(`tooltip: ${tt}`);
+                            }
+                          });
+                          // 3. Inputs com classes de erro JSF
+                          document.querySelectorAll('input.invalid, input[aria-invalid="true"], .rich-message-marker').forEach(el => {
                             result.invalids.push(el.id || el.name || el.outerHTML.substring(0, 100));
                           });
-                          // Texto de qualquer modal/dialog
-                          const modal = document.querySelector('.rf-pp-cnt, .rich-modalpanel-content, .ui-dialog');
+                          // 4. Modal / dialog
+                          const modal = document.querySelector('.rf-pp-cnt, .rich-modalpanel-content, .ui-dialog, .rich-mpnl-pnl');
                           if (modal) result.modal_text = modal.textContent.trim().substring(0, 500);
+                          // 5. Procurar no body por linhas com palavras-chave de erro
+                          const body = document.body?.textContent || '';
+                          const linhas = body.split('\n').map(l => l.trim()).filter(l => l.length > 10 && l.length < 250);
+                          for (const l of linhas) {
+                            if (/obrigat|inv[áa]lido|n[ãa]o pode|deve ser|erro/i.test(l) && !l.match(/Erro inesperado/i)) {
+                              result.body_excerpts.push(l);
+                              if (result.body_excerpts.length >= 5) break;
+                            }
+                          }
                           return result;
                         }
                     """)
                     if diag:
                         self.log(f"  [DIAG-cartao-save] url={diag.get('url', '')[:80]}")
-                        for m in (diag.get('msgs') or [])[:8]:
-                            self.log(f"  [DIAG-cartao-save] {m[:250]}")
+                        for m in (diag.get('msgs') or [])[:10]:
+                            self.log(f"  [DIAG-cartao-save] msg: {m[:300]}")
+                        for ex in (diag.get('body_excerpts') or [])[:5]:
+                            self.log(f"  [DIAG-cartao-save] body: {ex[:250]}")
                         if diag.get('invalids'):
                             self.log(f"  [DIAG-cartao-save] inválidos: {diag['invalids'][:5]}")
                         if diag.get('modal_text'):
