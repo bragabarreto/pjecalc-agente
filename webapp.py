@@ -3988,6 +3988,109 @@ async def vincular_pjc(sessao_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.post("/api/correcao_manual/{sessao_id}")
+async def registrar_correcao_manual(sessao_id: str, payload: dict, db: Session = Depends(get_db)):
+    """Registra correções manuais feitas pelo usuário no PJE-Calc Cidadão.
+
+    Quando a Liquidação falha após 2 tentativas, o frontend exibe o link de
+    edição manual + um textarea. O usuário descreve em texto livre o que
+    editou; este endpoint usa o LLM para estruturar a descrição em entradas
+    `CorrecaoUsuario` que alimentam o Learning Engine.
+
+    Body: {"descricao": str}
+    """
+    descricao = (payload or {}).get("descricao", "").strip()
+    if not descricao or len(descricao) < 10:
+        raise HTTPException(status_code=400, detail="descricao deve ter pelo menos 10 caracteres")
+
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    # Pedir ao LLM para estruturar a descrição em correções individuais
+    from core.llm_orchestrator import LLMOrchestrator, TaskType
+    import json as _json
+
+    sys_prompt = (
+        "Você é um assistente que estrutura correções feitas no PJE-Calc Cidadão.\n"
+        "O usuário descreverá em texto livre quais campos editou manualmente "
+        "no PJE-Calc após a automação falhar.\n\n"
+        "Retorne APENAS JSON no formato:\n"
+        '{"correcoes": [{"entidade": "verba|fgts|honorarios|custas|correcao_juros|imposto_renda|contribuicao_social|contrato|outro",'
+        ' "campo": "nome_do_campo_ou_path", "valor_depois": "valor_corrigido", '
+        ' "motivo": "porque_o_usuario_corrigiu_isto"}]}\n\n'
+        "Se a descrição mencionar várias correções, gerar uma entrada por correção. "
+        "Se a descrição for vaga, criar uma única entrada com entidade=outro e "
+        "campo=descricao_livre."
+    )
+    user_prompt = f"Descrição do usuário:\n\n{descricao}\n\nRetorne o JSON estruturado."
+
+    correcoes_estruturadas = []
+    try:
+        from infrastructure.config import get_settings
+        orch = LLMOrchestrator(settings=get_settings())
+        resp = orch.complete(
+            task_type=TaskType.LEARNING_ANALYSIS,
+            prompt=user_prompt,
+            system_override=sys_prompt,
+            inject_knowledge=False,
+            inject_learned_rules=False,
+        )
+        # complete() retorna dict se JSON-parsável, str caso contrário
+        if isinstance(resp, dict):
+            correcoes_estruturadas = resp.get("correcoes", [])
+        else:
+            raw = str(resp).strip()
+            if raw.startswith("```"):
+                raw = raw.split("```", 2)[1]
+                if raw.startswith("json"):
+                    raw = raw[4:]
+                raw = raw.strip("` \n")
+            parsed = _json.loads(raw)
+            correcoes_estruturadas = parsed.get("correcoes", [])
+    except Exception as e:
+        # Fallback: salvar como entrada única não-estruturada
+        correcoes_estruturadas = [{
+            "entidade": "outro",
+            "campo": "descricao_livre",
+            "valor_depois": descricao,
+            "motivo": f"Sem estruturação LLM: {e}",
+        }]
+
+    # Persistir cada correção como CorrecaoUsuario para alimentar o Learning Engine
+    from infrastructure.database import CorrecaoUsuario
+    registradas = 0
+    for c in correcoes_estruturadas:
+        try:
+            entrada = CorrecaoUsuario(
+                calculo_id=calculo.id,
+                sessao_id=sessao_id,
+                tipo_correcao="edicao_manual_pjecalc",
+                entidade=str(c.get("entidade", "outro"))[:50],
+                campo=str(c.get("campo", ""))[:200],
+                valor_antes=_json.dumps({"nota": "ver pendencias_liquidacao"}),
+                valor_depois=_json.dumps({"valor": c.get("valor_depois"), "motivo": c.get("motivo")}),
+                fonte_original="EDICAO_MANUAL_PJECALC",
+                contexto_json=_json.dumps({
+                    "descricao_original": descricao,
+                    "numero_processo": getattr(calculo, "numero_processo", None),
+                }),
+            )
+            db.add(entrada)
+            registradas += 1
+        except Exception:
+            continue
+    db.commit()
+
+    return {
+        "ok": True,
+        "registradas": registradas,
+        "correcoes": correcoes_estruturadas,
+        "msg": f"{registradas} correção(ões) registrada(s) para o Learning Engine",
+    }
+
+
 # ── Learning Dashboard ────────────────────────────────────────────────────────
 
 @app.get("/admin/aprendizado", response_class=HTMLResponse)

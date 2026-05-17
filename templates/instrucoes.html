@@ -545,6 +545,17 @@ function abrirSSE() {
     try { dados = JSON.parse(raw); } catch { logMsg(raw, 'ok'); return; }
     if (dados.keepalive) return;
 
+    // Evento especial: liquidação bloqueada → exibir painel de edição manual
+    if (dados.msg && dados.msg.startsWith('[MANUAL_EDIT_REQUIRED]')) {
+      try {
+        const payload = JSON.parse(dados.msg.slice('[MANUAL_EDIT_REQUIRED]'.length).trim());
+        exibirPainelEdicaoManual(payload);
+      } catch (e) {
+        console.error('Falha parse MANUAL_EDIT_REQUIRED', e);
+      }
+      return;
+    }
+
     // Typed progress event
     if (dados.type === 'progress') {
       atualizarProgresso(dados.current, dados.total);
@@ -605,6 +616,113 @@ function logMsg(msg, tipo = 'ok') {
   span.textContent = msg + '\n';
   pre.appendChild(span);
   pre.scrollTop = pre.scrollHeight;
+}
+
+function exibirPainelEdicaoManual(payload) {
+  // Evita duplicação se o evento chegar mais de uma vez
+  if (document.getElementById('painel-edicao-manual')) return;
+
+  const url = payload.url || '#';
+  const pendencias = payload.pendencias || [];
+  const detalhes = payload.detalhes || [];
+
+  const painel = document.createElement('div');
+  painel.id = 'painel-edicao-manual';
+  painel.style = 'margin:16px 0; padding:16px; border:2px solid #d97706; '
+               + 'background:#fffbeb; border-radius:8px;';
+  painel.innerHTML = `
+    <h3 style="margin-top:0; color:#92400e;">⚠ Liquidação bloqueada — edição manual necessária</h3>
+    <p style="margin:8px 0;">
+      A automação preencheu todos os campos do cálculo, mas a liquidação não pôde
+      ser concluída após 2 tentativas. <strong>Esta é a última alternativa</strong>:
+      abra o link abaixo para corrigir <em>apenas os parâmetros pendentes</em> diretamente
+      no PJE-Calc Cidadão. Todos os demais dados já estão salvos.
+    </p>
+
+    <div style="margin:12px 0;">
+      <strong>Pendências reportadas pelo PJE-Calc:</strong>
+      <ul style="margin:6px 0 0 24px;">
+        ${pendencias.map(p => `<li><code>${escapeHtml(p)}</code></li>`).join('')}
+        ${detalhes.length ? `<li><details><summary>Detalhes adicionais (${detalhes.length})</summary>
+          <ul>${detalhes.map(d => `<li><small>${escapeHtml(d)}</small></li>`).join('')}</ul>
+        </details></li>` : ''}
+      </ul>
+    </div>
+
+    <a href="${escapeAttr(url)}" target="_blank" rel="noopener"
+       class="btn btn-warning" style="font-weight:700; margin:8px 0;">
+      🔗 Abrir PJE-Calc para edição manual (nova aba)
+    </a>
+
+    <hr style="margin:16px 0; border-color:#fde68a;">
+
+    <h4 style="margin-bottom:8px;">Após editar e liquidar manualmente:</h4>
+    <p style="font-size:0.92em; color:#57534e;">
+      Descreva em linguagem natural quais campos você alterou no PJE-Calc para que a
+      liquidação fosse possível. Essa descrição alimenta o aprendizado do sistema e
+      evita que o mesmo erro ocorra em cálculos futuros.
+    </p>
+    <textarea id="textarea-correcao-manual" rows="5"
+              style="width:100%; padding:8px; border:1px solid #d4d4d8; border-radius:4px; font-family:inherit;"
+              placeholder="Ex.: Mudei a alíquota do honorário sucumbencial RECLAMADO de vazio para 10%. Marquei FGTS Multa 40%. Mudei o tipo de Custas de Conhecimento do Reclamado de NAO_HA para CALCULADA_2_POR_CENTO e preenchi a data de vencimento como 26/11/2025."></textarea>
+    <div style="margin-top:8px; display:flex; gap:8px; align-items:center;">
+      <button id="btn-salvar-correcao-manual" type="button" class="btn btn-primary">
+        Salvar correções para aprendizado
+      </button>
+      <span id="status-correcao-manual" style="color:#57534e; font-size:0.92em;"></span>
+    </div>
+  `;
+
+  // Inserir acima do log
+  const logEl = document.getElementById('log-automacao');
+  logEl.parentElement.insertBefore(painel, logEl);
+  painel.scrollIntoView({behavior: 'smooth', block: 'start'});
+
+  document.getElementById('btn-salvar-correcao-manual').addEventListener('click', enviarCorrecaoManual);
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+function escapeAttr(s) {
+  return escapeHtml(s).replace(/"/g, '&quot;');
+}
+
+async function enviarCorrecaoManual() {
+  const ta = document.getElementById('textarea-correcao-manual');
+  const status = document.getElementById('status-correcao-manual');
+  const btn = document.getElementById('btn-salvar-correcao-manual');
+  const descricao = (ta.value || '').trim();
+  if (descricao.length < 10) {
+    status.textContent = 'Descrição muito curta (mínimo 10 caracteres).';
+    status.style.color = '#b91c1c';
+    return;
+  }
+  btn.disabled = true;
+  status.style.color = '#57534e';
+  status.textContent = 'Enviando ao Learning Engine…';
+  try {
+    const r = await fetch(`/api/correcao_manual/${SESSAO_ID}`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({descricao})
+    });
+    const d = await r.json();
+    if (r.ok) {
+      status.textContent = `✓ ${d.msg || 'Correções registradas.'}`;
+      status.style.color = '#15803d';
+      ta.disabled = true;
+    } else {
+      status.textContent = `Erro: ${d.detail || r.status}`;
+      status.style.color = '#b91c1c';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    status.textContent = `Erro de rede: ${e.message}`;
+    status.style.color = '#b91c1c';
+    btn.disabled = false;
+  }
 }
 
 function tocarConclusao() {

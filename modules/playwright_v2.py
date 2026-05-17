@@ -4118,6 +4118,7 @@ class PlaywrightAutomatorV2:
             except Exception:
                 pass
             # Capturar TODAS as tabelas/listas de pendências detalhadas
+            detalhes_pendencias: list[str] = []
             try:
                 detalhes = self._page.evaluate("""() => {
                     const result = {linhas: [], tabelas: [], modal: null};
@@ -4139,16 +4140,70 @@ class PlaywrightAutomatorV2:
                 self.log(f"  [DIAG-pendencias] tabela_linhas={len(detalhes.get('linhas', []))}")
                 for ln in (detalhes.get('linhas') or [])[:30]:
                     self.log(f"  [DIAG-pendencias] {ln[:300]}")
+                    detalhes_pendencias.append(ln[:300])
                 for tb in (detalhes.get('tabelas') or [])[:10]:
                     self.log(f"  [DIAG-pendencias] detail: {tb[:250]}")
+                    detalhes_pendencias.append(tb[:250])
                 if detalhes.get('modal'):
                     self.log(f"  [DIAG-pendencias] modal: {detalhes['modal']}")
             except Exception as e:
                 self.log(f"  ⚠ Falha capturar detalhes de pendências: {e}")
-            raise RuntimeError(
-                f"Liquidação retornou pendências (schema v2 deveria ter prevenido):\n"
-                + "\n".join(f"  • {p}" for p in pendencias)
-            )
+
+            # ── RETRY: segunda tentativa após capturar pendências ────────────
+            # Usuário escolheu "2 tentativas antes do link manual" — algumas
+            # pendências são transitórias (race AJAX) e desaparecem ao tentar
+            # de novo após pequena espera.
+            if not getattr(self, "_liq_retry_done", False):
+                self._liq_retry_done = True
+                self.log("  → Pendências detectadas — 2ª tentativa de liquidação após 3s")
+                self._page.wait_for_timeout(3000)
+                try:
+                    self._clicar("liquidar")
+                    self._aguardar_ajax(15000)
+                    self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+                    _liq2 = self._page.evaluate("""() => {
+                        const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum')]
+                            .map(e => (e.textContent||'').trim()).filter(t => t);
+                        return {
+                            ok: msgs.some(m => /opera[cç][ãa]o realizada com sucesso|liquida[cç][ãa]o realizada/i.test(m)),
+                            pend: msgs.some(m => /pend[êe]ncia/i.test(m))
+                        };
+                    }""")
+                    if _liq2['ok'] and not _liq2['pend']:
+                        self.log("  ✓ 2ª tentativa de liquidação OK — prosseguindo para exportação")
+                        # Sair do branch de pendência, segue para exportar
+                        sucesso_liq = True
+                        pendencias = []
+                    else:
+                        self.log("  ⚠ 2ª tentativa ainda com pendência — emitindo evento de edição manual")
+                except Exception as e:
+                    self.log(f"  ⚠ Erro 2ª tentativa: {e}")
+
+            # Se ainda houver pendência após retry → emitir evento [MANUAL_EDIT_REQUIRED]
+            if pendencias:
+                self._capturar_conversation_id()
+                conv = self._calculo_conversation_id or "?"
+                # URL passada via proxy do app (mesma origem que o frontend usa)
+                edit_url = f"/pjecalc/pages/calculo/calculo.jsf?conversationId={conv}"
+                payload = {
+                    "url": edit_url,
+                    "conversationId": conv,
+                    "pendencias": pendencias[:10],
+                    "detalhes": detalhes_pendencias[:30],
+                }
+                # Marcador especial reconhecido pelo SSE/frontend
+                import json as _json
+                self.log(f"[MANUAL_EDIT_REQUIRED] {_json.dumps(payload, ensure_ascii=False)}")
+                self.log(
+                    "  ⚠ Liquidação bloqueada por pendências. Use o link de edição manual "
+                    "para corrigir os parâmetros diretamente no PJE-Calc Cidadão. Esta é a "
+                    "última alternativa — todos os demais dados já foram preenchidos pela "
+                    "automação; faça apenas as correções pontuais para finalizar."
+                )
+                raise RuntimeError(
+                    "Liquidação bloqueada por pendências após 2 tentativas. "
+                    "Edição manual oferecida ao usuário."
+                )
         else:
             # Sem mensagens conclusivas — assumimos OK (alertas não-bloqueadores)
             self.log("  ✓ Liquidação OK (sem mensagens bloqueadoras)")
