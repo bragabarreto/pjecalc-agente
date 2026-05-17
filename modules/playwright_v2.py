@@ -1907,6 +1907,16 @@ class PlaywrightAutomatorV2:
         if (not com_identificacao
                 and v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_DIRETO):
             self.log(f"    ℹ EXPRESSO_DIRETO: ajustando período + valor_informado se aplicável")
+            # Renomear quando nome_pjecalc divergir do expresso_alvo. Importante
+            # para verbas genéricas (RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA, DANO
+            # MATERIAL, INDENIZAÇÃO ADICIONAL) cujo nome canônico do Expresso
+            # não reflete a verba específica da condenação.
+            if v.nome_pjecalc and v.expresso_alvo and v.nome_pjecalc.strip().upper() != v.expresso_alvo.strip().upper():
+                try:
+                    self._preencher("descricao", v.nome_pjecalc, obrigatorio=False)
+                    self.log(f"    ✓ descricao customizada: '{v.nome_pjecalc}' (era '{v.expresso_alvo}')")
+                except Exception as e:
+                    self.log(f"    ⚠ Falha renomear descricao: {e}")
             # Ajustar período (datas)
             for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
                 try:
@@ -1926,7 +1936,7 @@ class PlaywrightAutomatorV2:
             if p.valor == TipoValor.INFORMADO and p.valor_devido and p.valor_devido.valor_informado_brl:
                 try:
                     self._preencher(
-                        "valorInformadoDoDevido",
+                        "valorDevido",
                         _fmt_br(p.valor_devido.valor_informado_brl),
                         obrigatorio=False,
                     )
@@ -1958,7 +1968,7 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(3000)
 
         if p.valor == TipoValor.INFORMADO:
-            self._preencher("valorInformadoDoDevido", _fmt_br(p.valor_devido.valor_informado_brl))
+            self._preencher("valorDevido", _fmt_br(p.valor_devido.valor_informado_brl))
         else:  # CALCULADO
             f = p.formula_calculado
             self._selecionar("tipoDaBaseTabelada", f.base_calculo.tipo.value)

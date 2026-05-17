@@ -263,6 +263,24 @@ A verba não existe literal, mas pode adaptar uma similar:
 - "Indenização Lei 9.029" → expresso_alvo="INDENIZAÇÃO POR DANO MORAL"
 - "Salário Família como verba autônoma" → expresso_alvo="SALÁRIO RETIDO" (excepcional)
 
+⚠️ **REGRA — nome customizado quando o Expresso é genérico:**
+Verbas Expresso com nomes amplos exigem `nome_pjecalc` específico (e estratégia
+**`expresso_adaptado`**), porque o nome genérico não comunica qual é a verba real:
+- "RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA" → use `nome_pjecalc` específico da sentença:
+  "RESTITUIÇÃO DE VALE-ALIMENTAÇÃO", "INDENIZAÇÃO USO VEÍCULO PRÓPRIO",
+  "REEMBOLSO COMBUSTÍVEL", "RESTITUIÇÃO DE DESCONTOS INDEVIDOS", etc.
+- "INDENIZAÇÃO POR DANO MATERIAL" → use `nome_pjecalc` específico:
+  "DANO MATERIAL — DESPESAS MÉDICAS", "PERDAS E DANOS — VEÍCULO", etc.
+- "INDENIZAÇÃO ADICIONAL" → use `nome_pjecalc` específico:
+  "ESTABILIDADE GESTANTE", "ESTABILIDADE ACIDENTÁRIA",
+  "INDENIZAÇÃO LEI 12.506/2011", etc.
+- "MULTA CONVENCIONAL" → use `nome_pjecalc` específico:
+  "MULTA CCT 2024 CLÁUSULA X", etc.
+
+Quando `nome_pjecalc` for diferente do `expresso_alvo`, a estratégia DEVE ser
+`expresso_adaptado` (NÃO `expresso_direto`). A automação renomeia o campo "Nome"
+no PJE-Calc para refletir a verba real da condenação.
+
 ### `manual`
 Verba muito específica sem similar:
 - Multas convencionais com cláusulas específicas
