@@ -439,42 +439,161 @@ details.fieldgroup[open] { border-color: #adb5bd; }
         <span class="badge ok">configurar</span>
       </header>
       <div class="corpo">
-        <p style="color:#6c757d; font-size:0.85rem; margin-bottom:8px;">Critérios de Apuração — Cartão de Ponto. Deixe em branco se não houver horas extras apuradas por cartão.</p>
+        <p style="color:#6c757d;font-size:0.85rem;margin-bottom:12px;">Espelha o formulário <em>Cartão de Ponto &gt; Novo</em> do PJE-Calc Cidadão v2.15.1. Preencher somente quando a sentença fixa jornada (horários de entrada/saída) e a quantidade de HE deve ser apurada pelo sistema.</p>
+
+        <!-- ── Período ─────────────────────────────────────────── -->
         <div class="fieldgroup">
-          <div class="fieldgroup-title">Forma de Apuração de HE</div>
-          <div class="campo">
-            <label>Forma de Apuração de HE</label>
-            <select data-campo="cartao_de_ponto.apuracao_he">
-              <option value="NAO_APURAR">Não apurar horas extras</option>
-              <option value="EXCEDENTES_DIARIO">Excedentes da jornada diária</option>
-              <option value="EXCEDENTES_SEMANAL">Excedentes da jornada semanal</option>
-              <option value="CRITERIO_MAIS_FAVORAVEL">Critério mais favorável (diário vs semanal)</option>
-              <option value="EXCEDENTES_MENSAL">Excedentes da jornada mensal</option>
-              <option value="SUMULA_85">Súmula 85 TST</option>
-              <option value="PRIMEIRAS_HE_EM_SEPARADO">Primeiras HE em separado</option>
-            </select>
+          <div class="fieldgroup-title">Período</div>
+          <div class="grid-2">
+            <div class="campo"><label>Data Inicial *</label><input type="text" data-campo="cartao_de_ponto.data_inicial" placeholder="DD/MM/AAAA"></div>
+            <div class="campo"><label>Data Final *</label><input type="text" data-campo="cartao_de_ponto.data_final" placeholder="DD/MM/AAAA"></div>
           </div>
         </div>
+
+        <!-- ── Formas de Apuração ──────────────────────────────── -->
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Formas de Apuração</div>
+          <div class="campo">
+            <label>Tipo de Apuração de HE</label>
+            <select data-campo="cartao_de_ponto.apuracao.tipo">
+              <option value="NAO_APURAR_HORAS_EXTRAS">Não apurar horas extras</option>
+              <option value="HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA">Horas extras excedentes da jornada diária</option>
+              <option value="HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL">Horas extras pelo critério mais favorável</option>
+              <option value="HORAS_EXTRAS_CONFORME_SUMULA_85">Horas extras conforme Súmula 85 do TST</option>
+              <option value="APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO">Apurar primeiras horas extras em separado</option>
+              <option value="HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL">Horas extras excedentes da jornada semanal</option>
+              <option value="HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL">Horas extras excedentes da jornada mensal</option>
+            </select>
+          </div>
+          <div class="grid-2" style="margin-top:6px;">
+            <div class="campo"><label>Hora p/ Súmula 85</label><input type="text" data-campo="cartao_de_ponto.apuracao.qtsumulatst" placeholder="02:00"></div>
+            <div class="campo"><label>Hora p/ Apurar Separado</label><input type="text" data-campo="cartao_de_ponto.apuracao.qthoraseparado" placeholder="02:00"></div>
+          </div>
+        </div>
+
+        <!-- ── Considerar Feriados + Tolerância ───────────────── -->
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Feriados e Tolerância</div>
+          <div class="grid-2">
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.considerar_feriados"> <label>Considerar Feriados</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.extras_feriados_separado"> <label>Extras aos feriados em separado</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.extras_domingos_separado"> <label>Extras aos domingos em separado</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.extras_sabados_domingos_separado"> <label>Extras aos sábados e domingos em separado</label></div>
+          </div>
+          <div style="margin-top:8px;" class="grid-3">
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.tolerancia_ativa"> <label>Tolerância</label></div>
+            <div class="campo"><label>Por turno</label><input type="text" data-campo="cartao_de_ponto.tolerancia_por_turno" placeholder="00:05"></div>
+            <div class="campo"><label>Por dia</label><input type="text" data-campo="cartao_de_ponto.tolerancia_por_dia" placeholder="00:10"></div>
+          </div>
+        </div>
+
+        <!-- ── Jornada de Trabalho Padrão ─────────────────────── -->
         <div class="fieldgroup" style="margin-top:10px;">
           <div class="fieldgroup-title">Jornada de Trabalho Padrão (HH:MM)</div>
           <div class="grid-4">
-            <div class="campo"><label>Segunda</label><input type="text" data-campo="cartao_de_ponto.jornada_segunda" placeholder="HH:MM"></div>
-            <div class="campo"><label>Terça</label><input type="text" data-campo="cartao_de_ponto.jornada_terca" placeholder="HH:MM"></div>
-            <div class="campo"><label>Quarta</label><input type="text" data-campo="cartao_de_ponto.jornada_quarta" placeholder="HH:MM"></div>
-            <div class="campo"><label>Quinta</label><input type="text" data-campo="cartao_de_ponto.jornada_quinta" placeholder="HH:MM"></div>
-            <div class="campo"><label>Sexta</label><input type="text" data-campo="cartao_de_ponto.jornada_sexta" placeholder="HH:MM"></div>
-            <div class="campo"><label>Sábado</label><input type="text" data-campo="cartao_de_ponto.jornada_sabado" placeholder="HH:MM"></div>
-            <div class="campo"><label>Domingo</label><input type="text" data-campo="cartao_de_ponto.jornada_domingo" placeholder="HH:MM"></div>
-            <div class="campo"><label>Dia Fechamento Mensal</label><input type="number" min="1" max="31" data-campo="cartao_de_ponto.dia_fechamento_mensal" placeholder="ex: 30"></div>
+            <div class="campo"><label>Segunda *</label><input type="text" data-campo="cartao_de_ponto.jornada_padrao.segunda_hhmm" placeholder="08:00"></div>
+            <div class="campo"><label>Terça *</label><input type="text" data-campo="cartao_de_ponto.jornada_padrao.terca_hhmm" placeholder="08:00"></div>
+            <div class="campo"><label>Quarta *</label><input type="text" data-campo="cartao_de_ponto.jornada_padrao.quarta_hhmm" placeholder="08:00"></div>
+            <div class="campo"><label>Quinta *</label><input type="text" data-campo="cartao_de_ponto.jornada_padrao.quinta_hhmm" placeholder="08:00"></div>
+            <div class="campo"><label>Sexta *</label><input type="text" data-campo="cartao_de_ponto.jornada_padrao.sexta_hhmm" placeholder="08:00"></div>
+            <div class="campo"><label>Sábado *</label><input type="text" data-campo="cartao_de_ponto.jornada_padrao.sabado_hhmm" placeholder="00:00"></div>
+            <div class="campo"><label>Domingo *</label><input type="text" data-campo="cartao_de_ponto.jornada_padrao.domingo_hhmm" placeholder="00:00"></div>
+          </div>
+          <div class="grid-2" style="margin-top:6px;">
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.jornada_feriado_trabalhado"> <label>Considerar jornada diária nos feriados trabalhados</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.jornada_feriado_nao_trabalhado"> <label>Considerar jornada diária nos feriados não trabalhados</label></div>
           </div>
         </div>
+
+        <!-- ── Períodos de Descanso ───────────────────────────── -->
         <div class="fieldgroup" style="margin-top:10px;">
-          <div class="fieldgroup-title">Períodos de Descanso e Noturno</div>
+          <div class="fieldgroup-title">Períodos de Descanso</div>
           <div class="grid-2">
-            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.apurar_intervalos_intrajornada"> <label>Apurar Supressão Intervalo Intrajornada</label></div>
-            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.apurar_intervalos_interjornadas"> <label>Apurar Intervalo Interjornadas</label></div>
-            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.apurar_adicional_noturno"> <label>Apurar Adicional Noturno</label></div>
-            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.horario_noturno_urbano"> <label>Noturno Urbano (22h-05h)</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_feriados_trabalhados"> <label>Apurar feriados trabalhados</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_domingos_trabalhados"> <label>Apurar domingos trabalhados</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_sabados_domingos"> <label>Apurar sábados e domingos trabalhados</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_intervalo_384"> <label>Apurar supressão do intervalo Art. 384 CLT</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_intervalo_72"> <label>Apurar supressão do intervalo Art. 72 CLT</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_intervalo_insalubridade"> <label>Apurar supressão do intervalo da insalubridade</label></div>
+          </div>
+          <div class="grid-2" style="margin-top:6px;">
+            <div class="campo"><label>Tempo Trabalho (Art. 253)</label><input type="text" data-campo="cartao_de_ponto.descanso.tempo_trabalho_art253" placeholder="01:40"></div>
+            <div class="campo"><label>Tempo Descanso (Art. 253)</label><input type="text" data-campo="cartao_de_ponto.descanso.tempo_descanso_art253" placeholder="00:20"></div>
+          </div>
+
+          <div style="margin-top:10px;padding-top:8px;border-top:1px solid #e9ecef;">
+            <strong style="font-size:0.8rem;color:#495057;">Intervalo Interjornadas</strong>
+            <div class="grid-3" style="margin-top:6px;">
+              <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.descanso_entre_jornadas"> <label>Ativar</label></div>
+              <div class="campo"><label>Entre jornadas</label>
+                <select data-campo="cartao_de_ponto.descanso.valor_descanso_entre_jornadas">
+                  <option value="10:00">10:00</option><option value="11:00">11:00</option>
+                  <option value="12:00">12:00</option><option value="14:00">14:00</option>
+                  <option value="17:00">17:00</option>
+                </select>
+              </div>
+              <div class="campo"><label>Entre semanas</label>
+                <select data-campo="cartao_de_ponto.descanso.valor_descanso_entre_semanas">
+                  <option value="35:00">35:00</option><option value="11:00">11:00</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div style="margin-top:10px;padding-top:8px;border-top:1px solid #e9ecef;">
+            <strong style="font-size:0.8rem;color:#495057;">Intervalo Intrajornada</strong>
+            <div class="grid-2" style="margin-top:6px;">
+              <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.intervalo_sup_4h_6h"> <label>Superior a 4h e até 6h</label></div>
+              <div class="campo"><label>Tolerância</label><input type="text" data-campo="cartao_de_ponto.descanso.tolerancia_sup_4h_6h" placeholder="00:15"></div>
+            </div>
+            <div class="grid-3" style="margin-top:4px;">
+              <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.intervalo_sup_6h"> <label>Superior a 6h</label></div>
+              <div class="campo"><label>Intervalo</label><input type="text" data-campo="cartao_de_ponto.descanso.valor_intervalo_sup_6h" placeholder="01:00"></div>
+              <div class="campo"><label>Tolerância</label><input type="text" data-campo="cartao_de_ponto.descanso.tolerancia_sup_6h" placeholder="00:05"></div>
+            </div>
+            <div class="grid-2" style="margin-top:6px;">
+              <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.considerar_fracionamento"> <label>Considerar válido o fracionamento do intervalo intrajornada</label></div>
+              <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_supressao_integral"> <label>Apurar supressão do intervalo intrajornada integral</label></div>
+              <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_supressao_reforma"> <label>Apurar supressão conforme §4º do Art. 71 da CLT</label></div>
+              <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_excesso_sumula118"> <label>Apurar excesso conforme Súmula 118 do TST</label></div>
+            </div>
+            <div class="grid-2" style="margin-top:4px;">
+              <div class="campo"><label>Intervalo máximo (Súmula 118)</label><input type="text" data-campo="cartao_de_ponto.descanso.valor_intervalo_max_sumula118" placeholder="02:00"></div>
+              <div class="checkbox-row" style="align-self:flex-end;"><input type="checkbox" data-campo="cartao_de_ponto.descanso.apurar_apenas_excesso_jornada"> <label>Apurar apenas o excesso que ultrapassar a jornada diária</label></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Horário Noturno ─────────────────────────────────── -->
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Horário Noturno</div>
+          <div class="campo" style="margin-bottom:8px;">
+            <label>Tipo de Atividade</label>
+            <select data-campo="cartao_de_ponto.noturno.tipo_atividade">
+              <option value="ATIVIDADE_URBANA">Atividade urbana (22:00 às 05:00)</option>
+              <option value="ATIVIDADE_AGRICOLA">Atividade agrícola (21:00 às 05:00)</option>
+              <option value="ATIVIDADE_PECUARIA">Atividade pecuária (20:00 às 04:00)</option>
+            </select>
+          </div>
+          <div class="grid-2">
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.noturno.apurar_horas_noturnas"> <label>Apurar horas noturnas</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.noturno.apurar_horas_extras_noturnas"> <label>Apurar horas extras noturnas</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.noturno.reducao_ficta"> <label>Considerar a redução ficta da hora noturna</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.noturno.horario_prorrogado_sumula60"> <label>Horário Prorrogado — Súmula 60 TST</label></div>
+            <div class="checkbox-row"><input type="checkbox" data-campo="cartao_de_ponto.noturno.forcar_prorrogacao"> <label>Forçar prorrogação</label></div>
+          </div>
+        </div>
+
+        <!-- ── Preenchimento de Jornadas ──────────────────────── -->
+        <div class="fieldgroup" style="margin-top:10px;">
+          <div class="fieldgroup-title">Preenchimento de Jornadas</div>
+          <div class="campo">
+            <label>Modo de preenchimento</label>
+            <select data-campo="cartao_de_ponto.preenchimento">
+              <option value="LIVRE">Livre</option>
+              <option value="PROGRAMACAO">Programação Semanal</option>
+              <option value="ESCALA">Escala</option>
+            </select>
           </div>
         </div>
       </div>
