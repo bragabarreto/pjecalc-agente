@@ -3023,27 +3023,38 @@ class PlaywrightAutomatorV2:
 
             self._marcar_radio("tipoDeDevedor", h.tipo_devedor)
             self._aguardar_ajax(1500)
+
+            # Quando devedor=RECLAMANTE, sempre cobrar (nunca descontar dos créditos)
+            if h.tipo_devedor == "RECLAMANTE":
+                self._selecionar("formaCobranca", "COBRAR")
+                self._aguardar_ajax(1000)
+
             self._marcar_radio("tipoValor", h.tipo_valor.value)
             self._aguardar_ajax(2000)
 
             if h.tipo_valor.value == "CALCULADO":
                 if h.aliquota_pct is not None:
-                    # PJE-Calc espera percentual em formato decimal (15.0 não 0.15)
-                    # O JSON pode vir como 0.15 ou 15 — normalizar
                     pct = h.aliquota_pct * 100 if h.aliquota_pct < 1 else h.aliquota_pct
-                    self._preencher("aliquota", _fmt_br(pct), obrigatorio=False)
+                    self._preencher("percentualHonorarios", _fmt_br(pct), obrigatorio=False)
                 if h.base_para_apuracao:
                     self._selecionar("baseParaApuracao", h.base_para_apuracao, obrigatorio=False)
             else:
                 if h.valor_informado_brl is not None:
-                    self._preencher("aliquota", _fmt_br(h.valor_informado_brl), obrigatorio=False)
+                    self._preencher("valorInformado", _fmt_br(h.valor_informado_brl), obrigatorio=False)
 
-            # Credor: campos opcionais — usar default reclamado se ausente
+            # Credor: para SUCUMBENCIAIS o credor é sempre o advogado da parte contrária
+            credor_nome = h.credor.nome if h.credor else None
+            if h.tipo_honorario == "SUCUMBENCIAIS":
+                if h.tipo_devedor == "RECLAMANTE":
+                    credor_nome = "ADVOGADO DO RECLAMADO"
+                elif h.tipo_devedor == "RECLAMADO":
+                    credor_nome = "ADVOGADO DO RECLAMANTE"
+            if credor_nome:
+                self._preencher("nomeCredor", credor_nome, obrigatorio=False)
             if h.credor:
-                self._preencher("nomeCredor", h.credor.nome, obrigatorio=False)
-                self._marcar_radio("tipoDocumentoFiscalCredor", h.credor.doc_fiscal_tipo.value)
-                self._preencher("numeroDocumentoFiscalCredor", h.credor.doc_fiscal_numero, obrigatorio=False)
-            self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
+                self._marcar_radio("tipoDocumentoCredor", h.credor.doc_fiscal_tipo.value)
+                self._preencher("documentoFiscalCredor", h.credor.doc_fiscal_numero, obrigatorio=False)
+            self._marcar_checkbox("apurarIr", h.apurar_irrf)
 
             self._clicar("salvar")
             self._aguardar_ajax(8000)
