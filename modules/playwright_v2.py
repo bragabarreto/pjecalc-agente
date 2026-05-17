@@ -3644,25 +3644,40 @@ class PlaywrightAutomatorV2:
             return
         c = self.previa.custas_judiciais
         self._selecionar("baseParaCustasCalculadas", c.base_para_calculadas)
+        # Marcar radios COM espera de AJAX após cada (a4j:support re-renderiza o
+        # campo de data correspondente apenas quando o tipo é CALCULADA_*/INFORMADA).
+        # Sem essa espera, o campo dataVencimento* não é encontrado na DOM seguinte.
         self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamante", c.custas_conhecimento_reclamante)
+        self._aguardar_ajax(3000); self._page.wait_for_timeout(800)
         self._marcar_radio("tipoDeCustasDeConhecimentoDoReclamado", c.custas_conhecimento_reclamado)
+        self._aguardar_ajax(3000); self._page.wait_for_timeout(800)
         self._marcar_radio("tipoDeCustasDeLiquidacao", c.custas_liquidacao)
+        self._aguardar_ajax(3000); self._page.wait_for_timeout(800)
+
         # Preencher dataVencimento* — validador do PJE-Calc exige data não-nula
-        # mesmo para tipos CALCULADA/NAO_SE_APLICA (NPE em DataVencimentoValidRule
-        # ao exportar). Usar data_ajuizamento como padrão (valida: vencimento >= aj.).
+        # quando o tipo correspondente é CALCULADA/INFORMADA.
         _dt_venc = (
             getattr(self.previa.parametros_calculo, "data_ajuizamento", None)
             or getattr(self.previa.parametros_calculo, "data_termino_calculo", None)
         )
         if _dt_venc:
-            self._aguardar_ajax(2000)
+            # Diagnóstico: listar quais dataVencimento* existem agora na DOM
+            existem = self._page.evaluate("""() => {
+                const result = {};
+                ['dataVencimentoConhecimentoDoReclamado','dataVencimentoConhecimentoDoReclamante',
+                 'dataVencimentoCustasDeLiquidacao','dataVencimentoCustasFixas'].forEach(f => {
+                  result[f] = !!document.getElementById('formulario:' + f);
+                  result[f + 'InputDate'] = !!document.getElementById('formulario:' + f + 'InputDate');
+                });
+                return result;
+            }""")
+            self.log(f"  [DIAG-custas-datas] {existem}")
             for _fid in [
                 "dataVencimentoConhecimentoDoReclamado",
                 "dataVencimentoConhecimentoDoReclamante",
                 "dataVencimentoCustasDeLiquidacao",
                 "dataVencimentoCustasFixas",
             ]:
-                # Tentar InputDate (visível, RichFaces) e base ID (hidden input)
                 self._preencher(f"{_fid}InputDate", _dt_venc, obrigatorio=False)
                 self._preencher(_fid, _dt_venc, obrigatorio=False)
             self.log(f"  ✓ dataVencimento custas = {_dt_venc}")
