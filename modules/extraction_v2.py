@@ -463,7 +463,34 @@ Valores de `apuracao.tipo` (usar o mais adequado à sentença):
 
 # 7. FGTS, CONTRIBUICAO_SOCIAL, IMPOSTO_DE_RENDA, HONORARIOS, CUSTAS, CORRECAO_JUROS_MULTA
 
-(Veja docs/schema-v2/ para campos detalhados — formato JSON espelha exatamente.)
+## FGTS — schema obrigatório
+
+```json
+{
+  "fgts": {
+    "tipo_verba": "PAGAR",
+    "compor_principal": "SIM",
+    "multa": {
+      "ativa": true,
+      "tipo_valor": "CALCULADA",
+      "percentual": "QUARENTA_POR_CENTO",
+      "excluir_aviso_da_multa": false
+    },
+    "incidencia": "SOBRE_O_TOTAL_DEVIDO",
+    "multa_artigo_467": false,
+    "multa_10_lc110": false,
+    "contribuicao_social": false,
+    "recolhimentos_existentes": []
+  }
+}
+```
+
+⚠️ **CRÍTICO**:
+- `compor_principal` ∈ {`"SIM"`, `"NAO"`} — **NUNCA** `true`/`false` (boolean)
+- `multa` é um **objeto**, **NUNCA** boolean. Se dispensa sem justa causa → `ativa: true`, `percentual: "QUARENTA_POR_CENTO"`. Se justa causa / pedido demissão → `ativa: false`.
+- `multa.percentual` ∈ {`"QUARENTA_POR_CENTO"`, `"VINTE_POR_CENTO"`}
+
+(Para contribuicao_social, imposto_de_renda, custas_judiciais e correcao_juros_multa, o formato JSON espelha exatamente a estrutura do schema.)
 
 ⚠️ Para `contribuicao_social.vinculacao_historicos_devidos`, deixar `{"modo": "automatica", "intervalos": []}` por padrão. Só usar `manual_por_periodo` se a sentença determinar bases diferentes por período.
 
@@ -494,7 +521,7 @@ Para `tipo_honorario = "SUCUMBENCIAIS"`, o credor é **sempre o advogado da part
 - `tipo_devedor = "RECLAMANTE"` → `credor.nome = "ADVOGADO DO RECLAMADO"`
 - `tipo_devedor = "RECLAMADO"` → `credor.nome = "ADVOGADO DO RECLAMANTE"`
 
-`credor.doc_fiscal_tipo`: usar `"CPNJ"` quando desconhecido (escritório de advocacia).
+`credor.doc_fiscal_tipo`: usar `"CNPJ"` quando desconhecido (escritório de advocacia).
 `credor.doc_fiscal_numero`: deixar `""` quando não informado na sentença.
 
 ### Tipos válidos de honorário

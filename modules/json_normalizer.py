@@ -7,7 +7,9 @@ Tratamentos cobertos (todos idempotentes — aplicar em JSON já canônico é no
 
 1. FGTS multa ``NAO_APURAR`` → ``ativa=false`` + ``CALCULADA/QUARENTA_POR_CENTO``
 2. FGTS multa ``percentual=null`` → ``QUARENTA_POR_CENTO``
-3. ``recolhimentos_existentes`` legacy (competencia/valor/observacao) → schema canônico
+3. FGTS ``compor_principal`` bool → SimNao enum (``true``→``"SIM"``, ``false``→``"NAO"``)
+4. FGTS ``multa`` bool → FGTSMulta dict (``true``→``{ativa:true,...}``, ``false``→``{ativa:false,...}``)
+5. ``recolhimentos_existentes`` legacy (competencia/valor/observacao) → schema canônico
 4. Honorários: traduz valores legacy do campo ``tipo`` para o enum ``tipo_honorario``
 5. Honorários: traduz ``base_apuracao`` legacy ("BRUTO"/"LIQUIDO") para enum canônico
 6. Correção/juros: ``IPCA_E``/``IPCA-E`` → ``IPCAE``
@@ -22,7 +24,21 @@ from typing import Any
 
 
 def _norm_fgts(fgts: dict[str, Any], *, parametros: dict | None = None) -> dict[str, Any]:
+    # compor_principal: projeto externo gera bool; Pydantic espera "SIM"/"NAO"
+    cp = fgts.get("compor_principal")
+    if isinstance(cp, bool):
+        fgts["compor_principal"] = "SIM" if cp else "NAO"
+
+    # multa: projeto externo gera bool; Pydantic espera objeto FGTSMulta
     multa = fgts.get("multa")
+    if isinstance(multa, bool):
+        fgts["multa"] = {
+            "ativa": multa,
+            "tipo_valor": "CALCULADA",
+            "percentual": "QUARENTA_POR_CENTO",
+        }
+        multa = fgts["multa"]
+
     if isinstance(multa, dict):
         tv = multa.get("tipo_valor")
         if tv == "NAO_APURAR":
