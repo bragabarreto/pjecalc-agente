@@ -2707,6 +2707,40 @@ class PlaywrightAutomatorV2:
                 erro = self._verificar_erro_jsf()
                 if erro:
                     self.log(f"  ⚠ Erro ao salvar Cartão de Ponto: {erro[:200]}")
+                # Diagnóstico forense detalhado quando o save falha
+                try:
+                    diag = self._page.evaluate(r"""
+                        () => {
+                          const result = {url: location.href, msgs: [], invalids: [], modal_text: null};
+                          // Capturar TODAS as mensagens RichFaces
+                          ['.rf-msg-err', '.rf-msgs-err', '.rich-message',
+                           '.rich-messages-marker', '.rf-msgs-sum', '.rf-msg-sum',
+                           '[id$=\"aliquotaErro\"]', '.messageError'].forEach(sel => {
+                            document.querySelectorAll(sel).forEach(el => {
+                              const t = (el.textContent || '').trim();
+                              if (t && t.length > 2 && t.length < 400) result.msgs.push(`${sel}: ${t}`);
+                            });
+                          });
+                          // Inputs inválidos
+                          document.querySelectorAll('.rich-message-marker, input.invalid, [aria-invalid="true"]').forEach(el => {
+                            result.invalids.push(el.id || el.name || el.outerHTML.substring(0, 100));
+                          });
+                          // Texto de qualquer modal/dialog
+                          const modal = document.querySelector('.rf-pp-cnt, .rich-modalpanel-content, .ui-dialog');
+                          if (modal) result.modal_text = modal.textContent.trim().substring(0, 500);
+                          return result;
+                        }
+                    """)
+                    if diag:
+                        self.log(f"  [DIAG-cartao-save] url={diag.get('url', '')[:80]}")
+                        for m in (diag.get('msgs') or [])[:8]:
+                            self.log(f"  [DIAG-cartao-save] {m[:250]}")
+                        if diag.get('invalids'):
+                            self.log(f"  [DIAG-cartao-save] inválidos: {diag['invalids'][:5]}")
+                        if diag.get('modal_text'):
+                            self.log(f"  [DIAG-cartao-save] modal: {diag['modal_text']}")
+                except Exception as e_diag:
+                    self.log(f"  [DIAG-cartao-save] falha capturar: {e_diag}")
             # Aplicar overrides via Grade de Ocorrências, se houver
             overrides = list(getattr(cp, "ocorrencias_override", []) or [])
             if overrides:
