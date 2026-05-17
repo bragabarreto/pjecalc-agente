@@ -440,7 +440,177 @@ Para cada verba principal, identificar reflexos. Padrão de incidência:
 
 # 5. CARTAO_DE_PONTO
 
-Incluir apenas se HE com base em jornada extraordinária. Ver doc 05.
+Preencher **somente quando a sentença fixar a jornada** (horário regular ou escala) e a
+quantidade de HE NÃO for informada diretamente (Opção B). O PJE-Calc apurará as HE a partir
+da jornada cadastrada.
+
+Deixar `null` quando: (a) HE quantitativa direta, ou (b) não há HE no cálculo.
+
+```json
+{
+  "data_inicial": "DD/MM/YYYY",
+  "data_final": "DD/MM/YYYY",
+
+  "apuracao": {
+    "tipo": "HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL",
+    "qtsumulatst": null,
+    "qthoraseparado": null
+  },
+
+  "considerar_feriados": true,
+  "extras_feriados_separado": false,
+  "extras_domingos_separado": false,
+  "extras_sabados_domingos_separado": false,
+
+  "tolerancia_ativa": false,
+  "tolerancia_por_turno": "00:05",
+  "tolerancia_por_dia": "00:10",
+
+  "jornada_padrao": {
+    "segunda_hhmm": "08:00", "terca_hhmm": "08:00", "quarta_hhmm": "08:00",
+    "quinta_hhmm": "08:00", "sexta_hhmm": "08:00",
+    "sabado_hhmm": "00:00", "domingo_hhmm": "00:00",
+    "jornada_semanal": "44,00", "jornada_mensal_media": "188,57"
+  },
+
+  "jornada_feriado_trabalhado": false,
+  "jornada_feriado_nao_trabalhado": false,
+
+  "descanso": null,
+  "noturno": null,
+
+  "preenchimento": "PROGRAMACAO",
+
+  "programacao_semanal": {
+    "segunda":  {"turnos": [{"entrada": "07:00", "saida": "12:00"}, {"entrada": "13:00", "saida": "18:00"}]},
+    "terca":    {"turnos": [{"entrada": "07:00", "saida": "12:00"}, {"entrada": "13:00", "saida": "18:00"}]},
+    "quarta":   {"turnos": [{"entrada": "07:00", "saida": "12:00"}, {"entrada": "13:00", "saida": "18:00"}]},
+    "quinta":   {"turnos": [{"entrada": "07:00", "saida": "12:00"}, {"entrada": "13:00", "saida": "18:00"}]},
+    "sexta":    {"turnos": [{"entrada": "07:00", "saida": "12:00"}, {"entrada": "13:00", "saida": "18:00"}]},
+    "sabado":   {"turnos": []},
+    "domingo":  {"turnos": []},
+    "feriado":  {"turnos": []}
+  },
+
+  "escala": null,
+
+  "ocorrencias_override": []
+}
+```
+
+**`apuracao.tipo`** ∈ {`HORAS_EXTRAS_PELO_CRITERIO_MAIS_FAVORAVEL` (padrão),
+`HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_DIARIA`, `HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_SEMANAL`,
+`HORAS_EXTRAS_EXCEDENTES_DA_JORNADA_MENSAL`, `HORAS_EXTRAS_CONFORME_SUMULA_85`,
+`APURA_PRIMEIRAS_HORAS_EXTRAS_SEPARADO`, `NAO_APURAR_HORAS_EXTRAS`}.
+
+`data_inicial`/`data_final`: mesmas datas da verba HE (`periodo_inicio`/`periodo_fim`).
+
+Preencher `descanso` e `noturno` somente quando a sentença mencionar expressamente
+supressão de intervalos ou trabalho noturno. Caso contrário, deixar `null`.
+
+## 5.1. PREENCHIMENTO DE JORNADA (CRÍTICO — sem isso o cartão não funciona)
+
+⚠️ **REGRA OBRIGATÓRIA**: quando a sentença fixa uma jornada (em qualquer formato), você
+DEVE preencher os campos de jornada concreta. Não basta marcar `preenchimento`; é
+necessário fornecer a tabela completa (entrada/saída por turno) para que a automação
+possa lançar os horários no PJE-Calc.
+
+### Modo de preenchimento — `preenchimento` ∈ {`LIVRE`, `PROGRAMACAO`, `ESCALA`}
+
+- **`PROGRAMACAO`** — padrão semanal (Seg..Dom + Feriado), PJE-Calc replica em todas
+  as semanas. **DEFAULT para sentenças com jornada regular semanal** (a maioria dos casos).
+- **`ESCALA`** — ciclo NÃO-semanal (12x36, 12x24, 5x1, etc). Usar quando a sentença
+  fixa escala específica.
+- **`LIVRE`** — nada é auto-gerado; raro, usar quando não há padrão semanal nem escala.
+
+### Programação Semanal (PROGRAMACAO) — `programacao_semanal`
+
+Tabela 8 dias × até 6 turnos. Cada dia tem `turnos` = lista de pares `{entrada, saida}` HH:MM.
+
+**Exemplos**:
+
+a) "Seg-sex 7h-18h com 1h de almoço":
+```json
+"programacao_semanal": {
+  "segunda": {"turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"18:00"}]},
+  "terca":   {"turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"18:00"}]},
+  "quarta":  {"turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"18:00"}]},
+  "quinta":  {"turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"18:00"}]},
+  "sexta":   {"turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"18:00"}]},
+  "sabado":  {"turnos": []},
+  "domingo": {"turnos": []},
+  "feriado": {"turnos": []}
+}
+```
+
+b) "Seg-sex 8h-17h direto sem intervalo":
+```json
+"segunda": {"turnos": [{"entrada":"08:00","saida":"17:00"}]}
+```
+
+c) Dia não trabalhado: `"turnos": []` (lista vazia).
+
+### Escala (ESCALA) — `escala`
+
+Ciclo repetido de N dias. `tipo` ∈ {`OUTRA`, `DOZE_POR_DOZE`, `DOZE_POR_VINTE_QUATRO`,
+`DOZE_POR_TRINTA_E_SEIS`, `DOZE_POR_QUARENTA_E_OITO`, `CINCO_POR_UM`, `SEIS_POR_UM`,
+`OITO_DOIS`}.
+
+Exemplo escala 12x36, 1 dia de ciclo:
+```json
+"preenchimento": "ESCALA",
+"escala": {
+  "tipo": "DOZE_POR_TRINTA_E_SEIS",
+  "inicio": "01/01/2020",
+  "quantidade_dias": 1,
+  "jornadas": [
+    {"turnos": [{"entrada":"07:00","saida":"19:00"}]}
+  ]
+}
+```
+
+`inicio` = data do dia 1 do ciclo (DD/MM/YYYY).
+`quantidade_dias` = nº de dias do ciclo. Para `OUTRA`, defina manualmente.
+
+### `ocorrencias_override` — JORNADAS IRREGULARES
+
+⚠️ **APRENDIZADO CHAVE — jornada regular × irregular**:
+
+- **REGULAR**: padrão repete a cada semana/ciclo. → `programacao_semanal`/`escala` resolve.
+- **IRREGULAR**: padrão dominante MAIS exceções por data (sábados alternados, plantões).
+  → passo 1: padrão em `programacao_semanal`/`escala`.
+  → passo 2: cada exceção em `ocorrencias_override` com data exata e turnos corretos.
+  Esses overrides são aplicados na Grade de Ocorrências mês a mês.
+
+**Exemplo concreto** (seg-sex 7h-18h + sábados ALTERNADOS 7h-15h):
+```json
+"preenchimento": "PROGRAMACAO",
+"programacao_semanal": {
+  "segunda": {"turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"18:00"}]},
+  ... (replica para terça-sexta) ...,
+  "sabado":  {"turnos": []},
+  "domingo": {"turnos": []},
+  "feriado": {"turnos": []}
+},
+"ocorrencias_override": [
+  {"data": "05/01/2020", "turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"15:00"}]},
+  {"data": "19/01/2020", "turnos":[{"entrada":"07:00","saida":"12:00"},{"entrada":"13:00","saida":"15:00"}]}
+]
+```
+
+Liste TODOS os sábados (ou dias específicos) trabalhados no período do cálculo, com a
+jornada exata. Para apagar um dia: `turnos: []`.
+
+### Tabela de decisão
+
+| Sentença diz... | `preenchimento` | tabela | overrides |
+|---|---|---|---|
+| "seg-sex 8h-17h" | PROGRAMACAO | `programacao_semanal` | — |
+| "seg-sex 7-18 + sáb 7-12 todo sábado" | PROGRAMACAO | `programacao_semanal` (sáb=7-12) | — |
+| "seg-sex 7-18 + sáb ALTERNADOS 7-15" | PROGRAMACAO | `programacao_semanal` (sáb=[]) | `ocorrencias_override` (cada sáb trabalhado) |
+| "escala 12x36" | ESCALA | `escala` (tipo=`DOZE_POR_TRINTA_E_SEIS`) | — |
+| "escala 5x1" | ESCALA | `escala` (tipo=`CINCO_POR_UM`) | — |
+| jornada sem padrão | LIVRE | — | `ocorrencias_override` (todos os dias) |
 
 # 6. FALTAS, FERIAS
 
