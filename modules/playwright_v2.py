@@ -3181,25 +3181,30 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ Fase 5 — Salvar: {e}")
 
     def _aplicar_ocorrencias_override(self, overrides: list) -> None:
-        """Aplica overrides de jornada na Grade de Ocorrências (apuracao-cartaodeponto).
+        """Aplica overrides de jornada na Grade de Ocorrências.
 
-        Para cada override (data, turnos), navega para a Grade do mês correspondente,
-        localiza a linha pela data e preenche entradaM/saidaM.
-
-        ⚠️ Mapeamento DOM da Grade ainda PARCIAL — confirmar IDs por inspeção direta.
+        Fluxo confirmado por inspeção DOM ao vivo (18/05/2026):
+        1. Garantir que estamos na listagem `apuracao-cartaodeponto.jsf`
+           (mostra botões Novo / Grade de Ocorrências / Visualizar Cartão)
+        2. Clicar `formulario:gradeOcorrencias` (botão "Grade de Ocorrências")
+        3. Aguardar select `formulario:mesAno` (sufixo `mesAno`) aparecer
+        4. Para cada (mes, ano) com overrides:
+           a. selecionar mês no dropdown
+           b. preencher inputs `entrada{M}` / `saida{M}` em cada linha (data)
+           c. **CLICAR SALVAR ANTES de mudar de mês** — caso contrário, as
+              alterações são perdidas (alerta exibido pelo PJE-Calc:
+              "Antes de mudar o mês, após alterar as ocorrências, é
+              necessário clicar no botão 'Salvar'")
         """
         if not overrides:
             return
         self.log(f"  → Aplicando {len(overrides)} ocorrências override na Grade")
-        # Agrupar por (mes, ano)
         from collections import defaultdict
         por_mes: dict[str, list] = defaultdict(list)
         def _campo(o, k, default=None):
-            """Acessa campo em Pydantic OU dict, sem quebrar."""
             if isinstance(o, dict):
                 return o.get(k, default)
             return getattr(o, k, default)
-
         for oc in overrides:
             data = _campo(oc, "data")
             if not data or "/" not in data:
@@ -3207,57 +3212,118 @@ class PlaywrightAutomatorV2:
             dd, mm, yyyy = data.split("/")
             por_mes[f"{mm}/{yyyy}"].append(oc)
 
-        # Navegar para a Grade — botão "Grade de Ocorrências" na listagem do Cartão de Ponto
+        # 1. Navegar DIRETO para a listagem de Cartão de Ponto (URL específica)
         try:
-            # Voltar à listagem do cartão de ponto (botão Voltar/Fechar ou navegação direta)
-            self._navegar_menu("li_calculo_cartao_ponto")
-            self._aguardar_ajax(2000)
-            grade_btn = self._page.locator(
-                "input[value='Grade de Ocorrências'], button:has-text('Grade de Ocorrências'), a:has-text('Grade de Ocorrências')"
-            ).first
-            grade_btn.click(force=True)
-            self._aguardar_ajax(3000)
+            conv = self._calculo_conversation_id
+            if conv:
+                url_list = (
+                    f"{self.pjecalc_url}/pages/cartaodeponto/"
+                    f"apuracao-cartaodeponto.jsf?conversationId={conv}"
+                )
+                self._page.goto(url_list, wait_until="domcontentloaded", timeout=15000)
+                self._aguardar_ajax(5000)
+                self._page.wait_for_timeout(1000)
+            else:
+                self._navegar_menu("li_calculo_cartao_ponto")
+                self._aguardar_ajax(5000)
         except Exception as e:
-            self.log(f"  ⚠ Grade de Ocorrências não acessível: {e}")
+            self.log(f"  ⚠ Falha navegar para apuracao-cartaodeponto: {e}")
             return
 
-        # Para cada mês, selecionar via dropdown Mês/Ano e aplicar overrides
+        # 2. Clicar botão "Grade de Ocorrências" (deve estar visível na listagem)
+        try:
+            clicou_grade = self._page.evaluate(
+                """() => {
+                    // Botão pode ser <input type=submit value="Grade de Ocorrências">
+                    // ou similar — usar value/texto + onclick exec
+                    const cands = [...document.querySelectorAll('input[type=submit], input[type=button], button, a')]
+                        .filter(el => /grade\\s+de\\s+ocorr/i.test((el.value||el.textContent||'').trim()));
+                    if (!cands.length) return null;
+                    const btn = cands[0];
+                    const onclickStr = btn.getAttribute('onclick') || '';
+                    if (onclickStr) {
+                        try {
+                            const fn = new Function('event', onclickStr);
+                            fn.call(btn, new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+                            return 'onclick-exec:' + (btn.id||btn.value||'').slice(0,40);
+                        } catch(_) {}
+                    }
+                    btn.click();
+                    return 'click:' + (btn.id||btn.value||'').slice(0,40);
+                }"""
+            )
+            if not clicou_grade:
+                self.log("  ⚠ Botão 'Grade de Ocorrências' não encontrado")
+                return
+            self.log(f"  ✓ click Grade de Ocorrências ({clicou_grade})")
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(1000)
+        except Exception as e:
+            self.log(f"  ⚠ Erro ao clicar Grade: {e}")
+            return
+
+        # 3. Aguardar select mesAno aparecer (sinal definitivo de que a Grade carregou)
+        try:
+            self._page.wait_for_selector("select[id$=':mesAno']", state="visible", timeout=10000)
+            self.log("  ✓ Grade carregada (select mesAno visível)")
+        except Exception:
+            self.log("  ⚠ select mesAno não apareceu em 10s — abortando overrides")
+            return
+
+        # 4. Para cada mês, selecionar dropdown → editar → SALVAR antes de mudar
         for mes_ano, ocs in por_mes.items():
+            self.log(f"  → Aplicando {len(ocs)} override(s) no mês {mes_ano}")
             try:
-                self._selecionar("mesAno", mes_ano)
-                self._aguardar_ajax(2000)
-            except Exception:
-                # Tentar IDs alternativos do dropdown
-                for alt_id in ("competenciaApuracao", "mesAnoApuracao", "filtroMesAno"):
-                    try:
-                        self._selecionar(alt_id, mes_ano)
-                        self._aguardar_ajax(2000)
-                        break
-                    except Exception:
-                        continue
-            # Para cada ocorrência: localizar linha pela data e preencher turnos
+                self._selecionar("mesAno", mes_ano, obrigatorio=True)
+                self._aguardar_ajax(3000)  # AJAX re-renderiza a tabela
+                self._page.wait_for_timeout(800)
+            except Exception as e:
+                self.log(f"    ⚠ Falha selecionar mês {mes_ano}: {e}")
+                continue
+
+            alterou = False
             for oc in ocs:
                 data = _campo(oc, "data")
                 turnos = _campo(oc, "turnos") or []
                 try:
                     row = self._page.locator(f"tr:has(td:has-text('{data}'))").first
+                    row.wait_for(state="visible", timeout=5000)
                     for t_idx, turno in enumerate(turnos[:6]):
                         m = t_idx + 1
                         ent = _campo(turno, "entrada", "")
                         sai = _campo(turno, "saida", "")
                         if ent:
-                            row.locator(f"input[id$='entrada{m}']").first.fill(ent)
+                            inp = row.locator(f"input[id$=':entrada{m}']").first
+                            inp.click()
+                            inp.press("Control+a"); inp.press("Delete")
+                            inp.type(ent, delay=20)
+                            inp.press("Tab")
+                            self._page.wait_for_timeout(200)
                         if sai:
-                            row.locator(f"input[id$='saida{m}']").first.fill(sai)
+                            inp = row.locator(f"input[id$=':saida{m}']").first
+                            inp.click()
+                            inp.press("Control+a"); inp.press("Delete")
+                            inp.type(sai, delay=20)
+                            inp.press("Tab")
+                            self._page.wait_for_timeout(200)
+                    alterou = True
+                    self.log(f"    ✓ override {data}: {len(turnos)} turno(s)")
                 except Exception as e:
-                    self.log(f"    ⚠ Falha ao aplicar override {data}: {e}")
-            # Salvar mês
-            try:
-                self._clicar("salvar")
-                self._aguardar_ajax(3000)
-            except Exception:
-                pass
-        self.log(f"  ✓ Overrides aplicados")
+                    self.log(f"    ⚠ Falha override {data}: {e}")
+
+            # 5. CRÍTICO: Salvar ANTES de mudar de mês (alerta explícito do PJE-Calc)
+            if alterou:
+                try:
+                    self._clicar("salvar")
+                    self._aguardar_ajax(5000)
+                    sucesso = self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
+                    if sucesso:
+                        self.log(f"  ✓ Mês {mes_ano} salvo")
+                    else:
+                        self.log(f"  ⚠ Save do mês {mes_ano} sem confirmação")
+                except Exception as e:
+                    self.log(f"  ⚠ Falha salvar mês {mes_ano}: {e}")
+        self.log(f"  ✓ Overrides aplicados em {len(por_mes)} mês(es)")
 
     def fase_faltas(self) -> None:
         self.log("Fase 6 — Faltas")
