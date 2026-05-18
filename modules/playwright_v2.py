@@ -102,6 +102,13 @@ class PlaywrightAutomatorV2:
         # via Recentes, evitando o problema de FlushMode.MANUAL no H2.
         self._calculo_teste_processo: str | None = os.environ.get("PJECALC_CALCULO_TESTE")
         self._modo_edicao_inicial: bool = False
+        # Verbas que precisam revisitar Parâmetros APÓS Fase 5 (Cartão de Ponto)
+        # para configurar tipoDaQuantidade=IMPORTADA_DO_CARTAO. O enum
+        # `apresentador.listaDeTiposDeQuantidade` só inclui IMPORTADA_DO_CARTAO
+        # quando há pelo menos 1 cartão cadastrado — por isso adiamos. Cada
+        # entrada: (v, q) onde `v` é a VerbaPrincipal e `q` o sub-objeto
+        # `formula_calculado.quantidade`.
+        self._verbas_pendentes_cartao_ponto: list = []
         # Diretório de download dedicado (padrão Calc Machine).
         # O Playwright usa esse path como destino dos downloads do navegador.
         import tempfile as _tempfile, pathlib as _pathlib, time as _time
@@ -299,6 +306,14 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"  ⚠ Reabertura pós-Verbas falhou: {e}")
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
+        # Fase 5b: revisita verbas dependentes de cartão (HE, intervalo
+        # intrajornada/interjornada, adicional noturno) para configurar
+        # tipoDaQuantidade=IMPORTADA_DO_CARTAO agora que o cartão existe.
+        _run_fase(
+            "Fase 5b (Vincular Cartão de Ponto às Verbas)",
+            self.fase_5b_vincular_cartao_ponto_verbas,
+            bool(self._verbas_pendentes_cartao_ponto),
+        )
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
         _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
         _run_fase("Fase 8 (FGTS)", self.fase_fgts)
@@ -1972,7 +1987,7 @@ class PlaywrightAutomatorV2:
         if not preenchido:
             self.log(f"    ⚠ Falha preencher valor_informado_brl={valor_brl}")
 
-    def _configurar_quantidade_radio(self, q_tipo: str, q) -> None:
+    def _configurar_quantidade_radio(self, q_tipo: str, q, v=None) -> None:
         """Configura o bloco Quantidade (radio + sub-campos) na verba-calculo.
 
         Decisões baseadas em pjecalc-fields-catalog.json:
@@ -2000,19 +2015,32 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu em 8s — pulando")
             return
         # Verificar se a OPÇÃO específica existe no DOM antes de tentar marcar.
-        # Para HE 50% via Expresso em Fase 4 (antes do Cartão de Ponto na
-        # Fase 5), o enum `listaDeTiposDeQuantidade` pode excluir
-        # IMPORTADA_DO_CARTAO porque nenhum cartão foi cadastrado ainda. Sem
-        # essa checagem prévia, _marcar_radio loga warning + nosso código
-        # continua emitindo um '✓ quantidade.tipo = X' enganoso.
+        # Para HE 50%/100%, intervalo intrajornada/interjornada, adicional
+        # noturno e outras verbas dependentes de cartão de ponto: na Fase 4
+        # (antes do Cartão de Ponto na Fase 5), o enum
+        # `apresentador.listaDeTiposDeQuantidade` EXCLUI IMPORTADA_DO_CARTAO
+        # porque nenhum cartão foi cadastrado ainda. Sem essa checagem prévia,
+        # _marcar_radio loga warning + nosso código continua emitindo um
+        # '✓ quantidade.tipo = X' enganoso.
         opcao_existe = self._page.locator(
             f"input[type='radio'][id*='tipoDaQuantidade'][value='{q_tipo}']"
         ).count() > 0
         if not opcao_existe:
-            self.log(
-                f"    ⚠ Opção tipoDaQuantidade={q_tipo} não está disponível neste estado "
-                f"(provável: Cartão de Ponto ainda não cadastrado — visite a verba após Fase 5)"
-            )
+            if q_tipo == "IMPORTADA_DO_CARTAO" and v is not None:
+                # ADIAR: revisitar após Fase 5 (Cartão de Ponto). A fase
+                # `fase_5b_vincular_cartao_ponto_verbas` itera essa lista e
+                # configura tipoDaQuantidade=IMPORTADA_DO_CARTAO + vincula
+                # o cartão.
+                self._verbas_pendentes_cartao_ponto.append((v, q))
+                self.log(
+                    f"    ⏸ tipoDaQuantidade=IMPORTADA_DO_CARTAO indisponível agora "
+                    f"(cartão não cadastrado) — verba '{getattr(v, 'nome_pjecalc', '?')}' "
+                    f"enfileirada para revisita pós-Fase 5"
+                )
+            else:
+                self.log(
+                    f"    ⚠ Opção tipoDaQuantidade={q_tipo} não está disponível neste estado"
+                )
             return
         try:
             self._marcar_radio("tipoDaQuantidade", q_tipo, obrigatorio=False)
@@ -2222,7 +2250,7 @@ class PlaywrightAutomatorV2:
             ):
                 q = p.formula_calculado.quantidade
                 q_tipo = q.tipo.value if hasattr(q.tipo, "value") else str(q.tipo)
-                self._configurar_quantidade_radio(q_tipo, q)
+                self._configurar_quantidade_radio(q_tipo, q, v=v)
             # Aguardar AJAX (rerender JSF disparado pelos blurs dos campos
             # acima) antes de o caller chamar _clicar_salvar_flex. Sem isso, o
             # botão Salvar pode estar em re-mount e a cascata flex falha com
@@ -2287,7 +2315,7 @@ class PlaywrightAutomatorV2:
             self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador), obrigatorio=False)
             # Quantidade: usa helper que pula APURADA/AVOS (valores internos)
             # e vincula cartão de ponto para IMPORTADA_DO_CARTAO
-            self._configurar_quantidade_radio(f.quantidade.tipo.value, f.quantidade)
+            self._configurar_quantidade_radio(f.quantidade.tipo.value, f.quantidade, v=v)
             # Dobrar Valor Devido — checkbox visível só quando valor=CALCULADO
             try:
                 if getattr(p.exclusoes, "dobrar_valor_devido", False):
@@ -3000,6 +3028,147 @@ class PlaywrightAutomatorV2:
         if "operação realizada com sucesso" not in body.lower() and "sucesso" not in body.lower():
             self.log(f"  ⚠ Verba '{v.nome_pjecalc}' — mensagem de sucesso não detectada")
         self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado")
+
+    def fase_5b_vincular_cartao_ponto_verbas(self) -> None:
+        """Revisita verbas adiadas para vincular IMPORTADA_DO_CARTAO ao cartão.
+
+        Verbas dependentes de cartão de ponto (HE 50%/100%, intervalo
+        intrajornada/interjornada, adicional noturno, RSR sobre HE, etc.)
+        precisam ter sua `tipoDaQuantidade` configurada para
+        `IMPORTADA_DO_CARTAO`. Mas o enum `apresentador.listaDeTiposDeQuantidade`
+        só inclui essa opção QUANDO PELO MENOS 1 CARTÃO DE PONTO EXISTE — o
+        que só acontece após Fase 5.
+
+        Por isso, na Fase 4 essas verbas são enfileiradas em
+        `_verbas_pendentes_cartao_ponto`. Aqui (após Fase 5) iteramos a fila
+        e configuramos cada uma:
+          1. Navegar para listagem de Verbas
+          2. Para cada verba pendente: click linkParametrizar → abre form
+          3. Marcar radio `tipoDaQuantidade=IMPORTADA_DO_CARTAO`
+          4. Selecionar o cartão no dropdown `tipoImportadadoDoCartaoDePontoQuantidade`
+             e clicar `incluirCartaoDePontoQuantidade`
+          5. Salvar e voltar à listagem
+
+        Não dispara mudarCaracteristica — apenas mexe no bloco Quantidade,
+        que re-renderiza só `regiaoQuantidade` e `painelLabelFormula`.
+        """
+        fila = list(self._verbas_pendentes_cartao_ponto)
+        if not fila:
+            self.log("  ⏭ Nenhuma verba pendente de vínculo ao cartão de ponto")
+            return
+        self.log(f"  → Vinculando cartão de ponto a {len(fila)} verba(s) dependente(s)")
+        # Navegar para a listagem de Verbas
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(2500)
+        except Exception as e:
+            self.log(f"  ⚠ Falha navegar para Verbas: {e}")
+            return
+
+        for v, q in fila:
+            nome = getattr(v, "nome_pjecalc", None) or getattr(v, "expresso_alvo", "?")
+            self.log(f"  → Revisitando '{nome}' para vincular IMPORTADA_DO_CARTAO")
+            try:
+                # Abrir Parâmetros da verba (mesma estratégia robusta do
+                # _configurar_parametros_pos_expresso: chamar onclick via JS)
+                candidatos = [v.nome_pjecalc] if getattr(v, "nome_pjecalc", None) else []
+                if hasattr(v, "expresso_alvo") and v.expresso_alvo and v.expresso_alvo not in candidatos:
+                    candidatos.append(v.expresso_alvo)
+                clicou = self._page.evaluate(
+                    """(candidatos) => {
+                        const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                        const trs = [...document.querySelectorAll('tr')];
+                        for (const alvo of candidatos) {
+                            const alvoN = norm(alvo);
+                            for (const tr of trs) {
+                                if (!norm(tr.textContent).includes(alvoN)) continue;
+                                const a = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
+                                if (!a || (a.id||'').includes(':listaReflexo:')) continue;
+                                const onclickStr = a.getAttribute('onclick') || '';
+                                if (onclickStr) {
+                                    try { new Function('event', onclickStr).call(a, new MouseEvent('click', {bubbles:true})); return alvo; } catch(_) {}
+                                }
+                                a.click();
+                                return alvo;
+                            }
+                        }
+                        return null;
+                    }""",
+                    candidatos,
+                )
+                if not clicou:
+                    self.log(f"    ⚠ Verba '{nome}' não encontrada na listagem — pulando")
+                    continue
+                self._aguardar_ajax(6000)
+                try:
+                    self._page.wait_for_selector(
+                        "input[id$=':descricao'], input[id$=':valorInformadoDoDevido']",
+                        state="visible",
+                        timeout=10000,
+                    )
+                except Exception:
+                    self.log(f"    ⚠ Form de Alteração não carregou para '{nome}' — pulando")
+                    continue
+                # Agora o radio IMPORTADA_DO_CARTAO deve estar disponível
+                opcao_existe = self._page.locator(
+                    "input[type='radio'][id*='tipoDaQuantidade'][value='IMPORTADA_DO_CARTAO']"
+                ).count() > 0
+                if not opcao_existe:
+                    self.log(
+                        f"    ⚠ Opção IMPORTADA_DO_CARTAO ainda indisponível para '{nome}' "
+                        f"(verificar se o cartão foi efetivamente salvo) — pulando"
+                    )
+                    # Voltar à listagem
+                    self._cancelar_form_voltar_listagem()
+                    continue
+                # Marcar radio + vincular cartão
+                self._marcar_radio("tipoDaQuantidade", "IMPORTADA_DO_CARTAO", obrigatorio=False)
+                self._aguardar_ajax(2500)
+                tipo_cp = getattr(q, "tipo_cartao_ponto", None)
+                self._vincular_cartao_ponto_quantidade(tipo_cp)
+                # Salvar
+                clicou_save = self._clicar_salvar_flex(timeout_ms=8000)
+                if not clicou_save:
+                    self.log(f"    ⚠ '{nome}': sem botão Salvar — pulando")
+                    self._cancelar_form_voltar_listagem()
+                    continue
+                self._aguardar_ajax(8000)
+                sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+                if sucesso:
+                    self.log(f"  ✓ '{nome}' vinculada ao cartão de ponto")
+                else:
+                    self.log(f"  ⚠ '{nome}': save sem mensagem de sucesso explícita")
+                    self._cancelar_form_voltar_listagem()
+            except Exception as e:
+                self.log(f"  ⚠ Falha revisitar '{nome}': {e}")
+                # Tentar recuperar para próxima iteração
+                try:
+                    self._cancelar_form_voltar_listagem()
+                except Exception:
+                    pass
+
+    def _cancelar_form_voltar_listagem(self) -> None:
+        """Helper para voltar à listagem de Verbas após erro/save sem sucesso."""
+        try:
+            cancelou = self._page.evaluate(
+                """() => {
+                    const btn = document.querySelector('input[id$=":cancelar"], input[value="Cancelar"]');
+                    if (!btn) return false;
+                    const onclickStr = btn.getAttribute('onclick') || '';
+                    if (onclickStr) { try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return true; } catch(_) {} }
+                    btn.click(); return true;
+                }"""
+            )
+            if cancelou:
+                self._aguardar_ajax(3000)
+        except Exception:
+            pass
+        # Fallback: nav direto
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(2000)
+        except Exception:
+            pass
 
     def fase_cartao_de_ponto(self) -> None:
         """Cartão de Ponto — cria novo cartão via formulário Novo do PJE-Calc.
