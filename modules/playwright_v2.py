@@ -475,20 +475,51 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ {dom_id}: fallback falhou: {e}")
 
     def _marcar_radio(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
+        """Marca um radio JSF simulando ação humana real.
+
+        CRÍTICO (descoberto 18/05/2026 sessão cecf7937): JSF a4j:support
+        diferencia eventos `isTrusted=true` (gerados pelo navegador real) de
+        eventos sintéticos `dispatchEvent(new Event(...))`. Em verbas
+        EXPRESSO_ADAPTADO com transição `valor=CALCULADO→INFORMADO`, o
+        backing bean Seam IGNORA mudanças disparadas por click(force=True) +
+        dispatchEvent, mantendo `valorDaVerba=CALCULADO` no servidor enquanto
+        o cliente vê INFORMADO → save silenciosamente rejeitado (URL fica em
+        verba-calculo.jsf sem mensagem de sucesso, sem erro JSF visível).
+
+        SOLUÇÃO: simular ação humana com scroll → hover → click SEM force.
+        Playwright aguarda o elemento ficar `actionable` e dispara eventos
+        TRUSTED que o a4j:support aceita corretamente.
+
+        Fallback com force=True + dispatchEvent só como último recurso
+        (cenários onde o radio está coberto por overlay invisível).
+        """
         # Tentar id*= primeiro (radios com id fixo); fallback name*= (JSF com IDs dinâmicos j_id*)
         for sel in (
             f"input[type='radio'][id*='{dom_id}'][value='{valor}']",
             f"input[type='radio'][name*='{dom_id}'][value='{valor}']",
         ):
             loc = self._page.locator(sel)
-            if loc.count() > 0:
-                loc.first.click(force=True)
-                # Forçar dispatch dos eventos JSF/RichFaces. force=True às vezes
-                # não dispara `change` nativo, e o a4j:support escuta esse evento
-                # para re-renderizar campos dependentes (ex.: dataVencimento* nas
-                # Custas só aparecem após `change` no radio tipoDeCustas*).
+            if loc.count() == 0:
+                continue
+            target = loc.first
+            # Estratégia 1: click humano (scroll → hover → click sem force).
+            # Gera evento isTrusted=true que o JSF aceita.
+            try:
+                target.scroll_into_view_if_needed(timeout=3000)
+                self._page.wait_for_timeout(100)
+                target.hover(timeout=3000)
+                self._page.wait_for_timeout(80)
+                target.click(timeout=5000)
+                self.log(f"  ✓ radio {dom_id} = {valor}")
+                return
+            except Exception as e:
+                self.log(f"  ⚠ radio {dom_id}={valor}: click humano falhou ({e}) — tentando fallback")
+            # Estratégia 2: fallback com force=True + dispatchEvent
+            # (rare path — só ativa se hit-test falhar)
+            try:
+                target.click(force=True)
                 try:
-                    loc.first.evaluate(
+                    target.evaluate(
                         """el => {
                             el.checked = true;
                             el.dispatchEvent(new Event('click', {bubbles: true}));
@@ -498,8 +529,10 @@ class PlaywrightAutomatorV2:
                     )
                 except Exception:
                     pass
-                self.log(f"  ✓ radio {dom_id} = {valor}")
+                self.log(f"  ✓ radio {dom_id} = {valor} (fallback force)")
                 return
+            except Exception as e:
+                self.log(f"  ⚠ radio {dom_id}={valor}: fallback também falhou ({e})")
         if obrigatorio:
             raise RuntimeError(f"Radio não encontrado: {dom_id}={valor}")
         self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
