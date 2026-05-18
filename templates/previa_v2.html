@@ -1718,9 +1718,42 @@ function htmlFormulaCalculado(v, idx) {
       </div>
     </div>
 
+    <div class="fieldgroup" style="margin:6px 0; background:#fff;">
+      <div class="fieldgroup-title" style="font-size:0.85rem;">Bases Compostas (somar outras verbas à Base)
+        <button type="button" style="float:right; font-size:0.78rem; padding:2px 8px;"
+          onclick="(function(){ const fc = previaData.verbas_principais[${idx}].parametros.formula_calculado; if (!fc.base_calculo) fc.base_calculo={}; if (!fc.base_calculo.bases_compostas) fc.base_calculo.bases_compostas=[]; fc.base_calculo.bases_compostas.push({verba:'', integralizar:'SIM'}); renderVerbas(); })()">
+          + Adicionar
+        </button>
+      </div>
+      ${((f.base_calculo?.bases_compostas)||[]).length === 0 ? `
+        <div class="ajuda" style="padding:4px 8px;">Vazio. Use o botão + acima para somar outra verba na base (ex.: base = Salário + Adicional Noturno).</div>
+      ` : ((f.base_calculo?.bases_compostas)||[]).map((bc, bci) => `
+        <div class="grid-3" style="border-top:1px dashed #ccc; padding-top:4px;">
+          <div class="campo">
+            <label>Verba</label>
+            <input type="text" value="${bc.verba||''}" placeholder="nome da verba a somar na base"
+              onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.bases_compostas[${bci}].verba=this.value">
+          </div>
+          <div class="campo">
+            <label>Integralizar</label>
+            <select onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.bases_compostas[${bci}].integralizar=this.value">
+              <option value="SIM"${bc.integralizar==='SIM'?' selected':''}>Sim</option>
+              <option value="NAO"${bc.integralizar==='NAO'?' selected':''}>Não</option>
+            </select>
+          </div>
+          <div class="campo" style="align-self:end;">
+            <button type="button" style="background:#dc3545; color:#fff; border:0; padding:5px 10px; border-radius:3px;"
+              onclick="previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.bases_compostas.splice(${bci},1); renderVerbas()">
+              × Remover
+            </button>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+
     <div style="margin-top:8px; padding:6px 10px; background:#eef3ff; border-radius:4px; font-size:0.85rem; font-family:monospace;">
       <strong>Fórmula resultante:</strong>
-      ((${(f.base_calculo?.tipo||'BASE').replace(/_/g,' ')})${f.base_calculo?.proporcionaliza==='SIM'?' propor.':''}
+      ((${(f.base_calculo?.tipo||'BASE').replace(/_/g,' ')}${((f.base_calculo?.bases_compostas)||[]).length ? ' + ' + ((f.base_calculo?.bases_compostas)||[]).map(bc => bc.verba||'?').join(' + ') : ''})${f.base_calculo?.proporcionaliza==='SIM'?' propor.':''}
       ÷ ${f.divisor?.tipo==='OUTRO_VALOR' ? (f.divisor?.valor??'?') : (f.divisor?.tipo||'?').replace(/_/g,' ').toLowerCase()})
       × ${f.multiplicador??1}
       × ${quantTipo==='INFORMADA' ? (f.quantidade?.valor??'?') : quantTipo.replace(/_/g,' ').toLowerCase()}${f.quantidade?.proporcionalizar?' propor.':''}
@@ -2018,10 +2051,19 @@ function htmlVerba(v, idx) {
             </select>
           </div>
           ${p.valor==='INFORMADO' ? `
-            <div class="campo col-span-2">
-              <label>Valor Devido Mensal (R$) <span class="obrigatorio">*</span></label>
+            <div class="campo">
+              <label>Devido Mensal (R$) <span class="obrigatorio">*</span></label>
               <input type="number" step="0.01" value="${p.valor_devido?.valor_informado_brl||''}"
                 onchange="if(!previaData.verbas_principais[${idx}].parametros.valor_devido) previaData.verbas_principais[${idx}].parametros.valor_devido={tipo:'INFORMADO'}; previaData.verbas_principais[${idx}].parametros.valor_devido.valor_informado_brl=parseFloat(this.value); validarPrevia()">
+              <span class="ajuda">Já mensalizado (R$/dia × 22 dias úteis)</span>
+            </div>
+            <div class="campo">
+              <div class="checkbox-row" style="margin-top:22px;">
+                <input type="checkbox"${p.valor_devido?.proporcionalizar?' checked':''}
+                  onchange="if(!previaData.verbas_principais[${idx}].parametros.valor_devido) previaData.verbas_principais[${idx}].parametros.valor_devido={tipo:'INFORMADO'}; previaData.verbas_principais[${idx}].parametros.valor_devido.proporcionalizar=this.checked">
+                <label>Proporcionalizar Devido</label>
+              </div>
+              <span class="ajuda" style="display:block; margin-top:4px;">marque se valor é integral (meses incompletos serão proporcionalizados pelo PJE-Calc)</span>
             </div>
           ` : `<div class="campo col-span-2"></div>`}
           <div class="campo">
@@ -2140,18 +2182,25 @@ function htmlVerba(v, idx) {
         </div>
       </details>
 
-      <details class="fieldgroup">
-        <summary class="fieldgroup-title" style="cursor:pointer;">Exclusões / Subtrações da Base</summary>
+      <div class="fieldgroup">
+        <div class="fieldgroup-title">Exclusões (do bloco Valor Devido)</div>
         <div class="grid-4">
-          ${['faltas_justificadas','faltas_nao_justificadas','ferias_gozadas','dobrar_valor_devido'].map(ex => `
+          ${['faltas_justificadas','faltas_nao_justificadas','ferias_gozadas'].map(ex => `
             <div class="checkbox-row">
               <input type="checkbox"${p.exclusoes?.[ex]?' checked':''}
                 onchange="if(!previaData.verbas_principais[${idx}].parametros.exclusoes) previaData.verbas_principais[${idx}].parametros.exclusoes={}; previaData.verbas_principais[${idx}].parametros.exclusoes['${ex}']=this.checked">
               <label>${ex.replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase())}</label>
             </div>
           `).join('')}
+          ${p.valor==='CALCULADO' ? `
+            <div class="checkbox-row" title="Visível apenas para verbas CALCULADO no PJE-Calc">
+              <input type="checkbox"${p.exclusoes?.dobrar_valor_devido?' checked':''}
+                onchange="if(!previaData.verbas_principais[${idx}].parametros.exclusoes) previaData.verbas_principais[${idx}].parametros.exclusoes={}; previaData.verbas_principais[${idx}].parametros.exclusoes.dobrar_valor_devido=this.checked">
+              <label><strong>Dobrar Valor Devido</strong></label>
+            </div>
+          ` : ''}
         </div>
-      </details>
+      </div>
 
       <details class="fieldgroup">
         <summary class="fieldgroup-title" style="cursor:pointer;">Valor Pago (já recebido pelo reclamante)</summary>

@@ -463,6 +463,52 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **MULTA CONVENCIONAL** | **INFORMADO** | valor único conforme CCT |
 | **INDENIZAÇÃO ADICIONAL (Estabilidade)** | CALCULADO | base=MAIOR_REMUNERACAO, divisor=OUTRO_VALOR=1, multiplicador=1, quantidade=INFORMADA (meses de estabilidade); proporcionalizar=SIM |
 
+### Estratégia de preenchimento — campos OBRIGATÓRIOS por verba
+
+Para que a automação preencha a página de Parâmetros do PJE-Calc Cidadão CORRETAMENTE,
+cada verba (manual OU expressa) precisa ter os campos abaixo definidos no JSON.
+O esquema espelha **integralmente** a página `verba-calculo.jsf` (Cálculo > Verbas > Alterar):
+
+#### Bloco "Dados de Verba" (sempre visível):
+- `parametros.assunto_cnj`: `{codigo: int, label: str}` (use 2581 - Remuneração... como default amplo)
+- `parametros.parcela`: `FIXA` (default) ou `VARIAVEL`
+- `parametros.valor`: `INFORMADO` ou `CALCULADO` (decide qual bloco aparece a seguir)
+- `parametros.incidencias`: `{irpf, cs_inss, fgts, previdencia_privada, pensao_alimenticia}` (booleans)
+- `parametros.caracteristica`: `COMUM` | `DECIMO_TERCEIRO_SALARIO` | `AVISO_PREVIO` | `FERIAS`
+- `parametros.ocorrencia_pagamento`: `MENSAL` | `DEZEMBRO` | `DESLIGAMENTO` | `PERIODO_AQUISITIVO`
+- `parametros.juros_aplicar_sumula_439`: false (default) — true só se sentença determinar
+
+#### Geração de Reflexa/Principal:
+- `parametros.tipo`: `PRINCIPAL` (verbas principais) ou `REFLEXO` (reflexos manuais)
+- `parametros.gerar_reflexa`: `DIFERENCA` (default) ou `DEVIDO` — sobre o que os reflexos incidirão
+- `parametros.gerar_principal`: `DIFERENCA` (default) ou `DEVIDO`
+- `parametros.compor_principal`: true (default) ou false — incluir no Bruto Devido?
+- `parametros.zerar_valor_negativo`: false (default) ou true
+
+#### Bloco "Valor Devido" (sempre visível):
+- `parametros.periodo_inicio` / `periodo_fim`: DD/MM/YYYY
+- `parametros.exclusoes`: `{faltas_justificadas, faltas_nao_justificadas, ferias_gozadas, dobrar_valor_devido}` (booleans)
+  - `dobrar_valor_devido`: só fica disponível quando `valor=CALCULADO` no PJE-Calc; marcar quando a sentença determinar (ex.: feriado em dobro, RSR em dobro)
+- Se `valor=INFORMADO`:
+  - `parametros.valor_devido`: `{tipo: "INFORMADO", valor_informado_brl: float > 0, proporcionalizar: bool}`
+  - `proporcionalizar`: true se o valor informado é INTEGRAL e o PJE-Calc deve proporcionalizar meses incompletos (admissão/demissão no meio do mês)
+  - `formula_calculado`: `null`
+- Se `valor=CALCULADO`:
+  - `parametros.valor_devido`: `{tipo: "CALCULADO"}`
+  - `parametros.formula_calculado`: ver §4.4 (base_calculo + divisor + multiplicador + quantidade)
+    - `base_calculo.bases_compostas`: lista de outras verbas a SOMAR na base (ex.: salário + adicional noturno). Vazio quando a base é só uma. Cada item: `{verba: "nome da verba", integralizar: "SIM"|"NAO"}`
+
+#### Bloco "Valor Pago" (sempre visível — valor já recebido):
+- `parametros.valor_pago`: `{tipo: "INFORMADO"|"CALCULADO", valor_brl: 0.00, proporcionalizar: bool}`
+- Geralmente `INFORMADO` com `valor_brl: 0.00` (nada pago) — exceto em equiparação salarial (CALCULADO com base no histórico do paradigma)
+
+#### Bloco "Comentários":
+- `parametros.comentarios`: string opcional com observações jurídicas (até 255 chars)
+
+**⚠️ NUNCA deixe um desses campos com `null` quando a sentença fornece a informação.**
+A IA deve LER a sentença e preencher EXPLICITAMENTE cada campo. A automação não inventa
+valores — ela reproduz o que está no JSON.
+
 ### Regra-chave: estrategia_preenchimento × `valor` da fórmula
 
 A automação trata as 3 estratégias de forma diferente:

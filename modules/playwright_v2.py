@@ -2018,6 +2018,12 @@ class PlaywrightAutomatorV2:
 
         if p.valor == TipoValor.INFORMADO:
             self._preencher("valorDevido", _fmt_br(p.valor_devido.valor_informado_brl))
+            # Proporcionalizar do bloco Valor Devido (espelho página verba-calculo.jsf)
+            try:
+                if getattr(p.valor_devido, "proporcionalizar", False):
+                    self._marcar_checkbox("proporcionalizarDevido", True)
+            except Exception:
+                pass
         else:  # CALCULADO
             f = p.formula_calculado
             self._selecionar("tipoDaBaseTabelada", f.base_calculo.tipo.value)
@@ -2034,6 +2040,12 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(2000)
             if f.quantidade.tipo.value == "INFORMADA" and f.quantidade.valor is not None:
                 self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor), obrigatorio=False)
+            # Dobrar Valor Devido — checkbox visível só quando valor=CALCULADO
+            try:
+                if getattr(p.exclusoes, "dobrar_valor_devido", False):
+                    self._marcar_checkbox("dobrarValorDevido", True)
+            except Exception:
+                pass
 
         # 3. Período
         for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
@@ -2073,6 +2085,13 @@ class PlaywrightAutomatorV2:
             self._marcar_checkbox("deduzirInssRecolhido", p.deduzir_inss_recolhido)
         if hasattr(p, "considerar_competencia_paga") and p.considerar_competencia_paga is not None:
             self._marcar_checkbox("considerarCompetenciaPaga", p.considerar_competencia_paga)
+
+        # 7. Comentários da verba (textarea opcional no form de Alteração)
+        if getattr(p, "comentarios", None):
+            try:
+                self._preencher("comentarios", p.comentarios, obrigatorio=False)
+            except Exception:
+                pass
 
     def _configurar_parametros_pos_expresso(self, v) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
