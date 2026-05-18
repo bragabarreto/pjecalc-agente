@@ -4025,12 +4025,31 @@ async def correcao_manual_diff(sessao_id: str, db: Session = Depends(get_db)):
     from modules.playwright_v2 import capturar_snapshot_final_listagem, computar_diff_snapshots
     try:
         snapshot_final = await _asyncio.to_thread(
-            capturar_snapshot_final_listagem, conv_id=conv
+            capturar_snapshot_final_listagem,
+            conv_id=conv,
+            numero_processo=getattr(calculo, "numero_processo", None),
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Falha ao capturar snapshot final: {e}")
 
-    diff = computar_diff_snapshots(data_inicial.get("snapshot", {}), snapshot_final)
+    # Validação: se o inicial tinha verbas e o final vier vazio, é quase
+    # certo que a conv expirou ou a reabertura falhou — não devemos
+    # registrar 10 "verbas removidas" falsamente.
+    snap_inicial = data_inicial.get("snapshot", {}) or {}
+    n_inicial = len(snap_inicial.get("linhas") or [])
+    n_final = len(snapshot_final.get("linhas") or [])
+    if n_inicial > 0 and n_final == 0:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Não foi possível ler o estado atual do PJE-Calc "
+                f"(snapshot inicial tinha {n_inicial} verbas, listagem atual vazia). "
+                "A conversa Seam pode ter expirado. Use a opção de descrição em texto livre "
+                "ou refaça a automação."
+            ),
+        )
+
+    diff = computar_diff_snapshots(snap_inicial, snapshot_final)
 
     # Persistir cada delta como CorrecaoUsuario para o Learning Engine
     from infrastructure.database import CorrecaoUsuario

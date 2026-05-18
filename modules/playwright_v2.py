@@ -4709,25 +4709,45 @@ class PlaywrightAutomatorV2:
 
 def capturar_snapshot_final_listagem(
     conv_id: str,
+    numero_processo: str | None = None,
     pjecalc_url: str = "http://localhost:9257/pjecalc",
     log_fn: Callable[[str], None] | None = None,
 ) -> dict:
-    """Abre Playwright efêmero, navega para a listagem de Verbas na conv
-    Seam indicada e captura o snapshot atual da listagem.
+    """Abre Playwright efêmero, navega para a listagem de Verbas e captura
+    o snapshot atual. Tenta 2 estratégias em cascata:
 
-    Usado pelo endpoint POST /api/correcao_manual_diff: o usuário avisa que
-    terminou a edição manual no PJE-Calc, e o backend chama esta função para
-    comparar o estado final com o snapshot inicial (salvo antes do raise
-    de Liquidação) e gerar CorrecaoUsuario automaticamente.
+    1. URL direta `verba-calculo.jsf?conversationId={conv_id}` — funciona
+       quando a conv Seam ainda está em modo edição com o cálculo aberto.
+    2. Fallback via Home → Recentes (duplo-click no cálculo) → sidebar
+       Verbas. Necessário quando a conv original expirou ou perdeu contexto.
     """
     from playwright.sync_api import sync_playwright
     _log = log_fn or (lambda m: logger.info(m))
     snap: dict = {"linhas": [], "reflexos_ativos": [], "mensagens": [], "erro": None}
+
+    def _coletar(page) -> dict:
+        return page.evaluate("""() => {
+            const trs = [...document.querySelectorAll('tr')];
+            const linhas = trs
+                .filter(tr => tr.querySelector('input[id*=":verbaSelecionada"]'))
+                .map(tr => (tr.textContent||'').replace(/\\s+/g,' ').trim())
+                .filter(t => t);
+            const reflexos = [...document.querySelectorAll('input[id*=":listaReflexo:"][id$=":ativo"]')]
+                .filter(c => c.checked)
+                .map(c => c.id);
+            const total_el = document.querySelector('[id*=":totalDevido"], [id*=":total"], [id$=":valorTotal"]');
+            const total = total_el ? (total_el.value || total_el.textContent || '').trim() : null;
+            const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.rich-message-detail')]
+                .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
+            return {linhas, reflexos_ativos: reflexos, valor_total: total, mensagens: msgs, url: location.href.split('#')[0]};
+        }""")
+
     with sync_playwright() as pw:
         try:
             browser = pw.firefox.launch(headless=True)
             ctx = browser.new_context(viewport={"width": 1280, "height": 800})
             page = ctx.new_page()
+            # Estratégia 1: URL direta com conv_id original
             url_verbas = (
                 f"{pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
                 f"?conversationId={conv_id}"
@@ -4738,21 +4758,58 @@ def capturar_snapshot_final_listagem(
             except Exception:
                 pass
             page.wait_for_timeout(1500)
-            snap = page.evaluate("""() => {
-                const trs = [...document.querySelectorAll('tr')];
-                const linhas = trs
-                    .filter(tr => tr.querySelector('input[id*=":verbaSelecionada"]'))
-                    .map(tr => (tr.textContent||'').replace(/\\s+/g,' ').trim())
-                    .filter(t => t);
-                const reflexos = [...document.querySelectorAll('input[id*=":listaReflexo:"][id$=":ativo"]')]
-                    .filter(c => c.checked)
-                    .map(c => c.id);
-                const total_el = document.querySelector('[id*=":totalDevido"], [id*=":total"], [id$=":valorTotal"]');
-                const total = total_el ? (total_el.value || total_el.textContent || '').trim() : null;
-                const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.rich-message-detail')]
-                    .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
-                return {linhas, reflexos_ativos: reflexos, valor_total: total, mensagens: msgs, url: location.href.split('#')[0]};
-            }""")
+            snap = _coletar(page)
+            snap["estrategia"] = "url-direta"
+
+            # Estratégia 2: listagem vazia → conv pode ter expirado. Reabrir
+            # via Recentes (duplo-click) + sidebar Verbas.
+            if not snap.get("linhas") and numero_processo:
+                _log(f"  ⚠ Listagem vazia em conv={conv_id} — tentando reabrir via Recentes")
+                page.goto(f"{pjecalc_url}/pages/principal.jsf", wait_until="domcontentloaded", timeout=15000)
+                page.wait_for_timeout(1500)
+                # Procurar select de Recentes (não-vazio) e fazer dblclick no item certo
+                reaberto = page.evaluate("""(numProc) => {
+                    const SKIP = new Set(['selAcheFacil']);
+                    let target = null;
+                    for (const s of document.querySelectorAll('select')) {
+                        if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
+                        if (s.size > 1 && (s.name||'').startsWith('formulario:')) { target = s; break; }
+                    }
+                    if (!target) return null;
+                    const opts = [...target.options];
+                    const idx = opts.findIndex(o => (o.text||'').includes(numProc));
+                    if (idx < 0) return null;
+                    target.selectedIndex = idx;
+                    target.options[idx].selected = true;
+                    target.dispatchEvent(new Event('change', {bubbles: true}));
+                    target.dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true}));
+                    target.options[idx].dispatchEvent(new MouseEvent('dblclick', {bubbles: true, cancelable: true}));
+                    return idx;
+                }""", numero_processo)
+                if reaberto is not None:
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=15000)
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(2000)
+                    # Capturar nova conv da URL
+                    m = page.evaluate("() => location.href.match(/conversationId=(\\d+)/)?.[1] || null")
+                    if m:
+                        page.goto(
+                            f"{pjecalc_url}/pages/calculo/verba/verba-calculo.jsf?conversationId={m}",
+                            wait_until="domcontentloaded", timeout=15000,
+                        )
+                        try:
+                            page.wait_for_load_state("networkidle", timeout=8000)
+                        except Exception:
+                            pass
+                        page.wait_for_timeout(1500)
+                        snap = _coletar(page)
+                        snap["estrategia"] = f"recentes-reabrir:conv={m}"
+                    else:
+                        _log("  ⚠ Reabertura via Recentes não mudou URL (sem conv nova)")
+                else:
+                    _log(f"  ⚠ Processo {numero_processo} não encontrado nos Recentes")
             browser.close()
         except Exception as e:
             _log(f"  ⚠ capturar_snapshot_final_listagem: {e}")
