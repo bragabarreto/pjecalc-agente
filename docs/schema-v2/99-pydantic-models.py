@@ -478,11 +478,13 @@ class ParametrosVerba(BaseModel):
 
     @model_validator(mode="after")
     def _check_valor_consistency(self) -> "ParametrosVerba":
-        # Pular validação quando valor não foi especificado (modo Expresso)
+        # Pular validação quando valor não foi especificado (modo Expresso
+        # SEM customização — PJE-Calc usa defaults). Mas avisar via log se
+        # alguma indicação de override está presente sem valor.
         if self.valor is None:
             return self
-        # Tolerância: se LLM gerou valor=CALCULADO mas formula_calculado é null
-        # E valor_devido tem valor_informado_brl, normalizamos para INFORMADO.
+        # Tolerância benigna: LLM gerou valor=CALCULADO sem fórmula MAS tem
+        # valor_informado_brl → normaliza para INFORMADO (provável engano).
         if (
             self.valor == TipoValor.CALCULADO
             and self.formula_calculado is None
@@ -490,6 +492,43 @@ class ParametrosVerba(BaseModel):
             and self.valor_devido.valor_informado_brl is not None
         ):
             self.valor = TipoValor.INFORMADO
+
+        # CONSISTÊNCIA RÍGIDA — bloqueia liquidação errada por verba
+        # mal-preenchida no JSON. Erros mais comuns observados em produção:
+        #   1. valor=INFORMADO sem valor_devido.valor_informado_brl > 0
+        #      → PJE-Calc fica com "Devido = 0,00" e pendência na liquidação
+        #   2. valor=CALCULADO sem formula_calculado completo
+        #      → PJE-Calc não consegue calcular, verba zerada
+        if self.valor == TipoValor.INFORMADO:
+            if not isinstance(self.valor_devido, ValorDevidoInformado) or not self.valor_devido.valor_informado_brl:
+                raise ValueError(
+                    "ParametrosVerba: valor=INFORMADO exige "
+                    "`valor_devido.valor_informado_brl > 0`. "
+                    "Aplicar mensalização (§4.4.bis do prompt) se a sentença "
+                    "fixar valor diário/semanal."
+                )
+        elif self.valor == TipoValor.CALCULADO:
+            f = self.formula_calculado
+            if f is None:
+                raise ValueError(
+                    "ParametrosVerba: valor=CALCULADO exige `formula_calculado` "
+                    "preenchido com base_calculo, divisor, multiplicador, quantidade. "
+                    "Se a sentença não fornecer fórmula explícita, use "
+                    "valor=INFORMADO com valor_informado_brl mensalizado."
+                )
+            if f.base_calculo is None or f.base_calculo.tipo is None:
+                raise ValueError(
+                    "ParametrosVerba: formula_calculado.base_calculo.tipo é obrigatório "
+                    "quando valor=CALCULADO. Use um dos enums: MAIOR_REMUNERACAO, "
+                    "HISTORICO_SALARIAL, SALARIO_DA_CATEGORIA, SALARIO_MINIMO, "
+                    "VALE_TRANSPORTE."
+                )
+            if f.quantidade is None or f.quantidade.tipo is None:
+                raise ValueError(
+                    "ParametrosVerba: formula_calculado.quantidade.tipo é obrigatório "
+                    "quando valor=CALCULADO. Use um dos enums: INFORMADA, "
+                    "IMPORTADA_DO_CALENDARIO, IMPORTADA_DO_CARTAO, AVOS, APURADA."
+                )
         return self
 
 

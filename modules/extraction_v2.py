@@ -399,6 +399,107 @@ da sentença e usar as mesmas datas `data_inicial`/`data_final` da verba HE.
 **Nunca** omitir `quantidade` nem deixar como `null` quando `valor=CALCULADO` — o PJE-Calc
 calculará 0 e a verba terá valor zero.
 
+## 4.4.bis REGRA DE MENSALIZAÇÃO (CRÍTICA — leia ANTES de preencher fórmulas)
+
+O **PJE-Calc apura SEMPRE mês a mês**. Qualquer valor da sentença em base não-mensal
+(diário, semanal, anual, por ocorrência) DEVE ser convertido para representação que o
+PJE-Calc consiga apurar mensalmente. Isso é fonte de erros frequentes.
+
+### Estratégia 1 — Mensalizar e usar `valor=INFORMADO` (mais simples, recomendado)
+Faça a conta da sentença e informe o **valor mensal** já calculado:
+
+```
+Vale-transporte: R$ 8,40/dia × 22 dias úteis = R$ 184,80/mês
+→ valor=INFORMADO, valor_devido.valor_informado_brl = 184.80
+```
+
+```
+Ajuda de custo: R$ 100/semana
+→ R$ 100 × 4,33 sem/mês = R$ 433,00/mês
+→ valor=INFORMADO, valor_devido.valor_informado_brl = 433.00
+```
+
+```
+Diárias: R$ 80/dia × 20 viagens/mês = R$ 1.600/mês
+→ valor=INFORMADO, valor_devido.valor_informado_brl = 1600.00
+```
+
+### Estratégia 2 — Usar `valor=CALCULADO` com fórmula PJE-Calc
+Use quando a sentença remete a um histórico salarial existente OU usa multiplicador
+sobre base já cadastrada. **NUNCA** use CALCULADO com "valor fixo × dias úteis" se o valor
+não vem de um histórico — isso não tem como ser preenchido na fórmula do PJE-Calc.
+
+❌ ERRADO: "Vale-transporte R$ 8,40/dia × dias úteis" → CALCULADO com base inventada
+✅ CERTO: "Vale-transporte R$ 8,40/dia × dias úteis" → INFORMADO com R$ 184,80/mês já calculado
+
+A fórmula CALCULADO do PJE-Calc EXIGE que `base_calculo.tipo` seja um destes 5 enums fixos
+(MAIOR_REMUNERACAO, HISTORICO_SALARIAL, SALARIO_DA_CATEGORIA, SALARIO_MINIMO,
+VALE_TRANSPORTE). Não há suporte para "valor fixo arbitrário" como base.
+
+## 4.4.ter TABELA DE DECISÃO POR TIPO DE VERBA
+
+Para cada verba, escolha `valor` com base na natureza econômica:
+
+| Verba | `valor` padrão | Como preencher |
+|---|---|---|
+| **SALDO DE SALÁRIO** | CALCULADO | base=HISTORICO_SALARIAL (última rem.), divisor=OUTRO_VALOR=30, multiplicador=1, quantidade=INFORMADA (dias trabalhados no mês da rescisão) |
+| **13º SALÁRIO** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, quantidade=AVOS |
+| **FÉRIAS + 1/3** | CALCULADO | sistema apura; quantidade=AVOS, multiplicador=1.33 |
+| **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=APURADA (Lei 12.506) |
+| **HORAS EXTRAS 50%/100%** | CALCULADO | base=HISTORICO_SALARIAL, divisor=CARGA_HORARIA (ou OUTRO_VALOR=220), multiplicador=1.5/2.0, quantidade=INFORMADA mensal OU IMPORTADA_DO_CARTAO |
+| **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, divisor e quantidade conforme cartão |
+| **ADICIONAL INSALUBRIDADE** | CALCULADO | base=SALARIO_MINIMO (ou histórico se sentença disser), multiplicador=0.10/0.20/0.40, quantidade=INFORMADA=1 |
+| **MULTA 477 CLT** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=INFORMADA=1, divisor=OUTRO_VALOR=1, multiplicador=1 |
+| **VALE TRANSPORTE** | **INFORMADO** | mensalizar (R$/dia × dias úteis médios = 22). NÃO usar CALCULADO. |
+| **RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA** | **INFORMADO** | mensalizar o valor total da restituição se for recorrente; se for ocorrência única, valor_informado_brl com o total e periodo_inicio=periodo_fim no mês da despesa |
+| **AJUDA DE CUSTO** | **INFORMADO** | mensalizar |
+| **DIÁRIAS - INTEGRAÇÃO** | **INFORMADO** | mensalizar valor médio; ocorrência=MENSAL, comporPrincipal=NAO, proporcionalizar=NAO |
+| **DIÁRIAS - PAGAMENTO** | **INFORMADO** | mensalizar |
+| **CESTA BÁSICA / TÍQUETE-ALIMENTAÇÃO** | **INFORMADO** | mensalizar (valor mensal já pago/devido) |
+| **GORJETA** | CALCULADO | base=HISTORICO_SALARIAL (gorjeta cadastrada) |
+| **COMISSÃO** | CALCULADO | base=HISTORICO_SALARIAL (comissões cadastradas) ou INFORMADO se sentença fixar valor mensal |
+| **DIFERENÇA SALARIAL** | CALCULADO | base=HISTORICO_SALARIAL (paradigma); ver §4.7 equiparação |
+| **INDENIZAÇÃO POR DANO MORAL/MATERIAL** | **INFORMADO** | valor único da condenação |
+| **MULTA CONVENCIONAL** | **INFORMADO** | valor único conforme CCT |
+| **INDENIZAÇÃO ADICIONAL (Estabilidade)** | CALCULADO | base=MAIOR_REMUNERACAO, divisor=OUTRO_VALOR=1, multiplicador=1, quantidade=INFORMADA (meses de estabilidade); proporcionalizar=SIM |
+
+### Regra-chave: estrategia_preenchimento × `valor` da fórmula
+
+A automação trata as 3 estratégias de forma diferente:
+
+- **`expresso_direto`**: o PJE-Calc Expresso já configura `valor`, `base_calculo`,
+  `divisor`, `multiplicador`, `quantidade` automaticamente. A automação **apenas
+  ajusta período + (opcionalmente) valor_informado se valor=INFORMADO**. NÃO sobrescreve
+  fórmula. Use quando a sentença SE ENCAIXA EXATAMENTE na verba Expresso padrão.
+
+- **`expresso_adaptado`**: a automação reabre a verba criada pelo Expresso e
+  reconfigura TODOS os parâmetros (nome, base, fórmula, valor). Use quando:
+  - O nome da verba na sentença difere do canônico do Expresso (§4 nome customizado)
+  - A fórmula da sentença difere da padrão do Expresso (ex.: divisor diferente,
+    multiplicador diferente, base de cálculo diferente)
+  - A sentença determina valor INFORMADO numa verba que o Expresso configura como CALCULADO
+  - A sentença determina valor CALCULADO numa verba que o Expresso configura como INFORMADO
+
+- **`manual`**: cria a verba do zero. Use quando não existe verba similar no Expresso.
+
+**Decisão prática**: se vai usar `valor=INFORMADO` em VALE TRANSPORTE, RESTITUIÇÃO/
+INDENIZAÇÃO DE DESPESA, ou outra verba que o Expresso padrão configura como
+CALCULADO → use `estrategia_preenchimento=expresso_adaptado` (não _direto).
+
+### Regra-chave: "Valor diário × dias úteis" → SEMPRE mensalize
+
+Quando a sentença disser algo como `"R$ X/dia × dias úteis"` ou `"R$ Y/dia"` para vale-transporte,
+diárias, ajuda de custo ou indenização de despesa, **NÃO TENTE TRADUZIR ISSO COMO FÓRMULA
+CALCULADO**. Em vez disso:
+
+1. Calcule o valor mensal: `valor_mensal = valor_diario × 22` (média mensal de dias úteis)
+2. Use `valor=INFORMADO`, `valor_devido.valor_informado_brl = valor_mensal`
+3. `formula_calculado = null`
+
+O PJE-Calc aplicará esse valor a cada mês do período. Para sentenças que envolvem períodos
+incompletos (admissão/demissão no meio do mês), o PJE-Calc proporcionaliza automaticamente
+se `proporcionalizar=true`.
+
 ## 4.5 REFLEXOS
 
 Para cada verba principal, listar reflexos. **Padrão de incidência reflexa:**
@@ -760,11 +861,15 @@ Se não há menção a JG na sentença, deixar `comentarios_jg: null`.
 - [ ] `processo.numero_processo` no formato CNJ
 - [ ] `parametros_calculo.data_termino_calculo` ≥ MAX(periodo_fim de TODAS as verbas)
 - [ ] `historico_salarial` cobre data_inicio_calculo até data_termino_calculo
-- [ ] Cada verba com `valor=INFORMADO` tem `valor_devido.valor_informado_brl > 0`
-- [ ] Cada verba com `valor=CALCULADO` tem `formula_calculado` preenchido
-- [ ] `formula_calculado.base_calculo.tipo` ∈ {MAIOR_REMUNERACAO, HISTORICO_SALARIAL, SALARIO_DA_CATEGORIA, SALARIO_MINIMO, VALE_TRANSPORTE}
-- [ ] `formula_calculado.divisor.tipo` ∈ {OUTRO_VALOR, CARGA_HORARIA, DIAS_UTEIS, IMPORTADA_DO_CARTAO}
-- [ ] `formula_calculado.quantidade.tipo` ∈ {INFORMADA, IMPORTADA_DO_CALENDARIO, IMPORTADA_DO_CARTAO, AVOS, APURADA}
+- [ ] **TODA verba tem `valor` preenchido (INFORMADO ou CALCULADO) — NUNCA null/omitido**
+- [ ] Cada verba com `valor=INFORMADO` tem `valor_devido.valor_informado_brl > 0` e `formula_calculado=null`
+- [ ] Cada verba com `valor=CALCULADO` tem `formula_calculado` preenchido COMPLETAMENTE com:
+   - `base_calculo.tipo` ∈ {MAIOR_REMUNERACAO, HISTORICO_SALARIAL, SALARIO_DA_CATEGORIA, SALARIO_MINIMO, VALE_TRANSPORTE}
+   - `divisor.tipo` ∈ {OUTRO_VALOR, CARGA_HORARIA, DIAS_UTEIS, IMPORTADA_DO_CARTAO}
+   - `multiplicador` (float > 0)
+   - `quantidade.tipo` ∈ {INFORMADA, IMPORTADA_DO_CALENDARIO, IMPORTADA_DO_CARTAO, AVOS, APURADA}
+- [ ] **VALE TRANSPORTE, RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA, AJUDA DE CUSTO, DIÁRIAS, CESTA BÁSICA, TÍQUETE-ALIMENTAÇÃO: SEMPRE `valor=INFORMADO` com mensalização aplicada (§4.4.bis)**
+- [ ] Verbas que a sentença descreve como "R$ X/dia × dias úteis" foram convertidas para valor mensal antes de virar JSON
 - [ ] Cada verba expresso_direto/expresso_adaptado tem `expresso_alvo` válido
 - [ ] Cada reflexo tem `expresso_reflex_alvo` no formato "X SOBRE Y"
 - [ ] Características COMUM/13o/Aviso/Férias com ocorrência derivada correta

@@ -2363,14 +2363,25 @@ async function validarPrevia() {
   }
   (previaData.verbas_principais || []).forEach((v, idx) => {
     const p = v.parametros || {};
+    const nome = v.nome_pjecalc || v.nome_sentenca || '?';
+    if (!p.valor) {
+      erros.push(`Verba ${idx+1} (${nome}): campo "Valor" não definido — escolher INFORMADO ou CALCULADO`);
+    }
     if (p.valor === 'INFORMADO' && (!p.valor_devido?.valor_informado_brl || p.valor_devido.valor_informado_brl <= 0)) {
-      erros.push(`Verba ${idx+1} (${v.nome_pjecalc||'?'}): valor informado ausente ou zero`);
+      erros.push(`Verba ${idx+1} (${nome}): valor informado ausente ou zero (use a mensalização: valor diário × 22 dias úteis)`);
     }
-    if (p.valor === 'CALCULADO' && !p.formula_calculado) {
-      erros.push(`Verba ${idx+1} (${v.nome_pjecalc||'?'}): fórmula calculado ausente`);
+    if (p.valor === 'CALCULADO') {
+      if (!p.formula_calculado) {
+        erros.push(`Verba ${idx+1} (${nome}): fórmula CALCULADO ausente`);
+      } else {
+        const f = p.formula_calculado;
+        if (!f.base_calculo?.tipo) erros.push(`Verba ${idx+1} (${nome}): fórmula sem Base de Cálculo`);
+        if (!f.quantidade?.tipo) erros.push(`Verba ${idx+1} (${nome}): fórmula sem Quantidade`);
+        if (f.multiplicador == null || f.multiplicador <= 0) erros.push(`Verba ${idx+1} (${nome}): multiplicador inválido (>0)`);
+      }
     }
-    if (!p.periodo_inicio) erros.push(`Verba ${idx+1}: período início`);
-    if (!p.periodo_fim) erros.push(`Verba ${idx+1}: período fim`);
+    if (!p.periodo_inicio) erros.push(`Verba ${idx+1} (${nome}): período início`);
+    if (!p.periodo_fim) erros.push(`Verba ${idx+1} (${nome}): período fim`);
   });
 
   // Render
