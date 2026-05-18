@@ -1998,6 +1998,32 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ✓ valor_informado_brl = {p.valor_devido.valor_informado_brl}")
                 except Exception as e:
                     self.log(f"    ⚠ Falha preencher valor_informado: {e}")
+            # FIX EXPRESSO_DIRETO + Quantidade especial: se JSON especificar
+            # quantidade.tipo != default do Expresso (ex.: HE Expresso vem
+            # com tipo=APURADA, mas IA pede IMPORTADA_DO_CARTAO ou INFORMADA),
+            # MARCAR o radio explicitamente. Sem isso, a HE fica APURADA mesmo
+            # com cartão de ponto preenchido — não importa as ocorrências.
+            if (
+                p.valor == TipoValor.CALCULADO
+                and p.formula_calculado
+                and p.formula_calculado.quantidade
+                and p.formula_calculado.quantidade.tipo
+            ):
+                try:
+                    q = p.formula_calculado.quantidade
+                    q_tipo = q.tipo.value if hasattr(q.tipo, "value") else str(q.tipo)
+                    self._marcar_radio("tipoDaQuantidade", q_tipo, obrigatorio=False)
+                    self._aguardar_ajax(1500)
+                    self.log(f"    ✓ quantidade.tipo = {q_tipo}")
+                    # Se INFORMADA, preencher valor
+                    if q_tipo == "INFORMADA" and q.valor is not None:
+                        self._preencher(
+                            "valorInformadoDaQuantidade",
+                            _fmt_br(q.valor),
+                            obrigatorio=False,
+                        )
+                except Exception as e:
+                    self.log(f"    ⚠ Falha quantidade.tipo: {e}")
             # Aguardar AJAX (rerender JSF disparado pelos blurs dos campos
             # acima) antes de o caller chamar _clicar_salvar_flex. Sem isso, o
             # botão Salvar pode estar em re-mount e a cascata flex falha com
@@ -2019,11 +2045,36 @@ class PlaywrightAutomatorV2:
             self._preencher("descricao", v.nome_pjecalc, obrigatorio=False)
 
         # 2. Valor (INFORMADO vs CALCULADO) — radio dispara AJAX que troca DOM
+        # CRÍTICO: ao trocar CALCULADO→INFORMADO, o PJE-Calc faz AJAX que
+        # substitui o bloco "Fórmula" pelo input "Devido". Tentar preencher
+        # antes do re-render dá RuntimeError("DOM ID não encontrado: valorDevido").
+        # wait_for_selector explícito garante que o input apareceu.
         self._marcar_radio("valor", p.valor.value)
         self._aguardar_ajax(3000)
 
         if p.valor == TipoValor.INFORMADO:
-            self._preencher("valorDevido", _fmt_br(p.valor_devido.valor_informado_brl))
+            # Aguardar campo "Devido" aparecer no DOM (re-render JSF pós-radio)
+            try:
+                self._page.wait_for_selector(
+                    "input[id$=':valorDevido']",
+                    state="visible",
+                    timeout=8000,
+                )
+            except Exception:
+                self.log(f"  ⚠ Campo valorDevido não apareceu em 8s — tentando fallback")
+            # Preencher com tolerância — se sufixo `:valorDevido` falhar,
+            # tenta variantes; obrigatorio=False evita RuntimeError travar tudo
+            preenchido = False
+            for sufixo in ("valorDevido", "valorInformadoDoDevido"):
+                try:
+                    if self._page.locator(f"[id$=':{sufixo}']").count() > 0:
+                        self._preencher(sufixo, _fmt_br(p.valor_devido.valor_informado_brl), obrigatorio=False)
+                        preenchido = True
+                        break
+                except Exception:
+                    continue
+            if not preenchido:
+                self.log(f"  ⚠ Falha preencher valor_informado_brl={p.valor_devido.valor_informado_brl}")
             # Proporcionalizar do bloco Valor Devido (espelho página verba-calculo.jsf)
             try:
                 if getattr(p.valor_devido, "proporcionalizar", False):
