@@ -310,18 +310,13 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"  ⚠ Reabertura pós-Verbas falhou: {e}")
         _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
-        # Reabertura pós-Cartão: força @End da conv atual + nova conv com
-        # dados frescos do banco. Sem isso, o enum
-        # `listaDeTiposDeQuantidade` na Fase 5b ainda não enxerga o cartão
-        # de ponto recém-criado (FlushMode.MANUAL do Seam EPC — entidades
-        # ficam em memória até @End). CLAUDE.md documenta esse comportamento.
-        if self._verbas_pendentes_cartao_ponto and bool(self.previa.cartao_de_ponto):
-            try:
-                self.log("  → Reabrindo cálculo via Recentes pós-Cartão (forçar @End para Fase 5b)...")
-                if self._reabrir_calculo_via_recentes():
-                    self.log(f"  ✓ Conv pós-Cartão: {self._calculo_conversation_id}")
-            except Exception as e:
-                self.log(f"  ⚠ Reabertura pós-Cartão falhou: {e}")
+        # NOTA (18/05/2026): tentamos reabrir cálculo via Recentes aqui
+        # para forçar @End da conv Seam → nova conv com cartão persistido.
+        # PROBLEMA: a nova conv também perdia as verbas criadas (FlushMode.MANUAL
+        # — entidades em memória NÃO commitadas). Resultado: Fase 5b passa de
+        # "Opção IMPORTADA_DO_CARTAO indisponível" para "Verba não encontrada
+        # na listagem" — pior. Mantemos a conv original e Fase 5b apenas
+        # registra a pendência sem corromper a listagem.
         # Fase 5b: revisita verbas dependentes de cartão (HE, intervalo
         # intrajornada/interjornada, adicional noturno) para configurar
         # tipoDaQuantidade=IMPORTADA_DO_CARTAO agora que o cartão existe.
