@@ -1380,6 +1380,36 @@ class PreviaCalculoV2(BaseModel):
                         f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
                         f"valor=CALCULADO requer formula_calculado completa"
                     )
+                else:
+                    f = p.formula_calculado
+                    # Quantidade obrigatória + coerência com cartão de ponto
+                    if f.quantidade:
+                        q = f.quantidade
+                        # INFORMADA com valor 0 ou null → PJE-Calc apura zero
+                        # e emite alerta "todas as ocorrências de HE foram
+                        # salvas com quantidade igual a zero". Bloqueante.
+                        if (
+                            q.tipo == TipoQuantidade.INFORMADA
+                            and (q.valor is None or q.valor <= 0)
+                        ):
+                            self.meta.validacao.campos_faltantes.append(
+                                f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
+                                f"quantidade.tipo=INFORMADA exige valor > 0. "
+                                f"Use a tabela de conversão (X HE/dia × 22 = mensal). "
+                                f"Se a sentença NÃO fixar quantidade, use "
+                                f"quantidade.tipo=IMPORTADA_DO_CARTAO e preencha cartao_de_ponto."
+                            )
+                        # IMPORTADA_DO_CARTAO exige cartao_de_ponto preenchido
+                        if (
+                            q.tipo == TipoQuantidade.IMPORTADA_DO_CARTAO
+                            and self.cartao_de_ponto is None
+                        ):
+                            self.meta.validacao.campos_faltantes.append(
+                                f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
+                                f"quantidade.tipo=IMPORTADA_DO_CARTAO exige cartao_de_ponto "
+                                f"preenchido (seção 5 do prompt). Sem o cartão, PJE-Calc "
+                                f"não tem como apurar HE mês a mês."
+                            )
 
         if avisos:
             self.meta.validacao.avisos.extend(avisos)

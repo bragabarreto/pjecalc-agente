@@ -394,35 +394,117 @@ Se a sentença não indica claramente a base, usar `HISTORICO_SALARIAL`.
 ⚠️ **PROIBIDO**: `DIAS_UTEIS_TRABALHADOS`, `DIAS_TRABALHADOS`, `DIAS_CORRIDOS`,
 `AVOS_CONTRATO`, `AVOS_PROPORCIONAL`, `CALCULADA`, qualquer outro valor.
 
-### Campo `quantidade` — regra de preenchimento para Horas Extras
+### Campo `quantidade` — regra crítica de preenchimento para Horas Extras
 
-O PJE-Calc sempre apura HE a partir da **quantidade mensal**. O campo `quantidade` é OBRIGATÓRIO
-para verbas de HE calculadas. Existem dois caminhos mutuamente exclusivos:
+O PJE-Calc sempre apura HE a partir da **quantidade MENSAL** (média de horas por mês).
+O campo `quantidade.tipo` é **OBRIGATÓRIO** para HE CALCULADO e tem **duas alternativas
+MUTUAMENTE EXCLUSIVAS**, escolhidas pela LEITURA da sentença:
 
-#### Opção A — Quantidade mensal informada (sentença fixa quantidade de HE)
-Usar quando a sentença especifica diretamente quantas horas extras o reclamante fazia.
-Converter para horas/mês e preencher:
-```json
-"quantidade": {"tipo": "INFORMADA", "valor_mensal": <float>}
+---
+
+#### ⚖️ ÁRVORE DE DECISÃO — INFORMADA × IMPORTADA_DO_CARTAO
+
 ```
-Regras de conversão:
-- Sentença diz **X horas extras diárias** → `valor_mensal = X × 22` (dias úteis médios/mês)
-- Sentença diz **X horas extras semanais** → `valor_mensal = round(X × 4.33, 1)`
-- Sentença diz **X horas extras mensais** → `valor_mensal = X` (usar direto)
-- Sentença menciona "excedentes da 44ª semanal" com escala 6×1 → `valor_mensal = 26` (1d×26sem/mês)
+Leia a parte da sentença sobre HE. Pergunte:
+│
+├── A sentença FIXA explicitamente a quantidade de HE?
+│   (ex.: "2 HE diárias", "44ª semanal extrapolada", "10 HE/mês",
+│         valor calculado direto pelo juiz como "30 HE/mês durante o contrato")
+│   │
+│   └── SIM → Opção A: `quantidade.tipo = "INFORMADA"` com `valor` MENSAL
+│             ❌ NÃO preencha `cartao_de_ponto` (deixe null)
+│
+└── A sentença descreve uma JORNADA (horários, escala, intervalos)
+    e cabe ao perito apurar as HE excedentes?
+    (ex.: "trabalhava das 7h às 19h de seg a sáb, com 1h intervalo",
+          "escala 12x36 noturna", "deveria ter intervalo de 1h e não tinha")
+    │
+    └── SIM → Opção B: `quantidade.tipo = "IMPORTADA_DO_CARTAO"`
+              ✅ PREENCHA `cartao_de_ponto` (seção 5) com a jornada da sentença
+              (mesmas datas data_inicial/data_final da verba HE)
+```
 
-#### Opção B — Importada do Cartão de Ponto (sentença fixa jornada/horário)
-Usar quando a sentença descreve a jornada de trabalho (horários de entrada/saída, escalas,
-intervalos) mas não fixa uma quantidade exata de HE. O PJE-Calc calculará as HE com base
-no Cartão de Ponto preenchido.
+**Regra de ouro**: a Opção A é **mais simples e robusta** — use sempre que a sentença
+deixar a quantidade calculável. A Opção B é **necessária** quando há cartões a apurar,
+intervalos descumpridos, escalas complexas, etc.
+
+---
+
+#### 🅰️ Opção A — Quantidade INFORMADA (sentença fixa qtd. de HE)
+
+```json
+"quantidade": {"tipo": "INFORMADA", "valor": <float>, "proporcionalizar": false}
+```
+
+**Tabela de conversão para horas/mês:**
+
+| Como a sentença descreveu | Cálculo | Exemplo |
+|---|---|---|
+| `X horas extras DIÁRIAS` (jornada de 5d/sem) | `X × 22` | 2 HE/dia → 44 HE/mês |
+| `X horas extras SEMANAIS` (calendário civil) | `round(X × 4.33, 1)` | 12 HE/sem → 51,9 HE/mês |
+| `X horas extras MENSAIS` | `X` (uso direto) | 30 HE/mês → 30 |
+| `X horas extras ANUAIS` | `round(X / 12, 1)` | 360/ano → 30/mês |
+| Excedentes da **44ª semanal** com escala 6×1 (6h diárias + sáb) | escala já gera 4h sáb. Ajuste a divisor=44 e qtd=1 | — |
+| Excedentes da **8ª diária** (Súmula 264/TST) em jornada de 8h+1 (9h totais) | 1h excedente × 22 = `22` | excedente padrão CLT |
+| `excedentes da 220ª mensal` | sem extrapolação → **valor=0** ou usar Opção B | sem direito reconhecido |
+| Sentença manda **"calcular como na inicial"** ou refere petição | EXTRAIR da petição/laudo. Se inalcançável → Opção B + cartão | — |
+| Sentença dá **apenas a fórmula** sem qtd (ex.: divisor 220, mult. 50%) | quantidade ainda obrigatória → Opção B (mais seguro) | — |
+
+**⚠️ NUNCA preencha `valor: 0` ou `valor: null`** em Opção A. Se a sentença não fixar
+quantidade, use Opção B em vez de zerar (zero impede a apuração).
+
+---
+
+#### 🅱️ Opção B — IMPORTADA do Cartão de Ponto (sentença fixa jornada)
+
+Use quando a sentença descreve **horários, intervalos, escalas ou ausência de registro
+de ponto** — situações em que o PJE-Calc precisa apurar mensalmente a partir da
+**Programação Semanal** ou **Escala** preenchida no Cartão de Ponto.
+
 ```json
 "quantidade": {"tipo": "IMPORTADA_DO_CARTAO"}
 ```
-Nesse caso, preencher obrigatoriamente `cartao_de_ponto` (seção 5) com a jornada extraída
-da sentença e usar as mesmas datas `data_inicial`/`data_final` da verba HE.
 
-**Nunca** omitir `quantidade` nem deixar como `null` quando `valor=CALCULADO` — o PJE-Calc
-calculará 0 e a verba terá valor zero.
+**Obrigatório** preencher também `cartao_de_ponto` (§5) com:
+- Mesma `data_inicial` / `data_final` da verba HE
+- Jornada extraída (programação semanal OU escala) com entrada/saída por dia
+- Intervalos (intra/inter)
+- Adicional noturno (se aplicável)
+
+**Casos típicos de Opção B:**
+
+| Cenário | Como configurar |
+|---|---|
+| Jornada 7h-19h c/ 1h intervalo | Programação Semanal: turnos 07:00→12:00 e 13:00→19:00 |
+| Escala 12×36 | Escala = `DOZE_POR_TRINTA_E_SEIS`, jornada 1 dia trabalho |
+| 6×1 com sábado normal | Programação semanal com seg-sáb preenchidos |
+| Intervalo intra suprimido | `cartao_de_ponto.intervalos.descanso_intra = false` |
+| Adicional noturno deferido | `cartao_de_ponto.noturno.apurar = true` |
+
+---
+
+#### 📊 Como o PJE-Calc combina os campos da Fórmula
+
+Quando `valor=CALCULADO`, o PJE-Calc aplica a fórmula:
+
+```
+((Base ÷ Divisor) × Multiplicador) × Quantidade
+```
+
+Para HE 50% padrão CLT:
+- Base = HISTORICO_SALARIAL (ÚLTIMA REMUNERAÇÃO ou similar)
+- Divisor = OUTRO_VALOR=220 (jornada mensal) OU CARGA_HORARIA (mesmo efeito)
+- Multiplicador = 1.5 (50% adicional → adicional somado à hora normal)
+- Quantidade = horas extras NO MÊS (via INFORMADA OU IMPORTADA_DO_CARTAO)
+
+Se `Quantidade = 0`, a verba apura em zero → PJE-Calc emite alerta:
+**_"Todas as ocorrências da verba HORAS EXTRAS 50% foram salvas com quantidade igual a zero"_**.
+
+Esse é o erro mais comum quando a IA escolhe Opção A mas zera o valor por não
+encontrar a quantidade na sentença. **Solução**: ou calcule a quantidade conforme
+tabela acima, ou use Opção B + cartão de ponto.
+
+**Nunca** omita `quantidade` nem deixe como `null` quando `valor=CALCULADO`.
 
 ## 4.4.bis REGRA DE MENSALIZAÇÃO (CRÍTICA — leia ANTES de preencher fórmulas)
 
