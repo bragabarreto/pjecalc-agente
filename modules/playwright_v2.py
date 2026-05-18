@@ -2075,10 +2075,29 @@ class PlaywrightAutomatorV2:
             try:
                 # Escapar `:` no id para CSS selector
                 esc = info["id"].replace(":", "\\:")
-                self._page.locator(f"a#{esc}").first.click(force=True, timeout=5000)
+                loc = self._page.locator(f"a#{esc}").first
+                # Click simulando ação humana: scroll → hover → click (sem
+                # force). Estratégia que resolveu problemas semelhantes no
+                # Cartão de Ponto. Sem force=True, Playwright aguarda o
+                # elemento ficar "actionable" (visível, estável, sem cobrir)
+                # e gera evento trusted=true que o JSF aceita.
+                loc.scroll_into_view_if_needed(timeout=3000)
+                self._page.wait_for_timeout(150)
+                loc.hover(timeout=3000)
+                self._page.wait_for_timeout(100)
+                loc.click(timeout=5000)
                 clicou = info["via"]
             except Exception as e:
-                self.log(f"    ⚠ Falha click Playwright em a#{info['id']}: {e}")
+                self.log(f"    ⚠ Falha click humano em a#{info['id']}: {e}")
+                # Último recurso: click com force (caso o elemento tenha
+                # algum overlay invisível bloqueando hit test)
+                try:
+                    esc = info["id"].replace(":", "\\:")
+                    self._page.locator(f"a#{esc}").first.click(force=True, timeout=5000)
+                    clicou = info["via"] + "+force"
+                    self.log(f"    ⚠ Fallback force=True usado")
+                except Exception as e2:
+                    self.log(f"    ⚠ Fallback force também falhou: {e2}")
         if not clicou:
             # Diagnóstico: dump tabela atual para identificar mismatch
             diag = self._page.evaluate(
