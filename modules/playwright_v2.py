@@ -1999,6 +1999,21 @@ class PlaywrightAutomatorV2:
         except Exception:
             self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu em 8s — pulando")
             return
+        # Verificar se a OPÇÃO específica existe no DOM antes de tentar marcar.
+        # Para HE 50% via Expresso em Fase 4 (antes do Cartão de Ponto na
+        # Fase 5), o enum `listaDeTiposDeQuantidade` pode excluir
+        # IMPORTADA_DO_CARTAO porque nenhum cartão foi cadastrado ainda. Sem
+        # essa checagem prévia, _marcar_radio loga warning + nosso código
+        # continua emitindo um '✓ quantidade.tipo = X' enganoso.
+        opcao_existe = self._page.locator(
+            f"input[type='radio'][id*='tipoDaQuantidade'][value='{q_tipo}']"
+        ).count() > 0
+        if not opcao_existe:
+            self.log(
+                f"    ⚠ Opção tipoDaQuantidade={q_tipo} não está disponível neste estado "
+                f"(provável: Cartão de Ponto ainda não cadastrado — visite a verba após Fase 5)"
+            )
+            return
         try:
             self._marcar_radio("tipoDaQuantidade", q_tipo, obrigatorio=False)
         except Exception as e:
@@ -2171,7 +2186,22 @@ class PlaywrightAutomatorV2:
             # `formulario:valorInformadoDoDevido` — NÃO `valorDevido`. O sufixo
             # antigo causava _preencher silencioso (obrigatorio=False) sem
             # nenhum aviso, deixando o campo em branco.
+            #
+            # ATENÇÃO (descoberto 18/05 22:30 via SSE): a verba criada via
+            # Expresso "RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA" vem com
+            # valor=CALCULADO por default — NÃO INFORMADO. Precisamos clicar
+            # o radio `valor=INFORMADO` para o painelValorDevidoInformado ser
+            # renderizado (rendered="#{registro.isValorDevidoInformado()}").
+            # O click do radio `valor` re-renderiza apenas painelTipoVerba,
+            # painelFormula, painelLabelFormula, painelValorDevidoInformado e
+            # painelAplicarProporcionalidadeAoValorDevido (não toca em
+            # painelCaracteristica/painelOcorrenciaDePagamento) — então é
+            # SEGURO clicar aqui sem disparar mudarCaracteristica.
             if p.valor == TipoValor.INFORMADO and p.valor_devido and p.valor_devido.valor_informado_brl is not None:
+                # 1. Garantir valor=INFORMADO (idempotente se já está)
+                self._marcar_radio("valor", "INFORMADO", obrigatorio=False)
+                self._aguardar_ajax(2500)
+                # 2. Preencher o input agora visível
                 self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
             # Proporcionalizar do bloco Valor Devido (mesmo campo da prévia)
             if p.valor == TipoValor.INFORMADO and p.valor_devido and getattr(p.valor_devido, "proporcionalizar", False):
