@@ -139,6 +139,10 @@ class PlaywrightAutomatorV2:
             viewport={"width": 1280, "height": 800},
         )
         self._page = ctx.new_page()
+        # Auto-aceitar dialogs nativos (confirm/alert/prompt) — fallback caso
+        # alguma página caia em window.confirm em vez do jConfirm modal.
+        # Sem isso, o save fica pendente esperando interação humana.
+        self._page.on("dialog", lambda d: d.accept())
         self.log(f"✓ Browser Firefox iniciado (download dir: {self._download_dir})")
         return self
 
@@ -717,7 +721,12 @@ class PlaywrightAutomatorV2:
         Sub-formulários JSF podem nomear o submit como `salvar`, `confirmar`,
         `gravar`, `aplicar` ou `atualizar`. Este helper varre essa cascata por
         sufixo de DOM ID e clica o primeiro visível. Retorna True se clicou.
+
+        Silencia preventivamente o jConfirm modal de checarValor antes do
+        click — sem custo se a função não existir nessa página, mas evita
+        save bloqueado em verba-calculo.jsf quando valor mudou CALCULADO↔INFORMADO.
         """
+        self._silenciar_dialog_confirma_valor()
         nomes = ["salvar", "confirmar", "gravar", "aplicar", "atualizar"]
         for nome in nomes:
             seletores = [
@@ -2031,6 +2040,47 @@ class PlaywrightAutomatorV2:
                 self._conv_pre_expresso = _conv_pre_expresso
             else:
                 self._conv_pre_expresso = None
+
+    def _silenciar_dialog_confirma_valor(self) -> None:
+        """Sobrescreve `checarValor` para evitar o jConfirm modal de mudança de valor.
+
+        CRÍTICO (descoberto 18/05/2026 sessão cecf7937 inspecionando
+        verba-calculo.xhtml linhas 1463-1474):
+
+            function checarValor() {
+                if (operacao != 'ALTERACAO') return true;
+                valor = $('formulario:valor:0').checked ? 'CALCULADO' : 'INFORMADO';
+                if (valor == valorAnterior) return true;
+                return confirma('#{mensagens.MSG0025}', $('formulario:salvar'));
+            }
+
+        Quando estamos em modo ALTERACAO e mudamos `valor` (CALCULADO ↔
+        INFORMADO), o onclick do botão Salvar dispara `confirma()` que
+        renderiza um modal jQuery (jConfirm) pedindo confirmação. O bot
+        não responde ao modal → save fica bloqueado, retornando false →
+        cascata de falhas (próximas verbas perdem listagem, Fase 5b
+        também perde HE 50%).
+
+        Solução: sobrescrever `window.checarValor` para sempre retornar
+        true. O save procede direto sem modal, e como o usuário JÁ
+        explicitamente configurou valor=INFORMADO no JSON, não há razão
+        legítima para pedir confirmação no bot.
+        """
+        try:
+            self._page.evaluate(
+                """() => {
+                    try { window.checarValor = function() { return true; }; } catch(_) {}
+                    // Belt-and-suspenders: também marca como "já confirmado"
+                    try {
+                        if (typeof window.lista === 'undefined') { window.lista = []; }
+                        if (window.lista.indexOf('formulario:salvar') === -1) {
+                            window.lista.push('formulario:salvar');
+                        }
+                    } catch(_) {}
+                }"""
+            )
+        except Exception:
+            pass
 
     def _preencher_valor_informado_devido(self, valor_brl: float) -> None:
         """Preenche o input 'Devido' do bloco INFORMADO.
