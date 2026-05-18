@@ -896,10 +896,109 @@ Critérios para detectar JG + sucumbência do reclamante:
 
 Se não há menção a JG na sentença, deixar `comentarios_jg: null`.
 
-# 8. SECUNDÁRIAS (incluir somente se a sentença mencionar)
+# 8. SEÇÕES OPCIONAIS — política "skip por omissão"
 
-- `salario_familia`, `seguro_desemprego`, `previdencia_privada`, `pensao_alimenticia`: `null` se não mencionado
-- `multas_indenizacoes`: `[]` se não mencionado (não confundir com Multa 477 que é verba)
+Todas as seções abaixo são **opcionais**. Quando a sentença NÃO determinar
+nada específico, **deixe `null`** (ou lista vazia). A automação pula a fase
+e os defaults nativos do PJE-Calc valem 100%. **Só preencha quando a
+sentença/CCT determinar explicitamente** algum desses pontos.
+
+## 8.1 Salário-família — `salario_familia`
+Preencher quando a sentença determinar:
+```json
+"salario_familia": {
+  "apurar": true,
+  "compor_principal": true,
+  "quantidade_filhos_menores_14": 2,
+  "tipo_salario_pago": "MAIOR_REMUNERACAO",  // ou NENHUM | HISTORICO_SALARIAL
+  "variacoes": [{"data_inicio": "01/06/2023", "quantidade_filhos": 3}],  // se houve mudança
+  "historico_salarial_nomes": [],  // nomes dos históricos que compõem remuneração
+  "salarios_devidos_verbas": []    // nomes das verbas devidas que compõem remuneração
+}
+```
+
+## 8.2 Seguro-desemprego — `seguro_desemprego`
+Preencher quando a sentença reconhecer direito ao SD:
+```json
+"seguro_desemprego": {
+  "apurar": true,
+  "apurar_empregado_domestico": false,
+  "compor_principal": true,
+  "numero_parcelas": 4,
+  "solicitacao": "PRIMEIRA",     // PRIMEIRA | SEGUNDA | DEMAIS
+  "tipo_valor": "CALCULADO",     // CALCULADO | INFORMADO
+  "valor_informado_brl": null    // só quando tipo_valor=INFORMADO
+}
+```
+
+## 8.3 Previdência Privada — `previdencia_privada`
+Preencher quando a sentença determinar incidência de PP sobre as verbas:
+```json
+"previdencia_privada": {
+  "apurar": true,
+  "aliquotas": [
+    {"aliquota_pct": 12.00, "data_inicio": "01/01/2020", "data_fim": null}
+  ]
+}
+```
+(A base de incidência é definida no checkbox `previdencia_privada` de cada verba.)
+
+## 8.4 Pensão Alimentícia — `pensao_alimenticia`
+Preencher quando houver decisão judicial determinando incidência:
+```json
+"pensao_alimenticia": {
+  "apurar": true,
+  "aliquota_pct": 20.00,
+  "incidir_sobre_juros": false
+}
+```
+
+## 8.5 Multas e Indenizações — `multas_indenizacoes`
+Lista de multas/indenizações que NÃO são verbas trabalhistas típicas
+(astreintes, multa CCT específica, indenização por extravio de bem, etc.).
+Multa 477/CLT e Multa 467/CLT NÃO entram aqui — vão em `verbas_principais`.
+
+```json
+"multas_indenizacoes": [
+  {
+    "descricao": "Multa CCT 2024 cláusula 15",
+    "credor_devedor": "RECLAMANTE_RECLAMADO",  // ou RECLAMADO_RECLAMANTE | TERCEIRO_*
+    "terceiro_nome": null,                     // só quando credor=TERCEIRO
+    "tipo_valor": "CALCULADO",                 // ou INFORMADO
+    "aliquota_pct": 50.0,                      // só CALCULADO
+    "tipo_base": "PRINCIPAL",                  // só CALCULADO: PRINCIPAL | PRINCIPAL_MENOS_CS | PRINCIPAL_MENOS_CS_MENOS_PP
+    "valor_brl": null,                         // só INFORMADO
+    "data_vencimento": null,                   // só INFORMADO
+    "correcao_monetaria": "INDICE_TRABALHISTA",
+    "outro_indice_correcao": null,
+    "aplicar_juros": true,
+    "data_juros_a_partir_de": null,
+    "tipo_cobranca_reclamante": null,          // COBRAR | DESCONTAR (só se reclamante=devedor)
+    "identificacao": null
+  }
+]
+```
+
+## 8.6 Correção, Juros e Multa — `correcao_juros_multa`
+Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
+```json
+"correcao_juros_multa": {
+  "indice_trabalhista": "IPCAE",
+  "combinar_outro_indice": false,
+  "indice_combinado": null,
+  "data_inicio_combinacao": null,
+  "ignorar_taxa_negativa": false,
+  "juros": "TAXA_LEGAL",
+  "fazenda_publica_data_inicial": null,
+  "nao_aplicar_juros": false,
+  "base_juros_verbas": "VERBAS",
+  "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"},
+  "previdencia_privada": null,
+  "custas_judiciais": null,
+  "cs_salarios_devidos": {"trabalhista": true, "previdenciaria": false, ...},
+  "cs_salarios_pagos": {"trabalhista": true, "previdenciaria": false, ...}
+}
+```
 
 # CHECKLIST FINAL ANTES DE RETORNAR
 

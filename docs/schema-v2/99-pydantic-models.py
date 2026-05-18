@@ -1087,16 +1087,194 @@ class CustasJudiciais(BaseModel):
     rt: list = Field(default_factory=list)
 
 
+# ─── Seções até agora subdimensionadas (schema=dict) — agora tipadas ─────
+
+
+class VariacaoSalarioFamilia(BaseModel):
+    """Variação na quantidade de filhos < 14 anos ao longo do contrato.
+
+    PJE-Calc permite registrar mudanças: filho nascido, completou 14 anos, etc.
+    """
+    data_inicio: str  # DD/MM/YYYY
+    quantidade_filhos: int
+
+
+class SalarioFamilia(BaseModel):
+    """Espelha página salario-familia.xhtml. Quando o JSON omitir = `null`,
+    a fase é pulada e os defaults do PJE-Calc valem (apurar=False).
+    Preencher apenas quando a sentença determinar a apuração.
+    """
+    apurar: bool = True
+    compor_principal: bool = True
+    quantidade_filhos_menores_14: int = 0
+    tipo_salario_pago: Optional[Literal["NENHUM", "MAIOR_REMUNERACAO", "HISTORICO_SALARIAL"]] = None
+    variacoes: list[VariacaoSalarioFamilia] = Field(default_factory=list)
+    historico_salarial_nomes: list[str] = Field(default_factory=list)  # nomes das bases que compõem a remuneração mensal
+    salarios_devidos_verbas: list[str] = Field(default_factory=list)  # nomes das verbas que compõem a remuneração mensal
+
+
+class SeguroDesemprego(BaseModel):
+    """Espelha página seguro-desemprego.xhtml."""
+    apurar: bool = True
+    apurar_empregado_domestico: bool = False
+    compor_principal: bool = True
+    numero_parcelas: Optional[int] = None
+    solicitacao: Optional[Literal["PRIMEIRA", "SEGUNDA", "DEMAIS"]] = None
+    tipo_valor: Optional[Literal["INFORMADO", "CALCULADO"]] = None
+    valor_informado_brl: Optional[float] = None
+    tipo_salario_pago: Optional[Literal["NENHUM", "MAIOR_REMUNERACAO", "HISTORICO_SALARIAL"]] = None
+    historico_salarial_nomes: list[str] = Field(default_factory=list)
+    salarios_devidos_verbas: list[str] = Field(default_factory=list)
+
+
+class AliquotaPrevidenciaPeriodo(BaseModel):
+    """Período de alíquota de Previdência Privada (pode haver múltiplos)."""
+    aliquota_pct: float = Field(gt=0)
+    data_inicio: str  # DD/MM/YYYY
+    data_fim: Optional[str] = None
+
+
+class PrevidenciaPrivada(BaseModel):
+    """Espelha página previdencia-privada.xhtml.
+
+    A base é definida nos Parâmetros das Verbas (checkbox
+    Incidência Previdência Privada). Aqui só configura alíquotas e períodos.
+    """
+    apurar: bool = True
+    aliquotas: list[AliquotaPrevidenciaPeriodo] = Field(default_factory=list)
+
+
+class PensaoAlimenticia(BaseModel):
+    """Espelha página pensao-alimenticia.xhtml.
+
+    A base é definida nos Parâmetros das Verbas (checkbox
+    Incidência Pensão Alimentícia).
+    """
+    apurar: bool = True
+    aliquota_pct: float = Field(default=0.0, ge=0)
+    incidir_sobre_juros: bool = False
+
+
+class MultaIndenizacao(BaseModel):
+    """Espelha página multas-indenizacoes.xhtml — item individual.
+
+    Cada multa/indenização gerada por aviso/sentença que NÃO é verba
+    trabalhista típica (essas vão em verbas_principais). Ex.: multa por
+    descumprimento de obrigação, indenização por bem perdido.
+    """
+    descricao: str
+    credor_devedor: Literal[
+        "RECLAMANTE_RECLAMADO",  # credor=reclamante, devedor=reclamado (default)
+        "RECLAMADO_RECLAMANTE",  # credor=reclamado, devedor=reclamante (sucumbência reversa)
+        "TERCEIRO_RECLAMANTE",   # credor=terceiro, devedor=reclamante
+        "TERCEIRO_RECLAMADO",    # credor=terceiro, devedor=reclamado
+    ] = "RECLAMANTE_RECLAMADO"
+    terceiro_nome: Optional[str] = None
+    tipo_valor: Literal["CALCULADO", "INFORMADO"] = "INFORMADO"
+    # CALCULADO
+    aliquota_pct: Optional[float] = None
+    tipo_base: Optional[Literal["PRINCIPAL", "PRINCIPAL_MENOS_CS", "PRINCIPAL_MENOS_CS_MENOS_PP"]] = None
+    # INFORMADO
+    valor_brl: Optional[float] = None
+    data_vencimento: Optional[str] = None  # DD/MM/YYYY
+    # Comuns
+    correcao_monetaria: Literal["INDICE_TRABALHISTA", "OUTRO_INDICE"] = "INDICE_TRABALHISTA"
+    outro_indice_correcao: Optional[str] = None
+    aplicar_juros: bool = True
+    data_juros_a_partir_de: Optional[str] = None  # DD/MM/YYYY
+    tipo_cobranca_reclamante: Optional[Literal["COBRAR", "DESCONTAR"]] = None
+    identificacao: Optional[str] = None  # ID do documento judicial
+
+    @model_validator(mode="after")
+    def _check_value_consistency(self) -> "MultaIndenizacao":
+        if self.tipo_valor == "CALCULADO":
+            if self.aliquota_pct is None or self.tipo_base is None:
+                raise ValueError(
+                    "MultaIndenizacao CALCULADO requer aliquota_pct + tipo_base"
+                )
+        else:  # INFORMADO
+            if not self.valor_brl or self.valor_brl <= 0:
+                raise ValueError(
+                    "MultaIndenizacao INFORMADO requer valor_brl > 0"
+                )
+        return self
+
+
+# ─── Correção, Juros e Multa (expandido) ──────────────────────────────────
+
+
+class CorrecaoFGTS(BaseModel):
+    """Sub-bloco FGTS em correcao_juros_multa (página liquidacao.xhtml)."""
+    indice_correcao: Literal[
+        "UTILIZAR_INDICE_TRABALHISTA",
+        "UTILIZAR_INDICE_JAM",
+        "UTILIZAR_INDICE_JAM_E_TRABALHISTA",
+    ] = "UTILIZAR_INDICE_TRABALHISTA"
+
+
+class CorrecaoPrevidenciaPrivada(BaseModel):
+    """Sub-bloco Previdência Privada em correcao_juros_multa."""
+    indice: Literal["INDICE_TRABALHISTA", "OUTRO_INDICE"] = "INDICE_TRABALHISTA"
+    outro_indice: Optional[str] = None
+    aplicar_juros: bool = False
+
+
+class CorrecaoCustasJudiciais(BaseModel):
+    """Sub-bloco Custas Judiciais em correcao_juros_multa."""
+    indice: Optional[Literal["INDICE_TRABALHISTA", "OUTRO_INDICE"]] = None
+    outro_indice: Optional[str] = None
+    aplicar_juros: bool = False
+
+
+class CorrecaoCS(BaseModel):
+    """Atualização de CS sobre salários devidos/pagos.
+
+    PJE-Calc oferece duas opções (que podem coexistir):
+    - Trabalhista: correção pelo índice trabalhista, juros a partir do
+      dia 2 do mês seguinte à liquidação.
+    - Previdenciária: UFIR + SELIC desde a prestação do serviço.
+    """
+    trabalhista: bool = True
+    previdenciaria: bool = False
+    multa_previdenciaria_tipo: Optional[Literal["URBANA", "RURAL"]] = None
+    multa_previdenciaria_modo: Optional[Literal["INTEGRAL", "REDUZIDO"]] = None
+
+
 class CorrecaoJurosMulta(BaseModel):
-    """Ver doc 13 — modelo simplificado, expandir conforme implementação."""
+    """Espelha página liquidacao.xhtml (Correção, Juros e Multa).
+
+    Modelo expandido com TODOS os campos do JSF (antes era apenas 3).
+    """
 
     model_config = ConfigDict(extra="allow")
+
+    # Aba "Dados Gerais"
     indice_trabalhista: str = "IPCAE"
-    juros: str = "TAXA_LEGAL"
+    """Tabela_Unica_JTDiario | Tabela_Unica_JTMensal | TR | IGP-M | INPC | IPC | IPCA | IPCAE | IPCAETR | etc."""
+    combinar_outro_indice: bool = False
+    indice_combinado: Optional[str] = None
+    data_inicio_combinacao: Optional[str] = None
+    ignorar_taxa_negativa: bool = False
+
+    juros: Literal[
+        "TAXA_LEGAL", "JUROS_PADRAO", "JUROS_POUPANCA", "JUROS_MEIO_PORCENTO",
+        "JUROS_UM_PORCENTO", "JUROS_ZERO_TRINTA_TRES", "SELIC", "SELIC_FAZENDA",
+        "SELIC_BACEN", "FAZENDA_PUBLICA",
+    ] = "TAXA_LEGAL"
+    fazenda_publica_data_inicial: Optional[str] = None
+    nao_aplicar_juros: bool = False
+
+    # Aba "Dados Específicos"
     base_juros_verbas: Literal["VERBAS", "VERBA_INSS", "VERBA_INSS_PP"] = "VERBAS"
+    fgts: CorrecaoFGTS = Field(default_factory=CorrecaoFGTS)
+    previdencia_privada: Optional[CorrecaoPrevidenciaPrivada] = None
+    custas_judiciais: Optional[CorrecaoCustasJudiciais] = None
+    cs_salarios_devidos: CorrecaoCS = Field(default_factory=CorrecaoCS)
+    cs_salarios_pagos: CorrecaoCS = Field(default_factory=CorrecaoCS)
 
 
 class Liquidacao(BaseModel):
+    """Espelha liquidacao.xhtml (Operações > Liquidar)."""
     data_de_liquidacao: Optional[str] = None  # default: hoje
     indices_acumulados: Literal[
         "MES_SUBSEQUENTE_AO_VENCIMENTO",
@@ -1150,11 +1328,14 @@ class PreviaCalculoV2(BaseModel):
     custas_judiciais: CustasJudiciais = Field(default_factory=CustasJudiciais)
     correcao_juros_multa: CorrecaoJurosMulta = Field(default_factory=CorrecaoJurosMulta)
     liquidacao: Liquidacao = Field(default_factory=Liquidacao)
-    salario_familia: Optional[dict] = None
-    seguro_desemprego: Optional[dict] = None
-    previdencia_privada: Optional[dict] = None
-    pensao_alimenticia: Optional[dict] = None
-    multas_indenizacoes: list[dict] = Field(default_factory=list)
+    # 5 seções com schema TIPADO (antes eram Optional[dict]). Política
+    # "skip por omissão": JSON `null` → fase pulada, defaults PJE-Calc
+    # valem 100%. IA só preenche quando a sentença determinar.
+    salario_familia: Optional[SalarioFamilia] = None
+    seguro_desemprego: Optional[SeguroDesemprego] = None
+    previdencia_privada: Optional[PrevidenciaPrivada] = None
+    pensao_alimenticia: Optional[PensaoAlimenticia] = None
+    multas_indenizacoes: list[MultaIndenizacao] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_completude(self) -> "PreviaCalculoV2":

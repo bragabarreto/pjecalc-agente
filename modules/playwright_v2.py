@@ -304,7 +304,13 @@ class PlaywrightAutomatorV2:
         _run_fase("Fase 8 (FGTS)", self.fase_fgts)
         _run_fase("Fase 9 (CS/INSS)", self.fase_contribuicao_social)
         _run_fase("Fase 10 (IRPF)", self.fase_imposto_de_renda)
+        # Fases das 5 seções com schema novo (skip por omissão — JSON null = pula)
+        _run_fase("Fase 10a (Salário-Família)", self.fase_salario_familia, bool(self.previa.salario_familia))
+        _run_fase("Fase 10b (Seguro-Desemprego)", self.fase_seguro_desemprego, bool(self.previa.seguro_desemprego))
+        _run_fase("Fase 10c (Previdência Privada)", self.fase_previdencia_privada, bool(self.previa.previdencia_privada))
+        _run_fase("Fase 10d (Pensão Alimentícia)", self.fase_pensao_alimenticia, bool(self.previa.pensao_alimenticia))
         _run_fase("Fase 11 (Honorários)", self.fase_honorarios, bool(self.previa.honorarios))
+        _run_fase("Fase 11b (Multas/Indenizações)", self.fase_multas_indenizacoes, bool(self.previa.multas_indenizacoes))
         _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
         _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
 
@@ -3819,6 +3825,188 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(8000)
         self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
         self.log("Fase 10 concluída")
+
+    # ─── Fases novas (5 seções com schema tipado + skip por omissão) ──────
+
+    def fase_salario_familia(self) -> None:
+        """Salário-família — espelha salario-familia.xhtml. SKIP se JSON omitir."""
+        self.log("Fase 10a — Salário-Família")
+        if self.previa.salario_familia is None:
+            self.log("  ⏭ Salário-família omitido no JSON — usando defaults do PJE-Calc")
+            return
+        sf = self.previa.salario_familia
+        if not self._navegar_menu_via_click("li_calculo_salario_familia"):
+            self._navegar_menu("li_calculo_salario_familia")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        try:
+            self._marcar_checkbox("apurarSalarioFamilia", sf.apurar)
+            self._aguardar_ajax(2000)
+            if not sf.apurar:
+                self._clicar("salvar")
+                self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
+                self.log("Fase 10a concluída (apurar=False)")
+                return
+            self._marcar_radio("comporPrincipal", "SIM" if sf.compor_principal else "NAO")
+            self._preencher("quantFilhosMenores14Anos", str(sf.quantidade_filhos_menores_14), obrigatorio=False)
+            if sf.tipo_salario_pago:
+                self._selecionar("tipoSalarioPago", sf.tipo_salario_pago, obrigatorio=False)
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+        except Exception as e:
+            self.log(f"  ⚠ Falha Salário-Família: {e}")
+        self.log("Fase 10a concluída")
+
+    def fase_seguro_desemprego(self) -> None:
+        """Seguro-Desemprego — espelha seguro-desemprego.xhtml. SKIP se omitido."""
+        self.log("Fase 10b — Seguro-Desemprego")
+        if self.previa.seguro_desemprego is None:
+            self.log("  ⏭ Seguro-Desemprego omitido no JSON — defaults PJE-Calc")
+            return
+        sd = self.previa.seguro_desemprego
+        if not self._navegar_menu_via_click("li_calculo_seguro_desemprego"):
+            self._navegar_menu("li_calculo_seguro_desemprego")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        try:
+            self._marcar_checkbox("apurarSeguroDesemprego", sd.apurar)
+            self._aguardar_ajax(2000)
+            if not sd.apurar:
+                self._clicar("salvar")
+                self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
+                self.log("Fase 10b concluída (apurar=False)")
+                return
+            self._marcar_checkbox("apurarEmpregadoDomestico", sd.apurar_empregado_domestico)
+            self._marcar_radio("comporPrincipal", "SIM" if sd.compor_principal else "NAO")
+            if sd.numero_parcelas is not None:
+                self._preencher("numeroDeParcelas", str(sd.numero_parcelas), obrigatorio=False)
+            if sd.solicitacao:
+                self._selecionar("solicitacao", sd.solicitacao, obrigatorio=False)
+            if sd.tipo_valor:
+                self._marcar_radio("valor", sd.tipo_valor)
+                self._aguardar_ajax(1500)
+                if sd.tipo_valor == "INFORMADO" and sd.valor_informado_brl is not None:
+                    self._preencher("valorInformado", _fmt_br(sd.valor_informado_brl), obrigatorio=False)
+            if sd.tipo_salario_pago:
+                self._selecionar("tipoSalarioPago", sd.tipo_salario_pago, obrigatorio=False)
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+        except Exception as e:
+            self.log(f"  ⚠ Falha Seguro-Desemprego: {e}")
+        self.log("Fase 10b concluída")
+
+    def fase_previdencia_privada(self) -> None:
+        """Previdência Privada — espelha previdencia-privada.xhtml."""
+        self.log("Fase 10c — Previdência Privada")
+        if self.previa.previdencia_privada is None:
+            self.log("  ⏭ Previdência Privada omitida — defaults PJE-Calc")
+            return
+        pp = self.previa.previdencia_privada
+        if not self._navegar_menu_via_click("li_calculo_previdencia_privada"):
+            self._navegar_menu("li_calculo_previdencia_privada")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        try:
+            self._marcar_checkbox("apurarPrevidenciaPrivada", pp.apurar)
+            self._aguardar_ajax(2000)
+            if not pp.apurar:
+                self._clicar("salvar")
+                self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
+                self.log("Fase 10c concluída (apurar=False)")
+                return
+            for periodo in pp.aliquotas:
+                try:
+                    self._preencher("aliquota", _fmt_br(periodo.aliquota_pct), obrigatorio=False)
+                    self._preencher("dataInicioPeriodo", periodo.data_inicio, obrigatorio=False)
+                    if periodo.data_fim:
+                        self._preencher("dataTerminoPeriodo", periodo.data_fim, obrigatorio=False)
+                    self._clicar("cmdIncluirAliquota")
+                    self._aguardar_ajax(2000)
+                except Exception as e:
+                    self.log(f"  ⚠ período Prev.Privada: {e}")
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+        except Exception as e:
+            self.log(f"  ⚠ Falha Previdência Privada: {e}")
+        self.log("Fase 10c concluída")
+
+    def fase_pensao_alimenticia(self) -> None:
+        """Pensão Alimentícia — espelha pensao-alimenticia.xhtml."""
+        self.log("Fase 10d — Pensão Alimentícia")
+        if self.previa.pensao_alimenticia is None:
+            self.log("  ⏭ Pensão Alimentícia omitida — defaults PJE-Calc")
+            return
+        pa = self.previa.pensao_alimenticia
+        if not self._navegar_menu_via_click("li_calculo_pensao_alimenticia"):
+            self._navegar_menu("li_calculo_pensao_alimenticia")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        try:
+            self._marcar_checkbox("apurarPensaoAlimenticia", pa.apurar)
+            self._aguardar_ajax(2000)
+            if not pa.apurar:
+                self._clicar("salvar")
+                self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
+                self.log("Fase 10d concluída (apurar=False)")
+                return
+            if pa.aliquota_pct > 0:
+                self._preencher("aliquota", _fmt_br(pa.aliquota_pct), obrigatorio=False)
+            self._marcar_checkbox("incidirSobreJuros", pa.incidir_sobre_juros)
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+        except Exception as e:
+            self.log(f"  ⚠ Falha Pensão Alimentícia: {e}")
+        self.log("Fase 10d concluída")
+
+    def fase_multas_indenizacoes(self) -> None:
+        """Multas e Indenizações — espelha multas-indenizacoes.xhtml.
+
+        Apenas executa quando há ≥ 1 multa no JSON. SKIP por list vazia.
+        """
+        self.log("Fase 11b — Multas e Indenizações")
+        if not self.previa.multas_indenizacoes:
+            self.log("  ⏭ Sem multas/indenizações no JSON")
+            return
+        if not self._navegar_menu_via_click("li_calculo_multas_e_indenizacoes"):
+            self._navegar_menu("li_calculo_multas_e_indenizacoes")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(800)
+        for m in self.previa.multas_indenizacoes:
+            try:
+                self._clicar("incluir")
+                self._aguardar_ajax(3000)
+                self._preencher("descricao", m.descricao, obrigatorio=False)
+                self._selecionar("credorDevedor", m.credor_devedor, obrigatorio=False)
+                if m.terceiro_nome and "TERCEIRO" in m.credor_devedor:
+                    self._preencher("terceiro", m.terceiro_nome, obrigatorio=False)
+                self._marcar_radio("valor", m.tipo_valor)
+                self._aguardar_ajax(1500)
+                if m.tipo_valor == "CALCULADO":
+                    self._preencher("aliquota", _fmt_br(m.aliquota_pct or 0), obrigatorio=False)
+                    if m.tipo_base:
+                        self._selecionar("tipoBaseMulta", m.tipo_base, obrigatorio=False)
+                else:
+                    self._preencher("valor2", _fmt_br(m.valor_brl or 0), obrigatorio=False)
+                    if m.data_vencimento:
+                        self._preencher("dataVencimento", m.data_vencimento, obrigatorio=False)
+                self._selecionar("correcaoMonetaria", m.correcao_monetaria, obrigatorio=False)
+                if m.correcao_monetaria == "OUTRO_INDICE" and m.outro_indice_correcao:
+                    self._selecionar("outroIndiceCorrecao", m.outro_indice_correcao, obrigatorio=False)
+                self._marcar_checkbox("aplicarJuros", m.aplicar_juros)
+                if m.data_juros_a_partir_de:
+                    self._preencher("dataJurosAPartirDe", m.data_juros_a_partir_de, obrigatorio=False)
+                if m.tipo_cobranca_reclamante and "RECLAMANTE" in m.credor_devedor[-10:]:
+                    self._selecionar("tipoCobrancaReclamante", m.tipo_cobranca_reclamante, obrigatorio=False)
+                self._clicar("salvar")
+                self._aguardar_ajax(5000)
+                self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
+            except Exception as e:
+                self.log(f"  ⚠ Falha Multa '{m.descricao}': {e}")
+        self.log("Fase 11b concluída")
 
     def fase_honorarios(self) -> None:
         self.log("Fase 11 — Honorários")
