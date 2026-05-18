@@ -1051,8 +1051,14 @@ class PreviaCalculoV2(BaseModel):
     faltas: list[Falta] = Field(default_factory=list)
     ferias: FeriasSection = Field(default_factory=FeriasSection)
     fgts: FGTS = Field(default_factory=FGTS)
-    contribuicao_social: ContribuicaoSocial = Field(default_factory=ContribuicaoSocial)
-    imposto_de_renda: ImpostoDeRenda = Field(default_factory=ImpostoDeRenda)
+    # CS e IRPF: opcionais por design — quando o JSON OMITE estes campos, a
+    # automação PULA as fases correspondentes e os defaults nativos do
+    # PJE-Calc valem 100% (apurar segurado, alíquota empregado SEGURADO_
+    # EMPREGADO, empregador POR_ATIVIDADE_ECONOMICA, IRPF com tributação
+    # separada RRA, etc.). A IA só deve preencher quando a sentença
+    # determinar EXPLICITAMENTE algo diferente.
+    contribuicao_social: Optional[ContribuicaoSocial] = None
+    imposto_de_renda: Optional[ImpostoDeRenda] = None
     honorarios: list[Honorario] = Field(default_factory=list)
     custas_judiciais: CustasJudiciais = Field(default_factory=CustasJudiciais)
     correcao_juros_multa: CorrecaoJurosMulta = Field(default_factory=CorrecaoJurosMulta)

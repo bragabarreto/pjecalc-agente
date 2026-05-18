@@ -962,9 +962,11 @@ def _montar_xml(dados: dict, verbas_mapeadas: dict, calc_id: int) -> str:
             elif _tipo == "PERICIAIS":
                 hon_dict["periciais"] = _h.get("valor_informado") or _h.get("percentual")
         hon = hon_dict
-    cj   = dados.get("correcao_juros", {})
-    cs   = dados.get("contribuicao_social", {})
-    ir   = dados.get("imposto_renda", {})
+    cj   = dados.get("correcao_juros", {}) or {}
+    # CS/IRPF podem ser explicitamente null (omitidos pela IA quando a
+    # sentença não determina regras específicas — defaults PJE-Calc valem).
+    cs   = dados.get("contribuicao_social", {}) or {}
+    ir   = dados.get("imposto_renda", {}) or {}
     avp  = dados.get("aviso_previo", {})
     pres = dados.get("prescricao", {})
 

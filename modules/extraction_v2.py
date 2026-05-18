@@ -74,8 +74,8 @@ Sua tarefa é analisar uma sentença trabalhista e extrair TODOS os dados necess
   "faltas": [],
   "ferias": { "periodos": [], "ferias_coletivas_inicio_primeiro_ano": null, "prazo_ferias_proporcionais": null },
   "fgts": { ... },
-  "contribuicao_social": { ... },
-  "imposto_de_renda": { ... },
+  "contribuicao_social": null,   // OMITIR (= null) se a sentença NÃO mencionar regras específicas; defaults do PJE-Calc valem
+  "imposto_de_renda": null,      // OMITIR (= null) se a sentença NÃO mencionar regras específicas; defaults do PJE-Calc valem
   "honorarios": [],
   "custas_judiciais": { ... },
   "correcao_juros_multa": { ... },
@@ -692,9 +692,15 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
 - `multa` é um **objeto**, **NUNCA** boolean. Se dispensa sem justa causa → `ativa: true`, `percentual: "QUARENTA_POR_CENTO"`. Se justa causa / pedido demissão → `ativa: false`.
 - `multa.percentual` ∈ {`"QUARENTA_POR_CENTO"`, `"VINTE_POR_CENTO"`}
 
-(Para contribuicao_social, imposto_de_renda, custas_judiciais e correcao_juros_multa, o formato JSON espelha exatamente a estrutura do schema.)
+(Para custas_judiciais e correcao_juros_multa, o formato JSON espelha exatamente a estrutura do schema.)
 
-⚠️ Para `contribuicao_social.vinculacao_historicos_devidos`, deixar `{"modo": "automatica", "intervalos": []}` por padrão. Só usar `manual_por_periodo` se a sentença determinar bases diferentes por período.
+⚠️ **Contribuição Social e IRPF — política padrão: OMITIR (= null)**:
+- O PJE-Calc tem defaults sensatos prontos: apurar segurado, alíquota SEGURADO_EMPREGADO, empregador POR_ATIVIDADE_ECONOMICA, IRPF apurado com tributação separada RRA, deduções padrão.
+- **NÃO preencher** `contribuicao_social` e `imposto_de_renda` quando a sentença NÃO determinar nada específico (caso da maioria das sentenças).
+- **Preencher APENAS quando** a sentença determinar explicitamente: regime de caixa (IR), CS pelo empregador FIXA com alíquotas próprias, dependentes (com `possui_dependentes: true` + `quantidade_dependentes: N`), aposentado maior de 65, RRA aplicado de modo distinto, vinculação manual de históricos de CS, etc.
+- Quando preencher, manter apenas os campos relevantes; os demais ficam com os defaults do schema.
+
+⚠️ Para `contribuicao_social.vinculacao_historicos_devidos` (quando preencher CS), deixar `{"modo": "automatica", "intervalos": []}` por padrão. Só usar `manual_por_periodo` se a sentença determinar bases diferentes por período.
 
 ⚠️ Para `correcao_juros_multa`, padrão pós-ADC 58 (após Set/2024):
 ```json

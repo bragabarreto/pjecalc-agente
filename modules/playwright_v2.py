@@ -3515,6 +3515,13 @@ class PlaywrightAutomatorV2:
 
     def fase_contribuicao_social(self) -> None:
         self.log("Fase 9 — Contribuição Social")
+        # SKIP por ausência: se o JSON omitir contribuicao_social, deixar os
+        # defaults nativos do PJE-Calc valerem. Política decidida 17/05/2026:
+        # a IA só preenche este bloco quando a sentença determinar algo
+        # explicitamente diferente do padrão; caso contrário, omite.
+        if self.previa.contribuicao_social is None:
+            self.log("  ⏭ Contribuição Social omitida no JSON — usando defaults do PJE-Calc")
+            return
         # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
         if not self._navegar_menu_via_click("li_calculo_inss"):
             self._navegar_menu("li_calculo_inss")
@@ -3604,6 +3611,12 @@ class PlaywrightAutomatorV2:
 
     def fase_imposto_de_renda(self) -> None:
         self.log("Fase 10 — IRPF")
+        # SKIP por ausência: idem CS (Fase 9). Quando o JSON omitir
+        # imposto_de_renda, os defaults nativos do PJE-Calc valem
+        # (apurar=Sim, tributação separada RRA, deduções padrão).
+        if self.previa.imposto_de_renda is None:
+            self.log("  ⏭ IRPF omitido no JSON — usando defaults do PJE-Calc")
+            return
         # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
         if not self._navegar_menu_via_click("li_calculo_irpf"):
             self._navegar_menu("li_calculo_irpf")
