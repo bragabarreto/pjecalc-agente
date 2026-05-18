@@ -221,6 +221,16 @@ Sua tarefa é analisar uma sentença trabalhista e extrair TODOS os dados necess
 ]
 ```
 
+⚠️ **DOIS campos `ocorrencias_override` DIFERENTES** — NÃO CONFUNDIR:
+
+| Onde aparece | Tipo | Quando usar | Formato |
+|---|---|---|---|
+| `verbas_principais[N].ocorrencias_override` | **OBJETO** `OcorrenciasOverride` ou `null` | sentença determina valores DIFERENTES por mês para a VERBA (raro) | `{"modo":"valores_mensais","valores_mensais":[{"mes":"06/2024","valor_devido":1500.00},...]}` |
+| `cartao_de_ponto.ocorrencias_override` | **LISTA** de `OcorrenciaJornada` | sábados alternados/plantões — exceções da jornada (comum) | `[{"data":"15/06/2024","turnos":[{"entrada":"07:00","saida":"12:00"}]},...]` |
+
+**Default para verbas**: `null` (não preencher; PJE-Calc gera ocorrências automáticas via Período + Ocorrência).
+**Default para cartão**: `[]` (lista vazia) ou lista de dias específicos.
+
 ## 4.1 ESTRATÉGIA DE PREENCHIMENTO
 
 Para cada verba, classificar em uma de 3 estratégias:

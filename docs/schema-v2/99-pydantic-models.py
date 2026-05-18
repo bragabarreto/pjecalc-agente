@@ -413,10 +413,33 @@ class OcorrenciasOverride(BaseModel):
     Modo `valores_mensais`: preenche cada linha individualmente. Use quando
     a sentença determina valores diferentes mês a mês.
     """
+    model_config = ConfigDict(extra="ignore")  # ignora chaves desconhecidas que IA possa colocar
 
     modo: Literal["alteracao_em_lote", "valores_mensais"] = "alteracao_em_lote"
     valores_mensais: list[OcorrenciaMensalOverride] = Field(default_factory=list)
     # quando modo=alteracao_em_lote, usar campos do verba.parametros.valor_devido
+
+    @model_validator(mode="before")
+    @classmethod
+    def _aceitar_formato_legado(cls, data):
+        """Tolerância: a IA frequentemente confunde verba.ocorrencias_override
+        (objeto com modo+valores_mensais) com cartao_de_ponto.ocorrencias_override
+        (lista de OcorrenciaJornada {data, turnos}). Quando vier uma lista
+        com itens contendo 'data' + 'turnos' (formato do cartão), descarta
+        — esses overrides pertencem ao cartao_de_ponto, não à verba.
+        Quando vier lista vazia, normaliza para objeto default."""
+        if isinstance(data, list):
+            if not data:
+                return {}  # lista vazia → default
+            primeiro = data[0] if data else {}
+            if isinstance(primeiro, dict) and "turnos" in primeiro:
+                # formato cartão de ponto colocado por engano aqui
+                return {}  # descarta — deveria estar em cartao_de_ponto
+            # Lista de items com {mes, valor_devido,...}? Tratar como valores_mensais
+            if isinstance(primeiro, dict) and ("mes" in primeiro or "valor_devido" in primeiro):
+                return {"modo": "valores_mensais", "valores_mensais": data}
+            return {}
+        return data
     # (não há campos extras aqui)
 
 
