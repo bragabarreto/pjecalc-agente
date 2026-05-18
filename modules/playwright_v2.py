@@ -139,6 +139,50 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
+    # ─── Snapshot de campos para DOM-diff em correção manual ───────────────
+
+    def capturar_snapshot_listagem_verbas(self) -> dict:
+        """Captura o estado da listagem de Verbas no PJE-Calc.
+
+        Usado para registrar o snapshot inicial antes de oferecer edição
+        manual ao usuário e, depois, comparar com o estado final para
+        gerar `CorrecaoUsuario` automaticamente (sem o usuário precisar
+        descrever em texto livre).
+
+        Retorna um dict serializável com:
+          - `linhas`: lista de strings (texto completo de cada <tr> com
+            input verbaSelecionada na listagem)
+          - `reflexos_ativos`: lista de ids dos reflexos marcados
+          - `valor_total`: texto do rodapé com o total da listagem (se houver)
+          - `mensagens`: mensagens JSF visíveis no momento (pendências, erros)
+          - `url`: URL atual (para verificação de contexto Seam)
+        """
+        try:
+            return self._page.evaluate("""() => {
+                const trs = [...document.querySelectorAll('tr')];
+                const linhas = trs
+                    .filter(tr => tr.querySelector('input[id*=":verbaSelecionada"]'))
+                    .map(tr => (tr.textContent||'').replace(/\\s+/g,' ').trim())
+                    .filter(t => t);
+                const reflexos = [...document.querySelectorAll('input[id*=":listaReflexo:"][id$=":ativo"]')]
+                    .filter(c => c.checked)
+                    .map(c => c.id);
+                const total_el = document.querySelector('[id*=":totalDevido"], [id*=":total"], [id$=":valorTotal"]');
+                const total = total_el ? (total_el.value || total_el.textContent || '').trim() : null;
+                const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.rich-message-detail')]
+                    .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
+                return {
+                    linhas: linhas,
+                    reflexos_ativos: reflexos,
+                    valor_total: total,
+                    mensagens: msgs,
+                    url: location.href.split('#')[0]
+                };
+            }""")
+        except Exception as e:
+            self.log(f"  ⚠ Falha capturar snapshot de verbas: {e}")
+            return {"erro": str(e), "linhas": [], "reflexos_ativos": [], "mensagens": []}
+
     # ─── Pipeline principal ────────────────────────────────────────────────
 
     def run(self) -> str | None:
@@ -4260,11 +4304,38 @@ class PlaywrightAutomatorV2:
                 conv = self._calculo_conversation_id or "?"
                 # URL passada via proxy do app (mesma origem que o frontend usa)
                 edit_url = f"/pjecalc/pages/calculo/calculo.jsf?conversationId={conv}"
+                # Capturar snapshot INICIAL da listagem de Verbas para futuro
+                # DOM-diff quando o usuário concluir a edição manual. Navega
+                # primeiro para Verbas, captura, e persiste em filesystem.
+                snapshot_inicial = None
+                try:
+                    self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(800)
+                    snapshot_inicial = self.capturar_snapshot_listagem_verbas()
+                    # Persistir no sistema de arquivos para o endpoint de diff
+                    # ler depois (path determinístico por sessão).
+                    import json as _json, pathlib as _pl, os as _os
+                    sessao = _os.environ.get("PJECALC_SESSAO_ID") or getattr(
+                        self.previa, "_sessao_id", None
+                    ) or "unknown"
+                    snap_dir = _pl.Path("/tmp/pjecalc_snapshots")
+                    snap_dir.mkdir(parents=True, exist_ok=True)
+                    snap_path = snap_dir / f"{sessao}_inicial.json"
+                    snap_path.write_text(_json.dumps({
+                        "conv": conv,
+                        "url": edit_url,
+                        "snapshot": snapshot_inicial,
+                    }, ensure_ascii=False), encoding="utf-8")
+                    self.log(f"  ✓ Snapshot inicial salvo: {snap_path} ({len(snapshot_inicial.get('linhas', []))} verbas)")
+                except Exception as e:
+                    self.log(f"  ⚠ Snapshot inicial falhou: {e}")
                 payload = {
                     "url": edit_url,
                     "conversationId": conv,
                     "pendencias": pendencias[:10],
                     "detalhes": detalhes_pendencias[:30],
+                    "snapshot_capturado": snapshot_inicial is not None,
                 }
                 # Marcador especial reconhecido pelo SSE/frontend
                 import json as _json
@@ -4627,3 +4698,84 @@ class PlaywrightAutomatorV2:
 
     def get_pjc_path(self) -> str | None:
         return self._pjc_path
+
+
+# ─── Snapshot externo para correção manual (DOM-diff) ──────────────────────
+
+def capturar_snapshot_final_listagem(
+    conv_id: str,
+    pjecalc_url: str = "http://localhost:9257/pjecalc",
+    log_fn: Callable[[str], None] | None = None,
+) -> dict:
+    """Abre Playwright efêmero, navega para a listagem de Verbas na conv
+    Seam indicada e captura o snapshot atual da listagem.
+
+    Usado pelo endpoint POST /api/correcao_manual_diff: o usuário avisa que
+    terminou a edição manual no PJE-Calc, e o backend chama esta função para
+    comparar o estado final com o snapshot inicial (salvo antes do raise
+    de Liquidação) e gerar CorrecaoUsuario automaticamente.
+    """
+    from playwright.sync_api import sync_playwright
+    _log = log_fn or (lambda m: logger.info(m))
+    snap: dict = {"linhas": [], "reflexos_ativos": [], "mensagens": [], "erro": None}
+    with sync_playwright() as pw:
+        try:
+            browser = pw.firefox.launch(headless=True)
+            ctx = browser.new_context(viewport={"width": 1280, "height": 800})
+            page = ctx.new_page()
+            url_verbas = (
+                f"{pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                f"?conversationId={conv_id}"
+            )
+            page.goto(url_verbas, wait_until="domcontentloaded", timeout=20000)
+            try:
+                page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
+            page.wait_for_timeout(1500)
+            snap = page.evaluate("""() => {
+                const trs = [...document.querySelectorAll('tr')];
+                const linhas = trs
+                    .filter(tr => tr.querySelector('input[id*=":verbaSelecionada"]'))
+                    .map(tr => (tr.textContent||'').replace(/\\s+/g,' ').trim())
+                    .filter(t => t);
+                const reflexos = [...document.querySelectorAll('input[id*=":listaReflexo:"][id$=":ativo"]')]
+                    .filter(c => c.checked)
+                    .map(c => c.id);
+                const total_el = document.querySelector('[id*=":totalDevido"], [id*=":total"], [id$=":valorTotal"]');
+                const total = total_el ? (total_el.value || total_el.textContent || '').trim() : null;
+                const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.rich-message-detail')]
+                    .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
+                return {linhas, reflexos_ativos: reflexos, valor_total: total, mensagens: msgs, url: location.href.split('#')[0]};
+            }""")
+            browser.close()
+        except Exception as e:
+            _log(f"  ⚠ capturar_snapshot_final_listagem: {e}")
+            snap["erro"] = str(e)
+    return snap
+
+
+def computar_diff_snapshots(inicial: dict, final: dict) -> dict:
+    """Calcula diferenças entre dois snapshots da listagem de verbas.
+
+    Retorna dict com:
+      - `verbas_alteradas`: linhas que mudaram (texto da TR)
+      - `verbas_adicionadas`: linhas novas no final
+      - `verbas_removidas`: linhas que sumiram
+      - `reflexos_adicionados`: ids de reflexo marcados depois
+      - `reflexos_removidos`: ids de reflexo desmarcados
+      - `valor_total_antes` / `valor_total_depois`
+    """
+    set_ini = set(inicial.get("linhas", []) or [])
+    set_fim = set(final.get("linhas", []) or [])
+    ref_ini = set(inicial.get("reflexos_ativos", []) or [])
+    ref_fim = set(final.get("reflexos_ativos", []) or [])
+    return {
+        "verbas_adicionadas": sorted(list(set_fim - set_ini)),
+        "verbas_removidas": sorted(list(set_ini - set_fim)),
+        "verbas_alteradas": [],  # comparação fuzzy fica para v2 (mesmo nome, params diferentes)
+        "reflexos_adicionados": sorted(list(ref_fim - ref_ini)),
+        "reflexos_removidos": sorted(list(ref_ini - ref_fim)),
+        "valor_total_antes": inicial.get("valor_total"),
+        "valor_total_depois": final.get("valor_total"),
+    }

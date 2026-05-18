@@ -3988,6 +3988,96 @@ async def vincular_pjc(sessao_id: str, db: Session = Depends(get_db)):
     }
 
 
+@app.post("/api/correcao_manual_diff/{sessao_id}")
+async def correcao_manual_diff(sessao_id: str, db: Session = Depends(get_db)):
+    """Captura o snapshot final do PJE-Calc, faz diff com o snapshot inicial
+    (salvo antes do raise de Liquidação) e cria CorrecaoUsuario automaticamente
+    para cada delta.
+
+    Mais preciso que a descrição em texto livre (`/api/correcao_manual`):
+    o sistema observa diretamente o que mudou no DOM em vez de depender
+    do usuário descrever.
+    """
+    import json as _json, pathlib as _pl
+    snap_path = _pl.Path("/tmp/pjecalc_snapshots") / f"{sessao_id}_inicial.json"
+    if not snap_path.exists():
+        raise HTTPException(
+            status_code=404,
+            detail="Snapshot inicial não encontrado. A automação precisa rodar e oferecer edição manual primeiro.",
+        )
+    try:
+        data_inicial = _json.loads(snap_path.read_text(encoding="utf-8"))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao ler snapshot inicial: {e}")
+
+    conv = data_inicial.get("conv")
+    if not conv or conv == "?":
+        raise HTTPException(status_code=400, detail="conversationId inválido no snapshot inicial")
+
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+
+    # Captura final via Playwright efêmero
+    from modules.playwright_v2 import capturar_snapshot_final_listagem, computar_diff_snapshots
+    try:
+        snapshot_final = capturar_snapshot_final_listagem(conv_id=conv)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Falha ao capturar snapshot final: {e}")
+
+    diff = computar_diff_snapshots(data_inicial.get("snapshot", {}), snapshot_final)
+
+    # Persistir cada delta como CorrecaoUsuario para o Learning Engine
+    from infrastructure.database import CorrecaoUsuario
+    registradas = 0
+    for tipo, items in [
+        ("verba_adicionada", diff["verbas_adicionadas"]),
+        ("verba_removida", diff["verbas_removidas"]),
+        ("reflexo_adicionado", diff["reflexos_adicionados"]),
+        ("reflexo_removido", diff["reflexos_removidos"]),
+    ]:
+        for item in items:
+            try:
+                entrada = CorrecaoUsuario(
+                    calculo_id=calculo.id,
+                    sessao_id=sessao_id,
+                    tipo_correcao="edicao_manual_dom_diff",
+                    entidade="verba",
+                    campo=tipo,
+                    valor_antes=_json.dumps({"presente_inicial": tipo.endswith("_removido")}),
+                    valor_depois=_json.dumps({"item": str(item)[:500]}),
+                    fonte_original="DOM_DIFF_PJECALC",
+                    contexto_json=_json.dumps({
+                        "conv": conv,
+                        "numero_processo": getattr(calculo, "numero_processo", None),
+                        "valor_total_antes": diff.get("valor_total_antes"),
+                        "valor_total_depois": diff.get("valor_total_depois"),
+                    }),
+                )
+                db.add(entrada)
+                registradas += 1
+            except Exception:
+                continue
+    db.commit()
+
+    # Salvar snapshot final ao lado do inicial (auditoria)
+    try:
+        (_pl.Path("/tmp/pjecalc_snapshots") / f"{sessao_id}_final.json").write_text(
+            _json.dumps({"conv": conv, "snapshot": snapshot_final, "diff": diff}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+    return {
+        "ok": True,
+        "diff": diff,
+        "correcoes_registradas": registradas,
+        "msg": f"{registradas} alteração(ões) detectada(s) e registrada(s) para o Learning Engine",
+    }
+
+
 @app.post("/api/correcao_manual/{sessao_id}")
 async def registrar_correcao_manual(sessao_id: str, payload: dict, db: Session = Depends(get_db)):
     """Registra correções manuais feitas pelo usuário no PJE-Calc Cidadão.

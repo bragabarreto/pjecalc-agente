@@ -235,12 +235,48 @@ function exibirPainelEdicaoManual(payload) {{
     '<h4 style="margin-bottom:8px;">Após editar e liquidar manualmente:</h4>' +
     '<p style="font-size:0.92em; color:#57534e;">Descreva em linguagem natural quais campos você alterou no PJE-Calc para que a liquidação fosse possível. Essa descrição alimenta o aprendizado do sistema e evita que o mesmo erro ocorra em cálculos futuros.</p>' +
     '<textarea id="textarea-correcao-manual" rows="5" style="width:100%; padding:8px; border:1px solid #d4d4d8; border-radius:4px; font-family:inherit;" placeholder="Ex.: Mudei a alíquota do honorário sucumbencial de vazio para 10%. Marquei FGTS Multa 40%. Preenchi a data de vencimento como 26/11/2025."></textarea>' +
-    '<div style="margin-top:8px; display:flex; gap:8px; align-items:center;">' +
-    '<button id="btn-salvar-correcao-manual" type="button" style="padding:8px 16px; background:#2563eb; color:#fff; border:0; border-radius:6px; font-weight:600; cursor:pointer;">Salvar correções para aprendizado</button>' +
+    '<div style="margin-top:8px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
+    (payload.snapshot_capturado ? '<button id="btn-capturar-diff" type="button" style="padding:8px 16px; background:#15803d; color:#fff; border:0; border-radius:6px; font-weight:600; cursor:pointer;">🔄 Capturar mudanças do PJE-Calc (automático)</button>' : '') +
+    '<button id="btn-salvar-correcao-manual" type="button" style="padding:8px 16px; background:#2563eb; color:#fff; border:0; border-radius:6px; font-weight:600; cursor:pointer;">Salvar descrição (texto livre)</button>' +
     '<span id="status-correcao-manual" style="color:#57534e; font-size:0.92em;"></span>' +
-    '</div>';
+    '</div>' +
+    '<div id="diff-resultado" style="margin-top:10px; font-size:0.9em;"></div>';
   document.getElementById('painel-area').appendChild(painel);
   painel.scrollIntoView({{behavior:'smooth', block:'start'}});
+  const btnDiff = document.getElementById('btn-capturar-diff');
+  if (btnDiff) {{
+    btnDiff.addEventListener('click', async () => {{
+      const st = document.getElementById('status-correcao-manual');
+      const out = document.getElementById('diff-resultado');
+      btnDiff.disabled = true;
+      st.style.color = '#57534e';
+      st.textContent = '🔄 Capturando estado do PJE-Calc (~15s)…';
+      try {{
+        const r = await fetch('/api/correcao_manual_diff/' + SESSAO_ID, {{method:'POST'}});
+        const d = await r.json();
+        if (r.ok) {{
+          const diff = d.diff || {{}};
+          const parts = [];
+          if (diff.verbas_adicionadas?.length) parts.push('<strong>Verbas adicionadas (' + diff.verbas_adicionadas.length + '):</strong><ul>' + diff.verbas_adicionadas.map(x => '<li><code>' + escapeHtml(x) + '</code></li>').join('') + '</ul>');
+          if (diff.verbas_removidas?.length) parts.push('<strong>Verbas removidas (' + diff.verbas_removidas.length + '):</strong><ul>' + diff.verbas_removidas.map(x => '<li><code>' + escapeHtml(x) + '</code></li>').join('') + '</ul>');
+          if (diff.reflexos_adicionados?.length) parts.push('<strong>Reflexos ativados (' + diff.reflexos_adicionados.length + '):</strong> ' + diff.reflexos_adicionados.map(escapeHtml).join(', '));
+          if (diff.reflexos_removidos?.length) parts.push('<strong>Reflexos desativados (' + diff.reflexos_removidos.length + '):</strong> ' + diff.reflexos_removidos.map(escapeHtml).join(', '));
+          if (diff.valor_total_antes !== diff.valor_total_depois) parts.push('<strong>Total:</strong> ' + escapeHtml(diff.valor_total_antes||'-') + ' → ' + escapeHtml(diff.valor_total_depois||'-'));
+          out.innerHTML = parts.length ? parts.join('<br>') : '<em>Nenhuma alteração detectada na listagem.</em>';
+          st.textContent = '✓ ' + (d.msg || 'Capturado.');
+          st.style.color = '#15803d';
+        }} else {{
+          st.textContent = 'Erro: ' + (d.detail || r.status);
+          st.style.color = '#b91c1c';
+          btnDiff.disabled = false;
+        }}
+      }} catch (e) {{
+        st.textContent = 'Erro de rede: ' + e.message;
+        st.style.color = '#b91c1c';
+        btnDiff.disabled = false;
+      }}
+    }});
+  }}
   document.getElementById('btn-salvar-correcao-manual').addEventListener('click', async () => {{
     const ta = document.getElementById('textarea-correcao-manual');
     const st = document.getElementById('status-correcao-manual');
