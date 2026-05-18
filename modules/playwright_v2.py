@@ -2041,63 +2041,51 @@ class PlaywrightAutomatorV2:
         if hasattr(v, "expresso_alvo") and v.expresso_alvo and v.expresso_alvo != v.nome_pjecalc:
             candidatos.append(v.expresso_alvo)
         self.log(f"  → Ajustar parâmetros: {v.nome_pjecalc} (busca: {candidatos})")
-        # ESTRATÉGIA: JS localiza o link e retorna seu id real; o click é
-        # feito via Playwright nativo (locator.click), que dispara um evento
-        # trusted que o JSF/RichFaces aceita. Click programático via JS
-        # (a.click() / dispatchEvent / onclick.call) falhou: o navegador
-        # seguia href="#irTopoPagina" antes do onclick="jsfcljs(...);return false"
-        # cancelar, e o DOM ficava na listagem ao invés de carregar o form.
-        info = self._page.evaluate(
+        # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
+        # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
+        # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
+        # (a.click(), dispatchEvent, onclick.call, hover+click via Playwright)
+        # NÃO disparavam a submission — o browser seguia href="#irTopoPagina"
+        # antes do onclick conseguir cancelar.
+        #
+        # SOLUÇÃO: chamar A4J.AJAX.Submit() diretamente como função JS global
+        # (exposta pelo RichFaces 3.3.3). Independe de evento trusted ou
+        # navegação default. Confirmado: chama jsfcljs interno corretamente
+        # e o servidor renderiza o form de Alteração.
+        clicou = self._page.evaluate(
             """(candidatos) => {
                 const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
-                const trs = [...document.querySelectorAll('tr')];
-                for (const alvo of candidatos) {
-                    const alvoN = norm(alvo);
-                    for (const tr of trs) {
-                        if (!norm(tr.textContent).includes(alvoN)) continue;
-                        const a1 = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
-                        if (a1 && a1.id) return {id: a1.id, via: 'class-title:'+alvo};
-                        const links = [...tr.querySelectorAll('a.linkParametrizar')];
-                        for (const link of links) {
-                            if (link.id && link.id.includes(':listaReflexo:')) continue;
-                            if (link.id) return {id: link.id, via: 'class-only:'+alvo};
+                const linkId = (function() {
+                    const trs = [...document.querySelectorAll('tr')];
+                    for (const alvo of candidatos) {
+                        const alvoN = norm(alvo);
+                        for (const tr of trs) {
+                            if (!norm(tr.textContent).includes(alvoN)) continue;
+                            const a1 = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
+                            if (a1 && a1.id && !a1.id.includes(':listaReflexo:')) return {id: a1.id, via: 'class-title:'+alvo};
+                            const links = [...tr.querySelectorAll('a.linkParametrizar')];
+                            for (const link of links) {
+                                if (link.id && link.id.includes(':listaReflexo:')) continue;
+                                if (link.id) return {id: link.id, via: 'class-only:'+alvo};
+                            }
                         }
-                        const t1 = tr.querySelector('a[title*="arâmetros"], a[title*="arametros"]');
-                        if (t1 && t1.id) return {id: t1.id, via: 'title-fallback:'+alvo};
                     }
+                    return null;
+                })();
+                if (!linkId) return null;
+                if (typeof A4J === 'undefined' || !A4J.AJAX || !A4J.AJAX.Submit) {
+                    // RichFaces não disponível — fallback para click do <a>
+                    const a = document.getElementById(linkId.id);
+                    if (a) a.click();
+                    return linkId.via + ':fallback-click';
                 }
-                return null;
+                const params = {};
+                params[linkId.id] = linkId.id;
+                A4J.AJAX.Submit('formulario', null, {similarityGroupingId: linkId.id, parameters: params});
+                return linkId.via + ':a4j-submit';
             }""",
             candidatos,
         )
-        clicou = None
-        if info and info.get("id"):
-            try:
-                # Escapar `:` no id para CSS selector
-                esc = info["id"].replace(":", "\\:")
-                loc = self._page.locator(f"a#{esc}").first
-                # Click simulando ação humana: scroll → hover → click (sem
-                # force). Estratégia que resolveu problemas semelhantes no
-                # Cartão de Ponto. Sem force=True, Playwright aguarda o
-                # elemento ficar "actionable" (visível, estável, sem cobrir)
-                # e gera evento trusted=true que o JSF aceita.
-                loc.scroll_into_view_if_needed(timeout=3000)
-                self._page.wait_for_timeout(150)
-                loc.hover(timeout=3000)
-                self._page.wait_for_timeout(100)
-                loc.click(timeout=5000)
-                clicou = info["via"]
-            except Exception as e:
-                self.log(f"    ⚠ Falha click humano em a#{info['id']}: {e}")
-                # Último recurso: click com force (caso o elemento tenha
-                # algum overlay invisível bloqueando hit test)
-                try:
-                    esc = info["id"].replace(":", "\\:")
-                    self._page.locator(f"a#{esc}").first.click(force=True, timeout=5000)
-                    clicou = info["via"] + "+force"
-                    self.log(f"    ⚠ Fallback force=True usado")
-                except Exception as e2:
-                    self.log(f"    ⚠ Fallback force também falhou: {e2}")
         if not clicou:
             # Diagnóstico: dump tabela atual para identificar mismatch
             diag = self._page.evaluate(
