@@ -1940,6 +1940,170 @@ class PlaywrightAutomatorV2:
             else:
                 self._conv_pre_expresso = None
 
+    def _preencher_valor_informado_devido(self, valor_brl: float) -> None:
+        """Preenche o input 'Devido' do bloco INFORMADO.
+
+        ID real DOM (confirmado em verba-calculo.xhtml linha 442):
+            formulario:valorInformadoDoDevido
+
+        O sufixo `valorDevido` aparece em código legado mas NÃO existe no
+        DOM. Para evitar 8s de espera + fallback ruidoso, vamos direto no
+        nome correto e — se faltar — caímos para o legado.
+        """
+        # Aguardar o campo aparecer (re-render JSF pós-radio valor=INFORMADO)
+        try:
+            self._page.wait_for_selector(
+                "input[id$=':valorInformadoDoDevido']",
+                state="visible",
+                timeout=8000,
+            )
+        except Exception:
+            self.log(f"    ⚠ Campo valorInformadoDoDevido não apareceu em 8s — tentando fallback")
+        preenchido = False
+        for sufixo in ("valorInformadoDoDevido", "valorDevido"):
+            try:
+                if self._page.locator(f"[id$=':{sufixo}']").count() > 0:
+                    self._preencher(sufixo, _fmt_br(valor_brl), obrigatorio=False)
+                    preenchido = True
+                    self.log(f"    ✓ valor_informado_brl = {valor_brl} (via {sufixo})")
+                    break
+            except Exception:
+                continue
+        if not preenchido:
+            self.log(f"    ⚠ Falha preencher valor_informado_brl={valor_brl}")
+
+    def _configurar_quantidade_radio(self, q_tipo: str, q) -> None:
+        """Configura o bloco Quantidade (radio + sub-campos) na verba-calculo.
+
+        Decisões baseadas em pjecalc-fields-catalog.json:
+          • radios DOM: INFORMADA, IMPORTADA_DO_CALENDARIO, IMPORTADA_DO_CARTAO
+          • APURADA, AVOS são valores INTERNOS do bean (não há radio
+            user-clickable) — usados para 13º/Férias/SaldoSalário onde o
+            sistema computa automaticamente. Pulamos silenciosamente.
+          • Para IMPORTADA_DO_CARTAO: além do radio, é necessário
+            selecionar o cartão de ponto disponível no dropdown
+            `tipoImportadadoDoCartaoDePontoQuantidade` e clicar
+            `incluirCartaoDePontoQuantidade` para vincular.
+        """
+        if q_tipo in ("APURADA", "AVOS"):
+            self.log(f"    ⊙ quantidade.tipo={q_tipo} (valor interno do bean — sem radio no DOM, pulando)")
+            return
+        # Esperar o painel de quantidade aparecer (a4j:region rendered=
+        # isValorDevidoCalculado). Sem esse wait, racing AJAX falha o click.
+        try:
+            self._page.wait_for_selector(
+                "input[type='radio'][id*='tipoDaQuantidade']",
+                state="attached",
+                timeout=8000,
+            )
+        except Exception:
+            self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu em 8s — pulando")
+            return
+        try:
+            self._marcar_radio("tipoDaQuantidade", q_tipo, obrigatorio=False)
+        except Exception as e:
+            self.log(f"    ⚠ Falha marcar tipoDaQuantidade={q_tipo}: {e}")
+            return
+        self._aguardar_ajax(2500)
+        self.log(f"    ✓ quantidade.tipo = {q_tipo}")
+        # Sub-blocos por tipo
+        try:
+            if q_tipo == "INFORMADA" and getattr(q, "valor", None) is not None:
+                self._preencher(
+                    "valorInformadoDaQuantidade",
+                    _fmt_br(q.valor),
+                    obrigatorio=False,
+                )
+                if getattr(q, "proporcionalizar", False):
+                    self._marcar_checkbox("aplicarProporcionalidadeAQuantidade", True)
+            elif q_tipo == "IMPORTADA_DO_CALENDARIO":
+                tipo_cal = getattr(q, "tipo_importada_calendario", None)
+                if tipo_cal:
+                    self._selecionar(
+                        "tipoImportadaCalendario",
+                        tipo_cal.value if hasattr(tipo_cal, "value") else str(tipo_cal),
+                        obrigatorio=False,
+                    )
+            elif q_tipo == "IMPORTADA_DO_CARTAO":
+                # Selecionar cartão de ponto + clicar Incluir.
+                # Sem este passo, a verba fica com `tipoDaQuantidade=IMPORTADA_DO_CARTAO`
+                # mas sem nenhum cartão vinculado → liquidação ignora as
+                # ocorrências apuradas no cartão (HE não soma nada).
+                tipo_cp = getattr(q, "tipo_cartao_ponto", None)
+                self._vincular_cartao_ponto_quantidade(tipo_cp)
+        except Exception as e:
+            self.log(f"    ⚠ Falha sub-bloco quantidade: {e}")
+
+    def _vincular_cartao_ponto_quantidade(self, tipo_cartao_ponto=None) -> None:
+        """Após marcar tipoDaQuantidade=IMPORTADA_DO_CARTAO, seleciona o
+        cartão no dropdown e clica Incluir.
+
+        DOM (verba-calculo.xhtml linhas 1057-1075):
+          • dropdown: formulario:...:tipoImportadadoDoCartaoDePontoQuantidade
+          • botão:   formulario:...:incluirCartaoDePontoQuantidade
+        """
+        try:
+            self._page.wait_for_selector(
+                "select[id$=':tipoImportadadoDoCartaoDePontoQuantidade']",
+                state="visible",
+                timeout=6000,
+            )
+        except Exception:
+            self.log(f"    ⚠ Dropdown cartão de ponto (Quantidade) não apareceu — IMPORTADA_DO_CARTAO sem vínculo")
+            return
+        # Selecionar: ou o tipo solicitado, ou o primeiro disponível
+        sel = self._page.locator("select[id$=':tipoImportadadoDoCartaoDePontoQuantidade']").first
+        try:
+            if tipo_cartao_ponto:
+                val = tipo_cartao_ponto.value if hasattr(tipo_cartao_ponto, "value") else str(tipo_cartao_ponto)
+                try:
+                    sel.select_option(value=val)
+                    self.log(f"    ✓ cartão de ponto (Quantidade) = {val}")
+                except Exception:
+                    # fallback: primeira opção não-vazia
+                    self._selecionar_primeira_opcao_cartao(sel)
+            else:
+                self._selecionar_primeira_opcao_cartao(sel)
+        except Exception as e:
+            self.log(f"    ⚠ Falha selecionar cartão (Quantidade): {e}")
+            return
+        # Clicar Incluir
+        try:
+            btn = self._page.locator("a[id$=':incluirCartaoDePontoQuantidade'], input[id$=':incluirCartaoDePontoQuantidade']")
+            if btn.count() > 0:
+                btn.first.click()
+                self._aguardar_ajax(2500)
+                self.log(f"    ✓ click incluirCartaoDePontoQuantidade")
+            else:
+                self.log(f"    ⚠ Botão incluirCartaoDePontoQuantidade não encontrado")
+        except Exception as e:
+            self.log(f"    ⚠ Falha click Incluir cartão (Quantidade): {e}")
+
+    def _selecionar_primeira_opcao_cartao(self, sel_locator) -> None:
+        """Seleciona a primeira option não-vazia/não-placeholder."""
+        try:
+            valor = self._page.evaluate(
+                """(sel) => {
+                    const opts = [...sel.options];
+                    for (const o of opts) {
+                        const v = (o.value || '').trim();
+                        const t = (o.textContent || '').trim();
+                        if (v && v !== '0' && !t.toLowerCase().startsWith('selecione')) {
+                            return v;
+                        }
+                    }
+                    return null;
+                }""",
+                sel_locator.element_handle(),
+            )
+            if valor:
+                sel_locator.select_option(value=valor)
+                self.log(f"    ✓ cartão de ponto (Quantidade) auto-selecionado = {valor}")
+            else:
+                self.log(f"    ⚠ Nenhum cartão de ponto disponível no dropdown")
+        except Exception as e:
+            self.log(f"    ⚠ Falha auto-select cartão: {e}")
+
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche todos os campos do form de parâmetros de verba.
 
@@ -1955,13 +2119,28 @@ class PlaywrightAutomatorV2:
         Em MANUAL: preenchemos tudo (com_identificacao=True).
         """
         p = v.parametros
-        # EXPRESSO_DIRETO: NÃO ALTERAR nada que o Expresso já configurou,
-        # MAS preencher valor_informado quando aplicável (sem isso, verbas como
-        # RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA, DANO MORAL ficam com valor 0 →
-        # liquidação rejeita por pendência "deve existir ocorrência com valor != 0").
+        # EXPRESSO_DIRETO e EXPRESSO_ADAPTADO seguem o mesmo fluxo MÍNIMO:
+        # o Expresso já configurou caracteristica/ocorrencia/incidencias/etc.
+        # corretamente — re-clicar esses radios dispara AJAX listeners
+        # (`mudarCaracteristica`, `mudarOcorrenciaDePagamento`) que RESETAM o
+        # estado do bean e fazem o save subsequente falhar silenciosamente
+        # (observado 18/05/2026 sessão cecf7937: INDENIZAÇÃO SUBSTITUTIVA DE
+        # REFEIÇÃO valor 484,00 preenchido mas save sem "Operação realizada
+        # com sucesso" → form quebrado → próximas verbas perdidas).
+        #
+        # Ajustamos APENAS o que pode divergir do Expresso:
+        #   • descricao (quando nome_pjecalc != expresso_alvo)
+        #   • período (datas da condenação)
+        #   • valor_informado_brl (RESTITUIÇÃO, DANO MORAL, INDENIZAÇÃO ADICIONAL)
+        #   • proporcionalizar do Valor Devido
+        #   • quantidade.tipo (HE com cartão de ponto IMPORTADA_DO_CARTAO)
         if (not com_identificacao
-                and v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_DIRETO):
-            self.log(f"    ℹ EXPRESSO_DIRETO: ajustando período + valor_informado se aplicável")
+                and v.estrategia_preenchimento in (
+                    EstrategiaPreenchimento.EXPRESSO_DIRETO,
+                    EstrategiaPreenchimento.EXPRESSO_ADAPTADO,
+                )):
+            estrat = v.estrategia_preenchimento.value if hasattr(v.estrategia_preenchimento, "value") else str(v.estrategia_preenchimento)
+            self.log(f"    ℹ {estrat}: ajustes mínimos (sem re-clicar radios que disparam mudarCaracteristica)")
             # Renomear quando nome_pjecalc divergir do expresso_alvo. Importante
             # para verbas genéricas (RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA, DANO
             # MATERIAL, INDENIZAÇÃO ADICIONAL) cujo nome canônico do Expresso
@@ -1987,17 +2166,19 @@ class PlaywrightAutomatorV2:
                         break
                 except Exception:
                     continue
-            # Preencher valor_informado_brl quando valor=INFORMADO
-            if p.valor == TipoValor.INFORMADO and p.valor_devido and p.valor_devido.valor_informado_brl:
+            # Preencher valor_informado_brl quando valor=INFORMADO.
+            # CRÍTICO (descoberto 18/05/2026): o DOM real é
+            # `formulario:valorInformadoDoDevido` — NÃO `valorDevido`. O sufixo
+            # antigo causava _preencher silencioso (obrigatorio=False) sem
+            # nenhum aviso, deixando o campo em branco.
+            if p.valor == TipoValor.INFORMADO and p.valor_devido and p.valor_devido.valor_informado_brl is not None:
+                self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
+            # Proporcionalizar do bloco Valor Devido (mesmo campo da prévia)
+            if p.valor == TipoValor.INFORMADO and p.valor_devido and getattr(p.valor_devido, "proporcionalizar", False):
                 try:
-                    self._preencher(
-                        "valorDevido",
-                        _fmt_br(p.valor_devido.valor_informado_brl),
-                        obrigatorio=False,
-                    )
-                    self.log(f"    ✓ valor_informado_brl = {p.valor_devido.valor_informado_brl}")
-                except Exception as e:
-                    self.log(f"    ⚠ Falha preencher valor_informado: {e}")
+                    self._marcar_checkbox("aplicarProporcionalidadeAoValorDevido", True)
+                except Exception:
+                    pass
             # FIX EXPRESSO_DIRETO + Quantidade especial: se JSON especificar
             # quantidade.tipo != default do Expresso (ex.: HE Expresso vem
             # com tipo=APURADA, mas IA pede IMPORTADA_DO_CARTAO ou INFORMADA),
@@ -2009,21 +2190,9 @@ class PlaywrightAutomatorV2:
                 and p.formula_calculado.quantidade
                 and p.formula_calculado.quantidade.tipo
             ):
-                try:
-                    q = p.formula_calculado.quantidade
-                    q_tipo = q.tipo.value if hasattr(q.tipo, "value") else str(q.tipo)
-                    self._marcar_radio("tipoDaQuantidade", q_tipo, obrigatorio=False)
-                    self._aguardar_ajax(1500)
-                    self.log(f"    ✓ quantidade.tipo = {q_tipo}")
-                    # Se INFORMADA, preencher valor
-                    if q_tipo == "INFORMADA" and q.valor is not None:
-                        self._preencher(
-                            "valorInformadoDaQuantidade",
-                            _fmt_br(q.valor),
-                            obrigatorio=False,
-                        )
-                except Exception as e:
-                    self.log(f"    ⚠ Falha quantidade.tipo: {e}")
+                q = p.formula_calculado.quantidade
+                q_tipo = q.tipo.value if hasattr(q.tipo, "value") else str(q.tipo)
+                self._configurar_quantidade_radio(q_tipo, q)
             # Aguardar AJAX (rerender JSF disparado pelos blurs dos campos
             # acima) antes de o caller chamar _clicar_salvar_flex. Sem isso, o
             # botão Salvar pode estar em re-mount e a cascata flex falha com
@@ -2053,32 +2222,12 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(3000)
 
         if p.valor == TipoValor.INFORMADO:
-            # Aguardar campo "Devido" aparecer no DOM (re-render JSF pós-radio)
-            try:
-                self._page.wait_for_selector(
-                    "input[id$=':valorDevido']",
-                    state="visible",
-                    timeout=8000,
-                )
-            except Exception:
-                self.log(f"  ⚠ Campo valorDevido não apareceu em 8s — tentando fallback")
-            # Preencher com tolerância — se sufixo `:valorDevido` falhar,
-            # tenta variantes; obrigatorio=False evita RuntimeError travar tudo
-            preenchido = False
-            for sufixo in ("valorDevido", "valorInformadoDoDevido"):
-                try:
-                    if self._page.locator(f"[id$=':{sufixo}']").count() > 0:
-                        self._preencher(sufixo, _fmt_br(p.valor_devido.valor_informado_brl), obrigatorio=False)
-                        preenchido = True
-                        break
-                except Exception:
-                    continue
-            if not preenchido:
-                self.log(f"  ⚠ Falha preencher valor_informado_brl={p.valor_devido.valor_informado_brl}")
-            # Proporcionalizar do bloco Valor Devido (espelho página verba-calculo.jsf)
+            self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
+            # Proporcionalizar do bloco Valor Devido (DOM real:
+            # aplicarProporcionalidadeAoValorDevido — XHTML linha 459)
             try:
                 if getattr(p.valor_devido, "proporcionalizar", False):
-                    self._marcar_checkbox("proporcionalizarDevido", True)
+                    self._marcar_checkbox("aplicarProporcionalidadeAoValorDevido", True)
             except Exception:
                 pass
         else:  # CALCULADO
@@ -2106,16 +2255,9 @@ class PlaywrightAutomatorV2:
             elif f.divisor.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.divisor, "tipo_cartao_ponto", None):
                 self._selecionar("tipoImportadadoDoCartaoDePontoDivisor", f.divisor.tipo_cartao_ponto, obrigatorio=False)
             self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador), obrigatorio=False)
-            self._marcar_radio("tipoDaQuantidade", f.quantidade.tipo.value)
-            self._aguardar_ajax(2000)
-            if f.quantidade.tipo.value == "INFORMADA" and f.quantidade.valor is not None:
-                self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor), obrigatorio=False)
-                if getattr(f.quantidade, "proporcionalizar", False):
-                    self._marcar_checkbox("aplicarProporcionalidadeAQuantidade", True)
-            elif f.quantidade.tipo.value == "IMPORTADA_DO_CALENDARIO" and getattr(f.quantidade, "tipo_importada_calendario", None):
-                self._selecionar("tipoImportadaCalendario", f.quantidade.tipo_importada_calendario, obrigatorio=False)
-            elif f.quantidade.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.quantidade, "tipo_cartao_ponto", None):
-                self._selecionar("tipoImportadadoDoCartaoDePontoQuantidade", f.quantidade.tipo_cartao_ponto, obrigatorio=False)
+            # Quantidade: usa helper que pula APURADA/AVOS (valores internos)
+            # e vincula cartão de ponto para IMPORTADA_DO_CARTAO
+            self._configurar_quantidade_radio(f.quantidade.tipo.value, f.quantidade)
             # Dobrar Valor Devido — checkbox visível só quando valor=CALCULADO
             try:
                 if getattr(p.exclusoes, "dobrar_valor_devido", False):
