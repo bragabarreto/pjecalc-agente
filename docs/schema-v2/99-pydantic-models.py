@@ -1432,18 +1432,31 @@ class PreviaCalculoV2(BaseModel):
                 or (v.nome_pjecalc and "AVISO PRÉVIO" in v.nome_pjecalc.upper())
             )
 
-            # Regra 1: DESLIGAMENTO + periodo_fim > demissao = ERRO
-            # EXCEÇÃO: AVISO_PREVIO (projeção legal — manual PJE-Calc §3.5)
+            # Regra 1: ocorrências NÃO-MENSAIS (DESLIGAMENTO, DEZEMBRO,
+            # PERIODO_AQUISITIVO) + periodo_fim > demissao = ERRO bloqueante.
+            # Mensagem JSF exata do PJE-Calc:
+            # "A data final não pode ser maior que a data demissão, para o
+            #  caso de 'Ocorrências de Pagamento' diferentes de Mensal"
+            # EXCEÇÃO: AVISO_PREVIO (projeção legal Lei 12.506/2011 §3.5)
+            nao_mensais = {
+                OcorrenciaPagamento.DESLIGAMENTO,
+                OcorrenciaPagamento.DEZEMBRO,
+                OcorrenciaPagamento.PERIODO_AQUISITIVO,
+            }
             if (
-                p.ocorrencia_pagamento == OcorrenciaPagamento.DESLIGAMENTO
+                p.ocorrencia_pagamento in nao_mensais
                 and d_pf and d_dem and d_pf > d_dem
                 and not is_aviso_previo
             ):
                 self.meta.validacao.campos_faltantes.append(
-                    f"verba[{v.id}] '{v.nome_pjecalc or v.nome_sentenca}': ocorrencia_pagamento=DESLIGAMENTO "
+                    f"verba[{v.id}] '{v.nome_pjecalc or v.nome_sentenca}': "
+                    f"ocorrencia_pagamento={p.ocorrencia_pagamento.value} "
                     f"incompatível com periodo_fim={p.periodo_fim} POSTERIOR à "
                     f"data_demissao={self.parametros_calculo.data_demissao}. "
-                    f"Use ocorrencia_pagamento=MENSAL para verbas pós-contratuais."
+                    f"PJE-Calc rejeita liquidação. Para verbas pós-contratuais "
+                    f"(estabilidade, dispensa discriminatória) use ocorrencia=MENSAL. "
+                    f"Para 13º/Férias/Rescisórias dentro do contrato, ajuste "
+                    f"periodo_fim≤data_demissao."
                 )
 
             # Regra 1.1: AVISO PRÉVIO — limite legal de 90 dias (Lei 12.506/2011)

@@ -2326,6 +2326,49 @@ class PlaywrightAutomatorV2:
             self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
+            # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
+            # Quando o save falha (ex.: erro JSF "A data final não pode ser
+            # maior que data demissão"), a página permanece no form de
+            # Alteração com erros visíveis. As próximas verbas tentam buscar
+            # na "listagem" mas estão no form errado → todas falham com
+            # "TRs com Parâmetros visíveis: []".
+            # Solução: clicar Cancelar para voltar à listagem antes da próxima.
+            try:
+                cancelou = self._page.evaluate(
+                    """() => {
+                        const btn = document.querySelector('input[id$=":cancelar"], input[value="Cancelar"]');
+                        if (!btn) return null;
+                        const onclickStr = btn.getAttribute('onclick') || '';
+                        if (onclickStr) {
+                            try {
+                                const fn = new Function('event', onclickStr);
+                                fn.call(btn, new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+                                return 'onclick-exec';
+                            } catch(_) {}
+                        }
+                        btn.click();
+                        return 'click';
+                    }"""
+                )
+                if cancelou:
+                    self.log(f"  → Cancelando form (via {cancelou}) para voltar à listagem")
+                    self._aguardar_ajax(5000)
+                    self._page.wait_for_timeout(1500)
+                    # Confirmar que voltou para listagem (tem botão Incluir/Manual)
+                    tem_listagem = self._page.evaluate(
+                        """() => !!document.querySelector('input[id$=":incluir"], a.linkParametrizar')"""
+                    )
+                    if tem_listagem:
+                        self.log(f"  ✓ Voltou à listagem (próxima verba pode tentar)")
+                    else:
+                        self.log(f"  ⚠ Cancelar não retornou à listagem — re-navegando li_calculo_verbas")
+                        try:
+                            self._navegar_menu("li_calculo_verbas")
+                            self._aguardar_ajax(8000)
+                        except Exception:
+                            pass
+            except Exception as e:
+                self.log(f"  ⚠ Falha cancelar form: {e}")
 
     def _OLD_configurar_parametros_pos_expresso(self, v) -> None:
         """[REMOVIDO — substituído por versão flexível acima]."""

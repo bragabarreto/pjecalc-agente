@@ -312,6 +312,31 @@ Verba muito específica sem similar:
 | AVISO_PREVIO | DESLIGAMENTO |
 | FERIAS | PERIODO_AQUISITIVO |
 
+### ⚠️ REGRA CRÍTICA — `periodo_fim` vs `data_demissao`
+
+**O PJE-Calc REJEITA a liquidação** com a mensagem _"A data final não pode
+ser maior que a data demissão, para o caso de 'Ocorrências de Pagamento'
+diferentes de Mensal"_ quando:
+
+- `ocorrencia_pagamento ∈ {DESLIGAMENTO, DEZEMBRO, PERIODO_AQUISITIVO}` (ou seja: NÃO-MENSAL)
+- E `periodo_fim > data_demissao`
+
+**Como evitar:**
+
+| Caso | Configuração correta |
+|---|---|
+| Verba rescisória dentro do contrato (Saldo Salário, 13º proporcional, Férias+1/3 proporcionais, Aviso Prévio Indenizado) | `periodo_fim ≤ data_demissao` |
+| Avos de 13º do ano da demissão | `periodo_inicio = 01/01/{ano_demissão}`, `periodo_fim = data_demissao` |
+| Avos de Férias do período aquisitivo aberto | `periodo_fim = data_demissao` |
+| Aviso Prévio Indenizado projetado (Lei 12.506/2011) | EXCEÇÃO: pode estender até 90 dias após demissão |
+| Verba pós-contratual (Estabilidade Gestante/Acidentária, Lei 9.029) | `ocorrencia_pagamento = MENSAL` (não DESLIGAMENTO) + `periodo_fim` ≤ data_termino_calculo |
+
+**❌ ERRADO**: `13º SALÁRIO` com `ocorrencia=DEZEMBRO` + `periodo_fim=23/01/2026` (data ajuizamento, posterior à demissão 27/11/2025)
+**✅ CERTO**: `13º SALÁRIO` com `ocorrencia=DEZEMBRO` + `periodo_fim=27/11/2025` (data demissão)
+
+Se a sentença mandar pagar verba PÓS-demissão (ex.: estabilidade): use
+`ocorrencia=MENSAL`, NÃO DESLIGAMENTO/DEZEMBRO/PERIODO_AQUISITIVO.
+
 ## 4.4 VALOR vs FORMULA_CALCULADO
 
 ### Quando `valor=INFORMADO`
