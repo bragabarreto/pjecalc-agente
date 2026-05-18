@@ -303,26 +303,49 @@ class BaseComposta(BaseModel):
 
 
 class BaseCalculoVerba(BaseModel):
+    """Espelho do bloco 'Base de Cálculo' da Fórmula CALCULADO em verba-calculo.xhtml.
+
+    Campos sub-bloco condicionais por `tipo`:
+      - HISTORICO_SALARIAL → `historico_nome` (qual histórico salarial usar)
+      - VALE_TRANSPORTE → `vale_transporte_nome` (qual VT cadastrado)
+      - SALARIO_DA_CATEGORIA → `salario_categoria_nome` (qual piso)
+      - MAIOR_REMUNERACAO / SALARIO_MINIMO → nenhum sub-campo
+    """
     tipo: TipoBaseCalculo
     historico_nome: Optional[str] = None
+    vale_transporte_nome: Optional[str] = None
+    salario_categoria_nome: Optional[str] = None
     proporcionaliza: Optional[SimNao] = None
     bases_compostas: list[BaseComposta] = Field(default_factory=list)
 
 
 class DivisorVerba(BaseModel):
+    """Espelho do bloco 'Divisor' da Fórmula CALCULADO.
+
+    Sub-campos condicionais:
+      - OUTRO_VALOR → `valor` (float obrigatório)
+      - IMPORTADA_DO_CARTAO → `tipo_cartao_ponto` (qual coluna/cartão usar)
+    """
     tipo: TipoDivisor = TipoDivisor.OUTRO_VALOR
     valor: Optional[float] = None
+    tipo_cartao_ponto: Optional[str] = None
 
 
 class QuantidadeVerba(BaseModel):
     """Quantidade na fórmula CALCULADO.
 
-    Tolerância: se `tipo=INFORMADA` mas `valor=None`, normalizamos para
-    `tipo=CALCULADA` (sistema apura) com valor 0.
+    Sub-campos condicionais:
+      - INFORMADA → `valor` (float; também aceita `valor_mensal` como alias legado)
+      - IMPORTADA_DO_CALENDARIO → `tipo_importada_calendario` (qual coluna calendário)
+      - IMPORTADA_DO_CARTAO → `tipo_cartao_ponto`
+
+    Tolerância: se `tipo=INFORMADA` mas `valor=None`, normalizamos para 0.
     """
     tipo: TipoQuantidade = TipoQuantidade.INFORMADA
     valor: Optional[float] = 1.0
     proporcionalizar: bool = False
+    tipo_importada_calendario: Optional[str] = None
+    tipo_cartao_ponto: Optional[str] = None
 
     @model_validator(mode="after")
     def _normaliza_valor_null(self) -> "QuantidadeVerba":
@@ -341,9 +364,34 @@ class FormulaCalculado(BaseModel):
 
 
 class ValorPagoVerba(BaseModel):
+    """Espelho do bloco 'Valor Pago' da página verba-calculo.xhtml.
+
+    Visível somente quando a verba é `valor=CALCULADO` (bloco aparece após
+    a fórmula). Tem dois modos:
+
+    - **INFORMADO**: usuário digita `valor_brl` direto (valor já recebido pelo
+      reclamante a título da verba).
+    - **CALCULADO**: o sistema apura o pago a partir de um histórico salarial
+      cadastrado (paradigma) — útil em equiparação salarial. Sub-campos:
+        - `base_tipo`: HISTORICO_SALARIAL / MAIOR_REMUNERACAO / SALARIO_MINIMO /
+          SALARIO_DA_CATEGORIA / VALE_TRANSPORTE
+        - `base_historico_nome`: quando base_tipo=HISTORICO_SALARIAL
+        - `base_vale_transporte_nome`: quando base_tipo=VALE_TRANSPORTE
+        - `base_salario_categoria_nome`: quando base_tipo=SALARIO_DA_CATEGORIA
+        - `proporcionaliza_historico`: SIM/NAO (apenas para HISTORICO_SALARIAL)
+        - `quantidade_brl`: Quantidade do Valor Pago (multiplicador aplicado
+          sobre a base, ex.: número de horas pagas)
+    """
     tipo: TipoValor = TipoValor.INFORMADO
     valor_brl: float = 0.0
     proporcionalizar: bool = False
+    # ── sub-campos quando tipo=CALCULADO ─────────────────────────────────
+    base_tipo: Optional[TipoBaseCalculo] = None
+    base_historico_nome: Optional[str] = None
+    base_vale_transporte_nome: Optional[str] = None
+    base_salario_categoria_nome: Optional[str] = None
+    proporcionaliza_historico: Optional[SimNao] = None
+    quantidade_brl: Optional[float] = None
 
 
 class OcorrenciaMensalOverride(BaseModel):

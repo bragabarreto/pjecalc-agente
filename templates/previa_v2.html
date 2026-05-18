@@ -1648,6 +1648,18 @@ function htmlFormulaCalculado(v, idx) {
               `).join('')}
             </select>
           </div>
+        ` : f.base_calculo?.tipo==='VALE_TRANSPORTE' ? `
+          <div class="campo">
+            <label>Vale Transporte (qual)</label>
+            <input type="text" value="${f.base_calculo?.vale_transporte_nome||''}" placeholder="nome do VT cadastrado"
+              onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.vale_transporte_nome=this.value">
+          </div>
+        ` : f.base_calculo?.tipo==='SALARIO_DA_CATEGORIA' ? `
+          <div class="campo">
+            <label>Piso da Categoria</label>
+            <input type="text" value="${f.base_calculo?.salario_categoria_nome||''}" placeholder="nome do piso"
+              onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.base_calculo.salario_categoria_nome=this.value">
+          </div>
         ` : '<div class="campo"></div>'}
         <div class="campo">
           <label>Proporcionalizar</label>
@@ -1682,6 +1694,12 @@ function htmlFormulaCalculado(v, idx) {
           <input type="number" step="0.01" value="${f.divisor?.valor??1}"
             onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.divisor.valor=parseFloat(this.value)">
         </div>
+      ` : f.divisor?.tipo==='IMPORTADA_DO_CARTAO' ? `
+        <div class="campo">
+          <label>Cartão (qual coluna)</label>
+          <input type="text" value="${f.divisor?.tipo_cartao_ponto||''}" placeholder="ex: horas trabalhadas"
+            onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.divisor.tipo_cartao_ponto=this.value">
+        </div>
       ` : '<div class="campo"></div>'}
       <div class="campo">
         <label>Multiplicador</label>
@@ -1707,6 +1725,18 @@ function htmlFormulaCalculado(v, idx) {
           <input type="number" step="0.01" value="${f.quantidade?.valor??1}"
             onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade.valor=parseFloat(this.value)">
           ${car==='AVISO_PREVIO' && apAviso==='NAO_APURAR' ? '<span class="ajuda" style="color:#856404">Sugestão: 30 (NAO_APURAR padrão)</span>' : ''}
+        </div>
+      ` : quantTipo==='IMPORTADA_DO_CALENDARIO' ? `
+        <div class="campo">
+          <label>Coluna do Calendário</label>
+          <input type="text" value="${f.quantidade?.tipo_importada_calendario||''}" placeholder="ex: dias úteis"
+            onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade.tipo_importada_calendario=this.value">
+        </div>
+      ` : quantTipo==='IMPORTADA_DO_CARTAO' ? `
+        <div class="campo">
+          <label>Coluna do Cartão</label>
+          <input type="text" value="${f.quantidade?.tipo_cartao_ponto||''}" placeholder="ex: HE 50%"
+            onchange="previaData.verbas_principais[${idx}].parametros.formula_calculado.quantidade.tipo_cartao_ponto=this.value">
         </div>
       ` : '<div class="campo"></div>'}
       <div class="campo">
@@ -2147,8 +2177,9 @@ function htmlVerba(v, idx) {
         </div>
       </details>
 
+      ${p.tipo !== 'REFLEXO' ? `
       <details class="fieldgroup">
-        <summary class="fieldgroup-title" style="cursor:pointer;">Geração / Comportamento</summary>
+        <summary class="fieldgroup-title" style="cursor:pointer;">Geração / Comportamento <small style="color:#6c757d;">(somente Principal)</small></summary>
         <div class="grid-3">
           <div class="campo">
             <label>Gerar Reflexa</label>
@@ -2181,17 +2212,23 @@ function htmlVerba(v, idx) {
           </div>
         </div>
       </details>
+      ` : `
+      <div class="fieldgroup" style="background:#eef3ff; border-left:3px solid #5a8dee;">
+        <div class="fieldgroup-title">Verba REFLEXA</div>
+        <p style="font-size:0.85rem; color:#475569; margin:4px 0;">Campos "Gerar Reflexa/Principal", "Compor Principal" e "Zerar Negativo" não aparecem no PJE-Calc para verbas REFLEXAS — são herdados da principal.</p>
+      </div>
+      `}
 
       <div class="fieldgroup">
         <div class="fieldgroup-title">Exclusões (do bloco Valor Devido)</div>
         <div class="grid-4">
-          ${['faltas_justificadas','faltas_nao_justificadas','ferias_gozadas'].map(ex => `
+          ${p.tipo !== 'REFLEXO' ? ['faltas_justificadas','faltas_nao_justificadas','ferias_gozadas'].map(ex => `
             <div class="checkbox-row">
               <input type="checkbox"${p.exclusoes?.[ex]?' checked':''}
                 onchange="if(!previaData.verbas_principais[${idx}].parametros.exclusoes) previaData.verbas_principais[${idx}].parametros.exclusoes={}; previaData.verbas_principais[${idx}].parametros.exclusoes['${ex}']=this.checked">
               <label>${ex.replace(/_/g,' ').replace(/\b\w/g, c=>c.toUpperCase())}</label>
             </div>
-          `).join('')}
+          `).join('') : '<div class="ajuda" style="grid-column: 1 / -1;">Exclusões (Faltas/Férias Gozadas) só são renderizadas no PJE-Calc para verbas PRINCIPAIS.</div>'}
           ${p.valor==='CALCULADO' ? `
             <div class="checkbox-row" title="Visível apenas para verbas CALCULADO no PJE-Calc">
               <input type="checkbox"${p.exclusoes?.dobrar_valor_devido?' checked':''}

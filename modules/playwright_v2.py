@@ -2028,18 +2028,37 @@ class PlaywrightAutomatorV2:
             f = p.formula_calculado
             self._selecionar("tipoDaBaseTabelada", f.base_calculo.tipo.value)
             self._aguardar_ajax(3000)
+            # Sub-blocos por tipoDaBaseTabelada (espelho verba-calculo.xhtml)
             if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
                 self._selecionar("baseHistoricos", f.base_calculo.historico_nome)
                 self._aguardar_ajax(2000)
+                if f.base_calculo.proporcionaliza:
+                    self._selecionar("proporcionalizaHistorico", f.base_calculo.proporcionaliza.value, obrigatorio=False)
+            elif f.base_calculo.tipo == TipoBaseCalculo.VALE_TRANSPORTE:
+                if f.base_calculo.vale_transporte_nome:
+                    self._selecionar("valeTransporteDevido", f.base_calculo.vale_transporte_nome, obrigatorio=False)
+                    self._aguardar_ajax(2000)
+            elif f.base_calculo.tipo == TipoBaseCalculo.SALARIO_DA_CATEGORIA:
+                if f.base_calculo.salario_categoria_nome:
+                    self._selecionar("salarioCategoria", f.base_calculo.salario_categoria_nome, obrigatorio=False)
+                    self._aguardar_ajax(2000)
             self._marcar_radio("tipoDeDivisor", f.divisor.tipo.value)
             self._aguardar_ajax(2000)
             if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
                 self._preencher("outroValorDoDivisor", _fmt_br(f.divisor.valor), obrigatorio=False)
+            elif f.divisor.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.divisor, "tipo_cartao_ponto", None):
+                self._selecionar("tipoImportadadoDoCartaoDePontoDivisor", f.divisor.tipo_cartao_ponto, obrigatorio=False)
             self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador), obrigatorio=False)
             self._marcar_radio("tipoDaQuantidade", f.quantidade.tipo.value)
             self._aguardar_ajax(2000)
             if f.quantidade.tipo.value == "INFORMADA" and f.quantidade.valor is not None:
                 self._preencher("valorInformadoDaQuantidade", _fmt_br(f.quantidade.valor), obrigatorio=False)
+                if getattr(f.quantidade, "proporcionalizar", False):
+                    self._marcar_checkbox("aplicarProporcionalidadeAQuantidade", True)
+            elif f.quantidade.tipo.value == "IMPORTADA_DO_CALENDARIO" and getattr(f.quantidade, "tipo_importada_calendario", None):
+                self._selecionar("tipoImportadaCalendario", f.quantidade.tipo_importada_calendario, obrigatorio=False)
+            elif f.quantidade.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.quantidade, "tipo_cartao_ponto", None):
+                self._selecionar("tipoImportadadoDoCartaoDePontoQuantidade", f.quantidade.tipo_cartao_ponto, obrigatorio=False)
             # Dobrar Valor Devido — checkbox visível só quando valor=CALCULADO
             try:
                 if getattr(p.exclusoes, "dobrar_valor_devido", False):
@@ -2085,6 +2104,67 @@ class PlaywrightAutomatorV2:
             self._marcar_checkbox("deduzirInssRecolhido", p.deduzir_inss_recolhido)
         if hasattr(p, "considerar_competencia_paga") and p.considerar_competencia_paga is not None:
             self._marcar_checkbox("considerarCompetenciaPaga", p.considerar_competencia_paga)
+
+        # 6.5. Tipo (PRINCIPAL/REFLEXA) + Gerar Reflexa/Principal + Compor Principal
+        # — só apareem em CALCULADO + não-REFLEXA (espelho rendered do JSF)
+        tipo_str = getattr(p.tipo, "value", str(p.tipo)) if getattr(p, "tipo", None) else "PRINCIPAL"
+        if p.valor == TipoValor.CALCULADO:
+            try:
+                self._marcar_radio("tipoDeVerba", tipo_str)
+                self._aguardar_ajax(1000)
+            except Exception:
+                pass
+        if tipo_str != "REFLEXO":
+            try:
+                self._marcar_radio("geraReflexo", p.gerar_reflexa.value if hasattr(p.gerar_reflexa, "value") else str(p.gerar_reflexa))
+            except Exception:
+                pass
+            try:
+                self._marcar_radio("gerarPrincipal", p.gerar_principal.value if hasattr(p.gerar_principal, "value") else str(p.gerar_principal))
+            except Exception:
+                pass
+            try:
+                self._marcar_radio("comporPrincipal", "SIM" if p.compor_principal else "NAO")
+            except Exception:
+                pass
+
+        # 6.6. Bloco Valor Pago (espelho integral verba-calculo.xhtml)
+        # Só aparece quando valor=CALCULADO no PJE-Calc; em INFORMADO ele
+        # não é renderizado.
+        if p.valor == TipoValor.CALCULADO and getattr(p, "valor_pago", None):
+            vp = p.valor_pago
+            try:
+                vp_tipo = vp.tipo.value if hasattr(vp.tipo, "value") else str(vp.tipo)
+                self._marcar_radio("tipoDoValorPago", vp_tipo)
+                self._aguardar_ajax(2000)
+                if vp_tipo == "CALCULADO":
+                    # Bloco CALCULADO: base + sub-blocos por tipo
+                    if vp.base_tipo:
+                        bt = vp.base_tipo.value if hasattr(vp.base_tipo, "value") else str(vp.base_tipo)
+                        self._selecionar("baseTabelada", bt, obrigatorio=False)
+                        self._aguardar_ajax(1500)
+                        if bt == "HISTORICO_SALARIAL":
+                            if vp.base_historico_nome:
+                                self._selecionar("baseHistoricosValorPago", vp.base_historico_nome, obrigatorio=False)
+                            if vp.proporcionaliza_historico:
+                                self._selecionar(
+                                    "proporcionalizaHistoricoDoValorPago",
+                                    vp.proporcionaliza_historico.value,
+                                    obrigatorio=False,
+                                )
+                        elif bt == "VALE_TRANSPORTE" and vp.base_vale_transporte_nome:
+                            self._selecionar("valeTransportePago", vp.base_vale_transporte_nome, obrigatorio=False)
+                        elif bt == "SALARIO_DA_CATEGORIA" and vp.base_salario_categoria_nome:
+                            self._selecionar("salarioCategoriaValorPago", vp.base_salario_categoria_nome, obrigatorio=False)
+                    if vp.quantidade_brl is not None:
+                        self._preencher("valorPagoQuantidade", _fmt_br(vp.quantidade_brl), obrigatorio=False)
+                else:
+                    # Bloco INFORMADO
+                    self._preencher("valorInformadoPago", _fmt_br(vp.valor_brl), obrigatorio=False)
+                if vp.proporcionalizar:
+                    self._marcar_checkbox("aplicarProporcionalidadeValorPago", True)
+            except Exception as e:
+                self.log(f"    ⚠ Falha preencher Valor Pago: {e}")
 
         # 7. Comentários da verba (textarea opcional no form de Alteração)
         if getattr(p, "comentarios", None):
