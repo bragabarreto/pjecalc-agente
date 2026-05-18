@@ -4408,8 +4408,11 @@ async def api_prompt_externo():
     quando extrai sentença com Claude API).
     """
     try:
-        from modules.extraction_v2 import SYSTEM_PROMPT_V2
-        return SYSTEM_PROMPT_V2
+        # Versão EXTERNAL (fluxo 2 etapas: resumo + validação humana → JSON).
+        # SYSTEM_PROMPT_V2 (sem fluxo) é usado pela API interna; EXTERNAL é
+        # a versão para colar no Projeto Claude externo (multi-turn).
+        from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL
+        return SYSTEM_PROMPT_V2_EXTERNAL
     except Exception as e:
         return PlainTextResponse(f"# Erro ao carregar prompt: {e}", status_code=500)
 

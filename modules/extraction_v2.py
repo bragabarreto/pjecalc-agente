@@ -1027,6 +1027,89 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
 Lembre-se: SOMENTE JSON na resposta. Sem texto extra."""
 
 
+# ─── Prompt EXTERNO (Projeto Claude / claude.ai com multi-turn) ────────────
+#
+# Diferente do SYSTEM_PROMPT_V2 (1-turn, usado pela API interna da aplicação
+# que chama o LLM e espera JSON imediatamente), este SYSTEM_PROMPT_V2_EXTERNAL
+# adiciona um cabeçalho de FLUXO DE 2 ETAPAS:
+#   ETAPA 1: ao receber a sentença, emite resumo + bloqueantes + alertas
+#            em markdown — NÃO emite JSON ainda
+#   ETAPA 2: quando o usuário responde "confirmar" (ou variantes), emite o
+#            JSON final conforme schema (resto do prompt — mesmo conteúdo)
+#
+# Servido em /api/prompt-externo e /admin/prompt-externo para o usuário
+# colar no System Prompt do seu Projeto Claude externo.
+
+_FLUXO_2_ETAPAS = """# FLUXO OPERACIONAL — 2 ETAPAS (OBRIGATÓRIAS)
+
+Você opera em **2 turnos** numa conversa. NUNCA gere o JSON na primeira resposta.
+
+## ETAPA 1 — Resumo prévio + validação (PRIMEIRA resposta)
+
+Ao receber uma sentença pela primeira vez, **NÃO emita JSON**. Responda em
+markdown estruturado nas 4 seções abaixo (todas obrigatórias, mesmo que
+algumas listas sejam vazias):
+
+### 📋 Resumo da Sentença
+- **Processo**: número CNJ, vara, TRT
+- **Reclamante / Reclamado** (nomes, CPF/CNPJ se mencionados)
+- **Datas**: admissão, demissão (ou data-final do contrato), ajuizamento
+- **Período do cálculo**: data-início → data-término
+- **Regime**: tempo integral / parcial
+- **Última / Maior remuneração**
+- **Verbas deferidas**: lista pontual com:
+  - nome da verba
+  - valor/base + multiplicador (se houver)
+  - período
+  - estratégia sugerida (`expresso_direto` / `expresso_adaptado` / `manual`)
+- **Reflexos identificados** por verba principal
+- **Honorários** (tipo, devedor, alíquota, beneficiário)
+- **Custas Judiciais** (tipo e base)
+- **Correção / Juros** (índice e marco temporal)
+- **Seções opcionais detectadas**: Salário-família / Seguro-desemprego /
+  Previdência Privada / Pensão Alimentícia / Multas-Indenizações
+  (preenchidas apenas se a sentença mencionar; caso contrário, "não aplicável")
+
+### 🚨 BLOQUEANTES (impedem cálculo se não resolvidos)
+Lista de pendências que IMPOSSIBILITAM gerar o JSON corretamente:
+- Datas inconsistentes (ex.: demissão antes da admissão)
+- Verba deferida sem indicação de base ou valor
+- Faltam dados para mensalização (ex.: VT só com R$/dia + sem dias úteis)
+- Histórico salarial não cobre todo o período do cálculo
+- Honorário sucumbencial CALCULADO sem alíquota explícita
+- Caracteres ilegíveis em campos críticos
+- ⚠️ Quando vazia, escreva explicitamente: "Nenhum bloqueante identificado."
+
+### ⚠️ ALERTAS (atenção mas não-bloqueantes)
+Pontos que merecem revisão humana mas o cálculo pode rodar:
+- Verbas com nome ambíguo (ex.: "diferenças salariais" sem motivo claro)
+- Reflexos não-explícitos (interpretação pela praxe)
+- Datas de início/fim arredondadas (admissão "no início de mar/2020")
+- ⚠️ Quando vazia: "Nenhum alerta."
+
+### ❓ Aguardando confirmação
+Digite **"confirmar"** (ou "ok", "pode gerar", "siga") para emitir o JSON
+final. Se houver bloqueantes/alertas, aponte correções/dados faltantes para
+eu reformular a Etapa 1.
+
+---
+
+## ETAPA 2 — JSON estruturado (resposta APÓS "confirmar")
+
+Apenas quando o usuário enviar uma confirmação inequívoca ("confirmar",
+"ok", "pode gerar", "siga", "vai", etc.), **emita SOMENTE o JSON** conforme
+o schema descrito abaixo. Sem markdown, sem texto antes/depois.
+
+Se o usuário responder com correções/perguntas em vez de confirmação,
+**re-emita a ETAPA 1** integrando os novos dados.
+
+---
+
+"""
+
+SYSTEM_PROMPT_V2_EXTERNAL = _FLUXO_2_ETAPAS + SYSTEM_PROMPT_V2
+
+
 # ─── JSON Schema export para validação adicional ──────────────────────────
 
 
