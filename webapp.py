@@ -24,7 +24,7 @@ from fastapi import (
     BackgroundTasks, Depends, FastAPI, File, Form, HTTPException,
     Request, UploadFile,
 )
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -4397,6 +4397,60 @@ async def api_dom_audit(background_tasks: BackgroundTasks):
     t = threading.Thread(target=_run_audit, daemon=True)
     t.start()
     return JSONResponse({"status": "started", "message": "Auditoria DOM iniciada em background"})
+
+@app.get("/api/prompt-externo", response_class=PlainTextResponse)
+async def api_prompt_externo():
+    """Retorna o SYSTEM_PROMPT_V2 atualizado em text/plain para o usuário
+    copiar/colar no Projeto Claude externo (claude.ai com sistema customizado)
+    que gera o JSON estruturado da prévia.
+
+    Sempre reflete o prompt em produção (o mesmo usado pela aplicação
+    quando extrai sentença com Claude API).
+    """
+    try:
+        from modules.extraction_v2 import SYSTEM_PROMPT_V2
+        return SYSTEM_PROMPT_V2
+    except Exception as e:
+        return PlainTextResponse(f"# Erro ao carregar prompt: {e}", status_code=500)
+
+
+@app.get("/admin/prompt-externo", response_class=HTMLResponse)
+async def admin_prompt_externo():
+    """Página HTML simples com botão 'Copiar' para o prompt externo."""
+    return """<!doctype html>
+<html><head>
+<meta charset="utf-8">
+<title>Prompt Externo — Projeto Claude</title>
+<style>
+  body { font-family: -apple-system, sans-serif; max-width: 1100px; margin: 1.5rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.2rem; }
+  .toolbar { margin: 0.5rem 0; }
+  button { padding: 8px 16px; font-size: 0.95rem; background: #2563eb; color: #fff; border: 0; border-radius: 4px; cursor: pointer; font-weight: 600; }
+  button:hover { background: #1d4ed8; }
+  .status { display: inline-block; margin-left: 12px; font-size: 0.9rem; color: #15803d; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 14px; border-radius: 6px; max-height: 70vh; overflow-y: auto; font-size: 0.78rem; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+</style></head><body>
+<h1>Prompt do Projeto Claude — pronto para colar no claude.ai</h1>
+<p>Cole este conteúdo no <strong>System Prompt</strong> do seu Projeto Claude externo. Atualiza automaticamente quando o prompt da aplicação mudar.</p>
+<div class="toolbar">
+  <button onclick="copiar()">📋 Copiar prompt completo</button>
+  <a href="/api/prompt-externo" target="_blank"><button type="button" style="background:#6c757d;">↓ Ver versão raw</button></a>
+  <span id="status" class="status"></span>
+</div>
+<pre id="conteudo">Carregando…</pre>
+<script>
+fetch('/api/prompt-externo').then(r => r.text()).then(t => document.getElementById('conteudo').textContent = t);
+function copiar() {
+  const txt = document.getElementById('conteudo').textContent;
+  navigator.clipboard.writeText(txt).then(() => {
+    const s = document.getElementById('status');
+    s.textContent = '✓ Copiado! (' + txt.length.toLocaleString('pt-BR') + ' caracteres)';
+    setTimeout(() => s.textContent = '', 4000);
+  });
+}
+</script>
+</body></html>"""
+
 
 @app.get("/api/dom-audit/status")
 async def api_dom_audit_status():
