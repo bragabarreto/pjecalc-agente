@@ -2073,16 +2073,30 @@ class PlaywrightAutomatorV2:
                     return null;
                 })();
                 if (!linkId) return null;
-                if (typeof A4J === 'undefined' || !A4J.AJAX || !A4J.AJAX.Submit) {
-                    // RichFaces não disponível — fallback para click do <a>
-                    const a = document.getElementById(linkId.id);
-                    if (a) a.click();
-                    return linkId.via + ':fallback-click';
+                const a = document.getElementById(linkId.id);
+                if (!a) return linkId.via + ':no-elem';
+                // Executar EXATAMENTE o atributo onclick da forma como o
+                // browser faria quando o click é "real": criar um event,
+                // vincular `this`, e avaliar o conteúdo do onclick. RichFaces
+                // 3.3.3 espera que `event` esteja no escopo da execução.
+                const onclickStr = a.getAttribute('onclick') || '';
+                if (!onclickStr) {
+                    a.click();
+                    return linkId.via + ':no-onclick:fallback';
                 }
-                const params = {};
-                params[linkId.id] = linkId.id;
-                A4J.AJAX.Submit('formulario', null, {similarityGroupingId: linkId.id, parameters: params});
-                return linkId.via + ':a4j-submit';
+                const ev = new MouseEvent('click', {bubbles: true, cancelable: true, view: window});
+                try { Object.defineProperty(ev, 'target', {value: a, configurable: true}); } catch(_) {}
+                try { Object.defineProperty(ev, 'currentTarget', {value: a, configurable: true}); } catch(_) {}
+                try {
+                    // new Function expõe "event" como argumento e "this" como
+                    // o elemento — replica ambiente do attribute onclick.
+                    const fn = new Function('event', onclickStr);
+                    fn.call(a, ev);
+                    return linkId.via + ':onclick-exec';
+                } catch (err) {
+                    a.click();
+                    return linkId.via + ':onclick-error:' + (err.message||'?').slice(0,60);
+                }
             }""",
             candidatos,
         )
