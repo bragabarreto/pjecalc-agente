@@ -2044,6 +2044,18 @@ class PlaywrightAutomatorV2:
         clicou = self._page.evaluate(
             """(candidatos) => {
                 const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                // Disparar clique cancelável para que o onclick do JSF
+                // (que faz jsfcljs(...); return false;) consiga prevenir o
+                // navegador de seguir href="#irTopoPagina" antes da
+                // submission JSF assíncrona. a.click() programático ignora
+                // o return false em alguns browsers e o navegador acaba
+                // navegando para #irTopoPagina, recarregando a listagem.
+                const fireClick = (a) => {
+                    if (a.onclick) {
+                        try { const r = a.onclick.call(a, new MouseEvent('click', {bubbles: true, cancelable: true})); if (r === false) return; } catch(_) {}
+                    }
+                    a.dispatchEvent(new MouseEvent('click', {bubbles: true, cancelable: true}));
+                };
                 const trs = [...document.querySelectorAll('tr')];
                 for (const alvo of candidatos) {
                     const alvoN = norm(alvo);
@@ -2051,17 +2063,17 @@ class PlaywrightAutomatorV2:
                         if (!norm(tr.textContent).includes(alvoN)) continue;
                         // 1. linkParametrizar com title começando 'Parâmetros'
                         const a = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
-                        if (a) { a.click(); return 'class-title:'+alvo; }
+                        if (a) { fireClick(a); return 'class-title:'+alvo; }
                         // 2. primeiro a.linkParametrizar (excluindo reflexos)
                         const links = [...tr.querySelectorAll('a.linkParametrizar')];
                         for (const link of links) {
                             if (link.id && link.id.includes(':listaReflexo:')) continue;
-                            link.click();
+                            fireClick(link);
                             return 'class-only:'+alvo;
                         }
                         // 3. fallback: title genérico
                         const t1 = tr.querySelector('a[title*="arâmetros"], a[title*="arametros"]');
-                        if (t1) { t1.click(); return 'title-fallback:'+alvo; }
+                        if (t1) { fireClick(t1); return 'title-fallback:'+alvo; }
                     }
                 }
                 return null;
