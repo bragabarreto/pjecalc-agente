@@ -179,8 +179,24 @@ const statusEl = document.getElementById('colar-status');
 
 txtArea.addEventListener('input', debounce(validarColado, 400));
 
+/**
+ * Remove wrapper markdown (```json ... ``` ou ``` ... ```) que alguns
+ * modelos Claude colocam mesmo com instrução "sem markdown".
+ * Também tolera espaços/quebras antes ou depois.
+ */
+function limparWrapperMarkdown(s) {
+  let t = (s || '').trim();
+  // Remove fence inicial: ```json, ```JSON ou apenas ```
+  const inicio = t.match(/^```(?:json|JSON)?\s*\n?/);
+  if (inicio) t = t.slice(inicio[0].length);
+  // Remove fence final
+  t = t.replace(/\n?```\s*$/, '');
+  return t.trim();
+}
+
 function validarColado() {
-  const txt = txtArea.value.trim();
+  const txtRaw = txtArea.value;
+  const txt = limparWrapperMarkdown(txtRaw);
   if (!txt) { statusEl.textContent = 'Aguardando conteúdo…'; statusEl.className = ''; return; }
   try {
     const j = JSON.parse(txt);
@@ -188,7 +204,8 @@ function validarColado() {
       statusEl.textContent = '⚠ JSON sem meta.schema_version: "2.0"';
       statusEl.className = 'erro';
     } else {
-      statusEl.textContent = '✓ JSON v2 válido';
+      const hint = (txt !== txtRaw.trim()) ? ' (wrapper ```json removido automaticamente)' : '';
+      statusEl.textContent = '✓ JSON v2 válido' + hint;
       statusEl.className = 'ok';
     }
   } catch(e) {
@@ -234,8 +251,8 @@ document.getElementById('form-upload').addEventListener('submit', async function
     }
     blob = arq;
   } else {
-    // Aba "Colar JSON"
-    const txt = txtArea.value.trim();
+    // Aba "Colar JSON" — limpa wrapper markdown automaticamente
+    const txt = limparWrapperMarkdown(txtArea.value);
     if (!txt) { alert('Cole o conteúdo do JSON v2 antes de processar.'); return; }
     try {
       const j = JSON.parse(txt);
