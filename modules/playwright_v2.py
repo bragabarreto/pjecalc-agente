@@ -538,23 +538,52 @@ class PlaywrightAutomatorV2:
         self.log(f"  ⚠ radio {dom_id}={valor} não encontrado — pulando")
 
     def _marcar_checkbox(self, dom_id: str, marcado: bool) -> None:
-        # Seletor MAIS específico: input[type=checkbox] com id terminando em ':<dom_id>' ou em '<dom_id>' exato.
-        # Evita match em outros elementos (ex.: select, radio, link) cujo id também termine no nome.
+        """Marca checkbox JSF — pula silenciosamente se disabled e usa click humano.
+
+        Disabled checkboxes (ex.: aplicarProporcionalidadeAoValorDevido para
+        verbas onde isPermiteAplicarPropocionalidadeAoValorDevido()=false)
+        com click(force=True) ainda alteravam o DOM, mas o backing bean
+        REJEITAVA a alteração — silenciosamente fazendo o save falhar sem
+        mensagem de erro visível (observado em 18/05/2026 sessão cecf7937,
+        v06 INDENIZAÇÃO REFEIÇÃO).
+        """
         for sel in (
             f"input[type='checkbox'][id='formulario:{dom_id}']",
             f"input[type='checkbox'][id$=':{dom_id}']",
             f"input[type='checkbox'][id$='{dom_id}']",
         ):
             loc = self._page.locator(sel)
-            if loc.count() > 0:
+            if loc.count() == 0:
+                continue
+            try:
+                target = loc.first
+                # Pular se disabled — JSF não atualiza o bean para checkboxes
+                # disabled mesmo se o DOM mudar via click(force)
                 try:
-                    if loc.first.is_checked() != marcado:
-                        loc.first.click(force=True)
-                    self.log(f"  ✓ checkbox {dom_id} = {marcado}")
-                    return
-                except Exception as e:
-                    self.log(f"  ⚠ checkbox {dom_id}: {e} — tentando próximo seletor")
-                    continue
+                    if not target.is_enabled():
+                        atual = target.is_checked()
+                        if atual == marcado:
+                            self.log(f"  ⊙ checkbox {dom_id} = {marcado} (disabled, valor atual coincide)")
+                        else:
+                            self.log(
+                                f"  ⊙ checkbox {dom_id} disabled — atual={atual}, desejado={marcado} (não aplicável a esta verba, pulando)"
+                            )
+                        return
+                except Exception:
+                    pass
+                # Click humano (trusted) — mesmo padrão dos radios
+                if target.is_checked() != marcado:
+                    try:
+                        target.scroll_into_view_if_needed(timeout=2000)
+                        self._page.wait_for_timeout(80)
+                        target.click(timeout=4000)
+                    except Exception:
+                        target.click(force=True)  # fallback overlay
+                self.log(f"  ✓ checkbox {dom_id} = {marcado}")
+                return
+            except Exception as e:
+                self.log(f"  ⚠ checkbox {dom_id}: {e} — tentando próximo seletor")
+                continue
         self.log(f"  ⚠ checkbox {dom_id} não existe ou não é checkbox — pulando")
 
     def _selecionar(self, dom_id: str, valor: str, obrigatorio: bool = False) -> None:
