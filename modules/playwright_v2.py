@@ -702,9 +702,24 @@ class PlaywrightAutomatorV2:
                 loc = self._page.locator(sel)
                 if loc.count() > 0:
                     try:
-                        loc.first.wait_for(state="visible", timeout=timeout_ms)
-                        loc.first.click(force=True)
-                        self.log(f"  ✓ click {nome} (cascata flex via {sel!r})")
+                        target = loc.first
+                        target.wait_for(state="visible", timeout=timeout_ms)
+                        # Click humano (trusted event) — necessário para JSF
+                        # a4j:commandButton aceitar a submission. force=True
+                        # pode gerar evento isTrusted=false e o JSF a4j
+                        # silenciosamente ignora a submissão (form fica em
+                        # edit mode sem mensagem de sucesso/erro).
+                        try:
+                            target.scroll_into_view_if_needed(timeout=2000)
+                            self._page.wait_for_timeout(100)
+                            target.hover(timeout=2000)
+                            self._page.wait_for_timeout(80)
+                            target.click(timeout=timeout_ms)
+                            self.log(f"  ✓ click {nome} humano (cascata flex via {sel!r})")
+                        except Exception as _eh:
+                            # Fallback: click com force (overlay invisível)
+                            target.click(force=True)
+                            self.log(f"  ✓ click {nome} fallback-force (cascata flex via {sel!r})")
                         return True
                     except Exception:
                         continue
