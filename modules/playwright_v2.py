@@ -80,10 +80,15 @@ class PlaywrightAutomatorV2:
         previa: PreviaCalculoV2,
         log_fn: Callable[[str], None] | None = None,
         pjecalc_url: str = "http://localhost:9257/pjecalc",
+        sessao_id: str | None = None,
     ):
         self.previa = previa
         self.log = log_fn or (lambda m: logger.info(m))
         self.pjecalc_url = pjecalc_url
+        # Sessão do app (UUID) — usado para nomear snapshots de listagem em
+        # /tmp/pjecalc_snapshots/<sessao_id>_inicial.json para o endpoint
+        # /api/correcao_manual_diff localizar depois.
+        self.sessao_id: str | None = sessao_id
         self._page = None
         self._browser = None
         self._pw = None
@@ -4316,7 +4321,7 @@ class PlaywrightAutomatorV2:
                     # Persistir no sistema de arquivos para o endpoint de diff
                     # ler depois (path determinístico por sessão).
                     import json as _json, pathlib as _pl, os as _os
-                    sessao = _os.environ.get("PJECALC_SESSAO_ID") or getattr(
+                    sessao = self.sessao_id or _os.environ.get("PJECALC_SESSAO_ID") or getattr(
                         self.previa, "_sessao_id", None
                     ) or "unknown"
                     snap_dir = _pl.Path("/tmp/pjecalc_snapshots")

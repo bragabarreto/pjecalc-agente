@@ -478,7 +478,7 @@ def executar_v2_como_generator(sessao_id: str):
 
     def _executar_bot() -> None:
         try:
-            with PlaywrightAutomatorV2(previa, log_fn=log_fn) as bot:
+            with PlaywrightAutomatorV2(previa, log_fn=log_fn, sessao_id=sessao_id) as bot:
                 pjc = bot.run()
                 pjc_path_holder["pjc"] = pjc
                 if pjc:

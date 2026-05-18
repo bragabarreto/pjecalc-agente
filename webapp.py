@@ -4019,10 +4019,14 @@ async def correcao_manual_diff(sessao_id: str, db: Session = Depends(get_db)):
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    # Captura final via Playwright efêmero
+    # Captura final via Playwright efêmero em thread separada — Playwright
+    # Sync API não pode ser chamada de dentro do event loop asyncio.
+    import asyncio as _asyncio
     from modules.playwright_v2 import capturar_snapshot_final_listagem, computar_diff_snapshots
     try:
-        snapshot_final = capturar_snapshot_final_listagem(conv_id=conv)
+        snapshot_final = await _asyncio.to_thread(
+            capturar_snapshot_final_listagem, conv_id=conv
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Falha ao capturar snapshot final: {e}")
 
