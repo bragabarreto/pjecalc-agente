@@ -2083,6 +2083,36 @@ class PlaywrightAutomatorV2:
             return
         self.log(f"    ✓ Click Parâmetros via estratégia: {clicou}")
         self._aguardar_ajax(8000)
+        # CRÍTICO: aguardar o form de Alteração carregar. Sem isso, o caller
+        # tenta preencher na listagem ainda (sem campos de form) e o save flex
+        # falha porque a listagem não tem botão Salvar. Sinal definitivo:
+        # input formulario:descricao OU formulario:valorDevido visível.
+        try:
+            self._page.wait_for_selector(
+                "input[id$=':descricao'], input[id$=':valorDevido']",
+                state="visible",
+                timeout=10000,
+            )
+            self.log("    ✓ form de Alteração da verba carregado (descricao visível)")
+        except Exception:
+            # Diagnóstico: dumpar o que está na página atual
+            try:
+                _diag = self._page.evaluate(
+                    """() => {
+                        const inputs = [...document.querySelectorAll('input,select')]
+                            .map(e => e.id || e.name).filter(Boolean).slice(0, 20);
+                        const btns = [...document.querySelectorAll('input[type=submit],button')]
+                            .map(b => b.value || b.textContent || b.id).filter(Boolean).slice(0, 10);
+                        return {url_tail: location.href.split('/').slice(-2).join('/'),
+                                inputs: inputs, botoes: btns,
+                                tem_descricao: !!document.querySelector('input[id$=":descricao"]'),
+                                tem_salvar: !!document.querySelector('input[id$=":salvar"]')};
+                    }"""
+                )
+                self.log(f"    ⚠ Form de Alteração não carregou em 10s — diag={_diag}")
+            except Exception:
+                self.log("    ⚠ Form de Alteração não carregou — sem diagnóstico DOM")
+            return  # aborta — sem form, não tem o que preencher
         self._preencher_form_parametros_verba(v, com_identificacao=False)
 
         # NOTA (12/05/2026): "Regerar Ocorrências" só existe em modo LISTAGEM
