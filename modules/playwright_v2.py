@@ -5387,6 +5387,20 @@ class PlaywrightAutomatorV2:
                 conv = self._calculo_conversation_id or "?"
                 # URL passada via proxy do app (mesma origem que o frontend usa)
                 edit_url = f"/pjecalc/pages/calculo/calculo.jsf?conversationId={conv}"
+                # Screenshot da tela da pendência ANTES de navegar para verbas,
+                # para diagnóstico humano. Path determinístico por sessão.
+                try:
+                    import pathlib as _pl, os as _os
+                    sessao_pre = self.sessao_id or _os.environ.get("PJECALC_SESSAO_ID") or getattr(
+                        self.previa, "_sessao_id", None
+                    ) or "unknown"
+                    snap_dir_pre = _pl.Path("/tmp/pjecalc_snapshots")
+                    snap_dir_pre.mkdir(parents=True, exist_ok=True)
+                    shot_path = snap_dir_pre / f"{sessao_pre}_pendencia.png"
+                    self._page.screenshot(path=str(shot_path), full_page=True)
+                    self.log(f"  📸 Screenshot pendência: {shot_path}")
+                except Exception as e:
+                    self.log(f"  ⚠ Screenshot pendência falhou: {e}")
                 # Capturar snapshot INICIAL da listagem de Verbas para futuro
                 # DOM-diff quando o usuário concluir a edição manual. Navega
                 # primeiro para Verbas, captura, e persiste em filesystem.
