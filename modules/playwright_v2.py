@@ -386,13 +386,30 @@ class PlaywrightAutomatorV2:
         if is_data_field:
             self._preencher_data_richfaces(loc.first, dom_id, str(valor))
         else:
-            loc.first.fill(str(valor))
-            # Disparar change para campos input genéricos (alguns RichFaces components
-            # só ouvem change/blur — fill dispara apenas input)
+            # CRÍTICO (descoberto 19/05/2026): JSF a4j:support / valueChangeListener
+            # SÓ captura inputs text quando o evento BLUR dispara. `fill()` do
+            # Playwright muda o value mas não causa focusout. `dispatch_event('change')`
+            # NÃO é equivalente — JSF tem listener no DOM change real (cross-trust).
+            #
+            # SEM blur: o save subsequente do form NÃO persiste o campo. Em
+            # produção isso causava verba RESTITUIÇÃO com descricao="RESTITUIÇÃO/
+            # INDENIZAÇÃO DE DESPESA" (canonical) e valorInformadoDoDevido=0,00
+            # mesmo após bot escrever nome customizado + 484,00.
+            #
+            # SOLUÇÃO: focus → fill → Tab (que dispara blur trusted) → wait AJAX.
             try:
-                loc.first.dispatch_event("change")
+                loc.first.focus()
             except Exception:
                 pass
+            loc.first.fill(str(valor))
+            try:
+                loc.first.press("Tab")
+            except Exception:
+                try:
+                    loc.first.dispatch_event("change")
+                    loc.first.dispatch_event("blur")
+                except Exception:
+                    pass
             self.log(f"  ✓ {dom_id} = {valor}")
 
     def _preencher_data_richfaces(self, locator, dom_id: str, valor: str) -> None:
