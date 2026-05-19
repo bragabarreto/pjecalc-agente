@@ -2,7 +2,10 @@
 <Context>
 	
               
-    <Resource auth="Container" driverClassName="org.h2.Driver" maxActive="10" maxIdle="3" maxWait="10000" name="jdbc/pjeCalcDS" password="/pjecalc/" testOnBorrow="true" type="javax.sql.DataSource" url="jdbc:h2:.dados/pjecalc" username="pjecalc" validationQuery="select 1"/>
+    <!-- H2 TCP server mode (19/05/2026): resolve problema Seam EPC com
+         embedded file-lock single-process. Server iniciado em iniciarPjeCalc.sh
+         antes do Tomcat. Permite múltiplas conexões + diagnóstico externo. -->
+    <Resource auth="Container" driverClassName="org.h2.Driver" maxActive="20" maxIdle="5" maxWait="10000" name="jdbc/pjeCalcDS" password="/pjecalc/" testOnBorrow="true" type="javax.sql.DataSource" url="jdbc:h2:tcp://localhost:9092/./pjecalc" username="pjecalc" validationQuery="select 1"/>
               
 	<!-- <Resource name="jdbc/pjeCalcDS" auth="Container" type="javax.sql.DataSource"
               maxActive="100" maxIdle="30" maxWait="10000" username="APP_PJECALC_HOM" password="app_pjecalc_hom"

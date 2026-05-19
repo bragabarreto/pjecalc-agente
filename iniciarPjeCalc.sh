@@ -203,6 +203,8 @@ fi
 if [ -f "$H2_DB" ] && [ -f "$H2_JAR" ]; then
     echo "[PJE-Calc] Limpando cálculos residuais do H2 (CARLOS ALBERTO, FRANCISCO JOSE, etc.)..."
     # Credenciais confirmadas em webapps/pjecalc/META-INF/context.xml
+    # Embedded URL aqui porque o TCP server ainda não subiu (precisamos
+    # do file-lock disponível para fazer o cleanup antes de subir o server)
     H2_URL="jdbc:h2:$PJECALC_DIR/.dados/pjecalc"
     H2_USER="pjecalc"
     H2_PASS="/pjecalc/"
@@ -234,6 +236,28 @@ if [ -f "$H2_DB" ] && [ -f "$H2_JAR" ]; then
         -script "$CLEANUP_SQL" 2>&1 | head -10 || true
     rm -f "$CLEANUP_SQL" "$DUMP_TABLES"
     echo "[PJE-Calc] Cleanup H2 concluído (preservando catálogos)."
+fi
+
+# ── Iniciar H2 em TCP server mode ───────────────────────────────────────────
+# Descoberto 19/05/2026: H2 embedded com file-lock single-process causa
+# problemas com Seam EPC (saves não @End'am, novos cálculos não persistem).
+# Solução: rodar H2 como TCP server. Tomcat conecta via jdbc:h2:tcp://...
+# Permite múltiplas conexões + diagnóstico externo via h2 Shell.
+if [ -f "$H2_JAR" ]; then
+    echo "[PJE-Calc] Iniciando H2 TCP server (porta 9092)..."
+    nohup java -cp "$H2_JAR" org.h2.tools.Server \
+        -tcp -tcpPort 9092 -tcpAllowOthers \
+        -baseDir "$PJECALC_DIR/.dados" \
+        > /tmp/h2-server.log 2>&1 &
+    H2_PID=$!
+    echo "$H2_PID" > /tmp/h2-server.pid
+    sleep 3
+    if kill -0 "$H2_PID" 2>/dev/null; then
+        echo "[PJE-Calc] ✓ H2 TCP server rodando (PID=$H2_PID)"
+    else
+        echo "[PJE-Calc] ⚠ H2 TCP server falhou ao iniciar — fallback embedded"
+        cat /tmp/h2-server.log | head -10
+    fi
 fi
 
 echo "[PJE-Calc] Iniciando processo Java (porta 9257)..."
