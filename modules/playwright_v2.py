@@ -1789,9 +1789,15 @@ class PlaywrightAutomatorV2:
         defaults_norm = {_norm(n) for n in self._HISTORICOS_DEFAULT}
 
         for idx, hist in enumerate(self.previa.historico_salarial):
-            # Pular históricos default (PJE-Calc já criou em Fase 2)
+            # Históricos default (PJE-Calc já criou em Fase 2): em vez de
+            # pular completamente, EDITAR para garantir CS e proporcionalizarINSS
+            # configurados. Sem isso, liquidação retorna "ÚLTIMA REMUNERAÇÃO
+            # não possui valor cadastrado para todas as ocorrências da CS".
             if _norm(hist.nome) in defaults_norm:
-                self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc")
+                if hist.incidencias.cs_inss:
+                    self._editar_default_historico_para_cs(hist.nome)
+                else:
+                    self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc (sem CS)")
                 continue
 
             # Reset de estado: após save anterior o form fica aberto em modo edição
@@ -1922,6 +1928,56 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ✓ Histórico '{hist.nome}' salvo")
 
         self.log("Fase 3 concluída")
+
+    def _editar_default_historico_para_cs(self, nome: str) -> None:
+        """Edita entrada default do histórico salarial (criada pelo PJE-Calc)
+        para marcar incidência CS + proporcionalizarINSS + gerar ocorrências
+        e salvar. Resolve pendência "X não possui valor cadastrado para todas
+        as ocorrências da CS sobre Salários Devidos".
+        """
+        self.log(f"  → Editar default histórico '{nome}' para configurar CS")
+        try:
+            # Localizar linha pela nome e clicar linkAlterar
+            clicou = self._page.evaluate(
+                """(nome) => {
+                    const linhas = document.querySelectorAll('table.rich-table tbody tr');
+                    for (const tr of linhas) {
+                        const txt = tr.textContent || '';
+                        if (txt.toUpperCase().includes(nome.toUpperCase())) {
+                            const link = tr.querySelector('a.linkAlterar');
+                            if (link) { link.click(); return true; }
+                        }
+                    }
+                    return false;
+                }""",
+                nome,
+            )
+            if not clicou:
+                self.log(f"    ⚠ '{nome}': linkAlterar não encontrado — skip")
+                return
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(1500)
+            # Marcar inss (CS) + proporcionalizarINSS
+            self._marcar_checkbox("inss", True)
+            self._aguardar_ajax(2000)
+            self._marcar_checkbox("proporcionalizarINSS", True)
+            self._aguardar_ajax(1500)
+            # Garantir ocorrências geradas com CS
+            try:
+                self._clicar("cmdGerarOcorrencias")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(1000)
+            except Exception as e:
+                self.log(f"    ⚠ cmdGerarOcorrencias erro: {e}")
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            if sucesso:
+                self.log(f"    ✓ '{nome}' editado com CS+proporcionalizarINSS")
+            else:
+                self.log(f"    ⚠ '{nome}' editado mas sem confirmação de save")
+        except Exception as e:
+            self.log(f"    ⚠ Erro ao editar '{nome}': {e}")
 
     def fase_verbas(self) -> None:
         self.log("Fase 4 — Verbas Principais")
@@ -2059,27 +2115,41 @@ class PlaywrightAutomatorV2:
                 self._navegar_menu("li_calculo_verbas")
                 self._aguardar_ajax(8000)
                 self._page.wait_for_timeout(1000)
-                # Localizar linha pela nome e clicar linkOcorrencias
-                clicou = self._page.evaluate(
+                # Localizar linha pela nome e clicar linkOcorrencias. Tenta
+                # múltiplas estratégias (className, queryAll, ID com sufixo).
+                res = self._page.evaluate(
                     """(nome) => {
-                        const linhas = document.querySelectorAll('table.rich-table tbody tr');
+                        const norm = (s) => (s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+                        const alvo = norm(nome);
+                        // Estratégia 1: tbody tr com a.linkOcorrencias
+                        let linhas = document.querySelectorAll('table tbody tr');
                         for (const tr of linhas) {
-                            const txt = tr.textContent || '';
-                            if (txt.toUpperCase().includes(nome.toUpperCase())) {
-                                const link = tr.querySelector('a.linkOcorrencias');
-                                if (link) {
-                                    link.click();
-                                    return true;
-                                }
+                            if (norm(tr.textContent || '').includes(alvo)) {
+                                let link = tr.querySelector('a.linkOcorrencias, .linkOcorrencias');
+                                if (link) { link.click(); return {ok: true, via: 'class'}; }
                             }
                         }
-                        return false;
+                        // Estratégia 2: qualquer <a> com title contendo Ocorrências dentro da linha
+                        for (const tr of linhas) {
+                            if (norm(tr.textContent || '').includes(alvo)) {
+                                let link = tr.querySelector('a[title*="Ocorr"], a[onclick*="visualizarOcorr"]');
+                                if (link) { link.click(); return {ok: true, via: 'title'}; }
+                            }
+                        }
+                        // Diagnóstico: dump das primeiras linhas e classes de links
+                        const diag = [];
+                        for (const tr of [...linhas].slice(0, 8)) {
+                            const links = [...tr.querySelectorAll('a')].map(a => ({cls: a.className, title: a.title})).slice(0, 5);
+                            diag.push({txt: (tr.textContent || '').slice(0, 80), links});
+                        }
+                        return {ok: false, diag};
                     }""",
                     nome,
                 )
-                if not clicou:
-                    self.log(f"    ⚠ {nome}: linkOcorrencias não encontrado")
+                if not res.get("ok"):
+                    self.log(f"    ⚠ {nome}: linkOcorrencias não encontrado (diag={res.get('diag')[:3] if res.get('diag') else '[]'})")
                     continue
+                self.log(f"    ✓ {nome}: linkOcorrencias clicado via {res.get('via')}")
                 self._aguardar_ajax(8000)
                 self._page.wait_for_timeout(1500)
                 # Conta linhas com input valorDevido
