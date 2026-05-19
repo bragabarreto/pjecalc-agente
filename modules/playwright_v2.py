@@ -3323,6 +3323,44 @@ class PlaywrightAutomatorV2:
                 except Exception:
                     self.log(f"    ⚠ Form de Alteração não carregou para '{nome}' — pulando")
                     continue
+                # FIX (descoberto 18/05/2026 via diag SSE): após reabrir o form
+                # da verba HE 50% pós-apuração, o backing bean retorna em
+                # estado corrompido (valor=INFORMADO em vez de CALCULADO,
+                # ocorrenciaPagto=DESLIGAMENTO em vez de MENSAL). Como o
+                # painel Quantidade só renderiza quando valor=CALCULADO
+                # (<a4j:region rendered="#{registro.isValorDevidoCalculado()}">),
+                # o radio tipoDaQuantidade não aparece.
+                #
+                # CORREÇÃO: forçar valor=CALCULADO + ocorrenciaPagto correto
+                # ANTES de buscar o radio Quantidade. Para HE 50% (e qualquer
+                # verba que precise IMPORTADA_DO_CARTAO), valor DEVE ser
+                # CALCULADO (faz sentido — IMPORTADA_DO_CARTAO é tipo de
+                # Quantidade no bloco Fórmula).
+                try:
+                    # 1. Garantir valor=CALCULADO
+                    valor_radio_calc = self._page.locator(
+                        "input[type='radio'][id$=':valor:0'][value='CALCULADO']"
+                    )
+                    if valor_radio_calc.count() > 0 and not valor_radio_calc.first.is_checked():
+                        self.log(f"    ⚠ Verba '{nome}' veio com valor=INFORMADO — corrigindo para CALCULADO")
+                        self._silenciar_dialog_confirma_valor()
+                        self._marcar_radio("valor", "CALCULADO", obrigatorio=False)
+                        self._aguardar_ajax(3000)
+                    # 2. Determinar ocorrencia esperada baseada no nome da verba
+                    ocorr_esperada = None
+                    n_upper = (nome or "").upper()
+                    if "HORAS EXTRAS" in n_upper or " HE " in f" {n_upper} " or "INTERVALO" in n_upper or "ADICIONAL NOTURNO" in n_upper:
+                        ocorr_esperada = "MENSAL"
+                    if ocorr_esperada:
+                        ocorr_check = self._page.locator(
+                            f"input[type='radio'][name$=':ocorrenciaPagto'][value='{ocorr_esperada}']"
+                        )
+                        if ocorr_check.count() > 0 and not ocorr_check.first.is_checked():
+                            self.log(f"    ⚠ Verba '{nome}' veio com ocorrencia errada — corrigindo para {ocorr_esperada}")
+                            self._marcar_radio("ocorrenciaPagto", ocorr_esperada, obrigatorio=False)
+                            self._aguardar_ajax(3000)
+                except Exception as _e_prefix:
+                    self.log(f"    ⚠ Pre-fix valor/ocorrencia falhou: {_e_prefix}")
                 # Aguardar especificamente o radio tipoDaQuantidade renderizar
                 # (state=attached porque pode estar dentro de a4j:region oculto inicialmente)
                 try:
