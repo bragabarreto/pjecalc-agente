@@ -3792,25 +3792,49 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(2500)
         except Exception:
             pass
-        # Procurar botão "Visualizar Cartão"
+        # Procurar botão "Visualizar Cartão" (pode ter id formulario:visualizarCartao
+        # ou similar, valor "Visualizar Cartão" / "Visualizar Cartao")
         clicou_vis = self._page.evaluate(
             """() => {
-                const btns = [...document.querySelectorAll('input[type=button], input[type=submit], button, a')];
-                for (const b of btns) {
-                    const v = (b.value || b.textContent || '').trim();
-                    if (v === 'Visualizar Cartão' || v === 'Visualizar Cartao') {
-                        const onclickStr = b.getAttribute('onclick') || '';
-                        if (onclickStr) {
-                            try { new Function('event', onclickStr).call(b, new MouseEvent('click',{bubbles:true})); return 'onclick-exec'; } catch(_) {}
-                        }
-                        b.click(); return 'plain-click';
+                const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
+                // Estratégia 1: id contendo "visualizar"
+                let candidatos = [...document.querySelectorAll('[id*="visualizar"]')]
+                    .filter(b => ['INPUT','BUTTON','A'].includes(b.tagName));
+                // Estratégia 2: value/text começando com "Visualizar"
+                if (!candidatos.length) {
+                    candidatos = [...document.querySelectorAll('input,button,a')].filter(b => {
+                        const v = norm(b.value || b.textContent || '');
+                        return v.startsWith('visualizar cart') || v.startsWith('visualizar cartão') || v.startsWith('visualizar cartao');
+                    });
+                }
+                for (const b of candidatos) {
+                    const onclickStr = b.getAttribute('onclick') || '';
+                    if (onclickStr) {
+                        try { new Function('event', onclickStr).call(b, new MouseEvent('click',{bubbles:true})); return 'onclick:' + (b.id||b.value||'?').slice(0,50); } catch(_) {}
                     }
+                    try { b.click(); return 'click:' + (b.id||b.value||'?').slice(0,50); } catch(_) {}
                 }
                 return null;
             }"""
         )
         if not clicou_vis:
-            self.log("    ⚠ Botão 'Visualizar Cartão' não encontrado — pulando apuração")
+            # Dump diagnóstico do que está na página
+            try:
+                diag = self._page.evaluate(
+                    """() => {
+                        const btns = [...document.querySelectorAll('input[type=button],input[type=submit],button,a')]
+                            .filter(b => (b.value || b.textContent || '').trim())
+                            .slice(0, 20)
+                            .map(b => ({tag: b.tagName, id: (b.id||'').slice(0,60), val: (b.value||b.textContent||'').trim().slice(0,40)}));
+                        return {url: location.href.slice(-80), n_btns: btns.length, btns: btns};
+                    }"""
+                )
+                self.log(f"    ⚠ Botão 'Visualizar Cartão' não encontrado — diagnóstico:")
+                self.log(f"       url: ...{diag.get('url')}")
+                for b in diag.get('btns', [])[:10]:
+                    self.log(f"       {b['tag']} id={b['id']!r} val={b['val']!r}")
+            except Exception:
+                self.log("    ⚠ Botão 'Visualizar Cartão' não encontrado — sem diagnóstico")
             return
         self.log(f"    ✓ click Visualizar Cartão ({clicou_vis})")
         self._aguardar_ajax(5000)
