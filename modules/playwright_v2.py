@@ -1879,6 +1879,14 @@ class PlaywrightAutomatorV2:
             self._marcar_radio("tipoVariacaoDaParcela", hist.parcela.value)
             self._marcar_checkbox("fgts", hist.incidencias.fgts)
             self._marcar_checkbox("inss", hist.incidencias.cs_inss)
+            # Quando CS=true, marcar proporcionalizarINSS para que as ocorrências
+            # da Contribuição Social sejam auto-populadas com o valor da base.
+            # Sem isso, a liquidação retorna "não possui valor cadastrado para
+            # todas as ocorrências da Contribuição Social sobre Salários
+            # Devidos" (descoberto 19/05/2026).
+            if hist.incidencias.cs_inss:
+                self._aguardar_ajax(2000)
+                self._marcar_checkbox("proporcionalizarINSS", True)
             self._preencher("competenciaInicialInputDate", hist.competencia_inicial, obrigatorio=False)
             self._preencher("competenciaFinalInputDate", hist.competencia_final, obrigatorio=False)
             self._marcar_radio("tipoValor", hist.tipo_valor.value)
@@ -2023,8 +2031,105 @@ class PlaywrightAutomatorV2:
         #    Verbas, após a geração das ocorrências da verba X"
         if verbas_expresso:
             self._regerar_ocorrencias_verbas()
+            # Para verbas INFORMADO: garantir que ao menos a primeira ocorrência
+            # tenha valorDevido != 0 (PJE-Calc rejeita liquidação se todas zero,
+            # com mensagem "deve existir pelo menos uma ocorrência com valor
+            # devido diferente de zero"). Descoberto 19/05/2026 via screenshot
+            # de pendência.
+            self._fixar_valordevido_ocorrencias_informadas(verbas_expresso)
 
         self.log("Fase 4 concluída")
+
+    def _fixar_valordevido_ocorrencias_informadas(self, verbas) -> None:
+        """Para cada verba com valor=INFORMADO, navega para Ocorrências e
+        garante que ao menos a primeira linha tenha valorDevido != 0.
+
+        Estratégia: distribuir valor_informado_brl entre TODAS as linhas
+        (equal split). Se proporcionalizar=False, só preenche a primeira.
+        """
+        verbas_inf = [v for v in verbas if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO
+                       and getattr(v.parametros.valor_devido, "valor_informado_brl", None)]
+        if not verbas_inf:
+            return
+        self.log(f"  → Fixar valorDevido em {len(verbas_inf)} verba(s) INFORMADO")
+        for v in verbas_inf:
+            nome = v.nome_pjecalc or v.expresso_alvo
+            valor_total = float(v.parametros.valor_devido.valor_informado_brl)
+            try:
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1000)
+                # Localizar linha pela nome e clicar linkOcorrencias
+                clicou = self._page.evaluate(
+                    """(nome) => {
+                        const linhas = document.querySelectorAll('table.rich-table tbody tr');
+                        for (const tr of linhas) {
+                            const txt = tr.textContent || '';
+                            if (txt.toUpperCase().includes(nome.toUpperCase())) {
+                                const link = tr.querySelector('a.linkOcorrencias');
+                                if (link) {
+                                    link.click();
+                                    return true;
+                                }
+                            }
+                        }
+                        return false;
+                    }""",
+                    nome,
+                )
+                if not clicou:
+                    self.log(f"    ⚠ {nome}: linkOcorrencias não encontrado")
+                    continue
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                # Conta linhas com input valorDevido
+                inputs = self._page.locator("input[id$=':valorDevido']")
+                n = inputs.count()
+                if n == 0:
+                    self.log(f"    ⚠ {nome}: 0 ocorrências encontradas em parametrizar-ocorrencia")
+                    continue
+                proporcionalizar = bool(getattr(v.parametros.valor_devido, "proporcionalizar", False))
+                # Estratégia: se proporcionalizar, distribuir igualmente; senão, total no primeiro
+                if proporcionalizar:
+                    por_linha = round(valor_total / n, 2)
+                    valores = [por_linha] * n
+                    # Ajuste de centavos no último item
+                    diff = round(valor_total - por_linha * n, 2)
+                    if diff:
+                        valores[-1] = round(valores[-1] + diff, 2)
+                else:
+                    valores = [valor_total] + [0.0] * (n - 1)
+                # Preenche cada linha via JS direto + dispatch blur
+                for i in range(n):
+                    val_br = _fmt_br(valores[i])
+                    el = inputs.nth(i)
+                    el_id = el.evaluate("e => e.id")
+                    self._page.evaluate(
+                        """([id, valor]) => {
+                            const el = document.getElementById(id);
+                            if (!el) return false;
+                            el.value = valor;
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                            return true;
+                        }""",
+                        [el_id, val_br],
+                    )
+                self._aguardar_ajax(3000)
+                self.log(f"    ✓ {nome}: {n} ocorrência(s) preenchidas (total {valor_total} BRL)")
+                # Salvar a página de ocorrências
+                try:
+                    self._clicar_salvar_flex()
+                    sucesso = self._aguardar_operacao_sucesso(timeout_ms=12000, bloqueante=False)
+                    if sucesso:
+                        self.log(f"    ✓ {nome}: ocorrências salvas")
+                    else:
+                        self.log(f"    ⚠ {nome}: save sem confirmação")
+                except Exception as e:
+                    self.log(f"    ⚠ {nome}: erro ao salvar: {e}")
+            except Exception as e:
+                self.log(f"    ⚠ {nome}: erro geral: {e}")
 
     def _regerar_ocorrencias_verbas(self) -> None:
         """Volta à listagem de Verbas e clica Regerar Ocorrências.
