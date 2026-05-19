@@ -1,7 +1,26 @@
 <?xml version="1.0" encoding="ISO-8859-1"?>
 <components xmlns="http://jboss.com/products/seam/components" xmlns:async="http://jboss.com/products/seam/async" xmlns:cache="http://jboss.com/products/seam/cache" xmlns:core="http://jboss.com/products/seam/core" xmlns:persistence="http://jboss.com/products/seam/persistence" xmlns:security="http://jboss.com/products/seam/security" xmlns:transaction="http://jboss.com/products/seam/transaction" xmlns:web="http://jboss.com/products/seam/web" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://jboss.com/products/seam/core http://jboss.com/products/seam/core-2.2.xsd          http://jboss.com/products/seam/web http://jboss.com/products/seam/web-2.2.xsd           http://jboss.com/products/seam/components http://jboss.com/products/seam/components-2.2.xsd          http://jboss.com/products/seam/security http://jboss.com/products/seam/security-2.2.xsd          http://jboss.com/products/seam/persistence http://jboss.com/products/seam/persistence-2.2.xsd          http://jboss.com/products/seam/transaction http://jboss.com/products/seam/transaction-2.2.xsd          http://jboss.com/products/seam/cache http://jboss.com/products/seam/cache-2.2.xsd          http://jboss.com/products/seam/async http://jboss.com/products/seam/async-2.2.xsd">
 
-	<core:manager concurrent-request-timeout="5000" conversation-timeout="30000" default-flush-mode="MANUAL"/>
+	<!--
+	  ALTERAÇÃO 19/05/2026 — Seam EPC FlushMode + conversation-timeout
+
+	  Original: conversation-timeout="30000" default-flush-mode="MANUAL"
+
+	  O modo MANUAL exige `@End` explícito para commitar entidades no banco.
+	  No PJE-Calc Cidadão (H2 local), @End só dispara em poucas ações
+	  (apresentadorExportacao.iniciar(), excluir, etc.). Para automação que
+	  cria cálculo + verbas + cartão + apura — sem chegar a exportar — nada
+	  persiste no H2, perdendo todo o trabalho.
+
+	  Mudanças:
+	  - default-flush-mode="AUTO" → cada save/transaction commita imediatamente.
+	    Risco mitigado: cada operação JSF do PJE-Calc já é endpoint final
+	    (botão Salvar finaliza a operação).
+	  - conversation-timeout=86400000 (24h) → conv não expira durante runs
+	    longos do bot. Em produção (humano), 30s seria razoável; em automação
+	    o run pode demorar 5+ min.
+	-->
+	<core:manager concurrent-request-timeout="5000" conversation-timeout="86400000" default-flush-mode="AUTO"/>
 	
 	<security:identity authenticate-method="#{autenticador.autenticar}"/>
 
