@@ -4911,13 +4911,15 @@ class PlaywrightAutomatorV2:
 
     def fase_contribuicao_social(self) -> None:
         self.log("Fase 9 — Contribuição Social")
-        # SKIP por ausência: se o JSON omitir contribuicao_social, deixar os
-        # defaults nativos do PJE-Calc valerem. Política decidida 17/05/2026:
-        # a IA só preenche este bloco quando a sentença determinar algo
-        # explicitamente diferente do padrão; caso contrário, omite.
-        if self.previa.contribuicao_social is None:
-            self.log("  ⏭ Contribuição Social omitida no JSON — usando defaults do PJE-Calc")
-            return
+        # Mesmo se o JSON omitir CS, devemos VISITAR + SALVAR a página CS
+        # para que o PJE-Calc gere `inssSobreSalariosDevidos.ocorrencias`.
+        # Sem essas ocorrências, a regra Drools RN02 dispara erro:
+        # "Histórico Salarial X não possui valor cadastrado para todas as
+        # ocorrências da Contribuição Social sobre Salários Devidos".
+        # Política revisada 19/05/2026.
+        somente_visitar = self.previa.contribuicao_social is None
+        if somente_visitar:
+            self.log("  ℹ CS omitida no JSON — apenas visitar+salvar p/ gerar ocorrências (defaults PJE-Calc)")
         # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
         if not self._navegar_menu_via_click("li_calculo_inss"):
             self._navegar_menu("li_calculo_inss")
@@ -4954,21 +4956,26 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⚠ Falha reabrir para CS: {e} — pulando")
                 return
         cs = self.previa.contribuicao_social
-        self._marcar_checkbox("apurarInssSeguradoDevido", cs.apurar_segurado_devido)
-        self._marcar_checkbox("cobrarDoReclamanteDevido", cs.cobrar_do_reclamante_devido)
-        self._marcar_checkbox("apurarSalariosPagos", cs.apurar_salarios_pagos)
-        self._marcar_radio("aliquotaEmpregado", cs.aliquota_segurado)
-        self._marcar_radio("aliquotaEmpregador", cs.aliquota_empregador)
-        if cs.aliquota_empregador == "FIXA":
-            self._preencher("aliquotaEmpresaFixa", str(cs.aliquota_empresa_fixa_pct or 20), obrigatorio=False)
-            self._preencher("aliquotaRatFixa", str(cs.aliquota_rat_fixa_pct or 1), obrigatorio=False)
-            self._preencher("aliquotaTerceirosFixa", str(cs.aliquota_terceiros_fixa_pct or 5.8), obrigatorio=False)
+        if not somente_visitar:
+            self._marcar_checkbox("apurarInssSeguradoDevido", cs.apurar_segurado_devido)
+            self._marcar_checkbox("cobrarDoReclamanteDevido", cs.cobrar_do_reclamante_devido)
+            self._marcar_checkbox("apurarSalariosPagos", cs.apurar_salarios_pagos)
+            self._marcar_radio("aliquotaEmpregado", cs.aliquota_segurado)
+            self._marcar_radio("aliquotaEmpregador", cs.aliquota_empregador)
+            if cs.aliquota_empregador == "FIXA":
+                self._preencher("aliquotaEmpresaFixa", str(cs.aliquota_empresa_fixa_pct or 20), obrigatorio=False)
+                self._preencher("aliquotaRatFixa", str(cs.aliquota_rat_fixa_pct or 1), obrigatorio=False)
+                self._preencher("aliquotaTerceirosFixa", str(cs.aliquota_terceiros_fixa_pct or 5.8), obrigatorio=False)
         try:
             self._clicar("salvar")
             self._aguardar_ajax(8000)
             self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+            self.log("  ✓ CS página salva (ocorrências de inssSobreSalariosDevidos geradas)")
         except Exception as e:
             self.log(f"  ⚠ save CS falhou: {e}")
+        # Quando somente_visitar=True, retornar aqui (não há sub-páginas a explorar)
+        if somente_visitar:
+            return
 
         # Sub-página parametrizar-inss para vinculação histórico→CS
         if cs.apurar_segurado_devido or cs.apurar_salarios_pagos:
