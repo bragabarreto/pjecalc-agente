@@ -2196,34 +2196,47 @@ class PlaywrightAutomatorV2:
                         self._page.wait_for_timeout(2000)
                 except Exception as e:
                     self.log(f"    ⚠ Tentativa dismiss alerta: {e}")
-                # Localizar linha pela nome e clicar linkOcorrencias. Tenta
-                # múltiplas estratégias (className, queryAll, ID com sufixo).
+                # Localizar linha pela nome e clicar linkOcorrencias. Estratégia
+                # robusta: procurar todos `.linkOcorrencias` na página e checar
+                # o TR pai pelo nome da verba.
                 res = self._page.evaluate(
                     """(nome) => {
                         const norm = (s) => (s||'').toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
                         const alvo = norm(nome);
-                        // Estratégia 1: tbody tr com a.linkOcorrencias
-                        let linhas = document.querySelectorAll('table tbody tr');
-                        for (const tr of linhas) {
-                            if (norm(tr.textContent || '').includes(alvo)) {
-                                let link = tr.querySelector('a.linkOcorrencias, .linkOcorrencias');
-                                if (link) { link.click(); return {ok: true, via: 'class'}; }
+                        // Estratégia robusta: iterar por todos .linkOcorrencias
+                        const links = document.querySelectorAll('.linkOcorrencias, a[title*="Ocorr"]');
+                        for (const link of links) {
+                            let parent = link.closest('tr');
+                            if (!parent) continue;
+                            // Subir TRs irmãos até encontrar a row com o nome
+                            // (em rich:dataTable às vezes nome está em row separado)
+                            let txt = norm(parent.textContent || '');
+                            if (txt.includes(alvo)) {
+                                link.click();
+                                return {ok: true, via: 'closest-tr', total: links.length};
+                            }
+                            // Tenta TR imediatamente seguinte (caso layout split)
+                            let next = parent.nextElementSibling;
+                            if (next && norm(next.textContent || '').includes(alvo)) {
+                                link.click();
+                                return {ok: true, via: 'next-tr', total: links.length};
+                            }
+                            // Tenta TR imediatamente anterior
+                            let prev = parent.previousElementSibling;
+                            if (prev && norm(prev.textContent || '').includes(alvo)) {
+                                link.click();
+                                return {ok: true, via: 'prev-tr', total: links.length};
                             }
                         }
-                        // Estratégia 2: qualquer <a> com title contendo Ocorrências dentro da linha
-                        for (const tr of linhas) {
-                            if (norm(tr.textContent || '').includes(alvo)) {
-                                let link = tr.querySelector('a[title*="Ocorr"], a[onclick*="visualizarOcorr"]');
-                                if (link) { link.click(); return {ok: true, via: 'title'}; }
-                            }
-                        }
-                        // Diagnóstico: dump das primeiras linhas e classes de links
-                        const diag = [];
-                        for (const tr of [...linhas].slice(0, 8)) {
-                            const links = [...tr.querySelectorAll('a')].map(a => ({cls: a.className, title: a.title})).slice(0, 5);
-                            diag.push({txt: (tr.textContent || '').slice(0, 80), links});
-                        }
-                        return {ok: false, diag};
+                        // Diagnóstico: links totais + amostras
+                        const sample = [...links].slice(0, 5).map(l => {
+                            const tr = l.closest('tr');
+                            return {
+                                href: l.id || l.className,
+                                trTxt: tr ? (tr.textContent || '').slice(0, 100) : '<no-tr>',
+                            };
+                        });
+                        return {ok: false, totalLinks: links.length, sample};
                     }""",
                     nome,
                 )
