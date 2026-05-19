@@ -3786,34 +3786,48 @@ class PlaywrightAutomatorV2:
         terá dropdown vazio e ficará com Quantidade=0,0000.
         """
         self.log("  → Apurando Cartão de Ponto (gerar ocorrências)...")
-        # Garantir que estamos na listagem — preferir click sidebar (Seam init)
-        # em vez de url-nav direto. URL-nav resulta em página "vazia" sem
-        # botões de ação (Novo/Grade/Visualizar Cartão) — observado em
-        # produção 18/05/2026, diagnóstico mostrou que só renderizam links
-        # do sidebar quando se navega via URL.
-        try:
-            self._navegar_menu("li_calculo_cartao_ponto")
-            self._aguardar_ajax(4000)
-        except Exception:
-            pass
+        # CRÍTICO: navegar via CLICK NO LINK DO SIDEBAR (executando o onclick
+        # A4J.AJAX.Submit nativo) — NÃO via URL nav direto.
+        # URL-nav cria uma conv fresh onde o backing bean do cálculo não
+        # carrega, e o painel de ações (Novo/Grade/Visualizar) não renderiza.
+        # Click no sidebar mantém a conv corrente com calc.bean populado.
+        clicou_menu = self._page.evaluate(
+            """() => {
+                // Achar o link "Cartão de Ponto" no sidebar
+                const norm = s => (s||'').replace(/\\s+/g,' ').trim();
+                const links = [...document.querySelectorAll('a[id*="j_id38"]')];
+                const alvo = links.find(a => {
+                    const t = norm(a.textContent || a.title || '');
+                    return t === 'Cartão de Ponto' || t === 'Cartao de Ponto';
+                });
+                if (!alvo) return null;
+                const onclickStr = alvo.getAttribute('onclick') || '';
+                if (onclickStr) {
+                    try { new Function('event', onclickStr).call(alvo, new MouseEvent('click',{bubbles:true})); return 'onclick:' + alvo.id.slice(0,60); } catch(_) {}
+                }
+                alvo.click(); return 'click:' + alvo.id.slice(0,60);
+            }"""
+        )
+        if clicou_menu:
+            self.log(f"    ✓ click sidebar Cartão de Ponto ({clicou_menu})")
+            self._aguardar_ajax(5000)
+        else:
+            self.log("    ⚠ Link 'Cartão de Ponto' do sidebar não encontrado — fallback _navegar_menu")
+            try:
+                self._navegar_menu("li_calculo_cartao_ponto")
+                self._aguardar_ajax(4000)
+            except Exception:
+                pass
         # Aguardar especificamente os botões da listagem renderizarem
         try:
             self._page.wait_for_selector(
-                "[id$=':importarCartao'], input[value='Visualizar Cartão']",
+                "[id$=':importarCartao']",
                 state="visible",
-                timeout=10000,
+                timeout=15000,
             )
         except Exception:
-            self.log("    ⚠ Painel de ações Cartão de Ponto (Novo/Grade/Visualizar) não renderizou em 10s")
-            # Tentar refresh navegação 1x mais
-            try:
-                self._navegar_menu("li_calculo_cartao_ponto")
-                self._aguardar_ajax(5000)
-                self._page.wait_for_selector(
-                    "[id$=':importarCartao']", state="visible", timeout=8000
-                )
-            except Exception:
-                pass
+            self.log("    ⚠ Painel de ações Cartão de Ponto (Novo/Grade/Visualizar) não renderizou em 15s — pulando apuração")
+            return
         # Procurar botão "Visualizar Cartão" — CONFUSO: id real é
         # `formulario:importarCartao` mas value é "Visualizar Cartão"
         # (legado JSF do PJE-Calc, confirmado via DOM inspection no
