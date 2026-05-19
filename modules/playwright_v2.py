@@ -3792,19 +3792,22 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(2500)
         except Exception:
             pass
-        # Procurar botão "Visualizar Cartão" (pode ter id formulario:visualizarCartao
-        # ou similar, valor "Visualizar Cartão" / "Visualizar Cartao")
+        # Procurar botão "Visualizar Cartão" — CONFUSO: id real é
+        # `formulario:importarCartao` mas value é "Visualizar Cartão"
+        # (legado JSF do PJE-Calc, confirmado via DOM inspection no
+        # apuracao-cartaodeponto.jsf — input[type=button][value='Visualizar Cartão']).
         clicou_vis = self._page.evaluate(
             """() => {
                 const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
-                // Estratégia 1: id contendo "visualizar"
-                let candidatos = [...document.querySelectorAll('[id*="visualizar"]')]
-                    .filter(b => ['INPUT','BUTTON','A'].includes(b.tagName));
-                // Estratégia 2: value/text começando com "Visualizar"
+                // Estratégia 1: id `formulario:importarCartao` (id confuso mas é o correto)
+                let candidatos = [...document.querySelectorAll(
+                    '[id$=":importarCartao"], [id="formulario:importarCartao"], [id*="visualizar"]'
+                )].filter(b => ['INPUT','BUTTON','A'].includes(b.tagName));
+                // Estratégia 2: value/text contém "Visualizar Cart"
                 if (!candidatos.length) {
                     candidatos = [...document.querySelectorAll('input,button,a')].filter(b => {
                         const v = norm(b.value || b.textContent || '');
-                        return v.startsWith('visualizar cart') || v.startsWith('visualizar cartão') || v.startsWith('visualizar cartao');
+                        return v.indexOf('visualizar cart') >= 0;
                     });
                 }
                 for (const b of candidatos) {
@@ -3838,10 +3841,11 @@ class PlaywrightAutomatorV2:
             return
         self.log(f"    ✓ click Visualizar Cartão ({clicou_vis})")
         self._aguardar_ajax(5000)
-        # Aguardar a página Montar carregar
+        # Aguardar a página Montar carregar (id `formulario:montarApartirDaApuracao`
+        # é o botão "Apurar Cartão de Ponto" — id legado JSF é confuso mas é o que existe)
         try:
             self._page.wait_for_selector(
-                "input[type=button][value='Apurar Cartão de Ponto'], input[type=submit][value='Apurar Cartão de Ponto']",
+                "[id$=':montarApartirDaApuracao'], [id='formulario:montarApartirDaApuracao']",
                 state="visible",
                 timeout=10000,
             )
@@ -3851,18 +3855,22 @@ class PlaywrightAutomatorV2:
         # Clicar Apurar Cartão de Ponto
         clicou_apurar = self._page.evaluate(
             """() => {
-                const btns = [...document.querySelectorAll('input[type=button], input[type=submit], button')];
-                for (const b of btns) {
-                    const v = (b.value || b.textContent || '').trim();
-                    if (v.startsWith('Apurar Cart')) {
-                        const onclickStr = b.getAttribute('onclick') || '';
-                        if (onclickStr) {
-                            try { new Function('event', onclickStr).call(b, new MouseEvent('click',{bubbles:true})); return 'onclick-exec'; } catch(_) {}
-                        }
-                        b.click(); return 'plain-click';
-                    }
+                // Estratégia 1: id `formulario:montarApartirDaApuracao`
+                let btn = document.getElementById('formulario:montarApartirDaApuracao') ||
+                          document.querySelector('[id$=":montarApartirDaApuracao"]');
+                // Estratégia 2: value contém "Apurar Cart"
+                if (!btn) {
+                    const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
+                    btn = [...document.querySelectorAll('input,button')].find(b =>
+                        norm(b.value || b.textContent || '').indexOf('apurar cart') >= 0
+                    );
                 }
-                return null;
+                if (!btn) return null;
+                const onclickStr = btn.getAttribute('onclick') || '';
+                if (onclickStr) {
+                    try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return 'onclick:' + btn.id.slice(0,50); } catch(_) {}
+                }
+                btn.click(); return 'click:' + btn.id.slice(0,50);
             }"""
         )
         if not clicou_apurar:
