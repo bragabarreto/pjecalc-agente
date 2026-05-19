@@ -3323,21 +3323,22 @@ class PlaywrightAutomatorV2:
                 except Exception:
                     self.log(f"    ⚠ Form de Alteração não carregou para '{nome}' — pulando")
                     continue
-                # Agora o radio IMPORTADA_DO_CARTAO deve estar disponível
-                opcao_existe = self._page.locator(
-                    "input[type='radio'][id*='tipoDaQuantidade'][value='IMPORTADA_DO_CARTAO']"
-                ).count() > 0
-                if not opcao_existe:
-                    self.log(
-                        f"    ⚠ Opção IMPORTADA_DO_CARTAO ainda indisponível para '{nome}' "
-                        f"(verificar se o cartão foi efetivamente salvo) — pulando"
+                # Aguardar especificamente o radio tipoDaQuantidade renderizar
+                try:
+                    self._page.wait_for_selector(
+                        "input[type='radio'][id*='tipoDaQuantidade']",
+                        state="attached",
+                        timeout=8000,
                     )
-                    # Voltar à listagem
+                except Exception:
+                    self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu no form de '{nome}' — pulando")
                     self._cancelar_form_voltar_listagem()
                     continue
-                # Marcar radio + vincular coluna do cartão (Hs EXT para HE)
+                # Marcar radio IMPORTADA_DO_CARTAO sempre (radio existe se valor=CALCULADO);
+                # o populamento do dropdown de colunas é validado em
+                # _vincular_cartao_ponto_quantidade que loga aviso se vazio.
                 self._marcar_radio("tipoDaQuantidade", "IMPORTADA_DO_CARTAO", obrigatorio=False)
-                self._aguardar_ajax(2500)
+                self._aguardar_ajax(3000)
                 tipo_cp = getattr(q, "tipo_cartao_ponto", None)
                 self._vincular_cartao_ponto_quantidade(tipo_cp, nome_verba=nome)
                 # Salvar
