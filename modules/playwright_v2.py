@@ -1948,7 +1948,8 @@ class PlaywrightAutomatorV2:
         # conversação Seam em edit mode com dados populados. URL-nav cria
         # nova conv fresh sem o histórico/verbas já lançados.
 
-        # 1) Editar históricos default com CS=true
+        # 1) Editar históricos default com CS=true (passar valor para
+        # preencher valorParaBaseDeCalculo — sem isso ocorrências CS ficam 0)
         for hist in self.previa.historico_salarial:
             if _norm(hist.nome) in defaults_norm and hist.incidencias.cs_inss:
                 try:
@@ -1957,7 +1958,8 @@ class PlaywrightAutomatorV2:
                         continue
                     self._aguardar_ajax(8000)
                     self._page.wait_for_timeout(2000)
-                    self._editar_default_historico_para_cs(hist.nome)
+                    valor = float(hist.valor_brl) if hist.tipo_valor.value == "INFORMADO" and hist.valor_brl else None
+                    self._editar_default_historico_para_cs(hist.nome, valor_brl=valor)
                 except Exception as e:
                     self.log(f"  ⚠ Erro pós-Recentes editar '{hist.nome}': {e}")
 
@@ -1965,11 +1967,14 @@ class PlaywrightAutomatorV2:
         # _configurar_ocorrencias_informado_inline (mesma conv Seam — listagem
         # acessível). Nada a fazer aqui pós-Recentes para verbas.
 
-    def _editar_default_historico_para_cs(self, nome: str) -> None:
+    def _editar_default_historico_para_cs(self, nome: str, valor_brl: float | None = None) -> None:
         """Edita entrada default do histórico salarial (criada pelo PJE-Calc)
-        para marcar incidência CS + proporcionalizarINSS + gerar ocorrências
-        e salvar. Resolve pendência "X não possui valor cadastrado para todas
-        as ocorrências da CS sobre Salários Devidos".
+        para marcar incidência CS + proporcionalizarINSS + setar valor base
+        + gerar ocorrências e salvar.
+
+        valor_brl: valor a setar em valorParaBaseDeCalculo (tipo INFORMADO).
+        Sem isso, default ÚLTIMA REMUNERAÇÃO tem valor=0 → todas as
+        ocorrências CS ficam com valor=0 → liquidação bloqueia.
         """
         self.log(f"  → Editar default histórico '{nome}' para configurar CS")
         try:
@@ -1998,6 +2003,13 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(2000)
             self._marcar_checkbox("proporcionalizarINSS", True)
             self._aguardar_ajax(1500)
+            # Setar valor base se fornecido (tipo INFORMADO)
+            if valor_brl is not None:
+                try:
+                    self._preencher("valorParaBaseDeCalculo", _fmt_br(valor_brl), obrigatorio=False)
+                    self.log(f"    ✓ valorParaBaseDeCalculo = {_fmt_br(valor_brl)}")
+                except Exception as e:
+                    self.log(f"    ⚠ valorParaBaseDeCalculo erro: {e}")
             # Garantir ocorrências geradas com CS
             try:
                 self._clicar("cmdGerarOcorrencias")
