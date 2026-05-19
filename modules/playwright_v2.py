@@ -3242,12 +3242,41 @@ class PlaywrightAutomatorV2:
             self.log("  ⏭ Nenhuma verba pendente de vínculo ao cartão de ponto")
             return
         self.log(f"  → Vinculando cartão de ponto a {len(fila)} verba(s) dependente(s)")
-        # Navegar para a listagem de Verbas
+        # Navegar via CLICK SIDEBAR (preservar conv) — url-nav direto resulta
+        # em nova conv onde cartão recém-apurado não está visível ainda.
+        # Mesmo padrão usado em _apurar_cartao_de_ponto.
+        clicou_menu = self._page.evaluate(
+            """() => {
+                const norm = s => (s||'').replace(/\\s+/g,' ').trim();
+                const links = [...document.querySelectorAll('a[id*="j_id38"]')];
+                const alvo = links.find(a => norm(a.textContent || a.title || '') === 'Verbas');
+                if (!alvo) return null;
+                const onclickStr = alvo.getAttribute('onclick') || '';
+                if (onclickStr) {
+                    try { new Function('event', onclickStr).call(alvo, new MouseEvent('click',{bubbles:true})); return 'onclick'; } catch(_) {}
+                }
+                alvo.click(); return 'click';
+            }"""
+        )
+        if clicou_menu:
+            self.log(f"    ✓ click sidebar Verbas ({clicou_menu})")
+            self._aguardar_ajax(4000)
+        else:
+            try:
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(2500)
+            except Exception as e:
+                self.log(f"  ⚠ Falha navegar para Verbas: {e}")
+                return
+        # Aguardar listagem renderizar (table#formulario:listagem)
         try:
-            self._navegar_menu("li_calculo_verbas")
-            self._aguardar_ajax(2500)
-        except Exception as e:
-            self.log(f"  ⚠ Falha navegar para Verbas: {e}")
+            self._page.wait_for_selector(
+                "table[id$=':listagem']",
+                state="visible",
+                timeout=10000,
+            )
+        except Exception:
+            self.log("  ⚠ Listagem de Verbas não renderizou — pulando Fase 5b")
             return
 
         for v, q in fila:
