@@ -3786,12 +3786,34 @@ class PlaywrightAutomatorV2:
         terá dropdown vazio e ficará com Quantidade=0,0000.
         """
         self.log("  → Apurando Cartão de Ponto (gerar ocorrências)...")
-        # Garantir que estamos na listagem
+        # Garantir que estamos na listagem — preferir click sidebar (Seam init)
+        # em vez de url-nav direto. URL-nav resulta em página "vazia" sem
+        # botões de ação (Novo/Grade/Visualizar Cartão) — observado em
+        # produção 18/05/2026, diagnóstico mostrou que só renderizam links
+        # do sidebar quando se navega via URL.
         try:
             self._navegar_menu("li_calculo_cartao_ponto")
-            self._aguardar_ajax(2500)
+            self._aguardar_ajax(4000)
         except Exception:
             pass
+        # Aguardar especificamente os botões da listagem renderizarem
+        try:
+            self._page.wait_for_selector(
+                "[id$=':importarCartao'], input[value='Visualizar Cartão']",
+                state="visible",
+                timeout=10000,
+            )
+        except Exception:
+            self.log("    ⚠ Painel de ações Cartão de Ponto (Novo/Grade/Visualizar) não renderizou em 10s")
+            # Tentar refresh navegação 1x mais
+            try:
+                self._navegar_menu("li_calculo_cartao_ponto")
+                self._aguardar_ajax(5000)
+                self._page.wait_for_selector(
+                    "[id$=':importarCartao']", state="visible", timeout=8000
+                )
+            except Exception:
+                pass
         # Procurar botão "Visualizar Cartão" — CONFUSO: id real é
         # `formulario:importarCartao` mas value é "Visualizar Cartão"
         # (legado JSF do PJE-Calc, confirmado via DOM inspection no
