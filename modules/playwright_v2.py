@@ -2202,18 +2202,28 @@ class PlaywrightAutomatorV2:
                         obrigatorio=False,
                     )
             elif q_tipo == "IMPORTADA_DO_CARTAO":
-                # Selecionar cartão de ponto + clicar Incluir.
+                # Selecionar coluna do cartão (Hs EXT para HE) + clicar Incluir.
                 # Sem este passo, a verba fica com `tipoDaQuantidade=IMPORTADA_DO_CARTAO`
-                # mas sem nenhum cartão vinculado → liquidação ignora as
-                # ocorrências apuradas no cartão (HE não soma nada).
+                # mas sem nenhuma coluna vinculada → liquidação ignora as
+                # horas apuradas no cartão (HE não soma nada).
                 tipo_cp = getattr(q, "tipo_cartao_ponto", None)
-                self._vincular_cartao_ponto_quantidade(tipo_cp)
+                nome_v = getattr(self, "_verba_atual_nome", None)
+                self._vincular_cartao_ponto_quantidade(tipo_cp, nome_verba=nome_v)
         except Exception as e:
             self.log(f"    ⚠ Falha sub-bloco quantidade: {e}")
 
-    def _vincular_cartao_ponto_quantidade(self, tipo_cartao_ponto=None) -> None:
-        """Após marcar tipoDaQuantidade=IMPORTADA_DO_CARTAO, seleciona o
-        cartão no dropdown e clica Incluir.
+    def _vincular_cartao_ponto_quantidade(self, tipo_cartao_ponto=None, nome_verba: str | None = None) -> None:
+        """Após marcar tipoDaQuantidade=IMPORTADA_DO_CARTAO, seleciona a
+        COLUNA do cartão no dropdown e clica Incluir.
+
+        Pós-apuração do Cartão de Ponto, o dropdown lista as colunas
+        apuradas (Hs EXT, Hs Trabalhadas, Hs Intrajornada, Dias Trabalhados).
+
+        Heurística de seleção baseada em `nome_verba`:
+          - HORAS EXTRAS / HE → "Hs EXT"
+          - INTERVALO INTRAJORNADA → "Hs Intrajornada"
+          - ADICIONAL NOTURNO → "Hs EXT" (caso sem coluna específica)
+          - Default → primeira opção não-placeholder
 
         DOM (verba-calculo.xhtml linhas 1057-1075):
           • dropdown: formulario:...:tipoImportadadoDoCartaoDePontoQuantidade
@@ -2228,7 +2238,16 @@ class PlaywrightAutomatorV2:
         except Exception:
             self.log(f"    ⚠ Dropdown cartão de ponto (Quantidade) não apareceu — IMPORTADA_DO_CARTAO sem vínculo")
             return
-        # Selecionar: ou o tipo solicitado, ou o primeiro disponível
+        # Heurística — qual coluna corresponde à verba
+        preferir = None
+        if nome_verba:
+            n = nome_verba.upper()
+            if "INTRAJORNADA" in n:
+                preferir = "Intrajornada"
+            elif "HORAS EXTRAS" in n or " HE " in f" {n} " or n.startswith("HE "):
+                preferir = "Hs EXT"
+            elif "INTERVALO" in n:
+                preferir = "Intrajornada"
         sel = self._page.locator("select[id$=':tipoImportadadoDoCartaoDePontoQuantidade']").first
         try:
             if tipo_cartao_ponto:
@@ -2237,47 +2256,76 @@ class PlaywrightAutomatorV2:
                     sel.select_option(value=val)
                     self.log(f"    ✓ cartão de ponto (Quantidade) = {val}")
                 except Exception:
-                    # fallback: primeira opção não-vazia
-                    self._selecionar_primeira_opcao_cartao(sel)
+                    self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
             else:
-                self._selecionar_primeira_opcao_cartao(sel)
+                self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
         except Exception as e:
             self.log(f"    ⚠ Falha selecionar cartão (Quantidade): {e}")
             return
-        # Clicar Incluir
+        # Clicar Incluir — o onclick contém A4J.AJAX.Submit, precisamos invocá-lo
         try:
-            btn = self._page.locator("a[id$=':incluirCartaoDePontoQuantidade'], input[id$=':incluirCartaoDePontoQuantidade']")
-            if btn.count() > 0:
-                btn.first.click()
+            clicou = self._page.evaluate(
+                """() => {
+                    const btn = document.querySelector("a[id$=':incluirCartaoDePontoQuantidade'], input[id$=':incluirCartaoDePontoQuantidade']");
+                    if (!btn) return null;
+                    const onclickStr = btn.getAttribute('onclick') || '';
+                    if (onclickStr) {
+                        try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return 'onclick-exec'; } catch(_) {}
+                    }
+                    btn.click(); return 'plain-click';
+                }"""
+            )
+            if clicou:
                 self._aguardar_ajax(2500)
-                self.log(f"    ✓ click incluirCartaoDePontoQuantidade")
+                self.log(f"    ✓ click incluirCartaoDePontoQuantidade ({clicou})")
             else:
                 self.log(f"    ⚠ Botão incluirCartaoDePontoQuantidade não encontrado")
         except Exception as e:
             self.log(f"    ⚠ Falha click Incluir cartão (Quantidade): {e}")
 
-    def _selecionar_primeira_opcao_cartao(self, sel_locator) -> None:
-        """Seleciona a primeira option não-vazia/não-placeholder."""
+    def _selecionar_primeira_opcao_cartao(self, sel_locator, preferir_label: str | None = None) -> None:
+        """Seleciona option do dropdown de coluna do cartão de ponto.
+
+        Pós-apuração do Cartão de Ponto, o dropdown tem opções como:
+          - "Dias Trabalhados"
+          - "Hs EXT"           ← ideal para HORAS EXTRAS
+          - "Hs Intrajornada"  ← ideal para INTERVALO INTRAJORNADA
+          - "Hs Trabalhadas"
+
+        Se `preferir_label` for fornecido, tenta match case-insensitive
+        contains. Caso contrário, usa a primeira option não-placeholder.
+        """
         try:
-            valor = self._page.evaluate(
+            options = self._page.evaluate(
                 """(sel) => {
-                    const opts = [...sel.options];
-                    for (const o of opts) {
-                        const v = (o.value || '').trim();
-                        const t = (o.textContent || '').trim();
-                        if (v && v !== '0' && !t.toLowerCase().startsWith('selecione')) {
-                            return v;
-                        }
-                    }
-                    return null;
+                    return [...sel.options].map(o => ({value: o.value, text: (o.textContent||'').trim()}));
                 }""",
                 sel_locator.element_handle(),
             )
-            if valor:
-                sel_locator.select_option(value=valor)
-                self.log(f"    ✓ cartão de ponto (Quantidade) auto-selecionado = {valor}")
+            valor_alvo = None
+            label_alvo = None
+            # Tentativa 1: match preferir_label (case-insensitive contains)
+            if preferir_label:
+                pl = preferir_label.lower()
+                for o in options:
+                    if o['text'].lower().find(pl) >= 0 and o['value'] and not o['value'].startswith('org.jboss'):
+                        valor_alvo = o['value']
+                        label_alvo = o['text']
+                        break
+            # Tentativa 2: primeira não-placeholder
+            if not valor_alvo:
+                for o in options:
+                    v = (o['value'] or '').strip()
+                    t = (o['text'] or '').strip()
+                    if v and not v.startswith('org.jboss') and v != '0' and not t.lower().startswith('selecione'):
+                        valor_alvo = v
+                        label_alvo = t
+                        break
+            if valor_alvo:
+                sel_locator.select_option(value=valor_alvo)
+                self.log(f"    ✓ cartão de ponto (Quantidade) selecionado = '{label_alvo}' (value={valor_alvo})")
             else:
-                self.log(f"    ⚠ Nenhum cartão de ponto disponível no dropdown")
+                self.log(f"    ⚠ Nenhuma coluna de cartão disponível no dropdown — cartão pode não ter sido apurado")
         except Exception as e:
             self.log(f"    ⚠ Falha auto-select cartão: {e}")
 
@@ -2574,6 +2622,9 @@ class PlaywrightAutomatorV2:
         - Reflexos têm linkParametrizar com title="Parametrizar" (SEM "da Verba")
           — disambiguar via id*=':listaReflexo:'.
         """
+        # Setar nome da verba no contexto para que _vincular_cartao_ponto_quantidade
+        # possa escolher a coluna correta do cartão (Hs EXT para HE, etc.)
+        self._verba_atual_nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
         # Match candidates: nome_pjecalc (custom) e expresso_alvo (canônico).
         # Para expresso_adaptado, o listing tem o nome canônico, não o adaptado.
         candidatos = [v.nome_pjecalc]
@@ -3255,11 +3306,11 @@ class PlaywrightAutomatorV2:
                     # Voltar à listagem
                     self._cancelar_form_voltar_listagem()
                     continue
-                # Marcar radio + vincular cartão
+                # Marcar radio + vincular coluna do cartão (Hs EXT para HE)
                 self._marcar_radio("tipoDaQuantidade", "IMPORTADA_DO_CARTAO", obrigatorio=False)
                 self._aguardar_ajax(2500)
                 tipo_cp = getattr(q, "tipo_cartao_ponto", None)
-                self._vincular_cartao_ponto_quantidade(tipo_cp)
+                self._vincular_cartao_ponto_quantidade(tipo_cp, nome_verba=nome)
                 # Salvar
                 clicou_save = self._clicar_salvar_flex(timeout_ms=8000)
                 if not clicou_save:
@@ -3702,9 +3753,125 @@ class PlaywrightAutomatorV2:
                     self.log("  ✓ Contexto Seam restaurado pós-overrides")
                 except Exception:
                     pass
+
+            # APURAÇÃO DO CARTÃO DE PONTO — passo crítico descoberto via teste
+            # manual (18/05/2026). Sem isso, o cartão fica como mera definição
+            # de critérios, sem ocorrências apuradas. O dropdown
+            # `tipoImportadadoDoCartaoDePontoQuantidade` da verba HE 50% fica
+            # VAZIO porque não há colunas (Hs EXT, Hs Intrajornada, etc.) para
+            # vincular. Manual oficial CSJT (linha 502): "Apurar Cartão de
+            # Ponto: Definir Dia do Fechamento Mensal, adicionar exceções,
+            # clicar Apurar".
+            try:
+                self._apurar_cartao_de_ponto()
+            except Exception as e_apurar:
+                self.log(f"  ⚠ Falha apurar cartão (não-crítico, mas HE não terá Quantidade): {e_apurar}")
+
             self.log("Fase 5 concluída")
         except Exception as e:
             self.log(f"  ⚠ Fase 5 — Salvar: {e}")
+
+    def _apurar_cartao_de_ponto(self) -> None:
+        """Apura o Cartão de Ponto — gera as ocorrências (Hs EXT, Hs Trabalhadas,
+        Hs Intrajornada, Dias Trabalhados) que serão vinculáveis às verbas HE.
+
+        Fluxo confirmado manualmente (18/05/2026 sessão cecf7937):
+        1. Navegar para Cartão de Ponto (apuracao-cartaodeponto.jsf)
+        2. Clicar botão "Visualizar Cartão" → vai para cartaodeponto.jsf (Montar)
+        3. Manter "Dia do Fechamento Mensal" = 31 (default)
+        4. Clicar botão "Apurar Cartão de Ponto"
+        5. Aguardar "Operação realizada com sucesso" + tabela de ocorrências
+
+        Sem este passo, a verba HE 50% com tipoDaQuantidade=IMPORTADA_DO_CARTAO
+        terá dropdown vazio e ficará com Quantidade=0,0000.
+        """
+        self.log("  → Apurando Cartão de Ponto (gerar ocorrências)...")
+        # Garantir que estamos na listagem
+        try:
+            self._navegar_menu("li_calculo_cartao_ponto")
+            self._aguardar_ajax(2500)
+        except Exception:
+            pass
+        # Procurar botão "Visualizar Cartão"
+        clicou_vis = self._page.evaluate(
+            """() => {
+                const btns = [...document.querySelectorAll('input[type=button], input[type=submit], button, a')];
+                for (const b of btns) {
+                    const v = (b.value || b.textContent || '').trim();
+                    if (v === 'Visualizar Cartão' || v === 'Visualizar Cartao') {
+                        const onclickStr = b.getAttribute('onclick') || '';
+                        if (onclickStr) {
+                            try { new Function('event', onclickStr).call(b, new MouseEvent('click',{bubbles:true})); return 'onclick-exec'; } catch(_) {}
+                        }
+                        b.click(); return 'plain-click';
+                    }
+                }
+                return null;
+            }"""
+        )
+        if not clicou_vis:
+            self.log("    ⚠ Botão 'Visualizar Cartão' não encontrado — pulando apuração")
+            return
+        self.log(f"    ✓ click Visualizar Cartão ({clicou_vis})")
+        self._aguardar_ajax(5000)
+        # Aguardar a página Montar carregar
+        try:
+            self._page.wait_for_selector(
+                "input[type=button][value='Apurar Cartão de Ponto'], input[type=submit][value='Apurar Cartão de Ponto']",
+                state="visible",
+                timeout=10000,
+            )
+        except Exception:
+            self.log("    ⚠ Página 'Montar' não carregou (botão Apurar invisível) — pulando")
+            return
+        # Clicar Apurar Cartão de Ponto
+        clicou_apurar = self._page.evaluate(
+            """() => {
+                const btns = [...document.querySelectorAll('input[type=button], input[type=submit], button')];
+                for (const b of btns) {
+                    const v = (b.value || b.textContent || '').trim();
+                    if (v.startsWith('Apurar Cart')) {
+                        const onclickStr = b.getAttribute('onclick') || '';
+                        if (onclickStr) {
+                            try { new Function('event', onclickStr).call(b, new MouseEvent('click',{bubbles:true})); return 'onclick-exec'; } catch(_) {}
+                        }
+                        b.click(); return 'plain-click';
+                    }
+                }
+                return null;
+            }"""
+        )
+        if not clicou_apurar:
+            self.log("    ⚠ Botão 'Apurar Cartão de Ponto' não encontrado — pulando")
+            return
+        self.log(f"    ✓ click Apurar Cartão de Ponto ({clicou_apurar})")
+        self._aguardar_ajax(15000)
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        if sucesso:
+            self.log("  ✓ Cartão de Ponto APURADO — ocorrências geradas")
+            # Capturar tabela de ocorrências para log diagnóstico
+            try:
+                resumo = self._page.evaluate(
+                    """() => {
+                        const trs = [...document.querySelectorAll('tr')];
+                        const data = [];
+                        for (const tr of trs) {
+                            const tds = [...tr.querySelectorAll('td')];
+                            if (tds.length >= 5 && /^\\d{2}\\/\\d{4}$/.test((tds[0].textContent||'').trim())) {
+                                data.push(tds.map(td => (td.textContent||'').trim()).join(' | '));
+                            }
+                        }
+                        return data;
+                    }"""
+                )
+                if resumo:
+                    self.log(f"    📊 Ocorrências apuradas:")
+                    for linha in resumo[:6]:
+                        self.log(f"       {linha}")
+            except Exception:
+                pass
+        else:
+            self.log("  ⚠ Apuração disparada mas sem mensagem de sucesso explícita")
 
     def _aplicar_ocorrencias_override(self, overrides: list) -> None:
         """Aplica overrides de jornada na Grade de Ocorrências.
