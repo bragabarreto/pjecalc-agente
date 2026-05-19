@@ -1961,27 +1961,9 @@ class PlaywrightAutomatorV2:
                 except Exception as e:
                     self.log(f"  ⚠ Erro pós-Recentes editar '{hist.nome}': {e}")
 
-        # 2) Fixar valorDevido em verbas INFORMADO
-        verbas_inf = [v for v in self.previa.verbas_principais
-                       if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO
-                       and getattr(v.parametros.valor_devido, "valor_informado_brl", None)]
-        if verbas_inf:
-            try:
-                if self._navegar_menu_via_click("li_calculo_verbas"):
-                    # Aguardar URL mudar para verba-calculo.jsf
-                    try:
-                        self._page.wait_for_url("**/verba/verba-calculo.jsf**", timeout=15000)
-                    except Exception:
-                        self.log(f"  ⚠ URL não mudou para verba-calculo.jsf após sidebar click — URL atual: {self._page.url}")
-                    self._page.wait_for_load_state("networkidle", timeout=15000)
-                    self._page.wait_for_timeout(2500)
-                    self._fixar_valordevido_ocorrencias_informadas(verbas_inf)
-                else:
-                    self.log(f"  ⚠ Não conseguiu navegar para Verbas via sidebar")
-            except Exception as e:
-                self.log(f"  ⚠ Erro pós-Recentes fixar valorDevido: {e}")
-                import traceback as _tb
-                self.log(f"    traceback: {_tb.format_exc()[:600]}")
+        # Verbas INFORMADO já foram tratadas em fase_verbas com
+        # _configurar_ocorrencias_informado_inline (mesma conv Seam — listagem
+        # acessível). Nada a fazer aqui pós-Recentes para verbas.
 
     def _editar_default_historico_para_cs(self, nome: str) -> None:
         """Edita entrada default do histórico salarial (criada pelo PJE-Calc)
@@ -2130,6 +2112,14 @@ class PlaywrightAutomatorV2:
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
+            # Para verbas INFORMADO: setar valorDevido em pelo menos uma
+            # ocorrência (PJE-Calc bloqueia liquidação se TODAS as ocorrências
+            # estão com valorDevido=0). Executado AQUI dentro de fase_verbas
+            # (mesma conv Seam que tem as verbas) — após a reabertura via
+            # Recentes a listagem fica vazia em nova conv.
+            if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO and \
+               getattr(v.parametros.valor_devido, "valor_informado_brl", None):
+                self._configurar_ocorrencias_informado_inline(v)
             for r in v.reflexos:
                 self._configurar_reflexo(v, r)
 
@@ -2294,6 +2284,115 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ⚠ {nome}: erro ao salvar: {e}")
             except Exception as e:
                 self.log(f"    ⚠ {nome}: erro geral: {e}")
+
+    def _configurar_ocorrencias_informado_inline(self, v) -> None:
+        """Após salvar verba INFORMADO, navegar para suas Ocorrências (mesma
+        conv Seam) e setar valorDevido em pelo menos uma linha.
+
+        Usa o mesmo padrão A4J onclick-exec de _configurar_parametros_pos_expresso
+        para invocar linkOcorrencias da linha da verba, que é confiável.
+        """
+        nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
+        valor_total = float(v.parametros.valor_devido.valor_informado_brl)
+        proporcionalizar = bool(getattr(v.parametros.valor_devido, "proporcionalizar", False))
+        candidatos = [v.nome_pjecalc]
+        if hasattr(v, "expresso_alvo") and v.expresso_alvo and v.expresso_alvo != v.nome_pjecalc:
+            candidatos.append(v.expresso_alvo)
+        self.log(f"    → Ocorrências INFORMADO de '{nome}': valor={valor_total}, proporcionalizar={proporcionalizar}")
+
+        # Voltar para listagem (URL-nav direto preservando conv)
+        self._navegar_menu("li_calculo_verbas")
+        self._aguardar_ajax(10000)
+        self._page.wait_for_timeout(1500)
+
+        # Clicar linkOcorrencias usando o mesmo padrão A4J onclick-exec
+        clicou = self._page.evaluate(
+            """(candidatos) => {
+                const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                const trs = [...document.querySelectorAll('tr')];
+                for (const alvo of candidatos) {
+                    const alvoN = norm(alvo);
+                    for (const tr of trs) {
+                        if (!norm(tr.textContent).includes(alvoN)) continue;
+                        // Procurar linkOcorrencias na linha (NÃO dentro de listaReflexo)
+                        const a = tr.querySelector('a.linkOcorrencias');
+                        if (!a || (a.id && a.id.includes(':listaReflexo:'))) continue;
+                        const onclickStr = a.getAttribute('onclick') || '';
+                        if (onclickStr) {
+                            const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
+                            try { Object.defineProperty(ev, 'target', {value:a, configurable:true}); } catch(_){}
+                            try { Object.defineProperty(ev, 'currentTarget', {value:a, configurable:true}); } catch(_){}
+                            try {
+                                new Function('event', onclickStr).call(a, ev);
+                                return {ok: true, via: 'onclick-exec:'+alvo};
+                            } catch(err) {
+                                return {ok: false, err: err.message.slice(0,60)};
+                            }
+                        }
+                        a.click();
+                        return {ok: true, via: 'click:'+alvo};
+                    }
+                }
+                return {ok: false, totalLinks: document.querySelectorAll('a.linkOcorrencias').length};
+            }""",
+            candidatos,
+        )
+        if not clicou.get("ok"):
+            self.log(f"    ⚠ linkOcorrencias não disparado: {clicou}")
+            return
+        self.log(f"    ✓ linkOcorrencias acionado via {clicou.get('via')}")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(2000)
+
+        # Agora deve estar em parametrizar-ocorrencia.jsf
+        inputs = self._page.locator("input[id$=':valorDevido']")
+        n = inputs.count()
+        if n == 0:
+            self.log(f"    ⚠ 0 inputs valorDevido encontrados na página de ocorrências")
+            return
+
+        # Distribuir valor
+        if proporcionalizar:
+            por_linha = round(valor_total / n, 2)
+            valores = [por_linha] * n
+            diff = round(valor_total - por_linha * n, 2)
+            if diff:
+                valores[-1] = round(valores[-1] + diff, 2)
+        else:
+            valores = [valor_total] + [0.0] * (n - 1)
+
+        for i in range(n):
+            val_br = _fmt_br(valores[i])
+            el = inputs.nth(i)
+            try:
+                el_id = el.evaluate("e => e.id")
+                self._page.evaluate(
+                    """([id, valor]) => {
+                        const el = document.getElementById(id);
+                        if (!el) return false;
+                        el.value = valor;
+                        el.dispatchEvent(new Event('input', {bubbles: true}));
+                        el.dispatchEvent(new Event('change', {bubbles: true}));
+                        el.dispatchEvent(new Event('blur', {bubbles: true}));
+                        return true;
+                    }""",
+                    [el_id, val_br],
+                )
+            except Exception as e:
+                self.log(f"      ⚠ valorDevido[{i}] = {val_br}: {e}")
+        self._aguardar_ajax(3000)
+        self.log(f"    ✓ {n} ocorrência(s) preenchidas (total {valor_total} BRL)")
+
+        # Salvar
+        try:
+            self._clicar_salvar_flex()
+            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+            if sucesso:
+                self.log(f"    ✓ Ocorrências de '{nome}' salvas")
+            else:
+                self.log(f"    ⚠ Ocorrências de '{nome}': sem confirmação de save")
+        except Exception as e:
+            self.log(f"    ⚠ Erro ao salvar ocorrências: {e}")
 
     def _regerar_ocorrencias_verbas(self) -> None:
         """Volta à listagem de Verbas e clica Regerar Ocorrências.
