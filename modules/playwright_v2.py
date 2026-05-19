@@ -3324,14 +3324,31 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ⚠ Form de Alteração não carregou para '{nome}' — pulando")
                     continue
                 # Aguardar especificamente o radio tipoDaQuantidade renderizar
+                # (state=attached porque pode estar dentro de a4j:region oculto inicialmente)
                 try:
                     self._page.wait_for_selector(
                         "input[type='radio'][id*='tipoDaQuantidade']",
                         state="attached",
-                        timeout=8000,
+                        timeout=15000,
                     )
                 except Exception:
-                    self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu no form de '{nome}' — pulando")
+                    # Diagnóstico DOM para entender o estado do form
+                    try:
+                        diag = self._page.evaluate(
+                            """() => {
+                                const radios = [...document.querySelectorAll('input[type=radio]')].slice(0, 30).map(r => ({id: r.id, name: r.name, value: r.value, checked: r.checked}));
+                                const inputs_text = [...document.querySelectorAll('input[type=text]')].slice(0, 15).map(i => ({id: i.id, value: i.value.slice(0,30)}));
+                                const url = location.href.slice(-100);
+                                return {url, n_radios: radios.length, radios, inputs_text};
+                            }"""
+                        )
+                        self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu — diag:")
+                        self.log(f"       url: ...{diag.get('url')}")
+                        self.log(f"       n_radios={diag.get('n_radios')}")
+                        for r in (diag.get('radios') or [])[:15]:
+                            self.log(f"       radio id={r.get('id')!r} value={r.get('value')!r} checked={r.get('checked')}")
+                    except Exception:
+                        self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu no form de '{nome}' — sem diag")
                     self._cancelar_form_voltar_listagem()
                     continue
                 # Marcar radio IMPORTADA_DO_CARTAO sempre (radio existe se valor=CALCULADO);
