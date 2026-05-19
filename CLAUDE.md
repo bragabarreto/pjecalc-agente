@@ -522,32 +522,45 @@ finally:
 
 Validado: capturou `PROCESSO_..._CALCULO_71_DATA_12052026_HORA_005357.PJC` (8065 bytes) ✅
 
-### Seam EPC FlushMode.MANUAL — cálculos novos NÃO persistem no H2 local (confirmado 12/05/2026)
+### H2 TCP server mode OBRIGATÓRIO — resolve Seam EPC + persistência (confirmado 19/05/2026)
 
-**Descoberta crítica**: no PJE-Calc Cidadão com banco H2 local, cálculos criados via automação
-("Cálculo > Novo") **nunca aparecem em Buscar/Recentes na mesma sessão** — ou em sessões posteriores.
+**Descoberta crítica e RESOLUÇÃO definitiva**: H2 em modo **embedded** (default — `jdbc:h2:.dados/pjecalc`)
+mantém um file-lock single-process que **rompe** o ciclo Seam EPC + JTA durante a automação
+RPA (que executa múltiplas requisições JSF longas em sequência).
 
-**Causa raiz**: Seam 2 usa `FlushMode.MANUAL` para o Extended Persistence Context (EPC). A transação
-JTA abrange **toda a conversa Seam** (não por request). Nenhuma entidade é commitada no H2 até que
-`@End` seja disparado explicitamente.
+**Sintomas em embedded**:
+- Cálculos novos criados via "Cálculo > Novo" não aparecem em Recentes
+- Saves intermediários (verbas, FGTS, CS) não chegam à DB
+- Liquidar abre conv fresca que lê estado stale → pendências falsas
+- `h2 Shell` externo retorna: `"Database may be already in use: Locked by another process.
+  Possible solutions: ... use the server mode"`
 
-`@End` só ocorre quando um bean retorna um navigation outcome mapeado em `pages.xml` com
-`<end-conversation before-redirect="true"/>` — exemplos: `if-outcome="exportacao"` (chamado por
-`apresentadorExportacao.iniciar()`), `if-outcome="calculo"`, etc.
+**Solução** (commits `142a2a9`):
 
-**Em modo "criação"** (nova conversa Seam após "Cálculo > Novo"):
-- O sidebar NÃO renderiza `li_operacoes_exportar` → `iniciar()` não pode ser chamado pelo menu
-- Force-POST do component ID `formulario:j_id38:2:j_id41:4:j_id46` não funciona (JSF bloqueia
-  ações de componentes não renderizados)
-- Clicar links globais (`li_calculo_novo`, `li_tela_inicial`, `li_tabelas_*`) cria **novas conversas**
-  mas NÃO faz flush do EPC da conversa pai
+1. `iniciarPjeCalc.sh` — iniciar H2 TCP server (porta 9092) ANTES do Tomcat subir:
+   ```bash
+   nohup java -cp "$H2_JAR" org.h2.tools.Server \
+       -tcp -tcpPort 9092 -tcpAllowOthers \
+       -baseDir "$PJECALC_DIR/.dados" &
+   ```
+2. `webapps/pjecalc/META-INF/context.xml` — DataSource via TCP:
+   ```xml
+   <Resource ... url="jdbc:h2:tcp://localhost:9092/./pjecalc" ... maxActive="20"/>
+   ```
 
-**Consequência para testes locais**: o fluxo Criar Novo → Preencher → Liquidar → Exportar só pode
-ser validado end-to-end em produção (TRT7) com PostgreSQL. O H2 local retém tudo na memória JTA
-sem commit.
+**Validação end-to-end (19/05/2026)** — sessão `cecf7937` com bot v45:
+- Liquidação: `pendencia=False, sucesso=True`
+- .PJC exportado: 12841 bytes
+- Reimportação no PJE-Calc Cidadão: "Operação realizada com sucesso"
 
-**O que funciona localmente**: abrir cálculo existente via Recentes (duplo-clique) → edit mode → Exportar.
-A conversa Seam em edit mode chama `iniciar()` corretamente via `li_operacoes_exportar`.
+**NUNCA voltar para H2 embedded** em ambiente de automação. TCP server permite múltiplas conexões,
+libera o file-lock e o Seam EPC se comporta corretamente com transações conv-scoped duradouras.
+
+Bonus: o TCP mode permite diagnóstico externo via `h2 Shell` sem matar o Tomcat:
+```bash
+java -cp h2-1.3.154.jar org.h2.tools.Shell \
+    -url "jdbc:h2:tcp://localhost:9092/./pjecalc" -user pjecalc -password "/pjecalc/"
+```
 
 ### SSE stream — keepalive obrigatório
 O SSE stream (endpoint `/api/executar/{sessao_id}`) precisa de keepalive a cada 10-15s para evitar
