@@ -308,17 +308,23 @@ class PlaywrightAutomatorV2:
         # formulário Parâmetros, sem precisar "revisitar".
         _run_fase("Fase 4 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
         _run_fase("Fase 5 (Verbas)", self.fase_verbas)
-        # Reabertura pós-Verbas: garantir conv estável com base de cálculo populada
+        # Fechar+Reabrir pós-Verbas: força @End da outer conv para commit
+        # dos saves em DB. Sem isso, os dados ficam presos na transação Seam
+        # e Liquidar (em conv fresca) lê estado stale.
         try:
-            self.log("  → Reabrindo cálculo via Recentes pós-Verbas (restaurar conv)...")
-            if self._reabrir_calculo_via_recentes():
-                self.log(f"  ✓ Conv pós-Verbas: {self._calculo_conversation_id}")
+            self._fechar_e_reabrir_calculo("pós-Verbas")
         except Exception as e:
-            self.log(f"  ⚠ Reabertura pós-Verbas falhou: {e}")
+            self.log(f"  ⚠ Fechar+Reabrir pós-Verbas falhou: {e}")
         # Correções pós-Recentes que dependem da listagem (modo edição):
         # - Editar histórico default p/ CS + proporcionalizarINSS
         # - Fixar valorDevido em verbas INFORMADO
         _run_fase("Fase 5.5 (Correções pós-Recentes)", self.fase_pos_recentes_correcoes)
+        # Fechar+Reabrir pós-Correções: commit das edições de histórico CS +
+        # valorDevido em verbas INFORMADO ao DB antes de prosseguir
+        try:
+            self._fechar_e_reabrir_calculo("pós-Correções")
+        except Exception as e:
+            self.log(f"  ⚠ Fechar+Reabrir pós-Correções falhou: {e}")
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
         _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
         _run_fase("Fase 8 (FGTS)", self.fase_fgts)
@@ -334,15 +340,14 @@ class PlaywrightAutomatorV2:
         _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
         _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
 
-        # CRÍTICO: Reabrir via Recentes ANTES de Liquidar para forçar commit
-        # das saves de CS/IRPF/Custas/Correção. Sem isso, Liquidar abre conv
-        # fresca que lê DB stale (sem nossos saves de fases 9-13).
+        # Fechar+Reabrir pré-Liquidar: força @End de toda a outer conv para
+        # commit de TODAS as saves de fases 6-13 (Faltas/Férias/FGTS/CS/IRPF/
+        # Custas/Honorários/Correção). Sem isso, Liquidar abre conv fresca
+        # que lê DB stale.
         try:
-            self.log("  → Reabrir cálculo via Recentes pré-Liquidar (forçar commit)")
-            if self._reabrir_calculo_via_recentes():
-                self.log(f"  ✓ Conv pré-Liquidar: {self._calculo_conversation_id}")
+            self._fechar_e_reabrir_calculo("pré-Liquidar")
         except Exception as e:
-            self.log(f"  ⚠ Reabertura pré-Liquidar falhou: {e}")
+            self.log(f"  ⚠ Fechar+Reabrir pré-Liquidar falhou: {e}")
 
         # Liquidação — tenta mesmo com fases parciais
         try:
@@ -1282,6 +1287,57 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"  ⚠ _capturar_conversation_id: {e}")
         return False
+
+    def _fechar_e_reabrir_calculo(self, contexto: str = "") -> bool:
+        """Fluxo seguro de commit: clicar Fechar (sidebar) → @End outer conv
+        → cálculo persiste no DB → Reabrir via Recentes → conv nova em edit
+        mode com estado committed.
+
+        Resolve o problema Seam EPC + H2: saves dentro de uma mesma conv
+        ficam pendentes na transação até @End. Fechar é a ação UI que
+        dispara @End de forma confiável.
+
+        Args:
+            contexto: tag p/ log (ex.: "pós-Verbas", "pós-CS")
+
+        Returns True se reabertura via Recentes foi bem-sucedida.
+        """
+        tag = f" ({contexto})" if contexto else ""
+        try:
+            self.log(f"  → Fechar cálculo{tag} para commit Seam @End...")
+            # Tentar sidebar click li_operacoes_fechar
+            clicou = self._navegar_menu_via_click("li_operacoes_fechar")
+            if not clicou:
+                # Fallback: procurar link com texto "Fechar" no sidebar
+                clicou = self._page.evaluate(
+                    """() => {
+                        const links = [...document.querySelectorAll('li a')];
+                        for (const a of links) {
+                            if ((a.textContent||'').trim() === 'Fechar') {
+                                if (a.onclick) { a.onclick(new Event('click')); }
+                                else { a.click(); }
+                                return true;
+                            }
+                        }
+                        return false;
+                    }"""
+                )
+            if not clicou:
+                self.log(f"  ⚠ Fechar{tag}: link não encontrado — pulando commit")
+                return False
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(2500)
+            self.log(f"  ✓ Fechar{tag} disparado (cálculo commitado ao DB)")
+            # Reabrir via Recentes
+            ok = self._reabrir_calculo_via_recentes()
+            if ok:
+                self.log(f"  ✓ Reabertura pós-Fechar{tag} ok: conv={self._calculo_conversation_id}")
+            else:
+                self.log(f"  ⚠ Reabertura pós-Fechar{tag} falhou")
+            return ok
+        except Exception as e:
+            self.log(f"  ⚠ _fechar_e_reabrir_calculo{tag}: {e}")
+            return False
 
     def _reabrir_calculo_via_recentes(self, processo_override: str | None = None) -> bool:
         """Volta para principal e reabre cálculo via lista 'Recentes'.
