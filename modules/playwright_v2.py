@@ -315,6 +315,10 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ✓ Conv pós-Verbas: {self._calculo_conversation_id}")
         except Exception as e:
             self.log(f"  ⚠ Reabertura pós-Verbas falhou: {e}")
+        # Correções pós-Recentes que dependem da listagem (modo edição):
+        # - Editar histórico default p/ CS + proporcionalizarINSS
+        # - Fixar valorDevido em verbas INFORMADO
+        _run_fase("Fase 5.5 (Correções pós-Recentes)", self.fase_pos_recentes_correcoes)
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
         _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
         _run_fase("Fase 8 (FGTS)", self.fase_fgts)
@@ -1789,15 +1793,12 @@ class PlaywrightAutomatorV2:
         defaults_norm = {_norm(n) for n in self._HISTORICOS_DEFAULT}
 
         for idx, hist in enumerate(self.previa.historico_salarial):
-            # Históricos default (PJE-Calc já criou em Fase 2): em vez de
-            # pular completamente, EDITAR para garantir CS e proporcionalizarINSS
-            # configurados. Sem isso, liquidação retorna "ÚLTIMA REMUNERAÇÃO
-            # não possui valor cadastrado para todas as ocorrências da CS".
+            # Históricos default (PJE-Calc já criou em Fase 2): pulamos aqui
+            # pois Seam está em modo criação — listagem inacessível. Edição
+            # do default será feita em fase_pos_recentes_correcoes() após
+            # reabertura via Recentes.
             if _norm(hist.nome) in defaults_norm:
-                if hist.incidencias.cs_inss:
-                    self._editar_default_historico_para_cs(hist.nome)
-                else:
-                    self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc (sem CS)")
+                self.log(f"  ⏭ Pulando '{hist.nome}' — default do PJE-Calc (edição pós-Recentes)")
                 continue
 
             # Reset de estado: após save anterior o form fica aberto em modo edição
@@ -1928,6 +1929,41 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ✓ Histórico '{hist.nome}' salvo")
 
         self.log("Fase 3 concluída")
+
+    def fase_pos_recentes_correcoes(self) -> None:
+        """Correções que só podem ser feitas após reabertura via Recentes
+        (Seam em modo edição com listagens completas).
+
+        Atualmente:
+        - Históricos default com CS=true → editar para marcar
+          proporcionalizarINSS e gerar ocorrências CS
+        - Verbas INFORMADO → garantir valorDevido != 0 em ocorrências
+        """
+        def _norm(s: str) -> str:
+            tabela = str.maketrans("ÁÉÍÓÚÇáéíóúç", "AEIOUCaeiouc")
+            return (s or "").translate(tabela).upper().strip()
+        defaults_norm = {_norm(n) for n in self._HISTORICOS_DEFAULT}
+
+        # 1) Editar históricos default com CS=true
+        for hist in self.previa.historico_salarial:
+            if _norm(hist.nome) in defaults_norm and hist.incidencias.cs_inss:
+                try:
+                    self._navegar_menu("li_calculo_historico_salarial")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(1500)
+                    self._editar_default_historico_para_cs(hist.nome)
+                except Exception as e:
+                    self.log(f"  ⚠ Erro pós-Recentes editar '{hist.nome}': {e}")
+
+        # 2) Fixar valorDevido em verbas INFORMADO
+        verbas_inf = [v for v in self.previa.verbas_principais
+                       if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO
+                       and getattr(v.parametros.valor_devido, "valor_informado_brl", None)]
+        if verbas_inf:
+            try:
+                self._fixar_valordevido_ocorrencias_informadas(verbas_inf)
+            except Exception as e:
+                self.log(f"  ⚠ Erro pós-Recentes fixar valorDevido: {e}")
 
     def _editar_default_historico_para_cs(self, nome: str) -> None:
         """Edita entrada default do histórico salarial (criada pelo PJE-Calc)
@@ -2087,12 +2123,9 @@ class PlaywrightAutomatorV2:
         #    Verbas, após a geração das ocorrências da verba X"
         if verbas_expresso:
             self._regerar_ocorrencias_verbas()
-            # Para verbas INFORMADO: garantir que ao menos a primeira ocorrência
-            # tenha valorDevido != 0 (PJE-Calc rejeita liquidação se todas zero,
-            # com mensagem "deve existir pelo menos uma ocorrência com valor
-            # devido diferente de zero"). Descoberto 19/05/2026 via screenshot
-            # de pendência.
-            self._fixar_valordevido_ocorrencias_informadas(verbas_expresso)
+            # ATENÇÃO: _fixar_valordevido_ocorrencias_informadas() não pode
+            # rodar aqui — Seam está em modo criação, listagem inacessível.
+            # Será chamado em fase_pos_recentes_correcoes após reabertura.
 
         self.log("Fase 4 concluída")
 
