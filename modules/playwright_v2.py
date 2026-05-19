@@ -102,13 +102,9 @@ class PlaywrightAutomatorV2:
         # via Recentes, evitando o problema de FlushMode.MANUAL no H2.
         self._calculo_teste_processo: str | None = os.environ.get("PJECALC_CALCULO_TESTE")
         self._modo_edicao_inicial: bool = False
-        # Verbas que precisam revisitar Parâmetros APÓS Fase 5 (Cartão de Ponto)
-        # para configurar tipoDaQuantidade=IMPORTADA_DO_CARTAO. O enum
-        # `apresentador.listaDeTiposDeQuantidade` só inclui IMPORTADA_DO_CARTAO
-        # quando há pelo menos 1 cartão cadastrado — por isso adiamos. Cada
-        # entrada: (v, q) onde `v` é a VerbaPrincipal e `q` o sub-objeto
-        # `formula_calculado.quantidade`.
-        self._verbas_pendentes_cartao_ponto: list = []
+        # Contexto da verba sendo configurada (usado pelo helper que escolhe
+        # a coluna do cartão de ponto — Hs EXT para HE, etc.)
+        self._verba_atual_nome: str | None = None
         # Diretório de download dedicado (padrão Calc Machine).
         # O Playwright usa esse path como destino dos downloads do navegador.
         import tempfile as _tempfile, pathlib as _pathlib, time as _time
@@ -301,7 +297,17 @@ class PlaywrightAutomatorV2:
         # Como Verbas muda o conv_id (cada Expresso cria nova conv), reabrir via
         # Recentes APÓS verbas para restaurar conv estável com tudo populado.
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
-        _run_fase("Fase 4 (Verbas)", self.fase_verbas)
+        # CARTÃO DE PONTO ANTES DE VERBAS (reordenação 18/05/2026):
+        # O manual oficial CSJT (§9.7) sugere Verbas antes de Cartão, mas
+        # para verbas com `quantidade.tipo=IMPORTADA_DO_CARTAO` (HE, intervalo
+        # intrajornada/interjornada, adicional noturno), o dropdown de
+        # colunas (Hs EXT, Hs Intrajornada, etc.) só popula APÓS o cartão
+        # estar criado E APURADO. Por isso reordenamos: criar cartão +
+        # apurar PRIMEIRO, depois criar verbas — assim na Fase 5 Verbas o
+        # bot pode setar IMPORTADA_DO_CARTAO + Hs EXT diretamente no
+        # formulário Parâmetros, sem precisar "revisitar".
+        _run_fase("Fase 4 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
+        _run_fase("Fase 5 (Verbas)", self.fase_verbas)
         # Reabertura pós-Verbas: garantir conv estável com base de cálculo populada
         try:
             self.log("  → Reabrindo cálculo via Recentes pós-Verbas (restaurar conv)...")
@@ -309,22 +315,6 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ✓ Conv pós-Verbas: {self._calculo_conversation_id}")
         except Exception as e:
             self.log(f"  ⚠ Reabertura pós-Verbas falhou: {e}")
-        _run_fase("Fase 5 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
-        # NOTA (18/05/2026): tentamos reabrir cálculo via Recentes aqui
-        # para forçar @End da conv Seam → nova conv com cartão persistido.
-        # PROBLEMA: a nova conv também perdia as verbas criadas (FlushMode.MANUAL
-        # — entidades em memória NÃO commitadas). Resultado: Fase 5b passa de
-        # "Opção IMPORTADA_DO_CARTAO indisponível" para "Verba não encontrada
-        # na listagem" — pior. Mantemos a conv original e Fase 5b apenas
-        # registra a pendência sem corromper a listagem.
-        # Fase 5b: revisita verbas dependentes de cartão (HE, intervalo
-        # intrajornada/interjornada, adicional noturno) para configurar
-        # tipoDaQuantidade=IMPORTADA_DO_CARTAO agora que o cartão existe.
-        _run_fase(
-            "Fase 5b (Vincular Cartão de Ponto às Verbas)",
-            self.fase_5b_vincular_cartao_ponto_verbas,
-            bool(self._verbas_pendentes_cartao_ponto),
-        )
         _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
         _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
         _run_fase("Fase 8 (FGTS)", self.fase_fgts)
@@ -613,6 +603,92 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⚠ select {dom_id}={valor}: {e} — pulando")
                 return
         self.log(f"  ✓ select {dom_id} = {valor}")
+
+    # ─── Helpers comparativos (espelho fiel do JSON) ──────────────────────
+    # Princípio (CLAUDE.md): a prévia é espelho do PJE-Calc. O bot lê o estado
+    # atual do DOM e só dispara mudança quando difere do JSON. Evita AJAX
+    # desnecessário que pode resetar o backing bean Seam (mudarCaracteristica
+    # etc.) e funciona uniformemente para Expresso ou Manual.
+
+    def _setar_text_se_diferente(self, dom_id: str, valor_desejado: Any, obrigatorio: bool = False) -> bool:
+        """Preenche input text só se valor atual != desejado. Retorna True se mudou."""
+        if valor_desejado is None or valor_desejado == "":
+            return False
+        try:
+            loc = self._page.locator(f"[id$='{dom_id}']")
+            if loc.count() == 0:
+                if obrigatorio:
+                    raise RuntimeError(f"DOM ID não encontrado: {dom_id}")
+                return False
+            atual = loc.first.input_value(timeout=1500)
+            if str(atual).strip() == str(valor_desejado).strip():
+                return False
+            self._preencher(dom_id, valor_desejado, obrigatorio=False)
+            return True
+        except Exception as e:
+            self.log(f"  ⚠ {dom_id} comparativo: {e}")
+            return False
+
+    def _marcar_radio_se_diferente(self, name_suffix: str, valor_desejado: str, obrigatorio: bool = False) -> bool:
+        """Marca radio só se o atualmente checked != valor_desejado.
+
+        Procura todos os inputs[type=radio][id*=name_suffix] e verifica qual
+        está checked. Se for o desejado, skip. Senão, clica via _marcar_radio
+        (que usa click humano + jConfirm silenciado).
+        """
+        try:
+            atual = self._page.evaluate(
+                """(nameSuf) => {
+                    const radios = [...document.querySelectorAll('input[type="radio"]')]
+                        .filter(r => (r.id || '').indexOf(nameSuf) >= 0 || (r.name || '').indexOf(nameSuf) >= 0);
+                    const checked = radios.find(r => r.checked);
+                    return checked ? checked.value : null;
+                }""",
+                name_suffix,
+            )
+            if atual == valor_desejado:
+                return False
+            self._marcar_radio(name_suffix, valor_desejado, obrigatorio=obrigatorio)
+            return True
+        except Exception as e:
+            self.log(f"  ⚠ radio {name_suffix} comparativo: {e}")
+            return False
+
+    def _marcar_checkbox_se_diferente(self, dom_id: str, marcado_desejado: bool) -> bool:
+        """Marca/desmarca checkbox só se estado atual != desejado."""
+        try:
+            loc = self._page.locator(
+                f"input[type='checkbox'][id$=':{dom_id}'], input[type='checkbox'][id$='{dom_id}']"
+            )
+            if loc.count() == 0:
+                return False
+            atual = loc.first.is_checked()
+            if atual == bool(marcado_desejado):
+                return False
+            self._marcar_checkbox(dom_id, marcado_desejado)
+            return True
+        except Exception as e:
+            self.log(f"  ⚠ checkbox {dom_id} comparativo: {e}")
+            return False
+
+    def _selecionar_se_diferente(self, dom_id: str, valor_desejado: str, obrigatorio: bool = False) -> bool:
+        """Seleciona option só se o valor atual do <select> != desejado."""
+        if not valor_desejado:
+            return False
+        try:
+            loc = self._page.locator(f"select[id$='{dom_id}']")
+            if loc.count() == 0:
+                if obrigatorio:
+                    raise RuntimeError(f"Select não encontrado: {dom_id}")
+                return False
+            atual = loc.first.input_value()
+            if str(atual) == str(valor_desejado):
+                return False
+            self._selecionar(dom_id, valor_desejado, obrigatorio=obrigatorio)
+            return True
+        except Exception as e:
+            self.log(f"  ⚠ select {dom_id} comparativo: {e}")
+            return False
 
     def _clicar(self, dom_id: str, timeout_ms: int = 8000) -> None:
         """Clica botão por sufixo de DOM ID. Aguarda elemento ficar visível
@@ -2149,32 +2225,17 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu em 8s — pulando")
             return
         # Verificar se a OPÇÃO específica existe no DOM antes de tentar marcar.
-        # Para HE 50%/100%, intervalo intrajornada/interjornada, adicional
-        # noturno e outras verbas dependentes de cartão de ponto: na Fase 4
-        # (antes do Cartão de Ponto na Fase 5), o enum
-        # `apresentador.listaDeTiposDeQuantidade` EXCLUI IMPORTADA_DO_CARTAO
-        # porque nenhum cartão foi cadastrado ainda. Sem essa checagem prévia,
-        # _marcar_radio loga warning + nosso código continua emitindo um
-        # '✓ quantidade.tipo = X' enganoso.
+        # Após reordenação 18/05/2026, Cartão de Ponto + Apuração rodam ANTES
+        # de Verbas, então IMPORTADA_DO_CARTAO deve estar disponível. Se ainda
+        # não estiver, é porque o cartão não foi apurado (erro na Fase 4).
         opcao_existe = self._page.locator(
             f"input[type='radio'][id*='tipoDaQuantidade'][value='{q_tipo}']"
         ).count() > 0
         if not opcao_existe:
-            if q_tipo == "IMPORTADA_DO_CARTAO" and v is not None:
-                # ADIAR: revisitar após Fase 5 (Cartão de Ponto). A fase
-                # `fase_5b_vincular_cartao_ponto_verbas` itera essa lista e
-                # configura tipoDaQuantidade=IMPORTADA_DO_CARTAO + vincula
-                # o cartão.
-                self._verbas_pendentes_cartao_ponto.append((v, q))
-                self.log(
-                    f"    ⏸ tipoDaQuantidade=IMPORTADA_DO_CARTAO indisponível agora "
-                    f"(cartão não cadastrado) — verba '{getattr(v, 'nome_pjecalc', '?')}' "
-                    f"enfileirada para revisita pós-Fase 5"
-                )
-            else:
-                self.log(
-                    f"    ⚠ Opção tipoDaQuantidade={q_tipo} não está disponível neste estado"
-                )
+            self.log(
+                f"    ⚠ Opção tipoDaQuantidade={q_tipo} não disponível para '{getattr(v, 'nome_pjecalc', '?')}' "
+                f"(provável: Cartão de Ponto não apurado na Fase 4)"
+            )
             return
         try:
             self._marcar_radio("tipoDaQuantidade", q_tipo, obrigatorio=False)
@@ -2330,287 +2391,227 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Falha auto-select cartão: {e}")
 
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
-        """Preenche todos os campos do form de parâmetros de verba.
+        """Preenche o form Parâmetros da Verba como ESPELHO FIEL do JSON.
 
-        Em EXPRESSO_DIRETO: o Expresso já configurou tudo (característica,
-        ocorrência, incidências, valor, fórmula). MINIMIZAMOS alterações para
-        evitar pendências do tipo "parâmetro X foi alterado após geração de
-        ocorrências". Apenas alteramos período (datas) que normalmente precisam
-        de ajuste para a sentença.
+        Princípio único (CLAUDE.md): a prévia v2 é espelho do PJE-Calc.
+        Para cada campo, o bot lê o estado atual do DOM, compara com o JSON
+        e SÓ dispara mudança se divergir. Isso evita:
+        - AJAX desnecessário que resetava o bean Seam (mudarCaracteristica)
+        - Lógica especial por estratégia (EXPRESSO_DIRETO/ADAPTADO/MANUAL)
 
-        Em EXPRESSO_ADAPTADO: alteramos descrição + tudo que diferenciar do
-        Expresso original (nome customizado).
+        Comportamento:
+        - **Expresso** (com_identificacao=False): a verba foi pré-configurada
+          pelo Expresso. Most campos batem com JSON → skip. Diferentes →
+          aplica (ex.: HE com IMPORTADA_DO_CARTAO em vez de APURADA).
+        - **Manual** (com_identificacao=True): form vazio. Todos os campos
+          divergem do JSON → preenche todos. Inclui Assunto CNJ que precisa
+          ser selecionado via lupa (especial).
 
-        Em MANUAL: preenchemos tudo (com_identificacao=True).
+        Nome (descricao):
+        - EXPRESSO_DIRETO: nome_pjecalc == expresso_alvo → skip (igual).
+        - EXPRESSO_ADAPTADO: nome_pjecalc é o nome da sentença
+          (ex.: "INDENIZAÇÃO SUBSTITUTIVA DE REFEIÇÃO") → diferente do
+          atual ("RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA") → renomeia.
+        - MANUAL: input vazio → escreve nome_pjecalc.
         """
         p = v.parametros
-        # EXPRESSO_DIRETO e EXPRESSO_ADAPTADO seguem o mesmo fluxo MÍNIMO:
-        # o Expresso já configurou caracteristica/ocorrencia/incidencias/etc.
-        # corretamente — re-clicar esses radios dispara AJAX listeners
-        # (`mudarCaracteristica`, `mudarOcorrenciaDePagamento`) que RESETAM o
-        # estado do bean e fazem o save subsequente falhar silenciosamente
-        # (observado 18/05/2026 sessão cecf7937: INDENIZAÇÃO SUBSTITUTIVA DE
-        # REFEIÇÃO valor 484,00 preenchido mas save sem "Operação realizada
-        # com sucesso" → form quebrado → próximas verbas perdidas).
-        #
-        # Ajustamos APENAS o que pode divergir do Expresso:
-        #   • descricao (quando nome_pjecalc != expresso_alvo)
-        #   • período (datas da condenação)
-        #   • valor_informado_brl (RESTITUIÇÃO, DANO MORAL, INDENIZAÇÃO ADICIONAL)
-        #   • proporcionalizar do Valor Devido
-        #   • quantidade.tipo (HE com cartão de ponto IMPORTADA_DO_CARTAO)
-        if (not com_identificacao
-                and v.estrategia_preenchimento in (
-                    EstrategiaPreenchimento.EXPRESSO_DIRETO,
-                    EstrategiaPreenchimento.EXPRESSO_ADAPTADO,
-                )):
-            estrat = v.estrategia_preenchimento.value if hasattr(v.estrategia_preenchimento, "value") else str(v.estrategia_preenchimento)
-            self.log(f"    ℹ {estrat}: ajustes mínimos (sem re-clicar radios que disparam mudarCaracteristica)")
-            # Renomear quando nome_pjecalc divergir do expresso_alvo. Importante
-            # para verbas genéricas (RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA, DANO
-            # MATERIAL, INDENIZAÇÃO ADICIONAL) cujo nome canônico do Expresso
-            # não reflete a verba específica da condenação.
-            if v.nome_pjecalc and v.expresso_alvo and v.nome_pjecalc.strip().upper() != v.expresso_alvo.strip().upper():
-                try:
-                    self._preencher("descricao", v.nome_pjecalc, obrigatorio=False)
-                    self.log(f"    ✓ descricao customizada: '{v.nome_pjecalc}' (era '{v.expresso_alvo}')")
-                except Exception as e:
-                    self.log(f"    ⚠ Falha renomear descricao: {e}")
-            # Ajustar período (datas)
-            for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
-                try:
-                    if self._page.locator(f"[id$='{sufixo}']").count() > 0:
-                        self._preencher(sufixo, p.periodo_inicio, obrigatorio=False)
-                        break
-                except Exception:
-                    continue
-            for sufixo in ("periodoFinalInputDate", "periodoFinal", "dataFimInputDate"):
-                try:
-                    if self._page.locator(f"[id$='{sufixo}']").count() > 0:
-                        self._preencher(sufixo, p.periodo_fim, obrigatorio=False)
-                        break
-                except Exception:
-                    continue
-            # Preencher valor_informado_brl quando valor=INFORMADO.
-            # CRÍTICO (descoberto 18/05/2026): o DOM real é
-            # `formulario:valorInformadoDoDevido` — NÃO `valorDevido`. O sufixo
-            # antigo causava _preencher silencioso (obrigatorio=False) sem
-            # nenhum aviso, deixando o campo em branco.
-            #
-            # ATENÇÃO (descoberto 18/05 22:30 via SSE): a verba criada via
-            # Expresso "RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA" vem com
-            # valor=CALCULADO por default — NÃO INFORMADO. Precisamos clicar
-            # o radio `valor=INFORMADO` para o painelValorDevidoInformado ser
-            # renderizado (rendered="#{registro.isValorDevidoInformado()}").
-            # O click do radio `valor` re-renderiza apenas painelTipoVerba,
-            # painelFormula, painelLabelFormula, painelValorDevidoInformado e
-            # painelAplicarProporcionalidadeAoValorDevido (não toca em
-            # painelCaracteristica/painelOcorrenciaDePagamento) — então é
-            # SEGURO clicar aqui sem disparar mudarCaracteristica.
-            if p.valor == TipoValor.INFORMADO and p.valor_devido and p.valor_devido.valor_informado_brl is not None:
-                # 1. Garantir valor=INFORMADO (idempotente se já está)
-                self._marcar_radio("valor", "INFORMADO", obrigatorio=False)
-                self._aguardar_ajax(2500)
-                # 2. Preencher o input agora visível
-                self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
-            # Proporcionalizar do bloco Valor Devido (mesmo campo da prévia)
-            if p.valor == TipoValor.INFORMADO and p.valor_devido and getattr(p.valor_devido, "proporcionalizar", False):
-                try:
-                    self._marcar_checkbox("aplicarProporcionalidadeAoValorDevido", True)
-                except Exception:
-                    pass
-            # FIX EXPRESSO_DIRETO + Quantidade especial: se JSON especificar
-            # quantidade.tipo != default do Expresso (ex.: HE Expresso vem
-            # com tipo=APURADA, mas IA pede IMPORTADA_DO_CARTAO ou INFORMADA),
-            # MARCAR o radio explicitamente. Sem isso, a HE fica APURADA mesmo
-            # com cartão de ponto preenchido — não importa as ocorrências.
-            if (
-                p.valor == TipoValor.CALCULADO
-                and p.formula_calculado
-                and p.formula_calculado.quantidade
-                and p.formula_calculado.quantidade.tipo
-            ):
-                q = p.formula_calculado.quantidade
-                q_tipo = q.tipo.value if hasattr(q.tipo, "value") else str(q.tipo)
-                self._configurar_quantidade_radio(q_tipo, q, v=v)
-            # Aguardar AJAX (rerender JSF disparado pelos blurs dos campos
-            # acima) antes de o caller chamar _clicar_salvar_flex. Sem isso, o
-            # botão Salvar pode estar em re-mount e a cascata flex falha com
-            # "Nenhum botão Salvar/Confirmar/Gravar encontrado".
-            self._aguardar_ajax(3000)
-            return
+        # Contexto para helpers (escolher coluna correta do cartão na HE etc.)
+        self._verba_atual_nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
 
-        # MANUAL ou EXPRESSO_ADAPTADO: configuração completa
+        # Silenciar jConfirm modal preventivamente (necessário se valor mudar)
+        self._silenciar_dialog_confirma_valor()
 
-        # 1. Identificação (apenas Manual ou Expresso_Adaptado)
+        # ─── 1. Identificação (Nome + Assunto CNJ) ───
+        # Nome — sempre garantir nome_pjecalc (espelho do JSON).
+        # Para EXPRESSO_DIRETO onde nome bate com o canonical, comparação
+        # detecta igual → skip. Para ADAPTADO/MANUAL, escreve.
+        if v.nome_pjecalc:
+            mudou = self._setar_text_se_diferente("descricao", v.nome_pjecalc)
+            if mudou:
+                self.log(f"    ✓ descricao = '{v.nome_pjecalc}'")
+        # Assunto CNJ — só preencher em MANUAL (form vazio). No Expresso vem
+        # pré-populado e mudá-lo via autocomplete é ruidoso.
         if com_identificacao:
-            self._preencher("descricao", v.nome_pjecalc)
-            # Assunto CNJ — autocomplete: digitar código + Enter dispara seleção
-            # Default 2581 (Remuneração, Verbas Indenizatórias e Benefícios)
-            # quando codigo é None — categoria ampla que cobre majoritárias.
             codigo_cnj = p.assunto_cnj.codigo if p.assunto_cnj and p.assunto_cnj.codigo else 2581
-            self._selecionar_assunto_cnj(codigo_cnj)
-        elif v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_ADAPTADO:
-            self._preencher("descricao", v.nome_pjecalc, obrigatorio=False)
-
-        # 2. Valor (INFORMADO vs CALCULADO) — radio dispara AJAX que troca DOM
-        # CRÍTICO: ao trocar CALCULADO→INFORMADO, o PJE-Calc faz AJAX que
-        # substitui o bloco "Fórmula" pelo input "Devido". Tentar preencher
-        # antes do re-render dá RuntimeError("DOM ID não encontrado: valorDevido").
-        # wait_for_selector explícito garante que o input apareceu.
-        self._marcar_radio("valor", p.valor.value)
-        self._aguardar_ajax(3000)
-
-        if p.valor == TipoValor.INFORMADO:
-            self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
-            # Proporcionalizar do bloco Valor Devido (DOM real:
-            # aplicarProporcionalidadeAoValorDevido — XHTML linha 459)
             try:
-                if getattr(p.valor_devido, "proporcionalizar", False):
-                    self._marcar_checkbox("aplicarProporcionalidadeAoValorDevido", True)
-            except Exception:
-                pass
-        else:  # CALCULADO
-            f = p.formula_calculado
-            self._selecionar("tipoDaBaseTabelada", f.base_calculo.tipo.value)
+                self._selecionar_assunto_cnj(codigo_cnj)
+            except Exception as e:
+                self.log(f"    ⚠ Assunto CNJ {codigo_cnj}: {e}")
+
+        # ─── 2. Parcela (FIXA/VARIAVEL) ───
+        if getattr(p, "parcela", None):
+            parc = p.parcela.value if hasattr(p.parcela, "value") else str(p.parcela)
+            self._marcar_radio_se_diferente("tipoVariacaoDaParcela", parc)
+
+        # ─── 3. Valor (CALCULADO/INFORMADO) — dispara AJAX que troca DOM ───
+        # Mudança aqui causa rerender de painelTipoVerba, painelFormula,
+        # painelLabelFormula, painelValorDevidoInformado,
+        # painelAplicarProporcionalidadeAoValorDevido, panelPeriodoDevido.
+        # SEGURO clicar (não toca em painelCaracteristica/ocorrencia).
+        valor_mudou = self._marcar_radio_se_diferente("valor", p.valor.value)
+        if valor_mudou:
             self._aguardar_ajax(3000)
-            # Sub-blocos por tipoDaBaseTabelada (espelho verba-calculo.xhtml)
-            if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
-                self._selecionar("baseHistoricos", f.base_calculo.historico_nome)
-                self._aguardar_ajax(2000)
-                if f.base_calculo.proporcionaliza:
-                    self._selecionar("proporcionalizaHistorico", f.base_calculo.proporcionaliza.value, obrigatorio=False)
-            elif f.base_calculo.tipo == TipoBaseCalculo.VALE_TRANSPORTE:
-                if f.base_calculo.vale_transporte_nome:
-                    self._selecionar("valeTransporteDevido", f.base_calculo.vale_transporte_nome, obrigatorio=False)
-                    self._aguardar_ajax(2000)
-            elif f.base_calculo.tipo == TipoBaseCalculo.SALARIO_DA_CATEGORIA:
-                if f.base_calculo.salario_categoria_nome:
-                    self._selecionar("salarioCategoria", f.base_calculo.salario_categoria_nome, obrigatorio=False)
-                    self._aguardar_ajax(2000)
-            self._marcar_radio("tipoDeDivisor", f.divisor.tipo.value)
-            self._aguardar_ajax(2000)
-            if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
-                self._preencher("outroValorDoDivisor", _fmt_br(f.divisor.valor), obrigatorio=False)
-            elif f.divisor.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.divisor, "tipo_cartao_ponto", None):
-                self._selecionar("tipoImportadadoDoCartaoDePontoDivisor", f.divisor.tipo_cartao_ponto, obrigatorio=False)
-            self._preencher("outroValorDoMultiplicador", _fmt_br(f.multiplicador), obrigatorio=False)
-            # Quantidade: usa helper que pula APURADA/AVOS (valores internos)
-            # e vincula cartão de ponto para IMPORTADA_DO_CARTAO
-            self._configurar_quantidade_radio(f.quantidade.tipo.value, f.quantidade, v=v)
-            # Dobrar Valor Devido — checkbox visível só quando valor=CALCULADO
-            try:
-                if getattr(p.exclusoes, "dobrar_valor_devido", False):
-                    self._marcar_checkbox("dobrarValorDevido", True)
-            except Exception:
-                pass
 
-        # 3. Período
+        # ─── 4. Incidências (checkboxes) ───
+        try:
+            self._marcar_checkbox_se_diferente("irpf", p.incidencias.irpf)
+            self._marcar_checkbox_se_diferente("inss", p.incidencias.cs_inss)
+            self._marcar_checkbox_se_diferente("fgts", p.incidencias.fgts)
+            self._marcar_checkbox_se_diferente("previdenciaPrivada", p.incidencias.previdencia_privada)
+            self._marcar_checkbox_se_diferente("pensaoAlimenticia", p.incidencias.pensao_alimenticia)
+        except Exception as e:
+            self.log(f"    ⚠ Incidências: {e}")
+
+        # ─── 5. Característica + Ocorrência ───
+        # IMPORTANTE: mudança nestes radios dispara mudarCaracteristica()
+        # que pode resetar campos do bean. Por isso usamos comparação —
+        # só clica se realmente diferente. Para Expresso onde já está
+        # correto, vai pular (skip).
+        try:
+            caract = p.caracteristica.value if hasattr(p.caracteristica, "value") else str(p.caracteristica)
+            if self._marcar_radio_se_diferente("caracteristicaVerba", caract):
+                self._aguardar_ajax(2500)
+        except Exception as e:
+            self.log(f"    ⚠ caracteristicaVerba: {e}")
+        try:
+            ocorr = p.ocorrencia_pagamento.value if hasattr(p.ocorrencia_pagamento, "value") else str(p.ocorrencia_pagamento)
+            if self._marcar_radio_se_diferente("ocorrenciaPagto", ocorr):
+                self._aguardar_ajax(2500)
+        except Exception as e:
+            self.log(f"    ⚠ ocorrenciaPagto: {e}")
+
+        # ─── 6. Período ───
         for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
-            try:
-                if self._page.locator(f"[id$='{sufixo}']").count() > 0:
-                    self._preencher(sufixo, p.periodo_inicio, obrigatorio=False)
-                    break
-            except Exception:
-                continue
+            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                self._setar_text_se_diferente(sufixo, p.periodo_inicio)
+                break
         for sufixo in ("periodoFinalInputDate", "periodoFinal", "dataFimInputDate"):
-            try:
-                if self._page.locator(f"[id$='{sufixo}']").count() > 0:
-                    self._preencher(sufixo, p.periodo_fim, obrigatorio=False)
-                    break
-            except Exception:
-                continue
+            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                self._setar_text_se_diferente(sufixo, p.periodo_fim)
+                break
 
-        # 4. Características + Ocorrência + Base de Cálculo
-        self._marcar_radio("caracteristicaVerba", p.caracteristica.value)
-        self._aguardar_ajax(2000)
-        self._marcar_radio("ocorrenciaPagto", p.ocorrencia_pagamento.value)
-        self._aguardar_ajax(2000)
-        if hasattr(p, "tipo_base_calculo") and p.tipo_base_calculo:
-            self._marcar_radio("tipoDaBaseDeCalculo", p.tipo_base_calculo.value)
-
-        # 5. Incidências
-        self._marcar_checkbox("irpf", p.incidencias.irpf)
-        self._marcar_checkbox("inss", p.incidencias.cs_inss)
-        self._marcar_checkbox("fgts", p.incidencias.fgts)
-        self._marcar_checkbox("previdenciaPrivada", p.incidencias.previdencia_privada)
-        self._marcar_checkbox("pensaoAlimenticia", p.incidencias.pensao_alimenticia)
-
-        # 6. Outras flags opcionais
-        if hasattr(p, "natureza_indenizatoria") and p.natureza_indenizatoria is not None:
-            self._marcar_checkbox("naturezaIndenizatoria", p.natureza_indenizatoria)
-        if hasattr(p, "deduzir_inss_recolhido") and p.deduzir_inss_recolhido is not None:
-            self._marcar_checkbox("deduzirInssRecolhido", p.deduzir_inss_recolhido)
-        if hasattr(p, "considerar_competencia_paga") and p.considerar_competencia_paga is not None:
-            self._marcar_checkbox("considerarCompetenciaPaga", p.considerar_competencia_paga)
-
-        # 6.5. Tipo (PRINCIPAL/REFLEXA) + Gerar Reflexa/Principal + Compor Principal
-        # — só apareem em CALCULADO + não-REFLEXA (espelho rendered do JSF)
+        # ─── 7. Tipo (PRINCIPAL/REFLEXA) — só rendered se valor=CALCULADO ───
         tipo_str = getattr(p.tipo, "value", str(p.tipo)) if getattr(p, "tipo", None) else "PRINCIPAL"
         if p.valor == TipoValor.CALCULADO:
             try:
-                self._marcar_radio("tipoDeVerba", tipo_str)
-                self._aguardar_ajax(1000)
-            except Exception:
-                pass
-        if tipo_str != "REFLEXO":
-            try:
-                self._marcar_radio("geraReflexo", p.gerar_reflexa.value if hasattr(p.gerar_reflexa, "value") else str(p.gerar_reflexa))
-            except Exception:
-                pass
-            try:
-                self._marcar_radio("gerarPrincipal", p.gerar_principal.value if hasattr(p.gerar_principal, "value") else str(p.gerar_principal))
-            except Exception:
-                pass
-            try:
-                self._marcar_radio("comporPrincipal", "SIM" if p.compor_principal else "NAO")
+                self._marcar_radio_se_diferente("tipoDeVerba", tipo_str)
             except Exception:
                 pass
 
-        # 6.6. Bloco Valor Pago (espelho integral verba-calculo.xhtml)
-        # Só aparece quando valor=CALCULADO no PJE-Calc; em INFORMADO ele
-        # não é renderizado.
+        # ─── 8. Gerar Reflexa / Gerar Principal / Compor Principal (não-REFLEXO) ───
+        if tipo_str != "REFLEXO":
+            try:
+                gr = p.gerar_reflexa.value if hasattr(p.gerar_reflexa, "value") else str(p.gerar_reflexa)
+                self._marcar_radio_se_diferente("geraReflexo", gr)
+            except Exception:
+                pass
+            try:
+                gp = p.gerar_principal.value if hasattr(p.gerar_principal, "value") else str(p.gerar_principal)
+                self._marcar_radio_se_diferente("gerarPrincipal", gp)
+            except Exception:
+                pass
+            try:
+                self._marcar_radio_se_diferente("comporPrincipal", "SIM" if p.compor_principal else "NAO")
+            except Exception:
+                pass
+
+        # ─── 9. Bloco Valor Devido (INFORMADO vs CALCULADO) ───
+        if p.valor == TipoValor.INFORMADO:
+            if p.valor_devido and p.valor_devido.valor_informado_brl is not None:
+                self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
+            if p.valor_devido and getattr(p.valor_devido, "proporcionalizar", False):
+                self._marcar_checkbox_se_diferente("aplicarProporcionalidadeAoValorDevido", True)
+        else:  # CALCULADO — bloco Fórmula
+            f = p.formula_calculado
+            if f:
+                # Base de Cálculo
+                try:
+                    if self._selecionar_se_diferente("tipoDaBaseTabelada", f.base_calculo.tipo.value):
+                        self._aguardar_ajax(2500)
+                except Exception as e:
+                    self.log(f"    ⚠ tipoDaBaseTabelada: {e}")
+                # Sub-blocos por tipo de Base
+                if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
+                    if f.base_calculo.historico_nome:
+                        self._selecionar_se_diferente("baseHistoricos", f.base_calculo.historico_nome)
+                    if f.base_calculo.proporcionaliza:
+                        self._selecionar_se_diferente(
+                            "proporcionalizaHistorico",
+                            f.base_calculo.proporcionaliza.value,
+                        )
+                elif f.base_calculo.tipo == TipoBaseCalculo.VALE_TRANSPORTE:
+                    if f.base_calculo.vale_transporte_nome:
+                        self._selecionar_se_diferente("valeTransporteDevido", f.base_calculo.vale_transporte_nome)
+                elif f.base_calculo.tipo == TipoBaseCalculo.SALARIO_DA_CATEGORIA:
+                    if f.base_calculo.salario_categoria_nome:
+                        self._selecionar_se_diferente("salarioCategoria", f.base_calculo.salario_categoria_nome)
+                # Divisor
+                if self._marcar_radio_se_diferente("tipoDeDivisor", f.divisor.tipo.value):
+                    self._aguardar_ajax(2000)
+                if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
+                    self._setar_text_se_diferente("outroValorDoDivisor", _fmt_br(f.divisor.valor))
+                elif f.divisor.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.divisor, "tipo_cartao_ponto", None):
+                    self._selecionar_se_diferente("tipoImportadadoDoCartaoDePontoDivisor", f.divisor.tipo_cartao_ponto)
+                # Multiplicador
+                if f.multiplicador is not None:
+                    self._setar_text_se_diferente("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
+                # Quantidade — helper especializado (pula APURADA/AVOS, vincula cartão se IMPORTADA_DO_CARTAO)
+                self._configurar_quantidade_radio(f.quantidade.tipo.value, f.quantidade, v=v)
+            # Dobrar Valor Devido — checkbox visível só quando valor=CALCULADO
+            try:
+                if getattr(p.exclusoes, "dobrar_valor_devido", False):
+                    self._marcar_checkbox_se_diferente("dobrarValorDevido", True)
+            except Exception:
+                pass
+
+        # ─── 10. Bloco Valor Pago (só quando valor=CALCULADO) ───
         if p.valor == TipoValor.CALCULADO and getattr(p, "valor_pago", None):
             vp = p.valor_pago
             try:
                 vp_tipo = vp.tipo.value if hasattr(vp.tipo, "value") else str(vp.tipo)
-                self._marcar_radio("tipoDoValorPago", vp_tipo)
-                self._aguardar_ajax(2000)
+                if self._marcar_radio_se_diferente("tipoDoValorPago", vp_tipo):
+                    self._aguardar_ajax(1500)
                 if vp_tipo == "CALCULADO":
-                    # Bloco CALCULADO: base + sub-blocos por tipo
                     if vp.base_tipo:
                         bt = vp.base_tipo.value if hasattr(vp.base_tipo, "value") else str(vp.base_tipo)
-                        self._selecionar("baseTabelada", bt, obrigatorio=False)
-                        self._aguardar_ajax(1500)
+                        if self._selecionar_se_diferente("baseTabelada", bt):
+                            self._aguardar_ajax(1500)
                         if bt == "HISTORICO_SALARIAL":
                             if vp.base_historico_nome:
-                                self._selecionar("baseHistoricosValorPago", vp.base_historico_nome, obrigatorio=False)
+                                self._selecionar_se_diferente("baseHistoricosValorPago", vp.base_historico_nome)
                             if vp.proporcionaliza_historico:
-                                self._selecionar(
+                                self._selecionar_se_diferente(
                                     "proporcionalizaHistoricoDoValorPago",
                                     vp.proporcionaliza_historico.value,
-                                    obrigatorio=False,
                                 )
                         elif bt == "VALE_TRANSPORTE" and vp.base_vale_transporte_nome:
-                            self._selecionar("valeTransportePago", vp.base_vale_transporte_nome, obrigatorio=False)
+                            self._selecionar_se_diferente("valeTransportePago", vp.base_vale_transporte_nome)
                         elif bt == "SALARIO_DA_CATEGORIA" and vp.base_salario_categoria_nome:
-                            self._selecionar("salarioCategoriaValorPago", vp.base_salario_categoria_nome, obrigatorio=False)
+                            self._selecionar_se_diferente("salarioCategoriaValorPago", vp.base_salario_categoria_nome)
                     if vp.quantidade_brl is not None:
-                        self._preencher("valorPagoQuantidade", _fmt_br(vp.quantidade_brl), obrigatorio=False)
-                else:
-                    # Bloco INFORMADO
-                    self._preencher("valorInformadoPago", _fmt_br(vp.valor_brl), obrigatorio=False)
+                        self._setar_text_se_diferente("valorPagoQuantidade", _fmt_br(vp.quantidade_brl))
+                else:  # INFORMADO
+                    if vp.valor_brl is not None:
+                        self._setar_text_se_diferente("valorInformadoPago", _fmt_br(vp.valor_brl))
                 if vp.proporcionalizar:
-                    self._marcar_checkbox("aplicarProporcionalidadeValorPago", True)
+                    self._marcar_checkbox_se_diferente("aplicarProporcionalidadeValorPago", True)
             except Exception as e:
-                self.log(f"    ⚠ Falha preencher Valor Pago: {e}")
+                self.log(f"    ⚠ Valor Pago: {e}")
 
-        # 7. Comentários da verba (textarea opcional no form de Alteração)
+        # ─── 11. Flags opcionais ───
+        if hasattr(p, "natureza_indenizatoria") and p.natureza_indenizatoria is not None:
+            self._marcar_checkbox_se_diferente("naturezaIndenizatoria", p.natureza_indenizatoria)
+        if hasattr(p, "deduzir_inss_recolhido") and p.deduzir_inss_recolhido is not None:
+            self._marcar_checkbox_se_diferente("deduzirInssRecolhido", p.deduzir_inss_recolhido)
+        if hasattr(p, "considerar_competencia_paga") and p.considerar_competencia_paga is not None:
+            self._marcar_checkbox_se_diferente("considerarCompetenciaPaga", p.considerar_competencia_paga)
+
+        # ─── 12. Comentários ───
         if getattr(p, "comentarios", None):
-            try:
-                self._preencher("comentarios", p.comentarios, obrigatorio=False)
-            except Exception:
-                pass
+            self._setar_text_se_diferente("comentarios", p.comentarios)
+
+        # Aguardar AJAX final antes de o caller chamar Salvar
+        self._aguardar_ajax(2500)
 
     def _configurar_parametros_pos_expresso(self, v) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
@@ -3213,232 +3214,6 @@ class PlaywrightAutomatorV2:
         if "operação realizada com sucesso" not in body.lower() and "sucesso" not in body.lower():
             self.log(f"  ⚠ Verba '{v.nome_pjecalc}' — mensagem de sucesso não detectada")
         self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado")
-
-    def fase_5b_vincular_cartao_ponto_verbas(self) -> None:
-        """Revisita verbas adiadas para vincular IMPORTADA_DO_CARTAO ao cartão.
-
-        Verbas dependentes de cartão de ponto (HE 50%/100%, intervalo
-        intrajornada/interjornada, adicional noturno, RSR sobre HE, etc.)
-        precisam ter sua `tipoDaQuantidade` configurada para
-        `IMPORTADA_DO_CARTAO`. Mas o enum `apresentador.listaDeTiposDeQuantidade`
-        só inclui essa opção QUANDO PELO MENOS 1 CARTÃO DE PONTO EXISTE — o
-        que só acontece após Fase 5.
-
-        Por isso, na Fase 4 essas verbas são enfileiradas em
-        `_verbas_pendentes_cartao_ponto`. Aqui (após Fase 5) iteramos a fila
-        e configuramos cada uma:
-          1. Navegar para listagem de Verbas
-          2. Para cada verba pendente: click linkParametrizar → abre form
-          3. Marcar radio `tipoDaQuantidade=IMPORTADA_DO_CARTAO`
-          4. Selecionar o cartão no dropdown `tipoImportadadoDoCartaoDePontoQuantidade`
-             e clicar `incluirCartaoDePontoQuantidade`
-          5. Salvar e voltar à listagem
-
-        Não dispara mudarCaracteristica — apenas mexe no bloco Quantidade,
-        que re-renderiza só `regiaoQuantidade` e `painelLabelFormula`.
-        """
-        fila = list(self._verbas_pendentes_cartao_ponto)
-        if not fila:
-            self.log("  ⏭ Nenhuma verba pendente de vínculo ao cartão de ponto")
-            return
-        self.log(f"  → Vinculando cartão de ponto a {len(fila)} verba(s) dependente(s)")
-        # Navegar via CLICK SIDEBAR (preservar conv) — url-nav direto resulta
-        # em nova conv onde cartão recém-apurado não está visível ainda.
-        # Mesmo padrão usado em _apurar_cartao_de_ponto.
-        clicou_menu = self._page.evaluate(
-            """() => {
-                const norm = s => (s||'').replace(/\\s+/g,' ').trim();
-                const links = [...document.querySelectorAll('a[id*="j_id38"]')];
-                const alvo = links.find(a => norm(a.textContent || a.title || '') === 'Verbas');
-                if (!alvo) return null;
-                const onclickStr = alvo.getAttribute('onclick') || '';
-                if (onclickStr) {
-                    try { new Function('event', onclickStr).call(alvo, new MouseEvent('click',{bubbles:true})); return 'onclick'; } catch(_) {}
-                }
-                alvo.click(); return 'click';
-            }"""
-        )
-        if clicou_menu:
-            self.log(f"    ✓ click sidebar Verbas ({clicou_menu})")
-            self._aguardar_ajax(4000)
-        else:
-            try:
-                self._navegar_menu("li_calculo_verbas")
-                self._aguardar_ajax(2500)
-            except Exception as e:
-                self.log(f"  ⚠ Falha navegar para Verbas: {e}")
-                return
-        # Aguardar listagem renderizar (table#formulario:listagem)
-        try:
-            self._page.wait_for_selector(
-                "table[id$=':listagem']",
-                state="visible",
-                timeout=10000,
-            )
-        except Exception:
-            self.log("  ⚠ Listagem de Verbas não renderizou — pulando Fase 5b")
-            return
-
-        for v, q in fila:
-            nome = getattr(v, "nome_pjecalc", None) or getattr(v, "expresso_alvo", "?")
-            self.log(f"  → Revisitando '{nome}' para vincular IMPORTADA_DO_CARTAO")
-            try:
-                # Abrir Parâmetros da verba (mesma estratégia robusta do
-                # _configurar_parametros_pos_expresso: chamar onclick via JS)
-                candidatos = [v.nome_pjecalc] if getattr(v, "nome_pjecalc", None) else []
-                if hasattr(v, "expresso_alvo") and v.expresso_alvo and v.expresso_alvo not in candidatos:
-                    candidatos.append(v.expresso_alvo)
-                clicou = self._page.evaluate(
-                    """(candidatos) => {
-                        const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
-                        const trs = [...document.querySelectorAll('tr')];
-                        for (const alvo of candidatos) {
-                            const alvoN = norm(alvo);
-                            for (const tr of trs) {
-                                if (!norm(tr.textContent).includes(alvoN)) continue;
-                                const a = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
-                                if (!a || (a.id||'').includes(':listaReflexo:')) continue;
-                                const onclickStr = a.getAttribute('onclick') || '';
-                                if (onclickStr) {
-                                    try { new Function('event', onclickStr).call(a, new MouseEvent('click', {bubbles:true})); return alvo; } catch(_) {}
-                                }
-                                a.click();
-                                return alvo;
-                            }
-                        }
-                        return null;
-                    }""",
-                    candidatos,
-                )
-                if not clicou:
-                    self.log(f"    ⚠ Verba '{nome}' não encontrada na listagem — pulando")
-                    continue
-                self._aguardar_ajax(6000)
-                try:
-                    self._page.wait_for_selector(
-                        "input[id$=':descricao'], input[id$=':valorInformadoDoDevido']",
-                        state="visible",
-                        timeout=10000,
-                    )
-                except Exception:
-                    self.log(f"    ⚠ Form de Alteração não carregou para '{nome}' — pulando")
-                    continue
-                # FIX (descoberto 18/05/2026 via diag SSE): após reabrir o form
-                # da verba HE 50% pós-apuração, o backing bean retorna em
-                # estado corrompido (valor=INFORMADO em vez de CALCULADO,
-                # ocorrenciaPagto=DESLIGAMENTO em vez de MENSAL). Como o
-                # painel Quantidade só renderiza quando valor=CALCULADO
-                # (<a4j:region rendered="#{registro.isValorDevidoCalculado()}">),
-                # o radio tipoDaQuantidade não aparece.
-                #
-                # CORREÇÃO: forçar valor=CALCULADO + ocorrenciaPagto correto
-                # ANTES de buscar o radio Quantidade. Para HE 50% (e qualquer
-                # verba que precise IMPORTADA_DO_CARTAO), valor DEVE ser
-                # CALCULADO (faz sentido — IMPORTADA_DO_CARTAO é tipo de
-                # Quantidade no bloco Fórmula).
-                try:
-                    # 1. Garantir valor=CALCULADO
-                    valor_radio_calc = self._page.locator(
-                        "input[type='radio'][id$=':valor:0'][value='CALCULADO']"
-                    )
-                    if valor_radio_calc.count() > 0 and not valor_radio_calc.first.is_checked():
-                        self.log(f"    ⚠ Verba '{nome}' veio com valor=INFORMADO — corrigindo para CALCULADO")
-                        self._silenciar_dialog_confirma_valor()
-                        self._marcar_radio("valor", "CALCULADO", obrigatorio=False)
-                        self._aguardar_ajax(3000)
-                    # 2. Determinar ocorrencia esperada baseada no nome da verba
-                    ocorr_esperada = None
-                    n_upper = (nome or "").upper()
-                    if "HORAS EXTRAS" in n_upper or " HE " in f" {n_upper} " or "INTERVALO" in n_upper or "ADICIONAL NOTURNO" in n_upper:
-                        ocorr_esperada = "MENSAL"
-                    if ocorr_esperada:
-                        ocorr_check = self._page.locator(
-                            f"input[type='radio'][name$=':ocorrenciaPagto'][value='{ocorr_esperada}']"
-                        )
-                        if ocorr_check.count() > 0 and not ocorr_check.first.is_checked():
-                            self.log(f"    ⚠ Verba '{nome}' veio com ocorrencia errada — corrigindo para {ocorr_esperada}")
-                            self._marcar_radio("ocorrenciaPagto", ocorr_esperada, obrigatorio=False)
-                            self._aguardar_ajax(3000)
-                except Exception as _e_prefix:
-                    self.log(f"    ⚠ Pre-fix valor/ocorrencia falhou: {_e_prefix}")
-                # Aguardar especificamente o radio tipoDaQuantidade renderizar
-                # (state=attached porque pode estar dentro de a4j:region oculto inicialmente)
-                try:
-                    self._page.wait_for_selector(
-                        "input[type='radio'][id*='tipoDaQuantidade']",
-                        state="attached",
-                        timeout=15000,
-                    )
-                except Exception:
-                    # Diagnóstico DOM para entender o estado do form
-                    try:
-                        diag = self._page.evaluate(
-                            """() => {
-                                const radios = [...document.querySelectorAll('input[type=radio]')].slice(0, 30).map(r => ({id: r.id, name: r.name, value: r.value, checked: r.checked}));
-                                const inputs_text = [...document.querySelectorAll('input[type=text]')].slice(0, 15).map(i => ({id: i.id, value: i.value.slice(0,30)}));
-                                const url = location.href.slice(-100);
-                                return {url, n_radios: radios.length, radios, inputs_text};
-                            }"""
-                        )
-                        self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu — diag:")
-                        self.log(f"       url: ...{diag.get('url')}")
-                        self.log(f"       n_radios={diag.get('n_radios')}")
-                        for r in (diag.get('radios') or [])[:15]:
-                            self.log(f"       radio id={r.get('id')!r} value={r.get('value')!r} checked={r.get('checked')}")
-                    except Exception:
-                        self.log(f"    ⚠ Radio tipoDaQuantidade não apareceu no form de '{nome}' — sem diag")
-                    self._cancelar_form_voltar_listagem()
-                    continue
-                # Marcar radio IMPORTADA_DO_CARTAO sempre (radio existe se valor=CALCULADO);
-                # o populamento do dropdown de colunas é validado em
-                # _vincular_cartao_ponto_quantidade que loga aviso se vazio.
-                self._marcar_radio("tipoDaQuantidade", "IMPORTADA_DO_CARTAO", obrigatorio=False)
-                self._aguardar_ajax(3000)
-                tipo_cp = getattr(q, "tipo_cartao_ponto", None)
-                self._vincular_cartao_ponto_quantidade(tipo_cp, nome_verba=nome)
-                # Salvar
-                clicou_save = self._clicar_salvar_flex(timeout_ms=8000)
-                if not clicou_save:
-                    self.log(f"    ⚠ '{nome}': sem botão Salvar — pulando")
-                    self._cancelar_form_voltar_listagem()
-                    continue
-                self._aguardar_ajax(8000)
-                sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
-                if sucesso:
-                    self.log(f"  ✓ '{nome}' vinculada ao cartão de ponto")
-                else:
-                    self.log(f"  ⚠ '{nome}': save sem mensagem de sucesso explícita")
-                    self._cancelar_form_voltar_listagem()
-            except Exception as e:
-                self.log(f"  ⚠ Falha revisitar '{nome}': {e}")
-                # Tentar recuperar para próxima iteração
-                try:
-                    self._cancelar_form_voltar_listagem()
-                except Exception:
-                    pass
-
-    def _cancelar_form_voltar_listagem(self) -> None:
-        """Helper para voltar à listagem de Verbas após erro/save sem sucesso."""
-        try:
-            cancelou = self._page.evaluate(
-                """() => {
-                    const btn = document.querySelector('input[id$=":cancelar"], input[value="Cancelar"]');
-                    if (!btn) return false;
-                    const onclickStr = btn.getAttribute('onclick') || '';
-                    if (onclickStr) { try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return true; } catch(_) {} }
-                    btn.click(); return true;
-                }"""
-            )
-            if cancelou:
-                self._aguardar_ajax(3000)
-        except Exception:
-            pass
-        # Fallback: nav direto
-        try:
-            self._navegar_menu("li_calculo_verbas")
-            self._aguardar_ajax(2000)
-        except Exception:
-            pass
 
     def fase_cartao_de_ponto(self) -> None:
         """Cartão de Ponto — cria novo cartão via formulário Novo do PJE-Calc.
