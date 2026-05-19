@@ -1968,12 +1968,11 @@ class PlaywrightAutomatorV2:
         if verbas_inf:
             try:
                 if self._navegar_menu_via_click("li_calculo_verbas"):
-                    # Aguardar URL mudar para verba-calculo.jsf (sidebar click
-                    # é AJAX assíncrono — _aguardar_ajax pode não detectar)
+                    # Aguardar URL mudar para verba-calculo.jsf
                     try:
                         self._page.wait_for_url("**/verba/verba-calculo.jsf**", timeout=15000)
                     except Exception:
-                        self.log(f"  ⚠ URL não mudou para verba-calculo.jsf após sidebar click")
+                        self.log(f"  ⚠ URL não mudou para verba-calculo.jsf após sidebar click — URL atual: {self._page.url}")
                     self._page.wait_for_load_state("networkidle", timeout=15000)
                     self._page.wait_for_timeout(2500)
                     self._fixar_valordevido_ocorrencias_informadas(verbas_inf)
@@ -1981,6 +1980,8 @@ class PlaywrightAutomatorV2:
                     self.log(f"  ⚠ Não conseguiu navegar para Verbas via sidebar")
             except Exception as e:
                 self.log(f"  ⚠ Erro pós-Recentes fixar valorDevido: {e}")
+                import traceback as _tb
+                self.log(f"    traceback: {_tb.format_exc()[:600]}")
 
     def _editar_default_historico_para_cs(self, nome: str) -> None:
         """Edita entrada default do histórico salarial (criada pelo PJE-Calc)
@@ -2172,6 +2173,29 @@ class PlaywrightAutomatorV2:
                         pass
                     self._page.wait_for_load_state("networkidle", timeout=15000)
                     self._page.wait_for_timeout(2000)
+                # Diagnóstico: dump da URL atual + dismiss alerta se houver
+                url_atual = self._page.url
+                self.log(f"    ℹ URL atual antes de buscar linkOcorrencias: {url_atual}")
+                # Dismiss "Alerta. Foram realizadas alterações" se aparecer
+                # (pode estar bloqueando a listagem)
+                try:
+                    dismiss = self._page.evaluate("""() => {
+                        // Procura botões OK/Continuar em divs de alerta
+                        const btns = [...document.querySelectorAll('input[value="OK"], input[value="Continuar"], button')].filter(b => {
+                            const t = (b.value || b.textContent || '').trim();
+                            return t === 'OK' || t === 'Continuar' || t === 'Sim';
+                        });
+                        if (btns.length > 0) {
+                            btns[0].click();
+                            return {ok: true, n: btns.length};
+                        }
+                        return {ok: false};
+                    }""")
+                    if dismiss.get("ok"):
+                        self.log(f"    ✓ Alerta dismiss: {dismiss}")
+                        self._page.wait_for_timeout(2000)
+                except Exception as e:
+                    self.log(f"    ⚠ Tentativa dismiss alerta: {e}")
                 # Localizar linha pela nome e clicar linkOcorrencias. Tenta
                 # múltiplas estratégias (className, queryAll, ID com sufixo).
                 res = self._page.evaluate(
