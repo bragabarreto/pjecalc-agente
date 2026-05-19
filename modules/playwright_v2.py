@@ -2468,16 +2468,14 @@ class PlaywrightAutomatorV2:
         # Silenciar jConfirm modal preventivamente (necessário se valor mudar)
         self._silenciar_dialog_confirma_valor()
 
-        # ─── 1. Identificação (Nome + Assunto CNJ) ───
-        # Nome — sempre garantir nome_pjecalc (espelho do JSON).
-        # Para EXPRESSO_DIRETO onde nome bate com o canonical, comparação
-        # detecta igual → skip. Para ADAPTADO/MANUAL, escreve.
-        if v.nome_pjecalc:
-            mudou = self._setar_text_se_diferente("descricao", v.nome_pjecalc)
-            if mudou:
-                self.log(f"    ✓ descricao = '{v.nome_pjecalc}'")
-        # Assunto CNJ — só preencher em MANUAL (form vazio). No Expresso vem
-        # pré-populado e mudá-lo via autocomplete é ruidoso.
+        # ═══ ORDEM CRÍTICA (descoberto 19/05/2026):
+        # AJAX rerenders disparados por radio clicks RESETAM inputs text
+        # escritos antes (re-injetam value do backing bean original).
+        # SOLUÇÃO: TODOS os radios PRIMEIRO, inputs text DEPOIS, save por último.
+        # Manual no PJE-Calc Docker comprovou: JS direto (el.value + dispatch)
+        # PERSISTE quando feito ANTES do save SEM rerenders intermediários.
+
+        # ─── 1. Assunto CNJ (só MANUAL — Expresso vem pré-populado) ───
         if com_identificacao:
             codigo_cnj = p.assunto_cnj.codigo if p.assunto_cnj and p.assunto_cnj.codigo else 2581
             try:
@@ -2485,41 +2483,26 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"    ⚠ Assunto CNJ {codigo_cnj}: {e}")
 
-        # ─── 2. Parcela (FIXA/VARIAVEL) ───
+        # ─── 2. RADIOS ESTRUTURAIS (disparam AJAX rerender) ───
+        # Parcela
         if getattr(p, "parcela", None):
             parc = p.parcela.value if hasattr(p.parcela, "value") else str(p.parcela)
             self._marcar_radio_se_diferente("tipoVariacaoDaParcela", parc)
 
-        # ─── 3. Valor (CALCULADO/INFORMADO) — dispara AJAX que troca DOM ───
-        # Mudança aqui causa rerender de painelTipoVerba, painelFormula,
-        # painelLabelFormula, painelValorDevidoInformado,
-        # painelAplicarProporcionalidadeAoValorDevido, panelPeriodoDevido.
-        # SEGURO clicar (não toca em painelCaracteristica/ocorrencia).
+        # Valor (CALCULADO/INFORMADO) — KEY rerender
         valor_mudou = self._marcar_radio_se_diferente("valor", p.valor.value)
         if valor_mudou:
             self._aguardar_ajax(3000)
 
-        # ─── 4. Incidências (checkboxes) ───
-        try:
-            self._marcar_checkbox_se_diferente("irpf", p.incidencias.irpf)
-            self._marcar_checkbox_se_diferente("inss", p.incidencias.cs_inss)
-            self._marcar_checkbox_se_diferente("fgts", p.incidencias.fgts)
-            self._marcar_checkbox_se_diferente("previdenciaPrivada", p.incidencias.previdencia_privada)
-            self._marcar_checkbox_se_diferente("pensaoAlimenticia", p.incidencias.pensao_alimenticia)
-        except Exception as e:
-            self.log(f"    ⚠ Incidências: {e}")
-
-        # ─── 5. Característica + Ocorrência ───
-        # IMPORTANTE: mudança nestes radios dispara mudarCaracteristica()
-        # que pode resetar campos do bean. Por isso usamos comparação —
-        # só clica se realmente diferente. Para Expresso onde já está
-        # correto, vai pular (skip).
+        # Caracteristica — dispara mudarCaracteristica
         try:
             caract = p.caracteristica.value if hasattr(p.caracteristica, "value") else str(p.caracteristica)
             if self._marcar_radio_se_diferente("caracteristicaVerba", caract):
                 self._aguardar_ajax(2500)
         except Exception as e:
             self.log(f"    ⚠ caracteristicaVerba: {e}")
+
+        # Ocorrência — dispara mudarOcorrenciaPagamento
         try:
             ocorr = p.ocorrencia_pagamento.value if hasattr(p.ocorrencia_pagamento, "value") else str(p.ocorrencia_pagamento)
             if self._marcar_radio_se_diferente("ocorrenciaPagto", ocorr):
@@ -2527,17 +2510,7 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"    ⚠ ocorrenciaPagto: {e}")
 
-        # ─── 6. Período ───
-        for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
-            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
-                self._setar_text_se_diferente(sufixo, p.periodo_inicio)
-                break
-        for sufixo in ("periodoFinalInputDate", "periodoFinal", "dataFimInputDate"):
-            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
-                self._setar_text_se_diferente(sufixo, p.periodo_fim)
-                break
-
-        # ─── 7. Tipo (PRINCIPAL/REFLEXA) — só rendered se valor=CALCULADO ───
+        # Tipo (PRINCIPAL/REFLEXA) — só rendered se valor=CALCULADO
         tipo_str = getattr(p.tipo, "value", str(p.tipo)) if getattr(p, "tipo", None) else "PRINCIPAL"
         if p.valor == TipoValor.CALCULADO:
             try:
@@ -2545,7 +2518,7 @@ class PlaywrightAutomatorV2:
             except Exception:
                 pass
 
-        # ─── 8. Gerar Reflexa / Gerar Principal / Compor Principal (não-REFLEXO) ───
+        # Gerar Reflexa / Gerar Principal / Compor Principal (não-REFLEXO)
         if tipo_str != "REFLEXO":
             try:
                 gr = p.gerar_reflexa.value if hasattr(p.gerar_reflexa, "value") else str(p.gerar_reflexa)
@@ -2562,13 +2535,9 @@ class PlaywrightAutomatorV2:
             except Exception:
                 pass
 
-        # ─── 9. Bloco Valor Devido (INFORMADO vs CALCULADO) ───
-        if p.valor == TipoValor.INFORMADO:
-            if p.valor_devido and p.valor_devido.valor_informado_brl is not None:
-                self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
-            if p.valor_devido and getattr(p.valor_devido, "proporcionalizar", False):
-                self._marcar_checkbox_se_diferente("aplicarProporcionalidadeAoValorDevido", True)
-        else:  # CALCULADO — bloco Fórmula
+        # ─── 3. SUB-BLOCO CALCULADO (Base + Divisor + Multiplicador + Quantidade) ───
+        # Esses só rendem se valor=CALCULADO; pode ter mais AJAX rerenders aqui
+        if p.valor == TipoValor.CALCULADO:
             f = p.formula_calculado
             if f:
                 # Base de Cálculo
@@ -2577,41 +2546,32 @@ class PlaywrightAutomatorV2:
                         self._aguardar_ajax(2500)
                 except Exception as e:
                     self.log(f"    ⚠ tipoDaBaseTabelada: {e}")
-                # Sub-blocos por tipo de Base
                 if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
                     if f.base_calculo.historico_nome:
                         self._selecionar_se_diferente("baseHistoricos", f.base_calculo.historico_nome)
                     if f.base_calculo.proporcionaliza:
-                        self._selecionar_se_diferente(
-                            "proporcionalizaHistorico",
-                            f.base_calculo.proporcionaliza.value,
-                        )
+                        self._selecionar_se_diferente("proporcionalizaHistorico", f.base_calculo.proporcionaliza.value)
                 elif f.base_calculo.tipo == TipoBaseCalculo.VALE_TRANSPORTE:
                     if f.base_calculo.vale_transporte_nome:
                         self._selecionar_se_diferente("valeTransporteDevido", f.base_calculo.vale_transporte_nome)
                 elif f.base_calculo.tipo == TipoBaseCalculo.SALARIO_DA_CATEGORIA:
                     if f.base_calculo.salario_categoria_nome:
                         self._selecionar_se_diferente("salarioCategoria", f.base_calculo.salario_categoria_nome)
-                # Divisor
+                # Divisor (radio)
                 if self._marcar_radio_se_diferente("tipoDeDivisor", f.divisor.tipo.value):
                     self._aguardar_ajax(2000)
-                if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
-                    self._setar_text_se_diferente("outroValorDoDivisor", _fmt_br(f.divisor.valor))
-                elif f.divisor.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.divisor, "tipo_cartao_ponto", None):
+                if f.divisor.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.divisor, "tipo_cartao_ponto", None):
                     self._selecionar_se_diferente("tipoImportadadoDoCartaoDePontoDivisor", f.divisor.tipo_cartao_ponto)
-                # Multiplicador
-                if f.multiplicador is not None:
-                    self._setar_text_se_diferente("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
-                # Quantidade — helper especializado (pula APURADA/AVOS, vincula cartão se IMPORTADA_DO_CARTAO)
+                # Quantidade (helper especializado — pula APURADA/AVOS, vincula cartão IMPORTADA_DO_CARTAO)
                 self._configurar_quantidade_radio(f.quantidade.tipo.value, f.quantidade, v=v)
-            # Dobrar Valor Devido — checkbox visível só quando valor=CALCULADO
+            # Dobrar Valor Devido
             try:
                 if getattr(p.exclusoes, "dobrar_valor_devido", False):
                     self._marcar_checkbox_se_diferente("dobrarValorDevido", True)
             except Exception:
                 pass
 
-        # ─── 10. Bloco Valor Pago (só quando valor=CALCULADO) ───
+        # ─── 4. RADIO Valor Pago (se CALCULADO) — pode disparar AJAX ───
         if p.valor == TipoValor.CALCULADO and getattr(p, "valor_pago", None):
             vp = p.valor_pago
             try:
@@ -2627,25 +2587,81 @@ class PlaywrightAutomatorV2:
                             if vp.base_historico_nome:
                                 self._selecionar_se_diferente("baseHistoricosValorPago", vp.base_historico_nome)
                             if vp.proporcionaliza_historico:
-                                self._selecionar_se_diferente(
-                                    "proporcionalizaHistoricoDoValorPago",
-                                    vp.proporcionaliza_historico.value,
-                                )
+                                self._selecionar_se_diferente("proporcionalizaHistoricoDoValorPago", vp.proporcionaliza_historico.value)
                         elif bt == "VALE_TRANSPORTE" and vp.base_vale_transporte_nome:
                             self._selecionar_se_diferente("valeTransportePago", vp.base_vale_transporte_nome)
                         elif bt == "SALARIO_DA_CATEGORIA" and vp.base_salario_categoria_nome:
                             self._selecionar_se_diferente("salarioCategoriaValorPago", vp.base_salario_categoria_nome)
+            except Exception as e:
+                self.log(f"    ⚠ Valor Pago radios: {e}")
+
+        # ═══ A PARTIR DAQUI: NÃO HAVER MAIS RADIO CLICKS QUE RERENDEREM
+        # painel onde estão os inputs text críticos (descricao, valor, período).
+        # Vamos preencher TODOS os inputs text agora, com state estável.
+
+        # Aguardar AJAX final dos radios antes de escrever inputs
+        self._aguardar_ajax(2000)
+
+        # ─── 5. INPUTS TEXT (após state estabilizado) ───
+        # Nome (descricao) — sempre garantir nome_pjecalc (espelho do JSON).
+        if v.nome_pjecalc:
+            mudou = self._setar_text_se_diferente("descricao", v.nome_pjecalc)
+            if mudou:
+                self.log(f"    ✓ descricao = '{v.nome_pjecalc}'")
+
+        # Período (datas)
+        for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
+            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                self._setar_text_se_diferente(sufixo, p.periodo_inicio)
+                break
+        for sufixo in ("periodoFinalInputDate", "periodoFinal", "dataFimInputDate"):
+            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                self._setar_text_se_diferente(sufixo, p.periodo_fim)
+                break
+
+        # Bloco INFORMADO — valorInformadoDoDevido + proporcionalizar
+        if p.valor == TipoValor.INFORMADO:
+            if p.valor_devido and p.valor_devido.valor_informado_brl is not None:
+                self._preencher_valor_informado_devido(p.valor_devido.valor_informado_brl)
+            if p.valor_devido and getattr(p.valor_devido, "proporcionalizar", False):
+                self._marcar_checkbox_se_diferente("aplicarProporcionalidadeAoValorDevido", True)
+
+        # Bloco CALCULADO — sub-inputs text (outroValorDoDivisor, multiplicador)
+        if p.valor == TipoValor.CALCULADO:
+            f = p.formula_calculado
+            if f:
+                if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
+                    self._setar_text_se_diferente("outroValorDoDivisor", _fmt_br(f.divisor.valor))
+                if f.multiplicador is not None:
+                    self._setar_text_se_diferente("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
+
+        # Valor Pago — sub-inputs text
+        if p.valor == TipoValor.CALCULADO and getattr(p, "valor_pago", None):
+            vp = p.valor_pago
+            try:
+                vp_tipo = vp.tipo.value if hasattr(vp.tipo, "value") else str(vp.tipo)
+                if vp_tipo == "CALCULADO":
                     if vp.quantidade_brl is not None:
                         self._setar_text_se_diferente("valorPagoQuantidade", _fmt_br(vp.quantidade_brl))
-                else:  # INFORMADO
+                else:
                     if vp.valor_brl is not None:
                         self._setar_text_se_diferente("valorInformadoPago", _fmt_br(vp.valor_brl))
                 if vp.proporcionalizar:
                     self._marcar_checkbox_se_diferente("aplicarProporcionalidadeValorPago", True)
             except Exception as e:
-                self.log(f"    ⚠ Valor Pago: {e}")
+                self.log(f"    ⚠ Valor Pago inputs: {e}")
 
-        # ─── 11. Flags opcionais ───
+        # ─── 6. INCIDÊNCIAS (checkboxes, sem AJAX) ───
+        try:
+            self._marcar_checkbox_se_diferente("irpf", p.incidencias.irpf)
+            self._marcar_checkbox_se_diferente("inss", p.incidencias.cs_inss)
+            self._marcar_checkbox_se_diferente("fgts", p.incidencias.fgts)
+            self._marcar_checkbox_se_diferente("previdenciaPrivada", p.incidencias.previdencia_privada)
+            self._marcar_checkbox_se_diferente("pensaoAlimenticia", p.incidencias.pensao_alimenticia)
+        except Exception as e:
+            self.log(f"    ⚠ Incidências: {e}")
+
+        # ─── 7. FLAGS OPCIONAIS ───
         if hasattr(p, "natureza_indenizatoria") and p.natureza_indenizatoria is not None:
             self._marcar_checkbox_se_diferente("naturezaIndenizatoria", p.natureza_indenizatoria)
         if hasattr(p, "deduzir_inss_recolhido") and p.deduzir_inss_recolhido is not None:
@@ -2653,12 +2669,12 @@ class PlaywrightAutomatorV2:
         if hasattr(p, "considerar_competencia_paga") and p.considerar_competencia_paga is not None:
             self._marcar_checkbox_se_diferente("considerarCompetenciaPaga", p.considerar_competencia_paga)
 
-        # ─── 12. Comentários ───
+        # ─── 8. COMENTÁRIOS (textarea, sem AJAX) ───
         if getattr(p, "comentarios", None):
             self._setar_text_se_diferente("comentarios", p.comentarios)
 
-        # Aguardar AJAX final antes de o caller chamar Salvar
-        self._aguardar_ajax(2500)
+        # Aguardar AJAX residual antes de o caller chamar Salvar
+        self._aguardar_ajax(2000)
 
     def _configurar_parametros_pos_expresso(self, v) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
