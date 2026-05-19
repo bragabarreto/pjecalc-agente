@@ -386,30 +386,60 @@ class PlaywrightAutomatorV2:
         if is_data_field:
             self._preencher_data_richfaces(loc.first, dom_id, str(valor))
         else:
-            # CRÍTICO (descoberto 19/05/2026): JSF a4j:support / valueChangeListener
-            # SÓ captura inputs text quando o evento BLUR dispara. `fill()` do
-            # Playwright muda o value mas não causa focusout. `dispatch_event('change')`
-            # NÃO é equivalente — JSF tem listener no DOM change real (cross-trust).
+            # CRÍTICO (descoberto 19/05/2026 via teste manual no PJE-Calc):
             #
-            # SEM blur: o save subsequente do form NÃO persiste o campo. Em
-            # produção isso causava verba RESTITUIÇÃO com descricao="RESTITUIÇÃO/
-            # INDENIZAÇÃO DE DESPESA" (canonical) e valorInformadoDoDevido=0,00
-            # mesmo após bot escrever nome customizado + 484,00.
+            # Playwright `fill()` + `press("Tab")` NÃO persiste inputs text em
+            # certos contextos JSF a4j. Estado pós-save:
+            #   descricao escrito 'INDENIZAÇÃO SUBSTITUTIVA DE REFEIÇÃO'
+            #   → persistido no DB como 'RESTITUIÇÃO / INDENIZAÇÃO DE DESPESA' (canonical)
+            #   → o backing bean NUNCA recebeu o valor escrito
             #
-            # SOLUÇÃO: focus → fill → Tab (que dispara blur trusted) → wait AJAX.
+            # Mas via JS direto (el.value=...; dispatch input/change/blur) +
+            # click salvar → PERSISTE corretamente.
+            #
+            # Por quê? Hipóteses (descobertas observacionais):
+            #   - fill() do Playwright muda o value mas só dispara `input` event
+            #   - press("Tab") dispara keydown trusted, mas o `blur` natural pode
+            #     ser interceptado por algum handler intermediário (modais? popups?)
+            #   - JSF a4j em alguns inputs (descricao tem onblur listener) precisa
+            #     do `change` event dispatch explícito, não apenas blur
+            #
+            # SOLUÇÃO comprovada: JS direto setando value + dispatch events
+            # explícitos (input, change, blur). É o mesmo que o navegador faz
+            # mas garantido.
+            real_id = None
             try:
-                loc.first.focus()
+                real_id = loc.first.get_attribute("id")
             except Exception:
                 pass
-            loc.first.fill(str(valor))
-            try:
-                loc.first.press("Tab")
-            except Exception:
+            ok = False
+            if real_id:
                 try:
-                    loc.first.dispatch_event("change")
-                    loc.first.dispatch_event("blur")
-                except Exception:
-                    pass
+                    ok = self._page.evaluate(
+                        """({id, valor}) => {
+                            const el = document.getElementById(id);
+                            if (!el) return false;
+                            el.focus();
+                            // Para inputs com mascara (currencyMask), o focus
+                            // pode ativar listener — aguardar 1 tick antes de setar.
+                            el.value = valor;
+                            el.dispatchEvent(new Event('input', {bubbles: true}));
+                            el.dispatchEvent(new Event('change', {bubbles: true}));
+                            el.dispatchEvent(new Event('blur', {bubbles: true}));
+                            return true;
+                        }""",
+                        {"id": real_id, "valor": str(valor)},
+                    )
+                except Exception as e:
+                    self.log(f"  ⚠ {dom_id} via JS: {e}")
+            if not ok:
+                # Fallback para fill() + Tab (caso JS falhe)
+                try:
+                    loc.first.focus()
+                    loc.first.fill(str(valor))
+                    loc.first.press("Tab")
+                except Exception as e:
+                    self.log(f"  ⚠ {dom_id} fallback: {e}")
             self.log(f"  ✓ {dom_id} = {valor}")
 
     def _preencher_data_richfaces(self, locator, dom_id: str, valor: str) -> None:
