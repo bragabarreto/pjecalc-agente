@@ -1959,22 +1959,46 @@ class PlaywrightAutomatorV2:
                     self._aguardar_ajax(8000)
                     self._page.wait_for_timeout(2000)
                     valor = float(hist.valor_brl) if hist.tipo_valor.value == "INFORMADO" and hist.valor_brl else None
-                    self._editar_default_historico_para_cs(hist.nome, valor_brl=valor)
+                    self._editar_default_historico_para_cs(
+                        hist.nome,
+                        valor_brl=valor,
+                        competencia_inicial=hist.competencia_inicial,
+                        competencia_final=hist.competencia_final,
+                    )
                 except Exception as e:
                     self.log(f"  ⚠ Erro pós-Recentes editar '{hist.nome}': {e}")
 
-        # Verbas INFORMADO já foram tratadas em fase_verbas com
-        # _configurar_ocorrencias_informado_inline (mesma conv Seam — listagem
-        # acessível). Nada a fazer aqui pós-Recentes para verbas.
+        # Re-aplicar valorDevido em verbas INFORMADO pós-Recentes (defensivo:
+        # se outer conv não @End'd, edits inline em fase_verbas podem ter
+        # sido perdidas. Re-aplicar em conv pós-Recentes garante persistência).
+        verbas_inf = [v for v in self.previa.verbas_principais
+                       if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO
+                       and getattr(v.parametros.valor_devido, "valor_informado_brl", None)]
+        for v in verbas_inf:
+            try:
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    continue
+                try:
+                    self._page.wait_for_url("**/verba/verba-calculo.jsf**", timeout=15000)
+                except Exception:
+                    pass
+                self._page.wait_for_load_state("networkidle", timeout=15000)
+                self._page.wait_for_timeout(2000)
+                self._configurar_ocorrencias_informado_inline(v)
+            except Exception as e:
+                self.log(f"  ⚠ Re-aplicar valorDevido '{v.nome_pjecalc}': {e}")
 
-    def _editar_default_historico_para_cs(self, nome: str, valor_brl: float | None = None) -> None:
+    def _editar_default_historico_para_cs(self, nome: str, valor_brl: float | None = None,
+                                            competencia_inicial: str | None = None,
+                                            competencia_final: str | None = None) -> None:
         """Edita entrada default do histórico salarial (criada pelo PJE-Calc)
         para marcar incidência CS + proporcionalizarINSS + setar valor base
-        + gerar ocorrências e salvar.
+        + atualizar competências + gerar ocorrências e salvar.
 
         valor_brl: valor a setar em valorParaBaseDeCalculo (tipo INFORMADO).
-        Sem isso, default ÚLTIMA REMUNERAÇÃO tem valor=0 → todas as
-        ocorrências CS ficam com valor=0 → liquidação bloqueia.
+        competencia_inicial/final: período do histórico (formato MM/YYYY).
+        Sem isso, default ÚLTIMA REMUNERAÇÃO tem período de 1 mês →
+        ocorrências CS incompletas → liquidação bloqueia.
         """
         self.log(f"  → Editar default histórico '{nome}' para configurar CS")
         try:
@@ -2003,6 +2027,19 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(2000)
             self._marcar_checkbox("proporcionalizarINSS", True)
             self._aguardar_ajax(1500)
+            # Atualizar competências (período do histórico) se fornecidas
+            if competencia_inicial:
+                try:
+                    self._preencher("competenciaInicialInputDate", competencia_inicial, obrigatorio=False)
+                    self.log(f"    ✓ competenciaInicial = {competencia_inicial}")
+                except Exception as e:
+                    self.log(f"    ⚠ competenciaInicial erro: {e}")
+            if competencia_final:
+                try:
+                    self._preencher("competenciaFinalInputDate", competencia_final, obrigatorio=False)
+                    self.log(f"    ✓ competenciaFinal = {competencia_final}")
+                except Exception as e:
+                    self.log(f"    ⚠ competenciaFinal erro: {e}")
             # Setar valor base se fornecido (tipo INFORMADO)
             if valor_brl is not None:
                 try:
