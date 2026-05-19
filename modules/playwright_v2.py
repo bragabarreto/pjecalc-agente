@@ -4966,6 +4966,13 @@ class PlaywrightAutomatorV2:
                 self._preencher("aliquotaEmpresaFixa", str(cs.aliquota_empresa_fixa_pct or 20), obrigatorio=False)
                 self._preencher("aliquotaRatFixa", str(cs.aliquota_rat_fixa_pct or 1), obrigatorio=False)
                 self._preencher("aliquotaTerceirosFixa", str(cs.aliquota_terceiros_fixa_pct or 5.8), obrigatorio=False)
+        else:
+            # Mesmo em modo "somente visitar", precisamos marcar
+            # apurarInssSeguradoDevido=true para que o save gere as
+            # ocorrências OcorrenciaDeInssSobreSalariosDevidos. Sem isso,
+            # o set fica vazio e a regra Drools RN02 dispara.
+            self._marcar_checkbox("apurarInssSeguradoDevido", True)
+            self._aguardar_ajax(2000)
         try:
             self._clicar("salvar")
             self._aguardar_ajax(8000)
