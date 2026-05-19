@@ -1968,8 +1968,14 @@ class PlaywrightAutomatorV2:
         if verbas_inf:
             try:
                 if self._navegar_menu_via_click("li_calculo_verbas"):
-                    self._aguardar_ajax(8000)
-                    self._page.wait_for_timeout(2000)
+                    # Aguardar URL mudar para verba-calculo.jsf (sidebar click
+                    # é AJAX assíncrono — _aguardar_ajax pode não detectar)
+                    try:
+                        self._page.wait_for_url("**/verba/verba-calculo.jsf**", timeout=15000)
+                    except Exception:
+                        self.log(f"  ⚠ URL não mudou para verba-calculo.jsf após sidebar click")
+                    self._page.wait_for_load_state("networkidle", timeout=15000)
+                    self._page.wait_for_timeout(2500)
                     self._fixar_valordevido_ocorrencias_informadas(verbas_inf)
                 else:
                     self.log(f"  ⚠ Não conseguiu navegar para Verbas via sidebar")
@@ -2160,8 +2166,12 @@ class PlaywrightAutomatorV2:
                 # uma verba, o link Ocorrências leva para parametrizar-ocorrencia)
                 if v != verbas_inf[0]:
                     self._navegar_menu_via_click("li_calculo_verbas")
-                    self._aguardar_ajax(6000)
-                    self._page.wait_for_timeout(1000)
+                    try:
+                        self._page.wait_for_url("**/verba/verba-calculo.jsf**", timeout=15000)
+                    except Exception:
+                        pass
+                    self._page.wait_for_load_state("networkidle", timeout=15000)
+                    self._page.wait_for_timeout(2000)
                 # Localizar linha pela nome e clicar linkOcorrencias. Tenta
                 # múltiplas estratégias (className, queryAll, ID com sufixo).
                 res = self._page.evaluate(
