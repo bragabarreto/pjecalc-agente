@@ -334,6 +334,16 @@ class PlaywrightAutomatorV2:
         _run_fase("Fase 12 (Custas)", self.fase_custas_judiciais)
         _run_fase("Fase 13 (Correção/Juros)", self.fase_correcao_juros_multa)
 
+        # CRÍTICO: Reabrir via Recentes ANTES de Liquidar para forçar commit
+        # das saves de CS/IRPF/Custas/Correção. Sem isso, Liquidar abre conv
+        # fresca que lê DB stale (sem nossos saves de fases 9-13).
+        try:
+            self.log("  → Reabrir cálculo via Recentes pré-Liquidar (forçar commit)")
+            if self._reabrir_calculo_via_recentes():
+                self.log(f"  ✓ Conv pré-Liquidar: {self._calculo_conversation_id}")
+        except Exception as e:
+            self.log(f"  ⚠ Reabertura pré-Liquidar falhou: {e}")
+
         # Liquidação — tenta mesmo com fases parciais
         try:
             return self.fase_liquidar_e_exportar()
