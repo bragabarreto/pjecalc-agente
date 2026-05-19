@@ -1944,13 +1944,19 @@ class PlaywrightAutomatorV2:
             return (s or "").translate(tabela).upper().strip()
         defaults_norm = {_norm(n) for n in self._HISTORICOS_DEFAULT}
 
+        # CRÍTICO: usar SIDEBAR click (não URL-nav) para preservar a mesma
+        # conversação Seam em edit mode com dados populados. URL-nav cria
+        # nova conv fresh sem o histórico/verbas já lançados.
+
         # 1) Editar históricos default com CS=true
         for hist in self.previa.historico_salarial:
             if _norm(hist.nome) in defaults_norm and hist.incidencias.cs_inss:
                 try:
-                    self._navegar_menu("li_calculo_historico_salarial")
-                    self._aguardar_ajax(6000)
-                    self._page.wait_for_timeout(1500)
+                    if not self._navegar_menu_via_click("li_calculo_historico_salarial"):
+                        self.log(f"  ⚠ Não conseguiu navegar via sidebar — skip '{hist.nome}'")
+                        continue
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(2000)
                     self._editar_default_historico_para_cs(hist.nome)
                 except Exception as e:
                     self.log(f"  ⚠ Erro pós-Recentes editar '{hist.nome}': {e}")
@@ -1961,7 +1967,12 @@ class PlaywrightAutomatorV2:
                        and getattr(v.parametros.valor_devido, "valor_informado_brl", None)]
         if verbas_inf:
             try:
-                self._fixar_valordevido_ocorrencias_informadas(verbas_inf)
+                if self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(2000)
+                    self._fixar_valordevido_ocorrencias_informadas(verbas_inf)
+                else:
+                    self.log(f"  ⚠ Não conseguiu navegar para Verbas via sidebar")
             except Exception as e:
                 self.log(f"  ⚠ Erro pós-Recentes fixar valorDevido: {e}")
 
@@ -2145,9 +2156,12 @@ class PlaywrightAutomatorV2:
             nome = v.nome_pjecalc or v.expresso_alvo
             valor_total = float(v.parametros.valor_devido.valor_informado_brl)
             try:
-                self._navegar_menu("li_calculo_verbas")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(1000)
+                # Re-navegar via sidebar se já saímos da listagem (após processar
+                # uma verba, o link Ocorrências leva para parametrizar-ocorrencia)
+                if v != verbas_inf[0]:
+                    self._navegar_menu_via_click("li_calculo_verbas")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(1000)
                 # Localizar linha pela nome e clicar linkOcorrencias. Tenta
                 # múltiplas estratégias (className, queryAll, ID com sufixo).
                 res = self._page.evaluate(
