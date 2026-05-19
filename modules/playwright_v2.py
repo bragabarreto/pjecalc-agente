@@ -3828,32 +3828,30 @@ class PlaywrightAutomatorV2:
         except Exception:
             self.log("    ⚠ Painel de ações Cartão de Ponto (Novo/Grade/Visualizar) não renderizou em 15s — pulando apuração")
             return
-        # Procurar botão "Visualizar Cartão" — CONFUSO: id real é
-        # `formulario:importarCartao` mas value é "Visualizar Cartão"
-        # (legado JSF do PJE-Calc, confirmado via DOM inspection no
-        # apuracao-cartaodeponto.jsf — input[type=button][value='Visualizar Cartão']).
+        # Procurar botão "Visualizar Cartão" — id EXATO `formulario:importarCartao`
+        # (CONFUSO: o id é `importarCartao` mas o value/label é "Visualizar Cartão").
+        # ATENÇÃO: NÃO usar `[id*="visualizar"]` porque casa com
+        # `formulario:visualizarOcorrencias` (que é o botão "Grade de Ocorrências"
+        # — outro botão da mesma página).
         clicou_vis = self._page.evaluate(
             """() => {
                 const norm = s => (s||'').replace(/\\s+/g,' ').trim().toLowerCase();
-                // Estratégia 1: id `formulario:importarCartao` (id confuso mas é o correto)
-                let candidatos = [...document.querySelectorAll(
-                    '[id$=":importarCartao"], [id="formulario:importarCartao"], [id*="visualizar"]'
-                )].filter(b => ['INPUT','BUTTON','A'].includes(b.tagName));
-                // Estratégia 2: value/text contém "Visualizar Cart"
-                if (!candidatos.length) {
-                    candidatos = [...document.querySelectorAll('input,button,a')].filter(b => {
+                // Estratégia 1: id sufixo EXATO `:importarCartao`
+                let btn = document.getElementById('formulario:importarCartao') ||
+                          document.querySelector('[id$=":importarCartao"]');
+                // Estratégia 2: value/text EXATO "Visualizar Cartão" (não Grade de Ocorrências)
+                if (!btn) {
+                    btn = [...document.querySelectorAll('input,button,a')].find(b => {
                         const v = norm(b.value || b.textContent || '');
-                        return v.indexOf('visualizar cart') >= 0;
+                        return v === 'visualizar cartão' || v === 'visualizar cartao';
                     });
                 }
-                for (const b of candidatos) {
-                    const onclickStr = b.getAttribute('onclick') || '';
-                    if (onclickStr) {
-                        try { new Function('event', onclickStr).call(b, new MouseEvent('click',{bubbles:true})); return 'onclick:' + (b.id||b.value||'?').slice(0,50); } catch(_) {}
-                    }
-                    try { b.click(); return 'click:' + (b.id||b.value||'?').slice(0,50); } catch(_) {}
+                if (!btn) return null;
+                const onclickStr = btn.getAttribute('onclick') || '';
+                if (onclickStr) {
+                    try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return 'onclick:' + btn.id.slice(0,50); } catch(_) {}
                 }
-                return null;
+                btn.click(); return 'click:' + btn.id.slice(0,50);
             }"""
         )
         if not clicou_vis:
