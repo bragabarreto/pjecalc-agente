@@ -2051,9 +2051,43 @@ class PlaywrightAutomatorV2:
             try:
                 self._clicar("cmdGerarOcorrencias")
                 self._aguardar_ajax(6000)
-                self._page.wait_for_timeout(1000)
+                self._page.wait_for_timeout(1500)
             except Exception as e:
                 self.log(f"    ⚠ cmdGerarOcorrencias erro: {e}")
+            # Marcar CS em TODAS as ocorrências (incideINSS por linha):
+            # selecionarTodos4 marca todos os checkboxes .labelInput4 de uma vez
+            # ALTERNATIVA: iterar formulario:listagemMC:N:incideINSS
+            try:
+                marcados = self._page.evaluate("""() => {
+                    // Estratégia 1: clicar selecionarTodos4 (select all CS)
+                    const todos = document.getElementById('selecionarTodos4');
+                    if (todos && !todos.checked) {
+                        todos.click();
+                        // Disparar o handler do prepararCheckAll
+                        if (window.jQuery) {
+                            window.jQuery('.labelInput4:enabled').prop('checked', true);
+                            window.jQuery('.labelInput4:enabled').each(function(){
+                                this.dispatchEvent(new Event('change', {bubbles: true}));
+                            });
+                        }
+                    }
+                    // Estratégia 2: marcar diretamente cada incideINSS
+                    const checkboxes = document.querySelectorAll("input[id$=':incideINSS']");
+                    let n = 0;
+                    checkboxes.forEach(cb => {
+                        if (!cb.disabled && !cb.checked) {
+                            cb.checked = true;
+                            cb.dispatchEvent(new Event('change', {bubbles: true}));
+                            cb.dispatchEvent(new Event('click', {bubbles: true}));
+                            n++;
+                        }
+                    });
+                    return {todosClicked: !!todos, nCheckboxes: checkboxes.length, marcados: n};
+                }""")
+                self.log(f"    ✓ incideINSS marcado: {marcados}")
+                self._aguardar_ajax(2000)
+            except Exception as e:
+                self.log(f"    ⚠ incideINSS erro: {e}")
             self._clicar("salvar")
             self._aguardar_ajax(8000)
             sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
