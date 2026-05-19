@@ -3290,65 +3290,29 @@ class PlaywrightAutomatorV2:
         # tenta preencher na listagem ainda (sem campos de form) e o save flex
         # falha porque a listagem não tem botão Salvar. Sinal definitivo:
         # input formulario:descricao OU formulario:valorDevido visível.
-        carregou = False
         try:
             self._page.wait_for_selector(
                 "input[id$=':descricao'], input[id$=':valorDevido']",
                 state="visible",
-                timeout=15000,
+                timeout=10000,
             )
             self.log("    ✓ form de Alteração da verba carregado (descricao visível)")
-            carregou = True
         except Exception:
-            # Retry: re-clicar o linkParametrizar e aguardar mais tempo
-            self.log(f"    ⚠ Form não carregou em 15s — RETRY com re-click + timeout 20s")
-            try:
-                clicou2 = self._page.evaluate(
-                    """(candidatos) => {
-                        const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
-                        const trs = [...document.querySelectorAll('tr')];
-                        for (const alvo of candidatos) {
-                            const alvoN = norm(alvo);
-                            for (const tr of trs) {
-                                if (!norm(tr.textContent).includes(alvoN)) continue;
-                                const a = tr.querySelector('a.linkParametrizar[title^="Par"]');
-                                if (!a || (a.id||'').includes(':listaReflexo:')) continue;
-                                const onclick = a.getAttribute('onclick') || '';
-                                if (onclick) {
-                                    const ev = new MouseEvent('click', {bubbles:true,cancelable:true,view:window});
-                                    new Function('event', onclick).call(a, ev);
-                                    return true;
-                                }
-                            }
-                        }
-                        return false;
-                    }""",
-                    candidatos,
-                )
-                if clicou2:
-                    self._aguardar_ajax(12000)
-                    self._page.wait_for_selector(
-                        "input[id$=':descricao'], input[id$=':valorDevido']",
-                        state="visible",
-                        timeout=20000,
-                    )
-                    self.log("    ✓ form carregado no retry")
-                    carregou = True
-            except Exception:
-                pass
-        if not carregou:
+            # Diagnóstico: dumpar o que está na página atual
             try:
                 _diag = self._page.evaluate(
                     """() => {
                         const inputs = [...document.querySelectorAll('input,select')]
                             .map(e => e.id || e.name).filter(Boolean).slice(0, 20);
+                        const btns = [...document.querySelectorAll('input[type=submit],button')]
+                            .map(b => b.value || b.textContent || b.id).filter(Boolean).slice(0, 10);
                         return {url_tail: location.href.split('/').slice(-2).join('/'),
-                                inputs: inputs,
+                                inputs: inputs, botoes: btns,
                                 tem_descricao: !!document.querySelector('input[id$=":descricao"]'),
                                 tem_salvar: !!document.querySelector('input[id$=":salvar"]')};
                     }"""
                 )
-                self.log(f"    ⚠ Form de Alteração não carregou (mesmo após retry) — diag={_diag}")
+                self.log(f"    ⚠ Form de Alteração não carregou em 10s — diag={_diag}")
             except Exception:
                 self.log("    ⚠ Form de Alteração não carregou — sem diagnóstico DOM")
             return  # aborta — sem form, não tem o que preencher
