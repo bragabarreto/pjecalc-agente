@@ -3212,6 +3212,22 @@ class PlaywrightAutomatorV2:
         if hasattr(v, "expresso_alvo") and v.expresso_alvo and v.expresso_alvo != v.nome_pjecalc:
             candidatos.append(v.expresso_alvo)
         self.log(f"  → Ajustar parâmetros: {v.nome_pjecalc} (busca: {candidatos})")
+        # CRÍTICO (descoberto 19/05/2026 via Java logs):
+        # JSF emite "Target component for id listagem not found" quando o click
+        # em linkParametrizar chega com view-state stale (após Recentes reabertura).
+        # Fix: forçar GET fresh em verba-calculo.jsf para re-sincronizar view-state.
+        try:
+            conv = self._calculo_conversation_id
+            if conv:
+                self._page.goto(
+                    f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf?conversationId={conv}",
+                    wait_until="domcontentloaded", timeout=15000,
+                )
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                self._capturar_conversation_id()
+        except Exception as e:
+            self.log(f"    ⚠ refresh verba-calculo.jsf falhou: {e}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
@@ -3286,6 +3302,18 @@ class PlaywrightAutomatorV2:
             return
         self.log(f"    ✓ Click Parâmetros via estratégia: {clicou}")
         self._aguardar_ajax(8000)
+        # Aguardar a URL mudar/estabilizar OU o form aparecer no DOM.
+        # JSF pode demorar para responder o redirect interno de view-state.
+        try:
+            self._page.wait_for_function(
+                """() => {
+                    return !!document.querySelector("input[id$=':descricao']") ||
+                           !!document.querySelector("input[id$=':valorInformadoDoDevido']");
+                }""",
+                timeout=8000,
+            )
+        except Exception:
+            pass
         # CRÍTICO: aguardar o form de Alteração carregar. Sem isso, o caller
         # tenta preencher na listagem ainda (sem campos de form) e o save flex
         # falha porque a listagem não tem botão Salvar. Sinal definitivo:
