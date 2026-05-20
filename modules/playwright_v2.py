@@ -2210,8 +2210,13 @@ class PlaywrightAutomatorV2:
             # Test manual no Chrome confirmou: conv=192 via Recentes mostra 5 verbas
             # e linkParametrizar funciona perfeitamente.
             self._fechar_e_reabrir_calculo("pós-Expresso")
-            # Navegar para listagem de verbas para ajuste de parâmetros pós-Expresso
-            self._navegar_menu_via_click("li_calculo_verbas")
+            # CRÍTICO (20/05/2026): após Recentes-reabertura (conv=N com cálculo
+            # carregado), usar `_navegar_menu` (URL direta com conversationId atual)
+            # em vez de `_navegar_menu_via_click` (sidebar click). Sidebar click
+            # CRIA NOVA CONV Seam que pode não ter o cálculo populado — observado
+            # como "verba-calculo.jsf vazia/NPE" no SSE log. URL direta preserva
+            # a conv reaberta com o cálculo completo.
+            self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
             tem_listagem = self._page.evaluate(
@@ -3177,11 +3182,13 @@ class PlaywrightAutomatorV2:
         # NPE em ApresentadorVerbaDeCalculo.prepararMinicrudsDasBasesCadastradas:841
         # ao clicar linkParametrizar. Causa: bean Seam não inicializado
         # (verbaDeCalculoVO null) na conv após Recentes reabertura.
-        # Fix: forçar iniciar() do apresentador via sidebar click ANTES de
-        # cada linkParametrizar. O sidebar click invoca o factory @Begin
-        # mapeado em pages.xml, garantindo bean fresco.
+        # CRÍTICO (20/05/2026): trocado _navegar_menu_via_click → _navegar_menu.
+        # Após Fechar+Reabrir pós-Expresso (que já initializa o bean Seam com
+        # cálculo completo via Recentes), o sidebar click destrói essa conv ao
+        # criar uma nova via @Begin. URL direta com conversationId atual
+        # preserva a listagem com 5 verbas.
         try:
-            self._navegar_menu_via_click("li_calculo_verbas")
+            self._navegar_menu("li_calculo_verbas")
             # Aguardar página estabilizar + listagem aparecer
             try:
                 self._page.wait_for_function(
@@ -3192,7 +3199,7 @@ class PlaywrightAutomatorV2:
                 pass
             self._page.wait_for_timeout(2000)
         except Exception as e:
-            self.log(f"    ⚠ re-init bean (sidebar verbas): {e}")
+            self.log(f"    ⚠ re-init bean (url-nav verbas): {e}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
