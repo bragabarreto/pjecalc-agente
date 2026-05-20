@@ -3267,25 +3267,6 @@ class PlaywrightAutomatorV2:
         if link_id_res:
             try:
                 lid = link_id_res["id"]
-                # Marcar verbaSelecionada checkbox da MESMA linha ANTES do
-                # linkParametrizar — força Seam @DataModelSelection antes da
-                # action alterar(), garantindo que registroSelecionado esteja
-                # populado e bean state correto.
-                self._page.evaluate(
-                    """(linkId) => {
-                        const link = document.getElementById(linkId);
-                        if (!link) return false;
-                        const tr = link.closest('tr');
-                        if (!tr) return false;
-                        const cb = tr.querySelector("input[type='checkbox'][id$=':verbaSelecionada']");
-                        if (cb && !cb.checked) {
-                            cb.click();
-                        }
-                        return true;
-                    }""",
-                    lid,
-                )
-                self._aguardar_ajax(2000)
                 # Click NATIVO Playwright — respeita onclick `return false`,
                 # não interrompe AJAX com navegação default.
                 self._page.locator(f'[id="{lid}"]').click(force=True, timeout=6000)
