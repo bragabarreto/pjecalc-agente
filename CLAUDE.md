@@ -599,6 +599,71 @@ adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 @docs/diagnostico-falhas-automacao.md
 @docs/analise-calc-machine-vs-agente.md
 
+## Limitações conhecidas (19/05/2026) — não-bloqueantes
+
+Após resolução do bug Seam EPC via H2 TCP, o bot completa o ciclo end-to-end
+Sentença → JSON → PJC → reimportação → Liquidação. Mas restam **2 alertas**
+não-bloqueantes que afetam **precisão de valores específicos**:
+
+### 1. HORAS EXTRAS 50% — quantidade = 0 (alerta RN50 Drools)
+
+**Sintoma**: PJC exportado tem a verba HE 50% com `<Quantidade><tipo>INFORMADA</tipo>
+<valorInformado>0E-25</valorInformado></Quantidade>`. Após reimportação no
+PJE-Calc, gera alerta "Todas as ocorrências da verba HORAS EXTRAS 50% foram
+salvas com quantidade igual a zero."
+
+**Causa raiz**: o bot clica `linkParametrizar` da verba para ajustar
+`tipoDaQuantidade=IMPORTADA_DO_CARTAO` + selecionar coluna `Hs EXT`, mas o
+JSF retorna "Target component for id listagem not found" (view-state stale
+após Recentes reabertura). O form de Alteração não carrega — bot pula o
+ajuste e a verba fica com defaults Expresso.
+
+**Tentativas que NÃO funcionam** (registrar para evitar repetir):
+- Retry de click com timeout maior → form continua sem carregar
+- GET refresh em `verba-calculo.jsf` antes do click → **QUEBRA a Fase 5** com
+  "Execution context was destroyed" (revertido em commit `e4a2835`)
+- Editar XML do PJC pós-export para mudar `tipo` para `IMPORTADA_DO_CARTAO_DE_PONTO`
+  → NPE em `Quantidade.resolverValor()` ao Liquidar reimportado (revertido em `b4b4792`)
+
+**Status atual**: PJC liquida com sucesso após reimport (HE 50% só fica com
+valor 0). Usuário pode ajustar manualmente no PJE-Calc real ou aceitar.
+
+### 2. Histórico Salarial ÚLTIMA REMUNERAÇÃO — CS sem valor por ocorrência (alerta)
+
+**Sintoma**: alerta "O Histórico Salarial ÚLTIMA REMUNERAÇÃO não possui valor
+cadastrado para todas as ocorrências da Contribuição Social sobre Salários
+Devidos." Não bloqueia liquidação.
+
+**Status atual**: o bot marca `inss=true` + `proporcionalizarINSS=true` +
+preenche `valorParaBaseDeCalculo`, mas não consegue setar `incideINSS` em cada
+ocorrência mensal individualmente (mesma issue de view-state JSF).
+
+### 3. Hibernate ConstraintViolation `IIDCALCULO NULL` (Fase 10b)
+
+Log Tomcat eventual:
+```
+NULL not allowed for column "IIDCALCULO"
+insert into TBSEGURODESEMPREGO (...)
+```
+
+Fase 10b Seguro-Desemprego tenta persistir entidade quando FK ainda não foi
+flushed. **Não afeta** o PJC final (cálculo principal já commitado antes).
+
+### Resumo da funcionalidade
+
+| Critério | Estado |
+|---|---|
+| Sentença → Prévia → PJC | ✅ |
+| PJC reimporta no PJE-Calc | ✅ "Operação realizada com sucesso" |
+| Liquidação após reimport | ✅ "Operação realizada com sucesso" |
+| Verbas com `valor=INFORMADO` | ✅ valorInformadoDoDevido aplicado |
+| Verbas Expresso simples (13º, AVISO, SALDO, etc.) | ✅ defaults corretos |
+| Cartão de Ponto apurado | ✅ |
+| Histórico Salarial CS+proporcionalizarINSS | ✅ |
+| HE 50% com tipoDaQuantidade=IMPORTADA_DO_CARTAO | ❌ usa default Expresso (qtd=0) |
+| CS incideINSS por ocorrência mensal | ❌ não setado |
+| Cobertura de senças diversas | ⚠ Testado apenas com 1 (cecf7937 — Paulo Roberto) |
+
 ## Problema em aberto (Tomcat headless)
 
 O Tomcat embarcado (`pjecalc.jar`) pode ter dificuldade para subir em ambientes headless. O Lancador Java (`Lancador.java:42`) executa validações de startup e pode mostrar `JOptionPane` dialogs (GUI Swing) que bloqueiam o thread principal. O Xvfb + xdotool tenta auto-dismissar, mas o Java pode não iniciar o Tomcat corretamente.
