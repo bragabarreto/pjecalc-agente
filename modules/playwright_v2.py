@@ -2171,17 +2171,45 @@ class PlaywrightAutomatorV2:
             return
         self._navegar_menu("li_calculo_verbas")
 
-        # Estratégia: agrupar por tipo de preenchimento
-        verbas_expresso = [
-            v
-            for v in self.previa.verbas_principais
-            if v.estrategia_preenchimento
-            in (EstrategiaPreenchimento.EXPRESSO_DIRETO, EstrategiaPreenchimento.EXPRESSO_ADAPTADO)
-        ]
-        verbas_manual = [
-            v for v in self.previa.verbas_principais
-            if v.estrategia_preenchimento == EstrategiaPreenchimento.MANUAL
-        ]
+        # Estratégia: agrupar por tipo de preenchimento.
+        # OVERRIDE 19/05/2026: verbas com quantidade.tipo=IMPORTADA_DO_CARTAO
+        # vão para MANUAL em vez de Expresso. Razão: o linkParametrizar JSF
+        # pós-Expresso tem view-state stale e o form de Alteração não carrega,
+        # então o bot não consegue setar tipoDaQuantidade=IMPORTADA_DO_CARTAO
+        # + selecionar a coluna Hs EXT. Manual abre o form de Inclusão de cara
+        # e preenche tudo, contornando a issue.
+        def _precisa_manual(v):
+            try:
+                if v.parametros.valor != TipoValor.CALCULADO:
+                    return False
+                fc = v.parametros.formula_calculado
+                if not fc or not fc.quantidade:
+                    return False
+                tipo = fc.quantidade.tipo.value if hasattr(fc.quantidade.tipo, "value") else str(fc.quantidade.tipo)
+                # IMPORTADA_DO_CARTAO ou INFORMADA com valor>0 precisam config
+                # que só o form Manual consegue setar
+                if tipo == "IMPORTADA_DO_CARTAO":
+                    return True
+                if tipo == "INFORMADA" and getattr(fc.quantidade, "valor", None):
+                    return True
+                return False
+            except Exception:
+                return False
+
+        verbas_expresso = []
+        verbas_manual = []
+        for v in self.previa.verbas_principais:
+            if v.estrategia_preenchimento == EstrategiaPreenchimento.MANUAL:
+                verbas_manual.append(v)
+            elif v.estrategia_preenchimento in (
+                EstrategiaPreenchimento.EXPRESSO_DIRETO,
+                EstrategiaPreenchimento.EXPRESSO_ADAPTADO,
+            ):
+                if _precisa_manual(v):
+                    self.log(f"  ⇄ Override: '{v.nome_pjecalc}' Expresso→Manual (quantidade requer form)")
+                    verbas_manual.append(v)
+                else:
+                    verbas_expresso.append(v)
 
         # 4a. Expresso (lote único)
         if verbas_expresso:
