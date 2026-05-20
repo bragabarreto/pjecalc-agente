@@ -2210,15 +2210,32 @@ class PlaywrightAutomatorV2:
             # Test manual no Chrome confirmou: conv=192 via Recentes mostra 5 verbas
             # e linkParametrizar funciona perfeitamente.
             self._fechar_e_reabrir_calculo("pós-Expresso")
-            # Navegar para listagem de verbas para ajuste de parâmetros pós-Expresso
-            self._navegar_menu_via_click("li_calculo_verbas")
-            self._aguardar_ajax(10000)
-            self._page.wait_for_timeout(2000)
-            tem_listagem = self._page.evaluate(
-                """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
-            )
-            if not tem_listagem:
-                self.log("  ⚠ verba-calculo.jsf vazia/NPE pós-Fechar+Reabrir — parâmetros pós-Expresso serão pulados")
+            # CRÍTICO (20/05/2026 — descoberto via análise log SSE):
+            # Após Fechar+Reabrir, o bean apresentadorVerbaDeCalculo (SESSION
+            # scoped) leva alguns ciclos para o Seam propagar o cálculo aberto
+            # pelo Recentes-reabertura. Bot navega rápido demais → listagem vazia.
+            # Observado no SSE: 1ª tentativa "Verba não encontrada [...] TRs: []";
+            # 2ª-5ª "menu não encontrado"; ~6ª tentativa "5 verbas listadas".
+            # FIX: retry navegação até listagem ter N verbas (= n verbas Expresso
+            # esperadas), ou até timeout. Garante "aquecimento" do bean.
+            n_esperado = max(1, sum(1 for v in verbas_expresso if v.estrategia_preenchimento and 'expresso' in str(v.estrategia_preenchimento).lower()))
+            n_atual = 0
+            for tentativa in range(6):
+                self._navegar_menu_via_click("li_calculo_verbas")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(3000)
+                try:
+                    n_atual = self._page.evaluate(
+                        """() => document.querySelectorAll('a.linkParametrizar:not([id*=":listaReflexo:"])').length"""
+                    )
+                except Exception:
+                    n_atual = 0
+                self.log(f"  [warm-up] tentativa {tentativa+1}/6: listagem tem {n_atual} verbas (esperado ≥{n_esperado})")
+                if n_atual >= n_esperado:
+                    self.log(f"  ✓ listagem aquecida ({n_atual} verbas) — iniciando loop Ajustar parâmetros")
+                    break
+            if n_atual < n_esperado:
+                self.log(f"  ⚠ listagem não aqueceu após 6 tentativas (tem {n_atual}, esperado {n_esperado}) — prosseguindo mesmo assim")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
