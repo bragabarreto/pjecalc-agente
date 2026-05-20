@@ -68,7 +68,9 @@
 						</h:panelGrid>
 					</rich:column>
 					<rich:column>
-						<a4j:commandLink styleClass="linkParametrizar" title="Parâmetros da Verba" actionListener="#{apresentador.alterar}"/>
+						<a4j:commandLink styleClass="linkParametrizar" title="Parâmetros da Verba" actionListener="#{apresentador.alterar}" reRender="panelMensagens,panelFormulario,panelListagem,panelFiltroCampos,painelMensagens">
+							<f:setPropertyActionListener target="#{apresentador.registroSelecionado}" value="#{item}"/>
+						</a4j:commandLink>
 						<a4j:commandLink styleClass="linkOcorrencias" title="Ocorrências da Verba" action="#{apresentador.visualizarOcorrencias}"/>
 						<a4j:commandLink styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" onclick="if (!confirma('#{mensagens.MSG0014}',this)) return false;"/>
 					</rich:column>
