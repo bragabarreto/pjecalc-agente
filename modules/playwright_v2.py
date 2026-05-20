@@ -3243,54 +3243,58 @@ class PlaywrightAutomatorV2:
         # (exposta pelo RichFaces 3.3.3). Independe de evento trusted ou
         # navegação default. Confirmado: chama jsfcljs interno corretamente
         # e o servidor renderiza o form de Alteração.
-        clicou = self._page.evaluate(
+        # NOVO 19/05/2026: usar click nativo Playwright via locator.
+        # Antes: JS `new Function('event', onclickStr).call(a, ev)` engolia
+        # o `return false` final do onclick, fazendo o browser navegar para
+        # href='#irTopoPagina' e interromper o ciclo AJAX. Vídeo do usuário
+        # mostrou que o flow precisa de click REAL para o form de Alteração
+        # carregar. Localizamos o ID com JS, depois Playwright clica.
+        link_id_res = self._page.evaluate(
             """(candidatos) => {
                 const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
-                const linkId = (function() {
-                    const trs = [...document.querySelectorAll('tr')];
-                    for (const alvo of candidatos) {
-                        const alvoN = norm(alvo);
-                        for (const tr of trs) {
-                            if (!norm(tr.textContent).includes(alvoN)) continue;
-                            const a1 = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
-                            if (a1 && a1.id && !a1.id.includes(':listaReflexo:')) return {id: a1.id, via: 'class-title:'+alvo};
-                            const links = [...tr.querySelectorAll('a.linkParametrizar')];
-                            for (const link of links) {
-                                if (link.id && link.id.includes(':listaReflexo:')) continue;
-                                if (link.id) return {id: link.id, via: 'class-only:'+alvo};
-                            }
+                const trs = [...document.querySelectorAll('tr')];
+                for (const alvo of candidatos) {
+                    const alvoN = norm(alvo);
+                    for (const tr of trs) {
+                        if (!norm(tr.textContent).includes(alvoN)) continue;
+                        const a1 = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
+                        if (a1 && a1.id && !a1.id.includes(':listaReflexo:')) return {id: a1.id, via: 'class-title:'+alvo};
+                        const links = [...tr.querySelectorAll('a.linkParametrizar')];
+                        for (const link of links) {
+                            if (link.id && link.id.includes(':listaReflexo:')) continue;
+                            if (link.id) return {id: link.id, via: 'class-only:'+alvo};
                         }
                     }
-                    return null;
-                })();
-                if (!linkId) return null;
-                const a = document.getElementById(linkId.id);
-                if (!a) return linkId.via + ':no-elem';
-                // Executar EXATAMENTE o atributo onclick da forma como o
-                // browser faria quando o click é "real": criar um event,
-                // vincular `this`, e avaliar o conteúdo do onclick. RichFaces
-                // 3.3.3 espera que `event` esteja no escopo da execução.
-                const onclickStr = a.getAttribute('onclick') || '';
-                if (!onclickStr) {
-                    a.click();
-                    return linkId.via + ':no-onclick:fallback';
                 }
-                const ev = new MouseEvent('click', {bubbles: true, cancelable: true, view: window});
-                try { Object.defineProperty(ev, 'target', {value: a, configurable: true}); } catch(_) {}
-                try { Object.defineProperty(ev, 'currentTarget', {value: a, configurable: true}); } catch(_) {}
-                try {
-                    // new Function expõe "event" como argumento e "this" como
-                    // o elemento — replica ambiente do attribute onclick.
-                    const fn = new Function('event', onclickStr);
-                    fn.call(a, ev);
-                    return linkId.via + ':onclick-exec';
-                } catch (err) {
-                    a.click();
-                    return linkId.via + ':onclick-error:' + (err.message||'?').slice(0,60);
-                }
+                return null;
             }""",
             candidatos,
         )
+        clicou = None
+        if link_id_res:
+            try:
+                lid = link_id_res["id"]
+                # Click NATIVO Playwright — respeita onclick `return false`,
+                # não interrompe AJAX com navegação default.
+                self._page.locator(f'[id="{lid}"]').click(force=True, timeout=6000)
+                clicou = link_id_res["via"] + ":native-click"
+            except Exception as e:
+                self.log(f"    ⚠ Click nativo falhou ({e}) — tentando JS exec")
+                # Fallback: JS onclick exec (estratégia anterior)
+                clicou = self._page.evaluate(
+                    """(lid) => {
+                        const a = document.getElementById(lid);
+                        if (!a) return null;
+                        const onclickStr = a.getAttribute('onclick') || '';
+                        if (!onclickStr) { a.click(); return 'no-onclick'; }
+                        try {
+                            const ev = new MouseEvent('click', {bubbles:true,cancelable:true,view:window});
+                            new Function('event', onclickStr).call(a, ev);
+                            return 'onclick-exec';
+                        } catch(err) { a.click(); return 'onclick-error'; }
+                    }""",
+                    lid,
+                )
         if not clicou:
             # Diagnóstico: dump tabela atual para identificar mismatch
             diag = self._page.evaluate(
