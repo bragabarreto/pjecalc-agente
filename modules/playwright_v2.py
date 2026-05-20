@@ -2210,34 +2210,19 @@ class PlaywrightAutomatorV2:
             # Test manual no Chrome confirmou: conv=192 via Recentes mostra 5 verbas
             # e linkParametrizar funciona perfeitamente.
             self._fechar_e_reabrir_calculo("pós-Expresso")
-            # CRÍTICO (20/05/2026 — descoberto via análise log SSE):
-            # Após Fechar+Reabrir, o bean apresentadorVerbaDeCalculo (SESSION
-            # scoped) leva alguns ciclos para o Seam propagar o cálculo aberto
-            # pelo Recentes-reabertura. Bot navega rápido demais → listagem vazia.
-            # Observado no SSE: 1ª tentativa "Verba não encontrada [...] TRs: []";
-            # 2ª-5ª "menu não encontrado"; ~6ª tentativa "5 verbas listadas".
-            # FIX: retry navegação até listagem ter N verbas (= n verbas Expresso
-            # esperadas), ou até timeout. Garante "aquecimento" do bean.
-            n_esperado = max(1, sum(1 for v in verbas_expresso if v.estrategia_preenchimento and 'expresso' in str(v.estrategia_preenchimento).lower()))
-            n_atual = 0
-            for tentativa in range(6):
-                self._navegar_menu_via_click("li_calculo_verbas")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(3000)
-                try:
-                    n_atual = self._page.evaluate(
-                        """() => document.querySelectorAll('a.linkParametrizar:not([id*=":listaReflexo:"])').length"""
-                    )
-                except Exception:
-                    n_atual = 0
-                self.log(f"  [warm-up] tentativa {tentativa+1}/6: listagem tem {n_atual} verbas (esperado ≥{n_esperado})")
-                if n_atual >= n_esperado:
-                    self.log(f"  ✓ listagem aquecida ({n_atual} verbas) — iniciando loop Ajustar parâmetros")
-                    break
-            if n_atual < n_esperado:
-                self.log(f"  ⚠ listagem não aqueceu após 6 tentativas (tem {n_atual}, esperado {n_esperado}) — prosseguindo mesmo assim")
 
-        for v in verbas_expresso:
+        # CRÍTICO (20/05/2026 — descoberto via log SSE):
+        # Cada `Operação realizada com sucesso` (save de verba) consome estado
+        # Seam EPC. Padrão observado no log: 1ª verba OK → 2ª FALHA (redirect
+        # para principal.jsf) → 3ª OK → 4ª/5ª FALHAM. Estado degenera a cada
+        # 2 saves.
+        # FIX: Fechar+Reabrir ANTES DE CADA verba — garante conv fresca + bean
+        # apresentadorVerbaDeCalculo limpo + cálculo recém-aberto via Recentes.
+        # Custo: ~8s por verba (5 verbas × 8s = 40s extras). Compensa pela
+        # confiabilidade — cada verba parte de estado limpo.
+        for idx, v in enumerate(verbas_expresso):
+            if idx > 0:  # Primeira já tem o Fechar+Reabrir acima
+                self._fechar_e_reabrir_calculo(f"pré-verba {idx+1}/{len(verbas_expresso)}")
             self._configurar_parametros_pos_expresso(v)
             # Para verbas INFORMADO: setar valorDevido em pelo menos uma
             # ocorrência (PJE-Calc bloqueia liquidação se TODAS as ocorrências
