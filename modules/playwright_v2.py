@@ -3212,19 +3212,25 @@ class PlaywrightAutomatorV2:
         if hasattr(v, "expresso_alvo") and v.expresso_alvo and v.expresso_alvo != v.nome_pjecalc:
             candidatos.append(v.expresso_alvo)
         self.log(f"  → Ajustar parâmetros: {v.nome_pjecalc} (busca: {candidatos})")
-        # NOTA 20/05/2026: removido sidebar click pré-linkParametrizar.
-        # Descoberta via decompilação: bean é @Scope(SESSION), não CONVERSATION.
-        # Sidebar click chama iniciar() que reseta operacao=LISTAGEM. Combinado
-        # com o native click (respeitando return false), a chamada direta
-        # ao linkParametrizar.click() deve preservar operacao=ALTERACAO no
-        # render response. Aguardar listagem estar visível antes do click.
+        # ESTRATÉGIA REFINADA 20/05/2026:
+        # Sidebar pre-click → invoca iniciar() do bean (popula verbaDeCalculoVO,
+        # evita NPE em prepararMinicrudsDasBasesCadastradas). Com a4j:keepAlive
+        # adicionado ao verba-calculo.xhtml (commit df56127), o bean state
+        # é preservado entre AJAX requests. Subsequente linkParametrizar
+        # native-click chama alterar() que seta operacao=ALTERACAO sobre o
+        # bean populado, e o keepAlive impede o reset no render response.
         try:
-            self._page.wait_for_function(
-                """() => document.querySelectorAll('a.linkParametrizar').length > 0""",
-                timeout=10000,
-            )
-        except Exception:
-            pass
+            self._navegar_menu_via_click("li_calculo_verbas")
+            try:
+                self._page.wait_for_function(
+                    """() => document.querySelectorAll('a.linkParametrizar').length > 0""",
+                    timeout=15000,
+                )
+            except Exception:
+                pass
+            self._page.wait_for_timeout(2000)
+        except Exception as e:
+            self.log(f"    ⚠ sidebar verbas: {e}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
