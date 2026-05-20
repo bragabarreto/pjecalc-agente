@@ -2198,66 +2198,27 @@ class PlaywrightAutomatorV2:
         # na conv=6 original — não precisamos mais nos preocupar com eles aqui.
         # Só precisamos de verba-calculo.jsf para configurar parâmetros pós-Expresso.
         if verbas_expresso:
-            # Pós-Expresso: Seam criou nova conversation (ex: conv=6 → conv=42).
-            # Forçar inicialização via calculo.jsf?conversationId={nova_conv}.
-            ok = False
-            _conv_pos = self._calculo_conversation_id
-            if _conv_pos:
-                try:
-                    self.log(f"  → Inicializando contexto pós-Expresso: calculo.jsf?conversationId={_conv_pos}")
-                    url_calc = f"{self.pjecalc_url}/pages/calculo/calculo.jsf?conversationId={_conv_pos}"
-                    self._page.goto(url_calc, wait_until="domcontentloaded", timeout=15000)
-                    self._aguardar_ajax(10000)
-                    self._page.wait_for_timeout(1500)
-                    self._capturar_conversation_id()
-                    _diag_init = self._page.evaluate("""() => {
-                        const body = document.body?.textContent || '';
-                        return {
-                            url: location.href.slice(-60),
-                            tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
-                            tem_form: !!document.getElementById('formulario'),
-                            n_fields: document.querySelectorAll('input[type=text],input[type=radio],input[type=checkbox],select').length
-                        };
-                    }""")
-                    self.log(f"  [DIAG-seam-init] calculo.jsf em conv={_conv_pos}: {_diag_init}")
-                    if not _diag_init['tem_500'] and _diag_init['n_fields'] > 5:
-                        self.log(f"  ✓ Contexto pós-Expresso ok: conv={self._calculo_conversation_id}")
-                        ok = True
-                    else:
-                        self.log(f"  ⚠ calculo.jsf sem campos em conv={_conv_pos} — tentando Recentes")
-                except Exception as _e_init:
-                    self.log(f"  ⚠ Erro ao inicializar contexto pós-Expresso: {_e_init}")
-
-            # Tentativa B: reabrir via Recentes (só se inicialização falhou)
-            if not ok:
-                try:
-                    _recentes_count = self._page.evaluate("""() => {
-                        const SKIP = new Set(['selAcheFacil']);
-                        for (const s of document.querySelectorAll('select')) {
-                            if (SKIP.has(s.name) || SKIP.has(s.id)) continue;
-                            if (s.size > 1 && (s.name || '').startsWith('formulario:'))
-                                return s.options.length;
-                        }
-                        return -1;
-                    }""")
-                    self.log(f"  ℹ Recentes count: {_recentes_count}")
-                    if _recentes_count > 0:
-                        self.log("  → Tentando reabrir via Recentes (lista não-vazia)")
-                        ok = self._reabrir_calculo_via_recentes()
-                    else:
-                        self.log(f"  ℹ Recentes vazio — prosseguindo com conv={self._calculo_conversation_id}")
-                except Exception as _e_rec:
-                    self.log(f"  ⚠ Erro ao checar Recentes: {_e_rec}")
-
+            # CRÍTICO (descoberto 20/05/2026 via Chrome MCP diagnóstico):
+            # Cada Expresso save cria uma nova conv Seam (6→42→48→...→86).
+            # A conv da última save (86) só "vê" a última verba salva (HE 50%),
+            # não as 4 anteriores. Quando o bot tenta `_configurar_parametros_pos_expresso`,
+            # a listagem aparece com APENAS 1 verba e linkParametrizar falha.
+            #
+            # FIX: Fechar+Reabrir após os Expresso saves força @End da conv atual,
+            # commita TODAS as 5 verbas ao DB, e a reabertura via Recentes cria
+            # uma conv fresh com o cálculo completo (todas as verbas visíveis).
+            # Test manual no Chrome confirmou: conv=192 via Recentes mostra 5 verbas
+            # e linkParametrizar funciona perfeitamente.
+            self._fechar_e_reabrir_calculo("pós-Expresso")
             # Navegar para listagem de verbas para ajuste de parâmetros pós-Expresso
-            self._navegar_menu("li_calculo_verbas")
+            self._navegar_menu_via_click("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2000)
             tem_listagem = self._page.evaluate(
                 """() => document.querySelectorAll('a.linkParametrizar').length > 0"""
             )
             if not tem_listagem:
-                self.log("  ⚠ verba-calculo.jsf vazia/NPE — parâmetros pós-Expresso serão pulados")
+                self.log("  ⚠ verba-calculo.jsf vazia/NPE pós-Fechar+Reabrir — parâmetros pós-Expresso serão pulados")
 
         for v in verbas_expresso:
             self._configurar_parametros_pos_expresso(v)
