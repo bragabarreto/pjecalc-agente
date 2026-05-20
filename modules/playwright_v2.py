@@ -3233,29 +3233,48 @@ class PlaywrightAutomatorV2:
         )
         clicou = None
         if link_id_res:
-            try:
-                lid = link_id_res["id"]
-                # Click NATIVO Playwright — respeita onclick `return false`,
-                # não interrompe AJAX com navegação default.
-                self._page.locator(f'[id="{lid}"]').click(force=True, timeout=6000)
-                clicou = link_id_res["via"] + ":native-click"
-            except Exception as e:
-                self.log(f"    ⚠ Click nativo falhou ({e}) — tentando JS exec")
-                # Fallback: JS onclick exec (estratégia anterior)
-                clicou = self._page.evaluate(
-                    """(lid) => {
-                        const a = document.getElementById(lid);
-                        if (!a) return null;
+            lid = link_id_res["id"]
+            # CRÍTICO (descoberto 20/05/2026 via Chrome MCP):
+            # `element.click()` puro do DOM JS funciona perfeitamente — o browser
+            # dispara o `onclick` handler `A4J.AJAX.Submit(...); return false;` e
+            # interpreta o `return false` como preventDefault, cancelando a
+            # navegação `href="#irTopoPagina"` ANTES dela acontecer. AJAX é
+            # processado limpo e o form de Alteração renderiza.
+            #
+            # Playwright `locator.click(force=True)` em ambiente headless tem
+            # comportamento sutilmente diferente — em testes o form não carregava.
+            # Já o `new Function('event', onclickStr).call(a, ev)` executa o JS
+            # do onclick mas SEM contexto de evento real → A4J.AJAX.Submit pode
+            # falhar internamente ao ler event.target.
+            #
+            # Estratégia primária: JS `element.click()` (confirmado funcional via
+            # Chrome MCP). Fallback: onclick-exec via new Function.
+            clicou = self._page.evaluate(
+                """(lid) => {
+                    const a = document.getElementById(lid);
+                    if (!a) return null;
+                    try { a.click(); return 'js-click'; }
+                    catch (e) {
                         const onclickStr = a.getAttribute('onclick') || '';
-                        if (!onclickStr) { a.click(); return 'no-onclick'; }
+                        if (!onclickStr) return null;
                         try {
                             const ev = new MouseEvent('click', {bubbles:true,cancelable:true,view:window});
                             new Function('event', onclickStr).call(a, ev);
                             return 'onclick-exec';
-                        } catch(err) { a.click(); return 'onclick-error'; }
-                    }""",
-                    lid,
-                )
+                        } catch (_) { return null; }
+                    }
+                }""",
+                lid,
+            )
+            if clicou:
+                clicou = link_id_res["via"] + ":" + clicou
+            else:
+                # Último fallback: Playwright force click
+                try:
+                    self._page.locator(f'[id="{lid}"]').click(force=True, timeout=6000)
+                    clicou = link_id_res["via"] + ":playwright-force"
+                except Exception as e:
+                    self.log(f"    ⚠ Playwright click force também falhou: {e}")
         if not clicou:
             # Diagnóstico: dump tabela atual para identificar mismatch
             diag = self._page.evaluate(
