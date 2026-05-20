@@ -10,20 +10,12 @@
 	xmlns:cobra="http://www.cobra.com.br/jsf/utils">
 
 	<ui:composition template="/templates/template-conteudo.xhtml">
-
+	
 		<ui:param name="dadosDe" value="Verba" />
 		<ui:param name="lista" value="#{listaVerbas}"/>
 		<ui:param name="apresentador" value="#{apresentadorVerbaDeCalculo}"/>
 		<ui:param name="registro" value="#{apresentadorVerbaDeCalculo.verbaDeCalculoVO}"/>
 		<ui:param name="titulo" value="#{apresentadorVerbaDeCalculo.titulo}" />
-
-		<!-- PATCH 20/05/2026: a4j:keepAlive preserva estado do bean Seam entre
-		     AJAX requests em rich:dataTable. Sem isso, o linkParametrizar
-		     dispara alterar() mas operacao=ALTERACAO Ã© perdido no render
-		     response (bean reinstanciado). Confirmado via decompilaÃ§Ã£o:
-		     @Scope(SESSION) + actionListener sem action â†’ state pode ser
-		     resetado por iniciar() chamado em redirect navigation. -->
-		<a4j:keepAlive beanName="apresentadorVerbaDeCalculo" />
 			
 		<ui:define name="nofiltroCampos">
 			<ui:include src="../resumo-calculo.xhtml" />
@@ -56,7 +48,7 @@
 					    	</h:panelGrid>
 						</rich:column>
 						<rich:column>
-							<h:outputText value="Aï¿½ï¿½es" />
+							<h:outputText value="Ações" />
 						</rich:column>
 						<rich:column>
 							<h:outputText value="Verba Principal" />
@@ -76,8 +68,8 @@
 						</h:panelGrid>
 					</rich:column>
 					<rich:column>
-						<a4j:commandLink styleClass="linkParametrizar" title="Parï¿½metros da Verba" actionListener="#{apresentador.alterar}"/>
-						<a4j:commandLink styleClass="linkOcorrencias" title="Ocorrï¿½ncias da Verba" action="#{apresentador.visualizarOcorrencias}"/>
+						<a4j:commandLink styleClass="linkParametrizar" title="Parâmetros da Verba" actionListener="#{apresentador.alterar}"/>
+						<a4j:commandLink styleClass="linkOcorrencias" title="Ocorrências da Verba" action="#{apresentador.visualizarOcorrencias}"/>
 						<a4j:commandLink styleClass="linkExcluir" title="Excluir" ajaxSingle="true" actionListener="#{apresentador.excluir}" onclick="if (!confirma('#{mensagens.MSG0014}',this)) return false;"/>
 					</rich:column>
 					<rich:column>
@@ -146,7 +138,7 @@
 		</ui:define>
 	
 	<!--  
-		INICIO DO FORMULï¿½RIO	
+		INICIO DO FORMULÁRIO	
 	-->
 		
 		<ui:define name="camposFormulario">
@@ -230,38 +222,38 @@
 				</h:panelGroup>
 				
 				<h:panelGroup id="painelIncidencias">
-				<fieldset style="float:left; height: 90px;"><legend>Incidï¿½ncia</legend>
+				<fieldset style="float:left; height: 90px;"><legend>Incidência</legend>
 					<h:panelGrid columns="2" cellpadding="3" cellspacing="3" border="0">
 						<h:panelGroup>
 						<h:selectBooleanCheckbox id="irpf" label="IRPF" value="#{registro.incidenciaIRPF}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
 						<h:outputText value="IRPF" style="padding-left: 4px"/>
 						</h:panelGroup>
 						<h:panelGroup>
-						<h:selectBooleanCheckbox id="inss" label="Contribuiï¿½ï¿½o Social" value="#{registro.incidenciaINSS}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
-						<h:outputText value="Contribuiï¿½ï¿½o Social" style="padding-left: 4px"/>
+						<h:selectBooleanCheckbox id="inss" label="Contribuição Social" value="#{registro.incidenciaINSS}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+						<h:outputText value="Contribuição Social" style="padding-left: 4px"/>
 						</h:panelGroup>						
 						<h:panelGroup>
 						<h:selectBooleanCheckbox id="fgts" label="FGTS" value="#{registro.incidenciaFGTS}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
 						<h:outputText value="FGTS" style="padding-left: 4px"/>
 						</h:panelGroup>
 						<h:panelGroup>
-						<h:selectBooleanCheckbox id="previdenciaPrivada" label="Previdï¿½ncia Privada" value="#{registro.incidenciaPrevidenciaPrivada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
-						<h:outputText value="Previdï¿½ncia Privada" style="padding-left: 4px"/>
+						<h:selectBooleanCheckbox id="previdenciaPrivada" label="Previdência Privada" value="#{registro.incidenciaPrevidenciaPrivada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+						<h:outputText value="Previdência Privada" style="padding-left: 4px"/>
 						</h:panelGroup>
 						<h:panelGroup></h:panelGroup>
 						<h:panelGroup>
-						<h:selectBooleanCheckbox id="pensaoAlimenticia"  label="Pensï¿½o Alimentï¿½cia"  value="#{registro.incidenciaPensaoAlimenticia}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
-						<h:outputText value="Pensï¿½o Alimentï¿½cia" style="padding-left: 4px"/>
+						<h:selectBooleanCheckbox id="pensaoAlimenticia"  label="Pensão Alimentícia"  value="#{registro.incidenciaPensaoAlimenticia}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+						<h:outputText value="Pensão Alimentícia" style="padding-left: 4px"/>
 						</h:panelGroup>
 					</h:panelGrid>
 				</fieldset>	
 				</h:panelGroup>	
 				
 				<h:panelGroup id="painelCaracteristica">
-					<fieldset style="float:left;"><legend>Caracterï¿½stica *</legend>
+					<fieldset style="float:left;"><legend>Característica *</legend>
 						<a4j:region>
 							<h:selectOneRadio id="caracteristicaVerba" value="#{registro.caracteristica}"
-											label="Caracterï¿½stica" 
+											label="Característica" 
 											disabled="#{apresentador.emModoSomenteVisualizacao}" styleClass="labelInput" 
 												layout="pageDirection" required="true" >
 								<s:selectItems value="#{enumItems.caracteristicaDaVerbaEnum}" var="item" label="#{item.nome}"/>
@@ -275,10 +267,10 @@
 				<!-- disabled="#{(apresentador.emModoSomenteVisualizacao or not registro.isPermiteAlterarOcorrenciaDePagamento()) or (registro.getItensDaBaseVerba().size() > 0 )}" styleClass="labelInput" -->
 				
 				<h:panelGroup id="painelOcorrenciaDePagamento">
-				<fieldset style="float:left; "><legend>Ocorrï¿½ncia de Pagamento *</legend>	
+				<fieldset style="float:left; "><legend>Ocorrência de Pagamento *</legend>	
 					<a4j:region>
 					<h:selectOneRadio id="ocorrenciaPagto" value="#{registro.ocorrenciaDePagamento}"
-										label="Ocorrï¿½ncia de Pagamento" 
+										label="Ocorrência de Pagamento" 
 										disabled="#{(apresentador.emModoSomenteVisualizacao or not registro.isPermiteAlterarOcorrenciaDePagamento())}" styleClass="labelInput" 
 										layout="pageDirection" required="true" 
 										>
@@ -291,10 +283,10 @@
 				</h:panelGroup>	
 
 				<h:panelGroup>
-				<fieldset style="float:left; height: 90px;"><legend>Juros - Aplicar Sï¿½mula nï¿½ 439 do TST</legend>	
+				<fieldset style="float:left; height: 90px;"><legend>Juros - Aplicar Súmula nº 439 do TST</legend>	
 						<h:selectOneRadio id="ocorrenciaAjuizamento" value="#{registro.jurosDoAjuizamento}" styleClass="labelInput" 
 										disabled="#{apresentador.emModoSomenteVisualizacao}" layout="pageDirection" required="true">
-							<s:selectItems value="#{enumItems.jurosDoAjuizamentoEnum}" var="item" label="#{item.valor == 'M' ? 'Sim' : 'Nï¿½o'}"/>
+							<s:selectItems value="#{enumItems.jurosDoAjuizamentoEnum}" var="item" label="#{item.valor == 'M' ? 'Sim' : 'Não'}"/>
 							<s:convertEnum />
 						</h:selectOneRadio>
 						</fieldset>	
@@ -380,11 +372,11 @@
 					<h:panelGrid columns="3" border="0">
 					<h:panelGroup>
 						<fieldset>
-							<legend>Perï¿½odo *</legend>
+							<legend>Período *</legend>
 							 
 							 <span style="margin-left: 8px; margin-right: 8px;"> De </span>
 							 
-						     <rich:calendar id="periodoInicial" label="Perï¿½odo Inicial" value="#{registro.periodoInicial}" inputSize="15" 
+						     <rich:calendar id="periodoInicial" label="Período Inicial" value="#{registro.periodoInicial}" inputSize="15" 
 						     				popup="true" datePattern="dd/MM/yyyy" 
 						     				enableManualInput="true" styleClass="leitura" 
 						     				oninputfocus="$(this).dateMask()" >
@@ -396,9 +388,9 @@
                                 <rich:message for="periodoInicial"/>
                             </cobra:toolTip>
 	                        
-	                        <span style="margin-left: 8px; margin-right: 8px;"> Atï¿½ </span>
+	                        <span style="margin-left: 8px; margin-right: 8px;"> Até </span>
 	   
-							<rich:calendar id="periodoFinal" label="Perï¿½odo Final" value="#{registro.periodoFinal}"  inputSize="15" popup="true" 
+							<rich:calendar id="periodoFinal" label="Período Final" value="#{registro.periodoFinal}"  inputSize="15" popup="true" 
 										datePattern="dd/MM/yyyy" enableManualInput="true" styleClass="leitura" 
 										oninputfocus="$(this).dateMask()">
 							    <f:facet name="footer">
@@ -414,19 +406,19 @@
 					<h:panelGroup rendered="#{not registro.isReflexo()}" id="painelExclusoes">
 						<a4j:outputPanel rendered="#{apresentador.mostrarExclusoes}">
 						<fieldset style="float:left;">
-							<legend>Exclusï¿½es</legend>
+							<legend>Exclusões</legend>
 							<h:panelGrid columns="3" cellpadding="3" cellspacing="3" border="0">
 								<h:panelGroup>
 									<h:selectBooleanCheckbox id="excluirFaltaJustificada" label="Faltas Justificadas" value="#{registro.excluirFaltaJustificada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
 									<h:outputText value="Faltas Justificadas" style="padding-left: 4px"/>
 								</h:panelGroup>
 								<h:panelGroup>
-									<h:selectBooleanCheckbox id="excluirFaltaNaoJustificada" label="Faltas Nï¿½o Justificadas" value="#{registro.excluirFaltaNaoJustificada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
-									<h:outputText value="Faltas Nï¿½o Justificadas" style="padding-left: 4px"/>
+									<h:selectBooleanCheckbox id="excluirFaltaNaoJustificada" label="Faltas Não Justificadas" value="#{registro.excluirFaltaNaoJustificada}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+									<h:outputText value="Faltas Não Justificadas" style="padding-left: 4px"/>
 								</h:panelGroup>
 								<h:panelGroup>
-									<h:selectBooleanCheckbox id="excluirFeriasGozadas" label="Fï¿½rias Gozadas" value="#{registro.excluirFeriasGozadas}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
-									<h:outputText value="Fï¿½rias Gozadas" style="padding-left: 4px"/>
+									<h:selectBooleanCheckbox id="excluirFeriasGozadas" label="Férias Gozadas" value="#{registro.excluirFeriasGozadas}" disabled="#{apresentador.emModoSomenteVisualizacao}"/>
+									<h:outputText value="Férias Gozadas" style="padding-left: 4px"/>
 								</h:panelGroup>
 							</h:panelGrid>
 						</fieldset>	
@@ -474,12 +466,12 @@
 			<a4j:outputPanel id="painelFormula">  
 			
 		    <h:panelGroup rendered="#{registro.isValorDevidoCalculado()}">
-				<fieldset><legend>Fï¿½rmula</legend>
+				<fieldset><legend>Fórmula</legend>
 				
 				<h:panelGrid columns="1" cellpadding="1" cellspacing="1" border="0" >
 				
 				<h:panelGroup>
-				<fieldset style="float:left; padding-right: 10px;"><legend>Base de Cï¿½lculo *</legend>
+				<fieldset style="float:left; padding-right: 10px;"><legend>Base de Cálculo *</legend>
 				
 				<div style="float: left;">
 				
@@ -488,7 +480,7 @@
 						<a4j:region rendered="#{registro.isPrincipal()}">
 								<h:outputLabel value="Bases Cadastradas" style="margin-left:5px;"/><br />
 								<h:selectOneMenu id="tipoDaBaseTabelada" value="#{registro.tipoDaBaseTabelada}" 
-													label="Base de Cï¿½lculo"
+													label="Base de Cálculo"
 													style="width:140px; margin-left:5px; margin-bottom:6px;" 
 													disabled="#{apresentador.emModoSomenteVisualizacao}">
 								 	<s:selectItems  noSelectionLabel="" value="#{enumItems.baseDeCalculoDoPrincipalEnum}" var="item" label="#{item.nome}"/>
@@ -533,8 +525,8 @@
 									<h:panelGrid columns="3" cellpadding="1" cellspacing="1" border="0" >
 
 										<h:panelGroup>
-											<h:outputLabel value="Histï¿½rico Salarial *" style="margin-left:2px;"/><br />
-											<h:selectOneMenu id="baseHistoricos" label="Base de Cï¿½lculo" 
+											<h:outputLabel value="Histórico Salarial *" style="margin-left:2px;"/><br />
+											<h:selectOneMenu id="baseHistoricos" label="Base de Cálculo" 
 															value="#{apresentador.historicoSalarialSelecionado}"
 															style="width:140px; margin-left:2px;"
 															disabled="#{apresentador.emModoSomenteVisualizacao}">
@@ -581,7 +573,7 @@
 													disabled="#{apresentador.emModoSomenteVisualizacao}"> 
 									    		<rich:column style="width:5%;">
 											    	<f:facet name="header">
-										    			<h:outputText value="Aï¿½ï¿½o"/>
+										    			<h:outputText value="Ação"/>
 										    		</f:facet>
 												    <a4j:region>
 										    			<a4j:commandLink id="excluirHistorico" actionListener="#{apresentador.excluirHistoricoSalarialDaVerba}"
@@ -593,7 +585,7 @@
 											    
 										    	<rich:column style="width:180px;">
 									    			<f:facet name="header">
-									    				<h:outputText value="Histï¿½rico Salarial"/>
+									    				<h:outputText value="Histórico Salarial"/>
 									    			</f:facet>	
 									    			<h:outputText value="#{historicoDaVerba.historicoSalarial.nome}" />
 										    	</rich:column>
@@ -602,7 +594,7 @@
 									    			<f:facet name="header">
 									    				<h:outputText value="Proporcionalizar"/>
 									    			</f:facet>	
-									    			<h:outputText value="#{(historicoDaVerba.aplicarProporcionalidade) ? 'Sim' : 'Nï¿½o'}" />
+									    			<h:outputText value="#{(historicoDaVerba.aplicarProporcionalidade) ? 'Sim' : 'Não'}" />
 										    	</rich:column>
 										     	
 											</rich:dataTable>
@@ -659,7 +651,7 @@
 													disabled="#{apresentador.emModoSomenteVisualizacao}"> 
 									    		<rich:column style="width:5%;">
 											    	<f:facet name="header">
-										    			<h:outputText value="Aï¿½ï¿½o"/>
+										    			<h:outputText value="Ação"/>
 										    		</f:facet>
 												    <a4j:region>
 										    			<a4j:commandLink id="excluirValeDevido" actionListener="#{apresentador.excluirValeTransporteDevido}"
@@ -693,7 +685,7 @@
 								</div>
 								</a4j:region>
 
-								<!--  FIM DA IMPLEMENTAï¿½ï¿½O DA BASE DE VALE TRANSPORTE -->
+								<!--  FIM DA IMPLEMENTAÇÃO DA BASE DE VALE TRANSPORTE -->
 								
 				
 				
@@ -707,7 +699,7 @@
 								<h:panelGrid columns="4" cellpadding="1" cellspacing="1" border="0" >
 									<h:panelGroup>
 									<h:outputLabel value="Verba *" /><br />
-									<h:selectOneMenu id="baseVerbaDeCalculo"  label="Base de Cï¿½lculo" 
+									<h:selectOneMenu id="baseVerbaDeCalculo"  label="Base de Cálculo" 
 													value="#{apresentador.baseVerbaDeCalculo}"
 													style="width:140px; margin-left:2px;"
 													disabled="#{apresentador.emModoSomenteVisualizacao}"> 
@@ -746,7 +738,7 @@
 										
 									    <h:outputText rendered="#{registro.isPrincipal()}" class="linkHelp" id="valorIntegralizarVerbaHelp" style="margin-left:1px">
 									   			<rich:toolTip for="valorIntegralizarVerbaHelp" showEvent="mouseover" styleClass="tooltipHelp">
-									   				Caso opte por "integralizar", nos meses incompletos serï¿½ considerado o valor correspondente ao mï¿½s completo.
+									   				Caso opte por "integralizar", nos meses incompletos será considerado o valor correspondente ao mês completo.
 									   			</rich:toolTip>
 					     	    		</h:outputText>
 					    			</h:panelGroup>
@@ -763,7 +755,7 @@
 													disabled="#{apresentador.emModoSomenteVisualizacao}"> 
 							    		<rich:column style="width:5%;">
 									    	<f:facet name="header">
-								    			<h:outputText value="Aï¿½ï¿½o"/>
+								    			<h:outputText value="Ação"/>
 								    		</f:facet>
 										    <a4j:region>
 								    			<a4j:commandLink id="excluirItem" actionListener="#{apresentador.excluirBaseVerbaDeCalculo(itemBaseVerba)}"
@@ -850,9 +842,9 @@
 							
 							<h:panelGrid columns="1" cellpadding="2" cellspacing="2" border="0">
 									<h:panelGroup rendered="${not registro.isValorMensal()}">
-										<h:outputLabel value="Perï¿½odo da Mï¿½dia"/><br />
+										<h:outputLabel value="Período da Média"/><br />
 										<h:selectOneMenu value="#{registro.periodoMediaReflexo}" 
-														label="Perï¿½odo da Mï¿½dia"
+														label="Período da Média"
 														style="width:175px; margin-bottom:6px;" 
 														disabled="#{apresentador.emModoSomenteVisualizacao}">
 										 	<s:selectItems value="#{apresentador.listaDePeriodosDaMediaDoReflexo}" var="item" label="#{item.nome}"/>
@@ -861,9 +853,9 @@
 									</h:panelGroup>
 									
 									<h:panelGroup>									
-										<h:outputLabel value="Tratamento da Fraï¿½ï¿½o de Mï¿½s"/><br />
+										<h:outputLabel value="Tratamento da Fração de Mês"/><br />
 										<h:selectOneMenu value="#{registro.tratamentoDaFracaoDeMesDoReflexo}" 
-														label="Tratamento da Fraï¿½ï¿½o de Mï¿½s" 
+														label="Tratamento da Fração de Mês" 
 														style="width:175px; margin-bottom:12px;" 
 														disabled="#{apresentador.emModoSomenteVisualizacao}">
 										 	<s:selectItems value="#{apresentador.listaDeTratamentosDaFracaoDoMesDoReflexo}"  var="item" label="#{item.nome}"/>
@@ -871,7 +863,7 @@
 										</h:selectOneMenu>
 										<h:outputText class="linkHelp" id="valorIntegralizarHelp" style="margin-left:1px">
 									   			<rich:toolTip for="valorIntegralizarHelp" showEvent="mouseover" styleClass="tooltipHelp">
-									   				Caso opte por "Integralizar", nos meses incompletos serï¿½ considerado o valor correspondente ao mï¿½s completo. 
+									   				Caso opte por "Integralizar", nos meses incompletos será considerado o valor correspondente ao mês completo. 
 									   			</rich:toolTip>
 					     	    		</h:outputText>
 									</h:panelGroup>
@@ -934,7 +926,7 @@
 								<h:panelGroup >
 										<h:selectOneMenu id="tipoImportadadoDoCartaoDePontoDivisor" 
 														value="#{apresentador.cartaoDePontoSelecionadoDivisor}" 
-														label="Importada do Cartï¿½o de Ponto"
+														label="Importada do Cartão de Ponto"
 														disabled="#{apresentador.emModoSomenteVisualizacao}">
 										 	<s:selectItems value="#{apresentador.cartoesDePontoDoCalculo}" var="item" label="#{item.nome}" noSelectionLabel=""/>
 										 	<a4j:support event="onchange"  ajaxSingle="true" reRender="painelLabelFormula" limitToList="true" />
@@ -960,7 +952,7 @@
 													disabled="#{apresentador.emModoSomenteVisualizacao}"> 
 									    		<rich:column style="width:5%;">
 											    	<f:facet name="header">
-										    			<h:outputText value="Aï¿½ï¿½o"/>
+										    			<h:outputText value="Ação"/>
 										    		</f:facet>
 												    <a4j:region>
 										    			<a4j:commandLink id="excluirCartaoDePontoDivisor" actionListener="#{apresentador.excluirCartaoDePontoDoDivisor}"
@@ -1054,7 +1046,7 @@
 							
 							<h:panelGroup rendered="#{registro.tipoDaQuantidadeImportadaDoCalendario}">
 								<h:selectOneMenu id="tipoImportadaCalendario" value="#{registro.tipoImportadaCalendario}" 
-												label="Importado do Calendï¿½rio" disabled="#{apresentador.emModoSomenteVisualizacao}">
+												label="Importado do Calendário" disabled="#{apresentador.emModoSomenteVisualizacao}">
 								 	<s:selectItems value="#{enumItems.tipoDeQuantidadeImportadaDoCalendarioEnum}" var="item" label="#{item.nome}"/>
 								 	<a4j:support event="onchange" ajaxSingle="true" reRender="painelLabelFormula" limitToList="true" />
 									<s:convertEnum />
@@ -1069,7 +1061,7 @@
 									<h:panelGroup>
 										<h:selectOneMenu id="tipoImportadadoDoCartaoDePontoQuantidade" 
 												value="#{apresentador.cartaoDePontoSelecionadoQuantidade}" 
-												label="Importada do Cartï¿½o de Ponto"
+												label="Importada do Cartão de Ponto"
 												disabled="#{apresentador.emModoSomenteVisualizacao}">
 								 	         <s:selectItems value="#{apresentador.cartoesDePontoDoCalculo}" var="item" label="#{item.nome}" noSelectionLabel=""/>
 								 	         <a4j:support event="onchange"  ajaxSingle="true" reRender="painelLabelFormula" limitToList="true" />
@@ -1094,7 +1086,7 @@
 														disabled="#{apresentador.emModoSomenteVisualizacao}"> 
 										    		<rich:column style="width:5%;">
 												    	<f:facet name="header">
-											    			<h:outputText value="Aï¿½ï¿½o"/>
+											    			<h:outputText value="Ação"/>
 											    		</f:facet>
 													    <a4j:region>
 											    			<a4j:commandLink id="excluirCartaoDePontoQuantidade" actionListener="#{apresentador.excluirCartaoDePontoDoQuantidade}"
@@ -1247,7 +1239,7 @@
 													disabled="#{apresentador.emModoSomenteVisualizacao}"> 
 									    		<rich:column style="width:5%;">
 											    	<f:facet name="header">
-										    			<h:outputText value="Aï¿½ï¿½o"/>
+										    			<h:outputText value="Ação"/>
 										    		</f:facet>
 												    <a4j:region>
 										    			<a4j:commandLink id="excluirValePago" actionListener="#{apresentador.excluirValeTransportePago}"
@@ -1281,13 +1273,13 @@
 								</div>
 								</a4j:region>
 
-								<!--  FIM DA IMPLEMENTAï¿½ï¿½O DA BASE DE VALE TRANSPORTE -->
+								<!--  FIM DA IMPLEMENTAÇÃO DA BASE DE VALE TRANSPORTE -->
 							
 								<a4j:region  rendered="#{(registro.baseTabelada == 'HISTORICO_SALARIAL') and registro.isValorPagoCalculado()}">
 								
 									<h:panelGrid columns="3" cellpadding="1" cellspacing="1" border="0" >
 										<h:panelGroup>
-											<h:outputLabel value="Histï¿½rico Salarial *" style="margin-left:2px;"/><br />
+											<h:outputLabel value="Histórico Salarial *" style="margin-left:2px;"/><br />
 											<h:selectOneMenu id="baseHistoricosValorPago" label="Base do Valor Pago" 
 															value="#{apresentador.historicoSalarialSelecionadoValorPago}"
 															style="width:140px; margin-left:2px;"
@@ -1333,7 +1325,7 @@
 													disabled="#{apresentador.emModoSomenteVisualizacao}"> 
 									    		<rich:column style="width:5%;">
 											    	<f:facet name="header">
-										    			<h:outputText value="Aï¿½ï¿½o"/>
+										    			<h:outputText value="Ação"/>
 										    		</f:facet>
 												    <a4j:region>
 										    			<a4j:commandLink id="excluirHistoricoValorPago" actionListener="#{apresentador.excluirHistoricoSalarialDaVerbaParaValorPago}"
@@ -1345,7 +1337,7 @@
 											    
 										    	<rich:column style="width:80%;">
 									    			<f:facet name="header">
-									    				<h:outputText value="Histï¿½rico"/>
+									    				<h:outputText value="Histórico"/>
 									    			</f:facet>	
 									    			<h:outputText value="#{historicoDaVerba.historicoSalarial.nome}" />
 										    	</rich:column>
@@ -1354,7 +1346,7 @@
 									    			<f:facet name="header">
 									    				<h:outputText value="Proporcionalizar"/>
 									    			</f:facet>	
-									    			<h:outputText value="#{(historicoDaVerba.aplicarProporcionalidade) ? 'Sim' : 'Nï¿½o'}" />
+									    			<h:outputText value="#{(historicoDaVerba.aplicarProporcionalidade) ? 'Sim' : 'Não'}" />
 										    	</rich:column>
 										     	
 											</rich:dataTable>
@@ -1416,9 +1408,9 @@
 		
 		
 		<div class="floatField" style="margin-top: 8px; margin-left: 6px;">
-			<h:outputLabel value="Comentï¿½rios" /><br/>
+			<h:outputLabel value="Comentários" /><br/>
 			<h:inputTextarea id="comentarios" value="#{registro.comentarios}" 
-							 label="Comentï¿½rios" cols="165" rows="3"
+							 label="Comentários" cols="165" rows="3"
 							 onkeyup="limitarTextArea(this, 255)"
 							 onkeypress="limitarTextArea(this, 255)" onchange="limitarTextArea(this, 255)">
 			</h:inputTextarea>
@@ -1432,7 +1424,7 @@
 			
 			<h:panelGrid columns="2" cellspacing="0" cellpadding="0" border="0" rendered="#{apresentador.emModoListagem}">
 				<h:panelGroup>
-					<fieldset><legend>Lanï¿½amento</legend>
+					<fieldset><legend>Lançamento</legend>
 						<h:panelGrid columns="2" cellspacing="2" cellpadding="0" border="0" style="height:42px;">
 							<a4j:commandButton id="incluir" value="Manual" actionListener="#{apresentador.novo}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoListagem}" />
 							<a4j:commandButton id="lancamentoExpresso" value="Expresso" action="#{apresentadorVerbasParaCalculo.iniciar}" immediate="true" styleClass="botao" rendered="#{apresentador.emModoListagem}" />
@@ -1440,15 +1432,15 @@
 					</fieldset>
 				</h:panelGroup>	
 				<h:panelGroup>
-					<fieldset><legend>Regeraï¿½ï¿½o de Ocorrï¿½ncias</legend>
+					<fieldset><legend>Regeração de Ocorrências</legend>
 						<h:panelGrid columns="2" cellspacing="2" cellpadding="0" border="0" style="height:42px;">
 							<h:panelGroup>
 								<a4j:commandButton id="regerarOcorrencias" value="Regerar" actionListener="#{apresentador.regerarOcorrencias}" styleClass="botao" rendered="#{apresentador.emModoListagem}" reRender="painelScript,painelListagem,listaReflexo" onclick="if (!confirma('#{mensagens.MSG0017}',this)) return false;" />
 							</h:panelGroup>
 							<h:panelGroup layout="block" style="padding-left:10px;">
 								<h:selectOneRadio id="tipoRegeracao" value="#{apresentador.manterAlteracoes}" styleClass="labelInput" layout="pageDirection">
-									<f:selectItem itemLabel="Manter alteraï¿½ï¿½es realizadas nas ocorrï¿½ncias" itemValue="#{true}" />
-									<f:selectItem itemLabel="Sobrescrever alteraï¿½ï¿½es realizadas nas ocorrï¿½ncias" itemValue="#{false}" />
+									<f:selectItem itemLabel="Manter alterações realizadas nas ocorrências" itemValue="#{true}" />
+									<f:selectItem itemLabel="Sobrescrever alterações realizadas nas ocorrências" itemValue="#{false}" />
 								</h:selectOneRadio>
 							</h:panelGroup>
 						</h:panelGrid>
