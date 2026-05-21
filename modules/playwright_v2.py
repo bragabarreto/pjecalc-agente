@@ -2573,20 +2573,30 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1000)
 
-            # Entrar na página Expresso
-            self._clicar("lancamentoExpresso")
-            self._aguardar_ajax(8000)
-            self._page.wait_for_timeout(1500)
+            # CRÍTICO (21/05/2026): após salvar várias verbas Expresso, o estado
+            # Seam degenera e a página Expresso retorna 0 checkboxes (lista vazia).
+            # Detectar isso e fazer Fechar+Reabrir antes de re-tentar.
+            def _entrar_expresso_com_retry() -> int:
+                """Entra na página Expresso e retorna count de checkboxes."""
+                self._clicar("lancamentoExpresso")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                try:
+                    return self._page.evaluate(
+                        """() => document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]').length"""
+                    )
+                except Exception:
+                    return 0
 
-            # Diagnóstico no primeiro loop
-            if idx == 0:
-                diag = self._page.evaluate(
-                    """() => {
-                        const cbs = [...document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')];
-                        return {total: cbs.length};
-                    }"""
-                )
-                self.log(f"    ℹ Página Expresso: {diag.get('total')} checkboxes disponíveis")
+            total_cbs = _entrar_expresso_com_retry()
+            if total_cbs == 0:
+                self.log(f"    ⚠ Página Expresso vazia (0 checkboxes) — Fechar+Reabrir + retry")
+                self._fechar_e_reabrir_calculo(f"pré-Expresso retry {idx+1}/{len(verbas)}")
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                total_cbs = _entrar_expresso_com_retry()
+            self.log(f"    ℹ Página Expresso: {total_cbs} checkboxes disponíveis")
 
             # Marcar checkbox da verba alvo
             # CRÍTICO (21/05/2026): DB tem MULTA 477 e outras verbas com
