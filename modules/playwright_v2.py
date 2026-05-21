@@ -3053,22 +3053,39 @@ class PlaywrightAutomatorV2:
             f = p.formula_calculado
             if f:
                 # Base de Cálculo
+                tipo_mudou = False
                 try:
-                    if self._selecionar_se_diferente("tipoDaBaseTabelada", f.base_calculo.tipo.value):
-                        self._aguardar_ajax(2500)
+                    tipo_mudou = self._selecionar_se_diferente("tipoDaBaseTabelada", f.base_calculo.tipo.value)
+                    if tipo_mudou:
+                        self._aguardar_ajax(3500)
+                        self._page.wait_for_timeout(500)
                 except Exception as e:
                     self.log(f"    ⚠ tipoDaBaseTabelada: {e}")
+                # CRÍTICO (21/05/2026): se tipoDaBaseTabelada mudou para HISTORICO_SALARIAL,
+                # o AJAX re-renderiza baseHistoricos com valor visual default mas JSF
+                # model server-side fica VAZIO. _selecionar_se_diferente verifica só
+                # o visual → pula → JSF reclama "Campo obrigatório: Histórico Salarial".
+                # FIX: forçar _selecionar() (que dispara onchange) quando tipo mudou.
                 if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
                     if f.base_calculo.historico_nome:
-                        self._selecionar_se_diferente("baseHistoricos", f.base_calculo.historico_nome)
+                        if tipo_mudou:
+                            self._selecionar("baseHistoricos", f.base_calculo.historico_nome, obrigatorio=False)
+                        else:
+                            self._selecionar_se_diferente("baseHistoricos", f.base_calculo.historico_nome)
                     if f.base_calculo.proporcionaliza:
                         self._selecionar_se_diferente("proporcionalizaHistorico", f.base_calculo.proporcionaliza.value)
                 elif f.base_calculo.tipo == TipoBaseCalculo.VALE_TRANSPORTE:
                     if f.base_calculo.vale_transporte_nome:
-                        self._selecionar_se_diferente("valeTransporteDevido", f.base_calculo.vale_transporte_nome)
+                        if tipo_mudou:
+                            self._selecionar("valeTransporteDevido", f.base_calculo.vale_transporte_nome, obrigatorio=False)
+                        else:
+                            self._selecionar_se_diferente("valeTransporteDevido", f.base_calculo.vale_transporte_nome)
                 elif f.base_calculo.tipo == TipoBaseCalculo.SALARIO_DA_CATEGORIA:
                     if f.base_calculo.salario_categoria_nome:
-                        self._selecionar_se_diferente("salarioCategoria", f.base_calculo.salario_categoria_nome)
+                        if tipo_mudou:
+                            self._selecionar("salarioCategoria", f.base_calculo.salario_categoria_nome, obrigatorio=False)
+                        else:
+                            self._selecionar_se_diferente("salarioCategoria", f.base_calculo.salario_categoria_nome)
                 # Divisor (radio)
                 if self._marcar_radio_se_diferente("tipoDeDivisor", f.divisor.tipo.value):
                     self._aguardar_ajax(2000)
