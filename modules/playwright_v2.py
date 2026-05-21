@@ -2549,8 +2549,23 @@ class PlaywrightAutomatorV2:
         """
         self.log(f"  → Lançamento Expresso ({len(verbas)} verba(s), uma por vez)")
 
+        # Resolver expresso_alvo de cada verba contra a lista canônica das 54
+        # (módulo expresso_verbas_canonicas). Garante que nomes com trailing
+        # spaces ou variações sutis do DB sejam encontrados.
+        from modules.expresso_verbas_canonicas import resolver_verba_expresso
+
         for idx, v in enumerate(verbas):
-            alvo = (v.expresso_alvo or "").strip().upper()
+            alvo_raw = v.expresso_alvo or ""
+            # Resolver contra catálogo canônico (trata NBSP, trailing space, etc)
+            alvo_canonico = resolver_verba_expresso(alvo_raw)
+            if alvo_canonico:
+                # Usar nome RAW canônico (com trailing space se houver) para match
+                alvo = alvo_canonico.strip().upper()
+                if alvo_canonico != alvo_raw:
+                    self.log(f"  ℹ Expresso resolvido: '{alvo_raw}' → '{alvo_canonico.rstrip()}' (canônico)")
+            else:
+                alvo = alvo_raw.strip().upper()
+                self.log(f"  ⚠ Verba '{alvo_raw}' não está nas 54 Expresso canônicas — tentando match aproximado")
             self.log(f"  → [{idx+1}/{len(verbas)}] Procurando e selecionando '{alvo}'...")
 
             # Garantir que estamos na listagem de verbas (li_calculo_verbas)
