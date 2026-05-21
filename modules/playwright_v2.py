@@ -3212,20 +3212,42 @@ class PlaywrightAutomatorV2:
         # href='#irTopoPagina' e interromper o ciclo AJAX. Vídeo do usuário
         # mostrou que o flow precisa de click REAL para o form de Alteração
         # carregar. Localizamos o ID com JS, depois Playwright clica.
+        # CRÍTICO (descoberto 21/05/2026 via análise log SSE):
+        # O match anterior (tr.textContent.includes) era catastrófico porque
+        # TR de HE 50% contém reflexos como "FÉRIAS + 1/3 SOBRE HORAS EXTRAS 50%".
+        # Bot buscando "FÉRIAS + 1/3" matchava TR de HE 50%, clicava no
+        # linkParametrizar dela, renomeava descricao para "FÉRIAS + 1/3" →
+        # transformava HE 50% em FÉRIAS+1/3 no DB.
+        # FIX: usar a CÉLULA específica da verba principal (verba-calculo.xhtml
+        # linha 75-77: <rich:column><h:outputText value="#{item.nome}"/></rich:column>)
+        # e fazer match EXATO no texto da célula, não no TR inteiro.
+        # Estrutura DOM: rich:dataTable id="listagem" → rich:columnGroup → linha
+        # principal tem 4 colunas: [checkbox] [actions/linkParametrizar] [nome] [Exibir]
         link_id_res = self._page.evaluate(
             """(candidatos) => {
                 const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
-                const trs = [...document.querySelectorAll('tr')];
+                // Iterar SOMENTE pelas linhas principais da listagem (não de reflexos)
+                // linkParametrizar de verba principal tem id sem ":listaReflexo:"
+                const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                    .filter(a => a.id && !a.id.includes(':listaReflexo:'));
                 for (const alvo of candidatos) {
                     const alvoN = norm(alvo);
-                    for (const tr of trs) {
-                        if (!norm(tr.textContent).includes(alvoN)) continue;
-                        const a1 = tr.querySelector('a.linkParametrizar[title^="Parâmetros"], a.linkParametrizar[title^="Parametros"]');
-                        if (a1 && a1.id && !a1.id.includes(':listaReflexo:')) return {id: a1.id, via: 'class-title:'+alvo};
-                        const links = [...tr.querySelectorAll('a.linkParametrizar')];
-                        for (const link of links) {
-                            if (link.id && link.id.includes(':listaReflexo:')) continue;
-                            if (link.id) return {id: link.id, via: 'class-only:'+alvo};
+                    for (const link of linksMain) {
+                        // Encontrar a célula de nome (3ª coluna na mesma row do link)
+                        const tr = link.closest('tr');
+                        if (!tr) continue;
+                        // Pegar todas as <td> do TR pai (que contém colunas da linha)
+                        const tds = tr.querySelectorAll('td');
+                        // Procurar td com texto EXATAMENTE igual ao alvo (não substring)
+                        let matched = false;
+                        for (const td of tds) {
+                            // outputText fica direto no td ou em span/div interno
+                            // Verificar texto direto (excluindo filhos com classe linkDestinacoes)
+                            const tdText = norm(td.textContent.replace(/Exibir|Ocultar/gi, ''));
+                            if (tdText === alvoN) { matched = true; break; }
+                        }
+                        if (matched) {
+                            return {id: link.id, via: 'exact-cell:'+alvo};
                         }
                     }
                 }
