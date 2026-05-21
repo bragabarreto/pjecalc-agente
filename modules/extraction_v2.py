@@ -952,7 +952,16 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
 ```
 
 ⚠️ **CRÍTICO**:
-- `compor_principal` ∈ {`"SIM"`, `"NAO"`} — **NUNCA** `true`/`false` (boolean)
+- `compor_principal`: **SEMPRE `"SIM"` como default** (raríssimo ser NAO).
+  - `"SIM"` = FGTS é SOMADO ao Bruto Devido pelo Reclamado ao Reclamante.
+    Esse é o **default trabalhista** para liquidação de sentença (FGTS via execução
+    direta, não depósito em conta vinculada).
+  - `"NAO"` = FGTS NÃO compõe o principal. Use SOMENTE se a sentença determinar
+    EXPLICITAMENTE depósito em conta vinculada (raro) ou se o crédito de FGTS já
+    estiver garantido em outro processo. **Quando em dúvida → SIM**.
+  - **Aceita só strings `"SIM"`/`"NAO"`**, NUNCA `true`/`false` (boolean).
+- `tipo_verba`: `"PAGAR"` (default) — pagamento direto ao reclamante.
+  `"DEPOSITAR"` apenas se sentença determinar depósito em conta FGTS.
 - `multa` é um **objeto**, **NUNCA** boolean. Se dispensa sem justa causa → `ativa: true`, `percentual: "QUARENTA_POR_CENTO"`. Se justa causa / pedido demissão → `ativa: false`.
 - `multa.percentual` ∈ {`"QUARENTA_POR_CENTO"`, `"VINTE_POR_CENTO"`}
 
