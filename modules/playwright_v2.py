@@ -3101,20 +3101,44 @@ class PlaywrightAutomatorV2:
             f = p.formula_calculado
             if f:
                 # Base de Cálculo
+                # SKIP equivalente (21/05/2026): MAIOR_REMUNERACAO ≡ HISTORICO_SALARIAL+ÚLTIMA REMUNERAÇÃO
+                # quando valorMaiorRemuneracao == valorUltimaRemuneracao (ambos vêm
+                # de Parâmetros do Cálculo). Manual PJE-Calc confirma: 'Ultima
+                # Remuneracao gera automaticamente historico salarial'. Mudar
+                # tipoDaBaseTabelada limpa a tabela listagemHistoricosDaVerba e
+                # gera erro JSF 'Falta selecionar Histórico Salarial' se não
+                # clicar +. Preservar default Expresso é mais simples e seguro.
                 tipo_mudou = False
                 try:
-                    tipo_mudou = self._selecionar_se_diferente("tipoDaBaseTabelada", f.base_calculo.tipo.value)
-                    if tipo_mudou:
-                        self._aguardar_ajax(3500)
-                        self._page.wait_for_timeout(500)
+                    atual_tipo = self._page.evaluate(
+                        """() => {
+                            const sel = document.querySelector("select[id$=':tipoDaBaseTabelada']");
+                            return sel ? sel.value : null;
+                        }"""
+                    )
+                    desejado_tipo = f.base_calculo.tipo.value
+                    historico_nome = (f.base_calculo.historico_nome or "").strip().upper()
+                    skip_equivalente = (
+                        atual_tipo == "MAIOR_REMUNERACAO"
+                        and desejado_tipo == "HISTORICO_SALARIAL"
+                        and historico_nome == "ÚLTIMA REMUNERAÇÃO"
+                    )
+                    if skip_equivalente:
+                        self.log("    ⊙ tipoDaBaseTabelada=MAIOR_REMUNERACAO preservado (≡ HISTORICO+ÚLTIMA; evita re-render destrutivo)")
+                    else:
+                        tipo_mudou = self._selecionar_se_diferente("tipoDaBaseTabelada", desejado_tipo)
+                        if tipo_mudou:
+                            self._aguardar_ajax(3500)
+                            self._page.wait_for_timeout(500)
                 except Exception as e:
                     self.log(f"    ⚠ tipoDaBaseTabelada: {e}")
+                    skip_equivalente = False
                 # CRÍTICO (21/05/2026): se tipoDaBaseTabelada mudou para HISTORICO_SALARIAL,
                 # o AJAX re-renderiza baseHistoricos com valor visual default mas JSF
                 # model server-side fica VAZIO. _selecionar_se_diferente verifica só
                 # o visual → pula → JSF reclama "Campo obrigatório: Histórico Salarial".
                 # FIX: forçar _selecionar() + dispatch change event JS + validação.
-                if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
+                if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL and not skip_equivalente:
                     if f.base_calculo.historico_nome:
                         if tipo_mudou:
                             self._selecionar("baseHistoricos", f.base_calculo.historico_nome, obrigatorio=False)
