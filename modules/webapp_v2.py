@@ -363,6 +363,34 @@ async def validar_previa(sessao_id: str):
 # ─── POST /api/previa/v2/{sessao_id}/confirmar ────────────────────────────
 
 
+def _limpar_cartao_ponto_vazio(payload: dict) -> dict:
+    """Se cartao_de_ponto for um dict sem dados úteis (sem datas, sem jornada,
+    sem escala e sem overrides), descarta para None.
+
+    Causa raiz: a UI da prévia v2 inicializa cartao_de_ponto como
+    {preenchimento: 'LIVRE'} no boot, mesmo quando o JSON original tinha null.
+    Ao confirmar, Pydantic exige data_inicial/data_final → erro 422.
+    Esta limpeza idempotente desfaz o objeto vazio antes de validar.
+    """
+    cp = payload.get("cartao_de_ponto")
+    if not isinstance(cp, dict):
+        return payload
+    # Indicadores de que o usuário realmente preencheu cartão de ponto
+    tem_datas = bool(cp.get("data_inicial")) or bool(cp.get("data_final"))
+    prog = cp.get("programacao_semanal") or {}
+    tem_programacao = isinstance(prog, dict) and any(
+        (d or {}).get("turnos") for d in prog.values() if isinstance(d, dict)
+    )
+    esc = cp.get("escala")
+    tem_escala = isinstance(esc, dict) and (
+        bool(esc.get("inicio")) or bool(esc.get("jornadas"))
+    )
+    tem_overrides = bool(cp.get("ocorrencias_override"))
+    if not (tem_datas or tem_programacao or tem_escala or tem_overrides):
+        payload["cartao_de_ponto"] = None
+    return payload
+
+
 @router_v2.post("/api/previa/v2/{sessao_id}/confirmar")
 async def confirmar_previa(sessao_id: str, payload: dict):
     """Confirma prévia + valida + libera para automação.
@@ -370,6 +398,7 @@ async def confirmar_previa(sessao_id: str, payload: dict):
     Em sucesso, salva e marca como pronta para automação.
     Em erro, retorna 422 com lista de pendências.
     """
+    payload = _limpar_cartao_ponto_vazio(payload)
     try:
         previa = PreviaCalculoV2.model_validate(payload)
     except Exception as e:

@@ -1288,8 +1288,12 @@ function carregarPrevia() {
   renderMultas();
   renderPP();
   // Cartão de Ponto — modo de preenchimento + tabelas
+  // ⚠ NÃO chamar cpTrocarModo() no boot se o JSON tinha cartao_de_ponto=null,
+  // porque _cpEnsureCartao() criaria um objeto vazio {preenchimento:'LIVRE'} que
+  // depois falha na validação Pydantic em confirmar_previa (Field required:
+  // data_inicial/data_final). Só inicializar se cartão já existe.
   const _modoEl = document.querySelector('[data-campo="cartao_de_ponto.preenchimento"]');
-  if (_modoEl) cpTrocarModo(_modoEl.value || 'LIVRE');
+  if (_modoEl && previaData.cartao_de_ponto) cpTrocarModo(_modoEl.value || 'LIVRE');
   renderProgramacaoSemanal();
   renderEscala();
   renderOcorrenciasOverride();
