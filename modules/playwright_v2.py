@@ -3103,13 +3103,43 @@ class PlaywrightAutomatorV2:
                 # o AJAX re-renderiza baseHistoricos com valor visual default mas JSF
                 # model server-side fica VAZIO. _selecionar_se_diferente verifica só
                 # o visual → pula → JSF reclama "Campo obrigatório: Histórico Salarial".
-                # FIX: forçar _selecionar() (que dispara onchange) quando tipo mudou.
+                # FIX: forçar _selecionar() + dispatch change event JS + validação.
                 if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL:
                     if f.base_calculo.historico_nome:
                         if tipo_mudou:
                             self._selecionar("baseHistoricos", f.base_calculo.historico_nome, obrigatorio=False)
                         else:
                             self._selecionar_se_diferente("baseHistoricos", f.base_calculo.historico_nome)
+                        # Garantir que o onchange foi disparado e JSF model atualizado.
+                        # Bug observado: select_option do Playwright às vezes não
+                        # dispara o a4j:support onchange handler do JSF, causando
+                        # "Campo obrigatório: Histórico Salarial" no save mesmo
+                        # com o select visualmente selecionado.
+                        try:
+                            persistiu = self._page.evaluate(
+                                """(nome) => {
+                                    const sel = document.querySelector("select[id$=':baseHistoricos']");
+                                    if (!sel) return {ok: false, why: 'select não existe'};
+                                    // Garantir option correta selecionada (por label)
+                                    const opts = [...sel.options];
+                                    const wanted = opts.find(o =>
+                                        (o.textContent||'').trim().toUpperCase() === nome.trim().toUpperCase()
+                                    );
+                                    if (!wanted) return {ok: false, why: 'option não encontrada', opts: opts.map(o=>o.textContent.trim())};
+                                    // Forçar seleção + dispatch change (JSF a4j:support)
+                                    sel.value = wanted.value;
+                                    sel.dispatchEvent(new Event('change', {bubbles: true}));
+                                    return {ok: true, value: sel.value, label: wanted.textContent.trim()};
+                                }""",
+                                f.base_calculo.historico_nome,
+                            )
+                            if persistiu and persistiu.get('ok'):
+                                self.log(f"    ✓ baseHistoricos JSF-persisted: value={persistiu.get('value')} label='{persistiu.get('label')}'")
+                                self._aguardar_ajax(2500)
+                            else:
+                                self.log(f"    ⚠ baseHistoricos não persistiu: {persistiu}")
+                        except Exception as e:
+                            self.log(f"    ⚠ baseHistoricos forçar dispatch: {e}")
                     if f.base_calculo.proporcionaliza:
                         self._selecionar_se_diferente("proporcionalizaHistorico", f.base_calculo.proporcionaliza.value)
                 elif f.base_calculo.tipo == TipoBaseCalculo.VALE_TRANSPORTE:
