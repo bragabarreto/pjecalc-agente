@@ -2574,33 +2574,56 @@ class PlaywrightAutomatorV2:
                 self.log(f"    ℹ Página Expresso: {diag.get('total')} checkboxes disponíveis")
 
             # Marcar checkbox da verba alvo
-            marcou = self._page.evaluate(
+            # CRÍTICO (21/05/2026): DB tem MULTA 477 e outras verbas com
+            # espaços trailing ou caracteres invisíveis (NBSP, ZWS) que quebram
+            # match exato. norm agora trata: NFC unicode + NBSP/ZWS/NNBSP→space
+            # + collapse whitespace + trim + uppercase.
+            res = self._page.evaluate(
                 """(alvo) => {
-                    const norm = s => (s||'').replace(/\\s+/g,' ').trim().toUpperCase();
+                    const norm = s => (s||'')
+                        .normalize('NFC')
+                        .replace(/[\\u00A0\\u200B\\u202F\\u2007\\uFEFF]/g, ' ')
+                        .replace(/\\s+/g, ' ')
+                        .trim()
+                        .toUpperCase();
+                    const alvoN = norm(alvo);
                     const cbs = [...document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')];
-                    for (const cb of cbs) {
+                    const candidatos = cbs.map(cb => {
                         const td = cb.closest('td');
-                        const txt = td ? td.textContent : '';
-                        if (norm(txt) === alvo) {
-                            cb.click();
-                            return true;
+                        return { cb, txt: td ? td.textContent : '', norm: norm(td ? td.textContent : '') };
+                    });
+                    // 1. Match exato
+                    for (const c of candidatos) {
+                        if (c.norm === alvoN) { c.cb.click(); return {ok: true, via: 'exact', txt: c.norm.slice(0,80)}; }
+                    }
+                    // 2. Match igualdade após remover múltiplos espaços E hífens
+                    const tighter = s => s.replace(/[\\s\\-]+/g, '');
+                    for (const c of candidatos) {
+                        if (tighter(c.norm) === tighter(alvoN)) { c.cb.click(); return {ok: true, via: 'tighter', txt: c.norm.slice(0,80)}; }
+                    }
+                    // 3. Match parcial: alvo CONTÉM ou está CONTIDO (último recurso)
+                    for (const c of candidatos) {
+                        if (c.norm && (c.norm.includes(alvoN) || alvoN.includes(c.norm))) {
+                            c.cb.click(); return {ok: true, via: 'partial', txt: c.norm.slice(0,80)};
                         }
                     }
-                    // Fallback parcial
-                    for (const cb of cbs) {
-                        const td = cb.closest('td');
-                        const txt = td ? td.textContent : '';
-                        if (norm(txt).includes(alvo) || alvo.includes(norm(txt))) {
-                            cb.click();
-                            return 'partial:'+norm(txt).slice(0,80);
-                        }
-                    }
-                    return null;
+                    // Falha → retornar diagnóstico
+                    return {ok: false, total: cbs.length, amostra: candidatos.slice(0,10).map(c => c.norm.slice(0,80))};
                 }""",
                 alvo,
             )
-            if not marcou:
-                self.log(f"    ⚠ Verba Expresso não encontrada: '{alvo}' — pulando")
+            marcou = res.get('ok') if isinstance(res, dict) else False
+            if marcou:
+                via = res.get('via', '?')
+                txt = res.get('txt', '')
+                self.log(f"    ✓ Verba Expresso marcada via '{via}': '{txt}'")
+            else:
+                amostra = res.get('amostra', []) if isinstance(res, dict) else []
+                total = res.get('total', '?') if isinstance(res, dict) else '?'
+                self.log(f"    ⚠ Verba Expresso não encontrada: '{alvo}' (total checkboxes: {total})")
+                self.log(f"       Amostra dos primeiros 10 checkboxes do Expresso:")
+                for nome in amostra:
+                    self.log(f"         • '{nome}'")
                 # Voltar à listagem para próxima iteração
                 try:
                     cancelar = self._page.locator("input[id$=':cancelar']")
