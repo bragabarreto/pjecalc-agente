@@ -1000,16 +1000,27 @@ Para `tipo_honorario = "SUCUMBENCIAIS"`, o credor é **sempre o advogado da part
 `tipo_honorario` ∈ {`SUCUMBENCIAIS`, `ADVOCATICIOS`, `ASSISTENCIAIS`, `CONTRATUAIS`,
 `PERICIAIS_MEDICO`, `PERICIAIS_CONTADOR`, `PERICIAIS_ENGENHEIRO`, `PERICIAIS_OUTROS`}
 
-### Sucumbência parcial — reclamante devedor com Justiça Gratuita (JG)
-Quando a sentença condena o reclamante em honorários sucumbenciais mas ele é
-beneficiário da Justiça Gratuita (art. 791-A, § 4º da CLT):
-1. Incluir o honorário normalmente: `tipo_devedor = "RECLAMANTE"`, `forma_cobranca = "COBRAR"`
-2. **Obrigatoriamente** preencher `parametros_calculo.comentarios_jg` com o texto:
-   `"Suspensão de exigibilidade dos honorários devidos pela parte beneficiária da Justiça Gratuita (art. 791-A, § 4º da CLT)."`
+### Sucumbência parcial — parte devedora com Justiça Gratuita (JG)
+Quando a sentença condena alguma parte (Reclamante ou Reclamado) em honorários
+sucumbenciais E essa parte é beneficiária da Justiça Gratuita (art. 791-A, § 4º da CLT):
+1. Incluir o honorário normalmente com o `tipo_devedor` correto
+2. **Obrigatoriamente** preencher `parametros_calculo.comentarios_jg` com texto
+   que **INDIQUE A PARTE BENEFICIÁRIA**:
 
-Critérios para detectar JG + sucumbência do reclamante:
-- A sentença menciona "benefício da justiça gratuita" ou "gratuidade da justiça" para o reclamante, E
-- Condena o reclamante em honorários sucumbenciais (sucumbência recíproca ou improcedência parcial)
+   - **Reclamante beneficiário** (caso mais comum):
+     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pelo Reclamante, beneficiário da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+
+   - **Reclamado beneficiário** (caso raro — pessoa física hipossuficiente):
+     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pelo Reclamado, beneficiário da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+
+   - **Ambas as partes beneficiárias**:
+     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos por ambas as partes, beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+
+Critérios:
+- Sentença menciona "benefício da justiça gratuita" / "gratuidade da justiça" para a parte, E
+- Condena essa parte em honorários sucumbenciais (sucumbência recíproca ou improcedência parcial)
+
+**NUNCA usar texto genérico "parte beneficiária"** — sempre indicar QUAL parte.
 
 Se não há menção a JG na sentença, deixar `comentarios_jg: null`.
 

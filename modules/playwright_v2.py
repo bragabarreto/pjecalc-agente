@@ -1805,18 +1805,35 @@ class PlaywrightAutomatorV2:
         # Carga horária
         self._preencher("valorCargaHorariaPadrao", _fmt_br(pc.carga_horaria.padrao_mensal))
 
-        # Comentários JG — usa valor explícito; fallback: auto-detecta JG via honorários
+        # Comentários JG — usa valor explícito; fallback: auto-detecta JG via honorários.
+        # CRÍTICO (21/05/2026): o texto DEVE indicar A PARTE beneficiária (Reclamante/
+        # Reclamado/ambas), não apenas "parte beneficiária" genérico. Regra consagrada.
         jg_text = getattr(pc, "comentarios_jg", None)
         if not jg_text:
+            partes_jg: list[str] = []
             for hon in self.previa.honorarios:
-                if (getattr(hon, "tipo_honorario", "") == "SUCUMBENCIAIS"
-                        and getattr(hon, "tipo_devedor", "") == "RECLAMANTE"):
+                if getattr(hon, "tipo_honorario", "") != "SUCUMBENCIAIS":
+                    continue
+                devedor = getattr(hon, "tipo_devedor", "") or ""
+                if devedor == "RECLAMANTE" and "Reclamante" not in partes_jg:
+                    partes_jg.append("Reclamante")
+                elif devedor == "RECLAMADO" and "Reclamado" not in partes_jg:
+                    partes_jg.append("Reclamado")
+            if partes_jg:
+                if len(partes_jg) == 1:
+                    parte = partes_jg[0]
                     jg_text = (
-                        "Suspensão de exigibilidade dos honorários devidos pela parte "
-                        "beneficiária da Justiça Gratuita (art. 791-A, § 4º da CLT)."
+                        f"Suspensão de exigibilidade dos honorários sucumbenciais "
+                        f"devidos pelo {parte}, beneficiário da Justiça Gratuita "
+                        f"(art. 791-A, § 4º, da CLT)."
                     )
-                    self.log("  ℹ JG auto-detectado via honorários — preenchendo comentários")
-                    break
+                else:
+                    jg_text = (
+                        "Suspensão de exigibilidade dos honorários sucumbenciais "
+                        "devidos por ambas as partes, beneficiárias da Justiça Gratuita "
+                        "(art. 791-A, § 4º, da CLT)."
+                    )
+                self.log(f"  ℹ JG auto-detectado: parte(s) beneficiária(s) = {', '.join(partes_jg)}")
         if jg_text:
             self._preencher("comentarios", jg_text, obrigatorio=False)
 
@@ -5553,9 +5570,27 @@ class PlaywrightAutomatorV2:
 
     def fase_honorarios(self) -> None:
         self.log("Fase 11 — Honorários")
-        self._navegar_menu("li_calculo_honorarios")
-        self._aguardar_ajax(8000)
-        self._page.wait_for_timeout(1000)
+        # CRÍTICO (21/05/2026): Fase 9 (CS) pode terminar com 'Execution context
+        # destroyed' deixando navegação pendente. Se Fase 11 navegar imediatamente,
+        # cai em 'Navigation interrupted by another navigation'. Estabilizar primeiro.
+        self._aguardar_ajax(5000)
+        self._page.wait_for_timeout(2000)
+        # Retry navegação até 3x se a primeira for interrompida
+        nav_ok = False
+        for tentativa in range(3):
+            try:
+                self._navegar_menu("li_calculo_honorarios")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                nav_ok = True
+                break
+            except Exception as e:
+                self.log(f"  ⚠ tentativa {tentativa+1}/3 nav Honorários: {str(e)[:120]}")
+                if tentativa < 2:
+                    self._page.wait_for_timeout(3000)
+        if not nav_ok:
+            self.log("  ⚠ Fase 11 Honorários: navegação falhou 3x — pulando")
+            return
         # Verificar que a listagem de honorários renderizou (tem botão Incluir)
         _tem_incluir = self._page.evaluate(
             """() => !!(document.querySelector('input[id$=incluir]') ||
@@ -5633,13 +5668,31 @@ class PlaywrightAutomatorV2:
 
     def fase_custas_judiciais(self) -> None:
         self.log("Fase 12 — Custas Judiciais")
-        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean.
-        # CRÍTICO: sem isso os campos dataVencimento* não existem na DOM e ficam
-        # vazios → liquidação rejeita por "Vencimento deve ser >= {data}".
-        if not self._navegar_menu_via_click("li_calculo_custas_judiciais"):
-            self._navegar_menu("li_calculo_custas_judiciais")
-        self._aguardar_ajax(6000)
-        self._page.wait_for_timeout(800)
+        # Estabilizar antes de navegar (evita 'Navigation interrupted' por fase
+        # anterior pendente). Retry até 3x.
+        self._aguardar_ajax(5000)
+        self._page.wait_for_timeout(1500)
+        nav_ok = False
+        for tentativa in range(3):
+            try:
+                # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean.
+                # CRÍTICO: sem isso os campos dataVencimento* não existem na DOM e ficam
+                # vazios → liquidação rejeita por "Vencimento deve ser >= {data}".
+                if not self._navegar_menu_via_click("li_calculo_custas_judiciais"):
+                    self._navegar_menu("li_calculo_custas_judiciais")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(1500)
+                _n_cst_tmp = self._page.evaluate(
+                    """() => document.querySelectorAll('input[type=radio],select').length"""
+                )
+                if _n_cst_tmp > 5:
+                    nav_ok = True
+                    break
+                self.log(f"  ⚠ tentativa {tentativa+1}/3 Custas: campos={_n_cst_tmp} (esperado >5)")
+            except Exception as e:
+                self.log(f"  ⚠ tentativa {tentativa+1}/3 nav Custas: {str(e)[:120]}")
+            if tentativa < 2:
+                self._page.wait_for_timeout(3000)
         _n_cst = self._page.evaluate(
             """() => document.querySelectorAll('input[type=radio],select').length"""
         )
@@ -5693,11 +5746,28 @@ class PlaywrightAutomatorV2:
 
     def fase_correcao_juros_multa(self) -> None:
         self.log("Fase 13 — Correção, Juros e Multa")
-        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
-        if not self._navegar_menu_via_click("li_calculo_correcao_juros_multa"):
-            self._navegar_menu("li_calculo_correcao_juros_multa")
-        self._aguardar_ajax(6000)
-        self._page.wait_for_timeout(800)
+        # Estabilizar antes (mesmo padrão Fase 11/12)
+        self._aguardar_ajax(5000)
+        self._page.wait_for_timeout(1500)
+        nav_ok = False
+        for tentativa in range(3):
+            try:
+                # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
+                if not self._navegar_menu_via_click("li_calculo_correcao_juros_multa"):
+                    self._navegar_menu("li_calculo_correcao_juros_multa")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(1500)
+                _n_tmp = self._page.evaluate(
+                    """() => document.querySelectorAll('select, input[type=checkbox], input[type=radio]').length"""
+                )
+                if _n_tmp > 10:
+                    nav_ok = True
+                    break
+                self.log(f"  ⚠ tentativa {tentativa+1}/3 Correção: campos={_n_tmp} (esperado >10)")
+            except Exception as e:
+                self.log(f"  ⚠ tentativa {tentativa+1}/3 nav Correção: {str(e)[:120]}")
+            if tentativa < 2:
+                self._page.wait_for_timeout(3000)
 
         _n_campos = self._page.evaluate(
             """() => document.querySelectorAll('select, input[type=checkbox], input[type=radio]').length"""
