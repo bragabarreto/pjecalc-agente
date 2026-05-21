@@ -331,6 +331,20 @@ A sentença determina valor fixo (R$ X). Use para:
 "formula_calculado": null
 ```
 
+> ⚠️ **`valor_informado_brl` é SEMPRE POSITIVO — NUNCA negativo.**
+> Em PJE-Calc todos os valores monetários no JSON são positivos: o sistema trata
+> sinais internamente. Mesmo quando a verba representa uma **DEDUÇÃO** (ex.:
+> `VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
+> `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`), o valor é positivo. Essas verbas são
+> intrinsecamente subtrativas no modelo de dados do PJE-Calc — você NÃO informa
+> o sinal.
+>
+> **Exemplo (correto):** TRCT pago de R$ 1.496,23 a deduzir →
+> `"valor_informado_brl": 1496.23` (NUNCA `-1496.23`).
+>
+> A mesma regra vale para `honorarios[*].valor_informado_brl` e
+> `valor_pago.valor_brl` — sempre positivos.
+
 ### `valor=CALCULADO`
 A verba é calculada por fórmula:
 
@@ -720,6 +734,10 @@ jornada exata. Para apagar um dia: `turnos: []`.
 - [ ] parametros_calculo.data_termino_calculo ≥ MAX(periodo_fim das verbas)
 - [ ] historico_salarial cobre data_inicio_calculo até data_termino_calculo
 - [ ] Cada verba INFORMADO tem valor_informado_brl > 0 com `comentarios` justificando
+- [ ] **NENHUM `valor_informado_brl` (verbas OU honorários) é negativo.** Mesmo verbas
+  de DEDUÇÃO (`VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
+  `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`) recebem valor positivo — o PJE-Calc trata o
+  sinal internamente.
 - [ ] Cada verba CALCULADO tem formula_calculado completo
 - [ ] Cada verba expresso_direto/adaptado tem expresso_alvo válido (lista 54)
 - [ ] Cada reflexo tem expresso_reflex_alvo no formato "X SOBRE Y"

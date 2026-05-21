@@ -610,6 +610,12 @@ O esquema espelha **integralmente** a página `verba-calculo.jsf` (Cálculo > Ve
   - `parametros.valor_devido`: `{tipo: "INFORMADO", valor_informado_brl: float > 0, proporcionalizar: bool}`
   - `proporcionalizar`: true se o valor informado é INTEGRAL e o PJE-Calc deve proporcionalizar meses incompletos (admissão/demissão no meio do mês)
   - `formula_calculado`: `null`
+  - **⚠️ `valor_informado_brl` é SEMPRE POSITIVO.** Em PJE-Calc todos os valores monetários
+    no JSON são positivos — o sistema trata sinais internamente. Mesmo quando a verba
+    representa uma **DEDUÇÃO** (ex.: `VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
+    `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`), o valor informado é positivo. Essas verbas são
+    intrinsecamente subtrativas no modelo de dados do PJE-Calc — você NÃO informa o sinal.
+    Exemplo: TRCT pago de R$ 1.496,23 a deduzir → `valor_informado_brl: 1496.23` (NUNCA `-1496.23`).
 - Se `valor=CALCULADO`:
   - `parametros.valor_devido`: `{tipo: "CALCULADO"}`
   - `parametros.formula_calculado`: ver §4.4 (base_calculo + divisor + multiplicador + quantidade)
@@ -1160,6 +1166,9 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
 - [ ] `historico_salarial` cobre data_inicio_calculo até data_termino_calculo
 - [ ] **TODA verba tem `valor` preenchido (INFORMADO ou CALCULADO) — NUNCA null/omitido**
 - [ ] Cada verba com `valor=INFORMADO` tem `valor_devido.valor_informado_brl > 0` e `formula_calculado=null`
+- [ ] **NENHUM `valor_informado_brl` (verbas OU honorários) é negativo.** Mesmo verbas de DEDUÇÃO
+  (`VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`, `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`)
+  recebem valor positivo — o PJE-Calc trata o sinal internamente.
 - [ ] Cada verba com `valor=CALCULADO` tem `formula_calculado` preenchido COMPLETAMENTE com:
    - `base_calculo.tipo` ∈ {MAIOR_REMUNERACAO, HISTORICO_SALARIAL, SALARIO_DA_CATEGORIA, SALARIO_MINIMO, VALE_TRANSPORTE}
    - `divisor.tipo` ∈ {OUTRO_VALOR, CARGA_HORARIA, DIAS_UTEIS, IMPORTADA_DO_CARTAO}

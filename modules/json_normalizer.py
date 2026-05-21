@@ -370,19 +370,43 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(p, dict):
                 continue
             fc = p.get("formula_calculado")
-            if not isinstance(fc, dict):
-                continue
-            div = fc.get("divisor")
-            if isinstance(div, dict) and div.get("tipo") in _DIVISOR_MAP:
-                div["tipo"] = _DIVISOR_MAP[div["tipo"]]
-                # PADRAO_MENSAL implica divisor=30 se valor ainda não foi definido
-                if div["tipo"] == "OUTRO_VALOR" and div.get("valor") is None:
-                    div["valor"] = 30.0
-            qtd = fc.get("quantidade")
-            if isinstance(qtd, dict) and qtd.get("tipo") in _QUANTIDADE_MAP:
-                qtd["tipo"] = _QUANTIDADE_MAP[qtd["tipo"]]
-            bc = fc.get("base_calculo")
-            if isinstance(bc, dict) and bc.get("tipo") in _BASE_CALCULO_MAP:
-                bc["tipo"] = _BASE_CALCULO_MAP[bc["tipo"]]
+            if isinstance(fc, dict):
+                div = fc.get("divisor")
+                if isinstance(div, dict) and div.get("tipo") in _DIVISOR_MAP:
+                    div["tipo"] = _DIVISOR_MAP[div["tipo"]]
+                    # PADRAO_MENSAL implica divisor=30 se valor ainda não foi definido
+                    if div["tipo"] == "OUTRO_VALOR" and div.get("valor") is None:
+                        div["valor"] = 30.0
+                qtd = fc.get("quantidade")
+                if isinstance(qtd, dict) and qtd.get("tipo") in _QUANTIDADE_MAP:
+                    qtd["tipo"] = _QUANTIDADE_MAP[qtd["tipo"]]
+                bc = fc.get("base_calculo")
+                if isinstance(bc, dict) and bc.get("tipo") in _BASE_CALCULO_MAP:
+                    bc["tipo"] = _BASE_CALCULO_MAP[bc["tipo"]]
+
+            # 6. Defensa contra `valor_informado_brl` negativo emitido pela IA.
+            #    Em PJE-Calc, TODOS os valores monetários no JSON são positivos —
+            #    o sistema trata sinais internamente (ex.: VALOR PAGO já é
+            #    intrinsecamente uma dedução, mas o valor informado é positivo).
+            #    Schema Pydantic exige Field(gt=0) → bloquearia o JSON.
+            #    Aplicamos abs() defensivamente e idempotente.
+            vd = p.get("valor_devido")
+            if isinstance(vd, dict) and vd.get("tipo") == "INFORMADO":
+                vi = vd.get("valor_informado_brl")
+                if isinstance(vi, (int, float)) and vi < 0:
+                    vd["valor_informado_brl"] = abs(vi)
+            vp = p.get("valor_pago")
+            if isinstance(vp, dict):
+                vb = vp.get("valor_brl")
+                if isinstance(vb, (int, float)) and vb < 0:
+                    vp["valor_brl"] = abs(vb)
+
+    # 7. Honorários — `valor_informado_brl` negativo também recebe abs().
+    for h in data.get("honorarios", []) or []:
+        if not isinstance(h, dict):
+            continue
+        vi = h.get("valor_informado_brl")
+        if isinstance(vi, (int, float)) and vi < 0:
+            h["valor_informado_brl"] = abs(vi)
 
     return data
