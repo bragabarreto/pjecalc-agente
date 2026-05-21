@@ -951,17 +951,32 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
 }
 ```
 
-⚠️ **CRÍTICO**:
-- `compor_principal`: **SEMPRE `"SIM"` como default** (raríssimo ser NAO).
-  - `"SIM"` = FGTS é SOMADO ao Bruto Devido pelo Reclamado ao Reclamante.
-    Esse é o **default trabalhista** para liquidação de sentença (FGTS via execução
-    direta, não depósito em conta vinculada).
-  - `"NAO"` = FGTS NÃO compõe o principal. Use SOMENTE se a sentença determinar
-    EXPLICITAMENTE depósito em conta vinculada (raro) ou se o crédito de FGTS já
-    estiver garantido em outro processo. **Quando em dúvida → SIM**.
-  - **Aceita só strings `"SIM"`/`"NAO"`**, NUNCA `true`/`false` (boolean).
-- `tipo_verba`: `"PAGAR"` (default) — pagamento direto ao reclamante.
-  `"DEPOSITAR"` apenas se sentença determinar depósito em conta FGTS.
+⚠️ **CRÍTICO — `compor_principal`** ∈ {`"SIM"`, `"NAO"`} (strings, NUNCA boolean).
+
+**REGRA UNIVERSAL** (vale para FGTS e QUALQUER verba que tenha esse campo):
+
+`compor_principal = "NAO"` SOMENTE quando a verba **não vai compor o montante da
+condenação**, mas a sua apuração é necessária para **calcular outras verbas/reflexos**.
+
+📌 **Exemplo clássico: "Salário por fora" reconhecido em sentença**
+- A sentença reconhece pagamentos extra-folha (salário por fora) durante o contrato
+- Esse valor já foi pago de fato ao reclamante — NÃO vai entrar de novo na condenação
+- Mas serve de BASE DE CÁLCULO para os reflexos em aviso prévio, férias+1/3, 13º,
+  FGTS, etc., que aí SIM vão compor o principal
+- Verba "Salário por fora" → `compor_principal: "NAO"` (só base para reflexos)
+- Verbas reflexas dela → `compor_principal: "SIM"` (compõem a condenação)
+
+📌 **Em todos os outros casos**: `compor_principal: "SIM"` (default).
+- FGTS sobre verbas rescisórias da condenação → SIM
+- Saldo de salário, 13º, férias, AVISO, horas extras, multa 477 → SIM
+- Qualquer verba que represente crédito real do reclamante → SIM
+
+❌ **NUNCA use "NAO"** só porque a verba é FGTS, salário variável, etc. O critério
+é EXCLUSIVAMENTE se o valor compõe o montante final OU se serve só de base.
+
+Outras regras FGTS:
+- `tipo_verba`: `"PAGAR"` (default — pagamento direto ao reclamante via execução).
+  `"DEPOSITAR"` apenas se sentença determinar depósito em conta vinculada.
 - `multa` é um **objeto**, **NUNCA** boolean. Se dispensa sem justa causa → `ativa: true`, `percentual: "QUARENTA_POR_CENTO"`. Se justa causa / pedido demissão → `ativa: false`.
 - `multa.percentual` ∈ {`"QUARENTA_POR_CENTO"`, `"VINTE_POR_CENTO"`}
 

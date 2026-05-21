@@ -5137,15 +5137,10 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⚠ FGTS {msg}: {e}")
 
         _safe(lambda: self._marcar_radio("tipoDeVerba", f.tipo_verba), "tipoDeVerba")
-        # CRÍTICO (21/05/2026): default seguro é SIM (compor principal). IA às vezes
-        # extrai NAO por engano, mas regra trabalhista padrão é compor o principal.
-        # Se vier NAO sem indicação explícita da sentença, forçar SIM com warning.
-        _compor_raw = f.compor_principal.value if hasattr(f.compor_principal, 'value') else str(f.compor_principal)
-        _compor_final = _compor_raw
-        if _compor_raw == "NAO":
-            self.log("  ⚠ FGTS compor_principal=NAO no JSON — forçando SIM (default trabalhista; só usar NAO se sentença determinar depósito em conta vinculada explicitamente)")
-            _compor_final = "SIM"
-        _safe(lambda: self._marcar_radio("comporPrincipal", _compor_final), "comporPrincipal")
+        # Princípio CLAUDE.md: fidelidade ao JSON. Bot NÃO sobrescreve. Se IA gerou
+        # comporPrincipal=NAO, segue NAO. Eventuais erros de extração são tratados
+        # no prompt da IA (extraction_v2.py), não no bot.
+        _safe(lambda: self._marcar_radio("comporPrincipal", f.compor_principal.value if hasattr(f.compor_principal, 'value') else str(f.compor_principal)), "comporPrincipal")
         _safe(lambda: self._marcar_checkbox("multa", f.multa.ativa), "multa")
         if f.multa.ativa:
             _safe(lambda: self._marcar_radio("tipoDoValorDaMulta", f.multa.tipo_valor), "tipoDoValorDaMulta")
