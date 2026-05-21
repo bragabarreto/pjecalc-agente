@@ -370,6 +370,128 @@ Além dos 5 modelos existentes, **4 novos** para o Learning Engine:
 
 ## Descobertas críticas (abril/2026)
 
+### ⚠️ INVARIANTE PERMANENTE — Match de verba no linkParametrizar (NUNCA mais quebrar)
+
+> **Bug catastrófico descoberto 21/05/2026**: o match anterior fazia
+> `tr.textContent.includes(nome_verba)` — pegava QUALQUER TR contendo o texto.
+> Isso era catastrófico porque HE 50% tem reflexos como "FÉRIAS + 1/3 SOBRE
+> HORAS EXTRAS 50%". Bot buscando "FÉRIAS + 1/3" matchava o TR de HE 50%,
+> clicava no linkParametrizar dele e renomeava descricao → **HE 50% virava
+> FÉRIAS + 1/3 no DB**. Listagem mostrava 2× FÉRIAS+1/3 e HE 50% sumia.
+
+**Invariantes obrigatórios** (em `_configurar_parametros_pos_expresso`):
+
+1. **Match EXATO no texto da célula** (não no TR inteiro):
+   - Iterar `linkParametrizar` sem `:listaReflexo:` (só linhas de verba principal)
+   - Para cada link, pegar `td` da row pai, comparar `td.textContent === alvo`
+   - REJEITAR matches por substring/includes — só igualdade exata
+   - Excluir texto "Exibir"/"Ocultar" dos links de detalhe
+
+2. **NÃO renomear descricao para EXPRESSO_DIRETO**:
+   - Verbas Expresso já vêm com nome canônico (54 nomes mapeados no PJE-Calc)
+   - Mexer em descricao só faz sentido para EXPRESSO_ADAPTADO (rename intencional)
+     ou MANUAL (form vazio precisa do nome)
+   - Tocar descricao em EXPRESSO_DIRETO é desperdício — e em caso de match
+     errado, corrompe a verba
+
+3. **Salvaguarda de descricao no início de `_preencher_form_parametros_verba`**:
+   - Para `com_identificacao=False` (pós-Expresso), LER `input[id$=':descricao']`
+     atual ANTES de qualquer edição
+   - Verificar que bate (case-insensitive) com `expresso_alvo` ou `nome_pjecalc`
+   - Se divergir: **ABORTAR a edição** (return imediato, sem salvar) com log
+     `🛑 ABORTANDO edição — form mostra verba ERRADA`
+   - Evita corromper o DB silenciosamente
+
+**Justificativa do usuário** (literal, 21/05/2026):
+> "esses erros de falta de match não podem ocorrer, já que há um mapeamento
+> completo das verbas de lançamento expresso contidas no pje calc (54 verbas)
+> ... a necessidade de alterar nome da parcela somente ocorre qdo se trata
+> de lancamento expresso adaptado, ou escrever o nome conforme condenação,
+> no caso de lancamento manual ... torne perene os ajustes para que esse
+> problema não retorne"
+
+### ⚠️ HORAS EXTRAS 50% — quantidade=0 em modo INFORMADA (limite arquitetural)
+
+> **NÃO RE-TENTAR as estratégias abaixo — todas falharam e algumas introduziram regressões graves.**
+
+**Sintoma**: liquidação de HORAS EXTRAS 50% gera alerta não-bloqueante (`quantidade=0`) quando
+o JSON especifica `quantidade.tipo=INFORMADA` com `valor` fixo (ex.: "20" horas/mês). O .PJC
+liquida e exporta com sucesso, mas o usuário deve ajustar manualmente no PJE-Calc após import.
+
+**Causa raiz identificada** (após investigação profunda): no PJE-Calc Cidadão local (H2),
+o link `linkParametrizar` da listagem de verbas aciona `alterarVerba(verba)` via
+`actionListener`, mas **a navegação para o form de Alteração não renderiza** mesmo após:
+- `actionListener` executar com sucesso (`operacao=ALTERACAO` setado no bean)
+- AJAX retornar 200 OK com `panelFormulario` no payload
+- `panelFormulario.ajaxRendered=true` no template
+
+O TRT7 em produção (PostgreSQL + JBoss real) renderiza o form normalmente — confirmado via
+vídeo do usuário em 19/05/2026. O comportamento divergente sugere problema específico do
+ambiente headless (H2 + Tomcat embarcado + Seam EPC).
+
+**Estratégias TENTADAS e descartadas** (não repetir):
+1. ❌ **GET refresh** em verba-calculo.jsf após linkParametrizar → quebrou Fase 5 com
+   "Execution context destroyed because of a navigation"
+2. ❌ **Post-processing do .PJC** mudando `<tipo>INFORMADA</tipo>` para
+   `IMPORTADA_DO_CARTAO_DE_PONTO` → causou NPE em `Quantidade.resolverValor` no import
+3. ❌ **Roteamento via fluxo Manual** (em vez de Expresso) → usuário rejeitou explicitamente
+   ("use o lancamento expresso... o calcmachine consegue fazer")
+4. ❌ **`<a4j:keepAlive beanName="apresentadorVerbaDeCalculo" />`** em verba-calculo.xhtml →
+   introduziu `StaleObjectStateException` do Hibernate (versionamento otimista falha)
+5. ❌ **Marcar `verbaSelecionada` antes de linkParametrizar** (Seam @DataModelSelection) →
+   sem efeito
+6. ❌ **Remover sidebar pré-click** (assumindo que bean SESSION-scoped não precisa init) →
+   sem efeito, e na verdade o sidebar pre-click é necessário pra evitar NPE em
+   `prepararMinicrudsDasBasesCadastradas:841` (verbaDeCalculoVO null)
+7. ❌ **Combo "tudo junto"** (sidebar + native click + keepAlive) → herdou regressão do #4
+8. ❌ **Patches no bytecode `ApresentadorVerbaDeCalculo.class`** → escopo grande demais, frágil
+9. ❌ **`<f:setPropertyActionListener>` + reRender explícito em linkParametrizar**
+   (Opção A — commit `3ee0645`, revertido em `d3735b5`/`e6eec53` em 20/05/2026) →
+   **REGRESSÃO MASSIVA**: TODOS os saves de TODAS as fases passaram a falhar
+   (`sucesso=False` em Fase 1 Dados, 8x Expresso, Honorários, Liquidar). Comparação
+   com SSE v52 confirma: pré-patch tinha `sucesso=True` em tudo; pós-patch tudo falha.
+   Causa raiz provável: `<f:setPropertyActionListener>` é **JSF 2.0**, mas PJE-Calc usa
+   **JSF 1.2 + Seam 2.2** — a tag não existe nessa versão; Facelets pode estar abortando
+   o parse do XHTML inteiro, fazendo `verba-calculo.jsf` retornar página vazia/NPE,
+   o que cascateou para perda total do contexto Seam EPC em todas as fases.
+   Não repetir tags JSF 2.0 (`<f:setPropertyActionListener>`, `<f:viewParam>`, etc.).
+   Se precisar do efeito do `setPropertyActionListener`, usar a alternativa Seam:
+   `<s:setPropertyActionListener>` (do namespace `http://jboss.com/products/seam/taglib`).
+10. ❌ **`_navegar_menu` (URL direta) em vez de `_navegar_menu_via_click`** para evitar
+    sidebar click após Fechar+Reabrir (commit `9419a23`, revertido em `cca2583` em
+    20/05/2026) → Trouxe de volta o NPE em `prepararMinicrudsDasBasesCadastradas:841`
+    que o sidebar click prevenia. URL direta NÃO chama `iniciar()` do bean Seam; só o
+    sidebar click invoca o factory `@Begin` que popula `verbaDeCalculoVO`. Sem isso,
+    `alterar()` lê `registroSelecionado` mas o bean explode em `prepararMinicruds`.
+    **Conclusão**: o sidebar pré-click é arquiteturalmente necessário (já documentado
+    como WIN preservado). Não tentar trocar por URL direta.
+
+**Fixes mantidos que funcionam parcialmente** (Fechar+Reabrir + JS click):
+- ✅ **Fechar+Reabrir pós-Expresso** (commit `96107f0`) — força @End da conv, garante
+  que as 5 verbas Expresso são commitadas ao DB antes de tentar Ajustar parâmetros.
+  Sem isso, a conv da última save só "via" 1 verba.
+- ✅ **JS `element.click()` em vez de Playwright force=true** (commit `460d33a`) — o
+  click puro do DOM dispara o `onclick` handler natural do browser, processando o
+  AJAX corretamente. `force=true` tinha comportamento sutil errado em headless.
+
+**Estado atual aceito (atualizado 20/05/2026)**: bot completa ciclo Sentença→PJC→
+reimport→Liquidação. PJC tem todas as 5 verbas Expresso, FGTS, CS, Honorários,
+Custas, Correção, etc. **Único alerta cosmético remanescente: HE 50% Quantidade fica
+INFORMADA=0 em vez de IMPORTADA_DO_CARTAO**. Usuário ajusta manualmente (1 campo,
+~30s). Tentar resolver arquitetonicamente até agora sempre arrisca regressões.
+
+**Wins PRESERVADOS** que devem ser mantidos (não reverter):
+- ✅ **H2 TCP server mode** (`jdbc:h2:tcp://localhost:9092/./pjecalc`) em `context.xml` +
+  `iniciarPjeCalc.sh` — resolveu vários problemas de EPC do Seam
+- ✅ **Native Playwright click** em `_configurar_parametros_pos_expresso` (vs JS onclick exec)
+  — respeita `return false` do `A4J.AJAX.Submit`, evita `#irTopoPagina` quebrar AJAX
+- ✅ **Sidebar pré-click** (`_navegar_menu_via_click("li_calculo_verbas")`) ANTES de
+  linkParametrizar — evita NPE em `prepararMinicrudsDasBasesCadastradas` (bean precisa init)
+
+**Estado atual aceito**: ~92% funcional. PJC liquida, exporta e importa. O alerta HE 50%
+qtd=0 é cosmético — o usuário ajusta manualmente após import (1 campo, 30s). Tentar resolver
+arquitetonicamente arrisca quebrar fases já funcionais.
+
 ### Novo cálculo: Seam em modo "criação" após save — menu lateral incompleto
 
 Ao iniciar um **novo cálculo** (`Cálculo > Novo`), mesmo após o Salvar da Fase 1 (URL passa a

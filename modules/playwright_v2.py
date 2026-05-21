@@ -2945,6 +2945,38 @@ class PlaywrightAutomatorV2:
         # Contexto para helpers (escolher coluna correta do cartão na HE etc.)
         self._verba_atual_nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
 
+        # ═══ SALVAGUARDA CRÍTICA (21/05/2026):
+        # Garantir que o form de Alteração atual corresponde à verba esperada.
+        # Sem isso, um match errado do linkParametrizar (ex: matchou TR de HE
+        # 50% por ter reflexo com texto de FÉRIAS+1/3) faria o bot editar a
+        # VERBA ERRADA, renomeando e corrompendo o DB.
+        # Invariante: input[id$=':descricao'].value DEVE bater com expresso_alvo
+        # ou nome_pjecalc (case-insensitive). Se divergir, ABORTAR.
+        if not com_identificacao:  # Pós-Expresso: já existe verba no form
+            try:
+                descricao_atual = self._page.evaluate(
+                    """() => {
+                        const el = document.querySelector("input[id$=':descricao']");
+                        return el ? (el.value || '') : '';
+                    }"""
+                ) or ""
+                expected = (getattr(v, "expresso_alvo", None) or v.nome_pjecalc or "").strip().upper()
+                actual = descricao_atual.strip().upper()
+                if expected and actual and expected != actual:
+                    # Não bate exatamente — pode ser EXPRESSO_ADAPTADO (nome_pjecalc != expresso_alvo)
+                    # nesse caso o atual deveria ser expresso_alvo (canônico) e nome_pjecalc é o renomeio desejado
+                    nome_pjecalc_upper = (v.nome_pjecalc or "").strip().upper()
+                    expresso_alvo_upper = (getattr(v, "expresso_alvo", None) or "").strip().upper()
+                    if actual not in (expresso_alvo_upper, nome_pjecalc_upper):
+                        self.log(
+                            f"  🛑 ABORTANDO edição — form de Alteração mostra verba ERRADA: "
+                            f"atual='{descricao_atual}' esperado='{getattr(v,'expresso_alvo',None) or v.nome_pjecalc}'"
+                        )
+                        self.log(f"     (Causa provável: match errado no linkParametrizar). Pulando esta verba para evitar corromper o DB.")
+                        return
+            except Exception as _e_safe:
+                self.log(f"    ⚠ Salvaguarda descricao não pôde verificar: {_e_safe}")
+
         # Silenciar jConfirm modal preventivamente (necessário se valor mudar)
         self._silenciar_dialog_confirma_valor()
 
@@ -3083,11 +3115,23 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(2000)
 
         # ─── 5. INPUTS TEXT (após state estabilizado) ───
-        # Nome (descricao) — sempre garantir nome_pjecalc (espelho do JSON).
-        if v.nome_pjecalc:
+        # Nome (descricao) — REGRA CRÍTICA (21/05/2026):
+        # - EXPRESSO_DIRETO: nome canônico já está no DOM (vem do Expresso).
+        #   NÃO MEXER. Mudar descricao aqui é um risco — se o match anterior
+        #   estiver errado, renomearíamos a verba ERRADA.
+        # - EXPRESSO_ADAPTADO: usuário quer um nome customizado (ex.: pulled
+        #   "RESTITUIÇÃO" mas renomeia para "INDENIZAÇÃO REFEIÇÃO"). Aplicar.
+        # - MANUAL: form vazio — preencher.
+        deve_setar_descricao = (
+            com_identificacao  # MANUAL: form vazio sempre
+            or v.estrategia_preenchimento == EstrategiaPreenchimento.EXPRESSO_ADAPTADO
+        )
+        if deve_setar_descricao and v.nome_pjecalc:
             mudou = self._setar_text_se_diferente("descricao", v.nome_pjecalc)
             if mudou:
                 self.log(f"    ✓ descricao = '{v.nome_pjecalc}'")
+        elif v.nome_pjecalc:
+            self.log(f"    ⊙ descricao preservado (EXPRESSO_DIRETO — nome canônico não tocado)")
 
         # Período (datas)
         for sufixo in ("periodoInicialInputDate", "periodoInicial", "dataInicioInputDate"):
