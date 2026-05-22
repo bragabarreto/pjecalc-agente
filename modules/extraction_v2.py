@@ -267,6 +267,40 @@ VALOR PAGO - NÃO TRIBUTÁVEL, VALOR PAGO - TRIBUTÁVEL
 `ferias.periodos`. O PJE-Calc gerencia os períodos na página Férias — não como verbas autônomas
 separadas. NUNCA criar múltiplas verbas "Férias" em `verbas_principais`.
 
+⚠️ **REGRA CRÍTICA — 13º SALÁRIO**: Mesmo que o contrato abranja vários anos com
+remunerações diferentes (ex: 2023-2024-2025-2026), criar **APENAS UMA** entrada
+`13º SALÁRIO` em `verbas_principais`, com:
+- `periodo_inicio` = data de admissão
+- `periodo_fim` = data de demissão
+- `caracteristica = "DECIMO_TERCEIRO_SALARIO"`, `ocorrencia_pagamento = "DEZEMBRO"`
+- `quantidade.tipo = "AVOS"`
+- `base_calculo.tipo = "HISTORICO_SALARIAL"` referenciando UM histórico (geralmente o mais recente,
+  ex: "SALÁRIO MÍNIMO 2025-2026" ou "ÚLTIMA REMUNERAÇÃO")
+
+O PJE-Calc **gera automaticamente** as ocorrências de 13º para cada ano (DEZEMBRO de cada ano
+mais a ocorrência de DESLIGAMENTO no ano da rescisão), e a **base de cada ocorrência respeita
+o `historico_salarial` vigente na competência** correspondente — você só precisa garantir que
+o array `historico_salarial` cubra cada ano com o valor correto.
+
+**❌ ERRADO** (gera 4 verbas separadas, INSS duplicado, conferência inviável):
+```
+v04: 13º SALÁRIO período 09/02/2023 → 31/12/2023, histórico "SM 2023"
+v05: 13º SALÁRIO período 01/01/2024 → 31/12/2024, histórico "SM 2024"
+v06: 13º SALÁRIO período 01/01/2025 → 31/12/2025, histórico "SM 2025"
+v07: 13º SALÁRIO período 01/01/2026 → 09/01/2026, histórico "SM 2026"
+```
+
+**✅ CERTO** (uma verba só + histórico_salarial segmentado):
+```
+v04: 13º SALÁRIO período 09/02/2023 → 09/01/2026, histórico "ÚLTIMA REMUNERAÇÃO"
++ historico_salarial: ["SM 2023" 02/2023-12/2023, "SM 2024" 01/2024-12/2024, "SM 2025-2026" 01/2025-01/2026]
+```
+
+A mesma regra de **uma verba só com período total** vale para outras verbas de natureza
+recorrente que se estendem por vários anos (Adicional Noturno, Adicional de Insalubridade,
+Adicional de Periculosidade, Diferença Salarial, Horas Extras): SEMPRE uma só entrada com
+período total + histórico_salarial segmentado por competência.
+
 ### `expresso_adaptado`
 A verba não existe literal, mas pode adaptar uma similar:
 - "Estabilidade Gestante / Acidentária" → expresso_alvo="INDENIZAÇÃO ADICIONAL", nome_pjecalc adaptado
@@ -1202,6 +1236,10 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
 - [ ] **VALE TRANSPORTE, RESTITUIÇÃO/INDENIZAÇÃO DE DESPESA, AJUDA DE CUSTO, DIÁRIAS, CESTA BÁSICA, TÍQUETE-ALIMENTAÇÃO: SEMPRE `valor=INFORMADO` com mensalização aplicada (§4.4.bis)**
 - [ ] Verbas que a sentença descreve como "R$ X/dia × dias úteis" foram convertidas para valor mensal antes de virar JSON
 - [ ] Cada verba expresso_direto/expresso_adaptado tem `expresso_alvo` válido
+- [ ] **Verbas recorrentes (13º SALÁRIO, FÉRIAS+1/3, AVISO PRÉVIO, ADICIONAIS,
+  DIFERENÇA SALARIAL, HORAS EXTRAS, COMISSÃO/GORJETA): UMA única entrada em
+  `verbas_principais` com período total (admissão→demissão), `historico_salarial`
+  segmentado por ano. NUNCA criar uma verba por ano.**
 - [ ] Cada reflexo tem `expresso_reflex_alvo` no formato "X SOBRE Y"
 - [ ] Características COMUM/13o/Aviso/Férias com ocorrência derivada correta
 - [ ] Honorários SUCUMBENCIAIS com devedor=RECLAMANTE têm `forma_cobranca="COBRAR"` e `credor.nome="ADVOGADO DO RECLAMADO"`

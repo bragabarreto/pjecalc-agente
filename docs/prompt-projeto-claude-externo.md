@@ -420,6 +420,60 @@ diferentes por mês), adicionar dentro de cada verba:
 ```
 Default: `null` (PJE-Calc gera automaticamente a tabela mensal a partir do `período` × `ocorrencia_pagamento`).
 
+## 4.4.quater REGRA DE VERBA ÚNICA POR CONTRATO
+
+⚠️ **Verbas recorrentes que se estendem por múltiplos anos devem ser representadas
+por UMA ÚNICA entrada em `verbas_principais` — NUNCA segmentadas por ano.**
+
+Aplica-se a:
+- **13º SALÁRIO** (mesmo que o contrato cubra 2023+2024+2025+2026)
+- **FÉRIAS + 1/3** (períodos vão em `ferias.periodos`, NÃO em verbas separadas)
+- **AVISO PRÉVIO**
+- **ADICIONAL NOTURNO / DE INSALUBRIDADE / DE PERICULOSIDADE**
+- **DIFERENÇA SALARIAL**
+- **HORAS EXTRAS 50% / 100%**
+- **COMISSÃO / GORJETA**
+
+**Modelo correto** (uma verba só com período total):
+```json
+{
+  "expresso_alvo": "13º SALÁRIO",
+  "parametros": {
+    "caracteristica": "DECIMO_TERCEIRO_SALARIO",
+    "ocorrencia_pagamento": "DEZEMBRO",
+    "periodo_inicio": "<data_admissao>",
+    "periodo_fim": "<data_demissao>",
+    "valor": "CALCULADO",
+    "formula_calculado": {
+      "base_calculo": {"tipo": "HISTORICO_SALARIAL", "historico_nome": "ÚLTIMA REMUNERAÇÃO"},
+      "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
+      "multiplicador": 1.0,
+      "quantidade": {"tipo": "AVOS"}
+    }
+  }
+}
+```
+
+O PJE-Calc gera automaticamente as ocorrências mensais/anuais e usa o valor do
+`historico_salarial` vigente em cada competência. Garanta que o array
+`historico_salarial` cubra cada ano do contrato com o valor correto:
+
+```json
+"historico_salarial": [
+  {"nome": "SALÁRIO MÍNIMO 2023", "competencia_inicial": "02/2023", "competencia_final": "12/2023", "valor_brl": 1320.00, ...},
+  {"nome": "SALÁRIO MÍNIMO 2024", "competencia_inicial": "01/2024", "competencia_final": "12/2024", "valor_brl": 1412.00, ...},
+  {"nome": "SALÁRIO MÍNIMO 2025-2026", "competencia_inicial": "01/2025", "competencia_final": "01/2026", "valor_brl": 1518.00, ...}
+]
+```
+
+**❌ ERRADO** (gera 4 verbas separadas, INSS apurado 4×, conferência inviável):
+```
+v04: 13º SALÁRIO período 09/02/2023→31/12/2023 base=SM 2023
+v05: 13º SALÁRIO período 01/01/2024→31/12/2024 base=SM 2024
+v06: 13º SALÁRIO período 01/01/2025→31/12/2025 base=SM 2025
+v07: 13º SALÁRIO período 01/01/2026→09/01/2026 base=SM 2026
+```
+
 ## 4.5 REFLEXOS
 
 **REGRA CRÍTICA**: Todo reflexo DEVE estar aninhado dentro de uma verba_principal,
@@ -772,6 +826,10 @@ jornada exata. Para apagar um dia: `turnos: []`.
   e `parametros.zerar_valor_negativo = false` na própria verba.
 - [ ] Cada verba CALCULADO tem formula_calculado completo
 - [ ] Cada verba expresso_direto/adaptado tem expresso_alvo válido (lista 54)
+- [ ] **Verbas recorrentes (13º SALÁRIO, FÉRIAS+1/3, AVISO PRÉVIO, ADICIONAIS, DIFERENÇA
+  SALARIAL, HORAS EXTRAS, COMISSÃO/GORJETA): UMA única entrada em `verbas_principais` com
+  período total (admissão → demissão) + `historico_salarial` segmentado por ano. NUNCA
+  criar uma verba por ano (§4.4.quater).**
 - [ ] Cada reflexo tem expresso_reflex_alvo no formato "X SOBRE Y"
 - [ ] Característica/ocorrência pareados corretamente
 - [ ] Incidências corretas para cada tipo de verba (tabela 4.2)
