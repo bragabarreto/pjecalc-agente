@@ -93,6 +93,13 @@ def _save_previa(sessao_id: str, data: dict) -> None:
 
 
 def _load_previa(sessao_id: str) -> dict | None:
+    """Carrega prévia v2 priorizando memória → arquivo → DB (fallback).
+
+    O fallback ao DB existe porque o volume de arquivos (_STORE_DIR) pode
+    ser perdido em rebuilds/restarts, enquanto Calculo.dados_json no DB
+    persiste no PostgreSQL/SQLite. Sem isso, processos antigos retornavam
+    404 ao clicar em "Ver Prévia".
+    """
     if sessao_id in _PREVIA_STORE:
         return _PREVIA_STORE[sessao_id]
     fp = _STORE_DIR / f"{sessao_id}.json"
@@ -100,6 +107,27 @@ def _load_previa(sessao_id: str) -> dict | None:
         data = json.loads(fp.read_text(encoding="utf-8"))
         _PREVIA_STORE[sessao_id] = data
         return data
+    # Fallback: tentar recuperar do DB (Calculo.dados_json)
+    try:
+        from infrastructure.database import SessionLocal, Calculo as _Calc
+        db = SessionLocal()
+        try:
+            calc = db.query(_Calc).filter_by(sessao_id=sessao_id).first()
+            if calc and calc.dados_json:
+                data = json.loads(calc.dados_json)
+                # Reidrata cache em memória e arquivo (best-effort)
+                _PREVIA_STORE[sessao_id] = data
+                try:
+                    fp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+                except Exception:
+                    pass  # se filesystem read-only, ignorar
+                return data
+        finally:
+            db.close()
+    except Exception as _e:
+        logging.getLogger(__name__).warning(
+            f"_load_previa: falha no fallback DB para {sessao_id}: {_e}"
+        )
     return None
 
 
