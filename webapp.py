@@ -2550,16 +2550,49 @@ async def previa_atual_processo(
     numero_processo: str,
     db: Session = Depends(get_db),
 ):
-    """Redireciona para a prévia mais recente do processo."""
+    """Redireciona para a prévia mais recente do processo.
+
+    Detecta automaticamente se é prévia v1 (Calculo.previa_texto) ou v2
+    (Calculo.dados_json), retornando o redirect correto:
+      v2 → /previa/v2/{sessao_id}
+      v1 → /previa/{sessao_id}
+    """
+    from fastapi.responses import RedirectResponse
+
+    # 1. Tenta primeiro v1 (filtro por previa_texto não-null)
     repo = RepositorioCalculo(db)
-    calculo = repo.buscar_previa(numero_processo)
-    if not calculo:
+    calculo_v1 = repo.buscar_previa(numero_processo)
+
+    # 2. Tenta também v2: último Calculo do processo COM dados_json populado
+    from infrastructure.database import Calculo as _Calc, Processo as _Proc
+    calculo_v2 = (
+        db.query(_Calc)
+        .join(_Proc)
+        .filter(
+            _Proc.numero_processo == numero_processo,
+            _Calc.dados_json.isnot(None),
+        )
+        .order_by(_Calc.criado_em.desc())
+        .first()
+    )
+
+    # 3. Escolhe o mais recente entre os dois
+    candidato = None
+    if calculo_v1 and calculo_v2:
+        candidato = calculo_v2 if calculo_v2.criado_em >= calculo_v1.criado_em else calculo_v1
+    else:
+        candidato = calculo_v2 or calculo_v1
+
+    if not candidato:
         raise HTTPException(
             status_code=404,
             detail="Nenhuma prévia encontrada para este processo"
         )
-    from fastapi.responses import RedirectResponse
-    return RedirectResponse(url=f"/previa/{calculo.sessao_id}")
+
+    # 4. Roteamento por presença de dados_json (= prévia v2)
+    if candidato.dados_json:
+        return RedirectResponse(url=f"/previa/v2/{candidato.sessao_id}")
+    return RedirectResponse(url=f"/previa/{candidato.sessao_id}")
 
 
 def _validar_pjc_para_download(pjc_path: str | Path) -> tuple[bool, str]:
