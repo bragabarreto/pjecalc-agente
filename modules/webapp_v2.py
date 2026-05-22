@@ -268,7 +268,16 @@ function exibirPainelEdicaoManual(payload) {{
     '<button id="btn-salvar-correcao-manual" type="button" style="padding:8px 16px; background:#2563eb; color:#fff; border:0; border-radius:6px; font-weight:600; cursor:pointer;">Salvar descrição (texto livre)</button>' +
     '<span id="status-correcao-manual" style="color:#57534e; font-size:0.92em;"></span>' +
     '</div>' +
-    '<div id="diff-resultado" style="margin-top:10px; font-size:0.9em;"></div>';
+    '<div id="diff-resultado" style="margin-top:10px; font-size:0.9em;"></div>' +
+    '<hr style="margin:16px 0; border-color:#fde68a;">' +
+    '<h4 style="margin-bottom:8px;">📎 Anexar .PJC liquidado (após exportar do PJE-Calc)</h4>' +
+    '<p style="font-size:0.92em; color:#57534e; margin:6px 0;">Quando você corrigir + liquidar + exportar o .PJC no PJE-Calc, faça upload aqui. ' +
+    'O sistema valida automaticamente se o arquivo pertence a este processo e marca o cálculo como concluído.</p>' +
+    '<form id="form-upload-pjc" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">' +
+    '  <input type="file" id="input-pjc" accept=".PJC,.pjc,application/zip" style="padding:6px; border:1px solid #d4d4d8; border-radius:4px;">' +
+    '  <button id="btn-upload-pjc" type="button" style="padding:8px 16px; background:#7c3aed; color:#fff; border:0; border-radius:6px; font-weight:600; cursor:pointer;">⬆ Enviar .PJC</button>' +
+    '  <span id="status-upload-pjc" style="color:#57534e; font-size:0.92em;"></span>' +
+    '</form>';
   document.getElementById('painel-area').appendChild(painel);
   painel.scrollIntoView({{behavior:'smooth', block:'start'}});
   const btnDiff = document.getElementById('btn-capturar-diff');
@@ -318,6 +327,55 @@ function exibirPainelEdicaoManual(payload) {{
       if (r.ok) {{ st.textContent = '✓ ' + (d.msg || 'Correções registradas.'); st.style.color='#15803d'; ta.disabled=true; }}
       else {{ st.textContent = 'Erro: ' + (d.detail || r.status); st.style.color='#b91c1c'; btn.disabled=false; }}
     }} catch(e) {{ st.textContent='Erro de rede: '+e.message; st.style.color='#b91c1c'; btn.disabled=false; }}
+  }});
+
+  // ─── Upload manual de PJC (após correção manual no PJE-Calc) ────────
+  const btnUpload = document.getElementById('btn-upload-pjc');
+  btnUpload.addEventListener('click', async () => {{
+    const inp = document.getElementById('input-pjc');
+    const st = document.getElementById('status-upload-pjc');
+    if (!inp.files || inp.files.length === 0) {{
+      st.textContent = 'Selecione um arquivo .PJC primeiro.';
+      st.style.color = '#b91c1c';
+      return;
+    }}
+    const file = inp.files[0];
+    if (file.size > 50 * 1024 * 1024) {{
+      st.textContent = 'Arquivo muito grande (>50MB).';
+      st.style.color = '#b91c1c';
+      return;
+    }}
+    btnUpload.disabled = true;
+    st.style.color = '#57534e';
+    st.textContent = '⬆ Enviando ' + file.name + ' (' + Math.round(file.size/1024) + ' KB)…';
+    try {{
+      const fd = new FormData();
+      fd.append('pjc', file);
+      const r = await fetch('/api/upload-pjc/' + SESSAO_ID, {{method:'POST', body: fd}});
+      const d = await r.json();
+      if (r.ok) {{
+        st.innerHTML = '✓ PJC anexado e validado. <a href="' + d.download + '">Baixar</a> · ' +
+                       (d.tamanho_bytes ? Math.round(d.tamanho_bytes/1024) + ' KB' : '');
+        st.style.color = '#15803d';
+        inp.disabled = true;
+        // Atualizar área de download principal
+        if (downloadArea) {{
+          downloadArea.innerHTML = '<a class="download-pjc" href="' + d.download + '">⬇ Baixar .PJC (anexado manualmente)</a>';
+        }}
+      }} else {{
+        let msg = '';
+        if (typeof d.detail === 'string') msg = d.detail;
+        else if (d.detail && d.detail.msg) msg = d.detail.msg;
+        else msg = JSON.stringify(d.detail || d).slice(0, 200);
+        st.textContent = '❌ ' + msg;
+        st.style.color = '#b91c1c';
+        btnUpload.disabled = false;
+      }}
+    }} catch (e) {{
+      st.textContent = 'Erro de rede: ' + e.message;
+      st.style.color = '#b91c1c';
+      btnUpload.disabled = false;
+    }}
   }});
 }}
 </script>

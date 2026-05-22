@@ -6248,15 +6248,32 @@ class PlaywrightAutomatorV2:
                     sessao = self.sessao_id or _os.environ.get("PJECALC_SESSAO_ID") or getattr(
                         self.previa, "_sessao_id", None
                     ) or "unknown"
-                    snap_dir = _pl.Path("/tmp/pjecalc_snapshots")
-                    snap_dir.mkdir(parents=True, exist_ok=True)
-                    snap_path = snap_dir / f"{sessao}_inicial.json"
-                    snap_path.write_text(_json.dumps({
+                    # Salvar em DOIS locais: volume persistente (sobrevive restart)
+                    # + /tmp (compat. com versões anteriores). O endpoint de diff
+                    # busca em cascade.
+                    snap_dirs = [
+                        _pl.Path("data/calculations/_snapshots"),
+                        _pl.Path("/app/data/calculations/_snapshots"),
+                        _pl.Path("/tmp/pjecalc_snapshots"),
+                    ]
+                    payload_snapshot = _json.dumps({
                         "conv": conv,
                         "url": edit_url,
                         "snapshot": snapshot_inicial,
-                    }, ensure_ascii=False), encoding="utf-8")
-                    self.log(f"  ✓ Snapshot inicial salvo: {snap_path} ({len(snapshot_inicial.get('linhas', []))} verbas)")
+                    }, ensure_ascii=False)
+                    paths_salvos: list[str] = []
+                    for snap_dir in snap_dirs:
+                        try:
+                            snap_dir.mkdir(parents=True, exist_ok=True)
+                            snap_path = snap_dir / f"{sessao}_inicial.json"
+                            snap_path.write_text(payload_snapshot, encoding="utf-8")
+                            paths_salvos.append(str(snap_path))
+                        except Exception as _e_dir:
+                            self.log(f"  ⚠ Snapshot dir {snap_dir} skipped: {_e_dir}")
+                    if paths_salvos:
+                        self.log(f"  ✓ Snapshot inicial salvo em {len(paths_salvos)} local(is): {paths_salvos[0]} ({len(snapshot_inicial.get('linhas', []))} verbas)")
+                    else:
+                        self.log("  ⚠ Nenhum local de snapshot disponível para gravar")
                 except Exception as e:
                     self.log(f"  ⚠ Snapshot inicial falhou: {e}")
                 payload = {

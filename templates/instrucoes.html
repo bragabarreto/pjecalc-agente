@@ -671,6 +671,22 @@ function exibirPainelEdicaoManual(payload) {
       </button>
       <span id="status-correcao-manual" style="color:#57534e; font-size:0.92em;"></span>
     </div>
+
+    <hr style="margin:16px 0; border-color:#fde68a;">
+
+    <h4 style="margin-bottom:8px;">📎 Anexar .PJC liquidado (após exportar do PJE-Calc)</h4>
+    <p style="font-size:0.92em; color:#57534e; margin:6px 0;">
+      Quando você corrigir + liquidar + exportar o .PJC no PJE-Calc, faça upload aqui.
+      O sistema valida automaticamente se o arquivo pertence a este processo e marca
+      o cálculo como concluído.
+    </p>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <input type="file" id="input-pjc-upload" accept=".PJC,.pjc,application/zip"
+             style="padding:6px; border:1px solid #d4d4d8; border-radius:4px;">
+      <button id="btn-upload-pjc" type="button" class="btn btn-primary"
+              style="background:#7c3aed; border-color:#7c3aed;">⬆ Enviar .PJC</button>
+      <span id="status-upload-pjc" style="color:#57534e; font-size:0.92em;"></span>
+    </div>
   `;
 
   // Inserir acima do log
@@ -679,6 +695,51 @@ function exibirPainelEdicaoManual(payload) {
   painel.scrollIntoView({behavior: 'smooth', block: 'start'});
 
   document.getElementById('btn-salvar-correcao-manual').addEventListener('click', enviarCorrecaoManual);
+  document.getElementById('btn-upload-pjc').addEventListener('click', enviarUploadPjc);
+}
+
+async function enviarUploadPjc() {
+  const inp = document.getElementById('input-pjc-upload');
+  const status = document.getElementById('status-upload-pjc');
+  const btn = document.getElementById('btn-upload-pjc');
+  if (!inp.files || inp.files.length === 0) {
+    status.textContent = 'Selecione um arquivo .PJC primeiro.';
+    status.style.color = '#b91c1c';
+    return;
+  }
+  const file = inp.files[0];
+  if (file.size > 50 * 1024 * 1024) {
+    status.textContent = 'Arquivo muito grande (>50 MB).';
+    status.style.color = '#b91c1c';
+    return;
+  }
+  btn.disabled = true;
+  status.style.color = '#57534e';
+  status.textContent = `⬆ Enviando ${file.name} (${Math.round(file.size/1024)} KB)…`;
+  try {
+    const fd = new FormData();
+    fd.append('pjc', file);
+    const r = await fetch(`/api/upload-pjc/${SESSAO_ID}`, { method: 'POST', body: fd });
+    const d = await r.json();
+    if (r.ok) {
+      status.innerHTML = `✓ PJC anexado e validado. <a href="${d.download}">Baixar</a> · ` +
+                         (d.tamanho_bytes ? `${Math.round(d.tamanho_bytes/1024)} KB` : '');
+      status.style.color = '#15803d';
+      inp.disabled = true;
+    } else {
+      let msg = '';
+      if (typeof d.detail === 'string') msg = d.detail;
+      else if (d.detail && d.detail.msg) msg = d.detail.msg;
+      else msg = JSON.stringify(d.detail || d).slice(0, 200);
+      status.textContent = '❌ ' + msg;
+      status.style.color = '#b91c1c';
+      btn.disabled = false;
+    }
+  } catch (e) {
+    status.textContent = 'Erro de rede: ' + e.message;
+    status.style.color = '#b91c1c';
+    btn.disabled = false;
+  }
 }
 
 function escapeHtml(s) {

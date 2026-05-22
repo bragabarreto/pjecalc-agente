@@ -4238,11 +4238,23 @@ async def correcao_manual_diff(sessao_id: str, db: Session = Depends(get_db)):
     do usuário descrever.
     """
     import json as _json, pathlib as _pl
-    snap_path = _pl.Path("/tmp/pjecalc_snapshots") / f"{sessao_id}_inicial.json"
-    if not snap_path.exists():
+    # Buscar snapshot em cascade: volume persistente → /tmp (legado) → DB.
+    # /tmp é efêmero — após restart de container o arquivo desaparece.
+    _candidatos_snapshot = [
+        _pl.Path("/app/data/calculations/_snapshots") / f"{sessao_id}_inicial.json",
+        _pl.Path("data/calculations/_snapshots") / f"{sessao_id}_inicial.json",
+        _pl.Path("/tmp/pjecalc_snapshots") / f"{sessao_id}_inicial.json",
+    ]
+    snap_path = next((p for p in _candidatos_snapshot if p.exists()), None)
+    if snap_path is None:
         raise HTTPException(
             status_code=404,
-            detail="Snapshot inicial não encontrado. A automação precisa rodar e oferecer edição manual primeiro.",
+            detail=(
+                "Snapshot inicial não encontrado. Isso significa que a automação "
+                "ainda não rodou + travou em pendência nesta sessão, OU o snapshot "
+                "foi perdido em restart de container. Re-execute a automação para "
+                "regerar o snapshot, ou use o upload manual do .PJC."
+            ),
         )
     try:
         data_inicial = _json.loads(snap_path.read_text(encoding="utf-8"))
@@ -4323,14 +4335,22 @@ async def correcao_manual_diff(sessao_id: str, db: Session = Depends(get_db)):
                 continue
     db.commit()
 
-    # Salvar snapshot final ao lado do inicial (auditoria)
-    try:
-        (_pl.Path("/tmp/pjecalc_snapshots") / f"{sessao_id}_final.json").write_text(
-            _json.dumps({"conv": conv, "snapshot": snapshot_final, "diff": diff}, ensure_ascii=False),
-            encoding="utf-8",
-        )
-    except Exception:
-        pass
+    # Salvar snapshot final ao lado do inicial (auditoria) — em todos os
+    # locais possíveis (persistente + legado).
+    _payload_final = _json.dumps(
+        {"conv": conv, "snapshot": snapshot_final, "diff": diff},
+        ensure_ascii=False
+    )
+    for _snap_dir in (
+        _pl.Path("data/calculations/_snapshots"),
+        _pl.Path("/app/data/calculations/_snapshots"),
+        _pl.Path("/tmp/pjecalc_snapshots"),
+    ):
+        try:
+            _snap_dir.mkdir(parents=True, exist_ok=True)
+            (_snap_dir / f"{sessao_id}_final.json").write_text(_payload_final, encoding="utf-8")
+        except Exception:
+            pass
 
     return {
         "ok": True,
