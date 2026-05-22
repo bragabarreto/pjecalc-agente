@@ -5636,8 +5636,10 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(1500)
 
             # Quando devedor=RECLAMANTE, sempre cobrar (nunca descontar dos créditos)
+            # ⚠ ID REAL do template (honorarios.xhtml:118): tipoCobrancaReclamante
+            # (radio renderizado condicionalmente quando tipoDeDevedor=RECLAMANTE)
             if h.tipo_devedor == "RECLAMANTE":
-                self._selecionar("formaCobranca", "COBRAR")
+                self._marcar_radio("tipoCobrancaReclamante", "COBRAR")
                 self._aguardar_ajax(1000)
 
             self._marcar_radio("tipoValor", h.tipo_valor.value)
@@ -5646,12 +5648,14 @@ class PlaywrightAutomatorV2:
             if h.tipo_valor.value == "CALCULADO":
                 if h.aliquota_pct is not None:
                     pct = h.aliquota_pct * 100 if h.aliquota_pct < 1 else h.aliquota_pct
-                    self._preencher("percentualHonorarios", _fmt_br(pct), obrigatorio=False)
+                    # ⚠ ID REAL (honorarios.xhtml:148): aliquota (não percentualHonorarios)
+                    self._preencher("aliquota", _fmt_br(pct), obrigatorio=False)
                 if h.base_para_apuracao:
                     self._selecionar("baseParaApuracao", h.base_para_apuracao, obrigatorio=False)
             else:
                 if h.valor_informado_brl is not None:
-                    self._preencher("valorInformado", _fmt_br(h.valor_informado_brl), obrigatorio=False)
+                    # ⚠ ID REAL (honorarios.xhtml:212): valor (não valorInformado)
+                    self._preencher("valor", _fmt_br(h.valor_informado_brl), obrigatorio=False)
 
             # Credor: para SUCUMBENCIAIS o credor é sempre o advogado da parte contrária
             credor_nome = h.credor.nome if h.credor else None
@@ -5663,9 +5667,12 @@ class PlaywrightAutomatorV2:
             if credor_nome:
                 self._preencher("nomeCredor", credor_nome, obrigatorio=False)
             if h.credor:
-                self._marcar_radio("tipoDocumentoCredor", h.credor.doc_fiscal_tipo.value)
-                self._preencher("documentoFiscalCredor", h.credor.doc_fiscal_numero, obrigatorio=False)
-            self._marcar_checkbox("apurarIr", h.apurar_irrf)
+                # ⚠ IDs REAIS (honorarios.xhtml:322,335):
+                #   tipoDocumentoFiscalCredor + numeroDocumentoFiscalCredor
+                self._marcar_radio("tipoDocumentoFiscalCredor", h.credor.doc_fiscal_tipo.value)
+                self._preencher("numeroDocumentoFiscalCredor", h.credor.doc_fiscal_numero, obrigatorio=False)
+            # ⚠ ID REAL (honorarios.xhtml:373): apurarIRRF (não apurarIr)
+            self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
 
             self._clicar("salvar")
             self._aguardar_ajax(8000)
@@ -5824,18 +5831,30 @@ class PlaywrightAutomatorV2:
         self._selecionar("indiceCorrecao", indice_val)
 
         # ── Combinar com segundo índice de correção ──────────────────────────
+        # Schema v2 usa: combinar_outro_indice / indice_combinado /
+        # data_inicio_combinacao. Versões antigas usavam: combinar_com_outro_indice
+        # / segundo_indice / indice_correcao_pos / data_inicio_segundo_indice.
+        # Aceitar ambos por compat. (idempotente — mesmo efeito no DOM).
         combinar_indice = (
             getattr(c, "combinar_outro_indice", False)
             or getattr(c, "combinar_com_outro_indice", False)
         )
-        segundo = getattr(c, "segundo_indice", None) or getattr(c, "indice_correcao_pos", None)
-        data_inicio_2 = getattr(c, "data_inicio_segundo_indice", None)
+        segundo = (
+            getattr(c, "indice_combinado", None)
+            or getattr(c, "segundo_indice", None)
+            or getattr(c, "indice_correcao_pos", None)
+        )
+        data_inicio_2 = (
+            getattr(c, "data_inicio_combinacao", None)
+            or getattr(c, "data_inicio_segundo_indice", None)
+        )
         if combinar_indice and segundo:
             self._marcar_checkbox("combinarComOutro", True)
             self._aguardar_ajax(2000)
             self._selecionar("segundoIndice", _INDICE_MAP.get(segundo, segundo))
             if data_inicio_2:
                 self._preencher("dataInicioSegundoIndiceInputDate", data_inicio_2, obrigatorio=False)
+            self.log(f"  ✓ Correção combinada: {segundo} a partir de {data_inicio_2}")
 
         # ── Ignorar Taxa Negativa ────────────────────────────────────────────
         ignorar_neg = getattr(c, "ignorar_taxa_negativa", None)
@@ -5847,18 +5866,29 @@ class PlaywrightAutomatorV2:
         self._selecionar("taxaJuros", juros_val)
 
         # ── Combinar com outro juros (Lei 14.905 / taxa a partir de data) ────
+        # Schema v2 usa: juros_combinar / juros_combinado / juros_combinado_data_inicio.
+        # Versões antigas: combinar_com_outro_juros / outro_juros / outro_juros_a_partir_de.
+        # Aceitar ambos por compat.
         combinar_juros = (
-            getattr(c, "combinar_com_outro_juros", False)
+            getattr(c, "juros_combinar", False)
+            or getattr(c, "combinar_com_outro_juros", False)
             or getattr(c, "combinar_outro_juros", False)
         )
-        outro_juros = getattr(c, "outro_juros", None)
-        outro_juros_de = getattr(c, "outro_juros_a_partir_de", None)
+        outro_juros = (
+            getattr(c, "juros_combinado", None)
+            or getattr(c, "outro_juros", None)
+        )
+        outro_juros_de = (
+            getattr(c, "juros_combinado_data_inicio", None)
+            or getattr(c, "outro_juros_a_partir_de", None)
+        )
         if combinar_juros and outro_juros:
             self._marcar_checkbox("combinarComOutroJuros", True)
             self._aguardar_ajax(1500)
             self._selecionar("outroJuros", _JUROS_MAP.get(outro_juros, outro_juros))
             if outro_juros_de:
                 self._preencher("outroJurosAPartirDeInputDate", outro_juros_de, obrigatorio=False)
+            self.log(f"  ✓ Juros combinado: {outro_juros} a partir de {outro_juros_de}")
 
         # ── Lei 14.905 ───────────────────────────────────────────────────────
         lei_14905 = getattr(c, "lei_14905", None)
