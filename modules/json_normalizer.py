@@ -401,6 +401,24 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
                 if isinstance(vb, (int, float)) and vb < 0:
                     vp["valor_brl"] = abs(vb)
 
+    # 6.bis Férias — normalizar valor "VENCIDAS" (não existe no enum) para
+    # "INDENIZADAS" preservando o flag `dobra`. No PJE-Calc, "vencidas" significa
+    # período concessivo expirado sem usufruto → direito à dobra (art. 137 CLT).
+    # No nosso schema isso é representado por INDENIZADAS + dobra=true.
+    # Idempotente.
+    _ferias = data.get("ferias") or {}
+    _periodos = _ferias.get("periodos") if isinstance(_ferias, dict) else None
+    if isinstance(_periodos, list):
+        for _p in _periodos:
+            if not isinstance(_p, dict):
+                continue
+            _sit = (_p.get("situacao") or "").upper()
+            if _sit == "VENCIDAS":
+                _p["situacao"] = "INDENIZADAS"
+                # Preservar dobra se já marcada; caso contrário, default True
+                if "dobra" not in _p or _p.get("dobra") is None:
+                    _p["dobra"] = True
+
     # 7. Honorários — `valor_informado_brl` negativo também recebe abs().
     for h in data.get("honorarios", []) or []:
         if not isinstance(h, dict):
