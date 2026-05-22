@@ -1342,6 +1342,26 @@ algumas listas sejam vazias):
   - valor/base + multiplicador (se houver)
   - período
   - estratégia sugerida (`expresso_direto` / `expresso_adaptado` / `manual`)
+
+  ⚠️ **CRÍTICO**: o resumo da Etapa 1 deve listar verbas EXATAMENTE como
+  vão para `verbas_principais` no JSON da Etapa 2 — UMA linha por verba.
+  Verbas recorrentes (13º SALÁRIO, FÉRIAS + 1/3, AVISO PRÉVIO, ADICIONAIS,
+  DIFERENÇA SALARIAL, HORAS EXTRAS, COMISSÃO/GORJETA) que cobrem vários
+  anos/períodos devem aparecer como UMA ÚNICA linha, com período total
+  (admissão→demissão). Os períodos específicos (no caso de Férias) ou
+  segmentos (no caso de 13º com salário variável) são apenas
+  **mencionados como observação dentro da linha** — nunca como verbas
+  separadas no resumo.
+
+  **Exemplo correto** para sentença com 3 períodos de férias:
+  > v03 | FÉRIAS + 1/3 (3 períodos: 23/24 em dobro, 24/25 simples,
+  >       25/26 proporcionais c/ AP) | SM por ano | `expresso_direto`
+
+  **Exemplo errado** (3 linhas):
+  > v03 | Férias vencidas em dobro 2023/2024 | ...
+  > v04 | Férias simples 2024/2025 | ...
+  > v05 | Férias proporcionais 2025/2026 | ...
+
 - **Reflexos identificados** por verba principal
 - **Honorários** (tipo, devedor, alíquota, beneficiário)
 - **Custas Judiciais** (tipo e base)
