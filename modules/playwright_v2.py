@@ -2585,10 +2585,50 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⚠ Verba '{alvo_raw}' não está nas 54 Expresso canônicas — tentando match aproximado")
             self.log(f"  → [{idx+1}/{len(verbas)}] Procurando e selecionando '{alvo}'...")
 
-            # Garantir que estamos na listagem de verbas (li_calculo_verbas)
-            self._navegar_menu("li_calculo_verbas")
+            # Garantir que estamos na listagem de verbas (li_calculo_verbas).
+            # ⚠ CRÍTICO (22/05/2026): após salvar uma verba, apresentadorVerba pode
+            # ficar em modo ALTERACAO/CONSULTA. O botão lancamentoExpresso tem
+            # rendered="#{apresentador.emModoListagem}" — quando NÃO em listagem,
+            # botão não renderiza e Expresso vem com 0 checkboxes (causa raiz
+            # do bug Scarlette). Solução: SEMPRE navegar via sidebar (que invoca
+            # o método correto para resetar emModoListagem=true) e aguardar
+            # visibilidade real do botão antes de clicar.
+            self._navegar_menu_via_click("li_calculo_verbas")
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1000)
+
+            def _verificar_modo_listagem() -> dict:
+                """Inspeciona se o bean está em modo listagem (botão lancamentoExpresso
+                realmente renderizado E visível, não fantasma)."""
+                return self._page.evaluate(
+                    """() => {
+                        const el = document.querySelector("[id$='lancamentoExpresso']");
+                        if (!el) return {existe: false, visivel: false, modo_listagem: false};
+                        // rendered=false produz elemento ausente ou display:none
+                        const visivel = !!(el.offsetParent) && getComputedStyle(el).display !== 'none';
+                        return {existe: true, visivel: visivel, modo_listagem: visivel};
+                    }"""
+                )
+
+            # Aguardar até modo listagem confirmado (timeout 10s, 5 retries)
+            for _retry in range(5):
+                _diag = _verificar_modo_listagem()
+                if _diag.get("modo_listagem"):
+                    break
+                self.log(
+                    f"    ⏳ Aguardando emModoListagem=true "
+                    f"(lancamentoExpresso existe={_diag.get('existe')} "
+                    f"visivel={_diag.get('visivel')})"
+                )
+                # Forçar sidebar click novamente — invoca método que reseta modo
+                self._navegar_menu_via_click("li_calculo_verbas")
+                self._aguardar_ajax(3000)
+                self._page.wait_for_timeout(800)
+            else:
+                self.log(
+                    f"    ⚠ apresentadorVerba não voltou para modo listagem em 5 tentativas "
+                    f"— prosseguindo (lancamentoExpresso pode estar fantasma no DOM)"
+                )
 
             # CRÍTICO (21/05/2026): após salvar várias verbas Expresso, o estado
             # Seam degenera e a página Expresso retorna 0 checkboxes (lista vazia).
@@ -2609,9 +2649,15 @@ class PlaywrightAutomatorV2:
             if total_cbs == 0:
                 self.log(f"    ⚠ Página Expresso vazia (0 checkboxes) — Fechar+Reabrir + retry")
                 self._fechar_e_reabrir_calculo(f"pré-Expresso retry {idx+1}/{len(verbas)}")
-                self._navegar_menu("li_calculo_verbas")
+                # Pós-Fechar+Reabrir: sidebar click + aguardar modo listagem
+                self._navegar_menu_via_click("li_calculo_verbas")
                 self._aguardar_ajax(8000)
                 self._page.wait_for_timeout(1500)
+                for _r in range(3):
+                    if _verificar_modo_listagem().get("modo_listagem"):
+                        break
+                    self._navegar_menu_via_click("li_calculo_verbas")
+                    self._aguardar_ajax(3000)
                 total_cbs = _entrar_expresso_com_retry()
             self.log(f"    ℹ Página Expresso: {total_cbs} checkboxes disponíveis")
 
