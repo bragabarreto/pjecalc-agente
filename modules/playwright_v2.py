@@ -5826,15 +5826,21 @@ class PlaywrightAutomatorV2:
             "UTILIZAR_INDICE_JAM_E_TRABALHISTA": "JAM_MAIS_TRABALHISTA",
         }
 
-        # ── Índice de Correção Trabalhista (sufixo real: indiceCorrecao) ─────
-        indice_val = _INDICE_MAP.get(c.indice_trabalhista, c.indice_trabalhista)
-        self._selecionar("indiceCorrecao", indice_val)
+        # ⚠ IDs REAIS do template parametros-atualizacao.xhtml (não os legados).
+        # A página tem 2 abas: "Dados Gerais" (default) e "Dados Específicos".
+        # Quase TODOS os IDs estavam errados no código anterior.
 
-        # ── Combinar com segundo índice de correção ──────────────────────────
-        # Schema v2 usa: combinar_outro_indice / indice_combinado /
-        # data_inicio_combinacao. Versões antigas usavam: combinar_com_outro_indice
-        # / segundo_indice / indice_correcao_pos / data_inicio_segundo_indice.
-        # Aceitar ambos por compat. (idempotente — mesmo efeito no DOM).
+        # ── Aba "Dados Gerais": Índice Trabalhista ───────────────────────────
+        # ID real: indiceTrabalhista (NÃO indiceCorrecao).
+        indice_val = _INDICE_MAP.get(c.indice_trabalhista, c.indice_trabalhista)
+        self._selecionar("indiceTrabalhista", indice_val)
+        self._aguardar_ajax(1000)
+
+        # ── Combinar com segundo índice (workflow JSF: checkbox → select →
+        # data → clicar BOTÃO "+" addOutroIndice).
+        # Schema v2 usa: combinar_outro_indice / indice_combinado / data_inicio_combinacao.
+        # IDs reais: combinarOutroIndice, outroIndiceTrabalhista,
+        # apartirDeOutroIndice, addOutroIndice (link).
         combinar_indice = (
             getattr(c, "combinar_outro_indice", False)
             or getattr(c, "combinar_com_outro_indice", False)
@@ -5849,26 +5855,42 @@ class PlaywrightAutomatorV2:
             or getattr(c, "data_inicio_segundo_indice", None)
         )
         if combinar_indice and segundo:
-            self._marcar_checkbox("combinarComOutro", True)
+            self._marcar_checkbox("combinarOutroIndice", True)
             self._aguardar_ajax(2000)
-            self._selecionar("segundoIndice", _INDICE_MAP.get(segundo, segundo))
+            self._selecionar("outroIndiceTrabalhista", _INDICE_MAP.get(segundo, segundo))
             if data_inicio_2:
-                self._preencher("dataInicioSegundoIndiceInputDate", data_inicio_2, obrigatorio=False)
-            self.log(f"  ✓ Correção combinada: {segundo} a partir de {data_inicio_2}")
+                self._preencher("apartirDeOutroIndice", data_inicio_2, obrigatorio=False)
+            # Clicar botão "+" para confirmar adição na tabela
+            try:
+                self._clicar("addOutroIndice")
+                self._aguardar_ajax(2000)
+                self.log(f"  ✓ Correção combinada: {segundo} a partir de {data_inicio_2} (+ adicionado)")
+            except Exception as e:
+                self.log(f"  ⚠ addOutroIndice falhou: {e}")
 
         # ── Ignorar Taxa Negativa ────────────────────────────────────────────
         ignorar_neg = getattr(c, "ignorar_taxa_negativa", None)
         if ignorar_neg is not None:
             self._marcar_checkbox("ignorarTaxaNegativa", bool(ignorar_neg))
 
-        # ── Taxa de Juros (sufixo real: taxaJuros) ───────────────────────────
-        juros_val = _JUROS_MAP.get(c.juros, c.juros)
-        self._selecionar("taxaJuros", juros_val)
+        # ── Aplicar Juros Pré-Judicial (controla se TabelaJuros aplica desde
+        # o vencimento ou desde o ajuizamento). Schema v2 não tem campo direto
+        # — só inferimos pela presença de data_inicio_juros pré-ajuizamento.
+        # Por padrão, deixar TRUE (Calc-Machine pattern).
+        try:
+            self._marcar_checkbox("aplicarJurosFasePreJudicial", True)
+            self._aguardar_ajax(800)
+        except Exception:
+            pass
 
-        # ── Combinar com outro juros (Lei 14.905 / taxa a partir de data) ────
-        # Schema v2 usa: juros_combinar / juros_combinado / juros_combinado_data_inicio.
-        # Versões antigas: combinar_com_outro_juros / outro_juros / outro_juros_a_partir_de.
-        # Aceitar ambos por compat.
+        # ── Tabela de Juros (ID real: juros — NÃO taxaJuros) ─────────────────
+        juros_val = _JUROS_MAP.get(c.juros, c.juros)
+        self._selecionar("juros", juros_val)
+        self._aguardar_ajax(1000)
+
+        # ── Combinar com outro juros (Lei 14.905 — taxa a partir de data)
+        # IDs reais: combinarOutroJuros, outroJuros, apartirDeOutroJuros,
+        # addOutroJuros (link).
         combinar_juros = (
             getattr(c, "juros_combinar", False)
             or getattr(c, "combinar_com_outro_juros", False)
@@ -5883,27 +5905,49 @@ class PlaywrightAutomatorV2:
             or getattr(c, "outro_juros_a_partir_de", None)
         )
         if combinar_juros and outro_juros:
-            self._marcar_checkbox("combinarComOutroJuros", True)
+            self._marcar_checkbox("combinarOutroJuros", True)
             self._aguardar_ajax(1500)
             self._selecionar("outroJuros", _JUROS_MAP.get(outro_juros, outro_juros))
             if outro_juros_de:
-                self._preencher("outroJurosAPartirDeInputDate", outro_juros_de, obrigatorio=False)
-            self.log(f"  ✓ Juros combinado: {outro_juros} a partir de {outro_juros_de}")
+                self._preencher("apartirDeOutroJuros", outro_juros_de, obrigatorio=False)
+            try:
+                self._clicar("addOutroJuros")
+                self._aguardar_ajax(2000)
+                self.log(f"  ✓ Juros combinado: {outro_juros} a partir de {outro_juros_de} (+ adicionado)")
+            except Exception as e:
+                self.log(f"  ⚠ addOutroJuros falhou: {e}")
 
-        # ── Lei 14.905 ───────────────────────────────────────────────────────
-        lei_14905 = getattr(c, "lei_14905", None)
-        if lei_14905 is not None:
-            self._marcar_checkbox("lei14905", bool(lei_14905))
-            if lei_14905:
-                data_tl = getattr(c, "data_taxa_legal", None)
-                if data_tl:
-                    self._preencher("dataTaxaLegalInputDate", data_tl, obrigatorio=False)
+        # ── Trocar para Aba "Dados Específicos" (onde estão baseDeJurosDasVerbas,
+        # indiceDeCorrecaoDoFGTS, custas, previdência privada). A aba tem id
+        # `tabDadosEspecificos`. Em rich:tabPanel com switchType=client, basta
+        # clicar no header da aba.
+        try:
+            _clicked = self._page.evaluate("""() => {
+                // Procurar header da aba "Dados Específicos"
+                const headers = [...document.querySelectorAll('td.rich-tab-header, .rich-tabhdr')];
+                for (const h of headers) {
+                    const txt = (h.textContent||'').trim();
+                    if (/Dados\\s+Espec[íi]ficos/i.test(txt)) {
+                        h.click();
+                        return true;
+                    }
+                }
+                // Fallback: tentar clicar via link interno
+                const link = document.querySelector('a[id$="tabDadosEspecificos"]');
+                if (link) { link.click(); return 'link'; }
+                return false;
+            }""")
+            if _clicked:
+                self._aguardar_ajax(1500)
+                self.log(f"  ✓ trocou para aba Dados Específicos ({_clicked})")
+        except Exception as e:
+            self.log(f"  ⚠ troca de aba falhou: {e}")
 
-        # ── Base de Juros das Verbas ─────────────────────────────────────────
+        # ── Base de Juros das Verbas (aba 2) ─────────────────────────────────
         base_val = _BASE_JUROS_MAP.get(c.base_juros_verbas, c.base_juros_verbas)
         self._selecionar("baseDeJurosDasVerbas", base_val)
 
-        # ── FGTS: Correção (radio: INDICE_TRABALHISTA / JAM / JAM_MAIS_TRABALHISTA)
+        # ── FGTS: Correção (ID real: indiceDeCorrecaoDoFGTS — radio) ─────────
         fgts_c = getattr(c, "fgts", None)
         if fgts_c:
             fc_raw = (
@@ -5911,7 +5955,7 @@ class PlaywrightAutomatorV2:
                 else getattr(fgts_c, "indice_correcao", None)
             )
             if fc_raw:
-                self._marcar_radio("fgtsCorrecao", _FGTS_CORR_MAP.get(fc_raw, fc_raw))
+                self._marcar_radio("indiceDeCorrecaoDoFGTS", _FGTS_CORR_MAP.get(fc_raw, fc_raw))
 
         # ── Lei 11.941/2009 (CS) ─────────────────────────────────────────────
         lei11941 = getattr(c, "lei_11941", None)
