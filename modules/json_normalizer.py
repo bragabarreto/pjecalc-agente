@@ -409,4 +409,56 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(vi, (int, float)) and vi < 0:
             h["valor_informado_brl"] = abs(vi)
 
+    # 8. Verbas de DEDUÇÃO (VALOR PAGO / DEVOLUÇÃO DESCONTOS):
+    #    o valor da dedução pertence a `valor_pago.valor_brl`, NÃO a
+    #    `valor_devido.valor_informado_brl`. Quando a IA inverte os campos
+    #    (caso comum até o prompt ser atualizado), migrar automaticamente.
+    #
+    #    Também: na presença de QUALQUER verba dedução, o parâmetro global
+    #    `parametros_calculo.zerar_valor_negativo` DEVE ser false — caso
+    #    contrário a dedução é zerada no PJE-Calc.
+    _NOMES_VERBAS_DEDUCAO = ("VALOR PAGO", "DEVOLUÇÃO DE DESCONTOS")
+    tem_deducao = False
+    for v in data.get("verbas_principais", []) or []:
+        if not isinstance(v, dict):
+            continue
+        nome_pj = (v.get("nome_pjecalc") or "").upper()
+        expr = (v.get("expresso_alvo") or "").upper()
+        eh_deducao = any(t in nome_pj or t in expr for t in _NOMES_VERBAS_DEDUCAO)
+        if not eh_deducao:
+            continue
+        tem_deducao = True
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        vd = p.get("valor_devido") or {}
+        vp = p.get("valor_pago") or {}
+        vi = vd.get("valor_informado_brl") if isinstance(vd, dict) else None
+        vp_atual = vp.get("valor_brl") if isinstance(vp, dict) else None
+        # Migrar quando valor_devido tem valor > 0 e valor_pago está vazio/0
+        if (
+            isinstance(vi, (int, float)) and vi > 0
+            and (vp_atual is None or vp_atual == 0)
+        ):
+            # Garantir vp como dict completo
+            if not isinstance(vp, dict):
+                vp = {}
+            vp["tipo"] = "INFORMADO"
+            vp["valor_brl"] = vi
+            vp.setdefault("proporcionalizar", False)
+            p["valor_pago"] = vp
+            # Resetar valor_devido para 0 (mantém estrutura INFORMADO)
+            if isinstance(vd, dict):
+                vd["valor_informado_brl"] = 0.0
+                vd.setdefault("tipo", "INFORMADO")
+                vd.setdefault("proporcionalizar", False)
+        # Garantir zerar_valor_negativo=False na própria verba
+        if p.get("zerar_valor_negativo") is True:
+            p["zerar_valor_negativo"] = False
+
+    if tem_deducao:
+        pc = data.get("parametros_calculo")
+        if isinstance(pc, dict) and pc.get("zerar_valor_negativo") is True:
+            pc["zerar_valor_negativo"] = False
+
     return data

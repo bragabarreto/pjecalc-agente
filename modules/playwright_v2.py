@@ -3249,8 +3249,9 @@ class PlaywrightAutomatorV2:
             except Exception:
                 pass
 
-        # ─── 4. RADIO Valor Pago (se CALCULADO) — pode disparar AJAX ───
-        if p.valor == TipoValor.CALCULADO and getattr(p, "valor_pago", None):
+        # ─── 4. RADIO Valor Pago — pode disparar AJAX ───
+        # Aplicar tanto em valor=CALCULADO quanto INFORMADO (verbas de DEDUÇÃO).
+        if getattr(p, "valor_pago", None):
             vp = p.valor_pago
             try:
                 vp_tipo = vp.tipo.value if hasattr(vp.tipo, "value") else str(vp.tipo)
@@ -3326,7 +3327,13 @@ class PlaywrightAutomatorV2:
                     self._setar_text_se_diferente("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
 
         # Valor Pago — sub-inputs text
-        if p.valor == TipoValor.CALCULADO and getattr(p, "valor_pago", None):
+        # ⚠ CRÍTICO (21/05/2026): preencher valor_pago tanto em valor=CALCULADO
+        # quanto em valor=INFORMADO. As verbas de DEDUÇÃO (VALOR PAGO -
+        # TRIBUTÁVEL/NÃO TRIBUTÁVEL, DEVOLUÇÃO DE DESCONTOS INDEVIDOS) usam
+        # valor=INFORMADO com o valor da dedução em valor_pago.valor_brl
+        # (e valor_devido.valor_informado_brl = 0). Sem isso, o bot omitiria
+        # o valor da dedução no PJE-Calc.
+        if getattr(p, "valor_pago", None):
             vp = p.valor_pago
             try:
                 vp_tipo = vp.tipo.value if hasattr(vp.tipo, "value") else str(vp.tipo)

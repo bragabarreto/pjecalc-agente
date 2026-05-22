@@ -333,17 +333,47 @@ A sentença determina valor fixo (R$ X). Use para:
 
 > ⚠️ **`valor_informado_brl` é SEMPRE POSITIVO — NUNCA negativo.**
 > Em PJE-Calc todos os valores monetários no JSON são positivos: o sistema trata
-> sinais internamente. Mesmo quando a verba representa uma **DEDUÇÃO** (ex.:
-> `VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
-> `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`), o valor é positivo. Essas verbas são
-> intrinsecamente subtrativas no modelo de dados do PJE-Calc — você NÃO informa
-> o sinal.
->
-> **Exemplo (correto):** TRCT pago de R$ 1.496,23 a deduzir →
-> `"valor_informado_brl": 1496.23` (NUNCA `-1496.23`).
+> sinais internamente.
 >
 > A mesma regra vale para `honorarios[*].valor_informado_brl` e
 > `valor_pago.valor_brl` — sempre positivos.
+
+> ⚠️ **REGRA CRÍTICA — Verbas de DEDUÇÃO usam `valor_pago.valor_brl`, NÃO `valor_devido`.**
+>
+> Para as verbas que existem ESPECIFICAMENTE para representar **deduções** (valores
+> já pagos pelo empregador, que devem ser abatidos do bruto devido):
+>
+>   - `VALOR PAGO - TRIBUTÁVEL`
+>   - `VALOR PAGO - NÃO TRIBUTÁVEL`
+>   - `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`
+>
+> O valor da dedução **vai em `parametros.valor_pago.valor_brl`** (positivo), enquanto
+> `parametros.valor_devido.valor_informado_brl` fica **`0.0`**. O PJE-Calc apura a verba
+> fazendo `devido − pago = − valor_pago`, gerando o saldo negativo que deduz do bruto.
+>
+> Adicionalmente:
+> - `parametros.zerar_valor_negativo: false` (na própria verba)
+> - `parametros_calculo.zerar_valor_negativo: false` (global, quando há qualquer verba
+>   de dedução no cálculo — aceita-se o alerta não-bloqueante do PJE-Calc)
+>
+> **Exemplo CORRETO** — Dedução TRCT de R$ 1.496,23:
+> ```json
+> {
+>   "expresso_alvo": "VALOR PAGO - NÃO TRIBUTÁVEL",
+>   "parametros": {
+>     "valor": "INFORMADO",
+>     "zerar_valor_negativo": false,
+>     "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 0.0, "proporcionalizar": false},
+>     "valor_pago":   {"tipo": "INFORMADO", "valor_brl": 1496.23, "proporcionalizar": false}
+>   }
+> }
+> ```
+>
+> **ERRADO** (somaria 1.496,23 ao bruto em vez de abater):
+> ```json
+> "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 1496.23, ...},
+> "valor_pago":   {"tipo": "INFORMADO", "valor_brl": 0.0, ...}
+> ```
 
 ### `valor=CALCULADO`
 A verba é calculada por fórmula:
@@ -734,10 +764,12 @@ jornada exata. Para apagar um dia: `turnos: []`.
 - [ ] parametros_calculo.data_termino_calculo ≥ MAX(periodo_fim das verbas)
 - [ ] historico_salarial cobre data_inicio_calculo até data_termino_calculo
 - [ ] Cada verba INFORMADO tem valor_informado_brl > 0 com `comentarios` justificando
-- [ ] **NENHUM `valor_informado_brl` (verbas OU honorários) é negativo.** Mesmo verbas
-  de DEDUÇÃO (`VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
-  `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`) recebem valor positivo — o PJE-Calc trata o
-  sinal internamente.
+- [ ] **NENHUM `valor_informado_brl` (verbas OU honorários) é negativo.**
+- [ ] **Verbas de DEDUÇÃO** (`VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
+  `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`) têm o valor em **`valor_pago.valor_brl`**
+  (positivo), com `valor_devido.valor_informado_brl = 0.0`. NUNCA inverter.
+- [ ] Se há qualquer verba de DEDUÇÃO, `parametros_calculo.zerar_valor_negativo = false`
+  e `parametros.zerar_valor_negativo = false` na própria verba.
 - [ ] Cada verba CALCULADO tem formula_calculado completo
 - [ ] Cada verba expresso_direto/adaptado tem expresso_alvo válido (lista 54)
 - [ ] Cada reflexo tem expresso_reflex_alvo no formato "X SOBRE Y"

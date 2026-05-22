@@ -615,7 +615,27 @@ O esquema espelha **integralmente** a página `verba-calculo.jsf` (Cálculo > Ve
     representa uma **DEDUÇÃO** (ex.: `VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
     `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`), o valor informado é positivo. Essas verbas são
     intrinsecamente subtrativas no modelo de dados do PJE-Calc — você NÃO informa o sinal.
-    Exemplo: TRCT pago de R$ 1.496,23 a deduzir → `valor_informado_brl: 1496.23` (NUNCA `-1496.23`).
+
+  - **⚠️ REGRA CRÍTICA — Verbas de DEDUÇÃO usam `valor_pago.valor_brl`, NÃO `valor_devido`.**
+    Para `VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL` e `DEVOLUÇÃO DE DESCONTOS
+    INDEVIDOS`, o valor da dedução vai em `parametros.valor_pago.valor_brl` (positivo),
+    enquanto `parametros.valor_devido.valor_informado_brl` fica **`0.0`**. O PJE-Calc apura
+    `devido − pago` → saldo negativo que deduz do bruto. Adicionalmente, marque:
+    - `parametros.zerar_valor_negativo: false` na verba
+    - `parametros_calculo.zerar_valor_negativo: false` global (quando houver qualquer
+      verba de dedução). Aceita-se o alerta não-bloqueante do PJE-Calc.
+
+    **Exemplo correto** (dedução TRCT de R$ 1.496,23):
+    ```json
+    "parametros": {
+      "valor": "INFORMADO",
+      "zerar_valor_negativo": false,
+      "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 0.0, "proporcionalizar": false},
+      "valor_pago":   {"tipo": "INFORMADO", "valor_brl": 1496.23, "proporcionalizar": false}
+    }
+    ```
+    **NUNCA inverter** (`valor_devido=1496.23, valor_pago=0`) — geraria soma em vez de abate.
+
 - Se `valor=CALCULADO`:
   - `parametros.valor_devido`: `{tipo: "CALCULADO"}`
   - `parametros.formula_calculado`: ver §4.4 (base_calculo + divisor + multiplicador + quantidade)
@@ -1169,6 +1189,11 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
 - [ ] **NENHUM `valor_informado_brl` (verbas OU honorários) é negativo.** Mesmo verbas de DEDUÇÃO
   (`VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`, `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`)
   recebem valor positivo — o PJE-Calc trata o sinal internamente.
+- [ ] **Verbas de DEDUÇÃO** (`VALOR PAGO - TRIBUTÁVEL`, `VALOR PAGO - NÃO TRIBUTÁVEL`,
+  `DEVOLUÇÃO DE DESCONTOS INDEVIDOS`) têm o valor em **`valor_pago.valor_brl`** (positivo),
+  com `valor_devido.valor_informado_brl = 0.0`. NUNCA inverter.
+- [ ] Se há qualquer verba de DEDUÇÃO, `parametros_calculo.zerar_valor_negativo = false`
+  (aceita-se o alerta não-bloqueante do PJE-Calc).
 - [ ] Cada verba com `valor=CALCULADO` tem `formula_calculado` preenchido COMPLETAMENTE com:
    - `base_calculo.tipo` ∈ {MAIOR_REMUNERACAO, HISTORICO_SALARIAL, SALARIO_DA_CATEGORIA, SALARIO_MINIMO, VALE_TRANSPORTE}
    - `divisor.tipo` ∈ {OUTRO_VALOR, CARGA_HORARIA, DIAS_UTEIS, IMPORTADA_DO_CARTAO}
