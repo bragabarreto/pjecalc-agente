@@ -6286,15 +6286,39 @@ class PlaywrightAutomatorV2:
                 # Marcador especial reconhecido pelo SSE/frontend
                 import json as _json
                 self.log(f"[MANUAL_EDIT_REQUIRED] {_json.dumps(payload, ensure_ascii=False)}")
+                # Bloco legível com cada pendência enumerada — visível no log
+                # mesmo que o frontend perca o evento [MANUAL_EDIT_REQUIRED].
+                self.log("")
+                self.log("┌─ 📋 PENDÊNCIAS BLOQUEANTES DA LIQUIDAÇÃO ─" + "─" * 20)
+                _todas_pendencias = pendencias + [
+                    d for d in detalhes_pendencias if d not in pendencias
+                ]
+                if not _todas_pendencias:
+                    self.log("│  (PJE-Calc não retornou texto explícito — investigar logs do JBoss)")
+                for _idx, _p in enumerate(_todas_pendencias[:15], start=1):
+                    # Quebrar mensagens muito longas em múltiplas linhas
+                    _texto = str(_p).strip()
+                    if len(_texto) > 110:
+                        _texto = _texto[:107] + "..."
+                    self.log(f"│  {_idx:>2}. {_texto}")
+                self.log("└" + "─" * 60)
+                self.log("")
                 self.log(
                     "  ⚠ Liquidação bloqueada por pendências. Use o link de edição manual "
                     "para corrigir os parâmetros diretamente no PJE-Calc Cidadão. Esta é a "
                     "última alternativa — todos os demais dados já foram preenchidos pela "
                     "automação; faça apenas as correções pontuais para finalizar."
                 )
+                # Enriquece a mensagem do RuntimeError com as 5 primeiras
+                # pendências para que apareçam em [FIM DA EXECUÇÃO ERRO] também
+                # — usuário não precisa rolar os logs até achar.
+                _resumo_pend = " | ".join(
+                    [str(p).strip()[:90] for p in _todas_pendencias[:5]]
+                ) or "sem texto explícito do PJE-Calc"
                 raise RuntimeError(
-                    "Liquidação bloqueada por pendências após 2 tentativas. "
-                    "Edição manual oferecida ao usuário."
+                    f"Liquidação bloqueada por pendências após 2 tentativas. "
+                    f"Pendências: {_resumo_pend}. "
+                    f"Edição manual oferecida ao usuário (painel acima)."
                 )
         else:
             # Sem mensagens conclusivas — assumimos OK (alertas não-bloqueadores)
