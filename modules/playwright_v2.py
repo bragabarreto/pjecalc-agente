@@ -6091,50 +6091,99 @@ class PlaywrightAutomatorV2:
             if erro:
                 self.log(f"  ⚠ JSF reportou erro: {erro[:200]}")
 
-        # Verificar resultado da liquidação — pendência/erro só são REAIS se
-        # aparecerem nas MENSAGENS JSF (.rf-msgs-*), não em qualquer lugar do body.
-        # Bug anterior: substring no body inteiro causava falso positivo (a palavra
-        # "pendência" pode aparecer em sidebar/menus mesmo com liquidação OK).
+        # Verificar resultado da liquidação. A página liquidacao.xhtml renderiza
+        # uma seção "Pendências do Cálculo" SEMPRE que houver erros OU alertas,
+        # com:
+        #   <input id="*:totalErros"   value="N"> — bloqueantes (X vermelho)
+        #   <input id="*:totalAlertas" value="N"> — não-bloqueantes (⚠ amarelo)
+        # Cada item de pendência tem class:
+        #   .validacaoErro   → bloqueante (impede a liquidação)
+        #   .validacaoAlerta → não impede (informativo)
+        #   .validacaoSucesso → "não há pendências" (liquidação OK)
+        #
+        # CRÍTICO: a automação SÓ deve travar e oferecer edição manual quando
+        # totalErros > 0. Alertas amarelos não impedem a liquidação e devem
+        # ser apenas registrados no log.
         _liq_result = self._page.evaluate("""() => {
-            const body = document.body?.textContent || '';
+            // ─ Totalizadores da tela liquidacao.xhtml ─────────────────────
+            const totErrosEl = document.querySelector('input[id$=":totalErros"], input[id$="totalErros"]');
+            const totAlertasEl = document.querySelector('input[id$=":totalAlertas"], input[id$="totalAlertas"]');
+            const totalErros = totErrosEl ? (parseInt(totErrosEl.value, 10) || 0) : null;
+            const totalAlertas = totAlertasEl ? (parseInt(totAlertasEl.value, 10) || 0) : null;
+
+            // ─ Itens de erro (bloqueantes) e alerta (não bloqueantes) ─────
+            const erros = [...document.querySelectorAll('.validacaoErro')]
+                .map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim())
+                .filter(t => t && !/^erro:\\s*impede/i.test(t));  // exclui legenda
+            const alertas = [...document.querySelectorAll('.validacaoAlerta')]
+                .map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim())
+                .filter(t => t && !/^alerta:\\s*n[ãa]o impede/i.test(t));  // exclui legenda
+            const sucesso_painel = !!document.querySelector('.validacaoSucesso');
+
+            // ─ Mensagens JSF complementares (rf-msgs) ─────────────────────
             const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum,.ui-messages-error-summary,.rich-messages-label')]
                 .map(e => (e.textContent||'').trim()).filter(t => t).slice(0, 10);
             const msgs_lower = msgs.map(m => m.toLowerCase()).join('\\n');
+            const has_sucesso_msg = msgs.some(m =>
+                /opera[cç][ãa]o realizada com sucesso/i.test(m)
+                || /liquida[cç][ãa]o realizada/i.test(m)
+            );
+            const body = document.body?.textContent || '';
             const has_real_error =
                 body.includes('HTTP Status 500')
                 || body.includes('NullPointerException')
                 || body.toLowerCase().includes('erro inesperado')
                 || msgs_lower.includes('erro:');
-            const has_pendencia_msg = msgs.some(m => /pend[êe]ncia/i.test(m));
-            const has_sucesso_msg = msgs.some(m =>
-                /opera[cç][ãa]o realizada com sucesso/i.test(m)
-                || /liquida[cç][ãa]o realizada/i.test(m)
-            );
+
             return {
-                msgs: msgs,
-                tem_pendencia: has_pendencia_msg,
-                nao_encontradas: msgs_lower.includes('não foram encontradas'),
-                tem_liquidado: body.toLowerCase().includes('liquidação realizada')
-                    || body.toLowerCase().includes('liquidado em '),
-                tem_erro: has_real_error,
-                tem_sucesso: has_sucesso_msg
+                totalErros, totalAlertas,
+                erros: [...new Set(erros)].slice(0, 30),
+                alertas: [...new Set(alertas)].slice(0, 30),
+                sucesso_painel,
+                msgs, tem_erro_500: has_real_error, tem_sucesso: has_sucesso_msg
             };
         }""")
-        self.log(
-            f"  [DIAG-liquidar] msgs={_liq_result['msgs']} "
-            f"pendencia={_liq_result['tem_pendencia']} "
-            f"sucesso={_liq_result['tem_sucesso']} "
-            f"erro={_liq_result['tem_erro']}"
-        )
 
-        # Prioridade: mensagem JSF de sucesso explícito > erro > pendência
-        # (Calc Machine faz exatamente isso — sucesso "veta" os demais sinais.)
-        if _liq_result['tem_sucesso']:
-            self.log("  ✓ Liquidação OK (mensagem JSF de sucesso explícita)")
-        elif _liq_result['tem_erro']:
-            raise RuntimeError(f"Liquidação retornou erro: {_liq_result['msgs']}")
-        elif _liq_result['tem_pendencia'] and not _liq_result['nao_encontradas']:
-            pendencias = _liq_result['msgs']
+        # Normalizar: se a tela renderizou totalizadores, usamos eles como
+        # fonte da verdade. Se ainda não renderizou (race AJAX), usamos só
+        # mensagens JSF como fallback.
+        _tE = _liq_result['totalErros']
+        _tA = _liq_result['totalAlertas']
+        _erros_lista = _liq_result['erros'] or []
+        _alertas_lista = _liq_result['alertas'] or []
+        self.log(
+            f"  [DIAG-liquidar] totalErros={_tE} totalAlertas={_tA} "
+            f"painel_sucesso={_liq_result['sucesso_painel']} "
+            f"msg_sucesso={_liq_result['tem_sucesso']} "
+            f"erro_500={_liq_result['tem_erro_500']}"
+        )
+        if _erros_lista:
+            self.log(f"  [DIAG-liquidar] erros[{len(_erros_lista)}]: {_erros_lista[:3]}")
+        if _alertas_lista:
+            self.log(f"  [DIAG-liquidar] alertas[{len(_alertas_lista)}]: {_alertas_lista[:3]}")
+
+        # Decisão:
+        #   - Erro 500 / NPE → falha técnica (raise sem oferecer edição manual)
+        #   - Sucesso explícito (mensagem JSF OU painel.validacaoSucesso) → OK
+        #   - totalErros > 0 → BLOQUEANTE → oferecer edição manual com lista de erros
+        #   - totalErros == 0 (com ou sem alertas) → prosseguir; alertas só são logados
+        if _liq_result['tem_erro_500']:
+            raise RuntimeError(f"Liquidação retornou erro técnico: {_liq_result['msgs']}")
+        if _liq_result['tem_sucesso'] or _liq_result['sucesso_painel'] or (
+            _tE == 0 and _tA == 0 and not _erros_lista
+        ):
+            self.log("  ✓ Liquidação OK (sem pendências bloqueantes)")
+            if _alertas_lista:
+                self.log(f"  ⚠ {len(_alertas_lista)} alerta(s) não-bloqueante(s) registrados — não impedem a liquidação:")
+                for _idx, _a in enumerate(_alertas_lista[:10], start=1):
+                    self.log(f"    {_idx}. {_a[:180]}")
+        elif _tE and _tE > 0:
+            # CASO CRÍTICO: liquidação bloqueada por erros REAIS marcados com
+            # X vermelho no painel "Pendências do Cálculo".
+            self.log(f"  ✗ Liquidação BLOQUEADA — totalErros={_tE} (alertas={_tA or 0} ignorados)")
+            # Erros bloqueantes têm prioridade absoluta. Mensagens JSF entram
+            # como complemento se a lista de erros estiver vazia (improvável).
+            pendencias = _erros_lista or _liq_result['msgs']
             # Capturar detalhes das pendências — clicar em "Verificar Pendências" ou
             # navegar para sidebar/popup com a tabela de pendências detalhadas.
             try:
@@ -6196,20 +6245,35 @@ class PlaywrightAutomatorV2:
                     self._aguardar_ajax(15000)
                     self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
                     _liq2 = self._page.evaluate("""() => {
+                        const totErrosEl2 = document.querySelector('input[id$=":totalErros"], input[id$="totalErros"]');
+                        const totalErros2 = totErrosEl2 ? (parseInt(totErrosEl2.value, 10) || 0) : null;
+                        const erros2 = [...document.querySelectorAll('.validacaoErro')]
+                            .map(el => (el.textContent || '').replace(/\\s+/g, ' ').trim())
+                            .filter(t => t && !/^erro:\\s*impede/i.test(t));
                         const msgs = [...document.querySelectorAll('.rf-msgs-detail,.rf-msgs-sum')]
                             .map(e => (e.textContent||'').trim()).filter(t => t);
                         return {
-                            ok: msgs.some(m => /opera[cç][ãa]o realizada com sucesso|liquida[cç][ãa]o realizada/i.test(m)),
-                            pend: msgs.some(m => /pend[êe]ncia/i.test(m))
+                            totalErros: totalErros2,
+                            erros: [...new Set(erros2)].slice(0, 20),
+                            ok: msgs.some(m => /opera[cç][ãa]o realizada com sucesso|liquida[cç][ãa]o realizada/i.test(m))
+                                || !!document.querySelector('.validacaoSucesso'),
                         };
                     }""")
-                    if _liq2['ok'] and not _liq2['pend']:
+                    # Liquidação OK se sucesso explícito + nenhum erro bloqueante.
+                    # totalErros pode ser null (painel não-renderizado = sem pendências).
+                    _erros2 = _liq2.get('erros') or []
+                    _tE2 = _liq2.get('totalErros')
+                    if _liq2.get('ok') and (not _tE2 or _tE2 == 0) and not _erros2:
                         self.log("  ✓ 2ª tentativa de liquidação OK — prosseguindo para exportação")
-                        # Sair do branch de pendência, segue para exportar
                         sucesso_liq = True
                         pendencias = []
                     else:
-                        self.log("  ⚠ 2ª tentativa ainda com pendência — emitindo evento de edição manual")
+                        if _erros2:
+                            self.log(f"  ⚠ 2ª tentativa ainda com {len(_erros2)} erro(s) bloqueante(s)")
+                            # Atualizar lista de pendências com os erros da 2ª tentativa
+                            pendencias = _erros2
+                        else:
+                            self.log("  ⚠ 2ª tentativa não confirmou sucesso — oferecendo edição manual")
                 except Exception as e:
                     self.log(f"  ⚠ Erro 2ª tentativa: {e}")
 
