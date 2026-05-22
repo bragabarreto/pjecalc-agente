@@ -401,6 +401,69 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
                 if isinstance(vb, (int, float)) and vb < 0:
                     vp["valor_brl"] = abs(vb)
 
+    # 6.ante Coerência temporal das verbas e data_termino_calculo.
+    #
+    # Regras:
+    #   (a) Verbas com ocorrencia_pagamento DESLIGAMENTO (Saldo de Salário,
+    #       Multa 477, Aviso Prévio etc) devem ter periodo_inicio = 1º dia
+    #       do mês da demissão. PJE-Calc gera ocorrências para o mês inteiro
+    #       e RECUSA a liquidação se a ocorrência ficar fora do período
+    #       declarado. Bot às vezes coloca periodo_inicio = periodo_fim =
+    #       data_demissao, gerando inconsistência.
+    #
+    #   (b) data_termino_calculo deve ser ≥ MAX(periodo_fim) entre todas as
+    #       verbas. Caso usuário/IA tenha colocado data_demissao mas haja
+    #       Aviso Prévio Indenizado projetado (Lei 12.506/2011: até +90 dias),
+    #       estabilidade, pensão vitalícia etc, a data fica curta e ocorrências
+    #       projetadas saem do período de cálculo.
+    pc_cal = data.get("parametros_calculo") or {}
+    data_demissao_str = pc_cal.get("data_demissao") if isinstance(pc_cal, dict) else None
+    def _parse_br(s: str | None):
+        if not s or not isinstance(s, str):
+            return None
+        try:
+            d, m, y = s.split("/")
+            return (int(y), int(m), int(d))
+        except Exception:
+            return None
+    def _format_br(triple):
+        return f"{triple[2]:02d}/{triple[1]:02d}/{triple[0]:04d}"
+    demi_tuple = _parse_br(data_demissao_str)
+
+    _OCORRENCIAS_DESLIG = {"DESLIGAMENTO"}
+    max_fim = None  # tupla (y,m,d) — usada para regra (b)
+    for v in data.get("verbas_principais", []) or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros") or {}
+        if not isinstance(p, dict):
+            continue
+        ocor = p.get("ocorrencia_pagamento")
+        pi = p.get("periodo_inicio")
+        pf = p.get("periodo_fim")
+        # (a) Ajustar periodo_inicio para 1º do mês da demissão quando
+        # ocor=DESLIGAMENTO e periodo_inicio==data_demissao (==periodo_fim).
+        if (
+            ocor in _OCORRENCIAS_DESLIG
+            and demi_tuple is not None
+            and pi == data_demissao_str
+            and pf == data_demissao_str
+        ):
+            primeiro_mes = (demi_tuple[0], demi_tuple[1], 1)
+            p["periodo_inicio"] = _format_br(primeiro_mes)
+        # (b) Calcular max_fim de todas as verbas
+        pf_atual = p.get("periodo_fim")
+        pf_t = _parse_br(pf_atual)
+        if pf_t and (max_fim is None or pf_t > max_fim):
+            max_fim = pf_t
+
+    # (b) Garantir data_termino_calculo >= max_fim.
+    dt_termino_str = pc_cal.get("data_termino_calculo") if isinstance(pc_cal, dict) else None
+    dt_termino_t = _parse_br(dt_termino_str)
+    if max_fim and (dt_termino_t is None or dt_termino_t < max_fim):
+        if isinstance(pc_cal, dict):
+            pc_cal["data_termino_calculo"] = _format_br(max_fim)
+
     # 6.bis Férias — normalizar valor "VENCIDAS" (não existe no enum) para
     # "INDENIZADAS" preservando o flag `dobra`. No PJE-Calc, "vencidas" significa
     # período concessivo expirado sem usufruto → direito à dobra (art. 137 CLT).

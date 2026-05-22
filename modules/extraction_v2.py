@@ -135,10 +135,38 @@ Sua tarefa é analisar uma sentença trabalhista e extrair TODOS os dados necess
 }
 ```
 
-⚠️ **CRÍTICO** — `data_termino_calculo`:
-- Para verbas COMUM mensais: ≥ data_demissao
-- Para indenizações pós-rescisão (estabilidade gestante, dispensa discriminatória, indenização adicional): ≥ MAX(periodo_fim de TODAS as verbas)
-- Sem isso, ocorrências de verbas indenizatórias ficam fora do período de cálculo
+⚠️ **CRÍTICO — COERÊNCIA TEMPORAL DO CÁLCULO**:
+
+### `data_termino_calculo` = MAX(periodo_fim de TODAS as verbas)
+
+A data final do cálculo **DEVE coincidir com o termo final da parcela
+mais projetada no tempo** — NUNCA é fixa em `data_demissao`.
+
+Casos típicos que estendem além da demissão:
+- **Aviso Prévio Indenizado** projeta o contrato (Lei 12.506/2011: 30+3/ano,
+  máx 90). Ex.: 2 anos completos → +36 dias após data_demissao.
+- **Estabilidade pós-contrato** (Gestante ADCT 10 II / Acidentária L8213
+  art 118 / Lei 9.029) → meses ou anos.
+- **Pensão Alimentícia / Vitalícia** → tempo todo da decisão.
+- **Indenização Adicional Lei 7.238** → prazo do aviso.
+
+Sem essa coerência: ocorrências projetadas saem do período, CS/IRPF zera,
+liquidação pode ser rejeitada.
+
+### Período de verbas com `ocorrencia_pagamento = DESLIGAMENTO`
+
+Verbas rescisórias (Saldo Salário, Aviso Prévio, Multa 477, FGTS) devem ter:
+- **`periodo_inicio` = 1º dia do mês da demissão** (NÃO a data da dispensa)
+- `periodo_fim` = `data_demissao`
+
+Razão: o PJE-Calc gera ocorrência para o MÊS inteiro. Se `periodo_inicio =
+periodo_fim = data_demissao`, a ocorrência sai do período declarado e a
+liquidação trava:
+*"Todas as ocorrências da verba X devem estar contidas no período
+estabelecido na página parâmetro da verba."*
+
+**❌ ERRADO**: Multa 477 com `periodo_inicio=09/01/2026, periodo_fim=09/01/2026`
+**✅ CERTO**:  Multa 477 com `periodo_inicio=01/01/2026, periodo_fim=09/01/2026`
 
 ⚠️ **`apuracao_aviso_previo`**:
 - Aviso INDENIZADO + dispensa SJC → "APURACAO_CALCULADA" (Lei 12.506/2011, projeta 30+3/ano)
@@ -1216,7 +1244,11 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
 
 - [ ] `meta.schema_version === "2.0"`
 - [ ] `processo.numero_processo` no formato CNJ
-- [ ] `parametros_calculo.data_termino_calculo` ≥ MAX(periodo_fim de TODAS as verbas)
+- [ ] `parametros_calculo.data_termino_calculo` = **MAX(periodo_fim de TODAS as verbas)**
+  — NÃO data_demissao. Coincide com termo final da parcela mais projetada (aviso projetado, estabilidade, pensão vitalícia)
+- [ ] **Verbas DESLIGAMENTO** (Saldo Salário, Aviso Prévio, Multa 477, FGTS):
+  `periodo_inicio = 1º dia do mês da demissão`, `periodo_fim = data_demissao`.
+  NUNCA `periodo_inicio = periodo_fim = data_demissao` (PJE-Calc rejeita: ocorrência fora do período)
 - [ ] `historico_salarial` cobre data_inicio_calculo até data_termino_calculo
 - [ ] **TODA verba tem `valor` preenchido (INFORMADO ou CALCULADO) — NUNCA null/omitido**
 - [ ] Cada verba com `valor=INFORMADO` tem `valor_devido.valor_informado_brl > 0` e `formula_calculado=null`

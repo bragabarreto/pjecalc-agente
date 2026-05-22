@@ -125,12 +125,44 @@ Pydantic e então usada por um agente automático que preenche o PJE-Calc.
 }
 ```
 
-⚠️ **CRÍTICO** — `data_termino_calculo`:
-- Para verbas COMUM mensais → ≥ data_demissao
-- Para indenizações pós-rescisão (estabilidade gestante/acidentária, dispensa
-  discriminatória, indenização adicional) → ≥ MAX(periodo_fim de TODAS as verbas)
-- Sem isso, ocorrências de verbas ficam fora do período de cálculo e a CS
-  sobre essas ocorrências fica zero.
+⚠️ **CRÍTICO** — `data_termino_calculo` (REGRA DA COERÊNCIA TEMPORAL):
+
+A `data_termino_calculo` **DEVE coincidir com o termo final da parcela
+mais projetada no tempo** — NUNCA é fixa em `data_demissao`.
+
+Calcule sempre: `data_termino_calculo = MAX(periodo_fim de TODAS as verbas)`.
+
+Casos que estendem além da data_demissao:
+- **Aviso Prévio Indenizado** projeta o contrato por 30 + 3 dias/ano completo
+  (Lei 12.506/2011, máx 90 dias). Ex.: 2 anos completos → +36 dias após
+  data_demissao.
+- **Estabilidade pós-contrato** (Gestante ADCT 10 II / Acidentária L8213
+  art 118 / Dispensa Discriminatória Lei 9.029) projeta meses ou até anos.
+- **Pensão Alimentícia / Pensão Vitalícia** projeta o tempo todo da decisão.
+- **Indenização Adicional Lei 7.238** projeta o prazo de aviso.
+
+Se a data ficar curta, ocorrências projetadas saem do período de cálculo,
+a CS/IRPF sobre elas fica zero e a liquidação pode ser rejeitada.
+
+⚠️ **CRÍTICO** — Período de verbas com `ocorrencia_pagamento = DESLIGAMENTO`:
+
+Verbas rescisórias (Saldo de Salário, Aviso Prévio, Multa 477, FGTS,
+Indenização do art. 477 etc) devem ter:
+- `periodo_inicio` = **1º dia do mês da demissão** (NÃO a data da dispensa)
+- `periodo_fim` = `data_demissao`
+
+Razão: o PJE-Calc gera ocorrência para o MÊS inteiro de competência. Se
+você declarar `periodo_inicio = periodo_fim = data_demissao`, a ocorrência
+gerada para o mês fica FORA do período declarado, e a liquidação é
+recusada com erro:
+*"Todas as ocorrências da verba X devem estar contidas no período
+estabelecido na página parâmetro da verba."*
+
+**❌ ERRADO**: Multa 477 com `periodo_inicio=09/01/2026, periodo_fim=09/01/2026`
+**✅ CERTO**:  Multa 477 com `periodo_inicio=01/01/2026, periodo_fim=09/01/2026`
+
+A mesma regra vale para Saldo de Salário, Aviso Prévio (mesmo indenizado —
+o período é o último mês trabalhado, não a data da dispensa em si).
 
 ⚠️ **`apuracao_aviso_previo`** + **`prazo_aviso_previo_dias`**:
 - Aviso INDENIZADO + dispensa SJC → `"APURACAO_CALCULADA"` (bot calcula auto)
@@ -815,7 +847,12 @@ jornada exata. Para apagar um dia: `turnos: []`.
 
 - [ ] meta.schema_version = "2.0"
 - [ ] processo.numero_processo no formato CNJ válido
-- [ ] parametros_calculo.data_termino_calculo ≥ MAX(periodo_fim das verbas)
+- [ ] `parametros_calculo.data_termino_calculo` = **MAX(periodo_fim de TODAS as verbas)** —
+  NÃO data_demissao. Coincide com termo final da parcela mais projetada
+  (aviso projetado, estabilidade, pensão vitalícia)
+- [ ] **Verbas DESLIGAMENTO** (Saldo Salário, Aviso Prévio, Multa 477, FGTS):
+  `periodo_inicio = 1º dia do mês da demissão`, `periodo_fim = data_demissao`.
+  NUNCA `periodo_inicio = periodo_fim = data_demissao` (PJE-Calc rejeita liquidação)
 - [ ] historico_salarial cobre data_inicio_calculo até data_termino_calculo
 - [ ] Cada verba INFORMADO tem valor_informado_brl > 0 com `comentarios` justificando
 - [ ] **NENHUM `valor_informado_brl` (verbas OU honorários) é negativo.**
