@@ -97,6 +97,37 @@ playwright_pjecalc.py (Automação)
 > Razão: muitos bugs foram causados por suposições incorretas que poderiam ter sido evitadas
 > consultando a documentação oficial. O manual é a fonte da verdade.
 
+## Invariantes do Prompt (NÃO REVERTER)
+
+O prompt da IA externa (`SYSTEM_PROMPT_V2_EXTERNAL` em `modules/extraction_v2.py`)
+contém **invariantes permanentes** marcados com `INVARIANTE PERMANENTE — NÃO REVERTER`.
+Esses invariantes foram aprendidos em diagnóstico de bugs reais e cada um existe
+para impedir a recorrência de um problema concreto:
+
+| Invariante | Causa raiz que motivou |
+|---|---|
+| **Verba ÚNICA para 13º SALÁRIO / FÉRIAS+1/3 / AVISO / ADICIONAIS / DIF SALARIAL / HE / COMISSÃO/GORJETA** | IA gerava verba por ano → PJE-Calc duplicava INSS, conferência inviável |
+| **`data_termino_calculo` = MAX(periodo_fim)** — não `data_demissao` | Aviso projetado, estabilidade pós-contrato e pensão vitalícia exigem cobertura |
+| **Verbas DESLIGAMENTO: `periodo_inicio` = 1º dia do mês da demissão** | PJE-Calc gera ocorrência mensal — ocorrência fora do período declarado trava liquidação |
+| **`valor_informado_brl` SEMPRE positivo** (mesmo em deduções) | PJE-Calc trata sinais internamente |
+| **Verbas DEDUÇÃO (VALOR PAGO/DEVOLUÇÃO) usam `valor_pago.valor_brl`** | Se posto em `valor_devido`, soma em vez de abater |
+| **Histórico salarial CALCULADO: schema = `{quantidade_pct, base_referencia}`** | IA confundia com schema de verba (`base_calculo.tipo`) |
+| **Etapa 1 do resumo consolida verbas recorrentes** | IA listava períodos como itens separados no resumo, induzindo JSON errado |
+
+### Validação automática
+
+`tests/test_prompt_invariants.py` valida que cada invariante está presente no prompt.
+**Roda em CI e bloqueia merge** se algum invariante desaparecer. Antes de editar o
+prompt, rode:
+
+```bash
+pytest tests/test_prompt_invariants.py -v
+```
+
+Se um teste falhar após sua edição, **não é o teste que está errado** — é a edição
+que removeu uma proteção. Restaure o invariante ou justifique explicitamente a
+remoção com o usuário.
+
 ## Commands
 
 ### Local development (Windows)

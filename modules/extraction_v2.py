@@ -40,6 +40,30 @@ PreviaCalculoV2 = _pm.PreviaCalculoV2
 logger = logging.getLogger(__name__)
 
 # ─── System Prompt v2 ──────────────────────────────────────────────────────
+#
+# ⚠️ INVARIANTES PERMANENTES — NÃO REVERTER (a menos que o usuário peça
+# explicitamente). Cada invariante abaixo está documentada na string do
+# prompt com o marcador "INVARIANTE PERMANENTE":
+#
+#   1. Verbas RECORRENTES (13º SALÁRIO, FÉRIAS + 1/3, AVISO PRÉVIO,
+#      ADICIONAIS, DIFERENÇA SALARIAL, HORAS EXTRAS, COMISSÃO/GORJETA):
+#      UMA ÚNICA entrada em `verbas_principais` com período total
+#      (admissão → demissão) + `historico_salarial` segmentado por ano.
+#      Validar via testes/test_prompt_invariants.py.
+#
+#   2. `data_termino_calculo` = MAX(periodo_fim) — não data_demissao.
+#
+#   3. Verbas DESLIGAMENTO: periodo_inicio = 1º dia do mês da demissão.
+#
+#   4. valor_informado_brl SEMPRE positivo (defesa também em normalizer).
+#
+#   5. Verbas DEDUÇÃO (VALOR PAGO/DEVOLUÇÃO): valor em valor_pago.valor_brl.
+#
+#   6. Histórico salarial CALCULADO: schema = {quantidade_pct, base_referencia}
+#      (não base_calculo — esse é schema de verba).
+#
+# Se você for alterar o prompt, GARANTA que essas invariantes permanecem
+# explícitas. O teste tests/test_prompt_invariants.py falha se alguma sumir.
 
 SYSTEM_PROMPT_V2 = """Você é um especialista em Direito do Trabalho brasileiro e no sistema PJE-Calc Cidadão (versão 2.15.1, CSJT/TST).
 
@@ -309,14 +333,16 @@ TÍQUETE-ALIMENTAÇÃO, VALE TRANSPORTE,
 VALOR PAGO - NÃO TRIBUTÁVEL, VALOR PAGO - TRIBUTÁVEL
 ```
 
-⚠️ **REGRA CRÍTICA — FÉRIAS + 1/3**: Mesmo que a sentença defira múltiplos períodos de férias
+⚠️ **REGRA CRÍTICA — FÉRIAS + 1/3 (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+Mesmo que a sentença defira múltiplos períodos de férias
 (ex: 4 períodos aquisitivos vencidos + férias proporcionais), criar APENAS UMA entrada em
 `verbas_principais` com `estrategia_preenchimento: "expresso_direto"` e
 `expresso_alvo: "FÉRIAS + 1/3"`. Os períodos específicos vão EXCLUSIVAMENTE no array
 `ferias.periodos`. O PJE-Calc gerencia os períodos na página Férias — não como verbas autônomas
 separadas. NUNCA criar múltiplas verbas "Férias" em `verbas_principais`.
 
-⚠️ **REGRA CRÍTICA — 13º SALÁRIO**: Mesmo que o contrato abranja vários anos com
+⚠️ **REGRA CRÍTICA — 13º SALÁRIO (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+Mesmo que o contrato abranja vários anos com
 remunerações diferentes (ex: 2023-2024-2025-2026), criar **APENAS UMA** entrada
 `13º SALÁRIO` em `verbas_principais`, com:
 - `periodo_inicio` = data de admissão

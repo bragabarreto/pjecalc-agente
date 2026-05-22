@@ -483,7 +483,7 @@ diferentes por mês), adicionar dentro de cada verba:
 ```
 Default: `null` (PJE-Calc gera automaticamente a tabela mensal a partir do `período` × `ocorrencia_pagamento`).
 
-## 4.4.quater REGRA DE VERBA ÚNICA POR CONTRATO
+## 4.4.quater REGRA DE VERBA ÚNICA POR CONTRATO (INVARIANTE PERMANENTE — NÃO REVERTER)
 
 ⚠️ **Verbas recorrentes que se estendem por múltiplos anos devem ser representadas
 por UMA ÚNICA entrada em `verbas_principais` — NUNCA segmentadas por ano.**
