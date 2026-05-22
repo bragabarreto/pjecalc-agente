@@ -464,6 +464,41 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
         if isinstance(pc_cal, dict):
             pc_cal["data_termino_calculo"] = _format_br(max_fim)
 
+    # 6.ante.bis Histórico Salarial CALCULADO mal-formado.
+    #
+    # IA às vezes confunde o schema de histórico salarial CALCULADO (que tem
+    # apenas quantidade_pct + base_referencia) com o de verba CALCULADO (que
+    # tem base_calculo, divisor, multiplicador, quantidade).
+    #
+    # Quando emite `calculado: {"base_calculo": {"tipo": "SALARIO_MINIMO"}}`,
+    # o Pydantic rejeita por falta de quantidade_pct e base_referencia.
+    #
+    # Conversão idempotente: extrair tipo do base_calculo erroneamente
+    # aninhado e reescrever como {quantidade_pct: 100.0, base_referencia: "TIPO"}.
+    _hist = data.get("historico_salarial")
+    if isinstance(_hist, list):
+        for h in _hist:
+            if not isinstance(h, dict):
+                continue
+            calc = h.get("calculado")
+            if not isinstance(calc, dict):
+                continue
+            # Detectar formato errado: tem base_calculo mas falta quantidade_pct/base_referencia
+            if (
+                "base_calculo" in calc
+                and ("quantidade_pct" not in calc or "base_referencia" not in calc)
+            ):
+                bc = calc.get("base_calculo")
+                tipo = None
+                if isinstance(bc, dict):
+                    tipo = bc.get("tipo") or bc.get("base")
+                if tipo:
+                    calc["base_referencia"] = str(tipo)
+                if "quantidade_pct" not in calc:
+                    calc["quantidade_pct"] = 100.0
+                # Limpar campo errado para evitar confusão futura
+                calc.pop("base_calculo", None)
+
     # 6.bis Férias — normalizar valor "VENCIDAS" (não existe no enum) para
     # "INDENIZADAS" preservando o flag `dobra`. No PJE-Calc, "vencidas" significa
     # período concessivo expirado sem usufruto → direito à dobra (art. 137 CLT).
