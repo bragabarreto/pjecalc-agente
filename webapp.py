@@ -3968,48 +3968,133 @@ async def reset_lock_automacao(sessao_id: str):
     }
 
 
+def _cnj_pertence_ao_pjc(pjc_path: Path, numero_processo: str) -> bool:
+    """Verifica se um arquivo .PJC pertence ao processo informado.
+
+    Validação em 2 etapas (defesa em profundidade):
+      1. Nome do arquivo: PJE-Calc nomeia como
+         PROCESSO_<CNJ_SEM_FORMATACAO>_CALCULO_<id>_DATA_<>_HORA_<>.PJC
+         onde <CNJ_SEM_FORMATACAO> é o CNJ sem pontuação (20 dígitos).
+      2. Conteúdo XML: tag <numeroDoProcesso> dentro do .PJC (ZIP+XML).
+
+    Match exato em qualquer das duas formas → OK. Caso contrário → False.
+
+    Crítico: sem essa validação, vincular_pjc/auto-link podem associar
+    arquivos de processos DIFERENTES (cross-contamination grave).
+    """
+    cnj_limpo = "".join(c for c in numero_processo if c.isdigit())
+    if len(cnj_limpo) != 20:
+        return False
+    # 1. Nome do arquivo
+    nome_upper = pjc_path.name.upper()
+    if f"PROCESSO_{cnj_limpo}_" in nome_upper or f"PROCESSO_{cnj_limpo}.PJC" in nome_upper:
+        return True
+    # 2. Conteúdo XML — leitura do ZIP
+    try:
+        import zipfile as _zf, re as _re
+        with _zf.ZipFile(str(pjc_path), 'r') as _z:
+            for entry in _z.namelist():
+                if not (entry.lower().endswith(".pjc") or entry.lower().endswith(".xml")):
+                    continue
+                xml_bytes = _z.read(entry)
+                try:
+                    xml_str = xml_bytes.decode("iso-8859-1", errors="replace")
+                except Exception:
+                    xml_str = xml_bytes.decode("utf-8", errors="replace")
+                # Buscar <numeroDoProcesso>...</numeroDoProcesso>
+                m = _re.search(r"<numeroDoProcesso>([^<]+)</numeroDoProcesso>", xml_str)
+                if m:
+                    cnj_xml = "".join(c for c in m.group(1) if c.isdigit())
+                    if cnj_xml == cnj_limpo:
+                        return True
+                break  # só lê primeira entry XML
+    except Exception:
+        pass
+    return False
+
+
 @app.post("/api/vincular-pjc/{sessao_id}")
 async def vincular_pjc(sessao_id: str, db: Session = Depends(get_db)):
     """Busca .PJC no diretório do cálculo e vincula ao registro no banco.
 
-    Útil para sessões anteriores ao fix de PJC_GERADO (retroativo).
+    CRÍTICO: cada PJC encontrado é validado contra o numero_processo da
+    sessão (via nome do arquivo OU conteúdo XML). PJCs de outros processos
+    são REJEITADOS para evitar cross-contamination.
     """
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
     if not calculo:
         raise HTTPException(status_code=404, detail="Sessão não encontrada")
 
-    # Se já tem PJC vinculado e arquivo existe, retorna
+    # Se já tem PJC vinculado e arquivo existe + pertence ao processo, retorna
     if calculo.arquivo_pjc and Path(calculo.arquivo_pjc).exists():
-        return {"ok": True, "arquivo": calculo.arquivo_pjc, "msg": "Já vinculado"}
+        if _cnj_pertence_ao_pjc(Path(calculo.arquivo_pjc), calculo.processo.numero_processo):
+            return {"ok": True, "arquivo": calculo.arquivo_pjc, "msg": "Já vinculado"}
+        # Arquivo já vinculado é de outro processo — limpar e re-buscar.
+        logger.warning(
+            f"vincular_pjc: arquivo vinculado {calculo.arquivo_pjc} NÃO pertence "
+            f"ao processo {calculo.processo.numero_processo} — desvinculando."
+        )
+        calculo.arquivo_pjc = None
+        db.commit()
 
-    # Buscar .PJC no diretório do cálculo ou em data/calculations/
-    _dirs_busca = []
+    numero = calculo.processo.numero_processo if calculo.processo else ""
+    if not numero:
+        raise HTTPException(
+            status_code=400,
+            detail="Sessão sem numero_processo — impossível validar PJC"
+        )
+
+    # Construir lista de candidatos a partir de diretórios prováveis
+    _candidatos: list[Path] = []
     if calculo.diretorio_calculo and Path(calculo.diretorio_calculo).exists():
-        _dirs_busca.append(Path(calculo.diretorio_calculo))
-    # Buscar em data/calculations/ por subpastas do processo
+        _candidatos.extend(sorted(Path(calculo.diretorio_calculo).rglob("*.PJC"), reverse=True))
+        _candidatos.extend(sorted(Path(calculo.diretorio_calculo).rglob("*.pjc"), reverse=True))
     _calc_base = Path("data/calculations")
     if _calc_base.exists():
-        for _subdir in sorted(_calc_base.rglob("*.PJC")):
-            _dirs_busca.append(_subdir)
+        # Priorizar subdir que contenha o CNJ no nome
+        for _subdir in _calc_base.iterdir():
+            if _subdir.is_dir() and numero in _subdir.name:
+                _candidatos.extend(sorted(_subdir.rglob("*.PJC"), reverse=True))
+                _candidatos.extend(sorted(_subdir.rglob("*.pjc"), reverse=True))
+        # Fallback: varrer toda a base
+        _candidatos.extend(sorted(_calc_base.rglob("*.PJC"), reverse=True))
+        _candidatos.extend(sorted(_calc_base.rglob("*.pjc"), reverse=True))
 
+    # Filtrar: só PJCs que PERTENCEM ao processo (validação CNJ)
     _pjc_encontrado = None
-    for _item in _dirs_busca:
-        if _item.is_file() and _item.suffix.upper() == ".PJC":
-            _pjc_encontrado = _item
+    _rejeitados: list[str] = []
+    for _cand in _candidatos:
+        if not _cand.is_file():
+            continue
+        if _cnj_pertence_ao_pjc(_cand, numero):
+            _pjc_encontrado = _cand
             break
-        elif _item.is_dir():
-            _pjcs = sorted(_item.glob("*.PJC"), reverse=True)
-            if not _pjcs:
-                _pjcs = sorted(_item.glob("*.pjc"), reverse=True)
-            if _pjcs:
-                _pjc_encontrado = _pjcs[0]
-                break
+        else:
+            _rejeitados.append(_cand.name)
 
     if not _pjc_encontrado:
         raise HTTPException(
             status_code=404,
-            detail="Nenhum .PJC encontrado no diretório do cálculo"
+            detail={
+                "msg": "Nenhum .PJC do processo encontrado no servidor.",
+                "numero_processo": numero,
+                "candidatos_rejeitados": _rejeitados[:5],
+                "dica": (
+                    "Se você completou o cálculo manualmente no PJE-Calc, "
+                    "use o endpoint POST /api/upload-pjc/{sessao_id} (multipart) "
+                    "para anexar o arquivo .PJC exportado."
+                ),
+            }
+        )
+
+    # Validação adicional: PJC tem hashCodeLiquidacao e dataDeLiquidacao?
+    _ok, _motivo = _validar_pjc_para_download(_pjc_encontrado)
+    if not _ok:
+        raise HTTPException(
+            status_code=409,
+            detail=f"PJC encontrado mas INVÁLIDO ({_motivo}). "
+                   f"Re-execute a automação ou faça upload manual de PJC liquidado."
         )
 
     repo.marcar_exportado(sessao_id, str(_pjc_encontrado))
@@ -4017,6 +4102,127 @@ async def vincular_pjc(sessao_id: str, db: Session = Depends(get_db)):
     return {
         "ok": True,
         "arquivo": str(_pjc_encontrado),
+        "download": f"/download/{sessao_id}/pjc",
+    }
+
+
+@app.post("/api/desvincular-pjc/{sessao_id}")
+async def desvincular_pjc(sessao_id: str, db: Session = Depends(get_db)):
+    """Desvincula o arquivo .PJC de uma sessão (sem deletar o arquivo).
+
+    Útil quando a vinculação está errada (ex.: cross-contamination de fix
+    anterior). NÃO afeta o status do Calculo — apenas zera arquivo_pjc.
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    arquivo_antes = calculo.arquivo_pjc
+    calculo.arquivo_pjc = None
+    if calculo.status == "pjc_exportado":
+        calculo.status = "confirmado"  # reverter status
+    db.commit()
+    return {"ok": True, "arquivo_desvinculado": arquivo_antes, "novo_status": calculo.status}
+
+
+@app.post("/api/upload-pjc/{sessao_id}")
+async def upload_pjc(
+    sessao_id: str,
+    pjc: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Permite upload manual de um arquivo .PJC após correção manual no PJE-Calc.
+
+    Fluxo: usuário roda automação → automação trava com pendência → usuário
+    corrige+liquida manualmente no PJE-Calc → exporta .PJC → faz upload aqui.
+
+    Validações:
+      1. Arquivo é ZIP válido com XML/.PJC interno
+      2. CNJ no arquivo bate com numero_processo da sessão
+      3. hashCodeLiquidacao e dataDeLiquidacao não nulos (PJC liquidado)
+    """
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    if not calculo.processo or not calculo.processo.numero_processo:
+        raise HTTPException(status_code=400, detail="Sessão sem numero_processo")
+    numero = calculo.processo.numero_processo
+
+    # Salvar em diretório do cálculo (ou criar se ausente)
+    diretorio = calculo.diretorio_calculo
+    if not diretorio:
+        diretorio = f"data/calculations/{numero}/manual_{sessao_id[:8]}"
+    dir_path = Path(diretorio)
+    dir_path.mkdir(parents=True, exist_ok=True)
+
+    # Nome de arquivo com timestamp para não sobrescrever
+    from datetime import datetime as _dt
+    ts = _dt.now().strftime("%d%m%Y_%H%M%S")
+    cnj_limpo = "".join(c for c in numero if c.isdigit())
+    safe_name = pjc.filename or f"UPLOAD_{cnj_limpo}_{ts}.PJC"
+    if not safe_name.lower().endswith(".pjc"):
+        safe_name = f"{safe_name}.PJC"
+    pjc_path = dir_path / safe_name
+
+    # Gravar bytes
+    pjc_path.write_bytes(await pjc.read())
+
+    # Validação 1: pertence ao processo?
+    if not _cnj_pertence_ao_pjc(pjc_path, numero):
+        try:
+            pjc_path.unlink()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Arquivo .PJC NÃO pertence ao processo {numero}. "
+                "O CNJ embutido no XML/nome do arquivo diverge. "
+                "Confira se exportou o .PJC do processo certo."
+            )
+        )
+
+    # Validação 2: PJC liquidado?
+    _ok, _motivo = _validar_pjc_para_download(pjc_path)
+    if not _ok:
+        try:
+            pjc_path.unlink()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Arquivo .PJC INVÁLIDO ({_motivo}). "
+                "Esperado .PJC liquidado pelo PJE-Calc Cidadão "
+                "(com hashCodeLiquidacao e dataDeLiquidacao não-nulos). "
+                "No PJE-Calc: Cálculo > Liquidar > Exportar > anexar aqui."
+            )
+        )
+
+    # Tudo OK — vincular
+    repo.marcar_exportado(sessao_id, str(pjc_path))
+    db.commit()
+
+    # Registrar como InteracaoHITL para o aprendizado
+    try:
+        from infrastructure.database import InteracaoHITL as _Inter
+        inter = _Inter(
+            calculo_id=calculo.id,
+            tipo_interacao="upload_pjc_manual",
+            descricao=f"Usuário fez upload manual de PJC após correção: {safe_name}",
+            dados_antes_json=None,
+            dados_depois_json=None,
+        )
+        db.add(inter)
+        db.commit()
+    except Exception as _e:
+        logger.warning(f"upload_pjc: falha ao registrar InteracaoHITL: {_e}")
+
+    return {
+        "ok": True,
+        "arquivo": str(pjc_path),
+        "tamanho_bytes": pjc_path.stat().st_size,
         "download": f"/download/{sessao_id}/pjc",
     }
 
