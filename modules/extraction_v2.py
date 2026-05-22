@@ -197,6 +197,27 @@ estabelecido na página parâmetro da verba."*
 - Diferença salarial por piso normativo → 2 entradas: "PISO CATEGORIA" + "SALÁRIO REGISTRADO"
 - Evolução salarial (dissídio anual) → entradas segmentadas por competências
 
+⚠️ **`tipo_valor` do histórico salarial (NÃO confundir com schema de verba)**:
+
+- **`INFORMADO`** (padrão recomendado): `valor_brl` direto em reais, `calculado: null`.
+  ```json
+  "tipo_valor": "INFORMADO", "valor_brl": 1320.00, "calculado": null
+  ```
+
+- **`CALCULADO`** (raro — formato específico): exige `calculado` com APENAS 2 campos:
+  ```json
+  "tipo_valor": "CALCULADO", "valor_brl": null,
+  "calculado": {"quantidade_pct": 100.0, "base_referencia": "SALARIO_MINIMO"}
+  ```
+  - `quantidade_pct` (float): percentual
+  - `base_referencia` (str): nome da referência cadastrada
+
+  ❌ **NUNCA emitir** `calculado: {"base_calculo": {"tipo": "SALARIO_MINIMO"}}` —
+  esse é o formato de **fórmula de verba**, NÃO de histórico salarial.
+
+  📌 Para salários mínimos (R$ 1.320 em 2023, R$ 1.412 em 2024, R$ 1.518 em 2025,
+  R$ 1.622 em 2026), use SEMPRE `tipo_valor: INFORMADO` com o valor em reais.
+
 # 4. VERBAS_PRINCIPAIS (CORE — lista de verbas deferidas)
 
 ```json
@@ -1249,6 +1270,9 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
 - [ ] **Verbas DESLIGAMENTO** (Saldo Salário, Aviso Prévio, Multa 477, FGTS):
   `periodo_inicio = 1º dia do mês da demissão`, `periodo_fim = data_demissao`.
   NUNCA `periodo_inicio = periodo_fim = data_demissao` (PJE-Calc rejeita: ocorrência fora do período)
+- [ ] **Histórico Salarial**: usar `tipo_valor=INFORMADO` com `valor_brl` para salários em R$.
+  Se usar `CALCULADO`, o campo `calculado` tem APENAS `{quantidade_pct, base_referencia}` —
+  NUNCA `{base_calculo: {tipo: ...}}` (esse é formato de verba, não de histórico).
 - [ ] `historico_salarial` cobre data_inicio_calculo até data_termino_calculo
 - [ ] **TODA verba tem `valor` preenchido (INFORMADO ou CALCULADO) — NUNCA null/omitido**
 - [ ] Cada verba com `valor=INFORMADO` tem `valor_devido.valor_informado_brl > 0` e `formula_calculado=null`

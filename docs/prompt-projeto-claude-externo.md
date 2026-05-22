@@ -200,6 +200,37 @@ pós-rescisão, ESTENDA "ÚLTIMA REMUNERAÇÃO" até `data_termino_calculo`.
 - Diferença salarial por piso → 2 entradas: "PISO CATEGORIA" + "SALÁRIO REGISTRADO"
 - Evolução salarial (dissídio anual) → entradas segmentadas por competências
 
+⚠️ **`tipo_valor` — schema do histórico salarial (NÃO confundir com schema de verba)**:
+
+- **`INFORMADO`** (padrão recomendado): valor monetário direto da sentença/folha.
+  ```json
+  "tipo_valor": "INFORMADO",
+  "valor_brl": 1320.00,
+  "calculado": null
+  ```
+
+- **`CALCULADO`** (raro — exige formato específico): salário expresso como % de outro
+  referencial cadastrado no PJE-Calc. O campo `calculado` tem APENAS 2 campos:
+  ```json
+  "tipo_valor": "CALCULADO",
+  "valor_brl": null,
+  "calculado": {
+    "quantidade_pct": 100.0,
+    "base_referencia": "SALARIO_MINIMO"
+  }
+  ```
+  - `quantidade_pct`: número (ex.: 100.0 = 100%, 150.0 = 150%)
+  - `base_referencia`: nome da referência cadastrada — geralmente `"SALARIO_MINIMO"`
+    ou nome de outra tabela base do PJE-Calc
+
+  ❌ **NUNCA emitir** `calculado: {"base_calculo": {"tipo": "SALARIO_MINIMO"}}` — esse é
+  o formato de fórmula de **verba**, NÃO de histórico salarial. O Pydantic rejeita.
+
+  📌 **Regra prática**: para salários mínimos legais (R$ 1.320 em 2023, R$ 1.412 em 2024,
+  R$ 1.518 em 2025, R$ 1.622 em 2026), use sempre `tipo_valor: "INFORMADO"` com o
+  `valor_brl` em reais. `CALCULADO` só faz sentido quando a sentença determinar
+  explicitamente "salário equivalente a X% do SM" sem fixar valor.
+
 # 4. VERBAS_PRINCIPAIS ✅ (CORE)
 
 [Estrutura completa nos docs/schema-v2/04-verbas-principais.md]
@@ -853,6 +884,9 @@ jornada exata. Para apagar um dia: `turnos: []`.
 - [ ] **Verbas DESLIGAMENTO** (Saldo Salário, Aviso Prévio, Multa 477, FGTS):
   `periodo_inicio = 1º dia do mês da demissão`, `periodo_fim = data_demissao`.
   NUNCA `periodo_inicio = periodo_fim = data_demissao` (PJE-Calc rejeita liquidação)
+- [ ] **Histórico Salarial**: para salários em R$ usar `tipo_valor="INFORMADO"` com
+  `valor_brl` (mais simples). `CALCULADO` exige apenas `{quantidade_pct, base_referencia}`
+  — NUNCA `{base_calculo: {tipo: ...}}` (esse formato é para verbas, não histórico).
 - [ ] historico_salarial cobre data_inicio_calculo até data_termino_calculo
 - [ ] Cada verba INFORMADO tem valor_informado_brl > 0 com `comentarios` justificando
 - [ ] **NENHUM `valor_informado_brl` (verbas OU honorários) é negativo.**
