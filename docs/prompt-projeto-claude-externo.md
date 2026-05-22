@@ -537,6 +537,58 @@ v06: 13º SALÁRIO período 01/01/2025→31/12/2025 base=SM 2025
 v07: 13º SALÁRIO período 01/01/2026→09/01/2026 base=SM 2026
 ```
 
+## 4.4.quinquies VERBAS COMPARATIVAS DE HISTÓRICO (INVARIANTE PERMANENTE — NÃO REVERTER)
+
+⚠️ Verbas que apuram a **diferença entre dois históricos salariais** exigem
+configuração específica com DOIS históricos cadastrados:
+
+- **DIFERENÇA SALARIAL** (equiparação, desvio de função, reajuste não concedido,
+  piso da categoria, dissídio retroativo)
+- **DIFERENÇA DE REMUNERAÇÃO** (mudança de função etc.)
+
+O PJE-Calc apura `(Valor Devido) − (Valor Pago)`. Portanto:
+
+- `formula_calculado.base_calculo`: histórico do **valor devido** (salário superior:
+  paradigma na equiparação, salário pleiteado no desvio, piso normativo)
+- `valor_pago`: histórico do **valor pago** (salário inferior: registro do reclamante,
+  contrato vigente)
+
+```json
+"formula_calculado": {
+  "base_calculo": {
+    "tipo": "HISTORICO_SALARIAL",
+    "historico_nome": "SALÁRIO DEVIDO",
+    "proporcionaliza": "NAO",
+    "bases_compostas": []
+  },
+  "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
+  "multiplicador": 1.0,
+  "quantidade": {"tipo": "INFORMADA", "valor_mensal": 1.0, "proporcionalizar": false}
+},
+"valor_pago": {
+  "tipo": "CALCULADO",
+  "base_tipo": "HISTORICO_SALARIAL",
+  "base_historico_nome": "SALÁRIO PAGO",
+  "proporcionaliza_historico": "NAO",
+  "quantidade_brl": null,
+  "proporcionalizar": false,
+  "valor_brl": null
+}
+```
+
+E `historico_salarial` deve ter AMBOS cadastrados com os nomes referenciados:
+
+```json
+"historico_salarial": [
+  {"nome": "SALÁRIO DEVIDO", "valor_brl": 1518.00, ...},
+  {"nome": "SALÁRIO PAGO",   "valor_brl": 700.00,  ...}
+]
+```
+
+Sem isso, o PJE-Calc rejeita a liquidação com:
+> *"Falta selecionar pelo menos um Histórico Salarial para apurar o Valor Devido
+> da Verba DIFERENÇA SALARIAL"*
+
 ## 4.5 REFLEXOS
 
 **REGRA CRÍTICA**: Todo reflexo DEVE estar aninhado dentro de uma verba_principal,
@@ -901,6 +953,11 @@ jornada exata. Para apagar um dia: `turnos: []`.
   SALARIAL, HORAS EXTRAS, COMISSÃO/GORJETA): UMA única entrada em `verbas_principais` com
   período total (admissão → demissão) + `historico_salarial` segmentado por ano. NUNCA
   criar uma verba por ano (§4.4.quater).**
+- [ ] **Verbas COMPARATIVAS (DIFERENÇA SALARIAL etc.)** têm `base_calculo.historico_nome`
+  com o histórico superior (valor devido) E `valor_pago.tipo=CALCULADO` +
+  `valor_pago.base_tipo=HISTORICO_SALARIAL` + `valor_pago.base_historico_nome` com o
+  histórico inferior (valor pago). AMBOS históricos cadastrados em `historico_salarial`
+  (§4.4.quinquies).
 - [ ] Cada reflexo tem expresso_reflex_alvo no formato "X SOBRE Y"
 - [ ] Característica/ocorrência pareados corretamente
 - [ ] Incidências corretas para cada tipo de verba (tabela 4.2)

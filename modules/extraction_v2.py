@@ -754,6 +754,59 @@ O esquema espelha **integralmente** a página `verba-calculo.jsf` (Cálculo > Ve
 - `parametros.valor_pago`: `{tipo: "INFORMADO"|"CALCULADO", valor_brl: 0.00, proporcionalizar: bool}`
 - Geralmente `INFORMADO` com `valor_brl: 0.00` (nada pago) — exceto em equiparação salarial (CALCULADO com base no histórico do paradigma)
 
+⚠️ **REGRA CRÍTICA — Verbas COMPARATIVAS DE HISTÓRICO (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+
+Verbas que apuram a **diferença entre dois históricos salariais** exigem
+configuração específica:
+- **DIFERENÇA SALARIAL** (por equiparação, desvio de função, reajuste não
+  concedido, piso da categoria, dissídio retroativo)
+- **DIFERENÇA DE REMUNERAÇÃO** decorrente de mudança de função
+
+O PJE-Calc apura a diferença fazendo `(Valor Devido) − (Valor Pago)`. Portanto:
+
+- `formula_calculado.base_calculo`: histórico do **valor devido**
+  (geralmente o salário superior — paradigma na equiparação, salário pleiteado
+  no desvio, piso normativo)
+- `valor_pago`: histórico do **valor pago** (geralmente o salário inferior —
+  registro do reclamante, contrato vigente)
+
+```json
+"formula_calculado": {
+  "base_calculo": {
+    "tipo": "HISTORICO_SALARIAL",
+    "historico_nome": "SALÁRIO DEVIDO",          ← histórico superior
+    "proporcionaliza": "NAO",
+    "bases_compostas": []
+  },
+  "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
+  "multiplicador": 1.0,
+  "quantidade": {"tipo": "INFORMADA", "valor_mensal": 1.0, "proporcionalizar": false}
+},
+"valor_pago": {
+  "tipo": "CALCULADO",
+  "base_tipo": "HISTORICO_SALARIAL",
+  "base_historico_nome": "SALÁRIO PAGO",         ← histórico inferior
+  "proporcionaliza_historico": "NAO",
+  "quantidade_brl": null,
+  "proporcionalizar": false,
+  "valor_brl": null
+}
+```
+
+E o array `historico_salarial` deve ter **AMBOS** cadastrados, cada um com o
+nome usado nos campos acima:
+
+```json
+"historico_salarial": [
+  {"nome": "SALÁRIO DEVIDO", "valor_brl": 1518.00, ...},
+  {"nome": "SALÁRIO PAGO",   "valor_brl": 700.00,  ...}
+]
+```
+
+Sem isso, o PJE-Calc rejeita a liquidação com:
+> *"Falta selecionar pelo menos um Histórico Salarial para apurar o Valor
+> Devido da Verba DIFERENÇA SALARIAL"*
+
 #### Bloco "Comentários":
 - `parametros.comentarios`: string opcional com observações jurídicas (até 255 chars)
 
@@ -1322,6 +1375,12 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
   DIFERENÇA SALARIAL, HORAS EXTRAS, COMISSÃO/GORJETA): UMA única entrada em
   `verbas_principais` com período total (admissão→demissão), `historico_salarial`
   segmentado por ano. NUNCA criar uma verba por ano.**
+- [ ] **Verbas COMPARATIVAS DE HISTÓRICO (DIFERENÇA SALARIAL por equiparação,
+  desvio de função, reajuste, piso)**: `base_calculo.historico_nome` = histórico
+  superior (valor devido); `valor_pago.tipo=CALCULADO` +
+  `valor_pago.base_tipo=HISTORICO_SALARIAL` + `valor_pago.base_historico_nome` =
+  histórico inferior (valor pago). AMBOS históricos cadastrados em
+  `historico_salarial`.
 - [ ] Cada reflexo tem `expresso_reflex_alvo` no formato "X SOBRE Y"
 - [ ] Características COMUM/13o/Aviso/Férias com ocorrência derivada correta
 - [ ] Honorários SUCUMBENCIAIS com devedor=RECLAMANTE têm `forma_cobranca="COBRAR"` e `credor.nome="ADVOGADO DO RECLAMADO"`

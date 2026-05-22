@@ -104,6 +104,20 @@ def test_etapa_1_resumo_consolida_verbas_recorrentes():
     assert "3 períodos" in PROMPT
 
 
+def test_diferenca_salarial_dois_historicos():
+    """DIFERENÇA SALARIAL exige 2 históricos (Valor Devido + Valor Pago)."""
+    # Regra documentada
+    assert "COMPARATIVAS DE HISTÓRICO" in PROMPT or "COMPARATIVAS" in PROMPT
+    # Campos críticos
+    assert "valor_pago" in PROMPT
+    assert "base_historico_nome" in PROMPT
+    # Caso real
+    assert "SALÁRIO DEVIDO" in PROMPT or "histórico superior" in PROMPT
+    assert "SALÁRIO PAGO" in PROMPT or "histórico inferior" in PROMPT
+    # Erro típico que isso previne
+    assert "Falta selecionar pelo menos um Histórico Salarial" in PROMPT
+
+
 def test_honorarios_sucumbenciais_credor_e_forma_cobranca():
     """SUCUMBENCIAIS: devedor=RECLAMANTE → forma_cobranca=COBRAR + credor=ADVOGADO DO RECLAMADO."""
     assert "ADVOGADO DO RECLAMADO" in PROMPT

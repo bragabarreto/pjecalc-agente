@@ -5796,29 +5796,65 @@ class PlaywrightAutomatorV2:
 
         c = self.previa.correcao_juros_multa
 
-        # Mapeamentos JSON → valores DOM (confirmados via dom_map_condensed.json v2.15.1)
+        # Mapeamentos JSON → valores DOM REAIS (docs/dom-mapping/dominios-values.json).
+        # ⚠ Bug histórico (corrigido 22/05/2026): mapping anterior gerava valores
+        # que NÃO EXISTEM no DOM (IPCA_E em vez de IPCAE, SELIC_SIMPLES em vez de
+        # SELIC, TABELA_UNICA em vez de TABELA_UNICA_JT_MENSAL) — causava timeout
+        # de 30s em select_option. Valores reais conforme enum do servidor:
+        #
+        #   indiceTrabalhista: TUACDT | TABELA_DEVEDOR_FAZENDA | TABELA_INDEBITO_TRIBUTARIO
+        #                    | TABELA_UNICA_JT_MENSAL | TABELA_UNICA_JT_DIARIO
+        #                    | TR | IGPM | INPC | IPC | IPCA | IPCAE | IPCAETR
+        #                    | SELIC | SELIC_FAZENDA | SELIC_BACEN | SEM_CORRECAO
         _INDICE_MAP = {
-            "IPCAE": "IPCA_E", "IPCAETR": "IPCA_E_TR",
-            "IGPM": "IGP_M",
-            "SELIC": "SELIC_SIMPLES", "SELIC_FAZENDA": "SELIC_RECEITA",
-            "SELIC_BACEN": "SELIC_COMPOSTA",
-            "TUACDT": "TABELA_UNICA",
-            "TABELA_DEVEDOR_FAZENDA": "DEVEDOR_FAZENDA_PUBLICA",
-            "TABELA_INDEBITO_TRIBUTARIO": "REPETICAO_INDEBITO_TRIBUTARIO",
+            # JSON v2 (com underscores) → DOM enum real (sem underscores)
+            "IPCA_E": "IPCAE",
+            "IPCA_E_TR": "IPCAETR",
+            "IPCAE_TR": "IPCAETR",
+            "IGP_M": "IGPM",
+            "SELIC_SIMPLES": "SELIC",
+            "SELIC_RECEITA": "SELIC_FAZENDA",
+            "SELIC_COMPOSTA": "SELIC_BACEN",
+            "TABELA_UNICA": "TABELA_UNICA_JT_MENSAL",
+            "DEVEDOR_FAZENDA_PUBLICA": "TABELA_DEVEDOR_FAZENDA",
+            "REPETICAO_INDEBITO_TRIBUTARIO": "TABELA_INDEBITO_TRIBUTARIO",
+            # Pass-through (valores já corretos no JSON)
+            "IPCAE": "IPCAE", "IPCAETR": "IPCAETR", "IGPM": "IGPM",
+            "INPC": "INPC", "IPC": "IPC", "IPCA": "IPCA", "TR": "TR",
+            "SELIC": "SELIC", "SELIC_FAZENDA": "SELIC_FAZENDA",
+            "SELIC_BACEN": "SELIC_BACEN",
+            "TUACDT": "TUACDT",
+            "SEM_CORRECAO": "SEM_CORRECAO",
         }
+        # Juros: enum real do servidor (parametros-atualizacao.xhtml usa jurosEnum
+        # do enumItems). Valores comuns: PADRAO, CADERNETA_POUPANCA, SIMPLES_0_5_MES,
+        # SIMPLES_1_MES, SIMPLES_0_0333333_DIA, SELIC, SELIC_FAZENDA, SELIC_BACEN,
+        # FAZENDA_PUBLICA, TAXA_LEGAL.
         _JUROS_MAP = {
-            "JUROS_PADRAO": "PADRAO", "JUROS_POUPANCA": "CADERNETA_POUPANCA",
+            "JUROS_PADRAO": "PADRAO",
+            "JUROS_POUPANCA": "CADERNETA_POUPANCA",
             "JUROS_MEIO_PORCENTO": "SIMPLES_0_5_MES",
             "JUROS_UM_PORCENTO": "SIMPLES_1_MES",
             "JUROS_ZERO_TRINTA_TRES": "SIMPLES_0_0333333_DIA",
-            "SELIC": "SELIC_SIMPLES", "SELIC_FAZENDA": "SELIC_RECEITA",
-            "SELIC_BACEN": "SELIC_COMPOSTA",
+            "SELIC_SIMPLES": "SELIC",
+            "SELIC_RECEITA": "SELIC_FAZENDA",
+            "SELIC_COMPOSTA": "SELIC_BACEN",
+            # Pass-through
+            "PADRAO": "PADRAO",
+            "CADERNETA_POUPANCA": "CADERNETA_POUPANCA",
+            "SELIC": "SELIC", "SELIC_FAZENDA": "SELIC_FAZENDA",
+            "SELIC_BACEN": "SELIC_BACEN",
             "FAZENDA_PUBLICA": "FAZENDA_PUBLICA",
+            "TAXA_LEGAL": "TAXA_LEGAL",
         }
+        # baseDeJurosDasVerbas: enum real (baseDeJurosDasVerbasEnum). Valores
+        # comuns: VERBA, VERBA_MENOS_CS, VERBA_MENOS_CS_MENOS_PP.
         _BASE_JUROS_MAP = {
             "VERBAS": "VERBA", "VERBA": "VERBA",
             "VERBA_INSS": "VERBA_MENOS_CS",
+            "VERBA_MENOS_CS": "VERBA_MENOS_CS",
             "VERBA_INSS_PP": "VERBA_MENOS_CS_MENOS_PP",
+            "VERBA_MENOS_CS_MENOS_PP": "VERBA_MENOS_CS_MENOS_PP",
         }
         _FGTS_CORR_MAP = {
             "UTILIZAR_INDICE_TRABALHISTA": "INDICE_TRABALHISTA",
