@@ -2503,6 +2503,16 @@ async function validarPrevia() {
 
 // ─── Confirmar ────────────────────────────────────────────────────────
 async function confirmarPreviaV2() {
+  // ⚠ Forçar blur no campo ativo ANTES de submeter.
+  // Razão: inputs de verba (e outros) usam onchange inline, que só dispara
+  // em blur. Se o usuário digita e clica direto em "Confirmar" sem tirar o
+  // foco, o onchange nunca roda e previaData fica com valor antigo. O blur
+  // explícito força o handler a gravar em previaData.
+  if (document.activeElement && typeof document.activeElement.blur === 'function') {
+    document.activeElement.blur();
+    // pequena espera para o onchange terminar (síncrono, mas defensivo)
+    await new Promise(r => setTimeout(r, 50));
+  }
   if (!confirm('Confirmar prévia e iniciar automação?')) return;
   const r = await fetch(`/api/previa/v2/${SESSAO_ID}/confirmar`, {
     method: 'POST',
