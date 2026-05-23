@@ -2693,10 +2693,28 @@ class PlaywrightAutomatorV2:
             if total_cbs == 0:
                 self.log(f"    ⚠ Página Expresso vazia (0 checkboxes) — Fechar+Reabrir + retry")
                 self._fechar_e_reabrir_calculo(f"pré-Expresso retry {idx+1}/{len(verbas)}")
-                # Pós-Fechar+Reabrir: sidebar click + aguardar modo listagem
+                # Pós-Fechar+Reabrir: sidebar click + URL fallback + aguardar modo listagem
                 self._navegar_menu_via_click("li_calculo_verbas")
                 self._aguardar_ajax(8000)
                 self._page.wait_for_timeout(1500)
+                # URL fallback: igual ao da entrada do loop — pós-Recentes
+                # sidebar click às vezes não leva para verba-calculo.jsf
+                try:
+                    if "verba-calculo.jsf" not in self._page.url and self._calculo_conversation_id:
+                        self.log(
+                            "    ℹ URL pós-click sidebar (retry) não é verba-calculo.jsf "
+                            "— forçando URL goto"
+                        )
+                        self._page.goto(
+                            f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}",
+                            wait_until="domcontentloaded",
+                            timeout=20000,
+                        )
+                        self._aguardar_ajax(8000)
+                        self._page.wait_for_timeout(1000)
+                except Exception as _e:
+                    self.log(f"    ⚠ Fallback URL goto verba-calculo.jsf (retry): {_e}")
                 for _r in range(3):
                     if _verificar_modo_listagem().get("modo_listagem"):
                         break
