@@ -2762,41 +2762,30 @@ class PlaywrightAutomatorV2:
             else:
                 self._conv_pre_expresso = None
 
-            # ⚠ CRÍTICO (22/05/2026) — OPÇÃO D: Reabrir via Recentes após CADA
-            # save Expresso. Versão anterior (Opção C) usava
-            # _fechar_e_reabrir_calculo, mas o link `li_operacoes_fechar` do
-            # sidebar NÃO renderiza em verbas-para-calculo.jsf (a URL onde o
-            # bot fica após save Expresso). Logo o Fechar era pulado e a
-            # conv corrente persistia em estado stale.
+            # ⚠ CRÍTICO (22/05/2026) — OPÇÃO C: Fechar+Reabrir após CADA save
+            # Expresso. Causa raiz do bug Scarlette ([4/11] página vazia +
+            # apresentadorVerbaDeCalculo travado fora de emModoListagem):
+            # após o copiar() bem-sucedido, o bean apresentadorVerbaDeCalculo
+            # chama pesquisar() (que coloca em LISTAGEM), mas a transição Seam
+            # EPC + redirect "verbaDeCalculo" mantém estado @Begin da conv
+            # corrente. Após 2-3 cycles, o Hibernate session fica stale e
+            # repositorioDeVerba.verbasParaCalculo() retorna lista vazia.
             #
-            # Opção D: pular o Fechar e ir DIRETO para reabertura via Recentes.
-            # _reabrir_calculo_via_recentes navega para /pages/principal.jsf
-            # (sem conversationId, abandona conv atual), seleciona o cálculo
-            # em Recentes e abre em nova conv Seam fresh. O outcome do
-            # apresentadorVerbasParaCalculo.copiar() já tem @End conv via
-            # pages.xml ("verbaDeCalculo" → end-conversation before-redirect),
-            # então a verba salva é commitada mesmo sem o Fechar manual.
+            # FIX: forçar @End (Fechar) → commit DB → @Begin via Recentes.
+            # Cada iteração começa com conv fresh + bean re-instanciado +
+            # operacao=NENHUM (será reset por _navegar_menu_via_click no
+            # próximo loop, via outcome verbaDeCalculo + end-conversation).
             #
-            # Custo: ~6s por verba × N verbas. Compensa pela confiabilidade.
+            # Custo: ~8s por verba × N verbas. Compensa 100% pela
+            # confiabilidade — sem isso só ~3 de N verbas chegam à DB.
             #
-            # NÃO reabrir na ÚLTIMA verba — o loop pós-Expresso já faz Fechar
-            # +Reabrir, e dispensar a iteração final reduz overhead.
+            # NÃO fazer Fechar+Reabrir na ÚLTIMA verba — o loop pós-Expresso
+            # (linha 2229) já faz isso explicitamente, e dispensar a iteração
+            # final reduz overhead.
             if idx < len(verbas) - 1:
-                self.log(
-                    f"  → Reabrir cálculo via Recentes (pós Expresso "
-                    f"[{idx+1}/{len(verbas)}: {alvo}]) para reset Seam EPC..."
+                self._fechar_e_reabrir_calculo(
+                    f"pós Expresso save [{idx+1}/{len(verbas)}: {alvo}]"
                 )
-                ok = self._reabrir_calculo_via_recentes()
-                if ok:
-                    self.log(
-                        f"  ✓ Reabertura ok — conv fresh "
-                        f"{self._calculo_conversation_id}"
-                    )
-                else:
-                    self.log(
-                        f"  ⚠ Reabertura via Recentes falhou — "
-                        f"próxima iteração pode falhar"
-                    )
 
     def _silenciar_dialog_confirma_valor(self) -> None:
         """Sobrescreve `checarValor` para evitar o jConfirm modal de mudança de valor.
