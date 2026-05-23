@@ -5715,8 +5715,30 @@ class PlaywrightAutomatorV2:
             if h.credor:
                 # ⚠ IDs REAIS (honorarios.xhtml:322,335):
                 #   tipoDocumentoFiscalCredor + numeroDocumentoFiscalCredor
-                self._marcar_radio("tipoDocumentoFiscalCredor", h.credor.doc_fiscal_tipo.value)
-                self._preencher("numeroDocumentoFiscalCredor", h.credor.doc_fiscal_numero, obrigatorio=False)
+                # CRÍTICO (22/05/2026): NÃO marcar tipoDocumentoFiscalCredor
+                # se numeroDocumentoFiscalCredor estiver VAZIO. O JSF tem um
+                # <f:validator validadorDinamico> em numero que dispara
+                # exceção quando tipo está set mas número é vazio. Causa do
+                # "Erro: 19" (MSG0013 — exceção não capturada) que corrompia
+                # o estado Seam para todas as fases subsequentes (Custas/
+                # Correção/Liquidar viam o cálculo "vazio"). Caso comum:
+                # ADVOGADO DO RECLAMANTE sem CNPJ conhecido na sentença.
+                _doc_num = (h.credor.doc_fiscal_numero or "").strip()
+                if _doc_num:
+                    self._marcar_radio(
+                        "tipoDocumentoFiscalCredor",
+                        h.credor.doc_fiscal_tipo.value,
+                    )
+                    self._preencher(
+                        "numeroDocumentoFiscalCredor",
+                        _doc_num,
+                        obrigatorio=False,
+                    )
+                else:
+                    self.log(
+                        "  ℹ doc_fiscal_numero do credor vazio — "
+                        "pulando tipo+número (evita validadorDinamico)"
+                    )
             # ⚠ ID REAL (honorarios.xhtml:373): apurarIRRF (não apurarIr)
             self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
 
