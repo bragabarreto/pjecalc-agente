@@ -1323,8 +1323,17 @@ class PlaywrightAutomatorV2:
                     }"""
                 )
             if not clicou:
-                self.log(f"  ⚠ Fechar{tag}: link não encontrado — pulando commit")
-                return False
+                # ⚠ FALLBACK (23/05/2026): quando sidebar não tem
+                # li_operacoes_fechar (estamos em principal.jsf ou outra page
+                # sem o menu Operações), reabrir diretamente via Recentes —
+                # navegar para principal.jsf abandona qualquer conv corrente
+                # (Seam @End implícito quando não passa conversationId), e a
+                # reabertura pegará o cálculo mais recente do DB.
+                self.log(f"  ⚠ Fechar{tag}: link não encontrado — tentando reabrir direto via Recentes")
+                ok = self._reabrir_calculo_via_recentes()
+                if ok:
+                    self.log(f"  ✓ Reabertura direta via Recentes{tag} ok: conv={self._calculo_conversation_id}")
+                return ok
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2500)
             self.log(f"  ✓ Fechar{tag} disparado (cálculo commitado ao DB)")
