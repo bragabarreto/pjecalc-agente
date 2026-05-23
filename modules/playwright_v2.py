@@ -3976,12 +3976,74 @@ class PlaywrightAutomatorV2:
                 # DOM mas Playwright reporta "not visible" (CSS animation,
                 # parent panel transition, etc.). Se tem_descricao=True E
                 # tem_salvar=True, ASSUMIR form carregado e prosseguir.
-                # Sem isso, o bot aborta o ajuste e a verba fica sem
-                # histórico → Liquidação trava com "Falta histórico".
                 if _diag.get("tem_descricao") and _diag.get("tem_salvar"):
                     self.log("    ℹ Fallback: tem_descricao+tem_salvar=True — prosseguindo (Playwright visibility false-negative)")
                 else:
-                    return  # de fato form não carregou
+                    # ⚠ RECOVERY (23/05/2026): às vezes o click Parâmetros
+                    # redireciona para principal.jsf (Seam fechou conv
+                    # spontaneamente). URL não é verba-calculo.jsf E não
+                    # tem form. Recuperar via Fechar+Reabrir + re-click.
+                    url_tail = _diag.get("url_tail", "")
+                    if "principal.jsf" in url_tail or "verba-calculo.jsf" not in url_tail:
+                        self.log(f"    → Detectado redirect para wrong page ({url_tail}) — Fechar+Reabrir + retry")
+                        try:
+                            if self._fechar_e_reabrir_calculo(f"recovery wrong-page ({v.nome_pjecalc})"):
+                                self._navegar_menu_via_click("li_calculo_verbas")
+                                self._aguardar_ajax(8000)
+                                self._page.wait_for_timeout(1500)
+                                if "verba-calculo.jsf" not in self._page.url and self._calculo_conversation_id:
+                                    self._page.goto(
+                                        f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                                        f"?conversationId={self._calculo_conversation_id}",
+                                        wait_until="domcontentloaded", timeout=20000,
+                                    )
+                                    self._aguardar_ajax(8000)
+                                # Re-tentar click Parâmetros
+                                clicou_retry = self._page.evaluate(
+                                    """(alvo) => {
+                                        const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                                        const alvoN = norm(alvo);
+                                        const trs = [...document.querySelectorAll('tr')];
+                                        for (const tr of trs) {
+                                            const link = tr.querySelector('a.linkParametrizar');
+                                            if (!link) continue;
+                                            const tds = [...tr.querySelectorAll('td')];
+                                            for (const td of tds) {
+                                                const txt = norm(td.textContent);
+                                                if (txt === alvoN || (txt && (txt.includes(alvoN) || alvoN.includes(txt)))) {
+                                                    if (link.onclick) { link.onclick(new Event('click')); }
+                                                    else { link.click(); }
+                                                    return true;
+                                                }
+                                            }
+                                        }
+                                        return false;
+                                    }""",
+                                    v.nome_pjecalc,
+                                )
+                                if clicou_retry:
+                                    self.log(f"    ✓ Click Parâmetros via retry pós wrong-page recovery")
+                                    self._aguardar_ajax(8000)
+                                    # Re-wait for descricao
+                                    try:
+                                        self._page.wait_for_selector(
+                                            "input[id$=':descricao'], input[id$=':valorDevido']",
+                                            state="visible", timeout=10000,
+                                        )
+                                        self.log("    ✓ form carregado após recovery")
+                                    except Exception:
+                                        self.log("    ⚠ form ainda não visível após recovery — abortando")
+                                        return
+                                else:
+                                    self.log(f"    ⚠ Retry pós wrong-page também não achou {v.nome_pjecalc}")
+                                    return
+                            else:
+                                return
+                        except Exception as e:
+                            self.log(f"    ⚠ Wrong-page recovery falhou: {e}")
+                            return
+                    else:
+                        return  # de fato form não carregou
             except Exception:
                 self.log("    ⚠ Form de Alteração não carregou — sem diagnóstico DOM")
                 return  # aborta — sem form, não tem o que preencher
