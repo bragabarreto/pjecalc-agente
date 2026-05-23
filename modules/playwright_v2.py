@@ -2708,11 +2708,10 @@ class PlaywrightAutomatorV2:
         self._capturar_conversation_id()
         self.log(f"  ✓ Batch save concluído — conv={self._calculo_conversation_id}")
 
-        # Tolerar NPE pós-batch via Fechar+Reabrir
-        try:
-            self._fechar_e_reabrir_calculo("pós-Expresso BATCH")
-        except Exception as e:
-            self.log(f"  ⚠ Fechar+Reabrir pós-batch: {e}")
+        # NÃO chamar Fechar+Reabrir aqui — o código de fase_verbas (linha
+        # 2250) já faz pós-Expresso. Duplicar quebra o estado Seam (segunda
+        # tentativa não acha li_operacoes_fechar no sidebar do calc aberto
+        # via Recentes, e tudo desmorona pra frente). Deixar o caller decidir.
 
     def _lancar_expresso_individual(self, verbas) -> None:
         """Versão UMA POR VEZ (1-2 verbas — sem trade-off de NPE)."""
