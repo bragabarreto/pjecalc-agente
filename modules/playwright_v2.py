@@ -3917,33 +3917,39 @@ class PlaywrightAutomatorV2:
                                 wait_until="domcontentloaded", timeout=20000,
                             )
                             self._aguardar_ajax(8000)
-                        # Re-tentar click Parâmetros
+                        # Re-tentar click Parâmetros — usar AMBOS candidatos
+                        # (v.nome_pjecalc + v.expresso_alvo) já que para
+                        # expresso_adaptado a listagem mostra o nome canônico.
                         clicou_retry = self._page.evaluate(
-                            """(alvo) => {
+                            """(candidatos) => {
                                 const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
-                                const alvoN = norm(alvo);
                                 const trs = [...document.querySelectorAll('tr')];
-                                for (const tr of trs) {
-                                    const link = tr.querySelector('a.linkParametrizar');
-                                    if (!link) continue;
-                                    const td = link.closest('td')?.previousElementSibling || tr.querySelector('td:nth-child(3)');
-                                    const txt = norm(td ? td.textContent : '');
-                                    if (txt === alvoN || txt.includes(alvoN) || alvoN.includes(txt)) {
-                                        if (link.onclick) { link.onclick(new Event('click')); }
-                                        else { link.click(); }
-                                        return true;
+                                for (const alvo of candidatos) {
+                                    const alvoN = norm(alvo);
+                                    for (const tr of trs) {
+                                        const link = tr.querySelector('a.linkParametrizar');
+                                        if (!link) continue;
+                                        const tds = [...tr.querySelectorAll('td')];
+                                        for (const td of tds) {
+                                            const txt = norm(td.textContent);
+                                            if (txt === alvoN || (txt && (txt.includes(alvoN) || alvoN.includes(txt)))) {
+                                                if (link.onclick) { link.onclick(new Event('click')); }
+                                                else { link.click(); }
+                                                return alvo;
+                                            }
+                                        }
                                     }
                                 }
-                                return false;
+                                return null;
                             }""",
-                            v.nome_pjecalc,
+                            candidatos,
                         )
                         if clicou_retry:
-                            self.log(f"    ✓ Click Parâmetros via retry pós Fechar+Reabrir")
+                            self.log(f"    ✓ Click Parâmetros via retry pós Fechar+Reabrir (matched='{clicou_retry}')")
                             self._aguardar_ajax(8000)
                             clicou = "retry-pos-FR"
                         else:
-                            self.log(f"    ⚠ Retry pós Fechar+Reabrir também não achou {v.nome_pjecalc}")
+                            self.log(f"    ⚠ Retry pós Fechar+Reabrir também não achou {candidatos}")
                             return
                     else:
                         return
@@ -4007,31 +4013,34 @@ class PlaywrightAutomatorV2:
                                         wait_until="domcontentloaded", timeout=20000,
                                     )
                                     self._aguardar_ajax(8000)
-                                # Re-tentar click Parâmetros
+                                # Re-tentar click Parâmetros — usar AMBOS candidatos
+                                # (nome_pjecalc + expresso_alvo) para expresso_adaptado
                                 clicou_retry = self._page.evaluate(
-                                    """(alvo) => {
+                                    """(candidatos) => {
                                         const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
-                                        const alvoN = norm(alvo);
                                         const trs = [...document.querySelectorAll('tr')];
-                                        for (const tr of trs) {
-                                            const link = tr.querySelector('a.linkParametrizar');
-                                            if (!link) continue;
-                                            const tds = [...tr.querySelectorAll('td')];
-                                            for (const td of tds) {
-                                                const txt = norm(td.textContent);
-                                                if (txt === alvoN || (txt && (txt.includes(alvoN) || alvoN.includes(txt)))) {
-                                                    if (link.onclick) { link.onclick(new Event('click')); }
-                                                    else { link.click(); }
-                                                    return true;
+                                        for (const alvo of candidatos) {
+                                            const alvoN = norm(alvo);
+                                            for (const tr of trs) {
+                                                const link = tr.querySelector('a.linkParametrizar');
+                                                if (!link) continue;
+                                                const tds = [...tr.querySelectorAll('td')];
+                                                for (const td of tds) {
+                                                    const txt = norm(td.textContent);
+                                                    if (txt === alvoN || (txt && (txt.includes(alvoN) || alvoN.includes(txt)))) {
+                                                        if (link.onclick) { link.onclick(new Event('click')); }
+                                                        else { link.click(); }
+                                                        return alvo;
+                                                    }
                                                 }
                                             }
                                         }
-                                        return false;
+                                        return null;
                                     }""",
-                                    v.nome_pjecalc,
+                                    candidatos,
                                 )
                                 if clicou_retry:
-                                    self.log(f"    ✓ Click Parâmetros via retry pós wrong-page recovery")
+                                    self.log(f"    ✓ Click Parâmetros via retry pós wrong-page recovery (matched='{clicou_retry}')")
                                     self._aguardar_ajax(8000)
                                     # Re-wait for descricao
                                     try:
@@ -4044,7 +4053,7 @@ class PlaywrightAutomatorV2:
                                         self.log("    ⚠ form ainda não visível após recovery — abortando")
                                         return
                                 else:
-                                    self.log(f"    ⚠ Retry pós wrong-page também não achou {v.nome_pjecalc}")
+                                    self.log(f"    ⚠ Retry pós wrong-page também não achou {candidatos}")
                                     return
                             else:
                                 return
