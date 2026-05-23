@@ -2762,6 +2762,37 @@ class PlaywrightAutomatorV2:
             else:
                 self._conv_pre_expresso = None
 
+            # ⚠ CRÍTICO (22/05/2026) — OPÇÃO F: Goto verba-calculo.jsf após save,
+            # depois Fechar+Reabrir, para reset Seam EPC + commit DB.
+            #
+            # Sem isso, a partir do 2º save o sidebar não tem
+            # li_calculo_verbas (apresentador.emModoListagem=false) e o bot
+            # falha em todas as iterações seguintes.
+            #
+            # Sequência: (1) goto verba-calculo.jsf?conversationId={new}
+            # (página com sidebar completo); (2) _fechar_e_reabrir_calculo
+            # (Fechar @End + commit DB + Reabrir via Recentes em conv fresh).
+            #
+            # NÃO fazer na ÚLTIMA verba — loop pós-Expresso já faz F+R.
+            if idx < len(verbas) - 1 and self._calculo_conversation_id:
+                try:
+                    url_verba_listagem = (
+                        f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                        f"?conversationId={self._calculo_conversation_id}"
+                    )
+                    self._page.goto(
+                        url_verba_listagem,
+                        wait_until="domcontentloaded",
+                        timeout=15000,
+                    )
+                    self._aguardar_ajax(10000)
+                    self._page.wait_for_timeout(1000)
+                except Exception as e:
+                    self.log(f"  ⚠ Goto verba-calculo.jsf falhou: {e}")
+                self._fechar_e_reabrir_calculo(
+                    f"pós Expresso save [{idx+1}/{len(verbas)}: {alvo}]"
+                )
+
     def _silenciar_dialog_confirma_valor(self) -> None:
         """Sobrescreve `checarValor` para evitar o jConfirm modal de mudança de valor.
 
