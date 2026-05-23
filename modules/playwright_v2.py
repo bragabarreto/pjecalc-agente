@@ -2251,27 +2251,40 @@ class PlaywrightAutomatorV2:
 
         # CRÍTICO (20/05/2026 — descoberto via log SSE):
         # Cada `Operação realizada com sucesso` (save de verba) consome estado
-        # Seam EPC. Padrão observado no log: 1ª verba OK → 2ª FALHA (redirect
-        # para principal.jsf) → 3ª OK → 4ª/5ª FALHAM. Estado degenera a cada
-        # 2 saves.
-        # FIX: Fechar+Reabrir ANTES DE CADA verba — garante conv fresca + bean
-        # apresentadorVerbaDeCalculo limpo + cálculo recém-aberto via Recentes.
-        # Custo: ~8s por verba (5 verbas × 8s = 40s extras). Compensa pela
-        # confiabilidade — cada verba parte de estado limpo.
+        # Seam EPC. Padrão observado: 2 saves saturam o EntityManager e a
+        # listagem fica vazia.
+        # Estratégia (23/05/2026): Fechar+Reabrir A CADA N VERBAS (batch de
+        # ajuste de parâmetros), não a cada uma. Reduz custo de
+        # 11×F+R para ⌈11/N⌉×F+R, mantendo confiabilidade.
+        N_VERBAS_POR_BATCH_PARAM = 3
         for idx, v in enumerate(verbas_expresso):
-            if idx > 0:  # Primeira já tem o Fechar+Reabrir acima
-                self._fechar_e_reabrir_calculo(f"pré-verba {idx+1}/{len(verbas_expresso)}")
-            self._configurar_parametros_pos_expresso(v)
+            # Fechar+Reabrir a cada N verbas (idx=0 já teve F+R no pós-Expresso)
+            if idx > 0 and idx % N_VERBAS_POR_BATCH_PARAM == 0:
+                self._fechar_e_reabrir_calculo(
+                    f"pré-verba batch {idx+1}/{len(verbas_expresso)}"
+                )
+            try:
+                self._configurar_parametros_pos_expresso(v)
+            except Exception as e:
+                self.log(
+                    f"  ⚠ Falha ajustar parâmetros '{v.nome_pjecalc or v.expresso_alvo}': {e}"
+                )
             # Para verbas INFORMADO: setar valorDevido em pelo menos uma
             # ocorrência (PJE-Calc bloqueia liquidação se TODAS as ocorrências
-            # estão com valorDevido=0). Executado AQUI dentro de fase_verbas
-            # (mesma conv Seam que tem as verbas) — após a reabertura via
-            # Recentes a listagem fica vazia em nova conv.
-            if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO and \
-               getattr(v.parametros.valor_devido, "valor_informado_brl", None):
-                self._configurar_ocorrencias_informado_inline(v)
+            # estão com valorDevido=0).
+            try:
+                if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO and \
+                   getattr(v.parametros.valor_devido, "valor_informado_brl", None):
+                    self._configurar_ocorrencias_informado_inline(v)
+            except Exception as e:
+                self.log(
+                    f"  ⚠ Falha ocorrências INFORMADO '{v.nome_pjecalc or v.expresso_alvo}': {e}"
+                )
             for r in v.reflexos:
-                self._configurar_reflexo(v, r)
+                try:
+                    self._configurar_reflexo(v, r)
+                except Exception as e:
+                    self.log(f"  ⚠ Falha reflexo '{r.nome}': {e}")
 
         # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
         # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
