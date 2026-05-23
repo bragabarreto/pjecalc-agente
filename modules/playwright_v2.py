@@ -2578,13 +2578,131 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ Falha ao regerar ocorrências: {e}")
 
     def _lancar_expresso(self, verbas) -> None:
-        """Lança verbas via página Expresso — UMA POR VEZ (padrão Calc Machine).
+        """Lança verbas via página Expresso.
 
-        Refatorado em 12/05/2026 após observar Calc Machine: marcar uma checkbox,
-        salvar imediatamente, voltar à listagem, retornar ao Expresso para a próxima.
-        Padrão batch (todas as checkboxes + salvar único) disparava NPE
-        ApresentadorVerbaDeCalculo.carregarBasesParaPrincipal pós-save.
+        Histórico:
+        - 12/05/2026 — UMA POR VEZ (padrão Calc Machine), porque batch dava
+          NPE em ApresentadorVerbaDeCalculo.carregarBasesParaPrincipal pós-save.
+        - 23/05/2026 — voltou a BATCH para cálculos >2 verbas: o padrão
+          one-by-one + Fechar+Reabrir entre cada satura a Hibernate session
+          após 2 saves (verbasParaCalculo retorna lista vazia). NPE pós-batch
+          é tolerável: as verbas FICAM salvas no DB, e Fechar+Reabrir recupera
+          estado para fases seguintes.
+        - Para 1-2 verbas, mantém one-by-one (sem trade-off de NPE).
         """
+        if len(verbas) <= 2:
+            return self._lancar_expresso_individual(verbas)
+        return self._lancar_expresso_batch(verbas)
+
+    def _lancar_expresso_batch(self, verbas) -> None:
+        """Versão BATCH: abre Expresso UMA vez, marca TODAS, salva UMA vez."""
+        self.log(f"  → Lançamento Expresso BATCH ({len(verbas)} verba(s), single save)")
+        from modules.expresso_verbas_canonicas import resolver_verba_expresso
+
+        # Resolver alvos canônicos
+        alvos: list[str] = []
+        for v in verbas:
+            alvo_raw = v.expresso_alvo or ""
+            alvo_canonico = resolver_verba_expresso(alvo_raw)
+            alvo = (alvo_canonico or alvo_raw).strip().upper()
+            alvos.append(alvo)
+        self.log(f"  → Alvos: {alvos}")
+
+        # Navegar para verba-calculo.jsf
+        self._navegar_menu_via_click("li_calculo_verbas")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        try:
+            if "verba-calculo.jsf" not in self._page.url and self._calculo_conversation_id:
+                self._page.goto(
+                    f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}",
+                    wait_until="domcontentloaded", timeout=20000,
+                )
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1000)
+        except Exception:
+            pass
+
+        # Click Expresso (entrar na grade de checkboxes)
+        try:
+            self._clicar("lancamentoExpresso")
+        except Exception as e:
+            self.log(f"  ⚠ click lancamentoExpresso falhou: {e}")
+            return
+        self._aguardar_ajax(10000)
+        self._page.wait_for_timeout(2000)
+
+        total_cbs = self._page.evaluate(
+            """() => document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]').length"""
+        )
+        self.log(f"    ℹ Página Expresso: {total_cbs} checkboxes")
+        if total_cbs == 0:
+            self.log(f"  ⚠ Expresso vazio — abortando batch")
+            return
+
+        # Marcar TODAS as checkboxes alvo de uma vez (sem AJAX entre marks)
+        res = self._page.evaluate(
+            """(alvos) => {
+                const norm = s => (s||'')
+                    .normalize('NFC')
+                    .replace(/[\\u00A0\\u200B\\u202F\\u2007\\uFEFF]/g, ' ')
+                    .replace(/\\s+/g, ' ').trim().toUpperCase();
+                const targets = alvos.map(norm);
+                const cbs = [...document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')];
+                const candidates = cbs.map(cb => {
+                    const td = cb.closest('td');
+                    return { cb, normTxt: norm(td ? td.textContent : '') };
+                });
+                const marcadas = [];
+                const naoEncontradas = [];
+                for (const tgt of targets) {
+                    let achou = false;
+                    // 1. Exact match
+                    for (const c of candidates) {
+                        if (!c.cb.checked && c.normTxt === tgt) {
+                            c.cb.click(); marcadas.push(c.normTxt.slice(0,80)); achou = true; break;
+                        }
+                    }
+                    if (achou) continue;
+                    // 2. Tighter match (remove espaços/hífens)
+                    const tight = s => s.replace(/[\\s\\-]+/g, '');
+                    const tgtTight = tight(tgt);
+                    for (const c of candidates) {
+                        if (!c.cb.checked && tight(c.normTxt) === tgtTight) {
+                            c.cb.click(); marcadas.push(c.normTxt.slice(0,80)); achou = true; break;
+                        }
+                    }
+                    if (!achou) naoEncontradas.push(tgt);
+                }
+                return { marcadas, naoEncontradas };
+            }""",
+            alvos,
+        )
+        self.log(f"  ✓ Marcadas {len(res.get('marcadas', []))}: {res.get('marcadas', [])}")
+        if res.get("naoEncontradas"):
+            self.log(f"  ⚠ Não encontradas: {res.get('naoEncontradas')}")
+
+        # Salvar UMA vez para todas
+        try:
+            self._clicar("salvar")
+            self._aguardar_ajax(30000)  # generoso — batch save pode ser lento
+            self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        except Exception as e:
+            self.log(f"  ⚠ Batch save falhou: {e}")
+
+        # Capturar nova conv pós-batch
+        self._capturar_conversation_id()
+        self.log(f"  ✓ Batch save concluído — conv={self._calculo_conversation_id}")
+
+        # Tolerar NPE pós-batch via Fechar+Reabrir
+        try:
+            self._fechar_e_reabrir_calculo("pós-Expresso BATCH")
+        except Exception as e:
+            self.log(f"  ⚠ Fechar+Reabrir pós-batch: {e}")
+
+    def _lancar_expresso_individual(self, verbas) -> None:
+        """Versão UMA POR VEZ (1-2 verbas — sem trade-off de NPE)."""
         self.log(f"  → Lançamento Expresso ({len(verbas)} verba(s), uma por vez)")
 
         # Resolver expresso_alvo de cada verba contra a lista canônica das 54
