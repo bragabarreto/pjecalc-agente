@@ -2762,6 +2762,31 @@ class PlaywrightAutomatorV2:
             else:
                 self._conv_pre_expresso = None
 
+            # ⚠ CRÍTICO (22/05/2026) — OPÇÃO C: Fechar+Reabrir após CADA save
+            # Expresso. Causa raiz do bug Scarlette ([4/11] página vazia +
+            # apresentadorVerbaDeCalculo travado fora de emModoListagem):
+            # após o copiar() bem-sucedido, o bean apresentadorVerbaDeCalculo
+            # chama pesquisar() (que coloca em LISTAGEM), mas a transição Seam
+            # EPC + redirect "verbaDeCalculo" mantém estado @Begin da conv
+            # corrente. Após 2-3 cycles, o Hibernate session fica stale e
+            # repositorioDeVerba.verbasParaCalculo() retorna lista vazia.
+            #
+            # FIX: forçar @End (Fechar) → commit DB → @Begin via Recentes.
+            # Cada iteração começa com conv fresh + bean re-instanciado +
+            # operacao=NENHUM (será reset por _navegar_menu_via_click no
+            # próximo loop, via outcome verbaDeCalculo + end-conversation).
+            #
+            # Custo: ~8s por verba × N verbas. Compensa 100% pela
+            # confiabilidade — sem isso só ~3 de N verbas chegam à DB.
+            #
+            # NÃO fazer Fechar+Reabrir na ÚLTIMA verba — o loop pós-Expresso
+            # (linha 2229) já faz isso explicitamente, e dispensar a iteração
+            # final reduz overhead.
+            if idx < len(verbas) - 1:
+                self._fechar_e_reabrir_calculo(
+                    f"pós Expresso save [{idx+1}/{len(verbas)}: {alvo}]"
+                )
+
     def _silenciar_dialog_confirma_valor(self) -> None:
         """Sobrescreve `checarValor` para evitar o jConfirm modal de mudança de valor.
 
