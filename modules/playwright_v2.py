@@ -3537,6 +3537,29 @@ class PlaywrightAutomatorV2:
                                 self._selecionar_se_diferente("baseHistoricosValorPago", vp.base_historico_nome)
                             if vp.proporcionaliza_historico:
                                 self._selecionar_se_diferente("proporcionalizaHistoricoDoValorPago", vp.proporcionaliza_historico.value)
+                            # CRÍTICO (23/05/2026): clicar "+" incluirBaseHistoricoValorPago
+                            # para adicionar à tabela. Sem isso, JSF rejeita save com
+                            # "Campo obrigatório: Base do Valor Pago" — verba não persiste
+                            # histórico de valor pago e Liquidação falha com
+                            # "Falta selecionar pelo menos um Histórico Salarial".
+                            # Mesma lógica do incluirBaseHistorico (lado Valor Devido).
+                            try:
+                                clicou_inc_pago = self._page.evaluate(
+                                    """() => {
+                                        const btn = document.querySelector("a[id$=':incluirBaseHistoricoValorPago'], input[id$=':incluirBaseHistoricoValorPago']");
+                                        if (!btn) return {ok:false, reason:'not_found'};
+                                        if (btn.onclick) { btn.onclick(new Event('click')); }
+                                        else { btn.click(); }
+                                        return {ok:true};
+                                    }"""
+                                )
+                                if clicou_inc_pago.get("ok"):
+                                    self._aguardar_ajax(2000)
+                                    self.log("    ✓ click '+' incluirBaseHistoricoValorPago (Base do Valor Pago)")
+                                else:
+                                    self.log(f"    ⚠ incluirBaseHistoricoValorPago: {clicou_inc_pago}")
+                            except Exception as e:
+                                self.log(f"    ⚠ incluirBaseHistoricoValorPago: {e}")
                         elif bt == "VALE_TRANSPORTE" and vp.base_vale_transporte_nome:
                             self._selecionar_se_diferente("valeTransportePago", vp.base_vale_transporte_nome)
                         elif bt == "SALARIO_DA_CATEGORIA" and vp.base_salario_categoria_nome:

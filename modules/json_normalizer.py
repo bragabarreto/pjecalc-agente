@@ -318,6 +318,36 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
             for h in hons
         ]
 
+    # 3b. Verbas — normalizar valor_pago CALCULADO:
+    # IA às vezes emite `historico_nome` em vez de `base_historico_nome`,
+    # e omite `base_tipo`. Sem essas chaves, o bot não aciona o painel de
+    # Base do Valor Pago, e o JSF rejeita o save com "Campo obrigatório:
+    # Base do Valor Pago" — fazendo Liquidação travar com "Falta selecionar
+    # pelo menos um Histórico Salarial para apurar o Valor Devido da Verba X".
+    verbas = data.get("verbas_principais")
+    if isinstance(verbas, list):
+        for v in verbas:
+            if not isinstance(v, dict):
+                continue
+            params = v.get("parametros")
+            if not isinstance(params, dict):
+                continue
+            vp = params.get("valor_pago")
+            if not isinstance(vp, dict):
+                continue
+            if (vp.get("tipo") or "").upper() == "CALCULADO":
+                # 1) historico_nome → base_historico_nome (mantém ambos por compat)
+                hist_legacy = vp.get("historico_nome")
+                if hist_legacy and not vp.get("base_historico_nome"):
+                    vp["base_historico_nome"] = hist_legacy
+                # 2) Se tem histórico mas sem base_tipo, inferir HISTORICO_SALARIAL
+                if vp.get("base_historico_nome") and not vp.get("base_tipo"):
+                    vp["base_tipo"] = "HISTORICO_SALARIAL"
+                # 3) proporcionalizar (bool) → proporcionaliza_historico (SimNao)
+                prop = vp.get("proporcionalizar")
+                if prop is not None and not vp.get("proporcionaliza_historico"):
+                    vp["proporcionaliza_historico"] = "SIM" if prop else "NAO"
+
     # 4. Correção/juros — IPCA-E
     if isinstance(data.get("correcao_juros_multa"), dict):
         data["correcao_juros_multa"] = _norm_correcao(data["correcao_juros_multa"])
