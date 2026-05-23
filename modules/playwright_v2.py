@@ -3888,10 +3888,20 @@ class PlaywrightAutomatorV2:
                                 tem_salvar: !!document.querySelector('input[id$=":salvar"]')};
                     }"""
                 )
-                self.log(f"    ⚠ Form de Alteração não carregou em 10s — diag={_diag}")
+                self.log(f"    ⚠ wait_for descricao visível falhou em 10s — diag={_diag}")
+                # ⚠ FALLBACK (23/05/2026): às vezes o input descricao está no
+                # DOM mas Playwright reporta "not visible" (CSS animation,
+                # parent panel transition, etc.). Se tem_descricao=True E
+                # tem_salvar=True, ASSUMIR form carregado e prosseguir.
+                # Sem isso, o bot aborta o ajuste e a verba fica sem
+                # histórico → Liquidação trava com "Falta histórico".
+                if _diag.get("tem_descricao") and _diag.get("tem_salvar"):
+                    self.log("    ℹ Fallback: tem_descricao+tem_salvar=True — prosseguindo (Playwright visibility false-negative)")
+                else:
+                    return  # de fato form não carregou
             except Exception:
                 self.log("    ⚠ Form de Alteração não carregou — sem diagnóstico DOM")
-            return  # aborta — sem form, não tem o que preencher
+                return  # aborta — sem form, não tem o que preencher
         self._preencher_form_parametros_verba(v, com_identificacao=False)
 
         # NOTA (12/05/2026): "Regerar Ocorrências" só existe em modo LISTAGEM
