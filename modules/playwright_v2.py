@@ -2762,47 +2762,41 @@ class PlaywrightAutomatorV2:
             else:
                 self._conv_pre_expresso = None
 
-            # ⚠ CRÍTICO (22/05/2026) — OPÇÃO F: Após save Expresso, voltar
-            # para verba-calculo.jsf (URL direta) ANTES de Fechar+Reabrir.
+            # ⚠ CRÍTICO (22/05/2026) — OPÇÃO D: Reabrir via Recentes após CADA
+            # save Expresso. Versão anterior (Opção C) usava
+            # _fechar_e_reabrir_calculo, mas o link `li_operacoes_fechar` do
+            # sidebar NÃO renderiza em verbas-para-calculo.jsf (a URL onde o
+            # bot fica após save Expresso). Logo o Fechar era pulado e a
+            # conv corrente persistia em estado stale.
             #
-            # Versões anteriores que falharam:
-            # - Opção C: chamou _fechar_e_reabrir_calculo direto. Mas
-            #   `li_operacoes_fechar` NÃO renderiza no sidebar de
-            #   verbas-para-calculo.jsf (página do Expresso). Fechar pulado.
-            # - Opção D: chamou _reabrir_calculo_via_recentes direto. Mas a
-            #   lista de Recentes vem VAZIA — o cálculo da Fase 1 nunca foi
-            #   commitado ao DB (conv Seam em memória). Reabertura falha.
+            # Opção D: pular o Fechar e ir DIRETO para reabertura via Recentes.
+            # _reabrir_calculo_via_recentes navega para /pages/principal.jsf
+            # (sem conversationId, abandona conv atual), seleciona o cálculo
+            # em Recentes e abre em nova conv Seam fresh. O outcome do
+            # apresentadorVerbasParaCalculo.copiar() já tem @End conv via
+            # pages.xml ("verbaDeCalculo" → end-conversation before-redirect),
+            # então a verba salva é commitada mesmo sem o Fechar manual.
             #
-            # Opção F (correta): forçar navegação URL direta para
-            # verba-calculo.jsf?conversationId={curr}. Essa página tem
-            # sidebar completo (com li_operacoes_fechar disponível).
-            # Em seguida _fechar_e_reabrir_calculo executa Fechar (@End conv +
-            # commit DB) → Reabrir via Recentes (agora populado).
+            # Custo: ~6s por verba × N verbas. Compensa pela confiabilidade.
             #
-            # NÃO fazer na ÚLTIMA verba — loop pós-Expresso já faz.
-            if idx < len(verbas) - 1 and self._calculo_conversation_id:
+            # NÃO reabrir na ÚLTIMA verba — o loop pós-Expresso já faz Fechar
+            # +Reabrir, e dispensar a iteração final reduz overhead.
+            if idx < len(verbas) - 1:
                 self.log(
-                    f"  → Pós-save: navegando para verba-calculo.jsf antes "
-                    f"de Fechar+Reabrir (Opção F)"
+                    f"  → Reabrir cálculo via Recentes (pós Expresso "
+                    f"[{idx+1}/{len(verbas)}: {alvo}]) para reset Seam EPC..."
                 )
-                try:
-                    url_verba_listagem = (
-                        f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
-                        f"?conversationId={self._calculo_conversation_id}"
+                ok = self._reabrir_calculo_via_recentes()
+                if ok:
+                    self.log(
+                        f"  ✓ Reabertura ok — conv fresh "
+                        f"{self._calculo_conversation_id}"
                     )
-                    self._page.goto(
-                        url_verba_listagem,
-                        wait_until="domcontentloaded",
-                        timeout=15000,
+                else:
+                    self.log(
+                        f"  ⚠ Reabertura via Recentes falhou — "
+                        f"próxima iteração pode falhar"
                     )
-                    self._aguardar_ajax(10000)
-                    self._page.wait_for_timeout(1000)
-                except Exception as e:
-                    self.log(f"  ⚠ Goto verba-calculo.jsf falhou: {e}")
-                # Agora sidebar deve ter Fechar disponível
-                self._fechar_e_reabrir_calculo(
-                    f"pós Expresso save [{idx+1}/{len(verbas)}: {alvo}]"
-                )
 
     def _silenciar_dialog_confirma_valor(self) -> None:
         """Sobrescreve `checarValor` para evitar o jConfirm modal de mudança de valor.
