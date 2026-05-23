@@ -2618,6 +2618,29 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1000)
 
+            # ⚠ CRÍTICO (23/05/2026): após Recentes reabertura, o sidebar click
+            # às vezes NÃO transiciona para verba-calculo.jsf — fica em
+            # calculo.jsf (Dados/Parâmetros). Forçar URL goto como fallback se
+            # ainda não estamos na página correta. Sem isso, lancamentoExpresso
+            # não é encontrado em iterações pós-Recentes (2/11+).
+            try:
+                _url_atual = self._page.url
+                if "verba-calculo.jsf" not in _url_atual and self._calculo_conversation_id:
+                    self.log(
+                        f"  ℹ URL pós-click sidebar não é verba-calculo.jsf "
+                        f"({_url_atual[-60:]}) — forçando URL goto"
+                    )
+                    self._page.goto(
+                        f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                        f"?conversationId={self._calculo_conversation_id}",
+                        wait_until="domcontentloaded",
+                        timeout=20000,
+                    )
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(1000)
+            except Exception as _e:
+                self.log(f"  ⚠ Fallback URL goto verba-calculo.jsf: {_e}")
+
             def _verificar_modo_listagem() -> dict:
                 """Inspeciona se o bean está em modo listagem (botão lancamentoExpresso
                 realmente renderizado E visível, não fantasma)."""
