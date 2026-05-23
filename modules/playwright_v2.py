@@ -2282,7 +2282,10 @@ class PlaywrightAutomatorV2:
         # Estratégia (23/05/2026): Fechar+Reabrir A CADA N VERBAS (batch de
         # ajuste de parâmetros), não a cada uma. Reduz custo de
         # 11×F+R para ⌈11/N⌉×F+R, mantendo confiabilidade.
-        N_VERBAS_POR_BATCH_PARAM = 3
+        # Revisão 23/05/2026 (test 15): N=3 ainda não era suficiente — HE 50%
+        # (idx=2) já vinha com listagem vazia. Reduzir para N=2 (F+R a cada
+        # par de verbas) para garantir que cada par parte de estado fresh.
+        N_VERBAS_POR_BATCH_PARAM = 2
         for idx, v in enumerate(verbas_expresso):
             # Fechar+Reabrir a cada N verbas (idx=0 já teve F+R no pós-Expresso)
             if idx > 0 and idx % N_VERBAS_POR_BATCH_PARAM == 0:
@@ -3885,7 +3888,61 @@ class PlaywrightAutomatorV2:
             )
             self.log(f"  ⚠ Verba não encontrada na listagem: {v.nome_pjecalc}")
             self.log(f"     TRs com Parâmetros visíveis: {diag}")
-            return
+            # ⚠ AUTO-RECOVERY (23/05/2026): se listagem está VAZIA (não é
+            # mismatch de nome, são 0 TRs), tentar Fechar+Reabrir +
+            # 1 retry. Frequentemente o cálculo TEM as verbas no DB mas
+            # a conv corrente está corrompida (Seam EPC saturated).
+            if not diag:  # 0 TRs com linkParametrizar — listagem vazia
+                self.log(f"  → Listagem vazia detectada — Fechar+Reabrir + retry")
+                try:
+                    if self._fechar_e_reabrir_calculo(f"recovery listagem vazia ({v.nome_pjecalc})"):
+                        # Re-navegar verbas + retry click Parâmetros
+                        self._navegar_menu_via_click("li_calculo_verbas")
+                        self._aguardar_ajax(8000)
+                        self._page.wait_for_timeout(1500)
+                        # Tentar URL goto se não estamos em verba-calculo.jsf
+                        if "verba-calculo.jsf" not in self._page.url and self._calculo_conversation_id:
+                            self._page.goto(
+                                f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                                f"?conversationId={self._calculo_conversation_id}",
+                                wait_until="domcontentloaded", timeout=20000,
+                            )
+                            self._aguardar_ajax(8000)
+                        # Re-tentar click Parâmetros
+                        clicou_retry = self._page.evaluate(
+                            """(alvo) => {
+                                const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                                const alvoN = norm(alvo);
+                                const trs = [...document.querySelectorAll('tr')];
+                                for (const tr of trs) {
+                                    const link = tr.querySelector('a.linkParametrizar');
+                                    if (!link) continue;
+                                    const td = link.closest('td')?.previousElementSibling || tr.querySelector('td:nth-child(3)');
+                                    const txt = norm(td ? td.textContent : '');
+                                    if (txt === alvoN || txt.includes(alvoN) || alvoN.includes(txt)) {
+                                        if (link.onclick) { link.onclick(new Event('click')); }
+                                        else { link.click(); }
+                                        return true;
+                                    }
+                                }
+                                return false;
+                            }""",
+                            v.nome_pjecalc,
+                        )
+                        if clicou_retry:
+                            self.log(f"    ✓ Click Parâmetros via retry pós Fechar+Reabrir")
+                            self._aguardar_ajax(8000)
+                            clicou = "retry-pos-FR"
+                        else:
+                            self.log(f"    ⚠ Retry pós Fechar+Reabrir também não achou {v.nome_pjecalc}")
+                            return
+                    else:
+                        return
+                except Exception as e:
+                    self.log(f"    ⚠ Recovery listagem vazia falhou: {e}")
+                    return
+            else:
+                return
         self.log(f"    ✓ Click Parâmetros via estratégia: {clicou}")
         self._aguardar_ajax(8000)
         # CRÍTICO: aguardar o form de Alteração carregar. Sem isso, o caller
