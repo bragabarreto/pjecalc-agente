@@ -113,6 +113,7 @@ para impedir a recorrência de um problema concreto:
 | **Verbas DEDUÇÃO (VALOR PAGO/DEVOLUÇÃO) usam `valor_pago.valor_brl`** | Se posto em `valor_devido`, soma em vez de abater |
 | **Histórico salarial CALCULADO: schema = `{quantidade_pct, base_referencia}`** | IA confundia com schema de verba (`base_calculo.tipo`) |
 | **Etapa 1 do resumo consolida verbas recorrentes** | IA listava períodos como itens separados no resumo, induzindo JSON errado |
+| **`prescricao_quinquenal=true` SÓ se contrato ≥5 anos** | JSF rejeitava save da Fase 2 — cálculo nunca commitava no DB — cascata de falhas em todas as fases pós Fase 2 (Scarlette 22/05/2026) |
 
 ### Validação automática
 

@@ -104,6 +104,20 @@ def test_etapa_1_resumo_consolida_verbas_recorrentes():
     assert "3 períodos" in PROMPT
 
 
+def test_prescricao_quinquenal_apenas_se_5_anos():
+    """prescricao_quinquenal=true SÓ com contrato (admissão→ajuizamento) ≥5 anos.
+
+    Causa raiz histórica (Scarlette 22/05/2026): JSON marcava quinquenal=true
+    em contrato de 8 meses → JSF rejeita save Fase 2 → cálculo nunca commita
+    no DB → cascata de falhas em TODAS as fases pós-Fase 2.
+    """
+    assert "prescricao_quinquenal" in PROMPT
+    # Regra do PJE-Calc deve estar citada literal (mensagem de erro do JSF)
+    assert "menor que cinco anos" in PROMPT or "5 anos" in PROMPT
+    # Marca explícita como INVARIANTE
+    assert "prescricao_quinquenal" in PROMPT.lower() and "NÃO REVERTER" in PROMPT
+
+
 def test_diferenca_salarial_dois_historicos():
     """DIFERENÇA SALARIAL exige 2 históricos (Valor Devido + Valor Pago)."""
     # Regra documentada

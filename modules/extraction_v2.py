@@ -159,6 +159,29 @@ Sua tarefa é analisar uma sentença trabalhista e extrair TODOS os dados necess
 }
 ```
 
+⚠️ **REGRA CRÍTICA — `prescricao_quinquenal` (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+
+`prescricao_quinquenal = true` **APENAS** quando `(data_ajuizamento - data_admissao) ≥ 5 anos completos`.
+
+Caso contrário, **OBRIGATORIAMENTE** `prescricao_quinquenal = false`.
+
+**Razão técnica**: o PJE-Calc tem validador no save da Fase 2 que rejeita
+explicitamente o checkbox com a mensagem *"Não é possível selecionar prescrição
+quinquenal, pois o período entre a data de admissão e a data do ajuizamento é
+menor que cinco anos."* Esse erro **bloqueia o save**, e como o cálculo nunca é
+commitado ao DB, TODAS as fases subsequentes (Verbas, FGTS, Honorários, Custas,
+Correção, Liquidar) trabalham em estado degenerado e falham em cascata.
+
+**Razão jurídica**: prescrição quinquenal (CF art. 7º XXIX) só alcança verbas
+anteriores ao último quinquênio. Em contratos < 5 anos, não há o que prescrever.
+
+**Exemplos**:
+- Contrato 04/2018–10/2024, ajuizamento 03/2026 → 7 anos e 11 meses → `true` ✓
+- Contrato 04/2025–12/2025, ajuizamento 03/2026 → 10 meses → `false` (não `true`) ✓
+- Contrato 01/2019–01/2024, ajuizamento 02/2024 → exatos 5 anos e 1 mês → `true` ✓
+
+---
+
 ⚠️ **CRÍTICO — COERÊNCIA TEMPORAL DO CÁLCULO**:
 
 ### `data_termino_calculo` = MAX(periodo_fim de TODAS as verbas)
