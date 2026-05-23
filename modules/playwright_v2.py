@@ -1419,22 +1419,48 @@ class PlaywrightAutomatorV2:
             # Achar pelo CNJ do processo (ou processo_override em modo TESTE)
             num = processo_override or self.previa.processo.numero_processo
             num_clean = num.replace(".", "").replace("-", "").replace("/", "")
-            found_idx = None
             options = listbox.first.locator("option")
+
+            # ⚠ CRÍTICO (23/05/2026): quando o mesmo CNJ aparece MÚLTIPLAS
+            # vezes em Recentes (testes repetidos), precisamos pegar o
+            # cálculo MAIS RECENTE — geralmente o de MAIOR ID. Formato:
+            # 'NNN / CNJ / RECLAMANTE'. Coletar TODOS os índices que
+            # casam, ordenar por ID descendente, pegar o primeiro.
+            def _extract_id(text: str) -> int:
+                """Extrai o ID numérico inicial do label Recentes."""
+                import re as _re
+                m = _re.match(r"\s*(\d+)\s*/", text or "")
+                return int(m.group(1)) if m else -1
+
+            matching_indices: list[tuple[int, int]] = []  # (id, idx)
             for i in range(n_opts):
                 opt_text = (options.nth(i).text_content() or "")
                 if num_clean in opt_text.replace(".", "").replace("-", "").replace("/", ""):
-                    found_idx = i
-                    break
+                    matching_indices.append((_extract_id(opt_text), i))
+
+            found_idx: int | None = None
+            if matching_indices:
+                # Maior ID primeiro (mais recente)
+                matching_indices.sort(key=lambda t: -t[0])
+                found_idx = matching_indices[0][1]
+                if len(matching_indices) > 1:
+                    self.log(
+                        f"  ℹ {len(matching_indices)} cálculos com o mesmo CNJ em Recentes — "
+                        f"escolhendo ID={matching_indices[0][0]} (mais recente)"
+                    )
 
             # Fallback: pelo nome do reclamante (só se NÃO estiver usando override de teste)
             if found_idx is None and processo_override is None:
                 rec = (self.previa.processo.reclamante.nome or "").upper()
                 if len(rec) >= 5:
+                    matching_indices = []
                     for i in range(n_opts):
-                        if rec in (options.nth(i).text_content() or "").upper():
-                            found_idx = i
-                            break
+                        opt_text_up = (options.nth(i).text_content() or "").upper()
+                        if rec in opt_text_up:
+                            matching_indices.append((_extract_id(options.nth(i).text_content() or ""), i))
+                    if matching_indices:
+                        matching_indices.sort(key=lambda t: -t[0])
+                        found_idx = matching_indices[0][1]
 
             # Último fallback: 1 item só na lista (só se NÃO for override de teste)
             if found_idx is None and n_opts == 1 and processo_override is None:
