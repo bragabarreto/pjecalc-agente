@@ -484,6 +484,13 @@ async def confirmar_previa(sessao_id: str, payload: dict):
     Em sucesso, salva e marca como pronta para automação.
     Em erro, retorna 422 com lista de pendências.
     """
+    # CRÍTICO (22/05/2026): aplicar normalize_v2_json AQUI também — não só em
+    # /processar/v2. Sem isso, edições do usuário ou re-submissões podem
+    # introduzir inconsistências que o JSF rejeita (ex.: prescricao_quinquenal
+    # marcada quando período <5 anos, causando erro de save Fase 2 e
+    # propagando falhas para todas as fases subsequentes).
+    from modules.json_normalizer import normalize_v2_json
+    payload = normalize_v2_json(payload)
     payload = _limpar_cartao_ponto_vazio(payload)
     try:
         previa = PreviaCalculoV2.model_validate(payload)
