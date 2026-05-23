@@ -1608,7 +1608,28 @@ class PlaywrightAutomatorV2:
             return False
 
     def _abrir_pjecalc(self) -> None:
-        self._page.goto(f"{self.pjecalc_url}/pages/principal.jsf", timeout=30000)
+        # CRÍTICO (23/05/2026): wait_until="load" (default) espera TODOS os
+        # recursos (CSS, JS, imagens, AJAX-renderers). Em ARM cloud lento o
+        # PJE-Calc serve principal.jsf demorando >30s para 'load' completar.
+        # Sintoma: Page.goto: Timeout 30000ms exceeded.
+        # Fix: usar "domcontentloaded" (HTML pronto, mais rápido) + retry
+        # com timeout maior se primeira falhar.
+        last_err = None
+        for tentativa in range(3):
+            try:
+                self._page.goto(
+                    f"{self.pjecalc_url}/pages/principal.jsf",
+                    wait_until="domcontentloaded",
+                    timeout=60000,
+                )
+                break
+            except Exception as e:
+                last_err = e
+                self.log(f"  ⚠ Tentativa {tentativa+1}/3 abrir principal.jsf: {type(e).__name__}")
+                if tentativa < 2:
+                    self._page.wait_for_timeout(3000)
+        else:
+            raise last_err  # type: ignore[misc]
         self._aguardar_ajax()
         self.log("✓ PJE-Calc home carregado")
 
