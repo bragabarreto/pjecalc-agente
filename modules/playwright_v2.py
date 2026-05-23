@@ -3529,19 +3529,58 @@ class PlaywrightAutomatorV2:
                 if vp_tipo == "CALCULADO":
                     if vp.base_tipo:
                         bt = vp.base_tipo.value if hasattr(vp.base_tipo, "value") else str(vp.base_tipo)
+                        # ⚠ CRÍTICO (23/05/2026): aguardar panelBaseTabelada
+                        # renderizar APÓS tipoDoValorPago=CALCULADO. Sem wait
+                        # explícito, baseTabelada não existe no DOM e o select
+                        # falha silenciosamente.
+                        try:
+                            self._page.wait_for_selector(
+                                "select[id$=':baseTabelada']",
+                                state="visible", timeout=6000,
+                            )
+                        except Exception:
+                            self.log("    ⚠ panelBaseTabelada não renderizou em 6s")
                         if self._selecionar_se_diferente("baseTabelada", bt):
-                            self._aguardar_ajax(1500)
+                            self._aguardar_ajax(2500)
+                        else:
+                            # Mesmo que select 'não mudou' (já era HISTORICO_SALARIAL),
+                            # disparar AJAX explicitamente para garantir que
+                            # painelMinicrudsDasBasesDoValorPago seja rendererizado.
+                            self._page.evaluate(
+                                """() => {
+                                    const sel = document.querySelector("select[id$=':baseTabelada']");
+                                    if (sel) {
+                                        sel.dispatchEvent(new Event('change', {bubbles:true}));
+                                    }
+                                }"""
+                            )
+                            self._aguardar_ajax(2500)
                         if bt == "HISTORICO_SALARIAL":
+                            # Aguardar painelMinicrudsDasBasesDoValorPago renderizar
+                            try:
+                                self._page.wait_for_selector(
+                                    "select[id$=':baseHistoricosValorPago']",
+                                    state="visible", timeout=6000,
+                                )
+                            except Exception:
+                                self.log("    ⚠ baseHistoricosValorPago não renderizou em 6s")
                             if vp.base_historico_nome:
-                                self._selecionar_se_diferente("baseHistoricosValorPago", vp.base_historico_nome)
+                                if self._selecionar_se_diferente("baseHistoricosValorPago", vp.base_historico_nome):
+                                    self.log(f"    ✓ baseHistoricosValorPago = {vp.base_historico_nome}")
+                                    self._aguardar_ajax(1500)
                             if vp.proporcionaliza_historico:
                                 self._selecionar_se_diferente("proporcionalizaHistoricoDoValorPago", vp.proporcionaliza_historico.value)
-                            # CRÍTICO (23/05/2026): clicar "+" incluirBaseHistoricoValorPago
-                            # para adicionar à tabela. Sem isso, JSF rejeita save com
-                            # "Campo obrigatório: Base do Valor Pago" — verba não persiste
-                            # histórico de valor pago e Liquidação falha com
-                            # "Falta selecionar pelo menos um Histórico Salarial".
-                            # Mesma lógica do incluirBaseHistorico (lado Valor Devido).
+                            # CRÍTICO: clicar "+" incluirBaseHistoricoValorPago
+                            # para adicionar à tabela. Sem isso, JSF rejeita save
+                            # com "Campo obrigatório: Base do Valor Pago".
+                            try:
+                                # Aguardar botão ser visível
+                                self._page.wait_for_selector(
+                                    "[id$=':incluirBaseHistoricoValorPago']",
+                                    state="visible", timeout=5000,
+                                )
+                            except Exception:
+                                self.log("    ⚠ incluirBaseHistoricoValorPago não renderizou em 5s")
                             try:
                                 clicou_inc_pago = self._page.evaluate(
                                     """() => {
