@@ -1471,14 +1471,35 @@ class PlaywrightAutomatorV2:
 
             found_idx: int | None = None
             if matching_indices:
-                # Maior ID primeiro (mais recente)
-                matching_indices.sort(key=lambda t: -t[0])
-                found_idx = matching_indices[0][1]
-                if len(matching_indices) > 1:
-                    self.log(
-                        f"  ℹ {len(matching_indices)} cálculos com o mesmo CNJ em Recentes — "
-                        f"escolhendo ID={matching_indices[0][0]} (mais recente)"
-                    )
+                # ⚠ CRÍTICO (24/05/2026): PREFERIR o cálculo CORRENTE (capturado
+                # no Fase 2 via _extrair_numero_calculo) por ID EXATO. Caso não
+                # haja match exato, fallback para o de maior ID (mais recente).
+                # Sem isso, em testes repetidos o bot pegava cálculos órfãos
+                # antigos com mesmo CNJ → liquidava cálculo VAZIO → PJC sem verbas.
+                calc_num_session = getattr(self, "_calculo_numero", None)
+                if calc_num_session:
+                    try:
+                        calc_id_int = int(str(calc_num_session).strip())
+                        for cid, idx in matching_indices:
+                            if cid == calc_id_int:
+                                found_idx = idx
+                                self.log(
+                                    f"  ℹ Match EXATO do cálculo da sessão "
+                                    f"(ID={calc_id_int}) em Recentes"
+                                )
+                                break
+                    except (ValueError, TypeError):
+                        pass
+                if found_idx is None:
+                    # Fallback: maior ID primeiro (mais recente)
+                    matching_indices.sort(key=lambda t: -t[0])
+                    found_idx = matching_indices[0][1]
+                    if len(matching_indices) > 1:
+                        self.log(
+                            f"  ℹ {len(matching_indices)} cálculos com mesmo CNJ — "
+                            f"sem match exato (sessão={calc_num_session}), "
+                            f"escolhendo ID={matching_indices[0][0]} (mais recente)"
+                        )
 
             # Fallback: pelo nome do reclamante (só se NÃO estiver usando override de teste)
             if found_idx is None and processo_override is None:
@@ -1525,6 +1546,29 @@ class PlaywrightAutomatorV2:
                 old_conv = self._calculo_conversation_id
                 self._calculo_conversation_id = url_after.split("conversationId=")[1].split("&")[0]
                 self.log(f"  ✓ Cálculo reaberto via Recentes (conv {old_conv} → {self._calculo_conversation_id})")
+                # ⚠ CRÍTICO (24/05/2026): capturar/atualizar _calculo_numero a
+                # partir do label do Recentes que foi reaberto. Isso permite
+                # que CHAMADAS futuras de _reabrir_calculo_via_recentes filtrem
+                # pelo cálculo CORRETO (match EXATO ID) em vez de "maior ID".
+                # Crucial em sessões com testes acumulados em Recentes.
+                try:
+                    import re as _re
+                    label_recente = (options.nth(found_idx).text_content() or "").strip()
+                    m_id = _re.match(r"\s*(\d+)\s*/", label_recente)
+                    if m_id:
+                        novo_num = m_id.group(1)
+                        if not self._calculo_numero:
+                            self._calculo_numero = novo_num
+                            self.log(f"  ℹ Cálculo da sessão capturado via Recentes: {novo_num}")
+                        elif self._calculo_numero != novo_num:
+                            self.log(f"  ⚠ ATENÇÃO: Recentes reabriu cálculo {novo_num} (sessão esperava {self._calculo_numero})")
+                except Exception as _e:
+                    self.log(f"  ⚠ Captura calc number Recentes: {_e}")
+                # Tentar também via DOM (header "Cálculo: NNN")
+                try:
+                    self._extrair_numero_calculo()
+                except Exception:
+                    pass
                 return True
             self.log(f"  ⚠ Reabrir não navegou para calculo.jsf — URL atual: {url_after[-80:]}")
             return False
