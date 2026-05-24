@@ -481,6 +481,29 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
         ):
             primeiro_mes = (demi_tuple[0], demi_tuple[1], 1)
             p["periodo_inicio"] = _format_br(primeiro_mes)
+        # (a.bis) Para verbas DESLIGAMENTO + valor=INFORMADO (ex.: INDENIZAÇÃO
+        # POR DANO MORAL), expandir periodo_fim para o ÚLTIMO dia do mês da
+        # demissão. Sem isso, período de 1 dia (01/12-01/12) NÃO gera ocorrência
+        # mensal — PJE-Calc reporta "Verba informada precisa ocorrência != 0".
+        # Verbas CALCULADAS (Saldo, Multa 477, Aviso Prévio) podem manter
+        # período curto porque o valor é derivado da fórmula.
+        if (
+            ocor in _OCORRENCIAS_DESLIG
+            and p.get("valor") == "INFORMADO"
+            and demi_tuple is not None
+            and p.get("periodo_inicio") and p.get("periodo_fim")
+        ):
+            pi_t = _parse_br(p["periodo_inicio"])
+            pf_t = _parse_br(p["periodo_fim"])
+            # Se período cai dentro do mês de demissão, expandir até último dia
+            if (pi_t and pf_t
+                and pi_t[0] == demi_tuple[0] and pi_t[1] == demi_tuple[1]
+                and pf_t[0] == demi_tuple[0] and pf_t[1] == demi_tuple[1]):
+                # Calcular último dia do mês
+                from calendar import monthrange as _mr
+                _, ult_dia = _mr(demi_tuple[0], demi_tuple[1])
+                ultimo_mes = (demi_tuple[0], demi_tuple[1], ult_dia)
+                p["periodo_fim"] = _format_br(ultimo_mes)
         # (b) Calcular max_fim de todas as verbas
         pf_atual = p.get("periodo_fim")
         pf_t = _parse_br(pf_atual)

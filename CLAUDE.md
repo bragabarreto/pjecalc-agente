@@ -85,6 +85,28 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — Preservar progresso conquistado
+
+> **TODA correção, refatoração ou melhoria DEVE preservar os avanços já alcançados.**
+>
+> Antes de remover/alterar código (especialmente recoveries, fallbacks, F+R, retries,
+> ou qualquer lógica "defensiva"), valide:
+>
+> 1. **Identifique o avanço que aquele código representa** — qual cenário ele resolve?
+>    Há git blame, comentário INVARIANTE ou regra em CLAUDE.md citando-o?
+> 2. **Verifique se o cenário foi realmente resolvido pela mudança nova** — não basta
+>    "achar" que está coberto. Rode um teste do cenário específico.
+> 3. **Quando remover algo que servia de safety net, adicione uma proteção equivalente**
+>    (assertion, monitoring, fallback alternativo) — ou explicitamente documente o
+>    risco aceito + cenário em que falha.
+> 4. **Em commits que removem código, citar os avanços específicos preservados** —
+>    "Removido X porque novo Y cobre o caso Z testado no commit ABC".
+>
+> Razão: por meses esta automação foi construída via cascata de fixes incrementais.
+> Cada Opção (B/C/D/F/Recovery LEVE/Recovery wrong-page/etc.) resolve uma falha
+> específica observada num teste real. Remover sem cuidado faz regredir para o estado
+> documentado na história de bugs. **A regressão é o inimigo silencioso.**
+
 ## Regra obrigatória — Consultar manual antes de qualquer alteração
 
 > **ANTES de corrigir, ajustar ou implementar qualquer funcionalidade relacionada ao PJE-Calc,

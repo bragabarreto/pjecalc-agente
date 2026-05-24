@@ -2615,8 +2615,80 @@ class PlaywrightAutomatorV2:
         inputs = self._page.locator("input[id$=':valorDevido']")
         n = inputs.count()
         if n == 0:
-            self.log(f"    ⚠ 0 inputs valorDevido encontrados na página de ocorrências")
-            return
+            self.log(f"    ⚠ 0 inputs valorDevido encontrados — tentando Regerar Ocorrências + retry")
+            # ⚠ RECOVERY (24/05/2026): para verbas INFORMADO+DESLIGAMENTO com
+            # período curto (ex.: INDENIZAÇÃO POR DANO MORAL), o PJE-Calc
+            # pode não ter gerado ocorrências (defaults Expresso usam período
+            # diferente). Voltar à listagem, Regerar Ocorrências (botão da
+            # listagem), depois re-navegar para linkOcorrencias dessa verba.
+            try:
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                # Dispara Regerar — aceitar dialog de confirmação
+                self._page.once("dialog", lambda d: d.accept())
+                clicou_regerar = self._page.evaluate(
+                    """() => {
+                        const btn = document.querySelector("input[id$=':regerarOcorrencias']");
+                        if (!btn) return false;
+                        const onclickStr = btn.getAttribute('onclick') || '';
+                        if (onclickStr) {
+                            try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return true; } catch(_){}
+                        }
+                        btn.click(); return true;
+                    }"""
+                )
+                if clicou_regerar:
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2500)
+                    self.log(f"    ✓ Regerar Ocorrências disparado — re-navegando para linkOcorrencias")
+                    # Re-acionar linkOcorrencias
+                    clicou_retry = self._page.evaluate(
+                        """(candidatos) => {
+                            const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                            const linksMain = [...document.querySelectorAll('a.linkOcorrencias')]
+                                .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                            for (const alvo of candidatos) {
+                                const alvoN = norm(alvo);
+                                for (const a of linksMain) {
+                                    const tr = a.closest('tr');
+                                    if (!tr) continue;
+                                    const tds = [...tr.querySelectorAll('td')];
+                                    for (const td of tds) {
+                                        const txt = norm(td.textContent.replace(/Exibir|Ocultar/gi,''));
+                                        if (txt === alvoN) {
+                                            const onclickStr = a.getAttribute('onclick') || '';
+                                            if (onclickStr) {
+                                                try { new Function('event', onclickStr).call(a, new MouseEvent('click',{bubbles:true})); return true; } catch(_){}
+                                            }
+                                            a.click(); return true;
+                                        }
+                                    }
+                                }
+                            }
+                            return false;
+                        }""",
+                        candidatos,
+                    )
+                    if clicou_retry:
+                        self._aguardar_ajax(8000)
+                        self._page.wait_for_timeout(2000)
+                        inputs = self._page.locator("input[id$=':valorDevido']")
+                        n = inputs.count()
+                        if n > 0:
+                            self.log(f"    ✓ Recovery OK — {n} inputs valorDevido disponíveis")
+                        else:
+                            self.log(f"    ⚠ Recovery falhou — ainda 0 inputs após Regerar+retry")
+                            return
+                    else:
+                        self.log(f"    ⚠ Recovery falhou: não conseguiu re-clicar linkOcorrencias")
+                        return
+                else:
+                    self.log(f"    ⚠ Botão Regerar Ocorrências não encontrado — pulando recovery")
+                    return
+            except Exception as e:
+                self.log(f"    ⚠ Recovery 0 inputs valorDevido falhou: {e}")
+                return
 
         # Distribuir valor
         if proporcionalizar:
