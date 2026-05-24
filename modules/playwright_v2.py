@@ -1305,6 +1305,28 @@ class PlaywrightAutomatorV2:
         tag = f" ({contexto})" if contexto else ""
         try:
             self.log(f"  → Fechar cálculo{tag} para commit Seam @End...")
+            # ⚠ CRÍTICO (24/05/2026): se URL atual é verbas-para-calculo.jsf
+            # (Expresso) ou principal.jsf, o sidebar NÃO tem li_operacoes_fechar.
+            # Forçar nav para uma página com sidebar completo (verba-calculo.jsf)
+            # antes de tentar o Fechar.
+            try:
+                url_atual = self._page.url
+                precisa_nav = (
+                    "verbas-para-calculo.jsf" in url_atual
+                    or "principal.jsf" in url_atual
+                    or "verba-calculo.jsf" not in url_atual
+                )
+                if precisa_nav and self._calculo_conversation_id:
+                    self.log(f"    ℹ URL atual ({url_atual[-50:]}) não tem sidebar Operações — navegando para verba-calculo.jsf primeiro")
+                    self._page.goto(
+                        f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                        f"?conversationId={self._calculo_conversation_id}",
+                        wait_until="domcontentloaded", timeout=20000,
+                    )
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(1500)
+            except Exception as _e:
+                self.log(f"    ⚠ Pre-Fechar nav: {_e}")
             # Tentar sidebar click li_operacoes_fechar
             clicou = self._navegar_menu_via_click("li_operacoes_fechar")
             if not clicou:
