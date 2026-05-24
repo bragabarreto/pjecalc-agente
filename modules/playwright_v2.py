@@ -3917,22 +3917,23 @@ class PlaywrightAutomatorV2:
                                 wait_until="domcontentloaded", timeout=20000,
                             )
                             self._aguardar_ajax(8000)
-                        # Re-tentar click Parâmetros — usar AMBOS candidatos
-                        # (v.nome_pjecalc + v.expresso_alvo) já que para
-                        # expresso_adaptado a listagem mostra o nome canônico.
+                        # Re-tentar click Parâmetros — usa MESMA lógica do
+                        # click inicial (linksMain sem :listaReflexo: + EXACT
+                        # match). includes() pegava reflexos por substring.
                         clicou_retry = self._page.evaluate(
                             """(candidatos) => {
                                 const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
-                                const trs = [...document.querySelectorAll('tr')];
+                                const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                                    .filter(a => a.id && !a.id.includes(':listaReflexo:'));
                                 for (const alvo of candidatos) {
                                     const alvoN = norm(alvo);
-                                    for (const tr of trs) {
-                                        const link = tr.querySelector('a.linkParametrizar');
-                                        if (!link) continue;
+                                    for (const link of linksMain) {
+                                        const tr = link.closest('tr');
+                                        if (!tr) continue;
                                         const tds = [...tr.querySelectorAll('td')];
                                         for (const td of tds) {
-                                            const txt = norm(td.textContent);
-                                            if (txt === alvoN || (txt && (txt.includes(alvoN) || alvoN.includes(txt)))) {
+                                            const tdText = norm(td.textContent.replace(/Exibir|Ocultar/gi, ''));
+                                            if (tdText === alvoN) {
                                                 if (link.onclick) { link.onclick(new Event('click')); }
                                                 else { link.click(); }
                                                 return alvo;
@@ -4013,21 +4014,22 @@ class PlaywrightAutomatorV2:
                                         wait_until="domcontentloaded", timeout=20000,
                                     )
                                     self._aguardar_ajax(8000)
-                                # Re-tentar click Parâmetros — usar AMBOS candidatos
-                                # (nome_pjecalc + expresso_alvo) para expresso_adaptado
+                                # Re-tentar click Parâmetros — MESMA lógica do
+                                # click inicial (linksMain sem :listaReflexo: + EXACT)
                                 clicou_retry = self._page.evaluate(
                                     """(candidatos) => {
                                         const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
-                                        const trs = [...document.querySelectorAll('tr')];
+                                        const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                                            .filter(a => a.id && !a.id.includes(':listaReflexo:'));
                                         for (const alvo of candidatos) {
                                             const alvoN = norm(alvo);
-                                            for (const tr of trs) {
-                                                const link = tr.querySelector('a.linkParametrizar');
-                                                if (!link) continue;
+                                            for (const link of linksMain) {
+                                                const tr = link.closest('tr');
+                                                if (!tr) continue;
                                                 const tds = [...tr.querySelectorAll('td')];
                                                 for (const td of tds) {
-                                                    const txt = norm(td.textContent);
-                                                    if (txt === alvoN || (txt && (txt.includes(alvoN) || alvoN.includes(txt)))) {
+                                                    const tdText = norm(td.textContent.replace(/Exibir|Ocultar/gi, ''));
+                                                    if (tdText === alvoN) {
                                                         if (link.onclick) { link.onclick(new Event('click')); }
                                                         else { link.click(); }
                                                         return alvo;
