@@ -2350,23 +2350,30 @@ class PlaywrightAutomatorV2:
             # e linkParametrizar funciona perfeitamente.
             self._fechar_e_reabrir_calculo("pós-Expresso")
 
-        # CRÍTICO (20/05/2026 — descoberto via log SSE):
-        # Cada `Operação realizada com sucesso` (save de verba) consome estado
-        # Seam EPC. Padrão observado: 2 saves saturam o EntityManager e a
-        # listagem fica vazia.
-        # Estratégia (23/05/2026): Fechar+Reabrir A CADA N VERBAS (batch de
-        # ajuste de parâmetros), não a cada uma. Reduz custo de
-        # 11×F+R para ⌈11/N⌉×F+R, mantendo confiabilidade.
-        # Revisão 23/05/2026 (test 15): N=3 ainda não era suficiente — HE 50%
-        # (idx=2) já vinha com listagem vazia. Reduzir para N=2 (F+R a cada
-        # par de verbas) para garantir que cada par parte de estado fresh.
-        N_VERBAS_POR_BATCH_PARAM = 2
+        # Histórico de F+R proativo no loop de ajuste:
+        # - 12/05: F+R a cada verba (custo proibitivo)
+        # - 23/05: F+R a cada N=3 verbas (HE 50% idx=2 falhava — não bastava)
+        # - 23/05 noite: N=2 (resolveu para 5 verbas)
+        # - 24/05: REMOVIDO. Com os recoveries reativos abaixo, F+R proativo
+        #   tornou-se desnecessário E perigoso (cada F+R pode pegar cálculo
+        #   errado de Recentes — bug encontrado test 23/24 quando Recentes
+        #   continha cálculos órfãos antigos). Match EXATO por calc_numero
+        #   (commit 5b2c44f) mitigou mas não eliminou risco.
+        #
+        # Recoveries reativos PRESERVADOS (não remover — protegem o cenário
+        # que o F+R proativo cobria):
+        # - Recovery LEVE (URL goto pre-conv) antes de F+R pesado
+        #   → commit 214ab89, _configurar_parametros_pos_expresso linha ~4020
+        # - Recovery wrong-page (principal.jsf detect) → commit 48f503d
+        # - Recovery listagem vazia (TRs=[]) → commit 7d07558
+        # - Re-anchor pós-save (URL goto verba-calculo.jsf) → commit 8828144
+        # - Auto-recovery Regerar+retry para INFORMADO valorDevido → commit cc1f4e9
+        #
+        # Cenário de regressão a monitorar: se um teste falhar com
+        # 'TRs com Parâmetros visíveis: []' em sequência crescente
+        # (verba 2, 3, 4...) sem o recovery LEVE resolver, reintroduzir
+        # F+R proativo a cada N verbas (testar N=3 primeiro).
         for idx, v in enumerate(verbas_expresso):
-            # Fechar+Reabrir a cada N verbas (idx=0 já teve F+R no pós-Expresso)
-            if idx > 0 and idx % N_VERBAS_POR_BATCH_PARAM == 0:
-                self._fechar_e_reabrir_calculo(
-                    f"pré-verba batch {idx+1}/{len(verbas_expresso)}"
-                )
             try:
                 self._configurar_parametros_pos_expresso(v)
             except Exception as e:

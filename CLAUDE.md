@@ -775,6 +775,31 @@ adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 @docs/diagnostico-falhas-automacao.md
 @docs/analise-calc-machine-vs-agente.md
 
+### INDENIZAÇÃO POR DANO MORAL (INFORMADO + DESLIGAMENTO + período curto) — bot não consegue setar valorDevido
+
+**Sintoma**: para verbas com `valor=INFORMADO` (ex.: dano moral arbitrado em R$X) e
+`ocorrencia_pagamento=DESLIGAMENTO` com período curto (1 dia), a página de Ocorrências
+da verba retorna **0 inputs valorDevido visíveis** mesmo após Regerar Ocorrências
+proativo + retry. Liquidação reclama:
+- "Todas as ocorrências fora do período"
+- "Verba precisa ocorrência != 0"
+
+**Causa raiz não-resolvida (24/05/2026)**: o PJE-Calc Expresso default para INDENIZAÇÃO
+POR DANO MORAL gera ocorrências mensais pro contrato todo. Quando bot muda período
+para 01/12-01/12, as ocorrências antigas ficam fora do range e a tabela vem vazia
+(filtrada por período). Regerar via UI dispara mas mantém ocorrências antigas, então
+o filtro continua escondendo a única ocorrência válida.
+
+**Tentativas que NÃO funcionaram** (registrar para evitar repetir):
+- Expandir periodo_fim para último dia do mês via normalizer → viola validação
+  `periodo_fim ≤ data_demissao para DESLIGAMENTO` (commit 8d115cd revertido em cc1f4e9).
+- Regerar Ocorrências proativo (antes de linkOcorrencias) → log mostra Regerar
+  disparado mas grade segue vazia.
+- Regerar reativo (quando 0 inputs) → idem.
+
+**Estado aceito**: usuário ajusta manualmente o valorDevido da INDENIZAÇÃO via tela
+de Edição Manual oferecida pelo bot (já implementada). 1 minuto manual.
+
 ## Limitações conhecidas (19/05/2026) — não-bloqueantes
 
 Após resolução do bug Seam EPC via H2 TCP, o bot completa o ciclo end-to-end
