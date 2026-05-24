@@ -4023,8 +4023,77 @@ class PlaywrightAutomatorV2:
                     # tem form. Recuperar via Fechar+Reabrir + re-click.
                     url_tail = _diag.get("url_tail", "")
                     if "principal.jsf" in url_tail or "verba-calculo.jsf" not in url_tail:
-                        self.log(f"    → Detectado redirect para wrong page ({url_tail}) — Fechar+Reabrir + retry")
+                        self.log(f"    → Detectado redirect para wrong page ({url_tail})")
+                        # ⚠ ESTRATÉGIA OTIMIZADA (24/05/2026): ANTES de F+R
+                        # (que pode pegar cálculo errado do Recentes), tentar
+                        # SIMPLES URL goto para verba-calculo.jsf?conv={pre}
+                        # onde pre = a conv ANTES do redirect. Geralmente a
+                        # conv pré-redirect tem o cálculo correto.
+                        if self._calculo_conversation_id:
+                            try:
+                                self.log(f"    → Tentando recovery LEVE: URL goto verba-calculo.jsf?conv={self._calculo_conversation_id}")
+                                self._page.goto(
+                                    f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                                    f"?conversationId={self._calculo_conversation_id}",
+                                    wait_until="domcontentloaded", timeout=15000,
+                                )
+                                self._aguardar_ajax(8000)
+                                self._page.wait_for_timeout(1500)
+                                # Tentar click Parâmetros DIRETO (sem F+R)
+                                clicou_leve = self._page.evaluate(
+                                    """(candidatos) => {
+                                        const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                                        const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                                            .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                                        for (const alvo of candidatos) {
+                                            const alvoN = norm(alvo);
+                                            for (const link of linksMain) {
+                                                const tr = link.closest('tr');
+                                                if (!tr) continue;
+                                                const tds = [...tr.querySelectorAll('td')];
+                                                for (const td of tds) {
+                                                    const tdText = norm(td.textContent.replace(/Exibir|Ocultar/gi, ''));
+                                                    if (tdText === alvoN) {
+                                                        if (link.onclick) { link.onclick(new Event('click')); }
+                                                        else { link.click(); }
+                                                        return alvo;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        return null;
+                                    }""",
+                                    candidatos,
+                                )
+                                if clicou_leve:
+                                    self.log(f"    ✓ Recovery LEVE bem-sucedido (matched='{clicou_leve}') — pulando F+R")
+                                    self._aguardar_ajax(8000)
+                                    try:
+                                        self._page.wait_for_selector(
+                                            "input[id$=':descricao'], input[id$=':valorDevido']",
+                                            state="visible", timeout=10000,
+                                        )
+                                        self.log("    ✓ form carregado após recovery LEVE")
+                                        clicou = "recovery-leve-goto"
+                                        # Continuar com o flow normal (skipping outer return)
+                                    except Exception:
+                                        self.log("    ⚠ form não visível após recovery LEVE — escalando para F+R")
+                                        clicou_leve = None
+                            except Exception as _e:
+                                self.log(f"    ⚠ Recovery LEVE falhou: {_e}")
+                                clicou_leve = None
+                        else:
+                            clicou_leve = None
+                        if clicou_leve:
+                            # Recovery LEVE deu certo, pular F+R e seguir flow
+                            pass
+                        else:
+                            # Recovery PESADO (F+R + Recentes) — última opção
+                            self.log(f"    → Escalando para F+R + retry (Recentes pode pegar cálculo errado)")
                         try:
+                            # Skip F+R se LEVE já resolveu
+                            if clicou_leve:
+                                raise StopIteration("LEVE resolveu")
                             if self._fechar_e_reabrir_calculo(f"recovery wrong-page ({v.nome_pjecalc})"):
                                 self._navegar_menu_via_click("li_calculo_verbas")
                                 self._aguardar_ajax(8000)
@@ -4081,6 +4150,9 @@ class PlaywrightAutomatorV2:
                                     return
                             else:
                                 return
+                        except StopIteration:
+                            # LEVE resolveu — pular F+R, seguir flow normal
+                            pass
                         except Exception as e:
                             self.log(f"    ⚠ Wrong-page recovery falhou: {e}")
                             return
