@@ -2572,6 +2572,32 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(10000)
         self._page.wait_for_timeout(1500)
 
+        # ⚠ PROATIVO (24/05/2026): regerar ocorrências ANTES de tentar
+        # linkOcorrencias. Para verbas INFORMADO+DESLIGAMENTO com período
+        # curto (ex.: INDENIZAÇÃO POR DANO MORAL), o save de parâmetros
+        # NÃO sincroniza automaticamente as ocorrências com o novo período
+        # — ocorrências antigas (defaults Expresso) ficam fora do range.
+        # Regerar antes força PJE-Calc a gerar com período corrente.
+        try:
+            self._page.once("dialog", lambda d: d.accept())
+            clicou_regerar = self._page.evaluate(
+                """() => {
+                    const btn = document.querySelector("input[id$=':regerarOcorrencias']");
+                    if (!btn) return false;
+                    const onclickStr = btn.getAttribute('onclick') || '';
+                    if (onclickStr) {
+                        try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return true; } catch(_){}
+                    }
+                    btn.click(); return true;
+                }"""
+            )
+            if clicou_regerar:
+                self._aguardar_ajax(12000)
+                self._page.wait_for_timeout(2000)
+                self.log(f"    ✓ Regerar Ocorrências proativo (pré linkOcorrencias)")
+        except Exception as _e:
+            self.log(f"    ⚠ Regerar proativo: {_e}")
+
         # Clicar linkOcorrencias usando o mesmo padrão A4J onclick-exec
         clicou = self._page.evaluate(
             """(candidatos) => {
