@@ -4114,6 +4114,24 @@ class PlaywrightAutomatorV2:
         sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
         if sucesso:
             self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
+            # ⚠ CRÍTICO (24/05/2026): após save bem-sucedido, Seam pode
+            # redirecionar para principal.jsf (conv ended). Detectar
+            # e re-anchorar em verba-calculo.jsf para próxima iteração.
+            try:
+                url_pos_save = self._page.url
+                self._capturar_conversation_id()
+                if "principal.jsf" in url_pos_save or "verba-calculo.jsf" not in url_pos_save:
+                    if self._calculo_conversation_id:
+                        self.log(f"    ℹ Pós-save redirecionou para {url_pos_save[-40:]} — re-anchorando em verba-calculo.jsf")
+                        self._page.goto(
+                            f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}",
+                            wait_until="domcontentloaded", timeout=20000,
+                        )
+                        self._aguardar_ajax(8000)
+                        self._page.wait_for_timeout(1000)
+            except Exception as _e:
+                self.log(f"    ⚠ Re-anchor pós-save: {_e}")
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
             # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
@@ -5087,18 +5105,42 @@ class PlaywrightAutomatorV2:
                 self.log("    ⚠ Botão 'Visualizar Cartão' não encontrado — sem diagnóstico")
             return
         self.log(f"    ✓ click Visualizar Cartão ({clicou_vis})")
-        self._aguardar_ajax(5000)
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(2000)
         # Aguardar a página Montar carregar (id `formulario:montarApartirDaApuracao`
         # é o botão "Apurar Cartão de Ponto" — id legado JSF é confuso mas é o que existe)
         try:
             self._page.wait_for_selector(
                 "[id$=':montarApartirDaApuracao'], [id='formulario:montarApartirDaApuracao']",
                 state="visible",
-                timeout=10000,
+                timeout=15000,
             )
         except Exception:
-            self.log("    ⚠ Página 'Montar' não carregou (botão Apurar invisível) — pulando")
-            return
+            # ⚠ FALLBACK (24/05/2026): se o botão Apurar não apareceu via
+            # Visualizar Cartão, tentar URL goto direto para cartaodeponto.jsf
+            # (página onde o botão Apurar reside, com sidebar completo).
+            self.log("    ⚠ Página 'Montar' não carregou — tentando URL goto cartaodeponto.jsf")
+            try:
+                self._capturar_conversation_id()
+                if self._calculo_conversation_id:
+                    self._page.goto(
+                        f"{self.pjecalc_url}/pages/cartaodeponto/cartaodeponto.jsf"
+                        f"?conversationId={self._calculo_conversation_id}",
+                        wait_until="domcontentloaded", timeout=20000,
+                    )
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(2000)
+                    self._page.wait_for_selector(
+                        "[id$=':montarApartirDaApuracao']",
+                        state="visible", timeout=10000,
+                    )
+                    self.log("    ✓ Botão Apurar disponível após URL goto")
+                else:
+                    self.log("    ⚠ Sem conversationId para URL goto — pulando apuração")
+                    return
+            except Exception as _e:
+                self.log(f"    ⚠ URL goto cartaodeponto.jsf também falhou: {_e} — pulando apuração")
+                return
         # Clicar Apurar Cartão de Ponto
         clicou_apurar = self._page.evaluate(
             """() => {
