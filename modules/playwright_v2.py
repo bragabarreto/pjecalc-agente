@@ -2767,6 +2767,21 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"    ⚠ Erro ao salvar ocorrências: {e}")
 
+        # REGRA OPERACIONAL (25/05/2026, usuário): toda alteração de
+        # ocorrência exige Regerar para PJE-Calc recompute downstream.
+        # sobrescrever=False — preservar os valorDevido que acabamos de
+        # editar (apenas regera ocorrências cujo período está sem mensal).
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(800)
+            if self._regerar_com_modal_confirmacao(
+                sobrescrever=False, log_prefix="    "
+            ):
+                self.log(f"    ✓ Regerar pós-ocorrências '{nome}'")
+        except Exception as _e:
+            self.log(f"    ⚠ Regerar pós-ocorrências: {_e}")
+
     def _dump_dom_indenizacao(self, verba_nome: str, fase: str) -> None:
         """Captura snapshot DOM completo da página de Ocorrências quando bot
         vê 0 inputs valorDevido. Salva JSON + screenshot em /tmp/pjecalc_snapshots/.
@@ -4529,6 +4544,7 @@ class PlaywrightAutomatorV2:
             # ⚠ CRÍTICO (24/05/2026): após save bem-sucedido, Seam pode
             # redirecionar para principal.jsf (conv ended). Detectar
             # e re-anchorar em verba-calculo.jsf para próxima iteração.
+            re_anchored = False
             try:
                 url_pos_save = self._page.url
                 self._capturar_conversation_id()
@@ -4542,8 +4558,26 @@ class PlaywrightAutomatorV2:
                         )
                         self._aguardar_ajax(8000)
                         self._page.wait_for_timeout(1000)
+                        re_anchored = True
             except Exception as _e:
                 self.log(f"    ⚠ Re-anchor pós-save: {_e}")
+            # REGRA OPERACIONAL (25/05/2026, usuário): toda alteração de
+            # parâmetro de qualquer verba exige Regerar Ocorrências para que
+            # o PJE-Calc recompute downstream (ocorrências antigas ficam
+            # stale se não regerar).
+            try:
+                # Garantir que está na listagem (Regerar só existe em modo
+                # listagem). Se não re-anchorou, navegar via sidebar.
+                if not re_anchored and "verba-calculo.jsf" not in self._page.url:
+                    self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(800)
+                if self._regerar_com_modal_confirmacao(
+                    sobrescrever=False, log_prefix="    "
+                ):
+                    self.log(f"    ✓ Regerar pós-parâmetros '{v.nome_pjecalc}'")
+            except Exception as _e:
+                self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
             # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save

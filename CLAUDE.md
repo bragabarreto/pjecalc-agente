@@ -85,6 +85,41 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — Regerar Ocorrências após cada alteração
+
+> **TODA alteração de parâmetro ou ocorrência de qualquer verba DEVE ser
+> seguida de "Regerar Ocorrências" para que o PJE-Calc recompute downstream.**
+>
+> Comportamento documentado pelo usuário (25/05/2026): "toda vez que houve
+> alteracao em algum parametro ou ocorrencia de qualquer verba é preciso regerar".
+>
+> Implementação: helper `_regerar_com_modal_confirmacao(sobrescrever, ...)` em
+> `modules/playwright_v2.py`. Chamado em 4 pontos:
+>
+> 1. **Após cada save de parâmetros** (em `_configurar_parametros_pos_expresso`,
+>    pós `✓ Parâmetros 'XXX' salvos`) — `sobrescrever=False`
+> 2. **PROATIVO antes de linkOcorrencias** de verba INFORMADO+DESLIGAMENTO
+>    (em `_configurar_ocorrencias_informado_inline`) — `sobrescrever=True`
+> 3. **Após cada save de ocorrências** (em `_configurar_ocorrencias_informado_inline`,
+>    pós `✓ Ocorrências de 'XXX' salvas`) — `sobrescrever=False`
+> 4. **Final de fase 4** (`_regerar_ocorrencias_verbas`) — `sobrescrever=False`
+>
+> O helper trata corretamente o `<rich:modalPanel>` "Confirmação" com botões
+> Ok/Cancelar que o botão `regerarOcorrencias` abre — **NÃO usar `page.on("dialog")`**
+> porque é um modal HTML, não dialog nativo do browser. Bug histórico
+> documentado em commit `e9dd13f` (25/05/2026): bot anterior deixava o modal
+> aberto, bloqueando navegação subsequente (`linkOcorrencias` falhava).
+>
+> **Sobrescrever vs Manter:**
+> - `sobrescrever=True` → descarta ocorrências antigas. Usar em PROATIVO antes
+>   de linkOcorrencias de INFORMADO+DESLIGAMENTO+período curto (ocorrências
+>   default do Expresso ficam fora do range)
+> - `sobrescrever=False` → preserva edições manuais nas ocorrências. Usar
+>   após save de parâmetros (queremos atualizar apenas o que mudou) e após
+>   save de ocorrências (preservar valorDevido recém-editado)
+
+---
+
 ## Regra obrigatória — Preservar progresso conquistado
 
 > **TODA correção, refatoração ou melhoria DEVE preservar os avanços já alcançados.**
