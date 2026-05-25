@@ -2648,6 +2648,14 @@ class PlaywrightAutomatorV2:
         n = inputs.count()
         if n == 0:
             self.log(f"    ⚠ 0 inputs valorDevido encontrados — tentando Regerar Ocorrências + retry")
+            # ⚠ FORENSE (25/05/2026): dump DOM completo pré-recovery para investigar
+            # porque a página de Ocorrências está sem inputs valorDevido. Necessário
+            # entender se é (A) página não navegou, (B) tabela vazia por filtro,
+            # (C) IDs diferentes de :valorDevido, (D) inputs ocultos.
+            try:
+                self._dump_dom_indenizacao(nome, fase="pre_recovery")
+            except Exception as _ed:
+                self.log(f"    ⚠ DOM dump pre_recovery: {_ed}")
             # ⚠ RECOVERY (24/05/2026): para verbas INFORMADO+DESLIGAMENTO com
             # período curto (ex.: INDENIZAÇÃO POR DANO MORAL), o PJE-Calc
             # pode não ter gerado ocorrências (defaults Expresso usam período
@@ -2711,6 +2719,10 @@ class PlaywrightAutomatorV2:
                             self.log(f"    ✓ Recovery OK — {n} inputs valorDevido disponíveis")
                         else:
                             self.log(f"    ⚠ Recovery falhou — ainda 0 inputs após Regerar+retry")
+                            try:
+                                self._dump_dom_indenizacao(nome, fase="post_recovery")
+                            except Exception as _ed:
+                                self.log(f"    ⚠ DOM dump post_recovery: {_ed}")
                             return
                     else:
                         self.log(f"    ⚠ Recovery falhou: não conseguiu re-clicar linkOcorrencias")
@@ -2764,6 +2776,71 @@ class PlaywrightAutomatorV2:
                 self.log(f"    ⚠ Ocorrências de '{nome}': sem confirmação de save")
         except Exception as e:
             self.log(f"    ⚠ Erro ao salvar ocorrências: {e}")
+
+    def _dump_dom_indenizacao(self, verba_nome: str, fase: str) -> None:
+        """Captura snapshot DOM completo da página de Ocorrências quando bot
+        vê 0 inputs valorDevido. Salva JSON + screenshot em /tmp/pjecalc_snapshots/.
+        Endpoint `/api/diag/list_dumps` permite recuperar.
+        """
+        import pathlib as _pl, os as _os, json as _json, re as _re
+        sessao = self.sessao_id or _os.environ.get("PJECALC_SESSAO_ID") or "unknown"
+        safe_nome = _re.sub(r"[^A-Za-z0-9]+", "_", verba_nome or "verba")[:40]
+        snap_dir = _pl.Path("/tmp/pjecalc_snapshots")
+        snap_dir.mkdir(parents=True, exist_ok=True)
+        stem = f"diag_indenizacao_{sessao}_{safe_nome}_{fase}"
+        # 1. Dump DOM info
+        info = self._page.evaluate("""() => {
+            const all_inputs = [...document.querySelectorAll('input,select,textarea')]
+                .map(e => ({tag: e.tagName, type: e.type||'', id: e.id||'', name: e.name||'',
+                            value: (e.value||'').slice(0,60), disabled: !!e.disabled,
+                            hidden: e.offsetParent === null}));
+            const tables = [...document.querySelectorAll('table')]
+                .filter(t => t.id || (t.className||'').includes('list') || (t.className||'').includes('dataTable'))
+                .map(t => ({id: t.id, class: (t.className||'').slice(0,80),
+                            rows: t.querySelectorAll('tr').length,
+                            colgroups: t.querySelectorAll('colgroup').length,
+                            html_first_500: (t.outerHTML||'').slice(0, 500)}));
+            const msgs = [...document.querySelectorAll('.rich-message,.rich-messages,.box-msg-livre,[class*="message"],[class*="msg"]')]
+                .map(e => (e.textContent||'').trim().replace(/\\s+/g,' ').slice(0,300))
+                .filter(Boolean);
+            const selectsAll = [...document.querySelectorAll('select')]
+                .map(s => ({id: s.id||'', name: s.name||'', value: s.value||'',
+                            n_opts: s.options.length,
+                            first_opts: [...s.options].slice(0,8).map(o => (o.text||'').slice(0,40))}));
+            const filtros = [...document.querySelectorAll('input[type="text"],input[type="search"]')]
+                .filter(i => /filtro|busca|search|mes|ano/i.test(i.id||i.name||''))
+                .map(i => ({id: i.id, name: i.name, value: i.value}));
+            return {
+                url: location.href,
+                title: document.title,
+                body_text_first_2000: (document.body.innerText||'').slice(0, 2000),
+                inputs_total: all_inputs.length,
+                valorDevido_inputs: document.querySelectorAll('input[id$=":valorDevido"]').length,
+                valorDevido_inputs_partial: document.querySelectorAll('input[id*="valorDevido"]').length,
+                valorPago_inputs: document.querySelectorAll('input[id*="valorPago"]').length,
+                hidden_inputs_valorDevido: [...document.querySelectorAll('input[id*="valorDevido"]')]
+                    .filter(e => e.offsetParent === null).length,
+                tables: tables.slice(0, 10),
+                msgs: msgs.slice(0, 10),
+                selects: selectsAll,
+                filtros: filtros,
+                inputs_sample: all_inputs.filter(i => i.id.includes('formulario:')).slice(0, 40),
+                inputs_with_valor: all_inputs.filter(i => /valor/i.test(i.id||i.name)).slice(0, 30),
+                body_html_first_4000: (document.body.innerHTML||'').slice(0, 4000),
+            };
+        }""")
+        json_path = snap_dir / f"{stem}.json"
+        json_path.write_text(_json.dumps({
+            "sessao": sessao, "verba": verba_nome, "fase": fase,
+            "info": info,
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
+        # 2. Screenshot
+        try:
+            shot_path = snap_dir / f"{stem}.png"
+            self._page.screenshot(path=str(shot_path), full_page=True)
+        except Exception:
+            pass
+        self.log(f"    📸 DOM dump salvo: {json_path.name}")
 
     def _regerar_ocorrencias_verbas(self) -> None:
         """Volta à listagem de Verbas e clica Regerar Ocorrências.

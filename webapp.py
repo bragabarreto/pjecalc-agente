@@ -3469,6 +3469,43 @@ def _diag_verba_ocorrencias_sync(calculo_id: str, verba_nome: str) -> dict:
         return {"error": str(e), "trace": traceback.format_exc()[:2000], "partial_result": result}
 
 
+@app.get("/api/diag/dumps")
+async def diag_dumps_list():
+    """Lista dumps DOM gerados pelo bot em /tmp/pjecalc_snapshots/."""
+    import os, pathlib
+    snap_dir = pathlib.Path("/tmp/pjecalc_snapshots")
+    if not snap_dir.exists():
+        return {"dumps": [], "msg": "no snapshots dir"}
+    files = []
+    for f in sorted(snap_dir.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True):
+        if f.name.startswith("diag_indenizacao_"):
+            files.append({
+                "name": f.name,
+                "size": f.stat().st_size,
+                "mtime": f.stat().st_mtime,
+            })
+    return {"dumps": files[:50]}
+
+
+@app.get("/api/diag/dump/{filename}")
+async def diag_dump_read(filename: str):
+    """Lê conteúdo de um dump DOM. Para JSON retorna parsed; para PNG retorna base64."""
+    import pathlib, json, base64
+    safe = pathlib.Path(filename).name
+    p = pathlib.Path("/tmp/pjecalc_snapshots") / safe
+    if not p.exists():
+        return {"error": "not found", "path": str(p)}
+    if p.suffix == ".json":
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception as e:
+            return {"error": str(e), "raw": p.read_text(encoding="utf-8")[:5000]}
+    if p.suffix == ".png":
+        return {"name": safe, "size": p.stat().st_size,
+                "b64": base64.b64encode(p.read_bytes()).decode()[:300000]}
+    return {"error": "unsupported file type"}
+
+
 @app.get("/api/calc_file/{numero}/{execucao}/{filename}")
 async def ler_calc_file(numero: str, execucao: str, filename: str):
     """Lê um arquivo de diagnóstico dentro de data/calculations/<numero>/<execucao>/.
