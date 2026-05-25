@@ -4858,18 +4858,6 @@ class PlaywrightAutomatorV2:
             # parâmetro de qualquer verba exige Regerar Ocorrências para que
             # o PJE-Calc recompute downstream (ocorrências antigas ficam
             # stale se não regerar).
-            #
-            # ⚠ FIX 25/05/2026 v3 (test 35 → 1 erro restante):
-            # Para verbas INFORMADO+DESLIGAMENTO (INDENIZAÇÃO POR DANO MORAL),
-            # Sobrescrever=False (Manter) deixa PJE-Calc reclamando
-            # "Param Ocorrência de Pagamento foi alterado APÓS a geração" porque
-            # o timestamp interno de geração das ocorrências fica anterior à
-            # mudança de param. Sobrescrever=True força regeneração FRESH com
-            # o param atual → timestamp reseta → alerta desaparece.
-            #
-            # Bot NÃO terá feito edits manuais ainda (este Regerar é antes do
-            # _configurar_ocorrencias_informado_inline). Então Sobrescrever
-            # não destrói nada — apenas reseta o timestamp.
             try:
                 # Garantir que está na listagem (Regerar só existe em modo
                 # listagem). Se não re-anchorou, navegar via sidebar.
@@ -4877,17 +4865,10 @@ class PlaywrightAutomatorV2:
                     self._navegar_menu("li_calculo_verbas")
                     self._aguardar_ajax(6000)
                     self._page.wait_for_timeout(800)
-                # Sobrescrever=True para INFORMADO+DESLIGAMENTO (reset timestamp).
-                # Para outras verbas, Manter (preserva edits manuais).
-                _p = v.parametros
-                _ocorr_str = str(getattr(_p, "ocorrencia_pagamento", "")).upper()
-                _val_str = str(getattr(_p, "valor", "")).upper()
-                _is_inf_des = "DESLIGAMENTO" in _ocorr_str and "INFORMADO" in _val_str
                 if self._regerar_com_modal_confirmacao(
-                    sobrescrever=_is_inf_des, log_prefix="    "
+                    sobrescrever=False, log_prefix="    "
                 ):
-                    sobr_mode = "Sobrescrever" if _is_inf_des else "Manter"
-                    self.log(f"    ✓ Regerar pós-parâmetros '{v.nome_pjecalc}' ({sobr_mode})")
+                    self.log(f"    ✓ Regerar pós-parâmetros '{v.nome_pjecalc}'")
             except Exception as _e:
                 self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
         else:
