@@ -3402,18 +3402,36 @@ def _run_single_strategy(pw, PJE_URL: str, calculo_id: str, verba_nome: str, str
             return null;
         }""", calculo_id)
         if not sel_info or "idx" not in sel_info:
-            return {**res, "error": "calc não encontrado em Recentes"}
+            return {**res, "error": f"calc não encontrado em Recentes ({sel_info!r})"}
         opt = page.locator(f"select[name='{sel_info['name']}']").first.locator("option").nth(sel_info["idx"])
         opt.click()
-        page.wait_for_timeout(500)
-        opt.dblclick()
-        page.wait_for_load_state("networkidle", timeout=20000)
-        conv_id = page.url.split("conversationId=")[1].split("&")[0] if "conversationId=" in page.url else None
+        page.wait_for_timeout(300)
+        try:
+            opt.dblclick()
+        except Exception as e:
+            res["dblclick_err"] = str(e)[:80]
+        # Aguardar como o bot — 30s
+        try:
+            page.wait_for_load_state("networkidle", timeout=30000)
+        except Exception:
+            pass
+        page.wait_for_timeout(2000)
+        url_after = page.url
+        res["url_after_reabrir"] = url_after[-100:]
+        conv_id = None
+        if "conversationId=" in url_after:
+            conv_id = url_after.split("conversationId=")[1].split("&")[0].split("#")[0]
+        res["conv_id_extracted"] = conv_id
+        if not conv_id:
+            return {**res, "error": f"sem conversationId após reabrir; url={url_after[-100:]}"}
         # 2. Goto verba-calculo.jsf
         page.goto(f"{PJE_URL}/pages/calculo/verba/verba-calculo.jsf?conversationId={conv_id}",
                   wait_until="domcontentloaded", timeout=20000)
         page.wait_for_timeout(3000)
-        page.wait_for_load_state("networkidle", timeout=15000)
+        try:
+            page.wait_for_load_state("networkidle", timeout=15000)
+        except Exception:
+            pass
         # 3. Find INDENIZAÇÃO's linkOcorrencias
         target_id = page.evaluate("""(alvo) => {
             const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim().replace(/EXIBIR|OCULTAR/g, '').trim();
