@@ -3149,6 +3149,11 @@ class PlaywrightAutomatorV2:
     ) -> bool:
         """Click Regerar Ocorrências + handle rich:modalPanel "Confirmação".
 
+        ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (CLAUDE.md Invariante 1):
+        NUNCA usar `self._page.once("dialog", ...)` para o Regerar — é modal
+        rich:modalPanel (HTML overlay), NÃO dialog nativo do browser.
+        Sempre localizar botão "Ok" no DOM e clicar.
+
         Fluxo descoberto via DOM dump forense (25/05/2026):
         1. Click `formulario:regerarOcorrencias` abre `<rich:modalPanel>` com
            título "Confirmação", texto "Deseja gerar novamente as ocorrências

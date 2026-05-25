@@ -142,6 +142,147 @@ playwright_pjecalc.py (Automação)
 > específica observada num teste real. Remover sem cuidado faz regredir para o estado
 > documentado na história de bugs. **A regressão é o inimigo silencioso.**
 
+## Invariantes do bot — NÃO REVERTER (descobertas 25/05/2026 via DOM forense)
+
+> Esta seção lista 7 invariantes do bot v2 descobertos via DOM dump forense
+> da sessão Scarlette INDENIZAÇÃO POR DANO MORAL. Cada invariante foi validado
+> por teste real e existe para impedir bug-regressão concreto.
+>
+> **Validação automática:** `tests/test_invariantes_indenizacao.py` (grep-based)
+> falha em CI se qualquer dos 7 invariantes for revertido. Rode antes de editar
+> `modules/playwright_v2.py`:
+>
+> ```bash
+> pytest tests/test_invariantes_indenizacao.py -v
+> ```
+
+### Invariante 1 — Modal `rich:modalPanel` "Confirmação" do Regerar
+
+**Bug histórico (commit `e9dd13f`):** Bot anterior usava
+`self._page.once("dialog", lambda d: d.accept())` para o Regerar Ocorrências.
+Mas o JSF `<rich:modalPanel>` "Confirmação" (com botões Ok/Cancelar) é overlay
+HTML — NÃO um dialog nativo do browser. Modal ficava aberta, bloqueando
+qualquer navegação subsequente.
+
+**Fix:** método `_regerar_com_modal_confirmacao(sobrescrever, ...)` em
+`modules/playwright_v2.py`. Localiza botão "Ok" no DOM (`offsetParent !== null`),
+clica via onclick-exec ou native.
+
+**Marcador no código:** `INVARIANTE PERMANENTE — modal Confirmação Regerar` deve
+permanecer em `_regerar_com_modal_confirmacao`.
+
+### Invariante 2 — Matcher EXATO POR TD em linkOcorrencias
+
+**Bug histórico (commit `36fe24e`):** Matcher anterior usava
+`tr.textContent.includes("INDENIZAÇÃO")`. PJE-Calc tem `<tr>` outermost de
+layout que envolve sidebar+main e contém TODO texto da página. Match retornava
+esse TR + primeira `a.linkOcorrencias` dentro = row 0 (13º SALÁRIO).
+
+**Fix:** iterar `linksMain = [...a.linkOcorrencias].filter(a => !id.includes(':listaReflexo:'))`.
+Para cada link, ler tds da MESMA linha (`a.closest('tr').querySelectorAll('td')`).
+Match só se `td.textContent.trim() === alvo` (igualdade exata).
+
+**Marcador no código:** comentário `# Bug histórico (...)` no início do helper.
+
+### Invariante 3 — Native Playwright click em linkOcorrencias (não onclick-exec)
+
+**Bug histórico (commit `1908b8d`):** Per CLAUDE.md já documentado para
+linkParametrizar — `new Function(onclickStr).call(a, ev)` não dispara A4J.AJAX
+de forma confiável em headless Firefox + JSF 1.2. Native `locator.click(force=True)`
+dispara evento real do browser com event.target correto.
+
+**Fix:** localizar id via JS (rapidez), clicar via `self._page.locator(f"a#{esc}").click(force=True)`.
+
+### Invariante 4 — Regerar após CADA save (parâmetro OU ocorrência)
+
+**Regra do usuário (25/05/2026, commit `cdd6c00`):** "toda vez que houve
+alteracao em algum parametro ou ocorrencia de qualquer verba é preciso regerar".
+
+**Fix:** chamadas em 4 pontos com `sobrescrever` apropriado — ver seção
+"Regra obrigatória — Regerar Ocorrências após cada alteração" acima.
+
+### Invariante 5 — Cascade A→B→C→D em linkOcorrencias
+
+**Bug histórico (commit `2c9e60e`):** Strategy A (onclick-exec) sozinha NÃO
+navegava para `parametrizar-ocorrencia.jsf` em PJE-Calc Cidadão H2 local.
+Strategy B (native click) NAVEGOU pela primeira vez no DOM forense.
+
+**Fix:** cascade defensivo com sucesso = `inputs valorDevido > 0`:
+1. A onclick-exec
+2. B native Playwright click(force=True)  ← funciona na maioria dos casos
+3. C jsfcljs(form, {linkId}, '') — POST completo via helper PJE-Calc
+4. D form.submit() com hidden input — bypass AJAX
+
+Entre strategies, se URL ≠ verba-calculo.jsf, re-navega para listagem.
+Se NENHUMA funciona, cai no recovery existente (Regerar+retry).
+
+### Invariante 6 — Filtro DESLIGAMENTO desmarca ocorrências fora do período
+
+**Bug histórico (commit `66228e6`):** PJE-Calc gera ocorrências MENSAIS para
+o contrato inteiro (e.g. 9 rows apr-dec/2025), IGNORANDO o
+ocorrencia_pagamento=DESLIGAMENTO do verba. Sobrescrever Regerar limpa
+valorDevido mas mantém a estrutura de 9 rows.
+
+**Fix (portado de `modules/playwright_pjecalc.py` v1):** para
+ocorrencia_pagamento=DESLIGAMENTO + n > 1:
+1. Iterar `input[type="checkbox"][id*=":listagem:"][id$=":ativo"]`
+2. Ordenar por índice (`:listagem:N:ativo`)
+3. Desmarcar TODAS exceto a última (mês de demissão)
+4. Distribuição de valor: `[0,0,...,valor_total]` (última linha)
+
+### Invariante 7 — Forensic DOM dump em 4 fases de INDENIZAÇÃO
+
+**Justificativa:** Sem o dump, foi impossível identificar:
+- onclick-exec não navegava (eduardo via `url_after`)
+- matcher pegava row errada (`row_tds` no metadata)
+- 9 rows existem mesmo após Sobrescrever (limite arquitetural H2)
+
+**Fix:** `_dump_dom_indenizacao(verba, fase)` em pontos pre_click /
+post_click / pre_recovery / post_recovery. Endpoints `/api/diag/dumps` e
+`/api/diag/dump/{filename}` permitem inspeção.
+
+Manter mesmo após INDENIZAÇÃO estar resolvida — é safety net para verbas
+similares (futuras INFORMADO+DESLIGAMENTO+período curto).
+
+---
+
+## Melhorias pendentes — NÃO são limites arquiteturais
+
+> Estas são pendências de investigação ativa. NÃO documentar como
+> "limite arquitetural aceito" — são problemas reais a serem resolvidos.
+
+### MP-1: INDENIZAÇÃO INFORMADO+DESLIGAMENTO+período curto — alert "param alterado APÓS geração"
+
+**Estado atual (25/05/2026, test 35):** 2 de 3 erros resolvidos. Restante:
+"O parâmetro Ocorrência de Pagamento foi alterado na página Verbas, após
+a geração das ocorrências da verba INDENIZAÇÃO POR DANO MORAL."
+
+**Comportamento PJE-Calc:** alert tornou-se BLOCKING (totalErros=1) em vez de
+non-blocking. Em produção (TRT7 PostgreSQL+JBoss) provavelmente é só warning.
+
+**Hipóteses a investigar:**
+1. **Ordem dos saves**: salvar params + Regerar Sobrescrever ANTES de qualquer
+   ajuste de ocorrência. Sobrescrever post-params resetar o timestamp interno
+   de geração (testado em test 36 mas teve regressão Seam EPC; investigar mais).
+2. **Fluxo Manual**: criar INDENIZAÇÃO via Manual (não Expresso) — Expresso default
+   é MENSAL, bot muda para DESLIGAMENTO → alert. Manual permite escolher
+   DESLIGAMENTO desde o início → sem alteração.
+3. **Filtro DESLIGAMENTO ANTES de save**: aplicar filtro de checkboxes :ativo
+   no MOMENTO do save de parâmetros (não depois), via JSF view-state intervention.
+4. **Skip Regerar pós-params + Regerar Sobrescrever no fim**: pode bater contra
+   regra usuário "Regerar após cada alteração" — investigar trade-off.
+
+**Tentativas fracassadas (NÃO repetir sem nova evidência):**
+- Sobrescrever pós-params (`312839e` revertido `ac0c712`) — listagem vazia mid-loop.
+
+**Tarefa:** continuar investigação. Manualmente reproduzir o fluxo em produção
+TRT7 (não headless), capturar via DevTools a sequência exata de POSTs JSF, e
+identificar qual mudança específica reseta o timestamp.
+
+### MP-2: HORAS EXTRAS 50% — quantidade=0 em modo INFORMADA
+
+Já descrito acima na seção principal. Mantido como pendência ativa.
+
 ## Regra obrigatória — Consultar manual antes de qualquer alteração
 
 > **ANTES de corrigir, ajustar ou implementar qualquer funcionalidade relacionada ao PJE-Calc,
