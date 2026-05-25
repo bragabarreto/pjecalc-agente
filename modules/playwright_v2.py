@@ -2685,51 +2685,102 @@ class PlaywrightAutomatorV2:
             return
         meta_dbg = self._page.evaluate("() => window.__lastLinkOcorrencias")
         self.log(f"    → linkOcorrencias id={target_id} meta={meta_dbg}")
-        # NATIVE Playwright click — fix per CLAUDE.md (não usar onclick-exec)
-        try:
-            esc = target_id.replace(":", "\\:")
-            self._page.locator(f"a#{esc}").first.click(force=True)
-            self.log(f"    ✓ linkOcorrencias acionado via native-playwright-click")
-            clicou = {"ok": True, "via": "native"}
-        except Exception as e:
-            self.log(f"    ⚠ Native click falhou: {e} — fallback onclick-exec")
-            clicou = self._page.evaluate(
-                """(id) => {
-                    const a = document.getElementById(id);
-                    if (!a) return {ok:false, err:'not-found'};
-                    const onclickStr = a.getAttribute('onclick') || '';
-                    if (onclickStr) {
-                        const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
-                        try { Object.defineProperty(ev, 'target', {value:a, configurable:true}); } catch(_){}
-                        try { Object.defineProperty(ev, 'currentTarget', {value:a, configurable:true}); } catch(_){}
-                        try { new Function('event', onclickStr).call(a, ev); return {ok:true, via:'onclick-exec'}; }
-                        catch(err) { return {ok:false, err:err.message.slice(0,60)}; }
-                    }
-                    a.click();
-                    return {ok:true, via:'click'};
-                }""",
-                target_id,
-            )
-            if not clicou.get("ok"):
-                self.log(f"    ⚠ Fallback também falhou: {clicou}")
-                return
-            self.log(f"    ✓ Fallback onclick-exec ok: {clicou.get('via')}")
-        self._aguardar_ajax(15000)
-        self._page.wait_for_timeout(3000)
 
-        # Esperar msgAguarde sumir após o click (server-side processing)
-        try:
-            self._page.wait_for_function(
-                """() => {
-                    const m = document.getElementById('formulario:msgAguarde');
-                    if (!m) return true;
-                    const s = window.getComputedStyle(m);
-                    return s.display === 'none' || s.visibility === 'hidden';
-                }""",
-                timeout=20000,
-            )
-        except Exception:
-            self.log(f"    ⚠ msgAguarde ainda visível após click+20s")
+        # ⚠ CASCADE 25/05/2026: PJE-Calc Cidadão H2 local NÃO navega de
+        # listagem→Ocorrências de forma confiável via onclick (limite arquitetural
+        # documentado em CLAUDE.md p/ linkParametrizar; mesmo bug aqui em linkOcorrencias).
+        # Estratégia: tentar 4 mecanismos em sequência. Success = inputs valorDevido > 0
+        # após wait. Se A funcionar, continua normal. Se nenhum funcionar, cai no
+        # recovery existente (Regerar+retry).
+        def _try_strategy(strat: str) -> tuple[bool, int]:
+            """Executa 1 strategy + aguarda + retorna (success, n_inputs)."""
+            try:
+                if strat == "A":
+                    self._page.evaluate(
+                        """(id) => {
+                            const a = document.getElementById(id);
+                            if (!a) return false;
+                            const onclickStr = a.getAttribute('onclick') || '';
+                            if (!onclickStr) return false;
+                            const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
+                            try { Object.defineProperty(ev, 'target', {value:a, configurable:true}); } catch(_){}
+                            try { Object.defineProperty(ev, 'currentTarget', {value:a, configurable:true}); } catch(_){}
+                            try { new Function('event', onclickStr).call(a, ev); return true; }
+                            catch(_){ return false; }
+                        }""",
+                        target_id,
+                    )
+                elif strat == "B":
+                    esc = target_id.replace(":", "\\:")
+                    self._page.locator(f"a#{esc}").first.click(force=True)
+                elif strat == "C":
+                    self._page.evaluate(
+                        """(id) => {
+                            if (typeof jsfcljs !== 'function') return false;
+                            const f = document.getElementById('formulario');
+                            if (!f) return false;
+                            const params = {}; params[id] = id;
+                            try { jsfcljs(f, params, ''); return true; } catch(_){ return false; }
+                        }""",
+                        target_id,
+                    )
+                elif strat == "D":
+                    self._page.evaluate(
+                        """(id) => {
+                            const f = document.getElementById('formulario');
+                            if (!f) return false;
+                            const inp = document.createElement('input');
+                            inp.type = 'hidden'; inp.name = id; inp.value = id;
+                            f.appendChild(inp);
+                            try { f.submit(); return true; } catch(_){ return false; }
+                        }""",
+                        target_id,
+                    )
+            except Exception as e:
+                self.log(f"      strat {strat} exception: {str(e)[:80]}")
+                return (False, 0)
+            self._aguardar_ajax(15000)
+            self._page.wait_for_timeout(2500)
+            # msgAguarde sumir
+            try:
+                self._page.wait_for_function(
+                    """() => {
+                        const m = document.getElementById('formulario:msgAguarde');
+                        if (!m) return true;
+                        const s = window.getComputedStyle(m);
+                        return s.display === 'none' || s.visibility === 'hidden';
+                    }""",
+                    timeout=15000,
+                )
+            except Exception:
+                pass
+            self._page.wait_for_timeout(1000)
+            n_inputs = self._page.locator("input[id$=':valorDevido']").count()
+            return (n_inputs > 0, n_inputs)
+
+        success_strat: str | None = None
+        n: int = 0
+        for strat in ["A", "B", "C", "D"]:
+            ok, n = _try_strategy(strat)
+            self.log(f"    → Strategy {strat}: ok={ok} n_inputs={n}")
+            if ok:
+                success_strat = strat
+                self.log(f"    ✓ linkOcorrencias navegou via Strategy {strat} ({n} inputs valorDevido)")
+                break
+            # Antes da próxima strategy, garantir que estamos na listagem
+            # (strategies anteriores podem ter mudado o estado)
+            if strat != "D":
+                try:
+                    url_now = self._page.url
+                    if "verba-calculo.jsf" not in url_now:
+                        self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(8000)
+                        self._page.wait_for_timeout(1500)
+                except Exception:
+                    pass
+        if success_strat is None:
+            self.log(f"    ⚠ NENHUMA das 4 strategies (A/B/C/D) navegou para Ocorrências")
+        clicou = {"ok": success_strat is not None, "via": f"cascade:{success_strat}"}
 
         # Desconectar listener network + log respostas capturadas
         try:
@@ -2737,15 +2788,15 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
         if _net_log:
-            self.log(f"    ℹ Net pós-click linkOcorrencias ({len(_net_log)} resp): {_net_log[:5]}")
+            self.log(f"    ℹ Net pós-cascade ({len(_net_log)} resp): {_net_log[:5]}")
 
-        # FORENSE v2: dump pós-click ANTES da checagem 0 inputs
+        # FORENSE v2: dump pós-cascade
         try:
             self._dump_dom_indenizacao(nome, fase="post_click")
         except Exception as _ed:
             self.log(f"    ⚠ DOM dump post_click: {_ed}")
 
-        # Agora deve estar em parametrizar-ocorrencia.jsf
+        # Re-checar inputs valorDevido (success_strat já garantiu n > 0)
         inputs = self._page.locator("input[id$=':valorDevido']")
         n = inputs.count()
         if n == 0:
