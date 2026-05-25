@@ -2604,6 +2604,45 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"    ⚠ Regerar proativo: {_e}")
 
+        # FORENSE (25/05/2026 v2): dump DOM ANTES de clicar linkOcorrencias —
+        # capturar estado real da listagem após PROATIVO Regerar.
+        try:
+            self._dump_dom_indenizacao(nome, fase="pre_click")
+        except Exception as _ed:
+            self.log(f"    ⚠ DOM dump pre_click: {_ed}")
+
+        # Interceptar respostas HTTP durante o click linkOcorrencias para
+        # diagnosticar se AJAX retornou rejeição/redirect/listagem
+        _net_log: list = []
+        def _on_response(resp):
+            try:
+                url = resp.url
+                if "verba-calculo" in url or "parametrizar-ocorrencia" in url or ".jsf" in url:
+                    _net_log.append({
+                        "url": url[-100:],
+                        "status": resp.status,
+                        "method": resp.request.method,
+                        "content_type": (resp.headers.get("content-type") or "")[:50],
+                    })
+            except Exception:
+                pass
+        self._page.on("response", _on_response)
+
+        # Esperar msgAguarde sumir antes de clicar (PROATIVO Regerar pode
+        # ainda estar processando server-side mesmo após networkidle).
+        try:
+            self._page.wait_for_function(
+                """() => {
+                    const m = document.getElementById('formulario:msgAguarde');
+                    if (!m) return true;
+                    const s = window.getComputedStyle(m);
+                    return s.display === 'none' || s.visibility === 'hidden';
+                }""",
+                timeout=15000,
+            )
+        except Exception:
+            self.log(f"    ⚠ msgAguarde ainda visível após 15s — prosseguindo mesmo assim")
+
         # Clicar linkOcorrencias usando o mesmo padrão A4J onclick-exec
         clicou = self._page.evaluate(
             """(candidatos) => {
@@ -2617,19 +2656,25 @@ class PlaywrightAutomatorV2:
                         const a = tr.querySelector('a.linkOcorrencias');
                         if (!a || (a.id && a.id.includes(':listaReflexo:'))) continue;
                         const onclickStr = a.getAttribute('onclick') || '';
+                        // Capturar metadados do link para diagnóstico
+                        window.__lastLinkOcorrencias = {
+                            id: a.id, onclick_len: onclickStr.length,
+                            title: a.title || '', cls: a.className || '',
+                            href: a.href || '', tr_text: tr.textContent.slice(0,100)
+                        };
                         if (onclickStr) {
                             const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
                             try { Object.defineProperty(ev, 'target', {value:a, configurable:true}); } catch(_){}
                             try { Object.defineProperty(ev, 'currentTarget', {value:a, configurable:true}); } catch(_){}
                             try {
                                 new Function('event', onclickStr).call(a, ev);
-                                return {ok: true, via: 'onclick-exec:'+alvo};
+                                return {ok: true, via: 'onclick-exec:'+alvo, meta: window.__lastLinkOcorrencias};
                             } catch(err) {
-                                return {ok: false, err: err.message.slice(0,60)};
+                                return {ok: false, err: err.message.slice(0,60), meta: window.__lastLinkOcorrencias};
                             }
                         }
                         a.click();
-                        return {ok: true, via: 'click:'+alvo};
+                        return {ok: true, via: 'click:'+alvo, meta: window.__lastLinkOcorrencias};
                     }
                 }
                 return {ok: false, totalLinks: document.querySelectorAll('a.linkOcorrencias').length};
@@ -2639,9 +2684,37 @@ class PlaywrightAutomatorV2:
         if not clicou.get("ok"):
             self.log(f"    ⚠ linkOcorrencias não disparado: {clicou}")
             return
-        self.log(f"    ✓ linkOcorrencias acionado via {clicou.get('via')}")
-        self._aguardar_ajax(8000)
-        self._page.wait_for_timeout(2000)
+        self.log(f"    ✓ linkOcorrencias acionado via {clicou.get('via')} meta={clicou.get('meta',{})}")
+        self._aguardar_ajax(15000)
+        self._page.wait_for_timeout(3000)
+
+        # Esperar msgAguarde sumir após o click (server-side processing)
+        try:
+            self._page.wait_for_function(
+                """() => {
+                    const m = document.getElementById('formulario:msgAguarde');
+                    if (!m) return true;
+                    const s = window.getComputedStyle(m);
+                    return s.display === 'none' || s.visibility === 'hidden';
+                }""",
+                timeout=20000,
+            )
+        except Exception:
+            self.log(f"    ⚠ msgAguarde ainda visível após click+20s")
+
+        # Desconectar listener network + log respostas capturadas
+        try:
+            self._page.remove_listener("response", _on_response)
+        except Exception:
+            pass
+        if _net_log:
+            self.log(f"    ℹ Net pós-click linkOcorrencias ({len(_net_log)} resp): {_net_log[:5]}")
+
+        # FORENSE v2: dump pós-click ANTES da checagem 0 inputs
+        try:
+            self._dump_dom_indenizacao(nome, fase="post_click")
+        except Exception as _ed:
+            self.log(f"    ⚠ DOM dump post_click: {_ed}")
 
         # Agora deve estar em parametrizar-ocorrencia.jsf
         inputs = self._page.locator("input[id$=':valorDevido']")
@@ -2815,10 +2888,62 @@ class PlaywrightAutomatorV2:
             const filtros = [...document.querySelectorAll('input[type="text"],input[type="search"]')]
                 .filter(i => /filtro|busca|search|mes|ano/i.test(i.id||i.name||''))
                 .map(i => ({id: i.id, name: i.name, value: i.value}));
+
+            // FORENSE v2 (25/05/2026): elementos-chave para entender bug INDENIZAÇÃO
+            // (a) msgAguarde — modal "Processando..." do PJE-Calc
+            const msgAguarde = (() => {
+                const m = document.getElementById('formulario:msgAguarde');
+                if (!m) return {present: false};
+                const s = window.getComputedStyle(m);
+                return {present: true, display: s.display, visibility: s.visibility,
+                        offsetParent_null: m.offsetParent === null};
+            })();
+            // (b) Todos os linkOcorrencias da listagem (não-reflexo)
+            const allLinkOcorr = [...document.querySelectorAll('a.linkOcorrencias')]
+                .filter(a => !a.id.includes(':listaReflexo:'))
+                .map(a => {
+                    const tr = a.closest('tr');
+                    const tds = tr ? [...tr.querySelectorAll('td')].map(t => (t.textContent||'').trim().slice(0,40)) : [];
+                    return {
+                        id: a.id || '',
+                        title: a.title || '',
+                        cls: (a.className||'').slice(0,60),
+                        href: (a.href||'').slice(0,80),
+                        onclick_len: (a.getAttribute('onclick')||'').length,
+                        onclick_first_200: (a.getAttribute('onclick')||'').slice(0,200),
+                        disabled_attr: a.hasAttribute('disabled'),
+                        offset_null: a.offsetParent === null,
+                        tr_tds: tds.slice(0,8),
+                    };
+                });
+            // (c) RichFaces queue / AJAX in flight
+            const a4jStatus = (() => {
+                try {
+                    if (typeof A4J !== 'undefined' && A4J.AJAX && A4J.AJAX.QUEUE) {
+                        const q = A4J.AJAX.QUEUE;
+                        return {has_queue: true, requestList_len: (q.requestList||[]).length};
+                    }
+                } catch(_) {}
+                return {has_queue: false};
+            })();
+            // (d) Listar todos rich:modalPanel visíveis
+            const visibleModals = [...document.querySelectorAll('[id*=":mp_"], div.rich-modalpanel, [class*="modal"]')]
+                .filter(el => {
+                    if (el.offsetParent === null) return false;
+                    const s = window.getComputedStyle(el);
+                    return s.display !== 'none' && s.visibility !== 'hidden';
+                })
+                .map(el => ({id: el.id||'', cls: (el.className||'').slice(0,80),
+                             text: (el.textContent||'').trim().replace(/\\s+/g,' ').slice(0,150)}));
+
             return {
                 url: location.href,
                 title: document.title,
                 body_text_first_2000: (document.body.innerText||'').slice(0, 2000),
+                msgAguarde,
+                allLinkOcorr,
+                a4jStatus,
+                visibleModals,
                 inputs_total: all_inputs.length,
                 valorDevido_inputs: document.querySelectorAll('input[id$=":valorDevido"]').length,
                 valorDevido_inputs_partial: document.querySelectorAll('input[id*="valorDevido"]').length,
