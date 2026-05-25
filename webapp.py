@@ -3315,6 +3315,146 @@ async def listar_processos():
     return {"processos": result.stdout}
 
 
+@app.get("/api/diag/verba_ocorrencias/{calculo_id}/{verba_nome}")
+async def diag_verba_ocorrencias(calculo_id: str, verba_nome: str):
+    """Diagnóstico profundo: abre PJE-Calc, navega para Ocorrências de uma verba
+    específica e dump o DOM completo.
+
+    Uso:
+      GET /api/diag/verba_ocorrencias/103/INDENIZAÇÃO POR DANO MORAL
+    """
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return {"error": "Playwright não disponível"}
+    import urllib.parse
+    verba_nome = urllib.parse.unquote(verba_nome)
+    PJE_URL = "http://localhost:9257/pjecalc"
+    result: dict = {"calculo_id": calculo_id, "verba_nome": verba_nome, "steps": []}
+    try:
+        with sync_playwright() as pw:
+            browser = pw.firefox.launch(headless=True)
+            ctx = browser.new_context()
+            page = ctx.new_page()
+            # 1. Login + principal
+            page.goto(f"{PJE_URL}/pages/principal.jsf", wait_until="domcontentloaded", timeout=30000)
+            page.wait_for_timeout(3000)
+            result["steps"].append({"step": "principal_loaded", "url": page.url[-80:]})
+            # 2. Find Recentes select + pick the calc_id
+            sel_info = page.evaluate("""(target_id) => {
+                for (const s of document.querySelectorAll('select')) {
+                    if (s.name === 'selAcheFacil' || s.id === 'selAcheFacil') continue;
+                    const opts = [...s.options];
+                    if (opts.length === 0) continue;
+                    const blob = opts.map(o => o.text || '').join(' | ');
+                    if (!/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob)) continue;
+                    for (let i=0; i<opts.length; i++) {
+                        const m = (opts[i].text||'').match(/^\\s*(\\d+)\\s*\\//);
+                        if (m && m[1] === target_id) {
+                            return {name: s.name, idx: i, label: opts[i].text.slice(0,80)};
+                        }
+                    }
+                    return {name: s.name, all: opts.map(o => o.text.slice(0,60)).slice(0,5)};
+                }
+                return null;
+            }""", calculo_id)
+            result["steps"].append({"step": "recentes_lookup", "info": sel_info})
+            if not sel_info or "idx" not in sel_info:
+                return {**result, "error": f"Cálculo {calculo_id} não encontrado em Recentes"}
+            # Click + dblclick to open
+            opt = page.locator(f"select[name='{sel_info['name']}']").first.locator("option").nth(sel_info["idx"])
+            opt.click()
+            page.wait_for_timeout(500)
+            opt.dblclick()
+            page.wait_for_load_state("networkidle", timeout=20000)
+            conv_id = page.url.split("conversationId=")[1].split("&")[0] if "conversationId=" in page.url else None
+            result["steps"].append({"step": "calc_opened", "url": page.url[-80:], "conv": conv_id})
+            # 3. Navigate to verba-calculo.jsf
+            page.goto(f"{PJE_URL}/pages/calculo/verba/verba-calculo.jsf?conversationId={conv_id}",
+                      wait_until="domcontentloaded", timeout=20000)
+            page.wait_for_timeout(3000)
+            # 4. List verbas in the listagem
+            verbas_listadas = page.evaluate("""() => {
+                const rows = [...document.querySelectorAll('tr')];
+                const out = [];
+                for (const r of rows) {
+                    const a = r.querySelector('a.linkOcorrencias');
+                    if (!a || a.id.includes(':listaReflexo:')) continue;
+                    const tds = [...r.querySelectorAll('td')];
+                    const txts = tds.map(td => (td.textContent||'').trim().replace(/\\s+/g,' ').slice(0,60));
+                    out.push({id_a: a.id.slice(-40), tds: txts});
+                }
+                return out;
+            }""")
+            result["steps"].append({"step": "verbas_listadas", "n": len(verbas_listadas), "rows": verbas_listadas})
+            # 5. Find target verba's linkOcorrencias and click
+            target_clicked = page.evaluate("""(alvo) => {
+                const norm = s => (s||'').normalize('NFC').toUpperCase().replace(/\\s+/g,' ').trim();
+                const alvoN = norm(alvo);
+                const rows = [...document.querySelectorAll('tr')];
+                for (const r of rows) {
+                    const a = r.querySelector('a.linkOcorrencias');
+                    if (!a || a.id.includes(':listaReflexo:')) continue;
+                    const tds = [...r.querySelectorAll('td')];
+                    for (const td of tds) {
+                        const txt = norm(td.textContent.replace(/Exibir|Ocultar/gi,''));
+                        if (txt === alvoN || txt.includes(alvoN) || alvoN.includes(txt)) {
+                            const onclickStr = a.getAttribute('onclick') || '';
+                            if (onclickStr) {
+                                try { new Function('event', onclickStr).call(a, new MouseEvent('click',{bubbles:true})); return {ok:true, alvo, via:'onclick'}; } catch(e) { return {ok:false, err:e.message}; }
+                            }
+                            a.click();
+                            return {ok:true, alvo, via:'click'};
+                        }
+                    }
+                }
+                return {ok:false, reason:'not_found'};
+            }""", verba_nome)
+            result["steps"].append({"step": "linkOcorrencias_click", "info": target_clicked})
+            page.wait_for_timeout(5000)
+            page.wait_for_load_state("networkidle", timeout=15000)
+            # 6. Dump page DOM info
+            page_info = page.evaluate("""() => {
+                const all_inputs = [...document.querySelectorAll('input,select,textarea')]
+                    .map(e => ({tag: e.tagName, type: e.type, id: e.id, name: e.name,
+                                value: (e.value||'').slice(0,40), disabled: e.disabled}));
+                const valorDevidoCount = document.querySelectorAll('input[id$=":valorDevido"]').length;
+                const valorPagoCount = document.querySelectorAll('input[id$=":valorPago"]').length;
+                const tables = [...document.querySelectorAll('table')]
+                    .filter(t => t.id || (t.className||'').includes('list'))
+                    .map(t => ({id: t.id, class: t.className.slice(0,60),
+                                rows: t.querySelectorAll('tr').length}));
+                const msgs = [...document.querySelectorAll('.rich-message,.rich-messages,.box-msg-livre,[class*="message"]')]
+                    .map(e => (e.textContent||'').trim().replace(/\\s+/g,' ').slice(0,200))
+                    .filter(Boolean);
+                return {
+                    url: location.href.slice(-100),
+                    title: document.title,
+                    body_text_first_500: (document.body.innerText||'').slice(0, 500),
+                    inputs_count: all_inputs.length,
+                    valorDevido_inputs: valorDevidoCount,
+                    valorPago_inputs: valorPagoCount,
+                    tables_count: tables.length,
+                    tables_info: tables.slice(0,5),
+                    msgs: msgs.slice(0,5),
+                    sample_inputs: all_inputs.slice(0, 25),
+                };
+            }""")
+            result["steps"].append({"step": "page_dump", "info": page_info})
+            # 7. Screenshot
+            try:
+                screenshot_b64 = page.screenshot(full_page=True)
+                import base64
+                result["screenshot_b64"] = base64.b64encode(screenshot_b64).decode()[:200000]
+            except Exception:
+                pass
+            browser.close()
+        return result
+    except Exception as e:
+        import traceback
+        return {"error": str(e), "trace": traceback.format_exc()[:2000], "partial_result": result}
+
+
 @app.get("/api/calc_file/{numero}/{execucao}/{filename}")
 async def ler_calc_file(numero: str, execucao: str, filename: str):
     """Lê um arquivo de diagnóstico dentro de data/calculations/<numero>/<execucao>/.
