@@ -3345,23 +3345,32 @@ def _diag_verba_ocorrencias_sync(calculo_id: str, verba_nome: str) -> dict:
             page.goto(f"{PJE_URL}/pages/principal.jsf", wait_until="domcontentloaded", timeout=30000)
             page.wait_for_timeout(3000)
             result["steps"].append({"step": "principal_loaded", "url": page.url[-80:]})
-            # 2. Find Recentes select + pick the calc_id
+            # 2. Find Recentes select + pick the calc_id (ou primeiro disponível se "auto")
             sel_info = page.evaluate("""(target_id) => {
+                const all_selects = [];
+                for (const s of document.querySelectorAll('select')) {
+                    const opts = [...s.options];
+                    all_selects.push({name: s.name, id: s.id, n_opts: opts.length,
+                                      first: opts.slice(0,5).map(o => (o.text||'').slice(0,80))});
+                }
                 for (const s of document.querySelectorAll('select')) {
                     if (s.name === 'selAcheFacil' || s.id === 'selAcheFacil') continue;
                     const opts = [...s.options];
                     if (opts.length === 0) continue;
                     const blob = opts.map(o => o.text || '').join(' | ');
                     if (!/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob)) continue;
+                    if (target_id === 'auto') {
+                        return {name: s.name, idx: 0, label: opts[0].text.slice(0,80), all_selects};
+                    }
                     for (let i=0; i<opts.length; i++) {
-                        const m = (opts[i].text||'').match(/^\\s*(\\d+)\\s*\\//);
+                        const m = (opts[i].text||'').match(/(\\d+)\\s*\\//);
                         if (m && m[1] === target_id) {
-                            return {name: s.name, idx: i, label: opts[i].text.slice(0,80)};
+                            return {name: s.name, idx: i, label: opts[i].text.slice(0,80), all_selects};
                         }
                     }
-                    return {name: s.name, all: opts.map(o => o.text.slice(0,60)).slice(0,5)};
+                    return {name: s.name, found_calcs: opts.map(o => o.text.slice(0,80)).slice(0,10), all_selects};
                 }
-                return null;
+                return {all_selects, target_id, msg: 'no select with CNJ pattern'};
             }""", calculo_id)
             result["steps"].append({"step": "recentes_lookup", "info": sel_info})
             if not sel_info or "idx" not in sel_info:
