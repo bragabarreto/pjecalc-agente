@@ -3327,6 +3327,228 @@ async def diag_verba_ocorrencias(calculo_id: str, verba_nome: str):
     return await asyncio.to_thread(_diag_verba_ocorrencias_sync, calculo_id, verba_nome)
 
 
+@app.get("/api/diag/click_strategies/{calculo_id}/{verba_nome}")
+async def diag_click_strategies(calculo_id: str, verba_nome: str, strategy: str = "all"):
+    """Testa 4 estratégias de click em linkOcorrencias.
+
+    Estratégias:
+    - A onclick_exec : new Function(onclickStr).call(a, event) [baseline atual]
+    - B native       : Playwright locator.click(force=True)
+    - C jsfcljs      : jsfcljs(form, {params}, '') — POST completo
+    - D form_submit  : form.submit() com hidden input adicionado
+
+    Cada estratégia roda em sessão isolada do Playwright.
+    Reporta para cada uma: URL antes/depois, valorDevido inputs count,
+    body text sample (200 chars).
+
+    Uso:
+      GET /api/diag/click_strategies/auto/INDENIZAÇÃO POR DANO MORAL
+      GET /api/diag/click_strategies/auto/INDENIZAÇÃO POR DANO MORAL?strategy=C
+    """
+    import asyncio
+    return await asyncio.to_thread(
+        _diag_click_strategies_sync, calculo_id, verba_nome, strategy
+    )
+
+
+def _diag_click_strategies_sync(calculo_id: str, verba_nome: str, strategy: str) -> dict:
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        return {"error": "Playwright não disponível"}
+    import urllib.parse
+    verba_nome = urllib.parse.unquote(verba_nome)
+    PJE_URL = "http://localhost:9257/pjecalc"
+    if strategy.lower() == "all":
+        strategies_to_test = ["A", "B", "C", "D"]
+    else:
+        strategies_to_test = [strategy.upper()]
+    out: dict = {"calculo_id": calculo_id, "verba_nome": verba_nome,
+                 "strategies_tested": strategies_to_test, "results": {}}
+    try:
+        with sync_playwright() as pw:
+            for strat in strategies_to_test:
+                strat_result = _run_single_strategy(pw, PJE_URL, calculo_id, verba_nome, strat)
+                out["results"][strat] = strat_result
+        return out
+    except Exception as e:
+        import traceback
+        return {**out, "error": str(e), "trace": traceback.format_exc()[:2000]}
+
+
+def _run_single_strategy(pw, PJE_URL: str, calculo_id: str, verba_nome: str, strat: str) -> dict:
+    """Roda 1 estratégia isolada em browser separado e retorna resultado."""
+    res: dict = {"strategy": strat, "steps": []}
+    browser = pw.firefox.launch(headless=True)
+    try:
+        ctx = browser.new_context()
+        page = ctx.new_page()
+        # 1. Open principal + find calc in Recentes
+        page.goto(f"{PJE_URL}/pages/principal.jsf", wait_until="domcontentloaded", timeout=30000)
+        page.wait_for_timeout(3000)
+        sel_info = page.evaluate("""(target_id) => {
+            for (const s of document.querySelectorAll('select')) {
+                if (s.name === 'selAcheFacil') continue;
+                const opts = [...s.options];
+                if (opts.length === 0) continue;
+                const blob = opts.map(o => o.text || '').join(' | ');
+                if (!/\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(blob)) continue;
+                if (target_id === 'auto') return {name: s.name, idx: 0, label: opts[0].text.slice(0,80)};
+                for (let i=0; i<opts.length; i++) {
+                    const m = (opts[i].text||'').match(/(\\d+)\\s*\\//);
+                    if (m && m[1] === target_id) return {name: s.name, idx: i, label: opts[i].text.slice(0,80)};
+                }
+            }
+            return null;
+        }""", calculo_id)
+        if not sel_info or "idx" not in sel_info:
+            return {**res, "error": "calc não encontrado em Recentes"}
+        opt = page.locator(f"select[name='{sel_info['name']}']").first.locator("option").nth(sel_info["idx"])
+        opt.click()
+        page.wait_for_timeout(500)
+        opt.dblclick()
+        page.wait_for_load_state("networkidle", timeout=20000)
+        conv_id = page.url.split("conversationId=")[1].split("&")[0] if "conversationId=" in page.url else None
+        # 2. Goto verba-calculo.jsf
+        page.goto(f"{PJE_URL}/pages/calculo/verba/verba-calculo.jsf?conversationId={conv_id}",
+                  wait_until="domcontentloaded", timeout=20000)
+        page.wait_for_timeout(3000)
+        page.wait_for_load_state("networkidle", timeout=15000)
+        # 3. Find INDENIZAÇÃO's linkOcorrencias
+        target_id = page.evaluate("""(alvo) => {
+            const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim().replace(/EXIBIR|OCULTAR/g, '').trim();
+            const alvoN = norm(alvo);
+            const links = [...document.querySelectorAll('a.linkOcorrencias')]
+                .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+            for (const a of links) {
+                const tr = a.closest('tr');
+                if (!tr) continue;
+                const tds = [...tr.querySelectorAll('td')];
+                for (const td of tds) {
+                    if (norm(td.textContent) === alvoN) return a.id;
+                }
+            }
+            return null;
+        }""", verba_nome)
+        if not target_id:
+            return {**res, "error": "linkOcorrencias not found"}
+        res["target_id"] = target_id
+        url_pre = page.url
+        res["url_pre"] = url_pre[-80:]
+        # 4. Apply strategy
+        if strat == "A":
+            apply_res = page.evaluate("""(id) => {
+                const a = document.getElementById(id);
+                if (!a) return {ok:false, err:'not-found'};
+                const onclickStr = a.getAttribute('onclick') || '';
+                if (!onclickStr) return {ok:false, err:'no-onclick'};
+                const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
+                try { Object.defineProperty(ev, 'target', {value:a, configurable:true}); } catch(_){}
+                try { Object.defineProperty(ev, 'currentTarget', {value:a, configurable:true}); } catch(_){}
+                try { new Function('event', onclickStr).call(a, ev); return {ok:true, applied:'A onclick-exec'}; }
+                catch(err){ return {ok:false, err:err.message.slice(0,80)}; }
+            }""", target_id)
+        elif strat == "B":
+            try:
+                esc = target_id.replace(":", "\\:")
+                page.locator(f"a#{esc}").first.click(force=True)
+                apply_res = {"ok": True, "applied": "B native-click"}
+            except Exception as e:
+                apply_res = {"ok": False, "err": str(e)[:80]}
+        elif strat == "C":
+            apply_res = page.evaluate("""(id) => {
+                const a = document.getElementById(id);
+                if (!a) return {ok:false, err:'not-found'};
+                if (typeof jsfcljs !== 'function') return {ok:false, err:'jsfcljs-undefined'};
+                const f = document.getElementById('formulario');
+                if (!f) return {ok:false, err:'no-form'};
+                try {
+                    jsfcljs(f, {[id]: id}, '');
+                    return {ok:true, applied:'C jsfcljs'};
+                } catch(err){ return {ok:false, err:err.message.slice(0,80)}; }
+            }""", target_id)
+        elif strat == "D":
+            apply_res = page.evaluate("""(id) => {
+                const a = document.getElementById(id);
+                if (!a) return {ok:false, err:'not-found'};
+                const f = document.getElementById('formulario');
+                if (!f) return {ok:false, err:'no-form'};
+                const inp = document.createElement('input');
+                inp.type = 'hidden'; inp.name = id; inp.value = id;
+                f.appendChild(inp);
+                try {
+                    f.submit();
+                    return {ok:true, applied:'D form-submit'};
+                } catch(err){ return {ok:false, err:err.message.slice(0,80)}; }
+            }""", target_id)
+        else:
+            apply_res = {"ok": False, "err": f"unknown strategy {strat}"}
+        res["apply"] = apply_res
+        if not apply_res.get("ok"):
+            return res
+        # 5. Wait + capture
+        try:
+            page.wait_for_load_state("networkidle", timeout=20000)
+        except Exception:
+            pass
+        page.wait_for_timeout(3000)
+        # Wait for msgAguarde to disappear
+        try:
+            page.wait_for_function(
+                """() => {
+                    const m = document.getElementById('formulario:msgAguarde');
+                    if (!m) return true;
+                    const s = window.getComputedStyle(m);
+                    return s.display === 'none' || s.visibility === 'hidden';
+                }""",
+                timeout=15000,
+            )
+        except Exception:
+            pass
+        page.wait_for_timeout(2000)
+        url_post = page.url
+        res["url_post"] = url_post[-80:]
+        res["url_changed"] = (url_pre.split("#")[0] != url_post.split("#")[0])
+        page_info = page.evaluate("""() => {
+            return {
+                valorDevido_inputs: document.querySelectorAll('input[id$=":valorDevido"]').length,
+                valorDevido_partial: document.querySelectorAll('input[id*="valorDevido"]').length,
+                msgAguarde_display: (() => {
+                    const m = document.getElementById('formulario:msgAguarde');
+                    return m ? window.getComputedStyle(m).display : 'no-element';
+                })(),
+                title: document.title,
+                body_text_sample: (document.body.innerText||'').replace(/\\s+/g,' ').slice(0,500),
+                has_listagem_table: !!document.querySelector('table#formulario\\\\:listagem'),
+                has_listagem_alt: !!document.querySelector('table[id="formulario:listagem"]'),
+                pageContext: (() => {
+                    // Detectar página atual via marcadores DOM
+                    if (document.querySelectorAll('input[id$=":valorDevido"]').length > 0) return 'ocorrencias-com-inputs';
+                    if (document.querySelector('input[id$=":regerarOcorrencias"]')) return 'listagem-verbas';
+                    if (document.querySelector('input[id$=":descricao"]')) return 'verba-form-alteracao';
+                    return 'desconhecido';
+                })(),
+            };
+        }""")
+        res["post"] = page_info
+        # Screenshot
+        try:
+            import base64
+            shot = page.screenshot(full_page=True)
+            # Save as file (avoid huge JSON)
+            import pathlib
+            d = pathlib.Path("/tmp/pjecalc_snapshots")
+            d.mkdir(exist_ok=True)
+            p = d / f"diag_strat_{strat}_{verba_nome[:20].replace(' ','_')}.png"
+            p.write_bytes(shot)
+            res["screenshot"] = p.name
+        except Exception:
+            pass
+        return res
+    finally:
+        browser.close()
+
+
 def _diag_verba_ocorrencias_sync(calculo_id: str, verba_nome: str) -> dict:
     try:
         from playwright.sync_api import sync_playwright
