@@ -2877,6 +2877,50 @@ class PlaywrightAutomatorV2:
                 self.log(f"    ⚠ Recovery 0 inputs valorDevido falhou: {e}")
                 return
 
+        # ⚠ FILTRO DESLIGAMENTO (25/05/2026, portado de playwright_pjecalc.py v1):
+        # PJE-Calc Cidadão gera ocorrências MENSAIS por todo o período do
+        # contrato, IGNORANDO o ocorrencia_pagamento=DESLIGAMENTO (mesmo
+        # com Sobrescrever=true em Regerar). Para 1-day DESLIGAMENTO (ex.
+        # INDENIZAÇÃO POR DANO MORAL), restam N (ex 9) linhas onde apenas
+        # a ÚLTIMA (mês de demissão) deveria estar ativa.
+        #
+        # Bot escrevendo 5000 em row[0] (mês mais antigo) → JSF reclama
+        # "ocorrências fora do período". Solução: desmarcar :ativo de
+        # TODAS exceto a última, depois escrever valor na última.
+        ocorrencia_pagto = str(getattr(v.parametros, "ocorrencia_pagamento", "")).upper()
+        is_desligamento = "DESLIGAMENTO" in ocorrencia_pagto
+        if is_desligamento and n > 1:
+            try:
+                r = self._page.evaluate("""() => {
+                    const cbxs = [...document.querySelectorAll(
+                        'input[type="checkbox"][id*=":listagem:"][id$=":ativo"]'
+                    )].filter(c => !c.id.includes('ativarTodos')
+                                 && !c.id.includes('selecionarTodos')
+                                 && !c.id.includes('listaReflexo'));
+                    const indexed = cbxs.map(c => {
+                        const m = c.id.match(/:listagem:(\\d+):ativo$/);
+                        return {cbx: c, idx: m ? parseInt(m[1]) : -1};
+                    }).filter(x => x.idx >= 0).sort((a, b) => a.idx - b.idx);
+                    if (indexed.length === 0) return {erro: 'no cbx'};
+                    const ultimaIdx = indexed[indexed.length - 1].idx;
+                    let desmarcados = 0, mantidos = 0;
+                    indexed.forEach(({cbx, idx}) => {
+                        if (idx === ultimaIdx) {
+                            if (!cbx.checked) cbx.click();
+                            mantidos++;
+                        } else {
+                            if (cbx.checked) { cbx.click(); desmarcados++; }
+                        }
+                    });
+                    return {desmarcados, mantidos, total: indexed.length, ultimaIdx};
+                }""")
+                self.log(f"    ✓ Filtro DESLIGAMENTO: última={r.get('ultimaIdx')}, desmarcadas={r.get('desmarcados')}, total={r.get('total')}")
+                if r.get("desmarcados", 0):
+                    self._aguardar_ajax(5000)
+                    self._page.wait_for_timeout(1000)
+            except Exception as _e_des:
+                self.log(f"    ⚠ Filtro DESLIGAMENTO: {_e_des}")
+
         # Distribuir valor
         if proporcionalizar:
             por_linha = round(valor_total / n, 2)
@@ -2884,6 +2928,10 @@ class PlaywrightAutomatorV2:
             diff = round(valor_total - por_linha * n, 2)
             if diff:
                 valores[-1] = round(valores[-1] + diff, 2)
+        elif is_desligamento:
+            # Para DESLIGAMENTO: valor vai na ÚLTIMA linha (mês de demissão),
+            # outras = 0 (já foram desmarcadas com :ativo=false acima).
+            valores = [0.0] * (n - 1) + [valor_total]
         else:
             valores = [valor_total] + [0.0] * (n - 1)
 
