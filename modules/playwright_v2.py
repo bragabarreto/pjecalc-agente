@@ -4863,39 +4863,19 @@ class PlaywrightAutomatorV2:
             # parâmetro de qualquer verba exige Regerar Ocorrências para que
             # o PJE-Calc recompute downstream (ocorrências antigas ficam
             # stale se não regerar).
-            #
-            # ⚠ EXCEÇÃO 25/05/2026 (MP-1, hipótese 1): para INFORMADO+DESLIGAMENTO
-            # PULAR o Regerar pós-params. O PROATIVO Regerar Sobrescrever em
-            # _configurar_ocorrencias_informado_inline será a ÚNICA geração,
-            # garantindo timestamp interno POSTERIOR à mudança de param.
-            #
-            # Razão: alert "Param Ocorrência de Pagamento foi alterado APÓS a
-            # geração" persiste em test 35 porque o Regerar Manter pós-params
-            # marca uma "geração" com timestamp inicial; depois bot muda
-            # parâmetros → JSF flagiia. Skip → primeira "geração" é Sobrescrever
-            # já com params atuais.
-            _p = v.parametros
-            _ocorr_str = str(getattr(_p, "ocorrencia_pagamento", "")).upper()
-            _val_str = str(getattr(_p, "valor", "")).upper()
-            _skip_regerar = "DESLIGAMENTO" in _ocorr_str and "INFORMADO" in _val_str
-
-            if _skip_regerar:
-                self.log(f"    ⊘ Skip Regerar pós-params '{v.nome_pjecalc}' "
-                         f"(INFORMADO+DESLIGAMENTO — PROATIVO Sobrescrever em ocorrências será a geração)")
-            else:
-                try:
-                    # Garantir que está na listagem (Regerar só existe em modo
-                    # listagem). Se não re-anchorou, navegar via sidebar.
-                    if not re_anchored and "verba-calculo.jsf" not in self._page.url:
-                        self._navegar_menu("li_calculo_verbas")
-                        self._aguardar_ajax(6000)
-                        self._page.wait_for_timeout(800)
-                    if self._regerar_com_modal_confirmacao(
-                        sobrescrever=False, log_prefix="    "
-                    ):
-                        self.log(f"    ✓ Regerar pós-parâmetros '{v.nome_pjecalc}'")
-                except Exception as _e:
-                    self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
+            try:
+                # Garantir que está na listagem (Regerar só existe em modo
+                # listagem). Se não re-anchorou, navegar via sidebar.
+                if not re_anchored and "verba-calculo.jsf" not in self._page.url:
+                    self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(800)
+                if self._regerar_com_modal_confirmacao(
+                    sobrescrever=False, log_prefix="    "
+                ):
+                    self.log(f"    ✓ Regerar pós-parâmetros '{v.nome_pjecalc}'")
+            except Exception as _e:
+                self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
             # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
