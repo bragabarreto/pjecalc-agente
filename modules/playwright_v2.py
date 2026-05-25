@@ -2322,6 +2322,32 @@ class PlaywrightAutomatorV2:
             if v.estrategia_preenchimento == EstrategiaPreenchimento.MANUAL
         ]
 
+        # ⚠ MP-1 H3 (25/05/2026): re-rotear INFORMADO+DESLIGAMENTO para Manual.
+        # Causa: Expresso default ocorrencia_pagamento=MENSAL → bot precisa
+        # mudar para DESLIGAMENTO → JSF flagueia "param alterado APÓS geração"
+        # como erro blocking. Hipóteses 1 (Sobrescrever pós-params) e
+        # (Skip Regerar pós-params) testadas e fracassadas — alert é
+        # temporalmente estrutural ao Expresso initial lançamento.
+        #
+        # Solução H3: criar essas verbas via Manual (botão 'Manual') desde T0
+        # com ocorrencia_pagamento=DESLIGAMENTO já no form de criação.
+        # Sem alteração pós-geração → sem alert.
+        def _is_inf_desligamento(_v) -> bool:
+            try:
+                _p = _v.parametros
+                _ocorr = str(getattr(_p, "ocorrencia_pagamento", "")).upper()
+                _val = str(getattr(_p, "valor", "")).upper()
+                return "DESLIGAMENTO" in _ocorr and "INFORMADO" in _val
+            except Exception:
+                return False
+
+        _reroute = [v for v in verbas_expresso if _is_inf_desligamento(v)]
+        if _reroute:
+            verbas_expresso = [v for v in verbas_expresso if v not in _reroute]
+            verbas_manual = verbas_manual + _reroute
+            for _v in _reroute:
+                self.log(f"  ↪ Re-roteado para Manual (INFORMADO+DESLIGAMENTO): {_v.nome_pjecalc}")
+
         # 4a. Expresso (lote único)
         if verbas_expresso:
             self._lancar_expresso(verbas_expresso)
