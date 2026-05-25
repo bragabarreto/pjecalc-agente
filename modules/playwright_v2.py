@@ -2643,16 +2643,17 @@ class PlaywrightAutomatorV2:
         except Exception:
             self.log(f"    ⚠ msgAguarde ainda visível após 15s — prosseguindo mesmo assim")
 
-        # Clicar linkOcorrencias usando MATCH EXATO POR TD
-        # ⚠ BUG HISTÓRICO (25/05/2026, dump forense pre_click): o matcher anterior
-        # usava tr.textContent.includes(alvo) → casava TR de layout outermost
-        # (que envolve sidebar + main e contém TODO texto da página) e pegava
-        # a PRIMEIRA linkOcorrencias = row 0 da listagem (13º SALÁRIO, não a
-        # verba desejada). Resultado: bot navegava para 13º em vez de INDENIZAÇÃO.
-        # Fix: alinhar ao padrão MATCH EXATO POR TD (igual ao recovery e ao
-        # _configurar_parametros_pos_expresso, conforme INVARIANTE CLAUDE.md
-        # "Match de verba no linkParametrizar").
-        clicou = self._page.evaluate(
+        # Clicar linkOcorrencias usando MATCH EXATO POR TD + NATIVE Playwright click.
+        # HISTÓRICO 25/05/2026:
+        # - dump pre_click: matcher antigo tr.textContent.includes() casava TR
+        #   de layout outermost → pegava row 0 (13º) em vez de INDENIZAÇÃO.
+        #   Fix: match EXATO no td da MESMA linha do link.
+        # - dump post_click: onclick-exec disparava A4J.AJAX.Submit mas servidor
+        #   não navegava (mesmo padrão do bug linkParametrizar). Fix per CLAUDE.md:
+        #   "Native Playwright click — respeita return false de A4J.AJAX.Submit,
+        #   evita #irTopoPagina quebrar AJAX".
+        # Estratégia: JS LOCALIZA id; Playwright CLICA via locator.click(force=True).
+        target_id = self._page.evaluate(
             """(candidatos) => {
                 const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim()
                                           .replace(/EXIBIR|OCULTAR/g, '').trim();
@@ -2664,48 +2665,55 @@ class PlaywrightAutomatorV2:
                         const tr = a.closest('tr');
                         if (!tr) continue;
                         const tds = [...tr.querySelectorAll('td')];
-                        // Match EXATO no texto de uma TD da MESMA linha
-                        let matched = false;
                         for (const td of tds) {
-                            if (norm(td.textContent) === alvoN) { matched = true; break; }
-                        }
-                        if (!matched) continue;
-                        const onclickStr = a.getAttribute('onclick') || '';
-                        window.__lastLinkOcorrencias = {
-                            id: a.id, onclick_len: onclickStr.length,
-                            title: a.title || '', cls: a.className || '',
-                            href: a.href || '',
-                            row_tds: tds.map(t => (t.textContent||'').trim().slice(0,30))
-                        };
-                        if (onclickStr) {
-                            const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
-                            try { Object.defineProperty(ev, 'target', {value:a, configurable:true}); } catch(_){}
-                            try { Object.defineProperty(ev, 'currentTarget', {value:a, configurable:true}); } catch(_){}
-                            try {
-                                new Function('event', onclickStr).call(a, ev);
-                                return {ok: true, via: 'onclick-exec:'+alvo, meta: window.__lastLinkOcorrencias};
-                            } catch(err) {
-                                return {ok: false, err: err.message.slice(0,60), meta: window.__lastLinkOcorrencias};
+                            if (norm(td.textContent) === alvoN) {
+                                window.__lastLinkOcorrencias = {
+                                    id: a.id, title: a.title || '',
+                                    row_tds: tds.map(t => (t.textContent||'').trim().slice(0,30))
+                                };
+                                return a.id;
                             }
                         }
-                        a.click();
-                        return {ok: true, via: 'click:'+alvo, meta: window.__lastLinkOcorrencias};
                     }
                 }
-                return {ok: false, reason: 'no-exact-td-match',
-                        totalLinks: linksMain.length,
-                        rows_sample: linksMain.slice(0,15).map(a => {
-                            const tr = a.closest('tr');
-                            const tds = tr ? [...tr.querySelectorAll('td')].map(t => (t.textContent||'').trim().slice(0,30)) : [];
-                            return {id: a.id, tds};
-                        })};
+                return null;
             }""",
             candidatos,
         )
-        if not clicou.get("ok"):
-            self.log(f"    ⚠ linkOcorrencias não disparado: {clicou}")
+        if not target_id:
+            self.log(f"    ⚠ linkOcorrencias não encontrado para candidatos: {candidatos}")
             return
-        self.log(f"    ✓ linkOcorrencias acionado via {clicou.get('via')} meta={clicou.get('meta',{})}")
+        meta_dbg = self._page.evaluate("() => window.__lastLinkOcorrencias")
+        self.log(f"    → linkOcorrencias id={target_id} meta={meta_dbg}")
+        # NATIVE Playwright click — fix per CLAUDE.md (não usar onclick-exec)
+        try:
+            esc = target_id.replace(":", "\\:")
+            self._page.locator(f"a#{esc}").first.click(force=True)
+            self.log(f"    ✓ linkOcorrencias acionado via native-playwright-click")
+            clicou = {"ok": True, "via": "native"}
+        except Exception as e:
+            self.log(f"    ⚠ Native click falhou: {e} — fallback onclick-exec")
+            clicou = self._page.evaluate(
+                """(id) => {
+                    const a = document.getElementById(id);
+                    if (!a) return {ok:false, err:'not-found'};
+                    const onclickStr = a.getAttribute('onclick') || '';
+                    if (onclickStr) {
+                        const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
+                        try { Object.defineProperty(ev, 'target', {value:a, configurable:true}); } catch(_){}
+                        try { Object.defineProperty(ev, 'currentTarget', {value:a, configurable:true}); } catch(_){}
+                        try { new Function('event', onclickStr).call(a, ev); return {ok:true, via:'onclick-exec'}; }
+                        catch(err) { return {ok:false, err:err.message.slice(0,60)}; }
+                    }
+                    a.click();
+                    return {ok:true, via:'click'};
+                }""",
+                target_id,
+            )
+            if not clicou.get("ok"):
+                self.log(f"    ⚠ Fallback também falhou: {clicou}")
+                return
+            self.log(f"    ✓ Fallback onclick-exec ok: {clicou.get('via')}")
         self._aguardar_ajax(15000)
         self._page.wait_for_timeout(3000)
 
