@@ -2578,28 +2578,28 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(10000)
         self._page.wait_for_timeout(1500)
 
-        # ⚠ PROATIVO (24/05/2026): regerar ocorrências ANTES de tentar
-        # linkOcorrencias. Para verbas INFORMADO+DESLIGAMENTO com período
-        # curto (ex.: INDENIZAÇÃO POR DANO MORAL), o save de parâmetros
-        # NÃO sincroniza automaticamente as ocorrências com o novo período
-        # — ocorrências antigas (defaults Expresso) ficam fora do range.
+        # ⚠ PROATIVO (24/05/2026; refinado 25/05/2026): regerar ocorrências
+        # ANTES de tentar linkOcorrencias. Para verbas INFORMADO+DESLIGAMENTO
+        # com período curto (ex.: INDENIZAÇÃO POR DANO MORAL), o save de
+        # parâmetros NÃO sincroniza automaticamente as ocorrências com o novo
+        # período — ocorrências antigas (defaults Expresso) ficam fora do range.
         # Regerar antes força PJE-Calc a gerar com período corrente.
+        #
+        # ⚠ FIX 25/05/2026 (DOM forense, dump_pre_recovery): clicar
+        # `regerarOcorrencias` abre `<rich:modalPanel>` "Confirmação" com
+        # botões Ok/Cancelar. Bot anterior usava `page.once("dialog")` que
+        # NÃO captura modal JSF (só dialogs nativos do browser). Modal ficava
+        # aberta, bloqueava `linkOcorrencias` subsequente → 0 inputs valorDevido.
+        # Helper `_regerar_com_modal_confirmacao` clica Ok no modal.
+        #
+        # sobrescrever=True para descartar ocorrências antigas (fora do
+        # período curto) e gerar novas dentro do range.
         try:
-            self._page.once("dialog", lambda d: d.accept())
-            clicou_regerar = self._page.evaluate(
-                """() => {
-                    const btn = document.querySelector("input[id$=':regerarOcorrencias']");
-                    if (!btn) return false;
-                    const onclickStr = btn.getAttribute('onclick') || '';
-                    if (onclickStr) {
-                        try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return true; } catch(_){}
-                    }
-                    btn.click(); return true;
-                }"""
+            ok_regerar = self._regerar_com_modal_confirmacao(
+                sobrescrever=True,
+                log_prefix="    ",
             )
-            if clicou_regerar:
-                self._aguardar_ajax(12000)
-                self._page.wait_for_timeout(2000)
+            if ok_regerar:
                 self.log(f"    ✓ Regerar Ocorrências proativo (pré linkOcorrencias)")
         except Exception as _e:
             self.log(f"    ⚠ Regerar proativo: {_e}")
@@ -2665,22 +2665,12 @@ class PlaywrightAutomatorV2:
                 self._navegar_menu("li_calculo_verbas")
                 self._aguardar_ajax(8000)
                 self._page.wait_for_timeout(1500)
-                # Dispara Regerar — aceitar dialog de confirmação
-                self._page.once("dialog", lambda d: d.accept())
-                clicou_regerar = self._page.evaluate(
-                    """() => {
-                        const btn = document.querySelector("input[id$=':regerarOcorrencias']");
-                        if (!btn) return false;
-                        const onclickStr = btn.getAttribute('onclick') || '';
-                        if (onclickStr) {
-                            try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return true; } catch(_){}
-                        }
-                        btn.click(); return true;
-                    }"""
+                # FIX 25/05/2026: usar helper com modal handling correto
+                clicou_regerar = self._regerar_com_modal_confirmacao(
+                    sobrescrever=True,
+                    log_prefix="    ",
                 )
                 if clicou_regerar:
-                    self._aguardar_ajax(15000)
-                    self._page.wait_for_timeout(2500)
                     self.log(f"    ✓ Regerar Ocorrências disparado — re-navegando para linkOcorrencias")
                     # Re-acionar linkOcorrencias
                     clicou_retry = self._page.evaluate(
@@ -2842,33 +2832,158 @@ class PlaywrightAutomatorV2:
             pass
         self.log(f"    📸 DOM dump salvo: {json_path.name}")
 
+    def _regerar_com_modal_confirmacao(
+        self,
+        sobrescrever: bool = False,
+        timeout_modal_ms: int = 8000,
+        timeout_ajax_ms: int = 15000,
+        log_prefix: str = "  ",
+    ) -> bool:
+        """Click Regerar Ocorrências + handle rich:modalPanel "Confirmação".
+
+        Fluxo descoberto via DOM dump forense (25/05/2026):
+        1. Click `formulario:regerarOcorrencias` abre `<rich:modalPanel>` com
+           título "Confirmação", texto "Deseja gerar novamente as ocorrências
+           das verbas e/ou reflexos selecionados?" e botões "Ok" / "Cancelar".
+        2. Modal é overlay HTML+CSS — NÃO é dialog do browser. `page.on("dialog")`
+           NÃO captura. Bot precisa achar e clicar o botão "Ok" no DOM.
+        3. Se modal não for confirmada, fica aberta e BLOQUEIA navegação
+           (incluindo cliques em `linkOcorrencias` de outras linhas) —
+           causando o sintoma "0 inputs valorDevido em INDENIZAÇÃO POR DANO MORAL".
+
+        Args:
+            sobrescrever: se True, pré-seleciona radio `tipoRegeracao:1`
+                (Sobrescrever) antes de clicar Regerar. Necessário para
+                INDENIZAÇÃO+DESLIGAMENTO+período curto onde ocorrências
+                antigas (defaults Expresso) ficam fora do range.
+
+        Returns:
+            True se Regerar completou (modal confirmada + AJAX concluído).
+            False em qualquer ponto de falha.
+        """
+        # 1. Pré-selecionar radio Sobrescrever se necessário
+        if sobrescrever:
+            try:
+                self._page.evaluate(
+                    """() => {
+                        const r = document.querySelector("input[id='formulario:tipoRegeracao:1']");
+                        if (!r) return false;
+                        r.checked = true;
+                        r.dispatchEvent(new Event('change', {bubbles: true}));
+                        r.dispatchEvent(new Event('click', {bubbles: true}));
+                        // Também atualizar manterAlteracoes hidden (true=manter, false=sobrescrever)
+                        const h = document.querySelector("input[id='formulario:manterAlteracoes']");
+                        if (h) h.value = 'false';
+                        return true;
+                    }"""
+                )
+            except Exception:
+                pass
+
+        # 2. Click Regerar button
+        btn_regerar = self._page.locator(
+            "input[id$=':regerarOcorrencias'], input[id*=':regerarOcorrencias']"
+        )
+        if btn_regerar.count() == 0:
+            btn_regerar = self._page.locator(
+                "input[type='submit'][value='Regerar'], input[type='button'][value='Regerar']"
+            )
+        if btn_regerar.count() == 0:
+            self.log(f"{log_prefix}⚠ Botão Regerar não encontrado na listagem")
+            return False
+        try:
+            btn_regerar.first.click(force=True)
+        except Exception as e:
+            self.log(f"{log_prefix}⚠ Falha click Regerar: {e}")
+            return False
+
+        # 3. Aguardar modal aparecer (botão Ok visível)
+        try:
+            self._page.wait_for_function(
+                """() => {
+                    const btns = [...document.querySelectorAll(
+                        'input[type=\"button\"], input[type=\"submit\"], button'
+                    )];
+                    for (const b of btns) {
+                        const txt = (b.value || b.textContent || '').trim();
+                        if (/^Ok$/i.test(txt) && b.offsetParent !== null) return true;
+                    }
+                    return false;
+                }""",
+                timeout=timeout_modal_ms,
+            )
+        except Exception:
+            # Modal pode não aparecer se: (a) lista vazia, (b) já confirmado.
+            # Aguardar AJAX caso tenha sido confirmação inline.
+            self._aguardar_ajax(timeout_ajax_ms)
+            return True
+
+        # 4. Click "Ok" dentro da modal
+        clicou_ok = self._page.evaluate(
+            """() => {
+                const btns = [...document.querySelectorAll(
+                    'input[type="button"], input[type="submit"], button'
+                )];
+                for (const b of btns) {
+                    if (b.offsetParent === null) continue;
+                    const txt = (b.value || b.textContent || '').trim();
+                    if (/^Ok$/i.test(txt)) {
+                        const onclickStr = b.getAttribute('onclick') || '';
+                        if (onclickStr) {
+                            try {
+                                new Function('event', onclickStr).call(b, new MouseEvent('click',{bubbles:true}));
+                                return 'onclick-exec';
+                            } catch(_) {}
+                        }
+                        b.click();
+                        return 'click';
+                    }
+                }
+                return null;
+            }"""
+        )
+        if not clicou_ok:
+            self.log(f"{log_prefix}⚠ Botão Ok da modal Regerar não encontrado")
+            return False
+
+        # 5. Aguardar AJAX + modal fechar
+        self._aguardar_ajax(timeout_ajax_ms)
+        try:
+            self._page.wait_for_function(
+                """() => {
+                    const btns = [...document.querySelectorAll(
+                        'input[type="button"], input[type="submit"], button'
+                    )];
+                    for (const b of btns) {
+                        const txt = (b.value || b.textContent || '').trim();
+                        if (/^Ok$/i.test(txt) && b.offsetParent !== null) return false;
+                    }
+                    return true;
+                }""",
+                timeout=8000,
+            )
+        except Exception:
+            self.log(f"{log_prefix}⚠ Modal Confirmação ainda visível após Ok — pode ter falhado")
+            # Não fail hard — pode ter regenerado mesmo assim
+        self._page.wait_for_timeout(1500)
+        return True
+
     def _regerar_ocorrencias_verbas(self) -> None:
         """Volta à listagem de Verbas e clica Regerar Ocorrências.
 
-        Botão `regerarOcorrencias` (a4j:commandButton, only `rendered=emModoListagem`).
-        Dispara confirm dialog 'Deseja regerar?' que precisa OK.
+        Botão `formulario:regerarOcorrencias` (a4j:commandButton, only
+        `rendered=emModoListagem`). Abre `<rich:modalPanel>` "Confirmação"
+        com botões Ok/Cancelar — handler via `_regerar_com_modal_confirmacao`.
         """
         try:
             self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(1500)
-            # Listar botões disponíveis para diagnóstico
-            btn_regerar = self._page.locator(
-                "input[id$=':regerarOcorrencias'], input[id*=':regerarOcorrencias']"
+            ok = self._regerar_com_modal_confirmacao(
+                sobrescrever=False,
+                log_prefix="  ",
             )
-            if btn_regerar.count() == 0:
-                # Fallback por value
-                btn_regerar = self._page.locator("input[type='submit'][value='Regerar'], input[type='button'][value='Regerar']")
-            if btn_regerar.count() == 0:
-                self.log("  ⚠ Botão Regerar não encontrado na listagem — pulando regerar")
-                return
-            # Aceitar confirm dialog antes do click
-            self._page.once("dialog", lambda d: d.accept())
-            btn_regerar.first.click(force=True)
-            self._aguardar_ajax(10000)
-            self._page.wait_for_timeout(2000)
-            sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
-            if sucesso:
+            if ok:
                 self.log("  ✓ Ocorrências regeradas em todas as verbas")
             else:
                 self.log("  ⚠ Regerar disparou mas sem confirmação")
