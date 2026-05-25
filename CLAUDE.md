@@ -251,40 +251,28 @@ similares (futuras INFORMADO+DESLIGAMENTO+período curto).
 > Estas são pendências de investigação ativa. NÃO documentar como
 > "limite arquitetural aceito" — são problemas reais a serem resolvidos.
 
-### MP-1: INDENIZAÇÃO INFORMADO+DESLIGAMENTO+período curto — alert "param alterado APÓS geração"
+### MP-1: INDENIZAÇÃO INFORMADO+DESLIGAMENTO+período curto — ✅ RESOLVIDO via H3
 
-**Estado atual (25/05/2026, test 35):** 2 de 3 erros resolvidos. Restante:
-"O parâmetro Ocorrência de Pagamento foi alterado na página Verbas, após
-a geração das ocorrências da verba INDENIZAÇÃO POR DANO MORAL."
+**Estado FINAL (25/05/2026, test 39, commit `6c66afe`):** ✅ 0 erros, **PJC exportado**.
 
-**Comportamento PJE-Calc:** alert tornou-se BLOCKING (totalErros=1) em vez de
-non-blocking. Em produção (TRT7 PostgreSQL+JBoss) provavelmente é só warning.
+**Solução adotada (H3 — Re-routing para Manual):**
 
-**Hipóteses a investigar:**
-1. **Ordem dos saves**: salvar params + Regerar Sobrescrever ANTES de qualquer
-   ajuste de ocorrência. Sobrescrever post-params resetar o timestamp interno
-   de geração (testado em test 36 mas teve regressão Seam EPC; investigar mais).
-2. **Fluxo Manual**: criar INDENIZAÇÃO via Manual (não Expresso) — Expresso default
-   é MENSAL, bot muda para DESLIGAMENTO → alert. Manual permite escolher
-   DESLIGAMENTO desde o início → sem alteração.
-3. **Filtro DESLIGAMENTO ANTES de save**: aplicar filtro de checkboxes :ativo
-   no MOMENTO do save de parâmetros (não depois), via JSF view-state intervention.
-4. **Skip Regerar pós-params + Regerar Sobrescrever no fim**: pode bater contra
-   regra usuário "Regerar após cada alteração" — investigar trade-off.
+Em `fase_verbas` (modules/playwright_v2.py), antes do split expresso/manual:
+- Detecta verbas INFORMADO+DESLIGAMENTO
+- Move da lista expresso para a lista manual
+- `_lancar_verba_manual` cria com ocorrencia_pagamento=DESLIGAMENTO desde T0
+- Sem alteração pós-geração → sem alert "param alterado APÓS geração"
 
-**Tentativas fracassadas (NÃO repetir sem nova evidência):**
-- Sobrescrever pós-params (`312839e` revertido `ac0c712`) — listagem vazia mid-loop.
-- Skip Regerar pós-params para INFORMADO+DESLIGAMENTO (`23f69ae` revertido `5bca99e`) —
-  alert PERSISTE mesmo sem o Regerar Manter pós-params, e mesmo com PROATIVO
-  Sobrescrever rodando depois. Comprova que o alert é **temporalmente
-  estrutural**: PJE-Calc grava timestamp de geração de ocorrência no momento
-  do **lançamento Expresso inicial** (com ocorrencia_pagamento=MENSAL default).
-  Sobrescrever Regerar APENAS reseta valores, não cria nova "geração".
-  Conclusão: hipótese 3 (Manual flow) é o caminho restante mais provável.
+**Hipóteses anteriores fracassadas (NÃO repetir — alert é temporalmente estrutural):**
+1. ❌ Sobrescrever pós-params (`312839e` revertido `ac0c712`) — listagem vazia mid-loop.
+2. ❌ Skip Regerar pós-params (`23f69ae` revertido `5bca99e`) — alert persiste mesmo
+   sem o Regerar Manter, e mesmo com PROATIVO Sobrescrever depois. Comprova que
+   o alert é gravado no momento do lançamento Expresso inicial (T0 com default MENSAL).
 
-**Tarefa:** continuar investigação. Manualmente reproduzir o fluxo em produção
-TRT7 (não headless), capturar via DevTools a sequência exata de POSTs JSF, e
-identificar qual mudança específica reseta o timestamp.
+**Invariante novo (NÃO REVERTER):** o re-routing INFORMADO+DESLIGAMENTO → Manual
+em `fase_verbas` deve ser preservado. Removê-lo regride INDENIZAÇÃO para o estado
+"1 erro restante — manual edit required". Protegido em
+`tests/test_invariantes_indenizacao.py::test_inv8_reroute_informado_desligamento_para_manual`.
 
 ### MP-2: HORAS EXTRAS 50% — quantidade=0 em modo INFORMADA
 

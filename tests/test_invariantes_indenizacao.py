@@ -209,6 +209,37 @@ def test_inv7_dump_helper_existe():
     assert "pjecalc_snapshots" in PLAYWRIGHT_V2
 
 
+# ─── Invariante 8 — Re-routing INFORMADO+DESLIGAMENTO → Manual (MP-1 H3) ─
+
+
+def test_inv8_reroute_informado_desligamento_para_manual():
+    """INFORMADO+DESLIGAMENTO deve ser re-roteada de Expresso para Manual.
+
+    Comprovação test 39 (commit 6c66afe, 25/05/2026): re-routing reduz
+    erros de 1 → 0 → PJC exportado pela primeira vez no caso Scarlette.
+    Sem re-routing, alert "param Ocorrência de Pagamento alterado APÓS
+    geração" persiste mesmo com modal handler + cascade + filtro DESLIGAMENTO.
+
+    Causa raiz: PJE-Calc grava timestamp de geração no momento do lançamento
+    Expresso (ocorrencia_pagamento=MENSAL default). Mudança subsequente
+    para DESLIGAMENTO via parametrizar → flag "param alterado APÓS geração".
+    Manual flow permite criar com DESLIGAMENTO desde T0.
+    """
+    # Verifica que existe a lógica de re-routing em fase_verbas
+    assert "Re-roteado para Manual" in PLAYWRIGHT_V2, \
+        "Log de re-routing INFORMADO+DESLIGAMENTO removido"
+    assert "_is_inf_desligamento" in PLAYWRIGHT_V2 or "MP-1 H3" in PLAYWRIGHT_V2, \
+        "Detecção INFORMADO+DESLIGAMENTO removida"
+    # Verifica que reroute está antes do _lancar_expresso e antes do _lancar_verba_manual
+    idx_reroute = PLAYWRIGHT_V2.find("Re-roteado para Manual")
+    idx_expresso = PLAYWRIGHT_V2.find("self._lancar_expresso(verbas_expresso)")
+    idx_manual = PLAYWRIGHT_V2.find("self._lancar_verba_manual(v)")
+    assert 0 < idx_reroute < idx_expresso, \
+        "Re-routing deve ocorrer ANTES de _lancar_expresso(verbas_expresso)"
+    assert 0 < idx_reroute < idx_manual, \
+        "Re-routing deve ocorrer ANTES de _lancar_verba_manual"
+
+
 # ─── Marker: regressão de mudança Sobrescrever pós-params ──────────────────
 
 
