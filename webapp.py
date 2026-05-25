@@ -3323,6 +3323,11 @@ async def diag_verba_ocorrencias(calculo_id: str, verba_nome: str):
     Uso:
       GET /api/diag/verba_ocorrencias/103/INDENIZAÇÃO POR DANO MORAL
     """
+    import asyncio
+    return await asyncio.to_thread(_diag_verba_ocorrencias_sync, calculo_id, verba_nome)
+
+
+def _diag_verba_ocorrencias_sync(calculo_id: str, verba_nome: str) -> dict:
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
