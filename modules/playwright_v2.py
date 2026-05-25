@@ -2643,24 +2643,39 @@ class PlaywrightAutomatorV2:
         except Exception:
             self.log(f"    ⚠ msgAguarde ainda visível após 15s — prosseguindo mesmo assim")
 
-        # Clicar linkOcorrencias usando o mesmo padrão A4J onclick-exec
+        # Clicar linkOcorrencias usando MATCH EXATO POR TD
+        # ⚠ BUG HISTÓRICO (25/05/2026, dump forense pre_click): o matcher anterior
+        # usava tr.textContent.includes(alvo) → casava TR de layout outermost
+        # (que envolve sidebar + main e contém TODO texto da página) e pegava
+        # a PRIMEIRA linkOcorrencias = row 0 da listagem (13º SALÁRIO, não a
+        # verba desejada). Resultado: bot navegava para 13º em vez de INDENIZAÇÃO.
+        # Fix: alinhar ao padrão MATCH EXATO POR TD (igual ao recovery e ao
+        # _configurar_parametros_pos_expresso, conforme INVARIANTE CLAUDE.md
+        # "Match de verba no linkParametrizar").
         clicou = self._page.evaluate(
             """(candidatos) => {
-                const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
-                const trs = [...document.querySelectorAll('tr')];
+                const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim()
+                                          .replace(/EXIBIR|OCULTAR/g, '').trim();
+                const linksMain = [...document.querySelectorAll('a.linkOcorrencias')]
+                    .filter(a => a.id && !a.id.includes(':listaReflexo:'));
                 for (const alvo of candidatos) {
                     const alvoN = norm(alvo);
-                    for (const tr of trs) {
-                        if (!norm(tr.textContent).includes(alvoN)) continue;
-                        // Procurar linkOcorrencias na linha (NÃO dentro de listaReflexo)
-                        const a = tr.querySelector('a.linkOcorrencias');
-                        if (!a || (a.id && a.id.includes(':listaReflexo:'))) continue;
+                    for (const a of linksMain) {
+                        const tr = a.closest('tr');
+                        if (!tr) continue;
+                        const tds = [...tr.querySelectorAll('td')];
+                        // Match EXATO no texto de uma TD da MESMA linha
+                        let matched = false;
+                        for (const td of tds) {
+                            if (norm(td.textContent) === alvoN) { matched = true; break; }
+                        }
+                        if (!matched) continue;
                         const onclickStr = a.getAttribute('onclick') || '';
-                        // Capturar metadados do link para diagnóstico
                         window.__lastLinkOcorrencias = {
                             id: a.id, onclick_len: onclickStr.length,
                             title: a.title || '', cls: a.className || '',
-                            href: a.href || '', tr_text: tr.textContent.slice(0,100)
+                            href: a.href || '',
+                            row_tds: tds.map(t => (t.textContent||'').trim().slice(0,30))
                         };
                         if (onclickStr) {
                             const ev = new MouseEvent('click', {bubbles:true, cancelable:true, view:window});
@@ -2677,7 +2692,13 @@ class PlaywrightAutomatorV2:
                         return {ok: true, via: 'click:'+alvo, meta: window.__lastLinkOcorrencias};
                     }
                 }
-                return {ok: false, totalLinks: document.querySelectorAll('a.linkOcorrencias').length};
+                return {ok: false, reason: 'no-exact-td-match',
+                        totalLinks: linksMain.length,
+                        rows_sample: linksMain.slice(0,15).map(a => {
+                            const tr = a.closest('tr');
+                            const tds = tr ? [...tr.querySelectorAll('td')].map(t => (t.textContent||'').trim().slice(0,30)) : [];
+                            return {id: a.id, tds};
+                        })};
             }""",
             candidatos,
         )
