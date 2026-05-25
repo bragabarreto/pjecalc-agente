@@ -2889,6 +2889,46 @@ class PlaywrightAutomatorV2:
         # TODAS exceto a última, depois escrever valor na última.
         ocorrencia_pagto = str(getattr(v.parametros, "ocorrencia_pagamento", "")).upper()
         is_desligamento = "DESLIGAMENTO" in ocorrencia_pagto
+
+        # ⚠ DIAG (25/05/2026 v3): logar estrutura de TODAS as rows ANTES de
+        # qualquer modificação. Bot precisa entender quais rows são quais
+        # datas para escrever valor no lugar certo.
+        try:
+            row_diag = self._page.evaluate("""() => {
+                const cbxs = [...document.querySelectorAll(
+                    'input[type="checkbox"][id*=":listagem:"][id$=":ativo"]'
+                )].filter(c => !c.id.includes('ativarTodos')
+                             && !c.id.includes('selecionarTodos')
+                             && !c.id.includes('listaReflexo'));
+                return cbxs.map(c => {
+                    const m = c.id.match(/:listagem:(\\d+):ativo$/);
+                    const idx = m ? parseInt(m[1]) : -1;
+                    const tr = c.closest('tr');
+                    // Procurar inputs/spans com data nesta linha
+                    const dInicial = tr ? tr.querySelector('[id$=":dataInicial"], [id*=":dataInicial"]') : null;
+                    const dFinal   = tr ? tr.querySelector('[id$=":dataFinal"], [id*=":dataFinal"]') : null;
+                    const vDevido  = tr ? tr.querySelector('input[id$=":valorDevido"]') : null;
+                    // Textos da TR
+                    const tds = tr ? [...tr.querySelectorAll('td')].map(t =>
+                        (t.textContent||'').trim().replace(/\\s+/g,' ').slice(0,30)
+                    ) : [];
+                    return {
+                        idx,
+                        ativo_checked: c.checked,
+                        ativo_id: c.id,
+                        d_inicial: dInicial ? (dInicial.value || dInicial.textContent || '').trim() : '',
+                        d_final: dFinal ? (dFinal.value || dFinal.textContent || '').trim() : '',
+                        v_devido: vDevido ? vDevido.value : '',
+                        tds: tds.filter(t => t),
+                    };
+                }).sort((a,b) => a.idx - b.idx);
+            }""")
+            self.log(f"    📋 Rows pré-filtro ({len(row_diag)}):")
+            for r in row_diag:
+                self.log(f"       row {r.get('idx')}: ativo={r.get('ativo_checked')} dI='{r.get('d_inicial')}' dF='{r.get('d_final')}' val='{r.get('v_devido')}' tds={r.get('tds')[:6]}")
+        except Exception as _e_diag:
+            self.log(f"    ⚠ Row diag: {_e_diag}")
+
         if is_desligamento and n > 1:
             try:
                 r = self._page.evaluate("""() => {
