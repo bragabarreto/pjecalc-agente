@@ -274,6 +274,13 @@ non-blocking. Em produção (TRT7 PostgreSQL+JBoss) provavelmente é só warning
 
 **Tentativas fracassadas (NÃO repetir sem nova evidência):**
 - Sobrescrever pós-params (`312839e` revertido `ac0c712`) — listagem vazia mid-loop.
+- Skip Regerar pós-params para INFORMADO+DESLIGAMENTO (`23f69ae` revertido `5bca99e`) —
+  alert PERSISTE mesmo sem o Regerar Manter pós-params, e mesmo com PROATIVO
+  Sobrescrever rodando depois. Comprova que o alert é **temporalmente
+  estrutural**: PJE-Calc grava timestamp de geração de ocorrência no momento
+  do **lançamento Expresso inicial** (com ocorrencia_pagamento=MENSAL default).
+  Sobrescrever Regerar APENAS reseta valores, não cria nova "geração".
+  Conclusão: hipótese 3 (Manual flow) é o caminho restante mais provável.
 
 **Tarefa:** continuar investigação. Manualmente reproduzir o fluxo em produção
 TRT7 (não headless), capturar via DevTools a sequência exata de POSTs JSF, e
