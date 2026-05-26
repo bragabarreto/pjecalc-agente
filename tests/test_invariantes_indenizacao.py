@@ -240,6 +240,31 @@ def test_inv8_reroute_informado_desligamento_para_manual():
         "Re-routing deve ocorrer ANTES de _lancar_verba_manual"
 
 
+# ─── Invariante 9 — Divisor CLT para 13º e Férias+1/3 ─────────────────────
+
+
+def test_inv9_divisor_clt_override():
+    """13º SALÁRIO e FÉRIAS + 1/3 SEMPRE divisor=12 (constante CLT).
+
+    Bug histórico (26/05/2026): IA externa gerou divisor.valor=1 para essas
+    verbas. PJE-Calc multiplicava cálculo por 12 → erro grave.
+
+    Defesa dupla:
+    - Bot: override defensivo se divisor != 12 para 13º/Férias
+    - Prompt: regra crítica explícita exigindo divisor=12
+    """
+    # Camada 1 (bot)
+    assert "CLT override" in PLAYWRIGHT_V2, \
+        "Override defensivo divisor=12 para 13º/Férias removido"
+    assert "FÉRIAS + 1/3" in PLAYWRIGHT_V2 and "(constante CLT)" in PLAYWRIGHT_V2
+
+    # Camada 2 (prompt)
+    extraction = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "DIVISOR CLT" in extraction or "divisor=OUTRO_VALOR=12" in extraction, \
+        "Regra crítica no prompt sobre divisor=12 removida"
+    assert "constante CLT" in extraction
+
+
 # ─── Marker: regressão de mudança Sobrescrever pós-params ──────────────────
 
 

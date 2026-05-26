@@ -374,6 +374,18 @@ remunerações diferentes (ex: 2023-2024-2025-2026), criar **APENAS UMA** entrad
 - `quantidade.tipo = "AVOS"`
 - `base_calculo.tipo = "HISTORICO_SALARIAL"` referenciando UM histórico (geralmente o mais recente,
   ex: "SALÁRIO MÍNIMO 2025-2026" ou "ÚLTIMA REMUNERAÇÃO")
+- **`divisor.tipo = "OUTRO_VALOR"` e `divisor.valor = 12` (constante CLT — 12 avos por ano)**
+- **`multiplicador = 1` e quantidade.tipo = "AVOS"** (PJE-Calc apura avos automaticamente)
+
+⚠️ **REGRA CRÍTICA — FÉRIAS + 1/3 (DIVISOR CLT — INVARIANTE PERMANENTE — NÃO REVERTER)**:
+- **`divisor.tipo = "OUTRO_VALOR"` e `divisor.valor = 12` (constante CLT — 12 avos por período aquisitivo)**
+- **`multiplicador = 1.33` (1/3 adicional constitucional)** e quantidade.tipo = "AVOS"
+
+⚠️ **ATENÇÃO ESPECIAL**: para **13º SALÁRIO** e **FÉRIAS + 1/3**, o divisor é uma
+**constante legal de 12** (CLT art. 130 / Constituição art. 7º XVII). NUNCA usar
+`divisor.valor = 1` ou outro valor — o PJE-Calc multiplicaria o cálculo por 12,
+gerando erro grave. O PJE-Calc Expresso default JÁ preenche `divisor=12` para
+essas verbas; o JSON v2 deve REPETIR esse valor para garantir consistência.
 
 O PJE-Calc **gera automaticamente** as ocorrências de 13º para cada ano (DEZEMBRO de cada ano
 mais a ocorrência de DESLIGAMENTO no ano da rescisão), e a **base de cada ocorrência respeita
@@ -692,8 +704,8 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | Verba | `valor` padrão | Como preencher |
 |---|---|---|
 | **SALDO DE SALÁRIO** | CALCULADO | base=HISTORICO_SALARIAL (última rem.), divisor=OUTRO_VALOR=30, multiplicador=1, quantidade=INFORMADA (dias trabalhados no mês da rescisão) |
-| **13º SALÁRIO** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, quantidade=AVOS |
-| **FÉRIAS + 1/3** | CALCULADO | sistema apura; quantidade=AVOS, multiplicador=1.33 |
+| **13º SALÁRIO** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1, quantidade=AVOS |
+| **FÉRIAS + 1/3** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1.33, quantidade=AVOS |
 | **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=APURADA (Lei 12.506) |
 | **HORAS EXTRAS 50%/100%** | CALCULADO | base=HISTORICO_SALARIAL, divisor=CARGA_HORARIA (ou OUTRO_VALOR=220), multiplicador=1.5/2.0, quantidade=INFORMADA mensal OU IMPORTADA_DO_CARTAO |
 | **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, divisor e quantidade conforme cartão |

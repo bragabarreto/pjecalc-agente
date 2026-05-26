@@ -85,6 +85,32 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — Divisor CLT para 13º e Férias + 1/3
+
+> **Para 13º SALÁRIO e FÉRIAS + 1/3, o divisor é SEMPRE 12** (constante legal —
+> CLT art. 130 / Constituição art. 7º XVII — 12 avos por ano/período aquisitivo).
+>
+> **Bug histórico (26/05/2026, descoberto via re-importação PJC Scarlette):**
+> A IA externa estava gerando `formula_calculado.divisor.valor = 1` para essas
+> verbas. Bot fielmente preenchia o campo `outroValorDoDivisor` com 1. PJE-Calc
+> multiplicava o cálculo por 12 → erro grave de valor.
+>
+> **Defesas implementadas (DUPLA CAMADA):**
+>
+> 1. **Prompt (`modules/extraction_v2.py`)**: regra crítica explícita para
+>    `13º SALÁRIO` e `FÉRIAS + 1/3` exigindo `divisor.valor=12`. Documenta
+>    a constante legal e o risco de divisor=1.
+>
+> 2. **Bot (`modules/playwright_v2.py`, `_preencher_form_parametros_verba`)**:
+>    override defensivo — se IA mandar `divisor.valor != 12` para essas verbas,
+>    bot SOBRESCREVE para 12 e loga `⚠ CLT override`. Aplicado APENAS para
+>    verbas com nome match "13... SAL..." ou "FÉRIAS + 1/3" — outras verbas
+>    preservam divisor da IA.
+>
+> Validado em `tests/test_invariantes_indenizacao.py::test_inv9_divisor_clt_override`.
+
+---
+
 ## Regra obrigatória — Regerar Ocorrências após cada alteração
 
 > **TODA alteração de parâmetro ou ocorrência de qualquer verba DEVE ser
