@@ -355,9 +355,12 @@ def test_inv11_comentarios_jg_formato_canonico():
     # Anti-padrão: NÃO devem existir os formatos antigos como exemplos vigentes
     # (eles aparecem só dentro do bloco ERRADO)
     bot = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    # Fallback do bot deve usar formato novo
-    assert "pela parte {p} — {nm}" in bot or "pela parte reclamante" in bot, \
-        "Fallback do bot não migrou para formato canônico"
+    # Fallback do bot deve usar formato novo (com hífen, não em-dash — PJE-Calc é Latin-1)
+    assert "pela parte {p} - {nm}" in bot or "pela parte reclamante" in bot, \
+        "Fallback do bot não migrou para formato canônico (hífen)"
+    # NUNCA usar em-dash — PJE-Calc Latin-1 não suporta U+2014
+    assert "pela parte {p} — {nm}" not in bot, \
+        "REGRESSÃO: bot voltou a usar EM-DASH — PJE-Calc converte para ¿"
 
 
 def test_inv11_normalizer_converte_legacy():
