@@ -268,74 +268,113 @@ def _norm_parametros(p: dict[str, Any]) -> dict[str, Any]:
     return p
 
 
-def _norm_comentarios_jg(data: dict[str, Any]) -> dict[str, Any]:
-    """Normaliza `parametros_calculo.comentarios_jg` para concordância correta.
+def _build_comentarios_jg(parte_lower: str, nome_rec: str, nome_red: str) -> str:
+    """Constrói texto canônico de suspensão JG.
 
-    Bug histórico (Scarlette 26/05/2026): IA gerou texto "devidos pelo
-    Reclamante, beneficiário" — concordância MASCULINA fixa, quebra quando
-    a parte é feminina (Scarlette = mulher). Solução: SEMPRE "parte
-    reclamante/reclamada" (feminino independe de gênero) + travessão + NOME.
-
-    Formato canônico:
+    Formato canônico (concordância sempre feminina via "parte"):
       "Suspensão de exigibilidade dos honorários sucumbenciais devidos pela
        parte <reclamante|reclamada> — <NOME>, beneficiária da Justiça
        Gratuita (art. 791-A, § 4º, da CLT)."
 
-    Idempotente: texto já no formato novo passa intacto.
+    parte_lower ∈ {"reclamante", "reclamado", "ambos"}
+    """
+    if parte_lower == "ambos":
+        return (
+            f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
+            f"pela parte reclamante — {nome_rec} e pela parte reclamada — {nome_red}, "
+            f"ambas beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."
+        )
+    nome_alvo = nome_rec if parte_lower == "reclamante" else nome_red
+    return (
+        f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
+        f"pela parte {parte_lower} — {nome_alvo}, beneficiária da Justiça "
+        f"Gratuita (art. 791-A, § 4º, da CLT)."
+    )
+
+
+def _norm_comentarios_jg(data: dict[str, Any]) -> dict[str, Any]:
+    """Sintetiza `parametros_calculo.comentarios_jg` a partir dos fatos do JSON.
+
+    Política (26/05/2026, user feedback): IA preenche apenas FATOS no JSON
+    (concessão de JG + honorários sucumbenciais). Normalizer DEDUZ e SINTETIZA
+    o texto canônico de suspensão de exigibilidade ANTES da prévia, para
+    preservar fidelidade prévia↔automação.
+
+    Lógica:
+    1. Se comentarios_jg já vem preenchido pelo usuário, valida concordância
+       e normaliza para formato canônico (compat. com legacy "pelo Reclamante,
+       beneficiário").
+    2. Se comentarios_jg é null/vazio, AUTO-GERA a partir de:
+       - parametros_calculo.justica_gratuita.{reclamante, reclamado}
+       - honorarios[*] onde tipo_honorario=SUCUMBENCIAIS
+       - processo.reclamante.nome / processo.reclamado.nome
+       Só gera quando há INTERSEÇÃO (parte JG ∩ parte com sucumbenciais).
+
+    Idempotente.
     """
     import re as _re
     pc = data.get("parametros_calculo")
     if not isinstance(pc, dict):
         return data
-    txt = pc.get("comentarios_jg")
-    if not txt or not isinstance(txt, str):
-        return data
-    if "Suspensão de exigibilidade" not in txt and "suspensão de exigibilidade" not in txt:
-        return data
-    # Detectar a parte beneficiária do texto antigo OU do honorarios
-    parte_lower = None
-    if _re.search(r"\bpelo\s+Reclamante|\bdo\s+Reclamante|\bReclamante,\s*benefici", txt):
-        parte_lower = "reclamante"
-    elif _re.search(r"\bpelo\s+Reclamado|\bdo\s+Reclamado|\bReclamado,\s*benefici", txt):
-        parte_lower = "reclamado"
-    elif "ambas" in txt.lower() or "ambos" in txt.lower():
-        parte_lower = "ambos"
-    elif "parte reclamante" in txt.lower():
-        parte_lower = "reclamante"
-    elif "parte reclamada" in txt.lower():
-        parte_lower = "reclamado"
-    # Fallback: detectar via honorarios sucumbenciais
-    if parte_lower is None:
-        for hon in data.get("honorarios", []) or []:
-            if not isinstance(hon, dict): continue
-            if hon.get("tipo_honorario") != "SUCUMBENCIAIS": continue
-            dev = hon.get("tipo_devedor", "")
-            if dev == "RECLAMANTE":
-                parte_lower = "reclamante" if parte_lower is None else "ambos"
-            elif dev == "RECLAMADO":
-                parte_lower = "reclamado" if parte_lower is None else "ambos"
-    if parte_lower is None:
-        return data  # não conseguiu identificar — preserva original
 
     proc = data.get("processo") or {}
     nome_rec = ((proc.get("reclamante") or {}).get("nome") or "").strip()
     nome_red = ((proc.get("reclamado")  or {}).get("nome") or "").strip()
 
-    # Verifica se texto JÁ está no formato canônico (idempotência)
-    if parte_lower != "ambos":
-        nome_alvo = nome_rec if parte_lower == "reclamante" else nome_red
-        forma_correta = (
-            f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
-            f"pela parte {parte_lower} — {nome_alvo}, beneficiária da Justiça "
-            f"Gratuita (art. 791-A, § 4º, da CLT)."
-        )
+    txt = pc.get("comentarios_jg")
+    if txt and isinstance(txt, str) and (
+        "Suspensão de exigibilidade" in txt or "suspensão de exigibilidade" in txt
+    ):
+        # Caso 1: texto já existe — extrair parte + reescrever em formato canônico
+        parte_lower = None
+        if _re.search(r"\bpelo\s+Reclamante|\bdo\s+Reclamante|\bReclamante,\s*benefici", txt):
+            parte_lower = "reclamante"
+        elif _re.search(r"\bpelo\s+Reclamado|\bdo\s+Reclamado|\bReclamado,\s*benefici", txt):
+            parte_lower = "reclamado"
+        elif "ambas" in txt.lower() or "ambos" in txt.lower():
+            parte_lower = "ambos"
+        elif "parte reclamante" in txt.lower() and "parte reclamada" in txt.lower():
+            parte_lower = "ambos"
+        elif "parte reclamante" in txt.lower():
+            parte_lower = "reclamante"
+        elif "parte reclamada" in txt.lower():
+            parte_lower = "reclamado"
+        if parte_lower is None:
+            return data  # preserva original (formato desconhecido)
+        pc["comentarios_jg"] = _build_comentarios_jg(parte_lower, nome_rec, nome_red)
+        return data
+
+    # Caso 2: comentarios_jg null/vazio → auto-gerar a partir dos FATOS
+    jg = pc.get("justica_gratuita") or {}
+    if not isinstance(jg, dict):
+        return data
+    jg_rec = bool(jg.get("reclamante", False))
+    jg_red = bool(jg.get("reclamado", False))
+    if not (jg_rec or jg_red):
+        return data  # ninguém é beneficiário — sem comentário
+
+    # Verificar interseção com sucumbenciais
+    suc_rec = False
+    suc_red = False
+    for hon in data.get("honorarios", []) or []:
+        if not isinstance(hon, dict): continue
+        if hon.get("tipo_honorario") != "SUCUMBENCIAIS": continue
+        dev = hon.get("tipo_devedor", "")
+        if dev == "RECLAMANTE": suc_rec = True
+        elif dev == "RECLAMADO": suc_red = True
+
+    aplica_rec = jg_rec and suc_rec
+    aplica_red = jg_red and suc_red
+    if aplica_rec and aplica_red:
+        parte_lower = "ambos"
+    elif aplica_rec:
+        parte_lower = "reclamante"
+    elif aplica_red:
+        parte_lower = "reclamado"
     else:
-        forma_correta = (
-            f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
-            f"pela parte reclamante — {nome_rec} e pela parte reclamada — {nome_red}, "
-            f"ambas beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."
-        )
-    pc["comentarios_jg"] = forma_correta
+        return data  # JG concedida mas sem sucumbenciais contra essa parte
+
+    pc["comentarios_jg"] = _build_comentarios_jg(parte_lower, nome_rec, nome_red)
     return data
 
 

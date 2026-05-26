@@ -196,6 +196,18 @@ class ExcecaoSabado(BaseModel):
     data_fim: str
 
 
+class JusticaGratuita(BaseModel):
+    """Concessão de Justiça Gratuita por parte (fato extraído da sentença).
+
+    Combinação com honorarios[].tipo_devedor=SUCUMBENCIAIS contra a mesma
+    parte aciona auto-build do texto de suspensão de exigibilidade
+    (art. 791-A § 4º CLT) pelo normalizer — preserva fidelidade
+    prévia↔automação.
+    """
+    reclamante: bool = False
+    reclamado: bool = False
+
+
 class ParametrosCalculo(BaseModel):
     model_config = ConfigDict(extra="allow")
     estado_uf: str = Field(min_length=2, max_length=2)
@@ -223,7 +235,12 @@ class ParametrosCalculo(BaseModel):
     sabado_dia_util: bool = False
     excecoes_sabado: list[ExcecaoSabado] = Field(default_factory=list)
     pontos_facultativos_codigo: list[int] = Field(default_factory=list)
+    justica_gratuita: JusticaGratuita = Field(default_factory=JusticaGratuita)
+    """Concessão de JG (true/false por parte). Auto-build de comentarios_jg
+    quando há sucumbenciais contra parte beneficiária."""
     comentarios_jg: Optional[str] = None
+    """Override manual do texto. Quando null, normalizer auto-gera a partir
+    de justica_gratuita + honorarios[]. Quando preenchido, sobrescreve."""
 
 
 # ─── 3. Histórico Salarial ────────────────────────────────────────────────

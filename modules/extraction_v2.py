@@ -1333,51 +1333,56 @@ Para `tipo_honorario = "SUCUMBENCIAIS"`, o credor é **sempre o advogado da part
 `tipo_honorario` ∈ {`SUCUMBENCIAIS`, `ADVOCATICIOS`, `ASSISTENCIAIS`, `CONTRATUAIS`,
 `PERICIAIS_MEDICO`, `PERICIAIS_CONTADOR`, `PERICIAIS_ENGENHEIRO`, `PERICIAIS_OUTROS`}
 
-### Sucumbência parcial — parte devedora com Justiça Gratuita (JG)
-Quando a sentença condena alguma parte (parte reclamante ou parte reclamada)
-em honorários sucumbenciais E essa parte é beneficiária da Justiça Gratuita
-(art. 791-A, § 4º da CLT):
-1. Incluir o honorário normalmente com o `tipo_devedor` correto
-2. **Obrigatoriamente** preencher `parametros_calculo.comentarios_jg` com texto
-   no formato:
+### Sucumbência parcial — Justiça Gratuita (JG)
 
-   ```
-   Suspensão de exigibilidade dos honorários sucumbenciais devidos pela
-   <parte reclamante|parte reclamada> — <NOME COMPLETO DA PARTE conforme PJE>,
-   beneficiária da Justiça Gratuita (art. 791-A, § 4º, da CLT).
-   ```
+⚠️ **POLÍTICA — preencha APENAS FATOS, não o texto do comentário** (26/05/2026):
 
-   ⚠️ **REGRA CRÍTICA DE CONCORDÂNCIA**:
-   - Use SEMPRE "parte reclamante" / "parte reclamada" (sempre feminino —
-     "parte" é substantivo feminino, independe do gênero da pessoa)
-   - Por isso a concordância: "beneficiári**a**" (feminino), não "beneficiário"
-   - Inclua SEMPRE travessão "—" e o NOME COMPLETO da parte conforme está
-     em `processo.reclamante.nome` ou `processo.reclamado.nome`
+Quando a sentença concede o benefício da Justiça Gratuita a alguma parte,
+marque em `parametros_calculo.justica_gratuita`:
 
-   **Exemplos corretos**:
+```json
+"parametros_calculo": {
+  ...,
+  "justica_gratuita": {
+    "reclamante": true,   // true se a sentença concede JG ao reclamante
+    "reclamado": false    // true se a sentença concede JG ao reclamado (raro)
+  },
+  "comentarios_jg": null   // DEIXE NULL — o normalizer auto-gera o texto
+}
+```
 
-   - **Parte reclamante beneficiária** (caso mais comum):
-     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pela parte reclamante — SCARLETTE KAROLAINE DA SILVA, beneficiária da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+E preencha normalmente os honorários sucumbenciais em `honorarios` com o
+`tipo_devedor` correto. O normalizer detectará a interseção (parte JG ∩
+parte condenada em sucumbenciais) e auto-gerará o texto canônico de
+suspensão de exigibilidade (art. 791-A § 4º CLT) ANTES da prévia, garantindo:
 
-   - **Parte reclamada beneficiária** (caso raro — pessoa física hipossuficiente):
-     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pela parte reclamada — JOÃO DA SILVA, beneficiária da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+- Concordância de gênero correta (usa "parte reclamante/reclamada" + "beneficiária")
+- Nome completo conforme `processo.reclamante.nome` / `processo.reclamado.nome`
+- Idempotência: você verá o texto pronto na prévia exatamente como vai na automação
 
-   - **Ambas as partes beneficiárias** (lista os dois nomes):
-     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pela parte reclamante — MARIA SOUZA e pela parte reclamada — JOÃO COSTA, ambas beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+Critérios para `justica_gratuita.reclamante = true`:
+- Sentença menciona "benefício da justiça gratuita", "gratuidade da justiça",
+  "assistência judiciária gratuita" deferida ao reclamante (autor)
 
-   ❌ **NUNCA** use formato com gênero do indivíduo:
-   - ~~"devidos pelo Reclamante, beneficiário"~~ (quebra se reclamante for mulher)
-   - ~~"devidos pelo Sr. João"~~ (presume gênero)
-   - ~~"parte beneficiária"~~ (genérico — não identifica qual parte)
+Critérios para `justica_gratuita.reclamado = true`:
+- Sentença menciona o mesmo para o reclamado (geralmente pessoa física hipossuficiente)
 
-   ✅ **SEMPRE** "parte reclamante/reclamada — NOME, beneficiária":
-   evita qualquer erro de concordância de gênero.
+⚠️ **`comentarios_jg`** deve ser `null` em 99% dos casos. Só preencha manualmente
+se quiser SOBRESCREVER o texto auto-gerado pelo normalizer (raro). Quando
+preencher, use o formato canônico:
 
-Critérios:
-- Sentença menciona "benefício da justiça gratuita" / "gratuidade da justiça" para a parte, E
-- Condena essa parte em honorários sucumbenciais (sucumbência recíproca ou improcedência parcial)
+```
+Suspensão de exigibilidade dos honorários sucumbenciais devidos pela
+<parte reclamante|parte reclamada> — <NOME>, beneficiária da Justiça
+Gratuita (art. 791-A, § 4º, da CLT).
+```
 
-Se não há menção a JG na sentença, deixar `comentarios_jg: null`.
+❌ **NUNCA** use formato com gênero do indivíduo:
+- ~~"devidos pelo Reclamante, beneficiário"~~ — quebra concordância se a parte for mulher
+- ~~"parte beneficiária"~~ — genérico, não identifica qual parte
+
+Se não há JG concedida na sentença, deixar `justica_gratuita: {reclamante: false, reclamado: false}`
+(ou omitir o campo — Pydantic usa default) e `comentarios_jg: null`.
 
 # 8. SEÇÕES OPCIONAIS — política "skip por omissão"
 
