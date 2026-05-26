@@ -7326,6 +7326,51 @@ class PlaywrightAutomatorV2:
                         self.descricao = None
                 fases_juros = [_F(_legacy_de or "", _legacy_outro)]
 
+        # ⚠ FIDELIDADE (26/05/2026): se juros_combinacoes está vazio mas
+        # PJE-Calc tem state anterior (cálculo reaberto), bot deve LIMPAR
+        # combinações antigas — não basta "não adicionar novas".
+        # Estratégia:
+        # 1. Se fases_juros == [] e DOM tem rows na tabela de combinações,
+        #    clicar nos ícones ❌ para remover cada linha
+        # 2. Em seguida desmarcar checkbox combinarOutroJuros (se possível)
+        try:
+            removidas = self._page.evaluate("""() => {
+                // Procurar todos links/imagens de "remover" na tabela de combinações de juros
+                // (ações da listaDeCombinacaoDeJuros)
+                const btns = [...document.querySelectorAll(
+                    'a[id*="removerCombinacaoDeJuros"], img[src*="trash"]'
+                )];
+                // Heurística adicional: links/buttons em rows da tabela de juros
+                let n = 0;
+                for (const b of btns) {
+                    try {
+                        b.click();
+                        n++;
+                    } catch(_) {}
+                }
+                return n;
+            }""")
+            if removidas:
+                self.log(f"  ↺ Removidas {removidas} combinações antigas de juros")
+                self._aguardar_ajax(2500)
+                self._page.wait_for_timeout(800)
+        except Exception:
+            pass
+
+        if not fases_juros:
+            # Desmarcar combinarOutroJuros (estava marcado por state anterior)
+            try:
+                checked = self._page.evaluate("""() => {
+                    const cb = document.querySelector("input[type='checkbox'][id$=':combinarOutroJuros']");
+                    return cb ? cb.checked : false;
+                }""")
+                if checked:
+                    self._marcar_checkbox("combinarOutroJuros", False)
+                    self._aguardar_ajax(1500)
+                    self.log("  ↺ combinarOutroJuros desmarcado (sem juros_combinacoes no JSON)")
+            except Exception:
+                pass
+
         if fases_juros:
             try:
                 self._marcar_checkbox("combinarOutroJuros", True)
