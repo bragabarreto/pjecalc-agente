@@ -1213,16 +1213,98 @@ Outras regras FGTS:
 
 ⚠️ Para `contribuicao_social.vinculacao_historicos_devidos` (quando preencher CS), deixar `{"modo": "automatica", "intervalos": []}` por padrão. Só usar `manual_por_periodo` se a sentença determinar bases diferentes por período.
 
-⚠️ Para `correcao_juros_multa`, padrão pós-ADC 58 (após Set/2024):
+⚠️ **REGRA CRÍTICA — `correcao_juros_multa` (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+
+**Modelo jurídico obrigatório**: ADC 58 (STF, vinculante) + TST E-ED-RR-20407-32.2015.5.04.0271
+(SDI-1, j. 24/10/2024, DEJT 08/11/2024) + Lei 14.905/2024 (vigência 30/08/2024).
+
+### Detecção do modelo a aplicar — leia a sentença
+
+A IA deve LER a seção da sentença sobre Correção/Juros e detectar:
+
+| Trecho da sentença | Modelo a aplicar |
+|---|---|
+| "ADC 58", "decisão vinculante STF", "IPCA-E pré-judicial e SELIC ajuizamento" | **Modelo TST** (3 fases conforme datas — ver tabela abaixo) |
+| Sentença explícita E-ED-RR-20407 ou Lei 14.905/2024 | **Modelo TST** |
+| Silente ou genérica ("correção monetária e juros legais") | **Modelo TST** (default jurisprudencial vigente) |
+| TR / Súmula 200/TST / juros 1% até 2017 | Modelo antigo (só usar se sentença for explícita; raro) |
+
+### Modelo TST — mapeamento para `correcao_juros_multa`
+
+Considerando `data_ajuizamento` da causa e a data de corte **30/08/2024** (vigência Lei 14.905):
+
+**Caso A — `data_ajuizamento` >= 30/08/2024** (Scarlette: 04/03/2026):
+```json
+{
+  "indice_trabalhista": "IPCA",
+  "combinar_outro_indice": false,
+  "juros": "TAXA_LEGAL",
+  "aplicar_juros_fase_pre_judicial": true,
+  "juros_combinacoes": [
+    {
+      "data_inicio": "<data_ajuizamento>",
+      "tabela": "SELIC",
+      "descricao": "Fase 2 — ajuizamento em diante (SELIC engloba correção e juros)"
+    }
+  ],
+  "base_juros_verbas": "VERBAS",
+  "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"}
+}
+```
+(Antes do ajuizamento não há juros — TAXA_LEGAL fica como tabela "principal" para
+PJE-Calc registrar a fase pré-judicial; SELIC entra como combinação a partir do
+ajuizamento; PJE-Calc aplica Lei 14.905 automaticamente quando juros=TAXA_LEGAL
+e correção=IPCA pós-30/08/2024.)
+
+**Caso B — `data_ajuizamento` >= 25/03/2015 E < 30/08/2024** (ações antigas):
 ```json
 {
   "indice_trabalhista": "IPCAE",
+  "combinar_outro_indice": true,
+  "indice_combinado": "IPCA",
+  "data_inicio_combinacao": "30/08/2024",
   "juros": "TAXA_LEGAL",
+  "aplicar_juros_fase_pre_judicial": true,
+  "juros_combinacoes": [
+    {
+      "data_inicio": "<data_ajuizamento>",
+      "tabela": "SELIC",
+      "descricao": "Fase 2 — ajuizamento até 29/08/2024"
+    },
+    {
+      "data_inicio": "30/08/2024",
+      "tabela": "TAXA_LEGAL",
+      "descricao": "Fase 3 — Lei 14.905/2024 (CC art. 406 §)"
+    }
+  ],
   "base_juros_verbas": "VERBAS",
-  "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"},
-  ...
+  "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"}
 }
 ```
+
+### IMPORTANTE — Dano Moral
+Quando a sentença menciona explicitamente que o modelo "aplica-se inclusive à
+indenização por danos morais" (jurisprudência TST recente), nada muda no
+`correcao_juros_multa` (que já é global ao cálculo). Apenas confirma que a
+INDENIZAÇÃO POR DANO MORAL deve marcar `incidencias` SEM `cs_inss/irpf/fgts`
+e ter `juros_aplicar_sumula_439=false` (já é o padrão).
+
+### Enums permitidos
+
+`indice_trabalhista`: `IPCAE` | `IPCA` | `IPCAETR` | `TR` | `IGPM` | `INPC` |
+`IPC` | `TUACDT` (legado) | `TABELA_UNICA_JT_MENSAL` | `TABELA_UNICA_JT_DIARIO` |
+`SELIC` | `SELIC_FAZENDA` | `SELIC_BACEN` | `SEM_CORRECAO`
+
+`juros` (fase 1) e `juros_combinacoes[].tabela`: `TAXA_LEGAL` | `SELIC` |
+`SELIC_FAZENDA` | `SELIC_BACEN` | `JUROS_PADRAO` | `JUROS_POUPANCA` |
+`JUROS_MEIO_PORCENTO` | `JUROS_UM_PORCENTO` | `JUROS_ZERO_TRINTA_TRES` |
+`FAZENDA_PUBLICA` | `SEM_JUROS`
+
+### Bug histórico (Scarlette 25/05/2026 — NÃO REPETIR)
+
+A IA gerou `{indice_trabalhista: "TUACDT", juros: "SELIC"}` (sem combinações).
+Ficou: Tabela Única + SELIC global. **ERRADO** vs. ADC 58/TST.
+Sempre usar IPCA/IPCAE + combinações conforme tabela acima.
 
 ## HONORÁRIOS — regras obrigatórias
 

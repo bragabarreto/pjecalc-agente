@@ -7275,49 +7275,88 @@ class PlaywrightAutomatorV2:
         if ignorar_neg is not None:
             self._marcar_checkbox("ignorarTaxaNegativa", bool(ignorar_neg))
 
-        # ── Aplicar Juros Pré-Judicial (controla se TabelaJuros aplica desde
-        # o vencimento ou desde o ajuizamento). Schema v2 não tem campo direto
-        # — só inferimos pela presença de data_inicio_juros pré-ajuizamento.
-        # Por padrão, deixar TRUE (Calc-Machine pattern).
-        try:
-            self._marcar_checkbox("aplicarJurosFasePreJudicial", True)
-            self._aguardar_ajax(800)
-        except Exception:
-            pass
-
         # ── Tabela de Juros (ID real: juros — NÃO taxaJuros) ─────────────────
+        # (aplicarJurosFasePreJudicial é configurado mais abaixo, lendo c.aplicar_juros_fase_pre_judicial)
         juros_val = _JUROS_MAP.get(c.juros, c.juros)
         self._selecionar("juros", juros_val)
         self._aguardar_ajax(1000)
 
-        # ── Combinar com outro juros (Lei 14.905 — taxa a partir de data)
-        # IDs reais: combinarOutroJuros, outroJuros, apartirDeOutroJuros,
-        # addOutroJuros (link).
-        combinar_juros = (
-            getattr(c, "juros_combinar", False)
-            or getattr(c, "combinar_com_outro_juros", False)
-            or getattr(c, "combinar_outro_juros", False)
-        )
-        outro_juros = (
-            getattr(c, "juros_combinado", None)
-            or getattr(c, "outro_juros", None)
-        )
-        outro_juros_de = (
-            getattr(c, "juros_combinado_data_inicio", None)
-            or getattr(c, "outro_juros_a_partir_de", None)
-        )
-        if combinar_juros and outro_juros:
-            self._marcar_checkbox("combinarOutroJuros", True)
-            self._aguardar_ajax(1500)
-            self._selecionar("outroJuros", _JUROS_MAP.get(outro_juros, outro_juros))
-            if outro_juros_de:
-                self._preencher("apartirDeOutroJuros", outro_juros_de, obrigatorio=False)
+        # ── Aplicar Juros na Fase Pré-Judicial (controla se TabelaJuros aplica
+        # DESDE o vencimento — modelo CLT — ou SÓ a partir do ajuizamento — Fazenda).
+        # ID real: aplicarJurosFasePreJudicial (checkbox).
+        try:
+            aplicar_pre = bool(getattr(c, "aplicar_juros_fase_pre_judicial", True))
+            self._marcar_checkbox("aplicarJurosFasePreJudicial", aplicar_pre)
+            self._aguardar_ajax(800)
+        except Exception:
+            pass
+
+        # ── Combinar com Outras Tabelas de Juros (N fases, modelo ADC 58 + TST
+        # E-ED-RR-20407 + Lei 14.905). Schema v2:
+        #   c.juros_combinacoes: list[FaseJuros{data_inicio, tabela, descricao?}]
+        # IDs JSF:
+        #   combinarOutroJuros (checkbox — marcar UMA vez se há combinações)
+        #   outroJuros (select da tabela)
+        #   apartirDeOutroJuros (date input)
+        #   addOutroJuros (link "+" — adiciona linha na tabela acumulada)
+        #
+        # Compat legacy: ainda lê campos antigos (juros_combinar/outro_juros/...)
+        # SE juros_combinacoes estiver vazio.
+        fases_juros: list = list(getattr(c, "juros_combinacoes", []) or [])
+        if not fases_juros:
+            # Modo legacy — converter 1 combinação antiga em uma fase única
+            _legacy_combinar = (
+                getattr(c, "juros_combinar", False)
+                or getattr(c, "combinar_com_outro_juros", False)
+                or getattr(c, "combinar_outro_juros", False)
+            )
+            _legacy_outro = (
+                getattr(c, "juros_combinado", None)
+                or getattr(c, "outro_juros", None)
+            )
+            _legacy_de = (
+                getattr(c, "juros_combinado_data_inicio", None)
+                or getattr(c, "outro_juros_a_partir_de", None)
+            )
+            if _legacy_combinar and _legacy_outro:
+                class _F:
+                    def __init__(self, data_inicio, tabela):
+                        self.data_inicio = data_inicio
+                        self.tabela = tabela
+                        self.descricao = None
+                fases_juros = [_F(_legacy_de or "", _legacy_outro)]
+
+        if fases_juros:
             try:
-                self._clicar("addOutroJuros")
-                self._aguardar_ajax(2000)
-                self.log(f"  ✓ Juros combinado: {outro_juros} a partir de {outro_juros_de} (+ adicionado)")
+                self._marcar_checkbox("combinarOutroJuros", True)
+                self._aguardar_ajax(1500)
             except Exception as e:
-                self.log(f"  ⚠ addOutroJuros falhou: {e}")
+                self.log(f"  ⚠ combinarOutroJuros checkbox falhou: {e}")
+            for idx, fase in enumerate(fases_juros):
+                tabela_in = getattr(fase, "tabela", None) or (fase.get("tabela") if isinstance(fase, dict) else None)
+                data_in = getattr(fase, "data_inicio", None) or (fase.get("data_inicio") if isinstance(fase, dict) else None)
+                desc = getattr(fase, "descricao", None) or (fase.get("descricao") if isinstance(fase, dict) else None)
+                if not tabela_in:
+                    self.log(f"  ⚠ fase juros[{idx}]: sem tabela — pulando")
+                    continue
+                tabela_dom = _JUROS_MAP.get(tabela_in, tabela_in)
+                try:
+                    self._selecionar("outroJuros", tabela_dom)
+                except Exception as e:
+                    self.log(f"  ⚠ selecionar outroJuros[{idx}]={tabela_dom}: {e}")
+                    continue
+                if data_in:
+                    try:
+                        self._preencher("apartirDeOutroJuros", data_in, obrigatorio=False)
+                    except Exception as e:
+                        self.log(f"  ⚠ apartirDeOutroJuros[{idx}]={data_in}: {e}")
+                try:
+                    self._clicar("addOutroJuros")
+                    self._aguardar_ajax(2000)
+                    desc_log = f" [{desc}]" if desc else ""
+                    self.log(f"  ✓ Juros fase {idx+1}: {tabela_in} a partir de {data_in or '(início)'}{desc_log}")
+                except Exception as e:
+                    self.log(f"  ⚠ addOutroJuros[{idx}] falhou: {e}")
 
         # ── Trocar para Aba "Dados Específicos" (onde estão baseDeJurosDasVerbas,
         # indiceDeCorrecaoDoFGTS, custas, previdência privada). A aba tem id

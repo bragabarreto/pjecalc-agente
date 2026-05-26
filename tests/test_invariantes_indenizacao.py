@@ -342,6 +342,41 @@ def test_inv9_normalizer_nao_toca_divisor_outras_verbas():
         f"Normalizer TOCOU divisor de MULTA 477 (deveria ser 1, got {div['valor']})"
 
 
+# ─── Invariante 10 — juros_combinacoes multi-fase (ADC 58 + TST E-ED-RR-20407) ─
+
+
+def test_inv10_juros_combinacoes_schema_existe():
+    """Schema v2 deve ter campo `juros_combinacoes: list[FaseJuros]` para
+    suportar até N fases de juros (modelo TST 3 fases).
+    """
+    schema_src = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
+    assert "class FaseJuros" in schema_src, "Schema FaseJuros não definido"
+    assert "juros_combinacoes:" in schema_src, "Campo juros_combinacoes ausente"
+    assert "ADC 58" in schema_src and "E-ED-RR-20407" in schema_src, \
+        "Motivação jurídica (ADC 58 + TST E-ED-RR-20407) deve estar documentada"
+
+
+def test_inv10_bot_aplica_juros_combinacoes():
+    """Bot deve iterar `juros_combinacoes` e clicar addOutroJuros para cada fase."""
+    src = PLAYWRIGHT_V2
+    assert "juros_combinacoes" in src, "Bot não consome juros_combinacoes"
+    assert "addOutroJuros" in src, "Bot não clica botão '+' addOutroJuros"
+    # Loop por fases
+    assert "for idx, fase in enumerate(fases_juros)" in src or "for fase in fases_juros" in src, \
+        "Bot não itera N fases — pode estar limitado a 1 combinação"
+
+
+def test_inv10_prompt_orienta_modelo_TST():
+    """Prompt interno deve orientar modelo TST E-ED-RR-20407 + Lei 14.905."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "E-ED-RR-20407" in ext, "Prompt interno não cita TST E-ED-RR-20407"
+    assert "Lei 14.905" in ext, "Prompt interno não cita Lei 14.905/2024"
+    assert "30/08/2024" in ext, "Data de corte Lei 14.905 ausente"
+    # 2 casos cobertos (Caso A pós, Caso B antigo)
+    assert "Caso A" in ext and "Caso B" in ext, \
+        "Prompt não cobre os 2 casos (ajuizamento >=30/08/2024 vs <30/08/2024)"
+
+
 # ─── Marker: regressão de mudança Sobrescrever pós-params ──────────────────
 
 

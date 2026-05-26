@@ -1263,6 +1263,32 @@ class CorrecaoCS(BaseModel):
     multa_previdenciaria_modo: Optional[Literal["INTEGRAL", "REDUZIDO"]] = None
 
 
+class FaseJuros(BaseModel):
+    """Uma fase de juros — empilhável no botão '+' do PJE-Calc.
+
+    Modelo jurídico ADC 58 + TST E-ED-RR-20407-32.2015.5.04.0271 + Lei 14.905/2024
+    requer até 3 fases consecutivas:
+      1. Pré-judicial: TAXA_LEGAL (art. 39 Lei 8.177)
+      2. Ajuizamento → 29/08/2024: SELIC
+      3. 30/08/2024 em diante: TAXA_LEGAL (= SELIC − IPCA, conforme CC art. 406
+         pós Lei 14.905/2024)
+
+    Cada FaseJuros vira uma linha no "Combinar com Outra Tabela de Juros"
+    do PJE-Calc.
+    """
+    data_inicio: str
+    """DD/MM/YYYY. Para a primeira fase (pré-judicial), usar string vazia
+    "" ou a data_inicio_calculo."""
+    tabela: Literal[
+        "TAXA_LEGAL", "JUROS_PADRAO", "JUROS_POUPANCA", "JUROS_MEIO_PORCENTO",
+        "JUROS_UM_PORCENTO", "JUROS_ZERO_TRINTA_TRES", "SELIC", "SELIC_FAZENDA",
+        "SELIC_BACEN", "FAZENDA_PUBLICA", "SEM_JUROS",
+    ]
+    """Enum do PJE-Calc para a tabela de juros desta fase."""
+    descricao: Optional[str] = None
+    """Anotação livre (ex.: 'Fase pré-judicial — art. 39 Lei 8.177'). Não vai ao DOM."""
+
+
 class CorrecaoJurosMulta(BaseModel):
     """Espelha página liquidacao.xhtml (Correção, Juros e Multa).
 
@@ -1284,8 +1310,32 @@ class CorrecaoJurosMulta(BaseModel):
         "JUROS_UM_PORCENTO", "JUROS_ZERO_TRINTA_TRES", "SELIC", "SELIC_FAZENDA",
         "SELIC_BACEN", "FAZENDA_PUBLICA",
     ] = "TAXA_LEGAL"
+    """Tabela de juros da FASE 1 (pré-judicial, ou única se juros_combinacoes
+    estiver vazio). Quando há mais de uma fase, preencher juros_combinacoes
+    com as FASES 2+ (cada uma com sua data_inicio)."""
     fazenda_publica_data_inicial: Optional[str] = None
     nao_aplicar_juros: bool = False
+    aplicar_juros_fase_pre_judicial: bool = True
+    """Se True, juros aplicam DESDE o vencimento da verba (modelo CLT).
+    Se False, juros aplicam SÓ a partir do ajuizamento (modelo Fazenda Pública)."""
+
+    juros_combinacoes: list[FaseJuros] = Field(default_factory=list)
+    """Fases adicionais de juros (botão '+' do PJE-Calc). Cada fase substitui
+    a tabela vigente a partir da `data_inicio`. Modelo TST E-ED-RR-20407
+    (ajuizamento >= 30/08/2024):
+      juros = "TAXA_LEGAL"  (fase 1: pré-jud)
+      juros_combinacoes = [
+        {data_inicio: "<data_ajuizamento>", tabela: "SELIC"},
+        {data_inicio: "30/08/2024", tabela: "TAXA_LEGAL"}
+      ]
+
+    Modelo simplificado (caso Scarlette, ajuizamento POSTERIOR a 30/08/2024):
+      juros = "TAXA_LEGAL"
+      juros_combinacoes = [
+        {data_inicio: "<data_ajuizamento>", tabela: "SELIC"}
+      ]
+    (PJE-Calc trata Lei 14.905 internamente com TAXA_LEGAL pós-30/08/2024.)
+    """
 
     # Aba "Dados Específicos"
     base_juros_verbas: Literal["VERBAS", "VERBA_INSS", "VERBA_INSS_PP"] = "VERBAS"
