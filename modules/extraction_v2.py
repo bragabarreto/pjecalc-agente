@@ -1373,9 +1373,13 @@ preencher, use o formato canônico:
 
 ```
 Suspensão de exigibilidade dos honorários sucumbenciais devidos pela
-<parte reclamante|parte reclamada> — <NOME>, beneficiária da Justiça
+<parte reclamante|parte reclamada> - <NOME>, beneficiária da Justiça
 Gratuita (art. 791-A, § 4º, da CLT).
 ```
+
+⚠️ **NOTA — usar HÍFEN comum `-`, não travessão Unicode `—` (em-dash)**:
+PJE-Calc 2.15.1 usa Latin-1; o em-dash U+2014 não existe nesse encoding e
+fica convertido para "¿". O hífen `-` (U+002D) é seguro em todos encodings.
 
 ❌ **NUNCA** use formato com gênero do indivíduo:
 - ~~"devidos pelo Reclamante, beneficiário"~~ — quebra concordância se a parte for mulher

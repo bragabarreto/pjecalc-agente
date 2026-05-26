@@ -1930,7 +1930,7 @@ class PlaywrightAutomatorV2:
         # Comentários JG — primary: pc.comentarios_jg (normalizer já corrige
         # concordância). Fallback defensivo se IA omitiu E há sucumbenciais.
         # CRÍTICO (26/05/2026, user feedback): formato canônico
-        #   "...devidos pela parte reclamante/reclamada — NOME, beneficiária..."
+        #   "...devidos pela parte reclamante/reclamada - NOME, beneficiária..."
         # Evita erro de concordância de gênero (Reclamante = sempre masculino;
         # parte = sempre feminino → "beneficiária" funciona p/ qualquer pessoa).
         jg_text = getattr(pc, "comentarios_jg", None)
@@ -1952,14 +1952,14 @@ class PlaywrightAutomatorV2:
                     p, nm = partes_jg[0]
                     jg_text = (
                         f"Suspensão de exigibilidade dos honorários sucumbenciais "
-                        f"devidos pela parte {p} — {nm}, beneficiária da Justiça "
+                        f"devidos pela parte {p} - {nm}, beneficiária da Justiça "
                         f"Gratuita (art. 791-A, § 4º, da CLT)."
                     )
                 else:
                     jg_text = (
                         f"Suspensão de exigibilidade dos honorários sucumbenciais "
-                        f"devidos pela parte reclamante — {nome_rec} e pela parte "
-                        f"reclamada — {nome_red}, ambas beneficiárias da Justiça "
+                        f"devidos pela parte reclamante - {nome_rec} e pela parte "
+                        f"reclamada - {nome_red}, ambas beneficiárias da Justiça "
                         f"Gratuita (art. 791-A, § 4º, da CLT)."
                     )
                 self.log(f"  ℹ JG auto-detectado: {[p[0] for p in partes_jg]}")

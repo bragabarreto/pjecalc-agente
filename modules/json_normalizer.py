@@ -281,13 +281,13 @@ def _build_comentarios_jg(parte_lower: str, nome_rec: str, nome_red: str) -> str
     if parte_lower == "ambos":
         return (
             f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
-            f"pela parte reclamante — {nome_rec} e pela parte reclamada — {nome_red}, "
+            f"pela parte reclamante - {nome_rec} e pela parte reclamada - {nome_red}, "
             f"ambas beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."
         )
     nome_alvo = nome_rec if parte_lower == "reclamante" else nome_red
     return (
         f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
-        f"pela parte {parte_lower} — {nome_alvo}, beneficiária da Justiça "
+        f"pela parte {parte_lower} - {nome_alvo}, beneficiária da Justiça "
         f"Gratuita (art. 791-A, § 4º, da CLT)."
     )
 
