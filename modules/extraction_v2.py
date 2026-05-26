@@ -1233,30 +1233,32 @@ A IA deve LER a seção da sentença sobre Correção/Juros e detectar:
 
 Considerando `data_ajuizamento` da causa e a data de corte **30/08/2024** (vigência Lei 14.905):
 
-**Caso A — `data_ajuizamento` >= 30/08/2024** (Scarlette: 04/03/2026):
+**Caso A — `data_ajuizamento` >= 30/08/2024 E `data_inicio_calculo` >= 30/08/2024**
+(Scarlette: ajuizamento 04/03/2026, cálculo inicia 10/04/2025 — TUDO pós-30/08/2024):
 ```json
 {
   "indice_trabalhista": "IPCA",
   "combinar_outro_indice": false,
   "juros": "TAXA_LEGAL",
   "aplicar_juros_fase_pre_judicial": true,
-  "juros_combinacoes": [
-    {
-      "data_inicio": "<data_ajuizamento>",
-      "tabela": "SELIC",
-      "descricao": "Fase 2 — ajuizamento em diante (SELIC engloba correção e juros)"
-    }
-  ],
+  "juros_combinacoes": [],
   "base_juros_verbas": "VERBAS",
   "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"}
 }
 ```
-(Antes do ajuizamento não há juros — TAXA_LEGAL fica como tabela "principal" para
-PJE-Calc registrar a fase pré-judicial; SELIC entra como combinação a partir do
-ajuizamento; PJE-Calc aplica Lei 14.905 automaticamente quando juros=TAXA_LEGAL
-e correção=IPCA pós-30/08/2024.)
+**Sem combinações** — PJE-Calc aplica Lei 14.905/2024 (CC art. 406 §)
+internamente quando `indice=IPCA` + `juros=TAXA_LEGAL`. A "fase 2 SELIC do
+ajuizamento até 29/08/2024" do modelo TST não se aplica aqui (ajuizamento
+é posterior a 29/08/2024). A "fase 3 IPCA + SELIC−IPCA" é o estado padrão
+desta configuração.
 
-**Caso B — `data_ajuizamento` >= 25/03/2015 E < 30/08/2024** (ações antigas):
+⚠️ **NÃO adicione `juros_combinacoes: [{tabela:"SELIC", data_inicio:<ajuizamento>}]`
+neste caso** — PJE-Calc auto-converterá para `SEM_JUROS` (correção interna)
+porque a fase SELIC pós-ajuizamento não tem período de aplicação (cálculo já
+está integralmente coberto pelo CC art. 406 §).
+
+**Caso B — cálculo CRUZA 30/08/2024** (ações antigas com período passando pela
+data-corte da Lei 14.905):
 ```json
 {
   "indice_trabalhista": "IPCAE",
@@ -1269,7 +1271,7 @@ e correção=IPCA pós-30/08/2024.)
     {
       "data_inicio": "<data_ajuizamento>",
       "tabela": "SELIC",
-      "descricao": "Fase 2 — ajuizamento até 29/08/2024"
+      "descricao": "Fase 2 — ajuizamento até 29/08/2024 (SELIC engloba)"
     },
     {
       "data_inicio": "30/08/2024",
@@ -1281,6 +1283,8 @@ e correção=IPCA pós-30/08/2024.)
   "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"}
 }
 ```
+Aqui o `data_inicio_calculo` é anterior a 30/08/2024 — a combinação faz sentido
+porque há período REAL de aplicação para cada fase.
 
 ### IMPORTANTE — Dano Moral
 Quando a sentença menciona explicitamente que o modelo "aplica-se inclusive à
