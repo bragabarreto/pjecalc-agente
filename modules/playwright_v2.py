@@ -7342,17 +7342,50 @@ class PlaywrightAutomatorV2:
                 tabela_dom = _JUROS_MAP.get(tabela_in, tabela_in)
                 try:
                     self._selecionar("outroJuros", tabela_dom)
+                    # ⚠ FIDELIDADE (26/05/2026): commitar o select ANTES de
+                    # clicar add. Test 40 mostrou que addOutroJuros pegava
+                    # SEM_JUROS (default do bean) em vez de SELIC porque o
+                    # change AJAX do select não tinha ainda terminado.
+                    # Dispatch explícito do evento change + aguardar AJAX.
+                    self._page.evaluate("""() => {
+                        const s = document.querySelector("select[id$=':outroJuros']");
+                        if (s) {
+                            s.dispatchEvent(new Event('change', {bubbles: true}));
+                            s.dispatchEvent(new Event('blur', {bubbles: true}));
+                        }
+                    }""")
+                    self._aguardar_ajax(2000)
+                    self._page.wait_for_timeout(500)
                 except Exception as e:
                     self.log(f"  ⚠ selecionar outroJuros[{idx}]={tabela_dom}: {e}")
                     continue
                 if data_in:
                     try:
                         self._preencher("apartirDeOutroJuros", data_in, obrigatorio=False)
+                        self._aguardar_ajax(1500)
+                        self._page.wait_for_timeout(400)
                     except Exception as e:
                         self.log(f"  ⚠ apartirDeOutroJuros[{idx}]={data_in}: {e}")
+                # Verificar valor antes de clicar add — sanity check
+                try:
+                    valor_select = self._page.evaluate("""() => {
+                        const s = document.querySelector("select[id$=':outroJuros']");
+                        return s ? s.value : null;
+                    }""")
+                    if valor_select != tabela_dom:
+                        self.log(f"  ⚠ outroJuros no DOM='{valor_select}' ≠ esperado='{tabela_dom}' — re-selecionando")
+                        self._selecionar("outroJuros", tabela_dom)
+                        self._page.evaluate("""() => {
+                            const s = document.querySelector("select[id$=':outroJuros']");
+                            if (s) s.dispatchEvent(new Event('change', {bubbles: true}));
+                        }""")
+                        self._aguardar_ajax(2000)
+                except Exception as e:
+                    self.log(f"  ⚠ sanity check outroJuros: {e}")
                 try:
                     self._clicar("addOutroJuros")
-                    self._aguardar_ajax(2000)
+                    self._aguardar_ajax(3000)
+                    self._page.wait_for_timeout(800)
                     desc_log = f" [{desc}]" if desc else ""
                     self.log(f"  ✓ Juros fase {idx+1}: {tabela_in} a partir de {data_in or '(início)'}{desc_log}")
                 except Exception as e:
