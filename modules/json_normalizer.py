@@ -268,6 +268,77 @@ def _norm_parametros(p: dict[str, Any]) -> dict[str, Any]:
     return p
 
 
+def _norm_comentarios_jg(data: dict[str, Any]) -> dict[str, Any]:
+    """Normaliza `parametros_calculo.comentarios_jg` para concordância correta.
+
+    Bug histórico (Scarlette 26/05/2026): IA gerou texto "devidos pelo
+    Reclamante, beneficiário" — concordância MASCULINA fixa, quebra quando
+    a parte é feminina (Scarlette = mulher). Solução: SEMPRE "parte
+    reclamante/reclamada" (feminino independe de gênero) + travessão + NOME.
+
+    Formato canônico:
+      "Suspensão de exigibilidade dos honorários sucumbenciais devidos pela
+       parte <reclamante|reclamada> — <NOME>, beneficiária da Justiça
+       Gratuita (art. 791-A, § 4º, da CLT)."
+
+    Idempotente: texto já no formato novo passa intacto.
+    """
+    import re as _re
+    pc = data.get("parametros_calculo")
+    if not isinstance(pc, dict):
+        return data
+    txt = pc.get("comentarios_jg")
+    if not txt or not isinstance(txt, str):
+        return data
+    if "Suspensão de exigibilidade" not in txt and "suspensão de exigibilidade" not in txt:
+        return data
+    # Detectar a parte beneficiária do texto antigo OU do honorarios
+    parte_lower = None
+    if _re.search(r"\bpelo\s+Reclamante|\bdo\s+Reclamante|\bReclamante,\s*benefici", txt):
+        parte_lower = "reclamante"
+    elif _re.search(r"\bpelo\s+Reclamado|\bdo\s+Reclamado|\bReclamado,\s*benefici", txt):
+        parte_lower = "reclamado"
+    elif "ambas" in txt.lower() or "ambos" in txt.lower():
+        parte_lower = "ambos"
+    elif "parte reclamante" in txt.lower():
+        parte_lower = "reclamante"
+    elif "parte reclamada" in txt.lower():
+        parte_lower = "reclamado"
+    # Fallback: detectar via honorarios sucumbenciais
+    if parte_lower is None:
+        for hon in data.get("honorarios", []) or []:
+            if not isinstance(hon, dict): continue
+            if hon.get("tipo_honorario") != "SUCUMBENCIAIS": continue
+            dev = hon.get("tipo_devedor", "")
+            if dev == "RECLAMANTE":
+                parte_lower = "reclamante" if parte_lower is None else "ambos"
+            elif dev == "RECLAMADO":
+                parte_lower = "reclamado" if parte_lower is None else "ambos"
+    if parte_lower is None:
+        return data  # não conseguiu identificar — preserva original
+
+    proc = data.get("processo") or {}
+    nome_rec = ((proc.get("reclamante") or {}).get("nome") or "").strip()
+    nome_red = ((proc.get("reclamado")  or {}).get("nome") or "").strip()
+
+    # Verifica se texto JÁ está no formato canônico (idempotência)
+    if parte_lower != "ambos":
+        nome_alvo = nome_rec if parte_lower == "reclamante" else nome_red
+        forma_correta = (
+            f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
+            f"pela parte {parte_lower} — {nome_alvo}, beneficiária da Justiça "
+            f"Gratuita (art. 791-A, § 4º, da CLT)."
+        )
+    else:
+        forma_correta = (
+            f"Suspensão de exigibilidade dos honorários sucumbenciais devidos "
+            f"pela parte reclamante — {nome_rec} e pela parte reclamada — {nome_red}, "
+            f"ambas beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."
+        )
+    pc["comentarios_jg"] = forma_correta
+    return data
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -281,6 +352,9 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # 1. Parâmetros — datas MM/YYYY
     if isinstance(data.get("parametros_calculo"), dict):
         data["parametros_calculo"] = _norm_parametros(data["parametros_calculo"])
+
+    # 1b. Comentários JG — concordância "parte reclamante/reclamada — NOME, beneficiária"
+    data = _norm_comentarios_jg(data)
 
     # 2. FGTS — multa + recolhimentos + saldo a deduzir
     if isinstance(data.get("fgts"), dict):

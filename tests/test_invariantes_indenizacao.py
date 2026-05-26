@@ -342,6 +342,50 @@ def test_inv9_normalizer_nao_toca_divisor_outras_verbas():
         f"Normalizer TOCOU divisor de MULTA 477 (deveria ser 1, got {div['valor']})"
 
 
+# ─── Invariante 11 — Comentário JG concordância de gênero ─────────────────
+
+
+def test_inv11_comentarios_jg_formato_canonico():
+    """Texto JG deve ser 'parte reclamante/reclamada — NOME, beneficiária'."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "parte reclamante" in ext.lower() or "parte reclamada" in ext.lower(), \
+        "Prompt não orienta uso de 'parte reclamante/reclamada'"
+    assert "REGRA CRÍTICA DE CONCORDÂNCIA" in ext, \
+        "Regra explícita de concordância removida"
+    # Anti-padrão: NÃO devem existir os formatos antigos como exemplos vigentes
+    # (eles aparecem só dentro do bloco ERRADO)
+    bot = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # Fallback do bot deve usar formato novo
+    assert "pela parte {p} — {nm}" in bot or "pela parte reclamante" in bot, \
+        "Fallback do bot não migrou para formato canônico"
+
+
+def test_inv11_normalizer_converte_legacy():
+    """Normalizer deve converter 'pelo Reclamante, beneficiário' → formato novo."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT))
+    from modules.json_normalizer import normalize_v2_json
+
+    payload = {
+        "processo": {
+            "reclamante": {"nome": "MARIA SOUZA"},
+            "reclamado": {"nome": "EMPRESA LTDA"},
+        },
+        "parametros_calculo": {
+            "comentarios_jg": "Suspensão de exigibilidade dos honorários sucumbenciais devidos pelo Reclamante, beneficiário da Justiça Gratuita (art. 791-A, § 4º, da CLT).",
+        },
+        "honorarios": [{"tipo_honorario": "SUCUMBENCIAIS", "tipo_devedor": "RECLAMANTE"}],
+    }
+    out = normalize_v2_json(payload)
+    novo = out["parametros_calculo"]["comentarios_jg"]
+    assert "parte reclamante" in novo, f"Não converteu para 'parte reclamante': {novo}"
+    assert "MARIA SOUZA" in novo, f"Nome ausente: {novo}"
+    assert "beneficiária" in novo, f"Concordância feminina ausente: {novo}"
+    # Idempotência
+    out2 = normalize_v2_json(out)
+    assert out2["parametros_calculo"]["comentarios_jg"] == novo, "Não é idempotente"
+
+
 # ─── Invariante 10 — juros_combinacoes multi-fase (ADC 58 + TST E-ED-RR-20407) ─
 
 

@@ -1927,35 +1927,42 @@ class PlaywrightAutomatorV2:
         # Carga horária
         self._preencher("valorCargaHorariaPadrao", _fmt_br(pc.carga_horaria.padrao_mensal))
 
-        # Comentários JG — usa valor explícito; fallback: auto-detecta JG via honorários.
-        # CRÍTICO (21/05/2026): o texto DEVE indicar A PARTE beneficiária (Reclamante/
-        # Reclamado/ambas), não apenas "parte beneficiária" genérico. Regra consagrada.
+        # Comentários JG — primary: pc.comentarios_jg (normalizer já corrige
+        # concordância). Fallback defensivo se IA omitiu E há sucumbenciais.
+        # CRÍTICO (26/05/2026, user feedback): formato canônico
+        #   "...devidos pela parte reclamante/reclamada — NOME, beneficiária..."
+        # Evita erro de concordância de gênero (Reclamante = sempre masculino;
+        # parte = sempre feminino → "beneficiária" funciona p/ qualquer pessoa).
         jg_text = getattr(pc, "comentarios_jg", None)
         if not jg_text:
-            partes_jg: list[str] = []
+            proc = self.previa.processo
+            nome_rec = (getattr(getattr(proc, "reclamante", None), "nome", "") or "").strip()
+            nome_red = (getattr(getattr(proc, "reclamado", None), "nome", "") or "").strip()
+            partes_jg: list[tuple[str, str]] = []  # (parte_lower, nome)
             for hon in self.previa.honorarios:
                 if getattr(hon, "tipo_honorario", "") != "SUCUMBENCIAIS":
                     continue
                 devedor = getattr(hon, "tipo_devedor", "") or ""
-                if devedor == "RECLAMANTE" and "Reclamante" not in partes_jg:
-                    partes_jg.append("Reclamante")
-                elif devedor == "RECLAMADO" and "Reclamado" not in partes_jg:
-                    partes_jg.append("Reclamado")
+                if devedor == "RECLAMANTE" and not any(p[0] == "reclamante" for p in partes_jg):
+                    partes_jg.append(("reclamante", nome_rec))
+                elif devedor == "RECLAMADO" and not any(p[0] == "reclamado" for p in partes_jg):
+                    partes_jg.append(("reclamado", nome_red))
             if partes_jg:
                 if len(partes_jg) == 1:
-                    parte = partes_jg[0]
+                    p, nm = partes_jg[0]
                     jg_text = (
                         f"Suspensão de exigibilidade dos honorários sucumbenciais "
-                        f"devidos pelo {parte}, beneficiário da Justiça Gratuita "
-                        f"(art. 791-A, § 4º, da CLT)."
+                        f"devidos pela parte {p} — {nm}, beneficiária da Justiça "
+                        f"Gratuita (art. 791-A, § 4º, da CLT)."
                     )
                 else:
                     jg_text = (
-                        "Suspensão de exigibilidade dos honorários sucumbenciais "
-                        "devidos por ambas as partes, beneficiárias da Justiça Gratuita "
-                        "(art. 791-A, § 4º, da CLT)."
+                        f"Suspensão de exigibilidade dos honorários sucumbenciais "
+                        f"devidos pela parte reclamante — {nome_rec} e pela parte "
+                        f"reclamada — {nome_red}, ambas beneficiárias da Justiça "
+                        f"Gratuita (art. 791-A, § 4º, da CLT)."
                     )
-                self.log(f"  ℹ JG auto-detectado: parte(s) beneficiária(s) = {', '.join(partes_jg)}")
+                self.log(f"  ℹ JG auto-detectado: {[p[0] for p in partes_jg]}")
         if jg_text:
             self._preencher("comentarios", jg_text, obrigatorio=False)
 

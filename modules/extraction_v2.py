@@ -1334,26 +1334,48 @@ Para `tipo_honorario = "SUCUMBENCIAIS"`, o credor é **sempre o advogado da part
 `PERICIAIS_MEDICO`, `PERICIAIS_CONTADOR`, `PERICIAIS_ENGENHEIRO`, `PERICIAIS_OUTROS`}
 
 ### Sucumbência parcial — parte devedora com Justiça Gratuita (JG)
-Quando a sentença condena alguma parte (Reclamante ou Reclamado) em honorários
-sucumbenciais E essa parte é beneficiária da Justiça Gratuita (art. 791-A, § 4º da CLT):
+Quando a sentença condena alguma parte (parte reclamante ou parte reclamada)
+em honorários sucumbenciais E essa parte é beneficiária da Justiça Gratuita
+(art. 791-A, § 4º da CLT):
 1. Incluir o honorário normalmente com o `tipo_devedor` correto
 2. **Obrigatoriamente** preencher `parametros_calculo.comentarios_jg` com texto
-   que **INDIQUE A PARTE BENEFICIÁRIA**:
+   no formato:
 
-   - **Reclamante beneficiário** (caso mais comum):
-     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pelo Reclamante, beneficiário da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+   ```
+   Suspensão de exigibilidade dos honorários sucumbenciais devidos pela
+   <parte reclamante|parte reclamada> — <NOME COMPLETO DA PARTE conforme PJE>,
+   beneficiária da Justiça Gratuita (art. 791-A, § 4º, da CLT).
+   ```
 
-   - **Reclamado beneficiário** (caso raro — pessoa física hipossuficiente):
-     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pelo Reclamado, beneficiário da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+   ⚠️ **REGRA CRÍTICA DE CONCORDÂNCIA**:
+   - Use SEMPRE "parte reclamante" / "parte reclamada" (sempre feminino —
+     "parte" é substantivo feminino, independe do gênero da pessoa)
+   - Por isso a concordância: "beneficiári**a**" (feminino), não "beneficiário"
+   - Inclua SEMPRE travessão "—" e o NOME COMPLETO da parte conforme está
+     em `processo.reclamante.nome` ou `processo.reclamado.nome`
 
-   - **Ambas as partes beneficiárias**:
-     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos por ambas as partes, beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+   **Exemplos corretos**:
+
+   - **Parte reclamante beneficiária** (caso mais comum):
+     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pela parte reclamante — SCARLETTE KAROLAINE DA SILVA, beneficiária da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+
+   - **Parte reclamada beneficiária** (caso raro — pessoa física hipossuficiente):
+     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pela parte reclamada — JOÃO DA SILVA, beneficiária da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+
+   - **Ambas as partes beneficiárias** (lista os dois nomes):
+     `"Suspensão de exigibilidade dos honorários sucumbenciais devidos pela parte reclamante — MARIA SOUZA e pela parte reclamada — JOÃO COSTA, ambas beneficiárias da Justiça Gratuita (art. 791-A, § 4º, da CLT)."`
+
+   ❌ **NUNCA** use formato com gênero do indivíduo:
+   - ~~"devidos pelo Reclamante, beneficiário"~~ (quebra se reclamante for mulher)
+   - ~~"devidos pelo Sr. João"~~ (presume gênero)
+   - ~~"parte beneficiária"~~ (genérico — não identifica qual parte)
+
+   ✅ **SEMPRE** "parte reclamante/reclamada — NOME, beneficiária":
+   evita qualquer erro de concordância de gênero.
 
 Critérios:
 - Sentença menciona "benefício da justiça gratuita" / "gratuidade da justiça" para a parte, E
 - Condena essa parte em honorários sucumbenciais (sucumbência recíproca ou improcedência parcial)
-
-**NUNCA usar texto genérico "parte beneficiária"** — sempre indicar QUAL parte.
 
 Se não há menção a JG na sentença, deixar `comentarios_jg: null`.
 
