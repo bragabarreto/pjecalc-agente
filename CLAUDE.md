@@ -315,6 +315,51 @@ em `fase_verbas` deve ser preservado. Removê-lo regride INDENIZAÇÃO para o es
 
 Já descrito acima na seção principal. Mantido como pendência ativa.
 
+## Regra obrigatória — Apresentação do prompt do Projeto Claude externo
+
+> **Quando o usuário solicitar a versão atualizada do prompt do Projeto Claude
+> externo (ex.: "me dá o prompt externo", "arquivo integral atualizado",
+> "para colar no projeto"), Claude DEVE entregar:**
+>
+> 1. **Formato com as 2 ETAPAS prévias** — `SYSTEM_PROMPT_V2_EXTERNAL` =
+>    `_FLUXO_2_ETAPAS + SYSTEM_PROMPT_V2` (definido em `modules/extraction_v2.py`).
+>    Começa com `# FLUXO OPERACIONAL — 2 ETAPAS (OBRIGATÓRIAS)` e contém:
+>    - Etapa 1: resumo prévio + validação em markdown (PRIMEIRA resposta)
+>    - Etapa 2: JSON estruturado (resposta APÓS "confirmar")
+>
+> 2. **Integral** — TODAS as ~1444 linhas (do "# FLUXO OPERACIONAL" até
+>    "Lembre-se: SOMENTE JSON na resposta. Sem texto extra."). NUNCA versão
+>    resumida, NUNCA por capítulos, NUNCA "blocos para colar separadamente".
+>
+> 3. **Atualizado** — versão renderizada DINAMICAMENTE a partir da fonte:
+>    ```python
+>    from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL
+>    ```
+>    Garante que reflete TODAS as últimas correções (divisor CLT,
+>    prescricao_quinquenal, verba única, etc.).
+>
+> 4. **Pronto para colar** — o texto deve poder ser copiado/colado DIRETAMENTE
+>    nas Instructions do Projeto Claude no Anthropic Console, sem
+>    pré-processamento, sem markdown decorativo de apresentação, sem
+>    comentários do Claude entre as linhas.
+>
+> **Implementação recomendada:**
+> ```bash
+> python3 -c "
+> from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL
+> print(SYSTEM_PROMPT_V2_EXTERNAL)
+> " > /tmp/prompt-externo-atualizado.md
+> ```
+> ou via endpoint: `curl -s http://163.176.44.221:8000/api/prompt-externo`.
+>
+> **Por que renderizar dinamicamente**: o prompt vive como código Python
+> (`_FLUXO_2_ETAPAS + SYSTEM_PROMPT_V2`). Apresentar via cópia estática de
+> `docs/prompt-projeto-claude-externo.md` corre risco de defasagem se este
+> arquivo .md ficar desatualizado em relação ao `modules/extraction_v2.py`
+> (fonte da verdade do que o sistema USA).
+
+---
+
 ## Regra obrigatória — Consultar manual antes de qualquer alteração
 
 > **ANTES de corrigir, ajustar ou implementar qualquer funcionalidade relacionada ao PJE-Calc,
