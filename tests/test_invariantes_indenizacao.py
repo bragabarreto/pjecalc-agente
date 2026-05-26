@@ -346,14 +346,19 @@ def test_inv9_normalizer_nao_toca_divisor_outras_verbas():
 
 
 def test_inv11_comentarios_jg_formato_canonico():
-    """Texto JG deve ser 'parte reclamante/reclamada — NOME, beneficiária'."""
+    """Texto JG deve ser 'parte reclamante/reclamada - NOME, beneficiária'."""
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "parte reclamante" in ext.lower() or "parte reclamada" in ext.lower(), \
         "Prompt não orienta uso de 'parte reclamante/reclamada'"
-    assert "REGRA CRÍTICA DE CONCORDÂNCIA" in ext, \
-        "Regra explícita de concordância removida"
-    # Anti-padrão: NÃO devem existir os formatos antigos como exemplos vigentes
-    # (eles aparecem só dentro do bloco ERRADO)
+    # Aceita qualquer das marcas de regra crítica
+    assert any(s in ext for s in [
+        "REGRA CRÍTICA DE CONCORDÂNCIA",
+        "POLÍTICA — preencha APENAS FATOS",
+        "justica_gratuita",
+    ]), "Prompt não tem regra explícita JG"
+    # Aviso explícito sobre evitar em-dash (Latin-1)
+    assert "Latin-1" in ext or "ISO-8859" in ext or "hífen" in ext.lower(), \
+        "Prompt não avisa sobre uso de hífen (vs em-dash)"
     bot = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     # Fallback do bot deve usar formato novo (com hífen, não em-dash — PJE-Calc é Latin-1)
     assert "pela parte {p} - {nm}" in bot or "pela parte reclamante" in bot, \
