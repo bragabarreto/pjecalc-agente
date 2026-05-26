@@ -4388,25 +4388,15 @@ class PlaywrightAutomatorV2:
                 self._marcar_checkbox_se_diferente("aplicarProporcionalidadeAoValorDevido", True)
 
         # Bloco CALCULADO — sub-inputs text (outroValorDoDivisor, multiplicador)
+        # ⚠ FIDELIDADE PRÉVIA↔AUTOMAÇÃO (CLAUDE.md): bot APENAS APLICA o que
+        # está no JSON validado pela prévia. Correções (ex.: divisor=12 para
+        # 13º/Férias por força CLT) ocorrem em modules/json_normalizer.py
+        # ANTES da prévia — para que usuário VEJA o valor correto ao revisar.
         if p.valor == TipoValor.CALCULADO:
             f = p.formula_calculado
             if f:
-                # ⚠ INVARIANTE CLT (26/05/2026, user feedback PJC test):
-                # 13º SALÁRIO e FÉRIAS + 1/3 têm divisor=12 SEMPRE (constante CLT —
-                # 12 avos por ano/período aquisitivo). PJE-Calc Expresso default
-                # já preenche 12. Se IA mandar divisor.valor=1 (bug observado em
-                # test 39), bot SOBRESCREVE para 12.
-                # Sem isso: cálculo de 13º/Férias multiplicado por 12 → erro grave.
-                _nome_upper = (v.nome_pjecalc or "").upper()
-                _divisor_valor = f.divisor.valor
-                if _divisor_valor is not None:
-                    if ("13" in _nome_upper and "SAL" in _nome_upper) or "FÉRIAS + 1/3" in _nome_upper:
-                        if float(_divisor_valor) != 12.0:
-                            self.log(f"    ⚠ CLT override: divisor de '{v.nome_pjecalc}' "
-                                     f"recebido={_divisor_valor} → 12 (constante CLT)")
-                            _divisor_valor = 12
-                if f.divisor.tipo.value == "OUTRO_VALOR" and _divisor_valor is not None:
-                    self._setar_text_se_diferente("outroValorDoDivisor", _fmt_br(_divisor_valor))
+                if f.divisor.tipo.value == "OUTRO_VALOR" and f.divisor.valor is not None:
+                    self._setar_text_se_diferente("outroValorDoDivisor", _fmt_br(f.divisor.valor))
                 if f.multiplicador is not None:
                     self._setar_text_se_diferente("outroValorDoMultiplicador", _fmt_br(f.multiplicador))
 

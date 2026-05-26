@@ -240,29 +240,106 @@ def test_inv8_reroute_informado_desligamento_para_manual():
         "Re-routing deve ocorrer ANTES de _lancar_verba_manual"
 
 
-# ─── Invariante 9 — Divisor CLT para 13º e Férias+1/3 ─────────────────────
+# ─── Invariante 9 — Divisor CLT para 13º e Férias+1/3 (no NORMALIZER!) ────
 
 
-def test_inv9_divisor_clt_override():
+def test_inv9_divisor_clt_no_normalizer():
     """13º SALÁRIO e FÉRIAS + 1/3 SEMPRE divisor=12 (constante CLT).
 
     Bug histórico (26/05/2026): IA externa gerou divisor.valor=1 para essas
     verbas. PJE-Calc multiplicava cálculo por 12 → erro grave.
 
-    Defesa dupla:
-    - Bot: override defensivo se divisor != 12 para 13º/Férias
-    - Prompt: regra crítica explícita exigindo divisor=12
-    """
-    # Camada 1 (bot)
-    assert "CLT override" in PLAYWRIGHT_V2, \
-        "Override defensivo divisor=12 para 13º/Férias removido"
-    assert "FÉRIAS + 1/3" in PLAYWRIGHT_V2 and "(constante CLT)" in PLAYWRIGHT_V2
+    ⚠ FIDELIDADE PRÉVIA↔AUTOMAÇÃO (CLAUDE.md): correção deve estar no
+    NORMALIZER (antes da prévia), NÃO no bot. Caso contrário usuário vê
+    divisor=1 na prévia e bot aplica 12 sem aviso — quebra fidelidade.
 
-    # Camada 2 (prompt)
+    Defesa em 3 camadas:
+    - Camada 1 (prompt externo): IA não gera divisor=1
+    - Camada 2 (normalizer): se IA escapar, corrige ANTES da prévia
+    - Camada 3 (prompt interno fallback): regra reforçada
+    Bot NÃO deve fazer override — apenas aplicar o JSON da prévia.
+    """
+    # Camada 2: normalizer (PRIMARY — preserva fidelidade prévia↔automação)
+    normalizer = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "INVARIANTE CLT" in normalizer, \
+        "Normalizer não tem correção CLT divisor=12 para 13º/Férias"
+    assert "FÉRIAS + 1/3" in normalizer and "fidelidade prévia↔automação" in normalizer
+
+    # Camada 3 (prompt interno fallback)
     extraction = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "DIVISOR CLT" in extraction or "divisor=OUTRO_VALOR=12" in extraction, \
-        "Regra crítica no prompt sobre divisor=12 removida"
+        "Regra crítica no prompt interno sobre divisor=12 removida"
     assert "constante CLT" in extraction
+
+    # Camada 1 (prompt externo)
+    ext_prompt = (REPO_ROOT / "docs" / "prompt-projeto-claude-externo.md").read_text(encoding="utf-8")
+    assert "DIVISOR CLT" in ext_prompt or "constante legal de 12" in ext_prompt, \
+        "Prompt externo não tem regra divisor=12"
+
+    # Bot NÃO deve ter override — fidelidade prévia↔automação
+    assert "CLT override" not in PLAYWRIGHT_V2, \
+        "REGRESSÃO: bot voltou a fazer override CLT. Override deve estar no NORMALIZER, " \
+        "não no bot — para preservar fidelidade prévia↔automação (CLAUDE.md)."
+
+
+def test_inv9_normalizer_behavior_divisor_13o_e_ferias():
+    """Teste de COMPORTAMENTO (não só grep): chama normalize_v2_json com
+    payload simulando IA enviando divisor=1 e valida que corrige para 12."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT))
+    from modules.json_normalizer import normalize_v2_json
+
+    cases = [
+        ("13º SALÁRIO", "DECIMO_TERCEIRO_SALARIO"),
+        ("FÉRIAS + 1/3", "FERIAS"),
+    ]
+    for nome, caract in cases:
+        payload = {
+            "verbas_principais": [{
+                "nome_pjecalc": nome,
+                "expresso_alvo": nome,
+                "parametros": {
+                    "caracteristica": caract,
+                    "valor": "CALCULADO",
+                    "formula_calculado": {
+                        "base_calculo": {"tipo": "HISTORICO_SALARIAL"},
+                        "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
+                        "multiplicador": 1.0,
+                        "quantidade": {"tipo": "AVOS"},
+                    },
+                },
+            }],
+        }
+        out = normalize_v2_json(payload)
+        div = out["verbas_principais"][0]["parametros"]["formula_calculado"]["divisor"]
+        assert float(div["valor"]) == 12.0, \
+            f"Normalizer NÃO corrigiu divisor de '{nome}' para 12 (got {div['valor']})"
+
+
+def test_inv9_normalizer_nao_toca_divisor_outras_verbas():
+    """Normalizer NÃO deve forçar divisor=12 em verbas que NÃO são 13º/Férias."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT))
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "verbas_principais": [{
+            "nome_pjecalc": "MULTA DO ARTIGO 477 DA CLT",
+            "expresso_alvo": "MULTA DO ARTIGO 477 DA CLT",
+            "parametros": {
+                "valor": "CALCULADO",
+                "formula_calculado": {
+                    "base_calculo": {"tipo": "MAIOR_REMUNERACAO"},
+                    "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
+                    "multiplicador": 1.0,
+                    "quantidade": {"tipo": "INFORMADA"},
+                },
+            },
+        }],
+    }
+    out = normalize_v2_json(payload)
+    div = out["verbas_principais"][0]["parametros"]["formula_calculado"]["divisor"]
+    assert float(div["valor"]) == 1.0, \
+        f"Normalizer TOCOU divisor de MULTA 477 (deveria ser 1, got {div['valor']})"
 
 
 # ─── Marker: regressão de mudança Sobrescrever pós-params ──────────────────

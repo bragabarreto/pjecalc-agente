@@ -395,6 +395,7 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     for v in data.get("verbas_principais", []):
         if not isinstance(v, dict):
             continue
+        _nome_verba = (v.get("nome_pjecalc") or v.get("expresso_alvo") or "").upper()
         for _key in ("parametros", "parametros_reflexo"):
             p = v.get(_key)
             if not isinstance(p, dict):
@@ -407,6 +408,22 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
                     # PADRAO_MENSAL implica divisor=30 se valor ainda não foi definido
                     if div["tipo"] == "OUTRO_VALOR" and div.get("valor") is None:
                         div["valor"] = 30.0
+                # ⚠ INVARIANTE CLT (26/05/2026, fidelidade prévia↔automação):
+                # 13º SALÁRIO e FÉRIAS + 1/3 têm divisor=12 SEMPRE (constante
+                # legal — CLT art. 130 / CF art. 7º XVII). Se IA externa gerar
+                # outro valor (bug Scarlette: divisor=1), normalizer CORRIGE
+                # AQUI — antes da prévia — para preservar fidelidade
+                # prévia↔automação. Bot apenas aplica o que está na prévia.
+                if isinstance(div, dict) and div.get("valor") is not None:
+                    _is_13o = "13" in _nome_verba and "SAL" in _nome_verba
+                    _is_ferias = "FÉRIAS + 1/3" in _nome_verba or "FERIAS + 1/3" in _nome_verba
+                    if _is_13o or _is_ferias:
+                        try:
+                            if float(div["valor"]) != 12.0:
+                                div["valor"] = 12
+                                div["tipo"] = "OUTRO_VALOR"
+                        except (TypeError, ValueError):
+                            pass
                 qtd = fc.get("quantidade")
                 if isinstance(qtd, dict) and qtd.get("tipo") in _QUANTIDADE_MAP:
                     qtd["tipo"] = _QUANTIDADE_MAP[qtd["tipo"]]

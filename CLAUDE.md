@@ -91,23 +91,34 @@ playwright_pjecalc.py (Automação)
 > CLT art. 130 / Constituição art. 7º XVII — 12 avos por ano/período aquisitivo).
 >
 > **Bug histórico (26/05/2026, descoberto via re-importação PJC Scarlette):**
-> A IA externa estava gerando `formula_calculado.divisor.valor = 1` para essas
-> verbas. Bot fielmente preenchia o campo `outroValorDoDivisor` com 1. PJE-Calc
+> O exemplo no prompt do Projeto Claude externo (`docs/prompt-projeto-claude-externo.md`
+> linha 534) ensinava `divisor.valor=1` para o 13º. IA replicava. PJE-Calc
 > multiplicava o cálculo por 12 → erro grave de valor.
 >
-> **Defesas implementadas (DUPLA CAMADA):**
+> ⚠️ **FIDELIDADE PRÉVIA↔AUTOMAÇÃO**: per regra arquitetural fundamental no
+> topo deste CLAUDE.md, a prévia deve mostrar EXATAMENTE o que a automação
+> aplica. Correções de valor NUNCA podem estar no bot — devem ocorrer no
+> normalizer (ANTES da prévia) para que o usuário veja o valor correto ao
+> revisar.
 >
-> 1. **Prompt (`modules/extraction_v2.py`)**: regra crítica explícita para
->    `13º SALÁRIO` e `FÉRIAS + 1/3` exigindo `divisor.valor=12`. Documenta
->    a constante legal e o risco de divisor=1.
+> **Defesas implementadas (3 CAMADAS, ordem prioridade):**
 >
-> 2. **Bot (`modules/playwright_v2.py`, `_preencher_form_parametros_verba`)**:
->    override defensivo — se IA mandar `divisor.valor != 12` para essas verbas,
->    bot SOBRESCREVE para 12 e loga `⚠ CLT override`. Aplicado APENAS para
->    verbas com nome match "13... SAL..." ou "FÉRIAS + 1/3" — outras verbas
->    preservam divisor da IA.
+> 1. **Prompt externo (`docs/prompt-projeto-claude-externo.md`)** — primária:
+>    exemplos corrigidos para `divisor=12` + bloco "DIVISOR CLT — INVARIANTE
+>    PERMANENTE — NÃO REVERTER". IA não gera mais divisor=1.
 >
-> Validado em `tests/test_invariantes_indenizacao.py::test_inv9_divisor_clt_override`.
+> 2. **Normalizer (`modules/json_normalizer.py`, `normalize_v2_json`)** —
+>    salvaguarda: se IA escapar a regra do prompt e gerar divisor != 12 para
+>    13º/Férias, normalizer CORRIGE para 12 ANTES da prévia. Usuário vê o
+>    valor correto. Bot apenas aplica o JSON validado.
+>
+> 3. **Prompt interno (`modules/extraction_v2.py`)** — fallback caso extração
+>    interna seja usada em vez do projeto Claude externo.
+>
+> ⚠️ **NÃO mover correção para o bot** — viola fidelidade prévia↔automação.
+> Bot APENAS aplica o JSON que passou pela prévia.
+>
+> Validado em `tests/test_invariantes_indenizacao.py::test_inv9_divisor_clt_no_normalizer`.
 
 ---
 
