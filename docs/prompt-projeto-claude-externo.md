@@ -531,8 +531,40 @@ Aplica-se a:
     "valor": "CALCULADO",
     "formula_calculado": {
       "base_calculo": {"tipo": "HISTORICO_SALARIAL", "historico_nome": "ÚLTIMA REMUNERAÇÃO"},
-      "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
+      "divisor": {"tipo": "OUTRO_VALOR", "valor": 12},
       "multiplicador": 1.0,
+      "quantidade": {"tipo": "AVOS"}
+    }
+  }
+}
+```
+
+⚠️ **DIVISOR CLT — INVARIANTE PERMANENTE — NÃO REVERTER**:
+
+Para **13º SALÁRIO** e **FÉRIAS + 1/3**, o divisor é uma **constante legal de 12**
+(CLT art. 130 / Constituição art. 7º XVII — 12 avos por ano/período aquisitivo).
+
+- ✅ **CORRETO**: `divisor: {"tipo": "OUTRO_VALOR", "valor": 12}`
+- ❌ **ERRADO**: `divisor: {"tipo": "OUTRO_VALOR", "valor": 1}` — gera erro grave
+  de cálculo (PJE-Calc multiplicaria o valor por 12)
+
+Esse valor é o que o **PJE-Calc Expresso já preenche por default** para essas
+verbas. O JSON v2 DEVE repetir esse valor para garantir consistência. Bug
+histórico (Scarlette 25/05/2026): IA gerou `divisor.valor=1` → bot v2 aplicava
+fielmente → cálculo de 13º/Férias 12× maior que o devido.
+
+Modelo correto para FÉRIAS + 1/3:
+```json
+{
+  "expresso_alvo": "FÉRIAS + 1/3",
+  "parametros": {
+    "caracteristica": "FERIAS",
+    "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
+    "valor": "CALCULADO",
+    "formula_calculado": {
+      "base_calculo": {"tipo": "HISTORICO_SALARIAL", "historico_nome": "ÚLTIMA REMUNERAÇÃO"},
+      "divisor": {"tipo": "OUTRO_VALOR", "valor": 12},
+      "multiplicador": 1.33,
       "quantidade": {"tipo": "AVOS"}
     }
   }
