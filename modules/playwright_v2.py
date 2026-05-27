@@ -306,7 +306,8 @@ class PlaywrightAutomatorV2:
         # apurar PRIMEIRO, depois criar verbas — assim na Fase 5 Verbas o
         # bot pode setar IMPORTADA_DO_CARTAO + Hs EXT diretamente no
         # formulário Parâmetros, sem precisar "revisitar".
-        _run_fase("Fase 4 (Cartão Ponto)", self.fase_cartao_de_ponto, bool(self.previa.cartao_de_ponto))
+        _run_fase("Fase 4 (Cartão Ponto)", self.fase_cartao_de_ponto,
+                  bool(self.previa.cartao_de_ponto) or bool(getattr(self.previa, "cartoes_de_ponto", None)))
         _run_fase("Fase 5 (Verbas)", self.fase_verbas)
         # Fechar+Reabrir pós-Verbas: força @End da outer conv para commit
         # dos saves em DB. Sem isso, os dados ficam presos na transação Seam
