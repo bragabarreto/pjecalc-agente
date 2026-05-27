@@ -342,6 +342,59 @@ def test_inv9_normalizer_nao_toca_divisor_outras_verbas():
         f"Normalizer TOCOU divisor de MULTA 477 (deveria ser 1, got {div['valor']})"
 
 
+# ─── Invariante 12 — Cartão de ponto MULTI-PERÍODO ────────────────────────
+
+
+def test_inv12_cartoes_de_ponto_lista_schema():
+    """Schema deve aceitar cartoes_de_ponto: list[CartaoDePonto] (Scarlette 27/05/2026)."""
+    schema_src = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
+    assert "cartoes_de_ponto:" in schema_src, \
+        "Schema não tem campo cartoes_de_ponto (lista)"
+    assert "list[CartaoDePonto]" in schema_src, \
+        "cartoes_de_ponto não é list[CartaoDePonto]"
+    # cartao_de_ponto (singular) mantido por retrocompat
+    assert "cartao_de_ponto: Optional[CartaoDePonto]" in schema_src, \
+        "cartao_de_ponto singular removido (quebra retrocompat)"
+
+
+def test_inv12_normalizer_migra_singular_para_lista():
+    """Normalizer deve migrar cartao_de_ponto singular → cartoes_de_ponto[1]."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT))
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "cartao_de_ponto": {
+            "data_inicial": "01/01/2024",
+            "data_final": "31/12/2024",
+            "preenchimento": "PROGRAMACAO",
+            "jornada_padrao": {},
+        },
+    }
+    out = normalize_v2_json(payload)
+    assert "cartoes_de_ponto" in out, "Campo cartoes_de_ponto não criado"
+    assert isinstance(out["cartoes_de_ponto"], list), "cartoes_de_ponto não é lista"
+    assert len(out["cartoes_de_ponto"]) == 1, \
+        f"Esperava 1 cartão, recebeu {len(out['cartoes_de_ponto'])}"
+
+
+def test_inv12_bot_itera_cartoes():
+    """Bot deve iterar cartoes_de_ponto via loop com _processar_um_cartao_de_ponto."""
+    src = PLAYWRIGHT_V2
+    assert "cartoes_de_ponto" in src, "Bot não consome cartoes_de_ponto"
+    assert "_processar_um_cartao_de_ponto" in src, \
+        "Helper _processar_um_cartao_de_ponto ausente"
+    assert "for idx, cp in enumerate(cartoes_validos)" in src or "for cp in cartoes_validos" in src, \
+        "Bot não itera cartoes_validos em loop"
+
+
+def test_inv12_prompt_orienta_multi_periodo():
+    """Prompt deve orientar uso de cartoes_de_ponto (lista) p/ multi-período."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "cartoes_de_ponto" in ext, "Prompt não menciona cartoes_de_ponto"
+    assert "MULTI-PERÍODO" in ext or "multi-período" in ext.lower(), \
+        "Regra multi-período ausente no prompt"
+
+
 # ─── Invariante 11 — Comentário JG concordância de gênero ─────────────────
 
 

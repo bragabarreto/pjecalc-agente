@@ -5368,21 +5368,53 @@ class PlaywrightAutomatorV2:
         self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado")
 
     def fase_cartao_de_ponto(self) -> None:
-        """Cartão de Ponto — cria novo cartão via formulário Novo do PJE-Calc.
+        """Cartão de Ponto — cria N cartões via formulário Novo do PJE-Calc.
 
-        Mapeamento DOM baseado em inspeção direta de
-        cartaodeponto/apuracao-cartaodeponto.jsf (v2.15.1, 17/05/2026).
+        ⚠ MULTI-PERÍODO (27/05/2026): se a sentença reconhece >1 dinâmica
+        de jornada em períodos distintos (Scarlette: jornada A até 21/09 +
+        jornada B 22/09 em diante), `cartoes_de_ponto` é uma lista. Bot
+        itera, criando UM cartão por período via 'Novo' no PJE-Calc.
+
+        Compat: `cartao_de_ponto` singular ainda funciona (normalizer migra
+        para lista de 1 item).
+
+        Mapeamento DOM: cartaodeponto/apuracao-cartaodeponto.jsf (v2.15.1).
         """
-        cp = getattr(self.previa, "cartao_de_ponto", None)
-        if not cp:
+        # Coleta a lista de cartões a criar (lista preferencial → singular fallback)
+        cartoes_list = getattr(self.previa, "cartoes_de_ponto", None) or []
+        cp_singular = getattr(self.previa, "cartao_de_ponto", None)
+        if not cartoes_list and cp_singular:
+            cartoes_list = [cp_singular]
+        # Filtra vazios
+        cartoes_validos = []
+        for cp in cartoes_list:
+            if cp is None:
+                continue
+            dados = cp.model_dump(exclude_none=True) if hasattr(cp, "model_dump") else {}
+            if dados:
+                cartoes_validos.append(cp)
+        if not cartoes_validos:
             self.log("Fase 5 — Cartão de Ponto: sem dados (pulando)")
             return
+        n_cartoes = len(cartoes_validos)
+        if n_cartoes > 1:
+            self.log(f"Fase 5 — Cartão de Ponto ({n_cartoes} cartões — multi-período)")
+        else:
+            self.log("Fase 5 — Cartão de Ponto")
+        # Processar cada cartão em sequência. _processar_um_cartao_de_ponto
+        # já navega para a listagem + clica Novo internamente, então não
+        # precisamos pre-navegar aqui.
+        for idx, cp in enumerate(cartoes_validos):
+            if n_cartoes > 1:
+                self.log(f"  ── Cartão {idx+1}/{n_cartoes} ──")
+            self._processar_um_cartao_de_ponto(cp)
+
+    def _processar_um_cartao_de_ponto(self, cp) -> None:
+        """Processa UM cartão de ponto — chamado pela fase_cartao_de_ponto em loop."""
         dados = cp.model_dump(exclude_none=True) if hasattr(cp, "model_dump") else {}
         if not dados:
-            self.log("Fase 5 — Cartão de Ponto: vazio (pulando)")
             return
 
-        self.log("Fase 5 — Cartão de Ponto")
         self._navegar_menu("li_calculo_cartao_ponto")
         self._aguardar_ajax(3000)
 

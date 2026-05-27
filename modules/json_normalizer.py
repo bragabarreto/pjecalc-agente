@@ -466,19 +466,33 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
         data["correcao_juros_multa"] = _norm_correcao(data["correcao_juros_multa"])
 
     # 4b. Cartão de Ponto — campos HH:MM nulos → default "00:00"
-    cp = data.get("cartao_de_ponto")
-    if isinstance(cp, dict):
-        jp = cp.get("jornada_padrao")
+    # 4b.1 Migração singular → lista: se IA enviou cartao_de_ponto (singular)
+    # e cartoes_de_ponto está vazio, migrar para list[1].
+    # Suporta multi-período (Scarlette: 2 jornadas distintas em 2 períodos).
+    cp_singular = data.get("cartao_de_ponto")
+    cp_lista = data.get("cartoes_de_ponto") or []
+    if cp_singular and not cp_lista:
+        if isinstance(cp_singular, dict) and cp_singular:  # não-vazio
+            data["cartoes_de_ponto"] = [cp_singular]
+            cp_lista = [cp_singular]
+    # Após migração, processar TODOS os cartões para defaults HH:MM
+    _JP_DEFAULTS: dict[str, str] = {
+        "segunda_hhmm": "08:00", "terca_hhmm": "08:00", "quarta_hhmm": "08:00",
+        "quinta_hhmm":  "08:00", "sexta_hhmm": "08:00",
+        "sabado_hhmm":  "00:00", "domingo_hhmm": "00:00",
+    }
+    for cp_item in cp_lista:
+        if not isinstance(cp_item, dict):
+            continue
+        jp = cp_item.get("jornada_padrao")
         if isinstance(jp, dict):
-            _JP_DEFAULTS: dict[str, str] = {
-                "segunda_hhmm": "08:00",
-                "terca_hhmm":   "08:00",
-                "quarta_hhmm":  "08:00",
-                "quinta_hhmm":  "08:00",
-                "sexta_hhmm":   "08:00",
-                "sabado_hhmm":  "00:00",
-                "domingo_hhmm": "00:00",
-            }
+            for campo, default in _JP_DEFAULTS.items():
+                if jp.get(campo) is None:
+                    jp[campo] = default
+    # Compat: também aplicar ao singular (caso bot legacy ainda leia)
+    if isinstance(cp_singular, dict):
+        jp = cp_singular.get("jornada_padrao")
+        if isinstance(jp, dict):
             for campo, default in _JP_DEFAULTS.items():
                 if jp.get(campo) is None:
                     jp[campo] = default

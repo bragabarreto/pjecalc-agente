@@ -914,7 +914,49 @@ Cada reflexo:
 - `checkbox_painel` (default) — marcar checkbox no painel da verba principal
 - `manual` — quando o reflexo NÃO está pré-cadastrado (raro: FGTS sobre estabilidade)
 
-# 5. CARTAO_DE_PONTO
+# 5. CARTAO_DE_PONTO / CARTOES_DE_PONTO
+
+⚠️ **REGRA CRÍTICA — MULTI-PERÍODO (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+
+Se a sentença reconhecer **mais de uma dinâmica de jornada em períodos
+distintos** (típico em casos de alteração unilateral de turno), emita
+**`cartoes_de_ponto` como LISTA** com um item por período. Cada item tem
+seu próprio `data_inicial`/`data_final` + jornada.
+
+```json
+"cartoes_de_ponto": [
+  {
+    "data_inicial": "10/04/2025",
+    "data_final":   "21/09/2025",
+    "preenchimento": "PROGRAMACAO",
+    "programacao_semanal": { ... jornada do período 1 ... },
+    ...
+  },
+  {
+    "data_inicial": "22/09/2025",
+    "data_final":   "01/12/2025",
+    "preenchimento": "PROGRAMACAO",
+    "programacao_semanal": { ... jornada do período 2 ... },
+    ...
+  }
+]
+```
+
+Use `cartao_de_ponto` (singular) quando a sentença fixar UMA só jornada
+em todo o período. O normalizer migra singular → lista[1] automaticamente.
+
+**Exemplo Scarlette (sentença 26/05/2026)**:
+> "Considera-se que a reclamante laborava: (i) de 10/04/2025 até a
+> alteração de turno em setembro de 2025, às terças, quartas e quintas,
+> das 17h às 22h, e aos domingos das 07h às 19h; (ii) a partir de
+> 22/09/2025, das 05h às 10h, de segunda a sexta-feira."
+
+→ DOIS cartões: período 1 (10/04→21/09) com jornada A, período 2
+(22/09→01/12) com jornada B. NUNCA tente combinar tudo em um único
+cartão com `ocorrencias_override` — o PJE-Calc apura por cartão.
+
+---
+
 
 Preencher **somente na Opção B** (ver seção 4.4): sentença fixa jornada/horário de trabalho
 mas não especifica quantidade de HE — o PJE-Calc apurará as HE a partir da jornada cadastrada.

@@ -1403,6 +1403,19 @@ class PreviaCalculoV2(BaseModel):
     # depósitos em atraso, que vai via fgts.saldos_a_deduzir (não como verba).
     verbas_principais: list[VerbaPrincipal] = Field(default_factory=list)
     cartao_de_ponto: Optional[CartaoDePonto] = None
+    """Cartão de ponto único (formato legacy). Use cartoes_de_ponto quando
+    a sentença reconhece >1 período de jornada distintos. Normalizer
+    migra singular para list[1] automaticamente."""
+    cartoes_de_ponto: list[CartaoDePonto] = Field(default_factory=list)
+    """Lista de cartões de ponto (1+ cartões para múltiplos períodos de
+    jornada distintos). Cada item tem seu próprio data_inicial/data_final
+    + jornada. Quando preenchido, sobrescreve cartao_de_ponto singular.
+    Bot cria N cartões via 'Novo' na listagem do PJE-Calc.
+
+    Exemplo (Scarlette 27/05/2026): sentença reconhece 2 períodos:
+    período 1 (10/04→21/09): jornada A; período 2 (22/09→01/12): jornada B.
+    → cartoes_de_ponto = [<cartão_p1>, <cartão_p2>]
+    """
     faltas: list[Falta] = Field(default_factory=list)
     ferias: FeriasSection = Field(default_factory=FeriasSection)
     fgts: FGTS = Field(default_factory=FGTS)
