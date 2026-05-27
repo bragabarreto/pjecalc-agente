@@ -1502,16 +1502,19 @@ class PreviaCalculoV2(BaseModel):
                                 f"Se a sentença NÃO fixar quantidade, use "
                                 f"quantidade.tipo=IMPORTADA_DO_CARTAO e preencha cartao_de_ponto."
                             )
-                        # IMPORTADA_DO_CARTAO exige cartao_de_ponto preenchido
+                        # IMPORTADA_DO_CARTAO exige cartao_de_ponto OU cartoes_de_ponto preenchido
+                        # (cartoes_de_ponto = lista — suporte multi-período Scarlette 27/05/2026)
                         if (
                             q.tipo == TipoQuantidade.IMPORTADA_DO_CARTAO
                             and self.cartao_de_ponto is None
+                            and not self.cartoes_de_ponto
                         ):
                             self.meta.validacao.campos_faltantes.append(
                                 f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
                                 f"quantidade.tipo=IMPORTADA_DO_CARTAO exige cartao_de_ponto "
-                                f"preenchido (seção 5 do prompt). Sem o cartão, PJE-Calc "
-                                f"não tem como apurar HE mês a mês."
+                                f"(ou cartoes_de_ponto para multi-período) preenchido "
+                                f"(seção 5 do prompt). Sem o cartão, PJE-Calc não tem como "
+                                f"apurar HE mês a mês."
                             )
 
         if avisos:
