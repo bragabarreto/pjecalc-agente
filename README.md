@@ -6,6 +6,15 @@ Agente inteligente de automação do **PJE-Calc Cidadão** (Programa de Cálculo
 PDF/DOCX → IA extrai → Humano revisa → Playwright preenche → .PJC exportado
 ```
 
+## Acesso
+
+- **Link principal (produção)**: http://163.176.44.221:8000
+- **Acesso fixo HTTPS (atrás de firewall público)**: https://163.176.44.221.sslip.io
+
+> O endereço HTTPS é **fixo e permanente**: `sslip.io` resolve o IP estático da VM e o **Caddy** (container `caddy` → `localhost:8000`) serve com certificado **Let's Encrypt** renovado automaticamente. Funciona em redes que bloqueiam HTTP/porta não-padrão (ex.: PCs da vara/fórum). Requer portas 80/443 abertas no Security List da Oracle (já configurado).
+>
+> Fallback alternativo (saída-só, sem portas abertas): um *quick tunnel* Cloudflare roda na VM (container `cloudflared`), mas seu subdomínio muda a cada reinício — por isso não é documentado como fixo.
+
 ---
 
 ## Arquitetura Multi-LLM
