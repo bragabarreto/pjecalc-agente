@@ -122,6 +122,78 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — Histórico Salarial = SM ⇒ 1 entrada CALCULADO/SALARIO_MINIMO
+
+> **Quando o salário é o mínimo vigente (ou múltiplo fixo dele: 1 SM, 2 SM, 1.5 SM…),
+> emita UMA ÚNICA entrada em `historico_salarial`** com:
+> ```json
+> {
+>   "nome": "SALARIO MINIMO",
+>   "tipo_valor": "CALCULADO",
+>   "calculado": {"quantidade_pct": 1.0, "base_referencia": "SALARIO_MINIMO"},
+>   "competencia_inicial": "<início do contrato>",
+>   "competencia_final": "<fim do contrato>"
+> }
+> ```
+> PJE-Calc tem a **tabela oficial do SM por competência** (desde 01/1967) e aplica
+> o valor certo de cada mês automaticamente — gera ocorrências mensais com o valor
+> correto sem precisar segmentar.
+>
+> ⚠️ `quantidade_pct` é **MULTIPLICADOR**, NÃO percentual 0–100:
+> - `1.0` = 100% = 1× SM (caso típico)
+> - `1.10` = 110% = 1.10× SM
+> - `0.50` = 50% = ½× SM
+> - **NUNCA emitir `100.0`** — PJE-Calc interpretaria como **100 salários mínimos**
+>   (R$ 141.200+).
+>
+> **Bug histórico (Mikaely 28/05/2026):** IA gerava `SALARIO MINIMO 2024 R$ 1.412` +
+> `SALARIO MINIMO 2025 R$ 1.518` como duas entradas INFORMADO separadas, poluindo
+> a listagem do histórico salarial no PJE-Calc. Validação end-to-end pós-fix:
+> PJC v3 (`PROCESSO_00018490720255070003_..._141817.pjc`, 58 KB) tem **13 ocorrências
+> mensais geradas a partir de 1 histórico só**, com valor evoluindo de R$ 1.412
+> (08-12/2024) para R$ 1.518 (01-08/2025) automaticamente pela tabela oficial.
+>
+> ⚠️ **FIDELIDADE PRÉVIA↔AUTOMAÇÃO**: prévia mostra exatamente 1 entrada
+> CALCULADO/SALARIO_MINIMO; bot apenas aplica.
+>
+> **Defesas implementadas (3 CAMADAS, ordem prioridade):**
+>
+> 1. **Prompt externo (`docs/prompt-projeto-claude-externo.md`)** — primária:
+>    bloco "REGRA INVARIANTE — NÃO REVERTER — salário mínimo = 1 entrada CALCULADO"
+>    + exemplo corrigido para `quantidade_pct: 1.0` com explicação "MULTIPLICADOR,
+>    NÃO percentual 0–100". Anti-segmentação explícita ("NUNCA segmente em SM
+>    2023, SM 2024…").
+>
+> 2. **Normalizer (`modules/json_normalizer.py`, `normalize_v2_json`)** —
+>    salvaguarda 2 camadas:
+>    - (a) Detecta N≥2 entradas INFORMADO com `valor_brl` ∈ tabela SM oficial
+>      (1320 em 2023, 1412 em 2024, 1518 em 2025, 1622 em 2026, etc.) em
+>      competências contíguas → consolida em 1 entrada CALCULADO/SALARIO_MINIMO
+>      `quantidade_pct=1.0`.
+>    - (b) Coerce `quantidade_pct ≥ 10` com `base_referencia ∈ {SALARIO_MINIMO,
+>      SALARIO_DA_CATEGORIA}` para multiplicador correto (100.0 → 1.0;
+>      150.0 → 1.5; 200.0 → 2.0).
+>
+> 3. **Prompt interno (`modules/extraction_v2.py`)** — fallback caso extração
+>    interna seja usada em vez do projeto Claude externo. Mesmas regras.
+>
+> 4. **Bot (`modules/playwright_v2.py`, `fase_historico_salarial`)** — espera
+>    AJAX após click `radio tipoValor=CALCULADO` (re-render condicional do form
+>    que mostra `quantidade` + `baseDeReferencia`). Sem essa espera, bot pulava
+>    os campos com "campo não existe — pulando" e o histórico saía sem
+>    quantidade/base — PJE-Calc usava default ÚLTIMA REMUNERAÇÃO (corrompendo
+>    o cálculo). Fix: `_aguardar_ajax(5000) + wait_for_timeout(800)` após radio,
+>    + `wait_for_selector visible 8000ms` no input quantidade.
+>
+> ⚠️ **NÃO mover correção para o bot** (camadas 1-3) — viola fidelidade
+> prévia↔automação. Bot APENAS aplica o JSON que passou pela prévia.
+>
+> Validado em `tests/test_invariantes_indenizacao.py::test_inv13_*` (4 testes:
+> consolidação Mikaely, coerção 100→1, preservação de entradas mistas,
+> presença do invariante no prompt) e `tests/test_prompt_invariants.py::test_historico_salario_minimo_calculado_consolidado`.
+
+---
+
 ## Regra obrigatória — Regerar Ocorrências após cada alteração
 
 > **TODA alteração de parâmetro ou ocorrência de qualquer verba DEVE ser
