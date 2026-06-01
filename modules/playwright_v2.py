@@ -2111,12 +2111,31 @@ class PlaywrightAutomatorV2:
             self._preencher("competenciaFinalInputDate", hist.competencia_final, obrigatorio=False)
             self._marcar_radio("tipoValor", hist.tipo_valor.value)
 
+            # CRÍTICO: radio tipoValor dispara A4J.AJAX que re-renderiza o form
+            # condicionalmente: INFORMADO mostra valorParaBaseDeCalculo;
+            # CALCULADO mostra quantidade + baseDeReferencia. Sem esperar o
+            # AJAX, o campo condicional não está no DOM e o _preencher/_selecionar
+            # falham com "campo não existe — pulando" (bug Mikaely 28/05/2026:
+            # histórico CALCULADO/SALARIO_MINIMO ficava sem quantidade nem base).
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(800)
+
             if hist.tipo_valor == TipoValor.INFORMADO:
                 self._preencher("valorParaBaseDeCalculo", _fmt_br(hist.valor_brl), obrigatorio=False)
             else:
-                # CALCULADO: quantidade + base_referencia
+                # CALCULADO: quantidade + base_referencia. Aguardar campos
+                # estarem visíveis antes de preencher (AJAX pode demorar).
+                try:
+                    self._page.wait_for_selector(
+                        "input[id$=':quantidade']:not([type=hidden])",
+                        state="visible", timeout=8000
+                    )
+                except Exception:
+                    self.log("  ⚠ Campo 'quantidade' não apareceu em 8s após CALCULADO — tentando preencher mesmo assim")
                 self._preencher("quantidade", _fmt_br(hist.calculado.quantidade_pct), obrigatorio=False)
                 self._selecionar("baseDeReferencia", hist.calculado.base_referencia)
+                # Dispatch change em baseDeReferencia também pode ter AJAX
+                self._aguardar_ajax(3000)
 
             # CRÍTICO (descoberto via Calc Machine 12/05/2026): tanto INFORMADO
             # quanto CALCULADO precisam clicar "Gerar Ocorrências" antes do save.
