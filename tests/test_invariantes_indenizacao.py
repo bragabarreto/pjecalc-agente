@@ -482,6 +482,97 @@ def test_inv10_prompt_orienta_modelo_TST():
         "Prompt não cobre os 2 casos (ajuizamento >=30/08/2024 vs <30/08/2024)"
 
 
+# ─── Histórico Salarial — consolidação CALCULADO/SALARIO_MINIMO ────────────
+
+
+def test_inv13_normalizer_consolida_sm_oficial():
+    """2+ entradas INFORMADO com valor de SM oficial em períodos contíguos
+    são consolidadas em 1 entrada CALCULADO/SALARIO_MINIMO (quantidade=1.0).
+
+    Causa raiz histórica (Mikaely 28/05/2026): IA gerava "SALARIO MINIMO
+    2024" R$ 1.412 + "SALARIO MINIMO 2025" R$ 1.518 como entradas separadas.
+    """
+    from modules.json_normalizer import normalize_v2_json
+
+    payload = {
+        "historico_salarial": [
+            {"nome": "SALARIO MINIMO 2024", "parcela": "FIXA",
+             "incidencias": {"fgts": True, "cs_inss": True},
+             "competencia_inicial": "08/2024", "competencia_final": "12/2024",
+             "tipo_valor": "INFORMADO", "valor_brl": 1412.0, "calculado": None},
+            {"nome": "SALARIO MINIMO 2025", "parcela": "FIXA",
+             "incidencias": {"fgts": True, "cs_inss": True},
+             "competencia_inicial": "01/2025", "competencia_final": "08/2025",
+             "tipo_valor": "INFORMADO", "valor_brl": 1518.0, "calculado": None},
+        ],
+        "verbas_principais": [], "honorarios": [], "parametros_calculo": {},
+    }
+    res = normalize_v2_json(payload)
+    hs = res["historico_salarial"]
+    assert len(hs) == 1, f"esperava 1 entrada consolidada, got {len(hs)}"
+    h = hs[0]
+    assert h["tipo_valor"] == "CALCULADO"
+    assert h["calculado"]["quantidade_pct"] == 1.0
+    assert h["calculado"]["base_referencia"] == "SALARIO_MINIMO"
+    assert h["competencia_inicial"] == "08/2024"
+    assert h["competencia_final"] == "08/2025"
+
+
+def test_inv13_normalizer_coerce_quantidade_pct_100_para_1():
+    """quantidade_pct=100.0 com base SALARIO_MINIMO é coercido para 1.0.
+
+    Bug histórico: prompt antigo dizia "100.0 = 100%" — PJE-Calc interpretaria
+    como 100 salários mínimos (R$ 141.200). Normalizer protege como salvaguarda.
+    """
+    from modules.json_normalizer import normalize_v2_json
+
+    payload = {
+        "historico_salarial": [{
+            "nome": "SALARIO", "parcela": "FIXA",
+            "incidencias": {"fgts": True, "cs_inss": True},
+            "competencia_inicial": "01/2024", "competencia_final": "12/2024",
+            "tipo_valor": "CALCULADO", "valor_brl": None,
+            "calculado": {"quantidade_pct": 100.0, "base_referencia": "SALARIO_MINIMO"},
+        }],
+        "verbas_principais": [], "honorarios": [], "parametros_calculo": {},
+    }
+    res = normalize_v2_json(payload)
+    assert res["historico_salarial"][0]["calculado"]["quantidade_pct"] == 1.0
+
+
+def test_inv13_normalizer_nao_consolida_entradas_mistas():
+    """Não consolidar quando há entrada NÃO-SM (ex.: salário negociado fora da tabela)."""
+    from modules.json_normalizer import normalize_v2_json
+
+    payload = {
+        "historico_salarial": [
+            {"nome": "SM 2024", "parcela": "FIXA",
+             "incidencias": {"fgts": True, "cs_inss": True},
+             "competencia_inicial": "01/2024", "competencia_final": "12/2024",
+             "tipo_valor": "INFORMADO", "valor_brl": 1412.0, "calculado": None},
+            {"nome": "SALARIO NEGOCIADO", "parcela": "FIXA",
+             "incidencias": {"fgts": True, "cs_inss": True},
+             "competencia_inicial": "01/2025", "competencia_final": "12/2025",
+             "tipo_valor": "INFORMADO", "valor_brl": 3500.0, "calculado": None},
+        ],
+        "verbas_principais": [], "honorarios": [], "parametros_calculo": {},
+    }
+    res = normalize_v2_json(payload)
+    assert len(res["historico_salarial"]) == 2, "deve preservar entradas mistas"
+
+
+def test_inv13_extraction_explica_quantidade_pct_como_multiplicador():
+    """Prompt interno deve explicar quantidade_pct como MULTIPLICADOR (1.0=100%),
+    NÃO como percentual 0–100 (100.0=100%). Evita interpretação errada como 100× SM.
+    """
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "MULTIPLICADOR" in ext
+    assert "1.0` = 100%" in ext or "1.0 = 100%" in ext
+    assert "NUNCA emitir 100.0" in ext
+    # E exemplo correto está com 1.0 (não 100.0)
+    assert '"quantidade_pct": 1.0' in ext
+
+
 # ─── Marker: regressão de mudança Sobrescrever pós-params ──────────────────
 
 

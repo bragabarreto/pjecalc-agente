@@ -246,24 +246,50 @@ estabelecido na página parâmetro da verba."*
 
 ⚠️ **`tipo_valor` do histórico salarial (NÃO confundir com schema de verba)**:
 
-- **`INFORMADO`** (padrão recomendado): `valor_brl` direto em reais, `calculado: null`.
-  ```json
-  "tipo_valor": "INFORMADO", "valor_brl": 1320.00, "calculado": null
-  ```
-
-- **`CALCULADO`** (raro — formato específico): exige `calculado` com APENAS 2 campos:
+- **`CALCULADO`** (**preferido sempre que aplicável**): exige `calculado` com APENAS 2 campos:
   ```json
   "tipo_valor": "CALCULADO", "valor_brl": null,
-  "calculado": {"quantidade_pct": 100.0, "base_referencia": "SALARIO_MINIMO"}
+  "calculado": {"quantidade_pct": 1.0, "base_referencia": "SALARIO_MINIMO"}
   ```
-  - `quantidade_pct` (float): percentual
-  - `base_referencia` (str): nome da referência cadastrada
+  - `quantidade_pct` (float): **MULTIPLICADOR**, NÃO percentual 0–100.
+    - `1.0` = 100% = 1× referência (caso típico: salário = 1 SM)
+    - `1.10` = 110% = 1.10× referência
+    - `0.50` = 50% = ½× referência
+    - **NUNCA emitir 100.0** — PJE-Calc interpretaria como **100 salários mínimos** (R$ 141.200+).
+  - `base_referencia` (str): tabela cadastrada. Valores válidos: `SALARIO_MINIMO`,
+    `SALARIO_DA_CATEGORIA` (piso), `MAIOR_REMUNERACAO`, `VALE_TRANSPORTE`.
 
   ❌ **NUNCA emitir** `calculado: {"base_calculo": {"tipo": "SALARIO_MINIMO"}}` —
   esse é o formato de **fórmula de verba**, NÃO de histórico salarial.
 
-  📌 Para salários mínimos (R$ 1.320 em 2023, R$ 1.412 em 2024, R$ 1.518 em 2025,
-  R$ 1.622 em 2026), use SEMPRE `tipo_valor: INFORMADO` com o valor em reais.
+- **`INFORMADO`**: `valor_brl` direto em reais, `calculado: null`.
+  ```json
+  "tipo_valor": "INFORMADO", "valor_brl": 1320.00, "calculado": null
+  ```
+  Use somente quando o valor for **arbitrário** (não corresponde a uma tabela cadastrada).
+
+⚠️ **REGRA INVARIANTE — NÃO REVERTER — salário mínimo = 1 entrada CALCULADO**:
+
+Quando a sentença indicar que o salário é o mínimo vigente (ou múltiplo fixo dele:
+1 SM, 2 SM, 1.5 SM…), emita **UMA ÚNICA entrada** no `historico_salarial`:
+- `tipo_valor: CALCULADO`
+- `calculado.quantidade_pct: 1.0` (ou o múltiplo correto)
+- `calculado.base_referencia: SALARIO_MINIMO`
+- `competencia_inicial` = início do contrato (ou início do cálculo)
+- `competencia_final` = fim do contrato (ou término do cálculo)
+
+PJE-Calc tem a **tabela oficial do SM por competência** (desde 01/1967) e aplica
+o valor certo de cada mês automaticamente — **NUNCA segmente em "SM 2023", "SM 2024",
+"SM 2025"**. Isso cria múltiplos históricos desnecessários, polui a listagem e dificulta
+a conferência humana.
+
+Para piso normativo (categoria profissional) com valores tabelados: mesmo padrão, usar
+`SALARIO_DA_CATEGORIA` como `base_referencia`.
+
+Mesma lógica para evolução salarial — preferir 1 entrada cobrindo todo o período sempre
+que possível. Só segmentar se a sentença trouxer valor **explicitamente diferente**
+para um período específico (ex.: dissídio negociado em data X com valor R$ Y) que NÃO
+corresponda a tabela cadastrada — nesse caso, INFORMADO segmentado.
 
 # 4. VERBAS_PRINCIPAIS (CORE — lista de verbas deferidas)
 
@@ -392,24 +418,32 @@ mais a ocorrência de DESLIGAMENTO no ano da rescisão), e a **base de cada ocor
 o `historico_salarial` vigente na competência** correspondente — você só precisa garantir que
 o array `historico_salarial` cubra cada ano com o valor correto.
 
-**❌ ERRADO** (gera 4 verbas separadas, INSS duplicado, conferência inviável):
+**❌ ERRADO** (gera 4 verbas separadas + 4 históricos separados — INSS duplicado, listagem poluída, conferência inviável):
 ```
-v04: 13º SALÁRIO período 09/02/2023 → 31/12/2023, histórico "SM 2023"
-v05: 13º SALÁRIO período 01/01/2024 → 31/12/2024, histórico "SM 2024"
-v06: 13º SALÁRIO período 01/01/2025 → 31/12/2025, histórico "SM 2025"
-v07: 13º SALÁRIO período 01/01/2026 → 09/01/2026, histórico "SM 2026"
+v04: 13º SALÁRIO período 09/02/2023 → 31/12/2023, histórico "SM 2023"  (INFORMADO R$ 1.320)
+v05: 13º SALÁRIO período 01/01/2024 → 31/12/2024, histórico "SM 2024"  (INFORMADO R$ 1.412)
+v06: 13º SALÁRIO período 01/01/2025 → 31/12/2025, histórico "SM 2025"  (INFORMADO R$ 1.518)
+v07: 13º SALÁRIO período 01/01/2026 → 09/01/2026, histórico "SM 2026"  (INFORMADO R$ 1.622)
 ```
 
-**✅ CERTO** (uma verba só + histórico_salarial segmentado):
+**✅ CERTO** (1 verba + **1 histórico** CALCULADO/SALARIO_MINIMO):
 ```
-v04: 13º SALÁRIO período 09/02/2023 → 09/01/2026, histórico "ÚLTIMA REMUNERAÇÃO"
-+ historico_salarial: ["SM 2023" 02/2023-12/2023, "SM 2024" 01/2024-12/2024, "SM 2025-2026" 01/2025-01/2026]
+v04: 13º SALÁRIO período 09/02/2023 → 09/01/2026, histórico "SALARIO MINIMO"
++ historico_salarial: [
+    {nome: "SALARIO MINIMO", competencia_inicial: "02/2023", competencia_final: "01/2026",
+     tipo_valor: "CALCULADO", valor_brl: null,
+     calculado: {quantidade_pct: 1.0, base_referencia: "SALARIO_MINIMO"}}
+  ]
 ```
+
+PJE-Calc resolve o valor de cada competência pela tabela oficial (R$ 1.320 em 2023,
+R$ 1.412 em 2024, R$ 1.518 em 2025, R$ 1.622 em 2026 etc.). **NUNCA** segmente o
+histórico por ano para o caso de salário mínimo — isso é redundante e poluente.
 
 A mesma regra de **uma verba só com período total** vale para outras verbas de natureza
 recorrente que se estendem por vários anos (Adicional Noturno, Adicional de Insalubridade,
 Adicional de Periculosidade, Diferença Salarial, Horas Extras): SEMPRE uma só entrada com
-período total + histórico_salarial segmentado por competência.
+período total + histórico_salarial **consolidado**.
 
 ### `expresso_adaptado`
 A verba não existe literal, mas pode adaptar uma similar:

@@ -231,27 +231,48 @@ pós-rescisão, ESTENDA "ÚLTIMA REMUNERAÇÃO" até `data_termino_calculo`.
   "calculado": null
   ```
 
-- **`CALCULADO`** (raro — exige formato específico): salário expresso como % de outro
-  referencial cadastrado no PJE-Calc. O campo `calculado` tem APENAS 2 campos:
+- **`CALCULADO`** (**preferido sempre que aplicável**): salário expresso como múltiplo de
+  uma referência tabelada no PJE-Calc (SM, piso, etc.). O campo `calculado` tem APENAS 2 campos:
   ```json
   "tipo_valor": "CALCULADO",
   "valor_brl": null,
   "calculado": {
-    "quantidade_pct": 100.0,
+    "quantidade_pct": 1.0,
     "base_referencia": "SALARIO_MINIMO"
   }
   ```
-  - `quantidade_pct`: número (ex.: 100.0 = 100%, 150.0 = 150%)
-  - `base_referencia`: nome da referência cadastrada — geralmente `"SALARIO_MINIMO"`
-    ou nome de outra tabela base do PJE-Calc
+  - `quantidade_pct`: **MULTIPLICADOR**, NÃO percentual 0–100.
+    - `1.0` = 100% = 1× referência (caso típico: salário = 1 SM)
+    - `1.10` = 110% = 1.10× referência
+    - `0.50` = 50% = ½× referência
+    - **NUNCA emitir `100.0`** — PJE-Calc interpretaria como **100 salários mínimos** (R$ 141.200+).
+  - `base_referencia`: nome da tabela cadastrada. Valores válidos:
+    `SALARIO_MINIMO`, `SALARIO_DA_CATEGORIA` (piso), `MAIOR_REMUNERACAO`, `VALE_TRANSPORTE`.
 
   ❌ **NUNCA emitir** `calculado: {"base_calculo": {"tipo": "SALARIO_MINIMO"}}` — esse é
   o formato de fórmula de **verba**, NÃO de histórico salarial. O Pydantic rejeita.
 
-  📌 **Regra prática**: para salários mínimos legais (R$ 1.320 em 2023, R$ 1.412 em 2024,
-  R$ 1.518 em 2025, R$ 1.622 em 2026), use sempre `tipo_valor: "INFORMADO"` com o
-  `valor_brl` em reais. `CALCULADO` só faz sentido quando a sentença determinar
-  explicitamente "salário equivalente a X% do SM" sem fixar valor.
+⚠️ **REGRA INVARIANTE — NÃO REVERTER — salário mínimo = 1 entrada CALCULADO**:
+
+Quando a sentença indicar que o salário é o mínimo vigente (ou múltiplo fixo dele:
+1 SM, 2 SM, 1.5 SM…), emita **UMA ÚNICA entrada** no `historico_salarial`:
+- `tipo_valor: CALCULADO`
+- `calculado.quantidade_pct: 1.0` (ou o múltiplo correto)
+- `calculado.base_referencia: SALARIO_MINIMO`
+- `competencia_inicial` = início do contrato (ou início do cálculo)
+- `competencia_final` = fim do contrato (ou término do cálculo)
+
+PJE-Calc tem a **tabela oficial do SM por competência** (desde 01/1967) e aplica
+o valor certo de cada mês automaticamente — **NUNCA segmente em "SM 2023", "SM 2024",
+"SM 2025"**. Isso cria múltiplos históricos desnecessários, polui a listagem e dificulta
+a conferência humana.
+
+Para piso normativo (categoria profissional) tabelado: mesmo padrão, usar
+`SALARIO_DA_CATEGORIA` como `base_referencia`.
+
+`INFORMADO` deve ser usado **somente** quando o valor for **arbitrário** e não
+corresponder a uma tabela cadastrada (ex.: salário negociado de R$ 3.500 fixos,
+acordos coletivos com valor não tabelado).
 
 # 4. VERBAS_PRINCIPAIS ✅ (CORE)
 

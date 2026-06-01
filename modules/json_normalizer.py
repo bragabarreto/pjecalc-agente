@@ -653,7 +653,8 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # o Pydantic rejeita por falta de quantidade_pct e base_referencia.
     #
     # Conversão idempotente: extrair tipo do base_calculo erroneamente
-    # aninhado e reescrever como {quantidade_pct: 100.0, base_referencia: "TIPO"}.
+    # aninhado e reescrever como {quantidade_pct: 1.0, base_referencia: "TIPO"}.
+    # quantidade_pct=1.0 = 1× referência = 100% (MULTIPLICADOR, não percentual 0-100).
     _hist = data.get("historico_salarial")
     if isinstance(_hist, list):
         for h in _hist:
@@ -674,9 +675,84 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
                 if tipo:
                     calc["base_referencia"] = str(tipo)
                 if "quantidade_pct" not in calc:
-                    calc["quantidade_pct"] = 100.0
+                    calc["quantidade_pct"] = 1.0
                 # Limpar campo errado para evitar confusão futura
                 calc.pop("base_calculo", None)
+            # Salvaguarda: se IA emitiu quantidade_pct=100.0 com base SALARIO_MINIMO/
+            # SALARIO_DA_CATEGORIA (clássico bug "100% interpretado como 100×"),
+            # corrigir para 1.0. Casos legítimos de múltiplos > 10 não existem
+            # nesse contexto (ninguém recebe 100 salários mínimos como salário base).
+            qpct = calc.get("quantidade_pct")
+            base = (calc.get("base_referencia") or "").upper()
+            if (
+                isinstance(qpct, (int, float))
+                and qpct >= 10.0
+                and base in ("SALARIO_MINIMO", "SALARIO_DA_CATEGORIA")
+            ):
+                # Heurística: 100.0 → 1.0; 150.0 → 1.5; 200.0 → 2.0
+                calc["quantidade_pct"] = float(qpct) / 100.0
+
+    # 6.bis Histórico Salarial — CONSOLIDAÇÃO de entradas duplicadas por valor de SM
+    # tabelado em períodos contíguos. Defesa em 2ª camada caso prompt falhe.
+    #
+    # Quando a IA emite N entradas tipo "SALARIO MINIMO 2024" R$ 1412 + "SALARIO
+    # MINIMO 2025" R$ 1518 + ..., o normalizer detecta que os valores batem com
+    # a tabela oficial do salário mínimo (R$ 1.320 em 2023, R$ 1.412 em 2024,
+    # R$ 1.518 em 2025, R$ 1.622 em 2026) e consolida em UMA entrada CALCULADO
+    # com base SALARIO_MINIMO + quantidade_pct=1.0. PJE-Calc resolve o valor de
+    # cada competência pela tabela oficial.
+    #
+    # Heurística: se TODAS as entradas têm valor_brl ∈ {SM oficial por ano} e
+    # períodos contíguos, consolidar.
+    SM_OFICIAL = {
+        2018: 954.00, 2019: 998.00, 2020: 1045.00, 2021: 1100.00,
+        2022: 1212.00, 2023: 1320.00, 2024: 1412.00, 2025: 1518.00,
+        2026: 1622.00,
+    }
+    def _competencia_ano(comp: str | None) -> int | None:
+        try:
+            return int((comp or "").split("/")[-1])
+        except Exception:
+            return None
+    if isinstance(_hist, list) and len(_hist) >= 2:
+        # Considerar apenas entradas INFORMADO com valor que bate com SM oficial
+        candidatas: list[dict] = []
+        for h in _hist:
+            if not isinstance(h, dict):
+                continue
+            if (h.get("tipo_valor") or "").upper() != "INFORMADO":
+                continue
+            val = h.get("valor_brl")
+            if not isinstance(val, (int, float)):
+                continue
+            ano = _competencia_ano(h.get("competencia_inicial"))
+            if ano is None or ano not in SM_OFICIAL:
+                continue
+            # tolerância 1 centavo
+            if abs(float(val) - SM_OFICIAL[ano]) > 0.01:
+                continue
+            candidatas.append(h)
+        # Só consolidar se TODAS as entradas históricas forem SM-tabelado
+        if len(candidatas) == len(_hist) and len(candidatas) >= 2:
+            comp_inicial = candidatas[0].get("competencia_inicial")
+            comp_final = candidatas[-1].get("competencia_final")
+            # Preservar incidências e parcela da primeira (defaults razoáveis)
+            inc = candidatas[0].get("incidencias") or {"fgts": True, "cs_inss": True}
+            parcela = candidatas[0].get("parcela") or "FIXA"
+            consolidada = {
+                "nome": "SALARIO MINIMO",
+                "parcela": parcela,
+                "incidencias": inc,
+                "competencia_inicial": comp_inicial,
+                "competencia_final": comp_final,
+                "tipo_valor": "CALCULADO",
+                "valor_brl": None,
+                "calculado": {
+                    "quantidade_pct": 1.0,
+                    "base_referencia": "SALARIO_MINIMO",
+                },
+            }
+            data["historico_salarial"] = [consolidada]
 
     # 6.bis Férias — normalizar valor "VENCIDAS" (não existe no enum) para
     # "INDENIZADAS" preservando o flag `dobra`. No PJE-Calc, "vencidas" significa

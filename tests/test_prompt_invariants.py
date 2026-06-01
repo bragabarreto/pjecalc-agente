@@ -132,6 +132,29 @@ def test_diferenca_salarial_dois_historicos():
     assert "Falta selecionar pelo menos um Histórico Salarial" in PROMPT
 
 
+def test_historico_salario_minimo_calculado_consolidado():
+    """Salário = SM (ou múltiplo) → 1 entrada CALCULADO/SALARIO_MINIMO, NUNCA segmentar por ano.
+
+    Causa raiz histórica (Mikaely 28/05/2026): IA gerava "SALARIO MINIMO 2024"
+    R$ 1.412 + "SALARIO MINIMO 2025" R$ 1.518 (dois históricos INFORMADO).
+    Correto: UMA entrada CALCULADO com quantidade_pct=1.0 + base=SALARIO_MINIMO
+    cobrindo o período inteiro — PJE-Calc resolve o valor por competência via
+    tabela oficial do SM (desde 01/1967).
+    """
+    # Regra invariante explícita
+    assert "salário mínimo = 1 entrada CALCULADO" in PROMPT
+    assert "NÃO REVERTER" in PROMPT
+    # Multiplicador, não percentual
+    assert "MULTIPLICADOR" in PROMPT
+    assert "1.0` = 100%" in PROMPT or "1.0 = 100%" in PROMPT
+    # Warning explícito contra 100.0
+    assert "NUNCA emitir" in PROMPT and "100.0" in PROMPT
+    # Tabela oficial citada
+    assert "tabela oficial" in PROMPT.lower() or "tabela oficial do SM" in PROMPT
+    # Anti-segmentação explícita
+    assert "SM 2023" in PROMPT and "NUNCA segmente" in PROMPT
+
+
 def test_honorarios_sucumbenciais_credor_e_forma_cobranca():
     """SUCUMBENCIAIS: devedor=RECLAMANTE → forma_cobranca=COBRAR + credor=ADVOGADO DO RECLAMADO."""
     assert "ADVOGADO DO RECLAMADO" in PROMPT
