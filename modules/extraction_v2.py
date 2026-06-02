@@ -950,6 +950,37 @@ Cada reflexo:
 
 # 5. CARTAO_DE_PONTO / CARTOES_DE_PONTO
 
+⚠️ **REGRA INVARIANTE — NÃO REVERTER — SEM cartão: emitir EXATAMENTE `null`**:
+
+Quando a sentença **NÃO mandar apurar jornada** (sem horários, sem escala, sem
+intervalos), você DEVE emitir:
+```json
+"cartao_de_ponto": null,
+"cartoes_de_ponto": []
+```
+
+❌ **NUNCA emitir stub** do tipo `{"ocorrencias_override": [], "preenchimento": "LIVRE"}`
+sem `data_inicial`/`data_final` nem jornada. O Pydantic rejeita esse stub
+com erro `Field required: data_inicial, data_final` → /confirmar 422 →
+**impossível iniciar automação**.
+
+❌ **NÃO inicializar** com defaults vazios "por garantia". Se há dúvida, deixe
+`null`. O bot pula a Fase 5 silenciosamente quando cartão é `null` — comportamento
+correto para sentenças sem HE-apurada-do-cartão.
+
+Casos típicos de cartão `null`:
+- Verbas só rescisórias (saldo, aviso, férias, 13º, multa 477)
+- HE com `quantidade.tipo = INFORMADA` (valor fixo mensal dado pela sentença)
+- Adicionais sem variação por jornada (insalubridade grau X, periculosidade)
+- Indenizações por dano moral / material / arts. 9.029, 477, etc.
+
+Casos onde cartão é OBRIGATÓRIO (não-null):
+- HE com `quantidade.tipo = IMPORTADA_DO_CARTAO` (perito deve apurar)
+- RSR / Intervalo intrajornada com apuração pelo cartão
+- Adicional noturno com horários específicos a apurar
+
+---
+
 ⚠️ **REGRA CRÍTICA — MULTI-PERÍODO (INVARIANTE PERMANENTE — NÃO REVERTER)**:
 
 Se a sentença reconhecer **mais de uma dinâmica de jornada em períodos

@@ -734,6 +734,27 @@ da jornada cadastrada.
 
 Deixar `null` quando: (a) HE quantitativa direta, ou (b) não há HE no cálculo.
 
+⚠️ **REGRA INVARIANTE — NÃO REVERTER — SEM cartão: emitir EXATAMENTE `null`**:
+
+```json
+"cartao_de_ponto": null,
+"cartoes_de_ponto": []
+```
+
+❌ **NUNCA emitir stub** `{"ocorrencias_override": [], "preenchimento": "LIVRE"}`
+sem `data_inicial`/`data_final` nem jornada — Pydantic rejeita com
+`Field required: data_inicial, data_final` → /confirmar 422 → impossível
+iniciar automação.
+
+❌ **NÃO inicializar campos vazios "por garantia"**. Se não tem jornada na sentença,
+deixe TUDO `null`. O bot pula a Fase 5 silenciosamente.
+
+Casos típicos onde cartão = `null`:
+- Sentenças só com verbas rescisórias (saldo, aviso, férias, 13º, multa 477)
+- HE com `quantidade.tipo = INFORMADA` (valor fixo mensal)
+- Adicionais sem variação por jornada
+- Indenizações por dano moral/material/9.029
+
 ```json
 {
   "data_inicial": "DD/MM/YYYY",

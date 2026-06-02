@@ -465,11 +465,60 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     if isinstance(data.get("correcao_juros_multa"), dict):
         data["correcao_juros_multa"] = _norm_correcao(data["correcao_juros_multa"])
 
-    # 4b. Cartão de Ponto — campos HH:MM nulos → default "00:00"
+    # 4b. Cartão de Ponto — sanitização + migração + defaults
+    #
+    # 4b.0 SANITIZAÇÃO ANTI-STUB (bug recorrente, ALINE 01/06/2026):
+    # IA frequentemente emite stub `{ocorrencias_override:[], preenchimento:'LIVRE'}`
+    # sem datas/jornada quando a sentença NÃO tem cartão de ponto. O Pydantic
+    # rejeita esse stub (data_inicial/data_final required) → /confirmar 422.
+    # Anular ANTES de qualquer outra migração — defesa em 2ª camada (prompt
+    # é a 1ª) para garantir fidelidade prévia↔automação.
+    def _cartao_e_stub_vazio(cp: object) -> bool:
+        """True se cartão não tem nenhum dado útil de jornada."""
+        if not isinstance(cp, dict) or not cp:
+            return False  # null/empty já tratados separado
+        # Campos OBRIGATÓRIOS de um cartão real
+        if cp.get("data_inicial") or cp.get("data_final"):
+            return False
+        # Programação semanal com algum dia preenchido
+        ps = cp.get("programacao_semanal")
+        if isinstance(ps, dict):
+            for dia, conf in ps.items():
+                if isinstance(conf, dict) and conf.get("turnos"):
+                    return False
+        # Escala configurada (tipo != OUTRA ou tem jornadas com turnos)
+        esc = cp.get("escala")
+        if isinstance(esc, dict):
+            tipo = esc.get("tipo")
+            if tipo and tipo != "OUTRA":
+                return False
+            jornadas = esc.get("jornadas") or []
+            for j in jornadas:
+                if isinstance(j, dict) and j.get("turnos"):
+                    return False
+        # Jornada padrão com algum dia > 00:00
+        jp = cp.get("jornada_padrao")
+        if isinstance(jp, dict):
+            for k, v in jp.items():
+                if k.endswith("_hhmm") and v and v not in ("00:00", "0", ""):
+                    return False
+        # Ocorrências override com pelo menos 1 dia
+        oo = cp.get("ocorrencias_override")
+        if isinstance(oo, list) and any(isinstance(o, dict) and o.get("data") for o in oo):
+            return False
+        # Tudo vazio → stub
+        return True
+    cp_singular = data.get("cartao_de_ponto")
+    if _cartao_e_stub_vazio(cp_singular):
+        data["cartao_de_ponto"] = None
+        cp_singular = None
+    cp_lista_pre = data.get("cartoes_de_ponto") or []
+    cp_lista_filtrada = [c for c in cp_lista_pre if not _cartao_e_stub_vazio(c)]
+    if len(cp_lista_filtrada) != len(cp_lista_pre):
+        data["cartoes_de_ponto"] = cp_lista_filtrada
     # 4b.1 Migração singular → lista: se IA enviou cartao_de_ponto (singular)
     # e cartoes_de_ponto está vazio, migrar para list[1].
     # Suporta multi-período (Scarlette: 2 jornadas distintas em 2 períodos).
-    cp_singular = data.get("cartao_de_ponto")
     cp_lista = data.get("cartoes_de_ponto") or []
     if cp_singular and not cp_lista:
         if isinstance(cp_singular, dict) and cp_singular:  # não-vazio

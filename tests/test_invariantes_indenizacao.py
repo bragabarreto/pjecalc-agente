@@ -561,6 +561,53 @@ def test_inv13_normalizer_nao_consolida_entradas_mistas():
     assert len(res["historico_salarial"]) == 2, "deve preservar entradas mistas"
 
 
+def test_inv14_normalizer_anula_cartao_stub_vazio():
+    """cartão {ocorrencias_override:[], preenchimento:'LIVRE'} sem datas → null.
+
+    Bug recorrente (ALINE 01/06/2026, e Mikaely antes): IA emite stub vazio
+    sem data_inicial/data_final → Pydantic rejeita em /confirmar → 422.
+    Normalizer deve anular ANTES da prévia (fidelidade prévia↔automação).
+    """
+    from modules.json_normalizer import normalize_v2_json
+    # Caso 1: stub clássico LIVRE
+    res1 = normalize_v2_json({
+        "cartao_de_ponto": {"ocorrencias_override": [], "preenchimento": "LIVRE"},
+        "cartoes_de_ponto": [],
+        "verbas_principais": [], "honorarios": [], "parametros_calculo": {},
+    })
+    assert res1.get("cartao_de_ponto") is None
+    assert res1.get("cartoes_de_ponto") == []
+    # Caso 2: lista com stub vazio
+    res2 = normalize_v2_json({
+        "cartoes_de_ponto": [{"ocorrencias_override": [], "preenchimento": "PROGRAMACAO"}],
+        "verbas_principais": [], "honorarios": [], "parametros_calculo": {},
+    })
+    assert res2.get("cartoes_de_ponto") == []
+    # Caso 3: cartão REAL com data deve ser preservado
+    real = {
+        "data_inicial": "01/01/2024", "data_final": "31/12/2024",
+        "preenchimento": "PROGRAMACAO",
+        "programacao_semanal": {"segunda": {"turnos": [{"entrada":"08:00","saida":"17:00"}]}},
+    }
+    res3 = normalize_v2_json({
+        "cartao_de_ponto": real,
+        "cartoes_de_ponto": [],
+        "verbas_principais": [], "honorarios": [], "parametros_calculo": {},
+    })
+    cp_res = res3.get("cartao_de_ponto") or (res3.get("cartoes_de_ponto") or [None])[0]
+    assert cp_res is not None, "cartão real foi indevidamente anulado"
+    assert cp_res.get("data_inicial") == "01/01/2024"
+
+
+def test_inv14_prompt_orienta_cartao_null_sem_jornada():
+    """Prompt interno + externo devem ter regra explícita 'NÃO emitir stub vazio'."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "NUNCA emitir stub" in ext
+    assert "SEM cartão: emitir EXATAMENTE" in ext or "EXATAMENTE `null`" in ext
+    extp = (REPO_ROOT / "docs" / "prompt-projeto-claude-externo.md").read_text(encoding="utf-8")
+    assert "NUNCA emitir stub" in extp
+
+
 def test_inv13_extraction_explica_quantidade_pct_como_multiplicador():
     """Prompt interno deve explicar quantidade_pct como MULTIPLICADOR (1.0=100%),
     NÃO como percentual 0–100 (100.0=100%). Evita interpretação errada como 100× SM.
