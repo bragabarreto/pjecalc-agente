@@ -1389,6 +1389,21 @@ A IA deve LER a seção da sentença sobre Correção/Juros e detectar:
 
 Considerando `data_ajuizamento` da causa e a data de corte **30/08/2024** (vigência Lei 14.905):
 
+⚠️ **DECISÃO CASO A vs CASO B — VERIFICAR AS DUAS CONDIÇÕES**:
+
+```
+SE  data_inicio_calculo >= 30/08/2024
+E   data_ajuizamento     >= 30/08/2024  ← AMBAS, simultaneamente
+ENTÃO Caso A (sem combinações)
+SENÃO Caso B (cálculo cruza 30/08/2024 — exige combinações)
+```
+
+❌ **ERRO RECORRENTE**: aplicar Caso A só porque `data_ajuizamento >= 30/08/2024`.
+A `data_inicio_calculo` (prescrição quinquenal) frequentemente é vários anos
+anterior à data-corte — nesse caso é OBRIGATÓRIO Caso B. Exemplo ALINE
+(01/06/2026): ajuizamento 14/04/2026 (pós-corte) mas `data_inicio_calculo`
+14/04/2021 (anterior ao corte por 3 anos) → **Caso B**, não Caso A.
+
 **Caso A — `data_ajuizamento` >= 30/08/2024 E `data_inicio_calculo` >= 30/08/2024**
 (Scarlette: ajuizamento 04/03/2026, cálculo inicia 10/04/2025 — TUDO pós-30/08/2024):
 ```json

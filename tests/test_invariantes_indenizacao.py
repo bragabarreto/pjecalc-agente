@@ -735,6 +735,87 @@ def test_inv16_lancar_verba_manual_aguarda_form_visivel():
     assert "Pulando" in func or "skip" in func.lower() or "return" in func
 
 
+def test_inv17_normalizer_corrige_caso_a_para_b_quando_cruza_30_08_2024():
+    """Cálculo que CRUZA 30/08/2024 (data-corte Lei 14.905) deve ser Caso B.
+
+    Bug histórico (ALINE 02/06/2026): IA gerou Caso A (sem combinações,
+    IPCA + TAXA_LEGAL) para cálculo com data_inicio_calculo=14/04/2021
+    e data_ajuizamento=14/04/2026 — cruza 30/08/2024. Period 04/2021-08/2024
+    teria IPCA + TAXA_LEGAL quando deveria ser IPCAE + SELIC pré-Lei.
+    """
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "parametros_calculo": {
+            "data_admissao": "07/12/2016",
+            "data_demissao": "01/09/2024",
+            "data_ajuizamento": "14/04/2026",
+            "data_inicio_calculo": "14/04/2021",
+            "data_termino_calculo": "22/10/2024",
+        },
+        "correcao_juros_multa": {
+            "indice_trabalhista": "IPCA",         # IA emitiu Caso A
+            "combinar_outro_indice": False,
+            "indice_combinado": None,
+            "data_inicio_combinacao": None,
+            "juros": "TAXA_LEGAL",
+            "aplicar_juros_fase_pre_judicial": True,
+            "juros_combinacoes": [],
+        },
+        "historico_salarial": [], "verbas_principais": [], "honorarios": [],
+    }
+    res = normalize_v2_json(payload)
+    cjm = res["correcao_juros_multa"]
+    # Após normalizer, DEVE virar Caso B
+    assert cjm["indice_trabalhista"] == "IPCAE", f"esperava IPCAE, got {cjm['indice_trabalhista']}"
+    assert cjm["combinar_outro_indice"] is True
+    assert cjm["indice_combinado"] == "IPCA"
+    assert cjm["data_inicio_combinacao"] == "30/08/2024"
+    # juros_combinacoes deve ter ao menos a fase TAXA_LEGAL pós-30/08/2024
+    combs = cjm.get("juros_combinacoes") or []
+    assert len(combs) >= 1, "esperava ≥1 combinação"
+    tabela_pos = next((c for c in combs if c.get("data_inicio") == "30/08/2024"), None)
+    assert tabela_pos is not None, "esperava combinação com data_inicio=30/08/2024"
+    assert tabela_pos["tabela"] == "TAXA_LEGAL"
+
+
+def test_inv17_normalizer_preserva_caso_a_quando_tudo_pos_30_08_2024():
+    """Cálculo TODO pós-30/08/2024 deve ficar como Caso A (preservado)."""
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "parametros_calculo": {
+            "data_admissao": "10/04/2025",
+            "data_demissao": "01/12/2025",
+            "data_ajuizamento": "04/03/2026",
+            "data_inicio_calculo": "10/04/2025",   # > 30/08/2024 ✓
+            "data_termino_calculo": "01/12/2025",
+        },
+        "correcao_juros_multa": {
+            "indice_trabalhista": "IPCA",
+            "combinar_outro_indice": False,
+            "juros": "TAXA_LEGAL",
+            "juros_combinacoes": [],
+        },
+        "historico_salarial": [], "verbas_principais": [], "honorarios": [],
+    }
+    res = normalize_v2_json(payload)
+    cjm = res["correcao_juros_multa"]
+    # Caso A preservado
+    assert cjm["indice_trabalhista"] == "IPCA"
+    assert cjm["combinar_outro_indice"] is False
+    assert cjm.get("juros_combinacoes") == []
+
+
+def test_inv17_prompt_orienta_verificar_ambas_condicoes():
+    """Prompt interno deve enfatizar que Caso A exige AMBAS as condições simultaneamente."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    # Aviso explícito da verificação dupla
+    assert "AMBAS" in ext and "simultaneamente" in ext
+    # Erro recorrente documentado
+    assert "ERRO RECORRENTE" in ext
+    # Exemplo concreto ALINE
+    assert "ALINE" in ext
+
+
 def test_inv13_extraction_explica_quantidade_pct_como_multiplicador():
     """Prompt interno deve explicar quantidade_pct como MULTIPLICADOR (1.0=100%),
     NÃO como percentual 0–100 (100.0=100%). Evita interpretação errada como 100× SM.

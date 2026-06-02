@@ -188,6 +188,83 @@ def _norm_correcao(c: dict[str, Any]) -> dict[str, Any]:
     return c
 
 
+def _norm_correcao_caso_a_vs_b(data: dict[str, Any]) -> None:
+    """Salvaguarda contra confusão da IA entre Caso A (cálculo TODO pós-Lei
+    14.905) e Caso B (cálculo CRUZA 30/08/2024).
+
+    Bug histórico (ALINE 02/06/2026): IA emitiu Caso A (sem combinações,
+    IPCA + TAXA_LEGAL) para cálculo com data_inicio_calculo=14/04/2021
+    (anterior a 30/08/2024) e data_ajuizamento=14/04/2026. Resultado: para
+    o período 14/04/2021–29/08/2024 (~3 anos) o PJE-Calc aplicava IPCA +
+    TAXA_LEGAL (regime Lei 14.905) quando o correto era IPCAE + SELIC
+    (modelo TST E-ED-RR-20407 pré-Lei 14.905).
+
+    Regra (per prompt e jurisprudência):
+    - **Caso A** requer AMBAS data_inicio_calculo >= 30/08/2024
+      E data_ajuizamento >= 30/08/2024.
+    - **Caso B** = cálculo CRUZA 30/08/2024 (data_inicio_calculo
+      < 30/08/2024 <= data_termino_calculo). Exige combinacao com
+      indice_combinado=IPCA + data_inicio_combinacao=30/08/2024 +
+      juros_combinacoes apropriadas.
+
+    Esta função detecta cálculos que cruzam a data-corte e ajusta a config
+    para Caso B se IA emitiu Caso A.
+    """
+    from datetime import datetime as _dt
+    cjm = data.get("correcao_juros_multa")
+    pc = data.get("parametros_calculo")
+    if not isinstance(cjm, dict) or not isinstance(pc, dict):
+        return
+    ini_str = pc.get("data_inicio_calculo")
+    fim_str = pc.get("data_termino_calculo") or pc.get("data_demissao")
+    if not (isinstance(ini_str, str) and isinstance(fim_str, str)):
+        return
+    try:
+        ini = _dt.strptime(ini_str, "%d/%m/%Y")
+        fim = _dt.strptime(fim_str, "%d/%m/%Y")
+    except Exception:
+        return
+    corte = _dt(2024, 8, 30)
+    # Caso B = cálculo CRUZA 30/08/2024 (parte antes, parte depois)
+    cruza_corte = ini < corte <= fim
+    if not cruza_corte:
+        return
+    # Cruza! Verificar se IA já emitiu Caso B (combinar_outro_indice=True
+    # + juros_combinacoes não-vazias). Se sim, OK. Se IA emitiu Caso A
+    # (combinar_outro_indice=False ou juros_combinacoes=[]), corrigir.
+    ja_caso_b = bool(cjm.get("combinar_outro_indice")) and bool(cjm.get("juros_combinacoes"))
+    if ja_caso_b:
+        return
+    # IA emitiu Caso A errado — corrigir para Caso B
+    aju_str = pc.get("data_ajuizamento")
+    cjm["indice_trabalhista"] = "IPCAE"
+    cjm["combinar_outro_indice"] = True
+    cjm["indice_combinado"] = "IPCA"
+    cjm["data_inicio_combinacao"] = "30/08/2024"
+    cjm["juros"] = "TAXA_LEGAL"
+    cjm["aplicar_juros_fase_pre_judicial"] = True
+    combs = []
+    if isinstance(aju_str, str):
+        try:
+            aju = _dt.strptime(aju_str, "%d/%m/%Y")
+            # Fase SELIC: do ajuizamento até 29/08/2024 (só se ajuizamento < corte)
+            if aju < corte:
+                combs.append({
+                    "data_inicio": aju_str,
+                    "tabela": "SELIC",
+                    "descricao": f"Fase 2 — ajuizamento ({aju_str}) até 29/08/2024 (SELIC engloba correção e juros)",
+                })
+        except Exception:
+            pass
+    # Fase TAXA_LEGAL: a partir de 30/08/2024
+    combs.append({
+        "data_inicio": "30/08/2024",
+        "tabela": "TAXA_LEGAL",
+        "descricao": "Fase 3 — Lei 14.905/2024 (CC art. 406 §) — IPCA + SELIC-IPCA a partir de 30/08/2024",
+    })
+    cjm["juros_combinacoes"] = combs
+
+
 def _norm_data(s: str, *, is_fim: bool) -> str:
     """Normaliza MM/YYYY → DD/MM/YYYY. Mantém valor se já estiver em DD/MM/YYYY."""
     if not isinstance(s, str):
@@ -464,6 +541,10 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # 4. Correção/juros — IPCA-E
     if isinstance(data.get("correcao_juros_multa"), dict):
         data["correcao_juros_multa"] = _norm_correcao(data["correcao_juros_multa"])
+
+    # Salvaguarda: detectar cálculo que CRUZA 30/08/2024 (Lei 14.905) e
+    # corrigir config se IA emitiu Caso A indevidamente (deveria ser Caso B).
+    _norm_correcao_caso_a_vs_b(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #
