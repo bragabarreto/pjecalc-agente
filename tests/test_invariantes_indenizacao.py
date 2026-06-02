@@ -608,6 +608,88 @@ def test_inv14_prompt_orienta_cartao_null_sem_jornada():
     assert "NUNCA emitir stub" in extp
 
 
+def test_inv15_normalizer_consolida_historico_arbitrario_em_evolucao():
+    """N entradas adjacentes mesma componente + contíguas → 1 entrada com evolucao.
+
+    Causa raiz (ALINE 01/06/2026): IA emitia 5 entradas "SALÁRIO ABRIL/2021",
+    "SALÁRIO MAIO-JUN/2021", "SALÁRIO JUL/2021-SET/2022" etc. — todas o mesmo
+    componente "SALÁRIO" com valores diferentes. Schema com `evolucao` resolve.
+    """
+    from modules.json_normalizer import normalize_v2_json
+
+    payload = {
+        "historico_salarial": [
+            {"nome":"SALÁRIO ABRIL/2021","parcela":"FIXA","incidencias":{"fgts":True,"cs_inss":True},
+             "competencia_inicial":"04/2021","competencia_final":"04/2021",
+             "tipo_valor":"INFORMADO","valor_brl":2577.20,"calculado":None},
+            {"nome":"SALÁRIO MAIO-JUN/2021","parcela":"FIXA","incidencias":{"fgts":True,"cs_inss":True},
+             "competencia_inicial":"05/2021","competencia_final":"06/2021",
+             "tipo_valor":"INFORMADO","valor_brl":2650.31,"calculado":None},
+            {"nome":"SALÁRIO JUL/2021-SET/2022","parcela":"FIXA","incidencias":{"fgts":True,"cs_inss":True},
+             "competencia_inicial":"07/2021","competencia_final":"09/2022",
+             "tipo_valor":"INFORMADO","valor_brl":2928.0,"calculado":None},
+        ],
+        "verbas_principais":[], "honorarios":[], "parametros_calculo":{},
+    }
+    res = normalize_v2_json(payload)
+    hs = res["historico_salarial"]
+    assert len(hs) == 1, f"esperava 1 entrada consolidada, got {len(hs)}"
+    h = hs[0]
+    assert h["nome"] == "SALÁRIO"
+    assert h["competencia_inicial"] == "04/2021"
+    assert h["competencia_final"] == "09/2022"
+    assert len(h["evolucao"]) == 3
+    assert h["evolucao"][0]["valor_brl"] == 2577.20
+    assert h["evolucao"][2]["valor_brl"] == 2928.0
+
+
+def test_inv15_normalizer_preserva_componentes_diferentes():
+    """Componentes DIFERENTES (salário base + adicional) NÃO devem consolidar."""
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "historico_salarial":[
+            {"nome":"SALÁRIO BASE","parcela":"FIXA","incidencias":{"fgts":True,"cs_inss":True},
+             "competencia_inicial":"01/2024","competencia_final":"12/2024",
+             "tipo_valor":"INFORMADO","valor_brl":3000.0,"calculado":None},
+            {"nome":"ADICIONAL DE PERICULOSIDADE","parcela":"FIXA","incidencias":{"fgts":True,"cs_inss":True},
+             "competencia_inicial":"01/2024","competencia_final":"12/2024",
+             "tipo_valor":"INFORMADO","valor_brl":900.0,"calculado":None},
+        ],
+        "verbas_principais":[], "honorarios":[], "parametros_calculo":{},
+    }
+    res = normalize_v2_json(payload)
+    assert len(res["historico_salarial"]) == 2
+
+
+def test_inv15_normalizer_nao_consolida_periodos_com_gap():
+    """Entradas com mesmo nome canônico mas períodos NÃO-contíguos não consolidam."""
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "historico_salarial":[
+            {"nome":"SALÁRIO 2021","parcela":"FIXA","incidencias":{"fgts":True,"cs_inss":True},
+             "competencia_inicial":"01/2021","competencia_final":"03/2021",
+             "tipo_valor":"INFORMADO","valor_brl":2500.0,"calculado":None},
+            # GAP de meses entre 03/2021 e 06/2022
+            {"nome":"SALÁRIO 2022","parcela":"FIXA","incidencias":{"fgts":True,"cs_inss":True},
+             "competencia_inicial":"06/2022","competencia_final":"12/2022",
+             "tipo_valor":"INFORMADO","valor_brl":2700.0,"calculado":None},
+        ],
+        "verbas_principais":[], "honorarios":[], "parametros_calculo":{},
+    }
+    res = normalize_v2_json(payload)
+    assert len(res["historico_salarial"]) == 2, "gap em períodos deve impedir consolidação"
+
+
+def test_inv15_bot_expande_evolucao():
+    """Bot expande hist.evolucao em N entradas internamente (path seguro:
+    PJE-Calc continua recebendo N linhas como antes, prévia mostra 1).
+    """
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "_expandir_evolucao_historico" in pw
+    # Bot precisa CHAMAR essa expansão antes do loop principal
+    assert "historicos_para_processar" in pw or "expandir_evolucao_historico(self.previa" in pw
+
+
 def test_inv13_extraction_explica_quantidade_pct_como_multiplicador():
     """Prompt interno deve explicar quantidade_pct como MULTIPLICADOR (1.0=100%),
     NÃO como percentual 0–100 (100.0=100%). Evita interpretação errada como 100× SM.

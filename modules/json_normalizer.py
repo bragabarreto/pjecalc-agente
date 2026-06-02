@@ -803,6 +803,117 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
             }
             data["historico_salarial"] = [consolidada]
 
+    # 6.ter Histórico Salarial — CONSOLIDAÇÃO por NOME CANÔNICO + EVOLUÇÃO
+    #
+    # Quando a IA emite N entradas adjacentes que representam o MESMO
+    # componente lógico com valores diferentes em períodos contíguos (ex.:
+    # ALINE 01/06/2026: "SALÁRIO ABRIL/2021" R$ 2577 + "SALÁRIO MAIO-JUN/2021"
+    # R$ 2650 + "SALÁRIO JUL/2021-SET/2022" R$ 2928 + …), consolidar em UMA
+    # entrada com campo `evolucao` listando as mudanças de valor por competência.
+    #
+    # Heurística:
+    #  1) Normalizar nome (strip date markers "/AAAA", "AGO-SET/2024", anos soltos)
+    #  2) Agrupar entradas ADJACENTES com mesmo nome canônico, mesmo tipo_valor
+    #     (INFORMADO), mesmas incidências, mesma parcela, períodos contíguos
+    #  3) Se grupo ≥ 2 entradas → 1 entrada consolidada com evolucao[]
+    import re as _re_evol
+    def _canonical_nome(nome: str | None) -> str:
+        s = (nome or "").upper().strip()
+        # Remove sufixos de data: "ABRIL/2021", "MAIO-JUN/2021", "JUL/2021-SET/2022",
+        # "AGO-SET/2024", "OUT/2022-JUL/2024", anos soltos "2024", "2025"
+        # Substitui padrões MES/AAAA e MES-MES/AAAA
+        meses = (
+            "JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ|"
+            "JANEIRO|FEVEREIRO|MARCO|MARÇO|ABRIL|MAIO|JUNHO|JULHO|"
+            "AGOSTO|SETEMBRO|OUTUBRO|NOVEMBRO|DEZEMBRO"
+        )
+        pad_intervalo = _re_evol.compile(
+            rf"\b({meses})(/\d{{2,4}})?(\s*-\s*({meses}))?(/\d{{2,4}})?\b"
+        )
+        s = pad_intervalo.sub("", s)
+        # Anos soltos (2018-2030)
+        s = _re_evol.sub(r"\b20\d{2}\b", "", s)
+        # Múltiplos espaços/traços/barras residuais
+        s = _re_evol.sub(r"[\s\-/]+", " ", s).strip()
+        return s
+
+    def _competencia_a_int(comp: str | None) -> int | None:
+        try:
+            m, a = (comp or "").split("/")
+            return int(a) * 12 + int(m)
+        except Exception:
+            return None
+
+    def _comp_seguinte(comp: str | None) -> str | None:
+        n = _competencia_a_int(comp)
+        if n is None:
+            return None
+        n += 1
+        return f"{n % 12 or 12:02d}/{(n - 1) // 12}"
+
+    # Re-fetch após a consolidação SM (6.bis) — `data["historico_salarial"]`
+    # pode ter mudado, mas `_hist` ainda referencia a lista antiga.
+    _hist_atual = data.get("historico_salarial")
+    if isinstance(_hist_atual, list) and len(_hist_atual) >= 2:
+        novo: list[dict] = []
+        i = 0
+        while i < len(_hist_atual):
+            h_atual = _hist_atual[i] if isinstance(_hist_atual[i], dict) else None
+            if not h_atual or (h_atual.get("tipo_valor") or "").upper() != "INFORMADO":
+                if h_atual:
+                    novo.append(h_atual)
+                i += 1
+                continue
+            nome_canon = _canonical_nome(h_atual.get("nome"))
+            inc = h_atual.get("incidencias") or {}
+            parcela = h_atual.get("parcela") or "FIXA"
+            grupo = [h_atual]
+            j = i + 1
+            while j < len(_hist_atual):
+                h_prox = _hist_atual[j] if isinstance(_hist_atual[j], dict) else None
+                if not h_prox:
+                    break
+                # Só agrupa se: mesmo nome canônico, mesmo tipo INFORMADO,
+                # mesmas incidências, mesma parcela, e período contíguo.
+                if (h_prox.get("tipo_valor") or "").upper() != "INFORMADO":
+                    break
+                if _canonical_nome(h_prox.get("nome")) != nome_canon:
+                    break
+                if (h_prox.get("incidencias") or {}) != inc:
+                    break
+                if (h_prox.get("parcela") or "FIXA") != parcela:
+                    break
+                # Contiguidade: competencia_final do grupo + 1 == competencia_inicial do próximo
+                esperado = _comp_seguinte(grupo[-1].get("competencia_final"))
+                if esperado != h_prox.get("competencia_inicial"):
+                    break
+                grupo.append(h_prox)
+                j += 1
+            if len(grupo) >= 2:
+                # Consolida em 1 entrada com evolucao[]
+                evolucao = [
+                    {"competencia": g["competencia_inicial"], "valor_brl": float(g["valor_brl"])}
+                    for g in grupo
+                ]
+                consolidada = {
+                    "nome": nome_canon or "SALARIO",
+                    "parcela": parcela,
+                    "incidencias": inc,
+                    "competencia_inicial": grupo[0]["competencia_inicial"],
+                    "competencia_final": grupo[-1]["competencia_final"],
+                    "tipo_valor": "INFORMADO",
+                    "valor_brl": float(grupo[0]["valor_brl"]),
+                    "calculado": None,
+                    "evolucao": evolucao,
+                }
+                novo.append(consolidada)
+                i = j
+            else:
+                novo.append(h_atual)
+                i += 1
+        if len(novo) != len(_hist_atual):
+            data["historico_salarial"] = novo
+
     # 6.bis Férias — normalizar valor "VENCIDAS" (não existe no enum) para
     # "INDENIZADAS" preservando o flag `dobra`. No PJE-Calc, "vencidas" significa
     # período concessivo expirado sem usufruto → direito à dobra (art. 137 CLT).

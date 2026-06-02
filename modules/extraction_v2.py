@@ -268,6 +268,55 @@ estabelecido na página parâmetro da verba."*
   ```
   Use somente quando o valor for **arbitrário** (não corresponde a uma tabela cadastrada).
 
+⚠️ **REGRA INVARIANTE — NÃO REVERTER — evolução de valores = 1 entrada com `evolucao`**:
+
+Quando a sentença indicar que o **MESMO componente salarial** (ex.: SALÁRIO BASE,
+ADICIONAL DE PERICULOSIDADE) teve **valores diferentes ao longo do tempo**
+(dissídio anual, reajuste negociado, evolução natural), emita **UMA ÚNICA entrada**
+no `historico_salarial` cobrindo todo o período + campo `evolucao` listando
+cada mudança de valor:
+
+```json
+{
+  "nome": "SALÁRIO",
+  "parcela": "FIXA",
+  "incidencias": {"fgts": true, "cs_inss": true},
+  "competencia_inicial": "04/2021",
+  "competencia_final": "10/2024",
+  "tipo_valor": "INFORMADO",
+  "valor_brl": 2577.20,
+  "calculado": null,
+  "evolucao": [
+    {"competencia": "04/2021", "valor_brl": 2577.20},
+    {"competencia": "05/2021", "valor_brl": 2650.31},
+    {"competencia": "07/2021", "valor_brl": 2928.00},
+    {"competencia": "10/2022", "valor_brl": 3225.48},
+    {"competencia": "08/2024", "valor_brl": 3479.32}
+  ]
+}
+```
+
+❌ **NUNCA segmente** o MESMO componente em N entradas como
+"SALÁRIO ABRIL/2021", "SALÁRIO MAIO-JUN/2021" — polui o histórico do PJE-Calc.
+
+✅ **SIM, separe** em N entradas quando há COMPONENTES DIFERENTES (cada um
+pode ter sua própria `evolucao`):
+- `SALÁRIO BASE` (1 entrada com sua evolução de valores)
+- `ADICIONAL DE PERICULOSIDADE` (outra entrada com sua evolução)
+- `COMISSÕES` (outra entrada)
+
+Tabela de decisão:
+
+| Cenário | Quantas entradas? | Usa `evolucao`? |
+|---|---|---|
+| Salário fixo durante todo contrato | 1 | não (`null`) |
+| Salário com dissídios/reajustes (mesmo cargo) | 1 | **sim** |
+| Salário mínimo (legal) durante todo contrato | 1 | não (use CALCULADO/SALARIO_MINIMO) |
+| Salário base + adicional de insalubridade | 2 | cada uma pode ter `evolucao` |
+| Salário + comissão variável mensal | 2 (uma fixa, uma com `evolucao` mensal) | sim na 2ª |
+
+---
+
 ⚠️ **REGRA INVARIANTE — NÃO REVERTER — salário mínimo = 1 entrada CALCULADO**:
 
 Quando a sentença indicar que o salário é o mínimo vigente (ou múltiplo fixo dele:

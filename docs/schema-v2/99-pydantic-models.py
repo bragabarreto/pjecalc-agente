@@ -256,6 +256,21 @@ class HistoricoSalarialCalculado(BaseModel):
     base_referencia: str
 
 
+class EvolucaoValor(BaseModel):
+    """Mudança de valor em uma competência específica dentro do MESMO componente.
+
+    Usado em `HistoricoSalarial.evolucao` quando o componente salarial mantém
+    a mesma natureza (ex.: SALÁRIO BASE) ao longo do contrato mas o VALOR
+    varia (dissídios, reajustes negociados).
+
+    Cada item representa: "a partir desta competência, o valor passa a ser X".
+    O bot mapeia cada ocorrência mensal do histórico para o EvolucaoValor mais
+    recente cuja `competencia ≤ data_ocorrencia`, e edita o valor da ocorrência.
+    """
+    competencia: str  # MM/YYYY — a partir desta competência o novo valor vigora
+    valor_brl: float  # novo valor em reais
+
+
 class HistoricoSalarial(BaseModel):
     nome: str
     parcela: TipoVariacaoParcela = TipoVariacaoParcela.FIXA
@@ -265,6 +280,13 @@ class HistoricoSalarial(BaseModel):
     tipo_valor: TipoValor
     valor_brl: Optional[float] = None
     calculado: Optional[HistoricoSalarialCalculado] = None
+    evolucao: Optional[list[EvolucaoValor]] = None
+    # Quando preenchido: o MESMO componente tem valores diferentes ao longo
+    # do período total. O bot cria UMA linha no PJE-Calc com valor_brl como
+    # base, depois edita ocorrências mensais conforme o array `evolucao`.
+    # Use APENAS quando todas as variações são do MESMO componente lógico
+    # (ex.: SALÁRIO BASE com reajustes). Para COMPONENTES DIFERENTES (salário
+    # + adicional), emita entradas separadas — cada uma pode ter sua evolução.
 
     @model_validator(mode="after")
     def _check_tipo_valor(self) -> "HistoricoSalarial":
@@ -272,6 +294,15 @@ class HistoricoSalarial(BaseModel):
             raise ValueError("Histórico INFORMADO exige valor_brl")
         if self.tipo_valor == TipoValor.CALCULADO and self.calculado is None:
             raise ValueError("Histórico CALCULADO exige campo `calculado`")
+        if self.evolucao and self.tipo_valor == TipoValor.CALCULADO:
+            raise ValueError(
+                "Histórico CALCULADO não admite `evolucao` — PJE-Calc resolve o valor "
+                "por competência via tabela (SM, piso). Use evolucao apenas com INFORMADO."
+            )
+        if self.evolucao:
+            for ev in self.evolucao:
+                if ev.valor_brl is None or ev.valor_brl <= 0:
+                    raise ValueError(f"evolucao[].valor_brl deve ser > 0 (got {ev.valor_brl})")
         return self
 
 

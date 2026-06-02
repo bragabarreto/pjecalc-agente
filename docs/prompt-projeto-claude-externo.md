@@ -252,6 +252,33 @@ pós-rescisão, ESTENDA "ÚLTIMA REMUNERAÇÃO" até `data_termino_calculo`.
   ❌ **NUNCA emitir** `calculado: {"base_calculo": {"tipo": "SALARIO_MINIMO"}}` — esse é
   o formato de fórmula de **verba**, NÃO de histórico salarial. O Pydantic rejeita.
 
+⚠️ **REGRA INVARIANTE — NÃO REVERTER — evolução de valores = 1 entrada com `evolucao`**:
+
+Quando o **MESMO componente salarial** (SALÁRIO BASE, ADICIONAL DE PERICULOSIDADE, etc.)
+tem **valores diferentes em períodos diferentes** (dissídios, reajustes negociados),
+emita UMA entrada cobrindo todo o período + campo `evolucao`:
+
+```json
+{
+  "nome": "SALÁRIO",
+  "competencia_inicial": "04/2021",
+  "competencia_final": "10/2024",
+  "tipo_valor": "INFORMADO",
+  "valor_brl": 2577.20,
+  "evolucao": [
+    {"competencia": "04/2021", "valor_brl": 2577.20},
+    {"competencia": "05/2021", "valor_brl": 2650.31},
+    {"competencia": "07/2021", "valor_brl": 2928.00}
+  ]
+}
+```
+
+❌ **NUNCA segmente** o MESMO componente em "SALÁRIO ABRIL/2021", "SALÁRIO MAIO/2021"…
+✅ **SIM separe** quando há COMPONENTES DIFERENTES (salário + adicional + comissão);
+   cada componente pode ter sua própria `evolucao`.
+
+---
+
 ⚠️ **REGRA INVARIANTE — NÃO REVERTER — salário mínimo = 1 entrada CALCULADO**:
 
 Quando a sentença indicar que o salário é o mínimo vigente (ou múltiplo fixo dele:

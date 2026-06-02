@@ -1995,6 +1995,56 @@ class PlaywrightAutomatorV2:
         "ADICIONAL DE INSALUBRIDADE PAGO",
     }
 
+    def _expandir_evolucao_historico(self, historicos: list) -> list:
+        """Expande HistoricoSalarial.evolucao em N entradas, cada uma cobrindo
+        o período entre uma evolução e a seguinte. Bot processa o resultado
+        igual ao caso N entradas separadas (comportamento estável).
+
+        Estratégia (safe path):
+        - Para cada hist com evolucao ≥ 2 steps: gera N entradas, cada uma
+          com competencia_inicial = ev[i].competencia,
+          competencia_final = (ev[i+1].competencia - 1mês) ou hist.competencia_final,
+          valor_brl = ev[i].valor_brl,
+          evolucao = None (já expandida).
+        - hist sem evolucao: passa direto.
+
+        Prévia continua mostrando 1 entrada consolidada para o usuário;
+        bot cria N entradas no PJE-Calc (limitação arquitetural aceita).
+        """
+        def _comp_a_int(comp: str) -> int:
+            m, a = comp.split("/")
+            return int(a) * 12 + int(m)
+
+        def _comp_anterior(comp: str) -> str:
+            n = _comp_a_int(comp) - 1
+            return f"{n % 12 or 12:02d}/{(n - 1) // 12}"
+
+        expandido = []
+        for h in historicos:
+            ev = getattr(h, "evolucao", None)
+            if not ev or len(ev) < 2:
+                expandido.append(h)
+                continue
+            # Ordena por competência crescente
+            steps = sorted(ev, key=lambda e: _comp_a_int(e.competencia))
+            self.log(
+                f"  ↪ Expandindo '{h.nome}' em {len(steps)} entradas (evolução)"
+            )
+            for i, s in enumerate(steps):
+                comp_inicial = s.competencia
+                if i + 1 < len(steps):
+                    comp_final = _comp_anterior(steps[i + 1].competencia)
+                else:
+                    comp_final = h.competencia_final
+                nova = h.model_copy(update={
+                    "competencia_inicial": comp_inicial,
+                    "competencia_final": comp_final,
+                    "valor_brl": s.valor_brl,
+                    "evolucao": None,
+                })
+                expandido.append(nova)
+        return expandido
+
     def fase_historico_salarial(self) -> None:
         self.log("Fase 3 — Histórico Salarial")
         self._navegar_menu("li_calculo_historico_salarial")
@@ -2005,7 +2055,12 @@ class PlaywrightAutomatorV2:
 
         defaults_norm = {_norm(n) for n in self._HISTORICOS_DEFAULT}
 
-        for idx, hist in enumerate(self.previa.historico_salarial):
+        # Expandir evolução em entradas individuais antes de iterar
+        # (mantém comportamento estável do bot — N entradas no PJE-Calc).
+        historicos_para_processar = self._expandir_evolucao_historico(
+            self.previa.historico_salarial
+        )
+        for idx, hist in enumerate(historicos_para_processar):
             # Históricos default (PJE-Calc já criou em Fase 2): pulamos aqui
             # pois Seam está em modo criação — listagem inacessível. Edição
             # do default será feita em fase_pos_recentes_correcoes() após
