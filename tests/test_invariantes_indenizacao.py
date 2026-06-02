@@ -770,12 +770,48 @@ def test_inv17_normalizer_corrige_caso_a_para_b_quando_cruza_30_08_2024():
     assert cjm["combinar_outro_indice"] is True
     assert cjm["indice_combinado"] == "IPCA"
     assert cjm["data_inicio_combinacao"] == "30/08/2024"
-    # juros_combinacoes deve ter ao menos a fase TAXA_LEGAL pós-30/08/2024
+    # Como ajuizamento (14/04/2026) é PÓS-30/08/2024, juros_combinacoes
+    # deve ficar VAZIO (TAXA_LEGAL principal já cobre — combinação seria
+    # convertida pelo PJE-Calc para SEM_JUROS).
+    assert cjm.get("juros_combinacoes") == []
+
+
+def test_inv17_normalizer_caso_b_com_ajuizamento_pre_corte_tem_2_fases():
+    """Caso B com ajuizamento ANTERIOR a 30/08/2024 deve ter 2 fases:
+    SELIC (do ajuizamento até 29/08/2024) + TAXA_LEGAL (pós-30/08/2024).
+
+    Cenário: contrato com pensão vitalícia ou aviso prévio projetando o
+    cálculo até depois de 30/08/2024 (cruza o corte) — ajuizamento ainda
+    antes da Lei 14.905.
+    """
+    from modules.json_normalizer import normalize_v2_json
+    # Cenário realista: ação ajuizada DURANTE contrato (antes da Lei 14.905),
+    # mas demissão posterior a 30/08/2024 → cálculo cruza corte.
+    payload = {
+        "parametros_calculo": {
+            "data_admissao": "01/03/2018",
+            "data_demissao": "01/06/2025",
+            "data_ajuizamento": "01/03/2023",   # PRÉ-30/08/2024
+            "data_inicio_calculo": "01/03/2018",
+            "data_termino_calculo": "01/06/2025",   # PÓS-corte (cruza)
+        },
+        "correcao_juros_multa": {
+            "indice_trabalhista": "IPCA",
+            "combinar_outro_indice": False,
+            "juros": "TAXA_LEGAL",
+            "juros_combinacoes": [],
+        },
+        "historico_salarial": [], "verbas_principais": [], "honorarios": [],
+    }
+    res = normalize_v2_json(payload)
+    cjm = res["correcao_juros_multa"]
     combs = cjm.get("juros_combinacoes") or []
-    assert len(combs) >= 1, "esperava ≥1 combinação"
-    tabela_pos = next((c for c in combs if c.get("data_inicio") == "30/08/2024"), None)
-    assert tabela_pos is not None, "esperava combinação com data_inicio=30/08/2024"
-    assert tabela_pos["tabela"] == "TAXA_LEGAL"
+    # Espera 2 fases: SELIC pós-ajuizamento + TAXA_LEGAL pós-30/08/2024
+    assert len(combs) == 2
+    fase_selic = next((c for c in combs if c.get("tabela") == "SELIC"), None)
+    fase_legal = next((c for c in combs if c.get("tabela") == "TAXA_LEGAL"), None)
+    assert fase_selic is not None and fase_selic["data_inicio"] == "01/03/2023"
+    assert fase_legal is not None and fase_legal["data_inicio"] == "30/08/2024"
 
 
 def test_inv17_normalizer_preserva_caso_a_quando_tudo_pos_30_08_2024():
