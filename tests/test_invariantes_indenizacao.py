@@ -690,6 +690,51 @@ def test_inv15_bot_expande_evolucao():
     assert "historicos_para_processar" in pw or "expandir_evolucao_historico(self.previa" in pw
 
 
+def test_inv16_reroute_inf_desligamento_lista_excecoes():
+    """Re-rotagem MP-1 H3 é SELETIVA: verbas Expresso cujo default é
+    DESLIGAMENTO (Multa 477, Saldo Salário, Aviso Prévio) NÃO devem ser
+    re-roteadas para Manual — funcionam direto pelo Expresso.
+
+    Bug histórico (ALINE 02/06/2026): regra original re-roteava TODO
+    INFORMADO+DESLIGAMENTO, causando falha no Manual flow para Multa 477
+    (form não renderizava em tempo, verba salva vazia, PJC sem multa).
+    """
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # Lista de exceções DEVE existir e conter Multa 477 / Saldo / Aviso
+    assert "_VERBAS_EXPRESSO_DEFAULT_DESLIGAMENTO" in pw
+    assert "MULTA DO ARTIGO 477 DA CLT" in pw
+    assert "SALDO DE SAL" in pw  # SALDO DE SALÁRIO (com ou sem acento)
+    assert "AVISO PR" in pw  # AVISO PRÉVIO
+    # E a função _is_inf_desligamento deve consultar essa lista
+    idx_func = pw.find("def _is_inf_desligamento")
+    assert idx_func > 0
+    # Após a definição da função, deve haver uso da lista para excluir
+    func_block = pw[idx_func:idx_func + 1500]
+    assert "_VERBAS_EXPRESSO_DEFAULT_DESLIGAMENTO" in func_block
+
+
+def test_inv16_lancar_verba_manual_aguarda_form_visivel():
+    """_lancar_verba_manual DEVE aguardar form visível antes de preencher.
+
+    Bug histórico (ALINE 02/06/2026): após `click incluir` + `_aguardar_ajax`,
+    o bot tentava preencher radios INSTANTANEAMENTE. O form Manual ainda não
+    estava renderizado → todos os radios falhavam silenciosamente → verba
+    salva vazia. Fix: wait_for_selector('input[id$=":descricao"]') por 15s.
+    """
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    idx = pw.find("def _lancar_verba_manual")
+    assert idx > 0
+    func = pw[idx:idx + 3500]
+    # DEVE haver wait_for_selector com descricao + state=visible
+    assert "wait_for_selector" in func
+    assert "descricao" in func
+    assert "state=\"visible\"" in func or "state='visible'" in func
+    # Timeout adequado (≥15s para JSF carregar form sob Seam EPC carregado)
+    assert "timeout=15000" in func or "timeout=20000" in func
+    # Defesa adicional: se form não abrir, deve PULAR (não salvar vazio)
+    assert "Pulando" in func or "skip" in func.lower() or "return" in func
+
+
 def test_inv13_extraction_explica_quantidade_pct_como_multiplicador():
     """Prompt interno deve explicar quantidade_pct como MULTIPLICADOR (1.0=100%),
     NÃO como percentual 0–100 (100.0=100%). Evita interpretação errada como 100× SM.

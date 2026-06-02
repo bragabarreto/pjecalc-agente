@@ -2404,22 +2404,45 @@ class PlaywrightAutomatorV2:
             if v.estrategia_preenchimento == EstrategiaPreenchimento.MANUAL
         ]
 
-        # ⚠ MP-1 H3 (25/05/2026): re-rotear INFORMADO+DESLIGAMENTO para Manual.
-        # Causa: Expresso default ocorrencia_pagamento=MENSAL → bot precisa
-        # mudar para DESLIGAMENTO → JSF flagueia "param alterado APÓS geração"
-        # como erro blocking. Hipóteses 1 (Sobrescrever pós-params) e
-        # (Skip Regerar pós-params) testadas e fracassadas — alert é
-        # temporalmente estrutural ao Expresso initial lançamento.
+        # ⚠ MP-1 H3 (25/05/2026, refinado 02/06/2026 — caso ALINE):
+        # re-rotear INFORMADO+DESLIGAMENTO para Manual SELETIVAMENTE.
         #
-        # Solução H3: criar essas verbas via Manual (botão 'Manual') desde T0
-        # com ocorrencia_pagamento=DESLIGAMENTO já no form de criação.
-        # Sem alteração pós-geração → sem alert.
+        # Causa original: Expresso default ocorrencia_pagamento=MENSAL → bot
+        # precisa mudar para DESLIGAMENTO → JSF flagueia "param alterado APÓS
+        # geração" como erro blocking. Solução H3: criar via Manual desde T0.
+        #
+        # **DEFEITO CORRIGIDO (ALINE 02/06/2026)**: regra original re-roteava
+        # qualquer verba INFORMADO+DESLIGAMENTO, mas várias verbas Expresso
+        # **JÁ têm DESLIGAMENTO como default** (Multa 477, Saldo Salário,
+        # Aviso Prévio). Para essas, não há "param alterado pós-geração" e
+        # NÃO devem ser re-roteadas — o Expresso direto funciona perfeito.
+        #
+        # Re-rotear apenas as verbas cujo Expresso default é MENSAL:
+        # INDENIZAÇÃO POR DANO MORAL / MATERIAL / ESTÉTICO / ADICIONAL / etc.
+        # (default MENSAL no Expresso, mas a sentença pede DESLIGAMENTO).
+        _VERBAS_EXPRESSO_DEFAULT_DESLIGAMENTO = {
+            "MULTA DO ARTIGO 477 DA CLT",
+            "MULTA 477",
+            "SALDO DE SALÁRIO",
+            "SALDO DE SALARIO",
+            "AVISO PRÉVIO",
+            "AVISO PREVIO",
+        }
         def _is_inf_desligamento(_v) -> bool:
             try:
                 _p = _v.parametros
                 _ocorr = str(getattr(_p, "ocorrencia_pagamento", "")).upper()
                 _val = str(getattr(_p, "valor", "")).upper()
-                return "DESLIGAMENTO" in _ocorr and "INFORMADO" in _val
+                if not ("DESLIGAMENTO" in _ocorr and "INFORMADO" in _val):
+                    return False
+                # Verbas cujo Expresso default já é DESLIGAMENTO → não re-rotear
+                _alvo = (getattr(_v, "expresso_alvo", None) or "").strip().upper()
+                _nome = (getattr(_v, "nome_pjecalc", None) or "").strip().upper()
+                if _alvo in _VERBAS_EXPRESSO_DEFAULT_DESLIGAMENTO:
+                    return False
+                if _nome in _VERBAS_EXPRESSO_DEFAULT_DESLIGAMENTO:
+                    return False
+                return True
             except Exception:
                 return False
 
@@ -5430,6 +5453,44 @@ class PlaywrightAutomatorV2:
         self.log(f"  → Manual: {v.nome_pjecalc}")
         self._clicar("incluir")
         self._aguardar_ajax(8000)
+
+        # ⚠ CRÍTICO (ALINE 02/06/2026): _aguardar_ajax retorna assim que o
+        # AJAX em vôo termina (~200ms), MAS o form Manual pode demorar muito
+        # mais para o JSF renderizar todos os campos (radios, lupa Assunto
+        # CNJ, valorInformadoDoDevido) — especialmente quando Seam EPC está
+        # sob carga (ex.: 5 históricos salariais salvos antes).
+        #
+        # Sintoma do bug: bot tentava radios/lupa/valor INSTANTANEAMENTE
+        # após _aguardar_ajax, todos falhavam silenciosamente com "não
+        # encontrado", só `comentarios` aparecia tarde. Verba salvava
+        # com TODOS os campos zerados → não aparecia no PJC final.
+        #
+        # Fix: aguardar EXPLICITAMENTE até que o input `descricao` (campo
+        # de Nome da verba — sempre presente no form Manual) fique visível.
+        # Padrão idêntico ao fase_historico_salarial (que funciona estável).
+        form_pronto = False
+        for sel in (
+            "input[id='formulario:descricao']",
+            "input[id$=':descricao'][type='text']",
+            "input[name='formulario:descricao']",
+        ):
+            try:
+                self._page.wait_for_selector(sel, state="visible", timeout=15000)
+                form_pronto = True
+                self.log(f"  ✓ form Manual aberto via selector: {sel}")
+                break
+            except Exception:
+                continue
+        if not form_pronto:
+            # Diagnóstico: listar inputs visíveis para ajudar futuros bugs
+            _ids = self._page.evaluate(
+                """() => [...document.querySelectorAll('input,select,textarea')]
+                    .filter(e => e.id && e.offsetParent)
+                    .map(e => e.id).slice(0, 30)"""
+            )
+            self.log(f"  ⚠ form Manual NÃO abriu em 15s — IDs visíveis: {_ids}")
+            self.log(f"  ⚠ Pulando '{v.nome_pjecalc}' para evitar salvar verba vazia")
+            return
 
         self._preencher_form_parametros_verba(v, com_identificacao=True)
 
