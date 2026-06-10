@@ -395,6 +395,19 @@ class QuantidadeVerba(BaseModel):
     tipo_importada_calendario: Optional[str] = None
     tipo_cartao_ponto: Optional[str] = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _alias_valor_mensal(cls, data):
+        # INVARIANTE PERMANENTE — alias valor_mensal (NÃO REVERTER).
+        # Bug THAÍS 10/06/2026: prompt ensinava `valor_mensal`, schema só lia
+        # `valor` (default 1.0) → quantidade 20 do SALDO DE SALÁRIO virou 1
+        # silenciosamente (R$ 1.614,79 → R$ 53,83). Aceitar ambos os nomes.
+        if isinstance(data, dict) and data.get("valor") is None:
+            vm = data.get("valor_mensal")
+            if vm is not None:
+                data = {**data, "valor": vm}
+        return data
+
     @model_validator(mode="after")
     def _normaliza_valor_null(self) -> "QuantidadeVerba":
         if self.valor is None:
@@ -1330,7 +1343,7 @@ class FaseJuros(BaseModel):
     tabela: Literal[
         "TAXA_LEGAL", "JUROS_PADRAO", "JUROS_POUPANCA", "JUROS_MEIO_PORCENTO",
         "JUROS_UM_PORCENTO", "JUROS_ZERO_TRINTA_TRES", "SELIC", "SELIC_FAZENDA",
-        "SELIC_BACEN", "FAZENDA_PUBLICA", "SEM_JUROS",
+        "SELIC_BACEN", "FAZENDA_PUBLICA", "SEM_JUROS", "TRD_SIMPLES", "TRD_COMPOSTOS",
     ]
     """Enum do PJE-Calc para a tabela de juros desta fase."""
     descricao: Optional[str] = None
@@ -1356,7 +1369,7 @@ class CorrecaoJurosMulta(BaseModel):
     juros: Literal[
         "TAXA_LEGAL", "JUROS_PADRAO", "JUROS_POUPANCA", "JUROS_MEIO_PORCENTO",
         "JUROS_UM_PORCENTO", "JUROS_ZERO_TRINTA_TRES", "SELIC", "SELIC_FAZENDA",
-        "SELIC_BACEN", "FAZENDA_PUBLICA",
+        "SELIC_BACEN", "FAZENDA_PUBLICA", "SEM_JUROS", "TRD_SIMPLES", "TRD_COMPOSTOS",
     ] = "TAXA_LEGAL"
     """Tabela de juros da FASE 1 (pré-judicial, ou única se juros_combinacoes
     estiver vazio). Quando há mais de uma fase, preencher juros_combinacoes

@@ -225,51 +225,64 @@ def _norm_correcao_caso_a_vs_b(data: dict[str, Any]) -> None:
     except Exception:
         return
     corte = _dt(2024, 8, 30)
-    # Caso B = cálculo CRUZA 30/08/2024 (parte antes, parte depois)
-    cruza_corte = ini < corte <= fim
-    if not cruza_corte:
-        return
-    # Cruza! Verificar se IA já emitiu Caso B (combinar_outro_indice=True
-    # + juros_combinacoes não-vazias). Se sim, OK. Se IA emitiu Caso A
-    # (combinar_outro_indice=False ou juros_combinacoes=[]), corrigir.
-    ja_caso_b = bool(cjm.get("combinar_outro_indice")) and bool(cjm.get("juros_combinacoes"))
-    if ja_caso_b:
-        return
-    # IA emitiu Caso A errado — corrigir para Caso B
     aju_str = pc.get("data_ajuizamento")
-    cjm["indice_trabalhista"] = "IPCAE"
-    cjm["combinar_outro_indice"] = True
-    cjm["indice_combinado"] = "IPCA"
-    cjm["data_inicio_combinacao"] = "30/08/2024"
-    cjm["juros"] = "TAXA_LEGAL"
-    cjm["aplicar_juros_fase_pre_judicial"] = True
-    # juros_combinacoes:
-    # - Se ajuizamento PRÉ-30/08/2024: precisa fase SELIC (do ajuizamento até
-    #   29/08/2024) + fase TAXA_LEGAL (pós-30/08/2024).
-    # - Se ajuizamento PÓS-30/08/2024 (ex.: ALINE): TAXA_LEGAL já é o juros
-    #   principal — NÃO adicionar combinação redundante (PJE-Calc converte
-    #   para SEM_JUROS automaticamente, corrompendo o resultado).
-    combs = []
+    aju = None
     if isinstance(aju_str, str):
         try:
             aju = _dt.strptime(aju_str, "%d/%m/%Y")
-            if aju < corte:
-                # Fase SELIC: do ajuizamento até 29/08/2024
-                combs.append({
+        except Exception:
+            aju = None
+
+    # ── 1) CORREÇÃO — combinação IPCA a partir de 30/08/2024 quando o
+    # cálculo CRUZA a data-corte (Lei 14.905). Bug ALINE 02/06/2026.
+    cruza_corte = ini < corte <= fim
+    if cruza_corte and not bool(cjm.get("combinar_outro_indice")):
+        cjm["indice_trabalhista"] = "IPCAE"
+        cjm["combinar_outro_indice"] = True
+        cjm["indice_combinado"] = "IPCA"
+        cjm["data_inicio_combinacao"] = "30/08/2024"
+
+    # ── 2) JUROS — modelo TST E-ED-RR-20407 (validado contra sentença THAÍS
+    # 0000183-68, 10/06/2026): a FASE 1 (pré-judicial) usa juros do art. 39
+    # caput da Lei 8.177/91 = TRD_SIMPLES; a TAXA_LEGAL entra como COMBINAÇÃO
+    # a partir do AJUIZAMENTO (ou SELIC→TAXA_LEGAL se ajuizamento pré-corte).
+    #
+    # Bug histórico THAÍS (10/06/2026): regra anterior (commit 587f862) emitia
+    # juros=TAXA_LEGAL SEM combinações quando ajuizamento >= 30/08/2024 —
+    # aplicava taxa legal DESDE O VENCIMENTO de cada verba (fase pré-judicial),
+    # quando o devido era TRD (≈0) até o ajuizamento. Usuário corrigia à mão.
+    #
+    # Nota sobre 587f862: aquele fix evitava o PJE-Calc auto-converter para
+    # SEM_JUROS a combinação TAXA_LEGAL@ajuizamento REDUNDANTE com fase 1
+    # TAXA_LEGAL. Com fase 1 = TRD_SIMPLES a combinação NÃO é redundante e
+    # persiste corretamente (comprovado no PJC THAÍS: <juros>TRD_SIMPLES</juros>
+    # + combinarOutroJuros TAXA_LEGAL@11/02/2025).
+    #
+    # Salvaguarda conservadora: só corrige quando a IA emitiu o padrão antigo
+    # (juros=TAXA_LEGAL na fase 1). Outras tabelas (sentenças explícitas,
+    # JUROS_PADRAO, SEM_JUROS...) são preservadas.
+    if aju is not None and cjm.get("juros") == "TAXA_LEGAL":
+        cjm["juros"] = "TRD_SIMPLES"
+        cjm["aplicar_juros_fase_pre_judicial"] = True
+        if aju >= corte:
+            cjm["juros_combinacoes"] = [{
+                "data_inicio": aju_str,
+                "tabela": "TAXA_LEGAL",
+                "descricao": f"Do ajuizamento ({aju_str}) — Lei 14.905/2024 (CC art. 406 §): IPCA + SELIC-IPCA",
+            }]
+        else:
+            cjm["juros_combinacoes"] = [
+                {
                     "data_inicio": aju_str,
                     "tabela": "SELIC",
                     "descricao": f"Fase 2 — ajuizamento ({aju_str}) até 29/08/2024 (SELIC engloba correção e juros)",
-                })
-                # Fase TAXA_LEGAL: a partir de 30/08/2024
-                combs.append({
+                },
+                {
                     "data_inicio": "30/08/2024",
                     "tabela": "TAXA_LEGAL",
                     "descricao": "Fase 3 — Lei 14.905/2024 (CC art. 406 §) — IPCA + SELIC-IPCA a partir de 30/08/2024",
-                })
-            # else: ajuizamento >= corte → juros = TAXA_LEGAL principal já cobre
-        except Exception:
-            pass
-    cjm["juros_combinacoes"] = combs
+                },
+            ]
 
 
 def _norm_data(s: str, *, is_fim: bool) -> str:

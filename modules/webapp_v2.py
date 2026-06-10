@@ -614,24 +614,58 @@ def executar_v2_como_generator(sessao_id: str):
     t = threading.Thread(target=_executar_bot, daemon=True)
     t.start()
 
-    yield f"══ Automação v2 iniciada para sessão {sessao_id} ══"
-    yield f"  Processo: {previa.processo.numero_processo}"
-    yield f"  Reclamante: {previa.processo.reclamante.nome}"
-    yield f"  Verbas: {len(previa.verbas_principais)} principais + " \
-          f"{sum(len(v.reflexos) for v in previa.verbas_principais)} reflexos"
+    # ⚠ Log persistido (fix THAÍS 10/06/2026): sem arquivo, o diagnóstico
+    # pós-falha fica inferencial (o SSE só existe no stream do browser).
+    # Grava cada linha em <store>/logs/<sessao_id>_automation.log.
+    _log_file = None
+    try:
+        _logs_dir = _STORE_DIR / "logs"
+        _logs_dir.mkdir(parents=True, exist_ok=True)
+        _log_file = open(_logs_dir / f"{sessao_id}_automation.log", "a", encoding="utf-8")
+        from datetime import datetime as _dt_log
+        _log_file.write(f"\n===== RUN {_dt_log.now().isoformat()} =====\n")
+    except Exception:
+        _log_file = None
 
-    # Drenar a queue
-    while True:
-        try:
-            item = log_q.get(timeout=15)
-        except queue.Empty:
-            yield "⏳ Processando…"
-            continue
-        if item is SENTINEL:
-            break
-        yield item
+    def _persist(linha: str) -> None:
+        if _log_file is not None:
+            try:
+                _log_file.write(linha + "\n")
+                _log_file.flush()
+            except Exception:
+                pass
 
-    yield "[FIM DA EXECUÇÃO]"
+    try:
+        for _hdr in (
+            f"══ Automação v2 iniciada para sessão {sessao_id} ══",
+            f"  Processo: {previa.processo.numero_processo}",
+            f"  Reclamante: {previa.processo.reclamante.nome}",
+            f"  Verbas: {len(previa.verbas_principais)} principais + "
+            f"{sum(len(v.reflexos) for v in previa.verbas_principais)} reflexos",
+        ):
+            _persist(_hdr)
+            yield _hdr
+
+        # Drenar a queue
+        while True:
+            try:
+                item = log_q.get(timeout=15)
+            except queue.Empty:
+                yield "⏳ Processando…"
+                continue
+            if item is SENTINEL:
+                break
+            _persist(str(item))
+            yield item
+
+        _persist("[FIM DA EXECUÇÃO]")
+        yield "[FIM DA EXECUÇÃO]"
+    finally:
+        if _log_file is not None:
+            try:
+                _log_file.close()
+            except Exception:
+                pass
 
 
 # ─── Helper: converter prévia v2 → v1 (compat com automação atual) ────────

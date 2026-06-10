@@ -443,7 +443,9 @@ separadas. NUNCA criar múltiplas verbas "Férias" em `verbas_principais`.
 Mesmo que o contrato abranja vários anos com
 remunerações diferentes (ex: 2023-2024-2025-2026), criar **APENAS UMA** entrada
 `13º SALÁRIO` em `verbas_principais`, com:
-- `periodo_inicio` = data de admissão
+- `periodo_inicio` = **início do período DEFERIDO na sentença** (ver regra da
+  fração deferida abaixo — só usar a data de admissão quando a condenação
+  abranger o contrato inteiro)
 - `periodo_fim` = data de demissão
 - `caracteristica = "DECIMO_TERCEIRO_SALARIO"`, `ocorrencia_pagamento = "DEZEMBRO"`
 - `quantidade.tipo = "AVOS"`
@@ -466,6 +468,29 @@ O PJE-Calc **gera automaticamente** as ocorrências de 13º para cada ano (DEZEM
 mais a ocorrência de DESLIGAMENTO no ano da rescisão), e a **base de cada ocorrência respeita
 o `historico_salarial` vigente na competência** correspondente — você só precisa garantir que
 o array `historico_salarial` cubra cada ano com o valor correto.
+
+⚠️ **REGRA CRÍTICA — FRAÇÃO DEFERIDA limita o período (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+A regra de "verba única" NÃO significa "período = contrato inteiro". O período da
+verba deve ser o **MENOR período que gera exatamente os avos/parcelas DEFERIDOS
+na sentença**. A liquidação segue estritamente o título executivo.
+
+**Bug histórico (THAÍS 0000183-68, 10/06/2026):** sentença deferiu APENAS
+"13º salário proporcional de 2025, na fração de 2/12 (R$ 403,70)". A IA emitiu
+`periodo 22/05/2023 → 20/01/2025` (contrato inteiro) → PJE-Calc liquidou
+7/12 de 2023 + 12/12 de 2024 + 2/12 de 2025 = R$ 4.238,83 — **R$ 3.835,13 a
+maior** que a condenação.
+
+**✅ CERTO para aquela sentença:** `periodo_inicio: "01/01/2025"`,
+`periodo_fim: "20/01/2025"` (gera apenas os 2/12 de 2025 com a projeção do AP).
+
+Aplicação:
+- Sentença defere "13º proporcional de YYYY (N/12)" → período = 01/01/YYYY até
+  a demissão (ou a fração específica indicada).
+- Sentença defere "13º de todo o período contratual" / "13º dos anos X, Y, Z"
+  → período cobre exatamente esses anos.
+- Mesma lógica vale para FÉRIAS (emitir em `ferias.periodos` SOMENTE os
+  períodos aquisitivos deferidos) e qualquer verba recorrente parcialmente
+  deferida.
 
 **❌ ERRADO** (gera 4 verbas separadas + 4 históricos separados — INSS duplicado, listagem poluída, conferência inviável):
 ```
@@ -593,7 +618,7 @@ A verba é calculada por fórmula. Preencher:
   "base_calculo": {"tipo": "HISTORICO_SALARIAL", "historico_nome": "ÚLTIMA REMUNERAÇÃO", "proporcionaliza": "NAO"},
   "divisor": {"tipo": "OUTRO_VALOR", "valor": 220},
   "multiplicador": 1.50,
-  "quantidade": {"tipo": "INFORMADA", "valor_mensal": 44.0}
+  "quantidade": {"tipo": "INFORMADA", "valor": 44.0}
 }
 ```
 
@@ -622,7 +647,7 @@ Se a sentença não indica claramente a base, usar `HISTORICO_SALARIAL`.
 **`quantidade.tipo` — ENUM OBRIGATÓRIO (exatamente um destes 5 valores):**
 | Valor | Quando usar |
 |---|---|
-| `INFORMADA` | Quantidade explícita fixada na sentença (preencher `valor_mensal`) |
+| `INFORMADA` | Quantidade explícita fixada na sentença (preencher `valor` — ex.: 20 dias → `valor: 20.0`) |
 | `IMPORTADA_DO_CALENDARIO` | PJE-Calc calcula a partir do calendário configurado |
 | `IMPORTADA_DO_CARTAO` | PJE-Calc apura a partir do cartão de ponto |
 | `AVOS` | Frações de período (ex: avos de 13º, avos de férias) |
@@ -898,7 +923,7 @@ O PJE-Calc apura a diferença fazendo `(Valor Devido) − (Valor Pago)`. Portant
   },
   "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
   "multiplicador": 1.0,
-  "quantidade": {"tipo": "INFORMADA", "valor_mensal": 1.0, "proporcionalizar": false}
+  "quantidade": {"tipo": "INFORMADA", "valor": 1.0, "proporcionalizar": false}
 },
 "valor_pago": {
   "tipo": "CALCULADO",
@@ -1404,58 +1429,60 @@ anterior à data-corte — nesse caso é OBRIGATÓRIO Caso B. Exemplo ALINE
 (01/06/2026): ajuizamento 14/04/2026 (pós-corte) mas `data_inicio_calculo`
 14/04/2021 (anterior ao corte por 3 anos) → **Caso B**, não Caso A.
 
+⚠️ **JUROS — INVARIANTE PERMANENTE — NÃO REVERTER (validado contra sentença
+THAÍS 0000183-68, 10/06/2026)**: a tabela `juros` (FASE 1) é a dos juros da
+**fase pré-judicial** = art. 39 *caput* da Lei 8.177/91 = **`TRD_SIMPLES`** —
+NUNCA `TAXA_LEGAL` na fase 1. A TAXA_LEGAL entra como **combinação a partir
+do ajuizamento**. Emitir `juros: "TAXA_LEGAL"` sem combinações aplica taxa
+legal desde o VENCIMENTO de cada verba (fase pré-judicial), majorando
+indevidamente os juros — o devido na fase pré-judicial é TRD (≈0).
+
 **Caso A — `data_ajuizamento` >= 30/08/2024 E `data_inicio_calculo` >= 30/08/2024**
 (Scarlette: ajuizamento 04/03/2026, cálculo inicia 10/04/2025 — TUDO pós-30/08/2024):
 ```json
 {
   "indice_trabalhista": "IPCA",
   "combinar_outro_indice": false,
-  "juros": "TAXA_LEGAL",
-  "aplicar_juros_fase_pre_judicial": true,
-  "juros_combinacoes": [],
-  "base_juros_verbas": "VERBAS",
-  "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"}
-}
-```
-**Sem combinações** — PJE-Calc aplica Lei 14.905/2024 (CC art. 406 §)
-internamente quando `indice=IPCA` + `juros=TAXA_LEGAL`. A "fase 2 SELIC do
-ajuizamento até 29/08/2024" do modelo TST não se aplica aqui (ajuizamento
-é posterior a 29/08/2024). A "fase 3 IPCA + SELIC−IPCA" é o estado padrão
-desta configuração.
-
-⚠️ **NÃO adicione `juros_combinacoes: [{tabela:"SELIC", data_inicio:<ajuizamento>}]`
-neste caso** — PJE-Calc auto-converterá para `SEM_JUROS` (correção interna)
-porque a fase SELIC pós-ajuizamento não tem período de aplicação (cálculo já
-está integralmente coberto pelo CC art. 406 §).
-
-**Caso B — cálculo CRUZA 30/08/2024** (ações antigas com período passando pela
-data-corte da Lei 14.905):
-```json
-{
-  "indice_trabalhista": "IPCAE",
-  "combinar_outro_indice": true,
-  "indice_combinado": "IPCA",
-  "data_inicio_combinacao": "30/08/2024",
-  "juros": "TAXA_LEGAL",
+  "juros": "TRD_SIMPLES",
   "aplicar_juros_fase_pre_judicial": true,
   "juros_combinacoes": [
     {
       "data_inicio": "<data_ajuizamento>",
-      "tabela": "SELIC",
-      "descricao": "Fase 2 — ajuizamento até 29/08/2024 (SELIC engloba)"
-    },
-    {
-      "data_inicio": "30/08/2024",
       "tabela": "TAXA_LEGAL",
-      "descricao": "Fase 3 — Lei 14.905/2024 (CC art. 406 §)"
+      "descricao": "Do ajuizamento — Lei 14.905/2024 (CC art. 406 §): IPCA + SELIC-IPCA"
     }
   ],
   "base_juros_verbas": "VERBAS",
   "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"}
 }
 ```
-Aqui o `data_inicio_calculo` é anterior a 30/08/2024 — a combinação faz sentido
-porque há período REAL de aplicação para cada fase.
+Correção IPCA direto (sem combinação — todo o período é pós-corte). Juros:
+TRD_SIMPLES no vencimento→ajuizamento; TAXA_LEGAL do ajuizamento em diante.
+A combinação NÃO é redundante com a fase 1 (TRD ≠ TAXA_LEGAL) e persiste
+corretamente no PJE-Calc.
+
+**Caso B — cálculo CRUZA 30/08/2024** (período inicia antes da data-corte da
+Lei 14.905 — ex.: THAÍS, contrato desde 22/05/2023, ajuizamento 11/02/2025):
+```json
+{
+  "indice_trabalhista": "IPCAE",
+  "combinar_outro_indice": true,
+  "indice_combinado": "IPCA",
+  "data_inicio_combinacao": "30/08/2024",
+  "juros": "TRD_SIMPLES",
+  "aplicar_juros_fase_pre_judicial": true,
+  "juros_combinacoes": [],
+  "base_juros_verbas": "VERBAS",
+  "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"}
+}
+```
+`juros_combinacoes` do Caso B depende da data do AJUIZAMENTO:
+- **Ajuizamento >= 30/08/2024** (THAÍS): UMA fase —
+  `[{"data_inicio": "<data_ajuizamento>", "tabela": "TAXA_LEGAL"}]`
+  (a fase SELIC nunca existe: o ajuizamento já é pós-corte).
+- **Ajuizamento < 30/08/2024** (ações antigas): DUAS fases —
+  `[{"data_inicio": "<data_ajuizamento>", "tabela": "SELIC"},
+    {"data_inicio": "30/08/2024", "tabela": "TAXA_LEGAL"}]`.
 
 ### IMPORTANTE — Dano Moral
 Quando a sentença menciona explicitamente que o modelo "aplica-se inclusive à

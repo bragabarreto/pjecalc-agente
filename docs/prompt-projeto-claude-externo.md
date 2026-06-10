@@ -665,7 +665,7 @@ O PJE-Calc apura `(Valor Devido) − (Valor Pago)`. Portanto:
   },
   "divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
   "multiplicador": 1.0,
-  "quantidade": {"tipo": "INFORMADA", "valor_mensal": 1.0, "proporcionalizar": false}
+  "quantidade": {"tipo": "INFORMADA", "valor": 1.0, "proporcionalizar": false}
 },
 "valor_pago": {
   "tipo": "CALCULADO",
@@ -1028,7 +1028,7 @@ jornada exata. Para apagar um dia: `turnos: []`.
 },
 "correcao_juros_multa": {
   "indice_trabalhista": "IPCAE",
-  "juros": "TAXA_LEGAL",
+  "juros": "TRD_SIMPLES",
   "base_juros_verbas": "VERBAS",
   "fgts": {"indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"},
   "previdencia_privada": {"aplicar_juros": false, "indice_correcao": "UTILIZAR_INDICE_TRABALHISTA"},
@@ -1096,7 +1096,7 @@ O Projeto Claude externo deve fazer `POST /processar/v2` com o JSON puro
 no body:
 
 ```bash
-POST https://163.176.44.221:8000/processar/v2
+POST https://147.15.26.201:8000/processar/v2
 Content-Type: application/json
 
 { ...JSON v2 conforme acima... }

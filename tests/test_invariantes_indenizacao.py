@@ -770,10 +770,16 @@ def test_inv17_normalizer_corrige_caso_a_para_b_quando_cruza_30_08_2024():
     assert cjm["combinar_outro_indice"] is True
     assert cjm["indice_combinado"] == "IPCA"
     assert cjm["data_inicio_combinacao"] == "30/08/2024"
-    # Como ajuizamento (14/04/2026) é PÓS-30/08/2024, juros_combinacoes
-    # deve ficar VAZIO (TAXA_LEGAL principal já cobre — combinação seria
-    # convertida pelo PJE-Calc para SEM_JUROS).
-    assert cjm.get("juros_combinacoes") == []
+    # Modelo TST (fix THAÍS 10/06/2026, supersede 587f862): fase 1 = TRD
+    # (art. 39 caput Lei 8.177 — pré-judicial) + combinação TAXA_LEGAL a
+    # partir do AJUIZAMENTO. Com fase 1 TRD a combinação NÃO é redundante
+    # (PJE-Calc não a converte para SEM_JUROS — comprovado no PJC THAÍS).
+    assert cjm["juros"] == "TRD_SIMPLES"
+    assert cjm["aplicar_juros_fase_pre_judicial"] is True
+    combs = cjm.get("juros_combinacoes") or []
+    assert len(combs) == 1
+    assert combs[0]["tabela"] == "TAXA_LEGAL"
+    assert combs[0]["data_inicio"] == "14/04/2026"
 
 
 def test_inv17_normalizer_caso_b_com_ajuizamento_pre_corte_tem_2_fases():
@@ -812,10 +818,13 @@ def test_inv17_normalizer_caso_b_com_ajuizamento_pre_corte_tem_2_fases():
     fase_legal = next((c for c in combs if c.get("tabela") == "TAXA_LEGAL"), None)
     assert fase_selic is not None and fase_selic["data_inicio"] == "01/03/2023"
     assert fase_legal is not None and fase_legal["data_inicio"] == "30/08/2024"
+    # Fase 1 (pré-judicial) = TRD (fix THAÍS 10/06/2026)
+    assert cjm["juros"] == "TRD_SIMPLES"
 
 
 def test_inv17_normalizer_preserva_caso_a_quando_tudo_pos_30_08_2024():
-    """Cálculo TODO pós-30/08/2024 deve ficar como Caso A (preservado)."""
+    """Cálculo TODO pós-30/08/2024: correção Caso A preservada (IPCA direto);
+    juros normalizados para o modelo TST (TRD_SIMPLES + TAXA_LEGAL@ajuizamento)."""
     from modules.json_normalizer import normalize_v2_json
     payload = {
         "parametros_calculo": {
@@ -835,10 +844,17 @@ def test_inv17_normalizer_preserva_caso_a_quando_tudo_pos_30_08_2024():
     }
     res = normalize_v2_json(payload)
     cjm = res["correcao_juros_multa"]
-    # Caso A preservado
+    # Caso A: CORREÇÃO preservada (IPCA direto, sem combinação de índice)
     assert cjm["indice_trabalhista"] == "IPCA"
     assert cjm["combinar_outro_indice"] is False
-    assert cjm.get("juros_combinacoes") == []
+    # JUROS (fix THAÍS 10/06/2026): fase 1 TRD_SIMPLES + TAXA_LEGAL a partir
+    # do ajuizamento — TAXA_LEGAL "seca" na fase 1 aplicaria taxa legal desde
+    # o VENCIMENTO (fase pré-judicial), majorando juros indevidamente.
+    assert cjm["juros"] == "TRD_SIMPLES"
+    combs = cjm.get("juros_combinacoes") or []
+    assert len(combs) == 1
+    assert combs[0]["tabela"] == "TAXA_LEGAL"
+    assert combs[0]["data_inicio"] == "04/03/2026"
 
 
 def test_inv17_prompt_orienta_verificar_ambas_condicoes():
@@ -867,20 +883,121 @@ def test_inv13_extraction_explica_quantidade_pct_como_multiplicador():
 # ─── Marker: regressão de mudança Sobrescrever pós-params ──────────────────
 
 
-def test_marker_sobrescrever_pos_params_NAO_aplicado_universalmente():
-    """Tentativa fracassada (commit 312839e, revertido ac0c712): aplicar
-    Sobrescrever=True em post-params Regerar para INFORMADO+DESLIGAMENTO
-    introduzia listagem vazia mid-loop. Manter sobrescrever=False (Manter)
-    como default no Regerar pós-parâmetros.
+def test_marker_sobrescrever_pos_params_condicional_periodo_curto():
+    """Evolução da regra (fix THAÍS 10/06/2026, SALÁRIO RETIDO):
+
+    - 312839e (revertido ac0c712): Sobrescrever UNIVERSAL pós-params →
+      listagem vazia mid-loop. NÃO repetir o modo universal.
+    - Fix atual: Sobrescrever CONDICIONAL — somente quando
+      (a) o período da verba é subconjunto ESTRITO do cálculo
+          (_verba_periodo_curto) E
+      (b) nenhuma ocorrência foi editada ainda (_ocorrencias_editadas False —
+          Regerar é global e apagaria valorDevido de verbas INFORMADO), com
+      (c) re-anchor da listagem pós-Sobrescrever (salvaguarda contra a
+          regressão "listagem vazia mid-loop" do 312839e).
     """
-    # No Regerar pós-parâmetros, sobrescrever deve ser False (ou condicional
-    # com nova evidência). Por enquanto, conservador: False.
-    pattern = re.search(
-        r"# REGRA OPERACIONAL.*?Regerar pós-parâmetros.*?\)",
-        PLAYWRIGHT_V2,
-        re.DOTALL,
-    )
-    # Não falhar se a regra evoluir — mas registrar intent.
-    # Apenas: se houver `sobrescrever=True` próximo a "pós-parâmetros", emitir warning.
-    # Para CI, validar apenas que o helper existe.
+    assert "_verba_periodo_curto" in PLAYWRIGHT_V2
+    assert "_ocorrencias_editadas" in PLAYWRIGHT_V2
+    # Condicional aplicado no Regerar pós-parâmetros
+    assert "self._verba_periodo_curto(v)" in PLAYWRIGHT_V2
+    assert 'not getattr(self, "_ocorrencias_editadas", False)' in PLAYWRIGHT_V2
+    # Salvaguarda re-anchor pós-Sobrescrever documentando 312839e
+    assert "312839e" in PLAYWRIGHT_V2
     assert "_regerar_com_modal_confirmacao" in PLAYWRIGHT_V2
+
+
+# ─── INV-18: alias valor_mensal → valor (QuantidadeVerba) ───────────────────
+
+
+def test_inv18_quantidade_aceita_valor_mensal_como_alias():
+    """Bug THAÍS (10/06/2026): prompt ensinava `valor_mensal`, schema só lia
+    `valor` (default 1.0) → quantidade 20 do SALDO DE SALÁRIO virou 1
+    silenciosamente (R$ 1.614,79 → R$ 53,83 na liquidação).
+    """
+    import importlib.util as _ilu
+    spec = _ilu.spec_from_file_location(
+        "pyd_models", str(REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py")
+    )
+    mod = _ilu.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    q = mod.QuantidadeVerba.model_validate(
+        {"tipo": "INFORMADA", "valor_mensal": 20.0, "proporcionalizar": False}
+    )
+    assert q.valor == 20.0, f"valor_mensal=20 deve mapear para valor=20, got {q.valor}"
+    # `valor` explícito tem precedência sobre o alias
+    q2 = mod.QuantidadeVerba.model_validate(
+        {"tipo": "INFORMADA", "valor": 5.0, "valor_mensal": 20.0}
+    )
+    assert q2.valor == 5.0
+
+
+def test_inv18_prompt_usa_campo_valor_canonico():
+    """Exemplos do prompt devem usar `valor` (canônico), não `valor_mensal`,
+    em quantidade INFORMADA."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert '"quantidade": {"tipo": "INFORMADA", "valor_mensal"' not in ext
+    assert 'preencher `valor`' in ext
+
+
+# ─── INV-19: template prévia usa campos CANÔNICOS de juros ──────────────────
+
+
+def test_inv19_template_previa_campos_canonicos_juros():
+    """Bug THAÍS (10/06/2026): template gravava juros em campos-alias
+    (juros_mora, aplicar_juros_pre_judicial, segundo_indice...) que o bot
+    NÃO lê → edições do usuário na prévia eram ignoradas pela automação.
+    """
+    tpl = (REPO_ROOT / "templates" / "previa_v2.html").read_text(encoding="utf-8")
+    # Canônicos presentes
+    assert 'data-campo="correcao_juros_multa.juros"' in tpl
+    assert 'data-campo="correcao_juros_multa.aplicar_juros_fase_pre_judicial"' in tpl
+    assert 'data-campo="correcao_juros_multa.indice_combinado"' in tpl
+    assert 'data-campo="correcao_juros_multa.data_inicio_combinacao"' in tpl
+    assert 'data-campo="correcao_juros_multa.combinar_outro_indice"' in tpl
+    # Aliases proibidos como data-campo
+    assert 'data-campo="correcao_juros_multa.juros_mora"' not in tpl
+    assert 'data-campo="correcao_juros_multa.aplicar_juros_pre_judicial"' not in tpl
+    assert 'data-campo="correcao_juros_multa.segundo_indice"' not in tpl
+    assert 'data-campo="correcao_juros_multa.combinar_a_partir_de"' not in tpl
+    # base_juros_verbas com values do schema (não VERBAS_MENOS_CS)
+    assert 'value="VERBA_INSS"' in tpl
+    assert 'value="VERBAS_MENOS_CS"' not in tpl
+    # Sync canônico juros_combinacoes presente
+    assert "sincronizarJurosCombinacoes" in tpl
+
+
+# ─── INV-20: modelo TST de juros (TRD fase 1) no prompt e no bot ────────────
+
+
+def test_inv20_prompt_juros_trd_fase1_taxa_legal_ajuizamento():
+    """Fix THAÍS (10/06/2026, supersede 587f862): fase 1 (pré-judicial) =
+    TRD_SIMPLES (art. 39 caput Lei 8.177); TAXA_LEGAL entra como combinação
+    a partir do AJUIZAMENTO. TAXA_LEGAL 'seca' na fase 1 aplicava taxa legal
+    desde o vencimento — juros majorados indevidamente.
+    """
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "TRD_SIMPLES" in ext
+    assert 'NUNCA `TAXA_LEGAL` na fase 1' in ext
+    # Exemplo Caso A com combinação TAXA_LEGAL@ajuizamento
+    assert '"juros": "TRD_SIMPLES"' in ext
+
+
+def test_inv20_bot_mapeia_trd_simples():
+    """_JUROS_MAP do bot deve mapear TRD_SIMPLES/TRD_COMPOSTOS/SEM_JUROS
+    (enum DOM confirmado via PJC THAÍS: <juros>TRD_SIMPLES</juros>)."""
+    assert '"TRD_SIMPLES": "TRD_SIMPLES"' in PLAYWRIGHT_V2
+    assert '"TRD_COMPOSTOS": "TRD_COMPOSTOS"' in PLAYWRIGHT_V2
+    assert '"SEM_JUROS": "SEM_JUROS"' in PLAYWRIGHT_V2
+
+
+# ─── INV-21: fração deferida limita o período da verba (13º) ────────────────
+
+
+def test_inv21_prompt_fracao_deferida_limita_periodo():
+    """Bug THAÍS (10/06/2026): sentença deferiu APENAS 2/12 de 13º/2025
+    (R$ 403,70); IA emitiu período do contrato inteiro → PJE-Calc liquidou
+    7/12+12/12+2/12 = R$ 4.238,83 (R$ 3.835,13 a maior que o título)."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "FRAÇÃO DEFERIDA" in ext
+    assert "MENOR período que gera exatamente os avos" in ext
+    assert "THAÍS" in ext

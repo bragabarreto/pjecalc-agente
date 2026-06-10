@@ -96,6 +96,10 @@ class PlaywrightAutomatorV2:
         self._calculo_conversation_id: str | None = None
         self._pjc_path: str | None = None
         self._calculo_numero: str | None = None  # ID do cálculo extraído do DOM
+        # Proteção do Regerar Sobrescrever (fix THAÍS 10/06/2026): True após a
+        # primeira edição de ocorrências (valorDevido) — Regerar global passa
+        # a usar somente Manter para não apagar edições.
+        self._ocorrencias_editadas: bool = False
         # Modo teste: abre cálculo existente em vez de criar novo.
         # Lido de PJECALC_CALCULO_TESTE (número CNJ do processo, ex: "0000948-78.2021.5.07.0003").
         # Quando definido, `run()` pula `_criar_novo_calculo()` e abre o cálculo existente
@@ -3134,6 +3138,10 @@ class PlaywrightAutomatorV2:
             sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
             if sucesso:
                 self.log(f"    ✓ Ocorrências de '{nome}' salvas")
+                # Flag de proteção (fix THAÍS 10/06/2026): a partir daqui o
+                # Regerar global NÃO pode mais usar Sobrescrever — apagaria
+                # os valorDevido recém-editados desta verba INFORMADO.
+                self._ocorrencias_editadas = True
             else:
                 self.log(f"    ⚠ Ocorrências de '{nome}': sem confirmação de save")
         except Exception as e:
@@ -4552,6 +4560,34 @@ class PlaywrightAutomatorV2:
         # Aguardar AJAX residual antes de o caller chamar Salvar
         self._aguardar_ajax(2000)
 
+    def _verba_periodo_curto(self, v) -> bool:
+        """True se o período da verba é subconjunto ESTRITO do período do cálculo.
+
+        Nesses casos o lançamento Expresso gerou ocorrências para o contrato
+        INTEIRO e o ajuste de período deixa ocorrências antigas fora do range —
+        Regerar com MANTER não as remove. É preciso SOBRESCREVER.
+
+        Bug histórico (THAÍS 0000183-68, 10/06/2026): SALÁRIO RETIDO —
+        DEZEMBRO/2024 (CALCULADO+MENSAL, período 01-31/12/2024 em contrato
+        2023-2025) ficou com ocorrências mensais do contrato inteiro fora do
+        período → "descompasso no período", liquidação travada, ajuste manual.
+        Mesmo padrão do MP-1 (INDENIZAÇÃO INFORMADO+DESLIGAMENTO), mas para
+        verbas CALCULADO que não são re-roteadas para Manual.
+        """
+        from datetime import datetime as _dt
+        try:
+            p = v.parametros
+            vi = _dt.strptime(p.periodo_inicio, "%d/%m/%Y")
+            vf = _dt.strptime(p.periodo_fim, "%d/%m/%Y")
+            pc = self.previa.parametros_calculo
+            ci = _dt.strptime(pc.data_inicio_calculo, "%d/%m/%Y")
+            cf = _dt.strptime(
+                pc.data_termino_calculo or pc.data_demissao, "%d/%m/%Y"
+            )
+            return vi > ci or vf < cf
+        except Exception:
+            return False
+
     def _configurar_parametros_pos_expresso(self, v) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
 
@@ -4998,6 +5034,14 @@ class PlaywrightAutomatorV2:
             # parâmetro de qualquer verba exige Regerar Ocorrências para que
             # o PJE-Calc recompute downstream (ocorrências antigas ficam
             # stale se não regerar).
+            #
+            # ⚠ MODO (fix THAÍS 10/06/2026 — SALÁRIO RETIDO): para verba com
+            # PERÍODO CURTO (subconjunto estrito do cálculo), Manter NÃO
+            # remove as ocorrências do contrato inteiro que ficaram FORA do
+            # novo período → "descompasso" trava a liquidação. Usar
+            # SOBRESCREVER — desde que nenhuma ocorrência tenha sido editada
+            # ainda (flag _ocorrencias_editadas; Regerar é GLOBAL e apagaria
+            # valorDevido recém-editado de verbas INFORMADO anteriores).
             try:
                 # Garantir que está na listagem (Regerar só existe em modo
                 # listagem). Se não re-anchorou, navegar via sidebar.
@@ -5005,10 +5049,25 @@ class PlaywrightAutomatorV2:
                     self._navegar_menu("li_calculo_verbas")
                     self._aguardar_ajax(6000)
                     self._page.wait_for_timeout(800)
+                _sobrescrever = (
+                    self._verba_periodo_curto(v)
+                    and not getattr(self, "_ocorrencias_editadas", False)
+                )
                 if self._regerar_com_modal_confirmacao(
-                    sobrescrever=False, log_prefix="    "
+                    sobrescrever=_sobrescrever, log_prefix="    "
                 ):
-                    self.log(f"    ✓ Regerar pós-parâmetros '{v.nome_pjecalc}'")
+                    _modo = "Sobrescrever (período curto)" if _sobrescrever else "Manter"
+                    self.log(f"    ✓ Regerar pós-parâmetros '{v.nome_pjecalc}' [{_modo}]")
+                    if _sobrescrever:
+                        # ⚠ Salvaguarda contra regressão 312839e (Sobrescrever
+                        # pós-params → "listagem vazia mid-loop", revertido em
+                        # ac0c712): após Sobrescrever, re-ancorar a listagem de
+                        # verbas para a PRÓXIMA verba do loop encontrar os
+                        # linkParametrizar (regen invalida o view-state da
+                        # listagem corrente).
+                        self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(6000)
+                        self._page.wait_for_timeout(1000)
             except Exception as _e:
                 self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
         else:
@@ -7387,6 +7446,12 @@ class PlaywrightAutomatorV2:
             "SELIC_BACEN": "SELIC_BACEN",
             "FAZENDA_PUBLICA": "FAZENDA_PUBLICA",
             "TAXA_LEGAL": "TAXA_LEGAL",
+            # TRD (art. 39 caput Lei 8.177/91 — juros da fase pré-judicial,
+            # modelo ADC 58 / TST E-ED-RR-20407). Enum DOM confirmado via PJC
+            # THAÍS 10/06/2026: <juros>TRD_SIMPLES</juros>.
+            "TRD_SIMPLES": "TRD_SIMPLES",
+            "TRD_COMPOSTOS": "TRD_COMPOSTOS",
+            "SEM_JUROS": "SEM_JUROS",
         }
         # baseDeJurosDasVerbas: enum real (baseDeJurosDasVerbasEnum). Valores
         # comuns: VERBA, VERBA_MENOS_CS, VERBA_MENOS_CS_MENOS_PP.

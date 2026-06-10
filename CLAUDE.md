@@ -194,6 +194,65 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regras obrigatórias — 5 fixes do caso THAÍS (0000183-68, 10/06/2026) — NÃO REVERTER
+
+> Auditoria sentença→JSON→prévia→PJC do cálculo THAÍS revelou 5 bugs sistêmicos.
+> Cada fix tem teste de invariante em `tests/test_invariantes_indenizacao.py`.
+
+### 1. Alias `valor_mensal` → `valor` em quantidade INFORMADA (inv18)
+
+O prompt ensinava `quantidade: {tipo: INFORMADA, valor_mensal: N}`; o schema
+(`QuantidadeVerba`) só lia `valor` (default 1.0) → **quantidade N≠1 era perdida
+silenciosamente** (SALDO DE SALÁRIO 20 dias virou 1 → R$ 53,83 em vez de
+R$ 1.614,79). Defesas: (a) validator `_alias_valor_mensal` em
+`docs/schema-v2/99-pydantic-models.py` aceita ambos; (b) exemplos do prompt
+migrados para `valor` canônico.
+
+### 2. Template prévia DEVE usar campos canônicos de juros (inv19)
+
+`templates/previa_v2.html` gravava juros em aliases que o bot NÃO lê
+(`juros_mora`, `aplicar_juros_pre_judicial`, `segundo_indice`,
+`combinar_a_partir_de`, values errados de `base_juros_verbas`) → **edições do
+usuário na prévia eram ignoradas pela automação** (violação da regra
+arquitetural de fidelidade prévia↔automação). Campos renomeados para os
+canônicos do schema; combinação de juros sincronizada com
+`juros_combinacoes[]` via `sincronizarJurosCombinacoes()`.
+
+### 3. Juros modelo TST: fase 1 = TRD_SIMPLES, TAXA_LEGAL via combinação (inv20)
+
+**Supersede o commit `587f862`.** Para ajuizamento >= 30/08/2024, a regra
+anterior emitia `juros=TAXA_LEGAL` sem combinações → taxa legal aplicada desde
+o VENCIMENTO (fase pré-judicial), majorando juros. Modelo correto (sentença
+THAÍS transcreve TST E-ED-RR-20407): fase 1 (pré-judicial) = `TRD_SIMPLES`
+(art. 39 caput Lei 8.177/91, ≈0) + combinação `TAXA_LEGAL@<data_ajuizamento>`
+(+ `SELIC@ajuizamento` antes, se ajuizamento pré-corte). A combinação NÃO é
+redundante com TRD na fase 1 — PJE-Calc não a converte para SEM_JUROS
+(motivo do 587f862; comprovado no PJC THAÍS). Defesas: prompt + normalizer
+(`_norm_correcao_caso_a_vs_b`) + `_JUROS_MAP` com TRD_SIMPLES/TRD_COMPOSTOS/
+SEM_JUROS + Literals do schema ampliados.
+
+### 4. Fração DEFERIDA limita o período da verba (inv21)
+
+"Verba única" ≠ "período do contrato inteiro". Sentença THAÍS deferiu APENAS
+2/12 de 13º/2025 (R$ 403,70); IA emitiu período do contrato → PJE-Calc liquidou
+7/12+12/12+2/12 = R$ 4.238,83 (**R$ 3.835 a maior que o título executivo**).
+Período da verba = MENOR período que gera exatamente os avos deferidos.
+Invariante no prompt (`FRAÇÃO DEFERIDA`).
+
+### 5. Regerar Sobrescrever CONDICIONAL p/ período curto + log persistido
+
+SALÁRIO RETIDO (Expresso, CALCULADO+MENSAL, período 1 mês em contrato de 20
+meses): ocorrências do contrato inteiro ficavam fora do período após o ajuste
+("descompasso"); Regerar Manter não as remove. Fix: no Regerar pós-parâmetros,
+`sobrescrever=True` SOMENTE quando `_verba_periodo_curto(v)` (subconjunto
+estrito do cálculo) E `_ocorrencias_editadas=False` (Regerar é global —
+apagaria valorDevido de INFORMADO já editado), com re-anchor da listagem
+pós-Sobrescrever (salvaguarda contra regressão `312839e` "listagem vazia
+mid-loop"). Log SSE agora persiste em `<store>/logs/<sessao>_automation.log`
+(`modules/webapp_v2.py`) — sem ele este diagnóstico foi inferencial.
+
+---
+
 ## Regra obrigatória — Regerar Ocorrências após cada alteração
 
 > **TODA alteração de parâmetro ou ocorrência de qualquer verba DEVE ser
@@ -422,7 +481,7 @@ Já descrito acima na seção principal. Mantido como pendência ativa.
 > print(SYSTEM_PROMPT_V2_EXTERNAL)
 > " > /tmp/prompt-externo-atualizado.md
 > ```
-> ou via endpoint: `curl -s http://163.176.44.221:8000/api/prompt-externo`.
+> ou via endpoint: `curl -s http://147.15.26.201:8000/api/prompt-externo`.
 >
 > **Por que renderizar dinamicamente**: o prompt vive como código Python
 > (`_FLUXO_2_ETAPAS + SYSTEM_PROMPT_V2`). Apresentar via cópia estática de
@@ -497,13 +556,13 @@ python main.py --sessao <UUID>
 git push origin main
 
 # Manual deploy
-./deploy/oracle-cloud/deploy.sh 163.176.44.221 ~/Downloads/ssh-key-2026-03-31.key
+./deploy/oracle-cloud/deploy.sh 147.15.26.201 ~/Downloads/ssh-key-2026-03-31.key
 
 # SSH into VM
-ssh -i ~/Downloads/ssh-key-2026-03-31.key opc@163.176.44.221
+ssh -i ~/Downloads/ssh-key-2026-03-31.key opc@147.15.26.201
 
 # Production URL
-http://163.176.44.221:8000
+http://147.15.26.201:8000
 
 # Diagnostic endpoints (produção)
 GET /api/logs/java      # stdout+stderr do processo Java (Lancador + Tomcat)
@@ -553,7 +612,7 @@ O gerador SSE em `executar_automacao_sse()` faz polling de Tomcat (até 600s) an
 
 ### Infraestrutura Docker / Oracle Cloud
 - **VM**: Oracle Cloud Free Tier ARM64, 5.5GB RAM, Oracle Linux 9
-- **IP**: `163.176.44.221` — porta 8000 (app) + opcionalmente Caddy nas 80/443
+- **IP**: `147.15.26.201` — porta 8000 (app) + opcionalmente Caddy nas 80/443
 - **Base**: `eclipse-temurin:8-jre-jammy` (Java 8 obrigatório para PJE-Calc).
 - **Sequência de inicialização** (`docker-entrypoint.sh`): PJE-Calc em background → uvicorn **imediatamente** → Tomcat inicializa em background (~3–5 min).
 - **PJE-Calc headless** (`iniciarPjeCalc.sh`): Xvfb `:99` + `xdotool` para auto-dismiss de dialogs Swing do Lancador. Java redireciona para `/opt/pjecalc/java.log`.
@@ -1194,7 +1253,7 @@ flushed. **Não afeta** o PJC final (cálculo principal já commitado antes).
 
 O Tomcat embarcado (`pjecalc.jar`) pode ter dificuldade para subir em ambientes headless. O Lancador Java (`Lancador.java:42`) executa validações de startup e pode mostrar `JOptionPane` dialogs (GUI Swing) que bloqueiam o thread principal. O Xvfb + xdotool tenta auto-dismissar, mas o Java pode não iniciar o Tomcat corretamente.
 
-**Diagnóstico**: acessar `http://163.176.44.221:8000/api/logs/java` após deploy para ver o stdout/stderr completo do Java (capturado em `/opt/pjecalc/java.log`).
+**Diagnóstico**: acessar `http://147.15.26.201:8000/api/logs/java` após deploy para ver o stdout/stderr completo do Java (capturado em `/opt/pjecalc/java.log`).
 
 **Abordagens alternativas a considerar**:
 1. Iniciar Tomcat diretamente (bypassar Lancador) usando `org.apache.catalina.startup.Bootstrap` com as JARs de `bin/lib/`

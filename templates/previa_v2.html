@@ -1131,14 +1131,18 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             </div>
           </div>
           <div class="checkbox-row" style="margin-top:8px;">
-            <input type="checkbox" data-campo="correcao_juros_multa.combinar_com_outro_indice" id="cb-combinar-indice"
+            <!-- ⚠ FIDELIDADE prévia↔bot (bug THAÍS 10/06/2026): data-campo DEVE usar os
+                 nomes CANÔNICOS do schema v2 (os mesmos que playwright_v2 lê). Aliases
+                 divergentes (combinar_com_outro_indice, segundo_indice, juros_mora...)
+                 faziam as edições do usuário serem IGNORADAS pela automação. -->
+            <input type="checkbox" data-campo="correcao_juros_multa.combinar_outro_indice" id="cb-combinar-indice"
               onchange="document.getElementById('combinar-indice-fields').style.display=(this.checked?'grid':'none')">
             <label>Combinar com Outro Índice</label>
           </div>
           <div id="combinar-indice-fields" class="grid-2" style="display:none; margin-top:8px;">
             <div class="campo">
               <label>Segundo Índice</label>
-              <select data-campo="correcao_juros_multa.segundo_indice">
+              <select data-campo="correcao_juros_multa.indice_combinado">
                 <option value="TUACDT">Tabela Única de Atualização e Conversão de Débitos Trabalhistas</option>
                 <option value="TABELA_DEVEDOR_FAZENDA">Devedor Fazenda Pública</option>
                 <option value="TABELA_INDEBITO_TRIBUTARIO">Repetição de Indébito Tributário</option>
@@ -1159,7 +1163,7 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             </div>
             <div class="campo">
               <label>Combinar a partir de</label>
-              <input type="text" data-campo="correcao_juros_multa.combinar_a_partir_de" placeholder="DD/MM/YYYY">
+              <input type="text" data-campo="correcao_juros_multa.data_inicio_combinacao" placeholder="DD/MM/YYYY">
             </div>
           </div>
           <div class="checkbox-row" style="margin-top:8px;">
@@ -1170,12 +1174,12 @@ details.fieldgroup[open] { border-color: #adb5bd; }
         <div class="fieldgroup" style="margin-top:10px;">
           <div class="fieldgroup-title">Juros de Mora</div>
           <div class="checkbox-row" style="margin-bottom:8px;">
-            <input type="checkbox" data-campo="correcao_juros_multa.aplicar_juros_pre_judicial" id="cb-juros-pre">
+            <input type="checkbox" data-campo="correcao_juros_multa.aplicar_juros_fase_pre_judicial" id="cb-juros-pre">
             <label for="cb-juros-pre">Aplicar Juros na Fase Pré-Judicial</label>
           </div>
           <div class="campo">
             <label>Tabela de Juros</label>
-            <select data-campo="correcao_juros_multa.juros_mora">
+            <select data-campo="correcao_juros_multa.juros">
               <option value="JUROS_PADRAO" selected>Juros Padrão</option>
               <option value="JUROS_POUPANCA">Juros Caderneta de Poupança</option>
               <option value="FAZENDA_PUBLICA">Juros Fazenda Pública</option>
@@ -1227,8 +1231,8 @@ details.fieldgroup[open] { border-color: #adb5bd; }
             <label>Base de Juros sobre Verbas</label>
             <select data-campo="correcao_juros_multa.base_juros_verbas">
               <option value="VERBAS" selected>Verbas</option>
-              <option value="VERBAS_MENOS_CS">Verbas (-) CS</option>
-              <option value="VERBAS_MENOS_CS_MENOS_PP">Verbas (-) CS (-) PP</option>
+              <option value="VERBA_INSS">Verbas (-) CS</option>
+              <option value="VERBA_INSS_PP">Verbas (-) CS (-) PP</option>
             </select>
           </div>
         </div>
@@ -1277,6 +1281,9 @@ function carregarPrevia() {
       else el.value = value;
     }
   });
+  // Correção/Juros: hidratar combinação de juros a partir do canônico
+  // juros_combinacoes[] + exibir grupos condicionais conforme checkboxes
+  sincronizarJurosCombinacoes(true);
   // Renderizar listas dinâmicas
   renderHistoricos();
   renderVerbas();
@@ -1467,6 +1474,43 @@ function getValueByPath(obj, path) {
   return path.split('.').reduce((acc, key) => acc && acc[key] !== undefined ? acc[key] : null, obj);
 }
 
+// ─── Correção/Juros: sync UI flat ↔ canônico juros_combinacoes[] ─────────
+// ⚠ FIDELIDADE prévia↔bot (bug THAÍS 10/06/2026): o bot lê o canônico
+// `juros_combinacoes` (lista de fases). A UI usa 3 campos flat (checkbox +
+// tabela + data) para a 1ª fase. Este sync mantém os dois em acordo:
+//   hidratar=true  → carregar flat a partir de juros_combinacoes[0]
+//   hidratar=false → regravar juros_combinacoes[0] a partir do flat
+//     (fases [1:] são preservadas — caso pré-corte tem 2 fases)
+function sincronizarJurosCombinacoes(hidratar) {
+  const cjm = previaData.correcao_juros_multa = previaData.correcao_juros_multa || {};
+  const cb = document.getElementById('cb-combinar-juros');
+  const selOutro = document.querySelector('[data-campo="correcao_juros_multa.outro_juros"]');
+  const inpData = document.querySelector('[data-campo="correcao_juros_multa.outro_juros_a_partir_de"]');
+  if (!cb || !selOutro || !inpData) return;
+  const fases = Array.isArray(cjm.juros_combinacoes) ? cjm.juros_combinacoes : [];
+  if (hidratar) {
+    if (fases.length > 0) {
+      cb.checked = true;
+      cjm.combinar_com_outro_juros = true;
+      selOutro.value = fases[0].tabela || '';
+      inpData.value = fases[0].data_inicio || '';
+      cjm.outro_juros = fases[0].tabela || null;
+      cjm.outro_juros_a_partir_de = fases[0].data_inicio || null;
+    }
+  } else {
+    const resto = fases.slice(1);
+    cjm.juros_combinacoes = (cb.checked && selOutro.value)
+      ? [{ tabela: selOutro.value, data_inicio: inpData.value || '' }].concat(resto)
+      : [];
+  }
+  // Exibir grupos condicionais conforme estado dos checkboxes
+  const grpJuros = document.getElementById('combinar-juros-fields');
+  if (grpJuros) grpJuros.style.display = cb.checked ? 'grid' : 'none';
+  const cbIdx = document.getElementById('cb-combinar-indice');
+  const grpIdx = document.getElementById('combinar-indice-fields');
+  if (cbIdx && grpIdx) grpIdx.style.display = cbIdx.checked ? 'grid' : 'none';
+}
+
 function setValueByPath(obj, path, value) {
   const keys = path.split('.');
   let cursor = obj;
@@ -1483,6 +1527,12 @@ document.addEventListener('change', e => {
   if (el.dataset.campo) {
     const v = el.type === 'checkbox' ? el.checked : (el.type === 'number' ? parseFloat(el.value) : el.value);
     setValueByPath(previaData, el.dataset.campo, v);
+    // Campos flat da combinação de juros → regravar canônico juros_combinacoes[]
+    if (['correcao_juros_multa.combinar_com_outro_juros',
+         'correcao_juros_multa.outro_juros',
+         'correcao_juros_multa.outro_juros_a_partir_de'].includes(el.dataset.campo)) {
+      sincronizarJurosCombinacoes(false);
+    }
     validarPrevia();
   }
   if (el.dataset.campoJson) {
