@@ -12148,7 +12148,7 @@ class PJECalcPlaywright:
                 "instrucoes_usuario": (
                     "A automação preencheu o cálculo no PJE-Calc Cidadão mas a "
                     "Liquidação detectou pendências. Abra o PJE-Calc Cidadão "
-                    "(http://163.176.44.221:8000), navegue para o cálculo, "
+                    "(http://147.15.26.201:8000), navegue para o cálculo, "
                     "corrija as pendências listadas acima e clique Liquidar/Exportar manualmente."
                 ),
             }
