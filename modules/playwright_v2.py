@@ -7349,6 +7349,7 @@ class PlaywrightAutomatorV2:
         data_str: str | None,
         label_esperado: str,
         contexto: str,
+        checkbox_id: str | None = None,
     ) -> bool:
         """Adiciona UMA linha de combinação (índice OU juros) na Fase 13 e
         VERIFICA contra a dataTable re-renderizada — que reflete o BEAN JSF,
@@ -7366,22 +7367,40 @@ class PlaywrightAutomatorV2:
           4. retry ×3 com remoção de linhas "Sem Juros"/erradas da mesma data.
         """
         for tentativa in range(1, 4):
-            # 1. Data primeiro — DIRETO no input do rich:calendar.
-            #    ⚠ POST capturado (diag 11/06/2026): o input real é
-            #    `{data_id}InputDate`; o seletor [id$='{data_id}'] casa com o
-            #    SPAN container do calendar → fill silenciosamente não escreve
-            #    nada e o POST vai com `apartirDe...InputDate=""` → validação
-            #    required rejeita o add (linha nunca criada).
+            # 0. Garantir painel aberto — remover a única linha da listagem
+            #    desmarca o checkbox combinar* no bean e o painel COLAPSA
+            #    (select/add somem do DOM; observado na run 11/06/2026:
+            #    "addOutroJuros indisponível" pós-remoção).
+            if checkbox_id:
+                try:
+                    aberto = self._page.evaluate(
+                        """(sid) => !!document.querySelector(`select[id$=':${sid}']`)""",
+                        select_id,
+                    )
+                    if not aberto:
+                        self.log(f"    ↺ {contexto}: painel colapsado — re-marcando {checkbox_id}")
+                        self._marcar_checkbox(checkbox_id, True)
+                        self._aguardar_ajax(2000)
+                        self._page.wait_for_timeout(500)
+                except Exception:
+                    pass
+            # 1. Data primeiro — fill DIRETO no input do rich:calendar, SEM
+            #    type/Tab/eventos.
+            #    ⚠ POSTs capturados (diag 11/06/2026):
+            #    - o input real é `{data_id}InputDate`; o seletor antigo
+            #      [id$='{data_id}'] casava com o SPAN container → data ia
+            #      vazia → validação required rejeitava o add;
+            #    - click+type+Tab dispara o A4J do calendar → re-render do
+            #      painel RESETA o select para o default do bean → linha
+            #      "Sem Juros". O fill puro escreve o value sem disparar
+            #      A4J; a serialização do submit do add lê o value do DOM
+            #      (comprovado: tentativa com fill simples → CONFIRMADA).
             if data_str:
                 try:
                     inp = self._page.locator(f"input[id$='{data_id}InputDate']")
                     if inp.count() > 0:
-                        inp.first.click()
-                        inp.first.fill("")
-                        inp.first.type(data_str, delay=30)
-                        inp.first.press("Tab")
-                        self._aguardar_ajax(2000)
-                        self._page.wait_for_timeout(400)
+                        inp.first.fill(data_str)
+                        self._page.wait_for_timeout(300)
                     else:
                         self._preencher(data_id, data_str, obrigatorio=False)
                         self._aguardar_ajax(2000)
@@ -7645,6 +7664,7 @@ class PlaywrightAutomatorV2:
                 data_str=data_inicio_2,
                 label_esperado=_LABEL_INDICE.get(_seg_dom, _seg_dom),
                 contexto=f"Correção combinada {segundo}",
+                checkbox_id="combinarOutroIndice",
             )
             if ok_idx:
                 self.log(f"  ✓ Correção combinada: {segundo} a partir de {data_inicio_2}")
@@ -7792,6 +7812,7 @@ class PlaywrightAutomatorV2:
                     data_str=data_in,
                     label_esperado=_LABEL_JUROS.get(tabela_dom, tabela_dom),
                     contexto=f"Juros fase {idx+1} ({tabela_in})",
+                    checkbox_id="combinarOutroJuros",
                 )
                 desc_log = f" [{desc}]" if desc else ""
                 if ok_juros:
