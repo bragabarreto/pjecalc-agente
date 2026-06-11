@@ -7366,26 +7366,52 @@ class PlaywrightAutomatorV2:
           4. retry ×3 com remoção de linhas "Sem Juros"/erradas da mesma data.
         """
         for tentativa in range(1, 4):
-            # 1. Data primeiro — rich:calendar pode disparar re-render do painel
+            # 1. Data primeiro — DIRETO no input do rich:calendar.
+            #    ⚠ POST capturado (diag 11/06/2026): o input real é
+            #    `{data_id}InputDate`; o seletor [id$='{data_id}'] casa com o
+            #    SPAN container do calendar → fill silenciosamente não escreve
+            #    nada e o POST vai com `apartirDe...InputDate=""` → validação
+            #    required rejeita o add (linha nunca criada).
             if data_str:
-                self._preencher(data_id, data_str, obrigatorio=False)
-                self._aguardar_ajax(2000)
-                self._page.wait_for_timeout(400)
+                try:
+                    inp = self._page.locator(f"input[id$='{data_id}InputDate']")
+                    if inp.count() > 0:
+                        inp.first.click()
+                        inp.first.fill("")
+                        inp.first.type(data_str, delay=30)
+                        inp.first.press("Tab")
+                        self._aguardar_ajax(2000)
+                        self._page.wait_for_timeout(400)
+                    else:
+                        self._preencher(data_id, data_str, obrigatorio=False)
+                        self._aguardar_ajax(2000)
+                        self._page.wait_for_timeout(400)
+                except Exception as e:
+                    self.log(f"    ⚠ {contexto}: data {data_id}InputDate: {e}")
             # 2. Select por último
             self._selecionar(select_id, valor)
             self._aguardar_ajax(1500)
             self._page.wait_for_timeout(300)
-            # 3. Re-confirmar DOM imediatamente antes do add
+            # 3. Re-confirmar DOM (select E data) imediatamente antes do add
             try:
-                dom_val = self._page.evaluate(
-                    """(sid) => { const s = document.querySelector(`select[id$=':${sid}']`);
-                                  return s ? s.value : null; }""",
-                    select_id,
+                estado = self._page.evaluate(
+                    """([sid, did]) => {
+                        const s = document.querySelector(`select[id$=':${sid}']`);
+                        const d = document.querySelector(`input[id$=':${did}InputDate']`);
+                        return {sel: s ? s.value : null, data: d ? d.value : null};
+                    }""",
+                    [select_id, data_id],
                 )
-                if dom_val != valor:
-                    self.log(f"    ⚠ {contexto}: select resetado para '{dom_val}' — re-selecionando")
+                if estado.get("sel") != valor:
+                    self.log(f"    ⚠ {contexto}: select resetado para '{estado.get('sel')}' — re-selecionando")
                     self._selecionar(select_id, valor)
                     self._page.wait_for_timeout(300)
+                if data_str and (estado.get("data") or "") != data_str:
+                    self.log(f"    ⚠ {contexto}: data no DOM='{estado.get('data')}' ≠ '{data_str}' — re-preenchendo")
+                    inp = self._page.locator(f"input[id$='{data_id}InputDate']")
+                    if inp.count() > 0:
+                        inp.first.fill(data_str)
+                        self._page.wait_for_timeout(300)
             except Exception:
                 pass
             # 4. Add
