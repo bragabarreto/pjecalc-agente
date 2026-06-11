@@ -1678,7 +1678,7 @@ Expandido para espelhar o XHTML inteiro. Defaults pós-ADC 58:
   "indice_combinado": null,
   "data_inicio_combinacao": null,
   "ignorar_taxa_negativa": false,
-  "juros": "TAXA_LEGAL",
+  "juros": "TRD_SIMPLES",
   "fazenda_publica_data_inicial": null,
   "nao_aplicar_juros": false,
   "base_juros_verbas": "VERBAS",
