@@ -285,6 +285,81 @@ def _norm_correcao_caso_a_vs_b(data: dict[str, Any]) -> None:
             ]
 
 
+def _norm_multa_467_como_reflexo(data: dict[str, Any]) -> None:
+    """Salvaguarda: MULTA DO ART. 467 emitida como VERBA PRINCIPAL autônoma.
+
+    INVARIANTE PERMANENTE — NÃO REVERTER.
+
+    Bug histórico (RODRIGO 0000447-51, 11/06/2026): IA emitiu MULTA 467 como
+    verba principal (expresso_alvo=MULTA DO ARTIGO 477 + multiplicador 0.5).
+    O Expresso não cria 2ª verba do mesmo alvo; os reflexos candidatos
+    "MULTA DO ARTIGO 467 DA CLT SOBRE X" ficaram todos ativo=false e a multa
+    FALTOU na liquidação (e, se criada, valeria 50% de 1 salário — errado).
+
+    Correção: remover a verba autônoma e convertê-la em reflexos
+    checkbox_painel sobre as verbas rescisórias estritas + multa_artigo_467
+    no FGTS (multa 40% na base, padrão da jurisprudência).
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+
+    def _eh_467(v: dict) -> bool:
+        blob = " ".join(
+            str(v.get(k) or "")
+            for k in ("nome_pjecalc", "nome_sentenca", "expresso_alvo")
+        ).upper()
+        return "467" in blob
+
+    autonomas_467 = [v for v in verbas if isinstance(v, dict) and _eh_467(v)]
+    if not autonomas_467:
+        return
+
+    # Verbas-alvo dos reflexos: rescisórias estritas (excluir multas,
+    # indenizações, deduções e a própria 467/477).
+    _EXCLUIR = ("MULTA", "INDENIZA", "DANO", "VALOR PAGO", "DEVOLU",
+                "SEGURO", "FGTS", "HONORÁRIO", "HONORARIO")
+    restantes = [v for v in verbas if isinstance(v, dict) and not _eh_467(v)]
+    n_reflexos = 0
+    for v in restantes:
+        nome = str(v.get("nome_pjecalc") or v.get("expresso_alvo") or "").strip()
+        if not nome or any(t in nome.upper() for t in _EXCLUIR):
+            continue
+        reflexos = v.setdefault("reflexos", [])
+        if not isinstance(reflexos, list):
+            continue
+        alvo = f"MULTA DO ARTIGO 467 DA CLT SOBRE {nome}"
+        if any(
+            isinstance(r, dict) and (r.get("expresso_reflex_alvo") or "").upper() == alvo.upper()
+            for r in reflexos
+        ):
+            continue
+        reflexos.append({
+            "id": f"r-{v.get('id') or nome[:8]}-467",
+            "nome": f"Multa do Art. 467 sobre {nome}",
+            "estrategia_reflexa": "checkbox_painel",
+            "expresso_reflex_alvo": alvo,
+            "parametros_override": None,
+            "ocorrencias_override": None,
+        })
+        n_reflexos += 1
+
+    # FGTS: multa 467 sobre a multa de 40% (base padrão)
+    fgts = data.get("fgts")
+    if isinstance(fgts, dict):
+        fgts["multa_artigo_467"] = True
+
+    # Remover as verbas autônomas 467
+    data["verbas_principais"] = restantes
+    import logging
+    logging.getLogger(__name__).warning(
+        "Normalizer: MULTA 467 emitida como verba autônoma — convertida em "
+        "%d reflexo(s) checkbox_painel + fgts.multa_artigo_467=true "
+        "(invariante RODRIGO 11/06/2026)",
+        n_reflexos,
+    )
+
+
 def _norm_data(s: str, *, is_fim: bool) -> str:
     """Normaliza MM/YYYY → DD/MM/YYYY. Mantém valor se já estiver em DD/MM/YYYY."""
     if not isinstance(s, str):
@@ -565,6 +640,10 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # Salvaguarda: detectar cálculo que CRUZA 30/08/2024 (Lei 14.905) e
     # corrigir config se IA emitiu Caso A indevidamente (deveria ser Caso B).
     _norm_correcao_caso_a_vs_b(data)
+
+    # Salvaguarda: MULTA 467 emitida como verba principal autônoma →
+    # converter em reflexos checkbox_painel + multa_artigo_467 no FGTS.
+    _norm_multa_467_como_reflexo(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #

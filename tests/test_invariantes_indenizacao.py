@@ -412,13 +412,16 @@ def test_inv11_comentarios_jg_formato_canonico():
     # Aviso explícito sobre evitar em-dash (Latin-1)
     assert "Latin-1" in ext or "ISO-8859" in ext or "hífen" in ext.lower(), \
         "Prompt não avisa sobre uso de hífen (vs em-dash)"
-    bot = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    # Fallback do bot deve usar formato novo (com hífen, não em-dash — PJE-Calc é Latin-1)
-    assert "pela parte {p} - {nm}" in bot or "pela parte reclamante" in bot, \
-        "Fallback do bot não migrou para formato canônico (hífen)"
+    # Fix RODRIGO 11/06/2026: o fallback do BOT foi removido (lógica errada —
+    # assumia devedor=JG; violava fidelidade prévia↔automação). O formato
+    # canônico agora é responsabilidade exclusiva do NORMALIZER.
+    norm = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "beneficiária da Justiça" in norm, \
+        "Normalizer não tem o texto canônico de suspensão de exigibilidade"
+    assert "_build_comentarios_jg" in norm
     # NUNCA usar em-dash — PJE-Calc Latin-1 não suporta U+2014
-    assert "pela parte {p} — {nm}" not in bot, \
-        "REGRESSÃO: bot voltou a usar EM-DASH — PJE-Calc converte para ¿"
+    assert "pela parte {parte_lower} — " not in norm, \
+        "REGRESSÃO: normalizer voltou a usar EM-DASH — PJE-Calc converte para ¿"
 
 
 def test_inv11_normalizer_converte_legacy():
@@ -1001,3 +1004,78 @@ def test_inv21_prompt_fracao_deferida_limita_periodo():
     assert "FRAÇÃO DEFERIDA" in ext
     assert "MENOR período que gera exatamente os avos" in ext
     assert "THAÍS" in ext
+
+
+# ─── INV-22..25: fixes do caso RODRIGO (0000447-51, 11/06/2026) ─────────────
+
+
+def test_inv22_bot_sem_fallback_jg_auto_detectado():
+    """Bug RODRIGO: fallback 'JG auto-detectado' assumia que o DEVEDOR dos
+    sucumbenciais era beneficiário da JG (sem consultar justica_gratuita) →
+    comentário 'parte reclamado ... beneficiária da JG' sem deferimento.
+    O bot deve aplicar APENAS pc.comentarios_jg da prévia (síntese é do
+    normalizer — fidelidade prévia↔automação)."""
+    assert "JG auto-detectado" not in PLAYWRIGHT_V2
+    # Invariante documentado no lugar do fallback
+    assert "comentarios_jg=None na prévia significa" in PLAYWRIGHT_V2
+
+
+def test_inv23_combinacoes_fase13_verificadas_contra_listagem():
+    """Bug RODRIGO: log '✓ click add' mas bean recebia o DEFAULT do select
+    (combinação juros persistida como SEM_JUROS; combinação de índice nem
+    criada). Fase 13 deve usar _add_combinacao_verificada: data primeiro,
+    select por último, verificação da dataTable renderizada + retry."""
+    assert "_add_combinacao_verificada" in PLAYWRIGHT_V2
+    assert "listagemJurosCombinados" in PLAYWRIGHT_V2
+    assert "listagemIndicesCombinados" in PLAYWRIGHT_V2
+    # O fluxo antigo (add sem verificação) não pode voltar
+    assert PLAYWRIGHT_V2.count("self._clicar(\"addOutroJuros\")") <= 1
+    assert "Sem Juros" in PLAYWRIGHT_V2  # remoção de linhas erradas
+
+
+def test_inv24_base_juros_map_enum_real():
+    """Bug RODRIGO: _BASE_JUROS_MAP mapeava para 'VERBA'/'VERBA_MENOS_CS' —
+    values INEXISTENTES (timeout 30s). Enum real (BaseDeJurosDasVerbasEnum
+    do JAR): VERBAS | VERBA_INSS | VERBA_INSS_PP."""
+    assert '"VERBAS": "VERBAS"' in PLAYWRIGHT_V2
+    assert '"VERBA_INSS": "VERBA_INSS"' in PLAYWRIGHT_V2
+    assert '"VERBA_INSS_PP": "VERBA_INSS_PP"' in PLAYWRIGHT_V2
+    assert '"VERBAS": "VERBA",' not in PLAYWRIGHT_V2
+
+
+def test_inv25_normalizer_multa_467_vira_reflexos():
+    """Bug RODRIGO: IA emitiu MULTA 467 como verba principal autônoma
+    (expresso_alvo=MULTA 477 + mult 0.5) → Expresso não criou, reflexos
+    todos inativos, multa FALTOU. Normalizer converte em reflexos
+    checkbox_painel + fgts.multa_artigo_467=true."""
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "verbas_principais": [
+            {"id": "v01", "nome_pjecalc": "SALDO DE SALÁRIO",
+             "expresso_alvo": "SALDO DE SALÁRIO", "reflexos": []},
+            {"id": "v05", "nome_pjecalc": "MULTA DO ARTIGO 467 DA CLT",
+             "expresso_alvo": "MULTA DO ARTIGO 477 DA CLT", "reflexos": []},
+            {"id": "v06", "nome_pjecalc": "MULTA DO ARTIGO 477 DA CLT",
+             "expresso_alvo": "MULTA DO ARTIGO 477 DA CLT", "reflexos": []},
+        ],
+        "fgts": {"multa_artigo_467": False},
+        "historico_salarial": [], "honorarios": [],
+    }
+    res = normalize_v2_json(payload)
+    nomes = [v["nome_pjecalc"] for v in res["verbas_principais"]]
+    assert "MULTA DO ARTIGO 467 DA CLT" not in nomes, "verba 467 autônoma deve ser removida"
+    assert "MULTA DO ARTIGO 477 DA CLT" in nomes, "477 deve ser preservada"
+    saldo = next(v for v in res["verbas_principais"] if v["nome_pjecalc"] == "SALDO DE SALÁRIO")
+    alvos = [r["expresso_reflex_alvo"] for r in saldo["reflexos"]]
+    assert "MULTA DO ARTIGO 467 DA CLT SOBRE SALDO DE SALÁRIO" in alvos
+    multa477 = next(v for v in res["verbas_principais"] if v["nome_pjecalc"] == "MULTA DO ARTIGO 477 DA CLT")
+    assert multa477["reflexos"] == [], "467 NÃO incide sobre a 477"
+    assert res["fgts"]["multa_artigo_467"] is True
+
+
+def test_inv25_prompt_multa_467_nunca_verba_autonoma():
+    """Prompt deve conter a regra: MULTA 467 NUNCA é verba principal."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "MULTA DO ART. 467 DA CLT (INVARIANTE PERMANENTE" in ext
+    assert "NUNCA é verba principal" in ext
+    assert "MULTA DO ARTIGO 467 DA CLT SOBRE" in ext

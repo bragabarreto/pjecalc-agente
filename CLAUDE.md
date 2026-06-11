@@ -253,6 +253,50 @@ mid-loop"). Log SSE agora persiste em `<store>/logs/<sessao>_automation.log`
 
 ---
 
+## Regras obrigatórias — 4 fixes do caso RODRIGO (0000447-51, 11/06/2026) — NÃO REVERTER
+
+> Primeiro cálculo com log SSE persistido (`<store>/logs/<sessao>_automation.log`)
+> — diagnóstico direto, não inferencial. Testes inv22–25.
+
+### 1. Bot NÃO sintetiza comentário de JG (inv22)
+
+Fallback "JG auto-detectado" assumia que o DEVEDOR dos sucumbenciais era o
+beneficiário da JG sem consultar `justica_gratuita` → inventou "parte
+reclamado — beneficiária da JG" quando o deferimento era só do autor. Bot
+agora aplica APENAS `pc.comentarios_jg` da prévia; a síntese (interseção
+JG ∩ devedor) é exclusiva do normalizer (`_norm_comentarios_jg`), ANTES da
+prévia. `comentarios_jg=None` na prévia = "não anotar nada".
+
+### 2. Combinações da Fase 13 verificadas contra a listagem renderizada (inv23)
+
+Log mostrava "✓ click addOutroJuros/addOutroIndice" mas o bean JSF recebia o
+DEFAULT do select — combinação de juros persistida como `SEM_JUROS@ajuizamento`
+e combinação de índice nem criada (`combinarOutroIndice=false` no PJC). Causa
+provável: re-render A4J do `rich:calendar` resetava o select antes do add.
+Fix: helper `_add_combinacao_verificada` — data PRIMEIRO, select por ÚLTIMO,
+add, e **verificação da `rich:dataTable` re-renderizada** (`listagemJurosCombinados`
+/ `listagemIndicesCombinados` — ground truth do bean) com retry ×3 + remoção
+de linhas "Sem Juros"/erradas da mesma data (preserva fases legítimas).
+O "✓" do log agora significa CONFIRMADO no bean.
+
+### 3. `_BASE_JUROS_MAP` com enum real (inv24)
+
+Map anterior gerava values inexistentes ("VERBA", "VERBA_MENOS_CS") → timeout
+30s. Enum real extraído de `BaseDeJurosDasVerbasEnum` (JAR pjecalc-negocio):
+`VERBAS | VERBA_INSS | VERBA_INSS_PP` (= schema v2, identidade).
+
+### 4. MULTA 467 NUNCA é verba principal autônoma (inv25)
+
+IA emitiu MULTA 467 como verba própria (`expresso_alvo=MULTA 477` + mult 0.5)
+→ Expresso não cria 2ª verba do mesmo alvo, reflexos candidatos "MULTA 467
+SOBRE X" ficaram todos `ativo=false` e a multa FALTOU na liquidação. Forma
+correta: **reflexos checkbox_painel** `MULTA DO ARTIGO 467 DA CLT SOBRE <verba>`
+nas verbas rescisórias estritas + `fgts.multa_artigo_467=true`. Defesas:
+prompt (regra crítica §4.1) + normalizer (`_norm_multa_467_como_reflexo` —
+remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES).
+
+---
+
 ## Regra obrigatória — Regerar Ocorrências após cada alteração
 
 > **TODA alteração de parâmetro ou ocorrência de qualquer verba DEVE ser

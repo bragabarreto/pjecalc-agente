@@ -458,6 +458,38 @@ remunerações diferentes (ex: 2023-2024-2025-2026), criar **APENAS UMA** entrad
 - **`divisor.tipo = "OUTRO_VALOR"` e `divisor.valor = 12` (constante CLT — 12 avos por período aquisitivo)**
 - **`multiplicador = 1.33` (1/3 adicional constitucional)** e quantidade.tipo = "AVOS"
 
+⚠️ **REGRA CRÍTICA — MULTA DO ART. 467 DA CLT (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+A multa do art. 467 (50% sobre verbas incontroversas) **NUNCA é verba principal
+autônoma** — ela NÃO existe no rol Expresso e lançá-la como verba própria de
+"0.5 × salário" calcula um valor ERRADO (50% de 1 salário, não 50% das verbas).
+
+**Bug histórico (RODRIGO 0000447-51, 11/06/2026):** IA emitiu MULTA 467 como
+verba principal (`expresso_alvo: MULTA DO ARTIGO 477` + multiplicador 0.5) →
+Expresso não criou a 2ª verba, os reflexos "MULTA 467 SOBRE X" ficaram todos
+desmarcados e a multa simplesmente FALTOU na liquidação.
+
+**Implementação correta** — a multa 467 entra em DOIS lugares:
+1. **Reflexos** em cada verba rescisória estrita listada na sentença — para
+   cada verba (SALDO DE SALÁRIO, AVISO PRÉVIO, 13º SALÁRIO, FÉRIAS + 1/3...),
+   adicionar em `reflexos`:
+   ```json
+   {
+     "id": "rNN-467",
+     "nome": "Multa do Art. 467 sobre <VERBA>",
+     "estrategia_reflexa": "checkbox_painel",
+     "expresso_reflex_alvo": "MULTA DO ARTIGO 467 DA CLT SOBRE <NOME_PJECALC_DA_VERBA>",
+     "parametros_override": null,
+     "ocorrencias_override": null
+   }
+   ```
+   (O PJE-Calc já cria esses candidatos automaticamente no painel "Exibir"
+   de cada verba — o bot apenas MARCA o checkbox.)
+2. **`fgts.multa_artigo_467: true`** quando a sentença incluir a multa de 40%
+   do FGTS na base da multa 467 (caso típico).
+
+Respeite a BASE da sentença: se ela exclui alguma verba (ex.: multa 477,
+indenizações), NÃO adicionar o reflexo 467 naquela verba.
+
 ⚠️ **ATENÇÃO ESPECIAL**: para **13º SALÁRIO** e **FÉRIAS + 1/3**, o divisor é uma
 **constante legal de 12** (CLT art. 130 / Constituição art. 7º XVII). NUNCA usar
 `divisor.valor = 1` ou outro valor — o PJE-Calc multiplicaria o cálculo por 12,
@@ -1646,7 +1678,7 @@ Preencher quando houver decisão judicial determinando incidência:
 ## 8.5 Multas e Indenizações — `multas_indenizacoes`
 Lista de multas/indenizações que NÃO são verbas trabalhistas típicas
 (astreintes, multa CCT específica, indenização por extravio de bem, etc.).
-Multa 477/CLT e Multa 467/CLT NÃO entram aqui — vão em `verbas_principais`.
+Multa 477/CLT NÃO entra aqui — vai em `verbas_principais`. Multa 467/CLT TAMBÉM NÃO entra aqui — ela NUNCA é verba autônoma (ver regra crítica na seção 4.1: reflexos + checkbox do FGTS).
 
 ```json
 "multas_indenizacoes": [

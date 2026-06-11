@@ -1932,42 +1932,19 @@ class PlaywrightAutomatorV2:
         # Carga horária
         self._preencher("valorCargaHorariaPadrao", _fmt_br(pc.carga_horaria.padrao_mensal))
 
-        # Comentários JG — primary: pc.comentarios_jg (normalizer já corrige
-        # concordância). Fallback defensivo se IA omitiu E há sucumbenciais.
-        # CRÍTICO (26/05/2026, user feedback): formato canônico
-        #   "...devidos pela parte reclamante/reclamada - NOME, beneficiária..."
-        # Evita erro de concordância de gênero (Reclamante = sempre masculino;
-        # parte = sempre feminino → "beneficiária" funciona p/ qualquer pessoa).
+        # Comentários JG — SOMENTE pc.comentarios_jg da prévia (fonte única).
+        #
+        # ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (bug RODRIGO 0000447-51,
+        # 11/06/2026): o fallback de auto-detecção de JG anterior assumia que o
+        # DEVEDOR dos honorários sucumbenciais era o beneficiário da JG — sem
+        # consultar `justica_gratuita`. Com devedor=RECLAMADO e JG só do
+        # reclamante, o bot inventou "parte reclamado ... beneficiária da
+        # Justiça Gratuita" (parte SEM deferimento + concordância errada).
+        # A síntese correta (interseção JG ∩ devedor) é responsabilidade do
+        # NORMALIZER (_norm_comentarios_jg) — ANTES da prévia, para o usuário
+        # revisar. comentarios_jg=None na prévia significa "NÃO há suspensão
+        # a anotar" e o bot deve respeitar (fidelidade prévia↔automação).
         jg_text = getattr(pc, "comentarios_jg", None)
-        if not jg_text:
-            proc = self.previa.processo
-            nome_rec = (getattr(getattr(proc, "reclamante", None), "nome", "") or "").strip()
-            nome_red = (getattr(getattr(proc, "reclamado", None), "nome", "") or "").strip()
-            partes_jg: list[tuple[str, str]] = []  # (parte_lower, nome)
-            for hon in self.previa.honorarios:
-                if getattr(hon, "tipo_honorario", "") != "SUCUMBENCIAIS":
-                    continue
-                devedor = getattr(hon, "tipo_devedor", "") or ""
-                if devedor == "RECLAMANTE" and not any(p[0] == "reclamante" for p in partes_jg):
-                    partes_jg.append(("reclamante", nome_rec))
-                elif devedor == "RECLAMADO" and not any(p[0] == "reclamado" for p in partes_jg):
-                    partes_jg.append(("reclamado", nome_red))
-            if partes_jg:
-                if len(partes_jg) == 1:
-                    p, nm = partes_jg[0]
-                    jg_text = (
-                        f"Suspensão de exigibilidade dos honorários sucumbenciais "
-                        f"devidos pela parte {p} - {nm}, beneficiária da Justiça "
-                        f"Gratuita (art. 791-A, § 4º, da CLT)."
-                    )
-                else:
-                    jg_text = (
-                        f"Suspensão de exigibilidade dos honorários sucumbenciais "
-                        f"devidos pela parte reclamante - {nome_rec} e pela parte "
-                        f"reclamada - {nome_red}, ambas beneficiárias da Justiça "
-                        f"Gratuita (art. 791-A, § 4º, da CLT)."
-                    )
-                self.log(f"  ℹ JG auto-detectado: {[p[0] for p in partes_jg]}")
         if jg_text:
             self._preencher("comentarios", jg_text, obrigatorio=False)
 
@@ -7361,6 +7338,126 @@ class PlaywrightAutomatorV2:
         self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
         self.log("Fase 12 concluída")
 
+    def _add_combinacao_verificada(
+        self,
+        *,
+        select_id: str,
+        data_id: str,
+        add_id: str,
+        listagem_id: str,
+        valor: str,
+        data_str: str | None,
+        label_esperado: str,
+        contexto: str,
+    ) -> bool:
+        """Adiciona UMA linha de combinação (índice OU juros) na Fase 13 e
+        VERIFICA contra a dataTable re-renderizada — que reflete o BEAN JSF,
+        não o DOM local.
+
+        ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (bug RODRIGO 0000447-51,
+        11/06/2026): o fluxo anterior logava "✓ click add" mas o bean recebia
+        o DEFAULT do select — combinação de juros persistida como SEM_JUROS
+        e combinação de índice nem criada (PJC: combinarOutroIndice=false).
+        Causa provável: re-render A4J do rich:calendar (apartirDe...) reseta
+        o select para o valor do bean ANTES do add. Mitigação:
+          1. data PRIMEIRO, select por ÚLTIMO (minimiza janela de reset);
+          2. re-confirmar value do select imediatamente antes do add;
+          3. VERIFICAR a linha na listagem renderizada (id listagem_id);
+          4. retry ×3 com remoção de linhas "Sem Juros"/erradas da mesma data.
+        """
+        for tentativa in range(1, 4):
+            # 1. Data primeiro — rich:calendar pode disparar re-render do painel
+            if data_str:
+                self._preencher(data_id, data_str, obrigatorio=False)
+                self._aguardar_ajax(2000)
+                self._page.wait_for_timeout(400)
+            # 2. Select por último
+            self._selecionar(select_id, valor)
+            self._aguardar_ajax(1500)
+            self._page.wait_for_timeout(300)
+            # 3. Re-confirmar DOM imediatamente antes do add
+            try:
+                dom_val = self._page.evaluate(
+                    """(sid) => { const s = document.querySelector(`select[id$=':${sid}']`);
+                                  return s ? s.value : null; }""",
+                    select_id,
+                )
+                if dom_val != valor:
+                    self.log(f"    ⚠ {contexto}: select resetado para '{dom_val}' — re-selecionando")
+                    self._selecionar(select_id, valor)
+                    self._page.wait_for_timeout(300)
+            except Exception:
+                pass
+            # 4. Add
+            try:
+                self._clicar(add_id)
+            except Exception as e:
+                self.log(f"    ⚠ {contexto}: {add_id} indisponível: {e}")
+                return False
+            self._aguardar_ajax(3000)
+            self._page.wait_for_timeout(800)
+            # 5. Verificar a listagem RENDERIZADA (ground truth do bean)
+            try:
+                res = self._page.evaluate(
+                    """([lid, label, dataStr]) => {
+                        const cont = document.querySelector(`[id$=':${lid}']`)
+                                  || document.getElementById(lid);
+                        if (!cont) return {found: null, resumo: 'listagem não encontrada'};
+                        const linhas = [...cont.querySelectorAll('tr')];
+                        for (const tr of linhas) {
+                            const tds = [...tr.querySelectorAll('td')].map(td => (td.textContent||'').trim());
+                            if (!tds.length) continue;
+                            const txt = tds.join(' | ');
+                            const temLabel = tds.some(t => t === label) || txt.includes(label);
+                            const temData = !dataStr || txt.includes(dataStr);
+                            if (temLabel && temData) return {found: true, resumo: txt.slice(0,120)};
+                        }
+                        return {found: false,
+                                resumo: linhas.map(tr => (tr.textContent||'').trim().slice(0,60)).slice(0,5).join(' ;; ')};
+                    }""",
+                    [listagem_id, label_esperado, data_str or ""],
+                )
+            except Exception as e:
+                res = {"found": None, "resumo": str(e)[:120]}
+            if res and res.get("found"):
+                self.log(f"    ✓ {contexto}: linha CONFIRMADA na listagem [{res.get('resumo','')}]")
+                return True
+            self.log(
+                f"    ⚠ {contexto}: linha NÃO confirmada (tentativa {tentativa}/3) — "
+                f"listagem: {str((res or {}).get('resumo'))[:160]}"
+            )
+            # 6. Remover linhas erradas — APENAS 'Sem Juros' ou linha com a
+            # MESMA data e label divergente (preserva fases legítimas de
+            # outras datas — caso B tem 2 fases).
+            try:
+                removidas = self._page.evaluate(
+                    """([lid, label, dataStr]) => {
+                        const cont = document.querySelector(`[id$=':${lid}']`)
+                                  || document.getElementById(lid);
+                        if (!cont) return 0;
+                        let n = 0;
+                        for (const tr of [...cont.querySelectorAll('tr')]) {
+                            const txt = (tr.textContent||'');
+                            const errada = txt.includes('Sem Juros')
+                                || (dataStr && txt.includes(dataStr) && !txt.includes(label));
+                            if (!errada) continue;
+                            const rm = tr.querySelector(
+                                'a[id*="remover"], a[id*="remove"], a.botaoRemoveItem, img[onclick], a[onclick]'
+                            );
+                            if (rm) { rm.click(); n++; }
+                        }
+                        return n;
+                    }""",
+                    [listagem_id, label_esperado, data_str or ""],
+                )
+                if removidas:
+                    self._aguardar_ajax(2500)
+                    self._page.wait_for_timeout(500)
+                    self.log(f"    ↺ {contexto}: removida(s) {removidas} linha(s) incorreta(s)")
+            except Exception:
+                pass
+        return False
+
     def fase_correcao_juros_multa(self) -> None:
         self.log("Fase 13 — Correção, Juros e Multa")
         # Estabilizar antes (mesmo padrão Fase 11/12)
@@ -7453,14 +7550,19 @@ class PlaywrightAutomatorV2:
             "TRD_COMPOSTOS": "TRD_COMPOSTOS",
             "SEM_JUROS": "SEM_JUROS",
         }
-        # baseDeJurosDasVerbas: enum real (baseDeJurosDasVerbasEnum). Valores
-        # comuns: VERBA, VERBA_MENOS_CS, VERBA_MENOS_CS_MENOS_PP.
+        # baseDeJurosDasVerbas: enum REAL extraído de BaseDeJurosDasVerbasEnum
+        # (pjecalc-negocio JAR, 11/06/2026 — bug RODRIGO: map anterior gerava
+        # "VERBA"/"VERBA_MENOS_CS", values inexistentes → timeout 30s no
+        # select_option): VERBAS | VERBA_INSS | VERBA_INSS_PP.
+        # (= schema v2 — identidade; aliases antigos mantidos para compat.)
         _BASE_JUROS_MAP = {
-            "VERBAS": "VERBA", "VERBA": "VERBA",
-            "VERBA_INSS": "VERBA_MENOS_CS",
-            "VERBA_MENOS_CS": "VERBA_MENOS_CS",
-            "VERBA_INSS_PP": "VERBA_MENOS_CS_MENOS_PP",
-            "VERBA_MENOS_CS_MENOS_PP": "VERBA_MENOS_CS_MENOS_PP",
+            "VERBAS": "VERBAS",
+            "VERBA_INSS": "VERBA_INSS",
+            "VERBA_INSS_PP": "VERBA_INSS_PP",
+            # aliases legados (revertem para o enum real)
+            "VERBA": "VERBAS",
+            "VERBA_MENOS_CS": "VERBA_INSS",
+            "VERBA_MENOS_CS_MENOS_PP": "VERBA_INSS_PP",
         }
         _FGTS_CORR_MAP = {
             "UTILIZAR_INDICE_TRABALHISTA": "INDICE_TRABALHISTA",
@@ -7496,19 +7598,32 @@ class PlaywrightAutomatorV2:
             getattr(c, "data_inicio_combinacao", None)
             or getattr(c, "data_inicio_segundo_indice", None)
         )
+        # Labels humanos do IndiceMonetarioEnum (extraídos do JAR 11/06/2026)
+        # — usados na VERIFICAÇÃO da linha adicionada na listagem renderizada.
+        _LABEL_INDICE = {
+            "IPCA": "IPCA", "IPCAE": "IPCA-E", "IPCAETR": "IPCA-E/TR",
+            "TR": "TR", "IGPM": "IGP-M", "INPC": "INPC", "IPC": "IPC",
+            "SELIC": "SELIC (Receita Federal)", "SELIC_FAZENDA": "SELIC",
+            "SELIC_BACEN": "SELIC Composta",
+        }
         if combinar_indice and segundo:
             self._marcar_checkbox("combinarOutroIndice", True)
             self._aguardar_ajax(2000)
-            self._selecionar("outroIndiceTrabalhista", _INDICE_MAP.get(segundo, segundo))
-            if data_inicio_2:
-                self._preencher("apartirDeOutroIndice", data_inicio_2, obrigatorio=False)
-            # Clicar botão "+" para confirmar adição na tabela
-            try:
-                self._clicar("addOutroIndice")
-                self._aguardar_ajax(2000)
-                self.log(f"  ✓ Correção combinada: {segundo} a partir de {data_inicio_2} (+ adicionado)")
-            except Exception as e:
-                self.log(f"  ⚠ addOutroIndice falhou: {e}")
+            _seg_dom = _INDICE_MAP.get(segundo, segundo)
+            ok_idx = self._add_combinacao_verificada(
+                select_id="outroIndiceTrabalhista",
+                data_id="apartirDeOutroIndice",
+                add_id="addOutroIndice",
+                listagem_id="listagemIndicesCombinados",
+                valor=_seg_dom,
+                data_str=data_inicio_2,
+                label_esperado=_LABEL_INDICE.get(_seg_dom, _seg_dom),
+                contexto=f"Correção combinada {segundo}",
+            )
+            if ok_idx:
+                self.log(f"  ✓ Correção combinada: {segundo} a partir de {data_inicio_2}")
+            else:
+                self.log(f"  🛑 Correção combinada {segundo}@{data_inicio_2} NÃO persistiu após 3 tentativas")
 
         # ── Ignorar Taxa Negativa ────────────────────────────────────────────
         ignorar_neg = getattr(c, "ignorar_taxa_negativa", None)
@@ -7617,6 +7732,19 @@ class PlaywrightAutomatorV2:
                 self._aguardar_ajax(1500)
             except Exception as e:
                 self.log(f"  ⚠ combinarOutroJuros checkbox falhou: {e}")
+            # Labels humanos do JurosEnum (extraídos do JAR 11/06/2026) —
+            # usados na VERIFICAÇÃO da linha adicionada na listagem renderizada.
+            _LABEL_JUROS = {
+                "TAXA_LEGAL": "Taxa Legal",
+                "SELIC": "SELIC (Receita Federal)",
+                "SELIC_FAZENDA": "SELIC",
+                "SELIC_BACEN": "SELIC Composta",
+                "PADRAO": "Juros Padrão",
+                "CADERNETA_POUPANCA": "Juros Caderneta de Poupança",
+                "FAZENDA_PUBLICA": "Juros Fazenda Pública",
+                "TRD_SIMPLES": "TRD",
+                "TRD_COMPOSTOS": "TRD",
+            }
             for idx, fase in enumerate(fases_juros):
                 tabela_in = getattr(fase, "tabela", None) or (fase.get("tabela") if isinstance(fase, dict) else None)
                 data_in = getattr(fase, "data_inicio", None) or (fase.get("data_inicio") if isinstance(fase, dict) else None)
@@ -7625,56 +7753,25 @@ class PlaywrightAutomatorV2:
                     self.log(f"  ⚠ fase juros[{idx}]: sem tabela — pulando")
                     continue
                 tabela_dom = _JUROS_MAP.get(tabela_in, tabela_in)
-                try:
-                    self._selecionar("outroJuros", tabela_dom)
-                    # ⚠ FIDELIDADE (26/05/2026): commitar o select ANTES de
-                    # clicar add. Test 40 mostrou que addOutroJuros pegava
-                    # SEM_JUROS (default do bean) em vez de SELIC porque o
-                    # change AJAX do select não tinha ainda terminado.
-                    # Dispatch explícito do evento change + aguardar AJAX.
-                    self._page.evaluate("""() => {
-                        const s = document.querySelector("select[id$=':outroJuros']");
-                        if (s) {
-                            s.dispatchEvent(new Event('change', {bubbles: true}));
-                            s.dispatchEvent(new Event('blur', {bubbles: true}));
-                        }
-                    }""")
-                    self._aguardar_ajax(2000)
-                    self._page.wait_for_timeout(500)
-                except Exception as e:
-                    self.log(f"  ⚠ selecionar outroJuros[{idx}]={tabela_dom}: {e}")
-                    continue
-                if data_in:
-                    try:
-                        self._preencher("apartirDeOutroJuros", data_in, obrigatorio=False)
-                        self._aguardar_ajax(1500)
-                        self._page.wait_for_timeout(400)
-                    except Exception as e:
-                        self.log(f"  ⚠ apartirDeOutroJuros[{idx}]={data_in}: {e}")
-                # Verificar valor antes de clicar add — sanity check
-                try:
-                    valor_select = self._page.evaluate("""() => {
-                        const s = document.querySelector("select[id$=':outroJuros']");
-                        return s ? s.value : null;
-                    }""")
-                    if valor_select != tabela_dom:
-                        self.log(f"  ⚠ outroJuros no DOM='{valor_select}' ≠ esperado='{tabela_dom}' — re-selecionando")
-                        self._selecionar("outroJuros", tabela_dom)
-                        self._page.evaluate("""() => {
-                            const s = document.querySelector("select[id$=':outroJuros']");
-                            if (s) s.dispatchEvent(new Event('change', {bubbles: true}));
-                        }""")
-                        self._aguardar_ajax(2000)
-                except Exception as e:
-                    self.log(f"  ⚠ sanity check outroJuros: {e}")
-                try:
-                    self._clicar("addOutroJuros")
-                    self._aguardar_ajax(3000)
-                    self._page.wait_for_timeout(800)
-                    desc_log = f" [{desc}]" if desc else ""
+                # ⚠ Bug RODRIGO 11/06/2026: o fluxo anterior (select → dispatch
+                # change → sanity DOM → add) persistia SEM_JUROS no bean.
+                # Agora: helper com data primeiro + verificação da listagem
+                # renderizada + retry (ver _add_combinacao_verificada).
+                ok_juros = self._add_combinacao_verificada(
+                    select_id="outroJuros",
+                    data_id="apartirDeOutroJuros",
+                    add_id="addOutroJuros",
+                    listagem_id="listagemJurosCombinados",
+                    valor=tabela_dom,
+                    data_str=data_in,
+                    label_esperado=_LABEL_JUROS.get(tabela_dom, tabela_dom),
+                    contexto=f"Juros fase {idx+1} ({tabela_in})",
+                )
+                desc_log = f" [{desc}]" if desc else ""
+                if ok_juros:
                     self.log(f"  ✓ Juros fase {idx+1}: {tabela_in} a partir de {data_in or '(início)'}{desc_log}")
-                except Exception as e:
-                    self.log(f"  ⚠ addOutroJuros[{idx}] falhou: {e}")
+                else:
+                    self.log(f"  🛑 Juros fase {idx+1} ({tabela_in}@{data_in}) NÃO persistiu após 3 tentativas")
 
         # ── Trocar para Aba "Dados Específicos" (onde estão baseDeJurosDasVerbas,
         # indiceDeCorrecaoDoFGTS, custas, previdência privada). A aba tem id
