@@ -5456,28 +5456,85 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(3000)
         self._page.wait_for_timeout(800)
 
-        # Agora marcar o checkbox do reflexo (após Exibir abrir o painel)
-        marcou = self._page.evaluate(
-            """([verbaPrincipal, alvoReflexo]) => {
-                const norm = s => (s||'').toUpperCase().trim();
-                if (!alvoReflexo) return 'sem-alvo';
-                const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
-                for (const cb of cbs) {
-                    const tr = cb.closest('tr');
-                    if (tr && norm(tr.textContent).includes(norm(alvoReflexo))) {
-                        cb.click();
-                        return true;
+        # Marcar o checkbox do reflexo COM VERIFICAÇÃO de persistência.
+        #
+        # ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (run RODRIGO 11/06/2026):
+        # o JS cb.click() disparava o a4j:support do checkbox, o log dizia
+        # "✓ Reflexo marcado", mas em 2 de 4 reflexos o bean NÃO recebeu
+        # (PJC: ativo=false) — mesma classe do bug das combinações da Fase 13
+        # (DOM ≠ bean). Fix: localizar o ID do checkbox, marcar via Playwright
+        # .check() (eventos nativos + actionability), aguardar o AJAX e
+        # VERIFICAR re-lendo o checkbox; retry ×3 com re-abertura do painel.
+        alvo = reflexo.expresso_reflex_alvo or ""
+        ok_reflexo = False
+        for tentativa in range(1, 4):
+            cb_id = self._page.evaluate(
+                """(alvoReflexo) => {
+                    const norm = s => (s||'').toUpperCase().trim();
+                    if (!alvoReflexo) return null;
+                    const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
+                    for (const cb of cbs) {
+                        const tr = cb.closest('tr');
+                        if (tr && norm(tr.textContent).includes(norm(alvoReflexo))) return cb.id;
                     }
-                }
-                return false;
-            }""",
-            [verba_principal.nome_pjecalc, reflexo.expresso_reflex_alvo or ""],
-        )
-        if marcou is True:
-            self.log(f"    ✓ Reflexo marcado: {reflexo.nome}")
-        else:
-            self.log(f"    ⚠ Reflexo não encontrado: {reflexo.nome} (alvo='{reflexo.expresso_reflex_alvo}', resultado={marcou})")
-        self._aguardar_ajax(5000)
+                    return null;
+                }""",
+                alvo,
+            )
+            if not cb_id:
+                # Painel pode ter fechado (re-render) — re-clicar Exibir
+                self.log(f"    ⚠ checkbox de '{alvo}' não visível (tentativa {tentativa}/3) — reabrindo painel")
+                self._page.evaluate(
+                    """(candidatos) => {
+                        const norm = s => (s||'').toUpperCase();
+                        for (const c of candidatos) {
+                            for (const tr of [...document.querySelectorAll('tr')]) {
+                                if (!norm(tr.textContent).includes(norm(c))) continue;
+                                const exibir = tr.querySelector('span.linkDestinacoes');
+                                if (exibir) { exibir.click(); return true; }
+                            }
+                        }
+                        return false;
+                    }""",
+                    candidatos_principal,
+                )
+                self._aguardar_ajax(3000)
+                self._page.wait_for_timeout(800)
+                continue
+            esc = cb_id.replace(":", "\\:")
+            loc = self._page.locator(f"input#{esc}")
+            try:
+                ja_marcado = loc.is_checked()
+            except Exception:
+                ja_marcado = False
+            if not ja_marcado:
+                try:
+                    loc.check(force=True)
+                except Exception as e:
+                    self.log(f"    ⚠ check() falhou ({str(e)[:80]}) — fallback JS click")
+                    self._page.evaluate(
+                        """(cid) => { const cb = document.getElementById(cid); if (cb) cb.click(); }""",
+                        cb_id,
+                    )
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(800)
+            # VERIFICAR: re-ler o checkbox no DOM pós-AJAX (o a4j:support
+            # re-renderiza a linha a partir do bean — se voltou unchecked,
+            # o bean não recebeu).
+            try:
+                confirmado = self._page.evaluate(
+                    """(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }""",
+                    cb_id,
+                )
+            except Exception:
+                confirmado = None
+            if confirmado:
+                ok_reflexo = True
+                self.log(f"    ✓ Reflexo CONFIRMADO no painel: {reflexo.nome}")
+                break
+            self.log(f"    ⚠ Reflexo '{reflexo.nome}' não confirmado (tentativa {tentativa}/3) — checked={confirmado}")
+        if not ok_reflexo:
+            self.log(f"    🛑 Reflexo '{reflexo.nome}' NÃO persistiu após 3 tentativas (alvo='{alvo}')")
 
         # Se há overrides, abrir Parâmetros do reflexo e ajustar
         if reflexo.parametros_override:
