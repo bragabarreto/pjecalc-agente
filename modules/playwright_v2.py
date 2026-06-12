@@ -2507,6 +2507,23 @@ class PlaywrightAutomatorV2:
                     self._configurar_reflexo(v, r)
                 except Exception as e:
                     self.log(f"  ⚠ Falha reflexo '{r.nome}': {e}")
+            # ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (run RODRIGO v4,
+            # 12/06/2026): o checkbox do reflexo vive na CONVERSA Seam e só
+            # persiste no DB se houver um submit/commit DEPOIS da marcação.
+            # Padrão observado: reflexos da 2ª verba de cada batch N=2 eram
+            # perdidos pelo Fechar+Reabrir seguinte (descarta a conv); os da
+            # 1ª verba sobreviviam porque o save de parâmetros da verba
+            # seguinte commitava a conv. Fix: Regerar (Manter) imediatamente
+            # após marcar os reflexos da verba — submete o form da listagem
+            # (commit) e regenera as ocorrências do reflexo recém-ativado.
+            if v.reflexos:
+                try:
+                    if self._regerar_com_modal_confirmacao(
+                        sobrescrever=False, log_prefix="    "
+                    ):
+                        self.log(f"    ✓ Regerar pós-reflexos '{v.nome_pjecalc}' (commit)")
+                except Exception as _e:
+                    self.log(f"    ⚠ Regerar pós-reflexos: {_e}")
 
         # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
         # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
