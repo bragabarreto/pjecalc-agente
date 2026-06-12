@@ -239,6 +239,18 @@ try:
 except Exception as _e:
     logging.getLogger(__name__).warning(f"Falha ao registrar router_v2: {_e}")
 
+# ── Extração IA in-app (Fase 1, 12/06/2026) — ADITIVO ───────────────────────
+# Fluxo do Projeto Claude externo dentro do app: /novo/ia → resumo de
+# validação → confirmar → JSON v2 → prévia v2. NÃO substitui o caminho do
+# JSON externo (/processar/v2 e auto-detecção .json no /processar) — é
+# opção paralela, per regra "preservar progresso conquistado".
+try:
+    from modules.webapp_extracao import router_extracao
+    app.include_router(router_extracao)
+    logging.getLogger(__name__).info("router_extracao registrado: /novo/ia, /processar/ia")
+except Exception as _e:
+    logging.getLogger(__name__).warning(f"Falha ao registrar router_extracao: {_e}")
+
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 STATIC_DIR = Path(__file__).parent / "static"
 STATIC_DIR.mkdir(exist_ok=True)

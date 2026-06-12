@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Resumo de Validação — Extração IA{% endblock %}
+
+{% block content %}
+<style>
+#resumo-box { background:#fff; border:1px solid #dee2e6; border-radius:8px; padding:20px 24px; margin:16px 0; max-height:65vh; overflow-y:auto; }
+#resumo-box h1, #resumo-box h2, #resumo-box h3 { color:#1a3a6b; margin-top:1em; }
+#resumo-box table { border-collapse:collapse; width:100%; font-size:0.85rem; margin:8px 0; }
+#resumo-box th, #resumo-box td { border:1px solid #dee2e6; padding:5px 8px; text-align:left; }
+#resumo-box th { background:#f1f3f5; }
+#resumo-box pre { white-space:pre-wrap; font-size:0.85rem; }
+#correcoes { width:100%; box-sizing:border-box; min-height:80px; border:1px solid #ced4da; border-radius:8px; padding:10px; font-size:0.88rem; font-family:inherit; }
+.fase-spinner { text-align:center; padding:48px 0; color:#5a3e99; }
+.fase-spinner .dot { animation: blink 1.2s infinite; font-size:2rem; }
+@keyframes blink { 0%,100%{opacity:.2} 50%{opacity:1} }
+</style>
+
+<div class="card" style="max-width:900px; margin:0 auto;">
+  <h2>Resumo de Validação <span style="font-size:0.85rem; color:#6c757d; font-weight:400;">(Etapa 1 — revise antes de gerar a prévia)</span></h2>
+
+  <div id="painel-processando" class="fase-spinner">
+    <div class="dot">🤖</div>
+    <div id="msg-processando" style="margin-top:8px;">A IA está lendo a sentença e os documentos…</div>
+    <div style="color:#adb5bd; font-size:0.82rem; margin-top:6px;">Isso pode levar de 30 segundos a 3 minutos, conforme o volume de documentos.</div>
+  </div>
+
+  <div id="painel-erro" style="display:none; background:#fdecea; border:1px solid #f5c2c7;
+       border-radius:8px; padding:16px; color:#842029;"></div>
+
+  <div id="painel-resumo" style="display:none;">
+    <div id="resumo-box"></div>
+
+    <div style="background:#fff8e6; border:1px solid #ffe69c; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
+      <label for="correcoes" style="font-weight:600; color:#664d03; font-size:0.9rem;">
+        Algo errado ou faltando? Descreva as correções e a IA refaz o resumo:
+      </label>
+      <textarea id="correcoes" placeholder="ex.: o adicional de insalubridade é em grau máximo (40%), não médio; a data de admissão correta é 03/02/2024…"></textarea>
+      <button class="btn" style="margin-top:8px;" onclick="enviarCorrecoes()">↺ Refazer resumo com correções</button>
+    </div>
+
+    <div style="text-align:center; padding-top:8px;">
+      <button class="btn btn-primary" style="font-size:1rem; padding:12px 48px;" onclick="confirmar()">
+        ✓ Confirmar — gerar JSON e prévia
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script>
+const SESSAO = "{{ sessao_id }}";
+let timer = null;
+
+function render(md) {
+  const box = document.getElementById('resumo-box');
+  try { box.innerHTML = marked.parse(md); }
+  catch (e) { box.innerHTML = '<pre></pre>'; box.querySelector('pre').textContent = md; }
+}
+
+function mostrar(fase, d) {
+  const proc = document.getElementById('painel-processando');
+  const erro = document.getElementById('painel-erro');
+  const res = document.getElementById('painel-resumo');
+  proc.style.display = 'none'; erro.style.display = 'none'; res.style.display = 'none';
+  if (fase === 'etapa1_processando') {
+    proc.style.display = 'block';
+    document.getElementById('msg-processando').textContent = 'A IA está lendo a sentença e os documentos…';
+  } else if (fase === 'etapa2_processando') {
+    proc.style.display = 'block';
+    document.getElementById('msg-processando').textContent = 'Gerando o JSON estruturado e a prévia…';
+  } else if (fase === 'resumo_pronto') {
+    res.style.display = 'block';
+    if (d.resumo_md) render(d.resumo_md);
+  } else if (fase === 'previa_pronta') {
+    window.location.href = d.url_previa;
+  } else if (fase === 'erro' || fase === 'erro_etapa2') {
+    erro.style.display = 'block';
+    erro.innerHTML = '<strong>❌ ' + (d.erro || 'Falha na extração via IA.') + '</strong><br>' +
+      (fase === 'erro_etapa2'
+        ? 'O resumo continua válido — você pode corrigir algo e confirmar novamente.'
+        : 'Verifique os créditos da API ou tente novamente em instantes.') +
+      ' <a href="/novo/ia">Recomeçar</a>';
+    if (fase === 'erro_etapa2' && d.resumo_md) {
+      document.getElementById('painel-resumo').style.display = 'block';
+      render(d.resumo_md);
+    }
+  }
+}
+
+async function poll() {
+  try {
+    const r = await fetch(`/api/ia/${SESSAO}/estado`);
+    const d = await r.json();
+    mostrar(d.fase, d);
+    if (d.fase && d.fase.endsWith('processando')) timer = setTimeout(poll, 4000);
+  } catch (e) { timer = setTimeout(poll, 6000); }
+}
+
+async function enviarCorrecoes() {
+  const c = document.getElementById('correcoes').value.trim();
+  if (!c) { alert('Descreva as correções antes de enviar.'); return; }
+  const r = await fetch(`/api/ia/${SESSAO}/corrigir`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({correcoes: c}),
+  });
+  if (r.ok) { document.getElementById('correcoes').value = ''; mostrar('etapa1_processando', {}); poll(); }
+  else { const d = await r.json(); alert(d.erro || 'falha'); }
+}
+
+async function confirmar() {
+  const r = await fetch(`/api/ia/${SESSAO}/confirmar`, {method: 'POST'});
+  if (r.ok) { mostrar('etapa2_processando', {}); poll(); }
+  else { const d = await r.json(); alert(d.erro || 'falha'); }
+}
+
+poll();
+</script>
+{% endblock %}

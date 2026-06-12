@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block title %}Novo Cálculo — Extração IA no App{% endblock %}
+
+{% block content %}
+<style>
+.ia-doc-row { border:1px solid #e9ecef; border-radius:8px; padding:12px; margin-bottom:10px; background:#fafbfc; }
+.ia-doc-row label { font-size:0.82rem; color:#495057; display:block; margin-bottom:4px; }
+.ia-doc-row input[type=text], .ia-doc-row textarea { width:100%; box-sizing:border-box; border:1px solid #ced4da; border-radius:6px; padding:6px 8px; font-size:0.85rem; }
+#texto-sentenca { width:100%; box-sizing:border-box; min-height:220px; border:1px solid #ced4da; border-radius:8px; padding:10px; font-size:0.85rem; font-family:inherit; }
+.ia-hint { background:#eef7ff; border:1px solid #b8daff; border-radius:8px; padding:12px 16px; margin-bottom:14px; font-size:0.88rem; color:#0c5395; }
+</style>
+
+<div class="card" style="max-width:860px; margin:0 auto;">
+  <h2>Novo Cálculo — Extração IA no aplicativo</h2>
+  <p style="color:#6c757d; margin-bottom:16px;">
+    Cole o texto da sentença (ou envie o arquivo) e anexe documentos do processo.
+    A IA (Claude Sonnet 4.6) gera um <strong>resumo de validação</strong> para sua revisão
+    antes de produzir o JSON e a prévia — o mesmo fluxo do Projeto Claude, dentro do app.
+  </p>
+  <div class="ia-hint">
+    💡 Prefere o fluxo clássico? <a href="/novo">Colar o JSON v2 gerado no Projeto Claude externo</a>
+    continua disponível — nada mudou nesse caminho.
+  </div>
+
+  <form id="form-ia" enctype="multipart/form-data">
+
+    <h4 style="color:#1a3a6b;">1. Sentença / decisão</h4>
+    <textarea id="texto-sentenca" name="texto_sentenca"
+      placeholder="Cole aqui o texto integral da sentença (e acórdãos, se houver)…"></textarea>
+    <div style="margin:10px 0 22px;">
+      <label style="font-size:0.85rem; color:#495057;">
+        …ou envie o arquivo (PDF, DOCX, TXT, MD):
+        <input type="file" name="arquivo_sentenca" accept=".pdf,.docx,.doc,.txt,.md" style="margin-left:8px;">
+      </label>
+    </div>
+
+    <h4 style="color:#1a3a6b;">2. Documentos do processo <span style="color:#6c757d; font-size:0.85rem; font-weight:400;">(opcional — contracheques, TRCT, cartões de ponto, planilhas…)</span></h4>
+    <div id="docs-container"></div>
+    <button type="button" class="btn" style="margin-bottom:20px;" onclick="addDoc()">+ Adicionar documento</button>
+
+    <div style="text-align:center; padding-top:12px; border-top:1px solid #e9ecef;">
+      <button type="submit" class="btn btn-primary" style="font-size:1rem; padding:12px 48px;">
+        Extrair com IA → Resumo de validação
+      </button>
+      <p id="status-envio" style="margin-top:10px; color:#6c757d; font-size:0.85rem;"></p>
+    </div>
+  </form>
+</div>
+
+<script>
+let nDocs = 0;
+function addDoc() {
+  if (nDocs >= 10) { alert('Máximo de 10 documentos.'); return; }
+  const i = nDocs++;
+  const div = document.createElement('div');
+  div.className = 'ia-doc-row';
+  div.innerHTML = `
+    <label>Arquivo (PDF, imagem, DOCX, MD/TXT, XLSX):
+      <input type="file" name="doc_arquivo_${i}"
+             accept=".pdf,.jpg,.jpeg,.png,.webp,.docx,.txt,.md,.csv,.xlsx"></label>
+    <label>…ou colar texto:
+      <textarea name="doc_texto_${i}" rows="2" placeholder="Cole o conteúdo aqui (opcional)"></textarea></label>
+    <label>O que é este documento?
+      <input type="text" name="doc_contexto_${i}" placeholder="ex.: contracheques 2024, TRCT, cartão de ponto março/2025"></label>`;
+  document.getElementById('docs-container').appendChild(div);
+}
+
+document.getElementById('form-ia').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  const st = document.getElementById('status-envio');
+  const btn = ev.target.querySelector('button[type=submit]');
+  const fd = new FormData(ev.target);
+  const temTexto = (fd.get('texto_sentenca') || '').trim().length > 0;
+  const temArq = fd.get('arquivo_sentenca') && fd.get('arquivo_sentenca').name;
+  if (!temTexto && !temArq) {
+    st.textContent = '⚠ Cole o texto da sentença ou selecione um arquivo.';
+    st.style.color = '#dc3545';
+    return;
+  }
+  btn.disabled = true;
+  st.style.color = '#6c757d';
+  st.textContent = 'Enviando documentos…';
+  try {
+    const r = await fetch('/processar/ia', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.erro || 'falha no envio');
+    window.location.href = d.url_resumo;
+  } catch (e) {
+    btn.disabled = false;
+    st.textContent = '❌ ' + e.message;
+    st.style.color = '#dc3545';
+  }
+});
+</script>
+{% endblock %}

@@ -44,3 +44,4 @@ playwright>=1.40.0
 
 # ── API Gemini (Google) — opcional, ativar via GEMINI_API_KEY ─────────────────
 google-genai>=1.0.0
+openpyxl>=3.1.0
