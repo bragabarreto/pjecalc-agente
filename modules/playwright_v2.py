@@ -5458,28 +5458,47 @@ class PlaywrightAutomatorV2:
         if hasattr(verba_principal, "expresso_alvo") and verba_principal.expresso_alvo \
            and verba_principal.expresso_alvo != verba_principal.nome_pjecalc:
             candidatos_principal.append(verba_principal.expresso_alvo)
-        click_exibir_ok = self._page.evaluate(
-            """([candidatos, alvoReflexo]) => {
-                const norm = s => (s||'').toUpperCase();
-                const trs = [...document.querySelectorAll('tr')];
-                for (const c of candidatos) {
-                    const cN = norm(c);
-                    for (const tr of trs) {
-                        if (!norm(tr.textContent).includes(cN)) continue;
-                        const exibir = tr.querySelector('span.linkDestinacoes');
-                        if (exibir) {
-                            exibir.click();
-                            try { exibir.dispatchEvent(new MouseEvent('click', {bubbles:true})); } catch(e) {}
-                            return 'exibir-clicked:'+c;
+        # ⚠ Retry com re-navegação (run v7 12/06/2026): pós-reabertura Seam a
+        # primeira renderização da listagem pode vir VAZIA ("listagem vazia
+        # mid-loop") — desistir na 1ª tentativa perdia o reflexo da 1ª verba
+        # de cada batch. Re-navegar via sidebar e tentar de novo (×3).
+        click_exibir_ok = "principal-nao-encontrada"
+        for nav_tent in range(1, 4):
+            click_exibir_ok = self._page.evaluate(
+                """([candidatos, alvoReflexo]) => {
+                    const norm = s => (s||'').toUpperCase();
+                    const trs = [...document.querySelectorAll('tr')];
+                    for (const c of candidatos) {
+                        const cN = norm(c);
+                        for (const tr of trs) {
+                            if (!norm(tr.textContent).includes(cN)) continue;
+                            const exibir = tr.querySelector('span.linkDestinacoes');
+                            if (exibir) {
+                                exibir.click();
+                                try { exibir.dispatchEvent(new MouseEvent('click', {bubbles:true})); } catch(e) {}
+                                return 'exibir-clicked:'+c;
+                            }
                         }
                     }
-                }
-                return 'principal-nao-encontrada';
-            }""",
-            [candidatos_principal, reflexo.expresso_reflex_alvo or ""],
-        )
+                    return 'principal-nao-encontrada';
+                }""",
+                [candidatos_principal, reflexo.expresso_reflex_alvo or ""],
+            )
+            if click_exibir_ok != "principal-nao-encontrada":
+                break
+            self.log(
+                f"    ⚠ '{verba_principal.nome_pjecalc}' não visível na listagem "
+                f"(tentativa {nav_tent}/3) — re-navegando"
+            )
+            try:
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(1500)
+            except Exception as _e:
+                self.log(f"    ⚠ re-navegação listagem: {_e}")
         if click_exibir_ok == "principal-nao-encontrada":
-            self.log(f"    ⚠ Verba principal '{verba_principal.nome_pjecalc}' não encontrada na listagem — pulando reflexo")
+            self.log(f"    🛑 Verba principal '{verba_principal.nome_pjecalc}' não encontrada na listagem após 3 tentativas — pulando reflexo")
             return
         self._aguardar_ajax(3000)
         self._page.wait_for_timeout(800)
