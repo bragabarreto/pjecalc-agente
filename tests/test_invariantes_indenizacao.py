@@ -1107,3 +1107,19 @@ def test_inv26_reflexo_espelha_carac_ocorrencia_submit_unico():
     assert "_corrigir_valor_reflexo_na_grade(verba_principal" not in sec, (
         "edição via grade é inviável p/ verba CALCULADO (dump v17: inputs vazios)"
     )
+
+
+def test_inv27_seguro_desemprego_so_indenizacao_substitutiva():
+    """Regra do usuário (12/06/2026): seguro-desemprego NÃO é apurado quando
+    a sentença determina apenas habilitação no programa / expedição de
+    ordem / entrega das guias — não há condenação pecuniária (o benefício
+    é pago pelo órgão gestor, fora da liquidação). Apurar SOMENTE quando
+    houver INDENIZAÇÃO SUBSTITUTIVA (conversão do benefício em dinheiro).
+    Caso de origem: sentença THAÍS 0000183-68 ('expedição de ordem judicial
+    para a habilitação da obreira no programa do seguro-desemprego')."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "INDENIZAÇÃO SUBSTITUTIVA" in ext
+    assert "habilitação" in ext and "entrega das guias" in ext
+    assert '`"seguro_desemprego": null`' in ext
+    # a regra antiga ("reconhecer direito ao SD") não pode voltar
+    assert "Preencher quando a sentença reconhecer direito ao SD" not in ext

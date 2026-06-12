@@ -1640,7 +1640,18 @@ Preencher quando a sentença determinar:
 ```
 
 ## 8.2 Seguro-desemprego — `seguro_desemprego`
-Preencher quando a sentença reconhecer direito ao SD:
+
+**INVARIANTE PERMANENTE — NÃO REVERTER (12/06/2026): seguro-desemprego SÓ é
+apurado quando a sentença condenar em INDENIZAÇÃO SUBSTITUTIVA (conversão
+do benefício em dinheiro — ex.: "indenização equivalente às parcelas do
+seguro-desemprego", "conversão em pecúnia").**
+
+Quando a sentença determina APENAS a **habilitação** no programa, a
+**expedição de ordem/ofício/alvará judicial** ou a **entrega das guias**
+(CD/SD), NÃO há condenação pecuniária — o benefício será pago pelo órgão
+gestor, fora da liquidação. Nesses casos: `"seguro_desemprego": null`.
+
+Preencher SOMENTE no caso de indenização substitutiva:
 ```json
 "seguro_desemprego": {
   "apurar": true,
