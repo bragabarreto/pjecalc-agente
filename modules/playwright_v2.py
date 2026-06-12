@@ -2504,21 +2504,9 @@ class PlaywrightAutomatorV2:
                 self.log(
                     f"  ⚠ Falha ajustar parâmetros '{v.nome_pjecalc or v.expresso_alvo}': {e}"
                 )
-            # Ajuste do PERÍODO do reflexo — apenas 13º multi-ano (run v9:
-            # reflexo da multa 467 do 13º cobria só o avo do ano da rescisão).
-            # SALDO/AVISO/FÉRIAS já saem corretos sem ajuste (não tocar).
-            try:
-                carac = getattr(v.parametros, "caracteristica", None)
-                carac_val = getattr(carac, "value", carac)
-                if v.reflexos and carac_val == "DECIMO_TERCEIRO_SALARIO":
-                    from datetime import datetime as _dtp
-                    _pi = _dtp.strptime(v.parametros.periodo_inicio, "%d/%m/%Y")
-                    _pf = _dtp.strptime(v.parametros.periodo_fim, "%d/%m/%Y")
-                    if _pi.year != _pf.year:
-                        for r in v.reflexos:
-                            self._ajustar_periodo_reflexo(v, r)
-            except Exception as _e:
-                self.log(f"  ⚠ ajuste período reflexo 13º: {_e}")
+            # (ajuste de período/base do reflexo do 13º movido para DEPOIS
+            # do loop — run v12: fazê-lo no meio do loop corrompia o estado
+            # Seam das verbas seguintes [AVISO/FÉRIAS falharam].)
             # Para verbas INFORMADO: setar valorDevido em pelo menos uma
             # ocorrência (PJE-Calc bloqueia liquidação se TODAS as ocorrências
             # estão com valorDevido=0).
@@ -2530,6 +2518,28 @@ class PlaywrightAutomatorV2:
                 self.log(
                     f"  ⚠ Falha ocorrências INFORMADO '{v.nome_pjecalc or v.expresso_alvo}': {e}"
                 )
+
+        # ── Sub-fase: ajustes finos dos reflexos do 13º multi-ano ────────
+        # ⚠ Executada APÓS o loop de verbas (run v12: no meio do loop, as
+        # navegações extras corrompiam o estado Seam das verbas seguintes).
+        # (a) período do reflexo = período da principal (pega avos de anos
+        #     anteriores) e (b) base da ocorrência do reflexo = 50% × devido
+        #     total da principal (PJE-Calc só soma o mês da rescisão — v11).
+        for v in verbas_expresso:
+            try:
+                carac = getattr(v.parametros, "caracteristica", None)
+                carac_val = getattr(carac, "value", carac)
+                if not (v.reflexos and carac_val == "DECIMO_TERCEIRO_SALARIO"):
+                    continue
+                from datetime import datetime as _dtp
+                _pi = _dtp.strptime(v.parametros.periodo_inicio, "%d/%m/%Y")
+                _pf = _dtp.strptime(v.parametros.periodo_fim, "%d/%m/%Y")
+                if _pi.year == _pf.year:
+                    continue
+                for r in v.reflexos:
+                    self._ajustar_periodo_reflexo(v, r)
+            except Exception as _e:
+                self.log(f"  ⚠ ajuste fino reflexo 13º: {_e}")
 
         # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
         # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
