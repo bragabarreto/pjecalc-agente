@@ -5760,9 +5760,19 @@ class PlaywrightAutomatorV2:
         esc = link_id.replace(":", "\\:")
         self._page.locator(f"a#{esc}").click(force=True)
         self._aguardar_ajax(8000)
+        # ⚠ run v13: o click navega para parametrizar-ocorrencia.jsf — um
+        # evaluate disparado durante a navegação morre com "Execution context
+        # was destroyed". Esperar a grade renderizar + retry no evaluate.
+        try:
+            self._page.wait_for_selector("input[id*=':valorDevido']", timeout=15000)
+        except Exception:
+            pass
         self._page.wait_for_timeout(1500)
-        res = self._page.evaluate(
-            """() => {
+        res = None
+        for _t in range(3):
+            try:
+                res = self._page.evaluate(
+                    """() => {
                 const parseBR = s => parseFloat((s||'0').replace(/\\./g,'').replace(',','.')) || 0;
                 let soma = 0;
                 for (const inp of document.querySelectorAll("input[id^='formulario:listagem:'][id$=':valorDevido']")) {
@@ -5781,7 +5791,16 @@ class PlaywrightAutomatorV2:
                 }
                 return {soma, alvos};
             }"""
-        )
+                )
+                break
+            except Exception as _e:
+                if "Execution context" in str(_e) and _t < 2:
+                    self._page.wait_for_timeout(2000)
+                    continue
+                raise
+        if res is None:
+            self.log("    ⚠ grade não estabilizou — base do reflexo não corrigida")
+            return
         soma = res.get("soma") or 0.0
         alvos = res.get("alvos") or []
         if not soma or not alvos:
