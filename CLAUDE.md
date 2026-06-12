@@ -682,6 +682,48 @@ docker run -p 8000:8000 \
 
 ## Architecture
 
+### Caminhos de entrada (3 — TODOS preservados, NUNCA remover um em favor de outro)
+
+| Caminho | Rota | Quem extrai | Status |
+|---|---|---|---|
+| **Extração IA in-app** | `/novo/ia` → `/processar/ia` | API Anthropic no próprio app (Sonnet 4.6, `SYSTEM_PROMPT_V2_EXTERNAL`) | padrão desde 12/06/2026 |
+| **JSON do Projeto Claude externo** | `/novo` (colar/subir .json) → `/processar/v2` | usuário no claude.ai (Projeto com o prompt das Instructions) | preservado como opção |
+| **Pipeline v1 legado** | `/processar` (PDF/DOCX direto) | `extraction.py` interno | legado |
+
+### Extração IA in-app (`modules/webapp_extracao.py`, 12/06/2026)
+
+Replica o fluxo do Projeto Claude externo dentro do app:
+
+```
+/novo/ia (colar sentença OU PDF/DOCX/TXT/MD + até 10 docs: PDF, fotos,
+          MD/TXT, XLSX→markdown, textos colados com contexto)
+    │ POST /processar/ia → worker thread → API Anthropic
+    ▼
+Etapa 1: resumo de validação em markdown (/resumo/ia/{id}, polling)
+    │ usuário corrige (texto livre, iterativo) e/ou confirma
+    ▼
+Etapa 2: JSON v2 → normalize_v2_json → PreviaCalculoV2 → _save_previa
+    ▼
+/previa/v2/{id} — DAQUI EM DIANTE é 100% o pipeline v2 existente
+```
+
+**Invariantes (protegidos em `tests/test_webapp_extracao.py`):**
+- **Fonte única do prompt**: importa `SYSTEM_PROMPT_V2_EXTERNAL` de
+  `extraction_v2.py` — NUNCA copiar o texto do prompt para o módulo.
+  Correções de prompt entram em vigor no deploy, sem recolar nada.
+- **Prompt caching**: `cache_control ephemeral` no system E no último
+  bloco da 1ª mensagem (prefixo inteiro: prompt + sentença + documentos).
+  Correções/Etapa 2 leem o cache a 10% do preço de entrada (medido:
+  39.6k tokens de cache_read por chamada no caso THAÍS). NÃO remover.
+- **IA-only**: falha da API → fase `erro` com mensagem; sem fallback regex.
+- **Aditivo**: `/processar/v2`, a auto-detecção `.json` no `/processar` e
+  a UI de colar JSON permanecem intocados.
+- Etapa 2 tem retry único de reemissão estrita se o JSON vier inválido.
+- Sessões de extração têm TTL de 7 dias (anexos até 150MB/sessão).
+- Usage (input/output/cache) persistido por etapa em `estado["usage"]` e
+  exposto em `GET /api/ia/{id}/estado` (custo visível na tela do resumo).
+- Regra SD (inv27): seguro-desemprego SÓ com indenização substitutiva.
+
 ### Pipeline de 6 fases
 ```
 PDF/DOCX → ingestion.py → extraction.py → classification.py → prévia web → playwright_pjecalc.py → .PJC
