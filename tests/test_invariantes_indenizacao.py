@@ -1079,3 +1079,31 @@ def test_inv25_prompt_multa_467_nunca_verba_autonoma():
     assert "MULTA DO ART. 467 DA CLT (INVARIANTE PERMANENTE" in ext
     assert "NUNCA é verba principal" in ext
     assert "MULTA DO ARTIGO 467 DA CLT SOBRE" in ext
+
+
+def test_inv26_reflexo_espelha_carac_ocorrencia_submit_unico():
+    """Bug RODRIGO v18/v19 (12/06/2026): reflexo 467 sobre 13º multi-ano
+    cobria só o avo do ano da rescisão (506,00 em vez de 1.201,75). A
+    correção exige característica+ocorrência do reflexo ESPELHADAS da
+    principal NUM ÚNICO SUBMIT: o a4j:support de cada radio valida o form
+    intermediário e o servidor REJEITA ('verbas ... incompatíveis com a
+    característica/ocorrência'), revertendo — DECIMO_TERCEIRO+DEZEMBRO é
+    inalcançável por cliques sequenciais. Marcar via JS checked sem
+    onchange; o Salvar full-form valida a combinação final e persiste."""
+    assert "_ajustar_periodo_reflexo" in PLAYWRIGHT_V2
+    # espelhamento em submit único via JS (NÃO _marcar_radio sequencial)
+    assert "caracteristicaVerba" in PLAYWRIGHT_V2
+    assert "submit único" in PLAYWRIGHT_V2 or "submit unico" in PLAYWRIGHT_V2
+    assert "inalcançável por cliques" in PLAYWRIGHT_V2
+    # o bloco JS marca ambos sem disparar onchange
+    assert "r.checked = want" in PLAYWRIGHT_V2
+    # NÃO regredir para clique sequencial no radio do reflexo
+    sec = PLAYWRIGHT_V2.split("def _ajustar_periodo_reflexo")[1].split("\n    def ")[0]
+    assert '_marcar_radio_se_diferente("ocorrenciaPagto"' not in sec, (
+        "clique sequencial no radio do reflexo é rejeitado pelo servidor "
+        "(validação de combinação) — usar o espelhamento JS em submit único"
+    )
+    # a correção via grade NÃO deve voltar (inputs de CALCULADO ficam vazios)
+    assert "_corrigir_valor_reflexo_na_grade(verba_principal" not in sec, (
+        "edição via grade é inviável p/ verba CALCULADO (dump v17: inputs vazios)"
+    )

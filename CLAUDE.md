@@ -309,15 +309,33 @@ falha observado em PJC real):
 **Resultado estável (6 runs)**: 4/4 reflexos ativos; SALDO/AVISO/FÉRIAS com
 50% × base integral exatos; juros/correção 100%.
 
-**Pendência conhecida (única)**: base do reflexo 467 sobre 13º MULTI-ANO
-cobre só o avo do ano da rescisão (PJE-Calc soma apenas o mês do
-desligamento; ex. RODRIGO: 506,00 em vez de 1.201,75 — falta o 11/12 do ano
-anterior). A cadeia de correção (período do reflexo + edição da base na
-grade) está implementada mas a leitura da soma na grade do 13º CALCULADO
-retorna 0 (DOM difere do mapeado no SALDO) — dump automático instrumentado
-em `_corrigir_valor_reflexo_na_grade` (fase `soma_zero`) para fechar na
-próxima sessão. Workaround manual: editar o valorDevido da ocorrência do
-reflexo na grade (50% × devido total) — ~30s.
+**Reflexo sobre 13º MULTI-ANO — RESOLVIDO (v17–v20, 12/06/2026, inv26)**:
+o reflexo criado pelo Expresso vem com característica COMUM + ocorrência
+DESLIGAMENTO → a base da ocorrência única soma só o avo do ano da rescisão
+(RODRIGO: 506,00 em vez de 1.201,75). Cadeia de descobertas:
+
+1. **Edição via grade é INVIÁVEL** (dump v17, fase `soma_zero`): em verba
+   CALCULADO os inputs `valorDevido` da grade ficam VAZIOS (coluna renderiza
+   o texto "Calculado") — não há números para somar.
+   `_corrigir_valor_reflexo_na_grade` mantida apenas como referência para
+   verbas INFORMADO; NÃO chamá-la para CALCULADO.
+2. **Fix correto**: espelhar característica + ocorrência de pagamento da
+   PRINCIPAL no form do reflexo (`_ajustar_periodo_reflexo`) — o PJE-Calc
+   passa a gerar 1 ocorrência do reflexo por ano com a base do avo daquele
+   ano. SEM edição manual de valores (fidelidade prévia↔automação).
+3. **⚠ SUBMIT ÚNICO obrigatório (v18/v19)**: clicar cada radio
+   sequencialmente NÃO funciona — o a4j:support valida o form INTERMEDIÁRIO
+   e o servidor REJEITA ("As verbas 13º SALÁRIO, utilizadas como base de
+   cálculo, são incompatíveis com a característica/ocorrência de pagamento
+   selecionados"), re-renderizando com o valor antigo. DECIMO_TERCEIRO +
+   DEZEMBRO é inalcançável por cliques. Fix comprovado por diag direto no
+   servidor: marcar AMBOS via JS `checked` SEM disparar onchange (nenhum
+   A4J intermediário); o Salvar full-form valida a combinação final e
+   persiste no bean (verificado por reabertura do form).
+4. Períodos primeiro (o fill dos rich:calendar dispara A4J); radios JS por
+   último (inertes); salvar; Regerar Manter.
+
+Protegido em `tests/test_invariantes_indenizacao.py::test_inv26_*`.
 
 ### 4. MULTA 467 NUNCA é verba principal autônoma (inv25)
 
