@@ -148,6 +148,15 @@ class DocumentoFiscal(BaseModel):
     tipo: DocumentoFiscalTipo
     numero: str
 
+    @field_validator("numero", mode="before")
+    @classmethod
+    def _numero_ausente_vira_vazio(cls, v):
+        """Sentenças frequentemente não trazem CPF/CNPJ das partes (caso
+        Ariane 12/06/2026 — extração in-app travava na Etapa 2 com
+        'Input should be a valid string'). Documento ausente → "" e o
+        usuário completa na prévia (campo editável)."""
+        return "" if v is None else v
+
 
 class DocumentoPrevidenciario(BaseModel):
     tipo: DocumentoPrevidenciarioTipo = DocumentoPrevidenciarioTipo.PIS

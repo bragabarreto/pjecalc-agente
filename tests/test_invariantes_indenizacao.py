@@ -1123,3 +1123,23 @@ def test_inv27_seguro_desemprego_so_indenizacao_substitutiva():
     assert '`"seguro_desemprego": null`' in ext
     # a regra antiga ("reconhecer direito ao SD") não pode voltar
     assert "Preencher quando a sentença reconhecer direito ao SD" not in ext
+
+
+def test_inv28_doc_fiscal_ausente_vira_string_vazia():
+    """Caso Ariane (12/06/2026, extração in-app): sentença sem CPF/CNPJ das
+    partes → IA emitia doc_fiscal.numero=null e a Etapa 2 travava na
+    validação Pydantic. Documento ausente deve virar "" (completável na
+    prévia), nunca bloquear o fluxo."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_models_inv28", str(REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py")
+    )
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    df = mod.DocumentoFiscal.model_validate({"tipo": "CPF", "numero": None})
+    assert df.numero == ""
+    df2 = mod.DocumentoFiscal.model_validate({"tipo": "CNPJ", "numero": "32.567.442/0001-00"})
+    assert df2.numero == "32.567.442/0001-00"
+    # prompt instrui "" + aviso
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "NUNCA null" in ext and "completar na prévia" in ext

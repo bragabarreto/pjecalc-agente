@@ -126,6 +126,10 @@ Sua tarefa é analisar uma sentença trabalhista e extrair TODOS os dados necess
     "advogados": [{"nome": "...", "oab": "12345/CE", "doc_fiscal_tipo": "CPF", "doc_fiscal_numero": "..."}]
   },
   "reclamado": { ... mesmo formato ... }
+
+⚠ `doc_fiscal.numero`: quando o CPF/CNPJ NÃO constar na sentença nem nos
+documentos anexados, emita `""` (string vazia — NUNCA null) e liste o campo
+em `meta.validacao.avisos` para o usuário completar na prévia.
 }
 ```
 
