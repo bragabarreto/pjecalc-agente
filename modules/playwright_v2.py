@@ -5701,6 +5701,30 @@ class PlaywrightAutomatorV2:
             self.log("    🛑 form do reflexo não carregou após 3 tentativas (período não ajustado)")
             return False
         self._page.wait_for_timeout(1000)
+        # ⚠ INVARIANTE (run v17/v18, 12/06/2026): além do período, o reflexo
+        # precisa ESPELHAR a ocorrência de pagamento da PRINCIPAL. O default
+        # do reflexo Expresso (desligamento) gera UMA ocorrência cuja base
+        # soma apenas as ocorrências da principal do mês da rescisão — para
+        # 13º multi-ano (ocorrência DEZEMBRO) o avo de dez/2024 ficava fora
+        # (506,00 em vez de 1.201,75). Com ocorrenciaPagto=DEZEMBRO o
+        # PJE-Calc gera uma ocorrência do reflexo por ano, cada uma com a
+        # base do avo daquele ano — sem edição manual de valores na grade.
+        # (Edição via grade é INVIÁVEL: dump v17 provou que os inputs
+        # valorDevido de verba CALCULADO ficam vazios — coluna mostra só o
+        # texto "Calculado"; não há números para somar.)
+        # Setar ANTES do período: mudarOcorrenciaPagamento re-renderiza o form.
+        try:
+            ocorr = (
+                p.ocorrencia_pagamento.value
+                if hasattr(p.ocorrencia_pagamento, "value")
+                else str(p.ocorrencia_pagamento)
+            )
+            if ocorr and self._marcar_radio_se_diferente("ocorrenciaPagto", ocorr):
+                self._aguardar_ajax(4000)
+                self._page.wait_for_timeout(800)
+                self.log(f"    → ocorrência do reflexo espelhada da principal: {ocorr}")
+        except Exception as _e:
+            self.log(f"    ⚠ ocorrenciaPagto do reflexo: {_e}")
         for sufixo, valor in (
             ("periodoInicialInputDate", p.periodo_inicio),
             ("periodoFinalInputDate", p.periodo_fim),
@@ -5726,17 +5750,13 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"    ⚠ Regerar pós-período reflexo: {_e}")
 
-        # ── Correção da BASE do reflexo na GRADE de ocorrências ──────────
-        # ⚠ INVARIANTE (run v11, 12/06/2026): mesmo com o período do reflexo
-        # cobrindo o contrato, o PJE-Calc soma na base da ocorrência única
-        # (DESLIGAMENTO) apenas as ocorrências da PRINCIPAL do mês da
-        # rescisão — o avo de DEZ/2024 do 13º ficava fora (506,00 em vez de
-        # 1.201,75). Fix: como faria o calculista — editar o valorDevido da
-        # ocorrência do reflexo na grade = 50% × devido TOTAL da principal.
-        try:
-            self._corrigir_valor_reflexo_na_grade(verba_principal, alvo)
-        except Exception as _e:
-            self.log(f"    ⚠ correção da base do reflexo na grade: {_e}")
+        # NOTA (v18): a correção via grade (_corrigir_valor_reflexo_na_grade)
+        # foi SUBSTITUÍDA pelo espelhamento da ocorrência de pagamento acima.
+        # Dump v17 (fase=soma_zero) provou que em verba CALCULADO os inputs
+        # valorDevido da grade ficam vazios (coluna renderiza o texto
+        # "Calculado") — a soma pela grade é estruturalmente inviável. A
+        # função permanece no código como referência/fallback para verbas
+        # INFORMADO (inputs preenchidos), mas não é chamada aqui.
         return bool(sucesso)
 
     def _corrigir_valor_reflexo_na_grade(self, verba_principal, alvo_reflexo: str) -> None:
