@@ -5705,7 +5705,117 @@ class PlaywrightAutomatorV2:
                 self.log("    ✓ Regerar pós-período do reflexo")
         except Exception as _e:
             self.log(f"    ⚠ Regerar pós-período reflexo: {_e}")
+
+        # ── Correção da BASE do reflexo na GRADE de ocorrências ──────────
+        # ⚠ INVARIANTE (run v11, 12/06/2026): mesmo com o período do reflexo
+        # cobrindo o contrato, o PJE-Calc soma na base da ocorrência única
+        # (DESLIGAMENTO) apenas as ocorrências da PRINCIPAL do mês da
+        # rescisão — o avo de DEZ/2024 do 13º ficava fora (506,00 em vez de
+        # 1.201,75). Fix: como faria o calculista — editar o valorDevido da
+        # ocorrência do reflexo na grade = 50% × devido TOTAL da principal.
+        try:
+            self._corrigir_valor_reflexo_na_grade(verba_principal, alvo)
+        except Exception as _e:
+            self.log(f"    ⚠ correção da base do reflexo na grade: {_e}")
         return bool(sucesso)
+
+    def _corrigir_valor_reflexo_na_grade(self, verba_principal, alvo_reflexo: str) -> None:
+        """Na grade de Ocorrências da PRINCIPAL: valorDevidoReflexo da multa
+        467 := 50% × soma dos valorDevido ativos da principal. Salva + flag
+        _ocorrencias_editadas + Regerar Manter (preserva a edição)."""
+        nome = verba_principal.nome_pjecalc
+        if "verba-calculo.jsf" not in self._page.url:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(800)
+        link_id = self._page.evaluate(
+            """(alvo) => {
+                const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                const links = [...document.querySelectorAll('a.linkOcorrencias')]
+                    .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                for (const a of links) {
+                    const tr = a.closest('tr');
+                    if (!tr) continue;
+                    for (const td of tr.querySelectorAll('td')) {
+                        if (norm(td.textContent.replace(/Exibir|Ocultar/gi,'')) === norm(alvo)) return a.id;
+                    }
+                }
+                return null;
+            }""",
+            nome,
+        )
+        if not link_id:
+            self.log(f"    ⚠ linkOcorrencias de '{nome}' não encontrado — base do reflexo não corrigida")
+            return
+        esc = link_id.replace(":", "\\:")
+        self._page.locator(f"a#{esc}").click(force=True)
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1500)
+        res = self._page.evaluate(
+            """() => {
+                const parseBR = s => parseFloat((s||'0').replace(/\\./g,'').replace(',','.')) || 0;
+                let soma = 0;
+                for (const inp of document.querySelectorAll("input[id^='formulario:listagem:'][id$=':valorDevido']")) {
+                    const m = inp.id.match(/^formulario:listagem:(\\d+):valorDevido$/);
+                    if (!m) continue;
+                    const cb = document.getElementById(`formulario:listagem:${m[1]}:ativo`);
+                    if (cb && !cb.checked) continue;
+                    soma += parseBR(inp.value);
+                }
+                const alvos = [];
+                for (const inp of document.querySelectorAll("input[id*=':listagem:'][id$=':valorDevidoReflexo']")) {
+                    let el = inp.closest('table');
+                    let blob = '';
+                    while (el && blob.length < 4000) { blob = (el.textContent||''); if (/467/.test(blob)) break; el = el.parentElement; }
+                    if (/467/.test(blob)) alvos.push({id: inp.id, atual: inp.value});
+                }
+                return {soma, alvos};
+            }"""
+        )
+        soma = res.get("soma") or 0.0
+        alvos = res.get("alvos") or []
+        if not soma or not alvos:
+            self.log(f"    ⚠ grade: soma_principal={soma} inputs_reflexo467={len(alvos)} — nada a corrigir")
+            return
+        alvo_valor = round(soma * 0.5, 2)
+        alvo_br = _fmt_br(alvo_valor)
+        mudou = False
+        for a in alvos:
+            atual = (a.get("atual") or "").strip()
+            if atual == alvo_br:
+                continue
+            self._page.evaluate(
+                """([iid, val]) => {
+                    const el = document.getElementById(iid);
+                    if (!el) return;
+                    el.value = val;
+                    el.dispatchEvent(new Event('input', {bubbles: true}));
+                    el.dispatchEvent(new Event('change', {bubbles: true}));
+                    el.dispatchEvent(new Event('blur', {bubbles: true}));
+                }""",
+                [a["id"], alvo_br],
+            )
+            mudou = True
+            self.log(f"    ✓ valorDevidoReflexo (467) {atual or '—'} → {alvo_br} (50% × {_fmt_br(soma)})")
+        if not mudou:
+            self.log(f"    ⊙ base do reflexo já correta ({alvo_br})")
+            return
+        self._aguardar_ajax(2000)
+        self._clicar_salvar_flex()
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+        if sucesso:
+            self.log("    ✓ grade salva (base do reflexo corrigida)")
+            self._ocorrencias_editadas = True
+        else:
+            self.log("    ⚠ save da grade sem confirmação")
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(800)
+            if self._regerar_com_modal_confirmacao(sobrescrever=False, log_prefix="    "):
+                self.log("    ✓ Regerar pós-edição do reflexo [Manter]")
+        except Exception as _e:
+            self.log(f"    ⚠ Regerar pós-edição reflexo: {_e}")
 
     def _lancar_verba_manual(self, v) -> None:
         """Criar verba via botão Manual ('Lançamento Manual de Parcela')."""
