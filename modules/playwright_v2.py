@@ -2485,6 +2485,27 @@ class PlaywrightAutomatorV2:
                 self._fechar_e_reabrir_calculo(
                     f"pré-verba batch {idx+1}/{len(verbas_expresso)}"
                 )
+            # ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (runs RODRIGO v4/v5,
+            # 12/06/2026): REFLEXOS ANTES dos parâmetros da própria verba.
+            #
+            # O checkbox do reflexo vive na CONVERSA Seam (FlushMode.MANUAL)
+            # e SÓ persiste no DB com o flush do SAVE de parâmetros de verba
+            # — nem o a4j:support do clique nem o Regerar flusham. Padrão das
+            # runs v4/v5: reflexos da última verba de cada batch N=2 sempre
+            # perdidos (Fechar+Reabrir descartava a conv); os demais
+            # sobreviviam porque o save de params da verba SEGUINTE flushava.
+            # Regerar pós-reflexos (v5) NÃO resolveu — não é flush.
+            #
+            # Ordem nova = fluxo humano documentado no CLAUDE.md ("Reflexos —
+            # fluxo correto": marcar checkbox → SALVAR a verba principal):
+            # 1. marcar reflexos (painel Exibir, verify-retry)
+            # 2. _configurar_parametros_pos_expresso → SAVE (flush) + Regerar
+            #    pós-params (regenera ocorrências, incluindo as do reflexo).
+            for r in v.reflexos:
+                try:
+                    self._configurar_reflexo(v, r)
+                except Exception as e:
+                    self.log(f"  ⚠ Falha reflexo '{r.nome}': {e}")
             try:
                 self._configurar_parametros_pos_expresso(v)
             except Exception as e:
@@ -2502,28 +2523,6 @@ class PlaywrightAutomatorV2:
                 self.log(
                     f"  ⚠ Falha ocorrências INFORMADO '{v.nome_pjecalc or v.expresso_alvo}': {e}"
                 )
-            for r in v.reflexos:
-                try:
-                    self._configurar_reflexo(v, r)
-                except Exception as e:
-                    self.log(f"  ⚠ Falha reflexo '{r.nome}': {e}")
-            # ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (run RODRIGO v4,
-            # 12/06/2026): o checkbox do reflexo vive na CONVERSA Seam e só
-            # persiste no DB se houver um submit/commit DEPOIS da marcação.
-            # Padrão observado: reflexos da 2ª verba de cada batch N=2 eram
-            # perdidos pelo Fechar+Reabrir seguinte (descarta a conv); os da
-            # 1ª verba sobreviviam porque o save de parâmetros da verba
-            # seguinte commitava a conv. Fix: Regerar (Manter) imediatamente
-            # após marcar os reflexos da verba — submete o form da listagem
-            # (commit) e regenera as ocorrências do reflexo recém-ativado.
-            if v.reflexos:
-                try:
-                    if self._regerar_com_modal_confirmacao(
-                        sobrescrever=False, log_prefix="    "
-                    ):
-                        self.log(f"    ✓ Regerar pós-reflexos '{v.nome_pjecalc}' (commit)")
-                except Exception as _e:
-                    self.log(f"    ⚠ Regerar pós-reflexos: {_e}")
 
         # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
         # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
