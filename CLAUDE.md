@@ -306,8 +306,11 @@ falha observado em PJC real):
    as ocorrências da verba PRINCIPAL referenciada (falso-positivo de
    "ocorrência espúria" que custou 2 iterações).
 
-**Resultado estável (6 runs)**: 4/4 reflexos ativos; SALDO/AVISO/FÉRIAS com
-50% × base integral exatos; juros/correção 100%.
+**Resultado final (run v21, 12/06/2026)**: 4/4 reflexos ativos com TODOS os
+valores exatos — SALDO 759,00 / AVISO 834,90 / FÉRIAS 1.602,34 / 13º
+multi-ano 1.201,75 (2 ocorrências anuais: 695,75 + 506,00); total multa 467
+= 4.397,99; juros/correção 100% (TRD_SIMPLES + TAXA_LEGAL, IPCAE + IPCA,
+base VERBAS); liquidação 0 erros.
 
 **Reflexo sobre 13º MULTI-ANO — RESOLVIDO (v17–v20, 12/06/2026, inv26)**:
 o reflexo criado pelo Expresso vem com característica COMUM + ocorrência
