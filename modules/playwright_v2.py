@@ -2485,39 +2485,9 @@ class PlaywrightAutomatorV2:
                 self._fechar_e_reabrir_calculo(
                     f"pré-verba batch {idx+1}/{len(verbas_expresso)}"
                 )
-            # ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (runs RODRIGO v4/v5,
-            # 12/06/2026): REFLEXOS ANTES dos parâmetros da própria verba.
-            #
-            # O checkbox do reflexo vive na CONVERSA Seam (FlushMode.MANUAL)
-            # e SÓ persiste no DB com o flush do SAVE de parâmetros de verba
-            # — nem o a4j:support do clique nem o Regerar flusham. Padrão das
-            # runs v4/v5: reflexos da última verba de cada batch N=2 sempre
-            # perdidos (Fechar+Reabrir descartava a conv); os demais
-            # sobreviviam porque o save de params da verba SEGUINTE flushava.
-            # Regerar pós-reflexos (v5) NÃO resolveu — não é flush.
-            #
-            # Ordem nova = fluxo humano documentado no CLAUDE.md ("Reflexos —
-            # fluxo correto": marcar checkbox → SALVAR a verba principal):
-            # 1. marcar reflexos (painel Exibir, verify-retry)
-            # 2. _configurar_parametros_pos_expresso → SAVE (flush) + Regerar
-            #    pós-params (regenera ocorrências, incluindo as do reflexo).
-            if v.reflexos:
-                # Garantir que estamos na LISTAGEM de verbas — na 1ª verba de
-                # cada batch a página atual é calculo.jsf (pós-F+R/Expresso)
-                # e o painel Exibir não existe (run v6: "Verba principal não
-                # encontrada na listagem — pulando reflexo").
-                try:
-                    if not self._navegar_menu_via_click("li_calculo_verbas"):
-                        self._navegar_menu("li_calculo_verbas")
-                    self._aguardar_ajax(6000)
-                    self._page.wait_for_timeout(1200)
-                except Exception as _e:
-                    self.log(f"  ⚠ nav listagem pré-reflexos: {_e}")
-            for r in v.reflexos:
-                try:
-                    self._configurar_reflexo(v, r)
-                except Exception as e:
-                    self.log(f"  ⚠ Falha reflexo '{r.nome}': {e}")
+            # ⚠ REFLEXOS: marcados DENTRO de _configurar_parametros_pos_expresso
+            # (após o anchor wait_for linkParametrizar e ANTES do save —
+            # invariante v4–v8, ver comentário lá). Não marcar aqui.
             try:
                 self._configurar_parametros_pos_expresso(v)
             except Exception as e:
@@ -4632,6 +4602,25 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_timeout(2000)
         except Exception as e:
             self.log(f"    ⚠ re-init bean (sidebar verbas): {e}")
+        # ⚠ INVARIANTE PERMANENTE — REFLEXOS AQUI, antes do linkParametrizar
+        # (runs RODRIGO v4–v8, 12/06/2026). Razões empilhadas:
+        # 1. FLUSH: o checkbox de reflexo vive na conversa Seam
+        #    (FlushMode.MANUAL) e SÓ persiste com o flush do SAVE de
+        #    parâmetros — que acontece logo abaixo neste método. Marcar
+        #    depois do save (ordem antiga) perdia os reflexos da última
+        #    verba de cada batch no Fechar+Reabrir (v4/v5).
+        # 2. LISTAGEM VALIDADA: o wait_for_function acima garante
+        #    linkParametrizar > 0 (listagem real). Marcar reflexos fora
+        #    deste método caía em listagem vazia pós-reabertura, mesmo com
+        #    re-navegação ×3 (v7/v8) — só o anchor daqui é confiável.
+        # 3. OCORRÊNCIAS: o Regerar pós-params (abaixo) regenera as
+        #    ocorrências do reflexo recém-ativado — 50% × base integral
+        #    (comprovado na v6: AVISO 834,90; FÉRIAS 1.602,34).
+        for _r in getattr(v, "reflexos", None) or []:
+            try:
+                self._configurar_reflexo(v, _r)
+            except Exception as _e:
+                self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
