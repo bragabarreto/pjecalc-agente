@@ -5680,17 +5680,27 @@ class PlaywrightAutomatorV2:
             self.log(f"    🛑 botão Parâmetros do reflexo '{alvo[:40]}' não encontrado — período não ajustado")
             return False
         esc = link_id.replace(":", "\\:")
-        try:
-            self._page.locator(f"a#{esc}").click(force=True)
-        except Exception as e:
-            self.log(f"    ⚠ click Parâmetros reflexo: {e}")
-            return False
-        self._aguardar_ajax(8000)
-        self._page.wait_for_timeout(1500)
-        form_ok = self._page.locator("[id$='periodoInicialInputDate'], [id$=':periodoInicial']").count() > 0
+        form_ok = False
+        for _ft in range(1, 4):
+            try:
+                self._page.locator(f"a#{esc}").click(force=True)
+            except Exception as e:
+                self.log(f"    ⚠ click Parâmetros reflexo (tent {_ft}/3): {e}")
+            self._aguardar_ajax(8000)
+            try:
+                self._page.wait_for_selector(
+                    "[id$='periodoInicialInputDate'], [id$=':periodoInicial']",
+                    timeout=12000,
+                )
+                form_ok = True
+                break
+            except Exception:
+                self.log(f"    ⚠ form do reflexo não carregou (tent {_ft}/3) — re-tentando")
+                self._page.wait_for_timeout(2000)
         if not form_ok:
-            self.log("    🛑 form do reflexo não carregou (período não ajustado)")
+            self.log("    🛑 form do reflexo não carregou após 3 tentativas (período não ajustado)")
             return False
+        self._page.wait_for_timeout(1000)
         for sufixo, valor in (
             ("periodoInicialInputDate", p.periodo_inicio),
             ("periodoFinalInputDate", p.periodo_fim),
