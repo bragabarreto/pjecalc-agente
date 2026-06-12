@@ -211,8 +211,17 @@ def _montar_conteudo_etapa1(estado: dict) -> list[dict]:
 
 
 def _montar_messages(estado: dict, nova_msg: str | None = None) -> list[dict]:
-    """Histórico completo da conversa para a API (stateless)."""
-    msgs: list[dict] = [{"role": "user", "content": _montar_conteudo_etapa1(estado)}]
+    """Histórico completo da conversa para a API (stateless).
+
+    Prompt caching: o último bloco da 1ª mensagem recebe cache_control —
+    isso cacheia o PREFIXO inteiro (system prompt ~25k tokens + sentença +
+    documentos). Etapa 1 grava o cache; correções e Etapa 2 (minutos
+    depois, mesmo prefixo) leem com 90% de desconto na entrada.
+    """
+    blocos = _montar_conteudo_etapa1(estado)
+    if blocos:
+        blocos[-1]["cache_control"] = {"type": "ephemeral"}
+    msgs: list[dict] = [{"role": "user", "content": blocos}]
     for turno in estado.get("conversa", []):
         msgs.append({"role": turno["role"], "content": turno["texto"]})
     if nova_msg:
@@ -230,10 +239,25 @@ def _chamar_claude(messages: list[dict], max_tokens: int) -> str:
     resp = client.messages.create(
         model=CLAUDE_MODEL,
         max_tokens=max_tokens,
-        system=SYSTEM_PROMPT_V2_EXTERNAL,
+        # cache_control no system: o prompt (~25k tokens) é idêntico em
+        # TODA chamada — a 1ª grava o cache, as demais pagam 10% na leitura
+        system=[{
+            "type": "text",
+            "text": SYSTEM_PROMPT_V2_EXTERNAL,
+            "cache_control": {"type": "ephemeral"},
+        }],
         messages=messages,
         temperature=0.0,
     )
+    u = getattr(resp, "usage", None)
+    if u is not None:
+        logger.info(
+            "extracao-ia tokens: in=%s out=%s cache_write=%s cache_read=%s",
+            getattr(u, "input_tokens", "?"),
+            getattr(u, "output_tokens", "?"),
+            getattr(u, "cache_creation_input_tokens", 0),
+            getattr(u, "cache_read_input_tokens", 0),
+        )
     return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
 
 
