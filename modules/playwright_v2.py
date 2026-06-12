@@ -2485,15 +2485,32 @@ class PlaywrightAutomatorV2:
                 self._fechar_e_reabrir_calculo(
                     f"pré-verba batch {idx+1}/{len(verbas_expresso)}"
                 )
-            # ⚠ REFLEXOS: marcados DENTRO de _configurar_parametros_pos_expresso
-            # (após o anchor wait_for linkParametrizar e ANTES do save —
-            # invariante v4–v8, ver comentário lá). Não marcar aqui.
+            # ⚠ INVARIANTE PERMANENTE — ORDEM DOS REFLEXOS (runs RODRIGO
+            # v4–v9, 12/06/2026) — NÃO REVERTER:
+            #
+            # 1ª passada: params + SAVE + Regerar → ocorrências da VERBA
+            #   corretas (divisor/quantidade aplicados).
+            # 2ª passada (só se v.reflexos): marca os checkboxes DENTRO do
+            #   helper (anchor de listagem validado — v7/v8: fora dele a
+            #   listagem vem vazia pós-reabertura) e SALVA de novo (flush da
+            #   conversa Seam — v4/v5: sem save posterior o checkbox morre
+            #   no Fechar+Reabrir). O Regerar da 2ª passada gera as
+            #   ocorrências do reflexo a partir das ocorrências JÁ CORRETAS
+            #   da principal (v9: ativar reflexo antes do 1º save gerava
+            #   ocorrência espúria de 100% no SALDO e base parcial no 13º).
             try:
                 self._configurar_parametros_pos_expresso(v)
             except Exception as e:
                 self.log(
                     f"  ⚠ Falha ajustar parâmetros '{v.nome_pjecalc or v.expresso_alvo}': {e}"
                 )
+            if v.reflexos:
+                try:
+                    self._configurar_parametros_pos_expresso(v, marcar_reflexos=True)
+                except Exception as e:
+                    self.log(
+                        f"  ⚠ Falha 2ª passada (reflexos) '{v.nome_pjecalc or v.expresso_alvo}': {e}"
+                    )
             # Para verbas INFORMADO: setar valorDevido em pelo menos uma
             # ocorrência (PJE-Calc bloqueia liquidação se TODAS as ocorrências
             # estão com valorDevido=0).
@@ -4563,8 +4580,12 @@ class PlaywrightAutomatorV2:
         except Exception:
             return False
 
-    def _configurar_parametros_pos_expresso(self, v) -> None:
+    def _configurar_parametros_pos_expresso(self, v, marcar_reflexos: bool = False) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
+
+        marcar_reflexos=True (2ª passada): marca os checkboxes de reflexo
+        após o anchor da listagem e ANTES do save (flush). Ver invariante
+        v4–v9 no fase_verbas.
 
         DOM confirmado (PJE-Calc 2.15.1, institucional+Cidadão):
         - <a class="linkParametrizar" title="Parâmetros da Verba"> (verba principal)
@@ -4602,25 +4623,18 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_timeout(2000)
         except Exception as e:
             self.log(f"    ⚠ re-init bean (sidebar verbas): {e}")
-        # ⚠ INVARIANTE PERMANENTE — REFLEXOS AQUI, antes do linkParametrizar
-        # (runs RODRIGO v4–v8, 12/06/2026). Razões empilhadas:
-        # 1. FLUSH: o checkbox de reflexo vive na conversa Seam
-        #    (FlushMode.MANUAL) e SÓ persiste com o flush do SAVE de
-        #    parâmetros — que acontece logo abaixo neste método. Marcar
-        #    depois do save (ordem antiga) perdia os reflexos da última
-        #    verba de cada batch no Fechar+Reabrir (v4/v5).
-        # 2. LISTAGEM VALIDADA: o wait_for_function acima garante
-        #    linkParametrizar > 0 (listagem real). Marcar reflexos fora
-        #    deste método caía em listagem vazia pós-reabertura, mesmo com
-        #    re-navegação ×3 (v7/v8) — só o anchor daqui é confiável.
-        # 3. OCORRÊNCIAS: o Regerar pós-params (abaixo) regenera as
-        #    ocorrências do reflexo recém-ativado — 50% × base integral
-        #    (comprovado na v6: AVISO 834,90; FÉRIAS 1.602,34).
-        for _r in getattr(v, "reflexos", None) or []:
-            try:
-                self._configurar_reflexo(v, _r)
-            except Exception as _e:
-                self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
+        # ⚠ REFLEXOS quando marcar_reflexos=True (2ª chamada do fase_verbas):
+        # marcados AQUI, após o anchor wait_for linkParametrizar (listagem
+        # garantidamente válida — runs v7/v8 provaram que fora deste método
+        # a listagem vem vazia pós-reabertura) e ANTES do save logo abaixo
+        # (flush da conversa Seam — runs v4/v5 provaram que sem save
+        # posterior o checkbox se perde no Fechar+Reabrir).
+        if marcar_reflexos:
+            for _r in getattr(v, "reflexos", None) or []:
+                try:
+                    self._configurar_reflexo(v, _r)
+                except Exception as _e:
+                    self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
