@@ -5712,7 +5712,20 @@ class PlaywrightAutomatorV2:
         # (Edição via grade é INVIÁVEL: dump v17 provou que os inputs
         # valorDevido de verba CALCULADO ficam vazios — coluna mostra só o
         # texto "Calculado"; não há números para somar.)
-        # Setar ANTES do período: mudarOcorrenciaPagamento re-renderiza o form.
+        # ⚠ ORDEM (run v18, mesma lição da Fase 13 "data primeiro, select por
+        # último"): períodos PRIMEIRO, radio POR ÚLTIMO. O preenchimento dos
+        # rich:calendar dispara re-render A4J que RESETA o radio para o
+        # default do bean (DESLIGAMENTO) — no v18 o período persistiu mas a
+        # ocorrência não. Após o AJAX do radio, re-verificar os períodos no
+        # DOM e re-preencher com fill PURO (sem eventos) se resetados.
+        for sufixo, valor in (
+            ("periodoInicialInputDate", p.periodo_inicio),
+            ("periodoFinalInputDate", p.periodo_fim),
+        ):
+            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                self._setar_text_se_diferente(sufixo, valor)
+            else:
+                self._setar_text_se_diferente(sufixo.replace("InputDate", ""), valor)
         try:
             ocorr = (
                 p.ocorrencia_pagamento.value
@@ -5723,16 +5736,21 @@ class PlaywrightAutomatorV2:
                 self._aguardar_ajax(4000)
                 self._page.wait_for_timeout(800)
                 self.log(f"    → ocorrência do reflexo espelhada da principal: {ocorr}")
+                # re-render do mudarOcorrenciaPagamento pode resetar os
+                # períodos — re-aplicar com fill PURO (não dispara A4J)
+                for sufixo, valor in (
+                    ("periodoInicialInputDate", p.periodo_inicio),
+                    ("periodoFinalInputDate", p.periodo_fim),
+                ):
+                    try:
+                        loc = self._page.locator(f"input[id$='{sufixo}']")
+                        if loc.count() > 0 and loc.first.input_value(timeout=1500).strip() != str(valor).strip():
+                            loc.first.fill(str(valor))
+                            self.log(f"    ↺ {sufixo} re-preenchido pós-AJAX do radio (fill puro)")
+                    except Exception:
+                        pass
         except Exception as _e:
             self.log(f"    ⚠ ocorrenciaPagto do reflexo: {_e}")
-        for sufixo, valor in (
-            ("periodoInicialInputDate", p.periodo_inicio),
-            ("periodoFinalInputDate", p.periodo_fim),
-        ):
-            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
-                self._setar_text_se_diferente(sufixo, valor)
-            else:
-                self._setar_text_se_diferente(sufixo.replace("InputDate", ""), valor)
         self.log(f"    → salvando período do reflexo = {p.periodo_inicio}–{p.periodo_fim}")
         self._clicar("salvar")
         self._aguardar_ajax(10000)
