@@ -2504,13 +2504,21 @@ class PlaywrightAutomatorV2:
                 self.log(
                     f"  ⚠ Falha ajustar parâmetros '{v.nome_pjecalc or v.expresso_alvo}': {e}"
                 )
-            if v.reflexos:
-                try:
-                    self._configurar_parametros_pos_expresso(v, marcar_reflexos=True)
-                except Exception as e:
-                    self.log(
-                        f"  ⚠ Falha 2ª passada (reflexos) '{v.nome_pjecalc or v.expresso_alvo}': {e}"
-                    )
+            # Ajuste do PERÍODO do reflexo — apenas 13º multi-ano (run v9:
+            # reflexo da multa 467 do 13º cobria só o avo do ano da rescisão).
+            # SALDO/AVISO/FÉRIAS já saem corretos sem ajuste (não tocar).
+            try:
+                carac = getattr(v.parametros, "caracteristica", None)
+                carac_val = getattr(carac, "value", carac)
+                if v.reflexos and carac_val == "DECIMO_TERCEIRO_SALARIO":
+                    from datetime import datetime as _dtp
+                    _pi = _dtp.strptime(v.parametros.periodo_inicio, "%d/%m/%Y")
+                    _pf = _dtp.strptime(v.parametros.periodo_fim, "%d/%m/%Y")
+                    if _pi.year != _pf.year:
+                        for r in v.reflexos:
+                            self._ajustar_periodo_reflexo(v, r)
+            except Exception as _e:
+                self.log(f"  ⚠ ajuste período reflexo 13º: {_e}")
             # Para verbas INFORMADO: setar valorDevido em pelo menos uma
             # ocorrência (PJE-Calc bloqueia liquidação se TODAS as ocorrências
             # estão com valorDevido=0).
@@ -4629,12 +4637,14 @@ class PlaywrightAutomatorV2:
         # a listagem vem vazia pós-reabertura) e ANTES do save logo abaixo
         # (flush da conversa Seam — runs v4/v5 provaram que sem save
         # posterior o checkbox se perde no Fechar+Reabrir).
-        if marcar_reflexos:
-            for _r in getattr(v, "reflexos", None) or []:
-                try:
-                    self._configurar_reflexo(v, _r)
-                except Exception as _e:
-                    self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
+        # (v9 estável: marcar SEMPRE — a 2ª passada da v10 perdeu o AVISO e
+        # não alterou os valores das ocorrências; a ordem de ativação não é
+        # o fator. Mantido o parâmetro para compat.)
+        for _r in getattr(v, "reflexos", None) or []:
+            try:
+                self._configurar_reflexo(v, _r)
+            except Exception as _e:
+                self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
@@ -5590,6 +5600,112 @@ class PlaywrightAutomatorV2:
         if reflexo.parametros_override:
             self.log(f"    → Aplicando overrides em {reflexo.nome}")
             # Implementação detalhada via doc 07 — pular nesta versão MVP
+
+    def _ajustar_periodo_reflexo(self, verba_principal, reflexo) -> bool:
+        """Abre os Parâmetros do REFLEXO e ajusta o período = período da principal.
+
+        ⚠ INVARIANTE PERMANENTE — NÃO REVERTER (run v9 RODRIGO 12/06/2026):
+        o período DEFAULT do reflexo criado pelo Expresso cobre apenas o mês
+        do desligamento — para 13º multi-ano a MULTA 467 incidia só sobre o
+        avo do ano da rescisão (506,00 = 50%×1.012 [8/12 2025] em vez de
+        1.201,75; faltava o 11/12 de 2024). Ajustar o período do reflexo ao
+        da principal faz o Regerar gerar ocorrências sobre TODOS os avos.
+
+        Pré-requisito: checkbox do reflexo já salvo/flushado (o botão
+        "Parâmetros" do reflexo só fica disponível após o save — CLAUDE.md
+        "Reflexos — fluxo correto"). Chamar após o save de params da verba.
+        """
+        alvo = (reflexo.expresso_reflex_alvo or "").upper().strip()
+        p = verba_principal.parametros
+        candidatos = [verba_principal.nome_pjecalc]
+        if getattr(verba_principal, "expresso_alvo", None) and \
+           verba_principal.expresso_alvo != verba_principal.nome_pjecalc:
+            candidatos.append(verba_principal.expresso_alvo)
+        link_id = None
+        for tent in range(1, 4):
+            self._page.evaluate(
+                """(cands) => {
+                    const norm = s => (s||'').toUpperCase();
+                    for (const c of cands) {
+                        for (const tr of [...document.querySelectorAll('tr')]) {
+                            if (!norm(tr.textContent).includes(norm(c))) continue;
+                            const ex = tr.querySelector('span.linkDestinacoes');
+                            if (ex) { ex.click(); return true; }
+                        }
+                    }
+                    return false;
+                }""",
+                candidatos,
+            )
+            self._aguardar_ajax(3000)
+            self._page.wait_for_timeout(800)
+            link_id = self._page.evaluate(
+                """(alvo) => {
+                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const links = [...document.querySelectorAll('a[id*=":listaReflexo:"]')]
+                        .filter(a => (a.title||'').toUpperCase().includes('PARAMETRIZAR')
+                                  || (a.className||'').includes('linkParametrizar'));
+                    for (const a of links) {
+                        const tr = a.closest('tr');
+                        if (tr && norm(tr.textContent).includes(norm(alvo))) return a.id;
+                    }
+                    return null;
+                }""",
+                alvo,
+            )
+            if link_id:
+                break
+            self.log(f"    ⚠ Parâmetros do reflexo '{alvo[:40]}' não visível (tent {tent}/3) — re-navegando")
+            try:
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._navegar_menu("li_calculo_verbas")
+                self._page.wait_for_function(
+                    "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                    timeout=15000,
+                )
+                self._page.wait_for_timeout(1500)
+            except Exception:
+                pass
+        if not link_id:
+            self.log(f"    🛑 botão Parâmetros do reflexo '{alvo[:40]}' não encontrado — período não ajustado")
+            return False
+        esc = link_id.replace(":", "\\:")
+        try:
+            self._page.locator(f"a#{esc}").click(force=True)
+        except Exception as e:
+            self.log(f"    ⚠ click Parâmetros reflexo: {e}")
+            return False
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1500)
+        form_ok = self._page.locator("[id$='periodoInicialInputDate'], [id$=':periodoInicial']").count() > 0
+        if not form_ok:
+            self.log("    🛑 form do reflexo não carregou (período não ajustado)")
+            return False
+        for sufixo, valor in (
+            ("periodoInicialInputDate", p.periodo_inicio),
+            ("periodoFinalInputDate", p.periodo_fim),
+        ):
+            if self._page.locator(f"[id$='{sufixo}']").count() > 0:
+                self._setar_text_se_diferente(sufixo, valor)
+            else:
+                self._setar_text_se_diferente(sufixo.replace("InputDate", ""), valor)
+        self.log(f"    → salvando período do reflexo = {p.periodo_inicio}–{p.periodo_fim}")
+        self._clicar("salvar")
+        self._aguardar_ajax(10000)
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        if not sucesso:
+            erro = self._verificar_erro_jsf()
+            self.log(f"    ⚠ save do reflexo sem confirmação{(' — ' + erro[:120]) if erro else ''}")
+        try:
+            if "verba-calculo.jsf" not in self._page.url:
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(800)
+            if self._regerar_com_modal_confirmacao(sobrescrever=False, log_prefix="    "):
+                self.log("    ✓ Regerar pós-período do reflexo")
+        except Exception as _e:
+            self.log(f"    ⚠ Regerar pós-período reflexo: {_e}")
+        return bool(sucesso)
 
     def _lancar_verba_manual(self, v) -> None:
         """Criar verba via botão Manual ('Lançamento Manual de Parcela')."""
