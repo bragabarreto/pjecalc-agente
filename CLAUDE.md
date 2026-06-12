@@ -285,6 +285,40 @@ Map anterior gerava values inexistentes ("VERBA", "VERBA_MENOS_CS") → timeout
 30s. Enum real extraído de `BaseDeJurosDasVerbasEnum` (JAR pjecalc-negocio):
 `VERBAS | VERBA_INSS | VERBA_INSS_PP` (= schema v2, identidade).
 
+### 4b. Reflexos 467 — persistência e ordem (ciclo v4–v16, 12/06/2026)
+
+Invariantes consolidados em 13 runs end-to-end (cada um reverte um modo de
+falha observado em PJC real):
+
+1. **Reflexos são marcados DENTRO de `_configurar_parametros_pos_expresso`**,
+   após o anchor `wait_for(linkParametrizar > 0)` e ANTES do save. Fora desse
+   anchor a listagem vem VAZIA pós-reabertura Seam mesmo com re-navegação ×3
+   (v7/v8); sem save posterior o checkbox morre no Fechar+Reabrir — o
+   checkbox vive na conversa Seam (FlushMode.MANUAL) e só o save de
+   parâmetros flusha (v4/v5; Regerar NÃO flusha).
+2. **Checkbox com verificação**: Playwright `.check()` + re-leitura pós-AJAX
+   + retry ×3 com reabertura do painel Exibir ("✓ CONFIRMADO" = no bean).
+3. **NÃO fazer ajustes de reflexo no meio do loop de verbas** — corrompe o
+   estado Seam das verbas seguintes (v12). Ajustes finos (período/base do
+   13º multi-ano) ficam em sub-fase própria APÓS o loop.
+4. **Validação de PJC**: ocorrências do reflexo são SOMENTE as do elemento
+   filho direto `ocorrencias` — `iter()` desce no XStream aninhado e captura
+   as ocorrências da verba PRINCIPAL referenciada (falso-positivo de
+   "ocorrência espúria" que custou 2 iterações).
+
+**Resultado estável (6 runs)**: 4/4 reflexos ativos; SALDO/AVISO/FÉRIAS com
+50% × base integral exatos; juros/correção 100%.
+
+**Pendência conhecida (única)**: base do reflexo 467 sobre 13º MULTI-ANO
+cobre só o avo do ano da rescisão (PJE-Calc soma apenas o mês do
+desligamento; ex. RODRIGO: 506,00 em vez de 1.201,75 — falta o 11/12 do ano
+anterior). A cadeia de correção (período do reflexo + edição da base na
+grade) está implementada mas a leitura da soma na grade do 13º CALCULADO
+retorna 0 (DOM difere do mapeado no SALDO) — dump automático instrumentado
+em `_corrigir_valor_reflexo_na_grade` (fase `soma_zero`) para fechar na
+próxima sessão. Workaround manual: editar o valorDevido da ocorrência do
+reflexo na grade (50% × devido total) — ~30s.
+
 ### 4. MULTA 467 NUNCA é verba principal autônoma (inv25)
 
 IA emitiu MULTA 467 como verba própria (`expresso_alvo=MULTA 477` + mult 0.5)

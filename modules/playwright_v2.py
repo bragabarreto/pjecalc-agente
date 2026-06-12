@@ -5836,6 +5836,13 @@ class PlaywrightAutomatorV2:
         alvos = res.get("alvos") or []
         if not soma or not alvos:
             self.log(f"    ⚠ grade: soma_principal={soma} inputs_reflexo467={len(alvos)} — nada a corrigir")
+            # Instrumentação (v16): dump da grade quando a soma falha — o DOM
+            # da grade do 13º CALCULADO difere do mapeado (SALDO) e ainda não
+            # foi inspecionado. O dump alimenta o fix na próxima sessão.
+            try:
+                self._dump_dom_indenizacao(f"{nome}-grade-reflexo467", fase="soma_zero")
+            except Exception:
+                pass
             return
         alvo_valor = round(soma * 0.5, 2)
         alvo_br = _fmt_br(alvo_valor)
