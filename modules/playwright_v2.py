@@ -2501,6 +2501,18 @@ class PlaywrightAutomatorV2:
             # 1. marcar reflexos (painel Exibir, verify-retry)
             # 2. _configurar_parametros_pos_expresso → SAVE (flush) + Regerar
             #    pós-params (regenera ocorrências, incluindo as do reflexo).
+            if v.reflexos:
+                # Garantir que estamos na LISTAGEM de verbas — na 1ª verba de
+                # cada batch a página atual é calculo.jsf (pós-F+R/Expresso)
+                # e o painel Exibir não existe (run v6: "Verba principal não
+                # encontrada na listagem — pulando reflexo").
+                try:
+                    if not self._navegar_menu_via_click("li_calculo_verbas"):
+                        self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(1200)
+                except Exception as _e:
+                    self.log(f"  ⚠ nav listagem pré-reflexos: {_e}")
             for r in v.reflexos:
                 try:
                     self._configurar_reflexo(v, r)
