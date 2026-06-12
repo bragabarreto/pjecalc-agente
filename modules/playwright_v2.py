@@ -5782,6 +5782,27 @@ class PlaywrightAutomatorV2:
                     if (cb && !cb.checked) continue;
                     soma += parseBR(inp.value);
                 }
+                // Fallback (run v14): no 13º CALCULADO a coluna Devido da
+                // principal é TEXTO (sem input) — somar pela célula da coluna
+                // 'Devido' da rich:dataTable principal.
+                if (!soma) {
+                    const tbl = document.querySelector("table[id$=':listagem']");
+                    if (tbl) {
+                        const headRow = tbl.querySelector('tr');
+                        const headers = headRow ? [...headRow.querySelectorAll('th,td')].map(c => (c.textContent||'').trim().toUpperCase()) : [];
+                        let idx = headers.findIndex(h => h.startsWith('DEVIDO'));
+                        if (idx >= 0) {
+                            for (const tr of tbl.querySelectorAll('tr')) {
+                                const tds = [...tr.querySelectorAll('td')];
+                                if (tds.length <= idx) continue;
+                                const cb = tr.querySelector("input[type='checkbox'][id$=':ativo']");
+                                if (!cb) continue;           // só linhas de ocorrência
+                                if (!cb.checked) continue;   // só ativas
+                                soma += parseBR(tds[idx].textContent);
+                            }
+                        }
+                    }
+                }
                 const alvos = [];
                 for (const inp of document.querySelectorAll("input[id*=':listagem:'][id$=':valorDevidoReflexo']")) {
                     let el = inp.closest('table');
