@@ -321,7 +321,24 @@ def _worker_etapa2(sessao_id: str) -> None:
         bruto, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA2)
         estado.setdefault("usage", []).append({"etapa": "json", **usage})
         estado["conversa"].append({"role": "assistant", "texto": bruto})
-        payload = _extrair_json(bruto)
+        try:
+            payload = _extrair_json(bruto)
+        except (json.JSONDecodeError, ValueError):
+            # retry único: resposta veio com texto extra/JSON truncado —
+            # pedir reemissão estrita (barata: prefixo inteiro vem do cache)
+            estado["conversa"].append({
+                "role": "user",
+                "texto": (
+                    "A resposta anterior não era JSON válido. Reemita AGORA "
+                    "o JSON completo do schema v2, SOMENTE o JSON, sem "
+                    "markdown e sem texto antes ou depois."
+                ),
+            })
+            _save_estado(sessao_id, estado)
+            bruto, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA2)
+            estado.setdefault("usage", []).append({"etapa": "json_retry", **usage})
+            estado["conversa"].append({"role": "assistant", "texto": bruto})
+            payload = _extrair_json(bruto)
 
         # mesmo pipeline do /processar/v2: normalizer → Pydantic → store v2
         from modules.json_normalizer import normalize_v2_json
@@ -345,6 +362,21 @@ def _disparar(worker, *args) -> None:
     threading.Thread(target=worker, args=args, daemon=True).start()
 
 
+def _limpar_sessoes_antigas(ttl_dias: int = 7) -> None:
+    """Remove sessões de extração com mais de `ttl_dias` (os anexos podem
+    chegar a 150MB por sessão — sem TTL o volume enche). Best-effort."""
+    import shutil
+
+    limite = time.time() - ttl_dias * 86400
+    try:
+        for d in _STORE_DIR.iterdir():
+            if d.is_dir() and d.stat().st_mtime < limite:
+                shutil.rmtree(d, ignore_errors=True)
+                logger.info(f"extracao-ia: sessão antiga removida: {d.name}")
+    except Exception as e:
+        logger.warning(f"extracao-ia: limpeza falhou: {e}")
+
+
 # ─── Rotas ────────────────────────────────────────────────────────────────
 
 
@@ -360,6 +392,7 @@ async def processar_ia(request: Request):
     form = await request.form()
     sessao_id = str(uuid.uuid4())
     sdir = _sessao_dir(sessao_id)
+    _disparar(_limpar_sessoes_antigas)
 
     texto_colado = str(form.get("texto_sentenca", "")).strip()
     arquivos: list[dict] = []
@@ -464,6 +497,11 @@ async def estado_ia(sessao_id: str):
         "url_previa": estado.get("url_previa"),
         "n_arquivos": len(estado.get("arquivos", [])),
         "usage": estado.get("usage", []),
+        # histórico de correções já enviadas (para exibir na tela)
+        "correcoes": [
+            t["texto"] for t in estado.get("conversa", [])
+            if t["role"] == "user" and t["texto"] != "confirmar"
+        ],
     })
 
 

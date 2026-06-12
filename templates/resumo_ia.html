@@ -28,6 +28,7 @@
        border-radius:8px; padding:16px; color:#842029;"></div>
 
   <div id="painel-resumo" style="display:none;">
+    <div id="info-extra" style="font-size:0.8rem; color:#6c757d; margin-bottom:6px;"></div>
     <div id="resumo-box"></div>
 
     <div style="background:#fff8e6; border:1px solid #ffe69c; border-radius:8px; padding:12px 16px; margin-bottom:14px;">
@@ -51,6 +52,29 @@
 const SESSAO = "{{ sessao_id }}";
 let timer = null;
 
+function atualizarInfo(d) {
+  const el = document.getElementById('info-extra');
+  const partes = [];
+  if (d.n_arquivos) partes.push(`📎 ${d.n_arquivos} documento(s) anexado(s)`);
+  const us = d.usage || [];
+  if (us.length) {
+    // custo estimado (USD): entrada nova 3/M, cache write 3.75/M, cache read 0.30/M, saída 15/M
+    let custo = 0;
+    for (const u of us) {
+      custo += (u.input || 0) * 3e-6 + (u.cache_write || 0) * 3.75e-6 +
+               (u.cache_read || 0) * 0.3e-6 + (u.output || 0) * 15e-6;
+    }
+    partes.push(`💰 ${us.length} chamada(s) à IA — custo estimado US$ ${custo.toFixed(2)}`);
+  }
+  const corr = d.correcoes || [];
+  if (corr.length) partes.push(`↺ ${corr.length} correção(ões) aplicada(s)`);
+  el.innerHTML = partes.join(' &nbsp;·&nbsp; ');
+  if (corr.length) {
+    el.innerHTML += '<details style="margin-top:4px;"><summary style="cursor:pointer;">ver correções enviadas</summary><ul>' +
+      corr.map(c => '<li>' + c.replace(/</g,'&lt;').slice(0, 300) + '</li>').join('') + '</ul></details>';
+  }
+}
+
 function render(md) {
   const box = document.getElementById('resumo-box');
   try { box.innerHTML = marked.parse(md); }
@@ -71,6 +95,7 @@ function mostrar(fase, d) {
   } else if (fase === 'resumo_pronto') {
     res.style.display = 'block';
     if (d.resumo_md) render(d.resumo_md);
+    atualizarInfo(d);
   } else if (fase === 'previa_pronta') {
     window.location.href = d.url_previa;
   } else if (fase === 'erro' || fase === 'erro_etapa2') {
