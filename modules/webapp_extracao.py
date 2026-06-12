@@ -250,15 +250,15 @@ def _chamar_claude(messages: list[dict], max_tokens: int) -> str:
         temperature=0.0,
     )
     u = getattr(resp, "usage", None)
-    if u is not None:
-        logger.info(
-            "extracao-ia tokens: in=%s out=%s cache_write=%s cache_read=%s",
-            getattr(u, "input_tokens", "?"),
-            getattr(u, "output_tokens", "?"),
-            getattr(u, "cache_creation_input_tokens", 0),
-            getattr(u, "cache_read_input_tokens", 0),
-        )
-    return "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+    usage = {
+        "input": getattr(u, "input_tokens", 0),
+        "output": getattr(u, "output_tokens", 0),
+        "cache_write": getattr(u, "cache_creation_input_tokens", 0) or 0,
+        "cache_read": getattr(u, "cache_read_input_tokens", 0) or 0,
+    } if u is not None else {}
+    print(f"[extracao-ia] tokens: {usage}", flush=True)
+    texto = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text").strip()
+    return texto, usage
 
 
 def _extrair_json(texto: str) -> dict:
@@ -283,7 +283,8 @@ def _extrair_json(texto: str) -> dict:
 def _worker_etapa1(sessao_id: str) -> None:
     estado = _load_estado(sessao_id) or {}
     try:
-        resumo = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA1)
+        resumo, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA1)
+        estado.setdefault("usage", []).append({"etapa": "resumo", **usage})
         estado["conversa"] = estado.get("conversa", [])
         estado["conversa"].append({"role": "assistant", "texto": resumo})
         estado["resumo_md"] = resumo
@@ -300,7 +301,8 @@ def _worker_correcao(sessao_id: str, correcoes: str) -> None:
     try:
         estado.setdefault("conversa", []).append({"role": "user", "texto": correcoes})
         _save_estado(sessao_id, estado)
-        resumo = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA1)
+        resumo, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA1)
+        estado.setdefault("usage", []).append({"etapa": "correcao", **usage})
         estado["conversa"].append({"role": "assistant", "texto": resumo})
         estado["resumo_md"] = resumo
         estado["fase"] = "resumo_pronto"
@@ -316,7 +318,8 @@ def _worker_etapa2(sessao_id: str) -> None:
     try:
         estado.setdefault("conversa", []).append({"role": "user", "texto": "confirmar"})
         _save_estado(sessao_id, estado)
-        bruto = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA2)
+        bruto, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA2)
+        estado.setdefault("usage", []).append({"etapa": "json", **usage})
         estado["conversa"].append({"role": "assistant", "texto": bruto})
         payload = _extrair_json(bruto)
 
@@ -460,6 +463,7 @@ async def estado_ia(sessao_id: str):
         "erro": estado.get("erro"),
         "url_previa": estado.get("url_previa"),
         "n_arquivos": len(estado.get("arquivos", [])),
+        "usage": estado.get("usage", []),
     })
 
 
