@@ -5712,12 +5712,19 @@ class PlaywrightAutomatorV2:
         # (Edição via grade é INVIÁVEL: dump v17 provou que os inputs
         # valorDevido de verba CALCULADO ficam vazios — coluna mostra só o
         # texto "Calculado"; não há números para somar.)
-        # ⚠ ORDEM (run v18, mesma lição da Fase 13 "data primeiro, select por
-        # último"): períodos PRIMEIRO, radio POR ÚLTIMO. O preenchimento dos
-        # rich:calendar dispara re-render A4J que RESETA o radio para o
-        # default do bean (DESLIGAMENTO) — no v18 o período persistiu mas a
-        # ocorrência não. Após o AJAX do radio, re-verificar os períodos no
-        # DOM e re-preencher com fill PURO (sem eventos) se resetados.
+        # ⚠ INVARIANTE (diag v19, 12/06/2026 — NÃO trocar por _marcar_radio):
+        # característica + ocorrência do reflexo devem ser espelhadas da
+        # principal NUM ÚNICO SUBMIT. O click humano em cada radio dispara
+        # a4j:support que valida o form INTERMEDIÁRIO e o servidor REJEITA
+        # ("As verbas 13º SALÁRIO, utilizadas como base de cálculo, são
+        # incompatíveis com a característica/ocorrência de pagamento
+        # selecionados") re-renderizando com o valor antigo — a combinação
+        # válida (DECIMO_TERCEIRO+DEZEMBRO) é inalcançável por cliques
+        # sequenciais. Fix comprovado: marcar AMBOS via JS checked SEM
+        # disparar onchange (nenhum A4J intermediário) e deixar o Salvar
+        # full-form validar a combinação final — persiste no bean
+        # (verificado por reabertura do form). Períodos primeiro (fill
+        # dispara A4J dos calendars); radios via JS por último (inertes).
         for sufixo, valor in (
             ("periodoInicialInputDate", p.periodo_inicio),
             ("periodoFinalInputDate", p.periodo_fim),
@@ -5727,30 +5734,37 @@ class PlaywrightAutomatorV2:
             else:
                 self._setar_text_se_diferente(sufixo.replace("InputDate", ""), valor)
         try:
+            carac = (
+                p.caracteristica.value
+                if hasattr(p.caracteristica, "value")
+                else str(p.caracteristica)
+            )
             ocorr = (
                 p.ocorrencia_pagamento.value
                 if hasattr(p.ocorrencia_pagamento, "value")
                 else str(p.ocorrencia_pagamento)
             )
-            if ocorr and self._marcar_radio_se_diferente("ocorrenciaPagto", ocorr):
-                self._aguardar_ajax(4000)
-                self._page.wait_for_timeout(800)
-                self.log(f"    → ocorrência do reflexo espelhada da principal: {ocorr}")
-                # re-render do mudarOcorrenciaPagamento pode resetar os
-                # períodos — re-aplicar com fill PURO (não dispara A4J)
-                for sufixo, valor in (
-                    ("periodoInicialInputDate", p.periodo_inicio),
-                    ("periodoFinalInputDate", p.periodo_fim),
-                ):
-                    try:
-                        loc = self._page.locator(f"input[id$='{sufixo}']")
-                        if loc.count() > 0 and loc.first.input_value(timeout=1500).strip() != str(valor).strip():
-                            loc.first.fill(str(valor))
-                            self.log(f"    ↺ {sufixo} re-preenchido pós-AJAX do radio (fill puro)")
-                    except Exception:
-                        pass
+            if carac and ocorr:
+                aplicado = self._page.evaluate(
+                    """(args) => {
+                        let n = 0;
+                        for (const [name, val] of args) {
+                            for (const r of document.querySelectorAll(`input[name='formulario:${name}']`)) {
+                                const want = (r.value === val);
+                                if (r.checked !== want) { r.checked = want; if (want) n++; }
+                            }
+                        }
+                        return n;
+                    }""",
+                    [["caracteristicaVerba", carac], ["ocorrenciaPagto", ocorr]],
+                )
+                if aplicado:
+                    self.log(
+                        f"    → característica/ocorrência do reflexo espelhadas da principal "
+                        f"(JS, submit único): {carac}/{ocorr}"
+                    )
         except Exception as _e:
-            self.log(f"    ⚠ ocorrenciaPagto do reflexo: {_e}")
+            self.log(f"    ⚠ espelhar característica/ocorrência do reflexo: {_e}")
         self.log(f"    → salvando período do reflexo = {p.periodo_inicio}–{p.periodo_fim}")
         self._clicar("salvar")
         self._aguardar_ajax(10000)
