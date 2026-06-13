@@ -128,8 +128,10 @@ Sua tarefa é analisar uma sentença trabalhista e extrair TODOS os dados necess
   "reclamado": { ... mesmo formato ... }
 
 ⚠ `doc_fiscal.numero`: quando o CPF/CNPJ NÃO constar na sentença nem nos
-documentos anexados, emita `""` (string vazia — NUNCA null) e liste o campo
-em `meta.validacao.avisos` para o usuário completar na prévia.
+documentos anexados, emita `""` (string vazia — NUNCA null). O documento
+fiscal das partes é OPCIONAL no PJE-Calc (não bloqueia o cálculo) — NÃO
+listar como campo faltante nem como pendência. O usuário completa na prévia
+só se quiser enviar o cálculo ao PJe depois.
 }
 ```
 

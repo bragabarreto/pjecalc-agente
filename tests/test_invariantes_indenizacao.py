@@ -1142,4 +1142,20 @@ def test_inv28_doc_fiscal_ausente_vira_string_vazia():
     assert df2.numero == "32.567.442/0001-00"
     # prompt instrui "" + aviso
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
-    assert "NUNCA null" in ext and "completar na prévia" in ext
+    assert "NUNCA null" in ext and "OPCIONAL no PJE-Calc" in ext
+
+
+def test_inv29_bot_nao_exige_cpf_cnpj_das_partes():
+    """Caso Ariane (13/06/2026): CPF/CNPJ das partes vazio abortava a Fase 1
+    ('Campo obrigatório vazio: reclamanteNumeroDocumentoFiscal') e cascateava
+    (Dados do Processo não salvava → históricos/verbas CALCULADO perdidos →
+    PJC só com a verba INFORMADA). O PJE-Calc NÃO exige documento fiscal das
+    partes (manual: obrigatório só p/ credor de honorários). O bot deve pular
+    radio + número quando o documento está vazio, sem abortar."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # bloco condicional que só preenche doc quando presente
+    assert 'if (proc.reclamante.doc_fiscal.numero or "").strip():' in src
+    assert 'if (proc.reclamado.doc_fiscal.numero or "").strip():' in src
+    assert "PJE-Calc não exige; seguindo sem documento" in src
+    # marcar_radio do documento DENTRO do if (12 espaços), nunca incondicional
+    assert '            self._marcar_radio("documentoFiscalReclamante"' in src

@@ -1837,15 +1837,30 @@ class PlaywrightAutomatorV2:
         self._preencher("valorDaCausa", _fmt_br(proc.valor_da_causa_brl))
         self._preencher("autuadoEm", proc.data_autuacao)
 
-        # Reclamante
+        # Reclamante / Reclamado — CPF/CNPJ das partes é OPCIONAL.
+        # ⚠ INVARIANTE (caso Ariane 13/06/2026): o PJE-Calc NÃO exige
+        # documento fiscal das partes para o cálculo (manual exige só para o
+        # credor de honorários). A trava antiga (`_preencher obrigatorio=True`
+        # default) abortava a Fase 1 com "Campo obrigatório vazio:
+        # reclamanteNumeroDocumentoFiscal" quando a sentença não trazia o
+        # CPF/CNPJ → cascata Seam: Dados do Processo não salvava, históricos
+        # e verbas CALCULADO se perdiam, PJC saía só com a verba INFORMADA.
+        # Quando o documento está vazio, NÃO marcar o radio nem preencher o
+        # número (evita também o ValidatorException "tipo sem número" da
+        # tarefa #30) — o PJE-Calc segue sem documento.
         self._preencher("reclamanteNome", proc.reclamante.nome)
-        self._marcar_radio("documentoFiscalReclamante", proc.reclamante.doc_fiscal.tipo.value)
-        self._preencher("reclamanteNumeroDocumentoFiscal", proc.reclamante.doc_fiscal.numero)
+        if (proc.reclamante.doc_fiscal.numero or "").strip():
+            self._marcar_radio("documentoFiscalReclamante", proc.reclamante.doc_fiscal.tipo.value)
+            self._preencher("reclamanteNumeroDocumentoFiscal", proc.reclamante.doc_fiscal.numero)
+        else:
+            self.log("  ℹ CPF/CNPJ da reclamante ausente — PJE-Calc não exige; seguindo sem documento")
 
-        # Reclamado
         self._preencher("reclamadoNome", proc.reclamado.nome)
-        self._marcar_radio("tipoDocumentoFiscalReclamado", proc.reclamado.doc_fiscal.tipo.value)
-        self._preencher("reclamadoNumeroDocumentoFiscal", proc.reclamado.doc_fiscal.numero)
+        if (proc.reclamado.doc_fiscal.numero or "").strip():
+            self._marcar_radio("tipoDocumentoFiscalReclamado", proc.reclamado.doc_fiscal.tipo.value)
+            self._preencher("reclamadoNumeroDocumentoFiscal", proc.reclamado.doc_fiscal.numero)
+        else:
+            self.log("  ℹ CPF/CNPJ da reclamada ausente — PJE-Calc não exige; seguindo sem documento")
 
         # Salvar Dados do Processo — OBRIGATÓRIO antes de fase_parametros_calculo
         # que chama _navegar_menu → page.goto(), descartando todo estado DOM não salvo.
