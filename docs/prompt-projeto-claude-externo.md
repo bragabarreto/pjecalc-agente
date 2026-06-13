@@ -144,6 +144,12 @@ Sua tarefa é analisar uma sentença trabalhista e extrair TODOS os dados necess
     "advogados": [{"nome": "...", "oab": "12345/CE", "doc_fiscal_tipo": "CPF", "doc_fiscal_numero": "..."}]
   },
   "reclamado": { ... mesmo formato ... }
+
+⚠ `doc_fiscal.numero`: quando o CPF/CNPJ NÃO constar na sentença nem nos
+documentos anexados, emita `""` (string vazia — NUNCA null). O documento
+fiscal das partes é OPCIONAL no PJE-Calc (não bloqueia o cálculo) — NÃO
+listar como campo faltante nem como pendência. O usuário completa na prévia
+só se quiser enviar o cálculo ao PJe depois.
 }
 ```
 
@@ -1412,13 +1418,29 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
 `compor_principal = "NAO"` SOMENTE quando a verba **não vai compor o montante da
 condenação**, mas a sua apuração é necessária para **calcular outras verbas/reflexos**.
 
-📌 **Exemplo clássico: "Salário por fora" reconhecido em sentença**
-- A sentença reconhece pagamentos extra-folha (salário por fora) durante o contrato
-- Esse valor já foi pago de fato ao reclamante — NÃO vai entrar de novo na condenação
-- Mas serve de BASE DE CÁLCULO para os reflexos em aviso prévio, férias+1/3, 13º,
-  FGTS, etc., que aí SIM vão compor o principal
-- Verba "Salário por fora" → `compor_principal: "NAO"` (só base para reflexos)
-- Verbas reflexas dela → `compor_principal: "SIM"` (compõem a condenação)
+📌 **"Salário por fora" / extrafolha — INVARIANTE PERMANENTE — NÃO REVERTER
+(caso Ariane 0000566-12, 13/06/2026):**
+
+⚠️ **NUNCA modele o salário por fora como uma VERBA principal
+(`DIFERENÇA SALARIAL` / "SALÁRIO PAGO POR FORA") com `compor_principal=NAO`
+servindo de base para reflexos-checkbox.** O PJE-Calc **não pré-cadastra os
+reflexos candidatos** (férias+1/3, 13º) no painel "Exibir" de uma verba
+CALCULADO sobre histórico customizado — a automação não consegue marcá-los e
+as verbas se perdem no export (bug #64). Esse formato é PROIBIDO.
+
+✅ **Forma correta (Modelo A — histórico + verbas Expresso próprias):**
+1. **Histórico salarial = 2 entradas**: "ÚLTIMA REMUNERAÇÃO" (registrado) +
+   "SALÁRIO PAGO POR FORA" — ambas com as mesmas incidências e período. Assim
+   a remuneração (última/maior) já incorpora o por fora.
+2. As parcelas deferidas que **refletem** o por fora (FÉRIAS + 1/3, 13º
+   SALÁRIO, AVISO) viram **verbas Expresso PRÓPRIAS** (não reflexos-checkbox),
+   calculadas sobre o histórico ampliado. Quando a sentença defere só a
+   **diferença** (a parcela registrada já foi paga/gozada), use `valor_pago`
+   para abater o já-pago — o líquido resulta apenas a diferença do por fora.
+3. O **FGTS** sobre o por fora vai no **módulo FGTS** (não como reflexo de
+   verba-base).
+- Esse modelo deixa o cálculo com forma 100% Expresso-padrão (como o RODRIGO),
+  que a automação executa de forma confiável.
 
 📌 **Em todos os outros casos**: `compor_principal: "SIM"` (default).
 - FGTS sobre verbas rescisórias da condenação → SIM

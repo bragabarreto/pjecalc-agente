@@ -5552,6 +5552,7 @@ class PlaywrightAutomatorV2:
         # VERIFICAR re-lendo o checkbox; retry ×3 com re-abertura do painel.
         alvo = reflexo.expresso_reflex_alvo or ""
         ok_reflexo = False
+        cb_visto = False  # o checkbox candidato chegou a existir no painel?
         for tentativa in range(1, 4):
             cb_id = self._page.evaluate(
                 """(alvoReflexo) => {
@@ -5586,6 +5587,7 @@ class PlaywrightAutomatorV2:
                 self._aguardar_ajax(3000)
                 self._page.wait_for_timeout(800)
                 continue
+            cb_visto = True
             esc = cb_id.replace(":", "\\:")
             loc = self._page.locator(f"input#{esc}")
             try:
@@ -5619,6 +5621,24 @@ class PlaywrightAutomatorV2:
                 break
             self.log(f"    ⚠ Reflexo '{reflexo.nome}' não confirmado (tentativa {tentativa}/3) — checked={confirmado}")
         if not ok_reflexo:
+            if not cb_visto:
+                # FALLBACK (caso Ariane #64, 13/06/2026): o checkbox candidato
+                # NUNCA existiu no painel "Exibir" — o PJE-Calc não pré-cadastra
+                # esse reflexo para esta verba (ex.: reflexo sobre verba
+                # CALCULADO/DIFERENÇA com base customizada). Em vez de perder o
+                # reflexo silenciosamente, criá-lo como verba Manual Tipo=REFLEXO.
+                # ⚠ só dispara quando o checkbox jamais apareceu — NÃO quando ele
+                # aparece mas falha em persistir (esse caso é tratado pelo retry
+                # acima; o fluxo Expresso-pareado do RODRIGO não é afetado).
+                self.log(
+                    f"    ↪ Reflexo '{reflexo.nome}' sem checkbox no painel — "
+                    f"fallback: criando como reflexo Manual"
+                )
+                try:
+                    self._criar_reflexo_manual(verba_principal, reflexo)
+                    return
+                except Exception as _e:
+                    self.log(f"    ⚠ fallback Manual do reflexo falhou: {_e}")
             self.log(f"    🛑 Reflexo '{reflexo.nome}' NÃO persistiu após 3 tentativas (alvo='{alvo}')")
 
         # Se há overrides, abrir Parâmetros do reflexo e ajustar

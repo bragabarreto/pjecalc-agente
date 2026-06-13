@@ -1159,3 +1159,34 @@ def test_inv29_bot_nao_exige_cpf_cnpj_das_partes():
     assert "PJE-Calc não exige; seguindo sem documento" in src
     # marcar_radio do documento DENTRO do if (12 espaços), nunca incondicional
     assert '            self._marcar_radio("documentoFiscalReclamante"' in src
+
+
+def test_inv30_salario_por_fora_modelo_a_nao_reflexo_base():
+    """Caso Ariane #64 (13/06/2026): salário por fora modelado como verba
+    DIFERENÇA SALARIAL/CALCULADO custom com compor_principal=NÃO servindo de
+    base p/ reflexos-checkbox → o painel não pré-cadastra os reflexos, a
+    automação não os marca e as verbas somem do export. Forma correta
+    (Modelo A): por fora = 2ª entrada de histórico + verbas Expresso próprias
+    (FÉRIAS+1/3, 13º) com valor_pago p/ a diferença; FGTS via módulo."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "NUNCA modele o salário por fora como uma VERBA principal" in ext
+    assert "não pré-cadastra os" in ext
+    assert "Modelo A" in ext and "2 entradas" in ext
+    # marcador de invariante presente
+    assert "INVARIANTE PERMANENTE — NÃO REVERTER\n(caso Ariane" in ext or \
+           "caso Ariane 0000566-12" in ext
+
+
+def test_inv31_bot_fallback_reflexo_manual_quando_sem_checkbox():
+    """Defesa em profundidade (#64): quando o checkbox candidato do reflexo
+    NUNCA aparece no painel 'Exibir', o bot deve criar o reflexo como Manual
+    (em vez de desistir). Só dispara quando cb_visto=False — não afeta o fluxo
+    Expresso-pareado (RODRIGO) onde o checkbox aparece e o retry trata."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "cb_visto = False" in src
+    assert "cb_visto = True" in src
+    # fallback condicionado a cb_visto False
+    sec = src.split("def _configurar_reflexo")[1].split("\n    def ")[0]
+    assert "if not cb_visto:" in sec
+    assert "_criar_reflexo_manual(verba_principal, reflexo)" in sec
+    assert "fallback: criando como reflexo Manual" in sec
