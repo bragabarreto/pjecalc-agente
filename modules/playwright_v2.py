@@ -4613,31 +4613,6 @@ class PlaywrightAutomatorV2:
         except Exception:
             return False
 
-    def _verba_tem_reflexo_ferias(self, v) -> bool:
-        """True se a verba tem um reflexo de FÉRIAS + 1/3 (checkbox_painel).
-
-        ⚠ INVARIANTE (caso Ariane #65, 14/06/2026): o reflexo é marcado ANTES
-        de a verba principal ter seus parâmetros (divisor/base) configurados
-        (ver ordem em _configurar_parametros_pos_expresso). O PJE-Calc calcula
-        a MÉDIA do reflexo de FÉRIAS (ocorrência PERÍODO_AQUISITIVO) no estado
-        DEFAULT da principal — saindo base 30× inflada (54.000 = 1.800 × 30 na
-        DIFERENÇA SALARIAL extrafolha). O Regerar [Manter] NÃO recomputa essa
-        média. Fix: forçar Regerar [Sobrescrever] após o save dos parâmetros —
-        regenera a média do reflexo sobre o estado JÁ correto da principal.
-        Manual sai certo justamente porque o usuário configura a principal
-        primeiro e seleciona o reflexo depois (confirmado pelo usuário).
-        O 13º reflexo (DEZEMBRO) não tem essa sensibilidade de média e já sai
-        correto; RODRIGO (reflexos MULTA 467, não férias) não é afetado.
-        """
-        try:
-            for r in getattr(v, "reflexos", None) or []:
-                alvo = (getattr(r, "expresso_reflex_alvo", None) or getattr(r, "nome", "") or "").upper()
-                if "FÉRIAS + 1/3 SOBRE" in alvo or "FERIAS + 1/3 SOBRE" in alvo:
-                    return True
-        except Exception:
-            pass
-        return False
-
     def _configurar_parametros_pos_expresso(self, v, marcar_reflexos: bool = False) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
 
@@ -5118,7 +5093,7 @@ class PlaywrightAutomatorV2:
                     self._aguardar_ajax(6000)
                     self._page.wait_for_timeout(800)
                 _sobrescrever = (
-                    (self._verba_periodo_curto(v) or self._verba_tem_reflexo_ferias(v))
+                    self._verba_periodo_curto(v)
                     and not getattr(self, "_ocorrencias_editadas", False)
                 )
                 if self._regerar_com_modal_confirmacao(

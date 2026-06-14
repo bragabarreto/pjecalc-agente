@@ -1230,17 +1230,3 @@ def test_inv33_match_reflexo_tolerante_ao_rename_da_verba():
     assert "expresso_alvo" in sec and "rindex(\" SOBRE \")" in sec
     # o JS deve casar por qualquer candidato
     assert "cands.some(c => txt.includes(c))" in sec
-
-
-def test_inv34_regerar_sobrescrever_quando_reflexo_ferias():
-    """Caso Ariane #65 (14/06/2026): o reflexo de FÉRIAS é marcado ANTES de a
-    verba principal ter divisor/base configurados; o PJE-Calc calcula a média
-    do reflexo no estado default da principal (base 30× inflada) e o Regerar
-    [Manter] não recomputa. Fix: Regerar [Sobrescrever] quando a verba tem
-    reflexo de FÉRIAS+1/3 — regenera a média sobre o estado já correto.
-    RODRIGO (reflexos MULTA 467) não é afetado."""
-    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    assert "def _verba_tem_reflexo_ferias" in src
-    assert "FÉRIAS + 1/3 SOBRE" in src
-    # a condição de sobrescrever inclui o reflexo de férias
-    assert "_verba_periodo_curto(v) or self._verba_tem_reflexo_ferias(v)" in src
