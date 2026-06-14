@@ -463,6 +463,15 @@ class ValorPagoVerba(BaseModel):
     proporcionaliza_historico: Optional[SimNao] = None
     quantidade_brl: Optional[float] = None
 
+    @field_validator("valor_brl", mode="before")
+    @classmethod
+    def _valor_brl_none_para_zero(cls, v):
+        """valor_pago CALCULADO (base sobre histórico) emite valor_brl=null —
+        o valor é apurado pelo PJE-Calc a partir do histórico, não digitado.
+        Coerce None→0.0 (o bot usa base_historico_nome, não valor_brl, em
+        modo CALCULADO). Caso Ariane DIFERENÇA SALARIAL (13/06/2026)."""
+        return 0.0 if v is None else v
+
 
 class OcorrenciaMensalOverride(BaseModel):
     mes: str  # MM/YYYY

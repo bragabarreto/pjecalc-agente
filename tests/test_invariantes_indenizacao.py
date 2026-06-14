@@ -1196,3 +1196,21 @@ def test_inv31_bot_fallback_reflexo_manual_quando_sem_checkbox():
     assert "if not cb_visto:" in sec
     assert "_criar_reflexo_manual(verba_principal, reflexo)" in sec
     assert "fallback: criando como reflexo Manual" in sec
+
+
+def test_inv32_valor_pago_calculado_aceita_valor_brl_null():
+    """Caso Ariane DIFERENÇA SALARIAL (13/06/2026): valor_pago CALCULADO (base
+    sobre histórico) emite valor_brl=null — o valor é apurado pelo PJE-Calc a
+    partir do histórico, não digitado. O schema travava (valor_brl: float
+    obrigatório), bloqueando a estratégia canônica. Validator coerce None→0.0;
+    INFORMADO preserva o valor."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "_m_inv32", str(REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py"))
+    m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+    vp = m.ValorPagoVerba.model_validate(
+        {"tipo": "CALCULADO", "base_tipo": "HISTORICO_SALARIAL",
+         "base_historico_nome": "SALÁRIO REGISTRADO", "valor_brl": None})
+    assert vp.valor_brl == 0.0
+    vp2 = m.ValorPagoVerba.model_validate({"tipo": "INFORMADO", "valor_brl": 1091.10})
+    assert vp2.valor_brl == 1091.10
