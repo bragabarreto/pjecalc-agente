@@ -867,7 +867,7 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 
 | Verba | `valor` padrão | Como preencher |
 |---|---|---|
-| **SALDO DE SALÁRIO** | CALCULADO | base=HISTORICO_SALARIAL (última rem.), divisor=OUTRO_VALOR=30, multiplicador=1, quantidade=INFORMADA (dias trabalhados no mês da rescisão) |
+| **SALDO DE SALÁRIO** | CALCULADO (regra) — **INFORMADO** (exceção, ver abaixo) | CALCULADO: base=HISTORICO_SALARIAL (última rem.), divisor=OUTRO_VALOR=30, multiplicador=1, quantidade=INFORMADA (dias trabalhados no mês da rescisão). **EXCEÇÃO obrigatória → INFORMADO** quando (a) a sentença FIXA o valor bruto do saldo (ex.: "R$ 1.886,67 = 8/30 de R$ 7.075,00"); OU (b) há valor já pago/depositado a deduzir (ConPag, adiantamento, depósito judicial); OU (c) a base inclui salário pago por fora (remuneração real = registrado + extrafolha). Ver §4.4.quater. |
 | **13º SALÁRIO** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1, quantidade=AVOS |
 | **FÉRIAS + 1/3** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1.33, quantidade=AVOS |
 | **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=APURADA (Lei 12.506) |
@@ -887,6 +887,55 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **INDENIZAÇÃO POR DANO MORAL/MATERIAL** | **INFORMADO** | valor único da condenação |
 | **MULTA CONVENCIONAL** | **INFORMADO** | valor único conforme CCT |
 | **INDENIZAÇÃO ADICIONAL (Estabilidade)** | CALCULADO | base=MAIOR_REMUNERACAO, divisor=OUTRO_VALOR=1, multiplicador=1, quantidade=INFORMADA (meses de estabilidade); proporcionalizar=SIM |
+
+## 4.4.quater SALDO DE SALÁRIO — INFORMADO quando há valor fixado/dedução/salário por fora — INVARIANTE PERMANENTE — NÃO REVERTER
+
+SALDO DE SALÁRIO é **sempre** DESLIGAMENTO + período curto (fração do último
+mês). Quando ele é CALCULADO com **base composta** (salário registrado +
+salário pago por fora) e/ou tem **valor pago a deduzir** (depósito da ConPag,
+adiantamento), o PJE-Calc Cidadão liquida ERRADO:
+
+- a ocorrência única do DESLIGAMENTO resolve a base **só pelo histórico
+  composto secundário** (perde o salário registrado): no caso ARIANE
+  (0000566-12, 14/06/2026) a base saiu R$ 1.800 (só o "por fora") em vez de
+  R$ 7.075 → saldo de R$ 480 em vez de R$ 1.886,67;
+- a ocorrência não regenera com o divisor/quantidade do parâmetro (fica
+  divisor=1/quantidade=1 default do Expresso) → alertas "parâmetro alterado
+  após geração" e o valor pago (ConPag) não é aplicado.
+
+**Regra (INVARIANTE):** emita SALDO DE SALÁRIO como **`valor: INFORMADO`**
+SEMPRE que ocorrer QUALQUER destes:
+1. a sentença **fixa o valor bruto** do saldo (ex.: "R$ 1.886,67 = 8/30 de
+   R$ 7.075,00") → `valor_informado_brl` = esse bruto;
+2. há **valor já pago/depositado** a deduzir (ConPag, depósito judicial,
+   adiantamento) → `valor_pago: {tipo: INFORMADO, valor_brl: <valor pago>}`
+   (NUNCA como verba de dedução separada);
+3. a base do saldo inclui **salário pago por fora** (remuneração real =
+   registrado + extrafolha).
+
+Modelo canônico (caso ARIANE — saldo 8 dias, remuneração real R$ 7.075,
+ConPag R$ 1.091,10):
+```json
+{
+  "expresso_alvo": "SALDO DE SALÁRIO",
+  "nome_pjecalc": "SALDO DE SALÁRIO",
+  "parametros": {
+    "valor": "INFORMADO",
+    "caracteristica": "COMUM",
+    "ocorrencia_pagamento": "DESLIGAMENTO",
+    "periodo_inicio": "01/04/2026",
+    "periodo_fim": "08/04/2026",
+    "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 1886.67},
+    "valor_pago":  {"tipo": "INFORMADO", "valor_brl": 1091.10}
+  }
+}
+```
+Se a sentença NÃO fixar o bruto, calcule-o você: `(remuneração real / 30) ×
+dias trabalhados no mês da rescisão`. `valor_informado_brl` é SEMPRE positivo;
+o PJE-Calc abate o `valor_pago` internamente. O bot já roteia
+INFORMADO+DESLIGAMENTO para o fluxo Manual (estável), evitando a fragilidade
+do CALCULADO. **Saldo CALCULADO simples (single histórico, sem dedução)
+permanece válido** — esta exceção só vale para os 3 gatilhos acima.
 
 ### Estratégia de preenchimento — campos OBRIGATÓRIOS por verba
 

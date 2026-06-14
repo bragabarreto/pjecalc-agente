@@ -1225,3 +1225,24 @@ def test_inv33_match_reflexo_tolerante_ao_rename_da_verba():
     assert "expresso_alvo" in sec and "rindex(\" SOBRE \")" in sec
     # o JS deve casar por qualquer candidato
     assert "cands.some(c => txt.includes(c))" in sec
+
+
+def test_inv34_saldo_informado_quando_fixado_deducao_ou_por_fora():
+    """Caso Ariane #65 (14/06/2026, sentença 0000566-12 item g): SALDO DE
+    SALÁRIO CALCULADO com base composta (registrado + por fora) e/ou valor pago
+    a deduzir (ConPag) liquida ERRADO — a ocorrência única do DESLIGAMENTO
+    resolve a base só pelo histórico secundário (R$ 1.800 em vez de R$ 7.075 →
+    saldo R$ 480 em vez de R$ 1.886,67) e não regenera com divisor/quantidade
+    do parâmetro. Regra: emitir SALDO como INFORMADO (valor_devido = bruto
+    fixado na sentença; valor_pago INFORMADO = depósito) → roteia pelo fluxo
+    Manual estável. Saldo CALCULADO simples (single histórico, sem dedução)
+    permanece válido."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "4.4.quater" in ext
+    assert "0000566-12" in ext  # caso documentado
+    assert "1.886,67" in ext  # valor bruto faithful à sentença
+    # os 3 gatilhos da exceção INFORMADO
+    assert "fixa o valor bruto" in ext
+    assert "salário pago por fora" in ext
+    # não quebra o saldo CALCULADO simples
+    assert "Saldo CALCULADO simples" in ext
