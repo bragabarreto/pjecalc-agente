@@ -1214,3 +1214,19 @@ def test_inv32_valor_pago_calculado_aceita_valor_brl_null():
     assert vp.valor_brl == 0.0
     vp2 = m.ValorPagoVerba.model_validate({"tipo": "INFORMADO", "valor_brl": 1091.10})
     assert vp2.valor_brl == 1091.10
+
+
+def test_inv33_match_reflexo_tolerante_ao_rename_da_verba():
+    """Caso Ariane #64 (13/06/2026): o PJE-Calc rotula o reflexo candidato no
+    painel com o nome ORIGINAL do Expresso da verba (ex.: 'FÉRIAS + 1/3 SOBRE
+    DIFERENÇA SALARIAL'), não com o nome_pjecalc renomeado ('... — SALÁRIO
+    EXTRAFOLHA'). O match do checkbox deve aceitar MÚLTIPLOS candidatos:
+    o alvo completo + '{tipo} SOBRE {expresso_alvo}' + '{tipo} SOBRE
+    {nome_pjecalc}' — senão o includes() falha e cai no fallback Manual
+    (base errada)."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    sec = src.split("def _configurar_reflexo")[1].split("\n    def ")[0]
+    assert "alvo_cands" in sec
+    assert "expresso_alvo" in sec and "rindex(\" SOBRE \")" in sec
+    # o JS deve casar por qualquer candidato
+    assert "cands.some(c => txt.includes(c))" in sec

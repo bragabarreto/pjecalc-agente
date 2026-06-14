@@ -5551,21 +5551,43 @@ class PlaywrightAutomatorV2:
         # .check() (eventos nativos + actionability), aguardar o AJAX e
         # VERIFICAR re-lendo o checkbox; retry ×3 com re-abertura do painel.
         alvo = reflexo.expresso_reflex_alvo or ""
+        # ⚠ INVARIANTE (caso Ariane #64, 13/06/2026): o PJE-Calc rotula o
+        # reflexo candidato no painel com o nome ORIGINAL do Expresso da verba
+        # (ex.: "FÉRIAS + 1/3 SOBRE DIFERENÇA SALARIAL"), NÃO com o nome
+        # renomeado da verba (nome_pjecalc = "DIFERENÇA SALARIAL — SALÁRIO
+        # EXTRAFOLHA"). Se o alvo do JSON usa o nome renomeado, o includes()
+        # falha → checkbox "não visível" → cai no fallback Manual (base errada).
+        # Fix: casar por MÚLTIPLOS candidatos — alvo completo E
+        # "{tipo do reflexo} SOBRE {expresso_alvo}" E "...SOBRE {nome_pjecalc}".
+        alvo_cands = [alvo]
+        if " SOBRE " in alvo.upper():
+            _pref = alvo[: alvo.upper().rindex(" SOBRE ")]
+            for _y in (
+                getattr(verba_principal, "expresso_alvo", None),
+                verba_principal.nome_pjecalc,
+            ):
+                if _y:
+                    _c = f"{_pref} SOBRE {_y}"
+                    if _c not in alvo_cands:
+                        alvo_cands.append(_c)
         ok_reflexo = False
         cb_visto = False  # o checkbox candidato chegou a existir no painel?
         for tentativa in range(1, 4):
             cb_id = self._page.evaluate(
-                """(alvoReflexo) => {
+                """(alvoCands) => {
                     const norm = s => (s||'').toUpperCase().trim();
-                    if (!alvoReflexo) return null;
+                    const cands = (alvoCands||[]).map(norm).filter(Boolean);
+                    if (!cands.length) return null;
                     const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
                     for (const cb of cbs) {
                         const tr = cb.closest('tr');
-                        if (tr && norm(tr.textContent).includes(norm(alvoReflexo))) return cb.id;
+                        if (!tr) continue;
+                        const txt = norm(tr.textContent);
+                        if (cands.some(c => txt.includes(c))) return cb.id;
                     }
                     return null;
                 }""",
-                alvo,
+                alvo_cands,
             )
             if not cb_id:
                 # Painel pode ter fechado (re-render) — re-clicar Exibir
