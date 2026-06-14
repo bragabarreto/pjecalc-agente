@@ -1161,26 +1161,21 @@ def test_inv29_bot_nao_exige_cpf_cnpj_das_partes():
     assert '            self._marcar_radio("documentoFiscalReclamante"' in src
 
 
-def test_inv30_salario_por_fora_diferenca_salarial_canonica():
-    """Caso Ariane #64 (13/06/2026, validado contra manual CSJT Exemplo 2):
-    salário por fora = verba DIFERENÇA SALARIAL (Expresso adaptado) com
-    valor_devido sobre o histórico SUPERIOR (por fora/total, ou INFORMADO fixo)
-    + valor_pago CALCULADO sobre o histórico do SALÁRIO REGISTRADO,
-    compor_principal=NAO (base condicional p/ reflexos), reflexos via
-    checkbox_painel, e incidência FGTS gerida p/ não duplicar a base. PROIBIDO
-    o modo não-canônico (CALCULADO sobre um único histórico custom sem
-    valor_pago sobre o registrado), que faz os reflexos sumirem e a verba
-    se perder no export."""
+def test_inv30_salario_por_fora_parcela_direta():
+    """Caso Ariane #65 (14/06/2026, validado contra cálculo MANUAL 263753):
+    salário por fora = DIFERENÇA SALARIAL com a PARCELA EXTRAFOLHA DIRETA
+    (base = histórico 'SALÁRIO PAGO POR FORA' = o valor da parcela; valor_pago
+    INFORMADO 0; divisor 1, mult 1, qtd 1; compor=NAO). PROIBIDO o modelo
+    devido(SALÁRIO TOTAL) − pago(SALÁRIO REGISTRADO): o net dá a diferença mas
+    a verba carrega o devido BRUTO e o reflexo de FÉRIAS lê o bruto e infla 30×.
+    Comprovado: planilha manual 263753, FÉRIAS reflexo = R$ 11.742 (correto)."""
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
-    assert "caso Ariane 0000566-12" in ext
-    assert "DIFERENÇA SALARIAL" in ext and "expresso_adaptado" in ext
-    assert "SALÁRIO REGISTRADO" in ext  # histórico inferior do valor_pago
-    assert 'compor_principal: "NAO"' in ext or "compor_principal=NAO" in ext
-    assert "checkbox_painel" in ext
-    # gestão de FGTS para não duplicar a base
-    assert "não DUPLICAR" in ext or "dupla base" in ext.lower()
-    # proibição do modo não-canônico (single histórico custom)
-    assert "ÚNICO\nhistórico custom" in ext or "ÚNICO histórico custom" in ext
+    assert "263753" in ext  # referência do cálculo manual
+    assert "parcela extrafolha DIRETO" in ext or "parcela por fora" in ext
+    assert '`valor_pago: {tipo: INFORMADO, valor_brl: 0.0}`' in ext
+    assert "infla 30" in ext or "infla **30" in ext
+    # proíbe o modelo antigo (total − registrado)
+    assert "NUNCA" in ext and "SALÁRIO TOTAL" in ext and "SALÁRIO REGISTRADO" in ext
 
 
 def test_inv31_bot_fallback_reflexo_manual_quando_sem_checkbox():

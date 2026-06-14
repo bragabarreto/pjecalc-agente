@@ -1401,42 +1401,42 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
 condenação**, mas a sua apuração é necessária para **calcular outras verbas/reflexos**.
 
 📌 **"Salário por fora" / extrafolha — INVARIANTE PERMANENTE — NÃO REVERTER
-(caso Ariane 0000566-12, 13/06/2026, validado contra o manual CSJT Exemplo 2):**
+(caso Ariane 0000566-12 + cálculo MANUAL de referência 263753, 14/06/2026):**
 
-A forma canônica é uma verba **DIFERENÇA SALARIAL** (Lançamento Expresso
-ADAPTADO, `estrategia_preenchimento: "expresso_adaptado"`,
-`expresso_alvo: "DIFERENÇA SALARIAL"`) configurada como BASE para reflexos —
-**a mesma mecânica de §4.7 (Devido − Pago via 2 históricos)**, com a diferença
-de que aqui `compor_principal = "NAO"`:
+A forma correta (VALIDADA contra cálculo manual de calculista, planilha PJC
+263753) modela a DIFERENÇA SALARIAL com o **valor da parcela extrafolha DIRETO**
+— NÃO como devido(total) − pago(registrado):
 
-1. **Histórico salarial = 2 entradas** (ver §4.7):
-   - "SALÁRIO REGISTRADO" (o que constava em folha) — histórico INFERIOR
-   - "SALÁRIO PAGO POR FORA" (ou o salário TOTAL reconhecido) — histórico SUPERIOR
-   - Mesmo período. Mesmas incidências, RESSALVADO o FGTS (ver item 5).
-2. **valor_devido** (`formula_calculado.base_calculo`) = o patamar SUPERIOR:
-   - sentença reconheceu histórico → `tipo: HISTORICO_SALARIAL`,
-     `historico_nome: "SALÁRIO PAGO POR FORA"` (ou o total);
-   - sentença fixou valor mensal fixo → `valor: INFORMADO` com esse valor no devido.
-3. **valor_pago** = `CALCULADO`, `base_historico_nome: "SALÁRIO REGISTRADO"`
-   (histórico inferior). Assim `devido − pago` = a diferença do por fora.
-4. **`compor_principal: "NAO"`** — a diferença mês a mês NÃO compõe o crédito;
-   serve só de BASE para os reflexos (manual: *"mudar para não se a parcela
-   serve apenas como base condicional"*). NÃO confundir com `gerar_reflexa`:
-   este permanece gerando os reflexos normalmente (campos independentes).
-5. **Reflexos** (FÉRIAS+1/3, 13º, AVISO conforme deferido) →
-   `estrategia_reflexa: "checkbox_painel"` (DIFERENÇA SALARIAL pré-cadastra
-   esses candidatos no painel "Exibir"). Os reflexos `compor_principal: "SIM"`.
-6. **FGTS — evitar dupla base**: o PJE-Calc soma a base FGTS de DUAS fontes
+1. **Histórico salarial "SALÁRIO PAGO POR FORA" = a própria parcela por fora**:
+   o VALOR desse histórico é a parcela extrafolha mensal (a diferença em si —
+   ex.: R$ 1.800,00/mês), com `proporcionaliza: "SIM"`. As DEMAIS verbas
+   (SALDO, MULTA 477, etc.) usam "ÚLTIMA REMUNERAÇÃO" com a remuneração total.
+2. **DIFERENÇA SALARIAL** (`estrategia_preenchimento: "expresso_adaptado"`,
+   `expresso_alvo: "DIFERENÇA SALARIAL"`, `valor: CALCULADO`):
+   - `formula_calculado.base_calculo`: `tipo: HISTORICO_SALARIAL`,
+     `historico_nome: "SALÁRIO PAGO POR FORA"`, `proporcionaliza: "SIM"`
+   - `divisor: {tipo: OUTRO_VALOR, valor: 1}`, `multiplicador: 1`,
+     `quantidade: {tipo: INFORMADA, valor: 1}`
+   - **`valor_pago: {tipo: INFORMADO, valor_brl: 0.0}`** — NÃO CALCULADO sobre
+     registrado. O valor da verba JÁ É a parcela por fora.
+   - `compor_principal: "NAO"` (serve só de base p/ reflexos).
+   - Fórmula resultante: `((SALÁRIO PAGO POR FORA / 1) × 1 × 1)` = a parcela.
+3. **Reflexos** (FÉRIAS+1/3, 13º, AVISO conforme deferido) →
+   `estrategia_reflexa: "checkbox_painel"`, `compor_principal: "SIM"`. O reflexo
+   lê o VALOR da verba-base (= a parcela por fora) e calcula certo.
+
+⚠️ **NUNCA** modele como `valor_devido` sobre SALÁRIO TOTAL **menos**
+`valor_pago` CALCULADO sobre SALÁRIO REGISTRADO: o *net* dá a diferença, MAS a
+verba carrega o **devido BRUTO** (o total), e o reflexo de **FÉRIAS** lê esse
+bruto e **infla 30×** (bug Ariane #65 — base 54.000 em vez de 1.800; o 13º não
+tem essa sensibilidade e sai certo, mascarando o erro). O valor da verba-base
+DEVE ser a própria parcela por fora (histórico direto, `valor_pago` INFORMADO 0).
+Comprovado: planilha manual 263753 com FÉRIAS reflexo = R$ 11.742 (correto).
+
+4. **FGTS — evitar dupla base**: o PJE-Calc soma a base FGTS de DUAS fontes
    (histórico com incidência FGTS + verba com incidência FGTS). Se o histórico
-   "SALÁRIO PAGO POR FORA"/total já tem `incidencia_fgts: true`, então a verba
-   DIFERENÇA SALARIAL deve ter **`incidencias.fgts: false`** (e demais
-   incidências conforme o caso) para não DUPLICAR. Se o FGTS sobre o por fora
-   só existe via a verba, mantenha a incidência na verba e ajuste o histórico.
-
-⚠️ **NUNCA** configure a DIFERENÇA SALARIAL como `CALCULADO` sobre um ÚNICO
-histórico custom (sem `valor_pago` sobre o registrado): nesse modo não-canônico
-os reflexos candidatos NÃO se formam no painel e a verba se perde no export
-(bug #64). O par devido(superior)/pago(registrado) é OBRIGATÓRIO.
+   "SALÁRIO PAGO POR FORA" já tem `incidencia_fgts: true`, então a verba
+   DIFERENÇA SALARIAL deve ter **`incidencias.fgts: false`** para não DUPLICAR.
 
 📌 **Em todos os outros casos**: `compor_principal: "SIM"` (default).
 - FGTS sobre verbas rescisórias da condenação → SIM
