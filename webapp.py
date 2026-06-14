@@ -4361,6 +4361,22 @@ async def _sse_follow_runner(runner: "_AutomacaoRunner", sessao_id: str):
                             CalculationStore().atualizar_status(runner.exec_dir, "pjc_exportado")
                         except Exception:
                             pass
+                    # Aprendizado v2 (Plano 2, FATIA 1 — captura): registrar a
+                    # parametrização confirmada de cada verba. Best-effort —
+                    # NUNCA pode quebrar o export. Só para sessões v2 (têm
+                    # prévia v2); v1 → _load_previa retorna None → no-op.
+                    try:
+                        from modules.webapp_v2 import _load_previa as _lp_v2
+                        _previa_v2 = _lp_v2(sessao_id)
+                        if _previa_v2:
+                            from learning.estrategia_parametrizacao import capturar_de_previa
+                            _dbcap = SessionLocal()
+                            try:
+                                capturar_de_previa(sessao_id, _previa_v2, _dbcap)
+                            finally:
+                                _dbcap.close()
+                    except Exception:
+                        pass
                     yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
                 if msg == "[FIM DA EXECUÇÃO]":
                     return
@@ -4941,6 +4957,63 @@ async def admin_aprendizado(request: Request, db: Session = Depends(get_db)):
             "correcoes_pendentes": correcoes_pendentes,
         },
     )
+
+
+@app.get("/api/aprendizado/parametrizacao")
+async def api_aprendizado_parametrizacao(db: Session = Depends(get_db)):
+    """Padrões de parametrização por verba aprendidos de cálculos exportados
+    (Plano 2, FATIA 1 — captura). Read-only."""
+    try:
+        from learning.estrategia_parametrizacao import listar_estrategias
+        return JSONResponse({"ok": True, "estrategias": listar_estrategias(db)})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "erro": str(exc), "estrategias": []})
+
+
+@app.get("/admin/aprendizado/parametrizacao", response_class=HTMLResponse)
+async def admin_aprendizado_parametrizacao(db: Session = Depends(get_db)):
+    """Painel read-only dos padrões de parametrização por verba acumulados."""
+    try:
+        from learning.estrategia_parametrizacao import listar_estrategias
+        ests = listar_estrategias(db)
+    except Exception as exc:
+        return HTMLResponse(f"<h1>Erro: {exc}</h1>", status_code=500)
+
+    import html as _html
+    import json as _json
+    linhas = []
+    for e in ests:
+        sig = e.get("assinatura", {})
+        sig_txt = ", ".join(
+            f"{k}={v}" for k, v in sig.items() if v not in (None, False, [], "")
+        )
+        linhas.append(
+            "<tr>"
+            f"<td><b>{_html.escape(e['nome_verba'] or '?')}</b></td>"
+            f"<td>{_html.escape(e.get('estrategia') or '—')}</td>"
+            f"<td style='font-size:0.82em;color:#555'>{_html.escape(sig_txt)}</td>"
+            f"<td style='text-align:center'>{e['n_calculos']}</td>"
+            f"<td style='text-align:center'>{e['confianca']:.2f}</td>"
+            f"<td><details><summary>ver</summary>"
+            f"<pre style='white-space:pre-wrap;font-size:0.78em'>"
+            f"{_html.escape(_json.dumps(e.get('parametros', {}), ensure_ascii=False, indent=1))}"
+            "</pre></details></td>"
+            "</tr>"
+        )
+    corpo = "".join(linhas) or "<tr><td colspan='6'>Nenhum padrão capturado ainda — exporte um cálculo v2 com sucesso.</td></tr>"
+    pagina = (
+        "<html><head><meta charset='utf-8'><title>Aprendizado — Parametrização por verba</title>"
+        "<style>body{font-family:system-ui,Arial;margin:2rem;color:#1c1917}"
+        "table{border-collapse:collapse;width:100%}th,td{border:1px solid #e7e5e4;padding:6px 9px;text-align:left;vertical-align:top}"
+        "th{background:#f5f5f4}h1{font-size:1.3rem}.sub{color:#57534e;margin-bottom:1rem}</style></head><body>"
+        "<h1>Padrões de parametrização por verba</h1>"
+        "<p class='sub'>Acumulado de cálculos v2 exportados com sucesso (Plano 2 — FATIA 1: captura). "
+        f"{len(ests)} padrão(ões). Esta fatia apenas ACUMULA — a injeção na extração vem depois.</p>"
+        "<table><thead><tr><th>Verba</th><th>Estratégia</th><th>Assinatura estrutural</th>"
+        "<th>Nº cálculos</th><th>Confiança</th><th>Parâmetros (exemplar)</th></tr></thead>"
+        f"<tbody>{corpo}</tbody></table></body></html>"
+    )
+    return HTMLResponse(pagina)
 
 
 @app.post("/api/aprendizado/executar")

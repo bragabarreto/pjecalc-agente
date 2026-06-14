@@ -430,6 +430,81 @@ class EstrategiaVerba(Base):
         return f"<EstrategiaVerba '{self.nome_verba}' [{self.estrategia}] taxa={taxa}>"
 
 
+class EstrategiaParametrizacaoVerba(Base):
+    """Plano 2 (estratégia de PREENCHIMENTO) — captura, por verba, COMO ela foi
+    parametrizada num cálculo revisado/exportado com sucesso (pipeline v2).
+
+    Diferente de ``EstrategiaVerba`` (que aprende a ESTRATÉGIA de lançamento —
+    expresso vs manual — no pipeline v1), esta tabela guarda a PARAMETRIZAÇÃO
+    completa confirmada na prévia v2: valor/base/divisor/multiplicador/
+    quantidade/valor_pago/reflexos/incidências. A unidade é
+    ``(nome_verba, assinatura estrutural dos parâmetros)`` — agrupa cálculos que
+    usaram o MESMO padrão de preenchimento e conta as ocorrências, revelando o
+    padrão dominante por verba para reúso futuro.
+
+    FUNDAÇÃO (captura): por ora só ACUMULA o dataset. A injeção na extração e o
+    ciclo de confiança vêm em fatias posteriores.
+    """
+
+    __tablename__ = "estrategia_parametrizacao_verba"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+
+    nome_verba = Column(String(300), nullable=False)
+    nome_normalizado = Column(String(300), nullable=False, index=True)
+
+    # Assinatura estrutural dos parâmetros (JSON canônico) — chave de agrupamento
+    assinatura = Column(String(600), nullable=False, index=True)
+    # Sinais contextuais mínimos extraídos da verba/sentença (JSON)
+    gatilho_contexto = Column(Text, nullable=True)
+    # estrategia_preenchimento da prévia: expresso_direto/expresso_adaptado/manual
+    estrategia_preenchimento = Column(String(40), nullable=True)
+    # Parâmetros COMPLETOS do exemplar mais recente (JSON) — referência de reúso
+    parametros = Column(Text, nullable=True)
+
+    # Métricas de aprendizado
+    confianca = Column(Float, default=0.5)
+    n_calculos_origem = Column(Integer, default=1)
+    calculos_origem = Column(Text, nullable=True)  # JSON: lista de sessao_ids
+
+    versao_pjecalc = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    @property
+    def parametros_dict(self) -> dict:
+        if self.parametros:
+            try:
+                return json.loads(self.parametros)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {}
+
+    @property
+    def gatilho_dict(self) -> dict:
+        if self.gatilho_contexto:
+            try:
+                return json.loads(self.gatilho_contexto)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return {}
+
+    @property
+    def calculos_origem_list(self) -> list:
+        if self.calculos_origem:
+            try:
+                return json.loads(self.calculos_origem)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return []
+
+    def __repr__(self) -> str:
+        return (
+            f"<EstrategiaParametrizacaoVerba '{self.nome_verba}' "
+            f"n={self.n_calculos_origem} conf={self.confianca:.2f}>"
+        )
+
+
 # ── Criar tabelas ─────────────────────────────────────────────────────────────
 
 def criar_tabelas() -> None:
