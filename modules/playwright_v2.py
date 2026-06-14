@@ -4613,6 +4613,115 @@ class PlaywrightAutomatorV2:
         except Exception:
             return False
 
+    @staticmethod
+    def _is_reflexo_ferias(r) -> bool:
+        alvo = (getattr(r, "expresso_reflex_alvo", None) or getattr(r, "nome", "") or "").upper()
+        return "FÉRIAS + 1/3 SOBRE" in alvo or "FERIAS + 1/3 SOBRE" in alvo
+
+    def _verba_tem_reflexo_ferias(self, v) -> bool:
+        """True se a verba tem reflexo de FÉRIAS+1/3 (média sensível à ordem)."""
+        try:
+            return any(self._is_reflexo_ferias(r) for r in (getattr(v, "reflexos", None) or []))
+        except Exception:
+            return False
+
+    def _marcar_reflexos_ferias_pos_config(self, v) -> None:
+        """Marca os reflexos de FÉRIAS+1/3 APÓS a principal estar configurada.
+
+        ⚠ INVARIANTE PERMANENTE (caso Ariane #65, 14/06/2026): a MÉDIA do
+        reflexo de FÉRIAS (ocorrência PERÍODO_AQUISITIVO) é calculada pelo
+        PJE-Calc no INSTANTE em que o checkbox é marcado, sobre o estado
+        ATUAL da principal — e NENHUM Regerar a recomputa depois (testado:
+        Sobrescrever não corrige). Se marcado antes de a principal ter
+        divisor/base (fluxo padrão ~linha 4668), a base sai 30× inflada
+        (54.000 = 1.800 × 30 na DIFERENÇA SALARIAL extrafolha → férias
+        72.000/período em vez de ~2.400). O usuário (calculista) confirmou:
+        à mão sai correto porque a principal é configurada PRIMEIRO e o
+        reflexo selecionado DEPOIS.
+
+        Por isso os reflexos de FÉRIAS são adiados para AQUI — após o save
+        dos parâmetros da principal — replicando o fluxo manual. Após marcar,
+        re-abrimos o form de parâmetros da principal e salvamos de novo
+        (flush da conversa Seam: o checkbox vive em FlushMode.MANUAL e só o
+        save de parâmetros flusha; sem isso some no Fechar+Reabrir).
+
+        RODRIGO (reflexos MULTA 467, não férias) NUNCA entra aqui — caminho
+        100% aditivo, zero risco de regressão.
+        """
+        ferias = [r for r in (getattr(v, "reflexos", None) or []) if self._is_reflexo_ferias(r)]
+        if not ferias:
+            return
+        candidatos = [v.nome_pjecalc]
+        if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
+            candidatos.append(v.expresso_alvo)
+        self.log(f"  → Reflexo(s) de FÉRIAS pós-config (principal já ajustada): {v.nome_pjecalc}")
+        try:
+            if "verba-calculo.jsf" not in self._page.url:
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(800)
+        except Exception:
+            pass
+        for r in ferias:
+            try:
+                self._configurar_reflexo(v, r)
+            except Exception as _e:
+                self.log(f"    ⚠ Falha reflexo férias '{getattr(r, 'nome', '?')}': {_e}")
+        # FLUSH: re-abrir o form de parâmetros da principal e salvar (sem
+        # alterar nada) — flusha o checkbox do reflexo na conversa Seam.
+        try:
+            if "verba-calculo.jsf" not in self._page.url:
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(5000)
+                self._page.wait_for_timeout(800)
+            lid = self._page.evaluate(
+                """(candidatos) => {
+                    const norm = s => (s||'').toUpperCase().replace(/\\s+/g,' ').trim();
+                    const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                        .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                    for (const alvo of candidatos) {
+                        const alvoN = norm(alvo);
+                        for (const link of linksMain) {
+                            const tr = link.closest('tr'); if (!tr) continue;
+                            for (const td of tr.querySelectorAll('td')) {
+                                const t = norm(td.textContent.replace(/Exibir|Ocultar/gi, ''));
+                                if (t === alvoN) return link.id;
+                            }
+                        }
+                    }
+                    return null;
+                }""",
+                candidatos,
+            )
+            if lid:
+                self._page.evaluate(
+                    "(id)=>{const a=document.getElementById(id); if(a) a.click();}", lid
+                )
+                self._aguardar_ajax(8000)
+                try:
+                    self._page.wait_for_selector(
+                        "input[id$=':descricao'], input[id$=':salvar']",
+                        state="visible", timeout=10000,
+                    )
+                except Exception:
+                    pass
+                if self._clicar_salvar_flex(timeout_ms=8000):
+                    self._aguardar_ajax(8000)
+                    if self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False):
+                        self.log("    ✓ Flush do reflexo de férias (re-save da principal)")
+                try:
+                    if "verba-calculo.jsf" not in self._page.url:
+                        self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(5000)
+                    if self._regerar_com_modal_confirmacao(sobrescrever=False, log_prefix="    "):
+                        self.log("    ✓ Regerar pós-reflexo de férias")
+                except Exception:
+                    pass
+            else:
+                self.log("    ⚠ flush férias: linkParametrizar da principal não achado")
+        except Exception as _e:
+            self.log(f"    ⚠ flush do reflexo de férias: {_e}")
+
     def _configurar_parametros_pos_expresso(self, v, marcar_reflexos: bool = False) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
 
@@ -4666,6 +4775,15 @@ class PlaywrightAutomatorV2:
         # não alterou os valores das ocorrências; a ordem de ativação não é
         # o fator. Mantido o parâmetro para compat.)
         for _r in getattr(v, "reflexos", None) or []:
+            # ⚠ FÉRIAS adiado (caso Ariane #65): o reflexo de FÉRIAS tem a
+            # MÉDIA congelada no instante da marcação — se marcado AQUI (antes
+            # de a principal ter divisor/base), a base sai 30× inflada. Os
+            # reflexos de férias são marcados DEPOIS do save da principal, em
+            # _marcar_reflexos_ferias_pos_config (chamado no fim deste método).
+            # Demais reflexos (MULTA 467 etc.) seguem aqui — ordem-insensíveis
+            # (RODRIGO inalterado).
+            if self._is_reflexo_ferias(_r):
+                continue
             try:
                 self._configurar_reflexo(v, _r)
             except Exception as _e:
@@ -5113,6 +5231,16 @@ class PlaywrightAutomatorV2:
                         self._page.wait_for_timeout(1000)
             except Exception as _e:
                 self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
+            # ⚠ FÉRIAS reflexo pós-config (caso Ariane #65): a principal já
+            # está configurada (divisor/base) e salva — marcar AGORA o reflexo
+            # de FÉRIAS para que a MÉDIA nasça sobre o estado correto (manual).
+            # Caminho 100% aditivo: só roda se houver reflexo de férias
+            # (RODRIGO/MULTA 467 não entram).
+            try:
+                if self._verba_tem_reflexo_ferias(v):
+                    self._marcar_reflexos_ferias_pos_config(v)
+            except Exception as _e:
+                self.log(f"    ⚠ reflexo de férias pós-config: {_e}")
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
             # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save

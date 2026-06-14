@@ -1230,3 +1230,23 @@ def test_inv33_match_reflexo_tolerante_ao_rename_da_verba():
     assert "expresso_alvo" in sec and "rindex(\" SOBRE \")" in sec
     # o JS deve casar por qualquer candidato
     assert "cands.some(c => txt.includes(c))" in sec
+
+
+def test_inv34_reflexo_ferias_marcado_pos_config_da_principal():
+    """Caso Ariane #65 (14/06/2026): a MÉDIA do reflexo de FÉRIAS
+    (PERÍODO_AQUISITIVO) é congelada no instante da marcação do checkbox,
+    sobre o estado da principal NAQUELE momento — nenhum Regerar a recomputa
+    (Sobrescrever testado e falhou). Marcar o reflexo de férias ANTES da
+    principal ter divisor/base → base 30× inflada. Fix: adiar os reflexos de
+    FÉRIAS para DEPOIS do save dos parâmetros da principal
+    (_marcar_reflexos_ferias_pos_config), replicando o fluxo manual; flush
+    via re-save da principal. RODRIGO (reflexos MULTA 467) é caminho
+    NÃO-tocado (aditivo)."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _marcar_reflexos_ferias_pos_config" in src
+    assert "def _is_reflexo_ferias" in src
+    # no loop original, os reflexos de férias são PULADOS
+    sec = src.split("def _configurar_parametros_pos_expresso")[1].split("\n    def _")[0]
+    assert "if self._is_reflexo_ferias(_r):" in sec and "continue" in sec
+    # e marcados pós-save
+    assert "_marcar_reflexos_ferias_pos_config(v)" in sec
