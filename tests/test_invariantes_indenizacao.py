@@ -1161,20 +1161,26 @@ def test_inv29_bot_nao_exige_cpf_cnpj_das_partes():
     assert '            self._marcar_radio("documentoFiscalReclamante"' in src
 
 
-def test_inv30_salario_por_fora_modelo_a_nao_reflexo_base():
-    """Caso Ariane #64 (13/06/2026): salário por fora modelado como verba
-    DIFERENÇA SALARIAL/CALCULADO custom com compor_principal=NÃO servindo de
-    base p/ reflexos-checkbox → o painel não pré-cadastra os reflexos, a
-    automação não os marca e as verbas somem do export. Forma correta
-    (Modelo A): por fora = 2ª entrada de histórico + verbas Expresso próprias
-    (FÉRIAS+1/3, 13º) com valor_pago p/ a diferença; FGTS via módulo."""
+def test_inv30_salario_por_fora_diferenca_salarial_canonica():
+    """Caso Ariane #64 (13/06/2026, validado contra manual CSJT Exemplo 2):
+    salário por fora = verba DIFERENÇA SALARIAL (Expresso adaptado) com
+    valor_devido sobre o histórico SUPERIOR (por fora/total, ou INFORMADO fixo)
+    + valor_pago CALCULADO sobre o histórico do SALÁRIO REGISTRADO,
+    compor_principal=NAO (base condicional p/ reflexos), reflexos via
+    checkbox_painel, e incidência FGTS gerida p/ não duplicar a base. PROIBIDO
+    o modo não-canônico (CALCULADO sobre um único histórico custom sem
+    valor_pago sobre o registrado), que faz os reflexos sumirem e a verba
+    se perder no export."""
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
-    assert "NUNCA modele o salário por fora como uma VERBA principal" in ext
-    assert "não pré-cadastra os" in ext
-    assert "Modelo A" in ext and "2 entradas" in ext
-    # marcador de invariante presente
-    assert "INVARIANTE PERMANENTE — NÃO REVERTER\n(caso Ariane" in ext or \
-           "caso Ariane 0000566-12" in ext
+    assert "caso Ariane 0000566-12" in ext
+    assert "DIFERENÇA SALARIAL" in ext and "expresso_adaptado" in ext
+    assert "SALÁRIO REGISTRADO" in ext  # histórico inferior do valor_pago
+    assert 'compor_principal: "NAO"' in ext or "compor_principal=NAO" in ext
+    assert "checkbox_painel" in ext
+    # gestão de FGTS para não duplicar a base
+    assert "não DUPLICAR" in ext or "dupla base" in ext.lower()
+    # proibição do modo não-canônico (single histórico custom)
+    assert "ÚNICO\nhistórico custom" in ext or "ÚNICO histórico custom" in ext
 
 
 def test_inv31_bot_fallback_reflexo_manual_quando_sem_checkbox():

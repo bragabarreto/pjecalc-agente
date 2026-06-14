@@ -1401,28 +1401,42 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
 condenação**, mas a sua apuração é necessária para **calcular outras verbas/reflexos**.
 
 📌 **"Salário por fora" / extrafolha — INVARIANTE PERMANENTE — NÃO REVERTER
-(caso Ariane 0000566-12, 13/06/2026):**
+(caso Ariane 0000566-12, 13/06/2026, validado contra o manual CSJT Exemplo 2):**
 
-⚠️ **NUNCA modele o salário por fora como uma VERBA principal
-(`DIFERENÇA SALARIAL` / "SALÁRIO PAGO POR FORA") com `compor_principal=NAO`
-servindo de base para reflexos-checkbox.** O PJE-Calc **não pré-cadastra os
-reflexos candidatos** (férias+1/3, 13º) no painel "Exibir" de uma verba
-CALCULADO sobre histórico customizado — a automação não consegue marcá-los e
-as verbas se perdem no export (bug #64). Esse formato é PROIBIDO.
+A forma canônica é uma verba **DIFERENÇA SALARIAL** (Lançamento Expresso
+ADAPTADO, `estrategia_preenchimento: "expresso_adaptado"`,
+`expresso_alvo: "DIFERENÇA SALARIAL"`) configurada como BASE para reflexos —
+**a mesma mecânica de §4.7 (Devido − Pago via 2 históricos)**, com a diferença
+de que aqui `compor_principal = "NAO"`:
 
-✅ **Forma correta (Modelo A — histórico + verbas Expresso próprias):**
-1. **Histórico salarial = 2 entradas**: "ÚLTIMA REMUNERAÇÃO" (registrado) +
-   "SALÁRIO PAGO POR FORA" — ambas com as mesmas incidências e período. Assim
-   a remuneração (última/maior) já incorpora o por fora.
-2. As parcelas deferidas que **refletem** o por fora (FÉRIAS + 1/3, 13º
-   SALÁRIO, AVISO) viram **verbas Expresso PRÓPRIAS** (não reflexos-checkbox),
-   calculadas sobre o histórico ampliado. Quando a sentença defere só a
-   **diferença** (a parcela registrada já foi paga/gozada), use `valor_pago`
-   para abater o já-pago — o líquido resulta apenas a diferença do por fora.
-3. O **FGTS** sobre o por fora vai no **módulo FGTS** (não como reflexo de
-   verba-base).
-- Esse modelo deixa o cálculo com forma 100% Expresso-padrão (como o RODRIGO),
-  que a automação executa de forma confiável.
+1. **Histórico salarial = 2 entradas** (ver §4.7):
+   - "SALÁRIO REGISTRADO" (o que constava em folha) — histórico INFERIOR
+   - "SALÁRIO PAGO POR FORA" (ou o salário TOTAL reconhecido) — histórico SUPERIOR
+   - Mesmo período. Mesmas incidências, RESSALVADO o FGTS (ver item 5).
+2. **valor_devido** (`formula_calculado.base_calculo`) = o patamar SUPERIOR:
+   - sentença reconheceu histórico → `tipo: HISTORICO_SALARIAL`,
+     `historico_nome: "SALÁRIO PAGO POR FORA"` (ou o total);
+   - sentença fixou valor mensal fixo → `valor: INFORMADO` com esse valor no devido.
+3. **valor_pago** = `CALCULADO`, `base_historico_nome: "SALÁRIO REGISTRADO"`
+   (histórico inferior). Assim `devido − pago` = a diferença do por fora.
+4. **`compor_principal: "NAO"`** — a diferença mês a mês NÃO compõe o crédito;
+   serve só de BASE para os reflexos (manual: *"mudar para não se a parcela
+   serve apenas como base condicional"*). NÃO confundir com `gerar_reflexa`:
+   este permanece gerando os reflexos normalmente (campos independentes).
+5. **Reflexos** (FÉRIAS+1/3, 13º, AVISO conforme deferido) →
+   `estrategia_reflexa: "checkbox_painel"` (DIFERENÇA SALARIAL pré-cadastra
+   esses candidatos no painel "Exibir"). Os reflexos `compor_principal: "SIM"`.
+6. **FGTS — evitar dupla base**: o PJE-Calc soma a base FGTS de DUAS fontes
+   (histórico com incidência FGTS + verba com incidência FGTS). Se o histórico
+   "SALÁRIO PAGO POR FORA"/total já tem `incidencia_fgts: true`, então a verba
+   DIFERENÇA SALARIAL deve ter **`incidencias.fgts: false`** (e demais
+   incidências conforme o caso) para não DUPLICAR. Se o FGTS sobre o por fora
+   só existe via a verba, mantenha a incidência na verba e ajuste o histórico.
+
+⚠️ **NUNCA** configure a DIFERENÇA SALARIAL como `CALCULADO` sobre um ÚNICO
+histórico custom (sem `valor_pago` sobre o registrado): nesse modo não-canônico
+os reflexos candidatos NÃO se formam no painel e a verba se perde no export
+(bug #64). O par devido(superior)/pago(registrado) é OBRIGATÓRIO.
 
 📌 **Em todos os outros casos**: `compor_principal: "SIM"` (default).
 - FGTS sobre verbas rescisórias da condenação → SIM
