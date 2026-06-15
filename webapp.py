@@ -175,6 +175,26 @@ class _AutomacaoRunner:
         finally:
             _db.close()
 
+        # Aprendizado v2 (Plano 2, FATIA 1 — captura): no FIM autoritativo do
+        # run (independe do SSE estar conectado), registrar a parametrização
+        # confirmada de cada verba. Independente do branch de status acima
+        # (sessões v2 podem não ter Calculo "em_automacao"). Best-effort —
+        # NUNCA pode quebrar. v1 (sem prévia v2) → _load_previa None → no-op.
+        try:
+            _pjc_ok = any(m.startswith("PJC_GERADO:") for m in self.logs)
+            if _pjc_ok:
+                from modules.webapp_v2 import _load_previa as _lp_v2
+                _previa_v2 = _lp_v2(sid)
+                if _previa_v2:
+                    from learning.estrategia_parametrizacao import capturar_de_previa
+                    _dbcap = SessionLocal()
+                    try:
+                        capturar_de_previa(sid, _previa_v2, _dbcap)
+                    finally:
+                        _dbcap.close()
+        except Exception as _exc:
+            logger.warning(f"_cleanup captura aprendizado falhou [{sid}]: {_exc}")
+
     def stop(self):
         """Para a automação forçadamente (chamado pelo endpoint /api/parar)."""
         if self.done:
@@ -4361,22 +4381,8 @@ async def _sse_follow_runner(runner: "_AutomacaoRunner", sessao_id: str):
                             CalculationStore().atualizar_status(runner.exec_dir, "pjc_exportado")
                         except Exception:
                             pass
-                    # Aprendizado v2 (Plano 2, FATIA 1 — captura): registrar a
-                    # parametrização confirmada de cada verba. Best-effort —
-                    # NUNCA pode quebrar o export. Só para sessões v2 (têm
-                    # prévia v2); v1 → _load_previa retorna None → no-op.
-                    try:
-                        from modules.webapp_v2 import _load_previa as _lp_v2
-                        _previa_v2 = _lp_v2(sessao_id)
-                        if _previa_v2:
-                            from learning.estrategia_parametrizacao import capturar_de_previa
-                            _dbcap = SessionLocal()
-                            try:
-                                capturar_de_previa(sessao_id, _previa_v2, _dbcap)
-                            finally:
-                                _dbcap.close()
-                    except Exception:
-                        pass
+                    # (Aprendizado v2: a captura ocorre no _cleanup do runner —
+                    # fim autoritativo do run, independe do SSE estar conectado.)
                     yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
                 if msg == "[FIM DA EXECUÇÃO]":
                     return

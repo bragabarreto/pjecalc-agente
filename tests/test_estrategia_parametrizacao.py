@@ -102,3 +102,21 @@ def test_base_composta_distingue_padrao(db):
     capturar_de_previa("s2", {"verbas_principais": [_verba(composta=True)]}, db)
     ests = listar_estrategias(db)
     assert len(ests) == 2  # composta vs não-composta = padrões distintos
+
+
+def test_reflexos_no_nivel_da_verba_entram_na_assinatura(db):
+    # reflexos vivem em v["reflexos"] (NÃO em parametros) — devem ser captados
+    v = _verba(nome="DIFERENÇA SALARIAL")
+    v["reflexos"] = [
+        {"expresso_reflex_alvo": "FÉRIAS + 1/3 SOBRE DIFERENÇA SALARIAL"},
+        {"expresso_reflex_alvo": "13º SALÁRIO SOBRE DIFERENÇA SALARIAL"},
+    ]
+    capturar_de_previa("s1", {"verbas_principais": [v]}, db)
+    ests = listar_estrategias(db)
+    assert len(ests) == 1
+    refs = ests[0]["assinatura"]["reflexos"]
+    assert len(refs) == 2
+    assert any("ferias" in r for r in refs)
+    # verba SEM reflexos = padrão distinto da mesma verba COM reflexos
+    capturar_de_previa("s2", {"verbas_principais": [_verba(nome="DIFERENÇA SALARIAL")]}, db)
+    assert len(listar_estrategias(db)) == 2

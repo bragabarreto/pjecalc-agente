@@ -120,6 +120,10 @@ def capturar_de_previa(
         params = v.get("parametros")
         if not nome or not isinstance(params, dict):
             continue
+        # Reflexos vivem no NÍVEL da verba (não dentro de parametros) — mesclar
+        # para que a assinatura capte o padrão de reflexos e o painel recompute
+        # consistente (fonte única no JSON persistido).
+        params = {**params, "reflexos": v.get("reflexos") or []}
         nome_norm = _normalizar(nome)
         assin = assinatura_estrutural(params)
         fp = _fingerprint(nome_norm, assin)
