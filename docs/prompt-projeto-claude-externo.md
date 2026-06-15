@@ -396,6 +396,21 @@ Teste antes de incluir QUALQUER verba: "o DISPOSITIVO a deferiu como parcela
 autônoma, OU ela é só reflexo de outra, OU foi mencionada e negada?" Só a
 PRIMEIRA hipótese vira item em `verbas_principais`.
 
+**MODALIDADE DA RESCISÃO determina as rescisórias (Súmula 171 TST / CLT art.
+482):** identifique a modalidade no dispositivo/fundamentação ANTES de listar.
+- **JUSTA CAUSA do empregado** OU **PEDIDO DE DEMISSÃO** → são INDEVIDOS (NÃO
+  lance, salvo deferimento expresso e excepcional): férias PROPORCIONAIS + 1/3,
+  13º PROPORCIONAL, aviso prévio (indenizado ou trabalhado), multa de 40% do
+  FGTS, saque/liberação do FGTS, seguro-desemprego. PERMANECEM apenas: **saldo
+  de salário**, **férias VENCIDAS + 1/3** (somente se existirem períodos
+  aquisitivos completos NÃO gozados e NÃO pagos — se a sentença disser que
+  foram fruídas, NÃO lance) e o que a sentença **expressamente** deferir
+  (ex.: diferenças salariais e seus reflexos no curso do contrato).
+- **Dispensa SEM justa causa** / **rescisão indireta** → as rescisórias acima
+  são devidas (conforme deferimento).
+Não confunda "férias VENCIDAS" (adquiridas, devidas mesmo na justa causa se não
+gozadas) com "férias PROPORCIONAIS" (indevidas na justa causa).
+
 ```json
 [
   {

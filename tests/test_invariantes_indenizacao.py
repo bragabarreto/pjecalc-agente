@@ -1267,3 +1267,7 @@ def test_inv35_so_verbas_efetivamente_deferidas():
     assert "Reflexo ≠ verba autônoma" in ext
     # dispositivo é a fonte da verdade
     assert "DISPOSITIVO" in ext and "improcedente" in ext.lower()
+    # regra consolidada de justa causa (Súmula 171) — gatilho que a IA perdia
+    assert "MODALIDADE DA RESCISÃO" in ext
+    assert "Súmula 171" in ext
+    assert "férias VENCIDAS" in ext and "férias PROPORCIONAIS" in ext
