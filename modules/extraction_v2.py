@@ -146,6 +146,7 @@ só se quiser enviar o cálculo ao PJe depois.
   "data_ajuizamento": "DD/MM/YYYY",
   "data_inicio_calculo": "DD/MM/YYYY",
   "data_termino_calculo": "DD/MM/YYYY",
+  "modalidade_rescisao": "sem_justa_causa|justa_causa|pedido_demissao|rescisao_indireta|termino_contrato|acordo|outro",
   "prescricao_quinquenal": true,
   "prescricao_fgts": false,
   "tipo_base_tabelada": "INTEGRAL|PARCIAL|INTERMITENTE",
@@ -164,6 +165,15 @@ só se quiser enviar o cálculo ao PJe depois.
   "comentarios_jg": null
 }
 ```
+
+⚠️ **`modalidade_rescisao` (OBRIGATÓRIO — determina as rescisórias)**: identifique
+no DISPOSITIVO/fundamentação a modalidade EFETIVAMENTE reconhecida (não a pedida):
+`justa_causa` | `sem_justa_causa` | `pedido_demissao` | `rescisao_indireta` |
+`termino_contrato` | `acordo` | `outro`. Atenção: se a parte PEDIU rescisão
+indireta/reversão da justa causa mas o juízo NEGOU (manteve a justa causa), use
+`justa_causa`. Esse campo aciona a regra MODALIDADE DA RESCISÃO (Súmula 171) da
+seção 4 — em `justa_causa`/`pedido_demissao` NÃO lance férias proporcionais/13º/
+aviso/40% FGTS/seguro-desemprego.
 
 ⚠️ **REGRA CRÍTICA — `prescricao_quinquenal` (INVARIANTE PERMANENTE — NÃO REVERTER)**:
 

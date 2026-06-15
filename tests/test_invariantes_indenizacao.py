@@ -1271,3 +1271,53 @@ def test_inv35_so_verbas_efetivamente_deferidas():
     assert "MODALIDADE DA RESCISÃO" in ext
     assert "Súmula 171" in ext
     assert "férias VENCIDAS" in ext and "férias PROPORCIONAIS" in ext
+
+
+def test_inv36_justa_causa_safeguard_deterministico():
+    """Caso Ariane #68 (15/06/2026): o prompt sozinho não zera a alucinação de
+    rescisórias indevidas na justa causa (~25% erram). Safeguard determinístico:
+    (a) campo modalidade_rescisao extraído; (b) normalizer AUTO-remove o
+    inequivocamente indevido (aviso/40%FGTS/saque/seguro); (c) FÉRIAS/13º NÃO
+    são removidos (vencidas podem ser devidas) — só preservados. Sem
+    modalidade → nenhuma remoção (retrocompatível)."""
+    from modules.json_normalizer import normalize_v2_json
+
+    def _mk(mod):
+        return {
+            "parametros_calculo": {
+                "estado_uf": "CE", "municipio": "X",
+                "data_admissao": "01/11/2021", "data_demissao": "08/04/2026",
+                "data_ajuizamento": "20/04/2026",
+                "data_inicio_calculo": "01/11/2021",
+                "data_termino_calculo": "08/04/2026",
+                "modalidade_rescisao": mod,
+            },
+            "verbas_principais": [
+                {"id": "v1", "nome_pjecalc": "SALDO DE SALÁRIO", "parametros": {}},
+                {"id": "v2", "nome_pjecalc": "AVISO PRÉVIO INDENIZADO", "parametros": {}},
+                {"id": "v3", "nome_pjecalc": "MULTA DE 40% DO FGTS", "parametros": {}},
+                {"id": "v4", "nome_pjecalc": "SEGURO-DESEMPREGO", "parametros": {}},
+                {"id": "v5", "nome_pjecalc": "FÉRIAS + 1/3", "parametros": {}},
+                {"id": "v6", "nome_pjecalc": "MULTA DO ARTIGO 477 DA CLT", "parametros": {}},
+            ],
+        }
+
+    jc = [v["nome_pjecalc"] for v in normalize_v2_json(_mk("justa_causa"))["verbas_principais"]]
+    assert "AVISO PRÉVIO INDENIZADO" not in jc  # auto-removido
+    assert "MULTA DE 40% DO FGTS" not in jc
+    assert "SEGURO-DESEMPREGO" not in jc
+    assert "FÉRIAS + 1/3" in jc  # NÃO remove (vencidas) — só FLAG no schema
+    assert "MULTA DO ARTIGO 477 DA CLT" in jc  # 477 devida se não paga no prazo
+    assert "SALDO DE SALÁRIO" in jc
+
+    # sem_justa_causa → preserva tudo (rescisórias devidas)
+    sjc = [v["nome_pjecalc"] for v in normalize_v2_json(_mk("sem_justa_causa"))["verbas_principais"]]
+    assert "AVISO PRÉVIO INDENIZADO" in sjc and len(sjc) == 6
+
+    # prompt instrui o campo + schema tem o campo
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "modalidade_rescisao" in ext
+    assert "manteve a justa causa" in ext  # caso 'pediu indireta mas negada'
+    sch = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
+    assert "modalidade_rescisao" in sch
+    assert "Súmula 171 TST" in sch  # FLAG de revisão no validator

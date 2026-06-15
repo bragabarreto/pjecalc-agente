@@ -360,6 +360,62 @@ def _norm_multa_467_como_reflexo(data: dict[str, Any]) -> None:
     )
 
 
+def _norm_justa_causa_exclui_rescisorias(data: dict[str, Any]) -> None:
+    """Súmula 171 TST / CLT art. 482 (#68 — safeguard determinístico).
+
+    Na JUSTA CAUSA do empregado ou no PEDIDO DE DEMISSÃO, AUTO-remove de
+    `verbas_principais` as rescisórias INEQUIVOCAMENTE indevidas — aviso prévio
+    (qualquer), multa/indenização de 40% do FGTS, saque/liberação do FGTS como
+    verba, e seguro-desemprego.
+
+    NÃO toca em:
+    - FÉRIAS / 13º (férias VENCIDAS são devidas mesmo na justa causa — o schema
+      apenas FLAGA para revisão);
+    - MULTA 477/467 (devidas se as rescisórias não forem pagas no prazo);
+    - DIFERENÇA SALARIAL e demais verbas do curso do contrato.
+
+    Só atua quando `modalidade_rescisao` foi extraída (campo opcional) — sem
+    ela, nenhuma exclusão é aplicada (retrocompatível).
+
+    Motivo (Ariane 0000566-12, 15/06/2026): a extração alucina rescisórias
+    indevidas em ~25% das vezes nessa modalidade; o prompt sozinho não zera.
+    """
+    pc = data.get("parametros_calculo")
+    if not isinstance(pc, dict):
+        return
+    if pc.get("modalidade_rescisao") not in ("justa_causa", "pedido_demissao"):
+        return
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+
+    def _indevida(v: dict) -> bool:
+        nome = " ".join(
+            str(v.get(k) or "")
+            for k in ("nome_pjecalc", "nome_sentenca", "expresso_alvo")
+        ).upper()
+        if "AVISO" in nome and ("PRÉVIO" in nome or "PREVIO" in nome):
+            return True
+        if ("40" in nome or "QUARENTA" in nome) and "FGTS" in nome:
+            return True
+        if "FGTS" in nome and ("SAQUE" in nome or "LIBERA" in nome):
+            return True
+        if "SEGURO" in nome and "DESEMPREGO" in nome:
+            return True
+        return False
+
+    restantes = [v for v in verbas if not (isinstance(v, dict) and _indevida(v))]
+    removidas = len(verbas) - len(restantes)
+    if removidas:
+        data["verbas_principais"] = restantes
+        import logging
+        logging.getLogger(__name__).warning(
+            "Normalizer: rescisão '%s' — %d verba(s) rescisória(s) indevida(s) "
+            "removida(s) (Súmula 171: aviso/40%%FGTS/saque/seguro)",
+            pc.get("modalidade_rescisao"), removidas,
+        )
+
+
 def _norm_data(s: str, *, is_fim: bool) -> str:
     """Normaliza MM/YYYY → DD/MM/YYYY. Mantém valor se já estiver em DD/MM/YYYY."""
     if not isinstance(s, str):
@@ -644,6 +700,12 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # Salvaguarda: MULTA 467 emitida como verba principal autônoma →
     # converter em reflexos checkbox_painel + multa_artigo_467 no FGTS.
     _norm_multa_467_como_reflexo(data)
+
+    # Salvaguarda Súmula 171 (#68): na justa causa / pedido de demissão,
+    # remover rescisórias INEQUIVOCAMENTE indevidas (aviso/40%FGTS/saque/seguro).
+    # FÉRIAS/13º NÃO são tocados (vencidas podem ser devidas) — o schema FLAGA
+    # para revisão.
+    _norm_justa_causa_exclui_rescisorias(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #

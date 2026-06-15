@@ -226,6 +226,15 @@ class ParametrosCalculo(BaseModel):
     data_ajuizamento: str
     data_inicio_calculo: str
     data_termino_calculo: str
+    # Modalidade da rescisão — usada para enforce determinístico da Súmula 171
+    # (justa causa / pedido de demissão excluem rescisórias). Opcional para
+    # retrocompatibilidade; quando ausente, nenhuma exclusão é aplicada.
+    modalidade_rescisao: Optional[
+        Literal[
+            "sem_justa_causa", "justa_causa", "pedido_demissao",
+            "rescisao_indireta", "termino_contrato", "acordo", "outro",
+        ]
+    ] = None
     prescricao_quinquenal: bool = True
     prescricao_fgts: bool = False
     tipo_base_tabelada: TipoBaseTabelada = TipoBaseTabelada.INTEGRAL
@@ -1578,6 +1587,25 @@ class PreviaCalculoV2(BaseModel):
                                 f"(seção 5 do prompt). Sem o cartão, PJE-Calc não tem como "
                                 f"apurar HE mês a mês."
                             )
+
+        # 4. Justa causa / pedido de demissão (Súmula 171) — FLAG de revisão
+        # para FÉRIAS/13º standalone. NÃO removemos aqui (férias VENCIDAS são
+        # devidas mesmo na justa causa) — o normalizer já auto-removeu o que é
+        # inequivocamente indevido (aviso/40%FGTS/saque/seguro); aqui só
+        # sinalizamos o ambíguo para o revisor confirmar.
+        _mod = getattr(self.parametros_calculo, "modalidade_rescisao", None)
+        if _mod in ("justa_causa", "pedido_demissao"):
+            for v in self.verbas_principais:
+                nome = (v.nome_pjecalc or v.nome_sentenca or "").upper()
+                eh_ferias = nome.startswith("FÉRIAS") or nome.startswith("FERIAS")
+                eh_13 = nome.startswith("13") or "DÉCIMO TERCEIRO" in nome or "DECIMO TERCEIRO" in nome
+                if eh_ferias or eh_13:
+                    avisos.append(
+                        f"⚠ Rescisão por {_mod.replace('_', ' ')}: a verba "
+                        f"'{v.nome_pjecalc or v.nome_sentenca}' é tipicamente "
+                        f"INDEVIDA (Súmula 171 TST) — só permanece se for FÉRIAS "
+                        f"VENCIDAS não gozadas. CONFIRME no dispositivo antes de liquidar."
+                    )
 
         if avisos:
             self.meta.validacao.avisos.extend(avisos)
