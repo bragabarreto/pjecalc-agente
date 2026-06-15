@@ -1246,3 +1246,24 @@ def test_inv34_saldo_informado_quando_fixado_deducao_ou_por_fora():
     assert "salário pago por fora" in ext
     # não quebra o saldo CALCULADO simples
     assert "Saldo CALCULADO simples" in ext
+
+
+def test_inv35_so_verbas_efetivamente_deferidas():
+    """Caso Ariane #68 (15/06/2026): a extração é não-determinística numa
+    armadilha — fundamentação cita 'férias vencidas + 1/3 se não pagas' (item
+    49) mas o parágrafo seguinte (item 50) diz que NÃO havia (todas fruídas), e
+    o dispositivo julga improcedentes férias proporcionais/13º (justa causa).
+    A IA chegou a alucinar FÉRIAS+1/3 e 13º standalone, inflando o cálculo.
+    Invariante: lançar SÓ verbas efetivamente deferidas no dispositivo; verba
+    mencionada e depois negada/inexistente NÃO vira verba; reflexo ≠ verba
+    autônoma."""
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "SÓ VERBAS EFETIVAMENTE DEFERIDAS" in ext
+    assert "MENCIONA como potencialmente devida e em" in ext
+    # caso concreto da armadilha (trecho contíguo, tolerante a quebra de linha)
+    assert "férias vencidas pendentes" in ext.lower()
+    assert "regularmente fruídos" in ext.lower()
+    # reflexo não é verba autônoma
+    assert "Reflexo ≠ verba autônoma" in ext
+    # dispositivo é a fonte da verdade
+    assert "DISPOSITIVO" in ext and "improcedente" in ext.lower()

@@ -348,6 +348,36 @@ corresponda a tabela cadastrada — nesse caso, INFORMADO segmentado.
 
 # 4. VERBAS_PRINCIPAIS (CORE — lista de verbas deferidas)
 
+⚠️ **REGRA CRÍTICA — SÓ VERBAS EFETIVAMENTE DEFERIDAS (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+
+Lance APENAS as verbas **efetivamente deferidas no DISPOSITIVO** (as alíneas
+"julgar procedente" / "procedente em parte" / "condenar a reclamada a pagar").
+O DISPOSITIVO é a fonte da verdade do que é devido — não a fundamentação isolada.
+
+**NUNCA lance uma verba que a sentença MENCIONA como potencialmente devida e em
+seguida NEGA, exclui ou declara inexistente.** Leia a fundamentação INTEIRA da
+verba antes de lançá-la: uma parcela citada num parágrafo e afastada no seguinte
+**NÃO é devida** e **NÃO gera verba**. O mesmo vale para tudo que o dispositivo
+"julga improcedente" / "indefere".
+
+Armadilhas concretas (NÃO repetir):
+- **Verba citada e depois negada por inexistência factual.** Ex. (caso ARIANE
+  0000566-12): a fundamentação diz "são devidas saldo de salário E **férias
+  vencidas + 1/3**, se ainda não pagas"; o parágrafo seguinte esclarece "**não
+  havia férias vencidas pendentes** — todos os períodos aquisitivos foram
+  regularmente fruídos". → **NÃO lance FÉRIAS + 1/3 vencidas.** Saiu 0.
+- **Dispositivo de improcedência (justa causa).** "Julgar improcedentes os
+  pedidos de ... férias proporcionais + 1/3, 13º proporcional, aviso prévio,
+  multa 40% FGTS, seguro-desemprego ..." → **nenhuma dessas vira verba.**
+- **Reflexo ≠ verba autônoma.** "Cabem reflexos sobre férias + 1/3 e 13º
+  [sobre a diferença/integração]" são REFLEXOS (checkbox_painel) da verba-base,
+  **não** verbas FÉRIAS / 13º standalone. Lançá-las em duplicidade infla a
+  condenação (a automação NÃO detecta — o PJE-Calc liquida assim mesmo).
+
+Teste antes de incluir QUALQUER verba: "o DISPOSITIVO a deferiu como parcela
+autônoma, OU ela é só reflexo de outra, OU foi mencionada e negada?" Só a
+PRIMEIRA hipótese vira item em `verbas_principais`.
+
 ```json
 [
   {
