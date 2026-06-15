@@ -61,8 +61,10 @@ def test_processar_ia_cria_sessao_e_erro_ia_only(client):
     r2 = client.get(f"/resumo/ia/{sid}")
     assert r2.status_code == 200
 
-    # aguardar o worker falhar com a chave fake
-    for _ in range(20):
+    # aguardar o worker falhar com a chave fake. Janela generosa: o worker faz
+    # uma chamada REAL à API (401) numa thread — sob carga do suite o
+    # round-trip pode passar de 10s (flaky). 30s remove a intermitência.
+    for _ in range(60):
         d = client.get(f"/api/ia/{sid}/estado").json()
         if d["fase"] != "etapa1_processando":
             break

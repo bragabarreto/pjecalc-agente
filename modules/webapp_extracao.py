@@ -210,17 +210,43 @@ def _montar_conteudo_etapa1(estado: dict) -> list[dict]:
     return blocos
 
 
-def _montar_messages(estado: dict, nova_msg: str | None = None) -> list[dict]:
+def _bloco_aprendizado() -> str | None:
+    """FATIA 2 — hints de parametrização aprendidos (padrões reincidentes).
+    Best-effort: qualquer falha → None (sem injeção). Hoje é no-op até um
+    padrão atingir n≥2 / confiança≥0,6."""
+    try:
+        from database import SessionLocal
+        from learning.estrategia_parametrizacao import montar_bloco_aprendizado
+        db = SessionLocal()
+        try:
+            return montar_bloco_aprendizado(db)
+        finally:
+            db.close()
+    except Exception:
+        return None
+
+
+def _montar_messages(
+    estado: dict, nova_msg: str | None = None, incluir_aprendizado: bool = False
+) -> list[dict]:
     """Histórico completo da conversa para a API (stateless).
 
     Prompt caching: o último bloco da 1ª mensagem recebe cache_control —
     isso cacheia o PREFIXO inteiro (system prompt ~25k tokens + sentença +
     documentos). Etapa 1 grava o cache; correções e Etapa 2 (minutos
     depois, mesmo prefixo) leem com 90% de desconto na entrada.
+
+    incluir_aprendizado=True (só Etapa 2): anexa os padrões aprendidos como
+    bloco de texto APÓS o breakpoint de cache (não invalida o prefixo
+    cacheado; é referência, a sentença e os invariantes prevalecem).
     """
     blocos = _montar_conteudo_etapa1(estado)
     if blocos:
         blocos[-1]["cache_control"] = {"type": "ephemeral"}
+        if incluir_aprendizado:
+            apr = _bloco_aprendizado()
+            if apr:
+                blocos.append({"type": "text", "text": apr})
     msgs: list[dict] = [{"role": "user", "content": blocos}]
     for turno in estado.get("conversa", []):
         msgs.append({"role": turno["role"], "content": turno["texto"]})
@@ -318,7 +344,9 @@ def _worker_etapa2(sessao_id: str) -> None:
     try:
         estado.setdefault("conversa", []).append({"role": "user", "texto": "confirmar"})
         _save_estado(sessao_id, estado)
-        bruto, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA2)
+        bruto, usage = _chamar_claude(
+            _montar_messages(estado, incluir_aprendizado=True), _MAX_TOKENS_ETAPA2
+        )
         estado.setdefault("usage", []).append({"etapa": "json", **usage})
         estado["conversa"].append({"role": "assistant", "texto": bruto})
         try:
@@ -335,7 +363,10 @@ def _worker_etapa2(sessao_id: str) -> None:
                 ),
             })
             _save_estado(sessao_id, estado)
-            bruto, usage = _chamar_claude(_montar_messages(estado), _MAX_TOKENS_ETAPA2)
+            bruto, usage = _chamar_claude(
+                _montar_messages(estado, incluir_aprendizado=True),
+                _MAX_TOKENS_ETAPA2,
+            )
             estado.setdefault("usage", []).append({"etapa": "json_retry", **usage})
             estado["conversa"].append({"role": "assistant", "texto": bruto})
             payload = _extrair_json(bruto)

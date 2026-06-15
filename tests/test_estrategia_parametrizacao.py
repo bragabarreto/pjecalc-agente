@@ -17,6 +17,7 @@ from learning.estrategia_parametrizacao import (
     assinatura_estrutural,
     capturar_de_previa,
     listar_estrategias,
+    montar_bloco_aprendizado,
 )
 
 
@@ -102,6 +103,33 @@ def test_base_composta_distingue_padrao(db):
     capturar_de_previa("s2", {"verbas_principais": [_verba(composta=True)]}, db)
     ests = listar_estrategias(db)
     assert len(ests) == 2  # composta vs não-composta = padrões distintos
+
+
+def test_injecao_noop_enquanto_padrao_nao_reincide(db):
+    # FATIA 2: um único cálculo (n=1, conf=0.5) NÃO injeta nada — o sistema
+    # acumula em silêncio até o padrão se provar.
+    capturar_de_previa("s1", {"verbas_principais": [_verba()]}, db)
+    assert montar_bloco_aprendizado(db) is None
+
+
+def test_injecao_dispara_quando_padrao_reincide(db):
+    # mesmo padrão em 2 cálculos distintos → n=2, conf=0.6 → injeta
+    capturar_de_previa("s1", {"verbas_principais": [_verba()]}, db)
+    capturar_de_previa("s2", {"verbas_principais": [_verba(periodo="03/03/2025")]}, db)
+    bloco = montar_bloco_aprendizado(db)
+    assert bloco is not None
+    assert "SALDO DE SALÁRIO" in bloco
+    # framing advisory obrigatório — a sentença e os invariantes prevalecem
+    assert "senten" in bloco.lower() and "prevalece" in bloco.lower()
+    assert "invariantes" in bloco.lower()
+    assert "2 cálculos" in bloco
+
+
+def test_injecao_respeita_limiar_customizado(db):
+    capturar_de_previa("s1", {"verbas_principais": [_verba()]}, db)
+    # com limiar_n=1 e limiar_conf=0.5, o padrão n=1 já qualifica
+    bloco = montar_bloco_aprendizado(db, limiar_conf=0.5, limiar_n=1)
+    assert bloco is not None and "SALDO DE SALÁRIO" in bloco
 
 
 def test_reflexos_no_nivel_da_verba_entram_na_assinatura(db):

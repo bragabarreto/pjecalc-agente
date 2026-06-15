@@ -225,3 +225,85 @@ def listar_estrategias(db, limite: int = 500) -> list[dict]:
             }
         )
     return out
+
+
+# ── FATIA 2 — injeção: bloco de hints aprendidos para a extração ──────────────
+
+# Só injeta padrões REINCIDENTES (vistos em ≥2 cálculos, confiança já elevada).
+# Enquanto um padrão tem n=1/conf=0.5 ele NÃO é injetado → o sistema acumula
+# silenciosamente e só passa a influenciar a extração quando o padrão se prova.
+LIMIAR_CONF = 0.6
+LIMIAR_N = 2
+
+
+def _resumo_assinatura(a: dict) -> str:
+    partes = []
+    for k in ("valor", "caracteristica", "ocorrencia_pagamento", "gerar_principal",
+              "base_tipo", "valor_pago_tipo"):
+        v = a.get(k)
+        if v not in (None, "", False):
+            partes.append(f"{k}={v}")
+    if a.get("base_composta"):
+        partes.append("base_composta=true")
+    if a.get("reflexos"):
+        partes.append("reflexos=[" + ", ".join(a["reflexos"]) + "]")
+    return ", ".join(partes)
+
+
+def montar_bloco_aprendizado(
+    db, limiar_conf: float = LIMIAR_CONF, limiar_n: int = LIMIAR_N, top_n: int = 30
+) -> Optional[str]:
+    """Bloco markdown com padrões REINCIDENTES de parametrização, para injetar
+    como referência na extração (Etapa 2). Retorna None se não há padrão
+    qualificado — nesse caso NADA é injetado (no-op). Best-effort."""
+    try:
+        from infrastructure.database import EstrategiaParametrizacaoVerba
+    except Exception:
+        return None
+    try:
+        rows = (
+            db.query(EstrategiaParametrizacaoVerba)
+            .filter(
+                EstrategiaParametrizacaoVerba.confianca >= limiar_conf,
+                EstrategiaParametrizacaoVerba.n_calculos_origem >= limiar_n,
+            )
+            .order_by(
+                EstrategiaParametrizacaoVerba.n_calculos_origem.desc(),
+                EstrategiaParametrizacaoVerba.confianca.desc(),
+            )
+            .limit(top_n)
+            .all()
+        )
+    except Exception as e:
+        logger.warning("montar_bloco_aprendizado: %s", e)
+        return None
+
+    if not rows:
+        return None
+
+    linhas = []
+    for r in rows:
+        resumo = _resumo_assinatura(assinatura_estrutural(r.parametros_dict))
+        if not resumo:
+            continue
+        linhas.append(
+            f"- **{r.nome_verba}** (visto em {r.n_calculos_origem} cálculos, "
+            f"confiança {r.confianca:.2f}): {resumo}."
+        )
+    if not linhas:
+        return None
+
+    return (
+        "# PADRÕES APRENDIDOS DE PARAMETRIZAÇÃO (referência de cálculos anteriores)\n\n"
+        "Os padrões abaixo de PREENCHIMENTO por verba se repetiram e foram "
+        "confirmados em cálculos anteriores revisados e exportados com sucesso. "
+        "Trate-os como DEFAULT da verba correspondente — MAS apenas como "
+        "referência:\n"
+        "- A **sentença deste caso** SEMPRE prevalece (períodos, valores, base, "
+        "se a verba é devida, fração deferida).\n"
+        "- Os **invariantes e regras do prompt acima** SEMPRE prevalecem em caso "
+        "de conflito.\n"
+        "- Aplique o padrão APENAS quando a verba correspondente aparecer nesta "
+        "sentença e o caso for compatível; ignore os demais.\n\n"
+        + "\n".join(linhas)
+    )
