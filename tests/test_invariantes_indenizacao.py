@@ -1321,3 +1321,21 @@ def test_inv36_justa_causa_safeguard_deterministico():
     sch = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
     assert "modalidade_rescisao" in sch
     assert "Súmula 171 TST" in sch  # FLAG de revisão no validator
+
+
+def test_inv37_fallback_manual_verba_expresso_nao_marcada():
+    """#5 (VALOR PAGO NÃO TRIBUTÁVEL / verba Expresso não-marcada): quando uma
+    verba Expresso não pode ser marcada (página vazia mesmo após F+R, ou alvo
+    ausente da grade), ela DEVE ir para o fluxo Manual em vez de ser perdida
+    silenciosamente (faltaria na liquidação). Mesmo padrão de inv8 (reroute
+    INFORMADO+DESLIGAMENTO) e inv31 (reflexo sem checkbox → Manual)."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # acumulador de verbas não-marcadas
+    assert "_verbas_expresso_falhadas" in src
+    # batch: total_cbs==0 e naoEncontradas alimentam o acumulador
+    assert "naoEncontradasIdx" in src
+    # fase_verbas cria as falhadas via Manual e as remove do loop de parâmetros
+    sec = src.split("def fase_verbas")[1].split("\n    def ")[0]
+    assert "_verbas_expresso_falhadas" in sec
+    assert "_lancar_verba_manual(v)" in sec
+    assert "v.id not in _ids_falhadas" in sec

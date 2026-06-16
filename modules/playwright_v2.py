@@ -2453,6 +2453,27 @@ class PlaywrightAutomatorV2:
         if verbas_expresso:
             self._lancar_expresso(verbas_expresso)
 
+        # 4a-bis (#5). Fallback Manual para verbas Expresso que NÃO puderam ser
+        # marcadas (página vazia mesmo após F+R, ou alvo ausente da grade).
+        # Antes eram perdidas silenciosamente → faltavam na liquidação. Agora
+        # são criadas via Manual (mesmo padrão do reroute INFORMADO+DESLIGAMENTO
+        # inv8 e do fallback de reflexo inv31). Removidas de verbas_expresso para
+        # o loop de parâmetros pós-Expresso não buscá-las na listagem.
+        _falhadas = getattr(self, "_verbas_expresso_falhadas", []) or []
+        if _falhadas:
+            _ids_falhadas = {f.id for f in _falhadas}
+            self.log(
+                f"  ↪ {len(_falhadas)} verba(s) Expresso não-marcada(s) → "
+                f"criando via Manual (fallback #5): "
+                f"{[f.nome_pjecalc for f in _falhadas]}"
+            )
+            for v in _falhadas:
+                try:
+                    self._lancar_verba_manual(v)
+                except Exception as e:
+                    self.log(f"  ⚠ fallback Manual '{v.nome_pjecalc}' falhou: {e}")
+            verbas_expresso = [v for v in verbas_expresso if v.id not in _ids_falhadas]
+
         # 4b. Manual (uma por vez)
         for v in verbas_manual:
             self._lancar_verba_manual(v)
@@ -3480,6 +3501,10 @@ class PlaywrightAutomatorV2:
           estado para fases seguintes.
         - Para 1-2 verbas, mantém one-by-one (sem trade-off de NPE).
         """
+        # #5 — acumulador de verbas Expresso que NÃO puderam ser marcadas
+        # (página vazia mesmo após F+R, ou alvo ausente da grade). fase_verbas
+        # cria essas via Manual (fallback), em vez de perdê-las silenciosamente.
+        self._verbas_expresso_falhadas = []
         if len(verbas) <= 2:
             return self._lancar_expresso_individual(verbas)
         return self._lancar_expresso_batch(verbas)
@@ -3528,7 +3553,9 @@ class PlaywrightAutomatorV2:
         )
         self.log(f"    ℹ Página Expresso: {total_cbs} checkboxes")
         if total_cbs == 0:
-            self.log(f"  ⚠ Expresso vazio — abortando batch")
+            self.log(f"  ⚠ Expresso vazio — todas as {len(verbas)} verba(s) "
+                     f"irão para fallback Manual (#5)")
+            self._verbas_expresso_falhadas = list(verbas)
             return
 
         # Marcar TODAS as checkboxes alvo de uma vez (sem AJAX entre marks)
@@ -3546,7 +3573,9 @@ class PlaywrightAutomatorV2:
                 });
                 const marcadas = [];
                 const naoEncontradas = [];
-                for (const tgt of targets) {
+                const naoEncontradasIdx = [];
+                for (let i = 0; i < targets.length; i++) {
+                    const tgt = targets[i];
                     let achou = false;
                     // 1. Exact match
                     for (const c of candidates) {
@@ -3563,15 +3592,23 @@ class PlaywrightAutomatorV2:
                             c.cb.click(); marcadas.push(c.normTxt.slice(0,80)); achou = true; break;
                         }
                     }
-                    if (!achou) naoEncontradas.push(tgt);
+                    if (!achou) { naoEncontradas.push(tgt); naoEncontradasIdx.push(i); }
                 }
-                return { marcadas, naoEncontradas };
+                return { marcadas, naoEncontradas, naoEncontradasIdx };
             }""",
             alvos,
         )
         self.log(f"  ✓ Marcadas {len(res.get('marcadas', []))}: {res.get('marcadas', [])}")
         if res.get("naoEncontradas"):
-            self.log(f"  ⚠ Não encontradas: {res.get('naoEncontradas')}")
+            self.log(f"  ⚠ Não encontradas: {res.get('naoEncontradas')} — fallback Manual (#5)")
+            # #5: mapear índices → verbas e acumular para criação Manual
+            try:
+                _idx = res.get("naoEncontradasIdx") or []
+                self._verbas_expresso_falhadas = [
+                    verbas[i] for i in _idx if 0 <= i < len(verbas)
+                ]
+            except Exception:
+                pass
 
         # Salvar UMA vez para todas
         try:
@@ -3781,6 +3818,11 @@ class PlaywrightAutomatorV2:
                 self.log(f"       Amostra dos primeiros 10 checkboxes do Expresso:")
                 for nome in amostra:
                     self.log(f"         • '{nome}'")
+                # #5: acumular para fallback Manual em vez de perder a verba
+                self.log(f"    ↪ '{v.nome_pjecalc}' → fallback Manual (#5)")
+                if not hasattr(self, "_verbas_expresso_falhadas"):
+                    self._verbas_expresso_falhadas = []
+                self._verbas_expresso_falhadas.append(v)
                 # Voltar à listagem para próxima iteração
                 try:
                     cancelar = self._page.locator("input[id$=':cancelar']")
