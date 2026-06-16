@@ -1600,11 +1600,16 @@ class PreviaCalculoV2(BaseModel):
                 eh_ferias = nome.startswith("FÉRIAS") or nome.startswith("FERIAS")
                 eh_13 = nome.startswith("13") or "DÉCIMO TERCEIRO" in nome or "DECIMO TERCEIRO" in nome
                 if eh_ferias or eh_13:
+                    _excecao = (
+                        "só permanece se for FÉRIAS VENCIDAS não gozadas"
+                        if eh_ferias else
+                        "só permanece se houver parcela VENCIDA não paga (ex.: 13º de ano anterior)"
+                    )
                     avisos.append(
                         f"⚠ Rescisão por {_mod.replace('_', ' ')}: a verba "
                         f"'{v.nome_pjecalc or v.nome_sentenca}' é tipicamente "
-                        f"INDEVIDA (Súmula 171 TST) — só permanece se for FÉRIAS "
-                        f"VENCIDAS não gozadas. CONFIRME no dispositivo antes de liquidar."
+                        f"INDEVIDA (Súmula 171 TST) — {_excecao}. "
+                        f"CONFIRME no dispositivo antes de liquidar."
                     )
 
         if avisos:
