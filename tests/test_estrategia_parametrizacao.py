@@ -148,3 +148,77 @@ def test_reflexos_no_nivel_da_verba_entram_na_assinatura(db):
     # verba SEM reflexos = padrão distinto da mesma verba COM reflexos
     capturar_de_previa("s2", {"verbas_principais": [_verba(nome="DIFERENÇA SALARIAL")]}, db)
     assert len(listar_estrategias(db)) == 2
+
+
+# ── FATIA 3 — ciclo de confiança (snapshot extração × prévia confirmada) ──────
+
+from learning.estrategia_parametrizacao import snapshot_assinaturas
+
+
+def test_snapshot_assinaturas_mapeia_verbas(db):
+    prev = {"verbas_principais": [_verba(nome="SALDO DE SALÁRIO"),
+                                  _verba(nome="MULTA 477", valor="INFORMADO")]}
+    snap = snapshot_assinaturas(prev)
+    assert set(snap.keys()) == {"saldo de salario", "multa 477"}
+    assert all(isinstance(fp, str) for fp in snap.values())
+
+
+def test_fatia3_validado_sobe_confianca(db):
+    # 1ª captura cria o padrão (conf 0.5). 2ª captura, com snapshot == confirmado
+    # (usuário NÃO alterou), sobe a confiança.
+    prev = {"verbas_principais": [_verba(nome="DIFERENÇA SALARIAL")]}
+    snap = snapshot_assinaturas(prev)
+    capturar_de_previa("s1", prev, db, snapshot=snap)
+    capturar_de_previa("s2", prev, db, snapshot=snap)
+    ests = listar_estrategias(db)
+    assert len(ests) == 1
+    assert ests[0]["confianca"] > 0.5  # validado → +0.1
+
+
+def test_fatia3_usuario_altera_penaliza_extraido(db):
+    # Extração produziu CALCULADO (snapshot), mas o usuário confirmou INFORMADO.
+    # O padrão CALCULADO (extraído, rejeitado) deve ser penalizado; o INFORMADO
+    # (escolha do usuário) é capturado.
+    extraido = {"verbas_principais": [_verba(nome="SALDO DE SALÁRIO", valor="CALCULADO")]}
+    snap = snapshot_assinaturas(extraido)
+    # primeiro, semear o padrão CALCULADO com confiança elevada (como se já
+    # tivesse sido visto antes)
+    capturar_de_previa("seed1", extraido, db, snapshot=snap)
+    capturar_de_previa("seed2", extraido, db, snapshot=snap)
+    conf_antes = {e["assinatura"]["valor"]: e["confianca"] for e in listar_estrategias(db)}
+    # agora o usuário ALTERA para INFORMADO (confirmado != snapshot)
+    confirmado = {"verbas_principais": [_verba(nome="SALDO DE SALÁRIO", valor="INFORMADO")]}
+    capturar_de_previa("s3", confirmado, db, snapshot=snap)
+    ests = {e["assinatura"]["valor"]: e for e in listar_estrategias(db)}
+    assert "INFORMADO" in ests  # escolha do usuário capturada
+    assert "CALCULADO" in ests  # padrão extraído continua, mas penalizado
+    assert ests["CALCULADO"]["confianca"] < conf_antes["CALCULADO"]
+
+
+def test_fatia3_verba_removida_penaliza(db):
+    # Extração trouxe FÉRIAS+1/3 standalone (alucinação); usuário REMOVEU.
+    # O padrão FÉRIAS deve ser penalizado.
+    extraido = {"verbas_principais": [
+        _verba(nome="SALDO DE SALÁRIO"),
+        _verba(nome="FÉRIAS + 1/3"),
+    ]}
+    snap = snapshot_assinaturas(extraido)
+    capturar_de_previa("e1", extraido, db, snapshot=snap)
+    capturar_de_previa("e2", extraido, db, snapshot=snap)
+    conf_ferias_antes = next(e["confianca"] for e in listar_estrategias(db)
+                             if "RIAS" in e["nome_verba"].upper())
+    # confirmada SEM a férias (usuário removeu)
+    confirmado = {"verbas_principais": [_verba(nome="SALDO DE SALÁRIO")]}
+    capturar_de_previa("c1", confirmado, db, snapshot=snap)
+    conf_ferias_depois = next(e["confianca"] for e in listar_estrategias(db)
+                              if "RIAS" in e["nome_verba"].upper())
+    assert conf_ferias_depois < conf_ferias_antes
+
+
+def test_fatia3_sem_snapshot_mantem_comportamento(db):
+    # Sem snapshot → comportamento antigo (reincidência sobe confiança), sem erro
+    prev = {"verbas_principais": [_verba(nome="13º SALÁRIO")]}
+    capturar_de_previa("a", prev, db)
+    capturar_de_previa("b", prev, db)
+    ests = listar_estrategias(db)
+    assert len(ests) == 1 and ests[0]["confianca"] > 0.5

@@ -92,6 +92,31 @@ def _save_previa(sessao_id: str, data: dict) -> None:
     )
 
 
+def _save_snapshot_extracao(sessao_id: str, previa: dict) -> None:
+    """Aprendizado FATIA 3 — grava as assinaturas das verbas EXTRAÍDAS (Etapa 2,
+    antes da edição do usuário), para comparar com a prévia confirmada na
+    captura. Best-effort: nunca levanta."""
+    try:
+        from learning.estrategia_parametrizacao import snapshot_assinaturas
+        snap = snapshot_assinaturas(previa)
+        (_STORE_DIR / f"{sessao_id}.extracao.json").write_text(
+            json.dumps(snap, ensure_ascii=False), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+def _load_snapshot_extracao(sessao_id: str) -> dict | None:
+    """Lê o snapshot de assinaturas da extração (FATIA 3). None se ausente."""
+    try:
+        p = _STORE_DIR / f"{sessao_id}.extracao.json"
+        if p.exists():
+            return json.loads(p.read_text(encoding="utf-8"))
+    except Exception:
+        pass
+    return None
+
+
 def _load_previa(sessao_id: str) -> dict | None:
     """Carrega prévia v2 priorizando memória → arquivo → DB (fallback).
 

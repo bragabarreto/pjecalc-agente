@@ -92,13 +92,61 @@ def _gatilho_contexto(verba: dict) -> dict:
     }
 
 
+def _fp_de_verba(v: dict):
+    """(nome_norm, fingerprint, params_merged) de uma verba da prévia.
+
+    Reflexos vivem no NÍVEL da verba (não em parametros) — mesclar para que a
+    assinatura capte o padrão de reflexos (fonte única no JSON persistido).
+    Retorna (None, None, None) se a verba não tem nome/parametros válidos.
+    """
+    if not isinstance(v, dict):
+        return None, None, None
+    nome = v.get("nome_pjecalc") or v.get("nome_sentenca")
+    params = v.get("parametros")
+    if not nome or not isinstance(params, dict):
+        return None, None, None
+    params = {**params, "reflexos": v.get("reflexos") or []}
+    nome_norm = _normalizar(nome)
+    fp = _fingerprint(nome_norm, assinatura_estrutural(params))
+    return nome_norm, fp, params
+
+
+def snapshot_assinaturas(previa: dict) -> dict:
+    """Mapa {nome_norm: fingerprint} das verbas de uma prévia — usado como
+    SNAPSHOT da extração (Etapa 2) para o ciclo de confiança (FATIA 3):
+    comparar o que a IA produziu com o que o usuário confirmou."""
+    out: dict[str, str] = {}
+    for v in (previa or {}).get("verbas_principais") or []:
+        nome_norm, fp, _ = _fp_de_verba(v)
+        if nome_norm and fp:
+            out[nome_norm] = fp
+    return out
+
+
+# Ciclo de confiança (FATIA 3) — deltas
+_CONF_VALIDADO = 0.1    # usuário manteve o padrão extraído
+_CONF_REJEITADO = -0.2  # usuário alterou/removeu o padrão extraído
+_CONF_PISO = 0.05
+_CONF_TETO = 0.95
+
+
 def capturar_de_previa(
     sessao_id: str,
     previa: dict,
     db,
     versao_pjecalc: Optional[str] = None,
+    snapshot: Optional[dict] = None,
 ) -> int:
-    """Registra a parametrização de cada verba da prévia v2 confirmada.
+    """Registra a parametrização de cada verba da prévia v2 CONFIRMADA.
+
+    FATIA 3 — ciclo de confiança: se `snapshot` (assinaturas da extração, antes
+    da edição) for fornecido, ajusta a confiança conforme o usuário MANTEVE ou
+    ALTEROU cada padrão:
+    - verba confirmada == extraída → padrão VALIDADO (+0.1);
+    - verba confirmada != extraída → o padrão EXTRAÍDO é penalizado (-0.2) e o
+      novo (escolha do usuário) é capturado;
+    - verba extraída REMOVIDA pelo usuário → padrão extraído penalizado (-0.2).
+    Sem snapshot, mantém o comportamento antigo (reincidência → +0.1).
 
     Retorna o número de verbas capturadas. Best-effort: nunca levanta.
     """
@@ -112,21 +160,19 @@ def capturar_de_previa(
     if not isinstance(verbas, list) or not verbas:
         return 0
 
+    def _ajusta_conf(c, delta):
+        return max(_CONF_PISO, min(_CONF_TETO, (c if c is not None else 0.5) + delta))
+
     capturadas = 0
+    confirmadas_fp: dict[str, str] = {}
     for v in verbas:
-        if not isinstance(v, dict):
+        nome_norm, fp, params = _fp_de_verba(v)
+        if not nome_norm:
             continue
         nome = v.get("nome_pjecalc") or v.get("nome_sentenca")
-        params = v.get("parametros")
-        if not nome or not isinstance(params, dict):
-            continue
-        # Reflexos vivem no NÍVEL da verba (não dentro de parametros) — mesclar
-        # para que a assinatura capte o padrão de reflexos e o painel recompute
-        # consistente (fonte única no JSON persistido).
-        params = {**params, "reflexos": v.get("reflexos") or []}
-        nome_norm = _normalizar(nome)
-        assin = assinatura_estrutural(params)
-        fp = _fingerprint(nome_norm, assin)
+        confirmadas_fp[nome_norm] = fp
+        # FATIA 3: o usuário manteve (validado) ou trocou (rejeitou o extraído)?
+        validado = snapshot is not None and snapshot.get(nome_norm) == fp
         try:
             existente = (
                 db.query(EstrategiaParametrizacaoVerba)
@@ -138,20 +184,22 @@ def capturar_de_previa(
             )
             if existente:
                 origens = existente.calculos_origem_list
-                if sessao_id not in origens:
+                novo_origem = sessao_id not in origens
+                if novo_origem:
                     origens.append(sessao_id)
                     existente.n_calculos_origem = len(origens)
                     existente.calculos_origem = json.dumps(origens, ensure_ascii=False)
-                    # confiança cresce com reincidência do padrão (cap 0.95)
-                    existente.confianca = min(0.95, (existente.confianca or 0.5) + 0.1)
-                # exemplar mais recente vira a referência
+                # confiança: validado (ou reincidência sem snapshot) → +0.1
+                if validado or snapshot is None:
+                    if novo_origem:
+                        existente.confianca = _ajusta_conf(existente.confianca, _CONF_VALIDADO)
                 existente.parametros = json.dumps(params, ensure_ascii=False)
                 existente.gatilho_contexto = json.dumps(
                     _gatilho_contexto(v), ensure_ascii=False
                 )
                 existente.updated_at = datetime.utcnow()
             else:
-                novo = EstrategiaParametrizacaoVerba(
+                db.add(EstrategiaParametrizacaoVerba(
                     nome_verba=nome,
                     nome_normalizado=nome_norm,
                     assinatura=fp,
@@ -162,12 +210,36 @@ def capturar_de_previa(
                     n_calculos_origem=1,
                     calculos_origem=json.dumps([sessao_id], ensure_ascii=False),
                     versao_pjecalc=versao_pjecalc,
-                )
-                db.add(novo)
+                ))
             capturadas += 1
         except Exception as e:
             logger.warning("captura estratégia verba '%s': %s", nome, e)
             continue
+
+    # FATIA 3: penalizar padrões EXTRAÍDOS que o usuário alterou ou removeu
+    # (presentes no snapshot, mas a verba confirmada tem outra assinatura ou
+    # sumiu). Isso faz padrões rejeitados (ex.: alucinações) caírem abaixo do
+    # limiar de injeção ao longo do tempo — autocorreção.
+    penalizadas = 0
+    if snapshot:
+        for nome_norm, old_fp in snapshot.items():
+            if confirmadas_fp.get(nome_norm) == old_fp:
+                continue  # mantido → já tratado
+            try:
+                rejeitado = (
+                    db.query(EstrategiaParametrizacaoVerba)
+                    .filter(
+                        EstrategiaParametrizacaoVerba.nome_normalizado == nome_norm,
+                        EstrategiaParametrizacaoVerba.assinatura == old_fp,
+                    )
+                    .first()
+                )
+                if rejeitado:
+                    rejeitado.confianca = _ajusta_conf(rejeitado.confianca, _CONF_REJEITADO)
+                    rejeitado.updated_at = datetime.utcnow()
+                    penalizadas += 1
+            except Exception as e:
+                logger.warning("penalização estratégia '%s': %s", nome_norm, e)
 
     try:
         db.commit()
@@ -179,10 +251,10 @@ def capturar_de_previa(
             pass
         return 0
 
-    if capturadas:
+    if capturadas or penalizadas:
         logger.info(
-            "Aprendizado v2: %d verba(s) capturada(s) da sessão %s",
-            capturadas, sessao_id,
+            "Aprendizado v2: %d verba(s) capturada(s), %d penalizada(s) — sessão %s",
+            capturadas, penalizadas, sessao_id,
         )
     return capturadas
 

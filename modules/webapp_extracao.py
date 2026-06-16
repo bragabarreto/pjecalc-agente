@@ -377,7 +377,15 @@ def _worker_etapa2(sessao_id: str) -> None:
 
         payload = normalize_v2_json(payload)
         previa = PreviaCalculoV2.model_validate(payload)
-        _save_previa(sessao_id, previa.model_dump())
+        _previa_dump = previa.model_dump()
+        _save_previa(sessao_id, _previa_dump)
+        # Aprendizado FATIA 3: snapshot das assinaturas EXTRAÍDAS (antes da
+        # edição do usuário) — base do ciclo de confiança na captura.
+        try:
+            from modules.webapp_v2 import _save_snapshot_extracao
+            _save_snapshot_extracao(sessao_id, _previa_dump)
+        except Exception:
+            pass
 
         estado["fase"] = "previa_pronta"
         estado["url_previa"] = f"/previa/v2/{sessao_id}"

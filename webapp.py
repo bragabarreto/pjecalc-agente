@@ -184,12 +184,14 @@ class _AutomacaoRunner:
             _pjc_ok = any(m.startswith("PJC_GERADO:") for m in self.logs)
             if _pjc_ok:
                 from modules.webapp_v2 import _load_previa as _lp_v2
+                from modules.webapp_v2 import _load_snapshot_extracao as _ls_v2
                 _previa_v2 = _lp_v2(sid)
                 if _previa_v2:
                     from learning.estrategia_parametrizacao import capturar_de_previa
+                    _snap = _ls_v2(sid)  # FATIA 3: assinaturas extraídas (pré-edição)
                     _dbcap = SessionLocal()
                     try:
-                        capturar_de_previa(sid, _previa_v2, _dbcap)
+                        capturar_de_previa(sid, _previa_v2, _dbcap, snapshot=_snap)
                     finally:
                         _dbcap.close()
         except Exception as _exc:
