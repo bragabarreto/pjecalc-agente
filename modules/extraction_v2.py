@@ -1537,10 +1537,20 @@ tem essa sensibilidade e sai certo, mascarando o erro). O valor da verba-base
 DEVE ser a própria parcela por fora (histórico direto, `valor_pago` INFORMADO 0).
 Comprovado: planilha manual 263753 com FÉRIAS reflexo = R$ 11.742 (correto).
 
-4. **FGTS — evitar dupla base**: o PJE-Calc soma a base FGTS de DUAS fontes
-   (histórico com incidência FGTS + verba com incidência FGTS). Se o histórico
-   "SALÁRIO PAGO POR FORA" já tem `incidencia_fgts: true`, então a verba
-   DIFERENÇA SALARIAL deve ter **`incidencias.fgts: false`** para não DUPLICAR.
+4. **FGTS — incidência SÓ sobre a parcela por fora (INVARIANTE — caso Ariane,
+   item d da sentença)**: a condenação de FGTS recai EXCLUSIVAMENTE sobre a
+   diferença (o "por fora") — o FGTS do salário registrado JÁ foi depositado no
+   curso do contrato e está FORA da lide. Portanto:
+   - histórico **"SALÁRIO PAGO POR FORA"** → **`incidencias.fgts: true`** (é a
+     base da diferença de FGTS deferida);
+   - históricos **"SALÁRIO REGISTRADO"**, **"ÚLTIMA REMUNERAÇÃO"** e qualquer
+     histórico do salário total/registrado → **`incidencias.fgts: false`**
+     (FGTS já recolhido; incidir aqui SUPERESTIMA o FGTS — bug Ariane: R$ 21.254
+     sobre 5.275 em vez de ~R$ 7.776 sobre 1.800);
+   - verba **DIFERENÇA SALARIAL** → **`incidencias.fgts: false`** (evita DUPLICAR
+     a base, já que o histórico por fora já incide).
+   Regra geral do FGTS por histórico: incide só o componente cujo FGTS NÃO foi
+   recolhido (a parcela sonegada). O que foi pago regularmente NÃO entra.
 
 📌 **Em todos os outros casos**: `compor_principal: "SIM"` (default).
 - FGTS sobre verbas rescisórias da condenação → SIM

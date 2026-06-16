@@ -1339,3 +1339,40 @@ def test_inv37_fallback_manual_verba_expresso_nao_marcada():
     assert "_verbas_expresso_falhadas" in sec
     assert "_lancar_verba_manual(v)" in sec
     assert "v.id not in _ids_falhadas" in sec
+
+
+def test_inv38_fgts_por_fora_so_parcela_extrafolha():
+    """#69 (Ariane, auditoria PJC 16/06/2026): no salário por fora o FGTS é
+    deferido SÓ sobre a parcela extrafolha (item d); o FGTS do registrado já foi
+    depositado. A IA invertia (registrado fgts=true, por fora=false) → FGTS sobre
+    5.275 (R$ 21.254) em vez de sobre 1.800 (~R$ 7.776). Normalizer força: por
+    fora=true, demais salariais=false; cs_inss preservado; sem histórico por
+    fora não mexe."""
+    from modules.json_normalizer import normalize_v2_json
+    base = {
+        "parametros_calculo": {
+            "estado_uf": "CE", "municipio": "X",
+            "data_admissao": "01/11/2021", "data_demissao": "08/04/2026",
+            "data_ajuizamento": "20/04/2026",
+            "data_inicio_calculo": "01/11/2021", "data_termino_calculo": "08/04/2026",
+        },
+        "historico_salarial": [
+            {"nome": "SALÁRIO REGISTRADO", "incidencias": {"fgts": True, "cs_inss": True}},
+            {"nome": "SALÁRIO PAGO POR FORA", "incidencias": {"fgts": False, "cs_inss": True}},
+            {"nome": "ÚLTIMA REMUNERAÇÃO", "incidencias": {"fgts": True, "cs_inss": True}},
+        ],
+    }
+    out = normalize_v2_json(base)
+    inc = {h["nome"]: h["incidencias"] for h in out["historico_salarial"]}
+    assert inc["SALÁRIO PAGO POR FORA"]["fgts"] is True
+    assert inc["SALÁRIO REGISTRADO"]["fgts"] is False
+    assert inc["ÚLTIMA REMUNERAÇÃO"]["fgts"] is False
+    assert all(h["incidencias"]["cs_inss"] for h in out["historico_salarial"])  # INSS preservado
+    # sem histórico por fora → não generaliza
+    base2 = {"parametros_calculo": base["parametros_calculo"],
+             "historico_salarial": [{"nome": "SALÁRIO BASE", "incidencias": {"fgts": True, "cs_inss": True}}]}
+    assert normalize_v2_json(base2)["historico_salarial"][0]["incidencias"]["fgts"] is True
+    # prompt instrui a regra
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "incidência SÓ sobre a parcela por fora" in ext
+    assert "FGTS já recolhido" in ext or "FGTS já depositado" in ext

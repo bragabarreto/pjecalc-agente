@@ -360,6 +360,55 @@ def _norm_multa_467_como_reflexo(data: dict[str, Any]) -> None:
     )
 
 
+def _norm_fgts_por_fora(data: dict[str, Any]) -> None:
+    """Salário por fora (#69 — caso Ariane): a condenação de FGTS recai SÓ sobre
+    a parcela extrafolha; o FGTS do salário registrado já foi depositado e está
+    FORA da lide. Quando há histórico cujo nome indica 'por fora'/'extrafolha',
+    força a incidência FGTS APENAS nele:
+    - histórico por fora → incidencias.fgts = True;
+    - demais históricos salariais (registrado / última remuneração / total) →
+      incidencias.fgts = False.
+
+    Safeguard determinístico: a IA frequentemente inverte (registrado=true,
+    por fora=false) → FGTS sobre 5.275 (já pago) em vez de sobre 1.800. Só atua
+    quando o padrão 'por fora' é detectado (presença do histórico). NÃO mexe em
+    incidencias.cs_inss (INSS sobre a diferença é devido normalmente).
+    """
+    hist = data.get("historico_salarial")
+    if not isinstance(hist, list) or not hist:
+        return
+
+    def _eh_por_fora(nome: str) -> bool:
+        n = (nome or "").upper()
+        return ("POR FORA" in n) or ("EXTRAFOLHA" in n) or ("EXTRA FOLHA" in n) \
+            or ("EXTRA-FOLHA" in n)
+
+    por_fora = [h for h in hist if isinstance(h, dict) and _eh_por_fora(h.get("nome", ""))]
+    if not por_fora:
+        return  # padrão não detectado → não mexe
+
+    alterou = 0
+    for h in hist:
+        if not isinstance(h, dict):
+            continue
+        inc = h.get("incidencias")
+        if not isinstance(inc, dict):
+            inc = {}
+            h["incidencias"] = inc
+        desejado = _eh_por_fora(h.get("nome", ""))
+        if inc.get("fgts") != desejado:
+            inc["fgts"] = desejado
+            alterou += 1
+
+    if alterou:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Normalizer: salário por fora — incidência FGTS ajustada em %d "
+            "histórico(s) (só a parcela extrafolha incide; registrado já "
+            "depositado) — #69 Ariane", alterou,
+        )
+
+
 def _norm_justa_causa_exclui_rescisorias(data: dict[str, Any]) -> None:
     """Súmula 171 TST / CLT art. 482 (#68 — safeguard determinístico).
 
@@ -706,6 +755,11 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # FÉRIAS/13º NÃO são tocados (vencidas podem ser devidas) — o schema FLAGA
     # para revisão.
     _norm_justa_causa_exclui_rescisorias(data)
+
+    # Salvaguarda salário por fora (#69): FGTS incide SÓ sobre a parcela
+    # extrafolha (o registrado já foi depositado). Corrige a inversão comum da
+    # IA (registrado=true / por fora=false).
+    _norm_fgts_por_fora(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #
