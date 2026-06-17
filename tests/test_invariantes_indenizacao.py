@@ -1442,5 +1442,5 @@ def test_inv41_regerar_final_sobrescrever_se_calculado_periodo_curto():
     assert "self._verba_periodo_curto(v)" in src
     assert "_regerar_ocorrencias_verbas(sobrescrever=_sobrescrever_final)" in src
     # só dispara para CALCULADO (não INFORMADO)
-    sec = src.split("_sobrescrever_final = any(")[1].split(")")[0]
+    sec = src.split("_sobrescrever_final = any(")[1].split("for v in verbas_expresso")[0]
     assert "TipoValor.CALCULADO" in sec
