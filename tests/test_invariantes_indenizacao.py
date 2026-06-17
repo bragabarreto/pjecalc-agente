@@ -1429,18 +1429,20 @@ def test_inv40_13_proporcional_ano_rescisao_desligamento():
     assert "período SEM dezembro" in ext or "período sem dezembro" in ext.lower()
 
 
-def test_inv41_regerar_final_sobrescrever_se_calculado_periodo_curto():
-    """#72 (LUCAS 0000610-31): o 13º proporcional do ano da rescisão tem
-    ocorrência default (dezembro) fora do período; o Manter do loop é suprimido
-    pela flag global _ocorrencias_editadas (edição INFORMADO do SALDO). Fix: o
-    Regerar FINAL faz Sobrescrever quando há verba CALCULADO período-curto —
-    saneando a ocorrência fora do período. O helper aceita o parâmetro
-    sobrescrever; o gatilho é CALCULADO + _verba_periodo_curto."""
+def test_inv41_regerar_final_sobrescrever_REVERTIDO():
+    """#72 (LUCAS 0000610-31): a tentativa de SOBRESCREVER no Regerar final
+    (quando há CALCULADO período-curto) foi REVERTIDA — validado em 3 runs que
+    NÃO resolve o 13º proporcional do ano da rescisão (a característica
+    DECIMO_TERCEIRO_SALARIO força a ocorrência para dezembro independentemente
+    do Sobrescrever; o erro 'ocorrências devem estar contidas no período'
+    persiste). O Sobrescrever global ainda regrediria RODRIGO 13º multi-ano
+    (inv26). Mantido Manter (sem argumento). Invariante: o Regerar final NÃO
+    pode passar sobrescrever=True condicional por CALCULADO período-curto."""
     src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # o gatilho condicional foi removido
+    assert "_sobrescrever_final = any(" not in src
+    assert "_regerar_ocorrencias_verbas(sobrescrever=_sobrescrever_final)" not in src
+    # marcador do revert presente
+    assert "REVERTIDO #72 (inv41" in src
+    # o helper preserva o parâmetro (default False — sem mudança de comportamento)
     assert "def _regerar_ocorrencias_verbas(self, sobrescrever: bool = False)" in src
-    assert "_sobrescrever_final = any(" in src
-    assert "self._verba_periodo_curto(v)" in src
-    assert "_regerar_ocorrencias_verbas(sobrescrever=_sobrescrever_final)" in src
-    # só dispara para CALCULADO (não INFORMADO)
-    sec = src.split("_sobrescrever_final = any(")[1].split("for v in verbas_expresso")[0]
-    assert "TipoValor.CALCULADO" in sec
