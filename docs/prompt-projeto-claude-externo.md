@@ -526,7 +526,15 @@ remunerações diferentes (ex: 2023-2024-2025-2026), criar **APENAS UMA** entrad
   fração deferida abaixo — só usar a data de admissão quando a condenação
   abranger o contrato inteiro)
 - `periodo_fim` = data de demissão
-- `caracteristica = "DECIMO_TERCEIRO_SALARIO"`, `ocorrencia_pagamento = "DEZEMBRO"`
+- `caracteristica = "DECIMO_TERCEIRO_SALARIO"`. **`ocorrencia_pagamento`**:
+  - `"DEZEMBRO"` quando o período DEFERIDO contém algum dezembro (13º de ano(s)
+    completo(s) — a ocorrência é colocada em dezembro de cada ano);
+  - **`"DESLIGAMENTO"`** quando o 13º deferido é SÓ o **proporcional do ano da
+    rescisão** e o contrato termina no meio do ano (período SEM dezembro —
+    ex.: 01/01/2026→25/04/2026). Com DEZEMBRO a ocorrência cairia fora do
+    período e o PJE-Calc rejeita ('Todas as ocorrências da verba 13º SALÁRIO
+    devem estar contidas no período'). DESLIGAMENTO coloca a ocorrência na
+    data da rescisão, dentro do período. (Caso LUCAS 0000610-31, #72.)
 - `quantidade.tipo = "AVOS"`
 - `base_calculo.tipo = "HISTORICO_SALARIAL"` referenciando UM histórico (geralmente o mais recente,
   ex: "SALÁRIO MÍNIMO 2025-2026" ou "ÚLTIMA REMUNERAÇÃO")

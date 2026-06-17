@@ -409,6 +409,65 @@ def _norm_fgts_por_fora(data: dict[str, Any]) -> None:
         )
 
 
+def _periodo_contem_dezembro(pi_str: str, pf_str: str) -> bool:
+    """True se o intervalo [pi, pf] (DD/MM/YYYY) contém algum mês 12."""
+    from datetime import datetime as _dt
+    try:
+        pi = _dt.strptime(pi_str, "%d/%m/%Y")
+        pf = _dt.strptime(pf_str, "%d/%m/%Y")
+    except Exception:
+        return True  # na dúvida, não mexer
+    y, m = pi.year, pi.month
+    while (y, m) <= (pf.year, pf.month):
+        if m == 12:
+            return True
+        m += 1
+        if m > 12:
+            m, y = 1, y + 1
+    return False
+
+
+def _norm_13_ocorrencia_proporcional(data: dict[str, Any]) -> None:
+    """13º proporcional do ano da rescisão (#72 — LUCAS 0000610-31).
+
+    Um 13º SALÁRIO com `ocorrencia_pagamento=DEZEMBRO` exige que o PERÍODO da
+    verba contenha um dezembro (onde a ocorrência é colocada). Quando o contrato
+    termina no meio do ano (rescisão) e o 13º deferido é só o PROPORCIONAL do ano
+    da rescisão (período sem dezembro — ex.: 01/01/2026→25/04/2026), o PJE-Calc
+    rejeita a liquidação com 'Todas as ocorrências da verba 13º SALÁRIO devem
+    estar contidas no período estabelecido'. O correto é `DESLIGAMENTO`: a
+    ocorrência é colocada na data da rescisão (dentro do período), com os avos
+    apurados do período.
+
+    Só atua quando caracteristica=DECIMO_TERCEIRO_SALARIO + ocorrencia=DEZEMBRO +
+    período SEM dezembro. 13º multi-ano (período que cruza dezembros) fica
+    intocado.
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        if p.get("caracteristica") != "DECIMO_TERCEIRO_SALARIO":
+            continue
+        if p.get("ocorrencia_pagamento") != "DEZEMBRO":
+            continue
+        pi, pf = p.get("periodo_inicio"), p.get("periodo_fim")
+        if not pi or not pf or _periodo_contem_dezembro(pi, pf):
+            continue
+        p["ocorrencia_pagamento"] = "DESLIGAMENTO"
+        import logging
+        logging.getLogger(__name__).warning(
+            "Normalizer: 13º '%s' período %s→%s sem dezembro — ocorrência "
+            "DEZEMBRO → DESLIGAMENTO (proporcional do ano da rescisão, #72)",
+            v.get("nome_pjecalc"), pi, pf,
+        )
+
+
 def _norm_justa_causa_exclui_rescisorias(data: dict[str, Any]) -> None:
     """Súmula 171 TST / CLT art. 482 (#68 — safeguard determinístico).
 
@@ -755,6 +814,11 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # FÉRIAS/13º NÃO são tocados (vencidas podem ser devidas) — o schema FLAGA
     # para revisão.
     _norm_justa_causa_exclui_rescisorias(data)
+
+    # Salvaguarda #72: 13º proporcional do ano da rescisão (período sem
+    # dezembro) → ocorrência DESLIGAMENTO (senão a ocorrência DEZEMBRO cai fora
+    # do período e a liquidação trava).
+    _norm_13_ocorrencia_proporcional(data)
 
     # Salvaguarda salário por fora (#69): FGTS incide SÓ sobre a parcela
     # extrafolha (o registrado já foi depositado). Corrige a inversão comum da

@@ -1394,3 +1394,36 @@ def test_inv39_retry_config_verba_execution_context_destroyed():
     # re-anchor + espera de navegação no helper
     assert 'wait_for_load_state(\n                "domcontentloaded"' in src or \
         'wait_for_load_state("domcontentloaded", timeout=8000)' in src
+
+
+def test_inv40_13_proporcional_ano_rescisao_desligamento():
+    """#72 (LUCAS 0000610-31): 13º proporcional do ano da rescisão com período
+    SEM dezembro + ocorrencia=DEZEMBRO → ocorrência cai fora do período →
+    liquidação travada ('ocorrências devem estar contidas no período'). Fix:
+    normalizer troca para DESLIGAMENTO. 13º multi-ano (cruza dezembros) fica
+    intocado. Prompt instrui a distinção."""
+    from modules.json_normalizer import normalize_v2_json
+    pc = {"estado_uf": "CE", "municipio": "X", "data_admissao": "13/01/2025",
+          "data_demissao": "25/04/2026", "data_ajuizamento": "01/05/2026",
+          "data_inicio_calculo": "13/01/2025", "data_termino_calculo": "25/05/2026"}
+
+    def _13(pi, pf):
+        return {"parametros_calculo": pc, "verbas_principais": [
+            {"id": "v", "nome_pjecalc": "13º SALÁRIO", "parametros": {
+                "caracteristica": "DECIMO_TERCEIRO_SALARIO",
+                "ocorrencia_pagamento": "DEZEMBRO",
+                "periodo_inicio": pi, "periodo_fim": pf}}]}
+
+    # proporcional do ano da rescisão (sem dezembro) → DESLIGAMENTO
+    o1 = normalize_v2_json(_13("01/01/2026", "25/04/2026"))["verbas_principais"][0]["parametros"]["ocorrencia_pagamento"]
+    assert o1 == "DESLIGAMENTO"
+    # multi-ano (cruza dezembros) → preservado
+    o2 = normalize_v2_json(_13("01/01/2024", "25/04/2026"))["verbas_principais"][0]["parametros"]["ocorrencia_pagamento"]
+    assert o2 == "DEZEMBRO"
+    # ano completo (tem dezembro) → preservado
+    o3 = normalize_v2_json(_13("01/01/2025", "31/12/2025"))["verbas_principais"][0]["parametros"]["ocorrencia_pagamento"]
+    assert o3 == "DEZEMBRO"
+    # prompt instrui a regra
+    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "proporcional do ano da" in ext and "DESLIGAMENTO" in ext
+    assert "período SEM dezembro" in ext or "período sem dezembro" in ext.lower()
