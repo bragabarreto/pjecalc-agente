@@ -2534,11 +2534,46 @@ class PlaywrightAutomatorV2:
             #   ocorrências do reflexo a partir das ocorrências JÁ CORRETAS
             #   da principal (v9: ativar reflexo antes do 1º save gerava
             #   ocorrência espúria de 100% no SALDO e base parcial no 13º).
-            try:
-                self._configurar_parametros_pos_expresso(v)
-            except Exception as e:
+            # ⚠ FIX #71 (processo 0000610-31, 17/06/2026) — RETRY + RE-ANCHOR:
+            # a config de uma verba pode falhar com "Execution context was
+            # destroyed" quando o page.evaluate corre contra a navegação Seam
+            # ainda em curso (o sidebar click → li_calculo_verbas é navegação
+            # real, não só AJAX; o Regerar da verba anterior deixa nav em voo).
+            # ANTES: o except só logava e SEGUIA para a próxima verba → a verba
+            # ficava sem base (13º CALCULADO sem histórico → liquidação
+            # bloqueada, descoberto só no fim). AGORA: re-ancorar a listagem
+            # (deixar a navegação assentar) e RETENTAR até 3×. A 2ª tentativa
+            # parte de um contexto estável e aplica a base corretamente.
+            _cfg_ok = False
+            for _tent in range(1, 4):
+                try:
+                    self._configurar_parametros_pos_expresso(v)
+                    _cfg_ok = True
+                    break
+                except Exception as e:
+                    self.log(
+                        f"  ⚠ Falha ajustar parâmetros "
+                        f"'{v.nome_pjecalc or v.expresso_alvo}' "
+                        f"(tentativa {_tent}/3): {e}"
+                    )
+                    # deixar a navegação que destruiu o contexto assentar antes
+                    # de retentar (re-anchor da listagem de verbas)
+                    try:
+                        self._page.wait_for_load_state(
+                            "domcontentloaded", timeout=8000
+                        )
+                    except Exception:
+                        pass
+                    try:
+                        self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(6000)
+                        self._page.wait_for_timeout(800)
+                    except Exception:
+                        pass
+            if not _cfg_ok:
                 self.log(
-                    f"  ⚠ Falha ajustar parâmetros '{v.nome_pjecalc or v.expresso_alvo}': {e}"
+                    f"  🛑 '{v.nome_pjecalc or v.expresso_alvo}' NÃO configurada "
+                    f"após 3 tentativas — pode liquidar sem base (verba CALCULADO)"
                 )
             # (ajuste de período/base do reflexo do 13º movido para DEPOIS
             # do loop — run v12: fazê-lo no meio do loop corrompia o estado
@@ -4687,6 +4722,15 @@ class PlaywrightAutomatorV2:
         # mapeado em pages.xml, garantindo bean fresco.
         try:
             self._navegar_menu_via_click("li_calculo_verbas")
+            # ⚠ FIX #71: o sidebar click é navegação Seam REAL — aguardar o
+            # documento carregar ANTES do wait_for_function/evaluate, senão o
+            # evaluate corre contra a navegação em curso e morre com
+            # "Execution context was destroyed" (processo 0000610-31, o 13º
+            # ficou sem base por causa dessa corrida).
+            try:
+                self._page.wait_for_load_state("domcontentloaded", timeout=8000)
+            except Exception:
+                pass
             # Aguardar página estabilizar + listagem aparecer
             try:
                 self._page.wait_for_function(

@@ -1376,3 +1376,21 @@ def test_inv38_fgts_por_fora_so_parcela_extrafolha():
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "incidência SÓ sobre a parcela por fora" in ext
     assert "FGTS já recolhido" in ext or "FGTS já depositado" in ext
+
+
+def test_inv39_retry_config_verba_execution_context_destroyed():
+    """#71 (processo 0000610-31, 17/06/2026): a config de uma verba podia
+    falhar com 'Execution context was destroyed' (page.evaluate corre contra a
+    navegação Seam do sidebar click ainda em curso). ANTES o bot só logava e
+    PULAVA para a próxima verba → a verba ficava sem base (13º CALCULADO sem
+    histórico → liquidação bloqueada). Invariante: retry com re-anchor (até 3×)
+    na config de verba; e wait_for_load_state após o sidebar click no helper."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # retry no loop de verbas
+    assert "FIX #71" in src
+    assert "_cfg_ok" in src
+    assert "tentativa {_tent}/3" in src
+    assert "NÃO configurada" in src and "pode liquidar sem base" in src
+    # re-anchor + espera de navegação no helper
+    assert 'wait_for_load_state(\n                "domcontentloaded"' in src or \
+        'wait_for_load_state("domcontentloaded", timeout=8000)' in src
