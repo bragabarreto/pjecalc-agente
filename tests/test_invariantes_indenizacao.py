@@ -1427,3 +1427,20 @@ def test_inv40_13_proporcional_ano_rescisao_desligamento():
     ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "proporcional do ano da" in ext and "DESLIGAMENTO" in ext
     assert "período SEM dezembro" in ext or "período sem dezembro" in ext.lower()
+
+
+def test_inv41_regerar_final_sobrescrever_se_calculado_periodo_curto():
+    """#72 (LUCAS 0000610-31): o 13º proporcional do ano da rescisão tem
+    ocorrência default (dezembro) fora do período; o Manter do loop é suprimido
+    pela flag global _ocorrencias_editadas (edição INFORMADO do SALDO). Fix: o
+    Regerar FINAL faz Sobrescrever quando há verba CALCULADO período-curto —
+    saneando a ocorrência fora do período. O helper aceita o parâmetro
+    sobrescrever; o gatilho é CALCULADO + _verba_periodo_curto."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _regerar_ocorrencias_verbas(self, sobrescrever: bool = False)" in src
+    assert "_sobrescrever_final = any(" in src
+    assert "self._verba_periodo_curto(v)" in src
+    assert "_regerar_ocorrencias_verbas(sobrescrever=_sobrescrever_final)" in src
+    # só dispara para CALCULADO (não INFORMADO)
+    sec = src.split("_sobrescrever_final = any(")[1].split(")")[0]
+    assert "TipoValor.CALCULADO" in sec

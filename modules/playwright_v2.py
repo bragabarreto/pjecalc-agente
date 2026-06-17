@@ -2619,7 +2619,25 @@ class PlaywrightAutomatorV2:
         #   "O parâmetro Ocorrência de Pagamento foi alterado na página
         #    Verbas, após a geração das ocorrências da verba X"
         if verbas_expresso:
-            self._regerar_ocorrencias_verbas()
+            # #72 (LUCAS 0000610-31): se há verba CALCULADO de período-curto
+            # (ex.: 13º proporcional do ano da rescisão), o Regerar final precisa
+            # SOBRESCREVER — senão a ocorrência default (dezembro) fica fora do
+            # novo período e a liquidação trava ('ocorrências devem estar
+            # contidas no período'). O Manter de cada verba no loop é suprimido
+            # pela flag global _ocorrencias_editadas (edição INFORMADO do SALDO),
+            # então o saneamento tem de ser AQUI. O valorDevido INFORMADO é
+            # restaurado depois por _fixar_valordevido_ocorrencias_informadas.
+            _sobrescrever_final = any(
+                getattr(v.parametros, "valor", None) == TipoValor.CALCULADO
+                and self._verba_periodo_curto(v)
+                for v in verbas_expresso
+            )
+            if _sobrescrever_final:
+                self.log(
+                    "  → Regerar final = SOBRESCREVER (há CALCULADO período-curto "
+                    "— ex.: 13º proporcional; ocorrência default ficaria fora do período)"
+                )
+            self._regerar_ocorrencias_verbas(sobrescrever=_sobrescrever_final)
             # ATENÇÃO: _fixar_valordevido_ocorrencias_informadas() não pode
             # rodar aqui — Seam está em modo criação, listagem inacessível.
             # Será chamado em fase_pos_recentes_correcoes após reabertura.
@@ -3501,19 +3519,29 @@ class PlaywrightAutomatorV2:
         self._page.wait_for_timeout(1500)
         return True
 
-    def _regerar_ocorrencias_verbas(self) -> None:
+    def _regerar_ocorrencias_verbas(self, sobrescrever: bool = False) -> None:
         """Volta à listagem de Verbas e clica Regerar Ocorrências.
 
         Botão `formulario:regerarOcorrencias` (a4j:commandButton, only
         `rendered=emModoListagem`). Abre `<rich:modalPanel>` "Confirmação"
         com botões Ok/Cancelar — handler via `_regerar_com_modal_confirmacao`.
+
+        sobrescrever=True (#72, LUCAS 0000610-31): descarta as ocorrências
+        antigas e regenera a partir dos parâmetros atuais. Necessário quando há
+        verba CALCULADO de PERÍODO-CURTO cuja ocorrência default caiu FORA do
+        novo período (ex.: 13º proporcional do ano da rescisão — a ocorrência
+        de dezembro do Expresso fica fora de [01/01–25/04]; Manter a preserva e
+        a liquidação trava). O Sobrescrever global apagaria o valorDevido
+        editado das verbas INFORMADO, MAS isso é restaurado logo depois por
+        `_fixar_valordevido_ocorrencias_informadas` (fase_pos_recentes) — por
+        isso é seguro aqui.
         """
         try:
             self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(1500)
             ok = self._regerar_com_modal_confirmacao(
-                sobrescrever=False,
+                sobrescrever=sobrescrever,
                 log_prefix="  ",
             )
             if ok:
