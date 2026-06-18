@@ -6269,9 +6269,60 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"    ⚠ Regerar pós-edição reflexo: {_e}")
 
+    def _garantir_incluir_disponivel(self) -> None:
+        """Garante que a listagem de verbas com o botão 'incluir' (Lançamento
+        Manual) está visível ANTES de clicá-lo.
+
+        ⚠ FIX #73 (ONASSES 0000495-10, 18/06/2026): após o save de uma verba
+        Manual, a conversa Seam fica num estado em que a listagem de verbas
+        re-renderiza SEM o botão 'incluir', e re-navegar pelo sidebar NÃO o
+        restaura (observado em run real: 3/3 retries 'Botão não encontrado:
+        incluir' para 13º e FÉRIAS → verbas perdidas → PJC incompleto). O que
+        restaura é o Fechar+Reabrir (mesmo mecanismo do Expresso): força @End
+        da conv, commita a verba anterior ao DB e reabre uma conv fresh em edit
+        mode na listagem completa.
+        """
+        def _tem_incluir() -> bool:
+            try:
+                return bool(self._page.evaluate(
+                    """() => { const e = document.querySelector("[id$=':incluir']");
+                               return !!(e && e.offsetParent !== null); }"""
+                ))
+            except Exception:
+                return False
+
+        if _tem_incluir():
+            return
+        # 1) navegação leve para a listagem
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(800)
+        except Exception:
+            pass
+        if _tem_incluir():
+            return
+        # 2) Fechar+Reabrir (conv fresh em edit mode) — restaura o botão
+        self.log("    ℹ 'incluir' (Manual) ausente — Fechar+Reabrir para restaurar listagem")
+        try:
+            self._fechar_e_reabrir_calculo("pré-Manual incluir")
+        except Exception as _e:
+            self.log(f"    ⚠ F+R pré-Manual falhou: {_e}")
+        try:
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(800)
+        except Exception:
+            pass
+        if not _tem_incluir():
+            self.log("    ⚠ 'incluir' ainda ausente após F+R — _clicar tentará mesmo assim")
+
     def _lancar_verba_manual(self, v) -> None:
         """Criar verba via botão Manual ('Lançamento Manual de Parcela')."""
         self.log(f"  → Manual: {v.nome_pjecalc}")
+        # ⚠ FIX #73: garantir listagem com 'incluir' antes de clicar (após save
+        # de verba Manual anterior a conv Seam fica stale e o botão some).
+        self._garantir_incluir_disponivel()
         self._clicar("incluir")
         self._aguardar_ajax(8000)
 

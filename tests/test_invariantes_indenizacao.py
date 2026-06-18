@@ -1518,3 +1518,16 @@ def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
     assert "verbas_principais" in guard
     assert "ABORTANDO liquida" in guard
     assert "return None" in guard
+
+    # Fix C — _lancar_verba_manual deve garantir o botão 'incluir' (escalando
+    # para Fechar+Reabrir) antes de cliná-lo. Após o save de uma verba Manual
+    # anterior a conv Seam fica stale e 'incluir' some → as verbas Manual
+    # seguintes eram perdidas (PJC incompleto).
+    assert "def _garantir_incluir_disponivel" in src, "helper de restauração de 'incluir' ausente"
+    idx_man = src.find("def _lancar_verba_manual")
+    assert idx_man > 0
+    man = src[idx_man:idx_man + 600]
+    assert "_garantir_incluir_disponivel()" in man, "_lancar_verba_manual não chama o guard de 'incluir'"
+    idx_g = src.find("def _garantir_incluir_disponivel")
+    gblock = src[idx_g:idx_g + 1800]
+    assert "_fechar_e_reabrir_calculo" in gblock, "guard de 'incluir' não escala para F+R"
