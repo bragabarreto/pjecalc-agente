@@ -1481,3 +1481,40 @@ def test_inv42_13_proporcional_periodo_contrato_mais_janela():
     assert "def _filtrar_ocorrencias_por_janela" in src
     assert "janela_ocorrencias_inicio" in src
     assert "_filtrar_ocorrencias_por_janela(_v)" in src
+
+
+def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
+    """#73 (ONASSES 0000495-10, 18/06/2026): o loop de verbas Manual NÃO pode
+    abortar a fase inteira por 'Execution context destroyed' numa única verba,
+    e o bot NUNCA pode exportar um PJC-fantasma (cálculo sem verbas) reportando
+    sucesso.
+
+    Bug observado em run real: 'Execution context was destroyed' no loop Manual
+    (sem try/except) → fase de Verbas abortada → bot liquidou/exportou um PJC de
+    ~6KB SEM nenhuma verba, marcando 'sucesso'.
+
+    Fix A: retry+re-anchor 3× por verba no loop Manual (espelha #71).
+    Fix B: guard em fase_liquidar_e_exportar — conta verbas listadas e aborta
+    (return None) se esperadas>0 e listadas==0.
+    """
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # Fix A — o loop Manual deve ter retry de 3 tentativas com re-anchor.
+    idx_loop = src.find("# 4b. Manual (uma por vez)")
+    assert idx_loop > 0, "bloco do loop Manual não encontrado"
+    bloco = src[idx_loop:idx_loop + 2200]
+    assert "FIX #73" in bloco, "marcador do fix #73 ausente do loop Manual"
+    assert "for _tent in range(1, 4):" in bloco, "retry 3× ausente do loop Manual"
+    assert "_lancar_verba_manual(v)" in bloco
+    assert '_navegar_menu("li_calculo_verbas")' in bloco, "re-anchor ausente"
+
+    # Fix B — guard anti-PJC-fantasma na liquidação.
+    idx_liq = src.find("def fase_liquidar_e_exportar")
+    assert idx_liq > 0
+    guard = src[idx_liq:idx_liq + 3000]
+    assert "GUARD anti-PJC-fantasma" in guard, "guard anti-fantasma ausente"
+    assert "capturar_snapshot_listagem_verbas" in guard
+    # esperadas>0 e listadas==0 → return None (não exporta)
+    assert "verbas_principais" in guard
+    assert "ABORTANDO liquida" in guard
+    assert "return None" in guard

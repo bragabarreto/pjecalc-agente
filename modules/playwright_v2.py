@@ -2475,8 +2475,47 @@ class PlaywrightAutomatorV2:
             verbas_expresso = [v for v in verbas_expresso if v.id not in _ids_falhadas]
 
         # 4b. Manual (uma por vez)
+        # ⚠ FIX #73 (ONASSES 0000495-10, 18/06/2026) — RETRY + RE-ANCHOR:
+        # mesmo padrão do loop Expresso pós-parâmetros (#71). _lancar_verba_manual
+        # navega para criar uma verba nova; se o save da verba Manual anterior
+        # deixou navegação Seam EM VOO, o page.evaluate da próxima é destruído
+        # ("Execution context was destroyed, most likely because of a navigation").
+        # ANTES: este loop não tinha try/except → o crash de UMA verba abortava a
+        # FASE INTEIRA de verbas (todas as restantes perdidas) e o bot seguia
+        # liquidando/exportando um PJC FANTASMA sem nenhuma verba (~6KB),
+        # reportando "sucesso". AGORA: re-ancorar a listagem (deixar a navegação
+        # assentar) e RETENTAR até 3× por verba; o guard anti-PJC-fantasma em
+        # fase_liquidar_e_exportar barra a exportação se mesmo assim faltarem.
         for v in verbas_manual:
-            self._lancar_verba_manual(v)
+            _nome_v = getattr(v, "nome_pjecalc", None) or getattr(v, "expresso_alvo", "?")
+            _man_ok = False
+            for _tent in range(1, 4):
+                try:
+                    self._lancar_verba_manual(v)
+                    _man_ok = True
+                    break
+                except Exception as e:
+                    self.log(
+                        f"  ⚠ Falha lançar Manual '{_nome_v}' "
+                        f"(tentativa {_tent}/3): {str(e)[:160]}"
+                    )
+                    # deixar a navegação que destruiu o contexto assentar antes
+                    # de retentar (re-anchor da listagem de verbas)
+                    try:
+                        self._page.wait_for_load_state("domcontentloaded", timeout=8000)
+                    except Exception:
+                        pass
+                    try:
+                        self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(6000)
+                        self._page.wait_for_timeout(800)
+                    except Exception:
+                        pass
+            if not _man_ok:
+                self.log(
+                    f"  🛑 Verba Manual '{_nome_v}' NÃO criada após 3 tentativas "
+                    f"— liquidação pode ficar incompleta (guard anti-fantasma ativo)"
+                )
 
         # 4c. Pós-Expresso: verificar contexto Seam para ajuste de parâmetros de verbas.
         # Bug PJE-Calc 2.15.1: Expresso save muda conversationId (ex: 6→42).
@@ -8662,6 +8701,47 @@ class PlaywrightAutomatorV2:
     def fase_liquidar_e_exportar(self) -> str | None:
         """Liquida o cálculo e baixa o arquivo .PJC final."""
         self.log("Fase 14 — Liquidar + Exportar")
+
+        # ── 14.0 GUARD anti-PJC-fantasma (#73, ONASSES 0000495-10, 18/06/2026) ──
+        # Se a sentença tem verbas mas a fase de Verbas abortou (ex.: "Execution
+        # context was destroyed" no loop Manual), o cálculo fica SEM NENHUMA verba
+        # e exportar produz um PJC-fantasma (~6KB) que o bot reportava como
+        # "sucesso" — pior que travar, porque o PJC inválido passa despercebido.
+        # Conferir a listagem de verbas ANTES de liquidar: se esperávamos verbas
+        # e a listagem está VAZIA, NÃO exportar — falhar alto (retorna None →
+        # webapp não vê PJC_GERADO → run marcado como falha).
+        try:
+            _esperadas = len(self.previa.verbas_principais or [])
+        except Exception:
+            _esperadas = 0
+        if _esperadas > 0:
+            def _contar_verbas_listadas() -> int:
+                try:
+                    self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(1000)
+                    _snap = self.capturar_snapshot_listagem_verbas()
+                    if not isinstance(_snap, dict):
+                        return -1
+                    return len(_snap.get("linhas", []) or [])
+                except Exception as _e:
+                    self.log(f"  ⚠ guard verbas: falha ao contar listagem: {str(_e)[:120]}")
+                    return -1
+            _n = _contar_verbas_listadas()
+            if _n == 0:
+                # double-check: re-navegar e recontar (evita falso-positivo por
+                # listagem que não renderizou na 1ª passada)
+                _n = _contar_verbas_listadas()
+            self.log(f"  [DIAG-liq] verbas esperadas={_esperadas} listadas={_n}")
+            if _n == 0:
+                self.log(
+                    "  🛑 ABORTANDO liquidação/exportação: a sentença tem "
+                    f"{_esperadas} verba(s) mas a listagem do cálculo está VAZIA "
+                    "(a fase de Verbas falhou — provável 'Execution context "
+                    "destroyed'). Exportar agora geraria um PJC inválido sem "
+                    "verbas. Run marcado como FALHA — re-execute para retomar."
+                )
+                return None
 
         # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
         # Sempre passar pelo Dados do Cálculo primeiro para garantir que
