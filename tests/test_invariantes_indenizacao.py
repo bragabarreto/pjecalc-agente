@@ -1529,5 +1529,11 @@ def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
     man = src[idx_man:idx_man + 600]
     assert "_garantir_incluir_disponivel()" in man, "_lancar_verba_manual não chama o guard de 'incluir'"
     idx_g = src.find("def _garantir_incluir_disponivel")
-    gblock = src[idx_g:idx_g + 1800]
+    gblock = src[idx_g:idx_g + 2600]
+    # causa raiz: restaurar 'incluir' exige CLIQUE no sidebar (Seam @Begin),
+    # não url-goto; e escalar para F+R como último recurso.
+    assert "_navegar_menu_via_click" in gblock, "guard de 'incluir' deve usar click sidebar (Seam init)"
     assert "_fechar_e_reabrir_calculo" in gblock, "guard de 'incluir' não escala para F+R"
+    # após o save Manual, re-capturar o conversationId (muda a cada save)
+    man_full = src[idx_man:idx_man + 3600]
+    assert "_capturar_conversation_id()" in man_full, "_lancar_verba_manual não re-captura conv após save"

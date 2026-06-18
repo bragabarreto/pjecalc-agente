@@ -6293,29 +6293,36 @@ class PlaywrightAutomatorV2:
 
         if _tem_incluir():
             return
-        # 1) navegação leve para a listagem
-        try:
-            self._navegar_menu("li_calculo_verbas")
+        # 1) SIDEBAR CLICK para li_calculo_verbas (NÃO url-goto).
+        # ⚠ CAUSA RAIZ (ONASSES, log forense 18/06/2026): após o save de uma
+        # verba Manual, a listagem só re-renderiza o botão 'incluir' quando o
+        # bean Seam da listagem é RE-INICIADO via factory @Begin — e isso só
+        # acontece pelo CLIQUE no menu lateral. `_navegar_menu` faz url-goto
+        # PRIMEIRO, que NÃO chama o factory → o Seam redireciona para calculo.jsf
+        # SEM 'incluir' (log: "URL pós-click sidebar não é verba-calculo.jsf
+        # (calculo.jsf...)"). Por isso a tentativa anterior com `_navegar_menu`
+        # + F+R falhava 3/3. `_navegar_menu_via_click` clica o sidebar e
+        # re-captura o conversationId (que muda após cada save Manual).
+        for _t in range(2):
+            self._navegar_menu_via_click("li_calculo_verbas")
             self._aguardar_ajax(6000)
             self._page.wait_for_timeout(800)
-        except Exception:
-            pass
-        if _tem_incluir():
-            return
-        # 2) Fechar+Reabrir (conv fresh em edit mode) — restaura o botão
-        self.log("    ℹ 'incluir' (Manual) ausente — Fechar+Reabrir para restaurar listagem")
+            if _tem_incluir():
+                return
+        # 2) Fechar+Reabrir (conv fresh em edit mode) + sidebar click
+        self.log("    ℹ 'incluir' (Manual) ausente — Fechar+Reabrir + click sidebar para restaurar")
         try:
             self._fechar_e_reabrir_calculo("pré-Manual incluir")
         except Exception as _e:
             self.log(f"    ⚠ F+R pré-Manual falhou: {_e}")
-        try:
-            self._navegar_menu("li_calculo_verbas")
+        for _t in range(2):
+            self._navegar_menu_via_click("li_calculo_verbas")
             self._aguardar_ajax(6000)
             self._page.wait_for_timeout(800)
-        except Exception:
-            pass
+            if _tem_incluir():
+                return
         if not _tem_incluir():
-            self.log("    ⚠ 'incluir' ainda ausente após F+R — _clicar tentará mesmo assim")
+            self.log("    ⚠ 'incluir' ainda ausente após click sidebar + F+R")
 
     def _lancar_verba_manual(self, v) -> None:
         """Criar verba via botão Manual ('Lançamento Manual de Parcela')."""
@@ -6368,6 +6375,10 @@ class PlaywrightAutomatorV2:
 
         self._clicar("salvar")
         self._aguardar_ajax(10000)
+        # ⚠ FIX #73: re-capturar o conversationId — o save Manual abre nova conv
+        # Seam; sem isso a navegação seguinte usa um conv stale e o Seam
+        # redireciona para calculo.jsf (sem 'incluir' p/ a próxima verba Manual).
+        self._capturar_conversation_id()
 
         # Verificar mensagem de sucesso JSF
         body = self._page.locator("body").text_content() or ""
