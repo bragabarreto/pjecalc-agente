@@ -1414,19 +1414,19 @@ def test_inv40_13_proporcional_ano_rescisao_desligamento():
                 "ocorrencia_pagamento": "DEZEMBRO",
                 "periodo_inicio": pi, "periodo_fim": pf}}]}
 
-    # proporcional do ano da rescisão (sem dezembro) → DESLIGAMENTO
-    o1 = normalize_v2_json(_13("01/01/2026", "25/04/2026"))["verbas_principais"][0]["parametros"]["ocorrencia_pagamento"]
-    assert o1 == "DESLIGAMENTO"
-    # multi-ano (cruza dezembros) → preservado
+    # proporcional do ano da rescisão (sem dezembro) com CONTRATO multi-ano que
+    # cruza dezembro → período expandido ao contrato + DEZEMBRO nativo (ver
+    # inv42 para a janela). NÃO mais DESLIGAMENTO (aquela tentativa não movia a
+    # ocorrência; ver task #72).
+    p1 = normalize_v2_json(_13("01/01/2026", "25/04/2026"))["verbas_principais"][0]["parametros"]
+    assert p1["ocorrencia_pagamento"] == "DEZEMBRO"
+    assert p1["periodo_inicio"] == "13/01/2025"  # contrato
+    # multi-ano (período já cruza dezembros) → preservado
     o2 = normalize_v2_json(_13("01/01/2024", "25/04/2026"))["verbas_principais"][0]["parametros"]["ocorrencia_pagamento"]
     assert o2 == "DEZEMBRO"
     # ano completo (tem dezembro) → preservado
     o3 = normalize_v2_json(_13("01/01/2025", "31/12/2025"))["verbas_principais"][0]["parametros"]["ocorrencia_pagamento"]
     assert o3 == "DEZEMBRO"
-    # prompt instrui a regra
-    ext = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
-    assert "proporcional do ano da" in ext and "DESLIGAMENTO" in ext
-    assert "período SEM dezembro" in ext or "período sem dezembro" in ext.lower()
 
 
 def test_inv41_regerar_final_sobrescrever_REVERTIDO():
@@ -1446,3 +1446,38 @@ def test_inv41_regerar_final_sobrescrever_REVERTIDO():
     assert "REVERTIDO #72 (inv41" in src
     # o helper preserva o parâmetro (default False — sem mudança de comportamento)
     assert "def _regerar_ocorrencias_verbas(self, sobrescrever: bool = False)" in src
+
+
+def test_inv42_13_proporcional_periodo_contrato_mais_janela():
+    """#72 (LUCAS, orientação do usuário validada em run real): 13º proporcional
+    do ano da rescisão deve apurar NATIVAMENTE — período expandido ao contrato
+    (para a ocorrência cair num dezembro válido) + JANELA de ocorrências
+    deferidas, e o bot DESATIVA as ocorrências de anos pagos fora da janela."""
+    from modules.json_normalizer import normalize_v2_json
+    pc = {"estado_uf": "CE", "municipio": "X", "data_admissao": "13/01/2025",
+          "data_demissao": "25/04/2026", "data_ajuizamento": "01/05/2026",
+          "data_inicio_calculo": "13/01/2025", "data_termino_calculo": "25/05/2026"}
+    base = {"parametros_calculo": pc, "verbas_principais": [
+        {"id": "v", "nome_pjecalc": "13º SALÁRIO", "parametros": {
+            "caracteristica": "DECIMO_TERCEIRO_SALARIO", "ocorrencia_pagamento": "DEZEMBRO",
+            "periodo_inicio": "01/01/2026", "periodo_fim": "25/04/2026"}}]}
+    p = normalize_v2_json(base)["verbas_principais"][0]["parametros"]
+    # período expandido ao contrato; janela = período deferido original; DEZEMBRO nativo
+    assert p["periodo_inicio"] == "13/01/2025" and p["periodo_fim"] == "25/04/2026"
+    assert p["janela_ocorrencias_inicio"] == "01/01/2026"
+    assert p["janela_ocorrencias_fim"] == "25/04/2026"
+    assert p["ocorrencia_pagamento"] == "DEZEMBRO"
+    # contrato de ano único (sem dezembro em lugar nenhum) → fallback DESLIGAMENTO
+    pc2 = dict(pc, data_admissao="01/02/2026", data_inicio_calculo="01/02/2026")
+    base2 = {"parametros_calculo": pc2, "verbas_principais": [
+        {"id": "v", "nome_pjecalc": "13º SALÁRIO", "parametros": {
+            "caracteristica": "DECIMO_TERCEIRO_SALARIO", "ocorrencia_pagamento": "DEZEMBRO",
+            "periodo_inicio": "01/02/2026", "periodo_fim": "25/04/2026"}}]}
+    p2 = normalize_v2_json(base2)["verbas_principais"][0]["parametros"]
+    assert p2["ocorrencia_pagamento"] == "DESLIGAMENTO"
+    assert p2.get("janela_ocorrencias_inicio") is None
+    # bot tem o método de filtro por janela
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _filtrar_ocorrencias_por_janela" in src
+    assert "janela_ocorrencias_inicio" in src
+    assert "_filtrar_ocorrencias_por_janela(v)" in src

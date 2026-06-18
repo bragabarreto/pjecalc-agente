@@ -2612,6 +2612,18 @@ class PlaywrightAutomatorV2:
             except Exception as _e:
                 self.log(f"  ⚠ ajuste fino reflexo 13º: {_e}")
 
+        # ── Sub-fase #72: filtrar ocorrências do 13º proporcional-rescisão ──
+        # Para o 13º com janela_ocorrencias (período expandido ao contrato pelo
+        # normalizer), desativar as ocorrências dos anos JÁ PAGOS (fora da
+        # janela deferida). Roda ANTES do Regerar final [Manter], que preserva
+        # as desativações.
+        for v in verbas_expresso:
+            try:
+                if getattr(v.parametros, "janela_ocorrencias_inicio", None):
+                    self._filtrar_ocorrencias_por_janela(v)
+            except Exception as _e:
+                self.log(f"  ⚠ filtro ocorrências 13º (janela): {_e}")
+
         # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
         # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
         # na LISTAGEM (botão regerarOcorrencias com rendered=emModoListagem).
@@ -2785,6 +2797,107 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ⚠ {nome}: erro ao salvar: {e}")
             except Exception as e:
                 self.log(f"    ⚠ {nome}: erro geral: {e}")
+
+    def _filtrar_ocorrencias_por_janela(self, v) -> None:
+        """#72 (LUCAS 0000610-31): 13º proporcional cujo período foi EXPANDIDO ao
+        contrato (apuração nativa). A apuração gera ocorrências de TODOS os anos
+        (ex.: dez/2025 do ano cheio + abril/2026 proporcional). DESATIVA as
+        ocorrências cuja data cai FORA da janela deferida (anos já pagos), via o
+        checkbox :ativo (Invariante 6). Só atua se janela_ocorrencias setada.
+        """
+        p = v.parametros
+        ji = getattr(p, "janela_ocorrencias_inicio", None)
+        jf = getattr(p, "janela_ocorrencias_fim", None)
+        if not ji or not jf:
+            return
+        from datetime import datetime as _dt
+        try:
+            ji_d = _dt.strptime(ji, "%d/%m/%Y")
+            jf_d = _dt.strptime(jf, "%d/%m/%Y")
+        except Exception:
+            return
+        nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
+        self.log(f"    → Filtrar ocorrências do 13º '{nome}' pela janela deferida {ji}–{jf}")
+        candidatos = [v.nome_pjecalc]
+        if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
+            candidatos.append(v.expresso_alvo)
+        self._navegar_menu("li_calculo_verbas")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1000)
+        target_id = self._page.evaluate(
+            """(cands) => {
+                const links = [...document.querySelectorAll('a.linkOcorrencias')]
+                    .filter(a => !a.id.includes(':listaReflexo:'));
+                for (const a of links) {
+                    const tr = a.closest('tr'); if (!tr) continue;
+                    for (const td of tr.querySelectorAll('td')) {
+                        const t = (td.textContent || '').trim();
+                        if (cands.some(c => c && t === c)) return a.id;
+                    }
+                }
+                return null;
+            }""",
+            candidatos,
+        )
+        if not target_id:
+            self.log("    ⚠ linkOcorrencias do 13º não encontrado — filtro pulado")
+            return
+        esc = target_id.replace(":", "\\:")
+        try:
+            self._page.locator(f"a#{esc}").first.click(force=True)
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1200)
+        except Exception as e:
+            self.log(f"    ⚠ click linkOcorrencias 13º: {e}")
+            return
+        rows = self._page.evaluate(
+            """() => {
+                const cbxs = [...document.querySelectorAll(
+                    'input[type="checkbox"][id*=":listagem:"][id$=":ativo"]'
+                )].filter(c => !c.id.includes('ativarTodos')
+                             && !c.id.includes('selecionarTodos')
+                             && !c.id.includes('listaReflexo'));
+                return cbxs.map(c => {
+                    const m = c.id.match(/:listagem:(\\d+):ativo$/);
+                    const tr = c.closest('tr');
+                    const di = tr ? tr.querySelector('[id$=":dataInicial"], [id*=":dataInicial"]') : null;
+                    return {
+                        idx: m ? parseInt(m[1]) : -1,
+                        checked: c.checked,
+                        dataInicial: (di ? (di.value || di.textContent || '') : '').trim(),
+                    };
+                }).filter(r => r.idx >= 0);
+            }"""
+        )
+        desativadas = 0
+        for r in rows:
+            try:
+                d = _dt.strptime(r["dataInicial"], "%d/%m/%Y")
+            except Exception:
+                continue
+            dentro = ji_d <= d <= jf_d
+            if r["checked"] and not dentro:
+                self._page.evaluate(
+                    """(idx) => {
+                        const c = [...document.querySelectorAll('input[id$=":ativo"]')]
+                            .find(x => new RegExp(':listagem:' + idx + ':ativo$').test(x.id));
+                        if (c && c.checked) c.click();
+                    }""",
+                    r["idx"],
+                )
+                self._aguardar_ajax(3000)
+                self._page.wait_for_timeout(500)
+                desativadas += 1
+                self.log(f"       ✓ desativada ocorrência {r['dataInicial']} (fora da janela — ano pago)")
+        if desativadas:
+            try:
+                self._clicar("salvar")
+                self._aguardar_ajax(6000)
+                self.log(f"    ✓ {desativadas} ocorrência(s) de ano pago desativada(s) e salvas no 13º")
+            except Exception as e:
+                self.log(f"    ⚠ salvar pós-filtro 13º: {e}")
+        else:
+            self.log("    ℹ nenhuma ocorrência fora da janela (nada a desativar)")
 
     def _configurar_ocorrencias_informado_inline(self, v) -> None:
         """Após salvar verba INFORMADO, navegar para suas Ocorrências (mesma

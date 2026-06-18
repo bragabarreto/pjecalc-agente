@@ -430,22 +430,34 @@ def _periodo_contem_dezembro(pi_str: str, pf_str: str) -> bool:
 def _norm_13_ocorrencia_proporcional(data: dict[str, Any]) -> None:
     """13º proporcional do ano da rescisão (#72 — LUCAS 0000610-31).
 
-    Um 13º SALÁRIO com `ocorrencia_pagamento=DEZEMBRO` exige que o PERÍODO da
-    verba contenha um dezembro (onde a ocorrência é colocada). Quando o contrato
-    termina no meio do ano (rescisão) e o 13º deferido é só o PROPORCIONAL do ano
-    da rescisão (período sem dezembro — ex.: 01/01/2026→25/04/2026), o PJE-Calc
-    rejeita a liquidação com 'Todas as ocorrências da verba 13º SALÁRIO devem
-    estar contidas no período estabelecido'. O correto é `DESLIGAMENTO`: a
-    ocorrência é colocada na data da rescisão (dentro do período), com os avos
-    apurados do período.
+    Orientação do usuário (juiz, 17/06/2026, validada em run real): o 13º deve
+    apurar NATIVAMENTE a partir dos parâmetros do cálculo (admissão→demissão); o
+    PJE-Calc posiciona a ocorrência no dezembro de cada ano e aplica a regra dos
+    15 dias para os avos. Quando o 13º deferido é só o PROPORCIONAL do ano da
+    rescisão, a IA estreita o período (ex.: 01/01/2026→25/04/2026) — e como esse
+    período NÃO contém dezembro, a ocorrência nativa cai fora e a liquidação
+    trava ('ocorrências do 13º devem estar contidas no período').
 
-    Só atua quando caracteristica=DECIMO_TERCEIRO_SALARIO + ocorrencia=DEZEMBRO +
-    período SEM dezembro. 13º multi-ano (período que cruza dezembros) fica
-    intocado.
+    Correção (só quando caracteristica=DECIMO_TERCEIRO_SALARIO + período SEM
+    dezembro):
+    - Se o CONTRATO (admissão→demissão) CONTÉM um dezembro (contrato multi-ano,
+      ex.: LUCAS adm 13/01/2025): EXPANDE o período do 13º ao contrato (apuração
+      nativa posiciona a ocorrência em dez/ano-anterior) e grava a JANELA de
+      ocorrências deferidas = período original (o bot desativa as ocorrências
+      dos anos pagos fora da janela). ocorrência volta a DEZEMBRO (nativo).
+    - Se o contrato TAMBÉM não tem dezembro (contrato de ano único, mid-year):
+      fallback DESLIGAMENTO (best-effort — posiciona na rescisão).
+
+    13º multi-ano cujo período JÁ cruza dezembros (THAÍS, inv21) fica intocado.
     """
     verbas = data.get("verbas_principais")
     if not isinstance(verbas, list):
         return
+    pc = data.get("parametros_calculo") or {}
+    adm = pc.get("data_admissao") if isinstance(pc, dict) else None
+    dem = pc.get("data_demissao") if isinstance(pc, dict) else None
+    import logging
+    _log = logging.getLogger(__name__)
     for v in verbas:
         if not isinstance(v, dict):
             continue
@@ -454,18 +466,31 @@ def _norm_13_ocorrencia_proporcional(data: dict[str, Any]) -> None:
             continue
         if p.get("caracteristica") != "DECIMO_TERCEIRO_SALARIO":
             continue
-        if p.get("ocorrencia_pagamento") != "DEZEMBRO":
-            continue
         pi, pf = p.get("periodo_inicio"), p.get("periodo_fim")
         if not pi or not pf or _periodo_contem_dezembro(pi, pf):
-            continue
-        p["ocorrencia_pagamento"] = "DESLIGAMENTO"
-        import logging
-        logging.getLogger(__name__).warning(
-            "Normalizer: 13º '%s' período %s→%s sem dezembro — ocorrência "
-            "DEZEMBRO → DESLIGAMENTO (proporcional do ano da rescisão, #72)",
-            v.get("nome_pjecalc"), pi, pf,
-        )
+            continue  # período já contém dezembro → nativo OK (THAÍS/multi-ano)
+        # período do 13º SEM dezembro (proporcional do ano da rescisão)
+        if adm and dem and _periodo_contem_dezembro(adm, dem):
+            # contrato multi-ano com dezembro → apuração nativa + janela deferida
+            p["janela_ocorrencias_inicio"] = pi
+            p["janela_ocorrencias_fim"] = pf
+            p["periodo_inicio"] = adm
+            p["periodo_fim"] = dem
+            p["ocorrencia_pagamento"] = "DEZEMBRO"
+            _log.warning(
+                "Normalizer: 13º '%s' proporcional-rescisão — período expandido "
+                "ao contrato %s→%s (apuração nativa) + janela deferida %s→%s "
+                "(bot desativa anos pagos) — #72",
+                v.get("nome_pjecalc"), adm, dem, pi, pf,
+            )
+        else:
+            # contrato de ano único mid-year (sem dezembro em lugar nenhum)
+            p["ocorrencia_pagamento"] = "DESLIGAMENTO"
+            _log.warning(
+                "Normalizer: 13º '%s' período %s→%s sem dezembro e contrato sem "
+                "dezembro — fallback DESLIGAMENTO (#72)",
+                v.get("nome_pjecalc"), pi, pf,
+            )
 
 
 def _norm_justa_causa_exclui_rescisorias(data: dict[str, Any]) -> None:

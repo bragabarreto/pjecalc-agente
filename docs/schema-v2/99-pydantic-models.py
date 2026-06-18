@@ -629,6 +629,13 @@ class ParametrosVerba(BaseModel):
     zerar_valor_negativo: bool = False
     periodo_inicio: Optional[str] = None
     periodo_fim: Optional[str] = None
+    # Janela de ocorrências DEFERIDAS (#72 — 13º proporcional do ano da rescisão):
+    # quando o período do 13º é expandido ao contrato (para a apuração NATIVA
+    # posicionar a ocorrência num dezembro válido), esta janela DD/MM/YYYY
+    # restringe quais ocorrências permanecem ativas — o bot DESATIVA as
+    # ocorrências cuja data cai fora dela (anos já pagos). Vazio = todas ativas.
+    janela_ocorrencias_inicio: Optional[str] = None
+    janela_ocorrencias_fim: Optional[str] = None
     exclusoes: VerbaExclusoes = Field(default_factory=VerbaExclusoes)
     valor_devido: Optional[Union[ValorDevidoInformado, ValorDevidoCalculado]] = None
     formula_calculado: Optional[FormulaCalculado] = None
