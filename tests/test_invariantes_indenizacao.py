@@ -1480,4 +1480,4 @@ def test_inv42_13_proporcional_periodo_contrato_mais_janela():
     src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     assert "def _filtrar_ocorrencias_por_janela" in src
     assert "janela_ocorrencias_inicio" in src
-    assert "_filtrar_ocorrencias_por_janela(v)" in src
+    assert "_filtrar_ocorrencias_por_janela(_v)" in src
