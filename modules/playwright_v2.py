@@ -2612,18 +2612,6 @@ class PlaywrightAutomatorV2:
             except Exception as _e:
                 self.log(f"  ⚠ ajuste fino reflexo 13º: {_e}")
 
-        # ── Sub-fase #72: filtrar ocorrências do 13º proporcional-rescisão ──
-        # Para o 13º com janela_ocorrencias (período expandido ao contrato pelo
-        # normalizer), desativar as ocorrências dos anos JÁ PAGOS (fora da
-        # janela deferida). Roda ANTES do Regerar final [Manter], que preserva
-        # as desativações.
-        for v in verbas_expresso:
-            try:
-                if getattr(v.parametros, "janela_ocorrencias_inicio", None):
-                    self._filtrar_ocorrencias_por_janela(v)
-            except Exception as _e:
-                self.log(f"  ⚠ filtro ocorrências 13º (janela): {_e}")
-
         # CRÍTICO (descoberto 12/05/2026 via diagnóstico de pendências):
         # após alterar parâmetros das verbas, é OBRIGATÓRIO clicar "Regerar"
         # na LISTAGEM (botão regerarOcorrencias com rendered=emModoListagem).
@@ -2647,6 +2635,20 @@ class PlaywrightAutomatorV2:
             # ATENÇÃO: _fixar_valordevido_ocorrencias_informadas() não pode
             # rodar aqui — Seam está em modo criação, listagem inacessível.
             # Será chamado em fase_pos_recentes_correcoes após reabertura.
+
+            # ── #72: filtrar ocorrências do 13º proporcional-rescisão ──
+            # APÓS o Regerar final (que gera as ocorrências do contrato inteiro:
+            # dez/ano-anterior + proporcional da rescisão). Desativa as
+            # ocorrências dos anos JÁ PAGOS (fora da janela deferida). Tem de ser
+            # AQUI, não antes do Regerar — antes, o 13º ainda tinha as ocorrências
+            # do período estreito (1 só, dentro da janela) e o filtro não
+            # encontrava nada (LUCAS run #74).
+            for _v in verbas_expresso:
+                try:
+                    if getattr(_v.parametros, "janela_ocorrencias_inicio", None):
+                        self._filtrar_ocorrencias_por_janela(_v)
+                except Exception as _e:
+                    self.log(f"  ⚠ filtro ocorrências 13º (janela): {_e}")
 
         self.log("Fase 4 concluída")
 
