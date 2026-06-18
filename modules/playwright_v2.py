@@ -2847,13 +2847,20 @@ class PlaywrightAutomatorV2:
         esc = target_id.replace(":", "\\:")
         try:
             self._page.locator(f"a#{esc}").first.click(force=True)
+            try:
+                self._page.wait_for_url("**/parametrizar-ocorrencia.jsf**", timeout=12000)
+            except Exception:
+                pass
             self._aguardar_ajax(8000)
-            self._page.wait_for_timeout(1200)
+            self._page.wait_for_timeout(1500)
         except Exception as e:
             self.log(f"    ⚠ click linkOcorrencias 13º: {e}")
             return
+        # ler ocorrências: data extraída do input/span :dataInicial OU do 1º td
+        # que casar uma data DD/MM/YYYY (a página de Ocorrências varia o DOM).
         rows = self._page.evaluate(
             """() => {
+                const re = /(\\d{2}\\/\\d{2}\\/\\d{4})/;
                 const cbxs = [...document.querySelectorAll(
                     'input[type="checkbox"][id*=":listagem:"][id$=":ativo"]'
                 )].filter(c => !c.id.includes('ativarTodos')
@@ -2862,15 +2869,22 @@ class PlaywrightAutomatorV2:
                 return cbxs.map(c => {
                     const m = c.id.match(/:listagem:(\\d+):ativo$/);
                     const tr = c.closest('tr');
+                    let data = '';
                     const di = tr ? tr.querySelector('[id$=":dataInicial"], [id*=":dataInicial"]') : null;
-                    return {
-                        idx: m ? parseInt(m[1]) : -1,
-                        checked: c.checked,
-                        dataInicial: (di ? (di.value || di.textContent || '') : '').trim(),
-                    };
+                    if (di) data = (di.value || di.textContent || '').trim();
+                    if (!re.test(data) && tr) {
+                        for (const td of tr.querySelectorAll('td, input, span')) {
+                            const t = (td.value || td.textContent || '').trim();
+                            const mm = t.match(re);
+                            if (mm) { data = mm[1]; break; }
+                        }
+                    }
+                    return {idx: m ? parseInt(m[1]) : -1, checked: c.checked, dataInicial: data};
                 }).filter(r => r.idx >= 0);
             }"""
         )
+        self.log(f"    ℹ filtro 13º: url={self._page.url[-48:]} | {len(rows)} ocorrência(s) lida(s): "
+                 f"{[(r['dataInicial'], r['checked']) for r in rows][:8]}")
         desativadas = 0
         for r in rows:
             try:
