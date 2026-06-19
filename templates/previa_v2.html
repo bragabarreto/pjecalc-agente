@@ -1597,6 +1597,26 @@ function htmlHistorico(h, idx) {
       <div class="checkbox-row"><input type="checkbox"${h.incidencias?.fgts!==false?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.fgts=this.checked"> <label>FGTS</label></div>
       <div class="checkbox-row"><input type="checkbox"${h.incidencias?.cs_inss!==false?' checked':''} onchange="previaData.historico_salarial[${idx}].incidencias=previaData.historico_salarial[${idx}].incidencias||{};previaData.historico_salarial[${idx}].incidencias.cs_inss=this.checked"> <label>CS/INSS</label></div>
     </div>
+    ${h.tipo_valor !== 'CALCULADO' ? `
+    <div class="fieldgroup" style="margin-top:8px; background:#fafbff; border-left:3px solid #5a8dee;">
+      <div class="fieldgroup-title" style="font-size:0.9rem;">📈 Evolução salarial — UM histórico, vários valores ao longo do contrato</div>
+      <p class="ajuda" style="margin:2px 0 8px;">Cada faixa = "a partir desta competência, o salário passa a ser X" (dissídios, reajustes). Mantenha <b>um único histórico</b> cobrindo todo o período — não crie históricos separados por faixa. O <b>Valor R$</b> acima é a base (1ª faixa). Deixe vazio se o salário foi fixo.</p>
+      <div id="evol-${idx}">
+        ${(h.evolucao||[]).map((ev, fidx) => `
+          <div class="grid-3" style="margin-bottom:4px; align-items:end;">
+            <div class="campo"><label>Competência (MM/AAAA)</label>
+              <input type="text" value="${ev.competencia||''}" placeholder="MM/AAAA"
+                onchange="previaData.historico_salarial[${idx}].evolucao[${fidx}].competencia=this.value; _sincEvolucao(${idx}); validarPrevia()"></div>
+            <div class="campo"><label>Valor R$</label>
+              <input type="number" step="0.01" value="${ev.valor_brl||''}"
+                onchange="previaData.historico_salarial[${idx}].evolucao[${fidx}].valor_brl=parseFloat(this.value); _sincEvolucao(${idx}); validarPrevia()"></div>
+            <div class="campo"><button type="button" onclick="removerFaixaEvolucao(${idx}, ${fidx})" style="color:#e74c3c; background:none; border:0; cursor:pointer; margin-bottom:6px;">✕ remover faixa</button></div>
+          </div>
+        `).join('')}
+      </div>
+      <button type="button" onclick="adicionarFaixaEvolucao(${idx})" style="margin-top:4px;">+ Adicionar faixa de evolução</button>
+    </div>
+    ` : ''}
   `;
   return div;
 }
@@ -1621,6 +1641,43 @@ function removerHistorico(idx) {
     renderHistoricos();
     validarPrevia();
   }
+}
+
+// ─── Evolução salarial (1 histórico, várias faixas de valor) ───────────────
+function adicionarFaixaEvolucao(idx) {
+  const h = previaData.historico_salarial[idx];
+  if (!h.evolucao) h.evolucao = [];
+  // 1ª faixa: semear com a competência inicial + valor base já informados
+  if (h.evolucao.length === 0 && (h.competencia_inicial || h.valor_brl)) {
+    h.evolucao.push({competencia: h.competencia_inicial || '', valor_brl: h.valor_brl || null});
+  }
+  h.evolucao.push({competencia: '', valor_brl: null});
+  renderHistoricos();
+  validarPrevia();
+}
+
+function removerFaixaEvolucao(idx, fidx) {
+  const h = previaData.historico_salarial[idx];
+  if (!h.evolucao) return;
+  h.evolucao.splice(fidx, 1);
+  if (h.evolucao.length === 0) h.evolucao = null;  // sem faixas → salário fixo
+  _sincEvolucao(idx);
+  renderHistoricos();
+  validarPrevia();
+}
+
+// Mantém o schema coerente: valor_brl (base) = valor da faixa de MENOR competência;
+// competencia_inicial = essa competência (se ainda vazia). NÃO reordena o array
+// em tela (evita o campo "pular" enquanto o usuário digita) — o bot ordena.
+function _sincEvolucao(idx) {
+  const h = previaData.historico_salarial[idx];
+  const ev = (h.evolucao || []).filter(e => e && e.competencia && e.valor_brl != null);
+  if (!ev.length) return;
+  const key = c => { const p = (c || '').split('/'); return (p[1] || '') + String(p[0] || '').padStart(2, '0'); };
+  let menor = ev[0];
+  for (const e of ev) if (key(e.competencia) < key(menor.competencia)) menor = e;
+  h.valor_brl = menor.valor_brl;
+  if (!h.competencia_inicial) h.competencia_inicial = menor.competencia;
 }
 
 // ─── Verbas Principais ────────────────────────────────────────────────

@@ -1624,3 +1624,22 @@ def test_inv46_dano_moral_expresso_nao_manual():
     bloco = pw[idx:idx + 1200]
     assert "INDENIZAÇÃO POR DANO MORAL" in bloco, \
         "dano moral deve estar na exceção do reroute (lançar via Expresso)"
+
+
+def test_inv47_previa_editor_evolucao_salarial():
+    """#77 (L'Oreal 0001858-66, orientação do usuário 19/06/2026): a prévia deve
+    permitir registrar UM histórico salarial com a EVOLUÇÃO do valor ao longo do
+    contrato (faixas competência→valor), não históricos separados por faixa.
+    Schema (HistoricoSalarial.evolucao) e bot (_expandir_evolucao_historico) já
+    suportavam; faltava o editor na prévia."""
+    tpl = (REPO_ROOT / "templates" / "previa_v2.html").read_text(encoding="utf-8")
+    # editor de faixas no card de histórico
+    assert "Evolução salarial" in tpl
+    assert "function adicionarFaixaEvolucao" in tpl
+    assert "function removerFaixaEvolucao" in tpl
+    assert "function _sincEvolucao" in tpl
+    # grava no campo canônico do schema
+    assert ".evolucao[" in tpl
+    # o bot expande mantendo o mesmo nome (1 histórico lógico)
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "_expandir_evolucao_historico" in pw
