@@ -565,6 +565,78 @@ def _norm_cap_periodo_fim_na_demissao(data: dict[str, Any]) -> None:
             )
 
 
+def _norm_cap_periodo_inicio_prescricao(data: dict[str, Any]) -> None:
+    """Coerência período×prescrição quinquenal (PJE-Calc) — #78.
+
+    Quando `prescricao_quinquenal=True`, o PJE-Calc REJEITA o save de parâmetros
+    de qualquer verba cujo `periodo_inicio` seja ANTERIOR ao piso prescricional
+    (data_ajuizamento − 5 anos): "A data de início informada não pode ser
+    anterior à data da prescrição quinquenal (5 anos antes da Data do
+    Ajuizamento)". O save falha, a verba fica desconfigurada, e na liquidação a
+    listagem vem vazia → guard anti-fantasma aborta a exportação.
+
+    Bug (FRANCISCA/L'Oréal 0001858-66, ajuizamento 24/11/2025, 19/06/2026): HORAS
+    EXTRAS 50% e INTERVALO INTRAJORNADA vinham com periodo_inicio=04/07/2020 <
+    piso 24/11/2020 → save rejeitado → 2 verbas, listagem vazia → abort. O mesmo
+    valha p/ `data_inicio_calculo` (a IA o setou 04/07/2020, inconsistente com o
+    piso).
+
+    Fix: capar `data_inicio_calculo` e cada `periodo_inicio` (verba + reflexo) no
+    piso prescricional ANTES da prévia (fidelidade prévia↔automação). O período
+    anterior ao piso é prescrito (não calculável); o usuário revê na prévia. Só
+    age quando prescricao_quinquenal=True (se False, PJE-Calc não aplica o piso).
+    """
+    pc = data.get("parametros_calculo") or {}
+    if not isinstance(pc, dict) or not pc.get("prescricao_quinquenal"):
+        return
+    aju = pc.get("data_ajuizamento")
+    if not aju:
+        return
+    from datetime import datetime as _dt
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        d_aju = _dt.strptime(aju, "%d/%m/%Y")
+    except (ValueError, TypeError):
+        return
+    # Piso = ajuizamento − 5 anos (mesma data, ano−5). 29/02 → 28/02.
+    try:
+        piso = d_aju.replace(year=d_aju.year - 5)
+    except ValueError:
+        piso = d_aju.replace(year=d_aju.year - 5, day=28)
+    piso_str = piso.strftime("%d/%m/%Y")
+
+    def _cap(container: dict, campo: str, rotulo: str) -> None:
+        val = container.get(campo)
+        if not val:
+            return
+        try:
+            d_val = _dt.strptime(val, "%d/%m/%Y")
+        except (ValueError, TypeError):
+            return
+        if d_val < piso:
+            container[campo] = piso_str
+            _log.warning(
+                "Normalizer: %s=%s ANTERIOR ao piso prescricional=%s "
+                "(ajuizamento %s − 5a) → cap em %s (#78)",
+                rotulo, val, piso_str, aju, piso_str,
+            )
+
+    # data_inicio_calculo do cálculo
+    _cap(pc, "data_inicio_calculo", "data_inicio_calculo")
+    # periodo_inicio de cada verba principal + seus reflexos
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if isinstance(p, dict):
+            _cap(p, "periodo_inicio", f"verba '{v.get('nome_pjecalc')}'")
+        for r in v.get("reflexos") or []:
+            if isinstance(r, dict) and isinstance(r.get("parametros"), dict):
+                _cap(r["parametros"], "periodo_inicio",
+                     f"reflexo '{r.get('nome_pjecalc')}' de '{v.get('nome_pjecalc')}'")
+
+
 def _norm_justa_causa_exclui_rescisorias(data: dict[str, Any]) -> None:
     """Súmula 171 TST / CLT art. 482 (#68 — safeguard determinístico).
 
@@ -921,6 +993,12 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # demissão → cap em data_demissao (PJE-Calc rejeita; bloqueia automação).
     # APÓS o _norm_13 (que pode setar DEZEMBRO) — o cap é a última palavra.
     _norm_cap_periodo_fim_na_demissao(data)
+
+    # Salvaguarda #78: com prescricao_quinquenal=True, periodo_inicio (verba/
+    # reflexo) e data_inicio_calculo NÃO podem ser anteriores ao piso
+    # prescricional (ajuizamento − 5a) — PJE-Calc rejeita o save da verba e a
+    # liquidação aborta com listagem vazia. Cap no piso ANTES da prévia.
+    _norm_cap_periodo_inicio_prescricao(data)
 
     # Salvaguarda salário por fora (#69): FGTS incide SÓ sobre a parcela
     # extrafolha (o registrado já foi depositado). Corrige a inversão comum da

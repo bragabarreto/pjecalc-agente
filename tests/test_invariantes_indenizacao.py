@@ -1660,3 +1660,47 @@ def test_inv48_regerar_seleciona_verbas():
         "_regerar_com_modal_confirmacao deve marcar as verbas antes do Regerar"
     # a seleção vem ANTES do click no botão Regerar (seletor real do botão)
     assert bloco.find("selecionarTodos") < bloco.find("':regerarOcorrencias'")
+
+
+def test_inv49_cap_periodo_inicio_prescricao():
+    """#78 (FRANCISCA/L'Oréal 0001858-66): com prescricao_quinquenal=True, o
+    PJE-Calc rejeita verba cujo periodo_inicio < piso prescricional (ajuizamento
+    − 5a) → save falha → liquidação aborta com listagem vazia. O normalizer capa
+    periodo_inicio (verba) e data_inicio_calculo no piso ANTES da prévia."""
+    import sys
+    sys.path.insert(0, str(REPO_ROOT))
+    from modules.json_normalizer import normalize_v2_json
+    payload = {
+        "meta": {"versao": "2.0", "validacao": {"completude": "OK",
+                 "campos_faltantes": [], "avisos": []}},
+        "processo": {"numero_processo": "0001858-66.2025.5.07.0003",
+                     "reclamante": {"nome": "X"}, "reclamado": {"nome": "Y"}},
+        "parametros_calculo": {
+            "data_admissao": "16/04/2018", "data_demissao": "02/09/2025",
+            "data_ajuizamento": "24/11/2025", "data_inicio_calculo": "04/07/2020",
+            "prescricao_quinquenal": True,
+        },
+        "verbas_principais": [{
+            "nome_pjecalc": "HORAS EXTRAS 50%", "expresso_alvo": "HORAS EXTRAS 50%",
+            "parametros": {"periodo_inicio": "04/07/2020", "periodo_fim": "02/09/2025",
+                           "ocorrencia_pagamento": "MENSAL"},
+        }],
+    }
+    out = normalize_v2_json(payload)
+    # piso = 24/11/2025 − 5a = 24/11/2020
+    assert out["parametros_calculo"]["data_inicio_calculo"] == "24/11/2020"
+    assert out["verbas_principais"][0]["parametros"]["periodo_inicio"] == "24/11/2020"
+
+    # com prescricao_quinquenal=False, NÃO capa (PJE-Calc não aplica piso)
+    payload2 = {**payload, "parametros_calculo": {
+        **payload["parametros_calculo"], "prescricao_quinquenal": False}}
+    payload2["verbas_principais"] = [{
+        "nome_pjecalc": "HORAS EXTRAS 50%", "expresso_alvo": "HORAS EXTRAS 50%",
+        "parametros": {"periodo_inicio": "04/07/2020", "periodo_fim": "02/09/2025",
+                       "ocorrencia_pagamento": "MENSAL"}}]
+    out2 = normalize_v2_json(payload2)
+    assert out2["verbas_principais"][0]["parametros"]["periodo_inicio"] == "04/07/2020"
+
+    # o hook está registrado no pipeline
+    nz = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_cap_periodo_inicio_prescricao(data)" in nz
