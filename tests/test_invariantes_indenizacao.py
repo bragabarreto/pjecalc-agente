@@ -1643,3 +1643,19 @@ def test_inv47_previa_editor_evolucao_salarial():
     # o bot expande mantendo o mesmo nome (1 histórico lógico)
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     assert "_expandir_evolucao_historico" in pw
+
+
+def test_inv48_regerar_seleciona_verbas():
+    """#76c (WASHINGTON, diag DOM): o PJE-Calc EXIGE ≥1 verba selecionada antes
+    do Regerar Ocorrências ('É necessário selecionar pelo menos uma Verba
+    Principal ou Reflexo') — o bot nunca marcava, então TODO Regerar (Manter e
+    Sobrescrever) falhava silenciosamente e o carimbo 'ocorrência alterada' do
+    dano moral nunca limpava. Fix: marcar selecionarTodos antes do Regerar."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    idx = pw.find("def _regerar_com_modal_confirmacao")
+    assert idx > 0
+    bloco = pw[idx:idx + 2500]
+    assert "selecionarTodos" in bloco, \
+        "_regerar_com_modal_confirmacao deve marcar as verbas antes do Regerar"
+    # a seleção vem ANTES do click no botão Regerar
+    assert bloco.find("selecionarTodos") < bloco.find("regerarOcorrencias")

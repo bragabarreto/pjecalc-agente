@@ -3585,6 +3585,39 @@ class PlaywrightAutomatorV2:
             True se Regerar completou (modal confirmada + AJAX concluído).
             False em qualquer ponto de falha.
         """
+        # 0. ⚠ CAUSA RAIZ #76c (WASHINGTON 0000614-68, 19/06/2026 — diag DOM
+        # direto): o PJE-Calc EXIGE ≥1 verba SELECIONADA (checkbox) antes do
+        # Regerar — senão retorna "Erro. É necessário selecionar pelo menos uma
+        # Verba Principal ou Reflexo." e NÃO regenera nada. O bot nunca marcava
+        # → TODO Regerar (Manter E Sobrescrever) falhava silenciosamente. Por
+        # isso o carimbo "ocorrência alterada" do dano moral NUNCA limpava (o
+        # Sobrescrever não rodava). As outras verbas funcionavam por não
+        # dependerem do Regerar (nascem corretas do Expresso). Fix: marcar
+        # 'selecionarTodos' (todas as verbas principais) antes do Regerar.
+        try:
+            self._page.evaluate(
+                """() => {
+                    // selecionarTodos cobre todas as verbas principais
+                    let n = 0;
+                    const all = document.querySelector("input[type=checkbox][id$=':selecionarTodos']");
+                    if (all && !all.checked) {
+                        all.click(); n++;
+                    }
+                    // fallback: marcar cada verbaSelecionada não-reflexo
+                    if (n === 0) {
+                        const cbs = [...document.querySelectorAll(
+                            "input[type=checkbox][id*=':verbaSelecionada']"
+                        )].filter(c => !c.id.includes(':listaReflexo:'));
+                        for (const c of cbs) if (!c.checked) { c.click(); n++; }
+                    }
+                    return n;
+                }"""
+            )
+            self._aguardar_ajax(3000)
+            self._page.wait_for_timeout(400)
+        except Exception:
+            pass
+
         # 1. Pré-selecionar radio Sobrescrever se necessário
         if sobrescrever:
             try:
