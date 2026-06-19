@@ -1654,7 +1654,8 @@ def test_inv48_regerar_seleciona_verbas():
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     idx = pw.find("def _regerar_com_modal_confirmacao")
     assert idx > 0
-    bloco = pw[idx:idx + 2500]
+    fim = pw.find("\n    def ", idx + 10)
+    bloco = pw[idx:fim]
     assert "selecionarTodos" in bloco, \
         "_regerar_com_modal_confirmacao deve marcar as verbas antes do Regerar"
     # a seleção vem ANTES do click no botão Regerar
