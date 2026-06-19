@@ -503,6 +503,68 @@ def _norm_13_ocorrencia_proporcional(data: dict[str, Any]) -> None:
             )
 
 
+def _norm_cap_periodo_fim_na_demissao(data: dict[str, Any]) -> None:
+    """Coerência ocorrência×período (PJE-Calc / validador Regra 1) — #75.
+
+    Para verbas com ocorrência NÃO-MENSAL (DESLIGAMENTO, DEZEMBRO,
+    PERIODO_AQUISITIVO), o PJE-Calc REJEITA a liquidação quando `periodo_fim` é
+    POSTERIOR à `data_demissao` ("A data final não pode ser maior que a data
+    demissão, para 'Ocorrências de Pagamento' diferentes de Mensal"). O schema
+    flagueia isso como completude=INCOMPLETO e a automação NÃO INICIA.
+
+    EXCEÇÃO: AVISO PRÉVIO (projeção legal Lei 12.506/2011 — periodo_fim pode/deve
+    passar da demissão). Mantido intocado.
+
+    Bug (processo 0000953-… demissão 05/11/2025, 19/06/2026): o 13º (verba única
+    multi-ano) ficava com `periodo_fim = data_termino_calculo` (07/12/2025 =
+    aviso projetado) + ocorrência DEZEMBRO → bloqueio. As demais rescisórias já
+    vinham capadas na demissão; só o 13º vazava a data_termino. Cap em
+    `data_demissao` (= regra do prompt: "13º DEZEMBRO → periodo_fim = demissão").
+    Fidelidade prévia↔automação: corrige ANTES da prévia.
+    """
+    pc = data.get("parametros_calculo") or {}
+    dem = pc.get("data_demissao") if isinstance(pc, dict) else None
+    if not dem:
+        return
+    from datetime import datetime as _dt
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        d_dem = _dt.strptime(dem, "%d/%m/%Y")
+    except (ValueError, TypeError):
+        return
+    _NAO_MENSAL = {"DESLIGAMENTO", "DEZEMBRO", "PERIODO_AQUISITIVO"}
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        if str(p.get("ocorrencia_pagamento") or "") not in _NAO_MENSAL:
+            continue
+        # AVISO PRÉVIO: projeção legal — não capar
+        _carac = str(p.get("caracteristica") or "").upper()
+        _alvo = (v.get("expresso_alvo") or "").upper()
+        _nome = (v.get("nome_pjecalc") or "").upper()
+        if "AVISO_PREVIO" in _carac or "AVISO PRÉVIO" in _alvo or "AVISO PREVIO" in _alvo \
+           or "AVISO PRÉVIO" in _nome or "AVISO PREVIO" in _nome:
+            continue
+        pf = p.get("periodo_fim")
+        if not pf:
+            continue
+        try:
+            d_pf = _dt.strptime(pf, "%d/%m/%Y")
+        except (ValueError, TypeError):
+            continue
+        if d_pf > d_dem:
+            p["periodo_fim"] = dem
+            _log.warning(
+                "Normalizer: verba '%s' ocorr=%s periodo_fim=%s POSTERIOR à "
+                "demissão=%s → cap em %s (#75 — PJE-Calc rejeita ≠ Mensal)",
+                v.get("nome_pjecalc"), p.get("ocorrencia_pagamento"), pf, dem, dem,
+            )
+
+
 def _norm_justa_causa_exclui_rescisorias(data: dict[str, Any]) -> None:
     """Súmula 171 TST / CLT art. 482 (#68 — safeguard determinístico).
 
@@ -854,6 +916,11 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # dezembro) → ocorrência DESLIGAMENTO (senão a ocorrência DEZEMBRO cai fora
     # do período e a liquidação trava).
     _norm_13_ocorrencia_proporcional(data)
+
+    # Salvaguarda #75: ocorrência NÃO-MENSAL com periodo_fim POSTERIOR à
+    # demissão → cap em data_demissao (PJE-Calc rejeita; bloqueia automação).
+    # APÓS o _norm_13 (que pode setar DEZEMBRO) — o cap é a última palavra.
+    _norm_cap_periodo_fim_na_demissao(data)
 
     # Salvaguarda salário por fora (#69): FGTS incide SÓ sobre a parcela
     # extrafolha (o registrado já foi depositado). Corrige a inversão comum da

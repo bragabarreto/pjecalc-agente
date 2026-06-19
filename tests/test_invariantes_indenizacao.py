@@ -1570,3 +1570,43 @@ def test_inv44_honorarios_base_bruto_e_incluir_reancora():
     # default BRUTO no preenchimento da base
     assert 'h.base_para_apuracao or "BRUTO"' in bloco, \
         "fase_honorarios deve usar default BRUTO na baseParaApuracao"
+
+
+def test_inv45_cap_periodo_fim_na_demissao():
+    """#75 (processo demissão 05/11/2025, 19/06/2026): o 13º (verba única
+    multi-ano) ficava com periodo_fim = data_termino_calculo (07/12/2025, aviso
+    projetado) + ocorrência DEZEMBRO → o validador (PreviaCalculoV2 Regra 1)
+    marcava completude=INCOMPLETO ('ocorrência ≠ Mensal incompatível com
+    periodo_fim POSTERIOR à demissão') e a AUTOMAÇÃO NÃO INICIAVA.
+
+    Fix: normalizer capa periodo_fim em data_demissao para ocorrências
+    NÃO-MENSAIS (DESLIGAMENTO/DEZEMBRO/PERIODO_AQUISITIVO), preservando AVISO
+    PRÉVIO (projeção legal Lei 12.506/2011).
+    """
+    from modules.json_normalizer import normalize_v2_json
+    base = {
+        "parametros_calculo": {
+            "estado_uf": "CE", "municipio": "FORTALEZA",
+            "data_admissao": "30/04/2021", "data_demissao": "05/11/2025",
+            "data_inicio_calculo": "30/04/2021", "data_termino_calculo": "07/12/2025",
+        },
+        "verbas_principais": [
+            {"id": "v13", "nome_pjecalc": "13º SALÁRIO", "parametros": {
+                "caracteristica": "DECIMO_TERCEIRO_SALARIO",
+                "ocorrencia_pagamento": "DEZEMBRO",
+                "periodo_inicio": "30/04/2021", "periodo_fim": "07/12/2025"}},
+            {"id": "vap", "nome_pjecalc": "AVISO PRÉVIO", "expresso_alvo": "AVISO PRÉVIO",
+             "parametros": {"caracteristica": "AVISO_PREVIO",
+                "ocorrencia_pagamento": "DESLIGAMENTO",
+                "periodo_inicio": "05/11/2025", "periodo_fim": "05/12/2025"}},
+        ],
+    }
+    out = normalize_v2_json(base)
+    vs = {v["nome_pjecalc"]: v["parametros"] for v in out["verbas_principais"]}
+    # 13º capado na demissão
+    assert vs["13º SALÁRIO"]["periodo_fim"] == "05/11/2025"
+    # aviso prévio preservado (projeção legal)
+    assert vs["AVISO PRÉVIO"]["periodo_fim"] == "05/12/2025"
+    # a função existe e está encadeada no normalize
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_cap_periodo_fim_na_demissao(data)" in src
