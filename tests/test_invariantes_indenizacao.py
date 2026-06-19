@@ -1658,5 +1658,5 @@ def test_inv48_regerar_seleciona_verbas():
     bloco = pw[idx:fim]
     assert "selecionarTodos" in bloco, \
         "_regerar_com_modal_confirmacao deve marcar as verbas antes do Regerar"
-    # a seleção vem ANTES do click no botão Regerar
-    assert bloco.find("selecionarTodos") < bloco.find("regerarOcorrencias")
+    # a seleção vem ANTES do click no botão Regerar (seletor real do botão)
+    assert bloco.find("selecionarTodos") < bloco.find("':regerarOcorrencias'")
