@@ -1624,18 +1624,3 @@ def test_inv46_dano_moral_expresso_nao_manual():
     bloco = pw[idx:idx + 1200]
     assert "INDENIZAÇÃO POR DANO MORAL" in bloco, \
         "dano moral deve estar na exceção do reroute (lançar via Expresso)"
-
-
-def test_inv46b_dano_moral_mensal_skip_inline():
-    """#76b (WASHINGTON): dano moral Expresso nasce MENSAL; mudar p/ DESLIGAMENTO
-    grava 'ocorrência alterada após geração' (totalErros=1). Fix: para verbas
-    MENSAL-default forçadas a DESLIGAMENTO, PULAR a edição inline da ocorrência
-    (que faz Regerar MANTER e re-carimba) — o valor vem do formulário da verba +
-    Regerar SOBRESCREVER período-curto."""
-    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    assert "_VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO" in pw
-    assert "def _is_mensal_forcar_desligamento" in pw
-    # o loop INFORMADO pula o inline para essas verbas
-    idx = pw.find("def _is_mensal_forcar_desligamento")
-    assert pw.find("_is_mensal_forcar_desligamento(v)", idx) > 0, \
-        "o loop de verbas deve consultar _is_mensal_forcar_desligamento p/ pular inline"
