@@ -2258,6 +2258,13 @@ class PlaywrightAutomatorV2:
                        if getattr(v.parametros, "valor", None) == TipoValor.INFORMADO
                        and getattr(v.parametros.valor_devido, "valor_informado_brl", None)]
         for v in verbas_inf:
+            # ⚠ #76b: dano moral (MENSAL-default→DESLIGAMENTO) — NÃO re-aplicar
+            # inline aqui também; o Regerar MANTER deste passo re-carimba
+            # "ocorrência alterada após geração" (totalErros=1). O valor já está
+            # no formulário + Sobrescrever período-curto da fase_verbas.
+            if self._is_mensal_forcar_desligamento(v):
+                self.log(f"  ⊙ '{v.nome_pjecalc}': pula re-aplicar inline pós-Recentes (#76b)")
+                continue
             try:
                 if not self._navegar_menu_via_click("li_calculo_verbas"):
                     continue
@@ -2435,33 +2442,10 @@ class PlaywrightAutomatorV2:
             "INDENIZAÇÃO POR DANO MORAL",
             "INDENIZACAO POR DANO MORAL",
         }
-        # ⚠ #76b (WASHINGTON 0000614-68, 19/06/2026): verbas Expresso cujo
-        # default de ocorrência é MENSAL, mas a sentença pede DESLIGAMENTO
-        # (incidência única — indenizações). Ao mudar MENSAL→DESLIGAMENTO o
-        # PJE-Calc grava "Ocorrência de Pagamento alterada APÓS a geração"
-        # (totalErros=1, bloqueia liquidação — MP-1). O Regerar SOBRESCREVER
-        # (período-curto) regenera a ocorrência DESLIGAMENTO já com o
-        # valorInformadoDoDevido do FORMULÁRIO da verba, limpando o carimbo.
-        # Para essas, PULAR a edição inline da ocorrência (que faz Regerar
-        # MANTER e re-carimba) — o valor já vem do formulário + Sobrescrever.
-        _VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO = {
-            "INDENIZAÇÃO POR DANO MORAL",
-            "INDENIZACAO POR DANO MORAL",
-            "INDENIZAÇÃO POR DANO MATERIAL",
-            "INDENIZAÇÃO POR DANO ESTÉTICO",
-            "INDENIZAÇÃO POR DANO EXISTENCIAL",
-        }
-        def _is_mensal_forcar_desligamento(_v) -> bool:
-            try:
-                _ocorr = str(getattr(_v.parametros, "ocorrencia_pagamento", "")).upper()
-                if "DESLIGAMENTO" not in _ocorr:
-                    return False
-                _alvo = (getattr(_v, "expresso_alvo", None) or "").strip().upper()
-                _nome = (getattr(_v, "nome_pjecalc", None) or "").strip().upper()
-                return (_alvo in _VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO
-                        or _nome in _VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO)
-            except Exception:
-                return False
+        # ⚠ #76b: dano moral (Expresso MENSAL-default forçado a DESLIGAMENTO) →
+        # pular a edição inline da ocorrência em TODOS os pontos. Ver método de
+        # classe self._is_mensal_forcar_desligamento / a constante
+        # _VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO.
         def _is_inf_desligamento(_v) -> bool:
             try:
                 _p = _v.parametros
@@ -2667,7 +2651,7 @@ class PlaywrightAutomatorV2:
                     # O valor já foi gravado no formulário (valorInformadoDoDevido)
                     # e o Regerar SOBRESCREVER (período-curto) regenerou a
                     # ocorrência DESLIGAMENTO com esse valor.
-                    if _is_mensal_forcar_desligamento(v):
+                    if self._is_mensal_forcar_desligamento(v):
                         self.log(
                             f"  ⊙ '{v.nome_pjecalc}': valor via formulário + "
                             f"Sobrescrever (pula inline p/ não re-carimbar ocorrência)"
@@ -4901,6 +4885,33 @@ class PlaywrightAutomatorV2:
 
         # Aguardar AJAX residual antes de o caller chamar Salvar
         self._aguardar_ajax(2000)
+
+    # ⚠ #76b — verbas Expresso cujo default de ocorrência é MENSAL mas a sentença
+    # pede DESLIGAMENTO (indenizações de incidência única). Ao mudar
+    # MENSAL→DESLIGAMENTO, o PJE-Calc grava "Ocorrência de Pagamento alterada
+    # após a geração" (totalErros=1). Para essas, o valor vem do FORMULÁRIO da
+    # verba (valorInformadoDoDevido) + Regerar SOBRESCREVER (período-curto), e a
+    # edição inline da ocorrência (que faz Regerar MANTER e re-carimba) é PULADA
+    # em TODOS os pontos (fase_verbas E fase_pos_recentes_correcoes).
+    _VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO = {
+        "INDENIZAÇÃO POR DANO MORAL",
+        "INDENIZACAO POR DANO MORAL",
+        "INDENIZAÇÃO POR DANO MATERIAL",
+        "INDENIZAÇÃO POR DANO ESTÉTICO",
+        "INDENIZAÇÃO POR DANO EXISTENCIAL",
+    }
+
+    def _is_mensal_forcar_desligamento(self, v) -> bool:
+        try:
+            _ocorr = str(getattr(v.parametros, "ocorrencia_pagamento", "")).upper()
+            if "DESLIGAMENTO" not in _ocorr:
+                return False
+            _alvo = (getattr(v, "expresso_alvo", None) or "").strip().upper()
+            _nome = (getattr(v, "nome_pjecalc", None) or "").strip().upper()
+            S = self._VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO
+            return _alvo in S or _nome in S
+        except Exception:
+            return False
 
     def _verba_periodo_curto(self, v) -> bool:
         """True se o período da verba é subconjunto ESTRITO do período do cálculo.
