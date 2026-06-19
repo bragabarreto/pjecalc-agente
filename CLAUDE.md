@@ -1300,30 +1300,41 @@ adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 @docs/diagnostico-falhas-automacao.md
 @docs/analise-calc-machine-vs-agente.md
 
-### INDENIZAÇÃO POR DANO MORAL (INFORMADO + DESLIGAMENTO + período curto) — bot não consegue setar valorDevido
+### INDENIZAÇÃO POR DANO MORAL (Expresso + INFORMADO + DESLIGAMENTO) — ✅ RESOLVIDO (#76c, 19/06/2026, inv48)
 
-**Sintoma**: para verbas com `valor=INFORMADO` (ex.: dano moral arbitrado em R$X) e
-`ocorrencia_pagamento=DESLIGAMENTO` com período curto (1 dia), a página de Ocorrências
-da verba retorna **0 inputs valorDevido visíveis** mesmo após Regerar Ocorrências
-proativo + retry. Liquidação reclama:
-- "Todas as ocorrências fora do período"
-- "Verba precisa ocorrência != 0"
+**Sintoma original**: para verbas com `valor=INFORMADO` (ex.: dano moral arbitrado em R$X) e
+`ocorrencia_pagamento=DESLIGAMENTO`, a liquidação reclamava (totalErros=1):
+- "O parâmetro Ocorrência de Pagamento foi alterado na página Verbas, após a geração
+  das ocorrências da verba INDENIZAÇÃO POR DANO MORAL" (o **carimbo**).
 
-**Causa raiz não-resolvida (24/05/2026)**: o PJE-Calc Expresso default para INDENIZAÇÃO
-POR DANO MORAL gera ocorrências mensais pro contrato todo. Quando bot muda período
-para 01/12-01/12, as ocorrências antigas ficam fora do range e a tabela vem vazia
-(filtrada por período). Regerar via UI dispara mas mantém ocorrências antigas, então
-o filtro continua escondendo a única ocorrência válida.
+**CAUSA RAIZ (descoberta via diag DOM direto na WASHINGTON 0000614-68)**: o botão Regerar
+Ocorrências (`formulario:regerarOcorrencias`) **EXIGE ≥1 verba SELECIONADA** (checkbox
+`formulario:listagem:selecionarTodos` ou `:N:verbaSelecionada`) antes do clique. Sem
+seleção, o Ok do modal Confirmação retorna **"Erro. É necessário selecionar pelo menos
+uma Verba Principal ou Reflexo"** e NÃO regenera nada. O bot
+(`_regerar_com_modal_confirmacao`) **nunca marcava a verba** → TODO Regerar (Manter E
+Sobrescrever) era **no-op silencioso**. O carimbo do dano moral só limpa via Sobrescrever
+(regenera as ocorrências com a ocorrência DESLIGAMENTO já gravada nos parâmetros) — que
+nunca rodava. As demais verbas funcionavam por não dependerem do Regerar (nascem corretas
+do Expresso).
 
-**Tentativas que NÃO funcionaram** (registrar para evitar repetir):
-- Expandir periodo_fim para último dia do mês via normalizer → viola validação
-  `periodo_fim ≤ data_demissao para DESLIGAMENTO` (commit 8d115cd revertido em cc1f4e9).
-- Regerar Ocorrências proativo (antes de linkOcorrencias) → log mostra Regerar
-  disparado mas grade segue vazia.
-- Regerar reativo (quando 0 inputs) → idem.
+**FIX (#76c)**: `_regerar_com_modal_confirmacao` agora marca `selecionarTodos` (JS click)
+ANTES de clicar Regerar. Combinado com:
+1. **Routing Expresso** (#76): INDENIZAÇÃO POR DANO MORAL fica em
+   `_VERBAS_EXPRESSO_DEFAULT_DESLIGAMENTO` (NÃO faz reroute p/ Manual) — entra via
+   Expresso, parâmetros ajustados p/ `ocorrencia_pagamento=DESLIGAMENTO` +
+   `valor=INFORMADO` (R$X) + `juros_aplicar_sumula_439=false`.
+2. **Sobrescrever período curto** pós-parâmetros (agora executa) → limpa o carimbo.
+3. **Inline ocorrências** seta `valorDevido=R$X` na ocorrência única DESLIGAMENTO.
 
-**Estado aceito**: usuário ajusta manualmente o valorDevido da INDENIZAÇÃO via tela
-de Edição Manual oferecida pelo bot (já implementada). 1 minuto manual.
+**Validado end-to-end (run WASHINGTON 19/06/2026)**: dano moral R$5.000, DESLIGAMENTO,
+totalErros=0, PJC exportado (CALCULO_102) com `ocorrenciaDePagamento=DESLIGAMENTO` +
+`constante/valor=5000` + `devido=5000`. Protegido em
+`tests/test_invariantes_indenizacao.py::test_inv48_regerar_seleciona_verbas`.
+
+⚠️ **NÃO reverter** a seleção de verba no Regerar — sem ela TODOS os Regerar do bot
+(Manter e Sobrescrever, em todas as verbas) voltam a ser no-op silencioso, regredindo
+não só o dano moral mas qualquer correção que dependa de Regerar.
 
 ## Limitações conhecidas (19/05/2026) — não-bloqueantes
 
