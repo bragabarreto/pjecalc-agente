@@ -1537,3 +1537,36 @@ def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
     # após o save Manual, re-capturar o conversationId (muda a cada save)
     man_full = src[idx_man:idx_man + 3600]
     assert "_capturar_conversation_id()" in man_full, "_lancar_verba_manual não re-captura conv após save"
+
+
+def test_inv44_honorarios_base_bruto_e_incluir_reancora():
+    """#74b (ONASSES 0000495-10, 18/06/2026): a página de Honorários ficava
+    VAZIA porque (a) baseParaApuracao é obrigatória p/ honorário CALCULADO e a
+    IA não a extraía → save falhava com 'Campo obrigatório: Base para Apuração';
+    (b) após o 1º honorário o botão 'incluir' sumia → 2º sucumbencial recíproco
+    perdido.
+
+    Fix A (normalizer): default base_para_apuracao=BRUTO p/ honorário CALCULADO.
+    Fix B (bot): default BRUTO no _selecionar + re-ancorar a listagem
+    (_navegar_menu li_calculo_honorarios) antes de CADA 'incluir'.
+    """
+    # Fix A — normalizer
+    from modules.json_normalizer import _norm_honorario
+    h = {"tipo_honorario": "SUCUMBENCIAIS", "tipo_devedor": "RECLAMADO",
+         "tipo_valor": "CALCULADO", "aliquota_pct": 7.5, "base_para_apuracao": None}
+    assert _norm_honorario(dict(h))["base_para_apuracao"] == "BRUTO"
+    # não sobrescreve quando já informado
+    h2 = dict(h, base_para_apuracao="BRUTO_MENOS_CONTRIBUICAO_SOCIAL")
+    assert _norm_honorario(dict(h2))["base_para_apuracao"] == "BRUTO_MENOS_CONTRIBUICAO_SOCIAL"
+
+    # Fix B — bot
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    idx = src.find("def fase_honorarios")
+    assert idx > 0
+    bloco = src[idx:idx + 5200]
+    # re-ancora a listagem antes de cada incluir (dentro do loop de honorários)
+    assert bloco.count('_navegar_menu("li_calculo_honorarios")') >= 2, \
+        "fase_honorarios deve re-ancorar a listagem antes de cada 'incluir'"
+    # default BRUTO no preenchimento da base
+    assert 'h.base_para_apuracao or "BRUTO"' in bloco, \
+        "fase_honorarios deve usar default BRUTO na baseParaApuracao"

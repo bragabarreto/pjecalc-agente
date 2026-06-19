@@ -8014,6 +8014,19 @@ class PlaywrightAutomatorV2:
             return
         for h in self.previa.honorarios:
             self.log(f"  → Processando honorário: {h.tipo_honorario} / {h.tipo_devedor}")
+            # ⚠ FIX (ONASSES 0000495-10, 18/06/2026): re-ancorar a listagem de
+            # honorários ANTES de CADA 'incluir'. Após o save (ou falha) de um
+            # honorário o form fica aberto / a conv Seam churna e o botão
+            # 'incluir' some → o 2º honorário era perdido ('Botão não encontrado:
+            # incluir') e a página de Honorários ficava vazia. Re-navegar garante
+            # a listagem com 'incluir' para cada honorário (≥2 sucumbenciais
+            # recíprocos é o caso comum).
+            try:
+                self._navegar_menu("li_calculo_honorarios")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(1000)
+            except Exception:
+                pass
             try:
                 self._clicar("incluir")
             except Exception as e:
@@ -8052,8 +8065,16 @@ class PlaywrightAutomatorV2:
                     pct = h.aliquota_pct * 100 if h.aliquota_pct < 1 else h.aliquota_pct
                     # ⚠ ID REAL (honorarios.xhtml:148): aliquota (não percentualHonorarios)
                     self._preencher("aliquota", _fmt_br(pct), obrigatorio=False)
-                if h.base_para_apuracao:
-                    self._selecionar("baseParaApuracao", h.base_para_apuracao, obrigatorio=False)
+                # ⚠ FIX (ONASSES 0000495-10): baseParaApuracao é OBRIGATÓRIO para
+                # honorário CALCULADO — sem ela o save falha com "Campo
+                # obrigatório: Base para Apuração" e o honorário NÃO é registrado.
+                # A IA frequentemente não extrai a base. Default BRUTO (valor
+                # bruto da condenação — base padrão dos sucumbenciais
+                # "...% sobre o valor da condenação"). Opções do enum:
+                # BRUTO | BRUTO_MENOS_CONTRIBUICAO_SOCIAL |
+                # BRUTO_MENOS_CONTRIBUICAO_SOCIAL_MENOS_PREVIDENCIA_PRIVADA.
+                _base_hon = h.base_para_apuracao or "BRUTO"
+                self._selecionar("baseParaApuracao", _base_hon, obrigatorio=False)
             else:
                 if h.valor_informado_brl is not None:
                     # ⚠ ID REAL (honorarios.xhtml:212): valor (não valorInformado)

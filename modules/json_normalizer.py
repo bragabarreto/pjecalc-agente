@@ -178,6 +178,16 @@ def _norm_honorario(h: dict[str, Any], *, processo: dict | None = None) -> dict[
                 "doc_fiscal_tipo": df.get("tipo", "CPF"),
                 "doc_fiscal_numero": df.get("numero", ""),
             }
+
+    # base_para_apuracao OBRIGATÓRIA p/ honorário CALCULADO (ONASSES 0000495-10,
+    # 18/06/2026): sem ela o PJE-Calc rejeita o save ("Campo obrigatório: Base
+    # para Apuração") e o honorário não é registrado. A IA frequentemente omite.
+    # Default BRUTO (valor bruto da condenação — base padrão dos sucumbenciais
+    # "...% sobre o valor da condenação"). Fidelidade prévia↔automação: o
+    # normalizer corrige ANTES da prévia, espelhando o que o bot aplica.
+    _tv = str(h.get("tipo_valor") or "CALCULADO").upper()
+    if "CALCULAD" in _tv and not (h.get("base_para_apuracao") or h.get("base_apuracao")):
+        h["base_para_apuracao"] = "BRUTO"
     return h
 
 
