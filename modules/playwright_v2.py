@@ -1415,7 +1415,7 @@ class PlaywrightAutomatorV2:
             }""")
             self.log(f"  [DIAG-recentes] selects={_diag_selects}")
 
-            _select_id = self._page.evaluate("""() => {
+            _SELECT_RECENTES_JS = """() => {
                 const SKIP = new Set(['selAcheFacil']);
                 // Tier 1: primeira opção começa com dígitos + "/" (padrão "ID / RECLAMANTE")
                 for (const s of document.querySelectorAll('select')) {
@@ -1438,7 +1438,30 @@ class PlaywrightAutomatorV2:
                         return n;
                 }
                 return null;
-            }""")
+            }"""
+            _select_id = self._page.evaluate(_SELECT_RECENTES_JS)
+            # ⚠ #78 (FRANCISCA 0001858-66, 19/06/2026): logo após o Fechar da
+            # PRIMEIRA verba Expresso, principal.jsf frequentemente ainda não
+            # renderizou a lista 'Recentes' (a 1ª verba HE 50% auto-cria 5
+            # reflexos → save mais lento → página demora a estabilizar). A
+            # detecção rodava cedo demais → _select_id=None → reabertura falhava
+            # → a verba recém-salva ficava órfã (perdida na liquidação). Fix:
+            # retry do reload + detecção com espera crescente (em vez de desistir
+            # na 1ª tentativa). Reproduzível na FRANCISCA; só sumia com retry.
+            _tent_rec = 0
+            while not _select_id and _tent_rec < 3:
+                _tent_rec += 1
+                self.log(
+                    f"  ⟳ Recentes ainda não carregou — recarregando "
+                    f"principal.jsf (retry {_tent_rec}/3)"
+                )
+                self._page.goto(
+                    f"{self.pjecalc_url}/pages/principal.jsf",
+                    wait_until="domcontentloaded", timeout=15000,
+                )
+                self._page.wait_for_timeout(3000 + _tent_rec * 2000)
+                self._aguardar_ajax(8000)
+                _select_id = self._page.evaluate(_SELECT_RECENTES_JS)
             if not _select_id:
                 self.log("  ⚠ Lista de Cálculos Recentes não encontrada ou vazia — pulando reabrir")
                 return False

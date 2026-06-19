@@ -1704,3 +1704,20 @@ def test_inv49_cap_periodo_inicio_prescricao():
     # o hook está registrado no pipeline
     nz = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
     assert "_norm_cap_periodo_inicio_prescricao(data)" in nz
+
+
+def test_inv50_reabertura_recentes_retry():
+    """#78 (FRANCISCA 0001858-66): logo após o Fechar da 1ª verba Expresso, a
+    lista 'Recentes' de principal.jsf às vezes ainda não renderizou → a detecção
+    do select falhava na 1ª tentativa → reabertura falhava → a verba recém-salva
+    ficava órfã (perdida). _reabrir_calculo_via_recentes deve RETRY o reload +
+    detecção (espera crescente) antes de desistir."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    idx = pw.find("def _reabrir_calculo_via_recentes")
+    assert idx > 0
+    fim = pw.find("\n    def ", idx + 10)
+    bloco = pw[idx:fim]
+    # retry com reload de principal.jsf enquanto select não encontrado
+    assert "while not _select_id" in bloco
+    assert bloco.count("principal.jsf") >= 2  # goto inicial + goto no retry
+    assert "_SELECT_RECENTES_JS" in bloco
