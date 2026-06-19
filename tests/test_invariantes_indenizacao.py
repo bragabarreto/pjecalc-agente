@@ -1610,3 +1610,17 @@ def test_inv45_cap_periodo_fim_na_demissao():
     # a função existe e está encadeada no normalize
     src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
     assert "_norm_cap_periodo_fim_na_demissao(data)" in src
+
+
+def test_inv46_dano_moral_expresso_nao_manual():
+    """#76 (WASHINGTON 0000614-68, orientação do usuário 19/06/2026): a
+    INDENIZAÇÃO POR DANO MORAL deve ser lançada via EXPRESSO (verba canônica
+    CNJ 1855) + INFORMADO + DESLIGAMENTO — NÃO re-roteada para Manual (cujo save
+    não persistia: Assunto CNJ via fallback-by-text + Seam FlushMode.MANUAL).
+    Está na lista de exceção do reroute INFORMADO+DESLIGAMENTO."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    idx = pw.find("_VERBAS_EXPRESSO_DEFAULT_DESLIGAMENTO = {")
+    assert idx > 0
+    bloco = pw[idx:idx + 1200]
+    assert "INDENIZAÇÃO POR DANO MORAL" in bloco, \
+        "dano moral deve estar na exceção do reroute (lançar via Expresso)"

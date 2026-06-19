@@ -2423,6 +2423,17 @@ class PlaywrightAutomatorV2:
             "SALDO DE SALARIO",
             "AVISO PRÉVIO",
             "AVISO PREVIO",
+            # ⚠ ORIENTAÇÃO DO USUÁRIO (juiz, 19/06/2026 — WASHINGTON 0000614-68):
+            # a INDENIZAÇÃO POR DANO MORAL deve ser lançada via EXPRESSO (verba
+            # canônica, CNJ 1855) com valor INFORMADO e ocorrência DESLIGAMENTO
+            # (incidência única, não mensal) — NÃO re-rotear para Manual. O
+            # fluxo Manual (MP-1 H3) NÃO persistia o save (Assunto CNJ via
+            # fallback-by-text + Seam FlushMode.MANUAL). O fluxo Expresso +
+            # _configurar_ocorrencias_informado_inline (que setou o SALDO março
+            # INFORMADO no ONASSES) é estável. Súmula 439 TST fica "não"
+            # (default do schema juros_aplicar_sumula_439=False).
+            "INDENIZAÇÃO POR DANO MORAL",
+            "INDENIZACAO POR DANO MORAL",
         }
         def _is_inf_desligamento(_v) -> bool:
             try:
