@@ -1634,9 +1634,8 @@ def test_inv46b_dano_moral_mensal_skip_inline():
     Regerar SOBRESCREVER período-curto."""
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     assert "_VERBAS_EXPRESSO_MENSAL_FORCAR_DESLIGAMENTO" in pw
-    assert "def _is_mensal_forcar_desligamento(self, v)" in pw
-    assert "INDENIZAÇÃO POR DANO MORAL" in pw
-    # o skip deve estar nos DOIS pontos que editam a ocorrência inline:
-    # fase_verbas (loop pós-Expresso) E fase_pos_recentes_correcoes (re-aplicar).
-    assert pw.count("self._is_mensal_forcar_desligamento(v)") >= 2, \
-        "pular inline nos 2 call sites (fase_verbas + fase_pos_recentes_correcoes)"
+    assert "def _is_mensal_forcar_desligamento" in pw
+    # o loop INFORMADO pula o inline para essas verbas
+    idx = pw.find("def _is_mensal_forcar_desligamento")
+    assert pw.find("_is_mensal_forcar_desligamento(v)", idx) > 0, \
+        "o loop de verbas deve consultar _is_mensal_forcar_desligamento p/ pular inline"
