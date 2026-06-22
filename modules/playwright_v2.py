@@ -3797,103 +3797,27 @@ class PlaywrightAutomatorV2:
         # (página vazia mesmo após F+R, ou alvo ausente da grade). fase_verbas
         # cria essas via Manual (fallback), em vez de perdê-las silenciosamente.
         self._verbas_expresso_falhadas = []
-        if len(verbas) <= 2:
-            self._lancar_expresso_individual(verbas)
-        else:
-            self._lancar_expresso_batch(verbas)
-        # #79 (FRANCISCA HE 50%): verbas cujo save Expresso auto-gera reflexos
-        # (HORAS EXTRAS 50% → RSR/AVISO/FÉRIAS/13º/MULTA477) têm save PESADO que,
-        # quando feito na conversa Seam INICIAL (pós-criação), NÃO commita o
-        # principal — só os reflexos órfãos sobram no DB. A 2ª verba (save leve,
-        # em conversa REABERTA) persiste. Fix: após o loop, verificar cada
-        # principal na listagem; re-lançar as faltantes — o re-save ocorre em
-        # conversa reaberta limpa (como a 2ª verba), onde o save pesado persiste.
+        # #79 (FRANCISCA HE 50%, 19/06/2026): verbas cujo save Expresso auto-gera
+        # reflexos (HORAS EXTRAS 50% → RSR/AVISO/FÉRIAS/13º/MULTA477) têm save
+        # PESADO que, quando feito na conversa Seam INICIAL (recém-criada na
+        # Fase 1), NÃO commita o principal — só os reflexos órfãos (discriminador
+        # R, ativo=N) sobram no DB. Comprovado: 1ª verba save sucesso=False +
+        # listagem vazia já antes do Fechar; H2 final sem o principal. A 2ª verba
+        # (save leve, em conversa REABERTA) persiste — e num teste o RE-SAVE da
+        # HE 50% em conversa reaberta retornou sucesso=True.
+        #
+        # Fix PREVENTIVO (não corretivo): Fechar+Reabrir ANTES do loop Expresso,
+        # de modo que mesmo a 1ª verba seja salva em conversa reaberta limpa
+        # (igual à 2ª). Evita os reflexos órfãos na origem — um retry pós-falha
+        # NÃO os removeria (duplicaria reflexos). Cálculos simples não regridem:
+        # o Fechar+Reabrir é idempotente e já usado em todo o fluxo.
         try:
-            self._verificar_e_retry_expresso(list(verbas))
+            self._fechar_e_reabrir_calculo("pré-loop Expresso (#79)")
         except Exception as _e79:
-            self.log(f"  ⚠ #79 verificação/retry Expresso: {_e79}")
-
-    def _listar_rows_listagem(self) -> list:
-        """Navega para a listagem de Verbas e retorna as linhas de verbas
-        PRINCIPAIS (não-reflexo) como textos UPPER. Usado p/ verificar
-        persistência pós-save Expresso (#79)."""
-        try:
-            self._navegar_menu_via_click("li_calculo_verbas")
-            self._aguardar_ajax(8000)
-            self._page.wait_for_timeout(800)
-            if ("verba-calculo.jsf" not in (self._page.url or "")
-                    and self._calculo_conversation_id):
-                self._page.goto(
-                    f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
-                    f"?conversationId={self._calculo_conversation_id}",
-                    wait_until="domcontentloaded", timeout=20000,
-                )
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(800)
-            rows = self._page.evaluate(
-                """() => {
-                    const out = [];
-                    for (const a of document.querySelectorAll("a[id*=':linkParametrizar']")) {
-                        if ((a.id||'').includes(':listaReflexo:')) continue;
-                        const tr = a.closest('tr'); if (!tr) continue;
-                        const tds = [...tr.querySelectorAll('td')]
-                            .map(td => (td.textContent||'').trim())
-                            .filter(t => t && t !== 'Exibir' && t !== 'Ocultar');
-                        if (tds.length) out.push(tds.join(' | '));
-                    }
-                    return out;
-                }"""
-            )
-            return [(r or "").upper() for r in (rows or [])]
-        except Exception as e:
-            self.log(f"  ⚠ _listar_rows_listagem: {e}")
-            return []
-
-    def _verificar_e_retry_expresso(self, verbas, tentativa: int = 1) -> None:
-        """#79: confirma que o PRINCIPAL de cada verba Expresso persistiu na
-        listagem; re-lança (em conversa reaberta) as que não persistiram."""
-        from modules.expresso_verbas_canonicas import resolver_verba_expresso
-
-        MAX_TENT = 2  # nº de re-tentativas além da 1ª passada
-
-        def _alvo(v) -> str:
-            a = resolver_verba_expresso(v.expresso_alvo or "") or (v.expresso_alvo or "")
-            return a.strip().upper()
-
-        # Reabrir p/ estado committed limpo antes de ler a listagem
-        self._fechar_e_reabrir_calculo(f"verificação #79 Expresso (tent {tentativa})")
-        rows = self._listar_rows_listagem()
-
-        faltantes = [
-            v for v in verbas
-            if _alvo(v) and not any(_alvo(v) in r for r in rows)
-        ]
-        if not faltantes:
-            if tentativa > 1:
-                self.log("  ✓ #79: todas as verbas Expresso persistiram após retry")
-            return
-
-        nomes = [_alvo(v) for v in faltantes]
-        self.log(
-            f"  ⚠ #79: {len(faltantes)} verba(s) Expresso sem principal na "
-            f"listagem (tent {tentativa}): {nomes}"
-        )
-        if tentativa > MAX_TENT:
-            self.log(
-                f"  🛑 #79: esgotadas {MAX_TENT} retentativas — {nomes} "
-                f"seguirão p/ fallback Manual"
-            )
-            for v in faltantes:
-                if v not in self._verbas_expresso_falhadas:
-                    self._verbas_expresso_falhadas.append(v)
-            return
-
-        self.log(
-            f"  ⟳ #79: re-lançando {len(faltantes)} verba(s) via Expresso "
-            f"em conversa reaberta (tent {tentativa + 1})"
-        )
-        self._lancar_expresso_individual(faltantes)
-        self._verificar_e_retry_expresso(faltantes, tentativa + 1)
+            self.log(f"  ⚠ #79 Fechar+Reabrir pré-Expresso: {_e79}")
+        if len(verbas) <= 2:
+            return self._lancar_expresso_individual(verbas)
+        return self._lancar_expresso_batch(verbas)
 
     def _lancar_expresso_batch(self, verbas) -> None:
         """Versão BATCH: abre Expresso UMA vez, marca TODAS, salva UMA vez."""

@@ -1723,20 +1723,16 @@ def test_inv50_reabertura_recentes_retry():
     assert "_SELECT_RECENTES_JS" in bloco
 
 
-def test_inv51_expresso_verifica_e_retry_principal():
+def test_inv51_expresso_fechar_reabrir_pre_loop():
     """#79 (FRANCISCA HE 50%): o save Expresso de verbas que auto-geram reflexos
-    (HORAS EXTRAS 50%) não commita o principal na conversa Seam inicial — só os
-    reflexos órfãos. _lancar_expresso deve VERIFICAR cada principal na listagem
-    pós-loop e RE-LANÇAR as faltantes (em conversa reaberta, onde o save pesado
-    persiste). Sem isso, a verba principal some da liquidação."""
+    (HORAS EXTRAS 50%) NÃO commita o principal quando feito na conversa Seam
+    INICIAL (recém-criada) — só os reflexos órfãos sobram. A 2ª verba (conversa
+    reaberta) persiste. Fix PREVENTIVO: _lancar_expresso faz Fechar+Reabrir ANTES
+    do loop, p/ que mesmo a 1ª verba seja salva em conversa reaberta limpa. Um
+    retry corretivo NÃO serve: os reflexos órfãos do save falho seriam
+    duplicados (não há como removê-los re-lançando)."""
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    # helper de verificação existe e é chamado pelo dispatcher
-    assert "def _verificar_e_retry_expresso" in pw
-    assert "def _listar_rows_listagem" in pw
-    disp = pw[pw.find("def _lancar_expresso(self"):pw.find("def _listar_rows_listagem")]
-    assert "_verificar_e_retry_expresso" in disp, \
-        "_lancar_expresso deve chamar a verificação/retry pós-loop"
-    # re-lança via Expresso individual e cai p/ fallback Manual após esgotar
-    vr = pw[pw.find("def _verificar_e_retry_expresso"):pw.find("def _lancar_expresso_batch")]
-    assert "_lancar_expresso_individual(faltantes)" in vr
-    assert "_verbas_expresso_falhadas" in vr
+    disp = pw[pw.find("def _lancar_expresso(self"):pw.find("def _lancar_expresso_batch")]
+    assert 'pré-loop Expresso (#79)' in disp
+    # o Fechar+Reabrir vem ANTES do dispatch p/ individual/batch
+    assert disp.find("_fechar_e_reabrir_calculo") < disp.find("_lancar_expresso_individual")
