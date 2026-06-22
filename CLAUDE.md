@@ -1336,6 +1336,36 @@ totalErros=0, PJC exportado (CALCULO_102) com `ocorrenciaDePagamento=DESLIGAMENT
 (Manter e Sobrescrever, em todas as verbas) voltam a ser no-op silencioso, regredindo
 não só o dano moral mas qualquer correção que dependa de Regerar.
 
+### Verba Expresso com reflexos auto-gerados (HORAS EXTRAS 50%) — ✅ RESOLVIDO (#79, 19/06/2026, inv51)
+
+**Sintoma**: ao lançar HORAS EXTRAS 50% como 1ª verba via Expresso, o cálculo
+liquidava SEM ela — no DB sobravam só os 5 reflexos candidatos órfãos
+(`discriminador=R`, `ativo=N`: RSR/AVISO/FÉRIAS/13º/MULTA477) e o PRINCIPAL
+`HORAS EXTRAS 50%` (C) não existia. A 2ª verba (INTERVALO, save leve) persistia.
+
+**CAUSA RAIZ (diag DOM + consulta direta H2)**: o save Expresso de HORAS EXTRAS
+50% faz o PJE-Calc auto-gerar 5 reflexos candidatos — save PESADO. Quando feito
+na **conversa Seam INICIAL** (recém-criada na Fase 1), esse save NÃO commita o
+principal (só os reflexos). A 2ª verba persiste porque é salva numa conversa
+REABERTA (após o Fechar+Reabrir da 1ª). Comprovado: re-save da HE 50% em conversa
+reaberta retorna `sucesso=True` e o H2 passa a ter o principal.
+
+**FIX PREVENTIVO (#79)**: `_lancar_expresso` faz `_fechar_e_reabrir_calculo`
+ANTES do loop, de modo que TODA verba (inclusive a 1ª) seja salva em conversa
+reaberta limpa. Um retry CORRETIVO seria inviável: o save falho já deixa os 5
+reflexos órfãos no DB, que um re-lançamento NÃO remove (duplicaria reflexos) —
+por isso previne-se a falha na origem.
+
+**Validado end-to-end (FRANCISCA 0001858-66, 22/06/2026)**: H2 confirma
+`HORAS EXTRAS 50% | C | ativo=S | 2020-11-24 → 2025-09-02` (período capado pela
+prescrição #78) + INTERVALO ativo; liquidação `totalErros=0`; PJC exportado com
+ambas as verbas. A visibilidade da HE 50% na listagem do param-phase é resolvida
+pela recovery "listagem vazia" já existente (Fechar+Reabrir → encontra a verba).
+Protegido em `tests/test_invariantes_indenizacao.py::test_inv51_*`.
+
+⚠️ **NÃO reverter** o Fechar+Reabrir pré-loop Expresso — sem ele a 1ª verba com
+reflexos auto-gerados (HE 50%, ADICIONAIS, etc.) volta a sumir da liquidação.
+
 ## Limitações conhecidas (19/05/2026) — não-bloqueantes
 
 Após resolução do bug Seam EPC via H2 TCP, o bot completa o ciclo end-to-end

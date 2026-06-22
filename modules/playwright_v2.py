@@ -4210,36 +4210,6 @@ class PlaywrightAutomatorV2:
                     self._page.wait_for_timeout(1000)
                 except Exception as e:
                     self.log(f"  ⚠ Goto verba-calculo.jsf falhou: {e}")
-                # #79 DIAG (FRANCISCA HE 50%): a verba com muitos reflexos some do
-                # DB (só sobram os reflexos órfãos). Ler a listagem ANTES do
-                # Fechar distingue "save não criou o principal" de "Fechar+Reabrir
-                # perde o principal". Read-only.
-                try:
-                    _rows79 = self._page.evaluate(
-                        """() => {
-                            const out = [];
-                            for (const a of document.querySelectorAll("a[id*=':linkParametrizar']")) {
-                                if ((a.id||'').includes(':listaReflexo:')) continue;
-                                const tr = a.closest('tr');
-                                if (!tr) continue;
-                                const tds = [...tr.querySelectorAll('td')]
-                                    .map(td => (td.textContent||'').trim()).filter(Boolean);
-                                out.push(tds.join(' | '));
-                            }
-                            return out;
-                        }"""
-                    )
-                    _tem79 = any(
-                        (alvo or "").upper() in (r or "").upper()
-                        for r in (_rows79 or [])
-                    )
-                    self.log(
-                        f"  [DIAG-#79] listagem pós-save (pré-Fechar) — "
-                        f"principal '{alvo}' presente={_tem79} | "
-                        f"rows={_rows79}"
-                    )
-                except Exception as _e79:
-                    self.log(f"  [DIAG-#79] falha leitura listagem: {_e79}")
                 self._fechar_e_reabrir_calculo(
                     f"pós Expresso save [{idx+1}/{len(verbas)}: {alvo}]"
                 )
