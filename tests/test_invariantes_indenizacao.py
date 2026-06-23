@@ -1753,3 +1753,17 @@ def test_inv52_importada_cartao_native_click():
     # verificação + retry da coluna
     assert "_label_presente" in fn
     assert "CONFIRMADA na listagem de quantidade" in fn
+
+
+def test_inv53_ocorrencias_valores_mensais():
+    """#80-C (0000715-08 DIFERENÇA SALARIAL): quando ocorrencias_override.modo=
+    valores_mensais, o bot deve aplicar CADA valor mensal na ocorrência do mês
+    correspondente (casado por dataInicial), em vez de jogar o total na 1ª
+    linha. Sem isso, DIFERENÇA SALARIAL liquida com valor errado por mês."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn = pw[pw.find("def _configurar_ocorrencias_informado_inline"):pw.find("def _dump_dom_indenizacao")]
+    assert "mes_to_valor" in fn
+    assert "valores_mensais" in fn
+    # casa por mês da linha (dataInicial) e prioriza sobre a distribuição total
+    assert "meses_por_input" in fn
+    assert fn.find("if mes_to_valor:") < fn.find("elif proporcionalizar:")

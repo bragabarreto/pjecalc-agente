@@ -3391,8 +3391,58 @@ class PlaywrightAutomatorV2:
             except Exception as _e_des:
                 self.log(f"    ⚠ Filtro DESLIGAMENTO: {_e_des}")
 
+        # #80-C (0000715-08 DIFERENÇA SALARIAL): quando o JSON traz
+        # ocorrencias_override.modo=valores_mensais (valor específico por mês —
+        # ex.: dez 44,43 / jan 92 / fev 92 / jul 124,73), aplicar CADA valor na
+        # ocorrência do mês correspondente (casado por dataInicial da linha), em
+        # vez de jogar o total na 1ª linha (que produzia valor errado por mês).
+        mes_to_valor = None
+        ov = getattr(v, "ocorrencias_override", None)
+        if ov is not None and getattr(ov, "modo", None) == "valores_mensais":
+            vms = getattr(ov, "valores_mensais", None) or []
+            if vms:
+                mes_to_valor = {}
+                for o in vms:
+                    try:
+                        mes_to_valor[str(o.mes).strip()] = float(o.valor_devido or 0)
+                    except Exception:
+                        pass
+
         # Distribuir valor
-        if proporcionalizar:
+        if mes_to_valor:
+            # Casar cada input valorDevido ao mês (MM/YYYY) da sua linha
+            meses_por_input = self._page.evaluate(
+                """() => {
+                    return [...document.querySelectorAll('input[id$=":valorDevido"]')].map(inp => {
+                        const tr = inp.closest('tr'); if (!tr) return '';
+                        let txt = '';
+                        const di = tr.querySelector('[id*=":dataInicial"]');
+                        if (di) txt = di.value || di.textContent || '';
+                        if (!/\\d{2}\\/\\d{2}\\/\\d{4}/.test(txt)) {
+                            for (const td of tr.querySelectorAll('td')) {
+                                const t = td.textContent || '';
+                                if (/\\d{2}\\/\\d{2}\\/\\d{4}/.test(t)) { txt = t; break; }
+                            }
+                        }
+                        const m = txt.match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/);
+                        return m ? (m[2] + '/' + m[3]) : '';
+                    });
+                }"""
+            )
+            valores = []
+            for i in range(n):
+                mes = meses_por_input[i] if i < len(meses_por_input) else ""
+                valores.append(mes_to_valor.get(mes, 0.0))
+            _pares = [(meses_por_input[i] if i < len(meses_por_input) else "?", valores[i])
+                      for i in range(n)]
+            self.log(f"    → valores_mensais por ocorrência: {_pares}")
+            _soma = round(sum(valores), 2)
+            if abs(_soma - valor_total) > 0.01:
+                self.log(
+                    f"    ⚠ soma valores_mensais ({_soma}) ≠ valor_total ({valor_total}) "
+                    f"— meses não casados podem estar fora do período da verba"
+                )
+        elif proporcionalizar:
             por_linha = round(valor_total / n, 2)
             valores = [por_linha] * n
             diff = round(valor_total - por_linha * n, 2)
