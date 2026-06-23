@@ -4400,6 +4400,7 @@ class PlaywrightAutomatorV2:
             elif "INTERVALO" in n:
                 preferir = "Intrajornada"
         sel = self._page.locator("select[id$=':tipoImportadadoDoCartaoDePontoQuantidade']").first
+        sel_label = None
         try:
             if tipo_cartao_ponto:
                 val = tipo_cartao_ponto.value if hasattr(tipo_cartao_ponto, "value") else str(tipo_cartao_ponto)
@@ -4407,34 +4408,95 @@ class PlaywrightAutomatorV2:
                     sel.select_option(value=val)
                     self.log(f"    ✓ cartão de ponto (Quantidade) = {val}")
                 except Exception:
-                    self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
+                    sel_label = self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
             else:
-                self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
+                sel_label = self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
         except Exception as e:
             self.log(f"    ⚠ Falha selecionar cartão (Quantidade): {e}")
             return
-        # Clicar Incluir — o onclick contém A4J.AJAX.Submit, precisamos invocá-lo
+        # ⚠ Disparar change explícito no select (alguns a4j:support só populam o
+        # campo dependente ao evento change real).
         try:
-            clicou = self._page.evaluate(
+            self._page.evaluate(
                 """() => {
-                    const btn = document.querySelector("a[id$=':incluirCartaoDePontoQuantidade'], input[id$=':incluirCartaoDePontoQuantidade']");
-                    if (!btn) return null;
-                    const onclickStr = btn.getAttribute('onclick') || '';
-                    if (onclickStr) {
-                        try { new Function('event', onclickStr).call(btn, new MouseEvent('click',{bubbles:true})); return 'onclick-exec'; } catch(_) {}
-                    }
-                    btn.click(); return 'plain-click';
+                    const s = document.querySelector("select[id$=':tipoImportadadoDoCartaoDePontoQuantidade']");
+                    if (s) s.dispatchEvent(new Event('change', {bubbles: true}));
                 }"""
             )
-            if clicou:
-                self._aguardar_ajax(2500)
-                self.log(f"    ✓ click incluirCartaoDePontoQuantidade ({clicou})")
-            else:
-                self.log(f"    ⚠ Botão incluirCartaoDePontoQuantidade não encontrado")
-        except Exception as e:
-            self.log(f"    ⚠ Falha click Incluir cartão (Quantidade): {e}")
+            self._aguardar_ajax(1500)
+        except Exception:
+            pass
+        # ⚠ CRÍTICO (#80-A, 0000715-08): o botão "Incluir" adiciona a coluna do
+        # cartão ao bean (mini-crud A4J). onclick-exec (`new Function`) NÃO
+        # dispara A4J.AJAX de forma confiável em headless Firefox + JSF 1.2
+        # (mesma causa documentada de linkOcorrencias/linkParametrizar) → a
+        # coluna nunca é incluída → o save persiste IMPORTADA_DO_CARTAO com
+        # tipoImportadadoDoCartaoDePonto=null → quantidade=0 (HE 50% liquida R$0).
+        # Fix: NATIVE Playwright click (dispara evento real do browser), com
+        # onclick-exec só como fallback. + verificação de que a coluna entrou.
+        def _label_presente() -> bool:
+            if not sel_label:
+                return False
+            try:
+                return self._page.evaluate(
+                    """(lbl) => {
+                        // após Incluir, a coluna aparece numa listagem (rich:dataTable)
+                        // dentro do painel de Quantidade; varrer linhas de tabela.
+                        const alvo = (lbl||'').trim().toLowerCase();
+                        for (const td of document.querySelectorAll('td')) {
+                            const t = (td.textContent||'').trim().toLowerCase();
+                            if (t === alvo) {
+                                // confirmar que NÃO é a option do select (que tem o mesmo texto)
+                                if (!td.closest('select')) return true;
+                            }
+                        }
+                        return false;
+                    }""",
+                    sel_label,
+                )
+            except Exception:
+                return False
 
-    def _selecionar_primeira_opcao_cartao(self, sel_locator, preferir_label: str | None = None) -> None:
+        incluido_ok = False
+        for _tent in range(3):
+            try:
+                loc = self._page.locator(
+                    "a[id$=':incluirCartaoDePontoQuantidade'], "
+                    "input[id$=':incluirCartaoDePontoQuantidade']"
+                ).first
+                if loc.count() == 0:
+                    self.log("    ⚠ Botão incluirCartaoDePontoQuantidade não encontrado")
+                    break
+                loc.click(force=True)  # NATIVE — dispara A4J de verdade
+                self._aguardar_ajax(4000)
+                self._page.wait_for_timeout(600)
+                self.log(f"    ✓ click incluirCartaoDePontoQuantidade (native, tent {_tent+1})")
+            except Exception as e:
+                self.log(f"    ⚠ native click Incluir falhou (tent {_tent+1}): {e}")
+            # Verificar persistência da coluna na listagem do painel
+            if _label_presente():
+                self.log(f"    ✓ coluna '{sel_label}' CONFIRMADA na listagem de quantidade")
+                incluido_ok = True
+                break
+            # Re-selecionar a coluna (o Incluir/AJAX pode ter resetado o select) e retry
+            if _tent < 2:
+                self.log(f"    ⟳ coluna ainda não confirmada — re-selecionando + retry")
+                try:
+                    self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
+                    self._page.evaluate(
+                        """() => { const s=document.querySelector("select[id$=':tipoImportadadoDoCartaoDePontoQuantidade']"); if(s) s.dispatchEvent(new Event('change',{bubbles:true})); }"""
+                    )
+                    self._aguardar_ajax(1500)
+                except Exception:
+                    pass
+        if not incluido_ok and sel_label is None:
+            # sel_label desconhecido (caminho tipo_cartao_ponto direto) — não dá
+            # p/ verificar; assumir que o native click bastou.
+            self.log("    ℹ coluna incluída (sem label p/ verificar)")
+        elif not incluido_ok:
+            self.log(f"    🛑 #80-A coluna '{sel_label}' NÃO confirmada após 3 tentativas — quantidade pode sair 0")
+
+    def _selecionar_primeira_opcao_cartao(self, sel_locator, preferir_label: str | None = None) -> str | None:
         """Seleciona option do dropdown de coluna do cartão de ponto.
 
         Pós-apuração do Cartão de Ponto, o dropdown tem opções como:
@@ -4475,10 +4537,12 @@ class PlaywrightAutomatorV2:
             if valor_alvo:
                 sel_locator.select_option(value=valor_alvo)
                 self.log(f"    ✓ cartão de ponto (Quantidade) selecionado = '{label_alvo}' (value={valor_alvo})")
+                return label_alvo
             else:
                 self.log(f"    ⚠ Nenhuma coluna de cartão disponível no dropdown — cartão pode não ter sido apurado")
         except Exception as e:
             self.log(f"    ⚠ Falha auto-select cartão: {e}")
+        return None
 
     def _preencher_form_parametros_verba(self, v, *, com_identificacao: bool) -> None:
         """Preenche o form Parâmetros da Verba como ESPELHO FIEL do JSON.

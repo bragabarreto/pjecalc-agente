@@ -1736,3 +1736,20 @@ def test_inv51_expresso_fechar_reabrir_pre_loop():
     assert 'pré-loop Expresso (#79)' in disp
     # o Fechar+Reabrir vem ANTES do dispatch p/ individual/batch
     assert disp.find("_fechar_e_reabrir_calculo") < disp.find("_lancar_expresso_individual")
+
+
+def test_inv52_importada_cartao_native_click():
+    """#80-A (0000715-08 HE 50%/INTERVALO): bot selecionava a coluna do cartão
+    (Hs EXT) e clicava 'Incluir' via onclick-exec (new Function) — que NÃO
+    dispara A4J.AJAX em headless Firefox/JSF 1.2 → coluna não entra no bean →
+    tipoImportadadoDoCartaoDePonto=null → quantidade=0 (verba liquida R$0). Fix:
+    NATIVE Playwright click no Incluir + verificação da coluna na listagem +
+    retry."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn = pw[pw.find("def _vincular_cartao_ponto_quantidade"):pw.find("def _selecionar_primeira_opcao_cartao")]
+    # Incluir via native click (force=True), não mais onclick-exec como primário
+    assert "incluirCartaoDePontoQuantidade" in fn
+    assert "click(force=True)" in fn, "Incluir deve usar native Playwright click"
+    # verificação + retry da coluna
+    assert "_label_presente" in fn
+    assert "CONFIRMADA na listagem de quantidade" in fn
