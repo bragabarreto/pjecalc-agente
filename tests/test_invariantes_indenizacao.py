@@ -1767,3 +1767,16 @@ def test_inv53_ocorrencias_valores_mensais():
     # casa por mês da linha (dataInicial) e prioriza sobre a distribuição total
     assert "meses_por_input" in fn
     assert fn.find("if mes_to_valor:") < fn.find("elif proporcionalizar:")
+
+
+def test_inv54_listagem_vazia_recovery_proativo_pre_reflexos():
+    """#80-D (0000715-08): após saves/Regerar a listagem de verbas volta VAZIA
+    (Seam EPC stale). O loop de reflexos rodava nela e o FGTS sobre HE 50%
+    falhava — a recovery Fechar+Reabrir só vinha depois (no click Parâmetros).
+    Fix: detectar listagem vazia e Fechar+Reabrir PROATIVO ANTES dos reflexos,
+    em _configurar_parametros_pos_expresso."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):pw.find("def _configurar_parametros_pos_expresso")+8000]
+    assert "#80-D listagem vazia pós-navegação" in fn
+    # o recovery proativo vem ANTES do loop de reflexos
+    assert fn.find("#80-D listagem vazia") < fn.find("for _r in getattr(v, \"reflexos\"")

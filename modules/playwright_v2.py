@@ -5131,6 +5131,55 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_timeout(2000)
         except Exception as e:
             self.log(f"    ⚠ re-init bean (sidebar verbas): {e}")
+        # ⚠ #80-D (0000715-08): após saves/Regerar, a conv corrente frequentemente
+        # devolve a listagem de verbas VAZIA (Seam EPC stale) — o que fazia o loop
+        # de REFLEXOS abaixo (ex.: FGTS sobre HE 50%) rodar numa listagem vazia e
+        # FALHAR, e só depois (no click de Parâmetros) a recovery Fechar+Reabrir
+        # rodava. Fix: detectar listagem vazia AQUI e fazer Fechar+Reabrir
+        # PROATIVO, ANTES dos reflexos — assim reflexos E parâmetros rodam numa
+        # listagem populada. (A recovery reativa do click de Parâmetros é
+        # mantida como rede de segurança.)
+        try:
+            _n_links = self._page.evaluate(
+                "() => document.querySelectorAll('a.linkParametrizar').length"
+            )
+        except Exception:
+            _n_links = 0
+        if not _n_links:
+            self.log(
+                f"    ⚠ #80-D listagem vazia pós-navegação ({v.nome_pjecalc}) — "
+                f"Fechar+Reabrir proativo antes de reflexos/parâmetros"
+            )
+            try:
+                if self._fechar_e_reabrir_calculo(
+                    f"listagem vazia pré-parâmetros ({v.nome_pjecalc})"
+                ):
+                    self._navegar_menu_via_click("li_calculo_verbas")
+                    try:
+                        self._page.wait_for_load_state("domcontentloaded", timeout=8000)
+                    except Exception:
+                        pass
+                    if ("verba-calculo.jsf" not in (self._page.url or "")
+                            and self._calculo_conversation_id):
+                        self._page.goto(
+                            f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                            f"?conversationId={self._calculo_conversation_id}",
+                            wait_until="domcontentloaded", timeout=20000,
+                        )
+                    try:
+                        self._page.wait_for_function(
+                            "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                            timeout=15000,
+                        )
+                    except Exception:
+                        pass
+                    self._page.wait_for_timeout(1500)
+                    _n2 = self._page.evaluate(
+                        "() => document.querySelectorAll('a.linkParametrizar').length"
+                    )
+                    self.log(f"    ℹ #80-D pós-recovery proativo: {_n2} verba(s) na listagem")
+            except Exception as _ed:
+                self.log(f"    ⚠ #80-D recovery proativo: {_ed}")
         # ⚠ REFLEXOS quando marcar_reflexos=True (2ª chamada do fase_verbas):
         # marcados AQUI, após o anchor wait_for linkParametrizar (listagem
         # garantidamente válida — runs v7/v8 provaram que fora deste método
