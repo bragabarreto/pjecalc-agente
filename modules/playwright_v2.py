@@ -3410,37 +3410,56 @@ class PlaywrightAutomatorV2:
 
         # Distribuir valor
         if mes_to_valor:
-            # Casar cada input valorDevido ao mês (MM/YYYY) da sua linha
-            meses_por_input = self._page.evaluate(
+            # Casar cada ocorrência ao seu mês. A grade inline de Ocorrências NÃO
+            # expõe a data por linha (dataInicial vazio), mas as linhas vêm em
+            # ORDEM CRONOLÓGICA mensal a partir do início do período da verba.
+            # → mês da linha i = periodo_inicio + i meses.
+            import re as _re_c
+            def _add_meses(yy, mm, k):
+                tot = yy * 12 + (mm - 1) + k
+                return tot // 12, tot % 12 + 1
+            pi = str(getattr(v.parametros, "periodo_inicio", "") or "")
+            base = None
+            _m = _re_c.match(r"\d{2}/(\d{2})/(\d{4})", pi) if pi else None
+            if _m:
+                base = (int(_m.group(2)), int(_m.group(1)))  # (ano, mês)
+            # (fallback) tentar extrair data do DOM caso a grade exponha
+            meses_dom = self._page.evaluate(
                 """() => {
                     return [...document.querySelectorAll('input[id$=":valorDevido"]')].map(inp => {
                         const tr = inp.closest('tr'); if (!tr) return '';
-                        let txt = '';
-                        const di = tr.querySelector('[id*=":dataInicial"]');
-                        if (di) txt = di.value || di.textContent || '';
-                        if (!/\\d{2}\\/\\d{2}\\/\\d{4}/.test(txt)) {
-                            for (const td of tr.querySelectorAll('td')) {
-                                const t = td.textContent || '';
-                                if (/\\d{2}\\/\\d{2}\\/\\d{4}/.test(t)) { txt = t; break; }
-                            }
+                        for (const el of tr.querySelectorAll('[id*=":dataInicial"], td')) {
+                            const t = (el.value || el.textContent || '');
+                            const m = t.match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/);
+                            if (m) return m[2] + '/' + m[3];
                         }
-                        const m = txt.match(/(\\d{2})\\/(\\d{2})\\/(\\d{4})/);
-                        return m ? (m[2] + '/' + m[3]) : '';
+                        return '';
                     });
                 }"""
             )
             valores = []
+            meses_usados = []
             for i in range(n):
-                mes = meses_por_input[i] if i < len(meses_por_input) else ""
+                mes = meses_dom[i] if i < len(meses_dom) and meses_dom[i] else ""
+                if not mes and base is not None:
+                    yy, mm = _add_meses(base[0], base[1], i)
+                    mes = f"{mm:02d}/{yy}"
+                meses_usados.append(mes)
                 valores.append(mes_to_valor.get(mes, 0.0))
-            _pares = [(meses_por_input[i] if i < len(meses_por_input) else "?", valores[i])
-                      for i in range(n)]
-            self.log(f"    → valores_mensais por ocorrência: {_pares}")
             _soma = round(sum(valores), 2)
-            if abs(_soma - valor_total) > 0.01:
+            self.log(f"    → valores_mensais por ocorrência: {list(zip(meses_usados, valores))}")
+            # ⚠ SALVAGUARDA: se o casamento por mês falhou (soma 0 mas há total a
+            # distribuir), NÃO zerar a verba — cair na distribuição antiga.
+            if _soma <= 0.01 and valor_total > 0.01:
                 self.log(
-                    f"    ⚠ soma valores_mensais ({_soma}) ≠ valor_total ({valor_total}) "
-                    f"— meses não casados podem estar fora do período da verba"
+                    f"    ⚠ casamento por mês falhou (soma {_soma}) — fallback: "
+                    f"valor_total na 1ª ocorrência (preserva o valor da verba)"
+                )
+                valores = [valor_total] + [0.0] * (n - 1)
+            elif abs(_soma - valor_total) > 0.01:
+                self.log(
+                    f"    ⚠ soma valores_mensais ({_soma}) ≠ valor_total "
+                    f"({valor_total}) — alguns meses podem estar fora do período"
                 )
         elif proporcionalizar:
             por_linha = round(valor_total / n, 2)

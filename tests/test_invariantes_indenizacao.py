@@ -1764,9 +1764,13 @@ def test_inv53_ocorrencias_valores_mensais():
     fn = pw[pw.find("def _configurar_ocorrencias_informado_inline"):pw.find("def _dump_dom_indenizacao")]
     assert "mes_to_valor" in fn
     assert "valores_mensais" in fn
-    # casa por mês da linha (dataInicial) e prioriza sobre a distribuição total
-    assert "meses_por_input" in fn
+    # casa por índice cronológico (periodo_inicio + i meses) — a grade inline não
+    # expõe a data por linha; fallback DOM mantido
+    assert "_add_meses" in fn
     assert fn.find("if mes_to_valor:") < fn.find("elif proporcionalizar:")
+    # SALVAGUARDA: não zerar a verba se o casamento por mês falhar
+    assert "casamento por mês falhou" in fn
+    assert "valor_total na 1ª ocorrência" in fn
 
 
 def test_inv54_listagem_vazia_recovery_proativo_pre_reflexos():
