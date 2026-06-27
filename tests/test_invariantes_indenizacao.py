@@ -1784,3 +1784,20 @@ def test_inv54_listagem_vazia_recovery_proativo_pre_reflexos():
     assert "#80-D listagem vazia pós-navegação" in fn
     # o recovery proativo vem ANTES do loop de reflexos
     assert fn.find("#80-D listagem vazia") < fn.find("for _r in getattr(v, \"reflexos\"")
+
+
+def test_inv55_quantidade_informada_aguarda_render():
+    """#80-E (GEOVANA 0000627-04): o radio tipoDaQuantidade=INFORMADA tem
+    onchange=A4J que renderiza CONDICIONALMENTE o campo valorInformadoDaQuantidade.
+    O native click dava timeout quando INFORMADA já era default, e sem o change
+    o campo de valor não renderizava → HORAS EXTRAS 50% / ADICIONAL NOTURNO /
+    INTERVALO saíam com quantidade=0 (capítulo Duração do Trabalho liquidava
+    R$0). Fix: disparar 'change' via JS + aguardar o campo de valor ficar
+    visível antes de preencher."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn = pw[pw.find("def _configurar_quantidade_radio"):pw.find("def _vincular_cartao_ponto_quantidade")]
+    # dispara change via JS (não native click que dava timeout)
+    assert "dispatchEvent(new Event('change'" in fn
+    # espera o campo de valor renderizar antes de preencher
+    assert "valorInformadoDaQuantidade" in fn
+    assert fn.find("dispatchEvent(new Event('change'") < fn.find('state="visible", timeout=10000')

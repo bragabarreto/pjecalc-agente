@@ -4396,21 +4396,65 @@ class PlaywrightAutomatorV2:
                 f"(provável: Cartão de Ponto não apurado na Fase 4)"
             )
             return
+        # ⚠ CRÍTICO (GEOVANA 0000627-04, 27/06/2026): o radio tipoDaQuantidade
+        # tem onchange=A4J.AJAX.Submit que renderiza CONDICIONALMENTE o campo
+        # `valorInformadoDaQuantidade`. Dois problemas no native click:
+        #  (a) quando INFORMADA já é o default (checked), o native click dá
+        #      TIMEOUT (5s+30s) e a verba é pulada;
+        #  (b) o onchange só dispara em interação real — sem ele, o A4J não roda
+        #      e o campo de valor nunca renderiza ("não existe — pulando").
+        # Resultado: HORAS EXTRAS 50% / ADICIONAL NOTURNO / INTERVALO saíam com
+        # quantidade=0 → liquidavam R$0 (todo o capítulo Duração do Trabalho).
+        # Fix: setar checked + disparar 'change' via JS (idempotente, dispara o
+        # A4J de verdade) em vez de native click.
         try:
-            self._marcar_radio("tipoDaQuantidade", q_tipo, obrigatorio=False)
+            _ok_radio = self._page.evaluate(
+                """(tipo) => {
+                    const r = document.querySelector(
+                        "input[type=radio][id*='tipoDaQuantidade'][value='"+tipo+"']"
+                    );
+                    if (!r) return false;
+                    r.checked = true;
+                    r.dispatchEvent(new Event('change', {bubbles: true}));
+                    return true;
+                }""",
+                q_tipo,
+            )
+            if not _ok_radio:
+                self.log(f"    ⚠ radio tipoDaQuantidade={q_tipo} ausente — pulando")
+                return
         except Exception as e:
-            self.log(f"    ⚠ Falha marcar tipoDaQuantidade={q_tipo}: {e}")
+            self.log(f"    ⚠ Falha disparar tipoDaQuantidade={q_tipo}: {e}")
             return
-        self._aguardar_ajax(2500)
+        self._aguardar_ajax(5000)
+        self._page.wait_for_timeout(600)
         self.log(f"    ✓ quantidade.tipo = {q_tipo}")
         # Sub-blocos por tipo
         try:
             if q_tipo == "INFORMADA" and getattr(q, "valor", None) is not None:
+                # Esperar o campo de valor RENDERIZAR (A4J condicional pós-radio).
+                # Sem este wait o _preencher rodava antes do re-render → "não
+                # existe — pulando" → quantidade 0.
+                try:
+                    self._page.wait_for_selector(
+                        "input[id$=':valorInformadoDaQuantidade']",
+                        state="visible", timeout=10000,
+                    )
+                except Exception:
+                    self.log("    ⚠ valorInformadoDaQuantidade não renderizou em 10s — tentando assim mesmo")
                 self._preencher(
                     "valorInformadoDaQuantidade",
                     _fmt_br(q.valor),
                     obrigatorio=False,
                 )
+                # Verificação: re-ler o campo p/ confirmar que o valor persistiu
+                try:
+                    _lido = self._page.evaluate(
+                        """() => { const e=document.querySelector("input[id$=':valorInformadoDaQuantidade']"); return e ? e.value : null; }"""
+                    )
+                    self.log(f"    ✓ quantidade INFORMADA = {_fmt_br(q.valor)} (campo lê: {_lido})")
+                except Exception:
+                    pass
                 if getattr(q, "proporcionalizar", False):
                     self._marcar_checkbox("aplicarProporcionalidadeAQuantidade", True)
             elif q_tipo == "IMPORTADA_DO_CALENDARIO":
