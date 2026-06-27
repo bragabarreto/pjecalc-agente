@@ -1871,3 +1871,32 @@ def test_inv58_aguardar_servidor_ocioso_antes_de_navegar():
     assert fn.find("_aguardar_servidor_ocioso(") < fn.find('_navegar_menu_via_click("li_calculo_verbas")'), (
         "o gate #80-H deve vir ANTES da navegação ao sidebar (prevenir navegar ocupado)"
     )
+
+
+def test_inv59_reflexos_manual_deferidos_apos_principal():
+    """#80-J (GEOVANA 0000627-04, reorder principal-antes-dos-reflexos):
+    reflexos MANUAL (estrategia=MANUAL OU fallback 'sem checkbox') clicam
+    Incluir e NAVEGAM para o form do reflexo, SAINDO da listagem. Se criados
+    ANTES do click de Parâmetros do principal, o principal não é mais
+    encontrado na listagem → quantidade da verba (HE 50%=157,5 / ADICIONAL=80)
+    nunca setada (qtd=0 na liquidação, validado run_K/L/N). Fix:
+    _configurar_reflexo aceita `coletar_manual_em` e DEFERE os Manual p/ uma
+    lista; eles são criados DEPOIS do save do principal. Reflexos CHECKBOX
+    (não navegam) seguem marcados antes do save (invariante de flush).
+    VALIDADO run_O: HE 50%=157,5 / ADICIONAL=80 / INTERVALO=7,5 persistidos no
+    PJC (CALCULO_103), totalErros=0. NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # _configurar_reflexo tem o parâmetro de coleta
+    assert "def _configurar_reflexo(self, verba_principal, reflexo, coletar_manual_em=None)" in pw, (
+        "_configurar_reflexo deve aceitar coletar_manual_em (#80-J)"
+    )
+    # o loop de reflexos da config de parâmetros COLETA os Manual
+    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):
+             pw.find("def _OLD_configurar_parametros_pos_expresso")]
+    assert "_manuais_deferidos = []" in fn
+    assert "coletar_manual_em=_manuais_deferidos" in fn
+    # os deferidos são criados DEPOIS (loop for _rm) — após a coleta
+    assert "for _rm in _manuais_deferidos" in fn
+    assert fn.find("coletar_manual_em=_manuais_deferidos") < fn.find("for _rm in _manuais_deferidos"), (
+        "a coleta deve vir ANTES da criação dos Manual deferidos"
+    )

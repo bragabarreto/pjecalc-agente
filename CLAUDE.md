@@ -1404,10 +1404,23 @@ nunca convergia).
   robusto a detachment do A4J — o `locator.click(force=True)` dava timeout 30s
   "element detached" e engolia o dispatchEvent (afetava tipoDaQuantidade,
   multaDoFgts=40%, geraReflexo).
+- **#80-J (reorder — RESOLVE o qtd=0 de HE 50%/ADICIONAL)**: reflexos MANUAL
+  (RSR/FGTS, explícito OU fallback "sem checkbox") clicam Incluir e NAVEGAM p/
+  o form do reflexo, SAINDO da listagem. Se criados ANTES do click de
+  Parâmetros do principal, o principal não é mais encontrado → quantidade
+  (157,5/80) nunca setada. Fix: `_configurar_reflexo(coletar_manual_em=lista)`
+  DEFERE os Manual; o principal é configurado/salvo com o bot ANCORADO na
+  listagem; os Manual deferidos são criados DEPOIS. Reflexos CHECKBOX (não
+  navegam) seguem antes do save (invariante de flush). `test_inv59`.
 
-**Validado end-to-end (run_K/L, GEOVANA):** liquidação `totalErros=0` + PJC
-exportado; "✓ #80-G listagem recuperada via reload leve (10 verbas) — sem F+R"
-(conversa VIVA graças ao #80-H).
+**Validado end-to-end (run_K/L/N/O, GEOVANA):** liquidação `totalErros=0` + PJC
+exportado em TODAS; "✓ #80-G listagem recuperada via reload leve (10 verbas) —
+sem F+R" (conversa VIVA graças ao #80-H). **run_O (#80-J): PJC CALCULO_103 tem
+`HORAS EXTRAS 50% valorInformado=157.5`, `ADICIONAL NOTURNO 80.0`,
+`INTERVALO 7.5` — quantidades de cartão 100% fiéis ao JSON.** Alertas
+remanescentes não-bloqueantes: CS histórico ÚLTIMA REMUNERAÇÃO (limite MP),
+característica do reflexo Férias+1/3 sobre HE, e "Quantidade alterada após
+geração" do INTERVALO (cosmético, ajustável via Regerar).
 
 ⚠️ **NÃO reverter** os gates `_aguardar_servidor_ocioso` nem o re-ancoramento
 #80-I — sem eles a "listagem fantasma" e a morte-de-conversa (cálculo
