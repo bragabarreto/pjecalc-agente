@@ -5437,6 +5437,36 @@ class PlaywrightAutomatorV2:
         # o servidor ficar ocioso ANTES de abrir o form (mesma causa raiz comum
         # da listagem fantasma, agora no nível do FORM).
         self._aguardar_servidor_ocioso(contexto=f"pré-form {v.nome_pjecalc}")
+        # ⚠ #80-I (GEOVANA 0000627-04, run_K/L): reflexos MANUAL (RSR/FGTS
+        # criados como verba própria) NAVEGAM para o form do reflexo, SAINDO da
+        # listagem. Sem re-ancorar, o match exact-cell do PRINCIPAL abaixo não
+        # acha `a.linkParametrizar` (estamos num form, não na listagem) → o form
+        # principal NUNCA abre → a quantidade da verba (HE 50%=157,5 /
+        # ADICIONAL NOTURNO=80) nunca é setada (qtd=0 na liquidação). Verbas sem
+        # reflexo Manual (ex.: INTERVALO) já estão na listagem e funcionam — por
+        # isso só HE 50%/ADICIONAL falhavam. Fix: re-ancorar na listagem se não
+        # estivermos vendo linkParametrizar. (O gate de servidor ocioso acima
+        # garante que a re-navegação não contende com o save do reflexo.)
+        try:
+            _na_listagem = self._page.evaluate(
+                "() => document.querySelectorAll('a.linkParametrizar').length > 0"
+            )
+        except Exception:
+            _na_listagem = False
+        if not _na_listagem:
+            self.log(
+                f"    ↪ #80-I re-ancorar listagem após reflexos Manual "
+                f"(p/ abrir o form principal de {v.nome_pjecalc})"
+            )
+            try:
+                self._navegar_menu_via_click("li_calculo_verbas")
+                self._page.wait_for_function(
+                    "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                    timeout=15000,
+                )
+                self._page.wait_for_timeout(1200)
+            except Exception as _ei:
+                self.log(f"    ⚠ #80-I re-ancorar listagem: {_ei}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
