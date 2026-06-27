@@ -1801,3 +1801,21 @@ def test_inv55_quantidade_informada_aguarda_render():
     # espera o campo de valor renderizar antes de preencher
     assert "valorInformadoDaQuantidade" in fn
     assert fn.find("dispatchEvent(new Event('change'") < fn.find('state="visible", timeout=10000')
+
+
+def test_inv56_seam_concurrent_request_timeout():
+    """#80-D RAIZ DEFINITIVA (GEOVANA, java.log): a 'listagem de verbas vazia'
+    que travava A/C/E era na verdade LockTimeoutException no @Synchronized
+    apresentadorVerbaDeCalculo — a verba-calculo.jsf falhava ao renderizar
+    porque não conseguia o lock do bean em 5s (operações pesadas o seguram >5s).
+    Fix: concurrent-request-timeout >= 120000 em components.xml (as requisições
+    esperam o lock em vez de falhar). NÃO reverter p/ 5000."""
+    cx = (REPO_ROOT / "pjecalc-dist" / "tomcat" / "webapps" / "pjecalc"
+          / "WEB-INF" / "components.xml").read_text(encoding="latin-1")
+    import re as _re
+    m = _re.search(r'concurrent-request-timeout="(\d+)"', cx)
+    assert m, "concurrent-request-timeout ausente no components.xml"
+    assert int(m.group(1)) >= 60000, (
+        f"concurrent-request-timeout={m.group(1)} curto demais — "
+        f"causa LockTimeoutException na verba-calculo.jsf (#80-D)"
+    )

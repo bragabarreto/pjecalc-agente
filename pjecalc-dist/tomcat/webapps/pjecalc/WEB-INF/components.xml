@@ -19,8 +19,26 @@
 	  - conversation-timeout=86400000 (24h) → conv não expira durante runs
 	    longos do bot. Em produção (humano), 30s seria razoável; em automação
 	    o run pode demorar 5+ min.
+
+	  ALTERAÇÃO 27/06/2026 (#80-D RAIZ DEFINITIVA) — concurrent-request-timeout
+	  5000 → 120000.
+
+	  Diagnóstico (DIAG-#80-F + java.log): a "listagem de verbas vazia" que
+	  travava A/C/E NÃO era bean-não-carregado — era
+	    org.jboss.seam.core.LockTimeoutException: could not acquire lock on
+	    @Synchronized component: apresentadorVerbaDeCalculo
+	  A verba-calculo.jsf renderiza via #{apresentadorVerbaDeCalculo.*}, que é
+	  @Synchronized (1 requisição por vez). Operações pesadas (save Expresso
+	  c/ reflexos, Regerar, save de parâmetros) seguram o lock por >5s na VM
+	  pequena; quando o bot navega para a listagem nesse meio-tempo, a
+	  requisição espera só 5s, falha com LockTimeoutException e o servidor
+	  devolve a página "Erro Interno no Servidor" — que o bot lia como
+	  "listagem vazia" e disparava recovery (que falhava igual → loop).
+	  Fix: 120000 (2 min) → as requisições ESPERAM o lock liberar (o
+	  @Synchronized serializa corretamente) em vez de falhar. Cobre as
+	  operações mais pesadas com folga. NÃO REVERTER p/ 5000.
 	-->
-	<core:manager concurrent-request-timeout="5000" conversation-timeout="86400000" default-flush-mode="AUTO"/>
+	<core:manager concurrent-request-timeout="120000" conversation-timeout="86400000" default-flush-mode="AUTO"/>
 	
 	<security:identity authenticate-method="#{autenticador.autenticar}"/>
 
