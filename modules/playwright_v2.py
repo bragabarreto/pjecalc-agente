@@ -5423,9 +5423,13 @@ class PlaywrightAutomatorV2:
         # (v9 estável: marcar SEMPRE — a 2ª passada da v10 perdeu o AVISO e
         # não alterou os valores das ocorrências; a ordem de ativação não é
         # o fator. Mantido o parâmetro para compat.)
+        # #80-J: reflexos CHECKBOX agora (não navegam); reflexos MANUAL são
+        # DEFERIDOS p/ DEPOIS da config do principal (criá-los navega p/ fora da
+        # listagem e o principal perderia a quantidade — ver _configurar_reflexo).
+        _manuais_deferidos = []
         for _r in getattr(v, "reflexos", None) or []:
             try:
-                self._configurar_reflexo(v, _r)
+                self._configurar_reflexo(v, _r, coletar_manual_em=_manuais_deferidos)
             except Exception as _e:
                 self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
         # ⚠ #80-H (GEOVANA): os reflexos acima fazem SAVES pesados (reflexo
@@ -6016,6 +6020,32 @@ class PlaywrightAutomatorV2:
                         self._page.wait_for_timeout(1000)
             except Exception as _e:
                 self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
+            # #80-J: criar os reflexos Manual DEFERIDOS — o principal já foi
+            # configurado/salvo (quantidade setada) e a listagem está
+            # re-ancorada. Cada Manual navega p/ o form do reflexo (Incluir),
+            # mas isso não afeta mais o principal (já está pronto). Gate de
+            # servidor ocioso + garantir listagem antes.
+            if _manuais_deferidos:
+                self.log(
+                    f"    ↪ #80-J criando {len(_manuais_deferidos)} reflexo(s) "
+                    f"Manual deferido(s) de {v.nome_pjecalc}"
+                )
+                self._aguardar_servidor_ocioso(contexto=f"pré-reflexos-Manual {v.nome_pjecalc}")
+                try:
+                    if "verba-calculo.jsf" not in (self._page.url or ""):
+                        self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(6000)
+                        self._page.wait_for_timeout(800)
+                except Exception:
+                    pass
+                for _rm in _manuais_deferidos:
+                    try:
+                        self._configurar_reflexo(v, _rm)  # sem coletar → cria Manual
+                    except Exception as _e:
+                        self.log(
+                            f"    ⚠ #80-J reflexo Manual deferido "
+                            f"'{getattr(_rm, 'nome', '?')}': {_e}"
+                        )
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
             # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
@@ -6384,10 +6414,25 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(15000)
         self.log(f"  ✓ Reflexo Manual '{nome}' criado")
 
-    def _configurar_reflexo(self, verba_principal, reflexo) -> None:
+    def _configurar_reflexo(self, verba_principal, reflexo, coletar_manual_em=None) -> None:
         """Marcar checkbox do reflexo no painel da verba principal (Expresso pareado)
-        OU criar como Manual se estrategia=MANUAL."""
+        OU criar como Manual se estrategia=MANUAL.
+
+        ⚠ #80-J (GEOVANA 0000627-04, reorder principal-antes-dos-reflexos):
+        `coletar_manual_em` (list) — quando fornecida, reflexos que seriam
+        criados como verba MANUAL (estrategia=MANUAL ou fallback "sem checkbox")
+        NÃO são criados agora: são ANEXADOS à lista para criação DEPOIS da
+        config do principal. Motivo: `_criar_reflexo_manual` clica "Incluir" e
+        NAVEGA para o form do reflexo, SAINDO da listagem — se rodar ANTES do
+        click de Parâmetros do principal, o principal não é mais encontrado na
+        listagem e sua quantidade (HE 50%=157,5 / ADICIONAL=80) nunca é setada.
+        Os reflexos CHECKBOX (RSR/Férias/13º no painel) NÃO navegam e seguem
+        sendo marcados agora (invariante: antes do save do principal p/ flush)."""
         if reflexo.estrategia_reflexa == EstrategiaReflexa.MANUAL:
+            if coletar_manual_em is not None:
+                coletar_manual_em.append(reflexo)
+                self.log(f"    ⏸ #80-J reflexo Manual '{reflexo.nome}' deferido (após o principal)")
+                return
             self._criar_reflexo_manual(verba_principal, reflexo)
             return
 
@@ -6555,6 +6600,15 @@ class PlaywrightAutomatorV2:
                 # ⚠ só dispara quando o checkbox jamais apareceu — NÃO quando ele
                 # aparece mas falha em persistir (esse caso é tratado pelo retry
                 # acima; o fluxo Expresso-pareado do RODRIGO não é afetado).
+                if coletar_manual_em is not None:
+                    # #80-J: deferir o fallback Manual p/ depois do principal
+                    # (criá-lo agora navegaria p/ fora da listagem).
+                    coletar_manual_em.append(reflexo)
+                    self.log(
+                        f"    ⏸ #80-J reflexo '{reflexo.nome}' sem checkbox — "
+                        f"deferido como Manual (após o principal)"
+                    )
+                    return
                 self.log(
                     f"    ↪ Reflexo '{reflexo.nome}' sem checkbox no painel — "
                     f"fallback: criando como reflexo Manual"
