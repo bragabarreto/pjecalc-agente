@@ -1936,3 +1936,25 @@ def test_inv60_honorario_reclamante_sempre_cobrar():
     assert "COBRAR" in seg and "Cobrar do reclamante".upper() in seg.upper()
     # verifica persistência (confirmado)
     assert "confirmado=" in seg
+
+
+def test_inv61_base_historico_verba_click_nativo_verificado():
+    """#80-M (0000712-53, 27/06/2026): a base CALCULADO/HISTORICO_SALARIAL da
+    verba exige clicar `incluirBaseHistorico` (<a4j:commandLink>) p/ adicionar o
+    histórico à tabela `listagemHistoricosDaVerba`. O JS `btn.click()` reportava
+    sucesso mas o bean NÃO recebia (padrão DOM≠bean) → base vazia → liquidação
+    'Falta selecionar pelo menos um Histórico Salarial...' (e a verba CALCULADO
+    liquidava 0). Fix: click NATIVO Playwright + VERIFICAR a tabela por NOME do
+    histórico (ground truth do bean) + retry ×3. NÃO reverter p/ JS btn.click()."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    i = pw.find("#80-M")
+    assert i > 0, "fix #80-M ausente"
+    seg = pw[i:i + 4200]
+    # verifica a tabela por nome (ground truth do bean)
+    assert "_tabela_tem_hist" in seg
+    assert "listagemHistoricosDaVerba" in seg
+    # click NATIVO via locator (não JS btn.click)
+    assert ".first.click(timeout=" in seg
+    assert "incluirBaseHistorico" in seg
+    # retry + confirmação
+    assert "CONFIRMADO na base da verba" in seg

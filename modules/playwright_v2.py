@@ -5020,34 +5020,64 @@ class PlaywrightAutomatorV2:
                     # Sem esse click, a tabela fica VAZIA → JSF retorna ERRO:
                     # "Falta selecionar pelo menos um Histórico Salarial para apurar
                     # o Valor Devido da Verba" → liquidação BLOQUEADA.
-                    try:
-                        # Antes de clicar Incluir, verificar se já há entry na lista
-                        # (algumas verbas Expresso vêm pré-populadas)
-                        ja_tem_historico = self._page.evaluate(
-                            """() => {
-                                const tabela = document.querySelector("[id$=':listagemHistoricosDaVerba'] tbody, [id$=':listagemHistoricosDaVerba']");
-                                if (!tabela) return false;
-                                const linhas = tabela.querySelectorAll('tr');
-                                return linhas.length >= 2; // header + ao menos 1 linha de dados
-                            }"""
-                        )
-                        if not ja_tem_historico:
-                            clicou_incluir = self._page.evaluate(
-                                """() => {
-                                    const btn = document.querySelector("a[id$=':incluirBaseHistorico'], input[id$=':incluirBaseHistorico']");
-                                    if (!btn) return null;
-                                    try { btn.click(); return 'js-click'; }
-                                    catch (e) { return 'erro:' + e.message; }
-                                }"""
+                    # ⚠ #80-M (0000712-53, 27/06/2026): adicionar o histórico à
+                    # tabela `listagemHistoricosDaVerba` via incluirBaseHistorico.
+                    # BUG: o JS `btn.click()` num <a4j:commandLink> reporta sucesso
+                    # mas o bean NÃO recebe a ação (padrão DOM≠bean já documentado
+                    # — reflexo checkbox RODRIGO, combinações Fase 13). A base
+                    # ficava VAZIA → liquidação "Falta selecionar pelo menos um
+                    # Histórico Salarial..." (e a verba CALCULADO liquidava 0).
+                    # Fix: click NATIVO Playwright + VERIFICAR a tabela por NOME do
+                    # histórico (ground truth do bean) + retry ×3.
+                    _hist_nome = (f.base_calculo.historico_nome or "").strip()
+                    def _tabela_tem_hist(nome=_hist_nome):
+                        try:
+                            return self._page.evaluate(
+                                """(nome) => {
+                                    const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                                    const t = document.querySelector("[id$=':listagemHistoricosDaVerba']");
+                                    if (!t) return false;
+                                    const alvo = norm(nome);
+                                    return [...t.querySelectorAll('tr')].some(r => {
+                                        if (!r.querySelector('td')) return false;  // pula header
+                                        return norm(r.textContent).includes(alvo);
+                                    });
+                                }""",
+                                nome,
                             )
-                            if clicou_incluir == 'js-click':
-                                self.log(f"    ✓ click '+' incluirBaseHistorico (adicionou histórico à tabela da verba)")
-                                self._aguardar_ajax(4000)
-                                self._page.wait_for_timeout(800)
-                            else:
-                                self.log(f"    ⚠ incluirBaseHistorico não encontrado/falhou: {clicou_incluir}")
+                        except Exception:
+                            return False
+                    try:
+                        if _tabela_tem_hist():
+                            self.log(f"    ⊙ histórico '{_hist_nome}' já na base da verba (skip incluir)")
                         else:
-                            self.log(f"    ⊙ histórico já estava na tabela da verba (skip incluir)")
+                            _inc_ok = False
+                            for _t_inc in range(1, 4):
+                                # re-selecionar o dropdown antes do + (o A4J pode
+                                # ter resetado o select na re-renderização)
+                                if _t_inc > 1 and _hist_nome:
+                                    try:
+                                        self._selecionar_se_diferente("baseHistoricos", _hist_nome)
+                                        self._aguardar_ajax(2000)
+                                    except Exception:
+                                        pass
+                                # NATIVE Playwright click (NÃO JS btn.click): dispara
+                                # o A4J real que o bean processa.
+                                try:
+                                    self._page.locator(
+                                        "a[id$=':incluirBaseHistorico'], input[id$=':incluirBaseHistorico']"
+                                    ).first.click(timeout=5000)
+                                except Exception as _ce:
+                                    self.log(f"    ⚠ #80-M click incluirBaseHistorico nativo (tent {_t_inc}/3): {_ce}")
+                                self._aguardar_ajax(5000)
+                                self._page.wait_for_timeout(900)
+                                if _tabela_tem_hist():
+                                    _inc_ok = True
+                                    self.log(f"    ✓ #80-M histórico '{_hist_nome}' CONFIRMADO na base da verba (tabela)")
+                                    break
+                                self.log(f"    ⚠ #80-M histórico não apareceu na tabela (tent {_t_inc}/3) — retry")
+                            if not _inc_ok:
+                                self.log(f"    🛑 #80-M histórico '{_hist_nome}' NÃO confirmado na base — liquidação pode falhar")
                     except Exception as e:
                         self.log(f"    ⚠ incluirBaseHistorico: {e}")
                 elif f.base_calculo.tipo == TipoBaseCalculo.VALE_TRANSPORTE:
