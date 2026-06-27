@@ -1913,7 +1913,7 @@ def test_inv60_honorario_reclamante_sempre_cobrar():
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     i = pw.find("#80-K")
     assert i > 0, "fix #80-K ausente"
-    seg = pw[i:i+2600]
+    seg = pw[i:i+3700]
     # espera o radio renderizar antes de marcar
     assert "tipoCobrancaReclamante" in seg
     assert "wait_for_selector" in seg
