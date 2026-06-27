@@ -194,6 +194,29 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — `_preencher` respeita `maxlength` (#80-O) — NÃO REVERTER
+
+> **`_preencher` seta inputs via JS `el.value=...` (necessário p/ o bean JSF a4j
+> receber), o que BYPASSA o `maxlength` que o browser imporia ao digitar.** Por
+> isso `_preencher` LÊ o `maxlength` do campo e TRUNCA o valor antes de setar.
+>
+> **Bug (0000712-53):** o campo `descricao` (Nome da verba) tem `maxlength=50` +
+> `required`. Verbas `expresso_adaptado` com nome >50 ("INDENIZAÇÃO — INTERVALO
+> INTRAJORNADA (45 MIN/PLANTÃO + 50%)"=59) eram setadas inteiras → o servidor
+> REJEITAVA o SAVE por validação de tamanho, **SILENCIOSAMENTE** (o `rich:message`
+> do campo não entra no re-render a4j) → form sem sucesso E sem erro → o bot
+> Cancelava → base histórico + parâmetros DESCARTADOS → liquidação bloqueada
+> ("Falta selecionar Histórico Salarial" / "ocorrência com valor zero"). Explica
+> por que verbas Expresso (nomes canônicos ≤50) salvam e adaptadas (>50) falham.
+>
+> ⚠️ **Diagnóstico de save bloqueado silenciosamente:** após salvar, página SEM
+> "Operação realizada com sucesso" E SEM erro, permanecendo no form → suspeitar
+> de validação silenciosa em campo fora do re-render (maxlength, required oculto).
+>
+> Validado (0000712-53, run4): descricao truncado a 50 → "✓ Parâmetros salvos"
+> → totalErros=0 → PJC. Protegido por `test_inv62`. Relacionado: #80-M (base
+> histórico da verba via click nativo + verificação da tabela, `test_inv61`).
+
 ## Regra obrigatória — Evolução salarial = OCORRÊNCIAS de 1 histórico, não N históricos (#80-L)
 
 > **Quando um histórico salarial INFORMADO tem evolução de valores ao longo do
