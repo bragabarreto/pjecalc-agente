@@ -405,6 +405,27 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
+        # ⚠ #80-O (0000712-53, 27/06/2026): RESPEITAR o maxlength do campo.
+        # _preencher seta via JS `el.value=...` (abaixo), que BYPASSA o maxlength
+        # que o browser normalmente impõe ao digitar. Campos como `descricao`
+        # (Nome) têm maxlength=50; verbas expresso_adaptado com nome longo (>50,
+        # ex.: "INDENIZAÇÃO — INTERVALO INTRAJORNADA (45 MIN/PLANTÃO + 50%)" = 59)
+        # eram setadas INTEIRAS → o servidor REJEITAVA o SAVE por validação de
+        # tamanho, de forma SILENCIOSA (o rich:message do campo não entra no
+        # re-render) → form sem sucesso E sem erro → bot Cancelava → base e
+        # parâmetros DESCARTADOS → liquidação "Falta histórico"/"valor zero".
+        # Truncar ao maxlength resolve (é o que o PJE-Calc aceita no campo).
+        try:
+            _maxlen = loc.first.get_attribute("maxlength")
+            if _maxlen and str(_maxlen).strip().isdigit():
+                _ml = int(_maxlen)
+                if _ml > 0 and len(str(valor)) > _ml:
+                    _orig = str(valor)
+                    valor = str(valor)[:_ml]
+                    self.log(f"  ✂ #80-O {dom_id} truncado a maxlength={_ml}: {_orig!r} → {valor!r}")
+        except Exception:
+            pass
+
         # Detectar campo de data RichFaces Calendar
         is_data_field = dom_id.lower().endswith("inputdate") or "data" in dom_id.lower()
         if is_data_field:

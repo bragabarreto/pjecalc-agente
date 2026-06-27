@@ -1958,3 +1958,21 @@ def test_inv61_base_historico_verba_click_nativo_verificado():
     assert "incluirBaseHistorico" in seg
     # retry + confirmação
     assert "CONFIRMADO na base da verba" in seg
+
+
+def test_inv62_preencher_respeita_maxlength():
+    """#80-O (0000712-53, 27/06/2026): _preencher seta inputs via JS
+    `el.value=...`, que BYPASSA o maxlength que o browser imporia ao digitar.
+    O campo `descricao` (Nome) da verba tem maxlength=50; verbas
+    expresso_adaptado com nome longo (>50) eram setadas inteiras → o servidor
+    rejeitava o SAVE por validação de tamanho, SILENCIOSAMENTE (rich:message
+    fora do re-render) → form sem sucesso/erro → bot Cancelava → base/params
+    descartados → liquidação bloqueada. Fix: _preencher lê o maxlength do campo
+    e TRUNCA o valor. NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn = pw[pw.find("def _preencher(self"):pw.find("def _preencher_data_richfaces")]
+    assert "#80-O" in fn, "fix #80-O ausente em _preencher"
+    assert 'get_attribute("maxlength")' in fn
+    assert "truncado a maxlength" in fn
+    # o truncamento ocorre ANTES do set via JS (el.value)
+    assert fn.find("truncado a maxlength") < fn.find("el.value = valor")
