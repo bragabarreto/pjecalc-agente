@@ -1780,7 +1780,7 @@ def test_inv54_listagem_vazia_recovery_proativo_pre_reflexos():
     Fix: detectar listagem vazia e Fechar+Reabrir PROATIVO ANTES dos reflexos,
     em _configurar_parametros_pos_expresso."""
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):pw.find("def _configurar_parametros_pos_expresso")+13000]
+    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):pw.find("def _configurar_parametros_pos_expresso")+14000]
     assert "#80-D listagem vazia pós-navegação" in fn
     # o recovery proativo vem ANTES do loop de reflexos
     assert fn.find("#80-D listagem vazia") < fn.find("for _r in getattr(v, \"reflexos\"")
@@ -1839,7 +1839,7 @@ def test_inv57_listagem_vazia_reload_leve_antes_de_fr():
     assert pw.count("#80-G") >= 2, "fix #80-G ausente em um dos recoveries"
     # PROATIVO: reload leve vem ANTES do Fechar+Reabrir proativo
     fn = pw[pw.find("def _configurar_parametros_pos_expresso"):
-             pw.find("def _configurar_parametros_pos_expresso") + 13000]
+             pw.find("def _configurar_parametros_pos_expresso") + 14000]
     assert "reload leve" in fn
     assert fn.find("#80-G") < fn.find("Fechar+Reabrir proativo"), (
         "reload leve #80-G deve vir ANTES do F+R proativo"
@@ -1848,4 +1848,26 @@ def test_inv57_listagem_vazia_reload_leve_antes_de_fr():
     bloco_proativo = fn[fn.find("#80-G"):fn.find("Fechar+Reabrir proativo")]
     assert "_fechar_e_reabrir_calculo" not in bloco_proativo, (
         "o reload leve #80-G não pode chamar Fechar+Reabrir (realimenta o lock)"
+    )
+
+
+def test_inv58_aguardar_servidor_ocioso_antes_de_navegar():
+    """#80-H (GEOVANA RAIZ COMUM — PREVENÇÃO): os 2 modos de 'listagem
+    fantasma' (LockTimeout E morte da conversa Seam) têm causa COMUM — o bot
+    NAVEGA para a listagem enquanto o servidor ainda finaliza a op pesada da
+    verba anterior (save Expresso + Regerar Drools, lock 20–40s na VM pequena).
+    O LockTimeout no render MATA a conversa → Recentes VAZIO = cálculo
+    irreabrível (run_J: nOpts=0). Fix: gate _aguardar_servidor_ocioso ANTES da
+    navegação à listagem em _configurar_parametros_pos_expresso — espera o
+    networkidle estabilizar (sem requisições em voo) antes de navegar; não
+    navega (zero risco de matar a conversa). NÃO remover: sem ele os fixes de
+    valor #80-A/C/E ficam bloqueados (forms nunca renderizam)."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _aguardar_servidor_ocioso" in pw, "helper #80-H ausente"
+    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):
+             pw.find("def _configurar_parametros_pos_expresso") + 14000]
+    # o gate é CHAMADO antes do sidebar click li_calculo_verbas
+    assert "_aguardar_servidor_ocioso(" in fn, "gate #80-H não chamado na config de parâmetros"
+    assert fn.find("_aguardar_servidor_ocioso(") < fn.find('_navegar_menu_via_click("li_calculo_verbas")'), (
+        "o gate #80-H deve vir ANTES da navegação ao sidebar (prevenir navegar ocupado)"
     )

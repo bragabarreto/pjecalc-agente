@@ -794,6 +794,54 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
+    def _aguardar_servidor_ocioso(self, contexto: str = "", ciclos: int = 14) -> None:
+        """#80-H (GEOVANA 0000627-04, causa raiz comum — escolha do usuário
+        27/06/2026): PREVENIR a "listagem fantasma".
+
+        A listagem de verbas vinha vazia por DOIS modos (LockTimeout no
+        @Synchronized apresentadorVerbaDeCalculo OU morte da conversa Seam →
+        redirect principal.jsf, com Recentes VAZIO = cálculo irreabrível). A
+        causa COMUM dos dois: o bot NAVEGA para a listagem enquanto o servidor
+        ainda finaliza a operação PESADA da verba anterior (save Expresso c/
+        reflexos + Regerar gerando ocorrências mensais via Drools, que na VM
+        pequena segura o lock 20–40s). O LockTimeout no render da nova
+        navegação MATA a conversa (irrecuperável). Logo: NÃO navegar enquanto
+        ocupado.
+
+        Este gate espera o servidor ESTABILIZAR antes de qualquer navegação à
+        listagem: exige `ciclos_estaveis` rodadas consecutivas em que o
+        networkidle retorna IMEDIATAMENTE (sem requisições em voo) — sinal de
+        que a operação pesada terminou. Não navega (zero risco de matar a
+        conversa); só observa a página corrente.
+        """
+        import time as _t80h
+        ciclos_estaveis = 0
+        ALVO = 2  # 2 rodadas consecutivas idle (~estável)
+        for _i in range(ciclos):
+            _ini = _t80h.monotonic()
+            try:
+                # janela curta: se há request em voo, networkidle SÓ retorna
+                # quando ela termina → _dur grande. Se idle, retorna em ~0.5s.
+                self._page.wait_for_load_state("networkidle", timeout=8000)
+            except Exception:
+                pass
+            _dur = _t80h.monotonic() - _ini
+            if _dur < 1.2:
+                ciclos_estaveis += 1
+                if ciclos_estaveis >= ALVO:
+                    if _i >= ALVO:  # só loga se houve espera real
+                        self.log(f"    ✓ #80-H servidor ocioso ({contexto}) após {_i+1} ciclo(s)")
+                    return
+            else:
+                ciclos_estaveis = 0
+                if _i == 0 or _i % 3 == 0:
+                    self.log(
+                        f"    ⏳ #80-H aguardando servidor terminar op pesada "
+                        f"({contexto}) — ciclo {_i+1}/{ciclos} (req em voo {_dur:.0f}s)"
+                    )
+            self._page.wait_for_timeout(1500)
+        self.log(f"    ⚠ #80-H servidor ainda ocupado após {ciclos} ciclos ({contexto}) — prosseguindo mesmo assim")
+
     def _preencher_prazo_aviso_informado(self, dias: int) -> None:
         """Preenche o campo 'prazoAvisoInformado' que aparece condicionalmente
         após selecionar 'APURACAO_INFORMADA' no campo apuracaoPrazoDoAvisoPrevio.
@@ -5172,6 +5220,11 @@ class PlaywrightAutomatorV2:
         # Fix: forçar iniciar() do apresentador via sidebar click ANTES de
         # cada linkParametrizar. O sidebar click invoca o factory @Begin
         # mapeado em pages.xml, garantindo bean fresco.
+        # ⚠ #80-H: ANTES da navegação, esperar o servidor terminar a op pesada
+        # da verba anterior (save+Regerar Drools). Navegar ocupado dispara
+        # LockTimeout que MATA a conversa (Recentes vazio = irreabrível). Esta
+        # é a causa raiz COMUM dos 2 modos de "listagem fantasma".
+        self._aguardar_servidor_ocioso(contexto=f"pré-listagem {v.nome_pjecalc}")
         try:
             self._navegar_menu_via_click("li_calculo_verbas")
             # ⚠ FIX #71: o sidebar click é navegação Seam REAL — aguardar o
