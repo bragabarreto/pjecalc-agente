@@ -1976,3 +1976,23 @@ def test_inv62_preencher_respeita_maxlength():
     assert "truncado a maxlength" in fn
     # o truncamento ocorre ANTES do set via JS (el.value)
     assert fn.find("truncado a maxlength") < fn.find("el.value = valor")
+
+
+def test_inv63_escala_inicio_hora_e_aguarda_habilitar():
+    """#80-B (0000712-53, 27/06/2026): cartão ESCALA não apurava dias → verbas
+    IMPORTADA_DO_CARTAO (INTERVALO) liquidavam qtd=0. Causa: o campo
+    valorHoraInicioEscala ('Início Escala', size=6 timeMask = HORA, não data)
+    é obrigatório e só HABILITA após o a4j onchange=mudarTipoEscala do select
+    'escalas'. O bot (a) esperava só 800ms → campo disabled → _preencher pulava
+    → save 'Campo obrigatório: Início Escala' → escala não salva → 0 dias; e
+    (b) preenchia esc.inicio (uma DATA) num campo de HORA. Fix: esperar o A4J +
+    o campo habilitar (wait_for_function !disabled) e preencher com a HORA de
+    entrada do 1º turno (ex.: 19:00). NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn = pw[pw.find('elif preenchimento == "ESCALA"'):pw.find('elif preenchimento == "ESCALA"') + 3200]
+    assert "#80-B" in fn, "fix #80-B ausente"
+    # usa a hora de entrada do 1º turno (não a data esc.inicio)
+    assert "_hora_ini" in fn and "turnos" in fn and "entrada" in fn
+    # aguarda o campo habilitar antes de preencher
+    assert "!e.disabled" in fn or "e.disabled" in fn
+    assert fn.find("valorHoraInicioEscala") < fn.find('_preencher("valorHoraInicioEscala"') or "_preencher(\"valorHoraInicioEscala\", _hora_ini" in fn

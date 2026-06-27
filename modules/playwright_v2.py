@@ -7562,9 +7562,41 @@ class PlaywrightAutomatorV2:
                 if hasattr(tipo_escala, "value"):
                     tipo_escala = tipo_escala.value
                 self._selecionar("escalas", tipo_escala)
-                self._aguardar_ajax(800)
-                if getattr(esc, "inicio", ""):
-                    self._preencher("valorHoraInicioEscala", esc.inicio, obrigatorio=False)
+                # ⚠ #80-B (0000712-53, 27/06/2026): o select 'escalas' tem
+                # <a4j:support onchange=mudarTipoEscala> que RE-RENDERIZA e
+                # HABILITA valorHoraInicioEscala (disabled enquanto o tipo é
+                # O/C/S/T). 800ms era curto → o campo ficava disabled →
+                # _preencher pulava → save da escala falhava "Campo obrigatório:
+                # Início Escala" → escala NÃO salva → apuração gerava 0 dias →
+                # verbas IMPORTADA_DO_CARTAO (ex.: INTERVALO) liquidavam qtd=0.
+                # Esperar o A4J + o campo HABILITAR antes de preencher.
+                self._aguardar_ajax(5000)
+                self._page.wait_for_timeout(800)
+                # "Início Escala" (valorHoraInicioEscala, size=6, timeMask) é a
+                # HORA de início da escala — NÃO uma data. esc.inicio costuma vir
+                # como DATA (= data_inicial do cartão) → valor errado p/ campo de
+                # hora. Usar a ENTRADA do 1º turno da 1ª jornada (ex.: 19:00).
+                _hora_ini = None
+                _jorns = getattr(esc, "jornadas", []) or []
+                if _jorns:
+                    _turnos0 = getattr(_jorns[0], "turnos", []) or []
+                    if _turnos0:
+                        _hora_ini = getattr(_turnos0[0], "entrada", None)
+                if not _hora_ini:
+                    _ini = str(getattr(esc, "inicio", "") or "")
+                    _hora_ini = _ini if ":" in _ini else None  # só usa se parecer HH:MM
+                if _hora_ini:
+                    # aguardar o campo habilitar (re-render do mudarTipoEscala)
+                    try:
+                        self._page.wait_for_function(
+                            "() => { const e=document.querySelector(\"input[id$=':valorHoraInicioEscala']\"); return e && !e.disabled; }",
+                            timeout=8000,
+                        )
+                    except Exception:
+                        self.log("  ⚠ #80-B valorHoraInicioEscala não habilitou em 8s")
+                    self._preencher("valorHoraInicioEscala", _hora_ini, obrigatorio=False)
+                # qtdDiasTrabalhados só é editável p/ escala OUTRA (fixas são
+                # automáticas) — _preencher pula sozinho se disabled.
                 qtd = int(getattr(esc, "quantidade_dias", 1) or 1)
                 self._preencher("qtdDiasTrabalhados", str(qtd), obrigatorio=False)
                 self._aguardar_ajax(1500)
