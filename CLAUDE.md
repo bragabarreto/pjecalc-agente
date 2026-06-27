@@ -1366,6 +1366,55 @@ Protegido em `tests/test_invariantes_indenizacao.py::test_inv51_*`.
 ⚠️ **NÃO reverter** o Fechar+Reabrir pré-loop Expresso — sem ele a 1ª verba com
 reflexos auto-gerados (HE 50%, ADICIONAIS, etc.) volta a sumir da liquidação.
 
+### "Listagem de verbas fantasma" = LockTimeout no @Synchronized — ✅ RESOLVIDO (#80-D/G/H/I, 27/06/2026, GEOVANA 0000627-04, inv56–58)
+
+**Sintoma (meses de fragilidade):** na fase de parâmetros, a listagem de verbas
+vinha "vazia", disparando recoveries (Fechar+Reabrir) que NÃO convergiam (runs
+com 0 "Parâmetros salvos" em ~600–1144 linhas SSE). Travava os fixes de valor
+#80-A/C/E (forms nunca renderizavam).
+
+**RAIZ (java.log + DIAG-#80-F + log persistido):** a "listagem vazia" é a página
+**"Erro Interno no Servidor"** do
+`org.jboss.seam.core.LockTimeoutException: could not acquire lock on
+@Synchronized component: apresentadorVerbaDeCalculo`. `verba-calculo.xhtml`
+renderiza via `#{apresentadorVerbaDeCalculo.verbaDeCalculoVO}` (@Synchronized, 1
+req por vez). O bot NAVEGA à listagem/form enquanto o servidor ainda finaliza a
+op pesada da verba anterior (save Expresso c/ reflexos + Regerar Drools, 20–40s
+na VM pequena). O timeout do lock é o da **ANOTAÇÃO `@Synchronized` (~1000ms no
+bytecode)** — `concurrent-request-timeout` do `<core:manager>` NÃO o afeta
+(verificado: LockTimeout dispara mesmo com 120000). O LockTimeout no render
+**MATA a conversa Seam** → redirect `principal.jsf` com **Recentes VAZIO
+(nOpts=0) = cálculo IRREABRÍVEL** (perda total — por isso o recovery reativo
+nunca convergia).
+
+**Fix DEFINITIVO = PREVENÇÃO (não recovery):**
+- **#80-H** (`_aguardar_servidor_ocioso`): esperar o networkidle ESTABILIZAR (2
+  ciclos sem requisição em voo) ANTES de navegar — não navega = não mata a
+  conversa. Chamado 2× em `_configurar_parametros_pos_expresso`: pré-listagem
+  (antes do sidebar `li_calculo_verbas`) e pré-FORM (após o loop de reflexos,
+  antes do click de Parâmetros). `test_inv58`.
+- **#80-G** (rede de segurança p/ contenção residual com conversa VIVA): ao
+  detectar a página de erro, poll 4s até ~84s recarregando a MESMA URL (sem nova
+  conversa); bail imediato se redirecionar p/ principal.jsf. `test_inv57`.
+- **#80-I**: reflexos MANUAL (RSR/FGTS criados como verba) navegam para o form do
+  reflexo, SAINDO da listagem. Re-ancorar na listagem após o loop de reflexos se
+  não houver `linkParametrizar` — senão o match exact-cell do PRINCIPAL falha e a
+  quantidade da verba (HE 50%=157,5 / ADICIONAL=80) nunca é setada.
+- **#80-E / _marcar_radio Estratégia 2**: JS por seletor (`page.evaluate`)
+  robusto a detachment do A4J — o `locator.click(force=True)` dava timeout 30s
+  "element detached" e engolia o dispatchEvent (afetava tipoDaQuantidade,
+  multaDoFgts=40%, geraReflexo).
+
+**Validado end-to-end (run_K/L, GEOVANA):** liquidação `totalErros=0` + PJC
+exportado; "✓ #80-G listagem recuperada via reload leve (10 verbas) — sem F+R"
+(conversa VIVA graças ao #80-H).
+
+⚠️ **NÃO reverter** os gates `_aguardar_servidor_ocioso` nem o re-ancoramento
+#80-I — sem eles a "listagem fantasma" e a morte-de-conversa (cálculo
+irreabrível) voltam, regredindo a GEOVANA e qualquer cálculo pesado (3+ verbas de
+cartão + reflexos). `concurrent-request-timeout=120000` é mantido (inofensivo,
+cobre contenção de CONVERSA — NÃO é a alavanca do lock @Synchronized).
+
 ## Limitações conhecidas (19/05/2026) — não-bloqueantes
 
 Após resolução do bug Seam EPC via H2 TCP, o bot completa o ciclo end-to-end
