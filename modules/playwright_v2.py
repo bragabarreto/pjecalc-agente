@@ -586,23 +586,38 @@ class PlaywrightAutomatorV2:
                 return
             except Exception as e:
                 self.log(f"  ⚠ radio {dom_id}={valor}: click humano falhou ({e}) — tentando fallback")
-            # Estratégia 2: fallback com force=True + dispatchEvent
-            # (rare path — só ativa se hit-test falhar)
+            # Estratégia 2: fallback JS por SELETOR — robusto a detachment.
+            # ⚠ #80-H (GEOVANA): quando o A4J re-renderiza o radio, o
+            # `target.click(force=True)` do locator dava TIMEOUT 30s ("element
+            # detached from the DOM") e ENGOLIA o dispatchEvent que vinha
+            # depois → multaDoFgts=40%, geraReflexo, tipoDaQuantidade do reflexo
+            # ficavam sem setar. Fix: consultar o radio por SELETOR via
+            # page.evaluate (não pelo locator preso ao handle antigo) e setar
+            # checked + change — funciona mesmo com o elemento re-renderizado.
+            # NÃO regride o radio `valor` (CALCULADO/INFORMADO, que exige evento
+            # trusted): a Estratégia 1 (human click) continua sendo a 1ª
+            # tentativa; este fallback só roda se ela falhar — caso em que era
+            # falha total de qualquer forma.
             try:
-                target.click(force=True)
-                try:
-                    target.evaluate(
-                        """el => {
-                            el.checked = true;
-                            el.dispatchEvent(new Event('click', {bubbles: true}));
-                            el.dispatchEvent(new Event('change', {bubbles: true}));
-                            el.dispatchEvent(new Event('input', {bubbles: true}));
-                        }"""
-                    )
-                except Exception:
-                    pass
-                self.log(f"  ✓ radio {dom_id} = {valor} (fallback force)")
-                return
+                _ok_js = self._page.evaluate(
+                    """(args) => {
+                        const dom_id = args[0], valor = args[1];
+                        const r = document.querySelector(
+                            "input[type=radio][id*='"+dom_id+"'][value='"+valor+"'], "+
+                            "input[type=radio][name*='"+dom_id+"'][value='"+valor+"']"
+                        );
+                        if (!r) return false;
+                        r.checked = true;
+                        r.dispatchEvent(new Event('change', {bubbles: true}));
+                        return true;
+                    }""",
+                    [dom_id, valor],
+                )
+                if _ok_js:
+                    self._aguardar_ajax(3000)
+                    self.log(f"  ✓ radio {dom_id} = {valor} (fallback JS dispatchEvent)")
+                    return
+                self.log(f"  ⚠ radio {dom_id}={valor}: fallback JS não achou o radio")
             except Exception as e:
                 self.log(f"  ⚠ radio {dom_id}={valor}: fallback também falhou ({e})")
         if obrigatorio:
@@ -5413,6 +5428,15 @@ class PlaywrightAutomatorV2:
                 self._configurar_reflexo(v, _r)
             except Exception as _e:
                 self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
+        # ⚠ #80-H (GEOVANA): os reflexos acima fazem SAVES pesados (reflexo
+        # Manual c/ fórmula, Regerar). Se o click de Parâmetros (que abre o
+        # FORM da verba, lendo apresentadorVerbaDeCalculo) disparar enquanto
+        # esses saves ainda finalizam, o form NÃO carrega ("wait_for descricao
+        # visível falhou") → _configurar_quantidade_radio nunca roda → HORAS
+        # EXTRAS 50%/ADICIONAL NOTURNO saem com quantidade=0 (run_K). Esperar
+        # o servidor ficar ocioso ANTES de abrir o form (mesma causa raiz comum
+        # da listagem fantasma, agora no nível do FORM).
+        self._aguardar_servidor_ocioso(contexto=f"pré-form {v.nome_pjecalc}")
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
