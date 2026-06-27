@@ -5458,15 +5458,35 @@ class PlaywrightAutomatorV2:
                 f"    ↪ #80-I re-ancorar listagem após reflexos Manual "
                 f"(p/ abrir o form principal de {v.nome_pjecalc})"
             )
-            try:
-                self._navegar_menu_via_click("li_calculo_verbas")
-                self._page.wait_for_function(
-                    "() => document.querySelectorAll('a.linkParametrizar').length > 0",
-                    timeout=15000,
-                )
+            # PACIENTE: a re-navegação pode bater no LockTimeout (o save do
+            # reflexo Manual ainda segura o lock — o gate networkidle não
+            # detecta o lock retido após a resposta). Retry da nav até o lock
+            # liberar (poll), em vez de desistir em 15s e pular a verba.
+            _reanc_ok = False
+            for _t_reanc in range(1, 13):  # ~12 × ~6s ≈ 72s
+                try:
+                    self._navegar_menu_via_click("li_calculo_verbas")
+                    self._page.wait_for_function(
+                        "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                        timeout=5000,
+                    )
+                    _reanc_ok = True
+                    break
+                except Exception:
+                    if _t_reanc == 1 or _t_reanc % 3 == 0:
+                        self.log(
+                            f"    ⏳ #80-I re-ancorar: listagem ainda não renderizou "
+                            f"(lock?) — retry {_t_reanc}/12"
+                        )
+                    self._page.wait_for_timeout(4000)
+            if _reanc_ok:
                 self._page.wait_for_timeout(1200)
-            except Exception as _ei:
-                self.log(f"    ⚠ #80-I re-ancorar listagem: {_ei}")
+                self.log(f"    ✓ #80-I listagem re-ancorada p/ {v.nome_pjecalc}")
+            else:
+                self.log(
+                    f"    ⚠ #80-I re-ancorar falhou após 12 tentativas "
+                    f"({v.nome_pjecalc}) — click de Parâmetros pode pular a verba"
+                )
         # ESTRATÉGIA DEFINITIVA (confirmada via inspeção DOM 17/05/2026):
         # Os links têm onclick = "A4J.AJAX.Submit('formulario', event, {...
         # parameters: {'<id>':'<id>'}}); return false;". Clicks programáticos
