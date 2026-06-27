@@ -5512,6 +5512,19 @@ class PlaywrightAutomatorV2:
                         )
                     except Exception:
                         continue
+                    # ⚠ #80-G v3 (run_J GEOVANA): há DOIS modos de "listagem
+                    # vazia". (1) LockTimeout → fica em verba-calculo.jsf com a
+                    # página de erro: vale esperar (poll). (2) Conversa Seam
+                    # MORTA → o goto REDIRECIONA para principal.jsf: a conv não
+                    # volta por reload, só via Recentes (nova conv). Detectar o
+                    # redirect e BAILAR já p/ o F+R, sem gastar 84s recarregando
+                    # uma conversa morta (run_J: 6 verbas × 84s desperdiçados).
+                    if "principal.jsf" in (self._page.url or ""):
+                        self.log(
+                            f"    ↪ #80-G conversa morta (redirect→principal.jsf) "
+                            f"em '{v.nome_pjecalc}' — reload não recupera; indo ao F+R"
+                        )
+                        break
                     try:
                         self._page.wait_for_function(
                             "() => document.querySelectorAll('a.linkParametrizar').length > 0",
