@@ -683,14 +683,28 @@ def test_inv15_normalizer_nao_consolida_periodos_com_gap():
     assert len(res["historico_salarial"]) == 2, "gap em períodos deve impedir consolidação"
 
 
-def test_inv15_bot_expande_evolucao():
-    """Bot expande hist.evolucao em N entradas internamente (path seguro:
-    PJE-Calc continua recebendo N linhas como antes, prévia mostra 1).
-    """
+def test_inv15_bot_aplica_evolucao_nas_ocorrencias():
+    """#80-L (0000712-53, 27/06/2026): a evolução de valores de UM histórico
+    salarial é aplicada às OCORRÊNCIAS mensais (1 histórico só), NÃO mais
+    expandida em N históricos separados (bug: 'REMUNERACAO MENSAL' com 31 steps
+    virava 31 históricos poluindo a listagem). O PJE-Calc suporta valores
+    mensais distintos dentro de um único histórico (listagemMC editável).
+    Fix: fase_historico_salarial itera os históricos da prévia DIRETO (sem
+    _expandir_evolucao_historico) e, após 'Gerar Ocorrências', chama
+    _aplicar_evolucao_ocorrencias_historico p/ editar o valor de cada mês."""
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    assert "_expandir_evolucao_historico" in pw
-    # Bot precisa CHAMAR essa expansão antes do loop principal
-    assert "historicos_para_processar" in pw or "expandir_evolucao_historico(self.previa" in pw
+    # helper que aplica a evolução nas ocorrências mensais existe e é chamado
+    assert "def _aplicar_evolucao_ocorrencias_historico" in pw
+    assert "_aplicar_evolucao_ocorrencias_historico(hist)" in pw
+    # a fase NÃO expande mais em N históricos (itera a prévia direto)
+    fase = pw[pw.find("def fase_historico_salarial"):
+              pw.find("def fase_historico_salarial") + 1500]
+    assert "historicos_para_processar = list(self.previa.historico_salarial)" in fase, (
+        "fase_historico_salarial deve iterar a prévia direto (sem expandir em N históricos)"
+    )
+    assert "_expandir_evolucao_historico(" not in fase, (
+        "fase_historico_salarial NÃO deve mais chamar _expandir_evolucao_historico"
+    )
 
 
 def test_inv16_reroute_inf_desligamento_lista_excecoes():
@@ -1630,8 +1644,9 @@ def test_inv47_previa_editor_evolucao_salarial():
     """#77 (L'Oreal 0001858-66, orientação do usuário 19/06/2026): a prévia deve
     permitir registrar UM histórico salarial com a EVOLUÇÃO do valor ao longo do
     contrato (faixas competência→valor), não históricos separados por faixa.
-    Schema (HistoricoSalarial.evolucao) e bot (_expandir_evolucao_historico) já
-    suportavam; faltava o editor na prévia."""
+    Schema (HistoricoSalarial.evolucao) suporta; o editor na prévia registra a
+    evolução. O bot aplica essa evolução nas OCORRÊNCIAS de 1 único histórico
+    (#80-L, ver test_inv15)."""
     tpl = (REPO_ROOT / "templates" / "previa_v2.html").read_text(encoding="utf-8")
     # editor de faixas no card de histórico
     assert "Evolução salarial" in tpl
@@ -1640,9 +1655,9 @@ def test_inv47_previa_editor_evolucao_salarial():
     assert "function _sincEvolucao" in tpl
     # grava no campo canônico do schema
     assert ".evolucao[" in tpl
-    # o bot expande mantendo o mesmo nome (1 histórico lógico)
+    # o bot aplica a evolução nas ocorrências de 1 histórico (não expande em N)
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    assert "_expandir_evolucao_historico" in pw
+    assert "_aplicar_evolucao_ocorrencias_historico" in pw
 
 
 def test_inv48_regerar_seleciona_verbas():

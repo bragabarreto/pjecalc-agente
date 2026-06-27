@@ -2127,6 +2127,82 @@ class PlaywrightAutomatorV2:
                 expandido.append(nova)
         return expandido
 
+    def _aplicar_evolucao_ocorrencias_historico(self, hist) -> None:
+        """#80-L (0000712-53): aplica a evolução de valores de UM histórico
+        salarial às ocorrências MENSAIS já geradas (em vez de criar N históricos
+        separados). Após "Gerar Ocorrências", a listagemMC tem 1 linha por mês
+        (todas com o valor base). Aqui setamos o `valor` de cada mês conforme a
+        evolução, em que cada step VIGORA da sua competência até a do próximo
+        (formato step — vale tanto para evolução mensal completa quanto para
+        poucos reajustes). O Save (full-form) persiste TODOS os valores das
+        ocorrências de uma vez (não dependemos do a4j:support onchange por
+        campo, evitando uma tempestade de AJAX em históricos longos)."""
+        ev = getattr(hist, "evolucao", None) or []
+        if not ev:
+            return
+
+        def _ci(comp: str) -> int:
+            m, a = comp.split("/")
+            return int(a) * 12 + int(m)
+
+        steps = sorted(
+            ((_ci(s.competencia), s.valor_brl) for s in ev), key=lambda t: t[0]
+        )
+        # Ler o mês (coluna `data`) de cada linha de ocorrência da listagemMC.
+        linhas = self._page.evaluate(
+            r"""() => [...document.querySelectorAll("input[id*=':listagemMC:'][id$=':valor']")]
+                .map(inp => {
+                    const m = inp.id.match(/:listagemMC:(\d+):valor$/);
+                    const idx = m ? m[1] : null;
+                    let mes = '';
+                    if (idx !== null) {
+                        const pref = inp.id.slice(0, inp.id.lastIndexOf(':valor'));
+                        const d = document.getElementById(pref + ':data');
+                        mes = d ? (d.textContent || '').trim() : '';
+                    }
+                    return {id: inp.id, mes: mes};
+                })"""
+        )
+        if not linhas:
+            self.log(f"    ⚠ #80-L sem ocorrências geradas p/ '{hist.nome}' — evolução não aplicada")
+            return
+        mapping = {}
+        for r in linhas:
+            mes = (r.get("mes") or "").strip()
+            if "/" not in mes:
+                continue
+            try:
+                ci = _ci(mes)
+            except Exception:
+                continue
+            val = steps[0][1]
+            for sc, sv in steps:
+                if sc <= ci:
+                    val = sv
+                else:
+                    break
+            mapping[r["id"]] = _fmt_br(val)
+        if not mapping:
+            self.log(f"    ⚠ #80-L não foi possível mapear meses das ocorrências de '{hist.nome}'")
+            return
+        n_set = self._page.evaluate(
+            """(mapa) => {
+                let n = 0;
+                for (const id in mapa) {
+                    const inp = document.getElementById(id);
+                    if (!inp) continue;
+                    inp.value = mapa[id];
+                    n++;
+                }
+                return n;
+            }""",
+            mapping,
+        )
+        self.log(
+            f"    ✓ #80-L evolução aplicada a {n_set}/{len(linhas)} ocorrência(s) "
+            f"de '{hist.nome}' ({len(steps)} step(s))"
+        )
+
     def fase_historico_salarial(self) -> None:
         self.log("Fase 3 — Histórico Salarial")
         self._navegar_menu("li_calculo_historico_salarial")
@@ -2137,11 +2213,15 @@ class PlaywrightAutomatorV2:
 
         defaults_norm = {_norm(n) for n in self._HISTORICOS_DEFAULT}
 
-        # Expandir evolução em entradas individuais antes de iterar
-        # (mantém comportamento estável do bot — N entradas no PJE-Calc).
-        historicos_para_processar = self._expandir_evolucao_historico(
-            self.previa.historico_salarial
-        )
+        # ⚠ #80-L (0000712-53, 27/06/2026): NÃO expandir a evolução em N
+        # históricos separados (bug recorrente: "REMUNERACAO MENSAL" com 31
+        # steps virava 31 históricos poluindo a listagem). O PJE-Calc suporta a
+        # evolução de valores DENTRO de um único histórico: cria-se 1 histórico
+        # cobrindo o período todo, clica "Gerar Ocorrências" e edita-se o valor
+        # de cada mês na tabela de ocorrências (listagemMC, coluna `valor`
+        # editável). Ver _aplicar_evolucao_ocorrencias_historico. A prévia já
+        # traz 1 entrada consolidada por nome com .evolucao — iteramos direto.
+        historicos_para_processar = list(self.previa.historico_salarial)
         for idx, hist in enumerate(historicos_para_processar):
             # Históricos default (PJE-Calc já criou em Fase 2): pulamos aqui
             # pois Seam está em modo criação — listagem inacessível. Edição
@@ -2284,6 +2364,15 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ✓ Ocorrências geradas para '{hist.nome}'")
             except Exception as e:
                 self.log(f"  ⚠ Falha ao gerar ocorrências '{hist.nome}': {e}")
+
+            # ⚠ #80-L: aplicar a evolução de valores ÀS ocorrências mensais
+            # (em vez de criar N históricos). Edita o valor de cada mês na
+            # listagemMC conforme os steps da evolução.
+            if getattr(hist, "evolucao", None):
+                try:
+                    self._aplicar_evolucao_ocorrencias_historico(hist)
+                except Exception as e:
+                    self.log(f"  ⚠ #80-L falha ao aplicar evolução em '{hist.nome}': {e}")
 
             self._clicar("salvar")
             self._aguardar_ajax(8000)
