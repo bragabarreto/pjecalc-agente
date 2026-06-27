@@ -194,6 +194,36 @@ playwright_pjecalc.py (Automação)
 
 ---
 
+## Regra obrigatória — Evolução salarial = OCORRÊNCIAS de 1 histórico, não N históricos (#80-L)
+
+> **Quando um histórico salarial INFORMADO tem evolução de valores ao longo do
+> tempo (`HistoricoSalarial.evolucao`), registrar UM ÚNICO histórico cobrindo o
+> período todo e aplicar a evolução nas OCORRÊNCIAS MENSAIS — NUNCA criar N
+> históricos separados (um por faixa/mês).**
+>
+> **Bug recorrente (0000712-53, 27/06/2026):** `_expandir_evolucao_historico`
+> explodia a evolução em N históricos ("REMUNERACAO MENSAL" com 31 steps → 31
+> históricos; "PISO SALARIAL" → 4). Poluía a listagem. A prévia estava correta
+> (1 entrada por nome com `.evolucao`).
+>
+> **Modelo PJE-Calc** (`historico-salarial.xhtml`): 1 histórico = Competência
+> Inicial/Final + valor base + botão "Gerar Ocorrências" (`cmdGerarOcorrencias`)
+> + tabela `listagemMC` com coluna `valor` editável por mês
+> (`formulario:listagemMC:N:valor`; mês em `...:N:data`).
+>
+> **Fix:** `fase_historico_salarial` itera a prévia DIRETO (sem expandir); após
+> "Gerar Ocorrências", `_aplicar_evolucao_ocorrencias_historico` seta o valor de
+> cada mês conforme o step vigente (cada step vale até a competência do próximo).
+> Os valores são setados via JS sem disparar change (evita tempestade A4J em
+> históricos longos); o Save full-form persiste todos. NÃO reverter para a
+> expansão em N históricos.
+>
+> Validado (0000712-53, H2): REMUNERACAO MENSAL=1, PISO=1 (não 35); ocorrências
+> com valores evoluindo (PISO 1.727,26 em 2024, 1.827,96 em 01/2025). Protegido
+> por `test_inv15` (reescrito) + `test_inv47`.
+
+---
+
 ## Regras obrigatórias — 5 fixes do caso THAÍS (0000183-68, 10/06/2026) — NÃO REVERTER
 
 > Auditoria sentença→JSON→prévia→PJC do cálculo THAÍS revelou 5 bugs sistêmicos.
