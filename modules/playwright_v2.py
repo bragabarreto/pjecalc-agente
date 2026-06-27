@@ -7616,6 +7616,41 @@ class PlaywrightAutomatorV2:
                     except Exception as _ek:
                         self.log(f"  ⚠ #80-B type início escala: {_ek} — fallback _preencher")
                         self._preencher("valorHoraInicioEscala", _hora_ini, obrigatorio=False)
+                    # ⚠ #80-B v3 (0000712-53, run7 flaky): o onkeyup
+                    # atualizarListaEscala é ASSÍNCRONO — às vezes não conclui o
+                    # auto-compute do turno antes do save → escala salva vazia →
+                    # apuração 0 dias → INTERVALO qtd=0 (run6 ok, run7 falhou com
+                    # o MESMO código). Tornar DETERMINÍSTICO: verificar que o
+                    # turno auto-computou (listagemEscala:0:entrada1 com valor) e
+                    # REDIGITAR o início até aparecer (retry ×4).
+                    def _turno_computado():
+                        try:
+                            return self._page.evaluate(
+                                "() => { const e=document.querySelector(\"input[id$=':listagemEscala:0:entrada1']\"); return !!(e && (e.value||'').replace(/[_\\s]/g,'').length >= 3); }"
+                            )
+                        except Exception:
+                            return False
+                    for _t_esc in range(1, 5):
+                        if _turno_computado():
+                            break
+                        self.log(f"  ⟳ #80-B turno da escala não auto-computou (tent {_t_esc}/4) — redigitando início")
+                        try:
+                            _li = self._page.locator("input[id$=':valorHoraInicioEscala']").first
+                            _li.click()
+                            try:
+                                _li.fill("")
+                            except Exception:
+                                pass
+                            _li.press_sequentially(str(_hora_ini), delay=130)
+                            _li.press("Tab")  # blur/keyup final p/ disparar o A4J
+                        except Exception:
+                            pass
+                        self._aguardar_ajax(6000)
+                        self._page.wait_for_timeout(1500)
+                    if _turno_computado():
+                        self.log("  ✓ #80-B turno da escala auto-computado (listagemEscala populada)")
+                    else:
+                        self.log("  ⚠ #80-B turno da escala NÃO auto-computou após 4 tentativas — apuração pode dar 0 dias")
                 # qtdDiasTrabalhados só é editável p/ escala OUTRA (fixas são
                 # automáticas) — _preencher pula sozinho se disabled.
                 qtd = int(getattr(esc, "quantidade_dias", 1) or 1)
