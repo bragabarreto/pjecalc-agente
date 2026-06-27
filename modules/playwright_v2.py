@@ -7594,7 +7594,28 @@ class PlaywrightAutomatorV2:
                         )
                     except Exception:
                         self.log("  ⚠ #80-B valorHoraInicioEscala não habilitou em 8s")
-                    self._preencher("valorHoraInicioEscala", _hora_ini, obrigatorio=False)
+                    # ⚠ #80-B v2 (0000712-53): o campo tem <a4j:support
+                    # event="onkeyup" action="atualizarListaEscala()"> que
+                    # AUTO-COMPUTA os turnos da escala fixa (12x36 etc.) a partir
+                    # da hora de início. _preencher seta via JS (input/change/blur)
+                    # — que NÃO dispara onkeyup → atualizarListaEscala não roda →
+                    # jornada sem período → save "A jornada deve ter pelo menos um
+                    # período de lançamento". Fix: DIGITAR via teclado real
+                    # (press_sequentially) p/ disparar o onkeyup e o auto-compute.
+                    try:
+                        _loc_ini = self._page.locator("input[id$=':valorHoraInicioEscala']").first
+                        _loc_ini.click()
+                        try:
+                            _loc_ini.fill("")
+                        except Exception:
+                            pass
+                        _loc_ini.press_sequentially(str(_hora_ini), delay=90)
+                        self.log(f"  ✓ #80-B valorHoraInicioEscala (teclado real, dispara atualizarListaEscala) = {_hora_ini}")
+                        self._aguardar_ajax(5000)
+                        self._page.wait_for_timeout(1000)
+                    except Exception as _ek:
+                        self.log(f"  ⚠ #80-B type início escala: {_ek} — fallback _preencher")
+                        self._preencher("valorHoraInicioEscala", _hora_ini, obrigatorio=False)
                 # qtdDiasTrabalhados só é editável p/ escala OUTRA (fixas são
                 # automáticas) — _preencher pula sozinho se disabled.
                 qtd = int(getattr(esc, "quantidade_dias", 1) or 1)
