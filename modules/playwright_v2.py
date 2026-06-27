@@ -8731,12 +8731,64 @@ class PlaywrightAutomatorV2:
             self._marcar_radio("tipoDeDevedor", h.tipo_devedor)
             self._aguardar_ajax(1500)
 
-            # Quando devedor=RECLAMANTE, sempre cobrar (nunca descontar dos créditos)
-            # ⚠ ID REAL do template (honorarios.xhtml:118): tipoCobrancaReclamante
-            # (radio renderizado condicionalmente quando tipoDeDevedor=RECLAMANTE)
-            if h.tipo_devedor == "RECLAMANTE":
-                self._marcar_radio("tipoCobrancaReclamante", "COBRAR")
-                self._aguardar_ajax(1000)
+            # Quando devedor=RECLAMANTE, SEMPRE "Cobrar do reclamante" (nunca
+            # "Descontar dos créditos"). ⚠ #80-K (bug recorrente reportado pelo
+            # usuário 27/06/2026): o radio `tipoCobrancaReclamante`
+            # (honorarios.xhtml:118) só RENDERIZA após o onchange A4J de
+            # tipoDeDevedor (pnlParametrosReclamante rendered=#{...eq 'RECLAMANTE'}).
+            # O bot marcava cedo demais / a marcação não persistia → ficava o
+            # DEFAULT do bean (TipoCobrancaReclamanteEnum.DESCONTAR_CREDITO) →
+            # honorário do reclamante saía "descontar dos créditos" (errado).
+            # Enum (javap): COBRAR="Cobrar do reclamante" / DESCONTAR_CREDITO=
+            # "Descontar dos créditos do reclamante" (o <s:selectItems> usa o
+            # NOME da constante como value — confirmado por tipoValor/tipoDeDevedor).
+            # Fix: esperar o radio renderizar + marcar COBRAR por value('COBRAR'/'C')
+            # OU label("Cobrar do reclamante") via JS + VERIFICAR + retry ×3.
+            _devedor = str(getattr(h.tipo_devedor, "value", h.tipo_devedor) or "").upper()
+            if _devedor == "RECLAMANTE":
+                try:
+                    self._page.wait_for_selector(
+                        "input[type='radio'][id*='tipoCobrancaReclamante']",
+                        state="attached", timeout=8000,
+                    )
+                except Exception:
+                    self.log("  ⚠ #80-K painel tipoCobrancaReclamante não renderizou em 8s")
+                _cobr_ok = False
+                for _tk in range(1, 4):
+                    _cobr_ok = self._page.evaluate(
+                        """() => {
+                            const rads = [...document.querySelectorAll("input[type=radio][id*='tipoCobrancaReclamante']")];
+                            if (!rads.length) return false;
+                            const isCobrar = (r) => {
+                                const v = (r.value||'').toUpperCase();
+                                if (v === 'COBRAR' || v === 'C') return true;
+                                // por label: o texto ao lado do radio
+                                let t = '';
+                                const lbl = r.labels && r.labels[0];
+                                if (lbl) t = lbl.textContent || '';
+                                if (!t && r.nextSibling) t = (r.nextSibling.textContent || r.nextSibling.nodeValue || '');
+                                if (!t && r.parentElement) t = r.parentElement.textContent || '';
+                                t = t.toUpperCase();
+                                return t.includes('COBRAR DO RECLAMANTE') && !t.includes('DESCONTAR');
+                            };
+                            const alvo = rads.find(isCobrar);
+                            if (!alvo) return false;
+                            if (!alvo.checked) {
+                                alvo.checked = true;
+                                alvo.dispatchEvent(new Event('click', {bubbles: true}));
+                                alvo.dispatchEvent(new Event('change', {bubbles: true}));
+                            }
+                            return alvo.checked === true;
+                        }"""
+                    )
+                    self._aguardar_ajax(1000)
+                    if _cobr_ok:
+                        break
+                    self._page.wait_for_timeout(600)
+                self.log(
+                    f"  {'✓' if _cobr_ok else '🛑'} #80-K Honorário do RECLAMANTE: "
+                    f"cobrança = COBRAR do reclamante (confirmado={_cobr_ok})"
+                )
 
             self._marcar_radio("tipoValor", h.tipo_valor.value)
             self._aguardar_ajax(2000)

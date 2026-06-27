@@ -1900,3 +1900,24 @@ def test_inv59_reflexos_manual_deferidos_apos_principal():
     assert fn.find("coletar_manual_em=_manuais_deferidos") < fn.find("for _rm in _manuais_deferidos"), (
         "a coleta deve vir ANTES da criação dos Manual deferidos"
     )
+
+
+def test_inv60_honorario_reclamante_sempre_cobrar():
+    """#80-K (bug recorrente 27/06/2026): honorários sucumbenciais devidos PELO
+    reclamante devem ser SEMPRE "Cobrar do reclamante" (TipoCobrancaReclamante
+    .COBRAR), NUNCA "Descontar dos créditos" (DESCONTAR_CREDITO, default do
+    bean). O radio tipoCobrancaReclamante só renderiza após o onchange A4J de
+    tipoDeDevedor; a marcação cedo/não-persistida deixava o default DESCONTAR.
+    Fix: esperar o radio renderizar + marcar COBRAR (por value 'COBRAR'/'C' OU
+    label 'Cobrar do reclamante') via JS + VERIFICAR + retry. NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    i = pw.find("#80-K")
+    assert i > 0, "fix #80-K ausente"
+    seg = pw[i:i+2600]
+    # espera o radio renderizar antes de marcar
+    assert "tipoCobrancaReclamante" in seg
+    assert "wait_for_selector" in seg
+    # marca por value COBRAR/C ou label "Cobrar do reclamante"
+    assert "COBRAR" in seg and "Cobrar do reclamante".upper() in seg.upper()
+    # verifica persistência (confirmado)
+    assert "confirmado=" in seg
