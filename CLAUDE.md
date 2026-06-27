@@ -1353,7 +1353,7 @@ adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 
 **Mapeamento DOM confirmado** (v2.15.1):
 - Programação: `formulario:listagemProgramacao:{D}:entradaM` / `:saidaM` onde D=0..7 (Seg..Feriado), M=1..6
-- Escala: `formulario:escalas` (select), `formulario:valorHoraInicioEscala` (data), `formulario:qtdDiasTrabalhados`, `formulario:listagemEscala:{D}:entradaM`/`:saidaM`
+- Escala: `formulario:escalas` (select), `formulario:valorHoraInicioEscala` (⚠ **HORA**, não data — size=6 timeMask), `formulario:qtdDiasTrabalhados`, `formulario:listagemEscala:{D}:entradaM`/`:saidaM`
 - Tipos de escala (enum): `OUTRA`, `DOZE_POR_DOZE`, `DOZE_POR_VINTE_QUATRO`, `DOZE_POR_TRINTA_E_SEIS`, `DOZE_POR_QUARENTA_E_OITO`, `CINCO_POR_UM`, `SEIS_POR_UM`, `OITO_DOIS`
 
 **Fluxo da automação**:
@@ -1361,6 +1361,28 @@ adicionar/remover entradas na prévia (botões + Adicionar / X Remover).
 2. Preencher tabela Programação OU Escala conforme `preenchimento`
 3. Salvar (PJE-Calc replica padrão para todo o período)
 4. Para overrides: navegar Grade de Ocorrências → selecionar Mês/Ano → ajustar linhas pelas datas → salvar mês a mês
+
+### ESCALA fixa (12x36 etc.) — #80-B (0000712-53, 27/06/2026) — NÃO REVERTER
+
+> **Cadeia de A4J dependente**: o `select escalas` (onchange=`mudarTipoEscala`)
+> HABILITA `valorHoraInicioEscala`; este ("Início Escala", size=6 timeMask = **HORA**,
+> obrigatório) tem `onkeyup`=`atualizarListaEscala` que **AUTO-COMPUTA os turnos**
+> da escala fixa a partir da hora de início (a tabela `listagemEscala` mostra os
+> turnos DISABLED — auto, NÃO preencher). `qtdDiasTrabalhados` só é editável p/
+> escala OUTRA.
+>
+> **Sem o fix**: o bot esperava só 800ms (campo disabled → pulado → "Campo
+> obrigatório: Início Escala"), preenchia a DATA (esc.inicio) num campo de HORA,
+> e setava via JS (`_preencher`) que NÃO dispara `onkeyup` → turnos não
+> auto-computavam → "A jornada deve ter pelo menos um período de lançamento" →
+> escala não salva → apuração 0 dias → verbas `IMPORTADA_DO_CARTAO` (INTERVALO)
+> liquidavam qtd=0.
+>
+> **Fix**: aguardar o campo habilitar (`wait_for_function !disabled`); valor = HORA
+> de entrada do 1º turno (ex.: "19:00"), não a data; **digitar via teclado real**
+> (`press_sequentially`) p/ disparar o `onkeyup`+auto-compute; NÃO preencher os
+> turnos. Validado run6: liquidação `painel_sucesso=True`, 0 erros, 0 alertas.
+> `test_inv63`.
 
 ## Documentos de referência
 
