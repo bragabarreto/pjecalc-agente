@@ -34,9 +34,20 @@
 	  requisição espera só 5s, falha com LockTimeoutException e o servidor
 	  devolve a página "Erro Interno no Servidor" — que o bot lia como
 	  "listagem vazia" e disparava recovery (que falhava igual → loop).
-	  Fix: 120000 (2 min) → as requisições ESPERAM o lock liberar (o
-	  @Synchronized serializa corretamente) em vez de falhar. Cobre as
-	  operações mais pesadas com folga. NÃO REVERTER p/ 5000.
+
+	  ⚠ CORREÇÃO 27/06/2026 (GEOVANA, #80-G): este concurrent-request-timeout
+	  NÃO é a alavanca do lock do @Synchronized. Verificado end-to-end: mesmo
+	  com 120000 no container (Seam confirma "reading components.xml"), o
+	  LockTimeoutException CONTINUA disparando — porque o SynchronizationInterceptor
+	  do Seam usa o timeout da PRÓPRIA ANOTAÇÃO @Synchronized (default 1000ms,
+	  no bytecode de ApresentadorVerbaDeCalculo), não o do <core:manager>.
+	  Mantido 120000 mesmo assim (inofensivo; cobre contenção em nível de
+	  CONVERSA, que é o que esta opção realmente controla). O fix REAL da
+	  "listagem fantasma" é bot-side: ao detectar a página de erro do
+	  LockTimeout, o bot ESPERA o lock liberar + RECARREGA a mesma URL (sem
+	  Fechar+Reabrir, que só realimentava a contenção) — ver #80-G em
+	  modules/playwright_v2.py (_configurar_parametros_pos_expresso e o recovery
+	  reativo do click de Parâmetros). NÃO REVERTER p/ 5000.
 	-->
 	<core:manager concurrent-request-timeout="120000" conversation-timeout="86400000" default-flush-mode="AUTO"/>
 	

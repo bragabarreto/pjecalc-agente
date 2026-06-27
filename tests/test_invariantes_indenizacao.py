@@ -1780,7 +1780,7 @@ def test_inv54_listagem_vazia_recovery_proativo_pre_reflexos():
     Fix: detectar listagem vazia e Fechar+Reabrir PROATIVO ANTES dos reflexos,
     em _configurar_parametros_pos_expresso."""
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):pw.find("def _configurar_parametros_pos_expresso")+8000]
+    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):pw.find("def _configurar_parametros_pos_expresso")+13000]
     assert "#80-D listagem vazia pós-navegação" in fn
     # o recovery proativo vem ANTES do loop de reflexos
     assert fn.find("#80-D listagem vazia") < fn.find("for _r in getattr(v, \"reflexos\"")
@@ -1804,12 +1804,16 @@ def test_inv55_quantidade_informada_aguarda_render():
 
 
 def test_inv56_seam_concurrent_request_timeout():
-    """#80-D RAIZ DEFINITIVA (GEOVANA, java.log): a 'listagem de verbas vazia'
-    que travava A/C/E era na verdade LockTimeoutException no @Synchronized
-    apresentadorVerbaDeCalculo — a verba-calculo.jsf falhava ao renderizar
-    porque não conseguia o lock do bean em 5s (operações pesadas o seguram >5s).
-    Fix: concurrent-request-timeout >= 120000 em components.xml (as requisições
-    esperam o lock em vez de falhar). NÃO reverter p/ 5000."""
+    """#80-D/G (GEOVANA, java.log): a 'listagem de verbas vazia' que travava
+    A/C/E era na verdade a página de erro do LockTimeoutException no
+    @Synchronized apresentadorVerbaDeCalculo — a verba-calculo.jsf falhava ao
+    renderizar porque não conseguia o lock do bean (operação pesada o segura).
+
+    ⚠ concurrent-request-timeout NÃO é a alavanca desse lock (verificado #80-G:
+    o LockTimeout dispara mesmo com 120000 — o SynchronizationInterceptor usa o
+    timeout da anotação @Synchronized, ~1000ms no bytecode). Mantém-se >=60000
+    mesmo assim (inofensivo, cobre contenção de CONVERSA). O fix real é #80-G
+    (bot-side, test_inv57). NÃO reverter p/ 5000."""
     cx = (REPO_ROOT / "pjecalc-dist" / "tomcat" / "webapps" / "pjecalc"
           / "WEB-INF" / "components.xml").read_text(encoding="latin-1")
     import re as _re
@@ -1818,4 +1822,30 @@ def test_inv56_seam_concurrent_request_timeout():
     assert int(m.group(1)) >= 60000, (
         f"concurrent-request-timeout={m.group(1)} curto demais — "
         f"causa LockTimeoutException na verba-calculo.jsf (#80-D)"
+    )
+
+
+def test_inv57_listagem_vazia_reload_leve_antes_de_fr():
+    """#80-G (GEOVANA RAIZ DEFINITIVA): a 'listagem fantasma' é a página de
+    erro do LockTimeoutException (@Synchronized apresentadorVerbaDeCalculo). O
+    Fechar+Reabrir pesado dispara MAIS requisições concorrentes e REALIMENTA o
+    lock (runs run_E/H: 0 'Parâmetros salvos' em ~600 linhas, loop infinito).
+    Fix: ao detectar a listagem vazia, ESPERAR o lock liberar + RECARREGAR a
+    MESMA URL (sem nova conversa), e só cair no F+R pesado se o reload leve
+    falhar. Tanto no recovery PROATIVO (_configurar_parametros_pos_expresso)
+    quanto no REATIVO (click de Parâmetros)."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    # marcador #80-G presente nos dois caminhos
+    assert pw.count("#80-G") >= 2, "fix #80-G ausente em um dos recoveries"
+    # PROATIVO: reload leve vem ANTES do Fechar+Reabrir proativo
+    fn = pw[pw.find("def _configurar_parametros_pos_expresso"):
+             pw.find("def _configurar_parametros_pos_expresso") + 13000]
+    assert "reload leve" in fn
+    assert fn.find("#80-G") < fn.find("Fechar+Reabrir proativo"), (
+        "reload leve #80-G deve vir ANTES do F+R proativo"
+    )
+    # o reload leve NÃO chama Fechar+Reabrir (é o ponto: sem realimentar o lock)
+    bloco_proativo = fn[fn.find("#80-G"):fn.find("Fechar+Reabrir proativo")]
+    assert "_fechar_e_reabrir_calculo" not in bloco_proativo, (
+        "o reload leve #80-G não pode chamar Fechar+Reabrir (realimenta o lock)"
     )

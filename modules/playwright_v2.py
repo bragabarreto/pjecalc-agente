@@ -5239,40 +5239,103 @@ class PlaywrightAutomatorV2:
                 self.log(f"    🔬 [DIAG-#80-F listagem vazia] {_diag}")
             except Exception as _edf:
                 self.log(f"    🔬 [DIAG-#80-F] falha: {_edf}")
-            self.log(
-                f"    ⚠ #80-D listagem vazia pós-navegação ({v.nome_pjecalc}) — "
-                f"Fechar+Reabrir proativo antes de reflexos/parâmetros"
+                _diag = {}
+            # ⚠ #80-G (GEOVANA 0000627-04, RAIZ DEFINITIVA da "listagem fantasma"):
+            # o java.log revelou que a página vazia é, na verdade, a página
+            # "Erro Interno no Servidor" devolvida por
+            #   org.jboss.seam.core.LockTimeoutException: could not acquire lock
+            #   on @Synchronized component: apresentadorVerbaDeCalculo
+            # verba-calculo.jsf renderiza via #{apresentadorVerbaDeCalculo.*},
+            # que é @Synchronized (timeout da ANOTAÇÃO = 1000ms, NÃO ajustável
+            # via components.xml/concurrent-request-timeout — verificado: lock
+            # falha mesmo com 120000). Numa VM pequena, um save/Regerar pesado
+            # ainda está fazendo flush (FlushMode=AUTO) quando o bot navega para
+            # a listagem → a render espera 1s, falha e o servidor devolve a
+            # página de erro. O Fechar+Reabrir pesado abaixo DISPARA MAIS
+            # requisições concorrentes → realimenta o LockTimeout (loop visto
+            # nos runs run_E/H: 0 "Parâmetros salvos" em 596 linhas).
+            # Fix correto e barato: ao detectar a página de erro (LockTimeout),
+            # apenas ESPERAR o detentor liberar o lock e RECARREGAR a MESMA URL.
+            # Sem novas conversas, sem contenção adicional.
+            _recuperado_leve = False
+            _eh_pagina_erro = bool(
+                isinstance(_diag, dict) and _diag.get("erro")
+                and not _diag.get("temProc") and (_diag.get("bodyLen") or 0) < 400
+                and not _diag.get("expresso") and not _diag.get("incluir")
             )
-            try:
-                if self._fechar_e_reabrir_calculo(
-                    f"listagem vazia pré-parâmetros ({v.nome_pjecalc})"
-                ):
-                    self._navegar_menu_via_click("li_calculo_verbas")
+            if _eh_pagina_erro:
+                import re as _re80g
+                _m = _re80g.search(r"conversationId=(\d+)", self._page.url or "")
+                _conv = _m.group(1) if _m else (self._calculo_conversation_id or "")
+                _url_verba = (
+                    f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                    f"?conversationId={_conv}"
+                )
+                for _tent_lock in range(1, 5):
+                    self.log(
+                        f"    ⏳ #80-G LockTimeout (apresentadorVerbaDeCalculo) — "
+                        f"aguardando lock liberar + reload {_tent_lock}/4 (sem F+R)"
+                    )
+                    self._page.wait_for_timeout(4000 + _tent_lock * 1500)
                     try:
-                        self._page.wait_for_load_state("domcontentloaded", timeout=8000)
+                        self._page.goto(_url_verba, wait_until="domcontentloaded",
+                                        timeout=20000)
                     except Exception:
-                        pass
-                    if ("verba-calculo.jsf" not in (self._page.url or "")
-                            and self._calculo_conversation_id):
-                        self._page.goto(
-                            f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
-                            f"?conversationId={self._calculo_conversation_id}",
-                            wait_until="domcontentloaded", timeout=20000,
-                        )
+                        continue
                     try:
                         self._page.wait_for_function(
                             "() => document.querySelectorAll('a.linkParametrizar').length > 0",
-                            timeout=15000,
+                            timeout=12000,
                         )
                     except Exception:
                         pass
-                    self._page.wait_for_timeout(1500)
-                    _n2 = self._page.evaluate(
+                    _n_leve = self._page.evaluate(
                         "() => document.querySelectorAll('a.linkParametrizar').length"
                     )
-                    self.log(f"    ℹ #80-D pós-recovery proativo: {_n2} verba(s) na listagem")
-            except Exception as _ed:
-                self.log(f"    ⚠ #80-D recovery proativo: {_ed}")
+                    if _n_leve:
+                        _recuperado_leve = True
+                        self.log(
+                            f"    ✓ #80-G listagem recuperada via reload leve "
+                            f"({_n_leve} verba(s)) — lock liberado, sem F+R"
+                        )
+                        break
+            if _recuperado_leve:
+                pass  # listagem populada sem F+R; segue para reflexos/parâmetros
+            else:
+                self.log(
+                    f"    ⚠ #80-D listagem vazia pós-navegação ({v.nome_pjecalc}) — "
+                    f"Fechar+Reabrir proativo antes de reflexos/parâmetros"
+                )
+                try:
+                    if self._fechar_e_reabrir_calculo(
+                        f"listagem vazia pré-parâmetros ({v.nome_pjecalc})"
+                    ):
+                        self._navegar_menu_via_click("li_calculo_verbas")
+                        try:
+                            self._page.wait_for_load_state("domcontentloaded", timeout=8000)
+                        except Exception:
+                            pass
+                        if ("verba-calculo.jsf" not in (self._page.url or "")
+                                and self._calculo_conversation_id):
+                            self._page.goto(
+                                f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                                f"?conversationId={self._calculo_conversation_id}",
+                                wait_until="domcontentloaded", timeout=20000,
+                            )
+                        try:
+                            self._page.wait_for_function(
+                                "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                                timeout=15000,
+                            )
+                        except Exception:
+                            pass
+                        self._page.wait_for_timeout(1500)
+                        _n2 = self._page.evaluate(
+                            "() => document.querySelectorAll('a.linkParametrizar').length"
+                        )
+                        self.log(f"    ℹ #80-D pós-recovery proativo: {_n2} verba(s) na listagem")
+                except Exception as _ed:
+                    self.log(f"    ⚠ #80-D recovery proativo: {_ed}")
         # ⚠ REFLEXOS quando marcar_reflexos=True (2ª chamada do fase_verbas):
         # marcados AQUI, após o anchor wait_for linkParametrizar (listagem
         # garantidamente válida — runs v7/v8 provaram que fora deste método
@@ -5408,8 +5471,76 @@ class PlaywrightAutomatorV2:
             # 1 retry. Frequentemente o cálculo TEM as verbas no DB mas
             # a conv corrente está corrompida (Seam EPC saturated).
             if not diag:  # 0 TRs com linkParametrizar — listagem vazia
-                self.log(f"  → Listagem vazia detectada — Fechar+Reabrir + retry")
-                try:
+                # ⚠ #80-G (GEOVANA): a "listagem vazia" aqui costuma ser a
+                # página "Erro Interno no Servidor" do LockTimeoutException no
+                # @Synchronized apresentadorVerbaDeCalculo (timeout 1000ms da
+                # anotação — ver _configurar_parametros_pos_expresso). O
+                # Fechar+Reabrir abaixo dispara mais requisições concorrentes e
+                # realimenta o lock. ANTES dele: esperar o lock liberar +
+                # recarregar a MESMA URL (sem nova conversa) e re-tentar o match.
+                import re as _re80g2
+                _m = _re80g2.search(r"conversationId=(\d+)", self._page.url or "")
+                _conv = _m.group(1) if _m else (self._calculo_conversation_id or "")
+                for _tent_lk in range(1, 4):
+                    if not _conv:
+                        break
+                    self.log(
+                        f"    ⏳ #80-G listagem vazia ({v.nome_pjecalc}) — aguardar "
+                        f"lock + reload leve {_tent_lk}/3 (sem F+R)"
+                    )
+                    self._page.wait_for_timeout(4000 + _tent_lk * 1500)
+                    try:
+                        self._page.goto(
+                            f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                            f"?conversationId={_conv}",
+                            wait_until="domcontentloaded", timeout=20000,
+                        )
+                    except Exception:
+                        continue
+                    try:
+                        self._page.wait_for_function(
+                            "() => document.querySelectorAll('a.linkParametrizar').length > 0",
+                            timeout=12000,
+                        )
+                    except Exception:
+                        pass
+                    _clk_leve = self._page.evaluate(
+                        """(candidatos) => {
+                            const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                            const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                                .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                            for (const alvo of candidatos) {
+                                const alvoN = norm(alvo);
+                                for (const link of linksMain) {
+                                    const tr = link.closest('tr');
+                                    if (!tr) continue;
+                                    for (const td of [...tr.querySelectorAll('td')]) {
+                                        const tdText = norm(td.textContent.replace(/Exibir|Ocultar/gi, ''));
+                                        if (tdText === alvoN) {
+                                            if (link.onclick) { link.onclick(new Event('click')); }
+                                            else { link.click(); }
+                                            return alvo;
+                                        }
+                                    }
+                                }
+                            }
+                            return null;
+                        }""",
+                        candidatos,
+                    )
+                    if _clk_leve:
+                        self.log(
+                            f"    ✓ #80-G Click Parâmetros via reload leve "
+                            f"(matched='{_clk_leve}') — lock liberado, sem F+R"
+                        )
+                        self._aguardar_ajax(8000)
+                        clicou = "retry-leve-80G"
+                        break
+                if clicou:
+                    pass  # recuperado sem F+R; segue para o wait_for descricao
+                else:
+                  self.log(f"  → Listagem vazia detectada — Fechar+Reabrir + retry")
+                  try:
                     if self._fechar_e_reabrir_calculo(f"recovery listagem vazia ({v.nome_pjecalc})"):
                         # Re-navegar verbas + retry click Parâmetros
                         self._navegar_menu_via_click("li_calculo_verbas")
@@ -5460,7 +5591,7 @@ class PlaywrightAutomatorV2:
                             return
                     else:
                         return
-                except Exception as e:
+                  except Exception as e:
                     self.log(f"    ⚠ Recovery listagem vazia falhou: {e}")
                     return
             else:
