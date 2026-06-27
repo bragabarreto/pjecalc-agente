@@ -1996,3 +1996,21 @@ def test_inv63_escala_inicio_hora_e_aguarda_habilitar():
     # aguarda o campo habilitar antes de preencher
     assert "!e.disabled" in fn or "e.disabled" in fn
     assert fn.find("valorHoraInicioEscala") < fn.find('_preencher("valorHoraInicioEscala"') or "_preencher(\"valorHoraInicioEscala\", _hora_ini" in fn
+
+
+def test_inv64_honorario_credor_sem_documento():
+    """#80-P (orientação do usuário 27/06/2026): honorários NÃO registram
+    CPF/documento do credor — basta o NOME ('ADVOGADO DO RECLAMANTE/RECLAMADO').
+    O credor sucumbencial é o advogado da parte contrária (genérico, sem CPF na
+    sentença); preencher o documento era desnecessário e disparava 'Erro: 19'
+    (validadorDinamico) quando o tipo ia sem número. Fix: a fase de honorários
+    NÃO preenche tipoDocumentoFiscalCredor nem numeroDocumentoFiscalCredor —
+    só nomeCredor. NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn = pw[pw.find("def fase_honorarios"):pw.find("def fase_custas_judiciais")]
+    # ainda preenche o NOME do credor
+    assert '_preencher("nomeCredor"' in fn
+    # mas NÃO preenche/marca o documento do credor
+    assert '"tipoDocumentoFiscalCredor"' not in fn, "honorários NÃO deve marcar tipoDocumentoFiscalCredor"
+    assert '"numeroDocumentoFiscalCredor"' not in fn, "honorários NÃO deve preencher numeroDocumentoFiscalCredor"
+    assert "#80-P" in fn

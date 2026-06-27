@@ -9044,33 +9044,16 @@ class PlaywrightAutomatorV2:
                     credor_nome = "ADVOGADO DO RECLAMANTE"
             if credor_nome:
                 self._preencher("nomeCredor", credor_nome, obrigatorio=False)
-            if h.credor:
-                # ⚠ IDs REAIS (honorarios.xhtml:322,335):
-                #   tipoDocumentoFiscalCredor + numeroDocumentoFiscalCredor
-                # CRÍTICO (22/05/2026): NÃO marcar tipoDocumentoFiscalCredor
-                # se numeroDocumentoFiscalCredor estiver VAZIO. O JSF tem um
-                # <f:validator validadorDinamico> em numero que dispara
-                # exceção quando tipo está set mas número é vazio. Causa do
-                # "Erro: 19" (MSG0013 — exceção não capturada) que corrompia
-                # o estado Seam para todas as fases subsequentes (Custas/
-                # Correção/Liquidar viam o cálculo "vazio"). Caso comum:
-                # ADVOGADO DO RECLAMANTE sem CNPJ conhecido na sentença.
-                _doc_num = (h.credor.doc_fiscal_numero or "").strip()
-                if _doc_num:
-                    self._marcar_radio(
-                        "tipoDocumentoFiscalCredor",
-                        h.credor.doc_fiscal_tipo.value,
-                    )
-                    self._preencher(
-                        "numeroDocumentoFiscalCredor",
-                        _doc_num,
-                        obrigatorio=False,
-                    )
-                else:
-                    self.log(
-                        "  ℹ doc_fiscal_numero do credor vazio — "
-                        "pulando tipo+número (evita validadorDinamico)"
-                    )
+            # ⚠ #80-P (orientação do usuário 27/06/2026): honorários NÃO
+            # registram CPF/documento do credor — basta IDENTIFICAR pelo NOME
+            # ("ADVOGADO DO RECLAMANTE" / "ADVOGADO DO RECLAMADO"). O credor
+            # sucumbencial é o advogado da parte contrária (genérico, sem CPF na
+            # sentença). Preencher o documento era desnecessário e, quando o
+            # tipo ia sem número, disparava o "Erro: 19" (validadorDinamico
+            # MSG0013) que corrompia o estado Seam. NÃO preencher
+            # tipoDocumentoFiscalCredor nem numeroDocumentoFiscalCredor —
+            # documento do credor de honorários é intencionalmente OMITIDO.
+            self.log("  ⊙ #80-P documento do credor de honorários omitido (só o nome)")
             # ⚠ ID REAL (honorarios.xhtml:373): apurarIRRF (não apurarIr)
             self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
 
