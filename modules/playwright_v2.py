@@ -6076,7 +6076,10 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ Parâmetros '{v.nome_pjecalc}': sem botão save — pulando ajuste")
             return
         self._aguardar_ajax(8000)
-        sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)
+        # #80-N: timeout maior — save de verba CALCULADO com base histórico de
+        # muitas ocorrências (ex.: 31 meses) recomputa devagar na VM pequena;
+        # 15s era curto e o bot caía no Cancel (descartando a base).
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
         if sucesso:
             self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
             # ⚠ CRÍTICO (24/05/2026): após save bem-sucedido, Seam pode
@@ -6167,6 +6170,32 @@ class PlaywrightAutomatorV2:
                         )
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
+            # #80-N: capturar a MENSAGEM DE ERRO JSF real do save (rf-msgs /
+            # rich:message) — sem isso o diagnóstico só mostrava url/title e a
+            # causa do save falho ficava oculta (0000712-53: INTERVALO/MULTA
+            # CALCULADO base custom não persistiam).
+            try:
+                _msgs = self._page.evaluate(
+                    """() => {
+                        const out = [];
+                        const sels = ['.rf-msgs-sum','.rf-msgs-det','.rf-msg-sum','.rf-msg-det',
+                                      '.rich-messages','.rich-message','[id$=\\\\:mensagens] *',
+                                      'span.errorMessage','.messageError','li.rf-msgs-itm'];
+                        for (const s of sels) {
+                            for (const el of document.querySelectorAll(s)) {
+                                const t = (el.textContent||'').replace(/\\s+/g,' ').trim();
+                                if (t && t.length > 3 && !out.includes(t)) out.push(t);
+                            }
+                        }
+                        return out.slice(0, 12);
+                    }"""
+                )
+                if _msgs:
+                    self.log(f"    🔎 #80-N mensagens JSF no save falho de '{v.nome_pjecalc}': {_msgs}")
+                else:
+                    self.log(f"    🔎 #80-N nenhuma mensagem JSF visível (save pode ter sido lento, não falho)")
+            except Exception as _em:
+                self.log(f"    🔎 #80-N captura de mensagens falhou: {_em}")
             # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
             # Quando o save falha (ex.: erro JSF "A data final não pode ser
             # maior que data demissão"), a página permanece no form de
