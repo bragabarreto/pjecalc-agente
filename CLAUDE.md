@@ -285,6 +285,20 @@ Map anterior gerava values inexistentes ("VERBA", "VERBA_MENOS_CS") → timeout
 30s. Enum real extraído de `BaseDeJurosDasVerbasEnum` (JAR pjecalc-negocio):
 `VERBAS | VERBA_INSS | VERBA_INSS_PP` (= schema v2, identidade).
 
+### 4c. Honorário do RECLAMANTE = SEMPRE "Cobrar do reclamante" (#80-K, 27/06/2026)
+
+Honorário sucumbencial devido **pelo reclamante** (sucumbência recíproca) deve
+ser SEMPRE `TipoCobrancaReclamanteEnum.COBRAR` ("Cobrar do reclamante"), NUNCA
+`DESCONTAR_CREDITO` ("Descontar dos créditos"). Bug recorrente: o bot deixava o
+DEFAULT do bean (DESCONTAR_CREDITO). O radio `formulario:tipoCobrancaReclamante`
+(honorarios.xhtml:118) só renderiza após o onchange A4J de `tipoDeDevedor`
+(painel `pnlParametrosReclamante` rendered=#{...eq 'RECLAMANTE'}); marcar cedo/sem
+verificar deixava o default. Fix: `wait_for_selector` + marcar COBRAR por value
+('COBRAR'/'C') OU label ('Cobrar do reclamante') via JS + VERIFICAR + retry ×3.
+`<s:selectItems>` desses enums usa o NOME da constante como value (confirmado:
+tipoValor='CALCULADO', tipoDeDevedor='RECLAMANTE'). Validado run_P GEOVANA: PJC
+`devedor=RECLAMANTE cobranca=COBRAR`. Protegido por `test_inv60`. NÃO reverter.
+
 ### 4b. Reflexos 467 — persistência e ordem (ciclo v4–v16, 12/06/2026)
 
 Invariantes consolidados em 13 runs end-to-end (cada um reverte um modo de
