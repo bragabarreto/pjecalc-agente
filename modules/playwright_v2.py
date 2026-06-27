@@ -5271,12 +5271,22 @@ class PlaywrightAutomatorV2:
                     f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
                     f"?conversationId={_conv}"
                 )
-                for _tent_lock in range(1, 5):
-                    self.log(
-                        f"    ⏳ #80-G LockTimeout (apresentadorVerbaDeCalculo) — "
-                        f"aguardando lock liberar + reload {_tent_lock}/4 (sem F+R)"
-                    )
-                    self._page.wait_for_timeout(4000 + _tent_lock * 1500)
+                # Poll PACIENTE de intervalo fixo: a operação pesada (gerar
+                # ocorrências mensais c/ Drools p/ HE 50% + reflexos) segura o
+                # lock 20–40s na VM pequena — comprovado: 3 reloads em ~21s
+                # falhavam. Espera-se o lock LIBERAR na MESMA conversa (a op
+                # termina e committa — não está travada: o F+R do run_H via a
+                # listagem populada depois). Poll a cada 4s até ~84s pega a
+                # liberação em <=4s e QUEBRA o loop F+R-e-recontende (sem
+                # abandonar a conversa, a próxima op não acha nada concorrente).
+                _MAX_TENT_LOCK = 21  # ~21 × 4s ≈ 84s
+                for _tent_lock in range(1, _MAX_TENT_LOCK + 1):
+                    if _tent_lock == 1 or _tent_lock % 4 == 0:
+                        self.log(
+                            f"    ⏳ #80-G LockTimeout (apresentadorVerbaDeCalculo) — "
+                            f"aguardando lock liberar + reload {_tent_lock}/{_MAX_TENT_LOCK} (sem F+R)"
+                        )
+                    self._page.wait_for_timeout(4000)
                     try:
                         self._page.goto(_url_verba, wait_until="domcontentloaded",
                                         timeout=20000)
@@ -5481,14 +5491,19 @@ class PlaywrightAutomatorV2:
                 import re as _re80g2
                 _m = _re80g2.search(r"conversationId=(\d+)", self._page.url or "")
                 _conv = _m.group(1) if _m else (self._calculo_conversation_id or "")
-                for _tent_lk in range(1, 4):
+                # Poll PACIENTE (ver #80-G em _configurar_parametros_pos_expresso):
+                # a op pesada segura o lock 20–40s; poll a cada 4s até ~84s pega
+                # a liberação na MESMA conversa e quebra o loop F+R-e-recontende.
+                _MAX_TENT_LK = 21  # ~21 × 4s ≈ 84s
+                for _tent_lk in range(1, _MAX_TENT_LK + 1):
                     if not _conv:
                         break
-                    self.log(
-                        f"    ⏳ #80-G listagem vazia ({v.nome_pjecalc}) — aguardar "
-                        f"lock + reload leve {_tent_lk}/3 (sem F+R)"
-                    )
-                    self._page.wait_for_timeout(4000 + _tent_lk * 1500)
+                    if _tent_lk == 1 or _tent_lk % 4 == 0:
+                        self.log(
+                            f"    ⏳ #80-G listagem vazia ({v.nome_pjecalc}) — aguardar "
+                            f"lock + reload leve {_tent_lk}/{_MAX_TENT_LK} (sem F+R)"
+                        )
+                    self._page.wait_for_timeout(4000)
                     try:
                         self._page.goto(
                             f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
