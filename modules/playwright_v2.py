@@ -5209,6 +5209,36 @@ class PlaywrightAutomatorV2:
         except Exception:
             _n_links = 0
         if not _n_links:
+            # DIAG #80-F (GEOVANA): capturar POR QUE a listagem vem vazia —
+            # cálculo carregado? página certa? tabela presente / "nenhum
+            # registro"? — para distinguir (a) calc não carregado na conv,
+            # (b) bean query vazia, (c) erro de render.
+            try:
+                _diag = self._page.evaluate(
+                    """() => {
+                        const url = location.href;
+                        const txt = (document.body.innerText || '');
+                        // breadcrumb/título com o nº do processo = calc carregado?
+                        const temProc = /\\d{7}-\\d{2}\\.\\d{4}\\.5\\.\\d{2}\\.\\d{4}/.test(txt);
+                        // tabela de verbas (rich:dataTable) presente?
+                        const tabelas = [...document.querySelectorAll('table')]
+                            .filter(t => (t.id||'').includes('listagem') || (t.className||'').toLowerCase().includes('datatable'));
+                        const nTab = tabelas.length;
+                        const nRows = tabelas.reduce((a,t)=>a + t.querySelectorAll('tr').length, 0);
+                        // mensagens típicas
+                        const semReg = /nenhum registro|não há|vazia/i.test(txt);
+                        const erro = /erro|exception|indispon/i.test(txt.slice(0,400));
+                        // botão Expresso presente (estamos na página de verbas)?
+                        const expresso = !!document.querySelector("[id$='lancamentoExpresso']");
+                        // amostra de selects (saber se é principal.jsf/Recentes)
+                        const incluir = !!document.querySelector("[id$=':incluir']");
+                        return {url: url.slice(-60), temProc, nTab, nRows, semReg, erro, expresso, incluir,
+                                bodyLen: txt.length, body0: txt.slice(0,120).replace(/\\s+/g,' ')};
+                    }"""
+                )
+                self.log(f"    🔬 [DIAG-#80-F listagem vazia] {_diag}")
+            except Exception as _edf:
+                self.log(f"    🔬 [DIAG-#80-F] falha: {_edf}")
             self.log(
                 f"    ⚠ #80-D listagem vazia pós-navegação ({v.nome_pjecalc}) — "
                 f"Fechar+Reabrir proativo antes de reflexos/parâmetros"
