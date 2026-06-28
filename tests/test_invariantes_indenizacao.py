@@ -1989,13 +1989,14 @@ def test_inv63_escala_inicio_hora_e_aguarda_habilitar():
     o campo habilitar (wait_for_function !disabled) e preencher com a HORA de
     entrada do 1º turno (ex.: 19:00). NÃO reverter."""
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    fn = pw[pw.find('elif preenchimento == "ESCALA"'):pw.find('elif preenchimento == "ESCALA"') + 3200]
+    fn = pw[pw.find('elif preenchimento == "ESCALA"'):pw.find('elif preenchimento == "ESCALA"') + 6000]
     assert "#80-B" in fn, "fix #80-B ausente"
     # usa a hora de entrada do 1º turno (não a data esc.inicio)
     assert "_hora_ini" in fn and "turnos" in fn and "entrada" in fn
     # aguarda o campo habilitar antes de preencher
     assert "!e.disabled" in fn or "e.disabled" in fn
-    assert fn.find("valorHoraInicioEscala") < fn.find('_preencher("valorHoraInicioEscala"') or "_preencher(\"valorHoraInicioEscala\", _hora_ini" in fn
+    # preenche via press_sequentially (dispara onkeyup→atualizarListaEscala) — NÃO via _preencher
+    assert "press_sequentially" in fn and "valorHoraInicioEscala" in fn
 
 
 def test_inv64_honorario_credor_sem_documento():
@@ -2014,3 +2015,23 @@ def test_inv64_honorario_credor_sem_documento():
     assert '"tipoDocumentoFiscalCredor"' not in fn, "honorários NÃO deve marcar tipoDocumentoFiscalCredor"
     assert '"numeroDocumentoFiscalCredor"' not in fn, "honorários NÃO deve preencher numeroDocumentoFiscalCredor"
     assert "#80-P" in fn
+
+
+def test_inv65_override_grade_usa_salvar_editavel():
+    """#80-Q (MARIA THAYSNARA 0000632-89, 27/06/2026): _aplicar_ocorrencias_override
+    usa _clicar("salvarEditavel") na Grade de Ocorrências, NÃO _clicar("salvar").
+    Em modo Grade (operacao=VISUALIZACAO ou OUTRO), o botão renderizado é
+    `id="salvarEditavel"` (apuracao-cartaodeponto.xhtml:1219).
+    `id="salvar"` só existe em emModoFormulario!=VISUALIZACAO — nunca em Grade.
+    Sem este fix, 100% dos saves da Grade falhavam silenciosamente com
+    'Botão não encontrado: salvar' → dobras de plantão nunca persistiam. NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn_start = pw.find("def _aplicar_ocorrencias_override")
+    fn_end = pw.find("\n    def ", fn_start + 1)
+    fn = pw[fn_start:fn_end]
+    assert '_clicar("salvarEditavel")' in fn, (
+        "REGRESSÃO: _aplicar_ocorrencias_override deve usar salvarEditavel (não salvar) na Grade"
+    )
+    assert '_clicar("salvar")' not in fn or fn.count('_clicar("salvar")') == 0, (
+        "REGRESSÃO: _aplicar_ocorrencias_override voltou a usar _clicar('salvar') — Grade usa salvarEditavel"
+    )

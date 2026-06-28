@@ -8096,9 +8096,12 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ⚠ Falha override {data}: {e}")
 
             # 5. CRÍTICO: Salvar ANTES de mudar de mês (alerta explícito do PJE-Calc)
+            # Em modo Grade (operacao=VISUALIZACAO), o botão correto é
+            # `id="salvarEditavel"` (apuracao-cartaodeponto.xhtml:1219).
+            # `id="salvar"` só renderiza em emModoFormulario != VISUALIZACAO (linha 1216).
             if alterou:
                 try:
-                    self._clicar("salvar")
+                    self._clicar("salvarEditavel")
                     self._aguardar_ajax(5000)
                     sucesso = self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
                     if sucesso:
