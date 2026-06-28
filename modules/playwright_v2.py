@@ -7348,6 +7348,12 @@ class PlaywrightAutomatorV2:
         body = self._page.locator("body").text_content() or ""
         if "operação realizada com sucesso" not in body.lower() and "sucesso" not in body.lower():
             self.log(f"  ⚠ Verba '{v.nome_pjecalc}' — mensagem de sucesso não detectada")
+            # Drools pode estar processando em background (ex.: FGTS com base complexa como PISO DA
+            # CATEGORIA) segurando o @Synchronized apresentadorVerbaDeCalculo por >3 min.
+            # Sem espera, a próxima chamada a _garantir_incluir_disponivel (45s×4=180s) ainda é
+            # insuficiente e a verba seguinte é perdida. (#80-V)
+            self.log(f"  ⏳ Aguardando 90s para Drools finalizar antes da próxima verba (#80-V)...")
+            self._page.wait_for_timeout(90000)
         self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado")
 
     def fase_cartao_de_ponto(self) -> None:
@@ -10427,21 +10433,33 @@ class PlaywrightAutomatorV2:
 
         nav_exp = None
 
+        # PRE-CHECK: se estamos em liquidacao.jsf, o sidebar click não navega
+        # para exportacao.jsf (conv de liquidação ≠ conv de exportação). Pular
+        # direto para estratégias 2-4 que usam URL nav ou Recentes.
+        _url_atual_pre = self._page.url
+        _em_liquidacao = "liquidacao.jsf" in _url_atual_pre
+        if _em_liquidacao:
+            self.log(f"  ℹ Pre-check: página é liquidacao.jsf ({_url_atual_pre[-50:]}) — pulando sidebar, indo direto p/ URL nav")
+
         # 1ª tentativa: sidebar estando na página de resultado da liquidação
-        self.log("  → Tentando nav Exportar via sidebar (pós-liquidação)...")
-        try:
-            nav_exp = _tentar_sidebar_exportar()
-            if nav_exp:
-                self._aguardar_ajax(15000)
-                self._page.wait_for_timeout(2000)
-                _diag_exp = _verificar_exportacao_ok()
-                self.log(f"  [DIAG-exp] sidebar={nav_exp} {_diag_exp}")
-                if _diag_exp['tem_500'] or _diag_exp['tem_erro_5'] or not _diag_exp['tem_export_btn']:
-                    self.log("  ⚠ Sidebar→Exportar sem botão/erro — tentando URL nav")
-                    nav_exp = None  # vai tentar URL nav (estratégia 2-4)
-        except Exception as e:
-            self.log(f"  ⚠ Sidebar exportar erro: {e}")
-            nav_exp = None
+        # (PULADA se já em liquidacao.jsf — sidebar click não navega p/ exportacao nesse estado)
+        if not _em_liquidacao:
+            self.log("  → Tentando nav Exportar via sidebar (pós-liquidação)...")
+            try:
+                nav_exp = _tentar_sidebar_exportar()
+                if nav_exp:
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+                    _diag_exp = _verificar_exportacao_ok()
+                    self.log(f"  [DIAG-exp] sidebar={nav_exp} {_diag_exp}")
+                    _cond_exp = bool(_diag_exp.get('tem_500') or _diag_exp.get('tem_erro_5') or not _diag_exp.get('tem_export_btn'))
+                    self.log(f"  [DEBUG-exp] tem_export_btn={_diag_exp.get('tem_export_btn')!r} cond={_cond_exp}")
+                    if _cond_exp:
+                        self.log("  ⚠ Sidebar→Exportar sem botão/erro — tentando URL nav")
+                        nav_exp = None  # vai tentar URL nav (estratégia 2-4)
+            except Exception as e:
+                self.log(f"  ⚠ Sidebar exportar erro: {e}")
+                nav_exp = None
 
         # 2ª tentativa: URL nav com conv pós-liquidação
         if not nav_exp and _conv_pos_liq:
