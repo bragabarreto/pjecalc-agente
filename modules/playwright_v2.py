@@ -10433,16 +10433,39 @@ class PlaywrightAutomatorV2:
 
         nav_exp = None
 
-        # PRE-CHECK: se estamos em liquidacao.jsf, o sidebar click não navega
-        # para exportacao.jsf (conv de liquidação ≠ conv de exportação). Pular
-        # direto para estratégias 2-4 que usam URL nav ou Recentes.
+        # PRE-CHECK: se estamos em liquidacao.jsf, o sidebar click NÃO navega
+        # para exportacao.jsf (a conv de liquidação não transiciona para exportação).
+        # Solução: Recentes reopen (→ calculo.jsf com conv fresca) ANTES do sidebar.
+        # A partir de calculo.jsf a conv está em edit-mode e o sidebar navega corretamente.
         _url_atual_pre = self._page.url
         _em_liquidacao = "liquidacao.jsf" in _url_atual_pre
         if _em_liquidacao:
-            self.log(f"  ℹ Pre-check: página é liquidacao.jsf ({_url_atual_pre[-50:]}) — pulando sidebar, indo direto p/ URL nav")
+            self.log(f"  ℹ Pre-check: liquidacao.jsf — Recentes reopen para conv fresca pré-export (#80-T)")
+            try:
+                ok_rec_pre = self._reabrir_calculo_via_recentes()
+                if ok_rec_pre:
+                    self.log(f"  ✓ Recentes reopen pré-export (conv={self._calculo_conversation_id}) — sidebar Exportar...")
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(1500)
+                    _sid_pre = _tentar_sidebar_exportar()
+                    if _sid_pre:
+                        self._aguardar_ajax(15000)
+                        self._page.wait_for_timeout(2000)
+                        _diag_pre = _verificar_exportacao_ok()
+                        self.log(f"  [DIAG-exp] recentes-pre+sidebar={_sid_pre} {_diag_pre}")
+                        if (not _diag_pre.get('tem_500') and not _diag_pre.get('tem_erro_5')
+                                and _diag_pre.get('tem_export_btn')):
+                            nav_exp = f"recentes-pre+sidebar:{_sid_pre}"
+                        else:
+                            self.log(f"  ⚠ Sidebar pós-Recentes-pre sem export btn — cai para estratégias 2-4")
+                    else:
+                        self.log(f"  ⚠ Sidebar pós-Recentes-pre: li_operacoes_exportar não encontrado — cai p/ 2-4")
+            except Exception as e_pre:
+                self.log(f"  ⚠ Recentes reopen pré-export: {e_pre}")
+            # Se pre-check teve sucesso, pula sidebar normal (estratégia 1) e vai direto p/ 2-4
 
         # 1ª tentativa: sidebar estando na página de resultado da liquidação
-        # (PULADA se já em liquidacao.jsf — sidebar click não navega p/ exportacao nesse estado)
+        # (PULADA se pré-check em liquidacao.jsf — sidebar não navega nesse estado)
         if not _em_liquidacao:
             self.log("  → Tentando nav Exportar via sidebar (pós-liquidação)...")
             try:
