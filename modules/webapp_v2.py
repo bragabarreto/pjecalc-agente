@@ -556,13 +556,18 @@ async def confirmar_previa(sessao_id: str, payload: dict):
 
             calculo_existente = db.query(Calculo).filter(Calculo.sessao_id == sessao_id).first()
             if not calculo_existente:
+                from datetime import datetime
                 calculo = Calculo(
                     sessao_id=sessao_id,
                     processo_id=proc_db.id,
                     status="confirmado",
                     dados_json=json.dumps(data),
+                    confirmado_em=datetime.utcnow(),
                 )
                 db.add(calculo)
+            elif not calculo_existente.confirmado_em:
+                from datetime import datetime
+                calculo_existente.confirmado_em = datetime.utcnow()
             db.commit()
         finally:
             db.close()

@@ -3956,8 +3956,10 @@ async def executar_automacao_sse(
         _sessoes_automacao.pop(sessao_id, None)
         _automacao_global_lock.clear()
 
-    # Verificar que o usuário confirmou a prévia (HITL obrigatório)
-    if not calculo.confirmado_em:
+    # Verificar que o usuário confirmou a prévia (HITL obrigatório).
+    # Aceita confirmado_em OU status="confirmado" — o path v2 seta status sem confirmado_em.
+    _previa_confirmada = bool(calculo.confirmado_em) or calculo.status in ("confirmado", "pjc_exportado")
+    if not _previa_confirmada:
         _liberar_locks()
         async def _nao_confirmado_sse():
             yield "data: ERRO_EXPORTAVEL::Prévia não confirmada — revise os dados e clique Confirmar antes de executar.\n\n"
