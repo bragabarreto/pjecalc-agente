@@ -312,6 +312,16 @@ class PlaywrightAutomatorV2:
         # formulário Parâmetros, sem precisar "revisitar".
         _run_fase("Fase 4 (Cartão Ponto)", self.fase_cartao_de_ponto,
                   bool(self.previa.cartao_de_ponto) or bool(getattr(self.previa, "cartoes_de_ponto", None)))
+        # #80-R (MARIA THAYSNARA 0000632-89, 27/06/2026): apuração de cartão
+        # pesado (130+ overrides × 61 meses 12x36) executa Drools que leva
+        # >60s na VM pequena, segurando o @Synchronized apresentadorVerbaDeCalculo.
+        # Se o bot inicia a Fase 5 antes do Drools terminar, TODA a listagem de
+        # verbas vem vazia (LockTimeout → conversa Seam morta → NPE em
+        # carregarBasesParaPrincipal:559). Gate aqui garante servidor ocioso
+        # antes de navegar a verba-calculo.xhtml. ciclos=80 → até ~2min de espera.
+        _tem_cartao = bool(self.previa.cartao_de_ponto) or bool(getattr(self.previa, "cartoes_de_ponto", None))
+        if _tem_cartao:
+            self._aguardar_servidor_ocioso("pós-apuração cartão (#80-R)", ciclos=80)
         _run_fase("Fase 5 (Verbas)", self.fase_verbas)
         # Fechar+Reabrir pós-Verbas: força @End da outer conv para commit
         # dos saves em DB. Sem isso, os dados ficam presos na transação Seam
@@ -4165,8 +4175,12 @@ class PlaywrightAutomatorV2:
         # Salvar UMA vez para todas
         try:
             self._clicar("salvar")
-            self._aguardar_ajax(30000)  # generoso — batch save pode ser lento
-            self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+            # #80-R: Drools gera reflexos pra cada verba Expresso E processa
+            # ocorrências de cartão pesado (130+ overrides × 61 meses) — pode
+            # levar >60s na VM pequena. 30s era insuficiente → bot avançava com
+            # servidor ainda computando → LockTimeout em toda a fase de verbas.
+            self._aguardar_ajax(120000)
+            self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
         except Exception as e:
             self.log(f"  ⚠ Batch save falhou: {e}")
 
@@ -7936,8 +7950,12 @@ class PlaywrightAutomatorV2:
             self.log("    ⚠ Botão 'Apurar Cartão de Ponto' não encontrado — pulando")
             return
         self.log(f"    ✓ click Apurar Cartão de Ponto ({clicou_apurar})")
-        self._aguardar_ajax(15000)
-        sucesso = self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        # #80-R (MARIA THAYSNARA 0000632-89, 27/06/2026): apuração Drools com
+        # cartão pesado (130+ overrides × 61 meses 12x36) pode levar >60s na
+        # VM pequena. 15s era insuficiente → bot avançava com servidor ainda
+        # computando → @Synchronized LockTimeout em toda a fase de verbas.
+        self._aguardar_ajax(120000)
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
         if sucesso:
             self.log("  ✓ Cartão de Ponto APURADO — ocorrências geradas")
             # Capturar tabela de ocorrências para log diagnóstico
