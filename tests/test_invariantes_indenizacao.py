@@ -2035,3 +2035,40 @@ def test_inv65_override_grade_usa_salvar_editavel():
     assert '_clicar("salvar")' not in fn or fn.count('_clicar("salvar")') == 0, (
         "REGRESSÃO: _aplicar_ocorrencias_override voltou a usar _clicar('salvar') — Grade usa salvarEditavel"
     )
+
+
+def test_inv66_reabrir_retry_antes_expresso():
+    """#80-S (MARIA THAYSNARA 0000632-89, 27/06/2026): após apuração pesada de
+    cartão (130+ overrides × 61 meses 12x36), o PJE-Calc recusa a reabertura via
+    Recentes imediatamente após o Fechar — URL fica em principal.jsf em vez de
+    navegar para calculo.jsf. Causa: servidor ainda processando Hibernate/Drools
+    side-effects pós-apuração. A mesma reabertura funciona minutos depois.
+
+    FIX: (1) _fechar_e_reabrir_calculo faz retry com delays 30s→90s quando Recentes
+    não navega; (2) _lancar_expresso recusa prosseguir com BATCH se Reabrir ainda
+    falhar após retries (redirecionando verbas para Manual fallback). Sem (2),
+    11 verbas Expresso eram salvas em conv órfã não associada ao cálculo correto,
+    resultando em cálculo com 0 verbas e listagem fantasma irrecuperável. NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # (1) _fechar_e_reabrir_calculo tem retry #80-S
+    fn_fr_start = pw.find("def _fechar_e_reabrir_calculo")
+    fn_fr_end = pw.find("\n    def ", fn_fr_start + 1)
+    fn_fr = pw[fn_fr_start:fn_fr_end]
+    assert "#80-S" in fn_fr, (
+        "REGRESSÃO #80-S: _fechar_e_reabrir_calculo deve ter retry #80-S pós-falha Recentes"
+    )
+    assert "retry" in fn_fr and ("30" in fn_fr or "30000" in fn_fr), (
+        "REGRESSÃO #80-S: retry deve ter delay de 30s antes de nova tentativa"
+    )
+
+    # (2) _lancar_expresso recusa prosseguir se Reabrir falhou
+    fn_le_start = pw.find("def _lancar_expresso(")
+    fn_le_end = pw.find("\n    def ", fn_le_start + 1)
+    fn_le = pw[fn_le_start:fn_le_end]
+    assert "#80-S" in fn_le, (
+        "REGRESSÃO #80-S: _lancar_expresso deve abortar Expresso quando Reabrir falha definitivamente"
+    )
+    assert "_verbas_expresso_falhadas" in fn_le and "return" in fn_le, (
+        "REGRESSÃO #80-S: _lancar_expresso deve redirecionar verbas para Manual e retornar ao falhar"
+    )
