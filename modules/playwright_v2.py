@@ -10361,9 +10361,9 @@ class PlaywrightAutomatorV2:
                 self._page.wait_for_timeout(2000)
                 _diag_exp = _verificar_exportacao_ok()
                 self.log(f"  [DIAG-exp] sidebar={nav_exp} {_diag_exp}")
-                if _diag_exp['tem_500'] or _diag_exp['tem_erro_5']:
-                    self.log("  ⚠ Sidebar→Exportar retornou erro (NPE?) — tentando URL nav")
-                    nav_exp = None  # vai tentar URL nav
+                if _diag_exp['tem_500'] or _diag_exp['tem_erro_5'] or not _diag_exp['tem_export_btn']:
+                    self.log("  ⚠ Sidebar→Exportar sem botão/erro — tentando URL nav")
+                    nav_exp = None  # vai tentar URL nav (estratégia 2-4)
         except Exception as e:
             self.log(f"  ⚠ Sidebar exportar erro: {e}")
             nav_exp = None
