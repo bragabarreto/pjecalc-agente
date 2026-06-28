@@ -7170,6 +7170,19 @@ class PlaywrightAutomatorV2:
         restaura é o Fechar+Reabrir (mesmo mecanismo do Expresso): força @End
         da conv, commita a verba anterior ao DB e reabre uma conv fresh em edit
         mode na listagem completa.
+
+        ⚠ FIX #80-U (MARIA THAYSNARA 0000632-89, 28/06/2026): 3 de 4 verbas
+        Manual não criadas porque `incluir` nunca aparecia pós-F+R. Causa raiz:
+        LockTimeout no @Synchronized apresentadorVerbaDeCalculo (mesma raiz que
+        #80-H/#80-G) — navegar para verba-calculo.jsf enquanto server processava
+        Drools/Regerar causava "Erro Interno no Servidor" sem `incluir`. O F+R
+        tentava pre-nav para verba-calculo.jsf → novo LockTimeout → Fechar não
+        encontrado → Reabrir direto. Após Reabrir, o servidor ainda estava ocupado
+        → novo LockTimeout ao tentar sidebar → loop infinito de F+Rs sem resolver.
+
+        FIX: (1) gate #80-H (_aguardar_servidor_ocioso) ANTES de cada sidebar
+        click; (2) recovery #80-G (reload leve) se LockTimeout ainda ocorrer.
+        Ambos aplicados tanto no loop pré-F+R quanto pós-F+R. NÃO REVERTER.
         """
         def _tem_incluir() -> bool:
             try:
@@ -7179,6 +7192,44 @@ class PlaywrightAutomatorV2:
                 ))
             except Exception:
                 return False
+
+        def _tem_locktimeout() -> bool:
+            try:
+                return bool(self._page.evaluate(
+                    """() => {
+                        const t = (document.body || {}).textContent || '';
+                        return t.includes('Erro Interno no Servidor');
+                    }"""
+                ))
+            except Exception:
+                return False
+
+        def _tentar_sidebar(n: int = 2) -> bool:
+            """n× sidebar click com gate #80-H + recovery #80-G se LockTimeout."""
+            for _t in range(n):
+                # Gate #80-H: não navegar enquanto server ainda processa op pesada
+                self._aguardar_servidor_ocioso(contexto="pré-incluir Manual (#80-U)")
+                self._navegar_menu_via_click("li_calculo_verbas")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(800)
+                if _tem_incluir():
+                    return True
+                # Recovery #80-G: reload leve sem F+R se LockTimeout
+                if _tem_locktimeout():
+                    self.log("    ⚠ 'incluir' ausente: LockTimeout #80-G — aguardando lock liberar")
+                    for _r in range(1, 8):
+                        self._page.wait_for_timeout(4000)
+                        try:
+                            self._page.reload(wait_until="domcontentloaded", timeout=12000)
+                            self._aguardar_ajax(5000)
+                        except Exception:
+                            pass
+                        if _tem_incluir():
+                            self.log(f"    ✓ 'incluir' recuperado via reload leve {_r} (#80-G)")
+                            return True
+                        if not _tem_locktimeout():
+                            break  # saiu da página de erro — re-tentar sidebar no próximo ciclo
+            return False
 
         if _tem_incluir():
             return
@@ -7192,26 +7243,18 @@ class PlaywrightAutomatorV2:
         # (calculo.jsf...)"). Por isso a tentativa anterior com `_navegar_menu`
         # + F+R falhava 3/3. `_navegar_menu_via_click` clica o sidebar e
         # re-captura o conversationId (que muda após cada save Manual).
-        for _t in range(2):
-            self._navegar_menu_via_click("li_calculo_verbas")
-            self._aguardar_ajax(6000)
-            self._page.wait_for_timeout(800)
-            if _tem_incluir():
-                return
+        if _tentar_sidebar(2):
+            return
         # 2) Fechar+Reabrir (conv fresh em edit mode) + sidebar click
         self.log("    ℹ 'incluir' (Manual) ausente — Fechar+Reabrir + click sidebar para restaurar")
         try:
             self._fechar_e_reabrir_calculo("pré-Manual incluir")
         except Exception as _e:
             self.log(f"    ⚠ F+R pré-Manual falhou: {_e}")
-        for _t in range(2):
-            self._navegar_menu_via_click("li_calculo_verbas")
-            self._aguardar_ajax(6000)
-            self._page.wait_for_timeout(800)
-            if _tem_incluir():
-                return
+        if _tentar_sidebar(2):
+            return
         if not _tem_incluir():
-            self.log("    ⚠ 'incluir' ainda ausente após click sidebar + F+R")
+            self.log("    ⚠ 'incluir' ainda ausente após click sidebar + F+R (#80-U)")
 
     def _lancar_verba_manual(self, v) -> None:
         """Criar verba via botão Manual ('Lançamento Manual de Parcela')."""

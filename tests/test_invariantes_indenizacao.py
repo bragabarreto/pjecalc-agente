@@ -1543,7 +1543,7 @@ def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
     man = src[idx_man:idx_man + 600]
     assert "_garantir_incluir_disponivel()" in man, "_lancar_verba_manual não chama o guard de 'incluir'"
     idx_g = src.find("def _garantir_incluir_disponivel")
-    gblock = src[idx_g:idx_g + 2600]
+    gblock = src[idx_g:idx_g + 5400]
     # causa raiz: restaurar 'incluir' exige CLIQUE no sidebar (Seam @Begin),
     # não url-goto; e escalar para F+R como último recurso.
     assert "_navegar_menu_via_click" in gblock, "guard de 'incluir' deve usar click sidebar (Seam init)"
@@ -1577,7 +1577,7 @@ def test_inv44_honorarios_base_bruto_e_incluir_reancora():
     src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
     idx = src.find("def fase_honorarios")
     assert idx > 0
-    bloco = src[idx:idx + 5200]
+    bloco = src[idx:idx + 9500]
     # re-ancora a listagem antes de cada incluir (dentro do loop de honorários)
     assert bloco.count('_navegar_menu("li_calculo_honorarios")') >= 2, \
         "fase_honorarios deve re-ancorar a listagem antes de cada 'incluir'"
@@ -2071,4 +2071,39 @@ def test_inv66_reabrir_retry_antes_expresso():
     )
     assert "_verbas_expresso_falhadas" in fn_le and "return" in fn_le, (
         "REGRESSÃO #80-S: _lancar_expresso deve redirecionar verbas para Manual e retornar ao falhar"
+    )
+
+
+def test_inv67_garantir_incluir_gate80h_e_recovery80g():
+    """#80-U (MARIA THAYSNARA 0000632-89, 28/06/2026): 3 de 4 verbas Manual
+    não criadas porque _garantir_incluir_disponivel não tinha gate #80-H nem
+    recovery #80-G — LockTimeout ao navegar para verba-calculo.jsf causava
+    página de erro sem 'incluir', o que escalava para F+R que também falhava
+    (pre-nav de F+R → novo LockTimeout → Fechar não encontrado → Reabrir direto
+    → servidor ainda ocupado → LockTimeout no próximo sidebar). Ciclo de F+Rs
+    sem resolver → verbas perdidas.
+
+    FIX: gate #80-H (_aguardar_servidor_ocioso) ANTES de cada sidebar click +
+    recovery #80-G (reload leve) se LockTimeout ocorrer. Aplicado em helper
+    _tentar_sidebar, usado tanto pré-F+R quanto pós-F+R. NÃO REVERTER."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    fn_start = pw.find("def _garantir_incluir_disponivel(")
+    fn_end = pw.find("\n    def ", fn_start + 1)
+    fn = pw[fn_start:fn_end]
+
+    assert "#80-U" in fn, (
+        "REGRESSÃO #80-U: _garantir_incluir_disponivel deve ter marcador #80-U"
+    )
+    assert "_aguardar_servidor_ocioso" in fn, (
+        "REGRESSÃO #80-U: _garantir_incluir_disponivel deve chamar _aguardar_servidor_ocioso "
+        "(gate #80-H) antes de sidebar click — sem isso LockTimeout mata a conv"
+    )
+    assert "_tem_locktimeout" in fn or "Erro Interno no Servidor" in fn, (
+        "REGRESSÃO #80-U: _garantir_incluir_disponivel deve detectar LockTimeout "
+        "(recovery #80-G) após sidebar click"
+    )
+    assert "reload" in fn, (
+        "REGRESSÃO #80-U: _garantir_incluir_disponivel deve fazer reload leve "
+        "para recovery #80-G ao detectar LockTimeout"
     )
