@@ -2112,3 +2112,72 @@ def test_inv67_garantir_incluir_gate80h_e_recovery80g():
         "REGRESSÃO #80-U: _garantir_incluir_disponivel deve fazer reload leve "
         "para recovery #80-G ao detectar LockTimeout"
     )
+
+
+def test_inv68_export_recentes_reopen_pos_liquidacao():
+    """#80-T (MARIA THAYSNARA 0000632-89, 28/06/2026): após a liquidação, a página
+    é liquidacao.jsf e o conversationId é o da liquidação (ex.: 691). Nesse estado:
+      • o sidebar click em li_operacoes_exportar NÃO navega para exportacao.jsf
+        (a conv de liquidação não transiciona para a conv de exportação);
+      • URL nav direto para exportacao.jsf?conv=<liquidação> RENDERIZA a página
+        (tem_export_btn=True) mas ao clicar Exportar o servidor retorna
+        'Erro: 6' (Erro inesperado) — a conv de liquidação não é estado Seam
+        válido para exportação. Fases A/E/F de captura todas falham.
+
+    FIX: pre-check detecta liquidacao.jsf → Recentes reopen (→ calculo.jsf com conv
+    fresca em edit-mode) → sidebar Exportar (do calculo.jsf a conv É válida e o
+    link navega corretamente para exportacao.jsf). Validado RUN 8: PJC 126.332
+    bytes capturado via Fase A após 'recentes-pre+sidebar:li_operacoes_exportar'.
+    NÃO reverter — sem o pre-check o export pós-liquidação falha com Erro: 6."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # Localizar o bloco de export (pre-check vive logo antes da estratégia 1 sidebar)
+    idx = pw.find("# PRE-CHECK: se estamos em liquidacao.jsf")
+    assert idx != -1, (
+        "REGRESSÃO #80-T: bloco de export deve ter PRE-CHECK para liquidacao.jsf"
+    )
+    bloco = pw[idx:idx + 2500]
+    assert "#80-T" in bloco, (
+        "REGRESSÃO #80-T: pre-check de export deve ter marcador #80-T"
+    )
+    assert "_reabrir_calculo_via_recentes" in bloco, (
+        "REGRESSÃO #80-T: pre-check deve fazer Recentes reopen ANTES do sidebar "
+        "Exportar quando em liquidacao.jsf (conv de liquidação não exporta — Erro: 6)"
+    )
+    assert "recentes-pre+sidebar" in bloco, (
+        "REGRESSÃO #80-T: pre-check deve marcar nav_exp='recentes-pre+sidebar' "
+        "ao navegar Exportar a partir da conv fresca reaberta"
+    )
+
+
+def test_inv69_verba_manual_aguarda_drools_pos_save():
+    """#80-V (MARIA THAYSNARA 0000632-89, 28/06/2026): verba Manual cujo save NÃO
+    emite 'operação realizada com sucesso' (ex.: FGTS com base complexa PISO DA
+    CATEGORIA) deixa o Drools processando reflexos em background, segurando o
+    @Synchronized apresentadorVerbaDeCalculo por >3 min. Sem espera, a próxima
+    verba dispara LockTimeout e é perdida — RUN 5/7 ficavam em 13/16 verbas
+    (TEMPO A DISPOSICAO, 13º PROPORCIONAL, FÉRIAS PROPORCIONAIS faltando).
+
+    FIX: ao detectar ausência de mensagem de sucesso em _lancar_verba_manual,
+    aguardar 90s (wait_for_timeout) para o Drools finalizar antes de prosseguir.
+    Validado RUN 7/8: 16/16 verbas criadas. NÃO reverter."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    fn_start = pw.find("def _lancar_verba_manual(")
+    fn_end = pw.find("\n    def ", fn_start + 1)
+    fn = pw[fn_start:fn_end]
+
+    assert "#80-V" in fn, (
+        "REGRESSÃO #80-V: _lancar_verba_manual deve ter marcador #80-V"
+    )
+    assert "90000" in fn, (
+        "REGRESSÃO #80-V: _lancar_verba_manual deve aguardar 90s (wait_for_timeout 90000) "
+        "após detectar ausência de mensagem de sucesso — Drools segura o lock por >3 min"
+    )
+    # A espera deve estar atrelada ao ramo de 'mensagem de sucesso não detectada'
+    idx_msg = fn.find("mensagem de sucesso não detectada")
+    assert idx_msg != -1, "REGRESSÃO #80-V: ramo de sucesso-não-detectado deve existir"
+    assert "90000" in fn[idx_msg:idx_msg + 600], (
+        "REGRESSÃO #80-V: o wait de 90s deve estar DENTRO do ramo de 'sucesso não "
+        "detectado' (não incondicional — não atrasar verbas que salvam normalmente)"
+    )
