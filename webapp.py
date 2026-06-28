@@ -3957,8 +3957,10 @@ async def executar_automacao_sse(
         _automacao_global_lock.clear()
 
     # Verificar que o usuário confirmou a prévia (HITL obrigatório).
-    # Aceita confirmado_em OU status="confirmado" — o path v2 seta status sem confirmado_em.
-    _previa_confirmada = bool(calculo.confirmado_em) or calculo.status in ("confirmado", "pjc_exportado")
+    # Aceita confirmado_em OU status em {confirmado, pjc_exportado, erro} — o path v2 seta
+    # status sem confirmado_em; "erro" implica que a automação já foi tentada antes,
+    # portanto a prévia foi confirmada (permite re-execução após falha).
+    _previa_confirmada = bool(calculo.confirmado_em) or calculo.status in ("confirmado", "pjc_exportado", "erro")
     if not _previa_confirmada:
         _liberar_locks()
         async def _nao_confirmado_sse():
