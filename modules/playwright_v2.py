@@ -1458,8 +1458,22 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(10000)
             self._page.wait_for_timeout(2500)
             self.log(f"  ✓ Fechar{tag} disparado (cálculo commitado ao DB)")
-            # Reabrir via Recentes
+            # Reabrir via Recentes — com retry p/ cartão pesado (#80-S)
             ok = self._reabrir_calculo_via_recentes()
+            if not ok:
+                # #80-S (MARIA THAYSNARA 0000632-89, 27/06/2026): após apuração
+                # pesada (130+ overrides × 61 meses 12x36), o PJE-Calc precisa de
+                # tempo extra para estabilizar antes de aceitar nova conversa via
+                # Recentes. O dblclick navega para principal.jsf mas Seam recusa
+                # re-open — provavelmente ainda processando Hibernate flush ou Drools
+                # side-effects. A mesma reabertura FUNCIONA minutos depois (post-Manual).
+                # Fix: retry com delays crescentes (30s → 90s) antes de desistir.
+                for _r80s, _delay_s in [(1, 30), (2, 90)]:
+                    self.log(f"  ⏳ #80-S Reabrir falhou — aguardando {_delay_s}s para servidor estabilizar (retry {_r80s}/2)")
+                    self._page.wait_for_timeout(_delay_s * 1000)
+                    ok = self._reabrir_calculo_via_recentes()
+                    if ok:
+                        break
             if ok:
                 self.log(f"  ✓ Reabertura pós-Fechar{tag} ok: conv={self._calculo_conversation_id}")
             else:
@@ -4064,9 +4078,20 @@ class PlaywrightAutomatorV2:
         # NÃO os removeria (duplicaria reflexos). Cálculos simples não regridem:
         # o Fechar+Reabrir é idempotente e já usado em todo o fluxo.
         try:
-            self._fechar_e_reabrir_calculo("pré-loop Expresso (#79)")
+            _ok79 = self._fechar_e_reabrir_calculo("pré-loop Expresso (#79)")
         except Exception as _e79:
             self.log(f"  ⚠ #79 Fechar+Reabrir pré-Expresso: {_e79}")
+            _ok79 = False
+        if not _ok79:
+            # #80-S (MARIA THAYSNARA 0000632-89, 27/06/2026): Reabrir falhou mesmo
+            # após 2 retries com delays (#80-S em _fechar_e_reabrir_calculo). NÃO
+            # prosseguir com Expresso BATCH — as verbas seriam salvas em conv órfã
+            # não associada ao cálculo correto, deixando cálculo ID=X com 0 verbas.
+            # Redirecionar todas para Manual fallback (#5) que cria cada verba
+            # individualmente (e tem próprio recovery F+R).
+            self.log(f"  ⚠ #80-S Reabrir pré-Expresso falhou definitivamente — redirecionando {len(verbas)} verba(s) para Manual (#5)")
+            self._verbas_expresso_falhadas = list(verbas)
+            return
         if len(verbas) <= 2:
             return self._lancar_expresso_individual(verbas)
         return self._lancar_expresso_batch(verbas)
