@@ -7204,19 +7204,37 @@ class PlaywrightAutomatorV2:
             except Exception:
                 return False
 
+        def _aguardar_incluir_positivo(timeout_ms: int = 45000) -> bool:
+            """Aguarda positivamente o botão 'incluir' via wait_for_function.
+
+            ⚠ FIX #80-U v2 (MARIA THAYSNARA 28/06/2026, RUN 5): a v1 usava
+            _aguardar_ajax(6000)+wait_for_timeout(800)+_tem_incluir() — timeout
+            fixo de 6.8s insuficiente quando @Synchronized lock ainda está ocupado
+            (Drools pesado 10–30s server-side, sem AJAX em voo → _aguardar_ajax
+            retorna imediatamente, networkidle ≠ lock liberado). Aguarda até 45s.
+            """
+            try:
+                self._page.wait_for_function(
+                    """() => { const e = document.querySelector("[id$=':incluir']");
+                               return !!(e && e.offsetParent !== null); }""",
+                    timeout=timeout_ms
+                )
+                return True
+            except Exception:
+                return False
+
         def _tentar_sidebar(n: int = 2) -> bool:
-            """n× sidebar click com gate #80-H + recovery #80-G se LockTimeout."""
+            """n× sidebar click com gate #80-H + espera positiva 45s + recovery #80-G."""
             for _t in range(n):
                 # Gate #80-H: não navegar enquanto server ainda processa op pesada
                 self._aguardar_servidor_ocioso(contexto="pré-incluir Manual (#80-U)")
                 self._navegar_menu_via_click("li_calculo_verbas")
-                self._aguardar_ajax(6000)
-                self._page.wait_for_timeout(800)
-                if _tem_incluir():
+                # Aguarda positivamente até 45s (substituiu timeout fixo de 6.8s)
+                if _aguardar_incluir_positivo(45000):
                     return True
-                # Recovery #80-G: reload leve sem F+R se LockTimeout
+                # Se expirou 45s: verificar se é LockTimeout (página de erro) vs lento
                 if _tem_locktimeout():
-                    self.log("    ⚠ 'incluir' ausente: LockTimeout #80-G — aguardando lock liberar")
+                    self.log("    ⚠ 'incluir' ausente 45s: LockTimeout #80-G — aguardando lock liberar")
                     for _r in range(1, 8):
                         self._page.wait_for_timeout(4000)
                         try:
@@ -7224,11 +7242,25 @@ class PlaywrightAutomatorV2:
                             self._aguardar_ajax(5000)
                         except Exception:
                             pass
-                        if _tem_incluir():
+                        if _aguardar_incluir_positivo(30000):
                             self.log(f"    ✓ 'incluir' recuperado via reload leve {_r} (#80-G)")
                             return True
                         if not _tem_locktimeout():
                             break  # saiu da página de erro — re-tentar sidebar no próximo ciclo
+                else:
+                    # Sem LockTimeout mas sem 'incluir' após 45s: diagnóstico
+                    try:
+                        _diag_i = self._page.evaluate(
+                            """() => ({
+                                url: location.href.slice(-60),
+                                bodyLen: document.body ? document.body.textContent.length : 0,
+                                nInputs: document.querySelectorAll('input').length,
+                                temListagem: !!document.querySelector('[id*=listagem]'),
+                            })"""
+                        )
+                        self.log(f"    ℹ 'incluir' não apareceu em 45s — DIAG: {_diag_i}")
+                    except Exception:
+                        pass
             return False
 
         if _tem_incluir():

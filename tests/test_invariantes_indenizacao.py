@@ -1543,7 +1543,7 @@ def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
     man = src[idx_man:idx_man + 600]
     assert "_garantir_incluir_disponivel()" in man, "_lancar_verba_manual não chama o guard de 'incluir'"
     idx_g = src.find("def _garantir_incluir_disponivel")
-    gblock = src[idx_g:idx_g + 5400]
+    gblock = src[idx_g:idx_g + 7200]
     # causa raiz: restaurar 'incluir' exige CLIQUE no sidebar (Seam @Begin),
     # não url-goto; e escalar para F+R como último recurso.
     assert "_navegar_menu_via_click" in gblock, "guard de 'incluir' deve usar click sidebar (Seam init)"
@@ -2098,6 +2098,11 @@ def test_inv67_garantir_incluir_gate80h_e_recovery80g():
     assert "_aguardar_servidor_ocioso" in fn, (
         "REGRESSÃO #80-U: _garantir_incluir_disponivel deve chamar _aguardar_servidor_ocioso "
         "(gate #80-H) antes de sidebar click — sem isso LockTimeout mata a conv"
+    )
+    assert "wait_for_function" in fn, (
+        "REGRESSÃO #80-U v2: _garantir_incluir_disponivel deve usar wait_for_function "
+        "(espera positiva 45s) em vez de timeout fixo — timeout fixo de 6.8s insuficiente "
+        "para Drools pesado server-side que não produz AJAX em voo"
     )
     assert "_tem_locktimeout" in fn or "Erro Interno no Servidor" in fn, (
         "REGRESSÃO #80-U: _garantir_incluir_disponivel deve detectar LockTimeout "
