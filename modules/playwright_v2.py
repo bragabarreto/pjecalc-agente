@@ -4110,6 +4110,13 @@ class PlaywrightAutomatorV2:
             alvos.append(alvo)
         self.log(f"  → Alvos: {alvos}")
 
+        # #80-W (REGINALDO 0001876-87, 30/06/2026): este Expresso roda logo após
+        # o Fechar+Reabrir pré-loop (#79). Na VM pequena o servidor ainda pode
+        # estar processando (Drools/Seam) quando navegamos — o botão
+        # lancamentoExpresso (rendered=#{apresentador.emModoListagem}) ainda não
+        # renderizou. Gate #80-H antes de navegar evita procurar o botão cedo demais.
+        self._aguardar_servidor_ocioso(contexto="pré-Expresso BATCH (#80-W)")
+
         # Navegar para verba-calculo.jsf
         self._navegar_menu_via_click("li_calculo_verbas")
         self._aguardar_ajax(8000)
@@ -4126,11 +4133,58 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
+        # #80-W: aguardar o botão lancamentoExpresso ficar VISÍVEL (modo listagem
+        # confirmado) ANTES de clicar — re-navegando via sidebar a cada retry
+        # (o sidebar click invoca o método que reseta emModoListagem=true).
+        # Sem esta espera, o batch procurava o botão cedo demais, não achava, e
+        # fazia `return` SILENCIOSO — todas as verbas eram descartadas e a
+        # listagem ficava vazia para sempre (REGINALDO: 8 verbas → 0 na listagem).
+        def _expresso_visivel() -> bool:
+            try:
+                return bool(self._page.evaluate(
+                    """() => { const el = document.querySelector("[id$='lancamentoExpresso']");
+                               return !!(el && el.offsetParent !== null
+                                         && getComputedStyle(el).display !== 'none'); }"""
+                ))
+            except Exception:
+                return False
+
+        _btn_ok = False
+        for _retry in range(6):
+            if _expresso_visivel():
+                _btn_ok = True
+                break
+            self.log(f"    ⏳ #80-W aguardando lancamentoExpresso visível (retry {_retry+1}/6)")
+            self._aguardar_servidor_ocioso(contexto="#80-W aguardando botão Expresso")
+            self._navegar_menu_via_click("li_calculo_verbas")
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(1000)
+            try:
+                if "verba-calculo.jsf" not in self._page.url and self._calculo_conversation_id:
+                    self._page.goto(
+                        f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                        f"?conversationId={self._calculo_conversation_id}",
+                        wait_until="domcontentloaded", timeout=20000,
+                    )
+                    self._aguardar_ajax(5000)
+                    self._page.wait_for_timeout(800)
+            except Exception:
+                pass
+
         # Click Expresso (entrar na grade de checkboxes)
         try:
+            if not _btn_ok:
+                # última checagem direta antes de desistir
+                _expresso_visivel()
             self._clicar("lancamentoExpresso")
         except Exception as e:
-            self.log(f"  ⚠ click lancamentoExpresso falhou: {e}")
+            # #80-W: NÃO descartar silenciosamente — rotear TODAS as verbas para
+            # o fallback Manual (#5) para que ao menos sejam criadas. Um `return`
+            # aqui (comportamento antigo) deixava a listagem vazia e bloqueava a
+            # liquidação inteira (cálculo travado em "Confirmado", PJC inválido).
+            self.log(f"  ⚠ click lancamentoExpresso falhou: {e} — roteando "
+                     f"{len(verbas)} verba(s) para Manual (#80-W)")
+            self._verbas_expresso_falhadas = list(verbas)
             return
         self._aguardar_ajax(10000)
         self._page.wait_for_timeout(2000)

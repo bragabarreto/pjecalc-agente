@@ -2181,3 +2181,42 @@ def test_inv69_verba_manual_aguarda_drools_pos_save():
         "REGRESSÃO #80-V: o wait de 90s deve estar DENTRO do ramo de 'sucesso não "
         "detectado' (não incondicional — não atrasar verbas que salvam normalmente)"
     )
+
+
+def test_inv70_expresso_batch_espera_botao_e_roteia_manual():
+    """#80-W (REGINALDO 0001876-87, 30/06/2026): no Expresso BATCH, logo após o
+    Fechar+Reabrir pré-loop (#79), o botão lancamentoExpresso
+    (rendered=#{apresentador.emModoListagem}) ainda não havia renderizado quando o
+    bot procurou — e o `except` apenas fazia `return` SILENCIOSO. Resultado: as 8
+    verbas nunca foram criadas, a listagem ficou VAZIA para sempre, e a liquidação
+    abortou (cálculo travado em 'Confirmado', sem PJC).
+
+    FIX (2 partes, NÃO REVERTER):
+      1. Gate #80-H (_aguardar_servidor_ocioso) + wait-loop que re-navega via
+         sidebar (resetando emModoListagem=true) até o botão ficar VISÍVEL antes
+         de clicar — replicando a robustez já presente em _lancar_expresso_individual.
+      2. Se o botão ainda não aparecer, rotear TODAS as verbas para o fallback
+         Manual (_verbas_expresso_falhadas) em vez de `return` silencioso — assim
+         as verbas são criadas e a liquidação não fica vazia."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    fn_start = pw.find("def _lancar_expresso_batch(")
+    fn_end = pw.find("\n    def ", fn_start + 1)
+    fn = pw[fn_start:fn_end]
+
+    assert "#80-W" in fn, (
+        "REGRESSÃO #80-W: _lancar_expresso_batch deve ter marcador #80-W"
+    )
+    assert "_aguardar_servidor_ocioso" in fn, (
+        "REGRESSÃO #80-W: _lancar_expresso_batch deve chamar _aguardar_servidor_ocioso "
+        "(gate #80-H) antes de procurar lancamentoExpresso (botão renderiza tarde pós-F+R)"
+    )
+    # O ramo de falha do clique NÃO pode ser um `return` silencioso — tem de rotear p/ Manual
+    idx_fail = fn.find("click lancamentoExpresso falhou")
+    assert idx_fail != -1, "REGRESSÃO #80-W: ramo de falha do clique deve existir"
+    bloco_fail = fn[idx_fail:idx_fail + 400]
+    assert "_verbas_expresso_falhadas = list(verbas)" in bloco_fail, (
+        "REGRESSÃO #80-W: ao não encontrar lancamentoExpresso, _lancar_expresso_batch "
+        "DEVE rotear TODAS as verbas para Manual (_verbas_expresso_falhadas = list(verbas)) "
+        "em vez de `return` silencioso — senão a listagem fica vazia e a liquidação aborta"
+    )
