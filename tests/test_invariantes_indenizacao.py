@@ -2260,3 +2260,33 @@ def test_inv71_execucao_limpa_cartao_vazio_antes_de_validar():
     assert p["cartao_de_ponto"] is None, (
         "REGRESSÃO #80-X: _limpar_cartao_ponto_vazio deve transformar cartao vazio em None"
     )
+
+
+def test_inv72_salario_base_nao_e_historico_default():
+    """#80-Y (REGINALDO 0001876-87, 30/06/2026): "SALÁRIO BASE" NÃO pode estar em
+    _HISTORICOS_DEFAULT. O commit e41b4ab (04/05/2026) assumia que o PJE-Calc
+    auto-cria um histórico "SALÁRIO BASE" — FALSO. O PJE-Calc só auto-cria
+    "ÚLTIMA REMUNERAÇÃO". Quando a prévia traz um histórico "SALÁRIO BASE" com
+    valor real e verbas CALCULADO o referenciam (formula_calculado.base_calculo.
+    historico_nome="SALÁRIO BASE", tipo=HISTORICO_SALARIAL — caso do 13º, FÉRIAS+1/3
+    e HE de REGINALDO), pulá-lo deixava essas verbas SEM base salarial →
+    liquidação bloqueada: "Falta selecionar pelo menos um Histórico Salarial" +
+    "Campo obrigatório: Histórico Salarial" no save dos parâmetros.
+
+    Removê-lo do skip faz o bot CRIAR o SALÁRIO BASE normalmente (fidelidade
+    prévia↔automação). NÃO RE-ADICIONAR."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    import re
+    m = re.search(r"_HISTORICOS_DEFAULT\s*=\s*\{(.*?)\}", pw, re.S)
+    assert m, "_HISTORICOS_DEFAULT deve existir"
+    corpo = m.group(1)
+    assert "SALÁRIO BASE" not in corpo and "SALARIO BASE" not in corpo, (
+        "REGRESSÃO #80-Y: 'SALÁRIO BASE' NÃO pode estar em _HISTORICOS_DEFAULT — "
+        "o PJE-Calc não o auto-cria; pulá-lo deixa verbas CALCULADO sem base e "
+        "bloqueia a liquidação. Ver caso REGINALDO 0001876-87."
+    )
+    # ÚLTIMA REMUNERAÇÃO DEVE permanecer (genuinamente auto-criada pelo PJE-Calc)
+    assert "REMUNERA" in corpo, (
+        "REGRESSÃO #80-Y: 'ÚLTIMA REMUNERAÇÃO' deve PERMANECER em _HISTORICOS_DEFAULT "
+        "(é o histórico genuinamente auto-criado pelo PJE-Calc)"
+    )

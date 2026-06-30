@@ -2115,10 +2115,21 @@ class PlaywrightAutomatorV2:
         self._capturar_conversation_id()
         self.log("Fase 2 concluída")
 
-    # Históricos auto-criados pelo PJE-Calc (não devem ser duplicados)
+    # Históricos auto-criados pelo PJE-Calc (não devem ser duplicados).
+    #
+    # ⚠ #80-Y (REGINALDO 0001876-87, 30/06/2026) — NÃO RE-ADICIONAR "SALÁRIO BASE":
+    # o commit e41b4ab (04/05/2026) assumia que o PJE-Calc auto-cria um histórico
+    # "SALÁRIO BASE". FALSO — o PJE-Calc só auto-cria "ÚLTIMA REMUNERAÇÃO" (é o
+    # único citado nos alertas de liquidação). Quando a prévia traz um histórico
+    # "SALÁRIO BASE" com valor real (REGINALDO: 1.594,11), pulá-lo deixava as
+    # verbas CALCULADO (13º, FÉRIAS+1/3, HE) SEM base salarial → liquidação
+    # bloqueada com "Falta selecionar pelo menos um Histórico Salarial" +
+    # "Campo obrigatório: Histórico Salarial" no save dos parâmetros.
+    # Removê-lo do skip faz o bot CRIAR o SALÁRIO BASE normalmente (fidelidade
+    # prévia↔automação). Só afeta cálculos que listam SALÁRIO BASE explicitamente
+    # — os que dependem de ÚLTIMA REMUNERAÇÃO seguem idênticos.
     _HISTORICOS_DEFAULT = {
         "ÚLTIMA REMUNERAÇÃO", "ULTIMA REMUNERACAO",
-        "SALÁRIO BASE", "SALARIO BASE",
         "ADICIONAL DE INSALUBRIDADE PAGO",
     }
 
