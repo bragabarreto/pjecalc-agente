@@ -600,6 +600,20 @@ def executar_v2_como_generator(sessao_id: str):
         yield f"ERRO: sessão {sessao_id} não encontrada"
         return
 
+    # #80-X (REGINALDO 0001876-87, 30/06/2026): a re-execução validava o JSON
+    # CRU, sem o normalize/limpeza que a confirmação aplica (linhas 518-519).
+    # Se o JSON salvo tiver cartao_de_ponto = {ocorrencias_override: []} (objeto
+    # vazio que a UI da prévia inicializa no boot), Pydantic exige
+    # data_inicial/data_final → "validação Pydantic falhou" e a automação nem
+    # inicia. Aplicar a MESMA limpeza/normalização aqui garante que a execução
+    # valide exatamente como a confirmação — re-execuções sempre coerentes.
+    try:
+        from modules.json_normalizer import normalize_v2_json
+        data = normalize_v2_json(data)
+    except Exception as _e:
+        yield f"  ⚠ normalize_v2_json (não-fatal): {_e}"
+    data = _limpar_cartao_ponto_vazio(data)
+
     # Validar antes de iniciar
     try:
         previa = PreviaCalculoV2.model_validate(data)

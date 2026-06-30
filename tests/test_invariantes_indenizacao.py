@@ -2220,3 +2220,43 @@ def test_inv70_expresso_batch_espera_botao_e_roteia_manual():
         "DEVE rotear TODAS as verbas para Manual (_verbas_expresso_falhadas = list(verbas)) "
         "em vez de `return` silencioso — senão a listagem fica vazia e a liquidação aborta"
     )
+
+
+def test_inv71_execucao_limpa_cartao_vazio_antes_de_validar():
+    """#80-X (REGINALDO 0001876-87, 30/06/2026): a re-execução
+    (executar_v2_como_generator) validava o JSON CRU com PreviaCalculoV2, sem o
+    normalize/limpeza que a confirmação aplica. Se o JSON salvo tiver
+    cartao_de_ponto = {ocorrencias_override: []} (objeto vazio que a UI da prévia
+    inicializa no boot), Pydantic exige data_inicial/data_final → "validação
+    Pydantic falhou" e a automação nem inicia.
+
+    FIX: aplicar _limpar_cartao_ponto_vazio (+ normalize_v2_json) ANTES do
+    model_validate na execução, idêntico ao path de confirmação — re-execuções
+    sempre coerentes. NÃO REVERTER."""
+    src = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
+
+    fn_start = src.find("def executar_v2_como_generator(")
+    assert fn_start != -1, "executar_v2_como_generator deve existir"
+    fn_end = src.find("\ndef ", fn_start + 1)
+    fn = src[fn_start:fn_end]
+
+    idx_validate = fn.find("PreviaCalculoV2.model_validate")
+    assert idx_validate != -1, "execução deve validar com PreviaCalculoV2"
+    antes = fn[:idx_validate]
+    assert "_limpar_cartao_ponto_vazio" in antes, (
+        "REGRESSÃO #80-X: executar_v2_como_generator deve chamar "
+        "_limpar_cartao_ponto_vazio ANTES do model_validate — senão cartao vazio "
+        "{ocorrencias_override:[]} quebra a validação e a automação nem inicia"
+    )
+    assert "normalize_v2_json" in antes, (
+        "REGRESSÃO #80-X: executar_v2_como_generator deve normalizar (normalize_v2_json) "
+        "ANTES do model_validate, igual ao path de confirmação"
+    )
+
+    # Comportamento: cartao vazio → None
+    import importlib
+    mod = importlib.import_module("modules.webapp_v2")
+    p = mod._limpar_cartao_ponto_vazio({"cartao_de_ponto": {"ocorrencias_override": []}})
+    assert p["cartao_de_ponto"] is None, (
+        "REGRESSÃO #80-X: _limpar_cartao_ponto_vazio deve transformar cartao vazio em None"
+    )
