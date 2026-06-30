@@ -6040,8 +6040,20 @@ class PlaywrightAutomatorV2:
                     # spontaneamente). URL não é verba-calculo.jsf E não
                     # tem form. Recuperar via Fechar+Reabrir + re-click.
                     url_tail = _diag.get("url_tail", "")
-                    if "principal.jsf" in url_tail or "verba-calculo.jsf" not in url_tail:
-                        self.log(f"    → Detectado redirect para wrong page ({url_tail})")
+                    # #80-Z (REGINALDO 0001876-87, 30/06/2026): o form de Alteração
+                    # NÃO carregou. ANTES recuperava SÓ em wrong-page (principal.jsf);
+                    # quando a URL seguia em verba-calculo.jsf (form não renderizou,
+                    # listagem persistiu por lock A4J transitório) caía no `return`
+                    # SILENCIOSO abaixo → a verba era PULADA sem ajustar parâmetros.
+                    # Para CALCULADO (ex.: 13º) isso deixa a base histórico sem
+                    # selecionar → liquidação bloqueada ("Falta selecionar Histórico
+                    # Salarial"). Agora SEMPRE tenta recovery (LEVE goto + re-click,
+                    # depois F+R). NÃO REVERTER para o gate wrong-page-only.
+                    if True:
+                        if "principal.jsf" in url_tail or "verba-calculo.jsf" not in url_tail:
+                            self.log(f"    → Detectado redirect para wrong page ({url_tail})")
+                        else:
+                            self.log(f"    → Form não carregou em verba-calculo.jsf ({url_tail[-40:]}) — recovery #80-Z")
                         # ⚠ ESTRATÉGIA OTIMIZADA (24/05/2026): ANTES de F+R
                         # (que pode pegar cálculo errado do Recentes), tentar
                         # SIMPLES URL goto para verba-calculo.jsf?conv={pre}
@@ -6174,8 +6186,6 @@ class PlaywrightAutomatorV2:
                         except Exception as e:
                             self.log(f"    ⚠ Wrong-page recovery falhou: {e}")
                             return
-                    else:
-                        return  # de fato form não carregou
             except Exception:
                 self.log("    ⚠ Form de Alteração não carregou — sem diagnóstico DOM")
                 return  # aborta — sem form, não tem o que preencher

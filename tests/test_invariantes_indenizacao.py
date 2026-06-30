@@ -2290,3 +2290,30 @@ def test_inv72_salario_base_nao_e_historico_default():
         "REGRESSÃO #80-Y: 'ÚLTIMA REMUNERAÇÃO' deve PERMANECER em _HISTORICOS_DEFAULT "
         "(é o histórico genuinamente auto-criado pelo PJE-Calc)"
     )
+
+
+def test_inv73_form_nao_carregou_sempre_recupera():
+    """#80-Z (REGINALDO 0001876-87, 30/06/2026): quando o form de Alteração da
+    verba NÃO carrega (wait_for descricao falha), o recovery (LEVE goto + re-click,
+    depois F+R) deve rodar SEMPRE — não só em wrong-page (principal.jsf). ANTES,
+    quando a URL seguia em verba-calculo.jsf (form não renderizou por lock A4J
+    transitório), caía num `return` SILENCIOSO ("de fato form não carregou") que
+    PULAVA a verba sem ajustar parâmetros. Para CALCULADO (13º SALÁRIO de REGINALDO)
+    isso deixava a base histórico sem selecionar → liquidação bloqueada com
+    "Falta selecionar pelo menos um Histórico Salarial". NÃO REVERTER."""
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    fn_start = pw.find("def _configurar_parametros_pos_expresso(")
+    assert fn_start != -1
+    fn_end = pw.find("\n    def ", fn_start + 1)
+    fn = pw[fn_start:fn_end]
+
+    assert "#80-Z" in fn, (
+        "REGRESSÃO #80-Z: _configurar_parametros_pos_expresso deve ter marcador #80-Z"
+    )
+    # O `return  # de fato form não carregou` (skip silencioso) NÃO pode voltar
+    assert "de fato form não carregou" not in fn, (
+        "REGRESSÃO #80-Z: o `return  # de fato form não carregou` foi removido — "
+        "ele pulava a verba sem recovery quando o form não renderizava em "
+        "verba-calculo.jsf. NÃO reintroduzir o gate wrong-page-only."
+    )
