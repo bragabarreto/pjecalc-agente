@@ -2317,3 +2317,9 @@ def test_inv73_form_nao_carregou_sempre_recupera():
         "ele pulava a verba sem recovery quando o form não renderizava em "
         "verba-calculo.jsf. NÃO reintroduzir o gate wrong-page-only."
     )
+    # #80-AA: o re-click pós-F+R deve esperar a listagem popular (linkParametrizar)
+    assert "#80-AA" in fn, (
+        "REGRESSÃO #80-AA: o recovery deve aguardar a listagem POPULAR "
+        "(linkParametrizar presente) antes do re-click pós-F+R — senão o re-click "
+        "roda com a listagem vazia (lock) e 'não acha' a verba (pulava o 13º)."
+    )

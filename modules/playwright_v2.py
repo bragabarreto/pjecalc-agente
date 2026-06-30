@@ -6135,6 +6135,28 @@ class PlaywrightAutomatorV2:
                                         wait_until="domcontentloaded", timeout=20000,
                                     )
                                     self._aguardar_ajax(8000)
+                                # #80-AA (REGINALDO 0001876-87, 30/06/2026): aguardar a
+                                # listagem POPULAR (linkParametrizar presente) antes do
+                                # re-click. Pós-F+R a listagem costuma vir vazia (lock
+                                # A4J ainda processando) e o re-click "não acha" a verba
+                                # (era o que pulava o 13º SALÁRIO mesmo com recovery).
+                                self._aguardar_servidor_ocioso(contexto=f"#80-AA pré re-click ({v.nome_pjecalc})")
+                                for _w in range(10):
+                                    try:
+                                        _tem_links = self._page.evaluate(
+                                            "() => document.querySelectorAll('a.linkParametrizar').length"
+                                        )
+                                    except Exception:
+                                        _tem_links = 0
+                                    if _tem_links:
+                                        break
+                                    self.log(f"    ⏳ #80-AA listagem sem linkParametrizar — reload leve {_w+1}/10")
+                                    try:
+                                        self._page.reload(wait_until="domcontentloaded", timeout=15000)
+                                    except Exception:
+                                        pass
+                                    self._aguardar_ajax(5000)
+                                    self._page.wait_for_timeout(1500)
                                 # Re-tentar click Parâmetros — MESMA lógica do
                                 # click inicial (linksMain sem :listaReflexo: + EXACT)
                                 clicou_retry = self._page.evaluate(
