@@ -883,6 +883,116 @@ def _norm_comentarios_jg(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _eh_aviso_previo(v: dict[str, Any]) -> bool:
+    """True se a verba é AVISO PRÉVIO (por característica ou nome/alvo)."""
+    p = v.get("parametros") if isinstance(v.get("parametros"), dict) else {}
+    carac = str(p.get("caracteristica") or "").upper()
+    alvo = str(v.get("expresso_alvo") or "").upper()
+    nome = str(v.get("nome_pjecalc") or "").upper()
+    return (
+        "AVISO_PREVIO" in carac
+        or "AVISO PRÉVIO" in alvo or "AVISO PREVIO" in alvo
+        or "AVISO PRÉVIO" in nome or "AVISO PREVIO" in nome
+    )
+
+
+def _norm_aviso_previo_divisor_30(data: dict[str, Any]) -> None:
+    """#80-AB — AVISO PRÉVIO CALCULADO deve usar divisor=30 (base DIÁRIA).
+
+    O aviso prévio indenizado é proporcional (Lei 12.506/2011: 30 dias + 3 por
+    ano completo). No PJE-Calc isso se traduz em fórmula de base DIÁRIA:
+    `valor = base × quantidade(dias) / 30`. A IA às vezes emite
+    `divisor=1, quantidade=1` ("1 mês") → só 30 dias, PERDENDO os dias
+    proporcionais (ex.: REGINALDO tinha 33 dias mas saiu 30).
+
+    Regra estrutural: para AVISO PRÉVIO, divisor SEMPRE = 30. Quando divisor≠30,
+    força 30 PRESERVANDO o valor — converte a quantidade da unidade antiga
+    ("meses") para "dias" (qtd' = qtd × 30 / divisor_antigo). Assim:
+      - divisor=1, qtd=1  → divisor=30, qtd=30 (mesmo valor, 30 dias)
+      - a IA que já emite divisor=30, qtd=33 é preservada (33 dias corretos).
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    for v in verbas:
+        if not isinstance(v, dict) or not _eh_aviso_previo(v):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        if str(p.get("valor") or "").upper() != "CALCULADO":
+            continue
+        fc = p.get("formula_calculado")
+        if not isinstance(fc, dict):
+            continue
+        div = fc.get("divisor")
+        if not isinstance(div, dict):
+            div = {"tipo": "OUTRO_VALOR", "valor": 30.0}
+            fc["divisor"] = div
+        try:
+            div_val = float(div.get("valor")) if div.get("valor") is not None else None
+        except (TypeError, ValueError):
+            div_val = None
+        if div_val == 30.0:
+            continue  # já correto — nada a fazer
+        # Preservar o valor: qtd' = qtd × 30 / divisor_antigo
+        old_div = div_val if (div_val and div_val > 0) else 1.0
+        q = fc.get("quantidade")
+        if not isinstance(q, dict):
+            q = {"tipo": "INFORMADA", "valor": 1.0}
+            fc["quantidade"] = q
+        try:
+            q_val = float(q.get("valor")) if q.get("valor") is not None else 1.0
+        except (TypeError, ValueError):
+            q_val = 1.0
+        q["valor"] = q_val * 30.0 / old_div
+        q.setdefault("tipo", "INFORMADA")
+        div["tipo"] = "OUTRO_VALOR"
+        div["valor"] = 30.0
+        _log.warning(
+            "Normalizer #80-AB: AVISO PRÉVIO '%s' divisor %s→30 (qtd %s→%s dias) "
+            "— base diária Lei 12.506/2011",
+            v.get("nome_pjecalc"), old_div, q_val, q["valor"],
+        )
+
+
+def _norm_dano_moral_sumula_439_false(data: dict[str, Any]) -> None:
+    """#80-AC — INDENIZAÇÃO POR DANO MORAL: Súmula 439 do TST = FALSE.
+
+    A opção "Juros — Aplicar Súmula nº 439 do TST" deve estar DESMARCADA nas
+    verbas de dano moral (o PJE-Calc pode deixá-la marcada por default em verba
+    indenizatória, o que anteciparia os juros para a data do ajuizamento). Força
+    `juros_aplicar_sumula_439=False` — o bot então desmarca explicitamente.
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        nome = str(v.get("nome_pjecalc") or "").upper()
+        alvo = str(v.get("expresso_alvo") or "").upper()
+        if "DANO MORAL" not in nome and "DANO MORAL" not in alvo:
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        if p.get("juros_aplicar_sumula_439") is not False:
+            p["juros_aplicar_sumula_439"] = False
+            _log.warning(
+                "Normalizer #80-AC: DANO MORAL '%s' → juros_aplicar_sumula_439=False",
+                v.get("nome_pjecalc"),
+            )
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -1004,6 +1114,18 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # extrafolha (o registrado já foi depositado). Corrige a inversão comum da
     # IA (registrado=true / por fora=false).
     _norm_fgts_por_fora(data)
+
+    # Salvaguarda #80-AB: AVISO PRÉVIO CALCULADO deve usar divisor=30 (base
+    # diária, Lei 12.506/2011 — aviso proporcional 30 + 3/ano). A IA às vezes
+    # emite divisor=1/quantidade=1 ("1 mês") → só 30 dias, perdendo os dias
+    # proporcionais. Força divisor=30 preservando o valor (converte a qtd de
+    # "meses" para "dias").
+    _norm_aviso_previo_divisor_30(data)
+
+    # Salvaguarda #80-AC: INDENIZAÇÃO POR DANO MORAL — a opção "Aplicar Súmula
+    # 439 do TST" deve ser FALSE (o PJE-Calc pode deixá-la marcada por default
+    # em verba indenizatória). Garante juros_aplicar_sumula_439=False.
+    _norm_dano_moral_sumula_439_false(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #

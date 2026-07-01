@@ -527,6 +527,19 @@ remunerações diferentes (ex: 2023-2024-2025-2026), criar **APENAS UMA** entrad
 - **`divisor.tipo = "OUTRO_VALOR"` e `divisor.valor = 12` (constante CLT — 12 avos por período aquisitivo)**
 - **`multiplicador = 1.33` (1/3 adicional constitucional)** e quantidade.tipo = "AVOS"
 
+⚠️ **REGRA CRÍTICA — AVISO PRÉVIO (DIVISOR = 30 — INVARIANTE PERMANENTE — NÃO REVERTER)**:
+O aviso prévio indenizado é calculado em BASE DIÁRIA: `valor = base × dias / 30`.
+Isso é obrigatório porque o aviso é PROPORCIONAL (Lei 12.506/2011: 30 dias + 3 por
+ano completo — ex.: 1 ano ⇒ 33 dias; 2 anos ⇒ 36 dias; ...).
+- **`divisor.tipo = "OUTRO_VALOR"` e `divisor.valor = 30` (SEMPRE 30 — base diária)**
+- **`quantidade.tipo = "INFORMADA"` e `quantidade.valor = <nº EXATO de dias de aviso deferidos>`**
+  (30 se contrato < 1 ano; 33 para 1 ano; 30+3×anos completos; ou o nº que a sentença fixar)
+- **`multiplicador = 1`**, base = MAIOR_REMUNERACAO
+- **NUNCA emitir `divisor.valor = 1` com `quantidade.valor = 1`** ("1 mês") — isso
+  liquida só 30 dias e PERDE os dias proporcionais (bug REGINALDO 0001876-87:
+  33 dias deferidos saíram como 30). O divisor 1 subestima o aviso e todos os
+  seus reflexos.
+
 ⚠️ **REGRA CRÍTICA — MULTA DO ART. 467 DA CLT (INVARIANTE PERMANENTE — NÃO REVERTER)**:
 A multa do art. 467 (50% sobre verbas incontroversas) **NUNCA é verba principal
 autônoma** — ela NÃO existe no rol Expresso e lançá-la como verba própria de
@@ -564,6 +577,13 @@ indenizações), NÃO adicionar o reflexo 467 naquela verba.
 `divisor.valor = 1` ou outro valor — o PJE-Calc multiplicaria o cálculo por 12,
 gerando erro grave. O PJE-Calc Expresso default JÁ preenche `divisor=12` para
 essas verbas; o JSON v2 deve REPETIR esse valor para garantir consistência.
+
+⚠️ **REGRA CRÍTICA — INDENIZAÇÃO POR DANO MORAL / SÚMULA 439 TST (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+Nas verbas de **INDENIZAÇÃO POR DANO MORAL**, o campo
+`parametros.juros_aplicar_sumula_439` deve ser **`false`** (opção "Juros — Aplicar
+Súmula nº 439 do TST" DESMARCADA). Deixar `true` anteciparia os juros para a data
+do ajuizamento de forma indevida para o padrão adotado. Emitir sempre `false`
+(o normalizer também força false como salvaguarda).
 
 O PJE-Calc **gera automaticamente** as ocorrências de 13º para cada ano (DEZEMBRO de cada ano
 mais a ocorrência de DESLIGAMENTO no ano da rescisão), e a **base de cada ocorrência respeita
@@ -915,7 +935,7 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **SALDO DE SALÁRIO** | CALCULADO (regra) — **INFORMADO** (exceção, ver abaixo) | CALCULADO: base=HISTORICO_SALARIAL (última rem.), divisor=OUTRO_VALOR=30, multiplicador=1, quantidade=INFORMADA (dias trabalhados no mês da rescisão). **EXCEÇÃO obrigatória → INFORMADO** quando (a) a sentença FIXA o valor bruto do saldo (ex.: "R$ 1.886,67 = 8/30 de R$ 7.075,00"); OU (b) há valor já pago/depositado a deduzir (ConPag, adiantamento, depósito judicial); OU (c) a base inclui salário pago por fora (remuneração real = registrado + extrafolha). Ver §4.4.quater. |
 | **13º SALÁRIO** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1, quantidade=AVOS |
 | **FÉRIAS + 1/3** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1.33, quantidade=AVOS |
-| **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=APURADA (Lei 12.506) |
+| **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, **divisor=OUTRO_VALOR=30 (SEMPRE — base diária)**, multiplicador=1, quantidade=INFORMADA=<dias de aviso: 30 + 3/ano, Lei 12.506/2011>. NUNCA divisor=1. |
 | **HORAS EXTRAS 50%/100%** | CALCULADO | base=HISTORICO_SALARIAL, divisor=CARGA_HORARIA (ou OUTRO_VALOR=220), multiplicador=1.5/2.0, quantidade=INFORMADA mensal OU IMPORTADA_DO_CARTAO |
 | **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, divisor e quantidade conforme cartão |
 | **ADICIONAL INSALUBRIDADE** | CALCULADO | base=SALARIO_MINIMO (ou histórico se sentença disser), multiplicador=0.10/0.20/0.40, quantidade=INFORMADA=1 |

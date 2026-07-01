@@ -5407,6 +5407,23 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Incidências: {e}")
 
         # ─── 7. FLAGS OPCIONAIS ───
+        # #80-AC: SÚMULA 439 do TST — nas verbas de INDENIZAÇÃO POR DANO MORAL a
+        # opção "Juros — Aplicar Súmula nº 439 do TST" deve refletir
+        # juros_aplicar_sumula_439 (padrão: False = desmarcada). O campo só
+        # renderiza para verbas indenizatórias; _marcar_checkbox_se_diferente é
+        # no-op seguro se ausente. Busca por sufixos prováveis do id JSF.
+        try:
+            _s439 = bool(getattr(p, "juros_aplicar_sumula_439", False))
+            _nome_v = (getattr(v, "nome_pjecalc", "") or "").upper()
+            if "DANO MORAL" in _nome_v or getattr(p, "juros_aplicar_sumula_439", None) is not None:
+                for _id in ("aplicarSumula439", "aplicaSumula439", "sumula439",
+                            "aplicarSumula439Tst", "jurosAplicarSumula439"):
+                    if self._marcar_checkbox_se_diferente(_id, _s439):
+                        self.log(f"    ✓ #80-AC Súmula 439 TST = {_s439} (campo {_id})")
+                        break
+        except Exception as _e:
+            self.log(f"    ⚠ #80-AC Súmula 439: {_e}")
+
         if hasattr(p, "natureza_indenizatoria") and p.natureza_indenizatoria is not None:
             self._marcar_checkbox_se_diferente("naturezaIndenizatoria", p.natureza_indenizatoria)
         if hasattr(p, "deduzir_inss_recolhido") and p.deduzir_inss_recolhido is not None:

@@ -2323,3 +2323,54 @@ def test_inv73_form_nao_carregou_sempre_recupera():
         "(linkParametrizar presente) antes do re-click pós-F+R — senão o re-click "
         "roda com a listagem vazia (lock) e 'não acha' a verba (pulava o 13º)."
     )
+
+
+def test_inv74_aviso_previo_divisor_30():
+    """#80-AB (REGINALDO 0001876-87): AVISO PRÉVIO CALCULADO deve usar divisor=30
+    (base diária, Lei 12.506/2011 — aviso proporcional 30 + 3/ano). A IA emitia
+    divisor=1/quantidade=1 ("1 mês") → só 30 dias, perdendo os proporcionais
+    (33 dias deferidos saíram 30). Camadas: prompt + normalizer.
+    """
+    import importlib
+    norm = importlib.import_module("modules.json_normalizer")
+    # (1) divisor=1/qtd=1 → divisor=30/qtd=30 (valor preservado)
+    d = {"verbas_principais": [{"nome_pjecalc": "AVISO PRÉVIO", "parametros": {
+        "caracteristica": "AVISO_PREVIO", "valor": "CALCULADO",
+        "formula_calculado": {"divisor": {"tipo": "OUTRO_VALOR", "valor": 1},
+                              "quantidade": {"tipo": "INFORMADA", "valor": 1}}}}]}
+    norm._norm_aviso_previo_divisor_30(d)
+    fc = d["verbas_principais"][0]["parametros"]["formula_calculado"]
+    assert fc["divisor"]["valor"] == 30.0, "REGRESSÃO #80-AB: divisor do aviso deve virar 30"
+    assert fc["quantidade"]["valor"] == 30.0, "REGRESSÃO #80-AB: qtd deve escalar p/ preservar valor"
+    # (2) já correto (30/33) preservado
+    d2 = {"verbas_principais": [{"nome_pjecalc": "AVISO PRÉVIO", "parametros": {
+        "caracteristica": "AVISO_PREVIO", "valor": "CALCULADO",
+        "formula_calculado": {"divisor": {"tipo": "OUTRO_VALOR", "valor": 30},
+                              "quantidade": {"tipo": "INFORMADA", "valor": 33}}}}]}
+    norm._norm_aviso_previo_divisor_30(d2)
+    fc2 = d2["verbas_principais"][0]["parametros"]["formula_calculado"]
+    assert fc2["divisor"]["valor"] == 30 and fc2["quantidade"]["valor"] == 33, (
+        "REGRESSÃO #80-AB: aviso já com divisor=30 deve ser preservado")
+    # prompt tem a regra
+    prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "AVISO PRÉVIO (DIVISOR = 30" in prompt, (
+        "REGRESSÃO #80-AB: prompt deve ter o invariante do divisor=30 do aviso")
+
+
+def test_inv75_dano_moral_sumula_439_false():
+    """#80-AC (REGINALDO): INDENIZAÇÃO POR DANO MORAL — Súmula 439 do TST deve ser
+    False. Camadas: normalizer força false; bot desmarca (defensivo); prompt instrui.
+    """
+    import importlib
+    norm = importlib.import_module("modules.json_normalizer")
+    d = {"verbas_principais": [{"nome_pjecalc": "INDENIZAÇÃO POR DANO MORAL",
+                                "parametros": {"juros_aplicar_sumula_439": True}}]}
+    norm._norm_dano_moral_sumula_439_false(d)
+    assert d["verbas_principais"][0]["parametros"]["juros_aplicar_sumula_439"] is False, (
+        "REGRESSÃO #80-AC: normalizer deve forçar juros_aplicar_sumula_439=False no dano moral")
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "#80-AC" in pw and "Súmula 439" in pw, (
+        "REGRESSÃO #80-AC: bot deve desmarcar Súmula 439 no dano moral (marcador #80-AC)")
+    prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "SÚMULA 439 TST" in prompt or "Súmula nº 439" in prompt, (
+        "REGRESSÃO #80-AC: prompt deve instruir Súmula 439=false no dano moral")
