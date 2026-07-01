@@ -1562,7 +1562,16 @@ class PreviaCalculoV2(BaseModel):
         for v in self.verbas_principais:
             p = v.parametros
             if p.valor == TipoValor.INFORMADO:
-                if not isinstance(p.valor_devido, ValorDevidoInformado):
+                # #80-AD: EXCEÇÃO DEDUÇÃO — verba de dedução (VALOR PAGO /
+                # DEVOLUÇÃO) tem valor_devido=0 de propósito; o valor abate o
+                # principal via valor_pago.valor_brl. NÃO é pendência.
+                _vp = getattr(p, "valor_pago", None)
+                _eh_deducao = bool(
+                    _vp is not None and getattr(_vp, "valor_brl", 0) and _vp.valor_brl > 0
+                )
+                if _eh_deducao:
+                    pass  # dedução válida — não acusar pendência
+                elif not isinstance(p.valor_devido, ValorDevidoInformado):
                     self.meta.validacao.campos_faltantes.append(
                         f"verbas_principais[{v.id}] '{v.nome_sentenca}': "
                         f"valor=INFORMADO requer valor_devido com valor_informado_brl > 0"

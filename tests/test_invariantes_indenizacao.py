@@ -2401,6 +2401,15 @@ def test_inv76_deducao_valor_devido_zero_valida():
     assert v["valor_pago"]["valor_brl"] == 4061.13, "valor da dedução fica em valor_pago"
     # ParametrosVerba aceita a dedução (valor_devido=0 + valor_pago>0)
     W._pm.ParametrosVerba.model_validate(v)  # não deve levantar
+    # A validação de COMPLETUDE (meta.validacao) TAMBÉM deve isentar a dedução
+    # (2ª camada — mesma regra). Guard estrutural no código do schema:
+    schema_src = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
+    idx_compl = schema_src.find("def _validate_completude")
+    assert idx_compl != -1
+    bloco_compl = schema_src[idx_compl: idx_compl + 4000]
+    assert "EXCEÇÃO DEDUÇÃO" in bloco_compl and "_eh_deducao" in bloco_compl, (
+        "REGRESSÃO #80-AD: a validação de completude deve isentar verbas de "
+        "dedução (valor_devido=0 + valor_pago>0) — senão a prévia fica INCOMPLETA")
     # regressão: INFORMADO sem valor nenhum (nem devido nem pago) ainda falha
     import pytest as _pt
     with _pt.raises(Exception):
