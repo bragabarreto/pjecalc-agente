@@ -2374,3 +2374,37 @@ def test_inv75_dano_moral_sumula_439_false():
     prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "SÚMULA 439 TST" in prompt or "Súmula nº 439" in prompt, (
         "REGRESSÃO #80-AC: prompt deve instruir Súmula 439=false no dano moral")
+
+
+def test_inv76_deducao_valor_devido_zero_valida():
+    """#80-AD (DANIEL 0000030-98): verba de DEDUÇÃO (VALOR PAGO / DEVOLUÇÃO) tem
+    valor_devido=0 e o valor em valor_pago.valor_brl. Antes, isso travava o
+    /confirmar da prévia: (a) o validador exigia valor_devido.valor_informado_brl>0
+    sem exceção; (b) ValorDevidoInformado tinha Field(gt=0); (c) o normalizer só
+    migrava valor→valor_pago quando valor_pago estava vazio (a IA punha em ambos,
+    com valor_devido.tipo=CALCULADO → parseava errado). Fix 3 pontos:
+    normalizer canoniza (valor_devido INFORMADO/0), Field ge=0, validator isenta
+    dedução (valor_pago>0). NÃO REVERTER."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+    W = importlib.import_module("modules.webapp_v2")
+    # dedução com valor em AMBOS + tipo CALCULADO no valor_devido (caso DANIEL)
+    d = {"verbas_principais": [{
+        "nome_pjecalc": "DEDUCAO - ACERTO RESCISORIO", "expresso_alvo": "VALOR PAGO - NÃO TRIBUTÁVEL",
+        "parametros": {"valor": "INFORMADO",
+                       "valor_devido": {"tipo": "CALCULADO", "valor_informado_brl": 4061.13},
+                       "valor_pago": {"tipo": "INFORMADO", "valor_brl": 4061.13}}}]}
+    nd = N.normalize_v2_json(d)
+    v = nd["verbas_principais"][0]["parametros"]
+    assert v["valor_devido"]["tipo"] == "INFORMADO", "normalizer deve canonizar valor_devido p/ INFORMADO"
+    assert v["valor_devido"]["valor_informado_brl"] == 0.0, "dedução: valor_devido deve ser 0"
+    assert v["valor_pago"]["valor_brl"] == 4061.13, "valor da dedução fica em valor_pago"
+    # ParametrosVerba aceita a dedução (valor_devido=0 + valor_pago>0)
+    W._pm.ParametrosVerba.model_validate(v)  # não deve levantar
+    # regressão: INFORMADO sem valor nenhum (nem devido nem pago) ainda falha
+    import pytest as _pt
+    with _pt.raises(Exception):
+        W._pm.ParametrosVerba.model_validate({
+            "valor": "INFORMADO",
+            "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 0},
+            "valor_pago": {"tipo": "INFORMADO", "valor_brl": 0}})

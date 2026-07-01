@@ -1628,23 +1628,35 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
         vp = p.get("valor_pago") or {}
         vi = vd.get("valor_informado_brl") if isinstance(vd, dict) else None
         vp_atual = vp.get("valor_brl") if isinstance(vp, dict) else None
-        # Migrar quando valor_devido tem valor > 0 e valor_pago está vazio/0
-        if (
-            isinstance(vi, (int, float)) and vi > 0
-            and (vp_atual is None or vp_atual == 0)
-        ):
-            # Garantir vp como dict completo
+        # #80-AD: DEDUÇÃO — o valor pertence SEMPRE a `valor_pago.valor_brl` e
+        # `valor_devido` deve ficar ZERADO com tipo=INFORMADO. Antes, a migração
+        # só ocorria quando valor_pago estava vazio; quando a IA punha o valor em
+        # AMBOS (valor_devido E valor_pago — caso DANIEL 0000030-98), o
+        # valor_devido continuava > 0. Pior: a IA emitia
+        # valor_devido.tipo="CALCULADO" com valor=INFORMADO → o Union do Pydantic
+        # parseava como ValorDevidoCalculado (perdia o valor_informado_brl) e o
+        # validador rejeitava a prévia ("valor_devido.valor_informado_brl > 0").
+        # Canonizar SEMPRE: pegar o valor (de valor_pago OU valor_devido), pô-lo
+        # em valor_pago e zerar valor_devido com tipo=INFORMADO.
+        _val_deducao = None
+        if isinstance(vp_atual, (int, float)) and vp_atual > 0:
+            _val_deducao = vp_atual
+        elif isinstance(vi, (int, float)) and vi > 0:
+            _val_deducao = vi
+        if _val_deducao is not None:
             if not isinstance(vp, dict):
                 vp = {}
             vp["tipo"] = "INFORMADO"
-            vp["valor_brl"] = vi
+            vp["valor_brl"] = _val_deducao
             vp.setdefault("proporcionalizar", False)
             p["valor_pago"] = vp
-            # Resetar valor_devido para 0 (mantém estrutura INFORMADO)
-            if isinstance(vd, dict):
-                vd["valor_informado_brl"] = 0.0
-                vd.setdefault("tipo", "INFORMADO")
-                vd.setdefault("proporcionalizar", False)
+            # valor_devido ZERADO e coerente (tipo=INFORMADO, não CALCULADO)
+            if not isinstance(vd, dict):
+                vd = {}
+            vd["tipo"] = "INFORMADO"
+            vd["valor_informado_brl"] = 0.0
+            vd.setdefault("proporcionalizar", False)
+            p["valor_devido"] = vd
         # Garantir zerar_valor_negativo=False na própria verba
         if p.get("zerar_valor_negativo") is True:
             p["zerar_valor_negativo"] = False

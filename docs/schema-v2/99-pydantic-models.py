@@ -355,7 +355,10 @@ class VerbaExclusoes(BaseModel):
 
 class ValorDevidoInformado(BaseModel):
     tipo: Literal["INFORMADO"] = "INFORMADO"
-    valor_informado_brl: float = Field(gt=0)
+    # #80-AD: ge=0 (não gt=0) — verbas de DEDUÇÃO têm valor_devido=0 (o valor
+    # vive em valor_pago). A regra "INFORMADO exige > 0, exceto dedução" é
+    # aplicada no model_validator de ParametrosVerba (ciente de valor_pago).
+    valor_informado_brl: float = Field(ge=0)
     proporcionalizar: bool = False
 
 
@@ -666,10 +669,26 @@ class ParametrosVerba(BaseModel):
         #   2. valor=CALCULADO sem formula_calculado completo
         #      → PJE-Calc não consegue calcular, verba zerada
         if self.valor == TipoValor.INFORMADO:
-            if not isinstance(self.valor_devido, ValorDevidoInformado) or not self.valor_devido.valor_informado_brl:
+            _vd_ok = (
+                isinstance(self.valor_devido, ValorDevidoInformado)
+                and self.valor_devido.valor_informado_brl
+            )
+            # #80-AD — EXCEÇÃO DEDUÇÃO: verba de dedução (VALOR PAGO / DEVOLUÇÃO
+            # DE DESCONTOS) tem `valor_devido = 0` de propósito — o valor abate o
+            # principal via `valor_pago.valor_brl`. É VÁLIDA mesmo com
+            # valor_devido zerado. Sem esta exceção, deduções travavam o
+            # /confirmar da prévia (caso DANIEL 0000030-98).
+            _vp = getattr(self, "valor_pago", None)
+            _eh_deducao = bool(
+                _vp is not None
+                and getattr(_vp, "valor_brl", 0)
+                and _vp.valor_brl > 0
+            )
+            if not _vd_ok and not _eh_deducao:
                 raise ValueError(
                     "ParametrosVerba: valor=INFORMADO exige "
-                    "`valor_devido.valor_informado_brl > 0`. "
+                    "`valor_devido.valor_informado_brl > 0` "
+                    "(ou, em verba de dedução, `valor_pago.valor_brl > 0`). "
                     "Aplicar mensalização (§4.4.bis do prompt) se a sentença "
                     "fixar valor diário/semanal."
                 )
