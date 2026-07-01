@@ -993,6 +993,76 @@ def _norm_dano_moral_sumula_439_false(data: dict[str, Any]) -> None:
             )
 
 
+def _carga_horaria_mensal_do_cartao(data: dict[str, Any]) -> float | None:
+    """Extrai a carga horária mensal (jornada_mensal_media) do 1º cartão de
+    ponto com esse dado. Retorna float ou None."""
+    cartoes = data.get("cartoes_de_ponto")
+    candidatos = list(cartoes) if isinstance(cartoes, list) else []
+    cp_sing = data.get("cartao_de_ponto")
+    if isinstance(cp_sing, dict):
+        candidatos.append(cp_sing)
+    for cp in candidatos:
+        if not isinstance(cp, dict):
+            continue
+        jp = cp.get("jornada_padrao")
+        if not isinstance(jp, dict):
+            continue
+        raw = jp.get("jornada_mensal_media")
+        if raw is None:
+            continue
+        try:
+            val = float(str(raw).replace(".", "").replace(",", ".")) if isinstance(raw, str) else float(raw)
+        except (TypeError, ValueError):
+            continue
+        if val and val > 0:
+            return round(val, 2)
+    return None
+
+
+def _norm_divisor_cartao_para_carga_horaria(data: dict[str, Any]) -> None:
+    """#80-AF — DIVISOR IMPORTADA_DO_CARTAO → OUTRO_VALOR (carga horária fixa).
+
+    Para verbas CALCULADO (ex.: ADICIONAL NOTURNO), a IA às vezes emite
+    `divisor.tipo=IMPORTADA_DO_CARTAO`. Isso é incorreto: o divisor é a CARGA
+    HORÁRIA MENSAL (base do valor-hora), um número fixo — não uma coluna do
+    cartão (que pode ser 0 em meses sem aquela grandeza, gerando "divisor zero"
+    e ocorrências desativadas; e o save trava com "Campo obrigatório: Cartão de
+    Ponto" pois o bot só vincula a coluna da QUANTIDADE). A QUANTIDADE segue
+    IMPORTADA_DO_CARTAO (horas noturnas/extras). Coage o divisor para
+    OUTRO_VALOR com a carga horária mensal do cartão (ou 220 default).
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    carga = _carga_horaria_mensal_do_cartao(data) or 220.0
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict) or str(p.get("valor") or "").upper() != "CALCULADO":
+            continue
+        fc = p.get("formula_calculado")
+        if not isinstance(fc, dict):
+            continue
+        div = fc.get("divisor")
+        if not isinstance(div, dict):
+            continue
+        if str(div.get("tipo") or "").upper() != "IMPORTADA_DO_CARTAO":
+            continue
+        div["tipo"] = "OUTRO_VALOR"
+        div["valor"] = carga
+        div["tipo_cartao_ponto"] = None
+        _log.warning(
+            "Normalizer #80-AF: verba '%s' divisor IMPORTADA_DO_CARTAO → "
+            "OUTRO_VALOR=%s (carga horária mensal) — evita divisor zero",
+            v.get("nome_pjecalc"), carga,
+        )
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -1126,6 +1196,13 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # 439 do TST" deve ser FALSE (o PJE-Calc pode deixá-la marcada por default
     # em verba indenizatória). Garante juros_aplicar_sumula_439=False.
     _norm_dano_moral_sumula_439_false(data)
+
+    # Salvaguarda #80-AF: DIVISOR de verba CALCULADO nunca deve ser
+    # IMPORTADA_DO_CARTAO — o divisor é a CARGA HORÁRIA (base p/ o valor-hora),
+    # fixa. Importá-lo do cartão gera "divisor zero" em meses sem a coluna e
+    # trava o save ("Campo obrigatório: Cartão de Ponto"). Coage p/ OUTRO_VALOR
+    # usando a carga horária mensal do cartão (ou 220).
+    _norm_divisor_cartao_para_carga_horaria(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #

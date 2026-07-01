@@ -937,7 +937,7 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **FÉRIAS + 1/3** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1.33, quantidade=AVOS |
 | **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, **divisor=OUTRO_VALOR=30 (SEMPRE — base diária)**, multiplicador=1, quantidade=INFORMADA=<dias de aviso: 30 + 3/ano, Lei 12.506/2011>. NUNCA divisor=1. |
 | **HORAS EXTRAS 50%/100%** | CALCULADO | base=HISTORICO_SALARIAL, divisor=CARGA_HORARIA (ou OUTRO_VALOR=220), multiplicador=1.5/2.0, quantidade=INFORMADA mensal OU IMPORTADA_DO_CARTAO |
-| **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, divisor e quantidade conforme cartão |
+| **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, **quantidade=IMPORTADA_DO_CARTAO** (horas noturnas), **divisor=OUTRO_VALOR = carga horária mensal FIXA** (ex.: 220, ou a jornada mensal do cartão). ⚠️ NUNCA `divisor=IMPORTADA_DO_CARTAO` — o divisor é a carga horária (base do valor-hora), não uma coluna do cartão; importá-lo gera "divisor zero" e trava o save. |
 | **ADICIONAL INSALUBRIDADE** | CALCULADO | base=SALARIO_MINIMO (ou histórico se sentença disser), multiplicador=0.10/0.20/0.40, quantidade=INFORMADA=1 |
 | **MULTA 477 CLT** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=INFORMADA=1, divisor=OUTRO_VALOR=1, multiplicador=1 |
 | **VALE TRANSPORTE** | **INFORMADO** | mensalizar (R$/dia × dias úteis médios = 22). NÃO usar CALCULADO. |

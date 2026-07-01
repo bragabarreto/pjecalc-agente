@@ -2417,3 +2417,36 @@ def test_inv76_deducao_valor_devido_zero_valida():
             "valor": "INFORMADO",
             "valor_devido": {"tipo": "INFORMADO", "valor_informado_brl": 0},
             "valor_pago": {"tipo": "INFORMADO", "valor_brl": 0}})
+
+
+def test_inv77_divisor_cartao_para_carga_horaria():
+    """#80-AF (DANIEL 0000030-98): divisor=IMPORTADA_DO_CARTAO em verba CALCULADO
+    (ex.: ADICIONAL NOTURNO) trava o save ("Campo obrigatório: Cartão de Ponto" —
+    o bot só vincula a coluna da QUANTIDADE) e gera "divisor zero". O divisor é a
+    CARGA HORÁRIA mensal fixa. Normalizer coage → OUTRO_VALOR (carga do cartão ou
+    220); quantidade segue IMPORTADA_DO_CARTAO. NÃO REVERTER."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+    # com carga horária no cartão → usa ela
+    d = {
+        "cartoes_de_ponto": [{"jornada_padrao": {"jornada_mensal_media": "181,00"}}],
+        "verbas_principais": [{"nome_pjecalc": "ADICIONAL NOTURNO 20%", "parametros": {
+            "valor": "CALCULADO",
+            "formula_calculado": {
+                "divisor": {"tipo": "IMPORTADA_DO_CARTAO", "valor": None},
+                "quantidade": {"tipo": "IMPORTADA_DO_CARTAO", "valor": 1},
+                "multiplicador": 0.20}}}],
+    }
+    N._norm_divisor_cartao_para_carga_horaria(d)
+    fc = d["verbas_principais"][0]["parametros"]["formula_calculado"]
+    assert fc["divisor"]["tipo"] == "OUTRO_VALOR" and fc["divisor"]["valor"] == 181.0
+    assert fc["quantidade"]["tipo"] == "IMPORTADA_DO_CARTAO", "quantidade segue do cartão"
+    # sem cartão → default 220
+    d2 = {"verbas_principais": [{"nome_pjecalc": "X", "parametros": {
+        "valor": "CALCULADO", "formula_calculado": {
+            "divisor": {"tipo": "IMPORTADA_DO_CARTAO"}, "quantidade": {"tipo": "INFORMADA", "valor": 1}}}}]}
+    N._norm_divisor_cartao_para_carga_horaria(d2)
+    assert d2["verbas_principais"][0]["parametros"]["formula_calculado"]["divisor"]["valor"] == 220.0
+    # prompt tem a regra
+    prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "NUNCA `divisor=IMPORTADA_DO_CARTAO`" in prompt
