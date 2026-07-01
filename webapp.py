@@ -304,9 +304,23 @@ async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
     """Página inicial — lista de processos e calculações recentes."""
     repo = RepositorioCalculo(db)
     processos = repo.listar_processos(limit=20)
+
+    # Prévias v2 geradas por IA mas AINDA NÃO confirmadas: existem só como
+    # arquivo no store (sem Calculo no banco) e por isso não apareciam na lista
+    # acima. Enumerar como "Prévias pendentes" para o usuário poder retomá-las.
+    previas_pendentes: list = []
+    try:
+        from infrastructure.database import Calculo as _Calc
+        _confirmados = {row[0] for row in db.query(_Calc.sessao_id).all() if row[0]}
+        from modules.webapp_v2 import listar_previas_pendentes
+        previas_pendentes = listar_previas_pendentes(_confirmados)
+    except Exception as _e:
+        logger.warning("home: falha ao listar prévias pendentes: %s", _e)
+
     return templates.TemplateResponse(
         request, "index.html",
-        {"processos": processos, "agora": datetime.now()},
+        {"processos": processos, "agora": datetime.now(),
+         "previas_pendentes": previas_pendentes},
     )
 
 

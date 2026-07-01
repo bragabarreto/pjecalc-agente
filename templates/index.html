@@ -64,4 +64,38 @@
   <p style="color:#6c757d;">Nenhum processo encontrado. Inicie um <a href="/novo">novo cálculo</a>.</p>
   {% endif %}
 </div>
+
+{% if previas_pendentes %}
+<div class="card">
+  <h2>Prévias pendentes <span class="badge badge-amarelo">{{ previas_pendentes|length }}</span></h2>
+  <p style="color:#6c757d; margin-top:-6px;">
+    Prévias geradas pela extração IA que <strong>ainda não foram confirmadas</strong>.
+    Clique em <em>Revisar / Confirmar</em> para retomar de onde parou.
+  </p>
+  <table>
+    <thead>
+      <tr>
+        <th>Nº do Processo</th>
+        <th>Reclamante</th>
+        <th>Reclamado</th>
+        <th>Gerada em</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pv in previas_pendentes %}
+      <tr>
+        <td>{{ pv.numero_processo }}</td>
+        <td>{{ pv.reclamante }}</td>
+        <td>{{ pv.reclamado }}</td>
+        <td>{{ pv.atualizado_em.strftime('%d/%m/%Y %H:%M') if pv.atualizado_em else '—' }}</td>
+        <td>
+          <a href="{{ pv.url_previa }}" class="btn btn-primary" style="padding:5px 12px; font-size:0.85rem;">Revisar / Confirmar</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
 {% endblock %}

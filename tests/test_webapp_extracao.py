@@ -156,3 +156,35 @@ def test_retry_json_invalido_presente():
     src = (REPO_ROOT / "modules" / "webapp_extracao.py").read_text(encoding="utf-8")
     assert "json_retry" in src
     assert "não era JSON válido" in src
+
+
+def test_previas_pendentes_filtra_confirmadas(tmp_path, monkeypatch):
+    """Home lista prévias v2 SALVAS mas não confirmadas (sem Calculo no banco).
+    Confirmadas (sessao_id no set) são excluídas; .extracao.json é ignorado."""
+    import modules.webapp_v2 as w2
+    monkeypatch.setattr(w2, "_STORE_DIR", tmp_path)
+    import json as _j
+    (tmp_path / "sid-pendente.json").write_text(_j.dumps(
+        {"processo": {"numero_processo": "0000030-98.2026.5.07.0003",
+                      "reclamante": {"nome": "DANIEL"}, "reclamado": {"nome": "ACME"}}}))
+    (tmp_path / "sid-confirmada.json").write_text(_j.dumps(
+        {"processo": {"numero_processo": "0000001-11.2026.5.07.0003",
+                      "reclamante": {"nome": "X"}}}))
+    (tmp_path / "sid-pendente.extracao.json").write_text("{}")  # deve ser ignorado
+    r = w2.listar_previas_pendentes({"sid-confirmada"})
+    sids = {p["sessao_id"] for p in r}
+    assert "sid-pendente" in sids, "prévia não confirmada deve aparecer"
+    assert "sid-confirmada" not in sids, "confirmada (no banco) deve ser excluída"
+    p = next(x for x in r if x["sessao_id"] == "sid-pendente")
+    assert p["numero_processo"] == "0000030-98.2026.5.07.0003"
+    assert p["reclamante"] == "DANIEL"
+    assert p["url_previa"] == "/previa/v2/sid-pendente"
+
+
+def test_home_passa_previas_pendentes_ao_template():
+    """A home coleta sessao_ids confirmados e passa previas_pendentes ao index."""
+    wapp = (REPO_ROOT / "webapp.py").read_text(encoding="utf-8")
+    assert "listar_previas_pendentes" in wapp
+    assert "previas_pendentes" in wapp
+    idx = (REPO_ROOT / "templates" / "index.html").read_text(encoding="utf-8")
+    assert "Prévias pendentes" in idx and "Revisar / Confirmar" in idx

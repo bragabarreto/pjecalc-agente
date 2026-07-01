@@ -92,6 +92,63 @@ def _save_previa(sessao_id: str, data: dict) -> None:
     )
 
 
+def listar_previas_pendentes(sessao_ids_confirmados: set | None = None,
+                             limit: int = 30) -> list[dict]:
+    """Lista prévias v2 SALVAS mas AINDA NÃO CONFIRMADAS (sem registro no banco).
+
+    Fluxo de extração IA (/novo/ia): a prévia é gravada como arquivo
+    `<sessao>.json` no _STORE_DIR ANTES de ser confirmada. Só ao confirmar é
+    criado um `Calculo` no banco (que passa a aparecer na home). Prévias geradas
+    e não confirmadas ficavam "invisíveis" — o usuário só as reencontrava se
+    tivesse guardado a URL. Esta função enumera esses rascunhos para exibi-los
+    numa seção "Prévias pendentes" da home.
+
+    `sessao_ids_confirmados`: conjunto de sessao_ids que JÁ têm Calculo no banco
+    (passado pela home) — usados para EXCLUIR da lista de pendentes.
+    """
+    confirmados = sessao_ids_confirmados or set()
+    pend: list[dict] = []
+    try:
+        arquivos = sorted(
+            [p for p in _STORE_DIR.glob("*.json")
+             if not p.name.endswith(".extracao.json")],
+            key=lambda p: p.stat().st_mtime, reverse=True,
+        )
+    except Exception:
+        return []
+    for p in arquivos:
+        sid = p.stem
+        if sid in confirmados:
+            continue
+        try:
+            d = json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        proc = d.get("processo") if isinstance(d.get("processo"), dict) else {}
+        numero = proc.get("numero_processo") or "—"
+
+        def _nome(v):
+            if isinstance(v, dict):
+                return v.get("nome") or "—"
+            return str(v or "—")
+        from datetime import datetime as _dt
+        try:
+            mtime = _dt.fromtimestamp(p.stat().st_mtime)
+        except Exception:
+            mtime = None
+        pend.append({
+            "sessao_id": sid,
+            "numero_processo": numero,
+            "reclamante": _nome(proc.get("reclamante")),
+            "reclamado": _nome(proc.get("reclamado")),
+            "atualizado_em": mtime,
+            "url_previa": f"/previa/v2/{sid}",
+        })
+        if len(pend) >= limit:
+            break
+    return pend
+
+
 def _save_snapshot_extracao(sessao_id: str, previa: dict) -> None:
     """Aprendizado FATIA 3 — grava as assinaturas das verbas EXTRAÍDAS (Etapa 2,
     antes da edição do usuário), para comparar com a prévia confirmada na
