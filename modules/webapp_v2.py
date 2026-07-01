@@ -577,15 +577,25 @@ async def confirmar_previa(sessao_id: str, payload: dict):
     try:
         previa = PreviaCalculoV2.model_validate(payload)
     except Exception as e:
-        raise HTTPException(status_code=422, detail=f"Validação Pydantic falhou: {e}")
+        # #80-AE: erro humanizado — o que deu errado + como corrigir (por verba).
+        from modules.erro_previa_humanizer import humanizar_validation_error
+        raise HTTPException(
+            status_code=422,
+            detail={"humanizado": humanizar_validation_error(e, payload),
+                    "mensagem": f"Validação Pydantic falhou: {e}"},
+        )
 
     if previa.meta.validacao.completude != "OK":
+        from modules.erro_previa_humanizer import humanizar_incompleta
         raise HTTPException(
             status_code=422,
             detail={
                 "completude": previa.meta.validacao.completude,
                 "campos_faltantes": previa.meta.validacao.campos_faltantes,
                 "avisos": previa.meta.validacao.avisos,
+                "humanizado": humanizar_incompleta(
+                    previa.meta.validacao.campos_faltantes,
+                    previa.meta.validacao.avisos),
             },
         )
 
@@ -675,13 +685,27 @@ def executar_v2_como_generator(sessao_id: str):
     try:
         previa = PreviaCalculoV2.model_validate(data)
     except Exception as e:
-        yield f"ERRO: validação Pydantic falhou: {e}"
+        # #80-AE: explicitar o que deu errado + como corrigir (por verba), em
+        # vez de despejar o erro Pydantic cru no log SSE.
+        from modules.erro_previa_humanizer import humanizar_validation_error
+        h = humanizar_validation_error(e, data)
+        yield f"❌ {h['titulo']}:"
+        for it in h["erros"]:
+            _ent = it.get("entidade") or "Prévia"
+            yield f"  • {_ent}: {it.get('o_que', '')}"
+            yield f"    → Como corrigir: {it.get('como_corrigir', '')}"
+        yield "  ℹ Abra a prévia, corrija os itens acima e confirme novamente."
         return
 
     if previa.meta.validacao.completude != "OK":
-        yield f"ERRO: prévia INCOMPLETA — {len(previa.meta.validacao.campos_faltantes)} pendência(s):"
-        for p in previa.meta.validacao.campos_faltantes[:20]:
-            yield f"  • {p}"
+        from modules.erro_previa_humanizer import humanizar_incompleta
+        h = humanizar_incompleta(previa.meta.validacao.campos_faltantes,
+                                 previa.meta.validacao.avisos)
+        yield f"❌ {h['titulo']}:"
+        for it in h["erros"][:20]:
+            yield f"  • {it.get('o_que', '')}"
+            yield f"    → {it.get('como_corrigir', '')}"
+        yield "  ℹ Abra a prévia, preencha as pendências acima e confirme novamente."
         return
 
     # Importar o automator v2

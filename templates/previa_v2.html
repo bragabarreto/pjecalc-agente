@@ -2631,14 +2631,45 @@ async function confirmarPreviaV2() {
     // Usa redirect_url retornado pelo backend (v2: /instrucoes/v2/{id}).
     window.location.href = data.redirect_url || `/instrucoes/v2/${SESSAO_ID}`;
   } else {
-    const err = await r.json();
-    const det = err.detail;
-    const msg = typeof det === 'string' ? det
-      : det?.campos_faltantes?.length
-        ? 'Campos pendentes:\n• ' + det.campos_faltantes.slice(0, 5).join('\n• ')
-        : JSON.stringify(det, null, 2).slice(0, 400);
-    alert('Erro ao confirmar:\n\n' + msg);
+    let det = {};
+    try { det = (await r.json()).detail || {}; } catch (_) {}
+    // #80-AE: erro humanizado (o que deu errado + como corrigir, por verba).
+    if (det && det.humanizado && Array.isArray(det.humanizado.erros)) {
+      mostrarErrosPrevia(det.humanizado);
+    } else {
+      const msg = typeof det === 'string' ? det
+        : det?.campos_faltantes?.length
+          ? 'Campos pendentes:\n• ' + det.campos_faltantes.slice(0, 5).join('\n• ')
+          : JSON.stringify(det, null, 2).slice(0, 400);
+      alert('Erro ao confirmar:\n\n' + msg);
+    }
   }
+}
+
+// #80-AE: painel de erros — explicita o que impede a automação e como corrigir.
+function mostrarErrosPrevia(h) {
+  document.getElementById('previa-erros-modal')?.remove();
+  const esc = s => String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const linhas = (h.erros || []).map(function (e) {
+    return '<li style="margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid #f0f0f0;">'
+      + '<div style="font-weight:600; color:#842029;">' + esc(e.entidade || 'Prévia')
+      + (e.campo ? ' <span style="font-weight:400; color:#6c757d;">— campo: ' + esc(e.campo) + '</span>' : '')
+      + '</div>'
+      + '<div style="margin:4px 0;"><strong>O que deu errado:</strong> ' + esc(e.o_que) + '</div>'
+      + '<div style="color:#0f5132;"><strong>Como corrigir:</strong> ' + esc(e.como_corrigir) + '</div>'
+      + '</li>';
+  }).join('');
+  const html =
+    '<div id="previa-erros-modal" style="position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:9999; display:flex; align-items:center; justify-content:center; padding:20px;">'
+    + '<div style="background:#fff; border-radius:10px; max-width:720px; width:100%; max-height:85vh; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.3);">'
+    + '<div style="background:#f8d7da; color:#842029; padding:16px 20px; border-radius:10px 10px 0 0; font-size:1.1rem; font-weight:700;">⚠️ ' + esc(h.titulo || 'A prévia tem problemas') + '</div>'
+    + '<div style="padding:20px;"><ul style="list-style:none; padding:0; margin:0;">' + linhas + '</ul>'
+    + '<p style="color:#6c757d; margin-top:8px; font-size:.9rem;">Corrija os itens acima aqui na prévia e clique novamente em <strong>Confirmar</strong>.</p></div>'
+    + '<div style="padding:12px 20px; border-top:1px solid #eee; text-align:right;">'
+    + '<button onclick="document.getElementById(\'previa-erros-modal\').remove()" class="btn btn-primary">Entendi, vou corrigir</button></div>'
+    + '</div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
 }
 
 // ─── Init ────────────────────────────────────────────────────────────
