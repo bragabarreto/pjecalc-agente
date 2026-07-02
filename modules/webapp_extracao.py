@@ -429,6 +429,13 @@ def _worker_etapa2(sessao_id: str) -> None:
         previa = PreviaCalculoV2.model_validate(payload)
         _previa_dump = previa.model_dump()
         _save_previa(sessao_id, _previa_dump)
+        # #80-AI: prévia entra na lista principal de processos DESDE a geração
+        # (requisito: disponível p/ automação posterior sem depender de URL)
+        try:
+            from modules.webapp_v2 import registrar_calculo_db
+            registrar_calculo_db(sessao_id, _previa_dump, status="previa_gerada")
+        except Exception as _e_reg:
+            logger.warning("registrar_calculo_db pós-Etapa2: %s", _e_reg)
         # Aprendizado FATIA 3: snapshot das assinaturas EXTRAÍDAS (antes da
         # edição do usuário) — base do ciclo de confiança na captura.
         try:

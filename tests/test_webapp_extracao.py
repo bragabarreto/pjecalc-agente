@@ -220,3 +220,18 @@ def test_recovery_sessoes_orfas(tmp_path, monkeypatch):
     assert e2["fase"] == "erro" and "reinício" in e2["erro"]
     assert e3["fase"] == "resumo_pronto" and "confirmar" in e3["aviso_recuperacao"]
     assert e4["fase"] == "previa_pronta"
+
+
+def test_previa_entra_na_lista_principal_desde_geracao():
+    """#80-AI: prévia registrada no banco (status previa_gerada) NA GERAÇÃO —
+    Etapa 2 da extração IA e /processar/v2 chamam registrar_calculo_db; a
+    confirmação atualiza (confirmar=True) em vez de criar."""
+    w2 = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
+    assert "def registrar_calculo_db" in w2
+    assert 'registrar_calculo_db(sessao_id, _dump, status="previa_gerada")' in w2, (
+        "/processar/v2 deve registrar na geração")
+    assert 'registrar_calculo_db(sessao_id, data, status="confirmado", confirmar=True)' in w2, (
+        "confirmação deve atualizar via helper")
+    ext = (REPO_ROOT / "modules" / "webapp_extracao.py").read_text(encoding="utf-8")
+    assert 'registrar_calculo_db(sessao_id, _previa_dump, status="previa_gerada")' in ext, (
+        "Etapa 2 da extração deve registrar na geração")

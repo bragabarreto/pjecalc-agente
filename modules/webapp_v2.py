@@ -92,6 +92,70 @@ def _save_previa(sessao_id: str, data: dict) -> None:
     )
 
 
+def registrar_calculo_db(sessao_id: str, data: dict, status: str = "previa_gerada",
+                         confirmar: bool = False) -> bool:
+    """#80-AI — registra a prévia na LISTA PRINCIPAL desde a GERAÇÃO.
+
+    Requisito do usuário (02/07/2026, caso RODRIGO ROCHA 0000905-05): "as
+    prévias geradas devem estar sempre disponíveis para posterior automação,
+    a partir da geração da prévia" — antes, o Processo/Calculo só era criado
+    na CONFIRMAÇÃO, e prévias recém-geradas ficavam apenas na seção "Prévias
+    pendentes" (fora da tabela principal de processos).
+
+    Chamado em: (a) fim da Etapa 2 da extração IA e (b) /processar/v2, ambos
+    com status="previa_gerada" (badge "Prévia" na home); (c) confirmação, com
+    confirmar=True (atualiza dados_json + status + confirmado_em).
+    Best-effort: nunca levanta.
+    """
+    try:
+        from datetime import datetime
+        from infrastructure.database import SessionLocal, Processo, Calculo
+        proc = data.get("processo") if isinstance(data.get("processo"), dict) else {}
+        numero = proc.get("numero_processo")
+        if not numero:
+            return False
+
+        def _nome(v):
+            if isinstance(v, dict):
+                return v.get("nome") or ""
+            return str(v or "")
+        reclamante = _nome(proc.get("reclamante"))
+        reclamado = _nome(proc.get("reclamado"))
+
+        db = SessionLocal()
+        try:
+            proc_db = db.query(Processo).filter(Processo.numero_processo == numero).first()
+            if not proc_db:
+                proc_db = Processo(numero_processo=numero, reclamante=reclamante,
+                                   reclamado=reclamado)
+                db.add(proc_db)
+                db.flush()
+            calc = db.query(Calculo).filter(Calculo.sessao_id == sessao_id).first()
+            if not calc:
+                calc = Calculo(
+                    sessao_id=sessao_id,
+                    processo_id=proc_db.id,
+                    status=status,
+                    dados_json=json.dumps(data),
+                    confirmado_em=datetime.utcnow() if confirmar else None,
+                )
+                db.add(calc)
+            else:
+                calc.dados_json = json.dumps(data)
+                if confirmar:
+                    calc.status = status
+                    if not calc.confirmado_em:
+                        calc.confirmado_em = datetime.utcnow()
+                # sem confirmar: não rebaixar status já avançado
+            db.commit()
+            return True
+        finally:
+            db.close()
+    except Exception as _e:
+        logger.warning("registrar_calculo_db(%s, status=%s): %s", sessao_id, status, _e)
+        return False
+
+
 def listar_previas_pendentes(sessao_ids_confirmados: set | None = None,
                              limit: int = 30) -> list[dict]:
     """Lista prévias v2 SALVAS mas AINDA NÃO CONFIRMADAS (sem registro no banco).
@@ -233,7 +297,10 @@ async def processar_v2(payload: dict):
         raise HTTPException(status_code=400, detail=f"Schema v2 inválido: {e}")
 
     sessao_id = str(uuid.uuid4())
-    _save_previa(sessao_id, previa.model_dump())
+    _dump = previa.model_dump()
+    _save_previa(sessao_id, _dump)
+    # #80-AI: entrar na lista principal de processos DESDE a geração
+    registrar_calculo_db(sessao_id, _dump, status="previa_gerada")
 
     return JSONResponse({
         "sessao_id": sessao_id,
@@ -604,42 +671,10 @@ async def confirmar_previa(sessao_id: str, payload: dict):
     data["meta"]["confirmada"] = True
     _save_previa(sessao_id, data)
 
-    # Criar registro no DB para que marcar_exportado funcione ao final da automação.
-    # Sem isso, _sse_follow_runner lança ValueError ao tentar vincular o PJC gerado.
-    try:
-        from infrastructure.database import SessionLocal, Processo, Calculo
-        db = SessionLocal()
-        try:
-            proc = previa.processo
-            numero = proc.numero_processo
-            reclamante = proc.reclamante.nome if hasattr(proc.reclamante, "nome") else str(proc.reclamante or "")
-            reclamado  = proc.reclamado.nome  if hasattr(proc.reclamado, "nome")  else str(proc.reclamado or "")
-
-            proc_db = db.query(Processo).filter(Processo.numero_processo == numero).first()
-            if not proc_db:
-                proc_db = Processo(numero_processo=numero, reclamante=reclamante, reclamado=reclamado)
-                db.add(proc_db)
-                db.flush()
-
-            calculo_existente = db.query(Calculo).filter(Calculo.sessao_id == sessao_id).first()
-            if not calculo_existente:
-                from datetime import datetime
-                calculo = Calculo(
-                    sessao_id=sessao_id,
-                    processo_id=proc_db.id,
-                    status="confirmado",
-                    dados_json=json.dumps(data),
-                    confirmado_em=datetime.utcnow(),
-                )
-                db.add(calculo)
-            elif not calculo_existente.confirmado_em:
-                from datetime import datetime
-                calculo_existente.confirmado_em = datetime.utcnow()
-            db.commit()
-        finally:
-            db.close()
-    except Exception as _e_db:
-        logger.warning("confirmar_previa: falha ao criar registro DB para %s: %s", sessao_id, _e_db)
+    # Criar/atualizar registro no DB para que marcar_exportado funcione ao final
+    # da automação. Com o registro na GERAÇÃO (#80-AI), aqui geralmente já
+    # existe — atualiza status/dados/confirmado_em.
+    registrar_calculo_db(sessao_id, data, status="confirmado", confirmar=True)
 
     return {
         "status": "confirmada",
