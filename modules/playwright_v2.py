@@ -7011,7 +7011,36 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(1500)
             self._preencher("outroValorDoDivisor", divisor, obrigatorio=False)
             self._preencher("outroValorDoMultiplicador", multiplicador, obrigatorio=False)
-            self._marcar_radio("tipoDaQuantidade", "INFORMADA")
+            # #80-AG-8 (run8 JANIELLY): a característica (13º/FÉRIAS) re-renderiza
+            # o painelTipoDeQuantidade; após marcar INFORMADA o input
+            # valorInformadoDaQuantidade só aparece no re-render A4J. Sem esperar,
+            # o campo era pulado → save falhava com "Campo obrigatório:
+            # Quantidade Informada" (FGTS passava porque o input já existia).
+            # Marcar → VERIFICAR input attached → retry ×3 (check nativo).
+            _qtd_input_ok = False
+            for _qt in range(1, 4):
+                if _qt == 1:
+                    self._marcar_radio("tipoDaQuantidade", "INFORMADA")
+                else:
+                    try:
+                        self._page.locator(
+                            "input[type='radio'][id*='tipoDaQuantidade'][value='INFORMADA']"
+                        ).first.check(force=True)
+                    except Exception as _e:
+                        self.log(f"    ⚠ re-check INFORMADA: {str(_e)[:60]}")
+                self._aguardar_ajax(4000)
+                try:
+                    self._page.wait_for_selector(
+                        "input[id$=':valorInformadoDaQuantidade']",
+                        state="attached", timeout=6000,
+                    )
+                    _qtd_input_ok = True
+                    break
+                except Exception:
+                    self.log(f"    ⚠ input Quantidade Informada não renderizou (tent {_qt}/3)")
+            if not _qtd_input_ok:
+                self.log("    🛑 Quantidade Informada não renderizou — save falharia; abortando tentativa")
+                return False
             self._preencher("valorInformadoDaQuantidade", quantidade, obrigatorio=False)
             self.log(f"    ✓ Fórmula: divisor={divisor} mult={multiplicador} qtd={quantidade} integraliza={integralizar}")
         except Exception as e:
