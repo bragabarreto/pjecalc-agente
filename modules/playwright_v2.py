@@ -6326,6 +6326,12 @@ class PlaywrightAutomatorV2:
                     f"    ↪ #80-J criando {len(_manuais_deferidos)} reflexo(s) "
                     f"Manual deferido(s) de {v.nome_pjecalc}"
                 )
+                # #80-AG-6: o Regerar da principal deixa Drools rodando por
+                # minutos (lock server-side). 90s fixos (precedente #80-V) +
+                # gate antes do 1º reflexo Manual — sem isso TODAS as tentativas
+                # caíam na mesma janela e falhavam com LockTimeout.
+                self.log("    ⏳ aguardando 90s (Drools pós-Regerar da principal) antes dos reflexos Manual (#80-AG-6)")
+                self._page.wait_for_timeout(90000)
                 self._aguardar_servidor_ocioso(contexto=f"pré-reflexos-Manual {v.nome_pjecalc}")
                 try:
                     if "verba-calculo.jsf" not in (self._page.url or ""):
@@ -6604,7 +6610,13 @@ class PlaywrightAutomatorV2:
             if ok:
                 self.log(f"    ⚠ save do reflexo reportou ok mas verba NÃO está na listagem (tentativa {_tent}/3)")
             if _tent < 3:
-                # Drools/lock pode estar segurando — aguardar antes de re-tentar
+                # #80-AG-6 (diag interativo 02/07/2026): com servidor OCIOSO o
+                # fluxo inteiro funciona (item entrou na lista). As falhas dos
+                # runs são a JANELA DROOLS pós-save/Regerar da principal — lock
+                # server-side INVISÍVEL ao networkidle. Espaçar tentativas 60s
+                # (precedente #80-V) em vez de 3 tiros na mesma tempestade.
+                self.log(f"    ⏳ aguardando 60s (janela Drools) antes da tentativa {_tent+1}/3 (#80-AG-6)")
+                self._page.wait_for_timeout(60000)
                 self._aguardar_servidor_ocioso(contexto=f"retry reflexo Manual {nome_persistido[:30]}")
         self.log(f"    🛑 Reflexo Manual '{nome_persistido}' NÃO persistiu após 3 tentativas")
         return False
@@ -6679,17 +6691,25 @@ class PlaywrightAutomatorV2:
             # thread renderiza a resposta — sem colisão de lock. ⚠ o render
             # full-page redesenha o form a partir do bean (inputs JS-filled se
             # perdem) — por isso o vínculo roda ANTES de descricao/CNJ/fórmula.
-            add_ok = self._page.evaluate(
-                """() => {
-                    const a = document.querySelector("[id$=':incluirItemProp']");
-                    const f = document.getElementById('formulario') || document.forms['formulario'];
-                    if (a && f && typeof jsfcljs === 'function') {
-                        try { jsfcljs(f, {[a.id]: a.id}, ''); return 'jsfcljs'; } catch(e) {}
-                    }
-                    if (a) { a.click(); return 'native-fallback'; }
-                    return null;
-                }"""
-            )
+            # #80-AG-6: NATIVE click comprovado pelo diag interativo (item
+            # entrou na lista com servidor ocioso). jsfcljs fica como fallback.
+            add_ok = None
+            try:
+                self._page.locator("[id$=':incluirItemProp']").first.click(force=True, timeout=8000)
+                add_ok = "native"
+            except Exception as _e:
+                self.log(f"    ⚠ native click add: {str(_e)[:80]} — fallback jsfcljs")
+                add_ok = self._page.evaluate(
+                    """() => {
+                        const a = document.querySelector("[id$=':incluirItemProp']");
+                        const f = document.getElementById('formulario') || document.forms['formulario'];
+                        if (a && f && typeof jsfcljs === 'function') {
+                            try { jsfcljs(f, {[a.id]: a.id}, ''); return 'jsfcljs'; } catch(e) {}
+                        }
+                        if (a) { a.click(); return 'js-click'; }
+                        return null;
+                    }"""
+                )
             self.log(f"    → Adicionar Base via {add_ok}")
             try:
                 self._page.wait_for_load_state("domcontentloaded", timeout=20000)
