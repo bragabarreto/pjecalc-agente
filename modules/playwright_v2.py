@@ -6670,18 +6670,33 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1000)
             self._aguardar_servidor_ocioso(contexto="pós-select baseVerbaDeCalculo (#80-AG-4)")
-            # Click "Adicionar Base" — NATIVE (a4j:commandLink; onclick-exec não
-            # dispara A4J confiável em headless FF — lição #80-A/inv3)
+            # "Adicionar Base" via jsfcljs FULL-FORM SUBMIT (#80-AG-5): o click
+            # A4J nativo produzia LockTimeoutException DETERMINÍSTICO no
+            # @Synchronized (java.log runs 4b/5) — o processamento A4J do add
+            # colide com um render full-page concorrente. O POST completo via
+            # jsfcljs (Strategy C do inv5, mesma técnica do linkOcorrencias) é
+            # UMA requisição síncrona: a action immediate=true roda e o MESMO
+            # thread renderiza a resposta — sem colisão de lock. ⚠ o render
+            # full-page redesenha o form a partir do bean (inputs JS-filled se
+            # perdem) — por isso o vínculo roda ANTES de descricao/CNJ/fórmula.
+            add_ok = self._page.evaluate(
+                """() => {
+                    const a = document.querySelector("[id$=':incluirItemProp']");
+                    const f = document.getElementById('formulario') || document.forms['formulario'];
+                    if (a && f && typeof jsfcljs === 'function') {
+                        try { jsfcljs(f, {[a.id]: a.id}, ''); return 'jsfcljs'; } catch(e) {}
+                    }
+                    if (a) { a.click(); return 'native-fallback'; }
+                    return null;
+                }"""
+            )
+            self.log(f"    → Adicionar Base via {add_ok}")
             try:
-                self._page.locator("[id$=':incluirItemProp']").first.click(force=True)
-            except Exception as _e:
-                self.log(f"    ⚠ click incluirItemProp: {str(_e)[:80]} — fallback JS")
-                self._page.evaluate(
-                    """() => { const a = document.querySelector("[id$=':incluirItemProp']");
-                               if (a) a.click(); }"""
-                )
-            self._aguardar_ajax(5000)
-            self._page.wait_for_timeout(800)
+                self._page.wait_for_load_state("domcontentloaded", timeout=20000)
+            except Exception:
+                pass
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1000)
             # VERIFICAR: a lista re-renderizada (bean) deve conter a principal
             confirmado = self._page.evaluate(
                 """(cands) => {
@@ -6832,20 +6847,17 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Form Manual não abriu — pulando reflexo {reflexo.id}")
             return False
 
-        # 3. Preencher Nome
-        self._preencher("descricao", nome[:100])
-
-        # 4. Selecionar Assunto CNJ (default 2581)
-        self._selecionar_assunto_cnj(2581)
-
-        # 5. Tipo = REFLEXO
+        # 3. Tipo = REFLEXO — PRIMEIRO (#80-AG-5): o vínculo da principal (5b)
+        # usa jsfcljs FULL-FORM submit cujo render redesenha o form a partir do
+        # bean — qualquer input preenchido via JS ANTES dele (descricao) seria
+        # apagado. Ordem: REFLEXO → vincular → só então descricao/CNJ/fórmula.
         try:
             self._marcar_radio("tipoDeVerba", "REFLEXO")
         except Exception as e:
             self.log(f"    ⚠ Tipo=REFLEXO: {e}")
         self._aguardar_ajax(2000)
 
-        # 5b. VINCULAR A VERBA PRINCIPAL (#80-AG — DOM mapeado 02/07/2026):
+        # 3b. VINCULAR A VERBA PRINCIPAL (#80-AG — DOM mapeado 02/07/2026):
         # o form REFLEXO tem o mini-crud "Verba *": select
         # `formulario:baseVerbaDeCalculo` (opções = listaTodasAsVerbas,
         # convertEntity) + a4j:commandLink `incluirItemProp` ("Adicionar Base",
@@ -6858,6 +6870,12 @@ class PlaywrightAutomatorV2:
         if not self._vincular_verba_principal_no_reflexo(verba_principal):
             self.log("    🛑 não foi possível vincular a verba principal — abortando tentativa")
             return False
+
+        # 4. Preencher Nome (APÓS o vínculo — ver #80-AG-5 acima)
+        self._preencher("descricao", nome[:100])
+
+        # 5. Selecionar Assunto CNJ (default 2581)
+        self._selecionar_assunto_cnj(2581)
 
         # 6. Aplicar parametros_override
         ov = reflexo.parametros_override
