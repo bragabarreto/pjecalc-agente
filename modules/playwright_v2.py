@@ -6662,8 +6662,14 @@ class PlaywrightAutomatorV2:
                 self._aguardar_ajax(2000)
                 continue
             sel_ok = opt_info["label"]
-            self._aguardar_ajax(3000)
-            self._page.wait_for_timeout(500)
+            # ⚠ #80-AG-4 (java.log run4b): o ajaxSingle do change SEGURA o lock
+            # do @Synchronized apresentadorVerbaDeCalculo; na VM lenta ele passa
+            # de 3,5s e o click no Adicionar Base COLIDE → LockTimeoutException
+            # → "Erro Interno no Servidor" e conversa morta. Esperar o A4J do
+            # change TERMINAR de verdade (networkidle estável) antes do add.
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1000)
+            self._aguardar_servidor_ocioso(contexto="pós-select baseVerbaDeCalculo (#80-AG-4)")
             # Click "Adicionar Base" — NATIVE (a4j:commandLink; onclick-exec não
             # dispara A4J confiável em headless FF — lição #80-A/inv3)
             try:
