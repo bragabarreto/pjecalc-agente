@@ -2528,3 +2528,18 @@ def test_inv78_reflexos_pos_contratuais_manual_verificado():
         "REGRESSÃO #80-AG: tentativa deve aguardar re-render pós-integralizarBase")
     assert "_aguardar_operacao_sucesso" in tent, (
         "REGRESSÃO #80-AG: save do reflexo deve verificar mensagem de sucesso")
+    # Vínculo da verba PRINCIPAL (mini-crud "Verba *" — causa raiz "Campo
+    # obrigatório: Verba"): select baseVerbaDeCalculo + incluirItemProp,
+    # SEMPRE após tipoDeVerba=REFLEXO (que limpa a lista no bean)
+    assert "_vincular_verba_principal_no_reflexo" in tent, (
+        "REGRESSÃO #80-AG: tentativa deve vincular a verba principal ao reflexo")
+    assert "def _vincular_verba_principal_no_reflexo" in pw
+    vinc_start = pw.find("def _vincular_verba_principal_no_reflexo(")
+    vinc = pw[vinc_start:pw.find("\n    def ", vinc_start + 1)]
+    assert "baseVerbaDeCalculo" in vinc and "incluirItemProp" in vinc, (
+        "REGRESSÃO #80-AG: vínculo usa select baseVerbaDeCalculo + incluirItemProp")
+    assert "excluirItem" in vinc, (
+        "REGRESSÃO #80-AG: vínculo deve VERIFICAR o item na lista re-renderizada")
+    # ordem: vínculo depois do tipoDeVerba=REFLEXO (que dá clear na lista)
+    assert tent.find("tipoDeVerba") < tent.find("_vincular_verba_principal_no_reflexo"), (
+        "REGRESSÃO #80-AG: vincular DEPOIS de tipoDeVerba=REFLEXO (clear da lista)")

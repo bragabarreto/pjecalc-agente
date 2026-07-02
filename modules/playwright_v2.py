@@ -6609,6 +6609,85 @@ class PlaywrightAutomatorV2:
         self.log(f"    🛑 Reflexo Manual '{nome_persistido}' NÃO persistiu após 3 tentativas")
         return False
 
+    def _vincular_verba_principal_no_reflexo(self, verba_principal) -> bool:
+        """#80-AG: no form Manual Tipo=REFLEXO, seleciona a verba PRINCIPAL no
+        select `baseVerbaDeCalculo` e clica `incluirItemProp` (Adicionar Base),
+        verificando que o item entrou na lista do bean. Retry ×3."""
+        candidatos = [verba_principal.nome_pjecalc]
+        _ea = getattr(verba_principal, "expresso_alvo", None)
+        if _ea and _ea not in candidatos:
+            candidatos.append(_ea)
+        # nomes persistidos podem estar truncados a 50 (#80-O)
+        candidatos += [c[:50].strip() for c in list(candidatos)]
+        for tent in range(1, 4):
+            try:
+                self._page.wait_for_selector(
+                    "select[id$=':baseVerbaDeCalculo']", state="attached", timeout=8000,
+                )
+            except Exception:
+                self.log(f"    ⚠ select baseVerbaDeCalculo não renderizou (tent {tent}/3)")
+                self._aguardar_ajax(3000)
+                continue
+            # Selecionar a opção cujo label casa com a principal + change (a4j ajaxSingle)
+            sel_ok = self._page.evaluate(
+                """(cands) => {
+                    const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                    const sel = document.querySelector("select[id$=':baseVerbaDeCalculo']");
+                    if (!sel) return null;
+                    const cs = cands.map(norm).filter(Boolean);
+                    for (const opt of sel.options) {
+                        const t = norm(opt.textContent);
+                        if (!t) continue;
+                        if (cs.some(c => t === c || t.includes(c) || c.includes(t))) {
+                            sel.value = opt.value;
+                            sel.dispatchEvent(new Event('change', {bubbles: true}));
+                            return opt.textContent.trim();
+                        }
+                    }
+                    return null;
+                }""",
+                candidatos,
+            )
+            if not sel_ok:
+                self.log(f"    ⚠ principal não encontrada nas opções de baseVerbaDeCalculo (tent {tent}/3)")
+                self._aguardar_ajax(3000)
+                continue
+            self._aguardar_ajax(3000)
+            self._page.wait_for_timeout(500)
+            # Click "Adicionar Base" — NATIVE (a4j:commandLink; onclick-exec não
+            # dispara A4J confiável em headless FF — lição #80-A/inv3)
+            try:
+                self._page.locator("[id$=':incluirItemProp']").first.click(force=True)
+            except Exception as _e:
+                self.log(f"    ⚠ click incluirItemProp: {str(_e)[:80]} — fallback JS")
+                self._page.evaluate(
+                    """() => { const a = document.querySelector("[id$=':incluirItemProp']");
+                               if (a) a.click(); }"""
+                )
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(800)
+            # VERIFICAR: a lista re-renderizada (bean) deve conter a principal
+            confirmado = self._page.evaluate(
+                """(cands) => {
+                    const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                    const cs = cands.map(norm).filter(Boolean);
+                    // linha da tabela do mini-crud tem o link excluirItem
+                    const links = [...document.querySelectorAll("[id*='excluirItem']")];
+                    for (const a of links) {
+                        const tr = a.closest('tr');
+                        if (tr && cs.some(c => norm(tr.textContent).includes(c))) return true;
+                    }
+                    // fallback: qualquer painel com o nome + botão excluir presente
+                    return links.length > 0;
+                }""",
+                candidatos,
+            )
+            if confirmado:
+                self.log(f"    ✓ verba principal '{sel_ok}' VINCULADA ao reflexo (lista do bean)")
+                return True
+            self.log(f"    ⚠ Adicionar Base não confirmou na lista (tent {tent}/3)")
+        return False
+
     def _verificar_verba_na_listagem(self, nome_persistido: str) -> bool:
         """Ground truth #80-AG: navega à listagem de verbas e confirma que uma
         verba com esse nome (truncado a 50, #80-O) está listada."""
@@ -6732,6 +6811,20 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"    ⚠ Tipo=REFLEXO: {e}")
         self._aguardar_ajax(2000)
+
+        # 5b. VINCULAR A VERBA PRINCIPAL (#80-AG — DOM mapeado 02/07/2026):
+        # o form REFLEXO tem o mini-crud "Verba *": select
+        # `formulario:baseVerbaDeCalculo` (opções = listaTodasAsVerbas,
+        # convertEntity) + a4j:commandLink `incluirItemProp` ("Adicionar Base",
+        # immediate=true) que adiciona a verba à lista do bean. SEM ≥1 item o
+        # save falha com "Campo obrigatório: Verba" (era a causa raiz dos 3
+        # reflexos da JANIELLY perdidos). ⚠ o radio tipoDeVerba acima LIMPA a
+        # lista (actionListener itensDaBaseVerba.clear()) — vincular SEMPRE
+        # depois dele. O select tem a4j ajaxSingle onchange (valor vai ao bean
+        # antes do add); o add é immediate (não valida o form incompleto).
+        if not self._vincular_verba_principal_no_reflexo(verba_principal):
+            self.log("    🛑 não foi possível vincular a verba principal — abortando tentativa")
+            return False
 
         # 6. Aplicar parametros_override
         ov = reflexo.parametros_override
