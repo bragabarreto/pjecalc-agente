@@ -6628,8 +6628,8 @@ class PlaywrightAutomatorV2:
                 self.log(f"    ⚠ select baseVerbaDeCalculo não renderizou (tent {tent}/3)")
                 self._aguardar_ajax(3000)
                 continue
-            # Selecionar a opção cujo label casa com a principal + change (a4j ajaxSingle)
-            sel_ok = self._page.evaluate(
+            # Localizar a opção cujo label casa com a principal (só lookup em JS)
+            opt_info = self._page.evaluate(
                 """(cands) => {
                     const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
                     const sel = document.querySelector("select[id$=':baseVerbaDeCalculo']");
@@ -6638,20 +6638,30 @@ class PlaywrightAutomatorV2:
                     for (const opt of sel.options) {
                         const t = norm(opt.textContent);
                         if (!t) continue;
-                        if (cs.some(c => t === c || t.includes(c) || c.includes(t))) {
-                            sel.value = opt.value;
-                            sel.dispatchEvent(new Event('change', {bubbles: true}));
-                            return opt.textContent.trim();
-                        }
+                        if (cs.some(c => t === c || t.includes(c) || c.includes(t)))
+                            return {value: opt.value, label: opt.textContent.trim()};
                     }
                     return null;
                 }""",
                 candidatos,
             )
-            if not sel_ok:
+            if not opt_info:
                 self.log(f"    ⚠ principal não encontrada nas opções de baseVerbaDeCalculo (tent {tent}/3)")
                 self._aguardar_ajax(3000)
                 continue
+            # Selecionar via Playwright NATIVO (input+change reais) — o
+            # dispatchEvent JS não dispara o a4j:support ajaxSingle de forma
+            # confiável (mesma classe do inv3): o bean não recebia a seleção e
+            # o Adicionar Base adicionava NADA (JANIELLY run3, 0/3).
+            try:
+                self._page.select_option(
+                    "select[id$=':baseVerbaDeCalculo']", value=opt_info["value"],
+                )
+            except Exception as _e:
+                self.log(f"    ⚠ select_option nativo falhou: {str(_e)[:80]}")
+                self._aguardar_ajax(2000)
+                continue
+            sel_ok = opt_info["label"]
             self._aguardar_ajax(3000)
             self._page.wait_for_timeout(500)
             # Click "Adicionar Base" — NATIVE (a4j:commandLink; onclick-exec não
@@ -6685,7 +6695,24 @@ class PlaywrightAutomatorV2:
             if confirmado:
                 self.log(f"    ✓ verba principal '{sel_ok}' VINCULADA ao reflexo (lista do bean)")
                 return True
-            self.log(f"    ⚠ Adicionar Base não confirmou na lista (tent {tent}/3)")
+            # DIAG: estado da página no ponto da falha (erro interno? mensagens?)
+            try:
+                _diag_v = self._page.evaluate(
+                    """() => ({
+                        url: location.href.slice(-60),
+                        erroInterno: document.body.textContent.includes('Erro Interno no Servidor'),
+                        temSelect: !!document.querySelector("select[id$=':baseVerbaDeCalculo']"),
+                        msgs: [...document.querySelectorAll('.rich-message')]
+                            .map(e => (e.textContent||'').trim()).filter(Boolean).slice(0,3),
+                    })"""
+                )
+                self.log(f"    ⚠ Adicionar Base não confirmou (tent {tent}/3) — diag={_diag_v}")
+                if _diag_v.get("erroInterno") or not _diag_v.get("temSelect"):
+                    # página trocou (LockTimeout/navegação) — inútil re-tentar
+                    # no mesmo form; abortar p/ o wrapper re-abrir do zero
+                    return False
+            except Exception:
+                self.log(f"    ⚠ Adicionar Base não confirmou na lista (tent {tent}/3)")
         return False
 
     def _verificar_verba_na_listagem(self, nome_persistido: str) -> bool:
