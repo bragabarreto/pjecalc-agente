@@ -1192,28 +1192,39 @@ Para criar verba via "Manual" (botão `incluir` da listagem com value="Manual"):
 
 Para `_configurar_parametros_pos_expresso` (verba já criada via Expresso): o assunto CNJ JÁ vem populado, **não precisa tocar**. Só renomear via campo "Nome" se for `expresso_adaptado`.
 
-### Verba Manual tipo REFLEXA — ⚠️ DOM NÃO MAPEADO (lacuna pendente)
+### Verba Manual tipo REFLEXO — ✅ DOM MAPEADO (#80-AG, JANIELLY 0000706-46, 02/07/2026)
 
-> **Atenção:** os campos e o comportamento de `verba-calculo.jsf` quando o campo `tipo`
-> é alterado de `PRINCIPAL` para `REFLEXA` **não foram inspecionados diretamente no DOM**.
-> Esta é uma lacuna de conhecimento confirmada.
+> Lacuna resolvida via `verba-calculo.xhtml` + diagnóstico #80-N em runs reais.
+> Implementado em `_criar_reflexo_manual` / `_vincular_verba_principal_no_reflexo`
+> (`modules/playwright_v2.py`). Protegido por `test_inv78`. **NÃO REVERTER.**
 
-O que se sabe (via manual, não por inspeção):
-- Ao selecionar Tipo=REFLEXA, o formulário provavelmente exibe um seletor da verba principal
-  à qual o reflexo se vincula
-- Alguns parâmetros podem ser herdados da principal (período, base) ou configuráveis
-  independentemente
-- A característica (`FERIAS`, `DECIMO_TERCEIRO_SALARIO`, `COMUM`) permanece configurável
+**DOM real do form Tipo=REFLEXO:**
+- **Vínculo com a principal é OBRIGATÓRIO** — mini-crud "Verba \*":
+  - select `formulario:baseVerbaDeCalculo` (opções = `listaTodasAsVerbas`,
+    `s:convertEntity` → value é a entidade; casar pela **label** = nome da verba;
+    tem `a4j:support ajaxSingle onchange` — a seleção só chega ao bean com
+    **evento nativo** (`select_option` do Playwright); `dispatchEvent` JS NÃO
+    dispara o A4J confiável → bean vazio → "Adicionar Base" adiciona NADA)
+  - a4j:commandLink `formulario:incluirItemProp` ("Adicionar Base",
+    `immediate=true` — não valida o form incompleto) → **native click**
+  - tabela do mini-crud com `excluirItem` por linha — **verificar** que o item
+    entrou (ground truth do bean) antes de prosseguir
+  - Sem ≥1 item: save falha **silenciosamente** com "Campo obrigatório: Verba"
+    (`formulario:baseVerbaDeCalculoErro`)
+- ⚠️ **O radio `tipoDeVerba` LIMPA a lista** (`actionListener
+  itensDaBaseVerba.clear()`) — vincular SEMPRE **depois** de Tipo=REFLEXO.
+- ⚠️ **`integralizarBase` (select SIM/NAO) dispara A4J que re-renderiza o form**
+  — sem `wait_for_selector` no `tipoDaQuantidade` depois dele, os campos
+  seguintes e o botão `salvar` "somem" mid-fill (13º da JANIELLY).
+- Assunto CNJ permanece obrigatório (lupa→modal, default 2581).
+- Característica (`FERIAS`/`DECIMO_TERCEIRO_SALARIO`/`COMUM`) configurável —
+  o bot aplica default por tipo do reflexo quando o override não define.
 
-O que **não se sabe** (requer inspeção DOM):
-- ID do seletor de "verba principal vinculada"
-- Quais campos somem / aparecem com Tipo=REFLEXA
-- Se o campo "Assunto CNJ" permanece obrigatório
-- Como o sistema valida o vínculo principal→reflexa no save
-
-**Ação necessária:** inspecionar `verba-calculo.jsf` com Tipo=REFLEXA selecionado e
-documentar os IDs e comportamentos aqui. Até isso ser feito, usar o **fluxo via painel
-"Exibir"** (seção "Reflexos — fluxo correto" abaixo) que foi confirmado pelo usuário.
+**Regras do fluxo (bot):** criação com retry ×3 re-abrindo o form; gate #80-H
+pré-form; save verificado (`_aguardar_operacao_sucesso` + dump #80-N das
+mensagens JSF); sucesso SÓ com a verba **confirmada na listagem**
+(`_verificar_verba_na_listagem`, nome truncado a 50 — #80-O). Log "criado"
+baseado apenas no click é proibido.
 
 ### Reflexos pós-contratuais (Estabilidade Gestante/Acidentária, Lei 9.029) — fórmulas confirmadas via vídeo (NotebookLM)
 
