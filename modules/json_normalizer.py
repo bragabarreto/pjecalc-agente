@@ -1134,6 +1134,14 @@ def _norm_reflexos_pos_contratuais_manual(data: dict[str, Any]) -> None:
             if not ov.get("caracteristica"):
                 ov["caracteristica"] = _caracteristica_por_nome(r.get("nome") or "")
                 mudou = True
+            # #80-AG-9: Ocorrência de Pagamento = MENSAL — o PJE-Calc REJEITA
+            # "data final > demissão" para ocorrências ≠ Mensal, e o reflexo
+            # pós-contratual PRECISA do período além da demissão. (FGTS passava
+            # porque COMUM defaulta MENSAL; 13º/FÉRIAS defaultavam DEZEMBRO/
+            # PERÍODO AQUISITIVO e o save falhava.)
+            if not ov.get("ocorrencia_pagamento"):
+                ov["ocorrencia_pagamento"] = "MENSAL"
+                mudou = True
             # Período do reflexo = período da principal (pós-contratual)
             if not ov.get("periodo_inicio") and p.get("periodo_inicio"):
                 ov["periodo_inicio"] = p["periodo_inicio"]

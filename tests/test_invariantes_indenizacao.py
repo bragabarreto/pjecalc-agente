@@ -2497,6 +2497,11 @@ def test_inv78_reflexos_pos_contratuais_manual_verificado():
     assert cars["Férias"] == "FERIAS"
     assert cars["FGTS"] == "COMUM"
     assert all(r["parametros_override"]["periodo_inicio"] == "23/01/2026" for r in rs)
+    # #80-AG-9: ocorrência MENSAL obrigatória (PJE-Calc rejeita data final >
+    # demissão p/ ocorrências ≠ Mensal; o reflexo pós-contratual exige o
+    # período além da demissão)
+    assert all(r["parametros_override"]["ocorrencia_pagamento"] == "MENSAL" for r in rs), (
+        "REGRESSÃO #80-AG-9: reflexo pós-contratual deve ter ocorrencia_pagamento=MENSAL")
 
     # verba NÃO pós-contratual não é tocada
     d2 = {"parametros_calculo": {"data_demissao": "23/12/2025"},
