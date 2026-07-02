@@ -1198,12 +1198,14 @@ estabilidade gestante/acidentária, Lei 9.029, indenização adicional), o PJE-C
 **NÃO pré-cadastra candidatos de reflexo** no painel "Exibir". Os reflexos
 (13º, Férias+1/3, FGTS) DEVEM ser emitidos com:
 - `estrategia_reflexa: "manual"` (NUNCA `checkbox_painel` — o checkbox não existe);
-- `parametros_override.caracteristica`: `"FERIAS"` p/ Férias+1/3,
-  `"DECIMO_TERCEIRO_SALARIO"` p/ 13º, `"COMUM"` p/ FGTS;
+- `parametros_override.caracteristica`: `"COMUM"` para TODOS (⚠️ FERIAS/
+  DECIMO_TERCEIRO travam a ocorrência em DEZEMBRO/PERÍODO AQUISITIVO, que o
+  PJE-Calc rejeita p/ período pós-demissão) + `ocorrencia_pagamento: "MENSAL"`;
 - `parametros_override.periodo_inicio/periodo_fim` = período da verba principal.
-Fórmulas aplicadas pelo bot (fluxo Manual Tipo=REFLEXO): Férias+1/3 →
-divisor 12 / mult 1,33 / qtd 12 / integralizar SIM; 13º → divisor 12 / mult 1 /
-qtd 12 / integralizar SIM; FGTS → divisor 100 / mult 8 (11,2 c/ multa 40%).
+Fórmulas aplicadas pelo bot (fluxo Manual Tipo=REFLEXO, ocorrência MENSAL =
+avos mensais): Férias+1/3 → divisor 12 / mult 1,33 / qtd 1; 13º → divisor 12 /
+mult 1 / qtd 1 (cada mês = um avo; acumulado = integral); FGTS → divisor 100 /
+mult 8 (11,2 c/ multa 40%) / qtd 1.
 (O normalizer também coage isso como salvaguarda — bug JANIELLY 0000706-46.)
 
 # 5. CARTAO_DE_PONTO / CARTOES_DE_PONTO

@@ -1109,11 +1109,12 @@ def _norm_reflexos_pos_contratuais_manual(data: dict[str, Any]) -> None:
         return False
 
     def _caracteristica_por_nome(nome_r: str) -> str:
-        n = (nome_r or "").upper()
-        if "FÉRIAS" in n or "FERIAS" in n:
-            return "FERIAS"
-        if "13" in n or "DÉCIMO" in n or "DECIMO" in n:
-            return "DECIMO_TERCEIRO_SALARIO"
+        # #80-AG-11 (empírico, run 11 JANIELLY): característica FERIAS/
+        # DECIMO_TERCEIRO TRAVA o radio de ocorrência (disabled) em DEZEMBRO/
+        # PERÍODO AQUISITIVO — e o PJE-Calc REJEITA período pós-demissão p/
+        # ocorrências ≠ Mensal. Beco sem saída p/ reflexo pós-contratual.
+        # Solução: COMUM + MENSAL (como o FGTS, que salva) com fórmula de avos
+        # mensais (qtd=1, div=12 → base/12 por mês; 12 meses = integral ✓).
         return "COMUM"
 
     for v in verbas:

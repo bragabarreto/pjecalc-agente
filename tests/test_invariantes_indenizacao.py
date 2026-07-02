@@ -2493,8 +2493,10 @@ def test_inv78_reflexos_pos_contratuais_manual_verificado():
     assert all(r["estrategia_reflexa"] == "manual" for r in rs), (
         "REGRESSÃO #80-AG: reflexos pós-contratuais devem virar estrategia=manual")
     cars = {r["nome"].split(" ")[0]: r["parametros_override"]["caracteristica"] for r in rs}
-    assert cars["13º"] == "DECIMO_TERCEIRO_SALARIO"
-    assert cars["Férias"] == "FERIAS"
+    # #80-AG-11: TODOS COMUM — FERIAS/DECIMO_TERCEIRO travam a ocorrência
+    # (disabled) em valores que o PJE-Calc rejeita p/ período pós-demissão.
+    assert cars["13º"] == "COMUM"
+    assert cars["Férias"] == "COMUM"
     assert cars["FGTS"] == "COMUM"
     assert all(r["parametros_override"]["periodo_inicio"] == "23/01/2026" for r in rs)
     # #80-AG-9: ocorrência MENSAL obrigatória (PJE-Calc rejeita data final >

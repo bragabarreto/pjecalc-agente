@@ -6979,10 +6979,13 @@ class PlaywrightAutomatorV2:
         is_13 = "13º" in nome_upper or "13o" in nome_upper.replace("º", "O") or "DÉCIMO" in nome_upper
         is_fgts_40 = "FGTS" in nome_upper and ("40" in nome_upper or "MULTA" in nome_upper)
         is_fgts = "FGTS" in nome_upper
+        # #80-AG-11: qtd=1 (não 12) — com ocorrência MENSAL, cada mês recebe
+        # base×mult/12 (um avo); o acumulado dos meses da estabilidade é o
+        # valor integral. qtd=12 daria 12× o devido (base inteira POR MÊS).
         if is_ferias:
-            divisor, multiplicador, quantidade, integralizar = "12", "1,33", "12", True
+            divisor, multiplicador, quantidade, integralizar = "12", "1,33", "1", True
         elif is_13:
-            divisor, multiplicador, quantidade, integralizar = "12", "1", "12", True
+            divisor, multiplicador, quantidade, integralizar = "12", "1", "1", True
         elif is_fgts_40:
             divisor, multiplicador, quantidade, integralizar = "100", "11,2", "1", False
         elif is_fgts:
