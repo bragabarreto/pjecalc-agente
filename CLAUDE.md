@@ -1226,6 +1226,26 @@ mensagens JSF); sucesso SÓ com a verba **confirmada na listagem**
 (`_verificar_verba_na_listagem`, nome truncado a 50 — #80-O). Log "criado"
 baseado apenas no click é proibido.
 
+**Aprendizados finais (runs 8–12 JANIELLY, ✅ 3/3 no PJC):**
+- **Radio REFLEXO com verificação de estado do bean** (#80-AG-7): ground truth
+  = `tipoDaBaseTabelada` DETACHED pós-A4J. Marcar via `.check()` nativo; o
+  fallback dispatchEvent do `_marcar_radio` marca só o DOM (classe inv3).
+- **Quantidade Informada** (#80-AG-8): após marcar INFORMADA, `wait_for_selector`
+  do input `valorInformadoDaQuantidade` (a característica re-renderiza o painel).
+- **⚠️ CARACTERÍSTICA FERIAS/DECIMO_TERCEIRO TRAVA A OCORRÊNCIA** (#80-AG-11 —
+  descoberta empírica): o radio ocorrenciaPagto fica DISABLED em DEZEMBRO/
+  PERÍODO AQUISITIVO, que o PJE-Calc REJEITA p/ período pós-demissão ("data
+  final > demissão p/ ocorrências ≠ Mensal"). Beco sem saída. Solução:
+  **característica COMUM + ocorrência MENSAL + fórmula de AVOS MENSAIS**
+  (13º: div 12/mult 1/**qtd 1**; Férias: div 12/mult 1,33/**qtd 1**; FGTS:
+  div 100/mult 8/qtd 1) — cada mês = um avo; acumulado do período = integral.
+  qtd=12 daria 12× o devido.
+- **Radios críticos com `_marcar_radio_verificado`** (#80-AG-10): re-ler o
+  checked pós-AJAX (re-render restaura do bean).
+- **Janela Drools** (#80-AG-6): 90s antes do 1º reflexo Manual + retries
+  espaçados 60s (precedente #80-V) — o lock server-side é invisível ao
+  networkidle.
+
 ### Reflexos pós-contratuais (Estabilidade Gestante/Acidentária, Lei 9.029) — fórmulas confirmadas via vídeo (NotebookLM)
 
 Para verbas pós-demissão (estabilidade, dispensa discriminatória), o PJE-Calc **NÃO** gera reflexos automáticos. Cada um é uma **verba Manual com Tipo=REFLEXO** vinculada à principal:
