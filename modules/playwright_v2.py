@@ -6581,6 +6581,33 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
+    def _marcar_radio_verificado(self, dom_id: str, valor: str, tentativas: int = 3) -> bool:
+        """#80-AG-10 — marca radio e VERIFICA no DOM pós-AJAX (o re-render
+        restaura do bean; checked persistente = bean recebeu). O fallback JS
+        dispatchEvent do _marcar_radio marca só o DOM (classe inv3) — em campos
+        críticos do reflexo (caracteristicaVerba, ocorrenciaPagto=MENSAL) isso
+        deixava o bean com o default e o save falhava silenciosamente."""
+        sel = f"input[type='radio'][id*='{dom_id}'][value='{valor}']"
+        for _t in range(1, tentativas + 1):
+            try:
+                self._page.locator(sel).first.check(force=(_t > 1), timeout=5000)
+            except Exception as _e:
+                self.log(f"    ⚠ check {dom_id}={valor} (tent {_t}/{tentativas}): {str(_e)[:70]}")
+            self._aguardar_ajax(3500)
+            self._page.wait_for_timeout(500)
+            try:
+                ok = self._page.evaluate(
+                    "(s) => { const r = document.querySelector(s); return r ? r.checked : null; }",
+                    sel,
+                )
+            except Exception:
+                ok = None
+            if ok:
+                self.log(f"    ✓ radio {dom_id}={valor} CONFIRMADO pós-AJAX")
+                return True
+            self.log(f"    ⚠ radio {dom_id}={valor} não confirmou pós-AJAX (tent {_t}/{tentativas})")
+        return False
+
     def _criar_reflexo_manual(self, verba_principal, reflexo) -> bool:
         """Cria reflexo via Manual (verba Tipo=REFLEXO) COM VERIFICAÇÃO (#80-AG).
 
@@ -6928,12 +6955,16 @@ class PlaywrightAutomatorV2:
                     self._preencher("periodoFinalInputDate", ov.periodo_fim, obrigatorio=False)
                 if ov.caracteristica:
                     car = ov.caracteristica.value if hasattr(ov.caracteristica, "value") else str(ov.caracteristica)
-                    self._marcar_radio("caracteristicaVerba", car)
-                    self._aguardar_ajax(2000)
+                    if not self._marcar_radio_verificado("caracteristicaVerba", car):
+                        self.log(f"    🛑 característica {car} não chegou ao bean — abortando tentativa")
+                        return False
                 if ov.ocorrencia_pagamento:
                     occ = ov.ocorrencia_pagamento.value if hasattr(ov.ocorrencia_pagamento, "value") else str(ov.ocorrencia_pagamento)
-                    self._marcar_radio("ocorrenciaPagto", occ)
-                    self._aguardar_ajax(2000)
+                    # ⚠ ordem: SEMPRE após a característica (mudarCaracteristica
+                    # re-renderiza painelOcorrenciaDePagamento e resetaria isto)
+                    if not self._marcar_radio_verificado("ocorrenciaPagto", occ):
+                        self.log(f"    🛑 ocorrência {occ} não chegou ao bean — abortando tentativa")
+                        return False
                 if ov.incidencias:
                     self._marcar_checkbox("irpf", ov.incidencias.irpf)
                     self._marcar_checkbox("inss", ov.incidencias.cs_inss)
