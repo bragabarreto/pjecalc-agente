@@ -188,3 +188,35 @@ def test_home_passa_previas_pendentes_ao_template():
     assert "previas_pendentes" in wapp
     idx = (REPO_ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     assert "Prévias pendentes" in idx and "Revisar / Confirmar" in idx
+
+
+def test_recovery_sessoes_orfas(tmp_path, monkeypatch):
+    """#80-AH: startup recupera sessões mortas por reinício do container."""
+    import json as _j
+    import modules.webapp_extracao as we
+    monkeypatch.setattr(we, "_STORE_DIR", tmp_path)
+    # caso 1: etapa1_processando COM resumo → resumo_pronto
+    (tmp_path / "s1").mkdir()
+    (tmp_path / "s1" / "estado.json").write_text(_j.dumps(
+        {"fase": "etapa1_processando", "resumo_md": "# Resumo completo"}))
+    # caso 2: etapa1_processando SEM resumo → erro claro
+    (tmp_path / "s2").mkdir()
+    (tmp_path / "s2" / "estado.json").write_text(_j.dumps(
+        {"fase": "etapa1_processando", "resumo_md": ""}))
+    # caso 3: etapa2_processando → resumo_pronto + aviso
+    (tmp_path / "s3").mkdir()
+    (tmp_path / "s3" / "estado.json").write_text(_j.dumps(
+        {"fase": "etapa2_processando", "resumo_md": "# R"}))
+    # caso 4: fase normal não é tocada
+    (tmp_path / "s4").mkdir()
+    (tmp_path / "s4" / "estado.json").write_text(_j.dumps(
+        {"fase": "previa_pronta", "resumo_md": "# R"}))
+    we._recuperar_sessoes_orfas()
+    e1 = _j.loads((tmp_path / "s1" / "estado.json").read_text())
+    e2 = _j.loads((tmp_path / "s2" / "estado.json").read_text())
+    e3 = _j.loads((tmp_path / "s3" / "estado.json").read_text())
+    e4 = _j.loads((tmp_path / "s4" / "estado.json").read_text())
+    assert e1["fase"] == "resumo_pronto"
+    assert e2["fase"] == "erro" and "reinício" in e2["erro"]
+    assert e3["fase"] == "resumo_pronto" and "confirmar" in e3["aviso_recuperacao"]
+    assert e4["fase"] == "previa_pronta"

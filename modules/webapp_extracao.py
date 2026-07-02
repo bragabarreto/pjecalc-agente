@@ -70,6 +70,56 @@ if _STORE_DIR is None:
     _STORE_DIR.mkdir(parents=True, exist_ok=True)
 logger.info(f"webapp_extracao: _STORE_DIR = {_STORE_DIR}")
 
+
+def _recuperar_sessoes_orfas() -> None:
+    """#80-AH — recovery no startup: sessões mortas por reinício do container.
+
+    Deploy/restart mata o worker thread da extração; a sessão fica travada em
+    `*_processando` PARA SEMPRE (caso RODRIGO ROCHA 0000905-05, 02/07/2026 —
+    deploy no meio da Etapa 1). Ao subir o app:
+      • etapa1_processando COM resumo_md salvo → o trabalho terminou, só a fase
+        não virou: promover a `resumo_pronto` (usuário continua de onde parou);
+      • etapa1_processando SEM resumo → `erro` com mensagem clara (reenviar);
+      • etapa2_processando → voltar a `resumo_pronto` (a conversa está salva —
+        o usuário só digita "confirmar" de novo).
+    Best-effort: nunca levanta.
+    """
+    import json as _json
+    try:
+        for d in _STORE_DIR.iterdir():
+            f = d / "estado.json"
+            if not f.exists():
+                continue
+            try:
+                est = _json.loads(f.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            fase = est.get("fase")
+            if fase not in ("etapa1_processando", "etapa2_processando"):
+                continue
+            if fase == "etapa1_processando" and not (est.get("resumo_md") or "").strip():
+                est["fase"] = "erro"
+                est["erro"] = ("Processamento interrompido por reinício do servidor. "
+                               "Reenvie a sentença em /novo/ia.")
+            else:
+                est["fase"] = "resumo_pronto"
+                if fase == "etapa2_processando":
+                    est["aviso_recuperacao"] = ("Geração do JSON interrompida por reinício "
+                                                "do servidor — digite 'confirmar' novamente.")
+            try:
+                f.write_text(_json.dumps(est, ensure_ascii=False), encoding="utf-8")
+                logger.warning(
+                    "webapp_extracao #80-AH: sessão órfã %s recuperada (%s → %s)",
+                    d.name, fase, est["fase"],
+                )
+            except Exception:
+                pass
+    except Exception as _e:
+        logger.warning("webapp_extracao #80-AH: recovery de órfãs falhou: %s", _e)
+
+
+_recuperar_sessoes_orfas()
+
 _MAX_FILE_BYTES = 15 * 1024 * 1024
 _IMG_MAX_PX = 1536
 _MAX_EXTRAS = 10
