@@ -1190,7 +1190,21 @@ Cada reflexo:
 
 `estrategia_reflexa`:
 - `checkbox_painel` (default) — marcar checkbox no painel da verba principal
-- `manual` — quando o reflexo NÃO está pré-cadastrado (raro: FGTS sobre estabilidade)
+- `manual` — quando o reflexo NÃO está pré-cadastrado no PJE-Calc
+
+⚠️ **REGRA CRÍTICA — REFLEXOS DE VERBA PÓS-CONTRATUAL (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+Para verba cujo período é POSTERIOR à demissão (indenização substitutiva de
+estabilidade gestante/acidentária, Lei 9.029, indenização adicional), o PJE-Calc
+**NÃO pré-cadastra candidatos de reflexo** no painel "Exibir". Os reflexos
+(13º, Férias+1/3, FGTS) DEVEM ser emitidos com:
+- `estrategia_reflexa: "manual"` (NUNCA `checkbox_painel` — o checkbox não existe);
+- `parametros_override.caracteristica`: `"FERIAS"` p/ Férias+1/3,
+  `"DECIMO_TERCEIRO_SALARIO"` p/ 13º, `"COMUM"` p/ FGTS;
+- `parametros_override.periodo_inicio/periodo_fim` = período da verba principal.
+Fórmulas aplicadas pelo bot (fluxo Manual Tipo=REFLEXO): Férias+1/3 →
+divisor 12 / mult 1,33 / qtd 12 / integralizar SIM; 13º → divisor 12 / mult 1 /
+qtd 12 / integralizar SIM; FGTS → divisor 100 / mult 8 (11,2 c/ multa 40%).
+(O normalizer também coage isso como salvaguarda — bug JANIELLY 0000706-46.)
 
 # 5. CARTAO_DE_PONTO / CARTOES_DE_PONTO
 

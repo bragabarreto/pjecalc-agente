@@ -2450,3 +2450,81 @@ def test_inv77_divisor_cartao_para_carga_horaria():
     # prompt tem a regra
     prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "NUNCA `divisor=IMPORTADA_DO_CARTAO`" in prompt
+
+
+def test_inv78_reflexos_pos_contratuais_manual_verificado():
+    """#80-AG (JANIELLY 0000706-46, estabilidade gestante, 02/07/2026): os 3
+    reflexos manuais da indenização de estabilidade NÃO foram criados. Cadeia:
+    (a) IA emitiu estrategia=checkbox_painel, mas o PJE-Calc não pré-cadastra
+    candidatos p/ verba adaptada pós-contratual → ×3 tentativas de checkbox
+    inúteis; (b) 13º: form Manual quebrou mid-fill (A4J do integralizarBase
+    re-renderizou; radio quantidade + salvar sumiram); (c) Férias: listagem em
+    LockTimeout → principal não encontrada → pulado SEM tentar o Manual;
+    (d) FGTS: "criado" no log SEM verificação — AUSENTE do PJC.
+
+    Defesas (3 camadas — NÃO REVERTER):
+    1. Normalizer coage reflexos de verba pós-contratual p/ estrategia=manual
+       + característica default + período da principal.
+    2. Prompt instrui estrategia "manual" p/ pós-contratual.
+    3. Bot: _criar_reflexo_manual com retry ×3 + persistência CONFIRMADA na
+       listagem (ground truth); pass deferido #80-J vai DIRETO ao Manual."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+
+    # (1) normalizer — detecção por período pós-demissão E por nome ESTABILIDADE
+    d = {
+        "parametros_calculo": {"data_demissao": "23/12/2025"},
+        "verbas_principais": [{
+            "nome_pjecalc": "INDENIZAÇÃO SUBSTITUTIVA — ESTABILIDADE GESTANTE",
+            "nome_sentenca": "estabilidade",
+            "parametros": {"periodo_inicio": "23/01/2026", "periodo_fim": "01/01/2027"},
+            "reflexos": [
+                {"nome": "13º Salário sobre Indenização", "estrategia_reflexa": "checkbox_painel",
+                 "parametros_override": None},
+                {"nome": "Férias + 1/3 sobre Indenização", "estrategia_reflexa": "checkbox_painel",
+                 "parametros_override": None},
+                {"nome": "FGTS sobre Indenização", "estrategia_reflexa": "checkbox_painel",
+                 "parametros_override": None},
+            ],
+        }],
+    }
+    N._norm_reflexos_pos_contratuais_manual(d)
+    rs = d["verbas_principais"][0]["reflexos"]
+    assert all(r["estrategia_reflexa"] == "manual" for r in rs), (
+        "REGRESSÃO #80-AG: reflexos pós-contratuais devem virar estrategia=manual")
+    cars = {r["nome"].split(" ")[0]: r["parametros_override"]["caracteristica"] for r in rs}
+    assert cars["13º"] == "DECIMO_TERCEIRO_SALARIO"
+    assert cars["Férias"] == "FERIAS"
+    assert cars["FGTS"] == "COMUM"
+    assert all(r["parametros_override"]["periodo_inicio"] == "23/01/2026" for r in rs)
+
+    # verba NÃO pós-contratual não é tocada
+    d2 = {"parametros_calculo": {"data_demissao": "23/12/2025"},
+          "verbas_principais": [{"nome_pjecalc": "HORAS EXTRAS 50%",
+                                 "parametros": {"periodo_inicio": "01/01/2025"},
+                                 "reflexos": [{"nome": "RSR sobre HE",
+                                               "estrategia_reflexa": "checkbox_painel",
+                                               "parametros_override": None}]}]}
+    N._norm_reflexos_pos_contratuais_manual(d2)
+    assert d2["verbas_principais"][0]["reflexos"][0]["estrategia_reflexa"] == "checkbox_painel", (
+        "REGRESSÃO #80-AG: verba comum (pré-demissão) não pode ser coagida")
+
+    # (2) prompt
+    prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "REFLEXOS DE VERBA PÓS-CONTRATUAL" in prompt
+
+    # (3) bot — save cego proibido; persistência verificada; deferido vai direto
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fn_start = pw.find("def _criar_reflexo_manual(")
+    fn = pw[fn_start:pw.find("\n    def _criar_reflexo_manual_tentativa")]
+    assert "#80-AG" in fn and "_verificar_verba_na_listagem" in fn, (
+        "REGRESSÃO #80-AG: _criar_reflexo_manual deve verificar persistência na listagem")
+    assert "def _verificar_verba_na_listagem" in pw
+    tent_start = pw.find("def _criar_reflexo_manual_tentativa(")
+    tent = pw[tent_start:pw.find("\n    def ", tent_start + 1)]
+    assert "_aguardar_servidor_ocioso" in tent, (
+        "REGRESSÃO #80-AG: tentativa deve ter gate #80-H")
+    assert "tipoDaQuantidade" in tent and "integralizar" in tent.lower(), (
+        "REGRESSÃO #80-AG: tentativa deve aguardar re-render pós-integralizarBase")
+    assert "_aguardar_operacao_sucesso" in tent, (
+        "REGRESSÃO #80-AG: save do reflexo deve verificar mensagem de sucesso")

@@ -1063,6 +1063,93 @@ def _norm_divisor_cartao_para_carga_horaria(data: dict[str, Any]) -> None:
         )
 
 
+def _norm_reflexos_pos_contratuais_manual(data: dict[str, Any]) -> None:
+    """#80-AG — reflexos de verba PÓS-CONTRATUAL viram estrategia "manual".
+
+    Caso JANIELLY 0000706-46 (estabilidade gestante): a IA emitiu os 3 reflexos
+    (13º, Férias+1/3, FGTS) com `estrategia_reflexa=checkbox_painel`. Mas o
+    PJE-Calc NÃO pré-cadastra candidatos de reflexo no painel "Exibir" para
+    verba adaptada pós-contratual — o bot tentava o checkbox ×3, caía no
+    fallback tardio e os reflexos se perdiam. Fluxo correto (CLAUDE.md,
+    "Reflexos pós-contratuais"): cada reflexo é uma verba MANUAL Tipo=REFLEXO
+    com característica própria (Férias+1/3→FERIAS, 13º→DECIMO_TERCEIRO_SALARIO,
+    FGTS→COMUM) e período = período da principal.
+
+    Detecção de principal pós-contratual (qualquer um):
+      • periodo_inicio da verba POSTERIOR à data_demissao; OU
+      • nome/nome_sentenca contém ESTABILIDADE ou Lei 9.029.
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    from datetime import datetime as _dt
+    _log = logging.getLogger(__name__)
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    pc = data.get("parametros_calculo") if isinstance(data.get("parametros_calculo"), dict) else {}
+    dem = pc.get("data_demissao")
+    d_dem = None
+    try:
+        d_dem = _dt.strptime(dem, "%d/%m/%Y") if dem else None
+    except (ValueError, TypeError):
+        d_dem = None
+
+    def _eh_pos_contratual(v: dict) -> bool:
+        nome = f"{v.get('nome_pjecalc') or ''} {v.get('nome_sentenca') or ''}".upper()
+        if "ESTABILIDADE" in nome or "9.029" in nome or "9029" in nome:
+            return True
+        p = v.get("parametros") if isinstance(v.get("parametros"), dict) else {}
+        pi = p.get("periodo_inicio")
+        if d_dem and pi:
+            try:
+                return _dt.strptime(pi, "%d/%m/%Y") > d_dem
+            except (ValueError, TypeError):
+                pass
+        return False
+
+    def _caracteristica_por_nome(nome_r: str) -> str:
+        n = (nome_r or "").upper()
+        if "FÉRIAS" in n or "FERIAS" in n:
+            return "FERIAS"
+        if "13" in n or "DÉCIMO" in n or "DECIMO" in n:
+            return "DECIMO_TERCEIRO_SALARIO"
+        return "COMUM"
+
+    for v in verbas:
+        if not isinstance(v, dict) or not _eh_pos_contratual(v):
+            continue
+        p = v.get("parametros") if isinstance(v.get("parametros"), dict) else {}
+        for r in v.get("reflexos") or []:
+            if not isinstance(r, dict):
+                continue
+            mudou = False
+            if r.get("estrategia_reflexa") != "manual":
+                r["estrategia_reflexa"] = "manual"
+                mudou = True
+            ov = r.get("parametros_override")
+            if not isinstance(ov, dict):
+                ov = {}
+                r["parametros_override"] = ov
+            if not ov.get("caracteristica"):
+                ov["caracteristica"] = _caracteristica_por_nome(r.get("nome") or "")
+                mudou = True
+            # Período do reflexo = período da principal (pós-contratual)
+            if not ov.get("periodo_inicio") and p.get("periodo_inicio"):
+                ov["periodo_inicio"] = p["periodo_inicio"]
+                mudou = True
+            if not ov.get("periodo_fim") and p.get("periodo_fim"):
+                ov["periodo_fim"] = p["periodo_fim"]
+                mudou = True
+            if mudou:
+                _log.warning(
+                    "Normalizer #80-AG: reflexo '%s' de '%s' (pós-contratual) → "
+                    "estrategia=manual, caracteristica=%s, periodo=%s→%s",
+                    r.get("nome"), v.get("nome_pjecalc"),
+                    ov.get("caracteristica"), ov.get("periodo_inicio"), ov.get("periodo_fim"),
+                )
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -1203,6 +1290,13 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # trava o save ("Campo obrigatório: Cartão de Ponto"). Coage p/ OUTRO_VALOR
     # usando a carga horária mensal do cartão (ou 220).
     _norm_divisor_cartao_para_carga_horaria(data)
+
+    # Salvaguarda #80-AG: reflexos de verba PÓS-CONTRATUAL (indenização de
+    # estabilidade, Lei 9.029) NUNCA são checkbox_painel — o PJE-Calc não
+    # pré-cadastra candidatos p/ verba adaptada pós-contratual. Coage p/
+    # estrategia "manual" + característica default (FERIAS/13º) + período da
+    # principal, conforme fluxo documentado (verba Manual Tipo=REFLEXO).
+    _norm_reflexos_pos_contratuais_manual(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #

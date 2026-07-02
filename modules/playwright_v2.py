@@ -6334,14 +6334,28 @@ class PlaywrightAutomatorV2:
                         self._page.wait_for_timeout(800)
                 except Exception:
                     pass
+                # #80-AG: reflexo deferido por "sem checkbox" NÃO precisa do
+                # painel Exibir da principal — ir DIRETO ao form Manual.
+                # (Antes: _configurar_reflexo re-tentava checkboxes ×3 e exigia
+                # a principal visível na listagem; na JANIELLY a listagem estava
+                # em LockTimeout e o reflexo Férias+1/3 foi pulado sem nem
+                # tentar o Manual.)
+                _persistidos = 0
                 for _rm in _manuais_deferidos:
                     try:
-                        self._configurar_reflexo(v, _rm)  # sem coletar → cria Manual
+                        if self._criar_reflexo_manual(v, _rm):
+                            _persistidos += 1
                     except Exception as _e:
                         self.log(
                             f"    ⚠ #80-J reflexo Manual deferido "
                             f"'{getattr(_rm, 'nome', '?')}': {_e}"
                         )
+                if _persistidos < len(_manuais_deferidos):
+                    self.log(
+                        f"    🛑 #80-AG reflexos Manual de {v.nome_pjecalc}: "
+                        f"{_persistidos}/{len(_manuais_deferidos)} persistidos — "
+                        f"os faltantes precisarão de lançamento manual no PJE-Calc"
+                    )
         else:
             self._diagnostico_pagina(contexto=f"pós-save Parâmetros {v.nome_pjecalc}")
             # #80-N: capturar a MENSAGEM DE ERRO JSF real do save (rf-msgs /
@@ -6561,24 +6575,85 @@ class PlaywrightAutomatorV2:
         except Exception:
             pass
 
-    def _criar_reflexo_manual(self, verba_principal, reflexo) -> None:
-        """Cria reflexo via Manual (verba separada com Tipo=REFLEXO).
+    def _criar_reflexo_manual(self, verba_principal, reflexo) -> bool:
+        """Cria reflexo via Manual (verba Tipo=REFLEXO) COM VERIFICAÇÃO (#80-AG).
 
-        Para reflexos `estrategia_reflexa: "manual"` que não têm equivalente
-        Expresso (ex.: reflexos de estabilidade pós-contratual, Lei 9.029/95).
-        Fluxo:
-        1. Navegar para listing de verbas.
-        2. Click "Manual" (input[id$=':incluir'][value='Manual']).
-        3. Preencher Nome (descricao), Assunto CNJ via lupa→modal, Tipo=REFLEXO.
-        4. Aplicar overrides (período, característica, ocorrência, incidências).
-        5. Configurar valor=CALCULADO com base padrão (HISTORICO_SALARIAL=ÚLTIMA REMUNERAÇÃO).
-        6. Salvar.
-        """
+        ⚠ #80-AG (JANIELLY 0000706-46, estabilidade gestante, 02/07/2026):
+        a versão anterior clicava Salvar e logava "criado" SEM verificar nada.
+        Os 3 reflexos da estabilidade se perderam: 13º (form quebrou mid-fill
+        pós-A4J do integralizarBase), Férias (listagem em LockTimeout) e FGTS
+        ("criado" no log mas AUSENTE do PJC — save não commitou/verificado).
+        Agora: retry ×3, cada tentativa re-abre o form do zero, e o sucesso é
+        CONFIRMADO pela PERSISTÊNCIA da verba na listagem (ground truth), não
+        pelo click. NÃO REVERTER para o save cego."""
         nome = (reflexo.nome or "").upper()
-        # Construir nome "X SOBRE Y" se ainda não estiver no formato
         if "SOBRE" not in nome:
             nome = f"{nome.upper()} SOBRE {verba_principal.nome_pjecalc.upper()}"
+        # #80-O: o campo descricao tem maxlength=50 — o nome persistido é o truncado
+        nome_persistido = nome[:50].strip()
+        for _tent in range(1, 4):
+            try:
+                ok = self._criar_reflexo_manual_tentativa(verba_principal, reflexo, nome)
+            except Exception as _e:
+                self.log(f"    ⚠ tentativa {_tent}/3 do reflexo Manual '{nome[:40]}': {str(_e)[:120]}")
+                ok = False
+            # VERIFICAR persistência na listagem (independente do que o form disse)
+            if self._verificar_verba_na_listagem(nome_persistido):
+                self.log(f"  ✓ Reflexo Manual '{nome_persistido}' criado e CONFIRMADO na listagem")
+                return True
+            if ok:
+                self.log(f"    ⚠ save do reflexo reportou ok mas verba NÃO está na listagem (tentativa {_tent}/3)")
+            if _tent < 3:
+                # Drools/lock pode estar segurando — aguardar antes de re-tentar
+                self._aguardar_servidor_ocioso(contexto=f"retry reflexo Manual {nome_persistido[:30]}")
+        self.log(f"    🛑 Reflexo Manual '{nome_persistido}' NÃO persistiu após 3 tentativas")
+        return False
+
+    def _verificar_verba_na_listagem(self, nome_persistido: str) -> bool:
+        """Ground truth #80-AG: navega à listagem de verbas e confirma que uma
+        verba com esse nome (truncado a 50, #80-O) está listada."""
+        try:
+            self._aguardar_servidor_ocioso(contexto="verificação pós-save reflexo")
+            if self._calculo_conversation_id:
+                self._page.goto(
+                    f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}",
+                    wait_until="domcontentloaded", timeout=15000,
+                )
+            else:
+                self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1000)
+            return bool(self._page.evaluate(
+                """(alvo) => {
+                    const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                    const a = norm(alvo);
+                    if (!a) return false;
+                    return [...document.querySelectorAll('td')]
+                        .some(td => norm(td.textContent).includes(a));
+                }""",
+                nome_persistido,
+            ))
+        except Exception as _e:
+            self.log(f"    ⚠ verificação na listagem falhou: {str(_e)[:100]}")
+            return False
+
+    def _criar_reflexo_manual_tentativa(self, verba_principal, reflexo, nome: str) -> bool:
+        """Uma tentativa de criação do reflexo Manual (form do zero → salvar).
+
+        Fluxo:
+        1. Gate #80-H + navegar para listing de verbas.
+        2. Click "Manual" (input[id$=':incluir'][value='Manual']).
+        3. Preencher Nome (descricao), Assunto CNJ via lupa→modal, Tipo=REFLEXO.
+        4. Característica (override OU default por tipo: FERIAS/13º) + período.
+        5. Fórmula CALCULADO (divisor/mult/qtd por tipo) — aguardando o A4J do
+           integralizarBase re-renderizar antes de tocar a quantidade (#80-AG).
+        6. Salvar com verificação de mensagem (+ dump #80-N em falha).
+        """
         self.log(f"  → Criar reflexo MANUAL: {nome}")
+        # #80-H: não navegar/preencher com o servidor ocupado (raiz do form
+        # quebrado mid-fill do 13º na JANIELLY)
+        self._aguardar_servidor_ocioso(contexto=f"pré-form reflexo Manual")
 
         # 1. Reset state agressivo: Cancelar (se visível) + page.reload() na URL
         # da listagem com conversationId. Reload força fresh state JSF/Seam,
@@ -6629,12 +6704,12 @@ class PlaywrightAutomatorV2:
                 self._page.wait_for_timeout(2000)
         if not btn_manual:
             self.log(f"    ⚠ Pulando reflexo {reflexo.id} — botão Manual indisponível")
-            return
+            return False
         try:
             btn_manual.click(force=True)
         except Exception as e:
             self.log(f"    ⚠ Click 'Manual' falhou: {e}")
-            return
+            return False
         self._aguardar_ajax(8000)
         # Aguardar form renderizar
         try:
@@ -6643,7 +6718,7 @@ class PlaywrightAutomatorV2:
             )
         except Exception:
             self.log(f"    ⚠ Form Manual não abriu — pulando reflexo {reflexo.id}")
-            return
+            return False
 
         # 3. Preencher Nome
         self._preencher("descricao", nome[:100])
@@ -6699,6 +6774,20 @@ class PlaywrightAutomatorV2:
         else:
             divisor, multiplicador, quantidade, integralizar = "1", "1", "1", True
 
+        # #80-AG: característica DEFAULT por tipo quando o override não define
+        # (CLAUDE.md, tabela "Reflexos pós-contratuais": Férias+1/3→FERIAS,
+        # 13º→DECIMO_TERCEIRO_SALARIO). Sem isso o reflexo salva como COMUM e
+        # o PJE-Calc não o trata como parcela anual.
+        if not (ov and getattr(ov, "caracteristica", None)):
+            _car_default = "FERIAS" if is_ferias else ("DECIMO_TERCEIRO_SALARIO" if is_13 else None)
+            if _car_default:
+                try:
+                    self._marcar_radio("caracteristicaVerba", _car_default)
+                    self._aguardar_ajax(2000)
+                    self.log(f"    ✓ característica default = {_car_default}")
+                except Exception as _e:
+                    self.log(f"    ⚠ característica default {_car_default}: {str(_e)[:80]}")
+
         try:
             self._marcar_radio("valor", "CALCULADO")
             self._aguardar_ajax(2000)
@@ -6721,6 +6810,18 @@ class PlaywrightAutomatorV2:
                 except Exception:
                     # Fallback: pode ser checkbox em algumas versões
                     self._marcar_checkbox("integralizar", True)
+                # #80-AG: o select integralizarBase dispara A4J que RE-RENDERIZA
+                # o form — na JANIELLY o radio tipoDaQuantidade e o botão salvar
+                # "sumiram" mid-fill (13º não persistiu). Aguardar o re-render
+                # assentar e o radio da quantidade voltar antes de prosseguir.
+                self._aguardar_ajax(4000)
+                try:
+                    self._page.wait_for_selector(
+                        "input[type='radio'][id*='tipoDaQuantidade']",
+                        state="attached", timeout=8000,
+                    )
+                except Exception:
+                    self.log("    ⚠ tipoDaQuantidade não re-renderizou em 8s pós-integralizar")
             self._marcar_radio("tipoDeDivisor", "OUTRO_VALOR")
             self._aguardar_ajax(1500)
             self._preencher("outroValorDoDivisor", divisor, obrigatorio=False)
@@ -6731,10 +6832,25 @@ class PlaywrightAutomatorV2:
         except Exception as e:
             self.log(f"    ⚠ Configurando fórmula CALCULADO: {e}")
 
-        # 8. Salvar
-        self._clicar("salvar")
+        # 8. Salvar COM verificação (#80-AG) — sem "criado" cego
+        if not self._clicar_salvar_flex(timeout_ms=8000):
+            self.log(f"    ⚠ botão salvar não encontrado no form do reflexo")
+            return False
         self._aguardar_ajax(15000)
-        self.log(f"  ✓ Reflexo Manual '{nome}' criado")
+        sucesso = self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        if not sucesso:
+            # #80-N: capturar mensagens JSF reais do save falho (DOM REFLEXO é
+            # não-mapeado — a mensagem revela campo obrigatório desconhecido)
+            try:
+                _msgs = self._page.evaluate(
+                    """() => [...document.querySelectorAll('.rich-message, .rich-messages, [id$=":mensagens"]')]
+                        .map(e => (e.textContent||'').trim()).filter(Boolean).slice(0,6)"""
+                )
+                if _msgs:
+                    self.log(f"    🔍 #80-N mensagens JSF no save do reflexo: {_msgs}")
+            except Exception:
+                pass
+        return bool(sucesso)
 
     def _configurar_reflexo(self, verba_principal, reflexo, coletar_manual_em=None) -> None:
         """Marcar checkbox do reflexo no painel da verba principal (Expresso pareado)
