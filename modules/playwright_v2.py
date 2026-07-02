@@ -6867,15 +6867,36 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Form Manual não abriu — pulando reflexo {reflexo.id}")
             return False
 
-        # 3. Tipo = REFLEXO — PRIMEIRO (#80-AG-5): o vínculo da principal (5b)
-        # usa jsfcljs FULL-FORM submit cujo render redesenha o form a partir do
-        # bean — qualquer input preenchido via JS ANTES dele (descricao) seria
-        # apagado. Ordem: REFLEXO → vincular → só então descricao/CNJ/fórmula.
-        try:
-            self._marcar_radio("tipoDeVerba", "REFLEXO")
-        except Exception as e:
-            self.log(f"    ⚠ Tipo=REFLEXO: {e}")
-        self._aguardar_ajax(2000)
+        # 3. Tipo = REFLEXO — PRIMEIRO (#80-AG-5) e COM VERIFICAÇÃO DE ESTADO
+        # DO BEAN (#80-AG-7). Diag interativo 02/07/2026 provou: o select
+        # `baseVerbaDeCalculo` JÁ EXISTE no modo PRINCIPAL; o que distingue o
+        # modo REFLEXO REAL é o A4J re-render que REMOVE `tipoDaBaseTabelada`
+        # (e `integralizarBase`). Nos runs, o radio era marcado no DOM mas o
+        # A4J NÃO disparava (classe inv3) → bean seguia PRINCIPAL → o change
+        # do select explodia no servidor ("Erro Interno" determinístico).
+        # Ground truth: REFLEXO confirmado ⇔ tipoDaBaseTabelada SUMIU do DOM.
+        _reflexo_ok = False
+        for _rt in range(1, 4):
+            try:
+                loc_r = self._page.locator(
+                    "input[type='radio'][id*='tipoDeVerba'][value='REFLEXO']"
+                ).first
+                loc_r.check(force=(_rt > 1))  # 1ª: eventos naturais; depois força
+            except Exception as _e:
+                self.log(f"    ⚠ check REFLEXO (tent {_rt}/3): {str(_e)[:80]}")
+            self._aguardar_ajax(4000)
+            try:
+                self._page.wait_for_selector(
+                    "select[id$=':tipoDaBaseTabelada']", state="detached", timeout=6000,
+                )
+                _reflexo_ok = True
+                self.log("    ✓ modo REFLEXO confirmado no bean (tipoDaBaseTabelada removido)")
+                break
+            except Exception:
+                self.log(f"    ⚠ re-render REFLEXO não confirmado (tent {_rt}/3) — re-marcando")
+        if not _reflexo_ok:
+            self.log("    🛑 bean não entrou em modo REFLEXO — abortando tentativa")
+            return False
 
         # 3b. VINCULAR A VERBA PRINCIPAL (#80-AG — DOM mapeado 02/07/2026):
         # o form REFLEXO tem o mini-crud "Verba *": select
