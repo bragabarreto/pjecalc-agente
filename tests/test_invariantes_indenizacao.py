@@ -2638,16 +2638,16 @@ def test_inv79_reflexos_he_expresso_nao_manual():
 
 
 def test_inv80_reconciliacao_fidelidade_previa_pjc():
-    """#80-AK (RODRIGO 0000905-05, 02/07/2026): reflexo/verba da prévia que
-    falha na automação era perdido SILENCIOSAMENTE — o PJC saía incompleto e o
-    bot reportava sucesso. Regra do usuário: "fidelidade 100% entre a prévia e
-    a automação".
+    """#80-AK/#80-AN (RODRIGO 0000905-05, 02-03/07/2026): reflexo/verba da prévia
+    que falha na automação era perdido SILENCIOSAMENTE. Regra do usuário:
+    "fidelidade 100% entre a prévia e a automação".
 
-    Guarda estrutural: após exportar, `_reconciliar_fidelidade_pjc` lê as
-    descricoes do PJC e compara com verbas+reflexos da prévia; se faltar algo,
-    loga um relatório EXPLÍCITO (⚠️ FALTANTES). READ-ONLY (não bloqueia o
-    export). Match por prefixo normalizado tolerante a acento/entidade/truncamento
-    (#80-O trunca descricao a 50)."""
+    Guarda estrutural `_reconciliar_fidelidade_pjc`: após exportar, lê o PJC e
+    reconcilia contra a prévia. #80-AN: lê o `<nome>` COMPLETO do reflexo (o
+    `<descricao>` vem truncado a 50 sem "SOBRE X") e casa por SUBCONJUNTO DE
+    TOKENS (tolera "E FERIADO" que a prévia não tem; e um reflexo "X SOBRE Y" não
+    casa o principal "X" sozinho). Detecta FALTANTES + DUPLICADOS + EXTRAS
+    (over-emissão). READ-ONLY."""
     import io
     import zipfile
     import types
@@ -2655,65 +2655,77 @@ def test_inv80_reconciliacao_fidelidade_previa_pjc():
     mod = importlib.import_module("modules.playwright_v2")
     Bot = mod.PlaywrightAutomatorV2
 
-    # normalizador: acentos/entidades/ordinal → forma comparável
     norm = Bot._norm_desc_fidelidade
     assert norm("13º SALÁRIO SOBRE INDENIZAÇÃO") == norm("13&#186; SAL&#193;RIO SOBRE INDENIZA&#199;&#195;O"), (
         "REGRESSÃO #80-AK: normalização deve casar entidade HTML com acento unicode")
 
-    def _pjc(descricoes):
+    def _pjc(verbas_desc, reflexos_nome):
+        """PJC sintético: verbas via <descricao>, reflexos ATIVOS via <Reflexo><nome>."""
         buf = io.BytesIO()
-        xml = "<root>" + "".join(f"<descricao>{d}</descricao>" for d in descricoes) + "</root>"
+        xml = "<root>"
+        for d in verbas_desc:
+            xml += f"<descricao>{d}</descricao>"
+        for n in reflexos_nome:
+            xml += f"<Reflexo><nome>{n}</nome><descricao>{n[:36]}</descricao></Reflexo>"
+        xml += "</root>"
         with zipfile.ZipFile(buf, "w") as z:
             z.writestr("CALC.PJC", xml.encode("iso-8859-1", "replace"))
         return buf.getvalue()
 
-    def _fake_self():
+    def _fake_self(reflexos):
         logs: list[str] = []
         v = types.SimpleNamespace(
             nome_pjecalc="HORAS EXTRAS 50%", expresso_alvo="HORAS EXTRAS 50%",
-            reflexos=[
-                types.SimpleNamespace(nome="RSR sobre HE", expresso_reflex_alvo="REPOUSO SEMANAL REMUNERADO SOBRE HORAS EXTRAS 50%"),
-                types.SimpleNamespace(nome="Aviso sobre HE", expresso_reflex_alvo="AVISO PRÉVIO SOBRE HORAS EXTRAS 50%"),
-            ],
-        )
+            reflexos=reflexos)
         fs = types.SimpleNamespace(
             previa=types.SimpleNamespace(verbas_principais=[v]),
             log=logs.append,
             _norm_desc_fidelidade=Bot._norm_desc_fidelidade,
-        )
+            _STOP_FID=Bot._STOP_FID)
+        fs._tokens_fidelidade = types.MethodType(Bot._tokens_fidelidade, fs)
         return fs, logs
 
-    # (1) PJC completo → fidelidade 100%, sem faltantes
-    fs, logs = _fake_self()
-    res = Bot._reconciliar_fidelidade_pjc(
-        fs, _pjc(["HORAS EXTRAS 50%",
-                  "REPOUSO SEMANAL REMUNERADO SOBRE HORAS EXTRAS 50%",
-                  "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%"]))
-    assert res["ok"] and not res["reflexos_faltantes"] and not res["verbas_faltantes"], (
-        "REGRESSÃO #80-AK: PJC completo deve reconciliar 100%")
+    R = lambda nome, alvo: types.SimpleNamespace(nome=nome, expresso_reflex_alvo=alvo)
+
+    # (1) PJC completo — e o RSR do painel tem "E FERIADO" que a prévia NÃO tem:
+    # o match por TOKENS casa mesmo assim (o prefixo falharia). Fidelidade 100%.
+    refl = [R("RSR sobre HE", "REPOUSO SEMANAL REMUNERADO SOBRE HORAS EXTRAS 50%"),
+            R("Aviso sobre HE", "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%")]
+    fs, logs = _fake_self(refl)
+    res = Bot._reconciliar_fidelidade_pjc(fs, _pjc(
+        ["HORAS EXTRAS 50%"],
+        ["REPOUSO SEMANAL REMUNERADO E FERIADO SOBRE HORAS EXTRAS 50%",
+         "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%"]))
+    assert res["ok"] and not res["reflexos_faltantes"], (
+        "REGRESSÃO #80-AN: token-match deve casar RSR com 'E FERIADO' (prefixo falharia)")
     assert any("fidelidade 100%" in l for l in logs)
 
-    # (2) PJC sem o reflexo RSR → detectado como faltante + relatório explícito
-    fs, logs = _fake_self()
-    res = Bot._reconciliar_fidelidade_pjc(
-        fs, _pjc(["HORAS EXTRAS 50%", "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%"]))
-    assert not res["ok"], "REGRESSÃO #80-AK: reflexo faltante deve derrubar ok"
-    assert any("RSR" in f for f in res["reflexos_faltantes"]), (
-        "REGRESSÃO #80-AK: RSR ausente deve constar em reflexos_faltantes")
-    assert any("REFLEXOS FALTANTES" in l for l in logs) and any("INCOMPLETO" in l for l in logs), (
-        "REGRESSÃO #80-AK: relatório deve avisar EXPLICITAMENTE o PJC incompleto")
+    # (2) reflexo "X SOBRE Y" NÃO pode casar o principal "X" sozinho.
+    fs, logs = _fake_self([R("Aviso sobre HE", "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%")])
+    res = Bot._reconciliar_fidelidade_pjc(fs, _pjc(["HORAS EXTRAS 50%", "AVISO PRÉVIO"], []))
+    assert res["reflexos_faltantes"], (
+        "REGRESSÃO #80-AN: reflexo não pode ser dado como presente casando só o principal")
 
-    # (3) truncamento a 50 chars (nome longo) ainda casa por prefixo
-    fs, logs = _fake_self()
-    fs.previa.verbas_principais[0].reflexos = [
-        types.SimpleNamespace(nome="13º sobre indeniz",
-                              expresso_reflex_alvo="13º SALÁRIO SOBRE INDENIZAÇÃO SUBSTITUTIVA À ESTABILIDADE GESTANTE"),
-    ]
-    res = Bot._reconciliar_fidelidade_pjc(
-        fs, _pjc(["HORAS EXTRAS 50%", "13º SALÁRIO SOBRE INDENIZAÇÃO SUBSTITUTIVA À ESTAB"]))
-    assert not res["reflexos_faltantes"], (
-        "REGRESSÃO #80-AK: match por prefixo deve tolerar truncamento a 50 do PJE-Calc")
+    # (3) DUPLICADO — mesmo reflexo aparece 2x no PJC (Manual + Expresso)
+    fs, logs = _fake_self([R("Férias sobre HE", "FÉRIAS + 1/3 SOBRE HORAS EXTRAS 50%")])
+    res = Bot._reconciliar_fidelidade_pjc(fs, _pjc(
+        ["HORAS EXTRAS 50%"],
+        ["FÉRIAS + 1/3 SOBRE HORAS EXTRAS 50%",
+         "FÉRIAS + 1/3 SOBRE HORAS EXTRAS 50% SOBRE HORAS EXTRAS 50%"]))
+    assert res["reflexos_duplicados"] and not res["ok"], (
+        "REGRESSÃO #80-AN: reflexo em dobro deve ser flagrado como DUPLICADO")
+    assert any("DUPLICADOS" in l for l in logs)
 
-    # (4) wiring: chamado após gravar o PJC
+    # (4) EXTRA — reflexo ativo no PJC que NÃO estava na prévia (over-emissão)
+    fs, logs = _fake_self([R("Aviso sobre HE", "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%")])
+    res = Bot._reconciliar_fidelidade_pjc(fs, _pjc(
+        ["HORAS EXTRAS 50%"],
+        ["AVISO PRÉVIO SOBRE HORAS EXTRAS 50%",
+         "MULTA DO ARTIGO 477 DA CLT SOBRE HORAS EXTRAS 50%"]))
+    assert any("MULTA" in e for e in res["reflexos_extras"]) and not res["ok"], (
+        "REGRESSÃO #80-AN: reflexo ativo fora da prévia deve ser flagrado como EXTRA")
+    assert any("EXTRAS" in l for l in logs)
+
+    # (5) wiring: chamado após gravar o PJC
     assert "_reconciliar_fidelidade_pjc(pjc_bytes)" in PLAYWRIGHT_V2, (
         "REGRESSÃO #80-AK: reconciliação deve ser chamada após exportar o PJC")
