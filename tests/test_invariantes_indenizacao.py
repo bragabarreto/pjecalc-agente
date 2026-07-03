@@ -2729,3 +2729,36 @@ def test_inv80_reconciliacao_fidelidade_previa_pjc():
     # (5) wiring: chamado após gravar o PJC
     assert "_reconciliar_fidelidade_pjc(pjc_bytes)" in PLAYWRIGHT_V2, (
         "REGRESSÃO #80-AK: reconciliação deve ser chamada após exportar o PJC")
+
+
+def test_inv81_painel_vazio_reancora_e_dedup_manual():
+    """#80-AO (RODRIGO 0000905-05, 03/07/2026): o reflexo Férias caiu no Manual
+    porque o painel 'Exibir' voltou VAZIO (0 checkboxes) num glitch de re-render
+    Seam — e o defer-pro-Manual criou uma 2ª cópia (DUPLICADO → dupla contagem),
+    já que o Expresso também acabou marcando o Férias.
+
+    Dois fixes estruturais (NÃO REVERTER):
+    1. PAINEL VAZIO (0 checkboxes) ≠ 'meu checkbox não está entre N' → re-ancorar
+       na listagem (sidebar) + gate servidor-ocioso antes de reabrir o painel,
+       com mais tentativas (5), em vez de deferir logo pro Manual.
+    2. DEDUP: antes de criar reflexo via Manual, se um equivalente já está na
+       listagem (match por tokens, tolera 'E FERIADO'), pular a criação."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # (1) painel-vazio: re-âncora quando 0 checkboxes disponíveis
+    sec = src.split("def _configurar_reflexo")[1].split("\n    def ")[0]
+    assert "#80-AO" in sec and "len(_lbls) == 0" in sec, (
+        "REGRESSÃO #80-AO: painel VAZIO (0 checkboxes) deve disparar re-âncora dedicada")
+    assert "_MAX_REFL_TENT = 5" in sec, (
+        "REGRESSÃO #80-AO: painel-vazio transiente precisa de mais tentativas")
+    assert "li_calculo_verbas" in sec[sec.index("len(_lbls) == 0"):], (
+        "REGRESSÃO #80-AO: re-âncora do painel-vazio deve re-navegar à listagem")
+
+    # (2) dedup: _criar_reflexo_manual pula se já presente
+    cm = src.split("def _criar_reflexo_manual(")[1].split("\n    def ")[0]
+    assert "_reflexo_ja_na_listagem" in cm and "return True" in cm, (
+        "REGRESSÃO #80-AO: _criar_reflexo_manual deve pular (dedup) se já presente")
+    assert "def _reflexo_ja_na_listagem" in src
+    dd = src.split("def _reflexo_ja_na_listagem(")[1].split("\n    def ")[0]
+    assert "_tokens_fidelidade" in dd and "SOBRE" in dd, (
+        "REGRESSÃO #80-AO: dedup usa match por tokens e só considera linhas de reflexo")

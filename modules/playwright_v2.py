@@ -6624,6 +6624,14 @@ class PlaywrightAutomatorV2:
             nome = f"{nome.upper()} SOBRE {verba_principal.nome_pjecalc.upper()}"
         # #80-O: o campo descricao tem maxlength=50 — o nome persistido é o truncado
         nome_persistido = nome[:50].strip()
+        # #80-AO — DEDUP: se um reflexo equivalente JÁ está na listagem (ex.:
+        # marcado por Expresso, tolerando "E FERIADO"), NÃO recriar via Manual.
+        # Evita o Férias DUPLICADO (defer-pro-Manual + checkbox Expresso já
+        # marcado geravam 2 cópias → dupla contagem).
+        if self._reflexo_ja_na_listagem(reflexo, verba_principal):
+            self.log(f"  ⏭ #80-AO reflexo '{nome_persistido[:40]}' JÁ presente na "
+                     "listagem — pulando criação Manual (evita duplicado)")
+            return True
         for _tent in range(1, 4):
             try:
                 ok = self._criar_reflexo_manual_tentativa(verba_principal, reflexo, nome)
@@ -6811,6 +6819,45 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"    ⚠ verificação na listagem falhou: {str(_e)[:100]}")
             return False
+
+    def _reflexo_ja_na_listagem(self, reflexo, verba_principal) -> bool:
+        """#80-AO — True se um reflexo EQUIVALENTE já consta na listagem (match
+        por SUBCONJUNTO DE TOKENS, tolerante a palavras extras tipo 'E FERIADO').
+
+        Usado como DEDUP antes de criar reflexo via Manual: se o Expresso já
+        marcou o reflexo, recriá-lo via Manual gera DUPLICADO (dupla contagem de
+        valor). Só considera células que contêm ' SOBRE ' (linha de reflexo, não
+        do principal)."""
+        alvo = getattr(reflexo, "expresso_reflex_alvo", None) or getattr(reflexo, "nome", None) or ""
+        if " SOBRE " not in alvo.upper():
+            alvo = f"{alvo} SOBRE {verba_principal.nome_pjecalc}"
+        r_toks = self._tokens_fidelidade(alvo)
+        if not r_toks:
+            return False
+        try:
+            self._aguardar_servidor_ocioso(contexto="dedup pré-Manual reflexo")
+            if self._calculo_conversation_id:
+                self._page.goto(
+                    f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                    f"?conversationId={self._calculo_conversation_id}",
+                    wait_until="domcontentloaded", timeout=15000,
+                )
+            else:
+                self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1000)
+            celulas = self._page.evaluate(
+                "() => [...document.querySelectorAll('td')]"
+                ".map(td => (td.textContent||'').trim()).filter(t => t.length > 3)"
+            )
+        except Exception as _e:
+            self.log(f"    ⚠ #80-AO dedup leitura da listagem: {str(_e)[:100]}")
+            return False
+        for c in (celulas or []):
+            cn = self._norm_desc_fidelidade(c)
+            if " SOBRE " in cn and r_toks <= self._tokens_fidelidade(c):
+                return True
+        return False
 
     def _criar_reflexo_manual_tentativa(self, verba_principal, reflexo, nome: str) -> bool:
         """Uma tentativa de criação do reflexo Manual (form do zero → salvar).
@@ -7218,7 +7265,8 @@ class PlaywrightAutomatorV2:
         ok_reflexo = False
         cb_visto = False  # o checkbox candidato chegou a existir no painel?
         _labels_diag_logado = False
-        for tentativa in range(1, 4):
+        _MAX_REFL_TENT = 5  # #80-AO: painel-vazio transiente precisa de mais fôlego
+        for tentativa in range(1, _MAX_REFL_TENT + 1):
             # #80-AL (RODRIGO 0000905-05): o `includes()` exato falha quando o
             # rótulo do painel tem palavras EXTRAS que a IA não emitiu — ex.:
             # RSR real = "REPOUSO SEMANAL REMUNERADO E FERIADOS SOBRE HORAS
@@ -7263,19 +7311,55 @@ class PlaywrightAutomatorV2:
                 alvo_cands,
             )
             cb_id = (_match or {}).get("cbId")
+            _lbls = (_match or {}).get("labels") or []
             if not cb_id:
                 # #80-AL: dump ÚNICO dos rótulos disponíveis no painel — se o
                 # reflexo não casou, mostrar o que O PJE-CALC realmente oferece
                 # (ground truth p/ ajustar o alvo/normalizer sem adivinhação).
                 if not _labels_diag_logado:
-                    _lbls = (_match or {}).get("labels") or []
                     self.log(
                         f"    🔎 #80-AL checkboxes de reflexo disponíveis no painel "
                         f"({len(_lbls)}): {_lbls[:12]}"
                     )
                     _labels_diag_logado = True
-                # Painel pode ter fechado (re-render) — re-clicar Exibir
-                self.log(f"    ⚠ checkbox de '{alvo}' não visível (tentativa {tentativa}/3) — reabrindo painel")
+                # #80-AO (RODRIGO 0000905-05): PAINEL VAZIO (0 checkboxes) ≠
+                # "meu checkbox não está entre N". Zero candidatos = a listagem/
+                # painel NÃO renderizou (glitch de re-render Seam pós-marcação do
+                # reflexo anterior). Re-clicar Exibir na página atual não resolve —
+                # é preciso RE-ANCORAR na listagem (sidebar) + aguardar o servidor
+                # ociosar antes de reabrir o painel. Sem isso, o Férias caía no
+                # Manual (→ dup) por um glitch transiente que se recupera sozinho.
+                if len(_lbls) == 0:
+                    self.log(f"    ⚠ #80-AO painel de reflexos VAZIO (0 checkboxes) "
+                             f"(tentativa {tentativa}/{_MAX_REFL_TENT}) — re-ancorando na listagem")
+                    try:
+                        self._aguardar_servidor_ocioso(contexto=f"painel-vazio reflexo {reflexo.nome[:30]}")
+                        if not self._navegar_menu_via_click("li_calculo_verbas"):
+                            self._navegar_menu("li_calculo_verbas")
+                        self._aguardar_ajax(6000)
+                        self._page.wait_for_timeout(1500)
+                        # re-abrir o painel Exibir da principal
+                        self._page.evaluate(
+                            """(candidatos) => {
+                                const norm = s => (s||'').toUpperCase();
+                                for (const c of candidatos) {
+                                    for (const tr of [...document.querySelectorAll('tr')]) {
+                                        if (!norm(tr.textContent).includes(norm(c))) continue;
+                                        const exibir = tr.querySelector('span.linkDestinacoes');
+                                        if (exibir) { exibir.click(); return true; }
+                                    }
+                                }
+                                return false;
+                            }""",
+                            candidatos_principal,
+                        )
+                        self._aguardar_ajax(4000)
+                        self._page.wait_for_timeout(1200)
+                    except Exception as _e:
+                        self.log(f"    ⚠ #80-AO re-âncora painel-vazio: {str(_e)[:100]}")
+                    continue
+                # Painel presente mas o checkbox não — re-clicar Exibir
+                self.log(f"    ⚠ checkbox de '{alvo}' não visível (tentativa {tentativa}/{_MAX_REFL_TENT}) — reabrindo painel")
                 self._page.evaluate(
                     """(candidatos) => {
                         const norm = s => (s||'').toUpperCase();
@@ -7325,7 +7409,7 @@ class PlaywrightAutomatorV2:
                 ok_reflexo = True
                 self.log(f"    ✓ Reflexo CONFIRMADO no painel: {reflexo.nome}")
                 break
-            self.log(f"    ⚠ Reflexo '{reflexo.nome}' não confirmado (tentativa {tentativa}/3) — checked={confirmado}")
+            self.log(f"    ⚠ Reflexo '{reflexo.nome}' não confirmado (tentativa {tentativa}/{_MAX_REFL_TENT}) — checked={confirmado}")
         if not ok_reflexo:
             if not cb_visto:
                 # FALLBACK (caso Ariane #64, 13/06/2026): o checkbox candidato
