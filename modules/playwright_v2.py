@@ -11238,7 +11238,115 @@ class PlaywrightAutomatorV2:
         dest.write_bytes(pjc_bytes)
         self._pjc_path = str(dest)
         self.log(f"✓ PJC gerado: {self._pjc_path} ({len(pjc_bytes)} bytes)")
+
+        # #80-AK — GUARDA DE FIDELIDADE PRÉVIA↔PJC (NÃO REVERTER):
+        # reconciliar TODAS as verbas e reflexos declarados na prévia contra o
+        # que efetivamente entrou no PJC exportado. Sem esta guarda, um reflexo
+        # que falha no meio da automação era perdido SILENCIOSAMENTE (só um
+        # aviso mid-log) e o PJC saía incompleto sem que ninguém percebesse.
+        # Regra do usuário (RODRIGO 0000905-05): "deve haver fidelidade 100%
+        # entre a prévia e a automação". A guarda é READ-ONLY (não bloqueia o
+        # export — o PJC parcial ainda serve de base) mas torna a lacuna
+        # EXPLÍCITA, estruturada e persistida no log da run.
+        try:
+            self._reconciliar_fidelidade_pjc(pjc_bytes)
+        except Exception as _e:
+            self.log(f"  ⚠ #80-AK reconciliação de fidelidade falhou: {str(_e)[:150]}")
+
         return self._pjc_path
+
+    @staticmethod
+    def _norm_desc_fidelidade(s: str) -> str:
+        """Normaliza uma descrição p/ comparação prévia↔PJC: decodifica
+        entidades HTML, remove acentos, mantém só A-Z0-9 e espaço, uppercase."""
+        import html as _html
+        import re as _re
+        import unicodedata as _ud
+        if not s:
+            return ""
+        t = _html.unescape(str(s))
+        t = _ud.normalize("NFKD", t).encode("ascii", "ignore").decode("ascii")
+        t = _re.sub(r"[^A-Za-z0-9 ]", " ", t)
+        t = _re.sub(r"\s+", " ", t).strip().upper()
+        return t
+
+    def _reconciliar_fidelidade_pjc(self, pjc_bytes: bytes) -> dict:
+        """#80-AK — compara verbas+reflexos da prévia contra o PJC exportado.
+
+        Emite um relatório estruturado no log e retorna
+        `{verbas_faltantes, reflexos_faltantes, ok}`. O PJE-Calc trunca a
+        `descricao` a 50 chars (#80-O) e grava entidades HTML em ISO-8859-1 —
+        por isso o match é por PREFIXO normalizado (~38 chars), tolerante a
+        acento/entidade/truncamento."""
+        import zipfile as _zip
+        import io as _io
+
+        # ── descricoes presentes no PJC ──
+        descs_pjc: list[str] = []
+        try:
+            z = _zip.ZipFile(_io.BytesIO(pjc_bytes))
+            xml = z.read(z.namelist()[0]).decode("iso-8859-1", "replace")
+            import re as _re
+            descs_pjc = [self._norm_desc_fidelidade(d)
+                         for d in _re.findall(r"<descricao>(.*?)</descricao>", xml, _re.S)]
+        except Exception as _e:
+            self.log(f"  ⚠ #80-AK não consegui ler descricoes do PJC: {str(_e)[:120]}")
+            return {"verbas_faltantes": [], "reflexos_faltantes": [], "ok": True}
+        descs_pjc = [d for d in descs_pjc if d]
+
+        def _presente(cands: list[str]) -> bool:
+            for c in cands:
+                cn = self._norm_desc_fidelidade(c)
+                if not cn:
+                    continue
+                chave = cn[:38]
+                for d in descs_pjc:
+                    if d.startswith(chave) or cn.startswith(d[:38]):
+                        return True
+            return False
+
+        verbas_faltantes: list[str] = []
+        reflexos_faltantes: list[str] = []
+        n_verbas = n_reflexos = 0
+        try:
+            verbas = self.previa.verbas_principais or []
+        except Exception:
+            verbas = []
+        for v in verbas:
+            n_verbas += 1
+            v_cands = [getattr(v, "nome_pjecalc", None), getattr(v, "expresso_alvo", None)]
+            v_cands = [c for c in v_cands if c]
+            if not _presente(v_cands):
+                verbas_faltantes.append(getattr(v, "nome_pjecalc", "?"))
+            for r in (getattr(v, "reflexos", None) or []):
+                n_reflexos += 1
+                r_cands = [getattr(r, "expresso_reflex_alvo", None), getattr(r, "nome", None)]
+                r_cands = [c for c in r_cands if c]
+                if not _presente(r_cands):
+                    reflexos_faltantes.append(getattr(r, "nome", None) or getattr(r, "expresso_reflex_alvo", "?"))
+
+        # ── relatório estruturado ──
+        self.log("  ── #80-AK FIDELIDADE PRÉVIA↔PJC ──")
+        self.log(f"     verbas: {n_verbas - len(verbas_faltantes)}/{n_verbas} no PJC | "
+                 f"reflexos: {n_reflexos - len(reflexos_faltantes)}/{n_reflexos} no PJC")
+        if verbas_faltantes or reflexos_faltantes:
+            if verbas_faltantes:
+                self.log(f"  ⚠️ VERBAS FALTANTES no PJC ({len(verbas_faltantes)}): "
+                         + "; ".join(verbas_faltantes))
+            if reflexos_faltantes:
+                self.log(f"  ⚠️ REFLEXOS FALTANTES no PJC ({len(reflexos_faltantes)}): "
+                         + "; ".join(reflexos_faltantes))
+            self.log("  ⚠️ PJC EXPORTADO PORÉM INCOMPLETO — os itens acima foram "
+                     "determinados na prévia mas NÃO entraram no cálculo. Revise/"
+                     "lance manualmente no PJE-Calc, ou re-execute a automação.")
+        else:
+            self.log("  ✓ #80-AK fidelidade 100%: todas as verbas e reflexos da "
+                     "prévia estão no PJC.")
+        return {
+            "verbas_faltantes": verbas_faltantes,
+            "reflexos_faltantes": reflexos_faltantes,
+            "ok": not (verbas_faltantes or reflexos_faltantes),
+        }
 
     def get_pjc_path(self) -> str | None:
         return self._pjc_path
