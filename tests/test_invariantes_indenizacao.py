@@ -2550,3 +2550,81 @@ def test_inv78_reflexos_pos_contratuais_manual_verificado():
     # ordem: vínculo depois do tipoDeVerba=REFLEXO (que dá clear na lista)
     assert tent.find("tipoDeVerba") < tent.find("_vincular_verba_principal_no_reflexo"), (
         "REGRESSÃO #80-AG: vincular DEPOIS de tipoDeVerba=REFLEXO (clear da lista)")
+
+
+def test_inv79_reflexos_he_expresso_nao_manual():
+    """#80-AJ (RODRIGO ROCHA 0000905-05, 02/07/2026): reflexos de HORAS EXTRAS
+    (verba IN-CONTRATO) devem ser SEMPRE Expresso (checkbox_painel) — o
+    lançamento MANUAL é EXCEÇÃO reservada a verba pós-contratual (estabilidade).
+
+    Dos 5 reflexos da HE, 2 caíram no manual indevido:
+    (1) RSR — a IA qualificou o alvo com "(COMISSIONISTA)"; o rótulo do checkbox
+        no painel NÃO tem o parêntese → o matcher includes() falhou (alvo mais
+        longo que o rótulo) → fallback manual.
+    (2) FGTS — "FGTS SOBRE X" NÃO é checkbox de reflexo; o FGTS incide via a
+        seção FGTS (SOBRE_O_TOTAL_DEVIDO). Reflexo à parte = dupla contagem, sem
+        checkbox → manual → falha.
+
+    Defesas (NÃO REVERTER):
+    - Normalizer `_norm_reflexos_expresso_saneados`: saneia o alvo (remove
+      qualificador entre parênteses) e REMOVE reflexos "FGTS SOBRE X". Só toca
+      `checkbox_painel` — reflexos `manual` (pós-contratual) intocados.
+    - Bot: `alvo_cands` também tenta a variante sem parênteses."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+
+    # (1) HE in-contrato — RSR saneado, FGTS removido, demais preservados
+    d = {
+        "parametros_calculo": {"data_demissao": "23/12/2025"},
+        "verbas_principais": [{
+            "nome_pjecalc": "HORAS EXTRAS 50%",
+            "parametros": {"periodo_inicio": "01/01/2025", "periodo_fim": "23/12/2025"},
+            "reflexos": [
+                {"nome": "RSR sobre HE 50%", "estrategia_reflexa": "checkbox_painel",
+                 "expresso_reflex_alvo": "REPOUSO SEMANAL REMUNERADO (COMISSIONISTA) SOBRE HORAS EXTRAS 50%"},
+                {"nome": "Aviso sobre HE 50%", "estrategia_reflexa": "checkbox_painel",
+                 "expresso_reflex_alvo": "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%"},
+                {"nome": "FGTS sobre HE 50%", "estrategia_reflexa": "checkbox_painel",
+                 "expresso_reflex_alvo": "FGTS SOBRE HORAS EXTRAS 50%"},
+            ],
+        }],
+    }
+    N._norm_reflexos_expresso_saneados(d)
+    rs = d["verbas_principais"][0]["reflexos"]
+    nomes = [r["nome"] for r in rs]
+    assert "FGTS sobre HE 50%" not in nomes, (
+        "REGRESSÃO #80-AJ: reflexo 'FGTS SOBRE X' deve ser REMOVIDO (incide via seção FGTS)")
+    assert len(rs) == 2, "REGRESSÃO #80-AJ: RSR e Aviso preservados, FGTS removido"
+    rsr = next(r for r in rs if r["nome"].startswith("RSR"))
+    assert "(" not in rsr["expresso_reflex_alvo"], (
+        "REGRESSÃO #80-AJ: qualificador entre parênteses deve ser saneado do alvo")
+    assert rsr["expresso_reflex_alvo"] == "REPOUSO SEMANAL REMUNERADO SOBRE HORAS EXTRAS 50%"
+    assert all(r["estrategia_reflexa"] == "checkbox_painel" for r in rs), (
+        "REGRESSÃO #80-AJ: reflexos de HE devem permanecer Expresso, NUNCA manual")
+
+    # (2) reflexo MANUAL (pós-contratual) NÃO é tocado — inclusive FGTS manual
+    d2 = {
+        "verbas_principais": [{
+            "nome_pjecalc": "INDENIZAÇÃO — ESTABILIDADE",
+            "reflexos": [
+                {"nome": "FGTS sobre Indenização", "estrategia_reflexa": "manual",
+                 "expresso_reflex_alvo": "FGTS SOBRE INDENIZAÇÃO"},
+            ],
+        }],
+    }
+    N._norm_reflexos_expresso_saneados(d2)
+    r2 = d2["verbas_principais"][0]["reflexos"]
+    assert len(r2) == 1 and r2[0]["estrategia_reflexa"] == "manual", (
+        "REGRESSÃO #80-AJ: reflexo FGTS MANUAL (estabilidade) NÃO pode ser removido")
+
+    # (3) pipeline completo é idempotente e mantém a distinção
+    out = N.normalize_v2_json(d)
+    out2 = N.normalize_v2_json(out)
+    import json as _json
+    assert _json.dumps(out, sort_keys=True) == _json.dumps(out2, sort_keys=True), (
+        "REGRESSÃO #80-AJ: normalize_v2_json não é idempotente")
+
+    # (4) bot — alvo_cands tenta variante sem parênteses
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "#80-AJ" in pw and "alvo_cands" in pw, (
+        "REGRESSÃO #80-AJ: bot deve gerar candidatos sem parênteses no matcher de reflexo")

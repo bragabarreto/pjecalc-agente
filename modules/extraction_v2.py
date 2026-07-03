@@ -1192,6 +1192,26 @@ Cada reflexo:
 - `checkbox_painel` (default) — marcar checkbox no painel da verba principal
 - `manual` — quando o reflexo NÃO está pré-cadastrado no PJE-Calc
 
+⚠️ **REGRA CRÍTICA — REFLEXOS DE VERBA IN-CONTRATO SÃO SEMPRE EXPRESSO (INVARIANTE PERMANENTE — NÃO REVERTER)**:
+Para verba do CURSO do contrato (horas extras, adicionais, diferença salarial,
+comissões etc.), TODOS os reflexos são `estrategia_reflexa: "checkbox_painel"`
+(Expresso — o PJE-Calc pré-cadastra os candidatos no painel "Exibir"). O
+lançamento MANUAL é EXCEÇÃO reservada a verba PÓS-CONTRATUAL (regra abaixo).
+Duas armadilhas a EVITAR (bug RODRIGO ROCHA 0000905-05):
+1. **`expresso_reflex_alvo` SEM qualificadores entre parênteses.** O rótulo do
+   checkbox no painel NÃO tem "(COMISSIONISTA)", "(MENSALISTA)" etc. Emitir
+   `"REPOUSO SEMANAL REMUNERADO SOBRE HORAS EXTRAS 50%"`, **nunca**
+   `"REPOUSO SEMANAL REMUNERADO (COMISSIONISTA) SOBRE HORAS EXTRAS 50%"` — o
+   parêntese quebra o match e o reflexo é perdido/lançado manualmente.
+2. **NÃO emitir reflexo `"FGTS SOBRE <verba>"`.** FGTS NÃO é checkbox de reflexo
+   no painel (os candidatos de HE são RSR/Aviso/Férias/13º/Multa477). O FGTS
+   incide sobre a verba pela **seção FGTS** (`fgts.incidencia` =
+   `SOBRE_O_TOTAL_DEVIDO` compõe todas as verbas na base). Um reflexo "FGTS
+   sobre X" à parte é dupla contagem. Para garantir FGTS sobre a verba, deixe
+   `fgts.incidencia: "SOBRE_O_TOTAL_DEVIDO"` (default) — não crie reflexo.
+(O normalizer também saneia isso como salvaguarda — remove o parêntese e o
+reflexo FGTS de verba in-contrato.)
+
 ⚠️ **REGRA CRÍTICA — REFLEXOS DE VERBA PÓS-CONTRATUAL (INVARIANTE PERMANENTE — NÃO REVERTER)**:
 Para verba cujo período é POSTERIOR à demissão (indenização substitutiva de
 estabilidade gestante/acidentária, Lei 9.029, indenização adicional), o PJE-Calc

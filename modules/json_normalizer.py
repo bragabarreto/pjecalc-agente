@@ -1159,6 +1159,96 @@ def _norm_reflexos_pos_contratuais_manual(data: dict[str, Any]) -> None:
                 )
 
 
+def _norm_reflexos_expresso_saneados(data: dict[str, Any]) -> None:
+    """#80-AJ — reflexos Expresso (checkbox_painel) de verba IN-CONTRATO:
+    sanear o `expresso_reflex_alvo` p/ casar com o rótulo real do checkbox
+    e REMOVER reflexos "FGTS SOBRE X" (que não existem como checkbox).
+
+    Caso RODRIGO ROCHA 0000905-05 (02/07/2026): dos 5 reflexos da HORAS
+    EXTRAS 50%, só 3 (Aviso/Férias/13º) casaram o checkbox no painel "Exibir";
+    RSR e FGTS caíram no fallback MANUAL (indevido — reflexo de HE deve ser
+    SEMPRE Expresso; o manual é EXCEÇÃO reservada a verba pós-contratual).
+    Duas causas, ambas estruturais:
+
+    1. RSR: a IA emitiu `expresso_reflex_alvo` com o qualificador
+       "(COMISSIONISTA)" — "REPOUSO SEMANAL REMUNERADO (COMISSIONISTA) SOBRE
+       HORAS EXTRAS 50%". O painel rotula o candidato SEM esse parêntese, e o
+       matcher (`txt.includes(alvo)`) falha porque o alvo é MAIS LONGO que o
+       rótulo. Fix: remover qualificadores entre parênteses do alvo.
+
+    2. FGTS: "FGTS SOBRE <verba>" NÃO é um checkbox de reflexo no painel — os
+       candidatos que o PJE-Calc pré-cadastra p/ HE são RSR/Aviso/Férias/13º/
+       Multa477 (nunca FGTS). O FGTS sobre a verba já é computado pela seção
+       FGTS (incidência SOBRE_O_TOTAL_DEVIDO compõe todas as verbas na base).
+       Um reflexo "FGTS sobre X" à parte é REDUNDANTE (dupla contagem) e sem
+       checkbox → cai no manual e falha. Fix: remover o reflexo; o FGTS incide
+       via a seção FGTS.
+
+    ⚠ Só toca reflexos `checkbox_painel` (in-contrato). Reflexos `manual` já
+    foram coagidos por `_norm_reflexos_pos_contratuais_manual` (estabilidade)
+    e são preservados — inclusive o FGTS SOBRE INDENIZAÇÃO manual do JANIELLY.
+    Por isso DEVE rodar DEPOIS daquele.
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    import re as _re
+    _log = logging.getLogger(__name__)
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+
+    def _sanear_alvo(alvo: str) -> str:
+        # Remove "(QUALQUER COISA)" e colapsa espaços.
+        s = _re.sub(r"\s*\([^)]*\)\s*", " ", alvo or "")
+        return _re.sub(r"\s+", " ", s).strip()
+
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        reflexos = v.get("reflexos")
+        if not isinstance(reflexos, list) or not reflexos:
+            continue
+        novos: list = []
+        for r in reflexos:
+            if not isinstance(r, dict):
+                novos.append(r)
+                continue
+            estrat = (r.get("estrategia_reflexa") or "checkbox_painel").lower()
+            # Preservar reflexos manuais (pós-contratual) intocados.
+            if estrat != "checkbox_painel":
+                novos.append(r)
+                continue
+            alvo = r.get("expresso_reflex_alvo") or ""
+            alvo_saneado = _sanear_alvo(alvo)
+            nome = (r.get("nome") or "").upper()
+            # (2) FGTS sobre verba: não é reflexo checkbox — remover.
+            _eh_fgts = (
+                alvo_saneado.upper().startswith("FGTS SOBRE")
+                or (nome.startswith("FGTS") and "SOBRE" in nome)
+            )
+            if _eh_fgts:
+                _log.warning(
+                    "Normalizer #80-AJ: reflexo '%s' de '%s' REMOVIDO — FGTS "
+                    "sobre verba não é checkbox de reflexo; incide via seção "
+                    "FGTS (SOBRE_O_TOTAL_DEVIDO). Reflexo à parte = dupla "
+                    "contagem.", r.get("nome"), v.get("nome_pjecalc"),
+                )
+                continue
+            # (1) Sanear qualificador entre parênteses no alvo do checkbox.
+            if alvo_saneado != alvo:
+                r["expresso_reflex_alvo"] = alvo_saneado
+                _log.warning(
+                    "Normalizer #80-AJ: reflexo '%s' — alvo saneado "
+                    "'%s' → '%s' (qualificador entre parênteses não existe no "
+                    "rótulo do checkbox do painel).",
+                    r.get("nome"), alvo, alvo_saneado,
+                )
+            novos.append(r)
+        if len(novos) != len(reflexos):
+            v["reflexos"] = novos
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -1306,6 +1396,15 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # estrategia "manual" + característica default (FERIAS/13º) + período da
     # principal, conforme fluxo documentado (verba Manual Tipo=REFLEXO).
     _norm_reflexos_pos_contratuais_manual(data)
+
+    # Salvaguarda #80-AJ: reflexos Expresso (checkbox_painel) de verba
+    # IN-CONTRATO — sanear alvo do checkbox (remover qualificador entre
+    # parênteses tipo "(COMISSIONISTA)" que não existe no rótulo do painel) e
+    # REMOVER "FGTS SOBRE X" (não é checkbox de reflexo; FGTS incide via seção
+    # FGTS). Reflexo de HE deve ser SEMPRE Expresso — nunca manual (RODRIGO
+    # 0000905-05). DEVE rodar APÓS o _pos_contratuais_manual (preserva os
+    # reflexos manuais de estabilidade).
+    _norm_reflexos_expresso_saneados(data)
 
     # 4b. Cartão de Ponto — sanitização + migração + defaults
     #

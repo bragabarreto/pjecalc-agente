@@ -7204,6 +7204,17 @@ class PlaywrightAutomatorV2:
                     _c = f"{_pref} SOBRE {_y}"
                     if _c not in alvo_cands:
                         alvo_cands.append(_c)
+        # #80-AJ (RODRIGO 0000905-05): a IA às vezes qualifica o alvo com
+        # "(COMISSIONISTA)" etc. — "REPOUSO SEMANAL REMUNERADO (COMISSIONISTA)
+        # SOBRE HORAS EXTRAS 50%" — mas o rótulo do checkbox no painel NÃO tem
+        # o parêntese, e o includes() falha (alvo mais longo que o rótulo) →
+        # cai no manual indevido. Adicionar variantes SEM os parênteses (o
+        # normalizer já saneia, mas isto cobre JSONs não-normalizados).
+        import re as _re_alvo
+        for _cand in list(alvo_cands):
+            _san = _re_alvo.sub(r"\s+", " ", _re_alvo.sub(r"\s*\([^)]*\)\s*", " ", _cand)).strip()
+            if _san and _san not in alvo_cands:
+                alvo_cands.append(_san)
         ok_reflexo = False
         cb_visto = False  # o checkbox candidato chegou a existir no painel?
         for tentativa in range(1, 4):
