@@ -7245,7 +7245,8 @@ class PlaywrightAutomatorV2:
         if _ea and _ea != verba_principal.nome_pjecalc:
             candidatos_principal.append(_ea)
         desmarcados = 0
-        for _pass in range(1, 8):  # cap defensivo
+        _falhas: dict[str, int] = {}
+        for _pass in range(1, 12):  # cap defensivo (mais fôlego p/ retries)
             try:
                 extra_id = self._page.evaluate(
                     """([candidatos, esperadosArr]) => {
@@ -7285,18 +7286,29 @@ class PlaywrightAutomatorV2:
             if not extra_id:
                 break  # sem mais extras ativos
             esc = extra_id.replace(":", "\\:")
+            # ⚠ o painel pode ter re-colapsado entre o scan (JS reabriu) e o
+            # uncheck → "Element is not visible". Esperar o checkbox ficar
+            # VISÍVEL; se não ficar, re-loop (o próximo scan reabre o painel).
+            try:
+                self._page.wait_for_selector(f"input#{esc}", state="visible", timeout=6000)
+            except Exception:
+                _falhas[extra_id] = _falhas.get(extra_id, 0) + 1
+                if _falhas[extra_id] >= 4:
+                    self.log(f"    ⚠ #80-AQ checkbox extra {extra_id[-28:]} não fica visível — desistindo")
+                    break
+                self._page.wait_for_timeout(600)
+                continue
             loc = self._page.locator(f"input#{esc}")
             try:
                 loc.uncheck(force=True)
             except Exception as _e:
-                self.log(f"    ⚠ #80-AQ uncheck falhou ({str(_e)[:60]}) — fallback JS")
+                self.log(f"    ⚠ #80-AQ uncheck falhou ({str(_e)[:60]}) — fallback JS click")
                 self._page.evaluate(
                     "(cid) => { const cb = document.getElementById(cid); if (cb && cb.checked) cb.click(); }",
                     extra_id,
                 )
             self._aguardar_ajax(5000)
             self._page.wait_for_timeout(800)
-            # verificar que desmarcou
             try:
                 ainda = self._page.evaluate(
                     "(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }",
@@ -7305,8 +7317,18 @@ class PlaywrightAutomatorV2:
             except Exception:
                 ainda = None
             if ainda:
-                self.log(f"    ⚠ #80-AQ reflexo extra {extra_id[-30:]} re-ativado (Drools?) — não desmarcou")
-                break
+                # NÃO concluir "Drools" no 1º; pode ser race de re-render.
+                # Retentar (re-loop reabre painel). Só desistir após 3 uncheck
+                # genuínos que reverteram — aí sim é regra de negócio (Drools).
+                _falhas[extra_id] = _falhas.get(extra_id, 0) + 1
+                if _falhas[extra_id] >= 3:
+                    self.log(f"    ⚠ #80-AQ reflexo extra {extra_id[-28:]} RE-ATIVA após "
+                             "3 unchecks — regra Drools do PJE-Calc (limite arquitetural); "
+                             "usuário desmarca no import se quiser")
+                    break
+                self.log(f"    ↻ #80-AQ extra ainda marcado (tent {_falhas[extra_id]}/3) — retentando")
+                self._page.wait_for_timeout(600)
+                continue
             desmarcados += 1
         return desmarcados
 
