@@ -1176,6 +1176,16 @@ Para cada verba principal, listar reflexos. **Padrão de incidência reflexa:**
 | Diferença Salarial | Aviso Prévio, Férias+1/3, Multa 477, 13º |
 | Indenizações pós-contrato (Estabilidade, Dispensa Discriminatória) | 13º, Férias+1/3, **FGTS+40%** (manual) |
 
+⚠️ **A tabela acima é REFERÊNCIA do que é POSSÍVEL — NÃO uma lista a emitir sempre.**
+Emita cada reflexo **SOMENTE se a sentença determinar aquela incidência** sobre
+aquela verba (fidelidade sentença→JSON). O painel Expresso do PJE-Calc oferece
+vários candidatos (ex.: HE 50% mostra AVISO/FÉRIAS/MULTA 477/RSR/13º), mas eles
+são OPÇÕES — o bot só marca os que você emitir. Ex.: **só inclua o reflexo
+"MULTA DO ARTIGO 477 SOBRE HORAS EXTRAS" se o dispositivo mandar a multa 477
+refletir sobre as horas extras**; se a sentença não determinar, NÃO emita.
+Regra dos dois lados: (a) não INVENTE reflexo que a sentença não deferiu;
+(b) não OMITA reflexo que ela deferiu.
+
 Cada reflexo:
 ```json
 {
