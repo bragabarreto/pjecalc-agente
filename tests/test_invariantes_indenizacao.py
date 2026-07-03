@@ -2791,3 +2791,28 @@ def test_inv82_limpar_verbas_inicio_limpo():
         "REGRESSÃO #80-AP: só excluir linhas de verba PRINCIPAL")
     assert "_aguardar_servidor_ocioso" in lv, (
         "REGRESSÃO #80-AP: gate #80-H entre exclusões (Drools/LockTimeout)")
+
+
+def test_inv83_desmarca_reflexos_extras_auto_gerados():
+    """#80-AQ (RODRIGO 0000905-05, 03/07/2026): o PJE-Calc AUTO-GERA o reflexo
+    "MULTA 477 SOBRE HE" (ativa o candidato) quando há verba principal MULTA 477
+    + HE com reflexos — mesmo NÃO estando na prévia. Confirmado em cálculo FRESCO
+    (não é acumulação). Regra do usuário: reflexo só se a sentença determinar.
+
+    Fix: após marcar os reflexos da prévia e ANTES do save de parâmetros,
+    _desmarcar_reflexos_extras desmarca os checkboxes ATIVOS cujo texto NÃO casa
+    (por tokens) nenhum reflexo da prévia. NÃO REVERTER."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # chamado no fluxo pós-marcação de reflexos (antes do save)
+    sec = src.split("def _configurar_parametros_pos_expresso(")[1].split("\n    def ")[0]
+    assert "_desmarcar_reflexos_extras(v)" in sec and "#80-AQ" in sec, (
+        "REGRESSÃO #80-AQ: pós-Expresso deve desmarcar reflexos extras auto-gerados")
+
+    dm = src.split("def _desmarcar_reflexos_extras(")[1].split("\n    def ")[0]
+    assert "_tokens_fidelidade" in dm, (
+        "REGRESSÃO #80-AQ: match de 'extra' por tokens (mesmo do guarda #80-AN)")
+    assert "uncheck" in dm and "listaReflexo" in dm, (
+        "REGRESSÃO #80-AQ: desmarca via uncheck o checkbox de reflexo ativo")
+    assert "checked" in dm and ("re-ativado" in dm or "Drools" in dm), (
+        "REGRESSÃO #80-AQ: verifica que desmarcou (detecta re-ativação por Drools)")

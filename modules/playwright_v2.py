@@ -5708,6 +5708,18 @@ class PlaywrightAutomatorV2:
                 self._configurar_reflexo(v, _r, coletar_manual_em=_manuais_deferidos)
             except Exception as _e:
                 self.log(f"    ⚠ Falha reflexo '{getattr(_r, 'nome', '?')}': {_e}")
+        # #80-AQ (RODRIGO 0000905-05): desmarcar reflexos AUTO-GERADOS pelo
+        # PJE-Calc que NÃO estão na prévia (over-emissão — ex.: "MULTA 477 SOBRE
+        # HE" ativado automaticamente quando há verba principal MULTA 477 + HE).
+        # Regra do usuário: reflexo só se a sentença determinar. Feito ANTES do
+        # save de parâmetros para persistir junto.
+        try:
+            _n_extra = self._desmarcar_reflexos_extras(v)
+            if _n_extra:
+                self.log(f"    🧹 #80-AQ {_n_extra} reflexo(s) extra(s) auto-gerado(s) "
+                         "desmarcado(s) (não estavam na prévia)")
+        except Exception as _e:
+            self.log(f"    ⚠ #80-AQ desmarcar extras: {str(_e)[:120]}")
         # ⚠ #80-H (GEOVANA): os reflexos acima fazem SAVES pesados (reflexo
         # Manual c/ fórmula, Regerar). Se o click de Parâmetros (que abre o
         # FORM da verba, lendo apresentadorVerbaDeCalculo) disparar enquanto
@@ -7215,6 +7227,88 @@ class PlaywrightAutomatorV2:
             except Exception:
                 pass
         return bool(sucesso)
+
+    def _desmarcar_reflexos_extras(self, verba_principal) -> int:
+        """#80-AQ — desmarca reflexos ATIVOS no painel "Exibir" da verba que NÃO
+        estão na prévia (over-emissão auto-gerada pelo PJE-Calc, ex.: "MULTA 477
+        SOBRE HE"). Match por SUBCONJUNTO DE TOKENS (mesmo do guarda #80-AN):
+        um checkbox ativo é EXTRA se seus tokens não contêm os de nenhum reflexo
+        da prévia. Desmarca via .uncheck() nativo + verifica. Retorna quantos."""
+        esperados = []
+        for r in (getattr(verba_principal, "reflexos", None) or []):
+            alvo = getattr(r, "expresso_reflex_alvo", None) or getattr(r, "nome", None) or ""
+            t = self._tokens_fidelidade(alvo)
+            if t:
+                esperados.append(sorted(t))
+        candidatos_principal = [verba_principal.nome_pjecalc]
+        _ea = getattr(verba_principal, "expresso_alvo", None)
+        if _ea and _ea != verba_principal.nome_pjecalc:
+            candidatos_principal.append(_ea)
+        desmarcados = 0
+        for _pass in range(1, 8):  # cap defensivo
+            try:
+                extra_id = self._page.evaluate(
+                    """([candidatos, esperadosArr]) => {
+                        const strip = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+                        const norm = s => strip((s||'')).toUpperCase().replace(/\\s+/g,' ').trim();
+                        const STOP = new Set(['SOBRE','DE','DA','DO','E','A','O','AO','NA','NO','COM']);
+                        const toks = s => new Set(norm(s).split(/[^A-Z0-9%\\/]+/).filter(t => t.length>1 && !STOP.has(t)));
+                        // garantir painel Exibir aberto
+                        for (const c of candidatos) {
+                            for (const tr of [...document.querySelectorAll('tr')]) {
+                                if (!norm(tr.textContent).includes(norm(c))) continue;
+                                const ex = tr.querySelector('span.linkDestinacoes');
+                                if (ex) { ex.click(); break; }
+                            }
+                        }
+                        const esperados = esperadosArr.map(a => new Set(a));
+                        const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
+                        for (const cb of cbs) {
+                            if (!cb.checked) continue;
+                            const tr = cb.closest('tr'); if (!tr) continue;
+                            const rt = toks(tr.textContent);
+                            let match = false;
+                            for (const es of esperados) {
+                                let all = es.size > 0;
+                                for (const t of es) { if (!rt.has(t)) { all = false; break; } }
+                                if (all) { match = true; break; }
+                            }
+                            if (!match) return cb.id;  // ATIVO e não-esperado → EXTRA
+                        }
+                        return null;
+                    }""",
+                    [candidatos_principal, esperados],
+                )
+            except Exception as _e:
+                self.log(f"    ⚠ #80-AQ scan extras: {str(_e)[:100]}")
+                break
+            if not extra_id:
+                break  # sem mais extras ativos
+            esc = extra_id.replace(":", "\\:")
+            loc = self._page.locator(f"input#{esc}")
+            try:
+                loc.uncheck(force=True)
+            except Exception as _e:
+                self.log(f"    ⚠ #80-AQ uncheck falhou ({str(_e)[:60]}) — fallback JS")
+                self._page.evaluate(
+                    "(cid) => { const cb = document.getElementById(cid); if (cb && cb.checked) cb.click(); }",
+                    extra_id,
+                )
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(800)
+            # verificar que desmarcou
+            try:
+                ainda = self._page.evaluate(
+                    "(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }",
+                    extra_id,
+                )
+            except Exception:
+                ainda = None
+            if ainda:
+                self.log(f"    ⚠ #80-AQ reflexo extra {extra_id[-30:]} re-ativado (Drools?) — não desmarcou")
+                break
+            desmarcados += 1
+        return desmarcados
 
     def _configurar_reflexo(self, verba_principal, reflexo, coletar_manual_em=None) -> None:
         """Marcar checkbox do reflexo no painel da verba principal (Expresso pareado)
