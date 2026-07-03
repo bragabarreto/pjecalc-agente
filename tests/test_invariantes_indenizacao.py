@@ -1237,8 +1237,15 @@ def test_inv33_match_reflexo_tolerante_ao_rename_da_verba():
     sec = src.split("def _configurar_reflexo")[1].split("\n    def ")[0]
     assert "alvo_cands" in sec
     assert "expresso_alvo" in sec and "rindex(\" SOBRE \")" in sec
-    # o JS deve casar por qualquer candidato
-    assert "cands.some(c => txt.includes(c))" in sec
+    # o JS deve casar por substring exata de QUALQUER candidato (nível 1)
+    assert "cands.some(c => r.txt.includes(c))" in sec
+    # #80-AL: e por SUBCONJUNTO DE TOKENS (nível 2) quando o rótulo do painel
+    # tem palavras extras (RSR real = "... E FERIADOS SOBRE ...")
+    assert "bestExtra" in sec and "rt.has(t)" in sec, (
+        "REGRESSÃO #80-AL: matcher deve ter fallback por subconjunto de tokens")
+    # #80-AL: e deve logar os rótulos disponíveis quando nada casa (ground truth)
+    assert "#80-AL checkboxes de reflexo disponíveis" in sec, (
+        "REGRESSÃO #80-AL: dump diagnóstico dos checkboxes do painel é obrigatório")
 
 
 def test_inv34_saldo_informado_quando_fixado_deducao_ou_por_fora():

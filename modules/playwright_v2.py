@@ -7217,24 +7217,63 @@ class PlaywrightAutomatorV2:
                 alvo_cands.append(_san)
         ok_reflexo = False
         cb_visto = False  # o checkbox candidato chegou a existir no painel?
+        _labels_diag_logado = False
         for tentativa in range(1, 4):
-            cb_id = self._page.evaluate(
+            # #80-AL (RODRIGO 0000905-05): o `includes()` exato falha quando o
+            # rótulo do painel tem palavras EXTRAS que a IA não emitiu — ex.:
+            # RSR real = "REPOUSO SEMANAL REMUNERADO E FERIADOS SOBRE HORAS
+            # EXTRAS 50%", mas a IA emitiu "REPOUSO SEMANAL REMUNERADO SOBRE...".
+            # Estratégia em 2 níveis: (1) substring exata; (2) SUBCONJUNTO DE
+            # TOKENS (todos os tokens significativos do candidato presentes na
+            # linha; escolhe o de MENOR excedente = melhor-fit). Retorna também
+            # `labels` (rótulos disponíveis no painel) p/ diagnóstico quando
+            # nada casa — assim nunca mais se adivinha rótulo às cegas.
+            _match = self._page.evaluate(
                 """(alvoCands) => {
-                    const norm = s => (s||'').toUpperCase().trim();
+                    const strip = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
+                    const norm = s => strip((s||'')).toUpperCase().replace(/\\s+/g,' ').trim();
                     const cands = (alvoCands||[]).map(norm).filter(Boolean);
-                    if (!cands.length) return null;
                     const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
-                    for (const cb of cbs) {
-                        const tr = cb.closest('tr');
-                        if (!tr) continue;
-                        const txt = norm(tr.textContent);
-                        if (cands.some(c => txt.includes(c))) return cb.id;
+                    const rows = cbs.map(cb => ({cb, txt: norm(cb.closest('tr') ? cb.closest('tr').textContent : '')})).filter(r => r.txt);
+                    const labels = rows.map(r => r.txt);
+                    if (!cands.length) return {cbId: null, labels};
+                    // (1) substring exata
+                    for (const r of rows) {
+                        if (cands.some(c => r.txt.includes(c))) return {cbId: r.cb.id, labels};
                     }
-                    return null;
+                    // (2) subconjunto de tokens (melhor-fit)
+                    const stop = new Set(['SOBRE','DE','DA','DO','E','A','O','AO','NA','NO','COM']);
+                    const toks = s => new Set(s.split(/[^A-Z0-9%\\/]+/).filter(t => t && t.length > 1 && !stop.has(t)));
+                    let best = null, bestExtra = 1e9;
+                    for (const c of cands) {
+                        const ct = toks(c);
+                        if (!ct.size) continue;
+                        for (const r of rows) {
+                            const rt = toks(r.txt);
+                            let all = true;
+                            for (const t of ct) { if (!rt.has(t)) { all = false; break; } }
+                            if (all) {
+                                const extra = rt.size - ct.size;
+                                if (extra < bestExtra) { bestExtra = extra; best = r.cb.id; }
+                            }
+                        }
+                    }
+                    return {cbId: best, labels};
                 }""",
                 alvo_cands,
             )
+            cb_id = (_match or {}).get("cbId")
             if not cb_id:
+                # #80-AL: dump ÚNICO dos rótulos disponíveis no painel — se o
+                # reflexo não casou, mostrar o que O PJE-CALC realmente oferece
+                # (ground truth p/ ajustar o alvo/normalizer sem adivinhação).
+                if not _labels_diag_logado:
+                    _lbls = (_match or {}).get("labels") or []
+                    self.log(
+                        f"    🔎 #80-AL checkboxes de reflexo disponíveis no painel "
+                        f"({len(_lbls)}): {_lbls[:12]}"
+                    )
+                    _labels_diag_logado = True
                 # Painel pode ter fechado (re-render) — re-clicar Exibir
                 self.log(f"    ⚠ checkbox de '{alvo}' não visível (tentativa {tentativa}/3) — reabrindo painel")
                 self._page.evaluate(
