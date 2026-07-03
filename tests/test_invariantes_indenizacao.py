@@ -2762,3 +2762,32 @@ def test_inv81_painel_vazio_reancora_e_dedup_manual():
     dd = src.split("def _reflexo_ja_na_listagem(")[1].split("\n    def ")[0]
     assert "_tokens_fidelidade" in dd and "SOBRE" in dd, (
         "REGRESSÃO #80-AO: dedup usa match por tokens e só considera linhas de reflexo")
+
+
+def test_inv82_limpar_verbas_inicio_limpo():
+    """#80-AP (RODRIGO 0000905-05, 03/07/2026): o PJE-Calc Cidadão NÃO tem UI de
+    excluir cálculo, então cada re-run do MESMO processo reabria o mesmo cálculo
+    e ACUMULAVA verbas/reflexos → duplicados (Férias ×2) e extras (multa 477 não
+    deferido). Fix: no início de fase_verbas, remover TODAS as verbas do cálculo
+    reaberto (início limpo). No-op em cálculo fresco (0 verbas); pulado em modo
+    TESTE (reabre cálculo existente de propósito).
+
+    NÃO REVERTER: usa o linkExcluir com o truque `lista.push(id)` (mesma lógica
+    do confirma() do PJE-Calc) p/ excluir sem o modal jConfirm; gate #80-H entre
+    exclusões."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # chamado no início de fase_verbas, guardado por modo teste
+    fv = src.split("def fase_verbas(")[1].split("\n    def ")[0]
+    assert "_limpar_verbas_do_calculo()" in fv and "#80-AP" in fv, (
+        "REGRESSÃO #80-AP: fase_verbas deve limpar verbas pré-existentes (início limpo)")
+    assert "_calculo_teste_processo" in fv, (
+        "REGRESSÃO #80-AP: limpeza deve ser PULADA em modo teste (reabre calc de propósito)")
+
+    lv = src.split("def _limpar_verbas_do_calculo(")[1].split("\n    def ")[0]
+    assert "linkExcluir" in lv and "lista.push" in lv, (
+        "REGRESSÃO #80-AP: exclusão via linkExcluir + truque lista.push (sem modal jConfirm)")
+    assert "verbaSelecionada" in lv, (
+        "REGRESSÃO #80-AP: só excluir linhas de verba PRINCIPAL")
+    assert "_aguardar_servidor_ocioso" in lv, (
+        "REGRESSÃO #80-AP: gate #80-H entre exclusões (Drools/LockTimeout)")

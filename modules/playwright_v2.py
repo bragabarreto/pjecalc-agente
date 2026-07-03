@@ -2617,6 +2617,21 @@ class PlaywrightAutomatorV2:
         if not self.previa.verbas_principais:
             self.log("  ⏭ Sem verbas principais — pulando (condenação pode ser só FGTS via saldo a deduzir)")
             return
+        # #80-AP (RODRIGO 0000905-05): INÍCIO LIMPO — remover verbas
+        # pré-existentes do cálculo reaberto ANTES de lançar as novas. No-op em
+        # cálculo fresco (0 verbas); só age quando se reabre um cálculo
+        # ACUMULADO (re-run do MESMO processo — o PJE-Calc Cidadão não tem UI de
+        # excluir cálculo, então cada run reusava o mesmo e acumulava reflexos/
+        # verbas → duplicados/extras). Pulado em modo TESTE (reabre cálculo
+        # existente de propósito).
+        if not getattr(self, "_calculo_teste_processo", None):
+            try:
+                _n_limpas = self._limpar_verbas_do_calculo()
+                if _n_limpas:
+                    self.log(f"  🧹 #80-AP início limpo: {_n_limpas} verba(s) "
+                             "pré-existente(s) do cálculo reaberto removida(s)")
+            except Exception as _e:
+                self.log(f"  ⚠ #80-AP limpeza pré-lançamento falhou: {str(_e)[:120]}")
         self._navegar_menu("li_calculo_verbas")
 
         # Estratégia: agrupar por tipo de preenchimento
@@ -6819,6 +6834,60 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"    ⚠ verificação na listagem falhou: {str(_e)[:100]}")
             return False
+
+    def _limpar_verbas_do_calculo(self) -> int:
+        """#80-AP — remove TODAS as verbas do cálculo reaberto (início limpo).
+
+        No-op em cálculo fresco (0 verbas). Só age em cálculo ACUMULADO (re-run
+        do mesmo processo). Usa o `a4j:commandLink.linkExcluir` (actionListener
+        `apresentador.excluir`). O onclick chama `confirma()` que exige o modal
+        jConfirm — MAS a lógica do próprio PJE-Calc é: `confirma` retorna false na
+        1ª vez (mostra modal) e, ao confirmar, faz `lista.push(id)` e re-clica; na
+        2ª vez o id está em `lista` → retorna true → a exclusão prossegue. Aqui
+        fazemos o `lista.push(id)` ANTES do clique → a exclusão passa direto SEM
+        modal (mesmo mecanismo, sem UI). Gate #80-H entre exclusões (Drools/lock).
+        Deletar a verba PRINCIPAL remove seus reflexos junto."""
+        removidas = 0
+        for _i in range(60):  # cap defensivo (evita loop infinito)
+            try:
+                self._aguardar_servidor_ocioso(contexto="#80-AP limpar verbas pré-lançamento")
+                if self._calculo_conversation_id:
+                    self._page.goto(
+                        f"{self.pjecalc_url}/pages/calculo/verba/verba-calculo.jsf"
+                        f"?conversationId={self._calculo_conversation_id}",
+                        wait_until="domcontentloaded", timeout=15000,
+                    )
+                else:
+                    self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(800)
+            except Exception as _e:
+                self.log(f"    ⚠ #80-AP nav listagem p/ limpar: {str(_e)[:100]}")
+                break
+            # 1º linkExcluir de uma verba PRINCIPAL (linha com verbaSelecionada);
+            # push id em `lista` + click → confirma() retorna true (sem modal).
+            clicou = self._page.evaluate(
+                """() => {
+                    const trs = [...document.querySelectorAll('tr')];
+                    for (const tr of trs) {
+                        if (!tr.querySelector('input[id*=":verbaSelecionada"]')) continue;
+                        const ex = tr.querySelector('a.linkExcluir');
+                        if (!ex) continue;
+                        let id = ex.id;
+                        if (!id) { id = 'exdyn_' + (window.__exseq = (window.__exseq||0)+1); ex.id = id; }
+                        try { if (typeof lista !== 'undefined' && lista.push) lista.push(id); } catch(e){}
+                        ex.click();
+                        return id;
+                    }
+                    return null;
+                }"""
+            )
+            if not clicou:
+                break  # listagem sem verbas — limpo
+            removidas += 1
+            self._aguardar_ajax(6000)
+            self._page.wait_for_timeout(1200)
+        return removidas
 
     def _reflexo_ja_na_listagem(self, reflexo, verba_principal) -> bool:
         """#80-AO — True se um reflexo EQUIVALENTE já consta na listagem (match
