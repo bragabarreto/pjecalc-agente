@@ -184,7 +184,8 @@ def test_fatia2_best_effort_nao_levanta(db, tmp_path, monkeypatch):
     import learning.pjc_aprendizado as PA
     monkeypatch.setattr(PA, "_APRENDIZADO_DIR", tmp_path)
     out = analisar_diff("inexistente", db, orchestrator=_FakeOrchestrator({}))
-    assert out == {"regras_novas": 0, "regras_reconfirmadas": 0, "acertos": 0, "resumo": ""}
+    assert out == {"regras_novas": 0, "regras_reconfirmadas": 0, "acertos": 0,
+                   "conflitos_abertos": 0, "resumo": ""}
 
     # LLM retornando lixo → sem regra, sem exceção
     _preparar_relatorio(tmp_path, monkeypatch, _rel_diff("s1", _campos_divisor()))

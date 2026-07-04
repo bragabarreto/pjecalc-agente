@@ -317,10 +317,19 @@ async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
     except Exception as _e:
         logger.warning("home: falha ao listar prévias pendentes: %s", _e)
 
+    # Plano 3 FATIA 4 — conflitos de aprendizado aguardando explicação
+    conflitos_aprendizado: list = []
+    try:
+        from learning.pjc_conflito import listar_conflitos
+        conflitos_aprendizado = listar_conflitos()
+    except Exception as _e:
+        logger.warning("home: falha ao listar conflitos de aprendizado: %s", _e)
+
     return templates.TemplateResponse(
         request, "index.html",
         {"processos": processos, "agora": datetime.now(),
-         "previas_pendentes": previas_pendentes},
+         "previas_pendentes": previas_pendentes,
+         "conflitos_aprendizado": conflitos_aprendizado},
     )
 
 
@@ -4844,6 +4853,32 @@ async def relatorio_pjc_definitivo(sessao_id: str):
         raise HTTPException(status_code=404, detail="Nenhum PJC definitivo enviado para esta sessão")
     rel["linhas"] = resumo_legivel(rel)
     return rel
+
+
+@app.get("/api/aprendizado/conflitos")
+async def listar_conflitos_aprendizado(status: str = "aguardando_explicacao"):
+    """Plano 3 FATIA 4 — pendências de explicação (conflito de aprendizado)."""
+    from learning.pjc_conflito import listar_conflitos
+    return {"conflitos": listar_conflitos(None if status == "todos" else status)}
+
+
+@app.post("/api/aprendizado/conflitos/{conflito_id}/responder")
+async def responder_conflito_aprendizado(
+    conflito_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+):
+    """Plano 3 FATIA 4 — o usuário explica a particularidade do caso; o Claude
+    avalia: compreensão plena → refina as regras e resolve; insuficiente →
+    devolve a próxima pergunta (o diálogo continua até compreensão plena)."""
+    from learning.pjc_conflito import responder_conflito
+    explicacao = str((payload or {}).get("explicacao") or "").strip()
+    if not explicacao:
+        raise HTTPException(status_code=400, detail="Explicação vazia")
+    res = responder_conflito(conflito_id, explicacao, db)
+    if res.get("status") == "erro":
+        raise HTTPException(status_code=404, detail=res.get("observacao"))
+    return res
 
 
 @app.post("/api/correcao_manual_diff/{sessao_id}")

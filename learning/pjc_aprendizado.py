@@ -127,7 +127,8 @@ def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
 
     Retorna {"regras_novas": n, "regras_reconfirmadas": n, "acertos": n,
     "resumo": str}. Best-effort: nunca levanta."""
-    out = {"regras_novas": 0, "regras_reconfirmadas": 0, "acertos": 0, "resumo": ""}
+    out = {"regras_novas": 0, "regras_reconfirmadas": 0, "acertos": 0,
+           "conflitos_abertos": 0, "resumo": ""}
     try:
         from learning.pjc_diff import carregar_relatorio
         rel = carregar_relatorio(sessao_id, _APRENDIZADO_DIR)
@@ -151,9 +152,10 @@ def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
             orchestrator = LLMOrchestrator(settings=get_settings())
         from core.llm_orchestrator import TaskType
 
+        contexto = _contexto_da_previa(sessao_id)
         prompt = (
             "## Contexto do caso (prévia confirmada)\n"
-            + _contexto_da_previa(sessao_id)
+            + contexto
             + "\n\n## Correções manuais detectadas (PJC gerado → PJC definitivo)\n"
             + _diff_em_linhas(rel)
             + "\n\n## Tarefa\nGere as regras conforme o formato. "
@@ -170,12 +172,20 @@ def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
         regras = result.get("regras", []) if isinstance(result, dict) else []
         out["resumo"] = (result.get("resumo", "") if isinstance(result, dict) else "")
 
-        novas, reconf = _persistir_regras(db, sessao_id, regras)
+        novas, reconf, conflitos = _persistir_regras(db, sessao_id, regras,
+                                                     contexto=contexto)
         out["regras_novas"], out["regras_reconfirmadas"] = novas, reconf
+        out["conflitos_abertos"] = conflitos
+        if conflitos:
+            out["resumo"] = (out["resumo"] + " " if out["resumo"] else "") + (
+                f"⚠️ {conflitos} conflito(s) com aprendizado consolidado — "
+                "explicação solicitada na página inicial."
+            )
         _persistir_aprendizado_no_relatorio(sessao_id, out)
         logger.info(
-            "Plano 3 FATIA 2 (%s): %d regra(s) nova(s), %d reconfirmada(s), %d acerto(s)",
-            sessao_id, novas, reconf, out["acertos"],
+            "Plano 3 FATIA 2 (%s): %d regra(s) nova(s), %d reconfirmada(s), "
+            "%d acerto(s), %d conflito(s)",
+            sessao_id, novas, reconf, out["acertos"], conflitos,
         )
     except Exception as e:
         logger.warning("pjc_aprendizado.analisar_diff(%s): %s", sessao_id, e)
@@ -186,25 +196,35 @@ def _chave_regra(verba: str, campo: str, para: str) -> str:
     return f"{_norm(verba)}::{_norm(campo)}::{_norm(para)}"
 
 
-def _persistir_regras(db, sessao_id: str, regras: list) -> tuple[int, int]:
+def _persistir_regras(db, sessao_id: str, regras: list,
+                      contexto: str = "") -> tuple[int, int, int]:
     """Cria/reconfirma RegrasAprendidas (tipo_regra='pjc_definitivo').
 
     Dedup por (verba, campo, para) via exemplos_json[0].chave — reincidência da
-    MESMA correção em outro cálculo reconfirma a regra (+0.1)."""
+    MESMA correção em outro cálculo reconfirma a regra (+0.1).
+
+    FATIA 4 — CONFLITO (excepcional): se a candidata atinge a MESMA
+    (verba, campo) de uma regra CONSOLIDADA (ativa, confiança ≥ 0.6) com valor
+    DIVERGENTE, NÃO cria regra concorrente — abre uma pendência de explicação
+    (diálogo com o usuário) e a consolidada permanece intocada até o usuário
+    explicar a particularidade. Retorna (novas, reconfirmadas, conflitos)."""
     from infrastructure.database import RegrasAprendidas
-    novas = reconf = 0
+    novas = reconf = conflitos = 0
     existentes = (
         db.query(RegrasAprendidas)
         .filter(RegrasAprendidas.tipo_regra == "pjc_definitivo")
         .all()
     )
     por_chave: dict[str, Any] = {}
+    por_campo: dict[str, list] = {}
     for r in existentes:
         try:
             ex = json.loads(r.exemplos_json or "[]")
             if ex and ex[0].get("chave"):
                 por_chave[ex[0]["chave"]] = r
-        except (json.JSONDecodeError, TypeError):
+                v, c, _p = ex[0]["chave"].split("::", 2)
+                por_campo.setdefault(f"{v}::{c}", []).append(r)
+        except (json.JSONDecodeError, TypeError, ValueError):
             continue
 
     for reg in regras:
@@ -214,6 +234,26 @@ def _persistir_regras(db, sessao_id: str, regras: list) -> tuple[int, int]:
         campo = str(reg.get("campo") or "")
         para = str(reg.get("para") or "")
         chave = _chave_regra(verba, campo, para)
+        # FATIA 4 — conflito com regra consolidada (mesma verba::campo, outro para)
+        if chave not in por_chave:
+            try:
+                from learning.pjc_conflito import abrir_conflito, detectar_conflito
+                chave_campo = f"{_norm(verba)}::{_norm(campo)}"
+                conflitante = next(
+                    (r for r in por_campo.get(chave_campo, [])
+                     if detectar_conflito(r, {"verba": verba, "campo": campo,
+                                              "para": para})),
+                    None,
+                )
+                if conflitante is not None:
+                    abrir_conflito(sessao_id, conflitante,
+                                   {**reg, "verba": verba, "campo": campo,
+                                    "para": para},
+                                   contexto=contexto)
+                    conflitos += 1
+                    continue  # não cria regra concorrente — aguarda explicação
+            except Exception as e:
+                logger.warning("detecção de conflito (%s/%s): %s", verba, campo, e)
         exemplo = {
             "chave": chave, "sessao_id": sessao_id, "verba": verba,
             "campo": campo, "de": reg.get("de"), "para": reg.get("para"),
@@ -252,8 +292,8 @@ def _persistir_regras(db, sessao_id: str, regras: list) -> tuple[int, int]:
             db.rollback()
         except Exception:
             pass
-        return 0, 0
-    return novas, reconf
+        return 0, 0, conflitos
+    return novas, reconf, conflitos
 
 
 def _persistir_aprendizado_no_relatorio(sessao_id: str, aprendizado: dict) -> None:

@@ -70,6 +70,55 @@
   {% endif %}
 </div>
 
+{% if conflitos_aprendizado %}
+<div class="card" style="border-left:4px solid #e67e22;">
+  <h2>🤝 Aprendizado — explicação solicitada <span class="badge badge-amarelo">{{ conflitos_aprendizado|length }}</span></h2>
+  <p style="color:#6c757d; margin-top:-6px;">
+    Correções de PJC definitivo <strong>conflitam com aprendizado consolidado</strong>.
+    Explique a particularidade de cada caso — a máquina refina as regras (e pode
+    fazer novas perguntas) até compreender plenamente.
+  </p>
+  {% for cf in conflitos_aprendizado %}
+  <div id="cf-{{ cf.id }}" style="border:1px solid #eee; border-radius:6px; padding:12px 14px; margin-bottom:10px; background:#fffdf7;">
+    <div style="font-size:0.85rem; color:#6c757d;">
+      Sessão {{ cf.sessao_id[:8] }} · {{ cf.nova_correcao.verba }} · <code>{{ cf.nova_correcao.campo }}</code>
+      · consolidado: <strong>{{ cf.regra_existente.exemplo.para }}</strong> × este caso: <strong>{{ cf.nova_correcao.para }}</strong>
+      {% if cf.trocas %} · {{ cf.trocas|length }} troca(s) anteriores{% endif %}
+    </div>
+    <p style="margin:8px 0;"><em>🤖 {{ cf.pergunta_atual }}</em></p>
+    <textarea id="exp-{{ cf.id }}" rows="2" style="width:100%; box-sizing:border-box;"
+              placeholder="Explique a particularidade deste caso..."></textarea>
+    <button class="btn btn-primary" style="margin-top:6px; padding:5px 14px; font-size:0.85rem;"
+            onclick="responderConflito('{{ cf.id }}')">Enviar explicação</button>
+  </div>
+  {% endfor %}
+</div>
+<script>
+async function responderConflito(id) {
+  const ta = document.getElementById('exp-' + id);
+  const explicacao = (ta.value || '').trim();
+  if (!explicacao) { alert('Escreva a explicação antes de enviar.'); return; }
+  try {
+    const r = await fetch(`/api/aprendizado/conflitos/${id}/responder`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ explicacao })
+    });
+    const j = await r.json();
+    if (!r.ok) { alert('Erro: ' + (j.detail || r.status)); return; }
+    if (j.status === 'resolvido') {
+      alert('✓ Compreendido — regras refinadas.\n\n' + (j.observacao || ''));
+      location.reload();
+    } else {
+      alert('🤖 A máquina precisa de mais um detalhe:\n\n' + (j.pergunta || ''));
+      const div = document.getElementById('cf-' + id).querySelector('em');
+      div.textContent = '🤖 ' + (j.pergunta || '');
+      ta.value = '';
+    }
+  } catch (e) { alert('Falha: ' + e); }
+}
+</script>
+{% endif %}
+
 <input type="file" id="pjcDefinitivoFile" accept=".pjc,.PJC" style="display:none">
 <script>
 // Plano 3 (aprendizado) — upload OPCIONAL do PJC definitivo p/ diff+aprendizado

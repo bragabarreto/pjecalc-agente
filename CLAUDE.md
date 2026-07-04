@@ -1038,6 +1038,17 @@ contra o PJC gerado (`calculo.arquivo_pjc`) → relatório persistido em
    extração) — guardrails: sentença do caso e invariantes SEMPRE prevalecem.
 6. **Best-effort em toda a cadeia** — falha de aprendizado NUNCA quebra
    upload/automação.
+7. **FATIA 4 — CONFLITO com aprendizado consolidado (diálogo HITL, excepcional)**:
+   se a nova correção atinge a MESMA (verba, campo) de regra CONSOLIDADA
+   (ativa, confiança ≥ 0.6) com valor DIVERGENTE, NÃO cria regra concorrente —
+   abre pendência de explicação (`learning/pjc_conflito.py`, JSONs em
+   `aprendizado_pjc/conflitos/`). Card "🤝 Aprendizado" na home; o Claude
+   avalia cada explicação e refina as CONDIÇÕES das duas regras (a antiga
+   ganha o gatilho que a delimita; a nova nasce 0.7 — explicação humana
+   direta) OU faz UMA nova pergunta — loop até compreensão plena. Reincidência
+   do MESMO valor não é conflito (é reconfirmação); regra não consolidada não
+   dispara o fluxo (excepcional). Endpoints: GET /api/aprendizado/conflitos,
+   POST /api/aprendizado/conflitos/{id}/responder.
 
 Validado E2E em produção (RODRIGO 0000905-05: upload → "idêntico" → análise
 background anexada ao relatório). Testes: `tests/test_pjc_diff.py` +
