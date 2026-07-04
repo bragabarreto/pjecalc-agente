@@ -2730,6 +2730,20 @@ def test_inv80_reconciliacao_fidelidade_previa_pjc():
     assert "_reconciliar_fidelidade_pjc(pjc_bytes)" in PLAYWRIGHT_V2, (
         "REGRESSÃO #80-AK: reconciliação deve ser chamada após exportar o PJC")
 
+    # (6) #80-AS — MULTA 467 ativada pela flag fgts.multa_artigo_467 NÃO é extra
+    fs, logs = _fake_self([R("Aviso sobre HE", "AVISO PRÉVIO SOBRE HORAS EXTRAS 50%")])
+    fs.previa.fgts = types.SimpleNamespace(multa_artigo_467=True)
+    res = Bot._reconciliar_fidelidade_pjc(fs, _pjc(
+        ["HORAS EXTRAS 50%"],
+        ["AVISO PRÉVIO SOBRE HORAS EXTRAS 50%",
+         "MULTA DO ARTIGO 467 DA CLT SOBRE HORAS EXTRAS 50%"]))
+    assert not res["reflexos_extras"] and res["ok"], (
+        "REGRESSÃO #80-AS: MULTA 467 via flag fgts.multa_artigo_467 é ESPERADA, não extra")
+    # e o desmarcador #80-AQ também a preserva
+    dm = PLAYWRIGHT_V2.split("def _desmarcar_reflexos_extras(")[1].split("\n    def ")[0]
+    assert "multa_artigo_467" in dm, (
+        "REGRESSÃO #80-AS: _desmarcar_reflexos_extras deve preservar MULTA 467 da flag FGTS")
+
 
 def test_inv81_painel_vazio_reancora_e_dedup_manual():
     """#80-AO (RODRIGO 0000905-05, 03/07/2026): o reflexo Férias caiu no Manual

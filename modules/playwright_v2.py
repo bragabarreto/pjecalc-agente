@@ -7240,6 +7240,16 @@ class PlaywrightAutomatorV2:
             t = self._tokens_fidelidade(alvo)
             if t:
                 esperados.append(sorted(t))
+        # #80-AS: MULTA 467 é ativada LEGITIMAMENTE pela flag fgts.multa_artigo_467
+        # (não vem como reflexo na prévia). Com a flag ligada, os candidatos
+        # "MULTA DO ARTIGO 467 SOBRE X" são ESPERADOS — jamais desmarcar.
+        try:
+            _fgts = getattr(self.previa, "fgts", None)
+            if _fgts is not None and getattr(_fgts, "multa_artigo_467", False):
+                esperados.append(sorted(self._tokens_fidelidade(
+                    f"MULTA DO ARTIGO 467 DA CLT SOBRE {verba_principal.nome_pjecalc}")))
+        except Exception:
+            pass
         candidatos_principal = [verba_principal.nome_pjecalc]
         _ea = getattr(verba_principal, "expresso_alvo", None)
         if _ea and _ea != verba_principal.nome_pjecalc:
@@ -11668,6 +11678,20 @@ class PlaywrightAutomatorV2:
                     reflexos_faltantes.append(r_label)
                 else:
                     casados_idx.update(hits)
+
+        # #80-AS: com fgts.multa_artigo_467=true na prévia, os reflexos
+        # "MULTA DO ARTIGO 467 SOBRE X" são ativados LEGITIMAMENTE pela flag
+        # (não constam como reflexos na prévia) — casá-los como esperados para
+        # não reportá-los como EXTRAS (falso alarme do 0000670-04).
+        try:
+            _fgts = getattr(self.previa, "fgts", None)
+            if _fgts is not None and getattr(_fgts, "multa_artigo_467", False):
+                _t467 = self._tokens_fidelidade("MULTA DO ARTIGO 467 DA CLT")
+                for i, (_nm, t) in enumerate(refl_ativos):
+                    if _t467 <= t:
+                        casados_idx.add(i)
+        except Exception:
+            pass
 
         # DUPLICADOS: um mesmo reflexo esperado casou 2+ entradas ativas no PJC.
         # EXTRAS: reflexo ativo no PJC que NENHUM esperado casou (over-emissão).
