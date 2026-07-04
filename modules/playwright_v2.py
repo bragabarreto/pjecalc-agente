@@ -10813,6 +10813,53 @@ class PlaywrightAutomatorV2:
         self._aguardar_ajax(15000)
         self._page.wait_for_timeout(2000)
 
+        # ── 14b'. #80-AU — VERIFICAR que a navegação ACONTECEU (NÃO REVERTER)
+        # Bug reprodutível (0000544-51, 2/2 runs): o JS a.click() no
+        # li_operacoes_liquidar era disparado mas a página FICAVA em
+        # calculo.jsf (Dados) — a navegação anterior tinha sido por URL-nav
+        # direto, que NÃO inicializa o bean Seam (limitação documentada), e o
+        # click ficava INERTE. O bot assumia sucesso e falhava 90s depois com
+        # 'Botão não encontrado: liquidar'. Verificar a URL e recuperar:
+        # (1) re-init do sidebar via CLICK (Seam @Begin) + re-click NATIVO
+        #     (trusted event — invariante 3) no Liquidar;
+        # (2) fallback URL goto liquidacao.jsf?conversationId.
+        if "liquidacao.jsf" not in (self._page.url or ""):
+            self.log(
+                f"  ⚠ #80-AU click Liquidar NÃO navegou (url={self._page.url[-60:]}) "
+                "— re-init sidebar via click + re-click nativo"
+            )
+            try:
+                self._aguardar_servidor_ocioso(contexto="pré-Liquidar (#80-AU)")
+                if not self._navegar_menu_via_click("li_calculo_verbas"):
+                    self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1500)
+                self._page.locator("#li_operacoes_liquidar a").first.click(
+                    force=True, timeout=8000)
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(2000)
+            except Exception as _e:
+                self.log(f"  ⚠ #80-AU re-click nativo Liquidar: {str(_e)[:100]}")
+        if "liquidacao.jsf" not in (self._page.url or "") and self._calculo_conversation_id:
+            self.log("  ↪ #80-AU fallback URL goto liquidacao.jsf")
+            try:
+                self._page.goto(
+                    f"{self.pjecalc_url}/pages/calculo/liquidacao.jsf"
+                    f"?conversationId={self._calculo_conversation_id}",
+                    wait_until="domcontentloaded", timeout=20000,
+                )
+                self._aguardar_ajax(15000)
+                self._page.wait_for_timeout(2000)
+            except Exception as _e:
+                self.log(f"  ⚠ #80-AU URL goto liquidacao: {str(_e)[:100]}")
+        if "liquidacao.jsf" not in (self._page.url or ""):
+            raise RuntimeError(
+                "#80-AU: navegação para liquidacao.jsf FALHOU após click + "
+                f"re-click nativo + URL goto (url atual: {self._page.url[-70:]}). "
+                "Re-execute a automação."
+            )
+        self.log("  ✓ #80-AU página de Liquidação confirmada (liquidacao.jsf)")
+
         # ── 14c. Preencher form de Liquidação ──────────────────────────────
         liq = self.previa.liquidacao
         if liq.data_de_liquidacao:
