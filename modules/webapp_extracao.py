@@ -261,15 +261,30 @@ def _montar_conteudo_etapa1(estado: dict) -> list[dict]:
 
 
 def _bloco_aprendizado() -> str | None:
-    """FATIA 2 — hints de parametrização aprendidos (padrões reincidentes).
-    Best-effort: qualquer falha → None (sem injeção). Hoje é no-op até um
-    padrão atingir n≥2 / confiança≥0,6."""
+    """Hints de aprendizado injetados na Etapa 2 (best-effort → None).
+
+    Dois planos, mesmo canal:
+    • Plano 2 — padrões de parametrização reincidentes (prévias confirmadas);
+    • Plano 3 — regras aprendidas de PJCs DEFINITIVOS (diff gerado × corrigido
+      manualmente pelo calculista), tipo_regra='pjc_definitivo'.
+    No-op até haver padrão/regra qualificado (n≥2 ou confiança≥0,6)."""
     try:
         from database import SessionLocal
         from learning.estrategia_parametrizacao import montar_bloco_aprendizado
         db = SessionLocal()
         try:
-            return montar_bloco_aprendizado(db)
+            partes = []
+            b2 = montar_bloco_aprendizado(db)
+            if b2:
+                partes.append(b2)
+            try:
+                from learning.pjc_aprendizado import montar_bloco_pjc_definitivo
+                b3 = montar_bloco_pjc_definitivo(db)
+                if b3:
+                    partes.append(b3)
+            except Exception:
+                pass
+            return "\n\n".join(partes) if partes else None
         finally:
             db.close()
     except Exception:
