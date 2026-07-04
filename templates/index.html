@@ -55,6 +55,11 @@
         <td>
           <a href="/processo/{{ proc.numero_processo }}/previa-atual" class="btn btn-secondary" style="padding:5px 12px; font-size:0.85rem;">Ver Prévia</a>
           <a href="/processo/{{ proc.numero_processo }}" class="btn btn-secondary" style="padding:5px 12px; font-size:0.85rem; margin-left:4px;">Histórico</a>
+          {% if ultimo_calc and ultimo_calc.status == 'pjc_exportado' and ultimo_calc.arquivo_pjc %}
+          <button onclick="enviarPjcDefinitivo('{{ ultimo_calc.sessao_id }}')" class="btn btn-secondary"
+                  title="Opcional: envie o PJC que você corrigiu manualmente no PJE-Calc e incorporou ao processo. O app compara com o PJC gerado pela automação e aprende com as diferenças."
+                  style="padding:5px 12px; font-size:0.85rem; margin-left:4px; border-color:#5a8dee; color:#5a8dee;">📥 PJC definitivo</button>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}
@@ -64,6 +69,35 @@
   <p style="color:#6c757d;">Nenhum processo encontrado. Inicie um <a href="/novo">novo cálculo</a>.</p>
   {% endif %}
 </div>
+
+<input type="file" id="pjcDefinitivoFile" accept=".pjc,.PJC" style="display:none">
+<script>
+// Plano 3 (aprendizado) — upload OPCIONAL do PJC definitivo p/ diff+aprendizado
+function enviarPjcDefinitivo(sessaoId) {
+  const inp = document.getElementById('pjcDefinitivoFile');
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    inp.value = '';
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('pjc', f);
+    try {
+      const r = await fetch(`/api/pjc-definitivo/${sessaoId}`, { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok) { alert('Erro: ' + (j.detail || r.status)); return; }
+      const linhas = (j.linhas || []).slice(0, 20).join('\n');
+      alert(
+        'PJC definitivo recebido para aprendizado.\n\n' +
+        `Correções manuais detectadas: ${j.resumo.campos_alterados} campo(s), ` +
+        `${j.resumo.entidades_adicionadas_removidas} verba(s)/reflexo(s) incluído(s)/removido(s).\n\n` +
+        (linhas || '✓ Nenhuma diferença — o PJC gerado já estava correto.') +
+        '\n\nRelatório completo: ' + j.relatorio
+      );
+    } catch (e) { alert('Falha no envio: ' + e); }
+  };
+  inp.click();
+}
+</script>
 
 {% if previas_pendentes %}
 <div class="card">

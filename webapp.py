@@ -4712,6 +4712,122 @@ async def upload_pjc(
     }
 
 
+# ── Plano 3 do Learning Engine — PJC DEFINITIVO (diff → aprendizado) ─────────
+
+_APRENDIZADO_PJC_DIR = Path("data/calculations/aprendizado_pjc")
+
+
+@app.post("/api/pjc-definitivo/{sessao_id}")
+async def enviar_pjc_definitivo(
+    sessao_id: str,
+    background_tasks: BackgroundTasks,
+    pjc: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    """Plano 3 (FATIA 1) — upload OPCIONAL do PJC DEFINITIVO (corrigido
+    manualmente no PJE-Calc e incorporado ao processo) para aprendizado.
+
+    O app diffa o definitivo contra o PJC GERADO pela automação
+    (`calculo.arquivo_pjc`) em nível de PARÂMETRO (não valores recomputados)
+    e persiste o relatório em `data/calculations/aprendizado_pjc/`. A análise
+    LLM (FATIA 2) roda em background a partir do relatório.
+
+    NÃO altera o cálculo nem o arquivo vinculado — é exclusivamente insumo
+    de aprendizado (diferente de /api/upload-pjc, que VINCULA o arquivo)."""
+    repo = RepositorioCalculo(db)
+    calculo = repo.buscar_sessao(sessao_id)
+    if not calculo:
+        raise HTTPException(status_code=404, detail="Sessão não encontrada")
+    numero = calculo.processo.numero_processo if calculo.processo else None
+    if not numero:
+        raise HTTPException(status_code=400, detail="Sessão sem numero_processo")
+    if not calculo.arquivo_pjc or not Path(calculo.arquivo_pjc).exists():
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Não há PJC GERADO pela automação vinculado a esta sessão — "
+                "sem baseline não há o que comparar. O aprendizado por PJC "
+                "definitivo exige que a automação tenha exportado um PJC antes."
+            ),
+        )
+
+    dados = await pjc.read()
+    if not dados or dados[:2] != b"PK":
+        raise HTTPException(status_code=400, detail="Arquivo enviado não é um .PJC (ZIP) válido")
+
+    # Validar que o definitivo pertence ao MESMO processo (anti contaminação
+    # cruzada — mesma regra do vincular_pjc, task #14)
+    _tmp = _APRENDIZADO_PJC_DIR / f"{sessao_id}_definitivo_tmp.pjc"
+    _tmp.parent.mkdir(parents=True, exist_ok=True)
+    _tmp.write_bytes(dados)
+    try:
+        if not _cnj_pertence_ao_pjc(_tmp, numero):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"O PJC enviado NÃO pertence ao processo {numero}. "
+                    "Confira se exportou o PJC definitivo do processo certo."
+                ),
+            )
+    finally:
+        try:
+            _tmp.unlink()
+        except OSError:
+            pass
+
+    from learning.pjc_diff import executar_diff_e_persistir, resumo_legivel
+    try:
+        rel = executar_diff_e_persistir(
+            sessao_id, calculo.arquivo_pjc, dados, _APRENDIZADO_PJC_DIR,
+        )
+    except Exception as e:
+        logger.exception("pjc-definitivo: falha no diff")
+        raise HTTPException(status_code=500, detail=f"Falha ao comparar PJCs: {e}")
+
+    # Auditoria HITL
+    try:
+        from infrastructure.database import InteracaoHITL as _Inter
+        db.add(_Inter(
+            calculo_id=calculo.id,
+            tipo_interacao="pjc_definitivo_aprendizado",
+            descricao=(
+                f"PJC definitivo enviado p/ aprendizado — "
+                f"{rel['resumo']['campos_alterados']} campo(s) alterado(s), "
+                f"{rel['resumo']['entidades_adicionadas_removidas']} entidade(s) add/rem"
+            ),
+            dados_antes_json=None,
+            dados_depois_json=json.dumps(rel["resumo"], ensure_ascii=False),
+        ))
+        db.commit()
+    except Exception as _e:
+        logger.warning(f"pjc-definitivo: falha ao registrar InteracaoHITL: {_e}")
+
+    # FATIA 2 — análise LLM em background (se instalada)
+    try:
+        from learning.pjc_aprendizado import analisar_diff_em_background
+        background_tasks.add_task(analisar_diff_em_background, sessao_id)
+    except ImportError:
+        logger.info("pjc-definitivo: FATIA 2 (análise LLM) ainda não instalada — só diff")
+
+    return {
+        "ok": True,
+        "resumo": rel["resumo"],
+        "linhas": resumo_legivel(rel),
+        "relatorio": f"/api/pjc-definitivo/{sessao_id}/relatorio",
+    }
+
+
+@app.get("/api/pjc-definitivo/{sessao_id}/relatorio")
+async def relatorio_pjc_definitivo(sessao_id: str):
+    """Relatório persistido do diff PJC gerado ↔ definitivo (Plano 3)."""
+    from learning.pjc_diff import carregar_relatorio, resumo_legivel
+    rel = carregar_relatorio(sessao_id, _APRENDIZADO_PJC_DIR)
+    if rel is None:
+        raise HTTPException(status_code=404, detail="Nenhum PJC definitivo enviado para esta sessão")
+    rel["linhas"] = resumo_legivel(rel)
+    return rel
+
+
 @app.post("/api/correcao_manual_diff/{sessao_id}")
 async def correcao_manual_diff(sessao_id: str, db: Session = Depends(get_db)):
     """Captura o snapshot final do PJE-Calc, faz diff com o snapshot inicial
