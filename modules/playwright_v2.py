@@ -10837,42 +10837,69 @@ class PlaywrightAutomatorV2:
         # (1) re-init do sidebar via CLICK (Seam @Begin) + re-click NATIVO
         #     (trusted event — invariante 3) no Liquidar;
         # (2) fallback URL goto liquidacao.jsf?conversationId.
-        if "liquidacao.jsf" not in (self._page.url or ""):
-            self.log(
-                f"  ⚠ #80-AU click Liquidar NÃO navegou (url={self._page.url[-60:]}) "
-                "— re-init sidebar via click + re-click nativo"
-            )
+        # Sucesso REAL = página de liquidação COM FORM (radios/botão) — a URL
+        # sozinha engana: goto liquidacao.jsf carrega a página VAZIA (bean
+        # ApresentadorLiquidacao não inicializa por URL — run v3: n_radios=0,
+        # 'Botão não encontrado: liquidar').
+        def _form_liquidacao_ok() -> bool:
             try:
-                self._aguardar_servidor_ocioso(contexto="pré-Liquidar (#80-AU)")
-                if not self._navegar_menu_via_click("li_calculo_verbas"):
-                    self._navegar_menu("li_calculo_verbas")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(1500)
-                self._page.locator("#li_operacoes_liquidar a").first.click(
-                    force=True, timeout=8000)
-                self._aguardar_ajax(15000)
-                self._page.wait_for_timeout(2000)
-            except Exception as _e:
-                self.log(f"  ⚠ #80-AU re-click nativo Liquidar: {str(_e)[:100]}")
-        if "liquidacao.jsf" not in (self._page.url or "") and self._calculo_conversation_id:
-            self.log("  ↪ #80-AU fallback URL goto liquidacao.jsf")
-            try:
-                self._page.goto(
-                    f"{self.pjecalc_url}/pages/calculo/liquidacao.jsf"
-                    f"?conversationId={self._calculo_conversation_id}",
-                    wait_until="domcontentloaded", timeout=20000,
+                self._page.wait_for_selector(
+                    "input[id$=':liquidar'], "
+                    "input[type='radio'][id*='indicesAcumulados']",
+                    state="attached", timeout=15000,
                 )
-                self._aguardar_ajax(15000)
-                self._page.wait_for_timeout(2000)
+                return True
+            except Exception:
+                return False
+
+        _liq_ok = ("liquidacao.jsf" in (self._page.url or "")) and _form_liquidacao_ok()
+        if not _liq_ok:
+            # #80-AW: espelhar o padrão do FECHAR (que funciona TODA vez):
+            # ancorar em verba-calculo.jsf via CLICK (Seam init) e dar JS CLICK
+            # no li_operacoes_liquidar (JS click funciona em âncora de menu
+            # colapsado; click NATIVO exige visibilidade e falhava). Run v3
+            # provou: JS click direto de calculo.jsf (Dados) é inerte; do
+            # verba-calculo click-navegado, o Fechar navega sempre.
+            for _t in range(1, 4):
+                self.log(
+                    f"  ↻ #80-AW Liquidar não carregou (url={self._page.url[-50:]}) "
+                    f"— re-âncora verba-calculo + JS click (tentativa {_t}/3)"
+                )
+                try:
+                    self._aguardar_servidor_ocioso(contexto="pré-Liquidar (#80-AW)")
+                    if not self._navegar_menu_via_click("li_calculo_verbas"):
+                        self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(1500)
+                    self._navegar_menu_via_click("li_operacoes_liquidar")
+                    self._page.wait_for_timeout(2000)
+                except Exception as _e:
+                    self.log(f"  ⚠ #80-AW tentativa {_t}: {str(_e)[:100]}")
+                if "liquidacao.jsf" in (self._page.url or "") and _form_liquidacao_ok():
+                    _liq_ok = True
+                    break
+        if not _liq_ok:
+            # Última cartada: conversa pode estar exaurida — reabrir via
+            # Recentes (conv fresca edit-mode) e repetir o padrão do Fechar.
+            self.log("  ↪ #80-AW última cartada: reabrir via Recentes + JS click Liquidar")
+            try:
+                if self._reabrir_calculo_via_recentes():
+                    if not self._navegar_menu_via_click("li_calculo_verbas"):
+                        self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(8000)
+                    self._page.wait_for_timeout(1500)
+                    self._navegar_menu_via_click("li_operacoes_liquidar")
+                    self._page.wait_for_timeout(2000)
+                    _liq_ok = ("liquidacao.jsf" in (self._page.url or "")) and _form_liquidacao_ok()
             except Exception as _e:
-                self.log(f"  ⚠ #80-AU URL goto liquidacao: {str(_e)[:100]}")
-        if "liquidacao.jsf" not in (self._page.url or ""):
+                self.log(f"  ⚠ #80-AW Recentes+Liquidar: {str(_e)[:100]}")
+        if not _liq_ok:
             raise RuntimeError(
-                "#80-AU: navegação para liquidacao.jsf FALHOU após click + "
-                f"re-click nativo + URL goto (url atual: {self._page.url[-70:]}). "
+                "#80-AU/AW: página de Liquidação NÃO carregou o form (radios/"
+                f"botão) após click, re-âncoras e Recentes (url: {self._page.url[-70:]}). "
                 "Re-execute a automação."
             )
-        self.log("  ✓ #80-AU página de Liquidação confirmada (liquidacao.jsf)")
+        self.log("  ✓ #80-AU página de Liquidação confirmada (liquidacao.jsf + form)")
 
         # ── 14c. Preencher form de Liquidação ──────────────────────────────
         liq = self.previa.liquidacao
