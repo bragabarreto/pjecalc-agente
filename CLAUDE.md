@@ -1006,6 +1006,46 @@ rule_injector.py (em extraction.py / classification.py)
 
 Dashboard em `/admin/aprendizado`. Trigger manual via `POST /api/aprendizado/executar`.
 
+### Plano 3 — PJC Definitivo (diff gerado ↔ corrigido manualmente) — 04/07/2026
+
+> **O sinal mais valioso dos três planos**: o PJC DEFINITIVO que o calculista
+> corrigiu manualmente no PJE-Calc e incorporou ao processo é o *ground truth*
+> do título executivo.
+
+**Fluxo (upload OPCIONAL)**: botão "📥 PJC definitivo" na home (só em
+`pjc_exportado`) → `POST /api/pjc-definitivo/{sessao_id}` → diff estruturado
+contra o PJC gerado (`calculo.arquivo_pjc`) → relatório persistido em
+`data/calculations/aprendizado_pjc/` → análise LLM em background → regras.
+
+**Módulos**: `learning/pjc_diff.py` (FATIA 1 — parser+differ) e
+`learning/pjc_aprendizado.py` (FATIAS 2+3 — LLM, ciclo de confiança, injeção).
+
+**Invariantes (NÃO REVERTER)**:
+1. **Diff por PARÂMETROS, nunca valores recomputados** — `<ocorrencias>` e
+   derivados (`baseHonorario`, `valorBaseCustasCalculadas`, `Honorario.valor`)
+   são EXCLUÍDOS; 1 parâmetro alterado recalcula centenas de valores e o
+   aprendizado precisa da CAUSA RAIZ (divisor 220→180, não 300 valores).
+2. **CNJ do PJC vive no NOME** (arquivo + entry interna do ZIP,
+   `PROCESSO_<CNJ>_CALCULO_...`) — PJCs reais do Cidadão 2.15.1 NÃO têm
+   `<numeroDoProcesso>` no XML. Validação anti contaminação checa 3 fontes.
+3. **Unidade de aprendizado = (verba, campo, contexto)** — nunca "tipo de
+   processo". Regras em `RegrasAprendidas` com `tipo_regra='pjc_definitivo'`;
+   dedup por (verba,campo,para) → reincidência reconfirma (+0.1).
+4. **Confiança**: generalizável nasce 0.6 (injetável); caso-específico 0.4
+   (só injeta se reincidir). Ciclo: correção NÃO repetida em novo PJC
+   definitivo → acerto (+0.05); piso 0.2 arquiva (arquivar > bonificar).
+5. **Injeção no MESMO canal do Plano 2** (`_bloco_aprendizado` na Etapa 2 da
+   extração) — guardrails: sentença do caso e invariantes SEMPRE prevalecem.
+6. **Best-effort em toda a cadeia** — falha de aprendizado NUNCA quebra
+   upload/automação.
+
+Validado E2E em produção (RODRIGO 0000905-05: upload → "idêntico" → análise
+background anexada ao relatório). Testes: `tests/test_pjc_diff.py` +
+`tests/test_pjc_aprendizado.py`. XStream do PJC: verbas são
+`<Calculada>/<Informada>`, reflexos `<Reflexo>` (nome completo em `<nome>`),
+históricos `<HistoricoSalarial>`; 1ª ocorrência serializada inline, demais
+como `<internalRef>` — o parser substitui definições aninhadas por `ref:<nome>`.
+
 ## Banco de dados — novos modelos (infrastructure/database.py)
 
 Além dos 5 modelos existentes, **4 novos** para o Learning Engine:
