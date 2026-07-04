@@ -7650,6 +7650,20 @@ class PlaywrightAutomatorV2:
                     return
                 except Exception as _e:
                     self.log(f"    ⚠ fallback Manual do reflexo falhou: {_e}")
+            else:
+                # #80-AV (0000544-51 run v3): checkbox VISÍVEL mas o bean NÃO
+                # recebeu após todas as tentativas (contenção A4J/Drools — RSR
+                # sobre HE 100%). Antes: perda declarada (🛑 e nada mais).
+                # Agora que o dedup exige checkbox MARCADO (#80-AT), o defer
+                # pro Manual é SEGURO: se o checkbox pegar depois, o dedup vê
+                # MARCADO e pula; se não pegou, o Manual recupera o reflexo.
+                if coletar_manual_em is not None:
+                    coletar_manual_em.append(reflexo)
+                    self.log(
+                        f"    ⏸ #80-AV reflexo '{reflexo.nome}' visível mas NÃO "
+                        f"persistiu — deferido como Manual (dedup #80-AT protege)"
+                    )
+                    return
             self.log(f"    🛑 Reflexo '{reflexo.nome}' NÃO persistiu após 3 tentativas (alvo='{alvo}')")
 
         # Se há overrides, abrir Parâmetros do reflexo e ajustar
