@@ -2873,6 +2873,63 @@ def test_inv84_expresso_alvo_sempre_canonico():
         "REGRESSÃO #80-AR: invariante do expresso_alvo canônico removido do prompt")
 
 
+def test_inv85_integridade_referencial_historicos():
+    """#80-AZ (0000544-51, 04/07/2026): a IA emitiu
+    base_calculo.historico_nome='SALARIO BASE ACUMULO' mas o historico_salarial
+    só tem 'SALARIO BASE' — referência SOLTA → select nunca tem a opção → save
+    da verba rejeitado → liquidação bloqueada após 25min de run.
+
+    Normalizer (ANTES da prévia): referência inexistente com EXATAMENTE 1
+    candidato por continência → coagida; sem candidato único → ERROR explícito
+    (sem coerção às cegas). NÃO REVERTER."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+
+    def _dados(ref_base, ref_vp=None, historicos=("SALARIO BASE", "ÚLTIMA REMUNERAÇÃO")):
+        return {
+            "historico_salarial": [{"nome": h} for h in historicos],
+            "verbas_principais": [{
+                "nome_pjecalc": "ACUMULO DE FUNCAO",
+                "parametros": {
+                    "formula_calculado": {"base_calculo": {
+                        "tipo": "HISTORICO_SALARIAL", "historico_nome": ref_base}},
+                    "valor_pago": {"tipo": "CALCULADO",
+                                   "base_historico_nome": ref_vp},
+                },
+            }],
+        }
+
+    # (1) sufixo inventado → coerção por continência (caso real 0000544-51)
+    d = _dados("SALARIO BASE ACUMULO")
+    N._norm_integridade_historicos(d)
+    bc = d["verbas_principais"][0]["parametros"]["formula_calculado"]["base_calculo"]
+    assert bc["historico_nome"] == "SALARIO BASE", (
+        "REGRESSÃO #80-AZ: referência com sufixo inventado deve coagir p/ o histórico real")
+
+    # (2) valor_pago.base_historico_nome também é saneado
+    d = _dados("SALARIO BASE", ref_vp="ULTIMA REMUNERACAO DO AUTOR")
+    N._norm_integridade_historicos(d)
+    vp = d["verbas_principais"][0]["parametros"]["valor_pago"]
+    assert vp["base_historico_nome"] == "ÚLTIMA REMUNERAÇÃO"
+
+    # (3) referência válida (só acento/caixa) → normalizada p/ o nome real, sem ruído
+    d = _dados("salario base")
+    N._norm_integridade_historicos(d)
+    assert d["verbas_principais"][0]["parametros"]["formula_calculado"][
+        "base_calculo"]["historico_nome"] == "SALARIO BASE"
+
+    # (4) ambíguo (2 candidatos por continência) → NÃO coage às cegas
+    d = _dados("SALARIO", historicos=("SALARIO BASE", "SALARIO PARADIGMA"))
+    N._norm_integridade_historicos(d)
+    assert d["verbas_principais"][0]["parametros"]["formula_calculado"][
+        "base_calculo"]["historico_nome"] == "SALARIO", (
+        "REGRESSÃO #80-AZ: referência ambígua não pode ser coagida às cegas")
+
+    # (5) registrado no pipeline
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_integridade_historicos(data)" in src.split("def normalize_v2_json")[1]
+
+
 def test_inv83_desmarca_reflexos_extras_auto_gerados():
     """#80-AQ (RODRIGO 0000905-05, 03/07/2026): o PJE-Calc AUTO-GERA o reflexo
     "MULTA 477 SOBRE HE" (ativa o candidato) quando há verba principal MULTA 477

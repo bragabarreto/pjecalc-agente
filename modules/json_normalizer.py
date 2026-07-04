@@ -1315,6 +1315,91 @@ def _norm_expresso_alvo_canonico(data: dict[str, Any]) -> None:
             )
 
 
+def _norm_integridade_historicos(data: dict[str, Any]) -> None:
+    """#80-AZ — INTEGRIDADE REFERENCIAL das bases de histórico das verbas.
+
+    Bug (0000544-51, 04/07/2026): a IA emitiu
+    `base_calculo.historico_nome="SALARIO BASE ACUMULO"` mas o
+    `historico_salarial` só tem "SALARIO BASE" — referência SOLTA. O select
+    `baseHistoricos` do form nunca tem essa opção → timeout ×3 → save da verba
+    rejeitado ("Campo obrigatório: Histórico Salarial") → liquidação bloqueada
+    ("Falta selecionar pelo menos um Histórico Salarial...") após 25min de run.
+
+    Salvaguarda (ANTES da prévia): para cada referência de histórico em
+    `base_calculo.historico_nome` e `valor_pago.base_historico_nome` que NÃO
+    exista em `historico_salarial[].nome`:
+    - se houver EXATAMENTE 1 histórico cujo nome esteja CONTIDO na referência
+      (ou vice-versa) → coage para o nome real (a IA costuma inventar sufixo:
+      "SALARIO BASE ACUMULO" → "SALARIO BASE");
+    - senão → log ERROR explícito (a referência precisa ser corrigida na
+      prévia, ou o histórico adicionado — sem isso a liquidação FALHARÁ).
+    """
+    if not isinstance(data, dict):
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    historicos = [
+        str(h.get("nome") or "").strip()
+        for h in (data.get("historico_salarial") or [])
+        if isinstance(h, dict) and h.get("nome")
+    ]
+    if not historicos:
+        return
+
+    def _n(s: str) -> str:
+        import unicodedata
+        nfkd = unicodedata.normalize("NFKD", str(s or ""))
+        sem = "".join(c for c in nfkd if not unicodedata.combining(c))
+        return " ".join(sem.upper().split())
+
+    hist_norm = {_n(h): h for h in historicos}
+
+    def _resolver(ref: str) -> str | None:
+        rn = _n(ref)
+        if rn in hist_norm:
+            return hist_norm[rn]  # existe (talvez com acento/caixa diferente)
+        cands = [h for hn, h in hist_norm.items() if hn in rn or rn in hn]
+        return cands[0] if len(cands) == 1 else None
+
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros") if isinstance(v.get("parametros"), dict) else {}
+        alvos = []
+        fc = p.get("formula_calculado")
+        if isinstance(fc, dict) and isinstance(fc.get("base_calculo"), dict):
+            alvos.append((fc["base_calculo"], "historico_nome", "base_calculo"))
+        vp = p.get("valor_pago")
+        if isinstance(vp, dict):
+            alvos.append((vp, "base_historico_nome", "valor_pago"))
+        for obj, campo, rotulo in alvos:
+            ref = obj.get(campo)
+            if not ref:
+                continue
+            if _n(ref) in hist_norm:
+                if hist_norm[_n(ref)] != ref:
+                    obj[campo] = hist_norm[_n(ref)]
+                continue
+            resolvido = _resolver(str(ref))
+            if resolvido:
+                obj[campo] = resolvido
+                _log.warning(
+                    "Normalizer #80-AZ: verba '%s' — %s.%s '%s' NÃO existe em "
+                    "historico_salarial; coagido p/ '%s' (único candidato por "
+                    "continência).",
+                    v.get("nome_pjecalc"), rotulo, campo, ref, resolvido,
+                )
+            else:
+                _log.error(
+                    "Normalizer #80-AZ: verba '%s' referencia histórico "
+                    "INEXISTENTE '%s' (%s.%s) e NENHUM candidato único — a "
+                    "liquidação FALHARÁ ('Falta selecionar Histórico Salarial'). "
+                    "Corrija a prévia: adicione o histórico ou ajuste o nome. "
+                    "Históricos existentes: %s",
+                    v.get("nome_pjecalc"), ref, rotulo, campo, historicos,
+                )
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -1405,6 +1490,11 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # Salvaguarda: detectar cálculo que CRUZA 30/08/2024 (Lei 14.905) e
     # corrigir config se IA emitiu Caso A indevidamente (deveria ser Caso B).
     _norm_correcao_caso_a_vs_b(data)
+
+    # Salvaguarda #80-AZ: referências de histórico das verbas (base_calculo/
+    # valor_pago) DEVEM apontar p/ históricos EXISTENTES — referência solta
+    # rejeita o save da verba e bloqueia a liquidação 25min depois.
+    _norm_integridade_historicos(data)
 
     # Salvaguarda #80-AR: expresso_alvo (direto/adaptado) DEVE ser o nome
     # CANÔNICO EXATO do rol das 54 — é por ele que a automação acha o checkbox
