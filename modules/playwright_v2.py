@@ -10860,6 +10860,7 @@ class PlaywrightAutomatorV2:
             # colapsado; click NATIVO exige visibilidade e falhava). Run v3
             # provou: JS click direto de calculo.jsf (Dados) é inerte; do
             # verba-calculo click-navegado, o Fechar navega sempre.
+            _diag_menu_logado = False
             for _t in range(1, 4):
                 self.log(
                     f"  ↻ #80-AW Liquidar não carregou (url={self._page.url[-50:]}) "
@@ -10871,8 +10872,48 @@ class PlaywrightAutomatorV2:
                         self._navegar_menu("li_calculo_verbas")
                     self._aguardar_ajax(8000)
                     self._page.wait_for_timeout(1500)
+                    # #80-AX DIAG (uma vez): anatomia do menu Operações — ground
+                    # truth de por que o click é inerte (li ausente? invisível?
+                    # onclick de que tipo?).
+                    if not _diag_menu_logado:
+                        try:
+                            _anat = self._page.evaluate(
+                                """() => [...document.querySelectorAll("li[id*='peracoes']")]
+                                    .map(li => { const a = li.querySelector('a');
+                                        return {id: li.id, vis: li.offsetParent !== null,
+                                            aId: a ? (a.id || '-') : null,
+                                            txt: a ? (a.textContent||'').trim().slice(0,18) : null,
+                                            href: a ? (a.getAttribute('href')||'').slice(0,35) : null,
+                                            oc: a ? ((a.getAttribute('onclick')||'').slice(0,90) || null) : null}; })"""
+                            )
+                            self.log(f"  🔎 #80-AX menu Operações: {_anat}")
+                        except Exception:
+                            pass
+                        _diag_menu_logado = True
                     self._navegar_menu_via_click("li_operacoes_liquidar")
                     self._page.wait_for_timeout(2000)
+                    # #80-AX estratégias extras se o JS click não navegou:
+                    # (D) onclick-exec via new Function (padrão do bot p/ links
+                    #     A4J); (E) jsfcljs manual pelo id do <a> (POST completo).
+                    if "liquidacao.jsf" not in (self._page.url or ""):
+                        _r = self._page.evaluate(
+                            """() => {
+                                const li = document.getElementById('li_operacoes_liquidar');
+                                const a = li ? li.querySelector('a') : null;
+                                if (!a) return 'sem-a';
+                                const oc = a.getAttribute('onclick');
+                                if (oc) { try { new Function(oc).call(a); return 'onclick-exec'; } catch(e) { return 'oc-erro:'+e.message.slice(0,50); } }
+                                if (a.id && typeof jsfcljs === 'function' && document.forms[0]) {
+                                    jsfcljs(document.forms[0], {[a.id]: a.id}, '');
+                                    return 'jsfcljs:'+a.id;
+                                }
+                                if (a.href && !a.href.endsWith('#')) { location.href = a.href; return 'href-nav'; }
+                                return 'sem-estrategia';
+                            }"""
+                        )
+                        self.log(f"  ↪ #80-AX estratégia extra Liquidar: {_r}")
+                        self._aguardar_ajax(12000)
+                        self._page.wait_for_timeout(2000)
                 except Exception as _e:
                     self.log(f"  ⚠ #80-AW tentativa {_t}: {str(_e)[:100]}")
                 if "liquidacao.jsf" in (self._page.url or "") and _form_liquidacao_ok():
