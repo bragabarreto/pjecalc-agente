@@ -10914,6 +10914,26 @@ class PlaywrightAutomatorV2:
                         self.log(f"  ↪ #80-AX estratégia extra Liquidar: {_r}")
                         self._aguardar_ajax(12000)
                         self._page.wait_for_timeout(2000)
+                    # #80-AX-2: se o submit rodou mas a URL não mudou, o servidor
+                    # provavelmente RECUSOU abrir a Liquidação (validação/
+                    # pendência) devolvendo a MESMA view com mensagem JSF que
+                    # não líamos — capturar as mensagens é o ground truth.
+                    if "liquidacao.jsf" not in (self._page.url or ""):
+                        try:
+                            _msgs = self._page.evaluate(
+                                """() => [...document.querySelectorAll(
+                                    '.rf-msgs-sum, .rf-msgs-detail, .rich-messages li, '
+                                    + \"span[id$='Erro'], .mensagemErro, .rich-message-detail, \"
+                                    + '.errorMessage, li.rich-msgs-err')]
+                                    .map(e => (e.textContent||'').trim())
+                                    .filter(t => t.length > 3).slice(0, 8)"""
+                            )
+                            if _msgs:
+                                self.log(f"  🔎 #80-AX-2 mensagens JSF pós-click Liquidar: {_msgs}")
+                            else:
+                                self.log("  🔎 #80-AX-2 sem mensagens JSF visíveis pós-click")
+                        except Exception:
+                            pass
                 except Exception as _e:
                     self.log(f"  ⚠ #80-AW tentativa {_t}: {str(_e)[:100]}")
                 if "liquidacao.jsf" in (self._page.url or "") and _form_liquidacao_ok():
