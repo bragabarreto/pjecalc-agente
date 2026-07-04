@@ -664,6 +664,19 @@ Quando `nome_pjecalc` for diferente do `expresso_alvo`, a estratégia DEVE ser
 `expresso_adaptado` (NÃO `expresso_direto`). A automação renomeia o campo "Nome"
 no PJE-Calc para refletir a verba real da condenação.
 
+⚠️ **INVARIANTE PERMANENTE — `expresso_alvo` = NOME CANÔNICO EXATO — NÃO REVERTER**:
+Em `expresso_direto` E `expresso_adaptado`, o campo `expresso_alvo` DEVE ser a
+**cópia LITERAL do nome canônico** de uma das 54 verbas do rol Expresso do
+PJE-Calc (como listadas acima) — é por esse nome que a automação localiza o
+checkbox na tela de Lançamento Expresso. NUNCA coloque em `expresso_alvo`:
+- ❌ o nome renomeado/adaptado (esse vai em `nome_pjecalc`);
+- ❌ o nome da verba na sentença;
+- ❌ variações, abreviações ou paráfrases do nome canônico.
+No `expresso_adaptado` os dois campos coexistem: `expresso_alvo` = verba
+canônica BASE (para achar o checkbox); `nome_pjecalc` = nome final desejado
+(a automação renomeia DEPOIS de lançar). Se nenhuma das 54 servir de base,
+use estratégia `manual` — não invente um `expresso_alvo`.
+
 ### `manual`
 Verba muito específica sem similar:
 - Multas convencionais com cláusulas específicas

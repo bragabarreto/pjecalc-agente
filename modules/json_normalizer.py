@@ -1249,6 +1249,72 @@ def _norm_reflexos_expresso_saneados(data: dict[str, Any]) -> None:
             v["reflexos"] = novos
 
 
+def _norm_expresso_alvo_canonico(data: dict[str, Any]) -> None:
+    """#80-AR — `expresso_alvo` DEVE ser o nome CANÔNICO EXATO (rol das 54).
+
+    Regra do usuário (04/07/2026): "toda vez que for usada a estratégia
+    lançamento expresso adaptado, deve ser registrado corretamente o nome
+    canônico da parcela, como está no PJE-Calc, para que o sistema busque
+    corretamente, independentemente do nome que será usado após a alteração".
+
+    A automação localiza o checkbox da tela Expresso pelo `expresso_alvo`;
+    se a IA registrar ali o nome RENOMEADO (que pertence a `nome_pjecalc`)
+    ou um nome inventado, o match falha e a verba cai em recovery/Manual.
+
+    Salvaguarda (ANTES da prévia — fidelidade prévia↔automação):
+    1. resolve `expresso_alvo` contra o catálogo canônico (tolerante a
+       acento/espaço/hífen — `resolver_verba_expresso`); coage p/ canônico;
+    2. se não resolver, tenta `nome_pjecalc`/`nome_sentenca` (a IA pode ter
+       trocado os campos);
+    3. se NADA resolver, rebaixa a estratégia p/ `manual` (o Expresso jamais
+       acharia o checkbox; o fluxo Manual aceita qualquer nome) e loga.
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    try:
+        from modules.expresso_verbas_canonicas import resolver_verba_expresso
+    except Exception:  # pragma: no cover — módulo indisponível: no-op
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        estrategia = str(v.get("estrategia_preenchimento") or "").lower()
+        if estrategia not in ("expresso_direto", "expresso_adaptado"):
+            continue
+        alvo = str(v.get("expresso_alvo") or "")
+        canonico = resolver_verba_expresso(alvo)
+        if canonico:
+            if canonico != alvo:
+                v["expresso_alvo"] = canonico
+                _log.warning(
+                    "Normalizer #80-AR: expresso_alvo '%s' → canônico '%s' (verba '%s')",
+                    alvo, canonico.rstrip(), v.get("nome_pjecalc"),
+                )
+            continue
+        # alvo não resolve — IA pode ter posto o nome renomeado no alvo
+        for cand in (v.get("nome_pjecalc"), v.get("nome_sentenca")):
+            canonico = resolver_verba_expresso(str(cand or ""))
+            if canonico:
+                v["expresso_alvo"] = canonico
+                _log.warning(
+                    "Normalizer #80-AR: expresso_alvo '%s' não é canônico — "
+                    "resolvido via '%s' → '%s'",
+                    alvo, cand, canonico.rstrip(),
+                )
+                break
+        else:
+            v["estrategia_preenchimento"] = "manual"
+            _log.warning(
+                "Normalizer #80-AR: expresso_alvo '%s' (verba '%s') não casa "
+                "NENHUMA das 54 canônicas — estratégia rebaixada p/ MANUAL "
+                "(Expresso jamais acharia o checkbox).",
+                alvo, v.get("nome_pjecalc"),
+            )
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -1339,6 +1405,12 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # Salvaguarda: detectar cálculo que CRUZA 30/08/2024 (Lei 14.905) e
     # corrigir config se IA emitiu Caso A indevidamente (deveria ser Caso B).
     _norm_correcao_caso_a_vs_b(data)
+
+    # Salvaguarda #80-AR: expresso_alvo (direto/adaptado) DEVE ser o nome
+    # CANÔNICO EXATO do rol das 54 — é por ele que a automação acha o checkbox
+    # da tela Expresso, independentemente do nome_pjecalc renomeado. Coage p/
+    # canônico (ou rebaixa p/ manual se nada resolver) ANTES da prévia.
+    _norm_expresso_alvo_canonico(data)
 
     # Salvaguarda: MULTA 467 emitida como verba principal autônoma →
     # converter em reflexos checkbox_painel + multa_artigo_467 no FGTS.

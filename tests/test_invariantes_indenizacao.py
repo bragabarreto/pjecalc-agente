@@ -2793,6 +2793,63 @@ def test_inv82_limpar_verbas_inicio_limpo():
         "REGRESSÃO #80-AP: gate #80-H entre exclusões (Drools/LockTimeout)")
 
 
+def test_inv84_expresso_alvo_sempre_canonico():
+    """#80-AR (regra do usuário, 04/07/2026): em expresso_direto/adaptado, o
+    `expresso_alvo` DEVE ser o nome CANÔNICO EXATO do rol das 54 verbas — é por
+    ele que a automação localiza o checkbox da tela Expresso, independentemente
+    do `nome_pjecalc` renomeado pós-lançamento (EXPRESSO_ADAPTADO).
+
+    Salvaguarda no normalizer (ANTES da prévia): (1) coage variações sutis p/
+    o canônico; (2) se a IA pôs o nome RENOMEADO no alvo, resolve via
+    nome_pjecalc/nome_sentenca; (3) se NADA resolver, rebaixa p/ manual (o
+    Expresso jamais acharia o checkbox). NÃO REVERTER."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+
+    def _verba(alvo, nome, estrategia="expresso_adaptado", sentenca=None):
+        return {"nome_pjecalc": nome, "nome_sentenca": sentenca or nome,
+                "expresso_alvo": alvo, "estrategia_preenchimento": estrategia,
+                "parametros": {}}
+
+    d = {"verbas_principais": [
+        # (1) variação sutil (sem acento) → coagida p/ canônico
+        _verba("INDENIZACAO ADICIONAL", "ESTABILIDADE GESTANTE"),
+        # (2) IA pôs o nome RENOMEADO no alvo; canônico está no nome_pjecalc
+        _verba("DANO MATERIAL — DESPESAS MÉDICAS", "INDENIZAÇÃO POR DANO MATERIAL"),
+        # (3) nada resolve → rebaixa p/ manual
+        _verba("VERBA INVENTADA XPTO", "PENALIDADE NORMATIVA CLÁUSULA 9",
+               sentenca="penalidade da norma coletiva"),
+        # (4) canônico exato → intocado
+        _verba("HORAS EXTRAS 50%", "HORAS EXTRAS 50%", estrategia="expresso_direto"),
+        # (5) manual não é tocado (mesmo com alvo estranho)
+        _verba("QUALQUER COISA", "VERBA MANUAL", estrategia="manual"),
+    ]}
+    N._norm_expresso_alvo_canonico(d)
+    vs = d["verbas_principais"]
+
+    assert vs[0]["expresso_alvo"].strip() == "INDENIZAÇÃO ADICIONAL", (
+        "REGRESSÃO #80-AR: variação do canônico deve ser coagida (acento)")
+    assert vs[0]["estrategia_preenchimento"] == "expresso_adaptado"
+
+    assert vs[1]["expresso_alvo"].strip() == "INDENIZAÇÃO POR DANO MATERIAL", (
+        "REGRESSÃO #80-AR: alvo com nome renomeado deve resolver via nome_pjecalc")
+
+    assert vs[2]["estrategia_preenchimento"] == "manual", (
+        "REGRESSÃO #80-AR: alvo irresolvível deve rebaixar p/ manual")
+
+    assert vs[3]["expresso_alvo"] == "HORAS EXTRAS 50%"
+    assert vs[4]["expresso_alvo"] == "QUALQUER COISA" and \
+        vs[4]["estrategia_preenchimento"] == "manual"
+
+    # registrado no pipeline (antes da prévia) + invariante no prompt
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_expresso_alvo_canonico(data)" in src.split("def normalize_v2_json")[1], (
+        "REGRESSÃO #80-AR: salvaguarda fora do normalize_v2_json")
+    prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "NOME CANÔNICO EXATO" in prompt, (
+        "REGRESSÃO #80-AR: invariante do expresso_alvo canônico removido do prompt")
+
+
 def test_inv83_desmarca_reflexos_extras_auto_gerados():
     """#80-AQ (RODRIGO 0000905-05, 03/07/2026): o PJE-Calc AUTO-GERA o reflexo
     "MULTA 477 SOBRE HE" (ativa o candidato) quando há verba principal MULTA 477
