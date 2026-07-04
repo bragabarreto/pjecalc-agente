@@ -10777,6 +10777,9 @@ class PlaywrightAutomatorV2:
         self.log(f"  [DIAG-liq] conv_id após dados_do_calculo: {self._calculo_conversation_id}")
 
         # ── 14b. Navegar para Liquidar via sidebar JSF ─────────────────────
+        # #80-AY: gate ANTES do 1º click — se o servidor ainda mastiga a op
+        # anterior, o click do Liquidar entra direto na contenção de lock.
+        self._aguardar_servidor_ocioso(contexto="pré-click Liquidar (#80-AY)")
         # Estratégia em cascata para localizar Liquidar
         nav_ok = self._page.evaluate(
             """() => {
@@ -10824,6 +10827,20 @@ class PlaywrightAutomatorV2:
         if not nav_ok:
             raise RuntimeError("Sidebar 'Liquidar' não localizado")
         self.log(f"  ✓ Navegação Liquidar via: {nav_ok}")
+        # #80-AY (0000544-51, 6 runs + java.log): o iniciar() do
+        # apresentadorLiquidacao é @Synchronized e, em cálculo PESADO (8 verbas
+        # + 11 reflexos), demora MINUTOS (Drools). O 1º click pega o lock e
+        # trabalha; cada RE-CLICK estoura LockTimeoutException (~1s) engolida
+        # no AJAX — página parada, sem mensagem, e os retries ALIMENTAVAM a
+        # contenção (mesmo padrão #80-G/V). Fix: clicar UMA vez e ESPERAR
+        # PACIENTEMENTE (poll até ~3min) a navegação acontecer, SEM re-click.
+        self.log("  ⏳ #80-AY aguardando iniciar() da Liquidação (lock @Synchronized, até 180s)...")
+        for _p in range(1, 19):  # 18 × 10s ≈ 180s
+            self._page.wait_for_timeout(10000)
+            if "liquidacao.jsf" in (self._page.url or ""):
+                break
+            if _p % 6 == 0:
+                self.log(f"  ⏳ #80-AY ainda aguardando Liquidação carregar ({_p*10}s)...")
         self._aguardar_ajax(15000)
         self._page.wait_for_timeout(2000)
 
@@ -10891,7 +10908,13 @@ class PlaywrightAutomatorV2:
                             pass
                         _diag_menu_logado = True
                     self._navegar_menu_via_click("li_operacoes_liquidar")
-                    self._page.wait_for_timeout(2000)
+                    # #80-AY: poll paciente pós-click (iniciar() @Synchronized
+                    # demora minutos em cálculo pesado) — re-click realimenta
+                    # a contenção de lock; esperar é a única jogada correta.
+                    for _p in range(1, 10):  # 9 × 10s ≈ 90s por tentativa
+                        self._page.wait_for_timeout(10000)
+                        if "liquidacao.jsf" in (self._page.url or ""):
+                            break
                     # #80-AX estratégias extras se o JS click não navegou:
                     # (D) onclick-exec via new Function (padrão do bot p/ links
                     #     A4J); (E) jsfcljs manual pelo id do <a> (POST completo).
