@@ -4756,24 +4756,42 @@ async def enviar_pjc_definitivo(
         raise HTTPException(status_code=400, detail="Arquivo enviado não é um .PJC (ZIP) válido")
 
     # Validar que o definitivo pertence ao MESMO processo (anti contaminação
-    # cruzada — mesma regra do vincular_pjc, task #14)
-    _tmp = _APRENDIZADO_PJC_DIR / f"{sessao_id}_definitivo_tmp.pjc"
-    _tmp.parent.mkdir(parents=True, exist_ok=True)
-    _tmp.write_bytes(dados)
-    try:
-        if not _cnj_pertence_ao_pjc(_tmp, numero):
-            raise HTTPException(
-                status_code=400,
-                detail=(
-                    f"O PJC enviado NÃO pertence ao processo {numero}. "
-                    "Confira se exportou o PJC definitivo do processo certo."
-                ),
-            )
-    finally:
+    # cruzada — mesma regra do vincular_pjc, task #14). ⚠ O CNJ pode NÃO
+    # existir no XML (PJCs reais do Cidadão 2.15.1 não têm <numeroDoProcesso>);
+    # ele vive no NOME do arquivo e no nome da ENTRY interna do ZIP
+    # (PROCESSO_<CNJ>_CALCULO_...). Checar as 3 fontes.
+    _cnj_limpo = "".join(c for c in numero if c.isdigit())
+    _pertence = bool(pjc.filename) and f"PROCESSO_{_cnj_limpo}" in pjc.filename.upper()
+    if not _pertence:
         try:
-            _tmp.unlink()
-        except OSError:
-            pass
+            import io as _io
+            import zipfile as _zf2
+            _pertence = any(
+                f"PROCESSO_{_cnj_limpo}" in n.upper()
+                for n in _zf2.ZipFile(_io.BytesIO(dados)).namelist()
+            )
+        except Exception:
+            _pertence = False
+    if not _pertence:
+        # Fallback: variante com <numeroDoProcesso> no XML (outras versões)
+        _tmp = _APRENDIZADO_PJC_DIR / f"PROCESSO_check_{sessao_id[:8]}.pjc"
+        _tmp.parent.mkdir(parents=True, exist_ok=True)
+        _tmp.write_bytes(dados)
+        try:
+            _pertence = _cnj_pertence_ao_pjc(_tmp, numero)
+        finally:
+            try:
+                _tmp.unlink()
+            except OSError:
+                pass
+    if not _pertence:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"O PJC enviado NÃO pertence ao processo {numero}. "
+                "Confira se exportou o PJC definitivo do processo certo."
+            ),
+        )
 
     from learning.pjc_diff import executar_diff_e_persistir, resumo_legivel
     try:
