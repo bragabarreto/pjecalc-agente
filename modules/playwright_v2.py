@@ -6927,16 +6927,27 @@ class PlaywrightAutomatorV2:
                 self._navegar_menu("li_calculo_verbas")
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1000)
-            celulas = self._page.evaluate(
-                "() => [...document.querySelectorAll('td')]"
-                ".map(td => (td.textContent||'').trim()).filter(t => t.length > 3)"
+            # #80-AT: a LINHA do candidato existe no painel Exibir mesmo com o
+            # checkbox DESMARCADO — casar só o texto dava falso "já presente" e
+            # o reflexo se perdia silenciosamente (Manual pulado + checkbox off).
+            # Coletar por TR: texto + estado do checkbox candidato (se houver).
+            linhas = self._page.evaluate(
+                """() => [...document.querySelectorAll('tr')].map(tr => {
+                    const cb = tr.querySelector('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]');
+                    return {txt: (tr.textContent||'').trim().slice(0, 300),
+                            temCb: !!cb, marcado: cb ? cb.checked : null};
+                }).filter(r => r.txt.length > 3)"""
             )
         except Exception as _e:
             self.log(f"    ⚠ #80-AO dedup leitura da listagem: {str(_e)[:100]}")
             return False
-        for c in (celulas or []):
-            cn = self._norm_desc_fidelidade(c)
-            if " SOBRE " in cn and r_toks <= self._tokens_fidelidade(c):
+        for row in (linhas or []):
+            cn = self._norm_desc_fidelidade(row.get("txt", ""))
+            if " SOBRE " not in cn or not (r_toks <= self._tokens_fidelidade(row.get("txt", ""))):
+                continue
+            # candidato com checkbox: só conta se MARCADO; linha sem checkbox
+            # é verba/reflexo REAL da listagem (Manual já criado) → conta.
+            if not row.get("temCb") or row.get("marcado"):
                 return True
         return False
 
@@ -7485,8 +7496,14 @@ class PlaywrightAutomatorV2:
                         if (cands.some(c => r.txt.includes(c))) return {cbId: r.cb.id, labels};
                     }
                     // (2) subconjunto de tokens (melhor-fit)
+                    // #80-AT: ordinal-insensível — '13º' tokeniza como '13' (º não é
+                    // [A-Z0-9]) mas a IA emite '13o'/'13O' (letra) que virava token
+                    // '13O' ≠ '13' → miss só no 13º. Normalizar dígitos+O/A → dígitos.
                     const stop = new Set(['SOBRE','DE','DA','DO','E','A','O','AO','NA','NO','COM']);
-                    const toks = s => new Set(s.split(/[^A-Z0-9%\\/]+/).filter(t => t && t.length > 1 && !stop.has(t)));
+                    const toks = s => new Set(
+                        s.split(/[^A-Z0-9%\\/]+/)
+                         .map(t => t.replace(/^(\\d+)[OA]$/, '$1'))
+                         .filter(t => t && t.length > 1 && !stop.has(t)));
                     let best = null, bestExtra = 1e9;
                     for (const c of cands) {
                         const ct = toks(c);

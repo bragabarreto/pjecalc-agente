@@ -1246,6 +1246,10 @@ def test_inv33_match_reflexo_tolerante_ao_rename_da_verba():
     # #80-AL: e deve logar os rótulos disponíveis quando nada casa (ground truth)
     assert "#80-AL checkboxes de reflexo disponíveis" in sec, (
         "REGRESSÃO #80-AL: dump diagnóstico dos checkboxes do painel é obrigatório")
+    # #80-AT: ordinal-insensível — '13o' (IA) deve casar '13º' (painel): o
+    # tokenizer JS normaliza dígitos+O/A p/ dígitos ('13O'→'13'; '13º'→'13')
+    assert r"replace(/^(\\d+)[OA]$/" in sec, (
+        "REGRESSÃO #80-AT: tokenizer do matcher deve normalizar ordinais (13o≡13º)")
 
 
 def test_inv34_saldo_informado_quando_fixado_deducao_ou_por_fora():
@@ -2776,6 +2780,11 @@ def test_inv81_painel_vazio_reancora_e_dedup_manual():
     dd = src.split("def _reflexo_ja_na_listagem(")[1].split("\n    def ")[0]
     assert "_tokens_fidelidade" in dd and "SOBRE" in dd, (
         "REGRESSÃO #80-AO: dedup usa match por tokens e só considera linhas de reflexo")
+    # #80-AT: a linha do candidato existe mesmo DESMARCADA — o dedup só pode
+    # dar "já presente" se o checkbox estiver MARCADO (ou linha sem checkbox =
+    # verba real). Senão o Manual é pulado e o reflexo se perde silenciosamente.
+    assert "marcado" in dd and "temCb" in dd, (
+        "REGRESSÃO #80-AT: dedup deve exigir checkbox MARCADO p/ linha de candidato")
 
 
 def test_inv82_limpar_verbas_inicio_limpo():
