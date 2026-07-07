@@ -315,11 +315,40 @@ async def processar_v2(payload: dict):
 
 
 @router_v2.get("/instrucoes/v2/{sessao_id}", response_class=HTMLResponse)
-async def instrucoes_v2(sessao_id: str, request: Request):
+async def instrucoes_v2(sessao_id: str, request: Request, rerun: bool = False):
     """Página que acompanha a automação v2 via SSE.
 
     Conecta-se a /api/executar/v2/{sessao_id} e exibe os logs em tempo real.
+
+    #80-BB: se o PJC já existe, o botão de download é renderizado
+    SERVER-SIDE (antes, só nascia do evento SSE ao vivo — quem voltava à
+    página depois não via botão nenhum) e o EventSource conecta sem rerun
+    (o endpoint devolve o link e encerra, sem re-executar). Re-execução
+    real só pelo botão ▶ Re-executar (?rerun=1).
     """
+    # Estado do cálculo (server-side) — botão de download imediato se já há PJC
+    _download_html = ""
+    _tem_pjc = False
+    try:
+        from database import SessionLocal as _SL
+        from database import RepositorioCalculo as _RC
+        from pathlib import Path as _P
+        _db = _SL()
+        try:
+            _calc = _RC(_db).buscar_sessao(sessao_id)
+            if _calc and _calc.arquivo_pjc and _P(_calc.arquivo_pjc).exists():
+                _tem_pjc = True
+                _download_html = (
+                    f'<a class="download-pjc" href="/download/{sessao_id}/pjc">'
+                    f'⬇ Baixar .PJC</a> '
+                    f'<span style="color:#6c757d;font-size:0.85rem;">'
+                    f'({_P(_calc.arquivo_pjc).name})</span>'
+                )
+        finally:
+            _db.close()
+    except Exception:
+        pass
+    _rerun_qs = "?rerun=1" if rerun else ""
     html = f"""<!doctype html>
 <html lang="pt-BR"><head>
 <meta charset="utf-8"><title>Automação v2 — {sessao_id[:8]}</title>
@@ -343,9 +372,10 @@ button {{ padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }}
 <p>Sessão: <code>{sessao_id}</code> · <a href="/previa/v2/{sessao_id}">← voltar à prévia</a></p>
 <div id="painel-area"></div>
 <div id="logs"></div>
-<div id="download-area"></div>
+<div id="download-area">{_download_html}</div>
 <p style="margin-top:1rem;">
   <button onclick="window.location.reload()">↻ Reconectar</button>
+  <button onclick="if(confirm('Re-executar a automação DO ZERO? O cálculo será refeito (~25 min).')) window.location='/instrucoes/v2/{sessao_id}?rerun=1'">▶ Re-executar</button>
   <button onclick="fetch('/api/parar/{sessao_id}', {{method:'POST'}}).then(r=>r.json()).then(d=>alert(d.msg))">⏹ Parar</button>
   <a href="/api/erros-mapping/{sessao_id}" target="_blank"><button type="button">📋 Erros de mapping</button></a>
 </p>
@@ -353,7 +383,7 @@ button {{ padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }}
 const logs = document.getElementById('logs');
 const status = document.getElementById('status');
 const downloadArea = document.getElementById('download-area');
-const es = new EventSource('/api/executar/v2/{sessao_id}');
+const es = new EventSource('/api/executar/v2/{sessao_id}{_rerun_qs}');
 es.onmessage = (e) => {{
   let txt = e.data;
   try {{ const j = JSON.parse(txt); txt = j.msg || txt; }} catch(_) {{}}

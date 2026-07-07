@@ -4160,11 +4160,17 @@ async def executar_automacao_sse(
 
 
 @app.get("/api/executar/v2/{sessao_id}")
-async def executar_automacao_v2_sse(sessao_id: str, request: Request):
+async def executar_automacao_v2_sse(sessao_id: str, request: Request, rerun: bool = False):
     """SSE que executa PlaywrightAutomatorV2 e transmite logs linha-a-linha.
 
     Usa o mesmo padrão (`_AutomacaoRunner`) do v1, mas o generator vem do
     schema v2 (modules.webapp_v2.executar_v2_como_generator).
+
+    #80-BB: `rerun=false` (default) — se o PJC desta sessão JÁ FOI exportado e
+    o arquivo existe, NÃO re-executa: devolve o link de download e encerra.
+    A página /instrucoes/v2 conecta o EventSource automaticamente ao abrir —
+    sem este guard, cada visita à página (p/ baixar o PJC!) disparava uma
+    re-execução completa de ~25min. Re-execução real exige `?rerun=1`.
     """
     from starlette.responses import StreamingResponse as _SR_v2
     from modules.webapp_v2 import executar_v2_como_generator
@@ -4185,6 +4191,22 @@ async def executar_automacao_v2_sse(sessao_id: str, request: Request):
                 async for chunk in _sse_follow_runner(existing, sessao_id):
                     yield chunk
             return
+
+        # #80-BB: PJC já exportado (pós-restart o runner some da memória, mas o
+        # DB sabe) → devolver o link SEM re-executar, salvo rerun explícito.
+        if not rerun:
+            _dbg = SessionLocal()
+            try:
+                _calc = RepositorioCalculo(_dbg).buscar_sessao(sessao_id)
+                if (_calc and _calc.arquivo_pjc and Path(_calc.arquivo_pjc).exists()):
+                    yield f"data: {json.dumps({'msg': '✓ PJC desta sessão JÁ FOI gerado — nada a executar.'})}\n\n"
+                    yield f"data: {json.dumps({'msg': f'✓ Arquivo: {Path(_calc.arquivo_pjc).name}'})}\n\n"
+                    yield f"data: {json.dumps({'msg': 'ℹ Para re-executar a automação do zero, use o botão ▶ Re-executar (ou ?rerun=1).'})}\n\n"
+                    yield f"data: DOWNLOAD_LINK_CALC:/download/{sessao_id}/pjc\n\n"
+                    yield f"data: {json.dumps({'msg': '[FIM DA EXECUÇÃO]'})}\n\n"
+                    return
+            finally:
+                _dbg.close()
 
         # Nenhum runner existente — iniciar nova automação
         try:
