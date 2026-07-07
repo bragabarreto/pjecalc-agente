@@ -154,20 +154,25 @@ class _AutomacaoRunner:
         _db = SessionLocal()
         try:
             _calc = RepositorioCalculo(_db).buscar_sessao(sid)
-            if _calc and _calc.status == "em_automacao":
+            if _calc:
                 # Extrair caminho do .PJC se foi gerado (última ocorrência vence)
                 _pjc_path: str | None = None
                 for _m in self.logs:
                     if _m.startswith("PJC_GERADO:"):
                         _pjc_path = _m.split(":", 1)[1].strip()
-                _has_error = any("ERRO" in m.upper() for m in self.logs[-5:])
                 if _pjc_path:
-                    # Fix: grava status E arquivo_pjc atomicamente via marcar_exportado.
-                    # Antes, _cleanup só setava status — se SSE desconectasse antes do
-                    # handler inline processar PJC_GERADO (webapp.py:1666), o campo
-                    # arquivo_pjc ficava NULL e o endpoint /download/{sid}/pjc → 404.
+                    # #80-BA (0000200-70, 07/07/2026): vincular SEMPRE que houve
+                    # PJC — INDEPENDENTE do status anterior. A condição antiga
+                    # (`status == "em_automacao"`) pulava sessões v2 (status
+                    # 'confirmado' durante o run) → arquivo_pjc ficava NULL e o
+                    # botão de download NUNCA aparecia, a menos que o usuário
+                    # estivesse com o SSE aberto no instante exato do
+                    # PJC_GERADO (handler inline). O _cleanup é o fim
+                    # AUTORITATIVO do run — o vínculo não pode depender do
+                    # navegador do usuário. marcar_exportado é idempotente.
                     RepositorioCalculo(_db).marcar_exportado(sid, _pjc_path)
-                else:
+                elif _calc.status == "em_automacao":
+                    _has_error = any("ERRO" in m.upper() for m in self.logs[-5:])
                     _calc.status = "erro_automacao" if _has_error else "concluido"
                     _db.commit()
         except Exception as _exc:
