@@ -2953,3 +2953,30 @@ def test_inv83_desmarca_reflexos_extras_auto_gerados():
         "REGRESSÃO #80-AQ: desmarca via uncheck o checkbox de reflexo ativo")
     assert "checked" in dm and ("re-ativado" in dm or "Drools" in dm), (
         "REGRESSÃO #80-AQ: verifica que desmarcou (detecta re-ativação por Drools)")
+
+
+def test_inv86_nomes_sem_caracteres_fora_iso8859():
+    """#80-BD (0000200-70, PJC definitivo): o PJE-Calc grava em ISO-8859-1 —
+    travessão '—' vira '¿' no banco/PJC ('DIFERENÇA SALARIAL ¿ SALÁRIO PAGO
+    POR FORA') e o calculista teve de RECRIAR verbas só p/ corrigir nomes.
+    Normalizer saneia ANTES da prévia; acentos (Ç/Á/º) são preservados."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+    d = {
+        "verbas_principais": [{
+            "nome_pjecalc": "DIFERENÇA SALARIAL — SALÁRIO PAGO POR FORA",
+            "reflexos": [{"nome": "13º sobre Diferença — por fora"}],
+        }],
+        "historico_salarial": [{"nome": "SALÁRIO “REAL”"}],
+    }
+    N._norm_nomes_iso8859(d)
+    v = d["verbas_principais"][0]
+    assert v["nome_pjecalc"] == "DIFERENÇA SALARIAL - SALÁRIO PAGO POR FORA", (
+        "REGRESSÃO #80-BD: travessão deve virar hífen (ISO-8859-1)")
+    assert "—" not in v["reflexos"][0]["nome"]
+    assert d["historico_salarial"][0]["nome"] == 'SALÁRIO "REAL"'
+    # acentos/ordinal preservados (existem em ISO-8859-1)
+    assert "DIFERENÇA" in v["nome_pjecalc"] and "13º" in v["reflexos"][0]["nome"]
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_nomes_iso8859(data)" in src.split("def normalize_v2_json")[1], (
+        "REGRESSÃO #80-BD: saneamento fora do pipeline normalize_v2_json")

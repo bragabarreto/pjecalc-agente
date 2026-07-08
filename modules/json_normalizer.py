@@ -1315,6 +1315,50 @@ def _norm_expresso_alvo_canonico(data: dict[str, Any]) -> None:
             )
 
 
+def _norm_nomes_iso8859(data: dict[str, Any]) -> None:
+    """#80-BD — nomes de verbas/reflexos/históricos SEM caracteres fora do
+    ISO-8859-1 (0000200-70, PJC definitivo): o PJE-Calc grava em ISO-8859-1;
+    o travessão '—' (e '–', aspas curvas, '…') vira '¿' no banco/PJC —
+    'DIFERENÇA SALARIAL — SALÁRIO PAGO POR FORA' saiu como '...¿ SALÁRIO...'
+    e o calculista teve de RECRIAR 3 verbas manualmente só p/ corrigir nomes.
+    Sanear ANTES da prévia (fidelidade): o usuário vê o nome que será gravado."""
+    _MAPA = {"—": "-", "–": "-", "‘": "'", "’": "'",
+             "“": '"', "”": '"', "…": "...", " ": " "}
+
+    def _sanear(s):
+        if not isinstance(s, str):
+            return s
+        for k, v in _MAPA.items():
+            s = s.replace(k, v)
+        # qualquer resíduo não-representável em ISO-8859-1 → '-'
+        return s.encode("iso-8859-1", "replace").decode("iso-8859-1").replace("?", "-") \
+            if s != s.encode("iso-8859-1", "ignore").decode("iso-8859-1") else s
+
+    import re as _re
+    def _limpar(s):
+        s2 = _sanear(s)
+        return _re.sub(r"\s+", " ", s2).strip() if isinstance(s2, str) else s2
+
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        for campo in ("nome_pjecalc",):
+            if v.get(campo):
+                novo = _limpar(v[campo])
+                if novo != v[campo]:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        "Normalizer #80-BD: nome '%s' → '%s' (ISO-8859-1)",
+                        v[campo], novo)
+                    v[campo] = novo
+        for r in v.get("reflexos") or []:
+            if isinstance(r, dict) and r.get("nome"):
+                r["nome"] = _limpar(r["nome"])
+    for h in data.get("historico_salarial") or []:
+        if isinstance(h, dict) and h.get("nome"):
+            h["nome"] = _limpar(h["nome"])
+
+
 def _norm_integridade_historicos(data: dict[str, Any]) -> None:
     """#80-AZ — INTEGRIDADE REFERENCIAL das bases de histórico das verbas.
 
@@ -1490,6 +1534,11 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # Salvaguarda: detectar cálculo que CRUZA 30/08/2024 (Lei 14.905) e
     # corrigir config se IA emitiu Caso A indevidamente (deveria ser Caso B).
     _norm_correcao_caso_a_vs_b(data)
+
+    # Salvaguarda #80-BD: nomes de verbas/reflexos/históricos sem caracteres
+    # fora do ISO-8859-1 (travessão '—' vira '¿' no PJE-Calc). ANTES do #80-AZ
+    # (integridade referencial compara nomes já saneados).
+    _norm_nomes_iso8859(data)
 
     # Salvaguarda #80-AZ: referências de histórico das verbas (base_calculo/
     # valor_pago) DEVEM apontar p/ históricos EXISTENTES — referência solta
