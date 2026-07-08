@@ -216,6 +216,14 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+
+def get_settings() -> Settings:
+    """Acessor do singleton — vários call sites (LLMOrchestrator em webapp/
+    learning) importam `get_settings`; sem este alias o import falhava
+    SILENCIOSAMENTE (try/except) e a análise LLM nunca rodava (#80-BC —
+    FATIA 2 do PJC definitivo morta no 0000200-70 por isso)."""
+    return settings
+
 # ── Re-exportações como constantes de módulo (backward compatibility) ─────────
 # Permite: from config import ANTHROPIC_API_KEY  (sem mudança em código existente)
 

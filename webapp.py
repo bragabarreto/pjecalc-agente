@@ -549,6 +549,17 @@ async def exibir_previa_web(
     if v == 3:
         return RedirectResponse(url=f"/previa_v3/{sessao_id}", status_code=303)
 
+    # #80-BC: sessão V2 → redirecionar p/ a prévia v2. O shape do JSON v2
+    # quebra o renderer v1 (AttributeError: 'str' object has no attribute
+    # 'get' em ferias) → 500 e o usuário "não consegue acessar a prévia
+    # após a automação" (0000200-70, 07/07/2026).
+    try:
+        from modules.webapp_v2 import _load_previa as _lp_v2
+        if _lp_v2(sessao_id):
+            return RedirectResponse(url=f"/previa/v2/{sessao_id}", status_code=307)
+    except Exception:
+        pass
+
     repo = RepositorioCalculo(db)
     calculo = repo.buscar_sessao(sessao_id)
 
