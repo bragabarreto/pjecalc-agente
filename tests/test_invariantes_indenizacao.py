@@ -3047,3 +3047,20 @@ def test_inv89_previa_nao_bloqueia_deducao_com_valor_pago():
     # Backend continua com a exceção #80-AD (fonte espelhada)
     sch = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
     assert "_eh_deducao" in sch, "REGRESSÃO #80-AD: exceção de dedução sumiu do schema"
+
+
+def test_inv90_selecionar_fallback_normalizado():
+    """#80-BH (0000556-65, 13/07/2026): a prévia traz nomes ASCII ("ULTIMA
+    REMUNERACAO") mas o PJE-Calc lista o histórico default ACENTUADO ("ÚLTIMA
+    REMUNERAÇÃO"). O _selecionar só tentava value/label EXATOS → base da verba
+    nunca selecionada → liquidação bloqueada com "Falta selecionar pelo menos
+    um Histórico Salarial" (2 pendências na ANNA KAROLINE). Invariante:
+    fallback de match normalizado (NFD sem diacríticos, caixa, espaços) com
+    seleção APENAS quando o match é único."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    corpo = src.split("def _selecionar(")[1].split("def _setar_text_se_diferente")[0]
+    assert "#80-BH" in corpo and "normalize('NFD')" in corpo, (
+        "REGRESSÃO #80-BH: _selecionar sem fallback normalizado — "
+        "'ULTIMA REMUNERACAO' × 'ÚLTIMA REMUNERAÇÃO' volta a falhar")
+    assert "m.length === 1" in corpo, (
+        "REGRESSÃO #80-BH: fallback deve exigir match ÚNICO (ambiguidade não seleciona)")

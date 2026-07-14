@@ -717,6 +717,39 @@ class PlaywrightAutomatorV2:
             try:
                 loc.first.select_option(label=valor)
             except Exception as e:
+                # #80-BH (0000556-65, 13/07/2026) — match NORMALIZADO (sem
+                # acento/caixa/espaços duplicados). A prévia traz nomes ASCII
+                # ("ULTIMA REMUNERACAO") mas o PJE-Calc lista o histórico
+                # default ACENTUADO ("ÚLTIMA REMUNERAÇÃO") — o match exato
+                # falhava, a base da verba nunca era selecionada e a
+                # liquidação bloqueava com "Falta selecionar pelo menos um
+                # Histórico Salarial". Só seleciona se o match for ÚNICO.
+                try:
+                    alvo_val = self._page.evaluate(
+                        """(args) => {
+                            const [suf, alvo] = args;
+                            const norm = s => (s||'').normalize('NFD')
+                                .replace(/[\\u0300-\\u036f]/g,'')
+                                .replace(/\\s+/g,' ').trim().toUpperCase();
+                            const sel = [...document.querySelectorAll('select')]
+                                .find(s => (s.id||'').endsWith(suf));
+                            if (!sel) return null;
+                            const m = [...sel.options].filter(o =>
+                                norm(o.label || o.textContent) === norm(alvo) ||
+                                norm(o.value) === norm(alvo));
+                            return m.length === 1 ? m[0].value : null;
+                        }""",
+                        [dom_id, valor],
+                    )
+                except Exception:
+                    alvo_val = None
+                if alvo_val is not None:
+                    try:
+                        loc.first.select_option(value=alvo_val)
+                        self.log(f"  ✓ select {dom_id} = {valor} (#80-BH match normalizado → value={alvo_val!r})")
+                        return
+                    except Exception as e2:
+                        e = e2
                 self.log(f"  ⚠ select {dom_id}={valor}: {e} — pulando")
                 return
         self.log(f"  ✓ select {dom_id} = {valor}")
