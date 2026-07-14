@@ -3064,3 +3064,31 @@ def test_inv90_selecionar_fallback_normalizado():
         "'ULTIMA REMUNERACAO' × 'ÚLTIMA REMUNERAÇÃO' volta a falhar")
     assert "m.length === 1" in corpo, (
         "REGRESSÃO #80-BH: fallback deve exigir match ÚNICO (ambiguidade não seleciona)")
+
+
+def test_inv91_diff_pjc_cobre_fgts_cartao_e_filtra_derivados():
+    """#80-BI (14/07/2026): _SECOES_GLOBAIS usava nomes de tag INEXISTENTES
+    ("juros", "imposto", "contribuicao", "atualizacaoMonetaria") e omitia
+    fgts/inss/irpf/cartão — edições manuais nessas seções NÃO entravam no
+    aprendizado do PJC definitivo (auditado contra 2 PJCs reais). Invariantes:
+    (a) seções reais cobertas — fgts, inss, irpf, parametrosDeAtualizacao e
+    apuracoesCartaoDePonto (a DEFINIÇÃO do cartão; cartoesDePonto são as
+    colunas APURADAS = resultado, fora); (b) derivados recomputados pela
+    liquidação (taxas/índices acumulados, valorCorrigido*) são ruído."""
+    import importlib
+    D = importlib.import_module("learning.pjc_diff")
+    sec = set(D._SECOES_GLOBAIS)
+    for s in ("fgts", "inss", "irpf", "parametrosDeAtualizacao",
+              "apuracoesCartaoDePonto", "honorarios", "custasJudiciais",
+              "seguroDesemprego"):
+        assert s in sec, f"REGRESSÃO #80-BI: seção real '{s}' fora do diff de aprendizado"
+    for s in ("juros", "imposto", "contribuicao", "atualizacaoMonetaria"):
+        assert s not in sec, f"REGRESSÃO #80-BI: '{s}' não é tag real do PJC (nome fantasma)"
+    assert "cartoesDePonto" not in sec and "apuracoesDeJuros" not in sec, (
+        "REGRESSÃO #80-BI: resultado recomputado (colunas apuradas / apurações de juros) não é parâmetro")
+    ruido = D._TAGS_RUIDO
+    for t in ("taxaDeJuros", "indiceAcumulado", "valorCorrigido",
+              "informacaoUltimoIndice", "ocorrenciasJornadaApuracaoCartao"):
+        assert t in ruido, f"REGRESSÃO #80-BI: derivado '{t}' fora do ruído — diff vira lixo a cada re-liquidação"
+    # 'ativo' e 'valorInformado' continuam FORA do ruído (parâmetros do usuário)
+    assert "ativo" not in ruido and "valorInformado" not in ruido

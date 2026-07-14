@@ -58,14 +58,46 @@ _TAGS_RUIDO = {
     "valorBaseCustasCalculadas", "valorConhecimentoDoReclamado",
     "valorConhecimentoDoReclamante", "baseHonorario",
     "valorApurado", "valorDevidoTotal", "valorTotal", "totalGeral",
+    # #80-BI: derivados recomputados pela liquidação (índices/taxas acumulados
+    # até a data — mudam a cada re-liquidação sem NENHUMA edição do usuário).
+    # O PARÂMETRO do usuário é o tipo/percentual/combinação, nunca o acumulado.
+    "taxaDeJuros", "taxaDeJurosParaDataDemissao",
+    "indiceMulta", "indiceAcumulado", "indiceAcumuladoDaMulta",
+    "indiceCorrecaoCustasFixas", "informacaoUltimoIndice",
+    "valorCorrigido", "valorCorrigidoParaIrpfDecimoTerceiro",
+    "valorCorrigidoParaIrpfDemaisVerbas", "valorVerbaParaContribuicaoSocial",
+    # #80-BI: backref da entidade ao cálculo e grade DIÁRIA da jornada
+    # (centenas de linhas recomputadas — análogo a <ocorrencias>)
+    "calculo", "ocorrenciasJornadaApuracaoCartao",
 }
 
 # Sufixos de caminho DERIVADOS (recomputados a partir de percentual × base)
 _SUFIXOS_DERIVADOS = ("Honorario.valor",)
 
-# Seções globais (fora de verbas) cujo subtree de parâmetros interessa
-_SECOES_GLOBAIS = ("juros", "honorarios", "custasJudiciais", "multas",
-                   "imposto", "contribuicao", "atualizacaoMonetaria")
+# Seções globais (fora de verbas) cujo subtree de parâmetros interessa.
+# ⚠ #80-BI (14/07/2026) — NOMES REAIS das tags XStream (auditados contra 2
+# PJCs reais do Cidadão 2.15.1). A lista anterior usava nomes INEXISTENTES
+# ("juros", "imposto", "contribuicao", "atualizacaoMonetaria") e OMITIA
+# fgts/inss/irpf/cartoesDePonto/seguroDesemprego — edições manuais nessas
+# seções NÃO entravam no aprendizado do PJC definitivo.
+# NÃO incluir apuracoesCartaoDePonto / apuracoesDiariasCartaoDePonto /
+# historicosValidacao* — são RESULTADO recomputado (análogo a <ocorrencias>).
+# ⚠ CARTÃO DE PONTO: a DEFINIÇÃO (params que o usuário edita — forma de
+# apuração, jornadas, intervalos, noturno, escala, tolerâncias) vive em
+# `apuracoesCartaoDePonto`; `cartoesDePonto` são as COLUNAS APURADAS
+# (Hs EXT/Intrajornada/Trabalhadas — resultado, não diffar). `apuracoesDeJuros`
+# também é resultado (valores corrigidos por verba) — fora.
+_SECOES_GLOBAIS = (
+    "fgts", "inss", "irpf",
+    "multas", "honorarios", "custasJudiciais",
+    "parametrosDeAtualizacao",
+    "apuracoesCartaoDePonto",
+    "excecoesDoFechamentoDeCartaoDePonto", "excecoesDaCargaHoraria",
+    "excecoesDoSabado",
+    "seguroDesemprego", "pensaoAlimenticia", "previdenciaPrivada",
+    "listaDeFerias", "faltas", "pagamentos",
+    "salarioFamilia", "pontosFacultativos",
+)
 
 
 def _norm_nome(s: str) -> str:
