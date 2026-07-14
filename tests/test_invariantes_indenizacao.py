@@ -3092,3 +3092,32 @@ def test_inv91_diff_pjc_cobre_fgts_cartao_e_filtra_derivados():
         assert t in ruido, f"REGRESSÃO #80-BI: derivado '{t}' fora do ruído — diff vira lixo a cada re-liquidação"
     # 'ativo' e 'valorInformado' continuam FORA do ruído (parâmetros do usuário)
     assert "ativo" not in ruido and "valorInformado" not in ruido
+
+
+def test_inv92_diff_pjc_discrimina_itens_de_colecao():
+    """#80-BJ (0000054-29, 14/07/2026): itens de coleção (<Set> com N
+    <Honorario>) COLAPSAVAM no mesmo caminho aplainado — honorário pericial
+    ADICIONADO ao lado da sucumbência saía no diff como MUTAÇÃO da sucumbência
+    e o aprendizado não via a adição (queixa do usuário). Invariantes: itens
+    de coleção keyed por discriminador natural (descricao/nome/credor/...) e
+    o filtro de derivados ignora os '[...]' do caminho."""
+    import xml.etree.ElementTree as ET
+    import importlib
+    D = importlib.import_module("learning.pjc_diff")
+    el = ET.fromstring(
+        "<Set>"
+        "<Honorario><descricao>HONORÁRIOS DE SUCUMBÊNCIA</descricao>"
+        "<aliquota>9</aliquota><valor>2984.73</valor></Honorario>"
+        "<Honorario><descricao>HONORÁRIOS PERICIAIS - ENGENHEIRO</descricao>"
+        "<tipoHonorario>PERICIAIS_ENGENHEIRO</tipoHonorario></Honorario>"
+        "</Set>"
+    )
+    flat = D._flatten(el)
+    assert "Honorario[HONORÁRIOS DE SUCUMBÊNCIA].aliquota" in flat, (
+        "REGRESSÃO #80-BJ: itens de Set voltaram a colapsar no mesmo caminho")
+    assert "Honorario[HONORÁRIOS PERICIAIS - ENGENHEIRO].tipoHonorario" in flat, (
+        "REGRESSÃO #80-BJ: 2º item da coleção perdido (último-vence)")
+    # Derivado Honorario.valor continua filtrado MESMO com discriminador
+    assert not any(k.endswith(".valor") for k in flat), (
+        "REGRESSÃO #80-BJ: filtro de derivados não ignora '[...]' — "
+        "valor recomputado da alíquota vira ruído a cada re-liquidação")

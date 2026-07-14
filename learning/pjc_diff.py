@@ -127,15 +127,51 @@ def _eh_definicao_entidade(el: ET.Element) -> bool:
     return bool(nome.strip()) and len(list(el)) > 4
 
 
+# #80-BJ: containers de coleção do XStream e campos que identificam cada item
+_TAGS_COLECAO = {"Set", "List", "Map"}
+_CAMPOS_DISCRIMINADORES = ("descricao", "nome", "nomeCredor",
+                           "tipoDeOperacaoDoFgts", "competencia",
+                           "sequencial", "data")
+
+
+def _disc_item(ch: ET.Element, idx: int) -> str:
+    """#80-BJ: chave natural de um item de coleção (descricao/nome/credor/…),
+    fallback = posição entre irmãos da mesma tag."""
+    for c in _CAMPOS_DISCRIMINADORES:
+        v = (ch.findtext(c) or "").strip()
+        if v and v.lower() != "null":
+            return _norm_nome(v)[:48]
+    return str(idx)
+
+
 def _flatten(el: ET.Element, prefixo: str = "") -> dict[str, str]:
     """Aplaina um subtree em {caminho: valor}, pulando ruído, substituindo
-    definições ANINHADAS de entidade por 'ref:<nome>' (não duplica árvores)."""
+    definições ANINHADAS de entidade por 'ref:<nome>' (não duplica árvores).
+
+    #80-BJ (0000054-29, 14/07/2026): itens de coleção (`<Set>` com N
+    `<Honorario>`, operações de FGTS…) COLAPSAVAM no mesmo caminho aplainado —
+    o último vencia. Honorário pericial ADICIONADO ao lado da sucumbência saía
+    no diff como MUTAÇÃO da sucumbência ("descricao: SUCUMBÊNCIA → PERICIAIS",
+    "aliquota: 9 → null") e o aprendizado não via a adição. Agora cada item de
+    coleção é keyed por discriminador natural: `Set.Honorario[HONORÁRIOS
+    PERICIAIS - ENGENHEIRO].aliquota`."""
     out: dict[str, str] = {}
+    eh_colecao = el.tag in _TAGS_COLECAO
+    idx_por_tag: dict[str, int] = {}
     for ch in el:
         if ch.tag in _TAGS_RUIDO:
             continue
-        caminho = f"{prefixo}.{ch.tag}" if prefixo else ch.tag
-        if any(caminho.endswith(s) for s in _SUFIXOS_DERIVADOS):
+        idx = idx_por_tag.get(ch.tag, 0)
+        idx_por_tag[ch.tag] = idx + 1
+        tag_path = ch.tag
+        if eh_colecao and len(list(ch)) > 0:
+            tag_path = f"{ch.tag}[{_disc_item(ch, idx)}]"
+        caminho = f"{prefixo}.{tag_path}" if prefixo else tag_path
+        # #80-BJ: comparar sufixos derivados IGNORANDO os discriminadores
+        # "[...]" — senão `Set.Honorario[X].valor` escapa do filtro e o valor
+        # recomputado da alíquota vira ruído a cada re-liquidação.
+        caminho_base = re.sub(r"\[[^\]]*\]", "", caminho)
+        if any(caminho_base.endswith(s) for s in _SUFIXOS_DERIVADOS):
             continue
         if _eh_definicao_entidade(ch):
             out[caminho] = f"ref:{_norm_nome(ch.findtext('nome') or '')}"
