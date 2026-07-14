@@ -81,7 +81,12 @@ Diretrizes:
   (generalizavel=false nesses casos, ou omita se irrelevante).
 - A condição deve citar SINAIS OBSERVÁVEIS na sentença/contexto — nunca
   "sempre" sem qualificação, exceto para constantes legais.
-- Uma regra por correção raiz; não desdobre a mesma causa em várias regras."""
+- Uma regra por correção raiz; não desdobre a mesma causa em várias regras.
+- COMENTÁRIOS/OBSERVAÇÕES removidos ou esvaziados no PJC definitivo NÃO são
+  correções: o calculista USA os comentários gerados como checklist de revisão
+  e os apaga verba a verba conforme revisa. NUNCA gere regra para suprimir,
+  reduzir ou deixar de emitir comentários (campos comentario/observacao/
+  comentarios_jg e afins) — a automação deve continuar gerando-os."""
 
 
 # ── FATIA 2 — análise LLM do diff ────────────────────────────────────────────
