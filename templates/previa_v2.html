@@ -2564,8 +2564,14 @@ async function validarPrevia() {
     if (!p.valor) {
       erros.push(`Verba ${idx+1} (${nome}): campo "Valor" não definido — escolher INFORMADO ou CALCULADO`);
     }
-    if (p.valor === 'INFORMADO' && (!p.valor_devido?.valor_informado_brl || p.valor_devido.valor_informado_brl <= 0)) {
-      erros.push(`Verba ${idx+1} (${nome}): valor informado ausente ou zero (use a mensalização: valor diário × 22 dias úteis)`);
+    // #80-BG: EXCEÇÃO DEDUÇÃO (espelha o #80-AD do schema/normalizer) — verba
+    // de dedução (VALOR PAGO / DEVOLUÇÃO DE DESCONTOS) tem valor_devido=0 DE
+    // PROPÓSITO: o valor a abater vive em valor_pago.valor_brl. Sem esta
+    // exceção o botão Confirmar ficava bloqueado e o usuário era forçado a
+    // pôr 0,01 no Devido só para conseguir iniciar a automação.
+    const ehDeducao = (p.valor_pago?.valor_brl || 0) > 0;
+    if (p.valor === 'INFORMADO' && !ehDeducao && (!p.valor_devido?.valor_informado_brl || p.valor_devido.valor_informado_brl <= 0)) {
+      erros.push(`Verba ${idx+1} (${nome}): valor informado ausente ou zero (use a mensalização: valor diário × 22 dias úteis; em verba de DEDUÇÃO, preencha o Valor Pago)`);
     }
     if (p.valor === 'CALCULADO') {
       if (!p.formula_calculado) {

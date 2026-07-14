@@ -3027,3 +3027,23 @@ def test_inv88_cartao_nao_salvo_nao_apura():
     assert "return bool(sucesso)" in fill
     assert "_apurar_cartao_de_ponto" not in fill, (
         "REGRESSÃO #80-BF: apuração voltou para dentro do fill/save (executaria mesmo sem save)")
+
+
+def test_inv89_previa_nao_bloqueia_deducao_com_valor_pago():
+    """#80-BG (sessão 88a993da, 13/07/2026): verba de DEDUÇÃO (VALOR PAGO /
+    DEVOLUÇÃO) tem valor_devido=0 de propósito — o valor a abater vive em
+    valor_pago.valor_brl (#80-AD já isenta no schema E no normalizer). Mas o
+    validarPrevia() do template não conhecia a exceção: acusava "valor
+    informado ausente ou zero" e DESABILITAVA o Confirmar — o usuário era
+    forçado a pôr 0,01 no Devido e corrigir o PJC depois. O JS deve espelhar
+    a mesma exceção do backend."""
+    tpl = (REPO_ROOT / "templates" / "previa_v2.html").read_text(encoding="utf-8")
+    corpo = tpl.split("async function validarPrevia")[1].split("async function confirmarPreviaV2")[0]
+    assert "ehDeducao" in corpo and "valor_pago?.valor_brl" in corpo, (
+        "REGRESSÃO #80-BG: validarPrevia sem a exceção de dedução — "
+        "verba VALOR PAGO com devido=0 volta a bloquear o Confirmar")
+    assert "!ehDeducao" in corpo, (
+        "REGRESSÃO #80-BG: a exceção deve condicionar o erro de valor zero")
+    # Backend continua com a exceção #80-AD (fonte espelhada)
+    sch = (REPO_ROOT / "docs" / "schema-v2" / "99-pydantic-models.py").read_text(encoding="utf-8")
+    assert "_eh_deducao" in sch, "REGRESSÃO #80-AD: exceção de dedução sumiu do schema"
