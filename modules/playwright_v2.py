@@ -8235,13 +8235,133 @@ class PlaywrightAutomatorV2:
             if n_cartoes > 1:
                 self.log(f"  ── Cartão {idx+1}/{n_cartoes} ──")
             self._processar_um_cartao_de_ponto(cp)
+        # #80-BF/BE: repetir em bloco os fracassos definitivos (o SSE é longo —
+        # a linha isolada do momento da falha se perde na revisão do usuário)
+        if getattr(self, "_cartao_nao_salvo", False):
+            self.log(
+                "⚠️ #80-BF ATENÇÃO: houve Cartão de Ponto NÃO SALVO nesta execução — "
+                "lançar a jornada MANUALMENTE no PJE-Calc antes de usar o cálculo"
+            )
+        _mf = getattr(self, "_overrides_meses_falhos", None)
+        if _mf:
+            self.log(
+                f"⚠️ #80-BE ATENÇÃO: overrides de jornada NÃO CONFIRMADOS em "
+                f"{len(_mf)} mês(es): {', '.join(_mf)} — revisar na Grade de Ocorrências"
+            )
 
     def _processar_um_cartao_de_ponto(self, cp) -> None:
-        """Processa UM cartão de ponto — chamado pela fase_cartao_de_ponto em loop."""
+        """Processa UM cartão de ponto — chamado pela fase_cartao_de_ponto em loop.
+
+        #80-BF (0000565-27, 13/07/2026) — NÃO REVERTER: o save do cartão
+        falhava ("Erro inesperado JSF", classe LockTimeout) e o bot SEGUIA para
+        a apuração, que "sucedia" sobre um cartão INEXISTENTE — mascarando a
+        perda total (o usuário teve que lançar a jornada manualmente). Agora:
+        fill+save com retry ×2 (gate servidor-ocioso entre tentativas) +
+        verificação GROUND-TRUTH na listagem; se o cartão definitivamente NÃO
+        salvou, a apuração é PULADA e o log grita o ajuste manual necessário.
+        """
         dados = cp.model_dump(exclude_none=True) if hasattr(cp, "model_dump") else {}
         if not dados:
             return
 
+        salvo = False
+        for _tent in range(1, 3):
+            if _tent > 1:
+                self.log(f"  → #80-BF re-tentativa {_tent}/2 do Cartão de Ponto (re-preenchimento completo)")
+                self._aguardar_servidor_ocioso(contexto="#80-BF cartão retry")
+            try:
+                salvo = self._preencher_e_salvar_cartao(cp)
+            except Exception as e:
+                self.log(f"  ⚠ Fase 5 — preencher/salvar cartão: {e}")
+                salvo = False
+            if salvo:
+                break
+            # A msg de sucesso pode ter sido perdida com o save efetivado —
+            # conferir GROUND TRUTH na listagem ANTES de re-preencher (evita
+            # criar cartão duplicado).
+            if self._cartao_presente_na_listagem(cp):
+                self.log("  ✓ #80-BF cartão PRESENTE na listagem apesar da confirmação ausente — save efetivou")
+                salvo = True
+                break
+
+        if not salvo:
+            self._cartao_nao_salvo = True
+            self.log(
+                "  🛑 #80-BF CARTÃO DE PONTO NÃO SALVO após 2 tentativas — APURAÇÃO PULADA; "
+                "a jornada precisará ser lançada MANUALMENTE no PJE-Calc "
+                "(verbas IMPORTADA_DO_CARTAO liquidarão com quantidade 0 até lá)"
+            )
+            return
+
+        # Aplicar overrides via Grade de Ocorrências, se houver.
+        # CRÍTICO: isolar em try/except para evitar invalidar a conv Seam
+        # (sem isso, FGTS/CS/IRPF subsequentes ficam sem bean → liquidação falha).
+        overrides = list(getattr(cp, "ocorrencias_override", []) or [])
+        if overrides:
+            try:
+                self._aplicar_ocorrencias_override(overrides)
+            except Exception as e_ov:
+                self.log(f"  ⚠ Overrides falharam (não-crítico): {e_ov}")
+            # SEMPRE retornar para o calculo.jsf via menu para restaurar contexto Seam
+            try:
+                self._navegar_menu("li_calculo_dados_do_calculo")
+                self._aguardar_ajax(2000)
+                self.log("  ✓ Contexto Seam restaurado pós-overrides")
+            except Exception:
+                pass
+
+        # APURAÇÃO DO CARTÃO DE PONTO — passo crítico descoberto via teste
+        # manual (18/05/2026). Sem isso, o cartão fica como mera definição
+        # de critérios, sem ocorrências apuradas. O dropdown
+        # `tipoImportadadoDoCartaoDePontoQuantidade` da verba HE 50% fica
+        # VAZIO porque não há colunas (Hs EXT, Hs Intrajornada, etc.) para
+        # vincular. Manual oficial CSJT (linha 502): "Apurar Cartão de
+        # Ponto: Definir Dia do Fechamento Mensal, adicionar exceções,
+        # clicar Apurar".
+        try:
+            self._apurar_cartao_de_ponto()
+        except Exception as e_apurar:
+            self.log(f"  ⚠ Falha apurar cartão (não-crítico, mas HE não terá Quantidade): {e_apurar}")
+
+        self.log("Fase 5 concluída")
+
+    def _cartao_presente_na_listagem(self, cp) -> bool:
+        """#80-BF: ground truth do save do cartão — navega à LISTAGEM de Cartão
+        de Ponto e procura a competência inicial deste cp nas células da tabela
+        de cartões. Retorna False em qualquer dúvida (o retry re-salva; um
+        duplicado não persiste porque o PJE-Calc rejeita períodos sobrepostos)."""
+        try:
+            self._navegar_menu("li_calculo_cartao_ponto")
+            self._aguardar_ajax(4000)
+            try:
+                self._page.wait_for_selector(
+                    "[id$=':importarCartao'], input[value='Novo']",
+                    state="visible", timeout=10000,
+                )
+            except Exception:
+                pass
+            alvo = (getattr(cp, "data_inicial", "") or "").strip()
+            if not alvo:
+                return False
+            # competência pode ser exibida como MM/AAAA na listagem
+            cands = [alvo]
+            if len(alvo) == 10:
+                cands.append(alvo[3:])
+            return bool(self._page.evaluate(
+                """(alvos) => {
+                    const tds = [...document.querySelectorAll('table td')];
+                    return alvos.some(a => a && tds.some(td => (td.textContent||'').includes(a)));
+                }""",
+                cands,
+            ))
+        except Exception:
+            return False
+
+    def _preencher_e_salvar_cartao(self, cp) -> bool:
+        """Preenche o formulário do Cartão de Ponto (Novo) e salva. Retorna
+        True somente se o save foi CONFIRMADO ("Operação realizada com
+        sucesso"). #80-BF: unidade retryável — overrides e apuração ficam no
+        orquestrador `_processar_um_cartao_de_ponto`."""
         self._navegar_menu("li_calculo_cartao_ponto")
         self._aguardar_ajax(3000)
 
@@ -8306,10 +8426,10 @@ class PlaywrightAutomatorV2:
                         )
                     except Exception as e:
                         self.log(f"  ⚠ Formulário Novo não carregou após fallback URL: {e} — pulando Cartão de Ponto")
-                        return
+                        return False
                 else:
                     self.log("  ⚠ Formulário Novo não carregou e não há conversationId — pulando Cartão de Ponto")
-                    return
+                    return False
 
         # ── Período ──────────────────────────────────────────────────────────
         if cp.data_inicial:
@@ -8696,39 +8816,12 @@ class PlaywrightAutomatorV2:
                             self.log(f"  [DIAG-cartao-save] modal: {diag['modal_text']}")
                 except Exception as e_diag:
                     self.log(f"  [DIAG-cartao-save] falha capturar: {e_diag}")
-            # Aplicar overrides via Grade de Ocorrências, se houver.
-            # CRÍTICO: isolar em try/except para evitar invalidar a conv Seam
-            # (sem isso, FGTS/CS/IRPF subsequentes ficam sem bean → liquidação falha).
-            overrides = list(getattr(cp, "ocorrencias_override", []) or [])
-            if overrides:
-                try:
-                    self._aplicar_ocorrencias_override(overrides)
-                except Exception as e_ov:
-                    self.log(f"  ⚠ Overrides falharam (não-crítico): {e_ov}")
-                # SEMPRE retornar para o calculo.jsf via menu para restaurar contexto Seam
-                try:
-                    self._navegar_menu("li_calculo_dados_do_calculo")
-                    self._aguardar_ajax(2000)
-                    self.log("  ✓ Contexto Seam restaurado pós-overrides")
-                except Exception:
-                    pass
-
-            # APURAÇÃO DO CARTÃO DE PONTO — passo crítico descoberto via teste
-            # manual (18/05/2026). Sem isso, o cartão fica como mera definição
-            # de critérios, sem ocorrências apuradas. O dropdown
-            # `tipoImportadadoDoCartaoDePontoQuantidade` da verba HE 50% fica
-            # VAZIO porque não há colunas (Hs EXT, Hs Intrajornada, etc.) para
-            # vincular. Manual oficial CSJT (linha 502): "Apurar Cartão de
-            # Ponto: Definir Dia do Fechamento Mensal, adicionar exceções,
-            # clicar Apurar".
-            try:
-                self._apurar_cartao_de_ponto()
-            except Exception as e_apurar:
-                self.log(f"  ⚠ Falha apurar cartão (não-crítico, mas HE não terá Quantidade): {e_apurar}")
-
-            self.log("Fase 5 concluída")
+            # #80-BF: overrides e apuração vivem no orquestrador
+            # `_processar_um_cartao_de_ponto` — SÓ executam com save confirmado.
+            return bool(sucesso)
         except Exception as e:
             self.log(f"  ⚠ Fase 5 — Salvar: {e}")
+            return False
 
     def _apurar_cartao_de_ponto(self) -> None:
         """Apura o Cartão de Ponto — gera as ocorrências (Hs EXT, Hs Trabalhadas,
@@ -9017,62 +9110,120 @@ class PlaywrightAutomatorV2:
             return
 
         # 4. Para cada mês, selecionar dropdown → editar → SALVAR antes de mudar
+        #
+        # #80-BE (0000226-68, 13/07/2026) — NÃO REVERTER: "Save do mês X sem
+        # confirmação" era apenas logado e o bot seguia — 16/40 meses de
+        # overrides (sábado mensal) foram PERDIDOS SILENCIOSAMENTE. Agora cada
+        # mês tem retry ×3 com verificação GROUND-TRUTH: re-selecionar o mês
+        # força re-render a partir do BEAN (edições não salvas são descartadas)
+        # e o valor do 1º turno da 1ª override é conferido na grade re-lida.
+        # Meses definitivamente não confirmados são reportados em bloco no fim.
+        meses_falhos: list[str] = []
         for mes_ano, ocs in por_mes.items():
             self.log(f"  → Aplicando {len(ocs)} override(s) no mês {mes_ano}")
-            try:
-                self._selecionar("mesAno", mes_ano, obrigatorio=True)
-                self._aguardar_ajax(3000)  # AJAX re-renderiza a tabela
-                self._page.wait_for_timeout(800)
-            except Exception as e:
-                self.log(f"    ⚠ Falha selecionar mês {mes_ano}: {e}")
-                continue
+            # 1ª override do mês com turno preenchido — referência p/ verificação
+            _ver_data, _ver_esperado = None, None
+            for _oc in ocs:
+                _ts = _campo(_oc, "turnos") or []
+                _e = _campo(_ts[0], "entrada", "") if _ts else ""
+                if _e:
+                    _ver_data, _ver_esperado = _campo(_oc, "data"), _e.strip()
+                    break
 
-            alterou = False
-            for oc in ocs:
-                data = _campo(oc, "data")
-                turnos = _campo(oc, "turnos") or []
+            persistiu = False
+            for _tent in range(1, 4):
+                if _tent > 1:
+                    self.log(f"    → #80-BE retry {_tent}/3 do mês {mes_ano}")
+                    self._aguardar_servidor_ocioso(contexto=f"#80-BE mês {mes_ano}")
                 try:
-                    row = self._page.locator(f"tr:has(td:has-text('{data}'))").first
-                    row.wait_for(state="visible", timeout=5000)
-                    for t_idx, turno in enumerate(turnos[:6]):
-                        m = t_idx + 1
-                        ent = _campo(turno, "entrada", "")
-                        sai = _campo(turno, "saida", "")
-                        if ent:
-                            inp = row.locator(f"input[id$=':entrada{m}']").first
-                            inp.click()
-                            inp.press("Control+a"); inp.press("Delete")
-                            inp.type(ent, delay=20)
-                            inp.press("Tab")
-                            self._page.wait_for_timeout(200)
-                        if sai:
-                            inp = row.locator(f"input[id$=':saida{m}']").first
-                            inp.click()
-                            inp.press("Control+a"); inp.press("Delete")
-                            inp.type(sai, delay=20)
-                            inp.press("Tab")
-                            self._page.wait_for_timeout(200)
-                    alterou = True
-                    self.log(f"    ✓ override {data}: {len(turnos)} turno(s)")
+                    self._selecionar("mesAno", mes_ano, obrigatorio=True)
+                    self._aguardar_ajax(3000)  # AJAX re-renderiza a tabela
+                    self._page.wait_for_timeout(800)
                 except Exception as e:
-                    self.log(f"    ⚠ Falha override {data}: {e}")
+                    self.log(f"    ⚠ Falha selecionar mês {mes_ano}: {e}")
+                    continue
 
-            # 5. CRÍTICO: Salvar ANTES de mudar de mês (alerta explícito do PJE-Calc)
-            # Em modo Grade (operacao=VISUALIZACAO), o botão correto é
-            # `id="salvarEditavel"` (apuracao-cartaodeponto.xhtml:1219).
-            # `id="salvar"` só renderiza em emModoFormulario != VISUALIZACAO (linha 1216).
-            if alterou:
+                alterou = False
+                for oc in ocs:
+                    data = _campo(oc, "data")
+                    turnos = _campo(oc, "turnos") or []
+                    try:
+                        row = self._page.locator(f"tr:has(td:has-text('{data}'))").first
+                        row.wait_for(state="visible", timeout=5000)
+                        for t_idx, turno in enumerate(turnos[:6]):
+                            m = t_idx + 1
+                            ent = _campo(turno, "entrada", "")
+                            sai = _campo(turno, "saida", "")
+                            if ent:
+                                inp = row.locator(f"input[id$=':entrada{m}']").first
+                                inp.click()
+                                inp.press("Control+a"); inp.press("Delete")
+                                inp.type(ent, delay=20)
+                                inp.press("Tab")
+                                self._page.wait_for_timeout(200)
+                            if sai:
+                                inp = row.locator(f"input[id$=':saida{m}']").first
+                                inp.click()
+                                inp.press("Control+a"); inp.press("Delete")
+                                inp.type(sai, delay=20)
+                                inp.press("Tab")
+                                self._page.wait_for_timeout(200)
+                        alterou = True
+                        self.log(f"    ✓ override {data}: {len(turnos)} turno(s)")
+                    except Exception as e:
+                        self.log(f"    ⚠ Falha override {data}: {e}")
+                if not alterou:
+                    # Nenhuma row preenchida (tabela não renderizou?) — retry
+                    continue
+
+                # 5. CRÍTICO: Salvar ANTES de mudar de mês (alerta explícito do PJE-Calc)
+                # Em modo Grade (operacao=VISUALIZACAO), o botão correto é
+                # `id="salvarEditavel"` (apuracao-cartaodeponto.xhtml:1219).
+                # `id="salvar"` só renderiza em emModoFormulario != VISUALIZACAO (linha 1216).
                 try:
                     self._clicar("salvarEditavel")
                     self._aguardar_ajax(5000)
                     sucesso = self._aguardar_operacao_sucesso(timeout_ms=8000, bloqueante=False)
-                    if sucesso:
-                        self.log(f"  ✓ Mês {mes_ano} salvo")
-                    else:
-                        self.log(f"  ⚠ Save do mês {mes_ano} sem confirmação")
                 except Exception as e:
-                    self.log(f"  ⚠ Falha salvar mês {mes_ano}: {e}")
-        self.log(f"  ✓ Overrides aplicados em {len(por_mes)} mês(es)")
+                    self.log(f"    ⚠ Falha salvar mês {mes_ano}: {e}")
+                    sucesso = False
+                if sucesso:
+                    self.log(f"  ✓ Mês {mes_ano} salvo")
+                    persistiu = True
+                    break
+
+                # #80-BE: sem confirmação — verificar GROUND TRUTH re-lendo a grade
+                self.log(f"  ⚠ Save do mês {mes_ano} sem confirmação — verificando persistência na grade")
+                if not _ver_esperado:
+                    # Sem turno de referência p/ conferir — aceitar como aplicado
+                    persistiu = True
+                    break
+                try:
+                    self._aguardar_servidor_ocioso(contexto=f"#80-BE verif {mes_ano}")
+                    self._selecionar("mesAno", mes_ano, obrigatorio=True)
+                    self._aguardar_ajax(3000)
+                    self._page.wait_for_timeout(800)
+                    row = self._page.locator(f"tr:has(td:has-text('{_ver_data}'))").first
+                    atual = (row.locator("input[id$=':entrada1']").first.input_value(timeout=4000) or "").strip()
+                    if atual == _ver_esperado:
+                        self.log(f"  ✓ Mês {mes_ano} PERSISTIDO (grade re-lida: {_ver_data} entrada1={atual})")
+                        persistiu = True
+                        break
+                    self.log(f"    ✗ Mês {mes_ano} NÃO persistiu ({_ver_data} entrada1={atual!r} ≠ {_ver_esperado!r}) — re-aplicando")
+                except Exception as e_ver:
+                    self.log(f"    ⚠ Verificação do mês {mes_ano} falhou: {e_ver}")
+
+            if not persistiu:
+                meses_falhos.append(mes_ano)
+
+        if meses_falhos:
+            self._overrides_meses_falhos = meses_falhos
+            self.log(
+                f"  🛑 #80-BE OVERRIDES NÃO CONFIRMADOS em {len(meses_falhos)}/{len(por_mes)} "
+                f"mês(es): {', '.join(meses_falhos)} — ajustar MANUALMENTE na Grade de Ocorrências"
+            )
+        else:
+            self.log(f"  ✓ Overrides aplicados e CONFIRMADOS em {len(por_mes)} mês(es)")
 
     def fase_faltas(self) -> None:
         self.log("Fase 6 — Faltas")

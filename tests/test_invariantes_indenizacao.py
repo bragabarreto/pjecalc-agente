@@ -2980,3 +2980,50 @@ def test_inv86_nomes_sem_caracteres_fora_iso8859():
     src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
     assert "_norm_nomes_iso8859(data)" in src.split("def normalize_v2_json")[1], (
         "REGRESSÃO #80-BD: saneamento fora do pipeline normalize_v2_json")
+
+
+def test_inv87_overrides_mes_retry_e_verificacao():
+    """#80-BE (0000226-68, 13/07/2026): 16/40 meses de overrides (sábado
+    mensal) foram perdidos SILENCIOSAMENTE — "Save do mês X sem confirmação"
+    era só logado, sem retry. Invariantes: retry ×3 por mês com gate
+    servidor-ocioso, verificação GROUND-TRUTH re-lendo a grade (re-select do
+    mês descarta edições não salvas), e relatório em bloco dos meses falhos."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    corpo = src.split("def _aplicar_ocorrencias_override")[1].split("def fase_faltas")[0]
+    assert "#80-BE retry" in corpo, (
+        "REGRESSÃO #80-BE: mês sem confirmação deve ter retry (não apenas log)")
+    assert "_aguardar_servidor_ocioso" in corpo, (
+        "REGRESSÃO #80-BE: retry sem gate servidor-ocioso re-alimenta o LockTimeout")
+    assert "input_value" in corpo and "entrada1" in corpo, (
+        "REGRESSÃO #80-BE: falta verificação ground-truth do turno na grade re-lida")
+    assert "meses_falhos" in corpo and "OVERRIDES NÃO CONFIRMADOS" in corpo, (
+        "REGRESSÃO #80-BE: meses definitivamente falhos devem ser reportados em bloco")
+    # O sucesso final não pode ser incondicional
+    assert "Overrides aplicados e CONFIRMADOS" in corpo
+
+
+def test_inv88_cartao_nao_salvo_nao_apura():
+    """#80-BF (0000565-27, 13/07/2026): save do cartão falhou ("Erro
+    inesperado JSF") e o bot SEGUIU para a apuração, que "sucedeu" sobre um
+    cartão INEXISTENTE — mascarando a perda total (jornada lançada à mão pelo
+    usuário). Invariantes: fill+save é unidade retryável (×2, gate ocioso),
+    ground-truth na listagem antes de re-preencher (anti-duplicata), e
+    apuração/overrides SÓ executam com save confirmado."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    orq = src.split("def _processar_um_cartao_de_ponto")[1].split(
+        "def _cartao_presente_na_listagem")[0]
+    assert "_preencher_e_salvar_cartao" in orq and "#80-BF re-tentativa" in orq, (
+        "REGRESSÃO #80-BF: fill+save do cartão deve ser retryável no orquestrador")
+    assert "_cartao_presente_na_listagem" in orq, (
+        "REGRESSÃO #80-BF: sem ground-truth na listagem, retry pode duplicar cartão")
+    assert "CARTÃO DE PONTO NÃO SALVO" in orq and orq.index("CARTÃO DE PONTO NÃO SALVO") < orq.index("_apurar_cartao_de_ponto"), (
+        "REGRESSÃO #80-BF: apuração deve ser PULADA quando o cartão não salvou")
+    # O return da falha deve vir ANTES da apuração (guard clause)
+    falha = orq.split("CARTÃO DE PONTO NÃO SALVO")[1]
+    assert "return" in falha.split("_apurar_cartao_de_ponto")[0], (
+        "REGRESSÃO #80-BF: falta o return que impede apurar cartão inexistente")
+    # O método de fill/save retorna bool e não apura por conta própria
+    fill = src.split("def _preencher_e_salvar_cartao")[1].split("\n    def ")[0]
+    assert "return bool(sucesso)" in fill
+    assert "_apurar_cartao_de_ponto" not in fill, (
+        "REGRESSÃO #80-BF: apuração voltou para dentro do fill/save (executaria mesmo sem save)")
