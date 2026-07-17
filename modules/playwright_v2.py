@@ -6376,6 +6376,14 @@ class PlaywrightAutomatorV2:
                         self._page.wait_for_timeout(1000)
             except Exception as _e:
                 self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
+            # #80-BK: verificação GROUND-TRUTH dos checkboxes de reflexo após
+            # o flush — o CONFIRMADO da marcação pode ser falso-positivo
+            # (0000092-41: 4 reflexos saíram ativo=false no PJC).
+            if marcar_reflexos and (getattr(v, "reflexos", None) or []):
+                try:
+                    self._verificar_reflexos_pos_save(v)
+                except Exception as _e:
+                    self.log(f"    ⚠ #80-BK: {str(_e)[:120]}")
             # #80-J: criar os reflexos Manual DEFERIDOS — o principal já foi
             # configurado/salvo (quantidade setada) e a listagem está
             # re-ancorada. Cada Manual navega p/ o form do reflexo (Incluir),
@@ -7703,6 +7711,158 @@ class PlaywrightAutomatorV2:
         if reflexo.parametros_override:
             self.log(f"    → Aplicando overrides em {reflexo.nome}")
             # Implementação detalhada via doc 07 — pular nesta versão MVP
+
+    def _verificar_reflexos_pos_save(self, v) -> None:
+        """#80-BK (0000092-41, 17/07/2026) — NÃO REVERTER: ground truth dos
+        checkboxes de reflexo APÓS o flush (save de parâmetros).
+
+        O '✓ Reflexo CONFIRMADO no painel' da marcação pode ser FALSO-POSITIVO:
+        o fallback JS `cb.click()` deixa o DOM checked mesmo quando o request
+        A4J se perde (contenção Drools) e o bean NUNCA recebe — o save então
+        persiste sem o reflexo. No 0000092-41, 4 reflexos da prévia saíram
+        `ativo=false` no PJC apesar de 4× CONFIRMADO (Aviso e Férias+1/3 sobre
+        HE 80%, Férias+1/3 sobre Noturno, 13º sobre Acúmulo) e o usuário teve
+        de ativá-los à mão.
+
+        Após 'Parâmetros salvos' (único ponto que flusha checkbox — regra 4b),
+        reabrir o painel Exibir re-renderiza DO BEAN: conferir cada reflexo
+        checkbox ativo da prévia; faltantes → re-marcar + re-abrir o form +
+        re-salvar + Regerar Manter (até 2 remediações)."""
+        import re as _re
+        import unicodedata as _ud
+
+        alvos = []
+        for r in getattr(v, "reflexos", None) or []:
+            if getattr(r, "ativo", True) is False:
+                continue
+            if (getattr(r, "estrategia", None) or "") == "manual":
+                continue
+            nome = (getattr(r, "nome", "") or getattr(r, "expresso_reflex_alvo", "") or "").strip()
+            if nome:
+                alvos.append(nome)
+        if not alvos:
+            return
+        candidatos = [v.nome_pjecalc]
+        if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
+            candidatos.append(v.expresso_alvo)
+
+        _stop = {"SOBRE", "DE", "DA", "DO", "DAS", "DOS", "E", "O", "A"}
+
+        def _toks(s: str) -> set:
+            s = _ud.normalize("NFKD", s or "")
+            s = "".join(c for c in s if not _ud.combining(c)).upper()
+            ts = _re.findall(r"[A-Z0-9]+", s)
+            return {_re.sub(r"^(\d+)[OA]$", r"\1", t) for t in ts if t not in _stop}
+
+        _js_exibir = """(candidatos) => {
+            const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+            for (const alvo of candidatos) {
+                for (const tr of [...document.querySelectorAll('tr')]) {
+                    const tds = [...tr.querySelectorAll('td')];
+                    if (!tds.some(td => norm(td.textContent.replace(/Exibir|Ocultar/gi,'')) === norm(alvo))) continue;
+                    const exibir = tr.querySelector('span.linkDestinacoes');
+                    if (exibir) { exibir.click(); return alvo; }
+                }
+            }
+            return null;
+        }"""
+        _js_form = """(candidatos) => {
+            const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+            const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+            for (const alvo of candidatos) {
+                for (const link of linksMain) {
+                    const tr = link.closest('tr');
+                    if (!tr) continue;
+                    for (const td of [...tr.querySelectorAll('td')]) {
+                        if (norm(td.textContent.replace(/Exibir|Ocultar/gi,'')) === norm(alvo)) {
+                            if (link.onclick) { link.onclick(new Event('click')); }
+                            else { link.click(); }
+                            return alvo;
+                        }
+                    }
+                }
+            }
+            return null;
+        }"""
+
+        for rodada in range(1, 4):
+            try:
+                self._aguardar_servidor_ocioso(contexto=f"#80-BK verif reflexos {v.nome_pjecalc}")
+                if "verba-calculo.jsf" not in (self._page.url or ""):
+                    self._navegar_menu_via_click("li_calculo_verbas")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(800)
+                abriu = self._page.evaluate(_js_exibir, candidatos)
+                if not abriu:
+                    self.log(f"    ⚠ #80-BK painel Exibir de '{v.nome_pjecalc}' não encontrado — verificação pulada")
+                    return
+                self._aguardar_ajax(5000)
+                self._page.wait_for_timeout(800)
+                linhas = self._page.evaluate(
+                    """() => [...document.querySelectorAll("input[type=checkbox][id*=':listaReflexo:'][id$=':ativo']")]
+                        .map(cb => ({id: cb.id, checked: cb.checked,
+                                     txt: ((cb.closest('tr') || {}).textContent || '').replace(/\\s+/g,' ').trim()}))"""
+                ) or []
+                faltantes = []
+                for nome in alvos:
+                    t_alvo = _toks(nome)
+                    linha = next((l for l in linhas if t_alvo <= _toks(l.get("txt", ""))), None)
+                    if linha is None:
+                        continue  # sem checkbox (reflexo via Manual) — fora do escopo
+                    if not linha.get("checked"):
+                        faltantes.append((nome, linha["id"]))
+                if not faltantes:
+                    self.log(f"    ✓ #80-BK reflexos de '{v.nome_pjecalc}' VERIFICADOS no bean pós-save")
+                    return
+                if rodada == 3:
+                    self.log(
+                        f"    🛑 #80-BK reflexo(s) de '{v.nome_pjecalc}' seguem DESMARCADOS "
+                        f"após 2 remediações: {[n for n, _ in faltantes]} — ativar MANUALMENTE no PJE-Calc"
+                    )
+                    return
+                self.log(
+                    f"    ✗ #80-BK {len(faltantes)} reflexo(s) de '{v.nome_pjecalc}' DESMARCADO(S) no bean "
+                    f"apesar do CONFIRMADO: {[n for n, _ in faltantes]} — re-marcando (rodada {rodada})"
+                )
+                for _nome, cb_id in faltantes:
+                    self._page.evaluate(
+                        "(cid) => { const cb = document.getElementById(cid); if (cb && !cb.checked) cb.click(); }",
+                        cb_id,
+                    )
+                    self._aguardar_ajax(4000)
+                    self._page.wait_for_timeout(600)
+                # Flush: reabrir o form de Parâmetros e salvar (regra 4b —
+                # checkbox só persiste com save de parâmetros da verba).
+                self._aguardar_servidor_ocioso(contexto=f"#80-BK re-save {v.nome_pjecalc}")
+                clicou = self._page.evaluate(_js_form, candidatos)
+                if not clicou:
+                    self.log(f"    ⚠ #80-BK form de '{v.nome_pjecalc}' não abriu p/ re-save — reflexos podem não persistir")
+                    return
+                self._aguardar_ajax(8000)
+                try:
+                    self._page.wait_for_selector(
+                        "input[id$=':descricao'], input[id$=':valorDevido']",
+                        state="visible", timeout=10000,
+                    )
+                except Exception:
+                    pass
+                if not self._clicar_salvar_flex(timeout_ms=8000):
+                    self.log("    ⚠ #80-BK sem botão save no re-save — abortando verificação")
+                    return
+                self._aguardar_ajax(8000)
+                ok = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
+                self.log(f"    {'✓' if ok else '⚠'} #80-BK re-save de '{v.nome_pjecalc}' {'confirmado' if ok else 'sem confirmação'}")
+                self._capturar_conversation_id()
+                if "verba-calculo.jsf" not in (self._page.url or ""):
+                    self._navegar_menu("li_calculo_verbas")
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(800)
+                if self._regerar_com_modal_confirmacao(sobrescrever=False, log_prefix="    "):
+                    self.log(f"    ✓ #80-BK Regerar pós re-save '{v.nome_pjecalc}'")
+            except Exception as e:
+                self.log(f"    ⚠ #80-BK verificação de reflexos: {str(e)[:150]}")
+                return
 
     def _ajustar_periodo_reflexo(self, verba_principal, reflexo) -> bool:
         """Abre os Parâmetros do REFLEXO e ajusta o período = período da principal.
@@ -10217,7 +10377,28 @@ class PlaywrightAutomatorV2:
             else:
                 if h.valor_informado_brl is not None:
                     # ⚠ ID REAL (honorarios.xhtml:212): valor (não valorInformado)
+                    # #80-BL (0000092-41, 17/07/2026): o campo `valor` SÓ
+                    # RENDERIZA após o re-render A4J do radio tipoValor=
+                    # INFORMADO. Sem esperar, o bot pulava ("valor não existe")
+                    # e o save era rejeitado ("Campo obrigatório: Valor") —
+                    # honorários periciais se perdiam em silêncio.
+                    try:
+                        self._page.wait_for_selector(
+                            "input[id$=':valor']", state="visible", timeout=8000
+                        )
+                    except Exception:
+                        self.log("  ⚠ #80-BL campo valor não renderizou em 8s")
                     self._preencher("valor", _fmt_br(h.valor_informado_brl), obrigatorio=False)
+                # #80-BL: honorário INFORMADO (ex.: periciais) exige Data de
+                # Vencimento ("Campo obrigatório: Data de Vencimento" no save).
+                # O schema não traz o campo — default: data de término do
+                # cálculo (mesma referência da liquidação).
+                _venc_hon = getattr(h, "data_vencimento", None) or getattr(
+                    self.previa.parametros_calculo, "data_termino_calculo", None
+                )
+                if _venc_hon:
+                    self._preencher("dataVencimentoInputDate", _venc_hon, obrigatorio=False)
+                    self._preencher("dataVencimento", _venc_hon, obrigatorio=False)
 
             # Credor: para SUCUMBENCIAIS o credor é sempre o advogado da parte contrária
             credor_nome = h.credor.nome if h.credor else None
@@ -10241,12 +10422,42 @@ class PlaywrightAutomatorV2:
             # ⚠ ID REAL (honorarios.xhtml:373): apurarIRRF (não apurarIr)
             self._marcar_checkbox("apurarIRRF", h.apurar_irrf)
 
-            self._clicar("salvar")
-            self._aguardar_ajax(8000)
-            sucesso = self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+            # #80-BL: save VERIFICADO com retry — antes, "sem sucesso" gerava
+            # apenas diagnóstico e o honorário se perdia em silêncio
+            # (0000092-41: periciais rejeitados por campos obrigatórios e a
+            # fase seguiu com "Fase 11 concluída").
+            sucesso = False
+            for _th in range(1, 3):
+                self._clicar("salvar")
+                self._aguardar_ajax(8000)
+                sucesso = self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+                if sucesso:
+                    break
+                _msgs_hon = self._page.evaluate(
+                    """() => [...new Set([...document.querySelectorAll('.rich-message, .rich-messages')]
+                        .map(e => (e.textContent||'').replace(/\\/\\/<!\\[CDATA\\[[\\s\\S]*$/, '').trim())
+                        .filter(t => t && t.length < 200))]"""
+                ) or []
+                for _m in _msgs_hon[:4]:
+                    self.log(f"    ⚠ #80-BL msg JSF: {_m[:150]}")
+                # Re-preencher campos que podem ter (re)renderizado só agora
+                if h.tipo_valor.value != "CALCULADO":
+                    if h.valor_informado_brl is not None:
+                        self._preencher("valor", _fmt_br(h.valor_informado_brl), obrigatorio=False)
+                    _venc_retry = getattr(h, "data_vencimento", None) or getattr(
+                        self.previa.parametros_calculo, "data_termino_calculo", None
+                    )
+                    if _venc_retry:
+                        self._preencher("dataVencimentoInputDate", _venc_retry, obrigatorio=False)
+                        self._preencher("dataVencimento", _venc_retry, obrigatorio=False)
+                self._page.wait_for_timeout(800)
             if sucesso:
                 self.log(f"  ✓ Honorário {h.tipo_honorario}/{h.tipo_devedor} salvo com sucesso")
             else:
+                self.log(
+                    f"  🛑 #80-BL Honorário {h.tipo_honorario}/{h.tipo_devedor} "
+                    f"NÃO SALVO após 2 tentativas — lançar MANUALMENTE no PJE-Calc"
+                )
                 self._diagnostico_pagina(contexto=f"pós-save Honorário {h.tipo_honorario}/{h.tipo_devedor}")
         self.log("Fase 11 concluída")
 

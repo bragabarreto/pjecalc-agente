@@ -1199,6 +1199,15 @@ refletir sobre as horas extras**; se a sentença não determinar, NÃO emita.
 Regra dos dois lados: (a) não INVENTE reflexo que a sentença não deferiu;
 (b) não OMITA reflexo que ela deferiu.
 
+⚠️ **INVARIANTE PERMANENTE — DISPOSITIVO prevalece sobre a fundamentação nos
+reflexos (#80-BK, 0000092-41).** Quando o rol de reflexos do DISPOSITIVO
+divergir do rol da fundamentação, use o do DISPOSITIVO (é o que transita em
+julgado). Bug real: fundamentação do adicional noturno listava reflexos sem
+RSR, mas o dispositivo (c.1) mandava HE **e** adicional noturno refletirem
+"em RSR, aviso prévio, férias mais um terço, décimo terceiro, FGTS e multa de
+40%" — a IA seguiu a fundamentação e OMITIU o RSR sobre o adicional noturno.
+Leia o dispositivo verba a verba e confira o rol completo de cada uma.
+
 Cada reflexo:
 ```json
 {
@@ -1799,6 +1808,18 @@ Para `tipo_honorario = "SUCUMBENCIAIS"`, o credor é **sempre o advogado da part
 ### Tipos válidos de honorário
 `tipo_honorario` ∈ {`SUCUMBENCIAIS`, `ADVOCATICIOS`, `ASSISTENCIAIS`, `CONTRATUAIS`,
 `PERICIAIS_MEDICO`, `PERICIAIS_CONTADOR`, `PERICIAIS_ENGENHEIRO`, `PERICIAIS_OUTROS`}
+
+### Honorários PERICIAIS — INVARIANTE PERMANENTE (#80-BL, 0000092-41)
+Quando a sentença fixar honorários periciais ("Honorários periciais, no
+importe de R$ X, pela reclamada, nos termos do art. 790-B da CLT"), emita um
+honorário próprio com:
+- `tipo_honorario` conforme a especialidade do perito (engenheiro → `PERICIAIS_ENGENHEIRO`)
+- `tipo_valor = "INFORMADO"` e `valor_informado_brl` = **EXATAMENTE o valor
+  FIXADO na sentença** — nunca arredonde nem infira de outro documento
+  (bug real: sentença fixou R$ 1.500,00 e a extração emitiu 1000)
+- `tipo_devedor` = quem a sentença onera (art. 790-B: em regra o sucumbente
+  no objeto da perícia; com JG do autor, a reclamada)
+- `credor.nome` = o NOME do perito quando constar da sentença/laudo
 
 ### Sucumbência parcial — Justiça Gratuita (JG)
 

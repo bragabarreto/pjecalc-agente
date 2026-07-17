@@ -3121,3 +3121,50 @@ def test_inv92_diff_pjc_discrimina_itens_de_colecao():
     assert not any(k.endswith(".valor") for k in flat), (
         "REGRESSÃO #80-BJ: filtro de derivados não ignora '[...]' — "
         "valor recomputado da alíquota vira ruído a cada re-liquidação")
+
+
+def test_inv93_reflexos_verificados_pos_save():
+    """#80-BK (0000092-41, 17/07/2026): o '✓ Reflexo CONFIRMADO no painel' da
+    marcação é FALSO-POSITIVO sob contenção — o fallback JS cb.click() deixa o
+    DOM checked mesmo quando o request A4J se perde e o bean nunca recebe; o
+    save persiste sem o reflexo (4 reflexos da prévia saíram ativo=false no
+    PJC). Invariantes: verificação ground-truth APÓS o flush (reabrir Exibir =
+    re-render do bean), re-marcação + re-save em caso de falta, e chamada no
+    fluxo pós-'Parâmetros salvos'."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _verificar_reflexos_pos_save" in src, (
+        "REGRESSÃO #80-BK: método de verificação pós-flush removido")
+    corpo = src.split("def _verificar_reflexos_pos_save")[1].split("def _ajustar_periodo_reflexo")[0]
+    assert "linkDestinacoes" in corpo and "listaReflexo" in corpo, (
+        "REGRESSÃO #80-BK: verificação deve reler os checkboxes do painel Exibir (bean)")
+    assert "_clicar_salvar_flex" in corpo and "_regerar_com_modal_confirmacao" in corpo, (
+        "REGRESSÃO #80-BK: re-marcação sem re-save não flusha (regra 4b) — checkbox morre de novo")
+    assert "_aguardar_servidor_ocioso" in corpo, (
+        "REGRESSÃO #80-BK: navegação sem gate re-alimenta o LockTimeout")
+    # Hook no fluxo pós-save
+    pos = src.split("Regerar pós-parâmetros: {_e}")[1][:800]
+    assert "_verificar_reflexos_pos_save" in pos, (
+        "REGRESSÃO #80-BK: verificação não é chamada após 'Parâmetros salvos'")
+
+
+def test_inv94_honorario_informado_valor_vencimento_save_verificado():
+    """#80-BL (0000092-41, 17/07/2026): honorários periciais (INFORMADO) se
+    perdiam em silêncio — o campo `valor` só renderiza após o A4J do radio
+    tipoValor (bot pulava com 'valor não existe'), a Data de Vencimento é
+    obrigatória e não era preenchida, e o save rejeitado ('Campo obrigatório')
+    não tinha retry nem alerta. Invariantes: wait do re-render, preenchimento
+    do vencimento (default data_termino_calculo) e save verificado ×2 com
+    aviso 🛑 em falha definitiva."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    corpo = src.split("def fase_honorarios")[1].split("def fase_custas_judiciais")[0]
+    assert "#80-BL" in corpo and "wait_for_selector" in corpo, (
+        "REGRESSÃO #80-BL: falta o wait do re-render do campo valor (INFORMADO)")
+    assert "dataVencimentoInputDate" in corpo and "data_termino_calculo" in corpo, (
+        "REGRESSÃO #80-BL: Data de Vencimento não preenchida — save do pericial rejeitado")
+    assert "NÃO SALVO" in corpo, (
+        "REGRESSÃO #80-BL: falha definitiva do save de honorário deve gritar (🛑)")
+    # Prompt: valor do pericial = o FIXADO na sentença
+    pr = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "Honorários PERICIAIS — INVARIANTE PERMANENTE" in pr
+    assert "DISPOSITIVO prevalece sobre a fundamentação nos" in pr, (
+        "REGRESSÃO #80-BK/prompt: invariante do rol de reflexos do dispositivo removido")
