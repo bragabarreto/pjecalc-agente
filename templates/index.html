@@ -10,61 +10,14 @@
   </div>
 
   {% if processos %}
-  <table>
-    <thead>
-      <tr>
-        <th>Nº do Processo</th>
-        <th>Reclamante</th>
-        <th>Reclamado</th>
-        <th>Status</th>
-        <th>Última Atualização</th>
-        <th>Arquivo .PJC</th>
-        <th>Ações</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for proc in processos %}
-      {% set ultimo_calc = proc.calculos|sort(attribute='criado_em', reverse=true)|first if proc.calculos else None %}
-      <tr>
-        <td><a href="/processo/{{ proc.numero_processo }}">{{ proc.numero_processo }}</a></td>
-        <td>{{ proc.reclamante or '—' }}</td>
-        <td>{{ proc.reclamado or '—' }}</td>
-        <td>
-          {% if ultimo_calc %}
-            {% if ultimo_calc.status == 'pjc_exportado' %}
-            <span class="badge badge-verde">PJC Exportado</span>
-            {% elif ultimo_calc.status == 'confirmado' %}
-            <span class="badge badge-azul">Confirmado</span>
-            {% elif ultimo_calc.status == 'previa_gerada' %}
-            <span class="badge badge-amarelo">Prévia</span>
-            {% elif ultimo_calc.status == 'em_automacao' %}
-            <span class="badge badge-azul">Automação...</span>
-            {% elif 'erro' in (ultimo_calc.status or '') %}
-            <span class="badge badge-vermelho">Erro</span>
-            {% else %}
-            <span class="badge badge-cinza">{{ ultimo_calc.status }}</span>
-            {% endif %}
-          {% else %}—{% endif %}
-        </td>
-        <td>{{ proc.atualizado_em.strftime('%d/%m/%Y %H:%M') if proc.atualizado_em else '—' }}</td>
-        <td>
-          {% if ultimo_calc and ultimo_calc.arquivo_pjc %}
-          <a href="/download/{{ ultimo_calc.sessao_id }}/pjc" class="btn btn-success" style="padding:4px 10px; font-size:0.8rem;">Download .PJC</a>
-          {% else %}—{% endif %}
-        </td>
-        <td>
-          <a href="/processo/{{ proc.numero_processo }}/previa-atual" class="btn btn-secondary" style="padding:5px 12px; font-size:0.85rem;">Ver Prévia</a>
-          <a href="/processo/{{ proc.numero_processo }}" class="btn btn-secondary" style="padding:5px 12px; font-size:0.85rem; margin-left:4px;">Histórico</a>
-          {% if ultimo_calc and ultimo_calc.status == 'pjc_exportado' and ultimo_calc.arquivo_pjc %}
-          <button onclick="enviarPjcDefinitivo('{{ ultimo_calc.sessao_id }}')" class="btn btn-secondary"
-                  title="Opcional: envie o PJC que você corrigiu manualmente no PJE-Calc e incorporou ao processo. O app compara com o PJC gerado pela automação e aprende com as diferenças."
-                  style="padding:5px 12px; font-size:0.85rem; margin-left:4px; border-color:#5a8dee; color:#5a8dee;">📥 PJC definitivo</button>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  {% include "_tabela_processos.html" %}
+  {% if n_antigos and n_antigos > 0 %}
+  <div style="margin-top:14px; text-align:center;">
+    <a href="/processos/antigos" class="btn btn-secondary" style="padding:6px 18px;">
+      📂 Mais antigos ({{ n_antigos }}) — organizados por mês
+    </a>
+  </div>
+  {% endif %}
   {% else %}
   <p style="color:#6c757d;">Nenhum processo encontrado. Inicie um <a href="/novo">novo cálculo</a>.</p>
   {% endif %}
@@ -119,41 +72,15 @@ async function responderConflito(id) {
 </script>
 {% endif %}
 
-<input type="file" id="pjcDefinitivoFile" accept=".pjc,.PJC" style="display:none">
-<script>
-// Plano 3 (aprendizado) — upload OPCIONAL do PJC definitivo p/ diff+aprendizado
-function enviarPjcDefinitivo(sessaoId) {
-  const inp = document.getElementById('pjcDefinitivoFile');
-  inp.onchange = async () => {
-    const f = inp.files[0];
-    inp.value = '';
-    if (!f) return;
-    const fd = new FormData();
-    fd.append('pjc', f);
-    try {
-      const r = await fetch(`/api/pjc-definitivo/${sessaoId}`, { method: 'POST', body: fd });
-      const j = await r.json();
-      if (!r.ok) { alert('Erro: ' + (j.detail || r.status)); return; }
-      const linhas = (j.linhas || []).slice(0, 20).join('\n');
-      alert(
-        'PJC definitivo recebido para aprendizado.\n\n' +
-        `Correções manuais detectadas: ${j.resumo.campos_alterados} campo(s), ` +
-        `${j.resumo.entidades_adicionadas_removidas} verba(s)/reflexo(s) incluído(s)/removido(s).\n\n` +
-        (linhas || '✓ Nenhuma diferença — o PJC gerado já estava correto.') +
-        '\n\nRelatório completo: ' + j.relatorio
-      );
-    } catch (e) { alert('Falha no envio: ' + e); }
-  };
-  inp.click();
-}
-</script>
+{% include "_pjc_definitivo_js.html" %}
 
-{% if previas_pendentes %}
+{% if previas_agrupadas %}
 <div class="card">
-  <h2>Prévias pendentes <span class="badge badge-amarelo">{{ previas_pendentes|length }}</span></h2>
+  <h2>Prévias pendentes <span class="badge badge-amarelo">{{ total_pendentes }}</span></h2>
   <p style="color:#6c757d; margin-top:-6px;">
-    Prévias geradas pela extração IA que <strong>ainda não foram confirmadas</strong>.
-    Clique em <em>Revisar / Confirmar</em> para retomar de onde parou.
+    Prévias geradas pela extração IA que <strong>ainda não foram confirmadas</strong>,
+    aglutinadas por processo. Clique em <em>Revisar / Confirmar</em> para retomar —
+    processos com mais de uma prévia abrem a lista completa.
   </p>
   <table>
     <thead>
@@ -161,19 +88,29 @@ function enviarPjcDefinitivo(sessaoId) {
         <th>Nº do Processo</th>
         <th>Reclamante</th>
         <th>Reclamado</th>
-        <th>Gerada em</th>
+        <th>Última geração</th>
+        <th>Prévias</th>
         <th>Ações</th>
       </tr>
     </thead>
     <tbody>
-      {% for pv in previas_pendentes %}
+      {% for pv in previas_agrupadas %}
       <tr>
         <td>{{ pv.numero_processo }}</td>
         <td>{{ pv.reclamante }}</td>
         <td>{{ pv.reclamado }}</td>
         <td>{{ pv.atualizado_em.strftime('%d/%m/%Y %H:%M') if pv.atualizado_em else '—' }}</td>
         <td>
+          {% if pv.n_previas > 1 %}
+          <span class="badge badge-amarelo">{{ pv.n_previas }}</span>
+          {% else %}1{% endif %}
+        </td>
+        <td>
+          {% if pv.n_previas > 1 %}
+          <a href="/previas-pendentes/{{ pv.numero_processo | urlencode }}" class="btn btn-primary" style="padding:5px 12px; font-size:0.85rem;">Ver {{ pv.n_previas }} prévias</a>
+          {% else %}
           <a href="{{ pv.url_previa }}" class="btn btn-primary" style="padding:5px 12px; font-size:0.85rem;">Revisar / Confirmar</a>
+          {% endif %}
         </td>
       </tr>
       {% endfor %}

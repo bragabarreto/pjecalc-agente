@@ -306,9 +306,18 @@ def _startup_criar_tabelas():
 
 @app.get("/", response_class=HTMLResponse)
 async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
-    """Página inicial — lista de processos e calculações recentes."""
+    """Página inicial — lista de processos e calculações recentes.
+
+    #81 (17/07/2026): para desafogar a home, só os 10 processos mais recentes
+    aparecem diretamente; os demais vivem em /processos/antigos (agrupados por
+    mês de geração, com TODOS os dados e ações). As prévias pendentes são
+    AGLUTINADAS por processo — múltiplas prévias do mesmo processo abrem em
+    /previas-pendentes/{numero}.
+    """
     repo = RepositorioCalculo(db)
-    processos = repo.listar_processos(limit=20)
+    processos_todos = repo.listar_processos(limit=100000)
+    processos = processos_todos[:10]
+    n_antigos = max(0, len(processos_todos) - 10)
 
     # Prévias v2 geradas por IA mas AINDA NÃO confirmadas: existem só como
     # arquivo no store (sem Calculo no banco) e por isso não apareciam na lista
@@ -318,9 +327,23 @@ async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
         from infrastructure.database import Calculo as _Calc
         _confirmados = {row[0] for row in db.query(_Calc.sessao_id).all() if row[0]}
         from modules.webapp_v2 import listar_previas_pendentes
-        previas_pendentes = listar_previas_pendentes(_confirmados)
+        previas_pendentes = listar_previas_pendentes(_confirmados, limit=500)
     except Exception as _e:
         logger.warning("home: falha ao listar prévias pendentes: %s", _e)
+
+    # #81: aglutinar pendentes por processo — a capa é a prévia MAIS RECENTE
+    # (a lista já vem ordenada desc por mtime); n_previas conta as demais.
+    previas_agrupadas: list = []
+    _por_proc: dict = {}
+    for pv in previas_pendentes:
+        chave = pv.get("numero_processo") or "—"
+        g = _por_proc.get(chave)
+        if g is None:
+            g = dict(pv)
+            g["n_previas"] = 0
+            _por_proc[chave] = g
+            previas_agrupadas.append(g)
+        g["n_previas"] += 1
 
     # Plano 3 FATIA 4 — conflitos de aprendizado aguardando explicação
     conflitos_aprendizado: list = []
@@ -333,8 +356,66 @@ async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request, "index.html",
         {"processos": processos, "agora": datetime.now(),
+         "n_antigos": n_antigos,
          "previas_pendentes": previas_pendentes,
+         "previas_agrupadas": previas_agrupadas,
+         "total_pendentes": len(previas_pendentes),
          "conflitos_aprendizado": conflitos_aprendizado},
+    )
+
+
+_MESES_PT = ["", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+             "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+
+
+@app.get("/processos/antigos", response_class=HTMLResponse)
+async def pagina_processos_antigos(request: Request, db: Session = Depends(get_db)):
+    """#81: processos além dos 10 mais recentes da home, organizados pelo mês
+    de geração (criado_em) — TODOS os dados e ações preservados (mesma tabela
+    partial da home, incluindo Download .PJC, Ver Prévia, Histórico e o upload
+    do PJC definitivo)."""
+    repo = RepositorioCalculo(db)
+    todos = repo.listar_processos(limit=100000)
+    antigos = todos[10:]
+    grupos: list = []
+    _idx: dict = {}
+    for proc in antigos:
+        dt = proc.criado_em or proc.atualizado_em
+        chave = dt.strftime("%Y-%m") if dt else "0000-00"
+        g = _idx.get(chave)
+        if g is None:
+            rotulo = f"{_MESES_PT[dt.month]} de {dt.year}" if dt else "Sem data"
+            g = {"chave": chave, "rotulo": rotulo, "processos": []}
+            _idx[chave] = g
+            grupos.append(g)
+        g["processos"].append(proc)
+    grupos.sort(key=lambda g: g["chave"], reverse=True)
+    return templates.TemplateResponse(
+        request, "processos_antigos.html",
+        {"grupos": grupos, "agora": datetime.now()},
+    )
+
+
+@app.get("/previas-pendentes/{numero_processo:path}", response_class=HTMLResponse)
+async def pagina_previas_processo(
+    numero_processo: str, request: Request, db: Session = Depends(get_db)
+):
+    """#81: TODAS as prévias pendentes (não confirmadas) de UM processo —
+    página aberta a partir da linha aglutinada da home."""
+    previas: list = []
+    try:
+        from infrastructure.database import Calculo as _Calc
+        _confirmados = {row[0] for row in db.query(_Calc.sessao_id).all() if row[0]}
+        from modules.webapp_v2 import listar_previas_pendentes
+        previas = [
+            pv for pv in listar_previas_pendentes(_confirmados, limit=500)
+            if (pv.get("numero_processo") or "—") == numero_processo
+        ]
+    except Exception as _e:
+        logger.warning("previas-processo %s: %s", numero_processo, _e)
+    return templates.TemplateResponse(
+        request, "previas_processo.html",
+        {"numero_processo": numero_processo, "previas": previas},
     )
 
 

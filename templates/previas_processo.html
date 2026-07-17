@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Prévias pendentes — {{ numero_processo }} — Agente PJE-Calc{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>Prévias pendentes do processo {{ numero_processo }}</h2>
+  <p style="color:#6c757d; margin-top:-6px;">
+    Todas as prévias geradas pela extração IA para este processo que
+    <strong>ainda não foram confirmadas</strong> — da mais recente para a mais antiga.
+  </p>
+  <div style="margin-bottom:16px;">
+    <a href="/" class="btn btn-secondary" style="padding:5px 14px;">← Voltar</a>
+  </div>
+
+  {% if previas %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Sessão</th>
+        <th>Reclamante</th>
+        <th>Reclamado</th>
+        <th>Gerada em</th>
+        <th>Ações</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pv in previas %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td><code>{{ pv.sessao_id[:8] }}</code></td>
+        <td>{{ pv.reclamante }}</td>
+        <td>{{ pv.reclamado }}</td>
+        <td>{{ pv.atualizado_em.strftime('%d/%m/%Y %H:%M') if pv.atualizado_em else '—' }}</td>
+        <td>
+          <a href="{{ pv.url_previa }}" class="btn btn-primary" style="padding:5px 12px; font-size:0.85rem;">Revisar / Confirmar</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p style="color:#6c757d;">Nenhuma prévia pendente para este processo.</p>
+  {% endif %}
+</div>
+{% endblock %}

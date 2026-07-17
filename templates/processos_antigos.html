@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Processos mais antigos — Agente PJE-Calc{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>📂 Processos mais antigos</h2>
+  <p style="color:#6c757d; margin-top:-6px;">
+    Processos além dos 10 mais recentes da página inicial, organizados pelo
+    <strong>mês de geração</strong>. Todos os dados e ações continuam disponíveis.
+  </p>
+  <div style="margin-bottom:16px;">
+    <a href="/" class="btn btn-secondary" style="padding:5px 14px;">← Voltar aos recentes</a>
+  </div>
+
+  {% if grupos %}
+    {% for grupo in grupos %}
+    <h3 style="margin:22px 0 8px; color:#444; border-bottom:2px solid #eee; padding-bottom:4px;">
+      {{ grupo.rotulo }} <span class="badge badge-cinza">{{ grupo.processos|length }}</span>
+    </h3>
+    {% with processos = grupo.processos %}
+    {% include "_tabela_processos.html" %}
+    {% endwith %}
+    {% endfor %}
+  {% else %}
+  <p style="color:#6c757d;">Nenhum processo além dos 10 mais recentes.</p>
+  {% endif %}
+</div>
+
+{% include "_pjc_definitivo_js.html" %}
+{% endblock %}

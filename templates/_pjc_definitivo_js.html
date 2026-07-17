@@ -1,0 +1,30 @@
+{# Input + script do upload do PJC definitivo (Plano 3) — partial compartilhado.
+   Incluir UMA vez por página que renderize a tabela de processos. #}
+<input type="file" id="pjcDefinitivoFile" accept=".pjc,.PJC" style="display:none">
+<script>
+// Plano 3 (aprendizado) — upload OPCIONAL do PJC definitivo p/ diff+aprendizado
+function enviarPjcDefinitivo(sessaoId) {
+  const inp = document.getElementById('pjcDefinitivoFile');
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    inp.value = '';
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('pjc', f);
+    try {
+      const r = await fetch(`/api/pjc-definitivo/${sessaoId}`, { method: 'POST', body: fd });
+      const j = await r.json();
+      if (!r.ok) { alert('Erro: ' + (j.detail || r.status)); return; }
+      const linhas = (j.linhas || []).slice(0, 20).join('\n');
+      alert(
+        'PJC definitivo recebido para aprendizado.\n\n' +
+        `Correções manuais detectadas: ${j.resumo.campos_alterados} campo(s), ` +
+        `${j.resumo.entidades_adicionadas_removidas} verba(s)/reflexo(s) incluído(s)/removido(s).\n\n` +
+        (linhas || '✓ Nenhuma diferença — o PJC gerado já estava correto.') +
+        '\n\nRelatório completo: ' + j.relatorio
+      );
+    } catch (e) { alert('Falha no envio: ' + e); }
+  };
+  inp.click();
+}
+</script>
