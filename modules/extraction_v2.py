@@ -1593,6 +1593,27 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
 }
 ```
 
+### Saldo do EXTRATO FGTS → dedução — INVARIANTE PERMANENTE (#80-BN, 0001972-05)
+
+Quando os autos trazem **extrato do FGTS** (ou a sentença manda deduzir os
+depósitos já existentes na conta vinculada), o saldo vai na seção própria do
+FGTS — "Saldo e/ou Saque" — via:
+
+```json
+"fgts": {
+  ...,
+  "saldos_a_deduzir": [{"data": "12/01/2026", "valor_brl": 2314.10}],
+  "deduzir_do_fgts": true
+}
+```
+
+- `data` = data do extrato (DD/MM/AAAA); `valor_brl` = saldo total do extrato.
+- **NUNCA** coloque o saldo do extrato em `recolhimentos_existentes` (essa é a
+  tabela de depósitos POR COMPETÊNCIA, raramente editada) — bug real: a IA
+  emitiu o saldo lá e a dedução foi PERDIDA na automação.
+- **NUNCA** represente o saldo FGTS como verba "VALOR PAGO" (classificação
+  incorreta já documentada).
+
 ⚠️ **CRÍTICO — `compor_principal`** ∈ {`"SIM"`, `"NAO"`} (strings, NUNCA boolean).
 
 **REGRA UNIVERSAL** (vale para FGTS e QUALQUER verba que tenha esse campo):

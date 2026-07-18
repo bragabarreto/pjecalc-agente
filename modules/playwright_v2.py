@@ -9811,61 +9811,78 @@ class PlaywrightAutomatorV2:
         #   1. Preencher data + valor
         #   2. Clicar botão "+" (adicionar) — adiciona à tabela
         #   3. Marcar checkbox "Deduzir do FGTS"
+        # #80-BM (0001972-05, 18/07/2026) — NÃO REVERTER: IDs REAIS da seção
+        # "Saldo e/ou Saque" (fgts.xhtml:209-247), substituindo os chutes
+        # antigos (dataSaldoFGTS/valorSaldoFGTS/heurística de "+") que NUNCA
+        # bateram com o DOM:
+        #   - Data:  rich:calendar id="competencia" → input `competenciaInputDate`
+        #   - Valor: h:inputText id="valor"
+        #   - Adicionar: a4j:commandLink id="cmdIncluir" (botaoAddItem)
+        #   - Checkbox `deduzirDoFGTS` (CASE exato) nasce DISABLED enquanto
+        #     listaDeOperacoes está vazia — a operação PRECISA entrar ANTES.
+        # Ground truth: rich:dataTable id="listagem" (painelListaOperacoes).
         saldos = getattr(f, "saldos_a_deduzir", None) or []
         for idx, saldo in enumerate(saldos):
             try:
-                self.log(f"  → Adicionando saldo FGTS a deduzir [{idx+1}/{len(saldos)}]: {saldo.data} = {saldo.valor_brl}")
-                # IDs prováveis: formulario:dataSaldoFGTS, formulario:valorSaldoFGTS
-                # ou similar. Vamos tentar variantes.
-                preenchido = False
-                for data_suf in ("dataSaldoFGTSInputDate", "dataSaldoFGTS", "saldoFGTSInputDate"):
-                    if self._page.locator(f"[id$='{data_suf}']").count() > 0:
-                        self._preencher(data_suf, saldo.data, obrigatorio=False)
-                        preenchido = True
+                self.log(f"  → #80-BM Saldo FGTS a deduzir [{idx+1}/{len(saldos)}]: {saldo.data} = {saldo.valor_brl}")
+                ok_op = False
+                for _t in range(1, 3):
+                    self._preencher("competenciaInputDate", saldo.data, obrigatorio=False)
+                    self._preencher("valor", _fmt_br(saldo.valor_brl), obrigatorio=False)
+                    try:
+                        self._page.locator("a[id$=':cmdIncluir']").first.click(force=True)
+                    except Exception:
+                        self._page.evaluate(
+                            """() => { const a = document.querySelector("a[id$=':cmdIncluir']"); if (a) a.click(); }"""
+                        )
+                    self._aguardar_ajax(6000)
+                    self._page.wait_for_timeout(800)
+                    ok_op = bool(self._page.evaluate(
+                        """(dt) => {
+                            const tb = document.querySelector("table[id$=':listagem']");
+                            return !!(tb && tb.textContent.includes(dt));
+                        }""",
+                        saldo.data,
+                    ))
+                    if ok_op:
+                        self.log("    ✓ #80-BM operação de saldo CONFIRMADA na listagem")
                         break
-                if not preenchido:
-                    self.log(f"    ⚠ campo data saldo FGTS não encontrado")
-                for val_suf in ("valorSaldoFGTS", "valorDeducao", "saldoValor"):
-                    if self._page.locator(f"[id$='{val_suf}']").count() > 0:
-                        self._preencher(val_suf, _fmt_br(saldo.valor_brl), obrigatorio=False)
-                        break
-                # Clicar botão "+" (adicionar)
-                added = self._page.evaluate(
-                    """() => {
-                        const btns = [...document.querySelectorAll('input[type="image"], input[type="submit"], input[type="button"], button, a')];
-                        for (const b of btns) {
-                            const txt = (b.value || b.textContent || '').trim();
-                            const alt = (b.alt || b.title || '').trim();
-                            const src = (b.src || '').toLowerCase();
-                            if (txt === '+' || alt.includes('Adicionar') || alt.includes('Incluir')
-                                || src.includes('add.png') || src.includes('mais') || src.includes('plus')) {
-                                // Confirmar contexto: próximo dos campos de saldo
-                                const container = b.closest('table, fieldset, div');
-                                if (container && /saldo|deduz/i.test(container.textContent || '')) {
-                                    b.click();
-                                    return true;
-                                }
-                            }
-                        }
-                        return false;
-                    }"""
-                )
-                if added:
-                    self.log(f"    ✓ Saldo adicionado à tabela")
-                    self._aguardar_ajax(5000)
+                    self.log(f"    ⚠ #80-BM operação não apareceu na listagem (tentativa {_t}/2)")
+                if not ok_op:
+                    self.log(
+                        "    🛑 #80-BM saldo FGTS NÃO adicionado — a dedução "
+                        "precisará ser lançada MANUALMENTE na seção FGTS do PJE-Calc"
+                    )
             except Exception as e:
                 self.log(f"    ⚠ Falha ao adicionar saldo FGTS: {e}")
 
-        # Marcar checkbox "Deduzir do FGTS"
+        # Marcar checkbox "Deduzir do FGTS" — APÓS a(s) operação(ões), pois o
+        # checkbox fica disabled com a lista vazia. Verificação pós-AJAX.
         if getattr(f, "deduzir_do_fgts", False) or saldos:
-            for cb_suf in ("deduzirDoFgts", "deduzirFGTS", "fazerDeducao"):
+            marcado = False
+            for cb_suf in ("deduzirDoFGTS", "deduzirDoFgts", "deduzirFGTS"):
                 try:
-                    if self._page.locator(f"input[type='checkbox'][id$=':{cb_suf}']").count() > 0:
-                        self._marcar_checkbox(cb_suf, True)
-                        self.log(f"  ✓ 'Deduzir do FGTS' marcado")
-                        break
+                    if self._page.locator(f"input[type='checkbox'][id$=':{cb_suf}']").count() == 0:
+                        continue
+                    try:
+                        self._page.wait_for_function(
+                            """(suf) => { const cb = [...document.querySelectorAll("input[type=checkbox]")]
+                                .find(c => (c.id||'').endsWith(suf)); return cb && !cb.disabled; }""",
+                            arg=cb_suf, timeout=8000,
+                        )
+                    except Exception:
+                        pass
+                    self._marcar_checkbox(cb_suf, True)
+                    self._aguardar_ajax(3000)
+                    marcado = bool(self._page.evaluate(
+                        """(suf) => { const cb = [...document.querySelectorAll("input[type=checkbox]")]
+                            .find(c => (c.id||'').endsWith(suf)); return !!(cb && cb.checked); }""",
+                        cb_suf,
+                    ))
+                    break
                 except Exception:
                     continue
+            self.log(f"  {'✓' if marcado else '🛑'} #80-BM 'Deduzir do FGTS' marcado (confirmado={marcado})")
 
         _safe(lambda: self._clicar("salvar"), "salvar")
         self._aguardar_ajax(8000)

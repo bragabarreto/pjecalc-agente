@@ -64,6 +64,12 @@ def _norm_fgts(fgts: dict[str, Any], *, parametros: dict | None = None) -> dict[
             # valor → valor_total_depositado_brl
             if "valor" in nr and "valor_total_depositado_brl" not in nr and "valor_depositado_brl" not in nr:
                 nr["valor_total_depositado_brl"] = nr.pop("valor")
+            # #80-BN (0001972-05): a IA emitia o saldo do EXTRATO como
+            # `valor_brl` (campo que o schema tolera via extra='allow' mas
+            # NINGUÉM lê) — o total abaixo somava 0 e a migração p/
+            # saldos_a_deduzir nunca disparava → dedução do FGTS perdida.
+            if nr.get("valor_brl") and not nr.get("valor_total_depositado_brl"):
+                nr["valor_total_depositado_brl"] = nr.pop("valor_brl")
             # observacao → descricao
             if "observacao" in nr and "descricao" not in nr:
                 nr["descricao"] = nr.pop("observacao")
@@ -84,9 +90,14 @@ def _norm_fgts(fgts: dict[str, Any], *, parametros: dict | None = None) -> dict[
             if isinstance(r, dict)
         )
         if total > 0:
-            # Data: usar data_demissao se disponível, senão hoje
+            # Data: preferir a data_referencia do próprio extrato (#80-BN),
+            # depois data_demissao, senão hoje.
             data_extrato = None
-            if parametros and isinstance(parametros, dict):
+            for r in fgts["recolhimentos_existentes"]:
+                if isinstance(r, dict) and r.get("data_referencia"):
+                    data_extrato = r["data_referencia"]
+                    break
+            if not data_extrato and parametros and isinstance(parametros, dict):
                 data_extrato = parametros.get("data_demissao")
             if not data_extrato:
                 from datetime import date as _date

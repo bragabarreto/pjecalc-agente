@@ -3168,3 +3168,38 @@ def test_inv94_honorario_informado_valor_vencimento_save_verificado():
     assert "Honorários PERICIAIS — INVARIANTE PERMANENTE" in pr
     assert "DISPOSITIVO prevalece sobre a fundamentação nos" in pr, (
         "REGRESSÃO #80-BK/prompt: invariante do rol de reflexos do dispositivo removido")
+
+
+def test_inv95_saldo_extrato_fgts_deduzido():
+    """#80-BM/BN (0001972-05, 18/07/2026): a dedução do saldo do EXTRATO FGTS
+    era perdida em 3 camadas: (1) IA emitia o saldo em recolhimentos_existentes
+    com campo `valor_brl` (não lido por ninguém) e o normalizer somava 0 →
+    saldos_a_deduzir vazio; (2) o prompt nunca ensinou saldos_a_deduzir;
+    (3) o bot usava IDs CHUTADOS (dataSaldoFGTS/valorSaldoFGTS/'+') que nunca
+    bateram com o DOM real da seção 'Saldo e/ou Saque'."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+    fgts = {"recolhimentos_existentes": [{
+        "tipo": "DEPOSITO_REGULAR", "data_referencia": "12/01/2026",
+        "valor_brl": 2314.10, "valor_total_depositado_brl": None,
+        "competencia_inicio": None, "competencia_fim": None,
+    }], "saldos_a_deduzir": []}
+    out = N._norm_fgts(fgts, parametros={"data_demissao": "10/12/2025"})
+    assert out.get("saldos_a_deduzir") == [{"data": "12/01/2026", "valor_brl": 2314.1}], (
+        "REGRESSÃO #80-BN: saldo do extrato (valor_brl) não migra p/ saldos_a_deduzir")
+    assert out.get("deduzir_do_fgts") is True
+    # Bot: IDs REAIS do fgts.xhtml + ordem operação→checkbox + ground truth
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    corpo = src.split("def fase_fgts")[1].split("def fase_contribuicao_social")[0]
+    assert "competenciaInputDate" in corpo and "cmdIncluir" in corpo, (
+        "REGRESSÃO #80-BM: IDs reais da seção Saldo e/ou Saque removidos")
+    assert "deduzirDoFGTS" in corpo, (
+        "REGRESSÃO #80-BM: checkbox real deduzirDoFGTS (case exato) removido")
+    assert "CONFIRMADA na listagem" in corpo, (
+        "REGRESSÃO #80-BM: falta ground truth da operação na listagem")
+    assert corpo.index("cmdIncluir") < corpo.index("deduzirDoFGTS"), (
+        "REGRESSÃO #80-BM: checkbox antes da operação — nasce disabled com lista vazia")
+    # Prompt ensina saldos_a_deduzir
+    pr = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "saldos_a_deduzir" in pr and "Saldo do EXTRATO FGTS" in pr, (
+        "REGRESSÃO #80-BN: prompt não ensina mais a dedução do extrato FGTS")
