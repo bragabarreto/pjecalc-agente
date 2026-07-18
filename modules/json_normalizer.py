@@ -576,6 +576,57 @@ def _norm_cap_periodo_fim_na_demissao(data: dict[str, Any]) -> None:
             )
 
 
+def _norm_cap_periodo_inicio_admissao(data: dict[str, Any]) -> None:
+    """Coerência período×admissão — #80-BO (0000771-41, 18/07/2026).
+
+    Nenhuma verba pode começar ANTES da data_admissao (não havia contrato).
+    A IA frequentemente emite `periodo_inicio` = 1º dia do MÊS da admissão
+    (ex.: admissão 08/12/2025 → período 01/12/2025), e o validador da prévia
+    bloqueia o /confirmar com "periodo_inicio ANTERIOR à data_admissao" — o
+    botão 'Confirmar e Iniciar Automação' parece morto para o usuário.
+
+    Fix: capar `periodo_inicio` (verbas + reflexos com parametros_override)
+    na data_admissao ANTES da prévia (fidelidade prévia↔automação) — mesmo
+    padrão dos caps #75 (demissão) e #78 (prescrição)."""
+    pc = data.get("parametros_calculo") or {}
+    adm = pc.get("data_admissao") if isinstance(pc, dict) else None
+    if not adm:
+        return
+    from datetime import datetime as _dt
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        d_adm = _dt.strptime(adm, "%d/%m/%Y")
+    except (ValueError, TypeError):
+        return
+
+    def _cap(container: dict, campo: str, rotulo: str) -> None:
+        val = container.get(campo)
+        if not val:
+            return
+        try:
+            d_val = _dt.strptime(val, "%d/%m/%Y")
+        except (ValueError, TypeError):
+            return
+        if d_val < d_adm:
+            container[campo] = adm
+            _log.warning(
+                "Normalizer: %s periodo_inicio=%s ANTERIOR à admissão=%s → "
+                "cap em %s (#80-BO)", rotulo, val, adm, adm,
+            )
+
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if isinstance(p, dict):
+            _cap(p, "periodo_inicio", f"verba '{v.get('nome_pjecalc')}'")
+        for r in v.get("reflexos") or []:
+            if isinstance(r, dict) and isinstance(r.get("parametros_override"), dict):
+                _cap(r["parametros_override"], "periodo_inicio",
+                     f"reflexo '{r.get('nome')}'")
+
+
 def _norm_cap_periodo_inicio_prescricao(data: dict[str, Any]) -> None:
     """Coerência período×prescrição quinquenal (PJE-Calc) — #78.
 
@@ -1587,6 +1638,7 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # prescricional (ajuizamento − 5a) — PJE-Calc rejeita o save da verba e a
     # liquidação aborta com listagem vazia. Cap no piso ANTES da prévia.
     _norm_cap_periodo_inicio_prescricao(data)
+    _norm_cap_periodo_inicio_admissao(data)
 
     # Salvaguarda salário por fora (#69): FGTS incide SÓ sobre a parcela
     # extrafolha (o registrado já foi depositado). Corrige a inversão comum da

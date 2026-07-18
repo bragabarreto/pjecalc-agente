@@ -3203,3 +3203,33 @@ def test_inv95_saldo_extrato_fgts_deduzido():
     pr = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "saldos_a_deduzir" in pr and "Saldo do EXTRATO FGTS" in pr, (
         "REGRESSÃO #80-BN: prompt não ensina mais a dedução do extrato FGTS")
+
+
+def test_inv96_cap_periodo_inicio_na_admissao():
+    """#80-BO (0000771-41, 18/07/2026): a IA emite periodo_inicio = 1º dia do
+    MÊS da admissão (admissão 08/12/2025 → período 01/12/2025); o validador da
+    prévia bloqueia o /confirmar ('periodo_inicio ANTERIOR à data_admissao') e
+    o botão 'Confirmar e Iniciar Automação' parece morto. O normalizer capa na
+    admissão ANTES da prévia (mesmo padrão dos caps #75/#78); o /confirmar
+    re-normaliza, então o próximo clique resolve sem edição manual."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+    data = {
+        "parametros_calculo": {"data_admissao": "08/12/2025"},
+        "verbas_principais": [
+            {"nome_pjecalc": "RESTITUICAO DE DESCONTOS",
+             "parametros": {"periodo_inicio": "01/12/2025", "periodo_fim": "10/06/2026"},
+             "reflexos": [{"nome": "R1", "parametros_override": {"periodo_inicio": "01/12/2025"}}]},
+            {"nome_pjecalc": "OK",
+             "parametros": {"periodo_inicio": "08/12/2025", "periodo_fim": "10/06/2026"}},
+        ],
+    }
+    N._norm_cap_periodo_inicio_admissao(data)
+    v0 = data["verbas_principais"][0]
+    assert v0["parametros"]["periodo_inicio"] == "08/12/2025", (
+        "REGRESSÃO #80-BO: periodo_inicio anterior à admissão não é capado")
+    assert v0["reflexos"][0]["parametros_override"]["periodo_inicio"] == "08/12/2025"
+    assert data["verbas_principais"][1]["parametros"]["periodo_inicio"] == "08/12/2025"
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_cap_periodo_inicio_admissao(data)" in src.split("def normalize_v2_json")[1], (
+        "REGRESSÃO #80-BO: cap fora do pipeline normalize_v2_json")
