@@ -3233,3 +3233,26 @@ def test_inv96_cap_periodo_inicio_na_admissao():
     src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
     assert "_norm_cap_periodo_inicio_admissao(data)" in src.split("def normalize_v2_json")[1], (
         "REGRESSÃO #80-BO: cap fora do pipeline normalize_v2_json")
+
+
+def test_inv97_painel_historico_garantido_e_skip_sem_acento():
+    """#80-BP (0000771-41, 18/07/2026): liquidação bloqueada com 'Para apurar a
+    verba informada X deve existir pelo menos uma ocorrência com valor
+    diferente de zero' — a base histórico das verbas de dedução ficou VAZIA.
+    Duas causas: (a) skip_equivalente só reconhecia 'ÚLTIMA REMUNERAÇÃO'
+    acentuada (prévia traz ASCII) → troca de base desnecessária em 7/9 verbas;
+    (b) o painel do histórico (baseHistoricos + incluirBaseHistorico) só
+    renderiza após o A4J do tipoDaBaseTabelada e o bot não esperava — skips
+    SILENCIOSOS deixavam a base vazia (Manual '13 SALARIO' morreu na mesma
+    janela de LockTimeout)."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    corpo = src.split("SUB-BLOCO CALCULADO")[1].split("def ")[0]
+    assert '_hist_ascii == "ULTIMA REMUNERACAO"' in corpo, (
+        "REGRESSÃO #80-BP: skip_equivalente voltou a exigir acento — "
+        "prévia ASCII força troca de base e o dance #80-M sem necessidade")
+    assert "#80-BP painel Histórico não renderizou" in corpo, (
+        "REGRESSÃO #80-BP: falta a espera/retry do painel de histórico pós-A4J")
+    assert "_aguardar_servidor_ocioso" in corpo.split("#80-BP painel")[1][:1200], (
+        "REGRESSÃO #80-BP: retry do painel sem gate re-alimenta o LockTimeout")
+    assert "#80-BP baseHistoricos NÃO setado" in corpo, (
+        "REGRESSÃO #80-BP: falha do set da base voltou a ser silenciosa")

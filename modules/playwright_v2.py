@@ -5135,10 +5135,18 @@ class PlaywrightAutomatorV2:
                     )
                     desejado_tipo = f.base_calculo.tipo.value
                     historico_nome = (f.base_calculo.historico_nome or "").strip().upper()
+                    # #80-BP (0000771-41): comparação SEM ACENTO — a prévia traz
+                    # "ULTIMA REMUNERACAO" (ASCII) e a equivalência nunca batia,
+                    # forçando a troca de base (e a inclusão verificada) sem necessidade.
+                    import unicodedata as _ud_be
+                    _hist_ascii = "".join(
+                        c for c in _ud_be.normalize("NFKD", historico_nome)
+                        if not _ud_be.combining(c)
+                    )
                     skip_equivalente = (
                         atual_tipo == "MAIOR_REMUNERACAO"
                         and desejado_tipo == "HISTORICO_SALARIAL"
-                        and historico_nome == "ÚLTIMA REMUNERAÇÃO"
+                        and _hist_ascii == "ULTIMA REMUNERACAO"
                     )
                     if skip_equivalente:
                         self.log("    ⊙ tipoDaBaseTabelada=MAIOR_REMUNERACAO preservado (≡ HISTORICO+ÚLTIMA; evita re-render destrutivo)")
@@ -5156,6 +5164,40 @@ class PlaywrightAutomatorV2:
                 # o visual → pula → JSF reclama "Campo obrigatório: Histórico Salarial".
                 # FIX: forçar _selecionar() + dispatch change event JS + validação.
                 if f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL and not skip_equivalente:
+                    # #80-BP (0000771-41, 18/07/2026): o painel do histórico
+                    # (select baseHistoricos + botão incluirBaseHistorico) SÓ
+                    # RENDERIZA após o re-render A4J do tipoDaBaseTabelada. Sob
+                    # servidor ocupado (pós-Expresso/Drools) ele não chegava e
+                    # os skips eram SILENCIOSOS — a base ficava vazia e a
+                    # liquidação bloqueava ("ocorrência com valor zero" /
+                    # "Falta selecionar Histórico Salarial"). Garantir o painel
+                    # com espera + gate + re-select antes de prosseguir.
+                    _painel_ok = False
+                    for _pt in range(1, 3):
+                        try:
+                            self._page.wait_for_selector(
+                                "select[id$=':baseHistoricos']",
+                                state="attached", timeout=12000,
+                            )
+                            _painel_ok = True
+                            break
+                        except Exception:
+                            self.log(
+                                f"    ⚠ #80-BP painel Histórico não renderizou "
+                                f"(tent {_pt}/2) — gate servidor + re-select tipoDaBaseTabelada"
+                            )
+                            self._aguardar_servidor_ocioso(contexto="#80-BP painel histórico")
+                            try:
+                                self._selecionar("tipoDaBaseTabelada", "HISTORICO_SALARIAL", obrigatorio=False)
+                                self._aguardar_ajax(5000)
+                                self._page.wait_for_timeout(800)
+                            except Exception:
+                                pass
+                    if not _painel_ok:
+                        self.log(
+                            "    🛑 #80-BP painel de Histórico Salarial NÃO renderizou — "
+                            "base da verba ficará vazia (liquidação pode bloquear)"
+                        )
                     if f.base_calculo.historico_nome:
                         if tipo_mudou:
                             self._selecionar("baseHistoricos", f.base_calculo.historico_nome, obrigatorio=False)
@@ -5182,6 +5224,14 @@ class PlaywrightAutomatorV2:
                             if persistiu and persistiu.get('ok'):
                                 self.log(f"    ✓ baseHistoricos JSF-persisted: value={persistiu.get('value')} label='{persistiu.get('label')}'")
                                 self._aguardar_ajax(2500)
+                            else:
+                                # #80-BP: falha era SILENCIOSA — sem este log a
+                                # base vazia só aparecia na liquidação bloqueada.
+                                self.log(
+                                    f"    ⚠ #80-BP baseHistoricos NÃO setado: "
+                                    f"{(persistiu or {}).get('why')} "
+                                    f"opts={(persistiu or {}).get('opts')}"
+                                )
                         except Exception as e:
                             self.log(f"    ⚠ baseHistoricos forçar dispatch: {e}")
                     if f.base_calculo.proporcionaliza:
