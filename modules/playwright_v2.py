@@ -2795,6 +2795,15 @@ class PlaywrightAutomatorV2:
                         self._page.wait_for_load_state("domcontentloaded", timeout=8000)
                     except Exception:
                         pass
+                    # #80-BQ (0000771-41): a 1ª verba Manual pós-Expresso BATCH
+                    # morre no A4J do form (Drools segurando o servidor por
+                    # minutos) e as 3 tentativas caíam TODAS na mesma janela —
+                    # '13 SALARIO' perdido em 2 runs seguidas. Esperar 90s
+                    # (precedente #80-V/#80-AG-6) + gate antes de re-tentar.
+                    if _tent < 3:
+                        self.log("    ⏳ #80-BQ aguardando 90s (Drools) antes da re-tentativa do Manual")
+                        self._page.wait_for_timeout(90000)
+                        self._aguardar_servidor_ocioso(contexto=f"#80-BQ retry Manual {_nome_v}")
                     try:
                         self._navegar_menu("li_calculo_verbas")
                         self._aguardar_ajax(6000)
@@ -5211,8 +5220,14 @@ class PlaywrightAutomatorV2:
                                     const sel = document.querySelector("select[id$=':baseHistoricos']");
                                     if (!sel) return {ok: false, why: 'select não existe'};
                                     const opts = [...sel.options];
+                                    // #80-BS: match SEM ACENTO — prévia ASCII
+                                    // ("ULTIMA REMUNERACAO") × option acentuada
+                                    // do PJE-Calc ("ÚLTIMA REMUNERAÇÃO").
+                                    const norm = s => (s||'').normalize('NFD')
+                                        .replace(/[\\u0300-\\u036f]/g,'')
+                                        .replace(/\\s+/g,' ').trim().toUpperCase();
                                     const wanted = opts.find(o =>
-                                        (o.textContent||'').trim().toUpperCase() === nome.trim().toUpperCase()
+                                        norm(o.textContent) === norm(nome)
                                     );
                                     if (!wanted) return {ok: false, why: 'option não encontrada', opts: opts.map(o=>o.textContent.trim())};
                                     sel.value = wanted.value;
@@ -5257,7 +5272,10 @@ class PlaywrightAutomatorV2:
                         try:
                             return self._page.evaluate(
                                 """(nome) => {
-                                    const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+                                    // #80-BS: comparação SEM ACENTO (prévia ASCII × tabela acentuada)
+                                    const norm = s => (s||'').normalize('NFD')
+                                        .replace(/[\\u0300-\\u036f]/g,'')
+                                        .replace(/\\s+/g,' ').trim().toUpperCase();
                                     const t = document.querySelector("[id$=':listagemHistoricosDaVerba']");
                                     if (!t) return false;
                                     const alvo = norm(nome);
@@ -12242,9 +12260,22 @@ class PlaywrightAutomatorV2:
     _STOP_FID = {"SOBRE", "DE", "DA", "DO", "E", "A", "O", "AO", "NA", "NO", "COM"}
 
     def _tokens_fidelidade(self, s: str) -> frozenset:
-        """Tokens significativos de uma descrição, p/ match por subconjunto."""
+        """Tokens significativos de uma descrição, p/ match por subconjunto.
+
+        #80-BR (0000771-41): normalizar ORDINAIS — o PJC grava "13º SALÁRIO"
+        (NFKD → token "13O") e a prévia "13 Salario" (token "13") → o subset
+        nunca batia e o guarda acusava falso FALTANTE + falso EXTRA do MESMO
+        reflexo. Mesmo fix do matcher de checkbox (#80-AT)."""
+        import re as _re
         n = self._norm_desc_fidelidade(s)
-        return frozenset(t for t in n.split() if len(t) > 1 and t not in self._STOP_FID)
+        toks = set()
+        for t in n.split():
+            t = _re.sub(r"^(\d+)[OA]$", r"\1", t)
+            if len(t) > 1 and t not in self._STOP_FID:
+                toks.add(t)
+            elif t.isdigit():
+                toks.add(t)
+        return frozenset(toks)
 
     def _reconciliar_fidelidade_pjc(self, pjc_bytes: bytes) -> dict:
         """#80-AK — compara verbas+reflexos da prévia contra o PJC exportado.

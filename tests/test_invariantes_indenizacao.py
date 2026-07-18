@@ -1527,7 +1527,8 @@ def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
     # Fix A — o loop Manual deve ter retry de 3 tentativas com re-anchor.
     idx_loop = src.find("# 4b. Manual (uma por vez)")
     assert idx_loop > 0, "bloco do loop Manual não encontrado"
-    bloco = src[idx_loop:idx_loop + 2200]
+    # janela ampliada p/ 3200 (#80-BQ inseriu a espera de 90s antes do re-anchor)
+    bloco = src[idx_loop:idx_loop + 3200]
     assert "FIX #73" in bloco, "marcador do fix #73 ausente do loop Manual"
     assert "for _tent in range(1, 4):" in bloco, "retry 3× ausente do loop Manual"
     assert "_lancar_verba_manual(v)" in bloco
@@ -3256,3 +3257,36 @@ def test_inv97_painel_historico_garantido_e_skip_sem_acento():
         "REGRESSÃO #80-BP: retry do painel sem gate re-alimenta o LockTimeout")
     assert "#80-BP baseHistoricos NÃO setado" in corpo, (
         "REGRESSÃO #80-BP: falha do set da base voltou a ser silenciosa")
+
+
+def test_inv98_manual_retry_gate_fidelidade_ordinal_historico_sem_acento():
+    """#80-BQ/BR/BS (re-run 0000771-41, 18/07/2026): (BQ) a 1ª verba Manual
+    pós-Expresso morre no A4J (Drools) e as 3 tentativas caíam na MESMA janela
+    — '13 SALARIO' perdido em 2 runs; retry agora espera 90s + gate. (BR) o
+    guarda de fidelidade acusava falso FALTANTE+EXTRA do mesmo reflexo porque
+    '13º'→token '13O' ≠ '13' da prévia; ordinais normalizados como no matcher
+    de checkbox. (BS) matchers de histórico (tabela da verba + persist JSF do
+    select) comparavam COM acento — 'ULTIMA REMUNERACAO' nunca casava a option
+    'ÚLTIMA REMUNERAÇÃO'."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "#80-BQ aguardando 90s" in src, (
+        "REGRESSÃO #80-BQ: retry do Manual sem espera do Drools — cai na mesma janela")
+    tk = src.split("def _tokens_fidelidade")[1].split("def _reconciliar_fidelidade_pjc")[0]
+    assert r"^(\d+)[OA]$" in tk, (
+        "REGRESSÃO #80-BR: tokens de fidelidade sem normalização de ordinal (13º≠13)")
+    seg_tab = src.split("listagemHistoricosDaVerba']\");")[0][-800:]
+    assert "u0300" in seg_tab, (
+        "REGRESSÃO #80-BS: _tabela_tem_hist voltou a comparar com acento")
+    seg_pers = src.split("select não existe'}")[1][:900]
+    assert "u0300" in seg_pers, (
+        "REGRESSÃO #80-BS: persist JSF do baseHistoricos voltou a exigir match acentuado")
+    # Instância real do bug BR:
+    import types
+    class _T:
+        _STOP_FID = {"SOBRE", "DE", "DA", "DO", "E", "A", "O", "AO", "NA", "NO", "COM"}
+    import importlib
+    PW = importlib.import_module("modules.playwright_v2")
+    inst = object.__new__(PW.PlaywrightAutomatorV2)
+    t1 = inst._tokens_fidelidade("13 Salario sobre Horas Extras 50%")
+    t2 = inst._tokens_fidelidade("13&#186; SAL&#193;RIO SOBRE HORAS EXTRAS 50% - MINUTOS DE ANTECEDENCIA")
+    assert t1 <= t2, f"REGRESSÃO #80-BR: {t1} não é subconjunto de {t2}"
