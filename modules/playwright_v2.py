@@ -2776,6 +2776,21 @@ class PlaywrightAutomatorV2:
         # reportando "sucesso". AGORA: re-ancorar a listagem (deixar a navegação
         # assentar) e RETENTAR até 3× por verba; o guard anti-PJC-fantasma em
         # fase_liquidar_e_exportar barra a exportação se mesmo assim faltarem.
+        #
+        # ⚠ #80-BT (0000198-03, 19/07/2026) — NÃO REVERTER: run 100% Manual
+        # (todas as verbas re-roteadas INFORMADO+DESLIGAMENTO) NÃO passa pelo
+        # Fechar+Reabrir pré-loop do #79 (que vive em _lancar_expresso) — as
+        # verbas Manual eram criadas na CONVERSA SEAM INICIAL da Fase 1, onde
+        # o save não commita (mesma raiz do #79), e MORRIAM no Fechar
+        # pré-Liquidar: guard anti-fantasma abortou com 'verbas esperadas=3
+        # listadas=0' apesar de 3× '✓ Manual criado'. Garantir conversa
+        # reaberta ANTES do 1º Manual quando o Expresso não rodou.
+        if verbas_manual and not verbas_expresso:
+            try:
+                if self._fechar_e_reabrir_calculo("pré-loop Manual (#80-BT)"):
+                    self.log("  ✓ #80-BT conversa reaberta antes do loop Manual (sem Expresso)")
+            except Exception as _e:
+                self.log(f"  ⚠ #80-BT Fechar+Reabrir pré-Manual: {str(_e)[:120]}")
         for v in verbas_manual:
             _nome_v = getattr(v, "nome_pjecalc", None) or getattr(v, "expresso_alvo", "?")
             _man_ok = False

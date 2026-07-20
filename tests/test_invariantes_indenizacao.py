@@ -1528,7 +1528,7 @@ def test_inv43_loop_manual_resiliente_e_guard_anti_fantasma():
     idx_loop = src.find("# 4b. Manual (uma por vez)")
     assert idx_loop > 0, "bloco do loop Manual não encontrado"
     # janela ampliada p/ 3200 (#80-BQ inseriu a espera de 90s antes do re-anchor)
-    bloco = src[idx_loop:idx_loop + 3200]
+    bloco = src[idx_loop:idx_loop + 4600]
     assert "FIX #73" in bloco, "marcador do fix #73 ausente do loop Manual"
     assert "for _tent in range(1, 4):" in bloco, "retry 3× ausente do loop Manual"
     assert "_lancar_verba_manual(v)" in bloco
@@ -3290,3 +3290,23 @@ def test_inv98_manual_retry_gate_fidelidade_ordinal_historico_sem_acento():
     t1 = inst._tokens_fidelidade("13 Salario sobre Horas Extras 50%")
     t2 = inst._tokens_fidelidade("13&#186; SAL&#193;RIO SOBRE HORAS EXTRAS 50% - MINUTOS DE ANTECEDENCIA")
     assert t1 <= t2, f"REGRESSÃO #80-BR: {t1} não é subconjunto de {t2}"
+
+
+def test_inv99_manual_only_fecha_reabre_antes_do_loop():
+    """#80-BT (0000198-03, 19/07/2026): run 100% Manual (todas as verbas
+    re-roteadas INFORMADO+DESLIGAMENTO) não passa pelo F+R pré-loop do #79
+    (vive em _lancar_expresso) — as 3 verbas eram criadas na conversa Seam
+    INICIAL, onde o save não commita, e morriam no Fechar pré-Liquidar (guard
+    anti-fantasma: 'esperadas=3 listadas=0' apesar de 3× criado). Invariante:
+    com verbas_manual e SEM Expresso, Fechar+Reabrir ANTES do 1º Manual."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    corpo = src.split("def fase_verbas")[1].split("def _lancar_expresso")[0]
+    assert "#80-BT" in corpo, "REGRESSÃO #80-BT: gate do run 100% Manual removido"
+    assert "if verbas_manual and not verbas_expresso:" in corpo, (
+        "REGRESSÃO #80-BT: condição do F+R pré-Manual alterada")
+    seg = corpo.split("if verbas_manual and not verbas_expresso:")[1][:400]
+    assert "_fechar_e_reabrir_calculo" in seg, (
+        "REGRESSÃO #80-BT: F+R pré-loop Manual removido — verbas Manual voltam "
+        "a nascer na conversa inicial e morrer no Fechar pré-Liquidar")
+    assert corpo.index("#80-BT") < corpo.index("for v in verbas_manual:"), (
+        "REGRESSÃO #80-BT: gate deve vir ANTES do loop Manual")
