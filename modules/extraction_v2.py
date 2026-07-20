@@ -222,6 +222,14 @@ Verbas rescisórias (Saldo Salário, Aviso Prévio, Multa 477, FGTS) devem ter:
 - **`periodo_inicio` = 1º dia do mês da demissão** (NÃO a data da dispensa)
 - `periodo_fim` = `data_demissao`
 
+⚠️ **INVARIANTE (#80-BU) — DESLIGAMENTO é SÓ para verbas pagas na rescisão.**
+Parcela devida num MÊS ESPECÍFICO anterior à demissão (ex.: diferença de
+feriado trabalhado em 07/09/2024, com demissão em 11/07/2025) usa
+`ocorrencia_pagamento = "MENSAL"` com período naquele mês — NUNCA
+DESLIGAMENTO. Bug real: o PJE-Calc gera a ocorrência DESLIGAMENTO no mês da
+demissão, fora do período da verba, e REJEITA o save silenciosamente — as
+verbas foram perdidas.
+
 Razão: o PJE-Calc gera ocorrência para o MÊS inteiro. Se `periodo_inicio =
 periodo_fim = data_demissao`, a ocorrência sai do período declarado e a
 liquidação trava:

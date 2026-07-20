@@ -2189,7 +2189,7 @@ def test_inv69_verba_manual_aguarda_drools_pos_save():
     # A espera deve estar atrelada ao ramo de 'mensagem de sucesso não detectada'
     idx_msg = fn.find("mensagem de sucesso não detectada")
     assert idx_msg != -1, "REGRESSÃO #80-V: ramo de sucesso-não-detectado deve existir"
-    assert "90000" in fn[idx_msg:idx_msg + 600], (
+    assert "90000" in fn[idx_msg:idx_msg + 1600], (  # janela ampliada (#80-BU inseriu captura de msgs JSF antes do wait)
         "REGRESSÃO #80-V: o wait de 90s deve estar DENTRO do ramo de 'sucesso não "
         "detectado' (não incondicional — não atrasar verbas que salvam normalmente)"
     )
@@ -3310,3 +3310,44 @@ def test_inv99_manual_only_fecha_reabre_antes_do_loop():
         "a nascer na conversa inicial e morrer no Fechar pré-Liquidar")
     assert corpo.index("#80-BT") < corpo.index("for v in verbas_manual:"), (
         "REGRESSÃO #80-BT: gate deve vir ANTES do loop Manual")
+
+
+def test_inv100_desligamento_fora_do_mes_vira_mensal_e_manual_confirmado():
+    """#80-BU (0000198-03, 19/07/2026): 3 verbas 'FERIADO EM DOBRO - DIFERENÇA'
+    com ocorrência DESLIGAMENTO e período MESES ANTES da demissão (11/07/2025)
+    — o PJE-Calc gera a ocorrência DESLIGAMENTO no mês da demissão, fora do
+    período, e REJEITA o save SEM mensagem; o '✓ Manual criado' incondicional
+    mascarou e o guard anti-fantasma só abortou no pré-Liquidar (2 runs).
+    Invariantes: (a) normalizer coage DESLIGAMENTO→MENSAL quando periodo_fim <
+    mês da demissão; (b) _lancar_verba_manual captura msgs JSF e SÓ declara
+    criado com a verba CONFIRMADA na listagem (raise → retry ×3 do loop)."""
+    import importlib
+    N = importlib.import_module("modules.json_normalizer")
+    data = {
+        "parametros_calculo": {"data_demissao": "11/07/2025"},
+        "verbas_principais": [
+            {"nome_pjecalc": "FERIADO EM DOBRO - DIFERENCA 07/09/2024",
+             "parametros": {"ocorrencia_pagamento": "DESLIGAMENTO",
+                            "periodo_inicio": "01/09/2024", "periodo_fim": "07/09/2024"}},
+            {"nome_pjecalc": "SALDO DE SALÁRIO",
+             "parametros": {"ocorrencia_pagamento": "DESLIGAMENTO",
+                            "periodo_inicio": "01/07/2025", "periodo_fim": "11/07/2025"}},
+        ],
+    }
+    N._norm_ocorrencia_desligamento_fora_do_mes(data)
+    assert data["verbas_principais"][0]["parametros"]["ocorrencia_pagamento"] == "MENSAL", (
+        "REGRESSÃO #80-BU: DESLIGAMENTO com período antes do mês da demissão não coagido a MENSAL")
+    assert data["verbas_principais"][1]["parametros"]["ocorrencia_pagamento"] == "DESLIGAMENTO", (
+        "REGRESSÃO #80-BU: rescisória legítima (mês da demissão) não pode ser tocada")
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_ocorrencia_desligamento_fora_do_mes(data)" in src.split("def normalize_v2_json")[1]
+    # Bot: ground truth do Manual
+    pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    corpo = pw.split("def _lancar_verba_manual")[1].split("def fase_cartao_de_ponto")[0]
+    assert "#80-BU msg JSF" in corpo, (
+        "REGRESSÃO #80-BU: msgs JSF do save Manual rejeitado não são mais capturadas")
+    assert "CONFIRMADO na listagem" in corpo and "NÃO apareceu na listagem pós-save" in corpo, (
+        "REGRESSÃO #80-BU: '✓ criado' voltou a ser incondicional — perda silenciosa de verba Manual")
+    # Prompt
+    pr = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
+    assert "DESLIGAMENTO é SÓ para verbas pagas na rescisão" in pr

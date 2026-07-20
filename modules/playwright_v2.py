@@ -8462,13 +8462,60 @@ class PlaywrightAutomatorV2:
         body = self._page.locator("body").text_content() or ""
         if "operação realizada com sucesso" not in body.lower() and "sucesso" not in body.lower():
             self.log(f"  ⚠ Verba '{v.nome_pjecalc}' — mensagem de sucesso não detectada")
+            # #80-BU: capturar as MENSAGENS JSF reais — o save pode ter sido
+            # REJEITADO silenciosamente (0000198-03: ocorrência DESLIGAMENTO
+            # fora do período) e sem isso a causa fica invisível no log.
+            try:
+                _msgs_mn = self._page.evaluate(
+                    """() => [...new Set([...document.querySelectorAll('.rich-message, .rich-messages, .rf-msg, .rf-msgs')]
+                        .map(e => (e.textContent||'').replace(/\\/\\/<!\\[CDATA\\[[\\s\\S]*$/, '').trim())
+                        .filter(t => t && t.length < 250))]"""
+                ) or []
+                for _m in _msgs_mn[:5]:
+                    self.log(f"    ⚠ #80-BU msg JSF: {_m[:180]}")
+            except Exception:
+                pass
             # Drools pode estar processando em background (ex.: FGTS com base complexa como PISO DA
             # CATEGORIA) segurando o @Synchronized apresentadorVerbaDeCalculo por >3 min.
             # Sem espera, a próxima chamada a _garantir_incluir_disponivel (45s×4=180s) ainda é
             # insuficiente e a verba seguinte é perdida. (#80-V)
             self.log(f"  ⏳ Aguardando 90s para Drools finalizar antes da próxima verba (#80-V)...")
             self._page.wait_for_timeout(90000)
-        self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado")
+        # #80-BU: GROUND TRUTH — confirmar a verba na LISTAGEM (re-render do
+        # bean) antes de declarar criada. O '✓ criado' incondicional mascarou
+        # a perda das 3 verbas do 0000198-03 (save rejeitado sem mensagem, run
+        # 'concluída' e guard anti-fantasma abortando só no pré-Liquidar).
+        _confirmada_mn = False
+        try:
+            self._aguardar_servidor_ocioso(contexto=f"#80-BU verif Manual {v.nome_pjecalc}")
+            if "verba-calculo.jsf" not in (self._page.url or ""):
+                self._navegar_menu_via_click("li_calculo_verbas")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(800)
+            _confirmada_mn = bool(self._page.evaluate(
+                """(alvo) => {
+                    const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                        .replace(/\\s+/g,' ').trim().toUpperCase();
+                    const links = [...document.querySelectorAll('a.linkParametrizar')]
+                        .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                    for (const link of links) {
+                        const tr = link.closest('tr');
+                        if (!tr) continue;
+                        for (const td of [...tr.querySelectorAll('td')]) {
+                            if (norm(td.textContent.replace(/Exibir|Ocultar/gi,'')) === norm(alvo)) return true;
+                        }
+                    }
+                    return false;
+                }""",
+                (v.nome_pjecalc or "")[:50],  # descricao trunca a 50 (#80-O)
+            ))
+        except Exception as _e:
+            self.log(f"    ⚠ #80-BU verificação na listagem: {str(_e)[:100]}")
+        if not _confirmada_mn:
+            raise RuntimeError(
+                f"verba Manual '{v.nome_pjecalc}' NÃO apareceu na listagem pós-save (#80-BU)"
+            )
+        self.log(f"  ✓ Manual '{v.nome_pjecalc}' criado (CONFIRMADO na listagem)")
 
     def fase_cartao_de_ponto(self) -> None:
         """Cartão de Ponto — cria N cartões via formulário Novo do PJE-Calc.

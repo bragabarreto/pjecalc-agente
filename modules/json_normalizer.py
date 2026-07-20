@@ -576,6 +576,54 @@ def _norm_cap_periodo_fim_na_demissao(data: dict[str, Any]) -> None:
             )
 
 
+def _norm_ocorrencia_desligamento_fora_do_mes(data: dict[str, Any]) -> None:
+    """#80-BU (0000198-03, 19/07/2026) — NÃO REVERTER.
+
+    Verba com `ocorrencia_pagamento=DESLIGAMENTO` gera a ocorrência única no
+    MÊS DA DEMISSÃO. Se o período da verba termina ANTES desse mês (ex.:
+    diferença de feriado de 07/09/2024 com demissão 11/07/2025), o PJE-Calc
+    REJEITA o save SILENCIOSAMENTE (ocorrência fora do período) — as 3 verbas
+    do 0000198-03 foram perdidas com '✓ criado' falso. Parcela devida num mês
+    específico anterior à rescisão é MENSAL (o período de 1 mês gera a
+    ocorrência única naquele mês). Fidelidade prévia↔automação: coagir ANTES
+    da prévia."""
+    pc = data.get("parametros_calculo") or {}
+    dem = pc.get("data_demissao") if isinstance(pc, dict) else None
+    if not dem:
+        return
+    from datetime import datetime as _dt
+    import logging
+    _log = logging.getLogger(__name__)
+    try:
+        d_dem = _dt.strptime(dem, "%d/%m/%Y")
+    except (ValueError, TypeError):
+        return
+    mes_dem = (d_dem.year, d_dem.month)
+    for v in data.get("verbas_principais") or []:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        if str(p.get("ocorrencia_pagamento") or "") != "DESLIGAMENTO":
+            continue
+        pf = p.get("periodo_fim")
+        if not pf:
+            continue
+        try:
+            d_pf = _dt.strptime(pf, "%d/%m/%Y")
+        except (ValueError, TypeError):
+            continue
+        if (d_pf.year, d_pf.month) < mes_dem:
+            p["ocorrencia_pagamento"] = "MENSAL"
+            _log.warning(
+                "Normalizer: verba '%s' DESLIGAMENTO com periodo_fim=%s ANTERIOR "
+                "ao mês da demissão (%s) → ocorrencia=MENSAL (#80-BU — PJE-Calc "
+                "rejeitaria o save com a ocorrência fora do período)",
+                v.get("nome_pjecalc"), pf, dem,
+            )
+
+
 def _norm_cap_periodo_inicio_admissao(data: dict[str, Any]) -> None:
     """Coerência período×admissão — #80-BO (0000771-41, 18/07/2026).
 
@@ -1639,6 +1687,7 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # liquidação aborta com listagem vazia. Cap no piso ANTES da prévia.
     _norm_cap_periodo_inicio_prescricao(data)
     _norm_cap_periodo_inicio_admissao(data)
+    _norm_ocorrencia_desligamento_fora_do_mes(data)
 
     # Salvaguarda salário por fora (#69): FGTS incide SÓ sobre a parcela
     # extrafolha (o registrado já foi depositado). Corrige a inversão comum da
