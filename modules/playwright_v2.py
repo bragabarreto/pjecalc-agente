@@ -2791,6 +2791,16 @@ class PlaywrightAutomatorV2:
                     self.log("  ✓ #80-BT conversa reaberta antes do loop Manual (sem Expresso)")
             except Exception as _e:
                 self.log(f"  ⚠ #80-BT Fechar+Reabrir pré-Manual: {str(_e)[:120]}")
+        # #80-BV (0000740-55, 20/07/2026): o batch Expresso (8 verbas c/
+        # reflexos auto-gerados) deixa o Drools rodando por MINUTOS; a 1ª verba
+        # Manual em seguida morria no A4J do form (LockTimeout → página de erro
+        # → cascata de 'campo não encontrado'). O gate cliente não enxerga o
+        # lock (rede ociosa, servidor ocupado) — 90s fixos + gate, mesmo
+        # precedente do #80-V/#80-AG-6.
+        if verbas_manual and verbas_expresso:
+            self.log("  ⏳ #80-BV aguardando 90s (Drools pós-Expresso) antes das verbas Manual")
+            self._page.wait_for_timeout(90000)
+            self._aguardar_servidor_ocioso(contexto="#80-BV pré-loop Manual")
         for v in verbas_manual:
             _nome_v = getattr(v, "nome_pjecalc", None) or getattr(v, "expresso_alvo", "?")
             _man_ok = False
@@ -5218,6 +5228,24 @@ class PlaywrightAutomatorV2:
                             except Exception:
                                 pass
                     if not _painel_ok:
+                        # #80-BV: se o PRÓPRIO tipoDaBaseTabelada também sumiu,
+                        # a PÁGINA morreu (LockTimeout no A4J da base — página
+                        # de erro no lugar do form). No fluxo Manual, abortar
+                        # JÁ: preencher um cadáver gasta ~30s de timeouts
+                        # ('campo não encontrado' em cascata) e termina em
+                        # 'Botão não encontrado: salvar' — o raise aciona o
+                        # retry ×3 do loop, que REABRE o form.
+                        try:
+                            _sel_vivo = self._page.locator(
+                                "select[id$=':tipoDaBaseTabelada']"
+                            ).count() > 0
+                        except Exception:
+                            _sel_vivo = False
+                        if not _sel_vivo and com_identificacao:
+                            raise RuntimeError(
+                                "#80-BV form Manual morreu durante o A4J da base "
+                                "(LockTimeout) — retry reabre o form"
+                            )
                         self.log(
                             "    🛑 #80-BP painel de Histórico Salarial NÃO renderizou — "
                             "base da verba ficará vazia (liquidação pode bloquear)"

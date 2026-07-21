@@ -3351,3 +3351,27 @@ def test_inv100_desligamento_fora_do_mes_vira_mensal_e_manual_confirmado():
     # Prompt
     pr = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "DESLIGAMENTO é SÓ para verbas pagas na rescisão" in pr
+
+
+def test_inv101_manual_pos_expresso_espera_drools_e_aborta_form_morto():
+    """#80-BV (0000740-55, 20/07/2026): a 1ª verba Manual logo após o batch
+    Expresso (8 verbas c/ reflexos → Drools por minutos) morria no A4J do
+    tipoDaBaseTabelada — LockTimeout troca o form pela página de erro e o bot
+    preenchia um cadáver ('campo não encontrado' em cascata até 'Botão não
+    encontrado: salvar'). O gate cliente não vê o lock (rede ociosa, servidor
+    ocupado). Invariantes: (a) 90s fixos + gate ANTES do loop Manual quando
+    houve Expresso (precedente #80-V/#80-AG-6); (b) no fluxo Manual, se o
+    próprio tipoDaBaseTabelada sumiu após o A4J, raise imediato → retry do
+    loop reabre o form."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    fv = src.split("def fase_verbas")[1].split("def _lancar_expresso")[0]
+    assert "if verbas_manual and verbas_expresso:" in fv and "#80-BV" in fv, (
+        "REGRESSÃO #80-BV: espera Drools pré-loop Manual pós-Expresso removida")
+    seg = fv.split("if verbas_manual and verbas_expresso:")[1][:600]
+    assert "90000" in seg and "_aguardar_servidor_ocioso" in seg, (
+        "REGRESSÃO #80-BV: 90s + gate ausentes do pré-loop Manual")
+    corpo = src.split("SUB-BLOCO CALCULADO")[1].split("\n    def ")[0]
+    assert "form Manual morreu durante o A4J da base" in corpo, (
+        "REGRESSÃO #80-BV: página morta volta a ser preenchida como cadáver")
+    assert "com_identificacao" in corpo.split("form Manual morreu")[0][-800:], (
+        "REGRESSÃO #80-BV: o abort precisa ser restrito ao fluxo Manual (com_identificacao)")
