@@ -7467,6 +7467,27 @@ class PlaywrightAutomatorV2:
             except Exception:
                 _falhas[extra_id] = _falhas.get(extra_id, 0) + 1
                 if _falhas[extra_id] >= 4:
+                    # #80-BW (0000740-55, 21/07/2026): desistir aqui deixava os
+                    # reflexos EXTRAS ativos em TODAS as runs (7× 'desistindo',
+                    # 0 desmarcações; guard #80-AK acusava 10 extras no PJC). A
+                    # MARCAÇÃO já usa fallback JS p/ checkbox oculto — espelhar
+                    # na DESMARCAÇÃO, com releitura pós-AJAX (DOM re-render).
+                    try:
+                        self._page.evaluate(
+                            "(cid) => { const cb = document.getElementById(cid); if (cb && cb.checked) cb.click(); }",
+                            extra_id,
+                        )
+                        self._aguardar_ajax(4000)
+                        self._page.wait_for_timeout(600)
+                        _ainda = self._page.evaluate(
+                            "(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }",
+                            extra_id,
+                        )
+                        if _ainda is False:
+                            self.log(f"    ✓ #80-BW extra {extra_id[-28:]} desmarcado via JS (checkbox oculto)")
+                            continue
+                    except Exception:
+                        pass
                     self.log(f"    ⚠ #80-AQ checkbox extra {extra_id[-28:]} não fica visível — desistindo")
                     break
                 self._page.wait_for_timeout(600)

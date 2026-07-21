@@ -3375,3 +3375,22 @@ def test_inv101_manual_pos_expresso_espera_drools_e_aborta_form_morto():
         "REGRESSÃO #80-BV: página morta volta a ser preenchida como cadáver")
     assert "com_identificacao" in corpo.split("form Manual morreu")[0][-800:], (
         "REGRESSÃO #80-BV: o abort precisa ser restrito ao fluxo Manual (com_identificacao)")
+
+
+def test_inv102_desmarcador_extras_fallback_js():
+    """#80-BW (0000740-55, 21/07/2026): o desmarcador #80-AQ exigia checkbox
+    VISÍVEL e desistia quando o painel re-colapsava ('não fica visível —
+    desistindo' 7×, 0 desmarcações) — reflexos EXTRAS auto-gerados pelo
+    Expresso sobreviviam em TODAS as runs (guard #80-AK: 10 extras no PJC).
+    A MARCAÇÃO já usa fallback JS p/ checkbox oculto; a DESMARCAÇÃO agora
+    espelha, com releitura pós-AJAX antes de aceitar."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    i = src.find("não fica visível — desistindo")
+    assert i > 0
+    seg = src[max(0, i - 2000):i]
+    assert "#80-BW" in seg and "desmarcado via JS" in seg, (
+        "REGRESSÃO #80-BW: desmarcador voltou a desistir sem fallback JS — "
+        "reflexos extras ficam ativos no PJC em toda run")
+    bw = seg.split("#80-BW")[1]
+    assert "cb.checked : null" in bw or "checked" in bw.split("desmarcado via JS")[0], (
+        "REGRESSÃO #80-BW: fallback JS sem releitura pós-AJAX (DOM≠bean)")
