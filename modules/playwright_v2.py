@@ -11677,7 +11677,7 @@ class PlaywrightAutomatorV2:
         # CRÍTICO: a automação SÓ deve travar e oferecer edição manual quando
         # totalErros > 0. Alertas amarelos não impedem a liquidação e devem
         # ser apenas registrados no log.
-        _liq_result = self._page.evaluate("""() => {
+        _JS_LIQ = """() => {
             // ─ Totalizadores da tela liquidacao.xhtml ─────────────────────
             const totErrosEl = document.querySelector('input[id$=":totalErros"], input[id$="totalErros"]');
             const totAlertasEl = document.querySelector('input[id$=":totalAlertas"], input[id$="totalAlertas"]');
@@ -11715,7 +11715,8 @@ class PlaywrightAutomatorV2:
                 sucesso_painel,
                 msgs, tem_erro_500: has_real_error, tem_sucesso: has_sucesso_msg
             };
-        }""")
+        }"""
+        _liq_result = self._page.evaluate(_JS_LIQ)
 
         # Normalizar: se a tela renderizou totalizadores, usamos eles como
         # fonte da verdade. Se ainda não renderizou (race AJAX), usamos só
@@ -11741,7 +11742,57 @@ class PlaywrightAutomatorV2:
         #   - totalErros > 0 → BLOQUEANTE → oferecer edição manual com lista de erros
         #   - totalErros == 0 (com ou sem alertas) → prosseguir; alertas só são logados
         if _liq_result['tem_erro_500']:
-            raise RuntimeError(f"Liquidação retornou erro técnico: {_liq_result['msgs']}")
+            # #80-BX (0000852-87, 22/07/2026) — NÃO REVERTER: o 500 aqui era
+            # "identifier 'registro' resolved to null" — a CONVERSA da página
+            # morreu durante a liquidação LONGA (16 verbas, Drools por
+            # minutos), mas o processamento continua/commita server-side. Em
+            # vez de desistir, reabrir via Recentes (conversa fresca),
+            # re-liquidar com o servidor calmo e re-avaliar (×6, 60s entre).
+            _bx_ok = False
+            for _bx in range(1, 7):
+                self.log(f"  ⚠ #80-BX erro técnico no render da liquidação — reopen {_bx}/6 em 60s")
+                self._page.wait_for_timeout(60000)
+                try:
+                    self._aguardar_servidor_ocioso(contexto=f"#80-BX reopen {_bx}")
+                    if not self._fechar_e_reabrir_calculo(f"#80-BX pós-500 liquidação ({_bx}/6)"):
+                        continue
+                    self._navegar_menu_via_click("li_operacoes_liquidar")
+                    self._aguardar_ajax(10000)
+                    self._page.wait_for_timeout(3000)
+                    _liq_result = self._page.evaluate(_JS_LIQ)
+                    if _liq_result['tem_erro_500'] or (
+                        _liq_result['totalErros'] is None
+                        and not _liq_result['sucesso_painel']
+                        and not _liq_result['tem_sucesso']
+                    ):
+                        # página aberta mas sem resultado — re-liquidar em
+                        # servidor calmo
+                        try:
+                            self._clicar("liquidar")
+                            self._aguardar_ajax(10000)
+                            self._aguardar_operacao_sucesso(timeout_ms=60000, bloqueante=False)
+                            _liq_result = self._page.evaluate(_JS_LIQ)
+                        except Exception:
+                            pass
+                    self.log(
+                        f"  [DIAG-liquidar/BX{_bx}] totalErros={_liq_result['totalErros']} "
+                        f"painel={_liq_result['sucesso_painel']} erro_500={_liq_result['tem_erro_500']}"
+                    )
+                    if not _liq_result['tem_erro_500'] and (
+                        _liq_result['totalErros'] is not None
+                        or _liq_result['sucesso_painel'] or _liq_result['tem_sucesso']
+                    ):
+                        _bx_ok = True
+                        _tE = _liq_result['totalErros']
+                        _tA = _liq_result['totalAlertas']
+                        _erros_lista = _liq_result['erros'] or []
+                        _alertas_lista = _liq_result['alertas'] or []
+                        self.log(f"  ✓ #80-BX liquidação recuperada pós-500 (reopen {_bx})")
+                        break
+                except Exception as _e:
+                    self.log(f"    ⚠ #80-BX reopen {_bx}: {str(_e)[:120]}")
+            if not _bx_ok:
+                raise RuntimeError(f"Liquidação retornou erro técnico: {_liq_result['msgs']}")
         if _liq_result['tem_sucesso'] or _liq_result['sucesso_painel'] or (
             _tE == 0 and _tA == 0 and not _erros_lista
         ):

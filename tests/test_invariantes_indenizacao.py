@@ -3394,3 +3394,17 @@ def test_inv102_desmarcador_extras_fallback_js():
     bw = seg.split("#80-BW")[1]
     assert "cb.checked : null" in bw or "checked" in bw.split("desmarcado via JS")[0], (
         "REGRESSÃO #80-BW: fallback JS sem releitura pós-AJAX (DOM≠bean)")
+
+
+def test_inv103_liquidacao_500_recovery_reopen():
+    """#80-BX (0000852-87, 22/07/2026): 500 'registro resolved to null' na
+    liquidação longa (16 verbas) = conversa da página morta com o Drools ainda
+    processando; o bot desistia com raise. Invariante: recovery com reopen via
+    Recentes + re-liquidar + re-avaliar (×6) antes de declarar falha."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    i = src.find("Liquidação retornou erro técnico")
+    seg = src[src.find("if _liq_result['tem_erro_500']:"):i + 100]
+    assert "#80-BX" in seg and "_fechar_e_reabrir_calculo" in seg, (
+        "REGRESSÃO #80-BX: 500 da liquidação volta a ser fatal sem reopen")
+    assert "_aguardar_servidor_ocioso" in seg and "range(1, 7)" in seg, (
+        "REGRESSÃO #80-BX: recovery sem gate/paciência")
