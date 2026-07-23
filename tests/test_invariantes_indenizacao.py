@@ -3481,3 +3481,36 @@ def test_inv105_espera_paciente_form_verba():
     helper = src[src.find("def _aguardar_form_verba_paciente"):ini]
     assert "principal.jsf" in helper and "Erro Interno" in helper, (
         "REGRESSÃO #80-BY-2: bail antecipado (erro/conversa morta) removido")
+
+
+def test_inv106_reflexos_bean_ground_truth_by3():
+    """#80-BY-3 (MARCELA 0000852-87, 23/07/2026): PJC saiu com os 32 reflexos
+    da prévia TODOS ativo=false. Cadeia: (a) checkbox invisível (painel Exibir
+    colapsado) → check() falha → fallback JS click sem A4J → bean nunca recebe
+    (falso CONFIRMADO); (b) a verificação ground-truth #80-BK estava atrás do
+    gate `marcar_reflexos` que NENHUM call site passa True — nunca rodava;
+    (c) o reconciler #80-AK considerava '<nome> não-vazio = ativo' e reportou
+    '37 ativos' com todos false, mascarando a perda."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # (a) visibilidade garantida antes do check nativo (abre Exibir da linha
+    #     dona do checkbox pelo PREFIXO do id, não por texto)
+    assert "listagem:\\\\d+:)listaReflexo" in src and "#80-BY-3" in src, (
+        "REGRESSÃO #80-BY-3: abertura do painel da linha dona do checkbox removida")
+    assert "painel da linha aberto" in src, (
+        "REGRESSÃO #80-BY-3: espera de visibilidade pré-check removida")
+
+    # (b) #80-BK roda sempre que a verba tem reflexos (gate órfão removido)
+    pos = src.split("Regerar pós-parâmetros: {_e}")[1][:600]
+    assert "marcar_reflexos and" not in pos, (
+        "REGRESSÃO #80-BY-3: #80-BK voltou ao gate marcar_reflexos (que nunca é True)")
+    assert "_verificar_reflexos_pos_save" in pos
+
+    # (c) reconciler lê <ativo> explícito do bloco Reflexo
+    ini = src.find("def _reconciliar_fidelidade_pjc")
+    corpo = src[ini:ini + 9000]
+    assert "<ativo>(true|false)</ativo>" in corpo, (
+        "REGRESSÃO #80-BY-3: reconciler não lê o <ativo> real do Reflexo")
+    # e usa atribuição 1-para-1 (melhor ajuste) p/ não gerar duplicados falsos
+    assert "best_extra" in corpo, (
+        "REGRESSÃO #80-BY-3: matching por melhor ajuste removido (duplicados falsos voltam)")

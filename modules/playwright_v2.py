@@ -6594,9 +6594,11 @@ class PlaywrightAutomatorV2:
             except Exception as _e:
                 self.log(f"    ⚠ Regerar pós-parâmetros: {_e}")
             # #80-BK: verificação GROUND-TRUTH dos checkboxes de reflexo após
-            # o flush — o CONFIRMADO da marcação pode ser falso-positivo
-            # (0000092-41: 4 reflexos saíram ativo=false no PJC).
-            if marcar_reflexos and (getattr(v, "reflexos", None) or []):
+            # o flush (0000092-41: CONFIRMADO falso-positivo, ativo=false).
+            # ⚠ #80-BY-3 (MARCELA): o gate antigo (só na 2ª passada) era órfão
+            # — único call site passa False → #80-BK NUNCA rodava → 32/32
+            # reflexos ativo=false no PJC. Rodar SEMPRE que há reflexos.
+            if getattr(v, "reflexos", None) or []:
                 try:
                     self._verificar_reflexos_pos_save(v)
                 except Exception as _e:
@@ -7871,6 +7873,39 @@ class PlaywrightAutomatorV2:
             cb_visto = True
             esc = cb_id.replace(":", "\\:")
             loc = self._page.locator(f"input#{esc}")
+            # #80-BY-3 (MARCELA 0000852-87): checkbox presente no DOM mas
+            # INVISÍVEL (painel Exibir da linha colapsado) → check() falhava
+            # ("Element is not visible") → fallback JS click sem A4J → bean
+            # nunca recebia (falso CONFIRMADO; 32/32 reflexos ativo=false no
+            # PJC). Abrir o Exibir da linha DONA do checkbox (prefixo do id
+            # `...:listagem:N:` — NÃO por texto, que casa o TR outermost) e
+            # aguardar visibilidade ANTES do check nativo.
+            try:
+                _cb_visivel = loc.is_visible()
+            except Exception:
+                _cb_visivel = False
+            if not _cb_visivel:
+                try:
+                    _r_exibir = self._page.evaluate(
+                        """(cid) => {
+                            const m = cid.match(/^(.*?:listagem:\\d+:)listaReflexo:/);
+                            if (!m) return 'no-prefix';
+                            const pref = m[1];
+                            const el = document.querySelector('a[id^="' + pref + '"]');
+                            const tr = el ? el.closest('tr') : null;
+                            const exibir = tr ? tr.querySelector('span.linkDestinacoes') : null;
+                            if (exibir) { exibir.click(); return 'clicked'; }
+                            return 'no-exibir';
+                        }""",
+                        cb_id,
+                    )
+                    self._aguardar_ajax(4000)
+                    self._page.wait_for_selector(
+                        f"input#{esc}", state="visible", timeout=8000
+                    )
+                    self.log(f"    ✓ #80-BY-3 painel da linha aberto ({_r_exibir}) — checkbox visível")
+                except Exception:
+                    self.log("    ⚠ #80-BY-3 checkbox segue invisível pós-Exibir — check pode cair no fallback JS")
             try:
                 ja_marcado = loc.is_checked()
             except Exception:
@@ -12615,14 +12650,22 @@ class PlaywrightAutomatorV2:
         pjc_tokens = [self._tokens_fidelidade(s) for s in pjc_strings]
         pjc_tokens = [t for t in pjc_tokens if t]
 
-        # Reflexos ATIVOS do PJC = <Reflexo> com <nome> não-vazio (candidato
-        # inativo não tem nome). O nome tem "... SOBRE <verba>".
+        # Reflexos ATIVOS do PJC. #80-BY-3 (MARCELA 0000852-87): PJCs reais
+        # trazem <ativo> EXPLÍCITO no bloco do Reflexo — candidato com <nome>
+        # completo mas ativo=false NÃO está ativo. A heurística anterior
+        # ("<nome> não-vazio = ativo") reportou "37 ativos" num PJC em que os
+        # 37 estavam false, MASCARANDO a perda total dos reflexos. Sem <ativo>
+        # no bloco (fixtures/versões antigas), mantém a heurística do nome.
         refl_ativos_raw = []
         for bloco in _re.findall(r"<Reflexo>(.*?)</Reflexo>", xml, _re.S):
             m = _re.search(r"<nome>(.*?)</nome>", bloco, _re.S)
             nm = (m.group(1).strip() if m and m.group(1) else "")
-            if nm and " SOBRE " in self._norm_desc_fidelidade(nm):
-                refl_ativos_raw.append(nm)
+            if not nm or " SOBRE " not in self._norm_desc_fidelidade(nm):
+                continue
+            m_at = _re.search(r"<ativo>(true|false)</ativo>", bloco)
+            if m_at and m_at.group(1) == "false":
+                continue
+            refl_ativos_raw.append(nm)
         refl_ativos = [(nm, self._tokens_fidelidade(nm)) for nm in refl_ativos_raw]
 
         def _match_tokens(cand_tokens: frozenset, universo) -> bool:
@@ -12634,14 +12677,13 @@ class PlaywrightAutomatorV2:
             return False
 
         verbas_faltantes: list[str] = []
-        reflexos_faltantes: list[str] = []
-        n_verbas = n_reflexos = 0
-        casados_idx: set[int] = set()  # índices de refl_ativos já casados
+        n_verbas = 0
 
         try:
             verbas = self.previa.verbas_principais or []
         except Exception:
             verbas = []
+        previa_reflexos: list[tuple[str, list]] = []  # (label, variantes de tokens)
         for v in verbas:
             n_verbas += 1
             v_toks = [self._tokens_fidelidade(c) for c in
@@ -12649,48 +12691,55 @@ class PlaywrightAutomatorV2:
             if not any(_match_tokens(t, pjc_tokens) for t in v_toks if t):
                 verbas_faltantes.append(getattr(v, "nome_pjecalc", "?"))
             for r in (getattr(v, "reflexos", None) or []):
-                n_reflexos += 1
                 r_label = getattr(r, "nome", None) or getattr(r, "expresso_reflex_alvo", "?")
                 r_toks = [self._tokens_fidelidade(c) for c in
                           (getattr(r, "expresso_reflex_alvo", None), getattr(r, "nome", None)) if c]
-                r_toks = [t for t in r_toks if t]
-                # casar contra os reflexos ativos do PJC (por subconjunto)
-                hits = []
-                for i, (_nm, t) in enumerate(refl_ativos):
-                    if any(rt <= t for rt in r_toks):
-                        hits.append(i)
-                if not hits:
-                    reflexos_faltantes.append(r_label)
-                else:
-                    casados_idx.update(hits)
+                previa_reflexos.append((r_label, [t for t in r_toks if t]))
+        n_reflexos = len(previa_reflexos)
+
+        # #80-BY-3: atribuição 1-para-1 por MELHOR AJUSTE — cada reflexo ativo
+        # do PJC vai para o reflexo da prévia de MENOR excedente de tokens. O
+        # modelo anterior (hits independentes por subconjunto) gerava
+        # DUPLICADOS falsos: "RSR sobre HE 50%" casava também "RSR sobre HE
+        # 50% - INTERVALO INTERJORNADA" (nome superset de outra verba),
+        # reportando ×2 onde não há duplicação. Duplicado REAL (Manual +
+        # Expresso do mesmo reflexo) segue flagrado: as duas entradas caem no
+        # MESMO reflexo da prévia.
+        atribuicao: list[list[int]] = [[] for _ in previa_reflexos]
+        nao_atribuidos: list[int] = []
+        for i, (_nm, t) in enumerate(refl_ativos):
+            best_j, best_extra = None, None
+            for j, (_lbl, variantes) in enumerate(previa_reflexos):
+                for rt in variantes:
+                    if rt and rt <= t:
+                        extra = len(t - rt)
+                        if best_extra is None or extra < best_extra:
+                            best_j, best_extra = j, extra
+            if best_j is None:
+                nao_atribuidos.append(i)
+            else:
+                atribuicao[best_j].append(i)
+
+        reflexos_faltantes = [lbl for (lbl, _v), hits in zip(previa_reflexos, atribuicao)
+                              if not hits]
+        reflexos_duplicados = [f"{lbl} (×{len(hits)})"
+                               for (lbl, _v), hits in zip(previa_reflexos, atribuicao)
+                               if len(hits) >= 2]
 
         # #80-AS: com fgts.multa_artigo_467=true na prévia, os reflexos
         # "MULTA DO ARTIGO 467 SOBRE X" são ativados LEGITIMAMENTE pela flag
-        # (não constam como reflexos na prévia) — casá-los como esperados para
-        # não reportá-los como EXTRAS (falso alarme do 0000670-04).
+        # (não constam como reflexos na prévia) — não reportá-los como EXTRAS.
+        _idx_467: set[int] = set()
         try:
             _fgts = getattr(self.previa, "fgts", None)
             if _fgts is not None and getattr(_fgts, "multa_artigo_467", False):
                 _t467 = self._tokens_fidelidade("MULTA DO ARTIGO 467 DA CLT")
-                for i, (_nm, t) in enumerate(refl_ativos):
-                    if _t467 <= t:
-                        casados_idx.add(i)
+                for i in nao_atribuidos:
+                    if _t467 <= refl_ativos[i][1]:
+                        _idx_467.add(i)
         except Exception:
             pass
-
-        # DUPLICADOS: um mesmo reflexo esperado casou 2+ entradas ativas no PJC.
-        # EXTRAS: reflexo ativo no PJC que NENHUM esperado casou (over-emissão).
-        from collections import Counter as _Counter
-        contagem = _Counter()
-        for r in [rr for vv in verbas for rr in (getattr(vv, "reflexos", None) or [])]:
-            r_toks = [self._tokens_fidelidade(c) for c in
-                      (getattr(r, "expresso_reflex_alvo", None), getattr(r, "nome", None)) if c]
-            r_toks = [t for t in r_toks if t]
-            n_hits = sum(1 for (_nm, t) in refl_ativos if any(rt <= t for rt in r_toks))
-            if n_hits >= 2:
-                contagem[getattr(r, "nome", None) or getattr(r, "expresso_reflex_alvo", "?")] = n_hits
-        reflexos_duplicados = [f"{k} (×{v})" for k, v in contagem.items()]
-        reflexos_extras = [nm for i, (nm, _t) in enumerate(refl_ativos) if i not in casados_idx]
+        reflexos_extras = [refl_ativos[i][0] for i in nao_atribuidos if i not in _idx_467]
 
         # ── relatório estruturado ──
         self.log("  ── #80-AK FIDELIDADE PRÉVIA↔PJC ──")
