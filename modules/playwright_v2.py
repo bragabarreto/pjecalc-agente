@@ -5654,6 +5654,53 @@ class PlaywrightAutomatorV2:
         except Exception:
             return False
 
+    def _aguardar_form_verba_paciente(self, contexto: str = "", max_ciclos: int = 9) -> bool:
+        """#80-BY-2 (MARCELA 0000852-87, 23/07/2026): espera PACIENTE do form
+        de Alteração da verba, SEM navegar.
+
+        Para verbas pesadas (DIFERENÇA SALARIAL c/ 5 reflexos + históricos com
+        evolução), o POST do linkParametrizar segura o lock @Synchronized do
+        apresentadorVerbaDeCalculo 20–60s na VM pequena. Esperar só 10s e
+        NAVEGAR (recovery LEVE/F+R) contende com o lock, mata a conversa
+        (LockTimeoutException no render de getTitulo — java.log 23/07 confirma)
+        e o ciclo F+R nunca converge (3 tentativas × 3 recoveries falharam).
+        Mesma lição do poll #80-G, agora no nível do FORM.
+
+        wait_for_selector NÃO emite requisições — esperar não contende.
+        Bail antecipado se a página virar "Erro Interno" ou principal.jsf
+        (conversa morta — esperar não recupera; recovery F+R é o caminho).
+        Retorna True se o form renderizou (descricao/valorDevido visível).
+        """
+        for _t in range(1, max_ciclos + 1):
+            try:
+                self._page.wait_for_selector(
+                    "input[id$=':descricao'], input[id$=':valorDevido']",
+                    state="visible",
+                    timeout=10000,
+                )
+                return True
+            except Exception:
+                try:
+                    _st = self._page.evaluate(
+                        """() => ({url: location.href,
+                                   erro: /Erro Interno no Servidor/i.test(
+                                       (document.body.innerText || '').slice(0, 600))})"""
+                    )
+                except Exception:
+                    _st = {}
+                if _st.get("erro") or "principal.jsf" in (_st.get("url") or ""):
+                    self.log(
+                        f"    ↪ #80-BY-2 erro/conversa morta na espera do form "
+                        f"({contexto}) — indo à recovery"
+                    )
+                    return False
+                if _t == 1 or _t % 3 == 0:
+                    self.log(
+                        f"    ⏳ #80-BY-2 form não renderizou ({contexto}) — "
+                        f"A4J pesado em curso, aguardando {_t}/{max_ciclos} sem navegar"
+                    )
+        return False
+
     def _configurar_parametros_pos_expresso(self, v, marcar_reflexos: bool = False) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
 
@@ -6236,11 +6283,10 @@ class PlaywrightAutomatorV2:
         # falha porque a listagem não tem botão Salvar. Sinal definitivo:
         # input formulario:descricao OU formulario:valorDevido visível.
         try:
-            self._page.wait_for_selector(
-                "input[id$=':descricao'], input[id$=':valorDevido']",
-                state="visible",
-                timeout=10000,
-            )
+            # #80-BY-2: espera paciente (~90s) — verba pesada segura o lock
+            # @Synchronized e o form demora; navegar cedo matava a conversa.
+            if not self._aguardar_form_verba_paciente(contexto=v.nome_pjecalc):
+                raise TimeoutError("form não visível após espera paciente #80-BY-2")
             self.log("    ✓ form de Alteração da verba carregado (descricao visível)")
         except Exception:
             # Diagnóstico: dumpar o que está na página atual
@@ -6328,15 +6374,14 @@ class PlaywrightAutomatorV2:
                                 if clicou_leve:
                                     self.log(f"    ✓ Recovery LEVE bem-sucedido (matched='{clicou_leve}') — pulando F+R")
                                     self._aguardar_ajax(8000)
-                                    try:
-                                        self._page.wait_for_selector(
-                                            "input[id$=':descricao'], input[id$=':valorDevido']",
-                                            state="visible", timeout=10000,
-                                        )
+                                    # #80-BY-2: espera paciente também aqui
+                                    if self._aguardar_form_verba_paciente(
+                                        contexto=f"recovery LEVE {v.nome_pjecalc}"
+                                    ):
                                         self.log("    ✓ form carregado após recovery LEVE")
                                         clicou = "recovery-leve-goto"
                                         # Continuar com o flow normal (skipping outer return)
-                                    except Exception:
+                                    else:
                                         self.log("    ⚠ form não visível após recovery LEVE — escalando para F+R")
                                         clicou_leve = None
                             except Exception as _e:
@@ -6417,14 +6462,12 @@ class PlaywrightAutomatorV2:
                                 if clicou_retry:
                                     self.log(f"    ✓ Click Parâmetros via retry pós wrong-page recovery (matched='{clicou_retry}')")
                                     self._aguardar_ajax(8000)
-                                    # Re-wait for descricao
-                                    try:
-                                        self._page.wait_for_selector(
-                                            "input[id$=':descricao'], input[id$=':valorDevido']",
-                                            state="visible", timeout=10000,
-                                        )
+                                    # Re-wait for descricao — #80-BY-2 paciente
+                                    if self._aguardar_form_verba_paciente(
+                                        contexto=f"pós-F+R {v.nome_pjecalc}"
+                                    ):
                                         self.log("    ✓ form carregado após recovery")
-                                    except Exception:
+                                    else:
                                         # #80-BY (MARCELA 0000852-87): este era O return
                                         # silencioso que pulou 5 verbas nas 3 tentativas
                                         # (sem base histórico → liquidação bloqueada).

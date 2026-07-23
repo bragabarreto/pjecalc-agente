@@ -3458,3 +3458,26 @@ def test_inv104_aborts_parametros_propagam_excecao():
     # 6. Caller (fase_verbas) mantém o retry ×3 que captura a exceção
     assert "Falha ajustar parâmetros" in src and "NÃO configurada" in src, (
         "REGRESSÃO #80-BY/#71: retry ×3 do fase_verbas removido")
+
+
+def test_inv105_espera_paciente_form_verba():
+    """#80-BY-2 (MARCELA 0000852-87, 23/07/2026): o POST do linkParametrizar de
+    verba pesada (DIFERENÇA SALARIAL, 5 reflexos) segura o lock @Synchronized
+    20-60s; esperar só 10s e NAVEGAR (recovery) contendia com o lock, matava a
+    conversa (LockTimeoutException no render — java.log) e o ciclo F+R nunca
+    convergia. Invariante: espera PACIENTE do form (~90s, sem navegar) via
+    _aguardar_form_verba_paciente nos 3 pontos (click inicial, recovery LEVE,
+    re-click pós-F+R)."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _aguardar_form_verba_paciente" in src, (
+        "REGRESSÃO #80-BY-2: helper de espera paciente removido")
+    ini = src.find("def _configurar_parametros_pos_expresso")
+    fim = src.find("def _OLD_configurar_parametros_pos_expresso")
+    corpo = src[ini:fim]
+    assert corpo.count("_aguardar_form_verba_paciente(") >= 3, (
+        "REGRESSÃO #80-BY-2: espera paciente não usada nos 3 pontos "
+        "(click inicial, recovery LEVE, re-click pós-F+R)")
+    # o helper baila cedo em conversa morta (não gastar 90s numa conv morta)
+    helper = src[src.find("def _aguardar_form_verba_paciente"):ini]
+    assert "principal.jsf" in helper and "Erro Interno" in helper, (
+        "REGRESSÃO #80-BY-2: bail antecipado (erro/conversa morta) removido")
