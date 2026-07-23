@@ -2946,6 +2946,18 @@ class PlaywrightAutomatorV2:
                         )
                     except Exception:
                         pass
+                    # #80-BY-9 (MULTA 2021, run 6): save rejeitado por NPE no
+                    # ApresentadorVerbaDeCalculo.salvar (bean da conversa
+                    # quebrado) repetia nas 3 tentativas — re-ancorar a
+                    # listagem NÃO renova a conversa Seam. A partir da 2ª
+                    # tentativa, F+R para conversa fresca de verdade.
+                    if _tent >= 2 or "save de parâmetros" in str(e):
+                        try:
+                            self._fechar_e_reabrir_calculo(
+                                f"retry {_tent} pós-falha ({v.nome_pjecalc or v.expresso_alvo})"
+                            )
+                        except Exception:
+                            pass
                     try:
                         self._navegar_menu("li_calculo_verbas")
                         self._aguardar_ajax(6000)
