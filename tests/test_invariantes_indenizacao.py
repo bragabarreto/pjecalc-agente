@@ -3537,3 +3537,22 @@ def test_inv107_reflexo_manual_clamp_e_bk_trunc50():
     corpo_bk = src[ini_bk:src.find("def _ajustar_periodo_reflexo")]
     assert corpo_bk.count("a.startsWith(td)") >= 2, (
         "REGRESSÃO #80-BY-4: tolerância a truncamento-50 nos matchers do #80-BK removida")
+
+
+def test_inv108_desmarcador_extras_escopo_linha_e_previa_global():
+    """#80-BY-6 (MARCELA 0000852-87, 23/07/2026) — NÃO REVERTER: o
+    _desmarcar_reflexos_extras escaneava TODOS os checkboxes marcados da
+    listagem comparando só com os reflexos da VERBA CORRENTE → desmarcava os
+    reflexos LEGÍTIMOS das verbas anteriores (24 kills na run 5; H2 voltou a
+    37×SFLATIVO=N). Invariantes: (a) esperados = reflexos de TODAS as verbas
+    da prévia; (b) scan restrito à linha da verba corrente via prefixo do id;
+    (c) sem linha identificada → não desmarca nada."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    ini = src.find("def _desmarcar_reflexos_extras")
+    corpo = src[ini:src.find("def ", ini + 50)]
+    assert "verbas_principais" in corpo, (
+        "REGRESSÃO #80-BY-6: esperados voltou a ser só da verba corrente")
+    assert "cb.id.startsWith(prefixo)" in corpo, (
+        "REGRESSÃO #80-BY-6: scan global de checkboxes voltou (mata reflexos de outras verbas)")
+    assert "if (!prefixo) return null" in corpo, (
+        "REGRESSÃO #80-BY-6: sem linha da verba deve desmarcar NADA")

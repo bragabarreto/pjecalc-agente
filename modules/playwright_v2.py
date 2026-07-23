@@ -7531,12 +7531,27 @@ class PlaywrightAutomatorV2:
         SOBRE HE"). Match por SUBCONJUNTO DE TOKENS (mesmo do guarda #80-AN):
         um checkbox ativo é EXTRA se seus tokens não contêm os de nenhum reflexo
         da prévia. Desmarca via .uncheck() nativo + verifica. Retorna quantos."""
+        # ⚠ #80-BY-6 (MARCELA 0000852-87, 23/07/2026) — NÃO REVERTER: o scan de
+        # "extras" era GLOBAL (todos os checkboxes marcados da listagem) mas o
+        # conjunto esperado era só da VERBA CORRENTE → ao processar a verba N+1,
+        # os reflexos LEGÍTIMOS da verba N (recém-ativados) eram flagrados como
+        # extras e DESMARCADOS (24 kills na run 5; H2 voltou a 37×SFLATIVO=N —
+        # com o helper BY-5 a desmarcação passou a ser eficaz e o bug ficou
+        # letal). Proteção dupla: (a) esperados = reflexos de TODAS as verbas
+        # da prévia; (b) scan restrito à LINHA da verba corrente via prefixo.
         esperados = []
-        for r in (getattr(verba_principal, "reflexos", None) or []):
-            alvo = getattr(r, "expresso_reflex_alvo", None) or getattr(r, "nome", None) or ""
-            t = self._tokens_fidelidade(alvo)
-            if t:
-                esperados.append(sorted(t))
+        try:
+            _todas_verbas = list(getattr(self.previa, "verbas_principais", None) or [])
+        except Exception:
+            _todas_verbas = [verba_principal]
+        if verba_principal not in _todas_verbas:
+            _todas_verbas.append(verba_principal)
+        for _vv in _todas_verbas:
+            for r in (getattr(_vv, "reflexos", None) or []):
+                alvo = getattr(r, "expresso_reflex_alvo", None) or getattr(r, "nome", None) or ""
+                t = self._tokens_fidelidade(alvo)
+                if t and sorted(t) not in esperados:
+                    esperados.append(sorted(t))
         # #80-AS: MULTA 467 é ativada LEGITIMAMENTE pela flag fgts.multa_artigo_467
         # (não vem como reflexo na prévia). Com a flag ligada, os candidatos
         # "MULTA DO ARTIGO 467 SOBRE X" são ESPERADOS — jamais desmarcar.
@@ -7561,16 +7576,36 @@ class PlaywrightAutomatorV2:
                         const norm = s => strip((s||'')).toUpperCase().replace(/\\s+/g,' ').trim();
                         const STOP = new Set(['SOBRE','DE','DA','DO','E','A','O','AO','NA','NO','COM']);
                         const toks = s => new Set(norm(s).split(/[^A-Z0-9%\\/]+/).filter(t => t.length>1 && !STOP.has(t)));
-                        // garantir painel Exibir aberto
-                        for (const c of candidatos) {
-                            for (const tr of [...document.querySelectorAll('tr')]) {
-                                if (!norm(tr.textContent).includes(norm(c))) continue;
-                                const ex = tr.querySelector('span.linkDestinacoes');
-                                if (ex) { ex.click(); break; }
+                        // #80-BY-6: achar a LINHA da verba corrente (célula exata,
+                        // tolerante a truncamento-50) e derivar o prefixo do id
+                        // `formulario:listagem:N:` — o scan fica RESTRITO a ela.
+                        const casa = (td, a) => td === a || (a.length > 45 && td.length >= 45 && a.startsWith(td));
+                        let prefixo = null;
+                        const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
+                            .filter(a => a.id && !a.id.includes(':listaReflexo:'));
+                        outer:
+                        for (const alvo of candidatos) {
+                            const a = norm(alvo);
+                            for (const link of linksMain) {
+                                const tr = link.closest('tr');
+                                if (!tr) continue;
+                                for (const td of [...tr.querySelectorAll('td')]) {
+                                    if (casa(norm(td.textContent.replace(/Exibir|Ocultar/gi,'')), a)) {
+                                        const m = link.id.match(/^(.*?:listagem:\\d+:)/);
+                                        if (m) { prefixo = m[1]; break outer; }
+                                    }
+                                }
                             }
                         }
+                        if (!prefixo) return null;  // sem linha da verba → não desmarcar NADA
+                        // garantir painel Exibir aberto (da linha corrente)
+                        const elRow = document.querySelector('a[id^="' + prefixo + '"]');
+                        const trRow = elRow ? elRow.closest('tr') : null;
+                        const ex = trRow ? trRow.querySelector('span.linkDestinacoes') : null;
+                        if (ex) { ex.click(); }
                         const esperados = esperadosArr.map(a => new Set(a));
-                        const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')];
+                        const cbs = [...document.querySelectorAll('input[type="checkbox"][id*="listaReflexo"][id$=":ativo"]')]
+                            .filter(cb => cb.id.startsWith(prefixo));
                         for (const cb of cbs) {
                             if (!cb.checked) continue;
                             const tr = cb.closest('tr'); if (!tr) continue;
@@ -8026,6 +8061,20 @@ class PlaywrightAutomatorV2:
                 pos = None
             if _a4j_ok and pos is not None and bool(pos) == desejado:
                 return True
+            # #80-BY-6: a4j=True + checked=False = o SERVIDOR rejeitou a
+            # ativação (ativarReflexo re-renderizou desmarcado). Capturar a
+            # mensagem JSF do painelMensagens — é a causa de negócio (ex.:
+            # característica/ocorrência incompatível pré-save da principal).
+            if _a4j_ok and bool(pos) != desejado:
+                try:
+                    _msgs = self._page.evaluate(
+                        """() => [...document.querySelectorAll('[id*="painelMensagens"] li, .rich-messages li, .mensagemErro')]
+                            .map(e => (e.textContent||'').trim()).filter(Boolean).slice(0,3)"""
+                    )
+                    if _msgs:
+                        self.log(f"    🔍 #80-BY-6 msg JSF na rejeição: {_msgs}")
+                except Exception:
+                    pass
             if _t < 3:
                 self.log(
                     f"    ⚠ #80-BY-5 checkbox não confirmado (a4j={_a4j_ok} "
@@ -8134,6 +8183,22 @@ class PlaywrightAutomatorV2:
                     except Exception:
                         pass
                 abriu = self._page.evaluate(_js_exibir, candidatos)
+                if not abriu:
+                    # #80-BY-6: retry paciente — pós-Regerar a listagem pode
+                    # estar vazia/transitória; antes pulava a verificação (foi
+                    # o caso da INTERJORNADA na run 5).
+                    for _t_bk in range(1, 4):
+                        self.log(f"    ⏳ #80-BK painel de '{v.nome_pjecalc}' não encontrado — retry {_t_bk}/3")
+                        self._aguardar_servidor_ocioso(contexto=f"#80-BK retry painel {v.nome_pjecalc}")
+                        try:
+                            self._page.reload(wait_until="domcontentloaded", timeout=20000)
+                            self._aguardar_ajax(5000)
+                            self._page.wait_for_timeout(1000)
+                        except Exception:
+                            pass
+                        abriu = self._page.evaluate(_js_exibir, candidatos)
+                        if abriu:
+                            break
                 if not abriu:
                     self.log(f"    ⚠ #80-BK painel Exibir de '{v.nome_pjecalc}' não encontrado — verificação pulada")
                     return
