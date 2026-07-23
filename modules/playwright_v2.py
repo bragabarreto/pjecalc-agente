@@ -65,6 +65,25 @@ def _split_cnj(numero_processo: str) -> dict:
 # ─── Classe principal ──────────────────────────────────────────────────────
 
 
+class ParametrosVerbaAbortadosError(RuntimeError):
+    """#80-BY (MARCELA 0000852-87, 23/07/2026) — NÃO REVERTER PARA `return`.
+
+    Os aborts internos de `_configurar_parametros_pos_expresso` (form de
+    Alteração não renderizou, verba não encontrada, recoveries esgotados)
+    eram `return` SILENCIOSOS: a função retornava normal, o retry ×3 do
+    `fase_verbas` (FIX #71) marcava `_cfg_ok=True` e o "🛑 NÃO configurada"
+    nunca logava. A verba era PULADA sem ajuste de parâmetros → sem base
+    histórico → liquidação bloqueada com "Falta selecionar pelo menos um
+    Histórico Salarial" (run 451b187d: 5 verbas puladas nas 3 tentativas,
+    todas via "⚠ form ainda não visível após recovery — abortando").
+
+    Agora esses aborts LEVANTAM esta exceção, que o retry ×3 do caller já
+    captura: re-ancora a listagem e re-executa a config do zero (F+R, gates
+    #80-H, recoveries #80-G/Z/AA todos re-engajam numa conversa fresca).
+    Após 3 falhas, o "🛑 NÃO configurada após 3 tentativas" finalmente loga.
+    """
+
+
 class PlaywrightAutomatorV2:
     """Automação PJE-Calc consumindo prévia v2.
 
@@ -5072,7 +5091,17 @@ class PlaywrightAutomatorV2:
                             f"atual='{descricao_atual}' esperado='{getattr(v,'expresso_alvo',None) or v.nome_pjecalc}'"
                         )
                         self.log(f"     (Causa provável: match errado no linkParametrizar). Pulando esta verba para evitar corromper o DB.")
-                        return
+                        # #80-BY: antes era `return` silencioso — o caller ainda
+                        # clicava Salvar (form da verba ERRADA, sem alterações) e
+                        # logava "✓ Parâmetros salvos" FALSO. Propagar aborta o
+                        # save e reengaja o retry ×3 do fase_verbas (re-match
+                        # exact-cell numa listagem fresca).
+                        raise ParametrosVerbaAbortadosError(
+                            f"form mostra verba errada: atual='{descricao_atual}' "
+                            f"esperado='{getattr(v, 'expresso_alvo', None) or v.nome_pjecalc}'"
+                        )
+            except ParametrosVerbaAbortadosError:
+                raise  # #80-BY: abort da salvaguarda deve propagar, não ser engolido
             except Exception as _e_safe:
                 self.log(f"    ⚠ Salvaguarda descricao não pôde verificar: {_e_safe}")
 
@@ -6179,14 +6208,27 @@ class PlaywrightAutomatorV2:
                             clicou = "retry-pos-FR"
                         else:
                             self.log(f"    ⚠ Retry pós Fechar+Reabrir também não achou {candidatos}")
-                            return
+                            # #80-BY: propagar p/ o retry ×3 do fase_verbas
+                            raise ParametrosVerbaAbortadosError(
+                                f"retry pós F+R não achou {candidatos}"
+                            )
                     else:
-                        return
+                        raise ParametrosVerbaAbortadosError(
+                            "F+R falhou na recovery de listagem vazia"
+                        )
+                  except ParametrosVerbaAbortadosError:
+                    raise
                   except Exception as e:
                     self.log(f"    ⚠ Recovery listagem vazia falhou: {e}")
-                    return
+                    raise ParametrosVerbaAbortadosError(
+                        f"recovery listagem vazia falhou: {e}"
+                    )
             else:
-                return
+                # #80-BY: listagem POPULADA mas a verba não deu match — antes era
+                # `return` silencioso e a verba ficava sem parâmetros/base.
+                raise ParametrosVerbaAbortadosError(
+                    f"verba não encontrada na listagem populada: {candidatos}"
+                )
         self.log(f"    ✓ Click Parâmetros via estratégia: {clicou}")
         self._aguardar_ajax(8000)
         # CRÍTICO: aguardar o form de Alteração carregar. Sem isso, o caller
@@ -6383,22 +6425,39 @@ class PlaywrightAutomatorV2:
                                         )
                                         self.log("    ✓ form carregado após recovery")
                                     except Exception:
+                                        # #80-BY (MARCELA 0000852-87): este era O return
+                                        # silencioso que pulou 5 verbas nas 3 tentativas
+                                        # (sem base histórico → liquidação bloqueada).
                                         self.log("    ⚠ form ainda não visível após recovery — abortando")
-                                        return
+                                        raise ParametrosVerbaAbortadosError(
+                                            f"form não visível após recovery wrong-page ({v.nome_pjecalc})"
+                                        )
                                 else:
                                     self.log(f"    ⚠ Retry pós wrong-page também não achou {candidatos}")
-                                    return
+                                    raise ParametrosVerbaAbortadosError(
+                                        f"retry wrong-page não achou {candidatos}"
+                                    )
                             else:
-                                return
+                                raise ParametrosVerbaAbortadosError(
+                                    "F+R falhou na recovery wrong-page"
+                                )
                         except StopIteration:
                             # LEVE resolveu — pular F+R, seguir flow normal
                             pass
+                        except ParametrosVerbaAbortadosError:
+                            raise
                         except Exception as e:
                             self.log(f"    ⚠ Wrong-page recovery falhou: {e}")
-                            return
+                            raise ParametrosVerbaAbortadosError(
+                                f"wrong-page recovery falhou: {e}"
+                            )
+            except ParametrosVerbaAbortadosError:
+                raise  # #80-BY: não engolir — retry ×3 do fase_verbas reengaja
             except Exception:
                 self.log("    ⚠ Form de Alteração não carregou — sem diagnóstico DOM")
-                return  # aborta — sem form, não tem o que preencher
+                raise ParametrosVerbaAbortadosError(
+                    f"form de Alteração não carregou ({v.nome_pjecalc}) — sem diagnóstico DOM"
+                )
         self._preencher_form_parametros_verba(v, com_identificacao=False)
 
         # NOTA (12/05/2026): "Regerar Ocorrências" só existe em modo LISTAGEM
@@ -6419,7 +6478,11 @@ class PlaywrightAutomatorV2:
             clicou_save = self._clicar_salvar_flex(timeout_ms=8000)
         if not clicou_save:
             self.log(f"  ⚠ Parâmetros '{v.nome_pjecalc}': sem botão save — pulando ajuste")
-            return
+            # #80-BY: sem save o ajuste inteiro se perde (form abandonado) —
+            # propagar p/ o retry ×3 re-executar a config numa conversa fresca.
+            raise ParametrosVerbaAbortadosError(
+                f"sem botão save no form de parâmetros ({v.nome_pjecalc})"
+            )
         self._aguardar_ajax(8000)
         # #80-N: timeout maior — save de verba CALCULADO com base histórico de
         # muitas ocorrências (ex.: 31 meses) recomputa devagar na VM pequena;

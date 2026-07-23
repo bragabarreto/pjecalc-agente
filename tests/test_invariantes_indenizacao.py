@@ -3408,3 +3408,53 @@ def test_inv103_liquidacao_500_recovery_reopen():
         "REGRESSÃO #80-BX: 500 da liquidação volta a ser fatal sem reopen")
     assert "_aguardar_servidor_ocioso" in seg and "range(1, 7)" in seg, (
         "REGRESSÃO #80-BX: recovery sem gate/paciência")
+
+
+def test_inv104_aborts_parametros_propagam_excecao():
+    """#80-BY (MARCELA 0000852-87, 23/07/2026): os aborts internos de
+    _configurar_parametros_pos_expresso eram `return` SILENCIOSOS — o retry ×3
+    do fase_verbas (FIX #71) marcava _cfg_ok=True e a verba era PULADA sem
+    parâmetros/base (5 verbas × 3 tentativas → liquidação bloqueada com
+    'Falta selecionar Histórico Salarial'). Invariante: aborts levantam
+    ParametrosVerbaAbortadosError, que o caller captura e re-tenta."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+
+    # 1. Classe de exceção existe
+    assert "class ParametrosVerbaAbortadosError(RuntimeError)" in src, (
+        "REGRESSÃO #80-BY: exceção ParametrosVerbaAbortadosError removida")
+
+    # 2. NENHUM `return` Python de abort dentro da função (só raises).
+    ini = src.find("def _configurar_parametros_pos_expresso")
+    fim = src.find("def _OLD_configurar_parametros_pos_expresso")
+    corpo = src[ini:fim]
+    import re
+    # returns Python de linha inteira (exclui `return` dentro de strings JS,
+    # que aparecem em linhas com `=>`, `{`, `;` ou aspas de template)
+    py_returns = [
+        ln for ln in corpo.splitlines()
+        if re.match(r"^\s{8,}return\s*(#.*)?$", ln)
+    ]
+    assert not py_returns, (
+        f"REGRESSÃO #80-BY: `return` silencioso reintroduzido em "
+        f"_configurar_parametros_pos_expresso: {py_returns}")
+
+    # 3. O ponto exato do bug (form não visível pós wrong-page recovery) levanta
+    i = corpo.find("form ainda não visível após recovery")
+    assert i != -1 and "raise ParametrosVerbaAbortadosError" in corpo[i:i + 400], (
+        "REGRESSÃO #80-BY: abort 'form não visível' não propaga exceção")
+
+    # 4. Os except genéricos intermediários re-levantam a exceção (não engolem)
+    assert corpo.count("except ParametrosVerbaAbortadosError:") >= 3, (
+        "REGRESSÃO #80-BY: except genérico volta a engolir o abort")
+
+    # 5. Salvaguarda de descricao divergente também propaga (antes: return +
+    #    save do form da verba ERRADA + '✓ salvos' falso)
+    ini_p = src.find("def _preencher_form_parametros_verba")
+    seg_p = src[ini_p:ini_p + 8000]
+    j = seg_p.find("ABORTANDO edição")
+    assert j != -1 and "raise ParametrosVerbaAbortadosError" in seg_p[j:j + 900], (
+        "REGRESSÃO #80-BY: salvaguarda descricao voltou ao return silencioso")
+
+    # 6. Caller (fase_verbas) mantém o retry ×3 que captura a exceção
+    assert "Falha ajustar parâmetros" in src and "NÃO configurada" in src, (
+        "REGRESSÃO #80-BY/#71: retry ×3 do fase_verbas removido")

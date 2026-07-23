@@ -1599,6 +1599,34 @@ irreabrível) voltam, regredindo a GEOVANA e qualquer cálculo pesado (3+ verbas
 cartão + reflexos). `concurrent-request-timeout=120000` é mantido (inofensivo,
 cobre contenção de CONVERSA — NÃO é a alavanca do lock @Synchronized).
 
+### Aborts de parâmetros PROPAGAM exceção — nunca `return` silencioso (#80-BY, MARCELA 0000852-87, 23/07/2026, inv104)
+
+**Sintoma (run 451b187d, 3 tentativas SSE):** 5 verbas (ADICIONAL NOTURNO 20%,
+GRATIFICAÇÃO QUINQUÊNIO, FERIADO EM DOBRO, DIFERENÇA SALARIAL, INTERVALO)
+liquidavam sem base — "Falta selecionar pelo menos um Histórico Salarial" ×5.
+No log, cada uma morria em `⚠ form ainda não visível após recovery — abortando`
+e o loop seguia para a próxima verba como se tivesse dado certo.
+
+**RAIZ:** os aborts internos de `_configurar_parametros_pos_expresso` (form de
+Alteração não renderizou pós-recovery #80-Z/AA, retry não achou a verba, F+R
+falhou, sem botão save) eram **`return` silenciosos**. A função retornava
+NORMAL → o retry ×3 do `fase_verbas` (FIX #71) marcava `_cfg_ok=True` na 1ª
+tentativa → nem re-tentava, nem logava o "🛑 NÃO configurada". O mesmo valia
+para a salvaguarda de descricao divergente em `_preencher_form_parametros_verba`
+(pior: o caller ainda clicava Salvar no form da verba ERRADA e logava
+"✓ Parâmetros salvos" FALSO).
+
+**Fix:** exceção `ParametrosVerbaAbortadosError` (module-level em
+`playwright_v2.py`). TODOS os aborts levantam-na; os `except Exception`
+intermediários das recoveries re-levantam (`except ParametrosVerbaAbortadosError:
+raise` ANTES do genérico — senão engolem). O retry ×3 do `fase_verbas` captura,
+re-ancora a listagem e re-executa a config numa conversa fresca (gates #80-H e
+recoveries #80-G/Z/AA reengajam); após 3 falhas o "🛑 NÃO configurada após 3
+tentativas" finalmente loga.
+
+⚠️ **NÃO reintroduzir `return` de abort** nessa função — `test_inv104` varre o
+corpo por `return` Python de linha inteira e falha se algum voltar.
+
 ## Limitações conhecidas (19/05/2026) — não-bloqueantes
 
 Após resolução do bug Seam EPC via H2 TCP, o bot completa o ciclo end-to-end
