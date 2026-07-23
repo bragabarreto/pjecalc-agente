@@ -3514,3 +3514,21 @@ def test_inv106_reflexos_bean_ground_truth_by3():
     # e usa atribuição 1-para-1 (melhor ajuste) p/ não gerar duplicados falsos
     assert "best_extra" in corpo, (
         "REGRESSÃO #80-BY-3: matching por melhor ajuste removido (duplicados falsos voltam)")
+
+
+def test_inv107_reflexo_manual_clamp_e_bk_trunc50():
+    """#80-BY-4 (MARCELA 0000852-87, 23/07/2026): (a) save do reflexo Manual
+    rejeitado com 'Data Inicial deve ser igual ou maior que Data Inicial da
+    Verba Principal' quando o override começa antes da principal (capada pela
+    prescrição) — clamp ao período da principal; (b) matchers do #80-BK usavam
+    igualdade EXATA da célula, mas nomes >50 aparecem truncados na listagem
+    (#80-O) → 'painel não encontrado' e verificação pulada."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    ini = src.find("def _criar_reflexo_manual_tentativa")
+    corpo = src[ini:ini + 20000]
+    assert "#80-BY-4" in corpo and "clamp" in corpo, (
+        "REGRESSÃO #80-BY-4: clamp do período do reflexo Manual removido")
+    ini_bk = src.find("def _verificar_reflexos_pos_save")
+    corpo_bk = src[ini_bk:src.find("def _ajustar_periodo_reflexo")]
+    assert corpo_bk.count("a.startsWith(td)") >= 2, (
+        "REGRESSÃO #80-BY-4: tolerância a truncamento-50 nos matchers do #80-BK removida")

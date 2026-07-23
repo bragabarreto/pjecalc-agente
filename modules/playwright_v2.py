@@ -7348,10 +7348,36 @@ class PlaywrightAutomatorV2:
         ov = reflexo.parametros_override
         if ov:
             try:
-                if ov.periodo_inicio:
-                    self._preencher("periodoInicialInputDate", ov.periodo_inicio, obrigatorio=False)
-                if ov.periodo_fim:
-                    self._preencher("periodoFinalInputDate", ov.periodo_fim, obrigatorio=False)
+                # #80-BY-4 (MARCELA 0000852-87): o servidor REJEITA o save do
+                # reflexo com "Data Inicial deve ser igual ou maior que Data
+                # Inicial da Verba Principal" quando o período do override
+                # começa antes do período da PRINCIPAL (ex.: principal capada
+                # pela prescrição #78, reflexo com início do contrato). Clamp
+                # ao período aplicado na principal (era a causa dos 🛑 "NÃO
+                # persistiu após 3 tentativas" de RSR SOBRE QUINQUENIO/
+                # DIFERENCA/FERIADO).
+                from datetime import datetime as _dtc
+                _p = getattr(verba_principal, "parametros", None)
+                _pi, _pf = ov.periodo_inicio, ov.periodo_fim
+                try:
+                    _ppi = getattr(_p, "periodo_inicio", None)
+                    if _pi and _ppi and (_dtc.strptime(_pi, "%d/%m/%Y")
+                                         < _dtc.strptime(_ppi, "%d/%m/%Y")):
+                        self.log(f"    ↪ #80-BY-4 período inicial do reflexo "
+                                 f"{_pi} < principal {_ppi} — clamp p/ {_ppi}")
+                        _pi = _ppi
+                    _ppf = getattr(_p, "periodo_fim", None)
+                    if _pf and _ppf and (_dtc.strptime(_pf, "%d/%m/%Y")
+                                         > _dtc.strptime(_ppf, "%d/%m/%Y")):
+                        self.log(f"    ↪ #80-BY-4 período final do reflexo "
+                                 f"{_pf} > principal {_ppf} — clamp p/ {_ppf}")
+                        _pf = _ppf
+                except Exception:
+                    pass
+                if _pi:
+                    self._preencher("periodoInicialInputDate", _pi, obrigatorio=False)
+                if _pf:
+                    self._preencher("periodoFinalInputDate", _pf, obrigatorio=False)
                 if ov.caracteristica:
                     car = ov.caracteristica.value if hasattr(ov.caracteristica, "value") else str(ov.caracteristica)
                     if not self._marcar_radio_verificado("caracteristicaVerba", car):
@@ -8029,10 +8055,15 @@ class PlaywrightAutomatorV2:
 
         _js_exibir = """(candidatos) => {
             const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+            // #80-BY-4: nomes >50 chars aparecem TRUNCADOS na listagem (#80-O)
+            // — igualdade exata falhava ("painel não encontrado"). Aceitar
+            // também célula = prefixo do alvo (>=45 chars, anti-colisão).
+            const casa = (td, a) => td === a || (a.length > 45 && td.length >= 45 && a.startsWith(td));
             for (const alvo of candidatos) {
+                const a = norm(alvo);
                 for (const tr of [...document.querySelectorAll('tr')]) {
                     const tds = [...tr.querySelectorAll('td')];
-                    if (!tds.some(td => norm(td.textContent.replace(/Exibir|Ocultar/gi,'')) === norm(alvo))) continue;
+                    if (!tds.some(td => casa(norm(td.textContent.replace(/Exibir|Ocultar/gi,'')), a))) continue;
                     const exibir = tr.querySelector('span.linkDestinacoes');
                     if (exibir) { exibir.click(); return alvo; }
                 }
@@ -8041,14 +8072,17 @@ class PlaywrightAutomatorV2:
         }"""
         _js_form = """(candidatos) => {
             const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
+            // #80-BY-4: tolerar truncamento-50 da listagem (ver _js_exibir)
+            const casa = (td, a) => td === a || (a.length > 45 && td.length >= 45 && a.startsWith(td));
             const linksMain = [...document.querySelectorAll('a.linkParametrizar')]
                 .filter(a => a.id && !a.id.includes(':listaReflexo:'));
             for (const alvo of candidatos) {
+                const a = norm(alvo);
                 for (const link of linksMain) {
                     const tr = link.closest('tr');
                     if (!tr) continue;
                     for (const td of [...tr.querySelectorAll('td')]) {
-                        if (norm(td.textContent.replace(/Exibir|Ocultar/gi,'')) === norm(alvo)) {
+                        if (casa(norm(td.textContent.replace(/Exibir|Ocultar/gi,'')), a)) {
                             if (link.onclick) { link.onclick(new Event('click')); }
                             else { link.click(); }
                             return alvo;
@@ -8099,10 +8133,41 @@ class PlaywrightAutomatorV2:
                     f"apesar do CONFIRMADO: {[n for n, _ in faltantes]} — re-marcando (rodada {rodada})"
                 )
                 for _nome, cb_id in faltantes:
-                    self._page.evaluate(
-                        "(cid) => { const cb = document.getElementById(cid); if (cb && !cb.checked) cb.click(); }",
-                        cb_id,
-                    )
+                    # #80-BY-4: re-marcar com o MESMO rigor da marcação (BY-3):
+                    # garantir visibilidade (abrir o Exibir da linha dona) e
+                    # check() NATIVO — o JS click em checkbox oculto não
+                    # dispara o A4J e a remediação girava em falso (FERIADO
+                    # EM DOBRO: 3 rodadas sem efeito).
+                    _esc_bk = cb_id.replace(":", "\\:")
+                    _loc_bk = self._page.locator(f"input#{_esc_bk}")
+                    try:
+                        if not _loc_bk.is_visible():
+                            self._page.evaluate(
+                                """(cid) => {
+                                    const m = cid.match(/^(.*?:listagem:\\d+:)listaReflexo:/);
+                                    if (!m) return false;
+                                    const el = document.querySelector('a[id^="' + m[1] + '"]');
+                                    const tr = el ? el.closest('tr') : null;
+                                    const ex = tr ? tr.querySelector('span.linkDestinacoes') : null;
+                                    if (ex) { ex.click(); return true; }
+                                    return false;
+                                }""",
+                                cb_id,
+                            )
+                            self._aguardar_ajax(4000)
+                            self._page.wait_for_selector(
+                                f"input#{_esc_bk}", state="visible", timeout=8000
+                            )
+                    except Exception:
+                        pass
+                    try:
+                        if not _loc_bk.is_checked():
+                            _loc_bk.check(force=True)
+                    except Exception:
+                        self._page.evaluate(
+                            "(cid) => { const cb = document.getElementById(cid); if (cb && !cb.checked) cb.click(); }",
+                            cb_id,
+                        )
                     self._aguardar_ajax(4000)
                     self._page.wait_for_timeout(600)
                 # Flush: reabrir o form de Parâmetros e salvar (regra 4b —
