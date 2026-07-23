@@ -7628,22 +7628,14 @@ class PlaywrightAutomatorV2:
                 continue
             loc = self._page.locator(f"input#{esc}")
             try:
-                loc.uncheck(force=True)
+                # #80-BY-5: desmarcação com CONFIRMAÇÃO do POST A4J (o uncheck
+                # /JS cru tinha o mesmo falso-positivo da marcação)
+                ainda = not self._setar_checkbox_reflexo_confirmado(
+                    extra_id, False, contexto=f"extra {extra_id[-24:]}"
+                )
             except Exception as _e:
-                self.log(f"    ⚠ #80-AQ uncheck falhou ({str(_e)[:60]}) — fallback JS click")
-                self._page.evaluate(
-                    "(cid) => { const cb = document.getElementById(cid); if (cb && cb.checked) cb.click(); }",
-                    extra_id,
-                )
-            self._aguardar_ajax(5000)
-            self._page.wait_for_timeout(800)
-            try:
-                ainda = self._page.evaluate(
-                    "(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }",
-                    extra_id,
-                )
-            except Exception:
-                ainda = None
+                self.log(f"    ⚠ #80-AQ uncheck confirmado falhou ({str(_e)[:60]})")
+                ainda = True
             if ainda:
                 # NÃO concluir "Drools" no 1º; pode ser race de re-render.
                 # Retentar (re-loop reabre painel). Só desistir após 3 uncheck
@@ -7897,71 +7889,15 @@ class PlaywrightAutomatorV2:
                 self._page.wait_for_timeout(800)
                 continue
             cb_visto = True
-            esc = cb_id.replace(":", "\\:")
-            loc = self._page.locator(f"input#{esc}")
-            # #80-BY-3 (MARCELA 0000852-87): checkbox presente no DOM mas
-            # INVISÍVEL (painel Exibir da linha colapsado) → check() falhava
-            # ("Element is not visible") → fallback JS click sem A4J → bean
-            # nunca recebia (falso CONFIRMADO; 32/32 reflexos ativo=false no
-            # PJC). Abrir o Exibir da linha DONA do checkbox (prefixo do id
-            # `...:listagem:N:` — NÃO por texto, que casa o TR outermost) e
-            # aguardar visibilidade ANTES do check nativo.
-            try:
-                _cb_visivel = loc.is_visible()
-            except Exception:
-                _cb_visivel = False
-            if not _cb_visivel:
-                try:
-                    _r_exibir = self._page.evaluate(
-                        """(cid) => {
-                            const m = cid.match(/^(.*?:listagem:\\d+:)listaReflexo:/);
-                            if (!m) return 'no-prefix';
-                            const pref = m[1];
-                            const el = document.querySelector('a[id^="' + pref + '"]');
-                            const tr = el ? el.closest('tr') : null;
-                            const exibir = tr ? tr.querySelector('span.linkDestinacoes') : null;
-                            if (exibir) { exibir.click(); return 'clicked'; }
-                            return 'no-exibir';
-                        }""",
-                        cb_id,
-                    )
-                    self._aguardar_ajax(4000)
-                    self._page.wait_for_selector(
-                        f"input#{esc}", state="visible", timeout=8000
-                    )
-                    self.log(f"    ✓ #80-BY-3 painel da linha aberto ({_r_exibir}) — checkbox visível")
-                except Exception:
-                    self.log("    ⚠ #80-BY-3 checkbox segue invisível pós-Exibir — check pode cair no fallback JS")
-            try:
-                ja_marcado = loc.is_checked()
-            except Exception:
-                ja_marcado = False
-            if not ja_marcado:
-                try:
-                    loc.check(force=True)
-                except Exception as e:
-                    self.log(f"    ⚠ check() falhou ({str(e)[:80]}) — fallback JS click")
-                    self._page.evaluate(
-                        """(cid) => { const cb = document.getElementById(cid); if (cb) cb.click(); }""",
-                        cb_id,
-                    )
-            self._aguardar_ajax(5000)
-            self._page.wait_for_timeout(800)
-            # VERIFICAR: re-ler o checkbox no DOM pós-AJAX (o a4j:support
-            # re-renderiza a linha a partir do bean — se voltou unchecked,
-            # o bean não recebeu).
-            try:
-                confirmado = self._page.evaluate(
-                    """(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }""",
-                    cb_id,
-                )
-            except Exception:
-                confirmado = None
-            if confirmado:
+            # #80-BY-5 (MARCELA 0000852-87): marcação com CONFIRMAÇÃO do POST
+            # A4J real + releitura pós re-render (bean). O caminho anterior
+            # (check→fallback JS→reler DOM) gerou 4 runs de "CONFIRMADO" com
+            # o H2 em SFLATIVO=N nos 37 reflexos (falso-positivo total).
+            if self._setar_checkbox_reflexo_confirmado(cb_id, True, contexto=reflexo.nome):
                 ok_reflexo = True
                 self.log(f"    ✓ Reflexo CONFIRMADO no painel: {reflexo.nome}")
                 break
-            self.log(f"    ⚠ Reflexo '{reflexo.nome}' não confirmado (tentativa {tentativa}/{_MAX_REFL_TENT}) — checked={confirmado}")
+            self.log(f"    ⚠ Reflexo '{reflexo.nome}' não confirmado (tentativa {tentativa}/{_MAX_REFL_TENT})")
         if not ok_reflexo:
             if not cb_visto:
                 # FALLBACK (caso Ariane #64, 13/06/2026): o checkbox candidato
@@ -8010,6 +7946,92 @@ class PlaywrightAutomatorV2:
         if reflexo.parametros_override:
             self.log(f"    → Aplicando overrides em {reflexo.nome}")
             # Implementação detalhada via doc 07 — pular nesta versão MVP
+
+    def _setar_checkbox_reflexo_confirmado(
+        self, cb_id: str, desejado: bool = True, contexto: str = ""
+    ) -> bool:
+        """#80-BY-5 (MARCELA 0000852-87, 23/07/2026) — NÃO REVERTER.
+
+        Seta o checkbox de reflexo (`...:listaReflexo:M:ativo`) com CONFIRMAÇÃO
+        do A4J REAL. Ground truth do H2 (calc 102): 37/37 reflexos SFLATIVO=N
+        apesar de 4 runs de "CONFIRMADO no painel" — o click (nativo ou JS) em
+        checkbox de painel colapsando NÃO dispara o A4J (`a4j:support onclick`
+        → actionListener ativarReflexo), o DOM fica checked e toda releitura
+        era falso-positivo (inclusive o #80-BK via toggle, que lia DOM stale).
+
+        Protocolo: (1) painel da linha DONA aberto (prefixo do id) + checkbox
+        VISÍVEL + 400ms p/ animação; (2) click NATIVO dentro de
+        expect_response(POST verba-calculo.jsf) — sem o POST, o server não
+        recebeu, ponto; (3) re-leitura pós re-render (reRender=listaReflexo →
+        conteúdo vem do BEAN). Retry ×3. True = bean atualizado de verdade.
+        """
+        esc = cb_id.replace(":", "\\:")
+        loc = self._page.locator(f"input#{esc}")
+        for _t in range(1, 4):
+            # (1) visibilidade — abrir o Exibir da linha dona se preciso
+            try:
+                if not loc.is_visible():
+                    self._page.evaluate(
+                        """(cid) => {
+                            const m = cid.match(/^(.*?:listagem:\\d+:)listaReflexo:/);
+                            if (!m) return false;
+                            const el = document.querySelector('a[id^="' + m[1] + '"]');
+                            const tr = el ? el.closest('tr') : null;
+                            const ex = tr ? tr.querySelector('span.linkDestinacoes') : null;
+                            if (ex) { ex.click(); return true; }
+                            return false;
+                        }""",
+                        cb_id,
+                    )
+                    self._aguardar_ajax(4000)
+                    self._page.wait_for_selector(f"input#{esc}", state="visible", timeout=8000)
+                self._page.wait_for_timeout(400)  # animação slideDown assentar
+            except Exception:
+                pass
+            # (2) estado atual — se já está como desejado num DOM recém-
+            # renderizado, nada a fazer (o re-render vem do bean)
+            try:
+                atual = self._page.evaluate(
+                    "(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }",
+                    cb_id,
+                )
+            except Exception:
+                atual = None
+            if atual is not None and bool(atual) == desejado:
+                # Estado já é o desejado. Confiável desde que NENHUM caminho
+                # legado faça JS click cru nesses checkboxes (todos passam por
+                # este helper pós-#80-BY-5); clicar p/ "confirmar" TOGGLARIA
+                # para fora do desejado.
+                return True
+            # (3) click nativo com confirmação do POST A4J
+            _a4j_ok = False
+            try:
+                with self._page.expect_response(
+                    lambda r: r.request.method == "POST" and "verba-calculo.jsf" in r.url,
+                    timeout=8000,
+                ) as _ri:
+                    loc.click(force=True)
+                _a4j_ok = _ri.value is not None
+            except Exception as _e:
+                self.log(f"    ⚠ #80-BY-5 click sem POST A4J ({str(_e)[:60]}) — retry {_t}/3 ({contexto})")
+                _a4j_ok = False
+            self._aguardar_ajax(5000)
+            self._page.wait_for_timeout(700)
+            try:
+                pos = self._page.evaluate(
+                    "(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }",
+                    cb_id,
+                )
+            except Exception:
+                pos = None
+            if _a4j_ok and pos is not None and bool(pos) == desejado:
+                return True
+            if _t < 3:
+                self.log(
+                    f"    ⚠ #80-BY-5 checkbox não confirmado (a4j={_a4j_ok} "
+                    f"checked={pos} desejado={desejado}) — retry {_t}/3 ({contexto})"
+                )
+        return False
 
     def _verificar_reflexos_pos_save(self, v) -> None:
         """#80-BK (0000092-41, 17/07/2026) — NÃO REVERTER: ground truth dos
@@ -8100,6 +8122,17 @@ class PlaywrightAutomatorV2:
                     self._navegar_menu_via_click("li_calculo_verbas")
                     self._aguardar_ajax(6000)
                     self._page.wait_for_timeout(800)
+                else:
+                    # #80-BY-5: RELOAD leve — render 100% do bean/DB. O toggle
+                    # do Exibir é jQuery client-side (mostra rows JÁ no DOM):
+                    # sem reload, a leitura via DOM stale dizia "VERIFICADOS"
+                    # com o H2 em SFLATIVO=N (falso-positivo do próprio BK).
+                    try:
+                        self._page.reload(wait_until="domcontentloaded", timeout=20000)
+                        self._aguardar_ajax(5000)
+                        self._page.wait_for_timeout(800)
+                    except Exception:
+                        pass
                 abriu = self._page.evaluate(_js_exibir, candidatos)
                 if not abriu:
                     self.log(f"    ⚠ #80-BK painel Exibir de '{v.nome_pjecalc}' não encontrado — verificação pulada")
@@ -8133,43 +8166,14 @@ class PlaywrightAutomatorV2:
                     f"apesar do CONFIRMADO: {[n for n, _ in faltantes]} — re-marcando (rodada {rodada})"
                 )
                 for _nome, cb_id in faltantes:
-                    # #80-BY-4: re-marcar com o MESMO rigor da marcação (BY-3):
-                    # garantir visibilidade (abrir o Exibir da linha dona) e
-                    # check() NATIVO — o JS click em checkbox oculto não
-                    # dispara o A4J e a remediação girava em falso (FERIADO
-                    # EM DOBRO: 3 rodadas sem efeito).
-                    _esc_bk = cb_id.replace(":", "\\:")
-                    _loc_bk = self._page.locator(f"input#{_esc_bk}")
-                    try:
-                        if not _loc_bk.is_visible():
-                            self._page.evaluate(
-                                """(cid) => {
-                                    const m = cid.match(/^(.*?:listagem:\\d+:)listaReflexo:/);
-                                    if (!m) return false;
-                                    const el = document.querySelector('a[id^="' + m[1] + '"]');
-                                    const tr = el ? el.closest('tr') : null;
-                                    const ex = tr ? tr.querySelector('span.linkDestinacoes') : null;
-                                    if (ex) { ex.click(); return true; }
-                                    return false;
-                                }""",
-                                cb_id,
-                            )
-                            self._aguardar_ajax(4000)
-                            self._page.wait_for_selector(
-                                f"input#{_esc_bk}", state="visible", timeout=8000
-                            )
-                    except Exception:
-                        pass
-                    try:
-                        if not _loc_bk.is_checked():
-                            _loc_bk.check(force=True)
-                    except Exception:
-                        self._page.evaluate(
-                            "(cid) => { const cb = document.getElementById(cid); if (cb && !cb.checked) cb.click(); }",
-                            cb_id,
-                        )
-                    self._aguardar_ajax(4000)
-                    self._page.wait_for_timeout(600)
+                    # #80-BY-5: re-marcar via helper confirmado (POST A4J real
+                    # + releitura pós re-render). O JS/check cru girava em
+                    # falso (FERIADO EM DOBRO: 3 rodadas sem efeito no bean).
+                    if not self._setar_checkbox_reflexo_confirmado(
+                        cb_id, True, contexto=f"#80-BK {_nome[:40]}"
+                    ):
+                        self.log(f"    ⚠ #80-BK re-marcação de '{_nome}' sem A4J confirmado")
+                    self._page.wait_for_timeout(300)
                 # Flush: reabrir o form de Parâmetros e salvar (regra 4b —
                 # checkbox só persiste com save de parâmetros da verba).
                 self._aguardar_servidor_ocioso(contexto=f"#80-BK re-save {v.nome_pjecalc}")

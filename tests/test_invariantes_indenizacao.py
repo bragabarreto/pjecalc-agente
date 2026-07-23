@@ -3493,12 +3493,17 @@ def test_inv106_reflexos_bean_ground_truth_by3():
     '37 ativos' com todos false, mascarando a perda."""
     src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
 
-    # (a) visibilidade garantida antes do check nativo (abre Exibir da linha
-    #     dona do checkbox pelo PREFIXO do id, não por texto)
-    assert "listagem:\\\\d+:)listaReflexo" in src and "#80-BY-3" in src, (
-        "REGRESSÃO #80-BY-3: abertura do painel da linha dona do checkbox removida")
-    assert "painel da linha aberto" in src, (
-        "REGRESSÃO #80-BY-3: espera de visibilidade pré-check removida")
+    # (a) #80-BY-5: helper com confirmação do POST A4J real usado na marcação,
+    #     na re-marcação do BK e na desmarcação de extras; abre o Exibir da
+    #     linha dona pelo PREFIXO do id (não por texto)
+    assert "def _setar_checkbox_reflexo_confirmado" in src, (
+        "REGRESSÃO #80-BY-5: helper de checkbox confirmado por A4J removido")
+    assert src.count("_setar_checkbox_reflexo_confirmado(") >= 4, (
+        "REGRESSÃO #80-BY-5: helper não usado em marcação+BK+desmarcador")
+    assert "expect_response" in src.split("def _setar_checkbox_reflexo_confirmado")[1][:4000], (
+        "REGRESSÃO #80-BY-5: confirmação do POST A4J removida do helper")
+    assert "listagem:\\\\d+:)listaReflexo" in src, (
+        "REGRESSÃO #80-BY-3/5: abertura do painel da linha dona do checkbox removida")
 
     # (b) #80-BK roda sempre que a verba tem reflexos (gate órfão removido)
     pos = src.split("Regerar pós-parâmetros: {_e}")[1][:600]
