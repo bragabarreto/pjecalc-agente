@@ -6803,8 +6803,7 @@ class PlaywrightAutomatorV2:
         # IDs do nó incluem "arv:864:{codigo}" no caminho. Há várias
         # variações dependendo do ramo da árvore (alguns são folhas
         # diretas, outros têm sub-nós).
-        node_clicado = self._page.evaluate(
-            """(codigo) => {
+        _js_click_no_cnj = """(codigo) => {
                 // Tenta vários padrões de ID
                 const patterns = [
                     `formularioModalCNJ:arv:864:${codigo}::_defaultNodeFace:text`,
@@ -6830,13 +6829,24 @@ class PlaywrightAutomatorV2:
                     }
                 }
                 return null;
-            }""",
-            str(codigo),
-        )
+            }"""
+        node_clicado = self._page.evaluate(_js_click_no_cnj, str(codigo))
         if not node_clicado:
             self.log(f"    ⚠ Nó CNJ {codigo} não encontrado na árvore")
-            self._fechar_modal_cnj()
-            return False
+            # #80-BY-11 (MARCELA run 7): fechar o modal SEM selecionar deixava
+            # o Assunto CNJ (obrigatório) vazio → o SAVE da verba Manual era
+            # rejeitado SILENCIOSAMENTE ("mensagem de sucesso não detectada" +
+            # verba fora da listagem) — a 2ª HE (intrajornada NATUREZA
+            # SALARIAL, assunto 2108 inexistente na árvore local) foi perdida
+            # em 3 runs seguidas. Fallback: default 2581 (Remuneração, Verbas
+            # Indenizatórias e Benefícios — preferência padrão do CLAUDE.md).
+            if str(codigo) != "2581":
+                node_clicado = self._page.evaluate(_js_click_no_cnj, "2581")
+                if node_clicado:
+                    self.log("    ↪ #80-BY-11 fallback Assunto CNJ 2581 (default) selecionado")
+            if not node_clicado:
+                self._fechar_modal_cnj()
+                return False
         self.log(f"    → Nó CNJ selecionado via: {node_clicado}")
         self._page.wait_for_timeout(800)
 
@@ -6853,12 +6863,13 @@ class PlaywrightAutomatorV2:
             self._fechar_modal_cnj()
             return False
 
-        # 4. Verificar que assunto foi setado
+        # 4. Verificar que assunto foi setado — #80-BY-11: aceitar também o
+        # 2581 do fallback (o codigo pedido pode não existir na árvore local)
         try:
             valor_atual = self._page.locator(
                 "input[id='formulario:assuntosCnj']"
             ).input_value(timeout=3000)
-            if str(codigo) in (valor_atual or ""):
+            if str(codigo) in (valor_atual or "") or "2581" in (valor_atual or ""):
                 self.log(f"    ✓ Assunto CNJ confirmado: {valor_atual}")
                 # Garantir que modal feche
                 self._fechar_modal_cnj(silent=True)

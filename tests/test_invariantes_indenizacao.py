@@ -3588,3 +3588,18 @@ def test_inv110_reflexo_manual_periodo_default_da_principal():
         "REGRESSÃO #80-BY-8: período default do reflexo Manual não vem da principal")
     assert 'or _ppi' in corpo and 'or _ppf' in corpo, (
         "REGRESSÃO #80-BY-8: fallback do período ao da principal removido")
+
+
+def test_inv111_assunto_cnj_fallback_2581():
+    """#80-BY-11 (MARCELA run 7, 23/07/2026): nó CNJ da prévia inexistente na
+    árvore local (2108) fechava o modal SEM selecionar → Assunto CNJ
+    (obrigatório) vazio → save da verba Manual rejeitado SILENCIOSAMENTE →
+    verba perdida (2ª HE intrajornada, 3 runs seguidas). Invariante: fallback
+    ao default 2581 e verificação aceita o 2581 do fallback."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    ini = src.find("def _selecionar_assunto_cnj")
+    corpo = src[ini:src.find("def _fechar_modal_cnj")]
+    assert "#80-BY-11" in corpo and '"2581"' in corpo, (
+        "REGRESSÃO #80-BY-11: fallback CNJ 2581 removido")
+    assert 'or "2581" in (valor_atual or "")' in corpo, (
+        "REGRESSÃO #80-BY-11: verificação não aceita o 2581 do fallback")
