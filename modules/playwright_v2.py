@@ -11772,6 +11772,30 @@ class PlaywrightAutomatorV2:
                         # sempre None). POLL PACIENTE NO LUGAR: até 8min,
                         # sem navegar, re-avaliando a cada 15s.
                         try:
+                            # #80-BX-3 (3ª run 0000852-87): pós-reopen a página
+                            # ainda está no iniciar() (@Synchronized) — o botão
+                            # liquidar demora a existir; o _clicar lançava e o
+                            # except engolia (6 reopens sem NUNCA re-liquidar).
+                            # Esperar o form real até 3min; se não vier, log e
+                            # próximo reopen.
+                            _btn_liq = False
+                            for _bw in range(1, 19):
+                                if self._page.locator(
+                                    "input[id$=':liquidar'], a[id$=':liquidar']"
+                                ).count() > 0:
+                                    _btn_liq = True
+                                    break
+                                self._page.wait_for_timeout(10000)
+                            if not _btn_liq:
+                                self.log("    ⚠ #80-BX-3 botão liquidar não apareceu em 3min — próximo reopen")
+                                continue
+                            try:
+                                _liq_cfg = getattr(self.previa, "liquidacao", None)
+                                _iac = getattr(_liq_cfg, "indices_acumulados", None) if _liq_cfg else None
+                                if _iac:
+                                    self._marcar_radio("indicesAcumulados", _iac)
+                            except Exception:
+                                pass
                             self._clicar("liquidar")
                             self._aguardar_ajax(10000)
                             for _pp in range(1, 33):
