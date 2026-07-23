@@ -6720,6 +6720,14 @@ class PlaywrightAutomatorV2:
                             pass
             except Exception as e:
                 self.log(f"  ⚠ Falha cancelar form: {e}")
+            # #80-BY-7 (MARCELA run 5): save de parâmetros REJEITADO ("Erro:
+            # 65" pós-bombardeio de A4J) seguia SILENCIOSO → verba sem base →
+            # "Falta selecionar Histórico Salarial" (4 verbas). Mesma classe
+            # do #80-BY: abortar ALTO p/ o retry ×3 re-executar em conversa
+            # fresca (o Cancelar acima já re-ancorou a listagem).
+            raise ParametrosVerbaAbortadosError(
+                f"save de parâmetros de '{v.nome_pjecalc}' sem sucesso (ver #80-N acima)"
+            )
 
     def _OLD_configurar_parametros_pos_expresso(self, v) -> None:
         """[REMOVIDO — substituído por versão flexível acima]."""
@@ -7928,9 +7936,22 @@ class PlaywrightAutomatorV2:
             # A4J real + releitura pós re-render (bean). O caminho anterior
             # (check→fallback JS→reler DOM) gerou 4 runs de "CONFIRMADO" com
             # o H2 em SFLATIVO=N nos 37 reflexos (falso-positivo total).
-            if self._setar_checkbox_reflexo_confirmado(cb_id, True, contexto=reflexo.nome):
+            # #80-BY-7: pré-save usa 1 tentativa — Aviso/13º são REJEITADOS
+            # pelo servidor antes do save da principal (config default
+            # incompatível); insistir bombardeava o Seam e corrompia o próprio
+            # save ("Erro: 65"). O #80-BK pós-save ativa os rejeitados; o
+            # defer Manual (dedup #80-AT) fica como última rede.
+            if self._setar_checkbox_reflexo_confirmado(
+                cb_id, True, contexto=reflexo.nome, max_tent=1
+            ):
                 ok_reflexo = True
                 self.log(f"    ✓ Reflexo CONFIRMADO no painel: {reflexo.nome}")
+                break
+            if getattr(self, "_by5_rejeitado_pelo_servidor", False):
+                self.log(
+                    f"    ↪ #80-BY-7 rejeição server-side pré-save de "
+                    f"'{reflexo.nome}' — deixando p/ o #80-BK pós-save ativar"
+                )
                 break
             self.log(f"    ⚠ Reflexo '{reflexo.nome}' não confirmado (tentativa {tentativa}/{_MAX_REFL_TENT})")
         if not ok_reflexo:
@@ -7983,7 +8004,7 @@ class PlaywrightAutomatorV2:
             # Implementação detalhada via doc 07 — pular nesta versão MVP
 
     def _setar_checkbox_reflexo_confirmado(
-        self, cb_id: str, desejado: bool = True, contexto: str = ""
+        self, cb_id: str, desejado: bool = True, contexto: str = "", max_tent: int = 3
     ) -> bool:
         """#80-BY-5 (MARCELA 0000852-87, 23/07/2026) — NÃO REVERTER.
 
@@ -8002,7 +8023,11 @@ class PlaywrightAutomatorV2:
         """
         esc = cb_id.replace(":", "\\:")
         loc = self._page.locator(f"input#{esc}")
-        for _t in range(1, 4):
+        # #80-BY-7: sinaliza rejeição de NEGÓCIO (a4j ok, server re-renderiza
+        # no estado antigo) — o caller pré-save usa p/ NÃO insistir (bombardear
+        # o Seam com A4J rejeitados corrompia o save da verba, "Erro: 65").
+        self._by5_rejeitado_pelo_servidor = False
+        for _t in range(1, max_tent + 1):
             # (1) visibilidade — abrir o Exibir da linha dona se preciso
             try:
                 if not loc.is_visible():
@@ -8066,6 +8091,7 @@ class PlaywrightAutomatorV2:
             # mensagem JSF do painelMensagens — é a causa de negócio (ex.:
             # característica/ocorrência incompatível pré-save da principal).
             if _a4j_ok and bool(pos) != desejado:
+                self._by5_rejeitado_pelo_servidor = True
                 try:
                     _msgs = self._page.evaluate(
                         """() => [...document.querySelectorAll('[id*="painelMensagens"] li, .rich-messages li, .mensagemErro')]
@@ -8075,7 +8101,7 @@ class PlaywrightAutomatorV2:
                         self.log(f"    🔍 #80-BY-6 msg JSF na rejeição: {_msgs}")
                 except Exception:
                     pass
-            if _t < 3:
+            if _t < max_tent:
                 self.log(
                     f"    ⚠ #80-BY-5 checkbox não confirmado (a4j={_a4j_ok} "
                     f"checked={pos} desejado={desejado}) — retry {_t}/3 ({contexto})"

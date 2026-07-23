@@ -3556,3 +3556,19 @@ def test_inv108_desmarcador_extras_escopo_linha_e_previa_global():
         "REGRESSÃO #80-BY-6: scan global de checkboxes voltou (mata reflexos de outras verbas)")
     assert "if (!prefixo) return null" in corpo, (
         "REGRESSÃO #80-BY-6: sem linha da verba deve desmarcar NADA")
+
+
+def test_inv109_save_falho_aborta_e_pre_save_nao_insiste():
+    """#80-BY-7 (MARCELA run 5, 23/07/2026): (a) save de parâmetros REJEITADO
+    ("Erro: 65") seguia silencioso → verba sem base ("Falta selecionar
+    Histórico Salarial" ×4); agora aborta via ParametrosVerbaAbortadosError
+    (retry ×3 do caller re-executa em conversa fresca); (b) a marcação de
+    reflexo PRÉ-save usa max_tent=1 e sai na rejeição server-side — insistir
+    bombardeava o Seam e corrompia o save; o #80-BK pós-save ativa."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    i = src.find("Falha cancelar form")
+    seg = src[i:i + 900]
+    assert "raise ParametrosVerbaAbortadosError" in seg, (
+        "REGRESSÃO #80-BY-7: save falho voltou a seguir silencioso")
+    assert "_by5_rejeitado_pelo_servidor" in src and "max_tent=1" in src, (
+        "REGRESSÃO #80-BY-7: marcação pré-save voltou a insistir na rejeição")
