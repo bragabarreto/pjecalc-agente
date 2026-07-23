@@ -3572,3 +3572,19 @@ def test_inv109_save_falho_aborta_e_pre_save_nao_insiste():
         "REGRESSÃO #80-BY-7: save falho voltou a seguir silencioso")
     assert "_by5_rejeitado_pelo_servidor" in src and "max_tent=1" in src, (
         "REGRESSÃO #80-BY-7: marcação pré-save voltou a insistir na rejeição")
+
+
+def test_inv110_reflexo_manual_periodo_default_da_principal():
+    """#80-BY-8 (MARCELA run 6, 23/07/2026): reflexo Manual com
+    parametros_override VAZIO ficava com o período DEFAULT do PJE-Calc
+    (admissão→término), anterior ao da principal capada → save rejeitado
+    ("Data Inicial deve ser igual ou maior que Data Inicial da Verba
+    Principal") ×3 → RSR sobre QUINQUENIO/DIFERENÇA/FERIADO perdidos.
+    Invariante: período do reflexo = override (clampado) ou o DA PRINCIPAL."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    ini = src.find("def _criar_reflexo_manual_tentativa")
+    corpo = src[ini:ini + 22000]
+    assert "#80-BY-8" in corpo and "(base: principal)" in corpo, (
+        "REGRESSÃO #80-BY-8: período default do reflexo Manual não vem da principal")
+    assert 'or _ppi' in corpo and 'or _ppf' in corpo, (
+        "REGRESSÃO #80-BY-8: fallback do período ao da principal removido")

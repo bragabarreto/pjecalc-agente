@@ -7354,38 +7354,40 @@ class PlaywrightAutomatorV2:
 
         # 6. Aplicar parametros_override
         ov = reflexo.parametros_override
+        # #80-BY-4/#80-BY-8 (MARCELA 0000852-87): o servidor REJEITA o save do
+        # reflexo com "Data Inicial deve ser igual ou maior que Data Inicial
+        # da Verba Principal" quando o período do reflexo começa antes do da
+        # PRINCIPAL. Caso real: overrides VAZIOS (períodos None) deixavam o
+        # form com o default do PJE-Calc (admissão→término), anterior à
+        # principal (QUINQUENIO inicia 06/03/2022) → 🛑 "NÃO persistiu ×3".
+        # Regra: período do reflexo = override quando houver (CLAMPADO ao da
+        # principal); DEFAULT = período da própria principal.
+        from datetime import datetime as _dtc
+        _p = getattr(verba_principal, "parametros", None)
+        _ppi = getattr(_p, "periodo_inicio", None) if _p else None
+        _ppf = getattr(_p, "periodo_fim", None) if _p else None
+        _pi = (getattr(ov, "periodo_inicio", None) if ov else None) or _ppi
+        _pf = (getattr(ov, "periodo_fim", None) if ov else None) or _ppf
+        try:
+            if _pi and _ppi and (_dtc.strptime(_pi, "%d/%m/%Y")
+                                 < _dtc.strptime(_ppi, "%d/%m/%Y")):
+                self.log(f"    ↪ #80-BY-4 período inicial do reflexo "
+                         f"{_pi} < principal {_ppi} — clamp p/ {_ppi}")
+                _pi = _ppi
+            if _pf and _ppf and (_dtc.strptime(_pf, "%d/%m/%Y")
+                                 > _dtc.strptime(_ppf, "%d/%m/%Y")):
+                self.log(f"    ↪ #80-BY-4 período final do reflexo "
+                         f"{_pf} > principal {_ppf} — clamp p/ {_ppf}")
+                _pf = _ppf
+        except Exception:
+            pass
+        if _pi:
+            self.log(f"    ↪ #80-BY-8 período do reflexo: {_pi} → {_pf or '?'} (base: principal)")
+            self._preencher("periodoInicialInputDate", _pi, obrigatorio=False)
+        if _pf:
+            self._preencher("periodoFinalInputDate", _pf, obrigatorio=False)
         if ov:
             try:
-                # #80-BY-4 (MARCELA 0000852-87): o servidor REJEITA o save do
-                # reflexo com "Data Inicial deve ser igual ou maior que Data
-                # Inicial da Verba Principal" quando o período do override
-                # começa antes do período da PRINCIPAL (ex.: principal capada
-                # pela prescrição #78, reflexo com início do contrato). Clamp
-                # ao período aplicado na principal (era a causa dos 🛑 "NÃO
-                # persistiu após 3 tentativas" de RSR SOBRE QUINQUENIO/
-                # DIFERENCA/FERIADO).
-                from datetime import datetime as _dtc
-                _p = getattr(verba_principal, "parametros", None)
-                _pi, _pf = ov.periodo_inicio, ov.periodo_fim
-                try:
-                    _ppi = getattr(_p, "periodo_inicio", None)
-                    if _pi and _ppi and (_dtc.strptime(_pi, "%d/%m/%Y")
-                                         < _dtc.strptime(_ppi, "%d/%m/%Y")):
-                        self.log(f"    ↪ #80-BY-4 período inicial do reflexo "
-                                 f"{_pi} < principal {_ppi} — clamp p/ {_ppi}")
-                        _pi = _ppi
-                    _ppf = getattr(_p, "periodo_fim", None)
-                    if _pf and _ppf and (_dtc.strptime(_pf, "%d/%m/%Y")
-                                         > _dtc.strptime(_ppf, "%d/%m/%Y")):
-                        self.log(f"    ↪ #80-BY-4 período final do reflexo "
-                                 f"{_pf} > principal {_ppf} — clamp p/ {_ppf}")
-                        _pf = _ppf
-                except Exception:
-                    pass
-                if _pi:
-                    self._preencher("periodoInicialInputDate", _pi, obrigatorio=False)
-                if _pf:
-                    self._preencher("periodoFinalInputDate", _pf, obrigatorio=False)
                 if ov.caracteristica:
                     car = ov.caracteristica.value if hasattr(ov.caracteristica, "value") else str(ov.caracteristica)
                     if not self._marcar_radio_verificado("caracteristicaVerba", car):
