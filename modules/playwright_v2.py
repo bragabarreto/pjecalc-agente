@@ -12430,7 +12430,20 @@ class PlaywrightAutomatorV2:
         if _em_liquidacao:
             self.log(f"  ℹ Pre-check: liquidacao.jsf — Recentes reopen para conv fresca pré-export (#80-T)")
             try:
-                ok_rec_pre = self._reabrir_calculo_via_recentes()
+                # #80-BY-10 (MARCELA run 6): o reopen falhava 1× (URL ficava em
+                # principal.jsf — double-click perdido com o Drools da
+                # liquidação ainda ocupado) e o fallback usava a CONV DA
+                # LIQUIDAÇÃO no url-nav → "Erro: 8" no Exportar (exatamente o
+                # que o #80-T evita) → PJC perdido com liquidação 0 erros.
+                # Retry ×3 com gate de servidor ocioso entre tentativas.
+                ok_rec_pre = False
+                for _t_reo in range(1, 4):
+                    ok_rec_pre = self._reabrir_calculo_via_recentes()
+                    if ok_rec_pre:
+                        break
+                    self.log(f"  ⏳ #80-BY-10 Recentes reopen pré-export falhou — retry {_t_reo}/3")
+                    self._aguardar_servidor_ocioso(contexto=f"#80-BY-10 reopen pré-export {_t_reo}")
+                    self._page.wait_for_timeout(4000)
                 if ok_rec_pre:
                     self.log(f"  ✓ Recentes reopen pré-export (conv={self._calculo_conversation_id}) — sidebar Exportar...")
                     self._aguardar_ajax(8000)
