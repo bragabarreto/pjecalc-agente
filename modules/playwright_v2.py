@@ -11766,12 +11766,23 @@ class PlaywrightAutomatorV2:
                         and not _liq_result['tem_sucesso']
                     ):
                         # página aberta mas sem resultado — re-liquidar em
-                        # servidor calmo
+                        # servidor calmo. ⚠ #80-BX-2 (2ª run 0000852-87):
+                        # esperar só 60s e REABRIR interrompia a própria
+                        # liquidação (16 verbas = minutos de Drools; BX1-6
+                        # sempre None). POLL PACIENTE NO LUGAR: até 8min,
+                        # sem navegar, re-avaliando a cada 15s.
                         try:
                             self._clicar("liquidar")
                             self._aguardar_ajax(10000)
-                            self._aguardar_operacao_sucesso(timeout_ms=60000, bloqueante=False)
-                            _liq_result = self._page.evaluate(_JS_LIQ)
+                            for _pp in range(1, 33):
+                                self._page.wait_for_timeout(15000)
+                                _liq_result = self._page.evaluate(_JS_LIQ)
+                                if (_liq_result['tem_erro_500']
+                                        or _liq_result['totalErros'] is not None
+                                        or _liq_result['sucesso_painel']
+                                        or _liq_result['tem_sucesso']):
+                                    self.log(f"    ⏳ #80-BX-2 conclusivo após ~{_pp*15}s de poll")
+                                    break
                         except Exception:
                             pass
                     self.log(
