@@ -7190,6 +7190,10 @@ class PlaywrightAutomatorV2:
             # #80-AG-6: NATIVE click comprovado pelo diag interativo (item
             # entrou na lista com servidor ocioso). jsfcljs fica como fallback.
             add_ok = None
+            # #80-BY-14: gate antes do submit síncrono — clicar com o Drools da
+            # verba anterior ainda quente disparava LockTimeout ("Erro Interno")
+            # e matava o form/conversa do reflexo.
+            self._aguardar_servidor_ocioso(contexto="#80-BY-14 pré-Adicionar Base")
             try:
                 self._page.locator("[id$=':incluirItemProp']").first.click(force=True, timeout=8000)
                 add_ok = "native"
@@ -7246,7 +7250,14 @@ class PlaywrightAutomatorV2:
                 self.log(f"    ⚠ Adicionar Base não confirmou (tent {tent}/3) — diag={_diag_v}")
                 if _diag_v.get("erroInterno") or not _diag_v.get("temSelect"):
                     # página trocou (LockTimeout/navegação) — inútil re-tentar
-                    # no mesmo form; abortar p/ o wrapper re-abrir do zero
+                    # no mesmo form; abortar p/ o wrapper re-abrir do zero.
+                    # #80-BY-14 (MARCELA run 8): SEM esperar o lock liberar, a
+                    # retentativa do wrapper COLIDIA de novo (erroInterno em
+                    # cascata ×3 → RSR sobre QUINQUENIO/DIFERENÇA/FERIADO
+                    # perdidos — únicos sem checkbox candidato). Esperar aqui.
+                    self.log("    ⏳ #80-BY-14 aguardando lock liberar antes da retentativa do wrapper (45s+gate)")
+                    self._page.wait_for_timeout(45000)
+                    self._aguardar_servidor_ocioso(contexto="#80-BY-14 pós-erroInterno vínculo")
                     return False
             except Exception:
                 self.log(f"    ⚠ Adicionar Base não confirmou na lista (tent {tent}/3)")
