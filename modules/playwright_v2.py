@@ -7798,8 +7798,17 @@ class PlaywrightAutomatorV2:
                     """([candidatos, esperadosArr]) => {
                         const strip = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'');
                         const norm = s => strip((s||'')).toUpperCase().replace(/\\s+/g,' ').trim();
-                        const STOP = new Set(['SOBRE','DE','DA','DO','E','A','O','AO','NA','NO','COM']);
-                        const toks = s => new Set(norm(s).split(/[^A-Z0-9%\\/]+/).filter(t => t.length>1 && !STOP.has(t)));
+                        const STOP = new Set(['SOBRE','DE','DA','DO','E','A','O','AO','NA','NO','COM','MAIS']);
+                        // #80-BY-17: tokenizer IGUAL ao _tokens_fidelidade do
+                        // Python (esperados) — split alfanumérico puro ('1/3'
+                        // vira 1,3; '50%' vira 50), dígitos soltos mantidos,
+                        // ordinal 13º→13. Sem isso, esperado {FERIAS,1,3} nunca
+                        // era subconjunto da linha {FERIAS,'1/3'} e o FÉRIAS
+                        // legítimo era desmarcado como "extra".
+                        const toks = s => new Set(
+                            norm(s).split(/[^A-Z0-9]+/)
+                                .map(t => t.replace(/^(\\d+)[OA]$/, '$1'))
+                                .filter(t => t && (t.length > 1 || /^\\d$/.test(t)) && !STOP.has(t)));
                         // #80-BY-6: achar a LINHA da verba corrente (célula exata,
                         // tolerante a truncamento-50) e derivar o prefixo do id
                         // `formulario:listagem:N:` — o scan fica RESTRITO a ela.
@@ -8410,13 +8419,21 @@ class PlaywrightAutomatorV2:
         if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
             candidatos.append(v.expresso_alvo)
 
-        _stop = {"SOBRE", "DE", "DA", "DO", "DAS", "DOS", "E", "O", "A"}
+        # #80-BY-17: 'MAIS' stopword + expansão RSR — sem isso "Ferias mais
+        # 1/3"/"RSR sobre X" nunca casavam linha nenhuma e o BK PULAVA esses
+        # reflexos em silêncio (linha None → continue): só Aviso/13º eram
+        # verificados, e FÉRIAS/RSR morriam sem remediação (run 9).
+        _stop = {"SOBRE", "DE", "DA", "DO", "DAS", "DOS", "E", "O", "A", "MAIS"}
 
         def _toks(s: str) -> set:
             s = _ud.normalize("NFKD", s or "")
             s = "".join(c for c in s if not _ud.combining(c)).upper()
             ts = _re.findall(r"[A-Z0-9]+", s)
-            return {_re.sub(r"^(\d+)[OA]$", r"\1", t) for t in ts if t not in _stop}
+            out = {_re.sub(r"^(\d+)[OA]$", r"\1", t) for t in ts if t not in _stop}
+            if "RSR" in out:
+                out.discard("RSR")
+                out.update({"REPOUSO", "SEMANAL", "REMUNERADO"})
+            return out
 
         _js_exibir = """(candidatos) => {
             const norm = s => (s||'').normalize('NFC').replace(/\\s+/g,' ').trim().toUpperCase();
@@ -13064,7 +13081,11 @@ class PlaywrightAutomatorV2:
         t = _re.sub(r"\s+", " ", t).strip().upper()
         return t
 
-    _STOP_FID = {"SOBRE", "DE", "DA", "DO", "E", "A", "O", "AO", "NA", "NO", "COM"}
+    # #80-BY-17: "MAIS" é stopword — a prévia diz "Ferias MAIS 1/3" e o rótulo
+    # do PJE-Calc "FÉRIAS + 1/3" (o + não vira token); com MAIS exigido no
+    # subset, FÉRIAS nunca casava → desmarcador o matava como "extra" e o BK o
+    # pulava em silêncio (run 9: FÉRIAS/RSR mortos em todas as verbas cedo).
+    _STOP_FID = {"SOBRE", "DE", "DA", "DO", "E", "A", "O", "AO", "NA", "NO", "COM", "MAIS"}
 
     def _tokens_fidelidade(self, s: str) -> frozenset:
         """Tokens significativos de uma descrição, p/ match por subconjunto.
@@ -13082,6 +13103,11 @@ class PlaywrightAutomatorV2:
                 toks.add(t)
             elif t.isdigit():
                 toks.add(t)
+        # #80-BY-17: a prévia usa a sigla "RSR"; o PJE-Calc escreve por extenso
+        # ("REPOUSO SEMANAL REMUNERADO [E FERIADO]") — expandir p/ o subset casar.
+        if "RSR" in toks:
+            toks.discard("RSR")
+            toks.update({"REPOUSO", "SEMANAL", "REMUNERADO"})
         return frozenset(toks)
 
     def _reconciliar_fidelidade_pjc(self, pjc_bytes: bytes) -> dict:

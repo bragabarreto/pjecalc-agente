@@ -3641,3 +3641,33 @@ def test_inv113_bk_ground_truth_h2():
         "REGRESSÃO #80-BY-15: proteção contra toggle de bean true não-flushado removida")
     assert "_aguardar_form_verba_paciente" in corpo, (
         "REGRESSÃO #80-BY-15: re-save do BK sem espera paciente do form")
+
+
+def test_inv114_tokens_mais_stopword_e_rsr_expandido():
+    """#80-BY-17 (MARCELA run 9, 24/07/2026): a prévia diz "Ferias MAIS 1/3" e
+    "RSR sobre X"; o PJE-Calc rotula "FÉRIAS + 1/3" e "REPOUSO SEMANAL
+    REMUNERADO [E FERIADO]". O subset com token MAIS/RSR nunca casava →
+    desmarcador matava FÉRIAS/RSR legítimos como "extras", o BK os PULAVA em
+    silêncio (linha None → continue) e o dedup deixava Manuais redundantes.
+    Invariantes: MAIS é stopword; RSR expande p/ REPOUSO/SEMANAL/REMUNERADO;
+    tokenizer do desmarcador JS = do Python (dígitos soltos, ordinal)."""
+    import importlib
+    mod = importlib.import_module("modules.playwright_v2")
+    Bot = mod.PlaywrightAutomatorV2
+    import types
+    fs = types.SimpleNamespace(_norm_desc_fidelidade=Bot._norm_desc_fidelidade,
+                               _STOP_FID=Bot._STOP_FID)
+    toks = types.MethodType(Bot._tokens_fidelidade, fs)
+    previa_ferias = toks("Ferias mais 1/3 sobre Horas Extras 50%")
+    rotulo_ferias = toks("FÉRIAS + 1/3 SOBRE HORAS EXTRAS 50%")
+    assert previa_ferias <= rotulo_ferias, (
+        "REGRESSÃO #80-BY-17: 'Ferias mais 1/3' não casa 'FÉRIAS + 1/3'")
+    previa_rsr = toks("RSR sobre Horas Extras 50%")
+    rotulo_rsr = toks("REPOUSO SEMANAL REMUNERADO E FERIADO SOBRE HORAS EXTRAS 50%")
+    assert previa_rsr <= rotulo_rsr, (
+        "REGRESSÃO #80-BY-17: 'RSR sobre X' não casa 'REPOUSO SEMANAL REMUNERADO...'")
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    ini = src.find("def _desmarcar_reflexos_extras")
+    corpo = src[ini:src.find("def ", ini + 50)]
+    assert "'MAIS'" in corpo and "tokenizer IGUAL" in corpo, (
+        "REGRESSÃO #80-BY-17: tokenizer JS do desmarcador divergiu do Python")
