@@ -7431,19 +7431,28 @@ class PlaywrightAutomatorV2:
             self._page.wait_for_timeout(1500)
 
         # 2. Click "Manual" (incluir) — wait_for_selector + retry
+        # #80-BY-13 (MARCELA run 7): pós-BK (re-save+Regerar) o Drools segura o
+        # lock e o botão Manual/o form não renderizam por 1-3 min — os retries
+        # de 10s desistiam ("Form Manual não abriu — pulando reflexo") e os RSR
+        # Manuais eram perdidos. Gate de servidor ocioso + 5 tentativas com
+        # espera crescente (classe #80-U/#80-V).
         btn_manual = None
-        for tentativa in range(3):
+        for tentativa in range(5):
             try:
+                if tentativa:
+                    self._aguardar_servidor_ocioso(
+                        contexto=f"#80-BY-13 botão Manual (tent {tentativa+1})"
+                    )
                 self._page.wait_for_selector(
                     "input[id$=':incluir'][value='Manual']",
-                    state="visible", timeout=10000,
+                    state="visible", timeout=10000 + tentativa * 10000,
                 )
                 btn_manual = self._page.locator(
                     "input[id$=':incluir'][value='Manual']"
                 ).first
                 break
             except Exception:
-                self.log(f"    ⚠ Botão Manual não apareceu (tentativa {tentativa+1}/3)")
+                self.log(f"    ⚠ Botão Manual não apareceu (tentativa {tentativa+1}/5)")
                 self._navegar_menu("li_calculo_dados_do_calculo")
                 self._page.wait_for_timeout(1000)
                 self._navegar_menu("li_calculo_verbas")
@@ -7458,12 +7467,24 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Click 'Manual' falhou: {e}")
             return False
         self._aguardar_ajax(8000)
-        # Aguardar form renderizar
-        try:
-            self._page.wait_for_selector(
-                "input[id='formulario:descricao']", state="visible", timeout=10000
-            )
-        except Exception:
+        # Aguardar form renderizar — #80-BY-13: paciente (Drools pós-BK)
+        _form_ok_13 = False
+        for _t13 in range(1, 4):
+            try:
+                self._page.wait_for_selector(
+                    "input[id='formulario:descricao']", state="visible", timeout=15000
+                )
+                _form_ok_13 = True
+                break
+            except Exception:
+                self.log(f"    ⏳ #80-BY-13 form Manual não renderizou — aguardando ({_t13}/3)")
+                self._aguardar_servidor_ocioso(contexto="#80-BY-13 form Manual")
+                try:
+                    btn_manual.click(force=True)
+                except Exception:
+                    pass
+                self._aguardar_ajax(8000)
+        if not _form_ok_13:
             self.log(f"    ⚠ Form Manual não abriu — pulando reflexo {reflexo.id}")
             return False
 
@@ -12584,37 +12605,36 @@ class PlaywrightAutomatorV2:
         if _em_liquidacao:
             self.log(f"  ℹ Pre-check: liquidacao.jsf — Recentes reopen para conv fresca pré-export (#80-T)")
             try:
-                # #80-BY-10 (MARCELA run 6): o reopen falhava 1× (URL ficava em
-                # principal.jsf — double-click perdido com o Drools da
-                # liquidação ainda ocupado) e o fallback usava a CONV DA
-                # LIQUIDAÇÃO no url-nav → "Erro: 8" no Exportar (exatamente o
-                # que o #80-T evita) → PJC perdido com liquidação 0 erros.
-                # Retry ×3 com gate de servidor ocioso entre tentativas.
-                ok_rec_pre = False
+                # #80-BY-10/13 (MARCELA runs 6-7): (run 6) o reopen falhava 1×
+                # e o fallback usava a CONV DA LIQUIDAÇÃO → "Erro: 8"; (run 7)
+                # o reopen deu conv fresca MAS o sidebar caiu em principal.jsf
+                # (conv morreu com o Drools quente) e o fallback usou a conv
+                # VELHA → Fase E HTTP 500. Ciclo completo REOPEN+SIDEBAR até
+                # ×3, com gate de servidor ocioso antes de cada rodada — cada
+                # rodada usa uma conversa NOVA.
                 for _t_reo in range(1, 4):
+                    self._aguardar_servidor_ocioso(contexto=f"#80-BY-10 pré-reopen export {_t_reo}")
                     ok_rec_pre = self._reabrir_calculo_via_recentes()
-                    if ok_rec_pre:
-                        break
-                    self.log(f"  ⏳ #80-BY-10 Recentes reopen pré-export falhou — retry {_t_reo}/3")
-                    self._aguardar_servidor_ocioso(contexto=f"#80-BY-10 reopen pré-export {_t_reo}")
-                    self._page.wait_for_timeout(4000)
-                if ok_rec_pre:
+                    if not ok_rec_pre:
+                        self.log(f"  ⏳ #80-BY-10 Recentes reopen pré-export falhou — retry {_t_reo}/3")
+                        self._page.wait_for_timeout(5000)
+                        continue
                     self.log(f"  ✓ Recentes reopen pré-export (conv={self._calculo_conversation_id}) — sidebar Exportar...")
                     self._aguardar_ajax(8000)
                     self._page.wait_for_timeout(1500)
                     _sid_pre = _tentar_sidebar_exportar()
-                    if _sid_pre:
-                        self._aguardar_ajax(15000)
-                        self._page.wait_for_timeout(2000)
-                        _diag_pre = _verificar_exportacao_ok()
-                        self.log(f"  [DIAG-exp] recentes-pre+sidebar={_sid_pre} {_diag_pre}")
-                        if (not _diag_pre.get('tem_500') and not _diag_pre.get('tem_erro_5')
-                                and _diag_pre.get('tem_export_btn')):
-                            nav_exp = f"recentes-pre+sidebar:{_sid_pre}"
-                        else:
-                            self.log(f"  ⚠ Sidebar pós-Recentes-pre sem export btn — cai para estratégias 2-4")
-                    else:
-                        self.log(f"  ⚠ Sidebar pós-Recentes-pre: li_operacoes_exportar não encontrado — cai p/ 2-4")
+                    if not _sid_pre:
+                        self.log(f"  ⚠ Sidebar pós-Recentes-pre: li_operacoes_exportar não encontrado — rodada {_t_reo}/3")
+                        continue
+                    self._aguardar_ajax(15000)
+                    self._page.wait_for_timeout(2000)
+                    _diag_pre = _verificar_exportacao_ok()
+                    self.log(f"  [DIAG-exp] recentes-pre+sidebar={_sid_pre} {_diag_pre}")
+                    if (not _diag_pre.get('tem_500') and not _diag_pre.get('tem_erro_5')
+                            and _diag_pre.get('tem_export_btn')):
+                        nav_exp = f"recentes-pre+sidebar:{_sid_pre}"
+                        break
+                    self.log(f"  ⚠ #80-BY-13 sidebar caiu fora da exportação (rodada {_t_reo}/3) — novo reopen")
             except Exception as e_pre:
                 self.log(f"  ⚠ Recentes reopen pré-export: {e_pre}")
             # Se pre-check teve sucesso, pula sidebar normal (estratégia 1) e vai direto p/ 2-4
@@ -12639,12 +12659,15 @@ class PlaywrightAutomatorV2:
                 self.log(f"  ⚠ Sidebar exportar erro: {e}")
                 nav_exp = None
 
-        # 2ª tentativa: URL nav com conv pós-liquidação
-        if not nav_exp and _conv_pos_liq:
-            self.log(f"  → Tentando URL nav exportacao.jsf?conversationId={_conv_pos_liq}")
+        # 2ª tentativa: URL nav — #80-BY-13: usar a conv MAIS FRESCA (a do
+        # reopen, quando houve), não a da liquidação (dá "Erro: 8"/500 no
+        # Exportar — run 7 usou a conv velha 792 em vez da fresca 797).
+        _conv_export = self._calculo_conversation_id or _conv_pos_liq
+        if not nav_exp and _conv_export:
+            self.log(f"  → Tentando URL nav exportacao.jsf?conversationId={_conv_export}")
             url_exp = (
                 f"{self.pjecalc_url}/pages/calculo/exportacao.jsf"
-                f"?conversationId={_conv_pos_liq}"
+                f"?conversationId={_conv_export}"
             )
             try:
                 self._page.goto(url_exp, wait_until="domcontentloaded", timeout=15000)
