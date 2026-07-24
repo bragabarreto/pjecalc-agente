@@ -4185,6 +4185,11 @@ class PlaywrightAutomatorV2:
             self.log(f"{log_prefix}⚠ Modal Confirmação ainda visível após Ok — pode ter falhado")
             # Não fail hard — pode ter regenerado mesmo assim
         self._page.wait_for_timeout(1500)
+        # #80-BY-18: carimbo p/ a janela de resfriamento do vínculo Manual —
+        # o Drools do Regerar (todas as verbas selecionadas, inv48) segura o
+        # lock por minutos DEPOIS da resposta A4J (invisível ao networkidle).
+        import time as _t18
+        self._ts_ultimo_regerar = _t18.time()
         return True
 
     def _regerar_ocorrencias_verbas(self, sobrescrever: bool = False) -> None:
@@ -7210,6 +7215,18 @@ class PlaywrightAutomatorV2:
             # verba anterior ainda quente disparava LockTimeout ("Erro Interno")
             # e matava o form/conversa do reflexo.
             self._aguardar_servidor_ocioso(contexto="#80-BY-14 pré-Adicionar Base")
+            # #80-BY-18 (run 10): o gate networkidle NÃO enxerga o lock do
+            # Drools retido após o Regerar (todas as verbas — minutos na VM);
+            # o vínculo colidia com "Erro Interno" nas 3 tentativas (RSR sobre
+            # QUINQUENIO). Janela de resfriamento determinística de 180s
+            # contados do ÚLTIMO Regerar antes do submit síncrono.
+            import time as _t18
+            _falta18 = 180 - (_t18.time() - getattr(self, "_ts_ultimo_regerar", 0))
+            if 0 < _falta18 <= 180:
+                self.log(f"    ⏳ #80-BY-18 janela pós-Regerar: aguardando "
+                         f"{int(_falta18)}s antes do vínculo (lock Drools)")
+                self._page.wait_for_timeout(int(_falta18 * 1000))
+                self._aguardar_servidor_ocioso(contexto="#80-BY-18 pós-janela")
             try:
                 self._page.locator("[id$=':incluirItemProp']").first.click(force=True, timeout=8000)
                 add_ok = "native"
