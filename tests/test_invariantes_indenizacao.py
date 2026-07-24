@@ -3621,3 +3621,23 @@ def test_inv112_duplicata_de_alvo_via_passada_extra_expresso():
         "REGRESSÃO #80-BY-12: Manual voltou a ser o 1º destino das duplicatas")
     assert "adaptadas primeiro" in src, (
         "REGRESSÃO #80-BY-12: ordenação adaptadas-antes-da-canônica removida")
+
+
+def test_inv113_bk_ground_truth_h2():
+    """#80-BY-15 (MARCELA run 8, 24/07/2026): o checked do painel MENTIA mesmo
+    pós-reload — reflexos 'VERIFICADOS' (FÉRIAS/RSR pré-save) estavam
+    SFLATIVO=N no DB; só os re-marcados pela remediação persistiam. O BK agora
+    consulta o H2 (TCP, mesmo container) como ground truth; bean true +
+    DB N = não-flushado → só re-save (clicar togglaria p/ false); re-save com
+    espera paciente do form (10s seco abortava a verificação)."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _reflexos_ativos_h2" in src and "SFLATIVO='S'" in src, (
+        "REGRESSÃO #80-BY-15: consulta ground-truth ao H2 removida")
+    ini = src.find("def _verificar_reflexos_pos_save")
+    corpo = src[ini:src.find("def _ajustar_periodo_reflexo")]
+    assert "_reflexos_ativos_h2()" in corpo, (
+        "REGRESSÃO #80-BY-15: BK voltou a confiar só no checked do painel")
+    assert "só re-save (flush)" in corpo, (
+        "REGRESSÃO #80-BY-15: proteção contra toggle de bean true não-flushado removida")
+    assert "_aguardar_form_verba_paciente" in corpo, (
+        "REGRESSÃO #80-BY-15: re-save do BK sem espera paciente do form")

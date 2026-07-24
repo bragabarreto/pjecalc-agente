@@ -8308,6 +8308,58 @@ class PlaywrightAutomatorV2:
                 )
         return False
 
+    def _reflexos_ativos_h2(self):
+        """#80-BY-15 (MARCELA run 8) — GROUND TRUTH ABSOLUTO: consulta o H2
+        (TCP server, MESMO container do bot) e retorna os nomes completos dos
+        reflexos ATIVOS (SFLATIVO='S') do cálculo corrente. None = H2
+        indisponível (caller usa o fallback do painel DOM).
+
+        Motivo: o checked do painel MENTE mesmo pós-reload em certos estados —
+        na run 8, reflexos 'VERIFICADOS' pelo painel (FÉRIAS/RSR marcados
+        pré-save) estavam SFLATIVO=N no DB, enquanto os re-marcados pela
+        remediação (13º/AVISO) persistiram. Só o DB não mente."""
+        import subprocess
+        import glob as _glob
+        import tempfile
+        import os as _os
+        num = getattr(self, "_calculo_numero", None)
+        if not num or not str(num).isdigit():
+            return None
+        jars = _glob.glob("/opt/pjecalc/bin/lib/h2-*.jar")
+        if not jars:
+            return None
+        sql = ("SELECT SNMCOMPLETOVERBA FROM TBVERBACALCULO "
+               f"WHERE IIDCALCULO={int(num)} AND STPDISCRIMINADOR='R' "
+               "AND SFLATIVO='S';")
+        spath = None
+        try:
+            with tempfile.NamedTemporaryFile("w", suffix=".sql", delete=False,
+                                             encoding="utf-8") as f:
+                f.write(sql)
+                spath = f.name
+            out = subprocess.run(
+                ["java", "-cp", jars[0], "org.h2.tools.RunScript",
+                 "-url", "jdbc:h2:tcp://localhost:9092/./pjecalc",
+                 "-user", "pjecalc", "-password", "/pjecalc/",
+                 "-script", spath, "-showResults"],
+                capture_output=True, text=True, timeout=30,
+            )
+            nomes = set()
+            for ln in (out.stdout or "").splitlines():
+                ln = ln.strip()
+                if ln.startswith("--> "):
+                    nomes.add(ln[4:].strip())
+            return nomes
+        except Exception as _e:
+            self.log(f"    ⚠ #80-BY-15 H2 indisponível: {str(_e)[:80]}")
+            return None
+        finally:
+            if spath:
+                try:
+                    _os.unlink(spath)
+                except Exception:
+                    pass
+
     def _verificar_reflexos_pos_save(self, v) -> None:
         """#80-BK (0000092-41, 17/07/2026) — NÃO REVERTER: ground truth dos
         checkboxes de reflexo APÓS o flush (save de parâmetros).
@@ -8435,13 +8487,25 @@ class PlaywrightAutomatorV2:
                         .map(cb => ({id: cb.id, checked: cb.checked,
                                      txt: ((cb.closest('tr') || {}).textContent || '').replace(/\\s+/g,' ').trim()}))"""
                 ) or []
+                # #80-BY-15: quando o H2 responde, o ATIVO vem do BANCO (o
+                # checked do painel mentia mesmo pós-reload — run 8).
+                _h2_ativos = self._reflexos_ativos_h2()
+                _h2_toks = ([_toks(n) for n in _h2_ativos]
+                            if _h2_ativos is not None else None)
+                if _h2_toks is not None and rodada == 1:
+                    self.log(f"    🔬 #80-BY-15 ground truth H2: "
+                             f"{len(_h2_ativos)} reflexo(s) ativo(s) no DB")
                 faltantes = []
                 for nome in alvos:
                     t_alvo = _toks(nome)
                     linha = next((l for l in linhas if t_alvo <= _toks(l.get("txt", ""))), None)
                     if linha is None:
                         continue  # sem checkbox (reflexo via Manual) — fora do escopo
-                    if not linha.get("checked"):
+                    if _h2_toks is not None:
+                        ativo_gt = any(t_alvo <= ht for ht in _h2_toks)
+                    else:
+                        ativo_gt = bool(linha.get("checked"))
+                    if not ativo_gt:
                         faltantes.append((nome, linha["id"]))
                 if not faltantes:
                     self.log(f"    ✓ #80-BK reflexos de '{v.nome_pjecalc}' VERIFICADOS no bean pós-save")
@@ -8457,6 +8521,20 @@ class PlaywrightAutomatorV2:
                     f"apesar do CONFIRMADO: {[n for n, _ in faltantes]} — re-marcando (rodada {rodada})"
                 )
                 for _nome, cb_id in faltantes:
+                    # #80-BY-15: se o DOM (bean da conversa) JÁ mostra checked
+                    # mas o H2 diz inativo, o true está NÃO-FLUSHADO — clicar
+                    # TOGGLARIA p/ false; a remediação certa é só o re-save
+                    # (flush). Re-marcar apenas quando o bean também está N.
+                    try:
+                        _chk_atual = self._page.evaluate(
+                            "(cid) => { const cb = document.getElementById(cid); return cb ? cb.checked : null; }",
+                            cb_id,
+                        )
+                    except Exception:
+                        _chk_atual = None
+                    if _chk_atual:
+                        self.log(f"    ↪ #80-BY-15 '{_nome}' true no bean, N no DB — só re-save (flush)")
+                        continue
                     # #80-BY-5: re-marcar via helper confirmado (POST A4J real
                     # + releitura pós re-render). O JS/check cru girava em
                     # falso (FERIADO EM DOBRO: 3 rodadas sem efeito no bean).
@@ -8473,16 +8551,16 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ⚠ #80-BK form de '{v.nome_pjecalc}' não abriu p/ re-save — reflexos podem não persistir")
                     return
                 self._aguardar_ajax(8000)
-                try:
-                    self._page.wait_for_selector(
-                        "input[id$=':descricao'], input[id$=':valorDevido']",
-                        state="visible", timeout=10000,
-                    )
-                except Exception:
-                    pass
+                # #80-BY-15: espera PACIENTE do form (o 10s seco abortava com
+                # "sem botão save" e a verificação morria — run 8, HE 50%)
+                if not self._aguardar_form_verba_paciente(
+                    contexto=f"#80-BK re-save {v.nome_pjecalc}"
+                ):
+                    self.log("    ⚠ #80-BK form do re-save não renderizou — nova rodada")
+                    continue
                 if not self._clicar_salvar_flex(timeout_ms=8000):
-                    self.log("    ⚠ #80-BK sem botão save no re-save — abortando verificação")
-                    return
+                    self.log("    ⚠ #80-BK sem botão save no re-save — nova rodada")
+                    continue
                 self._aguardar_ajax(8000)
                 ok = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
                 self.log(f"    {'✓' if ok else '⚠'} #80-BK re-save de '{v.nome_pjecalc}' {'confirmado' if ok else 'sem confirmação'}")
