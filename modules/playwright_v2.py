@@ -7164,13 +7164,30 @@ class PlaywrightAutomatorV2:
                     const sel = document.querySelector("select[id$=':baseVerbaDeCalculo']");
                     if (!sel) return null;
                     const cs = cands.map(norm).filter(Boolean);
+                    // #80-BY-19: MELHOR-AJUSTE — o includes() cru casava a
+                    // opção CURTA errada ("HORAS EXTRAS 50%") p/ principal
+                    // "HORAS EXTRAS 50% - INTERVALO INTERJORNADA..." (o Manual
+                    // ficava vinculado à HE errada). Ranking: exato(0) >
+                    // prefixo com MENOR diferença de tamanho; includes() só em
+                    // último caso.
+                    let best = null, bestScore = 1e9;
                     for (const opt of sel.options) {
                         const t = norm(opt.textContent);
                         if (!t) continue;
-                        if (cs.some(c => t === c || t.includes(c) || c.includes(t)))
-                            return {value: opt.value, label: opt.textContent.trim()};
+                        for (const c of cs) {
+                            let score = null;
+                            if (t === c) score = 0;
+                            else if (t.startsWith(c) || c.startsWith(t))
+                                score = 10 + Math.abs(t.length - c.length);
+                            else if (t.includes(c) || c.includes(t))
+                                score = 1000 + Math.abs(t.length - c.length);
+                            if (score !== null && score < bestScore) {
+                                bestScore = score;
+                                best = {value: opt.value, label: opt.textContent.trim()};
+                            }
+                        }
                     }
-                    return null;
+                    return best;
                 }""",
                 candidatos,
             )
@@ -8545,6 +8562,40 @@ class PlaywrightAutomatorV2:
                 if _h2_toks is not None and rodada == 1:
                     self.log(f"    🔬 #80-BY-15 ground truth H2: "
                              f"{len(_h2_ativos)} reflexo(s) ativo(s) no DB")
+                # #80-BY-19 (run 10): o subset cru CRUZAVA verbas homônimas —
+                # alvo "Aviso sobre HE 50%" ⊆ nome ativo "AVISO ... SOBRE HE
+                # 50% - INTERVALO INTRAJORNADA (NATUREZ" (da 2ª HE) → o BK
+                # dizia VERIFICADOS sem ter ativado NADA da HE principal
+                # (3 reflexos mortos) e da INTERJORNADA (4). Melhor-ajuste
+                # GLOBAL: um nome ativo só conta p/ o alvo se este for o fit
+                # de MENOR excedente entre TODOS os reflexos da prévia.
+                _alvos_globais = []
+                if _h2_toks is not None:
+                    try:
+                        for _vv in (self.previa.verbas_principais or []):
+                            for _rr in (getattr(_vv, "reflexos", None) or []):
+                                _nm19 = (getattr(_rr, "nome", None)
+                                         or getattr(_rr, "expresso_reflex_alvo", "") or "")
+                                _tk19 = _toks(_nm19)
+                                if _tk19:
+                                    _alvos_globais.append(_tk19)
+                    except Exception:
+                        pass
+
+                def _ativo_no_h2(t_alvo):
+                    for ht in _h2_toks:
+                        if not (t_alvo <= ht):
+                            continue
+                        extra_meu = len(ht - t_alvo)
+                        melhor_outro = min(
+                            (len(ht - g) for g in _alvos_globais
+                             if g != t_alvo and g <= ht),
+                            default=None,
+                        )
+                        if melhor_outro is None or extra_meu <= melhor_outro:
+                            return True
+                    return False
+
                 faltantes = []
                 for nome in alvos:
                     t_alvo = _toks(nome)
@@ -8552,7 +8603,7 @@ class PlaywrightAutomatorV2:
                     if linha is None:
                         continue  # sem checkbox (reflexo via Manual) — fora do escopo
                     if _h2_toks is not None:
-                        ativo_gt = any(t_alvo <= ht for ht in _h2_toks)
+                        ativo_gt = _ativo_no_h2(t_alvo)
                     else:
                         ativo_gt = bool(linha.get("checked"))
                     if not ativo_gt:
