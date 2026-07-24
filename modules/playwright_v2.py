@@ -7003,8 +7003,24 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(5000)
         except Exception as e:
             self.log(f"    ⚠ Click btnSelecionarCNJ: {e}")
-            self._fechar_modal_cnj()
-            return False
+            # #80-BY-16 (MARCELA run 9): o click nativo falha com "Element is
+            # not visible" (estado do modal) e a seleção NUNCA acontecia →
+            # "Campo obrigatório: Assuntos CNJ" no save do reflexo Manual, em
+            # loop. O onclick do botão é JS puro (seta codigoAssuntosCnj +
+            # assuntosCnj e fecha o modal) — o JS click roda mesmo invisível.
+            _js_ok = self._page.evaluate(
+                """() => {
+                    const b = document.getElementById('btnSelecionarCNJ')
+                        || document.querySelector("input[value='Selecionar'][type='button']");
+                    if (!b) return false;
+                    try { b.click(); return true; } catch (e) { return false; }
+                }"""
+            )
+            if not _js_ok:
+                self._fechar_modal_cnj()
+                return False
+            self.log("    ↪ #80-BY-16 Selecionar CNJ via JS click (botão invisível)")
+            self._aguardar_ajax(5000)
 
         # 4. Verificar que assunto foi setado — #80-BY-11: aceitar também o
         # 2581 do fallback (o codigo pedido pode não existir na árvore local)
