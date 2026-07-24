@@ -12429,9 +12429,15 @@ class PlaywrightAutomatorV2:
             # vez de desistir, reabrir via Recentes (conversa fresca),
             # re-liquidar com o servidor calmo e re-avaliar (×6, 60s entre).
             _bx_ok = False
+            # #80-BY-20 (runs 10-11 MARCELA): com 26 reflexos ativos a
+            # liquidação computa por 20-30min; reabrir cedo INTERROMPE o
+            # Drools (lição do próprio #80-BX-2) e o botão nunca renderiza em
+            # 3min. Espera LONGA antes do 1º reopen + espaçamento maior.
+            self.log("  ⏳ #80-BY-20 liquidação pesada em curso — aguardando 5min antes do 1º reopen")
+            self._page.wait_for_timeout(300000)
             for _bx in range(1, 7):
-                self.log(f"  ⚠ #80-BX erro técnico no render da liquidação — reopen {_bx}/6 em 60s")
-                self._page.wait_for_timeout(60000)
+                self.log(f"  ⚠ #80-BX erro técnico no render da liquidação — reopen {_bx}/6 em 120s")
+                self._page.wait_for_timeout(120000)
                 try:
                     self._aguardar_servidor_ocioso(contexto=f"#80-BX reopen {_bx}")
                     if not self._fechar_e_reabrir_calculo(f"#80-BX pós-500 liquidação ({_bx}/6)"):
@@ -12459,7 +12465,9 @@ class PlaywrightAutomatorV2:
                             # Esperar o form real até 3min; se não vier, log e
                             # próximo reopen.
                             _btn_liq = False
-                            for _bw in range(1, 19):
+                            # #80-BY-20: 3min → 10min (o iniciar() espera o
+                            # lock da liquidação pesada liberar)
+                            for _bw in range(1, 61):
                                 if self._page.locator(
                                     "input[id$=':liquidar'], a[id$=':liquidar']"
                                 ).count() > 0:
@@ -12467,7 +12475,7 @@ class PlaywrightAutomatorV2:
                                     break
                                 self._page.wait_for_timeout(10000)
                             if not _btn_liq:
-                                self.log("    ⚠ #80-BX-3 botão liquidar não apareceu em 3min — próximo reopen")
+                                self.log("    ⚠ #80-BX-3 botão liquidar não apareceu em 10min — próximo reopen")
                                 continue
                             try:
                                 _liq_cfg = getattr(self.previa, "liquidacao", None)
