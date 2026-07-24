@@ -2768,6 +2768,24 @@ class PlaywrightAutomatorV2:
         # são criadas via Manual (mesmo padrão do reroute INFORMADO+DESLIGAMENTO
         # inv8 e do fallback de reflexo inv31). Removidas de verbas_expresso para
         # o loop de parâmetros pós-Expresso não buscá-las na listagem.
+        # #80-BY-12 (regra do usuário, 23/07/2026): duplicatas de alvo canônico
+        # (2ª HE 50%, MULTA CONVENCIONAL 2022-2025) tentam PASSADA EXTRA de
+        # Expresso ANTES do Manual — o PJE-Calc aceita criar 2ª verba do mesmo
+        # canônico (rename diferencia depois). CNJ pré-populado, form Expresso
+        # estável. Manual só como último recurso.
+        _falhadas = getattr(self, "_verbas_expresso_falhadas", []) or []
+        if _falhadas:
+            _restantes_by12 = []
+            for v in _falhadas:
+                _criou = False
+                try:
+                    if getattr(v, "expresso_alvo", None):
+                        _criou = self._lancar_expresso_passada_extra(v)
+                except Exception as _e:
+                    self.log(f"  ⚠ #80-BY-12 passada extra '{v.nome_pjecalc}': {str(_e)[:100]}")
+                if not _criou:
+                    _restantes_by12.append(v)
+            self._verbas_expresso_falhadas = _restantes_by12
         _falhadas = getattr(self, "_verbas_expresso_falhadas", []) or []
         if _falhadas:
             _ids_falhadas = {f.id for f in _falhadas}
@@ -2897,6 +2915,37 @@ class PlaywrightAutomatorV2:
         # - Re-anchor pós-save → commit 8828144
         # - Auto-recovery Regerar+retry valorDevido INFORMADO → commit cc1f4e9
         # - Match EXATO calc_numero (evita cálculo errado) → commit 5b2c44f
+        # #80-BY-12: com DUPLICATAS de alvo canônico, as ADAPTADAS (rename)
+        # devem ser parametrizadas ANTES da irmã canônica (sem rename). O match
+        # exact-cell da canônica pega a 1ª linha do nome; se a principal rodasse
+        # primeiro, o rename da adaptada depois REBATIZARIA a linha já
+        # parametrizada da principal (corrupção da classe inv2). Renomeando
+        # primeiro, a principal fica com a linha canônica restante.
+        try:
+            from collections import defaultdict as _dd12
+            _grupos12 = _dd12(list)
+            for _v12 in verbas_expresso:
+                _grupos12[(getattr(_v12, "expresso_alvo", "") or "").strip().upper()].append(_v12)
+            if any(len(g) > 1 for g in _grupos12.values()):
+                _ordenadas12, _vistos12 = [], set()
+                for _v12 in verbas_expresso:
+                    _k12 = (getattr(_v12, "expresso_alvo", "") or "").strip().upper()
+                    if _k12 in _vistos12:
+                        continue
+                    _vistos12.add(_k12)
+                    _g12 = _grupos12[_k12]
+                    if len(_g12) > 1:
+                        _adapt = [x for x in _g12
+                                  if (x.nome_pjecalc or "").strip().upper() != _k12]
+                        _direto = [x for x in _g12 if x not in _adapt]
+                        _ordenadas12.extend(_adapt + _direto)
+                        self.log(f"  ↪ #80-BY-12 ordem do grupo '{_k12}': "
+                                 f"adaptadas primeiro ({len(_adapt)}), canônica depois")
+                    else:
+                        _ordenadas12.extend(_g12)
+                verbas_expresso = _ordenadas12
+        except Exception as _e12:
+            self.log(f"  ⚠ #80-BY-12 ordenação: {_e12}")
         N_VERBAS_POR_BATCH_PARAM = 2
         for idx, v in enumerate(verbas_expresso):
             if idx > 0 and idx % N_VERBAS_POR_BATCH_PARAM == 0:
@@ -4395,6 +4444,100 @@ class PlaywrightAutomatorV2:
         # 2250) já faz pós-Expresso. Duplicar quebra o estado Seam (segunda
         # tentativa não acha li_operacoes_fechar no sidebar do calc aberto
         # via Recentes, e tudo desmorona pra frente). Deixar o caller decidir.
+
+    def _lancar_expresso_passada_extra(self, v) -> bool:
+        """#80-BY-12 (regra do usuário, 23/07/2026): duplicata de alvo canônico
+        NÃO vai ao Manual — o PJE-Calc ACEITA marcar o mesmo canônico de novo e
+        criar uma 2ª verba (diferencia-se depois pelo rename do adaptado). CNJ
+        vem pré-populado e os parâmetros são ajustados via Expresso adaptado —
+        sem a fragilidade do form Manual (CNJ obrigatório, NPEs).
+
+        Passada extra: abre o Expresso, marca o canônico, salva, e confirma
+        pelo AUMENTO da contagem de linhas do alvo na listagem."""
+        from modules.expresso_verbas_canonicas import resolver_verba_expresso
+        alvo_raw = v.expresso_alvo or ""
+        alvo = (resolver_verba_expresso(alvo_raw) or alvo_raw).strip().upper()
+        if not alvo:
+            return False
+        self.log(f"  ↪ #80-BY-12 passada extra Expresso p/ duplicata "
+                 f"'{v.nome_pjecalc}' (alvo: {alvo})")
+
+        def _contar_linhas_alvo() -> int:
+            try:
+                return int(self._page.evaluate(
+                    """(alvo) => {
+                        const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                            .toUpperCase().replace(/\\s+/g,' ').trim();
+                        const a = norm(alvo);
+                        let n = 0;
+                        for (const link of document.querySelectorAll('a.linkParametrizar')) {
+                            if (!link.id || link.id.includes(':listaReflexo:')) continue;
+                            const tr = link.closest('tr');
+                            if (!tr) continue;
+                            for (const td of tr.querySelectorAll('td')) {
+                                const t = norm(td.textContent.replace(/Exibir|Ocultar/gi,''));
+                                if (t === a) { n++; break; }
+                            }
+                        }
+                        return n;
+                    }""",
+                    alvo,
+                ) or 0)
+            except Exception:
+                return 0
+
+        self._aguardar_servidor_ocioso(contexto=f"#80-BY-12 pré-passada extra {alvo}")
+        self._navegar_menu_via_click("li_calculo_verbas")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(1000)
+        n_antes = _contar_linhas_alvo()
+        try:
+            self._clicar("lancamentoExpresso")
+        except Exception as e:
+            self.log(f"    ⚠ #80-BY-12 lancamentoExpresso: {e}")
+            return False
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1500)
+        marcado = self._page.evaluate(
+            """(alvo) => {
+                const norm = s => (s||'').normalize('NFC')
+                    .replace(/[\\u00A0\\u200B\\u202F\\u2007\\uFEFF]/g, ' ')
+                    .replace(/\\s+/g, ' ').trim().toUpperCase();
+                const a = norm(alvo);
+                for (const cb of document.querySelectorAll('input[type="checkbox"][id$=":selecionada"]')) {
+                    const td = cb.closest('td');
+                    if (td && norm(td.textContent) === a && !cb.checked) {
+                        cb.click();
+                        return true;
+                    }
+                }
+                return false;
+            }""",
+            alvo,
+        )
+        if not marcado:
+            self.log(f"    ⚠ #80-BY-12 checkbox '{alvo}' não marcável na grade")
+            try:
+                self._clicar("cancelar")
+            except Exception:
+                pass
+            return False
+        try:
+            self._clicar("salvar")
+            self._aguardar_ajax(60000)
+            self._aguardar_operacao_sucesso(timeout_ms=20000, bloqueante=False)
+        except Exception as e:
+            self.log(f"    ⚠ #80-BY-12 save da passada extra: {e}")
+        self._capturar_conversation_id()
+        self._aguardar_servidor_ocioso(contexto=f"#80-BY-12 pós-save {alvo}")
+        self._navegar_menu_via_click("li_calculo_verbas")
+        self._aguardar_ajax(6000)
+        self._page.wait_for_timeout(1000)
+        n_depois = _contar_linhas_alvo()
+        ok = n_depois > n_antes
+        self.log(f"    {'✓' if ok else '⚠'} #80-BY-12 linhas de '{alvo}': "
+                 f"{n_antes} → {n_depois} ({'criada' if ok else 'NÃO criada'})")
+        return ok
 
     def _lancar_expresso_individual(self, verbas) -> None:
         """Versão UMA POR VEZ (1-2 verbas — sem trade-off de NPE)."""

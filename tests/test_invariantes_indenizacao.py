@@ -3603,3 +3603,21 @@ def test_inv111_assunto_cnj_fallback_2581():
         "REGRESSÃO #80-BY-11: fallback CNJ 2581 removido")
     assert 'or "2581" in (valor_atual or "")' in corpo, (
         "REGRESSÃO #80-BY-11: verificação não aceita o 2581 do fallback")
+
+
+def test_inv112_duplicata_de_alvo_via_passada_extra_expresso():
+    """#80-BY-12 (regra do usuário, 23/07/2026): duplicata de alvo canônico
+    (2ª HE 50%, MULTA CONVENCIONAL ×5) vai por PASSADA EXTRA de Expresso — o
+    PJE-Calc aceita criar 2ª verba do mesmo canônico; o rename diferencia
+    depois. CNJ pré-populado; Manual vira último recurso. Ordem: adaptadas
+    (rename) parametrizadas ANTES da irmã canônica (evita rebatizar a linha
+    já parametrizada da principal — classe inv2)."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _lancar_expresso_passada_extra" in src, (
+        "REGRESSÃO #80-BY-12: passada extra de Expresso removida")
+    i = src.find("criando via Manual (fallback #5)")
+    antes = src[:i]
+    assert "_lancar_expresso_passada_extra(v)" in antes[-3000:], (
+        "REGRESSÃO #80-BY-12: Manual voltou a ser o 1º destino das duplicatas")
+    assert "adaptadas primeiro" in src, (
+        "REGRESSÃO #80-BY-12: ordenação adaptadas-antes-da-canônica removida")
