@@ -3671,3 +3671,38 @@ def test_inv114_tokens_mais_stopword_e_rsr_expandido():
     corpo = src[ini:src.find("def ", ini + 50)]
     assert "'MAIS'" in corpo and "tokenizer IGUAL" in corpo, (
         "REGRESSÃO #80-BY-17: tokenizer JS do desmarcador divergiu do Python")
+
+
+def test_inv115_turnos_meia_noite_fundidos_e_escala_semanal():
+    """#80-BZ (0000042-58, 27/07/2026): jornada noturna emitida como turnos
+    quebrados na meia-noite ((17:00→00:00)+(00:00→06:00)) fazia o PJE-Calc
+    rejeitar a escala ("A jornada diária não deve ultrapassar o dia
+    seguinte" ×6) → cartão não salvo → HE/INTERVALO rejeitadas ("Campo
+    obrigatório: Cartão de Ponto") → 6 erros na liquidação. Formato aceito
+    (H2 real): UM turno overnight. E o caminho hora-início/auto-compute só
+    se aplica a escalas de PLANTÃO (DOZE_*) — nas semanais o campo nunca
+    habilita e os turnos vão direto na tabela."""
+    from modules.json_normalizer import normalize_v2_json
+    data = {
+        "cartao_de_ponto": {
+            "preenchimento": "ESCALA",
+            "escala": {
+                "tipo": "CINCO_POR_UM",
+                "jornadas": [
+                    {"turnos": [{"entrada": "17:00", "saida": "00:00"},
+                                {"entrada": "00:00", "saida": "06:00"}]},
+                    {"turnos": [{"entrada": "08:00", "saida": "12:00"},
+                                {"entrada": "13:00", "saida": "17:00"}]},
+                ],
+            },
+        },
+    }
+    out = normalize_v2_json(data)
+    j = out["cartao_de_ponto"]["escala"]["jornadas"]
+    assert j[0]["turnos"] == [{"entrada": "17:00", "saida": "06:00"}], (
+        "REGRESSÃO #80-BZ: par quebrado na meia-noite não fundido em overnight único")
+    assert len(j[1]["turnos"]) == 2, (
+        "REGRESSÃO #80-BZ: turnos diurnos legítimos não podem ser fundidos")
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert '_escala_plantao = str(tipo_escala).startswith("DOZE")' in src, (
+        "REGRESSÃO #80-BZ: auto-compute voltou a rodar em escala semanal")

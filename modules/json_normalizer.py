@@ -1554,6 +1554,75 @@ def _norm_integridade_historicos(data: dict[str, Any]) -> None:
                 )
 
 
+def _norm_turnos_meia_noite(data: dict[str, Any]) -> None:
+    """#80-BZ (0000042-58, 27/07/2026) — NÃO REVERTER.
+
+    Jornada noturna emitida pela IA como turnos QUEBRADOS na meia-noite
+    ((X→00:00) seguido de (00:00→Y)) faz o PJE-Calc rejeitar o save da
+    escala/programação com "A jornada diária não deve ultrapassar o dia
+    seguinte" (×N jornadas) → cartão NÃO salvo → verbas IMPORTADA_DO_CARTAO
+    rejeitadas ("Campo obrigatório: Cartão de Ponto") → liquidação bloqueada.
+
+    Formato ACEITO (comprovado no H2 de apuração real): UM turno overnight
+    (ex.: 19:00→07:00). Fundir cada par quebrado em um único turno. Também
+    normaliza "24:00"→"00:00" na saída antes da fusão.
+    """
+    cp = data.get("cartao_de_ponto")
+    if not isinstance(cp, dict):
+        return
+
+    def _fundir(turnos: list) -> list:
+        if not isinstance(turnos, list) or len(turnos) < 2:
+            return turnos
+        out: list = []
+        i = 0
+        while i < len(turnos):
+            t = dict(turnos[i]) if isinstance(turnos[i], dict) else turnos[i]
+            if isinstance(t, dict) and str(t.get("saida", "")).strip() in ("24:00",):
+                t["saida"] = "00:00"
+            prox = turnos[i + 1] if i + 1 < len(turnos) else None
+            if (
+                isinstance(t, dict) and isinstance(prox, dict)
+                and str(t.get("saida", "")).strip() == "00:00"
+                and str(prox.get("entrada", "")).strip() == "00:00"
+                and str(prox.get("saida", "")).strip() not in ("", "00:00")
+            ):
+                out.append({"entrada": t.get("entrada"), "saida": prox.get("saida")})
+                i += 2
+                continue
+            out.append(t)
+            i += 1
+        return out
+
+    n_fusoes = 0
+    esc = cp.get("escala")
+    if isinstance(esc, dict):
+        for jd in esc.get("jornadas") or []:
+            if isinstance(jd, dict) and isinstance(jd.get("turnos"), list):
+                antes = len(jd["turnos"])
+                jd["turnos"] = _fundir(jd["turnos"])
+                n_fusoes += antes - len(jd["turnos"])
+    prog = cp.get("programacao_semanal")
+    if isinstance(prog, dict):
+        for _dia, jd in prog.items():
+            if isinstance(jd, dict) and isinstance(jd.get("turnos"), list):
+                antes = len(jd["turnos"])
+                jd["turnos"] = _fundir(jd["turnos"])
+                n_fusoes += antes - len(jd["turnos"])
+    elif isinstance(prog, list):
+        for jd in prog:
+            if isinstance(jd, dict) and isinstance(jd.get("turnos"), list):
+                antes = len(jd["turnos"])
+                jd["turnos"] = _fundir(jd["turnos"])
+                n_fusoes += antes - len(jd["turnos"])
+    if n_fusoes:
+        import logging
+        logging.getLogger(__name__).info(
+            "#80-BZ: %d par(es) de turnos quebrados na meia-noite fundidos "
+            "em turno overnight único", n_fusoes,
+        )
+
+
 def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     """Normaliza JSON v2 legacy para o formato canônico.
 
@@ -1712,6 +1781,13 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # trava o save ("Campo obrigatório: Cartão de Ponto"). Coage p/ OUTRO_VALOR
     # usando a carga horária mensal do cartão (ou 220).
     _norm_divisor_cartao_para_carga_horaria(data)
+
+    # Salvaguarda #80-BZ (0000042-58, 27/07/2026): jornada NOTURNA quebrada na
+    # meia-noite — a IA emite (X→00:00)+(00:00→Y); o PJE-Calc REJEITA o save
+    # da escala/programação com "A jornada diária não deve ultrapassar o dia
+    # seguinte". O formato aceito (H2 real) é UM turno overnight (ex.:
+    # 19:00→07:00). Fundir os pares quebrados ANTES da prévia (fidelidade).
+    _norm_turnos_meia_noite(data)
 
     # Salvaguarda #80-AG: reflexos de verba PÓS-CONTRATUAL (indenização de
     # estabilidade, Lei 9.029) NUNCA são checkbox_painel — o PJE-Calc não

@@ -9715,7 +9715,16 @@ class PlaywrightAutomatorV2:
                 if not _hora_ini:
                     _ini = str(getattr(esc, "inicio", "") or "")
                     _hora_ini = _ini if ":" in _ini else None  # só usa se parecer HH:MM
-                if _hora_ini:
+                # #80-BZ (0000042-58): o caminho hora-início + auto-compute só
+                # existe p/ escalas de PLANTÃO (DOZE_POR_*). Nas SEMANAIS
+                # (CINCO_POR_UM/SEIS_POR_UM/OITO_DOIS/OUTRA) o campo
+                # valorHoraInicioEscala NUNCA habilita — o bot gastava 4
+                # retries de teclado num campo disabled e logava aviso falso;
+                # os TURNOS são digitados direto na listagemEscala (abaixo).
+                _escala_plantao = str(tipo_escala).startswith("DOZE")
+                if not _escala_plantao:
+                    self.log(f"  ℹ #80-BZ escala {tipo_escala} é SEMANAL — turnos digitados na tabela (sem auto-compute)")
+                if _hora_ini and _escala_plantao:
                     # aguardar o campo habilitar (re-render do mudarTipoEscala)
                     try:
                         self._page.wait_for_function(
