@@ -199,6 +199,25 @@ def _norm_honorario(h: dict[str, Any], *, processo: dict | None = None) -> dict[
     _tv = str(h.get("tipo_valor") or "CALCULADO").upper()
     if "CALCULAD" in _tv and not (h.get("base_para_apuracao") or h.get("base_apuracao")):
         h["base_para_apuracao"] = "BRUTO"
+
+    # #80-BZ-2 (0000042-58, 27/07/2026): honorário INFORMADO com PLACEHOLDER
+    # 0,01 — a IA emitia 0.01 quando a sentença fixa % sobre base que o
+    # PJE-Calc não computa ("valor dos pedidos improcedentes, a apurar em
+    # liquidação") e o bot gravava R$ 0,01 no cálculo (ERRADO). Regra: valor
+    # de honorário INFORMADO é o valor REAL ou NADA — placeholder vira None
+    # (a prévia mostra o campo vazio p/ o calculista informar; o bot recusa
+    # criar honorário INFORMADO sem valor).
+    if "INFORMAD" in _tv:
+        try:
+            _vi = float(h.get("valor_informado_brl") or 0)
+        except Exception:
+            _vi = 0.0
+        if 0 < _vi <= 0.01:
+            h["valor_informado_brl"] = None
+            _com = str(h.get("comentarios") or "")
+            if "VALOR A INFORMAR" not in _com.upper():
+                h["comentarios"] = ("⚠ VALOR A INFORMAR NA PRÉVIA (sentença não "
+                                    "fixa valor apurável pelo PJE-Calc). " + _com).strip()
     return h
 
 
@@ -1555,71 +1574,113 @@ def _norm_integridade_historicos(data: dict[str, Any]) -> None:
 
 
 def _norm_turnos_meia_noite(data: dict[str, Any]) -> None:
-    """#80-BZ (0000042-58, 27/07/2026) — NÃO REVERTER.
+    """#80-BZ (0000042-58, 27/07/2026; regra do usuário) — NÃO REVERTER.
 
-    Jornada noturna emitida pela IA como turnos QUEBRADOS na meia-noite
-    ((X→00:00) seguido de (00:00→Y)) faz o PJE-Calc rejeitar o save da
-    escala/programação com "A jornada diária não deve ultrapassar o dia
-    seguinte" (×N jornadas) → cartão NÃO salvo → verbas IMPORTADA_DO_CARTAO
-    rejeitadas ("Campo obrigatório: Cartão de Ponto") → liquidação bloqueada.
+    O PJE-Calc REJEITA jornada que ultrapassa o dia seguinte ("A jornada
+    diária não deve ultrapassar o dia seguinte"). O registro CORRETO de
+    jornada noturna é em DUAS LINHAS (regra do calculista, 27/07/2026):
+    ex. 17h→6h c/ 30min de intervalo →
+      linha do dia:      17:00–20:30, 21:00–23:59
+      linha do dia seg.: 00:00–06:00
 
-    Formato ACEITO (comprovado no H2 de apuração real): UM turno overnight
-    (ex.: 19:00→07:00). Fundir cada par quebrado em um único turno. Também
-    normaliza "24:00"→"00:00" na saída antes da fusão.
+    Ou seja: o turno da virada é capado em 23:59 e os turnos PÓS-meia-noite
+    vão para o INÍCIO da jornada SEGUINTE (na escala, ciclo — a sobra do
+    último dia trabalhado cai na folga; wrap p/ a 1ª linha quando o último
+    dia do ciclo trabalha overnight). Aceita tanto o par quebrado
+    ((X→00:00)+(00:00→Y)) quanto o overnight único (X→Y com Y<X).
+    "24:00" normaliza para "00:00".
     """
     cp = data.get("cartao_de_ponto")
     if not isinstance(cp, dict):
         return
 
-    def _fundir(turnos: list) -> list:
-        if not isinstance(turnos, list) or len(turnos) < 2:
-            return turnos
-        out: list = []
-        i = 0
-        while i < len(turnos):
-            t = dict(turnos[i]) if isinstance(turnos[i], dict) else turnos[i]
-            if isinstance(t, dict) and str(t.get("saida", "")).strip() in ("24:00",):
-                t["saida"] = "00:00"
-            prox = turnos[i + 1] if i + 1 < len(turnos) else None
-            if (
-                isinstance(t, dict) and isinstance(prox, dict)
-                and str(t.get("saida", "")).strip() == "00:00"
-                and str(prox.get("entrada", "")).strip() == "00:00"
-                and str(prox.get("saida", "")).strip() not in ("", "00:00")
-            ):
-                out.append({"entrada": t.get("entrada"), "saida": prox.get("saida")})
-                i += 2
-                continue
-            out.append(t)
-            i += 1
-        return out
+    def _min(h: str) -> int | None:
+        try:
+            hh, mm = str(h).strip().split(":")
+            return int(hh) * 60 + int(mm)
+        except Exception:
+            return None
 
-    n_fusoes = 0
+    def _split_jornadas(jornadas: list, *, ciclico: bool) -> int:
+        """Aplica o split in-place; retorna nº de viradas tratadas."""
+        n = len(jornadas)
+        if n == 0:
+            return 0
+        moves = 0
+        for i in range(n):
+            jd = jornadas[i]
+            if not isinstance(jd, dict) or not isinstance(jd.get("turnos"), list):
+                continue
+            turnos = jd["turnos"]
+            ficam: list = []
+            sobra: list = []
+            virou = False
+            for t in turnos:
+                if not isinstance(t, dict):
+                    ficam.append(t)
+                    continue
+                t = dict(t)
+                if str(t.get("saida", "")).strip() == "24:00":
+                    t["saida"] = "00:00"
+                if virou:
+                    sobra.append(t)
+                    continue
+                e, s = _min(t.get("entrada")), _min(t.get("saida"))
+                if e is None or s is None:
+                    ficam.append(t)
+                    continue
+                if s == 0 and e > 0:
+                    # turno termina exatamente na virada → capa em 23:59;
+                    # os turnos seguintes pertencem ao dia seguinte
+                    t["saida"] = "23:59"
+                    ficam.append(t)
+                    virou = True
+                elif s < e:
+                    # overnight único (ex.: 17:00→06:00) → 17:00–23:59 aqui
+                    # e 00:00–saida na jornada seguinte
+                    sobra.append({"entrada": "00:00", "saida": t.get("saida")})
+                    t["saida"] = "23:59"
+                    ficam.append(t)
+                    virou = True
+                else:
+                    ficam.append(t)
+            if not sobra:
+                jd["turnos"] = ficam
+                continue
+            destino = (i + 1) % n if ciclico else (i + 1 if i + 1 < n else None)
+            jd["turnos"] = ficam
+            if destino is None:
+                import logging
+                logging.getLogger(__name__).warning(
+                    "#80-BZ: sobra pós-meia-noite da última jornada sem destino — mantida capada em 23:59")
+                moves += 1
+                continue
+            jdest = jornadas[destino]
+            if not isinstance(jdest, dict):
+                jdest = jornadas[destino] = {"turnos": []}
+            if not isinstance(jdest.get("turnos"), list):
+                jdest["turnos"] = []
+            jdest["turnos"] = (sobra + jdest["turnos"])[:6]
+            moves += 1
+        return moves
+
+    n_viradas = 0
     esc = cp.get("escala")
-    if isinstance(esc, dict):
-        for jd in esc.get("jornadas") or []:
-            if isinstance(jd, dict) and isinstance(jd.get("turnos"), list):
-                antes = len(jd["turnos"])
-                jd["turnos"] = _fundir(jd["turnos"])
-                n_fusoes += antes - len(jd["turnos"])
+    if isinstance(esc, dict) and isinstance(esc.get("jornadas"), list):
+        n_viradas += _split_jornadas(esc["jornadas"], ciclico=True)
     prog = cp.get("programacao_semanal")
-    if isinstance(prog, dict):
-        for _dia, jd in prog.items():
-            if isinstance(jd, dict) and isinstance(jd.get("turnos"), list):
-                antes = len(jd["turnos"])
-                jd["turnos"] = _fundir(jd["turnos"])
-                n_fusoes += antes - len(jd["turnos"])
-    elif isinstance(prog, list):
-        for jd in prog:
-            if isinstance(jd, dict) and isinstance(jd.get("turnos"), list):
-                antes = len(jd["turnos"])
-                jd["turnos"] = _fundir(jd["turnos"])
-                n_fusoes += antes - len(jd["turnos"])
-    if n_fusoes:
+    if isinstance(prog, list):
+        # Seg..Dom (+Feriado no fim): domingo (idx 6) transborda p/ segunda
+        # (idx 0); Feriado (idx 7) não tem "dia seguinte" — capa em 23:59.
+        dias = prog[:7]
+        n_viradas += _split_jornadas(dias, ciclico=True)
+        if len(prog) > 7:
+            n_viradas += _split_jornadas(prog[7:8], ciclico=False)
+    if n_viradas:
         import logging
         logging.getLogger(__name__).info(
-            "#80-BZ: %d par(es) de turnos quebrados na meia-noite fundidos "
-            "em turno overnight único", n_fusoes,
+            "#80-BZ: %d jornada(s) noturna(s) registrada(s) em duas linhas "
+            "(dia: até 23:59; dia seguinte: a partir de 00:00)", n_viradas,
         )
 
 

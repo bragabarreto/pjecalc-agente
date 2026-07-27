@@ -11146,6 +11146,24 @@ class PlaywrightAutomatorV2:
             return
         for h in self.previa.honorarios:
             self.log(f"  → Processando honorário: {h.tipo_honorario} / {h.tipo_devedor}")
+            # #80-BZ-2 (0000042-58): honorário INFORMADO SEM valor real na
+            # prévia (a IA emitia placeholder 0,01; o normalizer o zera p/ o
+            # calculista informar). Gravar R$ 0,01 no cálculo é ERRADO —
+            # recusar ALTO e seguir (o usuário preenche o valor na prévia e
+            # re-executa, ou lança manualmente).
+            _tv_h = str(getattr(h, "tipo_valor", "") or "").upper()
+            if "INFORMAD" in _tv_h:
+                try:
+                    _vi_h = float(getattr(h, "valor_informado_brl", None) or 0)
+                except Exception:
+                    _vi_h = 0.0
+                if _vi_h <= 0.01:
+                    self.log(
+                        f"  🛑 #80-BZ-2 honorário {h.tipo_honorario}/{h.tipo_devedor} "
+                        f"INFORMADO sem valor real (={getattr(h, 'valor_informado_brl', None)}) — "
+                        f"NÃO criado; informe o valor na prévia e re-execute (ou lance manualmente)"
+                    )
+                    continue
             # ⚠ FIX (ONASSES 0000495-10, 18/06/2026): re-ancorar a listagem de
             # honorários ANTES de CADA 'incluir'. Após o save (ou falha) de um
             # honorário o form fica aberto / a conv Seam churna e o botão

@@ -3673,15 +3673,14 @@ def test_inv114_tokens_mais_stopword_e_rsr_expandido():
         "REGRESSÃO #80-BY-17: tokenizer JS do desmarcador divergiu do Python")
 
 
-def test_inv115_turnos_meia_noite_fundidos_e_escala_semanal():
-    """#80-BZ (0000042-58, 27/07/2026): jornada noturna emitida como turnos
-    quebrados na meia-noite ((17:00→00:00)+(00:00→06:00)) fazia o PJE-Calc
-    rejeitar a escala ("A jornada diária não deve ultrapassar o dia
-    seguinte" ×6) → cartão não salvo → HE/INTERVALO rejeitadas ("Campo
-    obrigatório: Cartão de Ponto") → 6 erros na liquidação. Formato aceito
-    (H2 real): UM turno overnight. E o caminho hora-início/auto-compute só
-    se aplica a escalas de PLANTÃO (DOZE_*) — nas semanais o campo nunca
-    habilita e os turnos vão direto na tabela."""
+def test_inv115_jornada_noturna_em_duas_linhas():
+    """#80-BZ (0000042-58, 27/07/2026; regra do calculista): o PJE-Calc rejeita
+    jornada que ultrapassa o dia seguinte. Registro CORRETO em DUAS linhas:
+    dia = turnos até 23:59; dia seguinte = 00:00→saída (na escala cíclica, os
+    dias intermediários acumulam sobra da véspera + início do próprio dia; a
+    sobra do último trabalhado cai na folga). O normalizer converte tanto o
+    par quebrado ((X→00:00)+(00:00→Y)) quanto o overnight único (X→Y, Y<X).
+    E o auto-compute (#80-B) só se aplica a escalas de PLANTÃO (DOZE_*)."""
     from modules.json_normalizer import normalize_v2_json
     data = {
         "cartao_de_ponto": {
@@ -3689,20 +3688,54 @@ def test_inv115_turnos_meia_noite_fundidos_e_escala_semanal():
             "escala": {
                 "tipo": "CINCO_POR_UM",
                 "jornadas": [
-                    {"turnos": [{"entrada": "17:00", "saida": "00:00"},
+                    {"turnos": [{"entrada": "17:00", "saida": "20:30"},
+                                {"entrada": "21:00", "saida": "00:00"},
                                 {"entrada": "00:00", "saida": "06:00"}]},
-                    {"turnos": [{"entrada": "08:00", "saida": "12:00"},
-                                {"entrada": "13:00", "saida": "17:00"}]},
+                    {"turnos": [{"entrada": "21:00", "saida": "06:00"}]},
+                    {"turnos": []},
                 ],
             },
         },
     }
     out = normalize_v2_json(data)
     j = out["cartao_de_ponto"]["escala"]["jornadas"]
-    assert j[0]["turnos"] == [{"entrada": "17:00", "saida": "06:00"}], (
-        "REGRESSÃO #80-BZ: par quebrado na meia-noite não fundido em overnight único")
-    assert len(j[1]["turnos"]) == 2, (
-        "REGRESSÃO #80-BZ: turnos diurnos legítimos não podem ser fundidos")
-    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    assert '_escala_plantao = str(tipo_escala).startswith("DOZE")' in src, (
+    # linha 1 (exemplo literal do usuário): 17:00-20:30, 21:00-23:59
+    assert j[0]["turnos"] == [{"entrada": "17:00", "saida": "20:30"},
+                              {"entrada": "21:00", "saida": "23:59"}], (
+        "REGRESSÃO #80-BZ: par quebrado deve capar em 23:59 na linha do dia")
+    # linha 2: sobra da véspera (00:00-06:00) + overnight próprio capado (21:00-23:59)
+    assert j[1]["turnos"][0] == {"entrada": "00:00", "saida": "06:00"}, (
+        "REGRESSÃO #80-BZ: sobra pós-meia-noite deve abrir a linha seguinte")
+    assert {"entrada": "21:00", "saida": "23:59"} in j[1]["turnos"], (
+        "REGRESSÃO #80-BZ: overnight único deve ser capado em 23:59 na própria linha")
+    # linha 3 (folga): recebe a sobra do overnight da linha 2
+    assert j[2]["turnos"] == [{"entrada": "00:00", "saida": "06:00"}], (
+        "REGRESSÃO #80-BZ: sobra do último dia trabalhado deve cair na folga")
+    src2 = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert '_escala_plantao = str(tipo_escala).startswith("DOZE")' in src2, (
         "REGRESSÃO #80-BZ: auto-compute voltou a rodar em escala semanal")
+
+
+def test_inv116_honorario_informado_sem_placeholder_001():
+    """#80-BZ-2 (0000042-58, 27/07/2026): honorário do RECLAMANTE gravado com
+    R$ 0,01 — a IA emitia placeholder quando a sentença fixa % sobre base não
+    computável ("pedidos improcedentes, a apurar em liquidação"). Invariantes:
+    normalizer zera o placeholder (campo vazio p/ o calculista informar na
+    prévia) e o bot RECUSA criar honorário INFORMADO sem valor real."""
+    from modules.json_normalizer import normalize_v2_json
+    data = {"honorarios": [{
+        "tipo_honorario": "SUCUMBENCIAIS", "tipo_devedor": "RECLAMANTE",
+        "tipo_valor": "INFORMADO", "valor_informado_brl": 0.01,
+        "comentarios": "10% sobre pedidos improcedentes",
+    }]}
+    out = normalize_v2_json(data)
+    h = out["honorarios"][0]
+    assert h["valor_informado_brl"] is None, (
+        "REGRESSÃO #80-BZ-2: placeholder 0,01 não foi zerado pelo normalizer")
+    assert "VALOR A INFORMAR" in (h.get("comentarios") or "").upper(), (
+        "REGRESSÃO #80-BZ-2: comentário de alerta ao calculista removido")
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    i = src.find("def fase_honorarios")
+    corpo = src[i:i + 6000]
+    assert "#80-BZ-2" in corpo and "NÃO criado" in corpo, (
+        "REGRESSÃO #80-BZ-2: bot voltou a criar honorário INFORMADO sem valor")

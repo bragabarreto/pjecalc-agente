@@ -885,6 +885,18 @@ de ponto** — situações em que o PJE-Calc precisa apurar mensalmente a partir
 | Intervalo intra suprimido | `cartao_de_ponto.intervalos.descanso_intra = false` |
 | Adicional noturno deferido | `cartao_de_ponto.noturno.apurar = true` |
 
+> **⚠️ INVARIANTE PERMANENTE — JORNADA NOTURNA EM DUAS LINHAS — NÃO REVERTER**
+> Quando a jornada **ultrapassa a meia-noite** (ex.: 17h→6h), o PJE-Calc
+> **REJEITA** a jornada num dia só ("A jornada diária não deve ultrapassar o
+> dia seguinte"). Registre em **DUAS linhas/jornadas**:
+> - linha do dia: turnos até `23:59` (ex.: 17:00→20:30 e 21:00→23:59, com o
+>   intervalo entre os turnos);
+> - linha do dia SEGUINTE: `00:00`→saída (ex.: 00:00→06:00).
+> Na escala cíclica (5x1 etc.), os dias intermediários acumulam a sobra da
+> véspera + o início do próprio dia (ex.: 00:00→06:00 e 17:00→23:59); a sobra
+> do último dia trabalhado cai na linha da folga. **NUNCA** emita turno com
+> saída `00:00`/`24:00` nem turno que cruze a meia-noite na mesma linha.
+
 ---
 
 #### 📊 Como o PJE-Calc combina os campos da Fórmula
@@ -1825,6 +1837,15 @@ Sempre usar IPCA/IPCAE + combinações conforme tabela acima.
 "forma_cobranca": "COBRAR"
 ```
 **NUNCA** usar `"DESCONTAR"` — o sistema sempre cobra diretamente do reclamante.
+
+### Valor do honorário INFORMADO
+> **⚠️ INVARIANTE PERMANENTE — NUNCA PLACEHOLDER 0,01 — NÃO REVERTER**
+> `valor_informado_brl` é o valor REAL fixado na sentença. Se a sentença fixa
+> percentual sobre base que o PJE-Calc **não computa** (ex.: "10% sobre o
+> valor atualizado dos pedidos improcedentes, a apurar em liquidação"),
+> **NÃO** invente valor: deixe `valor_informado_brl: null` e explique em
+> `comentarios` — o calculista informará o valor na prévia. Emitir `0.01`
+> (ou qualquer placeholder) grava R$ 0,01 no título executivo — **ERRADO**.
 
 ### Credor dos honorários SUCUMBENCIAIS
 Para `tipo_honorario = "SUCUMBENCIAIS"`, o credor é **sempre o advogado da parte contrária**:
