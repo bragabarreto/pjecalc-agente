@@ -2381,8 +2381,15 @@ def test_inv75_dano_moral_sumula_439_false():
     assert d["verbas_principais"][0]["parametros"]["juros_aplicar_sumula_439"] is False, (
         "REGRESSÃO #80-AC: normalizer deve forçar juros_aplicar_sumula_439=False no dano moral")
     pw = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    assert "#80-AC" in pw and "Súmula 439" in pw, (
-        "REGRESSÃO #80-AC: bot deve desmarcar Súmula 439 no dano moral (marcador #80-AC)")
+    # #80-CD (28/07/2026): o campo real é o RADIO ocorrenciaAjuizamento
+    # (JurosDoAjuizamentoEnum) — o #80-AC antigo chutava checkboxes
+    # inexistentes e falhava em silêncio (Súmula 439 ficava sempre "Sim").
+    assert "#80-CD" in pw and "ocorrenciaAjuizamento" in pw, (
+        "REGRESSÃO #80-CD: bot deve marcar o radio ocorrenciaAjuizamento da Súmula 439")
+    assert "OCORRENCIAS_VENCIDAS_E_VINCENDAS" in pw and "OCORRENCIAS_VENCIDAS" in pw, (
+        "REGRESSÃO #80-CD: constantes reais do JurosDoAjuizamentoEnum removidas")
+    assert "_marcar_radio_verificado(\"ocorrenciaAjuizamento\"" in pw, (
+        "REGRESSÃO #80-CD: marcação sem verificação pós-AJAX (classe inv3)")
     prompt = (REPO_ROOT / "modules" / "extraction_v2.py").read_text(encoding="utf-8")
     assert "SÚMULA 439 TST" in prompt or "Súmula nº 439" in prompt, (
         "REGRESSÃO #80-AC: prompt deve instruir Súmula 439=false no dano moral")

@@ -5758,22 +5758,46 @@ class PlaywrightAutomatorV2:
             self.log(f"    ⚠ Incidências: {e}")
 
         # ─── 7. FLAGS OPCIONAIS ───
-        # #80-AC: SÚMULA 439 do TST — nas verbas de INDENIZAÇÃO POR DANO MORAL a
-        # opção "Juros — Aplicar Súmula nº 439 do TST" deve refletir
-        # juros_aplicar_sumula_439 (padrão: False = desmarcada). O campo só
-        # renderiza para verbas indenizatórias; _marcar_checkbox_se_diferente é
-        # no-op seguro se ausente. Busca por sufixos prováveis do id JSF.
+        # #80-CD (recorrente, 28/07/2026) — SÚMULA 439 do TST — NÃO REVERTER.
+        # O campo "Juros - Aplicar Súmula nº 439 do TST" NÃO é checkbox: é o
+        # RADIO `ocorrenciaAjuizamento` (verba-calculo.xhtml:286, enum
+        # JurosDoAjuizamentoEnum): OCORRENCIAS_VENCIDAS_E_VINCENDAS='M'→Sim /
+        # OCORRENCIAS_VENCIDAS='V'→Não; s:convertEnum → value do input = NOME
+        # da constante (mesmo precedente do 80-K). O #80-AC antigo chutava 5 ids de
+        # CHECKBOX inexistentes e falhava em SILÊNCIO → o default "Sim" ficava
+        # sempre, contrariando prévia/sentença (dano moral: juros do
+        # ajuizamento, não do arbitramento).
         try:
             _s439 = bool(getattr(p, "juros_aplicar_sumula_439", False))
-            _nome_v = (getattr(v, "nome_pjecalc", "") or "").upper()
-            if "DANO MORAL" in _nome_v or getattr(p, "juros_aplicar_sumula_439", None) is not None:
-                for _id in ("aplicarSumula439", "aplicaSumula439", "sumula439",
-                            "aplicarSumula439Tst", "jurosAplicarSumula439"):
-                    if self._marcar_checkbox_se_diferente(_id, _s439):
-                        self.log(f"    ✓ #80-AC Súmula 439 TST = {_s439} (campo {_id})")
-                        break
+            _tem_radio_439 = bool(self._page.evaluate(
+                "() => !!document.querySelector(\"input[type='radio'][id*='ocorrenciaAjuizamento']\")"
+            ))
+            if _tem_radio_439:
+                _alvo_439 = ("OCORRENCIAS_VENCIDAS_E_VINCENDAS" if _s439
+                             else "OCORRENCIAS_VENCIDAS")
+                if self._marcar_radio_verificado("ocorrenciaAjuizamento", _alvo_439):
+                    self.log(f"    ✓ #80-CD Súmula 439 TST = {'Sim' if _s439 else 'Não'} ({_alvo_439})")
+                else:
+                    # fallback: marcar pela LABEL renderizada (Sim/Não)
+                    _lbl_439 = "Sim" if _s439 else "Não"
+                    _ok_lbl = self._page.evaluate(
+                        """(lbl) => {
+                            for (const r of document.querySelectorAll("input[type='radio'][id*='ocorrenciaAjuizamento']")) {
+                                const l = document.querySelector('label[for="' + r.id + '"]');
+                                const txt = (l ? l.textContent : (r.closest('td') || {}).textContent || '').trim();
+                                if (txt.toUpperCase().startsWith(lbl.toUpperCase())) { r.click(); return r.checked; }
+                            }
+                            return false;
+                        }""",
+                        _lbl_439,
+                    )
+                    if _ok_lbl:
+                        self.log(f"    ✓ #80-CD Súmula 439 TST = {_lbl_439} (via label)")
+                    else:
+                        self.log(f"    🛑 #80-CD Súmula 439 NÃO aplicada (radio não confirmou) — "
+                                 f"conferir manualmente: prévia pede {_lbl_439}")
         except Exception as _e:
-            self.log(f"    ⚠ #80-AC Súmula 439: {_e}")
+            self.log(f"    ⚠ #80-CD Súmula 439: {_e}")
 
         if hasattr(p, "natureza_indenizatoria") and p.natureza_indenizatoria is not None:
             self._marcar_checkbox_se_diferente("naturezaIndenizatoria", p.natureza_indenizatoria)
