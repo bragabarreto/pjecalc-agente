@@ -348,6 +348,59 @@ async def instrucoes_v2(sessao_id: str, request: Request, rerun: bool = False):
             _db.close()
     except Exception:
         pass
+    # #80-CB: painel de FIDELIDADE prévia↔PJC (server-side) — guia da correção
+    # manual: lista exatamente o que falta p/ 100% quando a automação não
+    # alcançou fidelidade total.
+    _fid_html = ""
+    try:
+        import json as _json_fid
+        _fid_file = _STORE_DIR / f"{sessao_id}.fidelidade.json"
+        if _fid_file.exists():
+            _fid = _json_fid.loads(_fid_file.read_text(encoding="utf-8"))
+            if _fid.get("ok"):
+                _fid_html = (
+                    '<div style="background:#d4edda;color:#155724;padding:10px 14px;'
+                    'border-radius:6px;margin:0.8rem 0;font-size:0.9rem;">'
+                    "✅ <b>Fidelidade 100%</b> — todas as verbas e reflexos da prévia "
+                    "estão no PJC, sem duplicados nem extras."
+                    f'<span style="color:#6c757d;"> ({_fid.get("quando", "")})</span></div>'
+                )
+            else:
+                def _li(itens):
+                    return "".join(f"<li>{i}</li>" for i in itens)
+                _blocos = []
+                if _fid.get("verbas_faltantes"):
+                    _blocos.append(
+                        f"<p><b>Verbas FALTANTES no PJC ({len(_fid['verbas_faltantes'])})</b> "
+                        f"— lançar manualmente no PJE-Calc:</p><ul>{_li(_fid['verbas_faltantes'])}</ul>")
+                if _fid.get("reflexos_faltantes"):
+                    _blocos.append(
+                        f"<p><b>Reflexos FALTANTES ({len(_fid['reflexos_faltantes'])})</b> "
+                        f"— ativar no painel Exibir da verba principal (ou criar como "
+                        f"verba Manual Tipo=REFLEXO se não houver checkbox):</p>"
+                        f"<ul>{_li(_fid['reflexos_faltantes'])}</ul>")
+                if _fid.get("reflexos_duplicados"):
+                    _blocos.append(
+                        f"<p><b>Reflexos DUPLICADOS ({len(_fid['reflexos_duplicados'])})</b> "
+                        f"— dupla contagem de valor; excluir a cópia excedente:</p>"
+                        f"<ul>{_li(_fid['reflexos_duplicados'])}</ul>")
+                if _fid.get("reflexos_extras"):
+                    _blocos.append(
+                        f"<p><b>Reflexos EXTRAS ({len(_fid['reflexos_extras'])})</b> "
+                        f"— ativos no PJC mas fora da prévia; desmarcar se a sentença "
+                        f"não os determina:</p><ul>{_li(_fid['reflexos_extras'])}</ul>")
+                _fid_html = (
+                    '<div style="background:#fff3cd;color:#664d03;padding:10px 14px;'
+                    'border-radius:6px;margin:0.8rem 0;font-size:0.88rem;">'
+                    "⚠️ <b>PJC sem fidelidade 100% à prévia</b> — itens para "
+                    "correção manual no PJE-Calc (após importar o .PJC), ou "
+                    "re-execute a automação:"
+                    + "".join(_blocos)
+                    + f'<span style="color:#6c757d;">Aferido em {_fid.get("quando", "")}. '
+                    "Após corrigir, Regerar Ocorrências e re-Liquidar.</span></div>"
+                )
+    except Exception:
+        _fid_html = ""
     _rerun_qs = "?rerun=1" if rerun else ""
     html = f"""<!doctype html>
 <html lang="pt-BR"><head>
@@ -370,6 +423,7 @@ button {{ padding: 6px 12px; font-size: 0.9rem; cursor: pointer; }}
 </style></head><body>
 <h1>Automação v2 <span id="status" class="status running">⏳ iniciando…</span></h1>
 <p>Sessão: <code>{sessao_id}</code> · <a href="/previa/v2/{sessao_id}">← voltar à prévia</a></p>
+{_fid_html}
 <div id="painel-area"></div>
 <div id="logs"></div>
 <div id="download-area">{_download_html}</div>
@@ -795,6 +849,23 @@ def executar_v2_como_generator(sessao_id: str):
                 pjc_path_holder["pjc"] = pjc
                 if pjc:
                     log_q.put(f"PJC_GERADO:{pjc}")
+                # #80-CB: persistir o relatório de fidelidade prévia↔PJC p/ a
+                # página do processo exibir o que falta p/ 100% (guia da
+                # correção manual do usuário).
+                try:
+                    _fid = getattr(bot, "_fidelidade_resultado", None)
+                    if isinstance(_fid, dict):
+                        import json as _json_fid
+                        from datetime import datetime as _dt_fid
+                        _fid_out = dict(_fid)
+                        _fid_out["pjc"] = str(pjc) if pjc else None
+                        _fid_out["quando"] = _dt_fid.now().isoformat(timespec="seconds")
+                        (_STORE_DIR / f"{sessao_id}.fidelidade.json").write_text(
+                            _json_fid.dumps(_fid_out, ensure_ascii=False, indent=1),
+                            encoding="utf-8",
+                        )
+                except Exception as _e_fid:
+                    log_q.put(f"  ⚠ #80-CB persistência da fidelidade: {_e_fid}")
         except Exception as e:
             log_q.put(f"ERRO na automação v2: {e}")
             log_q.put(traceback.format_exc())

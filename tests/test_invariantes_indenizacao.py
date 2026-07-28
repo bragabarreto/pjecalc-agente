@@ -3269,7 +3269,7 @@ def test_inv98_manual_retry_gate_fidelidade_ordinal_historico_sem_acento():
     select) comparavam COM acento — 'ULTIMA REMUNERACAO' nunca casava a option
     'ÚLTIMA REMUNERAÇÃO'."""
     src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
-    assert "#80-BQ aguardando 90s" in src, (
+    assert "#80-BQ aguardando {_esp_ca}s" in src, (
         "REGRESSÃO #80-BQ: retry do Manual sem espera do Drools — cai na mesma janela")
     tk = src.split("def _tokens_fidelidade")[1].split("def _reconciliar_fidelidade_pjc")[0]
     assert r"^(\d+)[OA]$" in tk, (
@@ -3739,3 +3739,21 @@ def test_inv116_honorario_informado_sem_placeholder_001():
     corpo = src[i:i + 6000]
     assert "#80-BZ-2" in corpo and "NÃO criado" in corpo, (
         "REGRESSÃO #80-BZ-2: bot voltou a criar honorário INFORMADO sem valor")
+
+
+def test_inv117_save_lento_nao_e_falha_e_fidelidade_persistida():
+    """#80-CA/#80-CB (0000127-78, 27/07/2026): (a) save de parâmetros sem
+    NENHUMA mensagem JSF = provavelmente LENTO (Drools >30s) — abortar era
+    falso negativo: o save persistia mas o pós-save (Regerar+BK) não rodava e
+    os reflexos da verba ficavam inativos (PLUS SALARIAL: 3 faltantes). Poll
+    paciente extra (~120s) antes de decidir. (b) O relatório de fidelidade
+    #80-AK é persistido (<sessao>.fidelidade.json) e exibido na página do
+    processo p/ guiar a correção manual."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "#80-CA sem mensagem de erro" in src and "save pode estar LENTO" in src, (
+        "REGRESSÃO #80-CA: poll paciente do save lento removido")
+    assert "_fidelidade_resultado = self._reconciliar_fidelidade_pjc" in src, (
+        "REGRESSÃO #80-CB: resultado da fidelidade não é mais guardado no bot")
+    web = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
+    assert ".fidelidade.json" in web and "Fidelidade 100%" in web, (
+        "REGRESSÃO #80-CB: persistência/painel de fidelidade removidos da página do processo")

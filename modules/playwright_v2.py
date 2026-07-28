@@ -2863,8 +2863,11 @@ class PlaywrightAutomatorV2:
                     # '13 SALARIO' perdido em 2 runs seguidas. Esperar 90s
                     # (precedente #80-V/#80-AG-6) + gate antes de re-tentar.
                     if _tent < 3:
-                        self.log("    ⏳ #80-BQ aguardando 90s (Drools) antes da re-tentativa do Manual")
-                        self._page.wait_for_timeout(90000)
+                        # #80-CA (0000127-78): 90s caía na MESMA janela Drools
+                        # (13º 3× idêntico) — escalonar 120s/240s (cf. BY-18/20)
+                        _esp_ca = 120 * _tent
+                        self.log(f"    ⏳ #80-BQ aguardando {_esp_ca}s (Drools) antes da re-tentativa do Manual")
+                        self._page.wait_for_timeout(_esp_ca * 1000)
                         self._aguardar_servidor_ocioso(contexto=f"#80-BQ retry Manual {_nome_v}")
                     try:
                         self._navegar_menu("li_calculo_verbas")
@@ -6691,6 +6694,35 @@ class PlaywrightAutomatorV2:
         # muitas ocorrências (ex.: 31 meses) recomputa devagar na VM pequena;
         # 15s era curto e o bot caía no Cancel (descartando a base).
         sucesso = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
+        if not sucesso:
+            # #80-CA (0000127-78, 27/07/2026): save SEM mensagem de erro visível
+            # = provavelmente LENTO, não falho (o Drools recomputa por >30s na
+            # VM). Abortar aqui era FALSO NEGATIVO: o save persistia depois
+            # (liquidação passou com 0 erros) mas o pós-save (Regerar + BK dos
+            # reflexos) nunca rodava → reflexos da verba ficavam inativos no
+            # PJC (PLUS SALARIAL: 3 reflexos faltantes). Poll paciente extra
+            # (até ~120s) por sucesso OU erro ANTES de decidir.
+            try:
+                _tem_erro_ca = bool(self._page.evaluate(
+                    """() => !!document.querySelector('.rich-messages-marker, .rf-msgs-err, span.errorMessage')"""
+                ))
+            except Exception:
+                _tem_erro_ca = False
+            if not _tem_erro_ca:
+                self.log("  ⏳ #80-CA sem mensagem de erro — save pode estar LENTO; aguardando até 120s")
+                for _t_ca in range(1, 13):
+                    self._page.wait_for_timeout(10000)
+                    sucesso = self._aguardar_operacao_sucesso(timeout_ms=1500, bloqueante=False)
+                    if sucesso:
+                        self.log(f"  ✓ #80-CA sucesso confirmado após ~{30 + _t_ca * 10}s (save lento)")
+                        break
+                    try:
+                        if self._page.evaluate(
+                            """() => !!document.querySelector('.rich-messages-marker, .rf-msgs-err, span.errorMessage')"""
+                        ):
+                            break  # erro real apareceu — segue p/ o diagnóstico
+                    except Exception:
+                        pass
         if sucesso:
             self.log(f"  ✓ Parâmetros '{v.nome_pjecalc}' salvos")
             # ⚠ CRÍTICO (24/05/2026): após save bem-sucedido, Seam pode
@@ -13163,7 +13195,9 @@ class PlaywrightAutomatorV2:
         # export — o PJC parcial ainda serve de base) mas torna a lacuna
         # EXPLÍCITA, estruturada e persistida no log da run.
         try:
-            self._reconciliar_fidelidade_pjc(pjc_bytes)
+            # #80-CB: resultado guardado no bot p/ o webapp persistir e a
+            # página do processo exibir o que falta p/ 100% de fidelidade.
+            self._fidelidade_resultado = self._reconciliar_fidelidade_pjc(pjc_bytes)
         except Exception as _e:
             self.log(f"  ⚠ #80-AK reconciliação de fidelidade falhou: {str(_e)[:150]}")
 
