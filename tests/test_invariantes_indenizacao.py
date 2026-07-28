@@ -3757,3 +3757,38 @@ def test_inv117_save_lento_nao_e_falha_e_fidelidade_persistida():
     web = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
     assert ".fidelidade.json" in web and "Fidelidade 100%" in web, (
         "REGRESSÃO #80-CB: persistência/painel de fidelidade removidos da página do processo")
+
+
+def test_inv118_verba_nao_casa_string_de_reflexo():
+    """#80-CC (0000127-78, 27/07/2026): a verba '13º SALÁRIO' INEXISTENTE no
+    PJC passava como presente casando a string do reflexo '13º SALÁRIO SOBRE
+    HORAS EXTRAS 50%' (falso 'verbas 8/8') — a verba Manual perdida sumia do
+    relatório de fidelidade. Strings com ' SOBRE ' ficam fora do universo de
+    match de VERBAS."""
+    import io
+    import zipfile
+    import types
+    import importlib
+    mod = importlib.import_module("modules.playwright_v2")
+    Bot = mod.PlaywrightAutomatorV2
+    buf = io.BytesIO()
+    xml = ("<root><descricao>HORAS EXTRAS 50%</descricao>"
+           "<Reflexo><nome>13º SALÁRIO SOBRE HORAS EXTRAS 50%</nome>"
+           "<descricao>13º SALÁRIO SOBRE HORAS EXTRAS</descricao><ativo>true</ativo></Reflexo>"
+           "</root>")
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("CALC.PJC", xml.encode("iso-8859-1", "replace"))
+    v13 = types.SimpleNamespace(nome_pjecalc="13o SALARIO", expresso_alvo="13o SALARIO", reflexos=[])
+    vhe = types.SimpleNamespace(nome_pjecalc="HORAS EXTRAS 50%", expresso_alvo="HORAS EXTRAS 50%", reflexos=[])
+    logs = []
+    fs = types.SimpleNamespace(
+        previa=types.SimpleNamespace(verbas_principais=[v13, vhe]),
+        log=logs.append,
+        _norm_desc_fidelidade=Bot._norm_desc_fidelidade,
+        _STOP_FID=Bot._STOP_FID)
+    fs._tokens_fidelidade = types.MethodType(Bot._tokens_fidelidade, fs)
+    res = Bot._reconciliar_fidelidade_pjc(fs, buf.getvalue())
+    assert "13o SALARIO" in res["verbas_faltantes"], (
+        "REGRESSÃO #80-CC: verba inexistente casou string de reflexo (falso presente)")
+    assert "HORAS EXTRAS 50%" not in res["verbas_faltantes"], (
+        "REGRESSÃO #80-CC: verba realmente presente foi dada como faltante")

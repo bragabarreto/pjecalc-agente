@@ -13279,7 +13279,14 @@ class PlaywrightAutomatorV2:
         pjc_nomes = _re.findall(r"<nome>(.*?)</nome>", xml, _re.S)
         pjc_descs = _re.findall(r"<descricao>(.*?)</descricao>", xml, _re.S)
         pjc_strings = [s for s in (pjc_nomes + pjc_descs) if s and s.strip()]
-        pjc_tokens = [self._tokens_fidelidade(s) for s in pjc_strings]
+        # #80-CC (0000127-78): o match de VERBA não pode usar strings de
+        # REFLEXO ("... SOBRE ...") — o 13º SALÁRIO INEXISTENTE passava como
+        # presente casando "13º SALÁRIO SOBRE HORAS EXTRAS 50%" (falso 8/8; a
+        # verba Manual perdida sumia do relatório de fidelidade).
+        pjc_tokens = [
+            self._tokens_fidelidade(s) for s in pjc_strings
+            if " SOBRE " not in self._norm_desc_fidelidade(s)
+        ]
         pjc_tokens = [t for t in pjc_tokens if t]
 
         # Reflexos ATIVOS do PJC. #80-BY-3 (MARCELA 0000852-87): PJCs reais
