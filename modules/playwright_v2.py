@@ -10814,6 +10814,27 @@ class PlaywrightAutomatorV2:
         self.log("Fase 8 concluída")
 
     def fase_contribuicao_social(self) -> None:
+        # #80-CE (0000408-54, 28/07/2026): a Fase 9 morria de primeira com
+        # "Execution context was destroyed" (evaluate correndo contra navegação
+        # Seam em voo — classe do FIX #71) e NÃO tinha retry: a CS inteira era
+        # pulada (parâmetros da prévia não aplicados + risco do RN02 na
+        # liquidação, pois a página nem é visitada/salva). Retry ×3 com
+        # estabilização entre tentativas (mesmo padrão da Fase 11).
+        for _tent_cs in range(1, 4):
+            try:
+                self._fase_contribuicao_social_impl()
+                return
+            except Exception as _e_cs:
+                self.log(f"  ⚠ Fase 9 CS (tentativa {_tent_cs}/3): {str(_e_cs)[:140]}")
+                try:
+                    self._page.wait_for_load_state("domcontentloaded", timeout=8000)
+                except Exception:
+                    pass
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(2500)
+        self.log("  🛑 Fase 9 CS falhou após 3 tentativas — CS ficará com defaults do PJE-Calc")
+
+    def _fase_contribuicao_social_impl(self) -> None:
         self.log("Fase 9 — Contribuição Social")
         # Mesmo se o JSON omitir CS, devemos VISITAR + SALVAR a página CS
         # para que o PJE-Calc gere `inssSobreSalariosDevidos.ocorrencias`.

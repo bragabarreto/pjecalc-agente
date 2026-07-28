@@ -3799,3 +3799,19 @@ def test_inv118_verba_nao_casa_string_de_reflexo():
         "REGRESSÃO #80-CC: verba inexistente casou string de reflexo (falso presente)")
     assert "HORAS EXTRAS 50%" not in res["verbas_faltantes"], (
         "REGRESSÃO #80-CC: verba realmente presente foi dada como faltante")
+
+
+def test_inv119_fase_cs_com_retry():
+    """#80-CE (0000408-54, 28/07/2026): a Fase 9 (CS/INSS) morria de primeira
+    ("Execution context was destroyed" — corrida com navegação Seam) sem
+    retry: parâmetros de CS da prévia pulados + risco RN02 (página nem
+    visitada/salva). Retry ×3 com estabilização."""
+    src = (REPO_ROOT / "modules" / "playwright_v2.py").read_text(encoding="utf-8")
+    assert "def _fase_contribuicao_social_impl" in src, (
+        "REGRESSÃO #80-CE: impl da Fase 9 sem wrapper de retry")
+    ini = src.find("def fase_contribuicao_social")
+    corpo = src[ini:src.find("def _fase_contribuicao_social_impl")]
+    assert "range(1, 4)" in corpo and "Fase 9 CS (tentativa" in corpo, (
+        "REGRESSÃO #80-CE: retry ×3 da Fase 9 removido")
+    assert "🛑 Fase 9 CS falhou após 3 tentativas" in corpo, (
+        "REGRESSÃO #80-CE: exaustão do retry deve ser ALTA, não silenciosa")
