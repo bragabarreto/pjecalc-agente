@@ -1,30 +1,131 @@
-{# Input + script do upload do PJC definitivo (Plano 3) — partial compartilhado.
-   Incluir UMA vez por página que renderize a tabela de processos. #}
+{# Input + modal + script do upload do PJC definitivo (Plano 3) — partial
+   compartilhado. Incluir UMA vez por página que renderize a tabela de
+   processos.
+   #80-CF: além do .PJC, o usuário pode informar que ALTEROU o texto da
+   sentença durante o ajuste manual e enviar/colar o texto DEFINITIVO — sem
+   isso o aprendizado compararia o PJC corrigido com a sentença antiga. #}
 <input type="file" id="pjcDefinitivoFile" accept=".pjc,.PJC" style="display:none">
+
+<div id="pjcDefModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45);
+     z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:8px; padding:22px 24px; max-width:620px; width:92%;
+       max-height:88vh; overflow:auto; box-shadow:0 10px 40px rgba(0,0,0,.3);">
+    <h3 style="margin:0 0 6px; font-size:1.05rem;">📥 PJC definitivo — aprendizado</h3>
+    <p style="margin:0 0 14px; color:#555; font-size:0.88rem;">
+      Arquivo: <b id="pjcDefNome">—</b><br>
+      O app compara este PJC com o gerado pela automação e aprende com as suas correções.
+    </p>
+
+    <label style="display:flex; gap:8px; align-items:flex-start; font-size:0.9rem; cursor:pointer;
+           background:#fff8e1; padding:10px 12px; border-radius:6px; border:1px solid #ffe08a;">
+      <input type="checkbox" id="pjcDefSentAlterada" style="margin-top:3px;">
+      <span>
+        <b>Houve alteração no texto da sentença</b> durante o ajuste manual
+        <span style="display:block; color:#6c757d; font-size:0.83rem; margin-top:2px;">
+          Marque se você corrigiu/esclareceu algum parâmetro no texto (ou mudou o julgamento).
+          Sem o texto definitivo, o aprendizado compara o cálculo corrigido com a sentença antiga.
+        </span>
+      </span>
+    </label>
+
+    <div id="pjcDefSentBox" style="display:none; margin-top:14px;">
+      <p style="margin:0 0 6px; font-size:0.86rem; color:#333;"><b>Sentença definitiva</b> — envie o arquivo
+         <span style="color:#6c757d;">(PDF, DOCX, TXT ou MD)</span> <b>ou</b> cole o texto:</p>
+      <input type="file" id="pjcDefSentArquivo" accept=".pdf,.docx,.doc,.txt,.md"
+             style="font-size:0.85rem; margin-bottom:8px;">
+      <textarea id="pjcDefSentTexto" rows="7" placeholder="…ou cole aqui o texto definitivo da sentença"
+                style="width:100%; font-size:0.83rem; font-family:ui-monospace,Menlo,monospace;
+                       padding:8px; border:1px solid #ccc; border-radius:5px; resize:vertical;"></textarea>
+    </div>
+
+    <div style="margin-top:18px; display:flex; gap:10px; justify-content:flex-end;">
+      <button type="button" onclick="pjcDefFechar()" class="btn btn-secondary"
+              style="padding:7px 16px; font-size:0.9rem;">Cancelar</button>
+      <button type="button" id="pjcDefEnviarBtn" onclick="pjcDefEnviar()" class="btn"
+              style="padding:7px 18px; font-size:0.9rem; background:#5a8dee; color:#fff; border:none;
+                     border-radius:5px; cursor:pointer;">Enviar para aprendizado</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // Plano 3 (aprendizado) — upload OPCIONAL do PJC definitivo p/ diff+aprendizado
+let _pjcDefSessao = null, _pjcDefArquivo = null;
+
 function enviarPjcDefinitivo(sessaoId) {
   const inp = document.getElementById('pjcDefinitivoFile');
-  inp.onchange = async () => {
+  inp.onchange = () => {
     const f = inp.files[0];
     inp.value = '';
     if (!f) return;
-    const fd = new FormData();
-    fd.append('pjc', f);
-    try {
-      const r = await fetch(`/api/pjc-definitivo/${sessaoId}`, { method: 'POST', body: fd });
-      const j = await r.json();
-      if (!r.ok) { alert('Erro: ' + (j.detail || r.status)); return; }
-      const linhas = (j.linhas || []).slice(0, 20).join('\n');
-      alert(
-        'PJC definitivo recebido para aprendizado.\n\n' +
-        `Correções manuais detectadas: ${j.resumo.campos_alterados} campo(s), ` +
-        `${j.resumo.entidades_adicionadas_removidas} verba(s)/reflexo(s) incluído(s)/removido(s).\n\n` +
-        (linhas || '✓ Nenhuma diferença — o PJC gerado já estava correto.') +
-        '\n\nRelatório completo: ' + j.relatorio
-      );
-    } catch (e) { alert('Falha no envio: ' + e); }
+    _pjcDefSessao = sessaoId;
+    _pjcDefArquivo = f;
+    document.getElementById('pjcDefNome').textContent = f.name;
+    document.getElementById('pjcDefSentAlterada').checked = false;
+    document.getElementById('pjcDefSentBox').style.display = 'none';
+    document.getElementById('pjcDefSentTexto').value = '';
+    document.getElementById('pjcDefSentArquivo').value = '';
+    document.getElementById('pjcDefModal').style.display = 'flex';
   };
   inp.click();
+}
+
+function pjcDefFechar() {
+  document.getElementById('pjcDefModal').style.display = 'none';
+  _pjcDefSessao = null; _pjcDefArquivo = null;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const chk = document.getElementById('pjcDefSentAlterada');
+  if (chk) chk.addEventListener('change', () => {
+    document.getElementById('pjcDefSentBox').style.display = chk.checked ? 'block' : 'none';
+  });
+});
+
+async function pjcDefEnviar() {
+  if (!_pjcDefSessao || !_pjcDefArquivo) return;
+  const alterada = document.getElementById('pjcDefSentAlterada').checked;
+  const texto = document.getElementById('pjcDefSentTexto').value.trim();
+  const sentFile = document.getElementById('pjcDefSentArquivo').files[0];
+  if (alterada && !texto && !sentFile) {
+    alert('Você marcou que a sentença foi alterada — envie o arquivo ou cole o texto definitivo.\n' +
+          '(Ou desmarque a opção, se o texto não mudou.)');
+    return;
+  }
+  const btn = document.getElementById('pjcDefEnviarBtn');
+  btn.disabled = true; btn.textContent = 'Enviando…';
+
+  const fd = new FormData();
+  fd.append('pjc', _pjcDefArquivo);
+  fd.append('sentenca_alterada', alterada ? 'true' : 'false');
+  if (alterada) {
+    if (texto) fd.append('sentenca_texto', texto);
+    if (sentFile) fd.append('sentenca_arquivo', sentFile);
+  }
+  try {
+    const r = await fetch(`/api/pjc-definitivo/${_pjcDefSessao}`, { method: 'POST', body: fd });
+    const j = await r.json();
+    if (!r.ok) { alert('Erro: ' + (j.detail || r.status)); return; }
+    const linhas = (j.linhas || []).slice(0, 20).join('\n');
+    const sd = j.sentenca_definitiva || {};
+    const infoSent = sd.alterada
+      ? ('\n\nSentença definitiva: ' + (sd.chars ? `${sd.chars} caracteres (${sd.origem}) — ` +
+         'o aprendizado usará o texto NOVO como título executivo.'
+         : '⚠ não pôde ser lida — o aprendizado usará o contexto da prévia original.'))
+      : '';
+    alert(
+      'PJC definitivo recebido para aprendizado.\n\n' +
+      `Correções manuais detectadas: ${j.resumo.campos_alterados} campo(s), ` +
+      `${j.resumo.entidades_adicionadas_removidas} verba(s)/reflexo(s) incluído(s)/removido(s).\n\n` +
+      (linhas || '✓ Nenhuma diferença — o PJC gerado já estava correto.') +
+      infoSent +
+      '\n\nRelatório completo: ' + j.relatorio
+    );
+    pjcDefFechar();
+  } catch (e) {
+    alert('Falha no envio: ' + e);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Enviar para aprendizado';
+  }
 }
 </script>

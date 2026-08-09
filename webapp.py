@@ -4845,11 +4845,49 @@ async def upload_pjc(
 _APRENDIZADO_PJC_DIR = Path("data/calculations/aprendizado_pjc")
 
 
+def _texto_da_sentenca_definitiva(
+    sessao_id: str,
+    texto_colado: Optional[str],
+    arquivo: Optional[UploadFile],
+    arquivo_bytes: Optional[bytes],
+) -> tuple:
+    """#80-CF — extrai o TEXTO da sentença definitiva (colado ou arquivo).
+
+    Retorna (texto, origem). Aceita PDF/DOCX/TXT/MD via `ler_documento`
+    (mesmo caminho da ingestão) ou texto colado. Best-effort: erro de leitura
+    retorna ("", motivo) — o aprendizado segue sem a sentença nova.
+    """
+    txt = (texto_colado or "").strip()
+    if txt:
+        return txt, "texto colado"
+    if not (arquivo and arquivo_bytes):
+        return "", "não informada"
+    suf = Path(arquivo.filename or "sentenca.txt").suffix.lower() or ".txt"
+    tmp = _APRENDIZADO_PJC_DIR / f"{sessao_id}_sentenca_upload{suf}"
+    tmp.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        tmp.write_bytes(arquivo_bytes)
+        from modules.ingestion import ler_documento
+        res = ler_documento(tmp)
+        return (res.get("texto") or "").strip(), f"arquivo {arquivo.filename}"
+    except Exception as e:
+        logger.warning("pjc-definitivo: falha ao ler sentença definitiva: %s", e)
+        return "", f"falha ao ler {arquivo.filename}: {e}"
+    finally:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+
+
 @app.post("/api/pjc-definitivo/{sessao_id}")
 async def enviar_pjc_definitivo(
     sessao_id: str,
     background_tasks: BackgroundTasks,
     pjc: UploadFile = File(...),
+    sentenca_alterada: bool = Form(False),
+    sentenca_texto: str = Form(""),
+    sentenca_arquivo: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
 ):
     """Plano 3 (FATIA 1) — upload OPCIONAL do PJC DEFINITIVO (corrigido
@@ -4930,6 +4968,45 @@ async def enviar_pjc_definitivo(
         logger.exception("pjc-definitivo: falha no diff")
         raise HTTPException(status_code=500, detail=f"Falha ao comparar PJCs: {e}")
 
+    # #80-CF (pedido do usuário, 28/07/2026): durante o ajuste manual o
+    # calculista às vezes ALTERA o texto da sentença (corrige/esclarece um
+    # parâmetro contraditório — em casos excepcionais muda o julgamento). Sem
+    # o texto DEFINITIVO, o aprendizado compara o PJC corrigido contra a
+    # sentença ANTIGA e "aprende" correções que na verdade decorrem da
+    # mudança do título — ruído grave. Quando o usuário marca que houve
+    # alteração, o texto novo é persistido junto ao relatório e entra no
+    # contexto da análise LLM.
+    _sent_txt, _sent_origem = "", "não informada"
+    if sentenca_alterada:
+        _bytes_sent = await sentenca_arquivo.read() if sentenca_arquivo else None
+        _sent_txt, _sent_origem = _texto_da_sentenca_definitiva(
+            sessao_id, sentenca_texto, sentenca_arquivo, _bytes_sent,
+        )
+    rel["sentenca_definitiva"] = {
+        "alterada": bool(sentenca_alterada),
+        "origem": _sent_origem,
+        "chars": len(_sent_txt),
+    }
+    if sentenca_alterada and _sent_txt:
+        try:
+            _sent_path = _APRENDIZADO_PJC_DIR / f"{sessao_id}.sentenca_definitiva.txt"
+            _sent_path.write_text(_sent_txt, encoding="utf-8")
+            rel["sentenca_definitiva"]["arquivo"] = str(_sent_path)
+        except Exception as _e_s:
+            logger.warning("pjc-definitivo: falha ao persistir sentença definitiva: %s", _e_s)
+    elif sentenca_alterada and not _sent_txt:
+        rel["sentenca_definitiva"]["aviso"] = (
+            "Sentença marcada como alterada mas o texto não pôde ser lido — "
+            "o aprendizado usará o contexto da prévia original."
+        )
+    try:
+        # mesmo nome usado por executar_diff_e_persistir/carregar_relatorio
+        (_APRENDIZADO_PJC_DIR / f"{sessao_id}_diff.json").write_text(
+            json.dumps(rel, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+    except Exception as _e_r:
+        logger.warning("pjc-definitivo: falha ao regravar relatório: %s", _e_r)
+
     # Auditoria HITL
     try:
         from infrastructure.database import InteracaoHITL as _Inter
@@ -4959,6 +5036,7 @@ async def enviar_pjc_definitivo(
         "ok": True,
         "resumo": rel["resumo"],
         "linhas": resumo_legivel(rel),
+        "sentenca_definitiva": rel.get("sentenca_definitiva", {}),
         "relatorio": f"/api/pjc-definitivo/{sessao_id}/relatorio",
     }
 

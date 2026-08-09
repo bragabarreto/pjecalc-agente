@@ -191,3 +191,55 @@ def test_fatia2_best_effort_nao_levanta(db, tmp_path, monkeypatch):
     _preparar_relatorio(tmp_path, monkeypatch, _rel_diff("s1", _campos_divisor()))
     out2 = analisar_diff("s1", db, orchestrator=_FakeOrchestrator("texto solto"))
     assert out2["regras_novas"] == 0
+
+
+# ── #80-CF — SENTENÇA DEFINITIVA (texto alterado no ajuste manual) ───────────
+
+def test_cf_sentenca_definitiva_entra_no_prompt(db, tmp_path, monkeypatch):
+    """#80-CF (pedido do usuário, 28/07/2026): quando o calculista ALTERA o
+    texto da sentença durante o ajuste manual, o texto DEFINITIVO deve entrar
+    no contexto da análise — senão o LLM compara o PJC corrigido com o título
+    ANTIGO e aprende correções que decorrem da mudança do texto."""
+    rel = _rel_diff("scf1", _campos_divisor())
+    sent = tmp_path / "scf1.sentenca_definitiva.txt"
+    sent.write_text("DISPOSITIVO: horas extras com divisor 180 (jornada 12x36).",
+                    encoding="utf-8")
+    rel["sentenca_definitiva"] = {"alterada": True, "origem": "texto colado",
+                                  "chars": 58, "arquivo": str(sent)}
+    _preparar_relatorio(tmp_path, monkeypatch, rel)
+    orq = _FakeOrchestrator(_REGRA_LLM)
+    analisar_diff("scf1", db, orchestrator=orq)
+    prompt = orq.prompts[0]
+    assert "SENTENÇA DEFINITIVA" in prompt, "texto definitivo não chegou ao prompt"
+    assert "divisor 180 (jornada 12x36)" in prompt, "conteúdo da sentença nova ausente"
+    assert "título executivo REAL" in prompt, "instrução de avaliar contra o texto novo ausente"
+
+
+def test_cf_sem_alteracao_nao_polui_o_prompt(db, tmp_path, monkeypatch):
+    """Sem alteração de texto o prompt segue como antes (contexto da prévia)."""
+    rel = _rel_diff("scf2", _campos_divisor())
+    rel["sentenca_definitiva"] = {"alterada": False, "origem": "não informada", "chars": 0}
+    _preparar_relatorio(tmp_path, monkeypatch, rel)
+    orq = _FakeOrchestrator(_REGRA_LLM)
+    analisar_diff("scf2", db, orchestrator=orq)
+    assert "SENTENÇA DEFINITIVA" not in orq.prompts[0]
+
+
+def test_cf_correcao_por_mudanca_da_sentenca_nao_generaliza(db, tmp_path, monkeypatch):
+    """Correção que decorre APENAS da mudança do texto não é erro da automação
+    — nasce como caso-específico (abaixo do limiar de injeção), nunca como
+    regra generalizável."""
+    from infrastructure.database import RegrasAprendidas
+
+    rel = _rel_diff("scf3", _campos_divisor())
+    rel["sentenca_definitiva"] = {"alterada": True, "origem": "texto colado", "chars": 10}
+    _preparar_relatorio(tmp_path, monkeypatch, rel)
+    resposta = json.loads(json.dumps(_REGRA_LLM))
+    resposta["regras"][0]["decorre_de_mudanca_da_sentenca"] = True
+    resposta["regras"][0]["generalizavel"] = True  # LLM pode se enganar
+    analisar_diff("scf3", db, orchestrator=_FakeOrchestrator(resposta))
+    regra = db.query(RegrasAprendidas).filter(
+        RegrasAprendidas.tipo_regra == "pjc_definitivo").first()
+    assert regra is not None
+    assert regra.confianca < LIMIAR_INJECAO, (
+        "correção decorrente da mudança do texto não pode nascer injetável")

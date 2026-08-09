@@ -70,6 +70,7 @@ Formato obrigatório da resposta (JSON válido, sem markdown):
       "condicao": "QUANDO aplicar (sinais na sentença/contexto, ex.: 'quando houver jornada 12x36')",
       "acao": "o que a automação deve fazer (ex.: 'usar divisor 180 na verba X')",
       "generalizavel": true,
+      "decorre_de_mudanca_da_sentenca": false,
       "justificativa": "fundamento jurídico/operacional em 1 frase"
     }
   ],
@@ -86,7 +87,21 @@ Diretrizes:
   correções: o calculista USA os comentários gerados como checklist de revisão
   e os apaga verba a verba conforme revisa. NUNCA gere regra para suprimir,
   reduzir ou deixar de emitir comentários (campos comentario/observacao/
-  comentarios_jg e afins) — a automação deve continuar gerando-os."""
+  comentarios_jg e afins) — a automação deve continuar gerando-os.
+- ⚠️ SENTENÇA DEFINITIVA (quando fornecida): o calculista pode ter ALTERADO o
+  texto da sentença durante a revisão (corrigindo/esclarecendo um parâmetro
+  contraditório — excepcionalmente mudando o julgamento). Nesse caso o PJC
+  definitivo reflete o texto NOVO, e o cálculo gerado refletia o ANTIGO.
+  Então:
+  • correção que decorre APENAS da mudança do texto NÃO é erro da automação —
+    marque `decorre_de_mudanca_da_sentenca: true` e `generalizavel: false`
+    (a automação teria acertado se tivesse recebido o texto definitivo);
+  • correção que a sentença definitiva JÁ determinava (o texto novo não mudou
+    aquele ponto, ou o antigo já dizia o mesmo) É aprendizado legítimo sobre
+    como traduzir o texto em parâmetros — gere a regra normalmente, com a
+    condição citando o trecho/sinal da sentença DEFINITIVA;
+  • sempre avalie o PJC definitivo contra a SENTENÇA DEFINITIVA (é o título
+    executivo real), nunca contra a versão antiga."""
 
 
 # ── FATIA 2 — análise LLM do diff ────────────────────────────────────────────
@@ -117,6 +132,35 @@ def _contexto_da_previa(sessao_id: str) -> str:
     if cp:
         linhas.append(f"- cartao_de_ponto: {len(cp)} período(s) de jornada apurada")
     return "\n".join(linhas) or "(prévia vazia)"
+
+
+_MAX_SENT_DEF = 60000  # ~15k tokens — sentenças trabalhistas cabem folgado
+
+
+def _sentenca_definitiva_txt(sessao_id: str, rel: dict) -> str:
+    """#80-CF — bloco da SENTENÇA DEFINITIVA p/ o prompt, quando o calculista
+    marcou que alterou o texto durante a revisão manual. Vazio quando não
+    houve alteração (o contexto da prévia original basta)."""
+    meta = (rel or {}).get("sentenca_definitiva") or {}
+    if not meta.get("alterada"):
+        return ""
+    txt = ""
+    try:
+        p = Path(meta.get("arquivo") or (_APRENDIZADO_DIR / f"{sessao_id}.sentenca_definitiva.txt"))
+        if p.exists():
+            txt = p.read_text(encoding="utf-8", errors="replace").strip()
+    except Exception as e:
+        logger.warning("pjc_aprendizado: sentença definitiva ilegível (%s): %s", sessao_id, e)
+    if not txt:
+        return ("\n\n## ⚠️ SENTENÇA ALTERADA (texto indisponível)\n"
+                "O calculista informou que o texto da sentença mudou, mas o texto "
+                "definitivo não pôde ser lido. Trate as correções com cautela: "
+                "podem decorrer da mudança do título, não de erro da automação "
+                "(prefira generalizavel=false quando houver dúvida).")
+    return ("\n\n## SENTENÇA DEFINITIVA (texto alterado pelo calculista durante a revisão)\n"
+            "Este é o título executivo REAL — avalie o PJC definitivo contra ele.\n"
+            "O cálculo automático foi gerado a partir da versão ANTERIOR do texto.\n\n"
+            + txt[:_MAX_SENT_DEF])
 
 
 def _diff_em_linhas(rel: dict) -> str:
@@ -158,9 +202,15 @@ def analisar_diff(sessao_id: str, db, orchestrator=None) -> dict:
         from core.llm_orchestrator import TaskType
 
         contexto = _contexto_da_previa(sessao_id)
+        # #80-CF: sentença DEFINITIVA (quando o calculista alterou o texto
+        # durante a revisão) — sem ela o LLM compararia o PJC corrigido com o
+        # título ANTIGO e aprenderia correções que decorrem da mudança do
+        # texto, não de erro da automação.
+        _sent_def = _sentenca_definitiva_txt(sessao_id, rel)
         prompt = (
             "## Contexto do caso (prévia confirmada)\n"
             + contexto
+            + _sent_def
             + "\n\n## Correções manuais detectadas (PJC gerado → PJC definitivo)\n"
             + _diff_em_linhas(rel)
             + "\n\n## Tarefa\nGere as regras conforme o formato. "
@@ -235,6 +285,16 @@ def _persistir_regras(db, sessao_id: str, regras: list,
     for reg in regras:
         if not isinstance(reg, dict) or not reg.get("acao"):
             continue
+        # #80-CF: correção que decorre APENAS da mudança do texto da sentença
+        # NÃO é erro da automação (ela teria acertado com o texto definitivo)
+        # — nunca vira regra generalizável nem abre conflito com consolidada.
+        if reg.get("decorre_de_mudanca_da_sentenca"):
+            reg["generalizavel"] = False
+            logger.info(
+                "pjc_aprendizado(%s): regra sobre %r/%r decorre da MUDANÇA da "
+                "sentença — registrada como caso-específico (não generalizável)",
+                sessao_id, reg.get("verba"), reg.get("campo"),
+            )
         verba = str(reg.get("verba") or "GLOBAL")
         campo = str(reg.get("campo") or "")
         para = str(reg.get("para") or "")
