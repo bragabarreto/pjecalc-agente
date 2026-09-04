@@ -6087,6 +6087,58 @@ class PlaywrightAutomatorV2:
                     )
         return False
 
+    def _reler_periodo_da_verba(self, v) -> dict | None:
+        """#80-CO — reabre o form de Parâmetros da verba e lê o período gravado.
+
+        Ground truth do bean quando a mensagem de sucesso do save não aparece
+        (ela é instável neste form). READ-ONLY: não altera nada; quem chama
+        decide se houve save."""
+        candidatos = [v.nome_pjecalc]
+        if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
+            candidatos.append(v.expresso_alvo)
+        try:
+            self._aguardar_servidor_ocioso(f"#80-CO reler '{v.nome_pjecalc}'")
+        except Exception:
+            pass
+        self._navegar_menu("li_calculo_verbas")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1200)
+        alvo = self._page.evaluate(
+            """(cs) => {
+                const ls = [...document.querySelectorAll('a.linkParametrizar')]
+                    .filter(a => !a.id.includes(':listaReflexo:'));
+                for (const a of ls) {
+                    const tr = a.closest('tr'); if (!tr) continue;
+                    for (const td of tr.querySelectorAll('td')) {
+                        const t = (td.textContent || '').replace(/Exibir|Ocultar/gi, '').trim();
+                        if (cs.some(c => c && t === c)) return a.id;
+                    }
+                }
+                return null;
+            }""",
+            candidatos,
+        )
+        if not alvo:
+            return None
+        try:
+            self._page.locator(f"a#{alvo.replace(':', chr(92) + ':')}").first.click(force=True)
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1200)
+            self._page.wait_for_selector("[id$=':descricao']", timeout=10000)
+        except Exception:
+            return None
+        return self._page.evaluate(
+            """() => {
+                const g = suf => {
+                    const el = document.querySelector('[id$=":' + suf + '"]');
+                    return el ? (el.value || '').trim() : null;
+                };
+                return {inicio: g('periodoInicialInputDate'),
+                        fim: g('periodoFinalInputDate'),
+                        descricao: g('descricao')};
+            }"""
+        )
+
     def _configurar_parametros_pos_expresso(self, v, marcar_reflexos: bool = False) -> None:
         """Ajustar parâmetros da verba pós-Expresso.
 
@@ -7126,57 +7178,94 @@ class PlaywrightAutomatorV2:
                     self.log(f"    🔎 #80-CN captura detalhada falhou: {str(_ed2)[:120]}")
             except Exception as _em:
                 self.log(f"    🔎 #80-N captura de mensagens falhou: {_em}")
-            # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
-            # Quando o save falha (ex.: erro JSF "A data final não pode ser
-            # maior que data demissão"), a página permanece no form de
-            # Alteração com erros visíveis. As próximas verbas tentam buscar
-            # na "listagem" mas estão no form errado → todas falham com
-            # "TRs com Parâmetros visíveis: []".
-            # Solução: clicar Cancelar para voltar à listagem antes da próxima.
+
+            _save_confirmado_co = False
+            # ── #80-CO: SEM mensagem ≠ SEM save. VERIFICAR por reabertura ──
+            # Diagnóstico #80-CN (0000977-55, 04/09/2026): no save falho do
+            # SALDO DE SALÁRIO os campos permanecem com os valores NOVOS
+            # (periodoInicial=01/05/2026) e não há erro de campo algum — ou
+            # seja, o servidor não rejeitou nem re-renderizou. Ainda assim o
+            # período não chega ao PJC: o `Cancelar` logo abaixo descarta a
+            # conversa Seam (FlushMode.MANUAL), levando junto o que já estava
+            # no bean. É a mesma classe do #80-O (Cancel descartando base
+            # histórico), aqui disparada pela simples AUSÊNCIA de mensagem.
+            #
+            # A mensagem de sucesso do PJE-Calc é notoriamente instável neste
+            # form (outras verbas do mesmo cálculo também não a produzem). Em
+            # vez de confiar nela, REABRIR a verba e ler o período: é o ground
+            # truth do bean, o mesmo princípio das demais verificações do bot.
             try:
-                cancelou = self._page.evaluate(
-                    """() => {
-                        const btn = document.querySelector('input[id$=":cancelar"], input[value="Cancelar"]');
-                        if (!btn) return null;
-                        const onclickStr = btn.getAttribute('onclick') || '';
-                        if (onclickStr) {
-                            try {
-                                const fn = new Function('event', onclickStr);
-                                fn.call(btn, new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
-                                return 'onclick-exec';
-                            } catch(_) {}
-                        }
-                        btn.click();
-                        return 'click';
-                    }"""
-                )
-                if cancelou:
-                    self.log(f"  → Cancelando form (via {cancelou}) para voltar à listagem")
-                    self._aguardar_ajax(5000)
-                    self._page.wait_for_timeout(1500)
-                    # Confirmar que voltou para listagem (tem botão Incluir/Manual)
-                    tem_listagem = self._page.evaluate(
-                        """() => !!document.querySelector('input[id$=":incluir"], a.linkParametrizar')"""
+                _pi_alvo = getattr(v.parametros, "periodo_inicio", None)
+                if _pi_alvo:
+                    _lido = self._reler_periodo_da_verba(v)
+                    if _lido and _lido.get("inicio") == _pi_alvo:
+                        self.log(
+                            f"    ✓ #80-CO save de '{v.nome_pjecalc}' CONFIRMADO por "
+                            f"reabertura (período {_lido['inicio']}→{_lido.get('fim')}) — "
+                            f"a mensagem de sucesso é que não apareceu"
+                        )
+                        _save_confirmado_co = True
+                    elif _lido:
+                        self.log(
+                            f"    ✗ #80-CO save de '{v.nome_pjecalc}' NÃO persistiu: "
+                            f"período no bean é {_lido.get('inicio')}→{_lido.get('fim')}, "
+                            f"esperado {_pi_alvo}"
+                        )
+            except Exception as _eco:
+                self.log(f"    ⚠ #80-CO verificação por reabertura: {str(_eco)[:120]}")
+
+            if not _save_confirmado_co:
+                # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
+                # Quando o save falha (ex.: erro JSF "A data final não pode ser
+                # maior que data demissão"), a página permanece no form de
+                # Alteração com erros visíveis. As próximas verbas tentam buscar
+                # na "listagem" mas estão no form errado → todas falham com
+                # "TRs com Parâmetros visíveis: []".
+                # Solução: clicar Cancelar para voltar à listagem antes da próxima.
+                try:
+                    cancelou = self._page.evaluate(
+                        """() => {
+                            const btn = document.querySelector('input[id$=":cancelar"], input[value="Cancelar"]');
+                            if (!btn) return null;
+                            const onclickStr = btn.getAttribute('onclick') || '';
+                            if (onclickStr) {
+                                try {
+                                    const fn = new Function('event', onclickStr);
+                                    fn.call(btn, new MouseEvent('click', {bubbles:true, cancelable:true, view:window}));
+                                    return 'onclick-exec';
+                                } catch(_) {}
+                            }
+                            btn.click();
+                            return 'click';
+                        }"""
                     )
-                    if tem_listagem:
-                        self.log(f"  ✓ Voltou à listagem (próxima verba pode tentar)")
-                    else:
-                        self.log(f"  ⚠ Cancelar não retornou à listagem — re-navegando li_calculo_verbas")
-                        try:
-                            self._navegar_menu("li_calculo_verbas")
-                            self._aguardar_ajax(8000)
-                        except Exception:
-                            pass
-            except Exception as e:
-                self.log(f"  ⚠ Falha cancelar form: {e}")
-            # #80-BY-7 (MARCELA run 5): save de parâmetros REJEITADO ("Erro:
-            # 65" pós-bombardeio de A4J) seguia SILENCIOSO → verba sem base →
-            # "Falta selecionar Histórico Salarial" (4 verbas). Mesma classe
-            # do #80-BY: abortar ALTO p/ o retry ×3 re-executar em conversa
-            # fresca (o Cancelar acima já re-ancorou a listagem).
-            raise ParametrosVerbaAbortadosError(
-                f"save de parâmetros de '{v.nome_pjecalc}' sem sucesso (ver #80-N acima)"
-            )
+                    if cancelou:
+                        self.log(f"  → Cancelando form (via {cancelou}) para voltar à listagem")
+                        self._aguardar_ajax(5000)
+                        self._page.wait_for_timeout(1500)
+                        # Confirmar que voltou para listagem (tem botão Incluir/Manual)
+                        tem_listagem = self._page.evaluate(
+                            """() => !!document.querySelector('input[id$=":incluir"], a.linkParametrizar')"""
+                        )
+                        if tem_listagem:
+                            self.log(f"  ✓ Voltou à listagem (próxima verba pode tentar)")
+                        else:
+                            self.log(f"  ⚠ Cancelar não retornou à listagem — re-navegando li_calculo_verbas")
+                            try:
+                                self._navegar_menu("li_calculo_verbas")
+                                self._aguardar_ajax(8000)
+                            except Exception:
+                                pass
+                except Exception as e:
+                    self.log(f"  ⚠ Falha cancelar form: {e}")
+                # #80-BY-7 (MARCELA run 5): save de parâmetros REJEITADO ("Erro:
+                # 65" pós-bombardeio de A4J) seguia SILENCIOSO → verba sem base →
+                # "Falta selecionar Histórico Salarial" (4 verbas). Mesma classe
+                # do #80-BY: abortar ALTO p/ o retry ×3 re-executar em conversa
+                # fresca (o Cancelar acima já re-ancorou a listagem).
+                raise ParametrosVerbaAbortadosError(
+                    f"save de parâmetros de '{v.nome_pjecalc}' sem sucesso (ver #80-N acima)"
+                )
 
     def _OLD_configurar_parametros_pos_expresso(self, v) -> None:
         """[REMOVIDO — substituído por versão flexível acima]."""
