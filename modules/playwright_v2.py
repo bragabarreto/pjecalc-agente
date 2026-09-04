@@ -3095,6 +3095,7 @@ class PlaywrightAutomatorV2:
                         self._filtrar_ocorrencias_por_janela(_v)
                 except Exception as _e:
                     self.log(f"  ⚠ filtro ocorrências 13º (janela): {_e}")
+            self._sonda_escopo("A-pos-filtro")
 
         self.log("Fase 4 concluída")
 
@@ -3245,6 +3246,68 @@ class PlaywrightAutomatorV2:
                     self.log(f"    ⚠ {nome}: erro ao salvar: {e}")
             except Exception as e:
                 self.log(f"    ⚠ {nome}: erro geral: {e}")
+
+    def _sonda_escopo(self, tag: str) -> None:
+        """#80-CL — DIAGNÓSTICO (gated por env DIAG_ESCOPO=1). READ-ONLY.
+
+        Re-navega até a grade de Ocorrências de cada verba com janela deferida e
+        registra o estado do checkbox `:ativo` de cada linha. Serve para achar
+        EM QUE PONTO do fluxo a inativação feita pelo #80-CG se perde: o save
+        não persiste? o Fechar+Reabrir descarta? a liquidação regenera?
+
+        Fica desligada por padrão — cada sonda faz navegação extra, que em
+        cálculo pesado pode provocar a contenção do #80-H.
+        """
+        import os as _os
+        import pathlib as _pl
+        _ligada = (
+            _os.environ.get("DIAG_ESCOPO") == "1"
+            or _pl.Path("/app/data/calculations/.diag_escopo").exists()
+            or _pl.Path("data/calculations/.diag_escopo").exists()
+        )
+        if not _ligada:
+            return
+        alvos = [v for v in (self.previa.verbas_principais or [])
+                 if getattr(v.parametros, "janela_ocorrencias_inicio", None)]
+        if not alvos:
+            return
+        for v in alvos:
+            nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
+            try:
+                self._aguardar_servidor_ocioso(f"sonda[{tag}]")
+                self._navegar_menu("li_calculo_verbas")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1000)
+                cands = [v.nome_pjecalc]
+                if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
+                    cands.append(v.expresso_alvo)
+                tid = self._page.evaluate(
+                    """(cs) => {
+                        const ls = [...document.querySelectorAll('a.linkOcorrencias')]
+                            .filter(a => !a.id.includes(':listaReflexo:'));
+                        for (const a of ls) {
+                            const tr = a.closest('tr'); if (!tr) continue;
+                            for (const td of tr.querySelectorAll('td'))
+                                if (cs.some(c => c && (td.textContent||'').trim() === c)) return a.id;
+                        }
+                        return null;
+                    }""", cands)
+                if not tid:
+                    self.log(f"  [SONDA {tag}] '{nome}': linkOcorrencias não encontrado")
+                    continue
+                self._page.locator(f"a#{tid.replace(':', chr(92) + ':')}").first.click(force=True)
+                try:
+                    self._page.wait_for_url("**/parametrizar-ocorrencia.jsf**", timeout=12000)
+                except Exception:
+                    pass
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1200)
+                rows = self._ler_ocorrencias_da_grade()
+                self.log(f"  [SONDA {tag}] '{nome}': " +
+                         "; ".join(f"{r['dataInicial']} ativo={r['ativo']} val='{r['valor']}'"
+                                   for r in rows))
+            except Exception as e:
+                self.log(f"  [SONDA {tag}] '{nome}': erro {str(e)[:110]}")
 
     def _filtrar_ocorrencias_por_janela(self, v) -> None:
         """#72 + #80-CG: aplica o ESCOPO DEFERIDO às ocorrências de uma verba
@@ -12238,6 +12301,7 @@ class PlaywrightAutomatorV2:
     def fase_liquidar_e_exportar(self) -> str | None:
         """Liquida o cálculo e baixa o arquivo .PJC final."""
         self.log("Fase 14 — Liquidar + Exportar")
+        self._sonda_escopo("B-pre-liquidar")
 
         # ── 14.0 GUARD anti-PJC-fantasma (#73, ONASSES 0000495-10, 18/06/2026) ──
         # Se a sentença tem verbas mas a fase de Verbas abortou (ex.: "Execution
@@ -12656,6 +12720,7 @@ class PlaywrightAutomatorV2:
             f"msg_sucesso={_liq_result['tem_sucesso']} "
             f"erro_500={_liq_result['tem_erro_500']}"
         )
+        self._sonda_escopo("C-pos-liquidar")
         if _erros_lista:
             self.log(f"  [DIAG-liquidar] erros[{len(_erros_lista)}]: {_erros_lista[:3]}")
         if _alertas_lista:
