@@ -2,7 +2,15 @@
 # Exclui bibliotecas de automação desktop (Windows-only), OCR e dependências não usadas.
 
 # ── API Claude (Anthropic) — NLP jurídico ────────────────────────────────────
-anthropic>=0.40.0
+# ⚠ TETO OBRIGATÓRIO (<1.0) — NÃO REMOVER SEM MIGRAR O CÓDIGO.
+# O SDK 1.x REMOVEU `temperature` de `Messages.create()` (substituído por
+# `output_config`, que só tem `effort`/`format` — sem controle de sampling).
+# Sem o teto, um rebuild da imagem puxa a 1.x e a extração quebra com
+# `Messages.create() got an unexpected keyword argument 'temperature'`
+# (ocorrido em produção em 04/09/2026, após rebuild do deploy #80-CG).
+# A extração jurídica exige temperature=0 por reprodutibilidade — migrar para
+# a 1.x significa abrir mão disso, decisão que não pode acontecer por acidente.
+anthropic>=0.40.0,<1.0
 
 # ── Leitura de documentos ────────────────────────────────────────────────────
 pdfplumber>=0.10.0

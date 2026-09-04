@@ -3985,3 +3985,31 @@ def test_inv125_gate_confere_periodo_da_verba_previa_vs_pjc():
     web = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
     assert "periodos_divergentes" in web, (
         "REGRESSÃO #80-CI: divergência de período sumiu do painel do processo")
+
+
+def test_inv126_anthropic_sdk_com_teto_de_versao():
+    """#80-CJ (produção, 04/09/2026): o SDK `anthropic` PRECISA de teto <1.0.
+
+    A 1.x REMOVEU `temperature` de `Messages.create()` (trocado por
+    `output_config`, que só expõe `effort`/`format` — sem controle de
+    sampling). Com o requirement aberto (`anthropic>=0.40.0`), o rebuild da
+    imagem no deploy puxou a 1.3.0 e TODA extração via IA passou a falhar com
+    `Messages.create() got an unexpected keyword argument 'temperature'` —
+    a UI reportava o erro como falta de crédito na API, o que despistava.
+
+    A extração jurídica exige `temperature=0` por reprodutibilidade
+    (CLAUDE.md). Migrar para a 1.x = abrir mão disso; é decisão deliberada,
+    não pode voltar a acontecer por um rebuild."""
+    import re as _re
+    for nome in ("requirements.txt", "requirements-cloud.txt"):
+        txt = (REPO_ROOT / nome).read_text(encoding="utf-8")
+        linha = [l for l in txt.splitlines()
+                 if l.strip().startswith("anthropic") and not l.strip().startswith("#")]
+        assert linha, f"{nome}: requirement do anthropic sumiu"
+        assert _re.search(r"<\s*1\.0", linha[0]), (
+            f"REGRESSÃO #80-CJ: {nome} voltou a permitir anthropic 1.x "
+            f"({linha[0]!r}) — a extração quebra com 'unexpected keyword "
+            f"argument temperature'")
+    # o código realmente depende de temperature nas 3 camadas de extração
+    for mod in ("modules/webapp_extracao.py", "modules/extraction_v2.py"):
+        assert "temperature=" in (REPO_ROOT / mod).read_text(encoding="utf-8")

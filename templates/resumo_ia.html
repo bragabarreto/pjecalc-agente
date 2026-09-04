@@ -101,15 +101,40 @@ function mostrar(fase, d) {
   } else if (fase === 'erro' || fase === 'erro_etapa2') {
     erro.style.display = 'block';
     erro.innerHTML = '<strong>❌ ' + (d.erro || 'Falha na extração via IA.') + '</strong><br>' +
-      (fase === 'erro_etapa2'
-        ? 'O resumo continua válido — você pode corrigir algo e confirmar novamente.'
-        : 'Verifique os créditos da API ou tente novamente em instantes.') +
+      dicaErro(d.erro || '', fase) +
       ' <a href="/novo/ia">Recomeçar</a>';
     if (fase === 'erro_etapa2' && d.resumo_md) {
       document.getElementById('painel-resumo').style.display = 'block';
       render(d.resumo_md);
     }
   }
+}
+
+
+// #80-CJ: a dica NÃO pode presumir falta de crédito. Em 04/09/2026 um erro de
+// SDK ("Messages.create() got an unexpected keyword argument 'temperature'",
+// causado pelo rebuild puxando anthropic 1.x) foi exibido como problema de
+// crédito — o usuário conferiu o saldo, estava cheio, e o diagnóstico real
+// levou muito mais tempo do que precisava. Classificar pelo texto do erro.
+function dicaErro(msg, fase) {
+  if (fase === 'erro_etapa2')
+    return 'O resumo continua válido — você pode corrigir algo e confirmar novamente.';
+  var m = (msg || '').toLowerCase();
+  if (m.indexOf('unexpected keyword argument') >= 0 || m.indexOf('typeerror') >= 0
+      || m.indexOf('has no attribute') >= 0 || m.indexOf('importerror') >= 0)
+    return 'Erro de <b>software</b> (incompatibilidade da biblioteca da API), não de crédito. '
+         + 'Avise o responsável técnico — repetir não vai resolver.';
+  if (m.indexOf('credit') >= 0 || m.indexOf('crédit') >= 0 || m.indexOf('quota') >= 0
+      || m.indexOf('billing') >= 0 || m.indexOf('insufficient') >= 0)
+    return 'Créditos da API esgotados — adicione fundos no Console da Anthropic.';
+  if (m.indexOf('rate') >= 0 || m.indexOf('429') >= 0 || m.indexOf('overloaded') >= 0
+      || m.indexOf('529') >= 0)
+    return 'A API está sobrecarregada ou no limite de taxa. Tente novamente em instantes.';
+  if (m.indexOf('timeout') >= 0 || m.indexOf('timed out') >= 0 || m.indexOf('connection') >= 0)
+    return 'Falha de rede ao falar com a API. Tente novamente em instantes.';
+  if (m.indexOf('authentication') >= 0 || m.indexOf('api key') >= 0 || m.indexOf('401') >= 0)
+    return 'Chave da API inválida ou ausente — verifique a configuração do servidor.';
+  return 'Tente novamente em instantes; se persistir, avise o responsável técnico.';
 }
 
 async function poll() {
