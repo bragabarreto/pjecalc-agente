@@ -3082,19 +3082,14 @@ class PlaywrightAutomatorV2:
             # rodar aqui — Seam está em modo criação, listagem inacessível.
             # Será chamado em fase_pos_recentes_correcoes após reabertura.
 
-            # ── #72: filtrar ocorrências do 13º proporcional-rescisão ──
-            # APÓS o Regerar final (que gera as ocorrências do contrato inteiro:
-            # dez/ano-anterior + proporcional da rescisão). Desativa as
-            # ocorrências dos anos JÁ PAGOS (fora da janela deferida). Tem de ser
-            # AQUI, não antes do Regerar — antes, o 13º ainda tinha as ocorrências
-            # do período estreito (1 só, dentro da janela) e o filtro não
-            # encontrava nada (LUCAS run #74).
-            for _v in verbas_expresso:
-                try:
-                    if getattr(_v.parametros, "janela_ocorrencias_inicio", None):
-                        self._filtrar_ocorrencias_por_janela(_v)
-                except Exception as _e:
-                    self.log(f"  ⚠ filtro ocorrências 13º (janela): {_e}")
+            # ── #72/#80-CM: o filtro de ESCOPO DEFERIDO NÃO roda mais aqui ──
+            # Rodava no fim da Fase 4 e era SEMPRE desfeito: os Regerar
+            # Ocorrências globais das fases seguintes (que marcam
+            # `selecionarTodos` desde o #76c) recriam as ocorrências do 13º e
+            # reativam as competências não deferidas. Comprovado por sondas
+            # (0000772-26): ativo=False no fim da Fase 4 → ativo=True no
+            # início da Fase 14. Agora é aplicado em 14.0b, imediatamente
+            # antes do Liquidar, onde nenhum Regerar o alcança.
             self._sonda_escopo("A-pos-filtro")
 
         self.log("Fase 4 concluída")
@@ -12343,6 +12338,30 @@ class PlaywrightAutomatorV2:
                     "verbas. Run marcado como FALHA — re-execute para retomar."
                 )
                 return None
+
+        # ── 14.0b ESCOPO DEFERIDO — aplicar AQUI, imediatamente antes do
+        # Liquidar (#80-CM). NÃO mover de volta para o fim da Fase 4.
+        #
+        # Diagnóstico por sondas (0000772-26, 04/09/2026, DIAG_ESCOPO):
+        #   A (fim da Fase 4, pós-filtro)  → 20/12/2022 ativo=False val='0,00'
+        #   B (início da Fase 14)          → 20/12/2022 ativo=True  val=''
+        #   C (pós-liquidação)             → 20/12/2022 ativo=True  val='1.084,11'
+        #
+        # O save do filtro PERSISTE (A confirma, em navegação nova). Quem o
+        # desfaz são os **Regerar Ocorrências GLOBAIS** que rodam entre as duas
+        # fases (correções pós-Recentes, 'Regerar pós-ocorrências SALDO DE
+        # SALÁRIO', 'Regerar Férias'): desde o #76c o Regerar marca
+        # `selecionarTodos` — sem isso ele é no-op —, então regerar por causa de
+        # QUALQUER verba recria as ocorrências do 13º e reativa as competências
+        # não deferidas. Entre B e o Liquidar não há Regerar algum (verificado
+        # no log), por isso este é o único ponto seguro do fluxo.
+        try:
+            for _v in (self.previa.verbas_principais or []):
+                if getattr(_v.parametros, "janela_ocorrencias_inicio", None):
+                    self._filtrar_ocorrencias_por_janela(_v)
+        except Exception as _e:
+            self.log(f"  ⚠ escopo deferido pré-Liquidar: {str(_e)[:150]}")
+        self._sonda_escopo("B2-pos-filtro-pre-liquidar")
 
         # ── 14a. Navegar para Liquidar via sidebar JSF ─────────────────────
         # Sempre passar pelo Dados do Cálculo primeiro para garantir que

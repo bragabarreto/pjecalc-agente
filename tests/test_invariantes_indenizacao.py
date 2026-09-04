@@ -4042,3 +4042,32 @@ def test_inv127_verificacao_do_escopo_usa_o_checkbox_ativo():
     assert "ativo: ativo" in src or "'ativo':" in src or '"ativo"' in src
     grade = src[src.find("def _ler_ocorrencias_da_grade"):]
     assert "checkbox" in grade[:1800] and "ativo" in grade[:1800]
+
+
+def test_inv128_escopo_deferido_aplicado_antes_do_liquidar():
+    """#80-CM: o filtro de escopo deferido roda IMEDIATAMENTE ANTES do Liquidar
+    (Fase 14.0b) — NUNCA no fim da Fase 4.
+
+    Diagnóstico por sondas (0000772-26, 04/09/2026):
+        A (fim da Fase 4, pós-filtro) → 20/12/2022 ativo=False val='0,00'
+        B (início da Fase 14)         → 20/12/2022 ativo=True  val=''
+        C (pós-liquidação)            → 20/12/2022 ativo=True  val='1.084,11'
+
+    O save do filtro PERSISTE (A confirma em navegação nova). Quem desfaz são
+    os Regerar Ocorrências GLOBAIS das fases intermediárias: desde o #76c o
+    Regerar marca `selecionarTodos` (sem isso é no-op), então regerar por causa
+    de QUALQUER verba recria as ocorrências do 13º e reativa as competências
+    não deferidas. Entre B e o Liquidar não há Regerar algum — é o único ponto
+    seguro do fluxo."""
+    src = PLAYWRIGHT_V2
+    fase14 = src[src.find("def fase_liquidar_e_exportar"):]
+    assert "_filtrar_ocorrencias_por_janela(_v)" in fase14[:9000], (
+        "REGRESSÃO #80-CM: filtro de escopo saiu da Fase 14 (pré-Liquidar)")
+    assert "14.0b" in fase14[:9000]
+    # e NÃO pode ter voltado para o fim da Fase 4
+    fase4 = src[:src.find("def fase_liquidar_e_exportar")]
+    assert "_filtrar_ocorrencias_por_janela(_v)" not in fase4, (
+        "REGRESSÃO #80-CM: filtro voltou para a Fase 4 — os Regerar globais "
+        "das fases seguintes o desfazem (ativo=False → ativo=True)")
+    # o motivo tem de ficar registrado no ponto onde ele NÃO roda mais
+    assert "selecionarTodos" in fase4[fase4.find("#72/#80-CM"):][:900]

@@ -474,6 +474,45 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Escopo deferido aplica-se ANTES do Liquidar, nunca na Fase 4 (#80-CM)
+
+> **O filtro de escopo deferido (`_filtrar_ocorrencias_por_janela`) roda em
+> `fase_liquidar_e_exportar`, seção 14.0b — imediatamente antes do Liquidar.
+> NÃO mover de volta para o fim da Fase 4.**
+>
+> **Diagnóstico por sondas** (`_sonda_escopo`, 0000772-26, 04/09/2026):
+>
+> | sonda | estado da ocorrência 20/12/2022 (não deferida) |
+> |---|---|
+> | A — fim da Fase 4, pós-filtro | `ativo=False val='0,00'` |
+> | B — início da Fase 14 | `ativo=True val=''` |
+> | C — pós-liquidação | `ativo=True val='1.084,11'` |
+>
+> O save do filtro **PERSISTE** (A confirma, em navegação nova). Quem o desfaz
+> são os **Regerar Ocorrências GLOBAIS** das fases intermediárias — correções
+> pós-Recentes ("Regerar pós-ocorrências SALDO DE SALÁRIO", "Regerar Ocorrências
+> proativo") e "Regerar Férias" da Fase 7. Desde o **#76c** o Regerar marca
+> `selecionarTodos` (sem isso é no-op silencioso), então regerar por causa de
+> QUALQUER verba **recria as ocorrências do 13º** e reativa as competências não
+> deferidas. Entre a sonda B e o Liquidar não há Regerar algum — é o único
+> ponto seguro do fluxo.
+>
+> ⚠️ **A ocorrência é INATIVADA, não zerada.** Em verba CALCULADO (13º/férias
+> com `quantidade=AVOS`) a coluna de valor da grade é computada na liquidação,
+> não digitada — por isso o PJC do calculista mostra `devido=null` com os avos
+> preservados. A confirmação tem de ler o checkbox `:ativo` (#80-CK): verificar
+> "valor != 0" dava sucesso trivial (o campo já vinha vazio) e o log declarava
+> "✓ ZERADAS e confirmadas no bean" sem nada ter mudado.
+>
+> **Sondas de diagnóstico** (`_sonda_escopo`, desligadas por padrão): ligar por
+> `DIAG_ESCOPO=1` ou criando `data/calculations/.diag_escopo` (o arquivo dispensa
+> reiniciar o container). Cada sonda navega a mais — em cálculo pesado pode
+> provocar a contenção do #80-H, por isso não fica ligada.
+>
+> Protegido por `test_inv127` e `test_inv128`.
+
+---
+
 ## Regra obrigatória — Gate confere o PERÍODO de cada verba (prévia × PJC) (#80-CI)
 
 > **Período da verba divergente entre a prévia e o PJC = save de parâmetros que
