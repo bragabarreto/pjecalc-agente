@@ -13450,10 +13450,15 @@ class PlaywrightAutomatorV2:
                             continue
                         ocs.append({"data": dt, "valor": _num(dd.get("devido", "0")),
                                     "avos": dd.get("quantidade", "")})
+            _pi_el, _pf_el = el.find("periodoInicial"), el.find("periodoFinal")
+            _pi = _ms(_pi_el.text) if _pi_el is not None and _pi_el.text else None
+            _pf = _ms(_pf_el.text) if _pf_el is not None and _pf_el.text else None
             pjc_verbas.append({
                 "desc": self._norm_desc_fidelidade(de.text),
                 "carac": (car.text or "") if car is not None else "",
                 "ocs": ocs,
+                "pi": _pi.strftime("%d/%m/%Y") if _pi else None,
+                "pf": _pf.strftime("%d/%m/%Y") if _pf else None,
             })
 
         def _casar(nome: str):
@@ -13533,6 +13538,50 @@ class PlaywrightAutomatorV2:
                         ],
                     })
 
+        # ── PERÍODO DE CADA VERBA: prévia vs PJC (#80-CI) ──
+        # Regra arquitetural do projeto: a automação APENAS APLICA o JSON que
+        # passou pela prévia. Logo, período divergente = save de parâmetros que
+        # não aconteceu — a verba ficou com o default do Expresso (período do
+        # contrato inteiro), o que infla verbas rescisórias (SALDO/AVISO/MULTA).
+        #
+        # Medido no corpus (03/09/2026): 20 dos 90 PJCs comparáveis têm ao menos
+        # uma verba com período diferente do da prévia, e é sempre a verba que
+        # ficou SEM o `comentarios` — ou seja, a que perdeu o save. No extremo
+        # (0001919-24, 16/05/2026) NENHUMA das 8 verbas recebeu parâmetros: o
+        # 13º deferido só para 2025 saiu com o contrato inteiro (17/12/2021→
+        # 20/10/2025) e liquidou 4 anos de avos. Nada acusava isso.
+        #
+        # Comparação por CONJUNTO de períodos por nome: o PJC repete a mesma
+        # verba aninhada dentro da baseVerba dos reflexos (XStream) e a prévia
+        # pode ter homônimas (ex.: 4× FÉRIAS + 1/3, uma por período aquisitivo).
+        _per_pjc: dict[str, set] = {}
+        for pv_ in pjc_verbas:
+            if pv_["pi"]:
+                _per_pjc.setdefault(pv_["desc"], set()).add((pv_["pi"], pv_["pf"]))
+        for v in (self.previa.verbas_principais or []):
+            p = v.parametros
+            ei = getattr(p, "periodo_inicio", None)
+            ef = getattr(p, "periodo_fim", None)
+            if not ei:
+                continue
+            alvo = self._norm_desc_fidelidade(
+                v.nome_pjecalc or getattr(v, "expresso_alvo", "") or "")
+            if not alvo:
+                continue
+            achados = _per_pjc.get(alvo)
+            if not achados:
+                # verba ausente do PJC → é o relatório de fidelidade #80-AK que
+                # reporta; não duplicar aqui.
+                continue
+            if (ei, ef) in achados:
+                continue
+            res["ok"] = False
+            res.setdefault("periodos_divergentes", []).append({
+                "verba": v.nome_pjecalc,
+                "previa": f"{ei}→{ef}",
+                "pjc": "; ".join(f"{a}→{b}" for a, b in sorted(achados)),
+            })
+
         # ── pendências acumuladas na fase de verbas (escopo não aplicado) ──
         pend = list(getattr(self, "_pendencias_escopo", []) or [])
         if pend:
@@ -13543,7 +13592,7 @@ class PlaywrightAutomatorV2:
         if res["ok"]:
             self.log("  ✓ #80-CG escopo deferido conferido no PJC (13º/férias) — sem excesso")
         else:
-            self.log("  ⚠️ #80-CG ESCOPO DEFERIDO — o PJC contém competências NÃO condenadas:")
+            self.log("  ⚠️ #80-CG ESCOPO/PERÍODO — o PJC diverge do que a sentença deferiu:")
             for e in res["excessos_13"]:
                 self.log(f"      • {e['verba']} (deferido {e['janela']}): "
                          f"{len(e['ocorrencias'])} ocorrência(s) a maior = R$ {e['total_excesso']:,.2f}")
@@ -13554,9 +13603,17 @@ class PlaywrightAutomatorV2:
                          f"para {f['periodos_aquisitivos_deferidos']} período(s) aquisitivo(s) deferido(s)")
                 for o in f["ocorrencias"]:
                     self.log(f"          – {o['data']} | {o['avos']} avos | R$ {o['valor']:,.2f}")
+            for pv_ in res.get("periodos_divergentes", []):
+                self.log(f"      • {pv_['verba']}: período da prévia {pv_['previa']} "
+                         f"NÃO chegou ao PJC (lá está {pv_['pjc']}) — save de "
+                         f"parâmetros dessa verba não persistiu")
             for pd in res.get("pendencias_aplicacao", []):
                 self.log(f"      • escopo NÃO aplicado em {pd['verba']} ({pd['janela']}): {pd['motivo']}")
-            self.log("      → revise essas ocorrências no PJE-Calc antes de incorporar o cálculo")
+            if res.get("periodos_divergentes"):
+                self.log("      → o período de uma verba só muda por save de parâmetros: "
+                         "corrija-o no PJE-Calc e Regerar Ocorrências (Sobrescrever) "
+                         "para a verba voltar a apurar dentro do deferido")
+            self.log("      → revise os itens acima no PJE-Calc antes de incorporar o cálculo")
         return res
 
     @staticmethod

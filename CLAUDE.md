@@ -474,6 +474,47 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Gate confere o PERÍODO de cada verba (prévia × PJC) (#80-CI)
+
+> **Período da verba divergente entre a prévia e o PJC = save de parâmetros que
+> NÃO persistiu.** Pela regra arquitetural do projeto a automação apenas APLICA
+> o JSON que passou pela prévia; logo, divergência é sempre defeito.
+>
+> **Sintoma:** a verba fica com o DEFAULT do Expresso — período do contrato
+> inteiro. Nas rescisórias (SALDO/AVISO/MULTA 477) isso alarga a base; no 13º
+> faz apurar avos de anos não condenados.
+>
+> **Medição (03/09/2026, 89 PJCs comparáveis):** 20 têm ao menos uma verba com
+> período diferente do da prévia — e é **sempre a verba que ficou sem o
+> `comentarios`**, isto é, a que perdeu o save de parâmetros (`comentarios` é o
+> indicador válido de que a fase rodou; `verbaAlterada` NÃO serve — vem `false`
+> mesmo nos cálculos corretos).
+>
+> **Caso extremo — 0001919-24 (16/05/2026):** NENHUMA das 8 verbas recebeu
+> parâmetros. O 13º deferido apenas para 2025 (`01/01/2025→28/11/2025`) saiu com
+> `17/12/2021→20/10/2025` e liquidou 4 anos de avos (R$ 8.127,67 a maior).
+> Não foi o #72 (que só entrou em 17/06/2026) nem a janela (`None`): o período
+> estreito simplesmente nunca chegou ao PJE-Calc. Essa modalidade de falha TOTAL
+> da fase aparece só em 16/05 e 01/06/2026, antes do endurecimento (#71 retry ×3,
+> recoveries #80-W/Z/AA, gate #80-H e #80-BY). As falhas PARCIAIS (uma verba
+> perde o save) seguem ocorrendo.
+>
+> **Implementado em `_verificar_escopo_deferido_pjc`** (mesmo gate READ-ONLY do
+> #80-CG), chave `periodos_divergentes`, exibido no painel da página do processo.
+>
+> ⚠️ **Comparação por CONJUNTO de períodos por nome de verba** — o XStream do PJC
+> repete a mesma verba ANINHADA dentro da `baseVerba` dos reflexos, e a prévia
+> pode ter homônimas (0001919-24 tem 4× FÉRIAS + 1/3, uma por período
+> aquisitivo). Comparar par a par daria falso positivo. Verba AUSENTE do PJC é
+> assunto do #80-AK — não duplicar aqui.
+>
+> Validado no corpus: acusa exatamente os 20 casos conhecidos (inclusive as 7
+> verbas do 0001919-24) e fica silencioso nos 69 restantes.
+>
+> Protegido por `test_inv125`.
+
+---
+
 ## Regra obrigatória — Súmula 340 do TST: multiplicador é SÓ o adicional (#80-CH)
 
 > **Horas extras sobre PARCELA VARIÁVEL** (comissionista, produtividade, peça,

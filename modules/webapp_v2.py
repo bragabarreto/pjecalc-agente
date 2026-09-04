@@ -388,6 +388,13 @@ async def instrucoes_v2(sessao_id: str, request: Request, rerun: bool = False):
                         f"para {_f['periodos_aquisitivos_deferidos']} período(s) "
                         f"aquisitivo(s) deferido(s). Confira quais correspondem "
                         f"à condenação e zere as demais:</p><ul>{_ocs}</ul>")
+                for _pv2 in _esc.get("periodos_divergentes", []):
+                    _eb.append(
+                        f"<p><b>{_pv2['verba']}</b> — período da prévia "
+                        f"<b>{_pv2['previa']}</b> não chegou ao PJC (lá está "
+                        f"{_pv2['pjc']}). O save de parâmetros dessa verba não "
+                        f"persistiu: corrija o período no PJE-Calc e Regerar "
+                        f"Ocorrências (Sobrescrever).</p>")
                 for _pd in _esc.get("pendencias_aplicacao", []):
                     _eb.append(
                         f"<p><b>{_pd['verba']}</b> — a automação não conseguiu "
@@ -396,10 +403,10 @@ async def instrucoes_v2(sessao_id: str, request: Request, rerun: bool = False):
                 _esc_html = (
                     '<div style="background:#f8d7da;color:#842029;padding:10px 14px;'
                     'border-radius:6px;margin:0.8rem 0;font-size:0.88rem;">'
-                    "🛑 <b>Competências fora da condenação</b> — o PJC liquidou "
-                    "13º/férias além do que a sentença deferiu. A liquidação "
-                    "fecha sem erro (as ocorrências são válidas), mas o valor "
-                    "excede o título executivo:" + "".join(_eb) +
+                    "🛑 <b>PJC diverge do deferido</b> — competências de 13º/férias "
+                    "além da condenação e/ou verba cujo período da prévia não "
+                    "chegou ao PJC. A liquidação fecha sem erro, mas o cálculo "
+                    "não obedece ao título executivo:" + "".join(_eb) +
                     '<span style="color:#6c757d;">Após zerar, Regerar '
                     "Ocorrências (Manter) e re-Liquidar.</span></div>"
                 )

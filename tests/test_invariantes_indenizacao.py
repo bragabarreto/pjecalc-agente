@@ -3947,6 +3947,41 @@ def test_inv124_painel_escopo_nao_e_encoberto_por_fidelidade_ok():
         "REGRESSÃO #80-CG: '✅ Fidelidade 100%' voltou a ignorar o escopo deferido")
     assert "_fid_html += _esc_html" in src, (
         "REGRESSÃO #80-CG: bloco do escopo deferido não é anexado ao painel")
-    assert "Competências fora da condenação" in src
+    assert "PJC diverge do deferido" in src
     assert "excessos_13" in src and "ferias_suspeitas" in src
     assert "pendencias_aplicacao" in src
+
+
+def test_inv125_gate_confere_periodo_da_verba_previa_vs_pjc():
+    """#80-CI: o gate tem de conferir o PERÍODO de cada verba (prévia × PJC).
+
+    Regra arquitetural do projeto: a automação APENAS APLICA o JSON que passou
+    pela prévia. Período divergente = save de parâmetros que não persistiu — a
+    verba ficou com o default do Expresso (contrato inteiro), o que infla as
+    rescisórias (SALDO/AVISO/MULTA 477) e, no 13º, faz apurar avos de anos não
+    condenados.
+
+    Medido no corpus (03/09/2026): 20 dos 89 PJCs comparáveis têm ao menos uma
+    verba com período diferente do da prévia — sempre a verba que ficou sem o
+    `comentarios`, isto é, a que perdeu o save. No extremo (0001919-24) NENHUMA
+    das 8 verbas recebeu parâmetros e o 13º deferido só para 2025 liquidou de
+    2021 a 2025. Nada no sistema acusava isso: o #80-AK confere PRESENÇA da
+    verba, não seus parâmetros."""
+    src = PLAYWRIGHT_V2
+    corpo = src[src.find("def _verificar_escopo_deferido_pjc"):
+                src.find("def _norm_desc_fidelidade")]
+    assert "periodos_divergentes" in corpo, (
+        "REGRESSÃO #80-CI: checagem de período prévia↔PJC removida do gate")
+    # o índice do PJC precisa carregar o período de cada verba
+    assert '"pi": _pi.strftime' in corpo and '"pf": _pf.strftime' in corpo
+    # comparação por CONJUNTO de períodos (XStream repete a verba aninhada nos
+    # reflexos; a prévia pode ter homônimas, ex.: 4× FÉRIAS + 1/3)
+    assert "_per_pjc" in corpo and "achados" in corpo, (
+        "REGRESSÃO #80-CI: comparação por conjunto de períodos removida — "
+        "voltaria a dar falso positivo com verba aninhada/homônima")
+    # verba AUSENTE do PJC é assunto do #80-AK; não duplicar aqui
+    assert "não duplicar aqui" in corpo
+    # painel da página do processo mostra a divergência
+    web = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
+    assert "periodos_divergentes" in web, (
+        "REGRESSÃO #80-CI: divergência de período sumiu do painel do processo")
