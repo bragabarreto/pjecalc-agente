@@ -4073,31 +4073,40 @@ def test_inv128_escopo_deferido_aplicado_antes_do_liquidar():
     assert "selecionarTodos" in fase4[fase4.find("#72/#80-CM"):][:900]
 
 
-def test_inv129_save_sem_mensagem_e_verificado_por_reabertura():
-    """#80-CO: ausência de mensagem de sucesso NÃO é prova de save falho — o
-    bot tem de VERIFICAR reabrindo a verba e lendo o período do bean.
+def test_inv129_save_sem_mensagem_verificado_por_releitura_pos_cancelar():
+    """#80-CO: ausência de mensagem de sucesso NÃO prova save falho — o bot
+    relê o período no bean. E a releitura tem de vir DEPOIS do Cancelar.
 
-    Diagnóstico #80-CN (0000977-55, 04/09/2026): no save do SALDO DE SALÁRIO os
-    campos permanecem com os valores NOVOS (periodoInicial=01/05/2026) e não há
-    erro de campo algum — o servidor não rejeitou nem re-renderizou. Ainda
-    assim o período não chegava ao PJC, porque o `Cancelar` do caminho de falha
-    descarta a conversa Seam (FlushMode.MANUAL) levando junto o que já estava
-    no bean — mesma classe do #80-O. A mensagem de sucesso é instável nesse
-    form (outras verbas do mesmo cálculo também não a produzem).
+    Diagnóstico (0000977-55, 04/09/2026):
+    - #80-CN: no save "falho" os campos ficam com os valores NOVOS
+      (periodoInicial=01/05/2026) e não há erro de campo — o servidor não
+      rejeitou. Falta só a mensagem, instável nesse form.
+    - O form de Alteração é STICKY: com ele aberto, navegar para
+      li_calculo_verbas NÃO leva à listagem. A 1ª versão da releitura rodava
+      ANTES do Cancelar e media `nLinks: 0, celulas: []` — não media nada.
 
-    Efeito medido antes do fix: 19 processos com a verba rescisória mantendo o
-    período do Expresso (contrato inteiro) — o que o #80-CI denuncia."""
+    Efeito antes do fix: 19 processos com a verba rescisória mantendo o período
+    do Expresso (contrato inteiro), que é o que o #80-CI denuncia."""
     src = PLAYWRIGHT_V2
-    assert "def _reler_periodo_da_verba" in src, (
-        "REGRESSÃO #80-CO: verificação do save por reabertura removida")
-    corpo = src[src.find("def _reler_periodo_da_verba"):
-                src.find("def _configurar_parametros_pos_expresso")]
-    assert "periodoInicialInputDate" in corpo and "linkParametrizar" in corpo
-    assert "_aguardar_servidor_ocioso" in corpo, (
-        "REGRESSÃO #80-CO: reabertura sem o gate #80-H volta a arriscar LockTimeout")
+    assert "def _reler_periodo_da_verba" in src and "def _save_persistiu_por_releitura" in src, (
+        "REGRESSÃO #80-CO: verificação do save por releitura removida")
+    h = src[src.find("def _save_persistiu_por_releitura"):
+            src.find("def _reler_periodo_da_verba")]
+    assert "STICKY" in h, (
+        "REGRESSÃO #80-CO: perdeu-se o registro de que a releitura só funciona "
+        "após o Cancelar (form sticky)")
+    rel = src[src.find("def _reler_periodo_da_verba"):
+              src.find("def _configurar_parametros_pos_expresso")]
+    assert "periodoInicialInputDate" in rel and "linkParametrizar" in rel
+    assert "_aguardar_servidor_ocioso" in rel, (
+        "REGRESSÃO #80-CO: releitura sem o gate #80-H volta a arriscar LockTimeout")
+    assert "nLinks" in rel, (
+        "REGRESSÃO #80-CO: releitura sem diagnóstico volta a falhar em silêncio")
+    # a chamada fica DEPOIS do Cancelar e ANTES do raise
     cfg = src[src.find("def _configurar_parametros_pos_expresso"):]
-    assert "_reler_periodo_da_verba(v)" in cfg
-    # o Cancelar (que descarta a conversa Seam) só pode rodar se NÃO confirmado
-    assert "if not _save_confirmado_co:" in cfg, (
-        "REGRESSÃO #80-CO: o Cancelar voltou a rodar mesmo com save confirmado — "
-        "descarta o período recém-gravado")
+    i_cancel = cfg.find("Falha cancelar form")
+    i_chama = cfg.find("_save_persistiu_por_releitura(v)")
+    i_raise = cfg.find("raise ParametrosVerbaAbortadosError", i_cancel)
+    assert 0 < i_cancel < i_chama < i_raise, (
+        "REGRESSÃO #80-CO: releitura saiu de entre o Cancelar e o raise — antes "
+        "do Cancelar ela lê o form, não a listagem, e não mede nada")

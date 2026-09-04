@@ -6087,6 +6087,50 @@ class PlaywrightAutomatorV2:
                     )
         return False
 
+    def _save_persistiu_por_releitura(self, v) -> bool:
+        """#80-CO — o save de parâmetros valeu, mesmo sem mensagem de sucesso?
+
+        Chamar SOMENTE depois do Cancelar: o form de Alteração é STICKY — com
+        ele aberto, `_navegar_menu('li_calculo_verbas')` NÃO leva à listagem.
+        Medido no 0000977-55 (04/09/2026): a releitura feita ANTES do Cancelar
+        via `nLinks: 0, celulas: []` ainda em verba-calculo.jsf, e por isso não
+        media nada.
+
+        Por que vale a pena: o `#80-CN` mostrou que o servidor NÃO rejeita esse
+        save — os campos ficam com os valores novos e não há erro de campo
+        algum. Falta só a mensagem de sucesso, notoriamente instável neste form
+        (outras verbas do mesmo cálculo também não a produzem). Se o período
+        estiver gravado no bean, abortar seria descartar trabalho bom — foi o
+        que manteve 19 processos com a verba rescisória no período do Expresso
+        (contrato inteiro), que é o que o #80-CI denuncia.
+        """
+        alvo = getattr(v.parametros, "periodo_inicio", None)
+        if not alvo:
+            return False
+        try:
+            lido = self._reler_periodo_da_verba(v)
+        except Exception as e:
+            self.log(f"    ⚠ #80-CO releitura pós-Cancelar: {str(e)[:120]}")
+            return False
+        if lido and lido.get("inicio") == alvo:
+            self.log(
+                f"    ✓ #80-CO save de '{v.nome_pjecalc}' CONFIRMADO por releitura "
+                f"pós-Cancelar (período {lido['inicio']}→{lido.get('fim')}) — "
+                f"só a mensagem de sucesso não apareceu"
+            )
+            return True
+        if lido:
+            self.log(
+                f"    ✗ #80-CO '{v.nome_pjecalc}' NÃO persistiu: bean tem "
+                f"{lido.get('inicio')}→{lido.get('fim')}, esperado {alvo}"
+            )
+        else:
+            self.log(
+                f"    ⚠ #80-CO releitura de '{v.nome_pjecalc}' INCONCLUSIVA — "
+                f"abortando pelo caminho normal"
+            )
+        return False
+
     def _reler_periodo_da_verba(self, v) -> dict | None:
         """#80-CO — reabre o form de Parâmetros da verba e lê o período gravado.
 
@@ -7202,45 +7246,6 @@ class PlaywrightAutomatorV2:
                 self.log(f"    🔎 #80-N captura de mensagens falhou: {_em}")
 
             _save_confirmado_co = False
-            # ── #80-CO: SEM mensagem ≠ SEM save. VERIFICAR por reabertura ──
-            # Diagnóstico #80-CN (0000977-55, 04/09/2026): no save falho do
-            # SALDO DE SALÁRIO os campos permanecem com os valores NOVOS
-            # (periodoInicial=01/05/2026) e não há erro de campo algum — ou
-            # seja, o servidor não rejeitou nem re-renderizou. Ainda assim o
-            # período não chega ao PJC: o `Cancelar` logo abaixo descarta a
-            # conversa Seam (FlushMode.MANUAL), levando junto o que já estava
-            # no bean. É a mesma classe do #80-O (Cancel descartando base
-            # histórico), aqui disparada pela simples AUSÊNCIA de mensagem.
-            #
-            # A mensagem de sucesso do PJE-Calc é notoriamente instável neste
-            # form (outras verbas do mesmo cálculo também não a produzem). Em
-            # vez de confiar nela, REABRIR a verba e ler o período: é o ground
-            # truth do bean, o mesmo princípio das demais verificações do bot.
-            try:
-                _pi_alvo = getattr(v.parametros, "periodo_inicio", None)
-                if _pi_alvo:
-                    _lido = self._reler_periodo_da_verba(v)
-                    if _lido and _lido.get("inicio") == _pi_alvo:
-                        self.log(
-                            f"    ✓ #80-CO save de '{v.nome_pjecalc}' CONFIRMADO por "
-                            f"reabertura (período {_lido['inicio']}→{_lido.get('fim')}) — "
-                            f"a mensagem de sucesso é que não apareceu"
-                        )
-                        _save_confirmado_co = True
-                    elif _lido:
-                        self.log(
-                            f"    ✗ #80-CO save de '{v.nome_pjecalc}' NÃO persistiu: "
-                            f"período no bean é {_lido.get('inicio')}→{_lido.get('fim')}, "
-                            f"esperado {_pi_alvo}"
-                        )
-                    else:
-                        # NUNCA silencioso: releitura inconclusiva tem de aparecer.
-                        self.log(
-                            f"    ⚠ #80-CO releitura de '{v.nome_pjecalc}' INCONCLUSIVA "
-                            f"(não reabriu o form) — seguindo pelo caminho de falha"
-                        )
-            except Exception as _eco:
-                self.log(f"    ⚠ #80-CO verificação por reabertura: {str(_eco)[:120]}")
 
             if not _save_confirmado_co:
                 # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
@@ -7291,7 +7296,12 @@ class PlaywrightAutomatorV2:
                 # "Falta selecionar Histórico Salarial" (4 verbas). Mesma classe
                 # do #80-BY: abortar ALTO p/ o retry ×3 re-executar em conversa
                 # fresca (o Cancelar acima já re-ancorou a listagem).
-                raise ParametrosVerbaAbortadosError(
+                # #80-CO: o form de Alteração é STICKY — só o Cancelar acima
+                # deixa a listagem acessível, então a leitura do bean é AQUI.
+                if self._save_persistiu_por_releitura(v):
+                    _save_confirmado_co = True
+                if not _save_confirmado_co:
+                    raise ParametrosVerbaAbortadosError(
                     f"save de parâmetros de '{v.nome_pjecalc}' sem sucesso (ver #80-N acima)"
                 )
 
