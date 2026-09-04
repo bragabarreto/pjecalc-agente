@@ -7090,6 +7090,40 @@ class PlaywrightAutomatorV2:
                     self.log(f"    🔎 #80-N mensagens JSF no save falho de '{v.nome_pjecalc}': {_msgs}")
                 else:
                     self.log(f"    🔎 #80-N nenhuma mensagem JSF visível (save pode ter sido lento, não falho)")
+                # #80-CN: quando NÃO há mensagem visível, o erro costuma estar
+                # num rich:message de CAMPO que não entrou no re-render a4j
+                # (mesma classe do #80-O). Capturar (a) todo elemento cujo id
+                # termina em 'Erro' com texto, mesmo oculto; (b) o valor que o
+                # servidor devolveu nos campos de período — se voltou ao valor
+                # antigo, o save foi REJEITADO e não apenas lento.
+                try:
+                    _det = self._page.evaluate(
+                        """() => {
+                            const erros = [];
+                            for (const el of document.querySelectorAll('[id$=\\\\:Erro], [id*=Erro]')) {
+                                const t = (el.textContent||'').replace(/\\s+/g,' ').trim();
+                                if (t && t.length > 2) erros.push(el.id + ' => ' + t.slice(0, 120));
+                            }
+                            const campos = {};
+                            for (const suf of ['periodoInicialInputDate','periodoFinalInputDate',
+                                               'descricao','valorInformadoDoDevido']) {
+                                const el = document.querySelector('[id$=":' + suf + '"]');
+                                if (el) campos[suf] = (el.value || '').slice(0, 40);
+                            }
+                            const form = document.querySelector('form');
+                            const txt = form ? (form.innerText||'') : '';
+                            const alerta = (txt.match(/[^.\\n]*(obrigat[óo]ri|inv[áa]lid|deve ser|n[ãa]o pode|incompat)[^.\\n]*/gi)||[])
+                                .map(x => x.replace(/\\s+/g,' ').trim()).slice(0, 6);
+                            return {erros: erros.slice(0, 10), campos: campos, alerta: alerta};
+                        }"""
+                    )
+                    self.log(f"    🔎 #80-CN campos pós-save: {_det.get('campos')}")
+                    if _det.get("erros"):
+                        self.log(f"    🔎 #80-CN erros de CAMPO (inclusive ocultos): {_det['erros']}")
+                    if _det.get("alerta"):
+                        self.log(f"    🔎 #80-CN texto de validação no form: {_det['alerta']}")
+                except Exception as _ed2:
+                    self.log(f"    🔎 #80-CN captura detalhada falhou: {str(_ed2)[:120]}")
             except Exception as _em:
                 self.log(f"    🔎 #80-N captura de mensagens falhou: {_em}")
             # FIX B (17/05/2026): RECUPERAÇÃO pós-erro de save
