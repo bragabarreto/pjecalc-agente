@@ -6119,6 +6119,28 @@ class PlaywrightAutomatorV2:
             candidatos,
         )
         if not alvo:
+            # #80-CO: após um save falho o bot ainda está NO FORM e a navegação
+            # para a listagem pode não sair dele. Diagnosticar, não devolver
+            # None mudo.
+            try:
+                _diag = self._page.evaluate(
+                    """() => ({
+                        url: location.pathname,
+                        nLinks: document.querySelectorAll('a.linkParametrizar').length,
+                        celulas: [...document.querySelectorAll('a.linkParametrizar')]
+                            .slice(0, 8)
+                            .map(a => {
+                                const tr = a.closest('tr');
+                                if (!tr) return '';
+                                return [...tr.querySelectorAll('td')]
+                                    .map(td => (td.textContent||'').replace(/Exibir|Ocultar/gi,'').trim())
+                                    .filter(t => t).slice(0, 2).join('|');
+                            })
+                    })"""
+                )
+                self.log(f"      ℹ #80-CO releitura não achou '{v.nome_pjecalc}': {_diag}")
+            except Exception:
+                pass
             return None
         try:
             self._page.locator(f"a#{alvo.replace(':', chr(92) + ':')}").first.click(force=True)
@@ -7210,6 +7232,12 @@ class PlaywrightAutomatorV2:
                             f"    ✗ #80-CO save de '{v.nome_pjecalc}' NÃO persistiu: "
                             f"período no bean é {_lido.get('inicio')}→{_lido.get('fim')}, "
                             f"esperado {_pi_alvo}"
+                        )
+                    else:
+                        # NUNCA silencioso: releitura inconclusiva tem de aparecer.
+                        self.log(
+                            f"    ⚠ #80-CO releitura de '{v.nome_pjecalc}' INCONCLUSIVA "
+                            f"(não reabriu o form) — seguindo pelo caminho de falha"
                         )
             except Exception as _eco:
                 self.log(f"    ⚠ #80-CO verificação por reabertura: {str(_eco)[:120]}")
