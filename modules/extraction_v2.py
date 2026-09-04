@@ -969,7 +969,7 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **13º SALÁRIO** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1, quantidade=AVOS |
 | **FÉRIAS + 1/3** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1.33, quantidade=AVOS |
 | **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, **divisor=OUTRO_VALOR=30 (SEMPRE — base diária)**, multiplicador=1, quantidade=INFORMADA=<dias de aviso: 30 + 3/ano, Lei 12.506/2011>. NUNCA divisor=1. |
-| **HORAS EXTRAS 50%/100%** | CALCULADO | base=HISTORICO_SALARIAL, divisor=CARGA_HORARIA (ou OUTRO_VALOR=220), multiplicador=1.5/2.0, quantidade=INFORMADA mensal OU IMPORTADA_DO_CARTAO |
+| **HORAS EXTRAS 50%/100%** | CALCULADO | base=HISTORICO_SALARIAL, divisor=CARGA_HORARIA (ou OUTRO_VALOR=220), multiplicador=1.5/2.0, quantidade=INFORMADA mensal OU IMPORTADA_DO_CARTAO. ⚠️ **Se a base for PARCELA VARIÁVEL (comissões/produtividade/peça) → Súmula 340 TST: multiplicador = SÓ O ADICIONAL** (0.5 / 0.55 / 0.6 …), ver §4.4.sumula340. |
 | **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, **quantidade=IMPORTADA_DO_CARTAO** (horas noturnas), **divisor=OUTRO_VALOR = carga horária mensal FIXA** (ex.: 220, ou a jornada mensal do cartão). ⚠️ NUNCA `divisor=IMPORTADA_DO_CARTAO` — o divisor é a carga horária (base do valor-hora), não uma coluna do cartão; importá-lo gera "divisor zero" e trava o save. |
 | **ADICIONAL INSALUBRIDADE** | CALCULADO | base=SALARIO_MINIMO (ou histórico se sentença disser), multiplicador=0.10/0.20/0.40, quantidade=INFORMADA=1 |
 | **MULTA 477 CLT** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=INFORMADA=1, divisor=OUTRO_VALOR=1, multiplicador=1 |
@@ -985,6 +985,48 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **INDENIZAÇÃO POR DANO MORAL/MATERIAL** | **INFORMADO** | valor único da condenação |
 | **MULTA CONVENCIONAL** | **INFORMADO** | valor único conforme CCT |
 | **INDENIZAÇÃO ADICIONAL (Estabilidade)** | CALCULADO | base=MAIOR_REMUNERACAO, divisor=OUTRO_VALOR=1, multiplicador=1, quantidade=INFORMADA (meses de estabilidade); proporcionalizar=SIM |
+
+### §4.4.sumula340 — HORAS EXTRAS sobre PARCELA VARIÁVEL (Súmula 340 do TST)
+
+⚠️ **INVARIANTE PERMANENTE — NÃO REVERTER**
+
+Quando as horas extras incidem sobre **remuneração variável** — comissionista,
+salário por produtividade, por peça, gorjeta, tarefa —, a Súmula 340 do TST
+determina que o empregado já recebeu, embutido na parcela variável, o **valor da
+hora normal** trabalhada em sobrejornada. A condenação, portanto, é **APENAS o
+ADICIONAL** de horas extras.
+
+**Logo, o `multiplicador` é SÓ o adicional — NUNCA a hora cheia:**
+
+| adicional deferido | multiplicador CORRETO | ❌ ERRADO (hora cheia) |
+|---|---|---|
+| 50% | **0.5** | ~~1.5~~ |
+| 55% | **0.55** | ~~1.55~~ |
+| 60% | **0.6** | ~~1.6~~ |
+| 70% | **0.7** | ~~1.7~~ |
+| 100% | **1.0** | ~~2.0~~ |
+
+Regra mecânica: `multiplicador = adicional / 100` (e **não** `1 + adicional/100`,
+que é a fórmula da hora extra sobre salário FIXO/mensalista).
+
+**Como reconhecer o caso na sentença:** menção expressa à Súmula 340 do TST ou à
+OJ 397 da SDI-1; ou base de cálculo composta por comissões, produtividade,
+percentual sobre vendas, peça/tarefa; ou o dispositivo dizer "apenas o adicional",
+"somente o adicional de horas extras", "acrescido do adicional".
+
+**Bug histórico (0001002-68.2026.5.07.0003, 09/08/2026):** a verba
+`HORAS EXTRAS 55% - COMISSIONISTA - SUM 340 TST` foi emitida com
+`multiplicador: 1.55`. O comentário da própria extração dizia "adicional de 55%
+sobre comissões/produtividade" — a súmula foi compreendida e o multiplicador saiu
+cheio assim mesmo. O PJC exportado liquidou **R$ 14.302,70** em 23 ocorrências
+onde o correto eram **~R$ 5.075,15** — **R$ 9.227 a maior** (2,8× o devido).
+
+⚠️ Quando o empregado é **misto** (parte fixa + parte variável), a sentença
+costuma deferir HE cheia (1.5) sobre a parte FIXA e HE só-adicional (0.5) sobre a
+parte VARIÁVEL: emita **duas verbas distintas**, cada uma com sua base e seu
+multiplicador. Nunca aplique um multiplicador médio.
+
+
 
 ## 4.4.quater SALDO DE SALÁRIO — INFORMADO quando há valor fixado/dedução/salário por fora — INVARIANTE PERMANENTE — NÃO REVERTER
 

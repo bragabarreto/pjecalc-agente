@@ -357,13 +357,61 @@ async def instrucoes_v2(sessao_id: str, request: Request, rerun: bool = False):
         _fid_file = _STORE_DIR / f"{sessao_id}.fidelidade.json"
         if _fid_file.exists():
             _fid = _json_fid.loads(_fid_file.read_text(encoding="utf-8"))
-            if _fid.get("ok"):
+            # #80-CG: bloco do ESCOPO DEFERIDO (13º/férias proporcionais).
+            # Renderizado À PARTE porque um PJC pode ter fidelidade 100% (todas
+            # as verbas presentes) e AINDA ASSIM pagar competências não
+            # condenadas — foi exatamente o que passou despercebido em 13 de 13
+            # cálculos com janela. Sem isto o painel diria "✅ 100%" por cima do
+            # excesso.
+            _esc = _fid.get("escopo_deferido") or {}
+            _esc_html = ""
+            if _esc and not _esc.get("ok"):
+                _eb = []
+                for _e in _esc.get("excessos_13", []):
+                    _ocs = "".join(
+                        f"<li>{_o['data']} — {_o['avos']} avos — "
+                        f"R$ {_o['valor']:,.2f}</li>" for _o in _e["ocorrencias"])
+                    _eb.append(
+                        f"<p><b>{_e['verba']}</b> — deferido apenas "
+                        f"{_e['janela']}; o PJC traz {len(_e['ocorrencias'])} "
+                        f"competência(s) a maior "
+                        f"(<b>R$ {_e['total_excesso']:,.2f}</b>). Zere o valor "
+                        f"devido destas ocorrências no PJE-Calc:</p>"
+                        f"<ul>{_ocs}</ul>")
+                for _f in _esc.get("ferias_suspeitas", []):
+                    _ocs = "".join(
+                        f"<li>{_o['data']} — {_o['avos']} avos — "
+                        f"R$ {_o['valor']:,.2f}</li>" for _o in _f["ocorrencias"])
+                    _eb.append(
+                        f"<p><b>{_f['verba']}</b> — "
+                        f"{_f['ocorrencias_valoradas']} ocorrência(s) valoradas "
+                        f"para {_f['periodos_aquisitivos_deferidos']} período(s) "
+                        f"aquisitivo(s) deferido(s). Confira quais correspondem "
+                        f"à condenação e zere as demais:</p><ul>{_ocs}</ul>")
+                for _pd in _esc.get("pendencias_aplicacao", []):
+                    _eb.append(
+                        f"<p><b>{_pd['verba']}</b> — a automação não conseguiu "
+                        f"aplicar o escopo deferido ({_pd['janela']}): "
+                        f"{_pd['motivo']}</p>")
+                _esc_html = (
+                    '<div style="background:#f8d7da;color:#842029;padding:10px 14px;'
+                    'border-radius:6px;margin:0.8rem 0;font-size:0.88rem;">'
+                    "🛑 <b>Competências fora da condenação</b> — o PJC liquidou "
+                    "13º/férias além do que a sentença deferiu. A liquidação "
+                    "fecha sem erro (as ocorrências são válidas), mas o valor "
+                    "excede o título executivo:" + "".join(_eb) +
+                    '<span style="color:#6c757d;">Após zerar, Regerar '
+                    "Ocorrências (Manter) e re-Liquidar.</span></div>"
+                )
+            if _fid.get("ok") and (not _esc or _esc.get("ok")):
                 _fid_html = (
                     '<div style="background:#d4edda;color:#155724;padding:10px 14px;'
                     'border-radius:6px;margin:0.8rem 0;font-size:0.9rem;">'
                     "✅ <b>Fidelidade 100%</b> — todas as verbas e reflexos da prévia "
-                    "estão no PJC, sem duplicados nem extras."
-                    f'<span style="color:#6c757d;"> ({_fid.get("quando", "")})</span></div>'
+                    "estão no PJC, sem duplicados nem extras"
+                    + (" e sem competências fora da condenação (13º/férias)."
+                       if _esc else ".")
+                    + f'<span style="color:#6c757d;"> ({_fid.get("quando", "")})</span></div>'
                 )
             else:
                 def _li(itens):
@@ -398,7 +446,9 @@ async def instrucoes_v2(sessao_id: str, request: Request, rerun: bool = False):
                     + "".join(_blocos)
                     + f'<span style="color:#6c757d;">Aferido em {_fid.get("quando", "")}. '
                     "Após corrigir, Regerar Ocorrências e re-Liquidar.</span></div>"
-                )
+                ) if _blocos else ""
+            # #80-CG: o bloco do escopo deferido vale nos DOIS ramos.
+            _fid_html += _esc_html
     except Exception:
         _fid_html = ""
     _rerun_qs = "?rerun=1" if rerun else ""

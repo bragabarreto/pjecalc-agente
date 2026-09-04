@@ -467,6 +467,113 @@ def _periodo_contem_dezembro(pi_str: str, pf_str: str) -> bool:
     return False
 
 
+_SUM340_SINAIS = (
+    "SUMULA 340", "SÚMULA 340", "SUM 340", "SUM. 340", "S. 340",
+    "OJ 397", "OJ-397", "ORIENTACAO JURISPRUDENCIAL 397",
+    "COMISSIONIST", "COMISSAO", "COMISSÃO", "COMISSOES", "COMISSÕES",
+    "PRODUTIVIDADE", "PARCELA VARIAVEL", "PARCELA VARIÁVEL",
+    "SALARIO VARIAVEL", "SALÁRIO VARIÁVEL", "REMUNERACAO VARIAVEL",
+    "REMUNERAÇÃO VARIÁVEL", "POR PECA", "POR PEÇA", "GORJETA", "TAREFA",
+    "APENAS O ADICIONAL", "SOMENTE O ADICIONAL", "SO O ADICIONAL",
+)
+
+
+def _norm_sumula_340_multiplicador(data: dict[str, Any]) -> None:
+    """Súmula 340 do TST — HE sobre parcela variável = SÓ O ADICIONAL (#80-CH).
+
+    Regra do usuário (03/09/2026): quando a hora extra incide sobre remuneração
+    variável (comissionista, produtividade, peça, gorjeta), o empregado já
+    recebeu a hora normal embutida na parcela variável; a condenação é apenas o
+    ADICIONAL. Logo `multiplicador = adicional/100` — 0.5 (50%), 0.55 (55%),
+    0.6 (60%) — e NUNCA 1.5 / 1.55 / 1.6, que é a hora cheia do mensalista.
+
+    Bug que originou a regra (0001002-68, 09/08/2026): a verba
+    'HORAS EXTRAS 55% - COMISSIONISTA - SUM 340 TST' saiu com multiplicador
+    1.55 no PJC — R$ 14.302,70 liquidados contra ~R$ 5.075,15 devidos
+    (R$ 9,2 mil a maior). Antes deste normalizer a expressão "Súmula 340" não
+    existia em NENHUMA camada do sistema: das 2 ocorrências históricas, uma saiu
+    0.5 (certa) e outra 1.55 (errada) — o acerto dependia do acaso da leitura.
+
+    Coage apenas multiplicador > 1.0 (mult == 1.0 já é "só adicional de 100%").
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        fc = p.get("formula_calculado")
+        if not isinstance(fc, dict):
+            continue
+        mult = fc.get("multiplicador")
+        try:
+            mult = float(mult)
+        except (TypeError, ValueError):
+            continue
+        if mult <= 1.0:
+            continue
+        nome = " ".join(str(v.get(k) or "") for k in
+                        ("nome_pjecalc", "nome_sentenca", "expresso_alvo"))
+        if not any(t in nome.upper() for t in ("HORA", "EXTRA")):
+            continue
+        # sinal de parcela variável: no nome, no comentário ou na base de cálculo
+        base = fc.get("base_calculo")
+        base_txt = ""
+        if isinstance(base, dict):
+            base_txt = " ".join(
+                str(base.get(k) or "") for k in
+                ("historico_nome", "salario_categoria_nome", "tipo")
+            )
+            for it in (base.get("bases_compostas") or []):
+                if isinstance(it, dict):
+                    base_txt += " " + str(it.get("verba") or "")
+        alvo = (nome + " " + str(p.get("comentarios") or "") + " " + base_txt).upper()
+        if not any(sig in alvo for sig in _SUM340_SINAIS):
+            continue
+        novo = round(mult - 1.0, 4)
+        if novo <= 0:
+            continue
+
+        # ⚠ BASE MISTA (fixo + variável) — NUNCA coagir (#80-CH).
+        # Empregado com salário base + comissões recebe HE CHEIA (1.5) sobre a
+        # parte FIXA e HE só-adicional (0.5) sobre a VARIÁVEL. Cortar o
+        # multiplicador único pela metade SUBESTIMARIA a parte fixa — erro tão
+        # grave quanto o excesso que esta regra combate. O correto é DUAS
+        # verbas, decisão que exige ler a sentença: aqui apenas sinalizamos.
+        # Detectado na varredura de regressão sobre 336 prévias
+        # (0000855-42: base SALARIO BASE + COMISSAO EXTRAFOLHA, mult 1.5).
+        _hist = ""
+        if isinstance(base, dict):
+            _hist = str(base.get("historico_nome") or "").upper()
+        _hist_variavel = any(t in _hist for t in _SUM340_SINAIS)
+        _hist_fixo = (not _hist_variavel) and any(
+            t in _hist for t in ("SALARIO", "SALÁRIO", "REMUNERACAO", "REMUNERAÇÃO",
+                                 "PISO", "ORDENADO", "VENCIMENTO")
+        )
+        if _hist_fixo:
+            _log.warning(
+                "Normalizer #80-CH: verba '%s' tem BASE MISTA (fixo '%s' + parcela "
+                "variável) com multiplicador %s — NÃO coagido. Súmula 340 TST pede "
+                "DUAS verbas: HE cheia (%s) sobre a parte fixa e HE só-adicional "
+                "(%s) sobre a variável. REVISAR na prévia.",
+                v.get("nome_pjecalc"), _hist, mult, mult, novo,
+            )
+            continue
+
+        fc["multiplicador"] = novo
+        _log.warning(
+            "Normalizer #80-CH: Súmula 340 TST — verba '%s' com base em parcela "
+            "variável: multiplicador %s → %s (condenação é SÓ o adicional; "
+            "%s seria a hora cheia do mensalista)",
+            v.get("nome_pjecalc"), mult, novo, mult,
+        )
+
+
 def _norm_13_ocorrencia_proporcional(data: dict[str, Any]) -> None:
     """13º proporcional do ano da rescisão (#72 — LUCAS 0000610-31).
 
@@ -1805,6 +1912,11 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # dezembro) → ocorrência DESLIGAMENTO (senão a ocorrência DEZEMBRO cai fora
     # do período e a liquidação trava).
     _norm_13_ocorrencia_proporcional(data)
+
+    # Salvaguarda #80-CH: Súmula 340 TST — HE sobre parcela variável
+    # (comissionista/produtividade/peça) condena SÓ o adicional: multiplicador
+    # 0.5/0.55/0.6, nunca 1.5/1.55/1.6.
+    _norm_sumula_340_multiplicador(data)
 
     # Salvaguarda #75: ocorrência NÃO-MENSAL com periodo_fim POSTERIOR à
     # demissão → cap em data_demissao (PJE-Calc rejeita; bloqueia automação).

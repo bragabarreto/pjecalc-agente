@@ -3815,3 +3815,138 @@ def test_inv119_fase_cs_com_retry():
         "REGRESSÃO #80-CE: retry ×3 da Fase 9 removido")
     assert "🛑 Fase 9 CS falhou após 3 tentativas" in corpo, (
         "REGRESSÃO #80-CE: exaustão do retry deve ser ALTA, não silenciosa")
+
+
+def test_inv120_escopo_deferido_zera_valordevido_nao_so_desmarca():
+    """#80-CG (auditoria 03/09/2026 — 516 prévias / 201 PJCs / 24 diffs): a
+    aplicação do escopo deferido (13º/férias proporcionais) DEVE zerar o
+    `valorDevido` da ocorrência, não apenas desmarcar o checkbox `:ativo`.
+
+    Medido: em 13 de 13 cálculos com janela o PJC exportado saiu com as
+    ocorrências de anos NÃO condenados ainda valoradas — inclusive naqueles em
+    que o log dizia "✓ desativada" (0000513-31: 20/12/2025 permaneceu com 3
+    avos e R$ 557,50). Desmarcar `:ativo` não remove o valor do PJC. O remédio
+    que o calculista aplica à mão é ZERAR o devido (0001107-45: 13º de
+    2022/2023/2024 → devido=null). Excesso confirmado: R$ 25,6 mil."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def _filtrar_ocorrencias_por_janela")
+    assert ini > 0, "REGRESSÃO #80-CG: _filtrar_ocorrencias_por_janela sumiu"
+    corpo = src[ini:src.find("def _configurar_ocorrencias_informado_inline")]
+    # zera o valorDevido (não só desmarca ativo)
+    assert "_zerar_ocorrencia" in corpo, (
+        "REGRESSÃO #80-CG: voltou a apenas desmarcar :ativo — o valor persiste no PJC")
+    assert "def _zerar_ocorrencia" in src
+    zer = src[src.find("def _zerar_ocorrencia"):]
+    assert "valorDevido" in zer[:1600] and "'0,00'" in zer[:1600], (
+        "REGRESSÃO #80-CG: _zerar_ocorrencia deve setar valorDevido=0,00")
+    # verificação no re-render (ground truth do bean) — não confiar no click
+    assert "_ler_ocorrencias_da_grade" in corpo, (
+        "REGRESSÃO #80-CG: sem re-leitura da grade o '✓' volta a ser falso-positivo")
+    assert "_valor_nao_zerado" in corpo
+    # falha NUNCA silenciosa (o 'filtro pulado' custou 5 cálculos)
+    assert "_registrar_pendencia_escopo" in corpo, (
+        "REGRESSÃO #80-CG: falha de aplicação do escopo voltou a ser silenciosa")
+    assert "ESCOPO DEFERIDO NÃO APLICADO" in corpo
+    # retry + gate #80-H antes de navegar (causa do skip silencioso)
+    assert "_aguardar_servidor_ocioso" in corpo
+    assert "range(1, 4)" in corpo, "REGRESSÃO #80-CG: retry ×3 do linkOcorrencias removido"
+
+
+def test_inv121_guarda_escopo_deferido_pos_pjc():
+    """#80-CG: guarda READ-ONLY que confere, no PJC exportado, se há
+    competências valoradas FORA do escopo deferido pela sentença.
+
+    Nenhum alerta do PJE-Calc pega isso — a liquidação fecha com totalErros=0
+    porque as ocorrências extras são internamente válidas; só não foram
+    condenadas. Validada contra o corpus real: pega os 4 excessos de 13º
+    confirmados por PJC definitivo (R$ 19.414,46) e fica silenciosa nos 15
+    cálculos corretos."""
+    src = PLAYWRIGHT_V2
+    assert "def _verificar_escopo_deferido_pjc" in src, (
+        "REGRESSÃO #80-CG: guarda de escopo deferido removida")
+    corpo = src[src.find("def _verificar_escopo_deferido_pjc"):
+                src.find("def _norm_desc_fidelidade")]
+    assert "excessos_13" in corpo and "ferias_suspeitas" in corpo
+    # limiar de férias SEM tolerância (+1 perde os dois casos reais medidos)
+    assert "limite = len(pas)" in corpo, (
+        "REGRESSÃO #80-CG: limiar de férias afrouxado — com len(pas)+1 o gate "
+        "perde 0000565-27 (R$ 4.186,84) e 0001972-05 (R$ 2.018,94)")
+    assert "limite = len(pas) + 1" not in corpo
+    # encadeada ao export, junto da fidelidade #80-AK, e best-effort
+    assert "_verificar_escopo_deferido_pjc(pjc_bytes)" in src
+    assert '["escopo_deferido"] = _esc' in src
+
+
+def test_inv122_sumula_340_multiplicador_so_adicional():
+    """#80-CH: Súmula 340 do TST — horas extras sobre PARCELA VARIÁVEL
+    (comissionista/produtividade/peça/gorjeta) condenam SÓ o ADICIONAL:
+    multiplicador 0.5 / 0.55 / 0.6 …, NUNCA 1.5 / 1.55 / 1.6 (hora cheia do
+    mensalista).
+
+    Antes desta regra a expressão "Súmula 340" não existia em NENHUMA camada do
+    sistema: das 2 ocorrências históricas uma saiu 0.5 (certa) e outra 1.55
+    (errada, exportada no PJC do 0001002-68 — R$ 14.302,70 contra ~R$ 5.075,15
+    devidos, R$ 9,2 mil a maior)."""
+    from modules.json_normalizer import normalize_v2_json
+    pc = {"estado_uf": "CE", "municipio": "X", "data_admissao": "01/01/2020",
+          "data_demissao": "01/01/2024", "data_ajuizamento": "01/02/2024",
+          "data_inicio_calculo": "01/01/2020", "data_termino_calculo": "01/01/2024"}
+
+    def _mult(nome, mult, com="", base=None):
+        d = {"parametros_calculo": pc, "verbas_principais": [
+            {"id": "v", "nome_pjecalc": nome, "parametros": {
+                "comentarios": com,
+                "formula_calculado": {"multiplicador": mult, "base_calculo": base}}}]}
+        out = normalize_v2_json(d)
+        return out["verbas_principais"][0]["parametros"]["formula_calculado"]["multiplicador"]
+
+    var = {"tipo": "HISTORICO_SALARIAL", "historico_nome": "SALARIO POR PRODUTIVIDADE"}
+    fixo = {"tipo": "HISTORICO_SALARIAL", "historico_nome": "SALARIO BASE",
+            "bases_compostas": [{"verba": "COMISSAO EXTRAFOLHA", "integralizar": "NAO"}]}
+
+    # coage a hora cheia quando a base é (só) parcela variável
+    assert _mult("HORAS EXTRAS 55% - COMISSIONISTA - SUM 340 TST", 1.55, base=var) == 0.55
+    assert _mult("HORAS EXTRAS 50%", 1.5, com="comissionista", base=var) == 0.5
+    assert _mult("HORAS EXTRAS 100%", 2.0, com="Sumula 340 TST", base=var) == 1.0
+
+    # NÃO toca HE de mensalista (salário fixo, sem sinal de parcela variável)
+    assert _mult("HORAS EXTRAS 50%", 1.5, com="HE sobre salario fixo mensal") == 1.5
+    # NÃO toca multiplicador que já é só-adicional
+    assert _mult("HORAS EXTRAS 100%", 1.0, com="Sumula 340", base=var) == 1.0
+    # NÃO toca verba que não é hora extra
+    assert _mult("ADICIONAL NOTURNO", 1.2, com="comissionista", base=var) == 1.2
+
+    # ⚠ BASE MISTA (fixo + variável): NUNCA coagir — cortar pela metade
+    # subestimaria a parte FIXA. Súmula 340 pede DUAS verbas. (0000855-42)
+    assert _mult("HORAS EXTRAS 50%", 1.5, com="salario + comissoes", base=fixo) == 1.5
+
+
+def test_inv123_sumula_340_no_prompt():
+    """#80-CH: a regra da Súmula 340 tem de estar no prompt (camada primária) —
+    o normalizer é apenas salvaguarda."""
+    from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL as P
+    assert "Súmula 340" in P, "REGRESSÃO #80-CH: regra da Súmula 340 sumiu do prompt"
+    assert "INVARIANTE PERMANENTE" in P
+    # a tabela adicional→multiplicador precisa dos valores corretos
+    for m in ("0.5", "0.55", "0.6"):
+        assert m in P, f"REGRESSÃO #80-CH: multiplicador {m} sumiu da tabela"
+    assert "multiplicador = adicional / 100" in P, (
+        "REGRESSÃO #80-CH: a regra mecânica do multiplicador sumiu")
+
+
+def test_inv124_painel_escopo_nao_e_encoberto_por_fidelidade_ok():
+    """#80-CG: o painel da página do processo tem de mostrar o excesso de
+    competências MESMO quando a fidelidade prévia↔PJC está 100%.
+
+    Um PJC pode conter todas as verbas da prévia (fidelidade OK) e ainda assim
+    liquidar 13º/férias além do deferido — foi o que passou despercebido em 13
+    de 13 cálculos. Se o '✅ Fidelidade 100%' continuar gateado só por
+    `_fid['ok']`, ele encobre o excesso."""
+    src = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
+    assert 'if _fid.get("ok") and (not _esc or _esc.get("ok")):' in src, (
+        "REGRESSÃO #80-CG: '✅ Fidelidade 100%' voltou a ignorar o escopo deferido")
+    assert "_fid_html += _esc_html" in src, (
+        "REGRESSÃO #80-CG: bloco do escopo deferido não é anexado ao painel")
+    assert "Competências fora da condenação" in src
+    assert "excessos_13" in src and "ferias_suspeitas" in src
+    assert "pendencias_aplicacao" in src

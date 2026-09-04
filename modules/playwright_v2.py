@@ -3247,11 +3247,21 @@ class PlaywrightAutomatorV2:
                 self.log(f"    ⚠ {nome}: erro geral: {e}")
 
     def _filtrar_ocorrencias_por_janela(self, v) -> None:
-        """#72 (LUCAS 0000610-31): 13º proporcional cujo período foi EXPANDIDO ao
-        contrato (apuração nativa). A apuração gera ocorrências de TODOS os anos
-        (ex.: dez/2025 do ano cheio + abril/2026 proporcional). DESATIVA as
-        ocorrências cuja data cai FORA da janela deferida (anos já pagos), via o
-        checkbox :ativo (Invariante 6). Só atua se janela_ocorrencias setada.
+        """#72 + #80-CG: aplica o ESCOPO DEFERIDO às ocorrências de uma verba
+        cujo período foi EXPANDIDO ao contrato (13º/Férias com apuração nativa).
+
+        ⚠ INVARIANTE PERMANENTE — ZERAR valorDevido, não apenas desmarcar ativo
+        (#80-CG, auditoria 03/09/2026 sobre 13 PJCs + 6 PJCs definitivos):
+        desmarcar o checkbox `:ativo` NÃO remove o valor da ocorrência no PJC
+        exportado. Em 13 de 13 cálculos com janela o PJC saiu com as ocorrências
+        de anos NÃO deferidos ainda valoradas — mesmo naqueles em que o log dizia
+        "✓ desativada" (0000513-31: 20/12/2025 permaneceu com 3 avos e R$ 557,50).
+        O remédio que o calculista aplica à mão no PJC definitivo é ZERAR o
+        `devido` da ocorrência (0001107-45: 13º 2022/2023/2024 → devido=null,
+        mantendo período e avos). Confirmado em R$ 25,6 mil de excesso.
+
+        NÃO reverter para "apenas desmarcar ativo" — sem a zeragem a condenação
+        sai a maior e a liquidação não obedece ao título executivo.
         """
         p = v.parametros
         ji = getattr(p, "janela_ocorrencias_inicio", None)
@@ -3265,31 +3275,54 @@ class PlaywrightAutomatorV2:
         except Exception:
             return
         nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
-        self.log(f"    → Filtrar ocorrências do 13º '{nome}' pela janela deferida {ji}–{jf}")
+        self.log(f"    → Aplicar escopo deferido {ji}–{jf} nas ocorrências de '{nome}'")
         candidatos = [v.nome_pjecalc]
         if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
             candidatos.append(v.expresso_alvo)
-        self._navegar_menu("li_calculo_verbas")
-        self._aguardar_ajax(8000)
-        self._page.wait_for_timeout(1000)
-        target_id = self._page.evaluate(
-            """(cands) => {
-                const links = [...document.querySelectorAll('a.linkOcorrencias')]
-                    .filter(a => !a.id.includes(':listaReflexo:'));
-                for (const a of links) {
-                    const tr = a.closest('tr'); if (!tr) continue;
-                    for (const td of tr.querySelectorAll('td')) {
-                        const t = (td.textContent || '').trim();
-                        if (cands.some(c => c && t === c)) return a.id;
+
+        # ── retry ×3: o "filtro pulado" silencioso (#80-CG) custou 5 cálculos ──
+        # Causa: navegar para a listagem enquanto o servidor ainda finaliza o
+        # Regerar (Drools) → LockTimeout → listagem sem linkOcorrencias. O gate
+        # #80-H (servidor ocioso) é a prevenção; o retry é a rede de segurança.
+        for tentativa in range(1, 4):
+            try:
+                self._aguardar_servidor_ocioso(f"pré-escopo-deferido '{nome}' (t{tentativa})")
+            except Exception:
+                pass
+            self._navegar_menu("li_calculo_verbas")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1200)
+            target_id = self._page.evaluate(
+                """(cands) => {
+                    const links = [...document.querySelectorAll('a.linkOcorrencias')]
+                        .filter(a => !a.id.includes(':listaReflexo:'));
+                    for (const a of links) {
+                        const tr = a.closest('tr'); if (!tr) continue;
+                        for (const td of tr.querySelectorAll('td')) {
+                            const t = (td.textContent || '').trim();
+                            if (cands.some(c => c && t === c)) return a.id;
+                        }
                     }
-                }
-                return null;
-            }""",
-            candidatos,
-        )
+                    return null;
+                }""",
+                candidatos,
+            )
+            if target_id:
+                break
+            self.log(f"    ⚠ t{tentativa}/3: linkOcorrencias de '{nome}' não encontrado na listagem")
+            if tentativa < 3:
+                try:
+                    self._fechar_e_reabrir_calculo()
+                except Exception as _e:
+                    self.log(f"      ⚠ F+R: {str(_e)[:100]}")
         if not target_id:
-            self.log("    ⚠ linkOcorrencias do 13º não encontrado — filtro pulado")
+            # ⚠ NUNCA silencioso: o escopo deferido não foi aplicado → o PJC sai
+            # com competências não condenadas. Registra pendência de fidelidade.
+            self.log(f"    🛑 ESCOPO DEFERIDO NÃO APLICADO em '{nome}' — "
+                     f"ocorrências fora de {ji}–{jf} permanecem valoradas no PJC")
+            self._registrar_pendencia_escopo(nome, ji, jf, motivo="listagem sem linkOcorrencias")
             return
+
         esc = target_id.replace(":", "\\:")
         try:
             self._page.locator(f"a#{esc}").first.click(force=True)
@@ -3300,66 +3333,155 @@ class PlaywrightAutomatorV2:
             self._aguardar_ajax(8000)
             self._page.wait_for_timeout(1500)
         except Exception as e:
-            self.log(f"    ⚠ click linkOcorrencias 13º: {e}")
+            self.log(f"    ⚠ click linkOcorrencias '{nome}': {str(e)[:120]}")
+            self._registrar_pendencia_escopo(nome, ji, jf, motivo=f"click falhou: {str(e)[:80]}")
             return
-        # ler ocorrências: data extraída do input/span :dataInicial OU do 1º td
-        # que casar uma data DD/MM/YYYY (a página de Ocorrências varia o DOM).
-        rows = self._page.evaluate(
-            """() => {
-                const re = /(\\d{2}\\/\\d{2}\\/\\d{4})/;
-                const cbxs = [...document.querySelectorAll(
-                    'input[type="checkbox"][id*=":listagem:"][id$=":ativo"]'
-                )].filter(c => !c.id.includes('ativarTodos')
-                             && !c.id.includes('selecionarTodos')
-                             && !c.id.includes('listaReflexo'));
-                return cbxs.map(c => {
-                    const m = c.id.match(/:listagem:(\\d+):ativo$/);
-                    const tr = c.closest('tr');
-                    let data = '';
-                    const di = tr ? tr.querySelector('[id$=":dataInicial"], [id*=":dataInicial"]') : null;
-                    if (di) data = (di.value || di.textContent || '').trim();
-                    if (!re.test(data) && tr) {
-                        for (const td of tr.querySelectorAll('td, input, span')) {
-                            const t = (td.value || td.textContent || '').trim();
-                            const mm = t.match(re);
-                            if (mm) { data = mm[1]; break; }
-                        }
-                    }
-                    return {idx: m ? parseInt(m[1]) : -1, checked: c.checked, dataInicial: data};
-                }).filter(r => r.idx >= 0);
-            }"""
-        )
-        self.log(f"    ℹ filtro 13º: url={self._page.url[-48:]} | {len(rows)} ocorrência(s) lida(s): "
-                 f"{[(r['dataInicial'], r['checked']) for r in rows][:8]}")
-        desativadas = 0
+
+        rows = self._ler_ocorrencias_da_grade()
+        self.log(f"    ℹ escopo '{nome}': {len(rows)} ocorrência(s) lida(s): "
+                 f"{[(r['dataInicial'], r['valor']) for r in rows][:8]}")
+        if not rows:
+            self.log(f"    🛑 grade de ocorrências VAZIA em '{nome}' — escopo não aplicado")
+            self._registrar_pendencia_escopo(nome, ji, jf, motivo="grade vazia")
+            return
+
+        fora = []
         for r in rows:
             try:
                 d = _dt.strptime(r["dataInicial"], "%d/%m/%Y")
             except Exception:
                 continue
-            dentro = ji_d <= d <= jf_d
-            if r["checked"] and not dentro:
-                self._page.evaluate(
-                    """(idx) => {
-                        const c = [...document.querySelectorAll('input[id$=":ativo"]')]
-                            .find(x => new RegExp(':listagem:' + idx + ':ativo$').test(x.id));
-                        if (c && c.checked) c.click();
-                    }""",
-                    r["idx"],
-                )
-                self._aguardar_ajax(3000)
-                self._page.wait_for_timeout(500)
-                desativadas += 1
-                self.log(f"       ✓ desativada ocorrência {r['dataInicial']} (fora da janela — ano pago)")
-        if desativadas:
+            if not (ji_d <= d <= jf_d):
+                fora.append(r)
+        if not fora:
+            self.log("    ℹ todas as ocorrências estão dentro do escopo deferido")
+            return
+
+        # ── zerar valorDevido + desmarcar ativo, com verificação no re-render ──
+        for passada in range(1, 3):
+            for r in fora:
+                self._zerar_ocorrencia(r["idx"])
             try:
                 self._clicar("salvar")
-                self._aguardar_ajax(6000)
-                self.log(f"    ✓ {desativadas} ocorrência(s) de ano pago desativada(s) e salvas no 13º")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1200)
             except Exception as e:
-                self.log(f"    ⚠ salvar pós-filtro 13º: {e}")
-        else:
-            self.log("    ℹ nenhuma ocorrência fora da janela (nada a desativar)")
+                self.log(f"    ⚠ salvar pós-escopo '{nome}': {str(e)[:120]}")
+            # ground truth: re-ler a grade re-renderizada pelo bean
+            rows2 = self._ler_ocorrencias_da_grade()
+            by_idx = {r["idx"]: r for r in rows2}
+            resistentes = [
+                r for r in fora
+                if by_idx.get(r["idx"]) and self._valor_nao_zerado(by_idx[r["idx"]]["valor"])
+            ]
+            if not resistentes:
+                self.log(f"    ✓ {len(fora)} ocorrência(s) fora do escopo ZERADA(S) e confirmada(s) "
+                         f"no bean: {[r['dataInicial'] for r in fora]}")
+                return
+            self.log(f"    ⚠ passada {passada}/2: {len(resistentes)} ocorrência(s) ainda valorada(s) "
+                     f"{[(r['dataInicial'], by_idx[r['idx']]['valor']) for r in resistentes][:6]}")
+            fora = resistentes
+        self.log(f"    🛑 ESCOPO DEFERIDO NÃO CONFIRMADO em '{nome}' — "
+                 f"{len(fora)} ocorrência(s) seguem valoradas fora de {ji}–{jf}")
+        self._registrar_pendencia_escopo(
+            nome, ji, jf,
+            motivo=f"{len(fora)} ocorrência(s) resistiram à zeragem: "
+                   f"{[r['dataInicial'] for r in fora]}",
+        )
+
+    @staticmethod
+    def _valor_nao_zerado(txt: str) -> bool:
+        """True se o texto do campo representa um valor != 0 (BR ou US)."""
+        if txt is None:
+            return False
+        s = str(txt).strip()
+        if not s:
+            return False
+        s = s.replace("R$", "").replace(" ", "")
+        # BR "1.234,56" → US "1234.56"; US "1234.56" fica igual
+        if "," in s:
+            s = s.replace(".", "").replace(",", ".")
+        try:
+            return abs(float(s)) > 0.004
+        except Exception:
+            return False
+
+    def _ler_ocorrencias_da_grade(self) -> list:
+        """Lê a grade de ocorrências (parametrizar-ocorrencia.jsf): índice, data,
+        estado do checkbox :ativo e o valorDevido corrente. O valor é o GROUND
+        TRUTH do bean após o re-render — é o que o PJC vai exportar."""
+        try:
+            return self._page.evaluate(
+                """() => {
+                    const re = /(\\d{2}\\/\\d{2}\\/\\d{4})/;
+                    const out = [];
+                    const vals = [...document.querySelectorAll('input[id*=":listagem:"][id$=":valorDevido"]')];
+                    for (const inp of vals) {
+                        const m = inp.id.match(/:listagem:(\\d+):valorDevido$/);
+                        if (!m) continue;
+                        const idx = parseInt(m[1]);
+                        const tr = inp.closest('tr');
+                        let data = '';
+                        if (tr) {
+                            const di = tr.querySelector('[id$=":dataInicial"], [id*=":dataInicial"]');
+                            if (di) data = (di.value || di.textContent || '').trim();
+                            if (!re.test(data)) {
+                                for (const el of tr.querySelectorAll('td, input, span')) {
+                                    const t = (el.value || el.textContent || '').trim();
+                                    const mm = t.match(re);
+                                    if (mm) { data = mm[1]; break; }
+                                }
+                            }
+                        }
+                        let ativo = null;
+                        const cb = tr ? tr.querySelector('input[type="checkbox"][id$=":ativo"]') : null;
+                        if (cb) ativo = cb.checked;
+                        out.push({idx: idx, dataInicial: data, valor: (inp.value || '').trim(), ativo: ativo});
+                    }
+                    return out;
+                }"""
+            ) or []
+        except Exception as e:
+            self.log(f"    ⚠ leitura da grade de ocorrências: {str(e)[:120]}")
+            return []
+
+    def _zerar_ocorrencia(self, idx: int) -> None:
+        """Zera o valorDevido da linha `idx` e desmarca seu checkbox :ativo.
+
+        O valor é setado via JS + eventos (change/blur) porque o input é
+        `onchange` A4J; sem o evento o bean não recebe a zeragem (mesma classe
+        de bug do _preencher). Desmarcar :ativo sozinho NÃO basta (#80-CG)."""
+        try:
+            self._page.evaluate(
+                """(idx) => {
+                    const inp = [...document.querySelectorAll('input[id*=":listagem:"][id$=":valorDevido"]')]
+                        .find(x => new RegExp(':listagem:' + idx + ':valorDevido$').test(x.id));
+                    if (inp) {
+                        inp.focus();
+                        inp.value = '0,00';
+                        inp.dispatchEvent(new Event('input',  {bubbles: true}));
+                        inp.dispatchEvent(new Event('change', {bubbles: true}));
+                        inp.dispatchEvent(new Event('blur',   {bubbles: true}));
+                    }
+                    const cb = [...document.querySelectorAll('input[type="checkbox"][id$=":ativo"]')]
+                        .find(x => new RegExp(':listagem:' + idx + ':ativo$').test(x.id));
+                    if (cb && cb.checked) cb.click();
+                }""",
+                idx,
+            )
+            self._aguardar_ajax(3000)
+            self._page.wait_for_timeout(400)
+        except Exception as e:
+            self.log(f"      ⚠ zerar ocorrência idx={idx}: {str(e)[:100]}")
+
+    def _registrar_pendencia_escopo(self, nome: str, ji: str, jf: str, motivo: str) -> None:
+        """#80-CG: acumula falhas de aplicação do escopo deferido para que
+        apareçam no relatório final — nunca silenciosas."""
+        if not hasattr(self, "_pendencias_escopo"):
+            self._pendencias_escopo = []
+        self._pendencias_escopo.append(
+            {"verba": nome, "janela": f"{ji}–{jf}", "motivo": motivo}
+        )
 
     def _configurar_ocorrencias_informado_inline(self, v) -> None:
         """Após salvar verba INFORMADO, navegar para suas Ocorrências (mesma
@@ -13246,7 +13368,196 @@ class PlaywrightAutomatorV2:
         except Exception as _e:
             self.log(f"  ⚠ #80-AK reconciliação de fidelidade falhou: {str(_e)[:150]}")
 
+        # #80-CG — GUARDA DE ESCOPO DEFERIDO (13º/férias proporcionais).
+        # Best-effort: nunca quebra o export.
+        try:
+            _esc = self._verificar_escopo_deferido_pjc(pjc_bytes)
+            if isinstance(getattr(self, "_fidelidade_resultado", None), dict):
+                self._fidelidade_resultado["escopo_deferido"] = _esc
+            else:
+                self._fidelidade_resultado = {"escopo_deferido": _esc}
+        except Exception as _e:
+            self.log(f"  ⚠ #80-CG guarda de escopo deferido falhou: {str(_e)[:150]}")
+
         return self._pjc_path
+
+    def _verificar_escopo_deferido_pjc(self, pjc_bytes: bytes) -> dict:
+        """#80-CG — GUARDA DE ESCOPO DEFERIDO (13º / Férias). READ-ONLY.
+
+        Compara as OCORRÊNCIAS efetivamente valoradas no PJC exportado contra o
+        escopo que a sentença deferiu, e denuncia competências pagas a maior.
+
+        Motivação (auditoria 03/09/2026, 516 prévias / 201 PJCs / 24 diffs):
+        o problema recorrente relatado pelo usuário — "a sentença defere 13º ou
+        férias PROPORCIONAIS e o cálculo inclui todas as competências do
+        contrato" — passou silenciosamente em 13 de 13 cálculos com janela.
+        Confirmado contra PJC definitivo em 6 processos (R$ 25,6 mil + R$ 8,3 mil
+        no 0001107-45). Nenhum alerta do PJE-Calc pega isso: a liquidação fecha
+        com totalErros=0 porque as ocorrências extras são internamente válidas —
+        só não foram condenadas.
+
+        Critérios:
+        - 13º com `janela_ocorrencias_*`: qualquer ocorrência VALORADA com data
+          fora da janela é excesso (o calculista zera essas — 0001107-45).
+        - FÉRIAS (PERIODO_AQUISITIVO): o nº de ocorrências valoradas não pode
+          exceder o nº de períodos aquisitivos deferidos em `ferias.periodos`
+          (+1 para o proporcional da rescisão). Não zera automaticamente — a
+          escolha de QUAL ocorrência corresponde a QUAL período aquisitivo não é
+          derivável com segurança da grade; aqui a guarda APONTA para revisão.
+        """
+        import zipfile as _zip
+        import io as _io
+        import datetime as _dtm
+        import xml.etree.ElementTree as _ET
+
+        res = {"excessos_13": [], "ferias_suspeitas": [], "ok": True}
+        try:
+            z = _zip.ZipFile(_io.BytesIO(pjc_bytes))
+            root = _ET.fromstring(z.read(z.namelist()[0]).decode("iso-8859-1", "replace"))
+        except Exception as _e:
+            self.log(f"  ⚠ #80-CG não consegui ler o PJC: {str(_e)[:120]}")
+            return res
+
+        def _ms(txt):
+            try:
+                return _dtm.datetime.fromtimestamp(int(txt) / 1000)
+            except Exception:
+                return None
+
+        def _num(txt):
+            try:
+                return float(txt)
+            except Exception:
+                return 0.0
+
+        # ── indexa as verbas do PJC: descricao → (caracteristica, ocorrências) ──
+        pjc_verbas = []
+        for el in root.iter():
+            if el.tag not in ("Calculada", "Informada"):
+                continue
+            de = el.find("descricao")
+            car = el.find("caracteristica")
+            if de is None or not (de.text or "").strip():
+                continue
+            ocs = []
+            oc = el.find("ocorrencias")
+            if oc is not None:
+                for lst in oc:
+                    for it in lst:
+                        dd = {c.tag: (c.text or "") for c in it}
+                        dt = _ms(dd.get("dataInicial", ""))
+                        if dt is None:
+                            continue
+                        ocs.append({"data": dt, "valor": _num(dd.get("devido", "0")),
+                                    "avos": dd.get("quantidade", "")})
+            pjc_verbas.append({
+                "desc": self._norm_desc_fidelidade(de.text),
+                "carac": (car.text or "") if car is not None else "",
+                "ocs": ocs,
+            })
+
+        def _casar(nome: str):
+            alvo = self._norm_desc_fidelidade(nome or "")
+            if not alvo:
+                return None
+            for pv in pjc_verbas:
+                if pv["desc"] == alvo or pv["desc"].startswith(alvo[:48]):
+                    return pv
+            return None
+
+        # ── 13º: ocorrências valoradas fora da janela deferida ──
+        for v in (self.previa.verbas_principais or []):
+            p = v.parametros
+            ji = getattr(p, "janela_ocorrencias_inicio", None)
+            jf = getattr(p, "janela_ocorrencias_fim", None)
+            if not ji or not jf:
+                continue
+            try:
+                ji_d = _dtm.datetime.strptime(ji, "%d/%m/%Y")
+                jf_d = _dtm.datetime.strptime(jf, "%d/%m/%Y")
+            except Exception:
+                continue
+            pv = _casar(v.nome_pjecalc or getattr(v, "expresso_alvo", "") or "")
+            if not pv:
+                continue
+            fora = [o for o in pv["ocs"]
+                    if not (ji_d <= o["data"] <= jf_d) and abs(o["valor"]) > 0.004]
+            if fora:
+                res["ok"] = False
+                res["excessos_13"].append({
+                    "verba": v.nome_pjecalc,
+                    "janela": f"{ji}–{jf}",
+                    "ocorrencias": [
+                        {"data": o["data"].strftime("%d/%m/%Y"),
+                         "avos": o["avos"][:5], "valor": round(o["valor"], 2)}
+                        for o in fora
+                    ],
+                    "total_excesso": round(sum(o["valor"] for o in fora), 2),
+                })
+
+        # ── FÉRIAS: nº de ocorrências valoradas vs períodos aquisitivos deferidos ──
+        try:
+            pas = list(getattr(self.previa.ferias, "periodos", None) or [])
+        except Exception:
+            pas = []
+        if pas:
+            for v in (self.previa.verbas_principais or []):
+                p = v.parametros
+                if getattr(p, "caracteristica", None) != "FERIAS":
+                    continue
+                pv = _casar(v.nome_pjecalc or getattr(v, "expresso_alvo", "") or "")
+                if not pv:
+                    continue
+                valoradas = [o for o in pv["ocs"] if abs(o["valor"]) > 0.004]
+                # ⚠ Limiar = nº de PAs deferidos, SEM tolerância (#80-CG).
+                # Medido nos 13 pares gerado↔definitivo disponíveis: com "+1
+                # para o proporcional da rescisão" o gate perde os DOIS casos
+                # reais (0000565-27 R$ 4.186,84 e 0001972-05 R$ 2.018,94); sem
+                # tolerância pega ambos ao custo de 2 alarmes falsos (0000200-70
+                # e 0000833-81, onde 1 PA legitimamente rende 2 ocorrências).
+                # Como o gate é READ-ONLY e não bloqueia o export, recall vale
+                # mais que precisão: um alarme falso custa uma conferência, um
+                # silêncio custa dinheiro no título executivo.
+                # NÃO afrouxar para len(pas)+1 sem antes remedir o corpus.
+                limite = len(pas)
+                if len(valoradas) > limite:
+                    res["ok"] = False
+                    res["ferias_suspeitas"].append({
+                        "verba": v.nome_pjecalc,
+                        "periodos_aquisitivos_deferidos": len(pas),
+                        "ocorrencias_valoradas": len(valoradas),
+                        "ocorrencias": [
+                            {"data": o["data"].strftime("%d/%m/%Y"),
+                             "avos": o["avos"][:5], "valor": round(o["valor"], 2)}
+                            for o in valoradas
+                        ],
+                    })
+
+        # ── pendências acumuladas na fase de verbas (escopo não aplicado) ──
+        pend = list(getattr(self, "_pendencias_escopo", []) or [])
+        if pend:
+            res["ok"] = False
+            res["pendencias_aplicacao"] = pend
+
+        # ── log explícito ──
+        if res["ok"]:
+            self.log("  ✓ #80-CG escopo deferido conferido no PJC (13º/férias) — sem excesso")
+        else:
+            self.log("  ⚠️ #80-CG ESCOPO DEFERIDO — o PJC contém competências NÃO condenadas:")
+            for e in res["excessos_13"]:
+                self.log(f"      • {e['verba']} (deferido {e['janela']}): "
+                         f"{len(e['ocorrencias'])} ocorrência(s) a maior = R$ {e['total_excesso']:,.2f}")
+                for o in e["ocorrencias"]:
+                    self.log(f"          – {o['data']} | {o['avos']} avos | R$ {o['valor']:,.2f}")
+            for f in res["ferias_suspeitas"]:
+                self.log(f"      • {f['verba']}: {f['ocorrencias_valoradas']} ocorrência(s) valoradas "
+                         f"para {f['periodos_aquisitivos_deferidos']} período(s) aquisitivo(s) deferido(s)")
+                for o in f["ocorrencias"]:
+                    self.log(f"          – {o['data']} | {o['avos']} avos | R$ {o['valor']:,.2f}")
+            for pd in res.get("pendencias_aplicacao", []):
+                self.log(f"      • escopo NÃO aplicado em {pd['verba']} ({pd['janela']}): {pd['motivo']}")
+            self.log("      → revise essas ocorrências no PJE-Calc antes de incorporar o cálculo")
+        return res
 
     @staticmethod
     def _norm_desc_fidelidade(s: str) -> str:

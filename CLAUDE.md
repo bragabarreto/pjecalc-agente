@@ -419,6 +419,97 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Escopo deferido: ZERAR o valorDevido, não só desmarcar (#80-CG)
+
+> **Quando a sentença defere 13º ou FÉRIAS apenas PROPORCIONAIS, as ocorrências
+> das competências NÃO condenadas têm de sair do PJC com valor ZERO — desmarcar
+> o checkbox `:ativo` NÃO basta.**
+>
+> **Auditoria (03/09/2026 — 516 prévias, 201 PJCs, 24 diffs contra PJC
+> definitivo):** o mecanismo `janela_ocorrencias` do #72 nunca funcionou de
+> ponta a ponta. Em **13 de 13** cálculos com janela o PJC exportado saiu com as
+> ocorrências de anos não deferidos **ainda valoradas** — inclusive naqueles em
+> que o log dizia `✓ desativada ocorrência 20/12/2025` (0000513-31: a ocorrência
+> permaneceu com 3 avos e R$ 557,50). Além disso o filtro era **pulado em
+> silêncio** em 5 runs (`linkOcorrencias do 13º não encontrado`), efeito da
+> navegação durante operação pesada (LockTimeout, mesma raiz do #80-H).
+>
+> Excesso confirmado contra PJC definitivo: **R$ 25,6 mil** em 5 processos, mais
+> **R$ 8,3 mil** no 0001107-45 (13º R$ 4.013,64 + férias R$ 4.329,51).
+>
+> **Remédio (o mesmo que o calculista aplica à mão):** ZERAR o `devido` da
+> ocorrência, mantendo período e avos (0001107-45: 13º de 2022/2023/2024 →
+> `devido=null`). Nas férias o período TEM de cobrir os períodos aquisitivos —
+> por isso zerar é o único remédio que serve para as duas verbas.
+>
+> **Implementado em `_filtrar_ocorrencias_por_janela`:**
+> 1. `_zerar_ocorrencia(idx)` seta `valorDevido='0,00'` (com `change`/`blur` —
+>    o input é A4J `onchange`) **e** desmarca `:ativo`.
+> 2. **Verificação no re-render** (`_ler_ocorrencias_da_grade` + `_valor_nao_zerado`)
+>    — ground truth do bean. Sem ela o `✓` volta a ser falso-positivo.
+> 3. Retry ×3 com gate `_aguardar_servidor_ocioso` (#80-H) antes de navegar.
+> 4. Falha **NUNCA silenciosa**: `_registrar_pendencia_escopo` acumula e o
+>    relatório final denuncia.
+>
+> **Guarda pós-PJC `_verificar_escopo_deferido_pjc` (READ-ONLY):** confere no PJC
+> exportado se há competências valoradas fora do escopo. Nenhum alerta do
+> PJE-Calc pega isso — a liquidação fecha com `totalErros=0` porque as
+> ocorrências extras são internamente válidas, só não foram condenadas. Validada
+> contra o corpus: pega os 4 excessos de 13º confirmados (R$ 19.414,46) e fica
+> silenciosa nos 15 cálculos corretos. Resultado vai em
+> `_fidelidade_resultado["escopo_deferido"]` (persistido em `.fidelidade.json`).
+>
+> ⚠️ **Limiar das férias = `len(ferias.periodos)`, SEM tolerância.** Medido nos 13
+> pares gerado↔definitivo: com `+1` o gate perde os DOIS casos reais
+> (0000565-27 R$ 4.186,84 e 0001972-05 R$ 2.018,94), ao passo que sem tolerância
+> pega ambos ao custo de 2 alarmes falsos. Como é aviso READ-ONLY, recall vale
+> mais que precisão. **NÃO afrouxar sem remedir o corpus.**
+>
+> ⚠️ As férias têm **detecção**, não zeragem automática: qual ocorrência
+> corresponde a qual período aquisitivo não é derivável com segurança da grade
+> (em 0001107-45 duas ocorrências dividem a data 11/10/2025, uma devida e outra
+> não). Zerar por adivinhação subestimaria o título.
+>
+> Protegido por `test_inv120` e `test_inv121`.
+
+---
+
+## Regra obrigatória — Súmula 340 do TST: multiplicador é SÓ o adicional (#80-CH)
+
+> **Horas extras sobre PARCELA VARIÁVEL** (comissionista, produtividade, peça,
+> gorjeta, tarefa) condenam **apenas o ADICIONAL** — a hora normal já foi paga
+> embutida na parcela variável. Logo:
+>
+> `multiplicador = adicional / 100` → **0.5** (50%), **0.55** (55%), **0.6** (60%)
+> — **NUNCA** 1.5 / 1.55 / 1.6, que é a hora cheia do mensalista.
+>
+> **Bug (0001002-68, 09/08/2026):** a verba `HORAS EXTRAS 55% - COMISSIONISTA -
+> SUM 340 TST` saiu com `multiplicador 1.55` no PJC — R$ 14.302,70 liquidados
+> contra ~R$ 5.075,15 devidos (**R$ 9,2 mil a maior, 2,8× o correto**). O
+> comentário da própria extração dizia "adicional de 55%": a súmula foi
+> compreendida e o multiplicador saiu cheio assim mesmo. Auditoria: a expressão
+> "Súmula 340" **não existia em nenhuma camada** do sistema — das 2 ocorrências
+> históricas, uma saiu 0.5 (certa) e outra 1.55 (errada). O acerto dependia do
+> acaso da leitura.
+>
+> **Defesas (2 camadas + teste):**
+> 1. **Prompt** (`extraction_v2.py`, §4.4.sumula340) — primária: tabela
+>    adicional→multiplicador, regra mecânica e sinais de reconhecimento.
+> 2. **Normalizer** (`_norm_sumula_340_multiplicador`) — salvaguarda: coage
+>    `multiplicador > 1` para `multiplicador − 1` quando há sinal de parcela
+>    variável no nome, comentário ou base de cálculo.
+>
+> ⚠️ **BASE MISTA (fixo + variável) NUNCA é coagida** — só sinalizada. Empregado
+> com salário base + comissões recebe HE cheia (1.5) sobre a parte FIXA e
+> só-adicional (0.5) sobre a VARIÁVEL; cortar o multiplicador único pela metade
+> subestimaria a parte fixa — erro tão grave quanto o excesso que a regra
+> combate. O correto são **duas verbas**. Descoberto na varredura de regressão
+> sobre 336 prévias (0000855-42: base `SALARIO BASE` + `COMISSAO EXTRAFOLHA`).
+>
+> Protegido por `test_inv122` e `test_inv123`.
+
+---
+
 ## Regra obrigatória — Regerar Ocorrências após cada alteração
 
 > **TODA alteração de parâmetro ou ocorrência de qualquer verba DEVE ser
