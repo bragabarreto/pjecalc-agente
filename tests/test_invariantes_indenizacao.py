@@ -4013,3 +4013,32 @@ def test_inv126_anthropic_sdk_com_teto_de_versao():
     # o código realmente depende de temperature nas 3 camadas de extração
     for mod in ("modules/webapp_extracao.py", "modules/extraction_v2.py"):
         assert "temperature=" in (REPO_ROOT / mod).read_text(encoding="utf-8")
+
+
+def test_inv127_verificacao_do_escopo_usa_o_checkbox_ativo():
+    """#80-CK (piloto 0000772-26, 04/09/2026): a confirmação de que uma
+    ocorrência saiu do cálculo tem de olhar o checkbox `:ativo`, NUNCA só o
+    valorDevido.
+
+    Em verba CALCULADO (13º/férias com quantidade=AVOS) a coluna de valor da
+    grade vem VAZIA — o devido é computado na liquidação, não digitado (o mesmo
+    fato já registrado no #80-AG/v17). Verificar "valor != 0" dava sucesso
+    trivial para toda ocorrência e o log declarava "✓ ZERADAS e confirmadas no
+    bean" sem nada ter mudado: o PJC do piloto saiu com os mesmos R$ 5.962,59
+    de 13º das 4 competências não deferidas.
+
+    No PJC definitivo do calculista a ocorrência removida aparece com
+    `devido=null` e os avos preservados — ou seja, ela é INATIVADA, não zerada.
+    """
+    src = PLAYWRIGHT_V2
+    ini = src.find("def _filtrar_ocorrencias_por_janela")
+    corpo = src[ini:src.find("def _configurar_ocorrencias_informado_inline")]
+    assert 'inativa = cur.get("ativo") is False' in corpo, (
+        "REGRESSÃO #80-CK: a verificação voltou a ignorar o checkbox :ativo")
+    assert 'cur["valor"] != ""' in corpo, (
+        "REGRESSÃO #80-CK: valor vazio (verba CALCULADO) voltaria a contar como "
+        "'zerado' — falso positivo que declara sucesso sem alterar nada")
+    # a grade precisa expor o estado do checkbox p/ a verificação
+    assert "ativo: ativo" in src or "'ativo':" in src or '"ativo"' in src
+    grade = src[src.find("def _ler_ocorrencias_da_grade"):]
+    assert "checkbox" in grade[:1800] and "ativo" in grade[:1800]

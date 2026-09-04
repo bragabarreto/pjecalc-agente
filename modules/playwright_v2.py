@@ -3370,19 +3370,38 @@ class PlaywrightAutomatorV2:
             # ground truth: re-ler a grade re-renderizada pelo bean
             rows2 = self._ler_ocorrencias_da_grade()
             by_idx = {r["idx"]: r for r in rows2}
-            resistentes = [
-                r for r in fora
-                if by_idx.get(r["idx"]) and self._valor_nao_zerado(by_idx[r["idx"]]["valor"])
-            ]
+            # ⚠ GROUND TRUTH = o checkbox :ativo, NÃO o valorDevido (#80-CK).
+            # Em verba CALCULADO (13º/férias com quantidade=AVOS) a coluna de
+            # valor da grade vem VAZIA — o devido é computado na liquidação, não
+            # digitado. Verificar "valor != 0" dava SUCESSO TRIVIAL para toda
+            # ocorrência (o campo já era ''), e o log declarava
+            # "✓ ZERADAS e confirmadas no bean" sem nada ter sido alterado —
+            # foi o que aconteceu no piloto do 0000772-26 (04/09/2026): as 4
+            # ocorrências saíram no PJC com os mesmos R$ 5.962,59.
+            # A ocorrência só sai do cálculo se ficar INATIVA; no PJC do
+            # calculista ela aparece com `devido=null` e os avos preservados.
+            resistentes = []
+            for r in fora:
+                cur = by_idx.get(r["idx"])
+                if cur is None:
+                    continue  # linha sumiu da grade — nada a verificar
+                inativa = cur.get("ativo") is False
+                zerada = not self._valor_nao_zerado(cur["valor"]) and cur["valor"] != ""
+                if not (inativa or zerada):
+                    resistentes.append(r)
             if not resistentes:
-                self.log(f"    ✓ {len(fora)} ocorrência(s) fora do escopo ZERADA(S) e confirmada(s) "
-                         f"no bean: {[r['dataInicial'] for r in fora]}")
+                _como = [(r["dataInicial"],
+                          "inativa" if (by_idx.get(r["idx"]) or {}).get("ativo") is False
+                          else "valor 0") for r in fora]
+                self.log(f"    ✓ {len(fora)} ocorrência(s) fora do escopo REMOVIDA(S) do cálculo "
+                         f"e confirmada(s) no bean: {_como}")
                 return
-            self.log(f"    ⚠ passada {passada}/2: {len(resistentes)} ocorrência(s) ainda valorada(s) "
-                     f"{[(r['dataInicial'], by_idx[r['idx']]['valor']) for r in resistentes][:6]}")
+            self.log(f"    ⚠ passada {passada}/2: {len(resistentes)} ocorrência(s) seguem ATIVAS "
+                     f"{[(r['dataInicial'], 'ativo=' + str((by_idx.get(r['idx']) or {}).get('ativo'))) for r in resistentes][:6]}")
             fora = resistentes
-        self.log(f"    🛑 ESCOPO DEFERIDO NÃO CONFIRMADO em '{nome}' — "
-                 f"{len(fora)} ocorrência(s) seguem valoradas fora de {ji}–{jf}")
+        self.log(f"    🛑 ESCOPO DEFERIDO NÃO CONFIRMADO em '{nome}' — {len(fora)} "
+                 f"ocorrência(s) seguem ATIVAS fora de {ji}–{jf}; o PJC vai liquidar "
+                 f"competências não condenadas (zere-as no PJE-Calc)")
         self._registrar_pendencia_escopo(
             nome, ji, jf,
             motivo=f"{len(fora)} ocorrência(s) resistiram à zeragem: "
