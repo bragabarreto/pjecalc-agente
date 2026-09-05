@@ -4110,3 +4110,31 @@ def test_inv129_save_sem_mensagem_verificado_por_releitura_pos_cancelar():
     assert 0 < i_cancel < i_chama < i_raise, (
         "REGRESSÃO #80-CO: releitura saiu de entre o Cancelar e o raise — antes "
         "do Cancelar ela lê o form, não a listagem, e não mede nada")
+
+
+def test_inv130_radio_valor_espera_painel_renderizar():
+    """#80-CP: após trocar o radio `valor` (CALCULADO ⇄ INFORMADO) o bot tem de
+    ESPERAR o painel novo existir — `_aguardar_ajax` sozinho não basta.
+
+    Medido no 0000977-55 (05/09/2026): logo após `radio valor = INFORMADO` vinha
+    `radio geraReflexo: Element is not attached to the DOM`. O bot seguia
+    preenchendo (e "confirmando") num form já substituído e clicava um `salvar`
+    morto — nada era submetido: campos guardavam o digitado, o servidor não
+    devolvia sucesso NEM erro (por isso o #80-CN não achava erro de campo) e o
+    bean ficava com o período antigo (`#80-CO`: bean 01/02/2024, esperado
+    01/05/2026, 3 tentativas).
+
+    Prova de que é o radio `valor`: no mesmo cálculo AVISO PRÉVIO, FÉRIAS + 1/3
+    e MULTA 477 usam o MESMO caminho de save e persistem — nenhuma delas troca
+    `valor`. Efeito acumulado: 19 processos com a verba rescisória no período
+    do Expresso (contrato inteiro), denunciados pelo #80-CI."""
+    src = PLAYWRIGHT_V2
+    i = src.find('valor_mudou = self._marcar_radio_se_diferente("valor"')
+    assert i > 0, "REGRESSÃO #80-CP: troca do radio valor sumiu"
+    seg = src[i:i + 2200]
+    assert "#80-CP" in seg, "REGRESSÃO #80-CP: espera do painel removida"
+    assert "wait_for_selector" in seg and 'state="visible"' in seg, (
+        "REGRESSÃO #80-CP: voltou a confiar só em _aguardar_ajax — o campo "
+        "seguinte pega o DOM antigo e o save não submete")
+    assert "valorInformadoDoDevido" in seg and "tipoDaBaseTabelada" in seg, (
+        "REGRESSÃO #80-CP: âncoras dos dois painéis (INFORMADO/CALCULADO) perdidas")

@@ -5495,6 +5495,36 @@ class PlaywrightAutomatorV2:
         valor_mudou = self._marcar_radio_se_diferente("valor", p.valor.value)
         if valor_mudou:
             self._aguardar_ajax(3000)
+            # ⚠ #80-CP — ESPERAR O PAINEL NOVO EXISTIR. NÃO REMOVER.
+            # Trocar este radio re-renderiza o bloco de fórmula inteiro
+            # (CALCULADO ⇄ INFORMADO). Só `_aguardar_ajax` NÃO basta: o campo
+            # seguinte ainda pegava o DOM antigo — no 0000977-55 o log mostrava
+            # `radio geraReflexo: Element is not attached to the DOM`
+            # IMEDIATAMENTE após `radio valor = INFORMADO`. O bot seguia
+            # preenchendo (e "confirmando") num form substituído e clicava um
+            # `salvar` morto: nada era submetido, os campos guardavam o que foi
+            # digitado, o servidor não devolvia sucesso NEM erro, e o bean ficava
+            # com o período antigo. Só o SALDO DE SALÁRIO troca `valor` nesse
+            # cálculo — AVISO/FÉRIAS/MULTA 477, que não trocam, salvavam bem.
+            # Efeito: 19 processos com a verba rescisória no período do Expresso
+            # (contrato inteiro), denunciados pelo #80-CI.
+            # Mesmo padrão já exigido no radio do histórico salarial CALCULADO.
+            _ancora = (
+                "valorInformadoDoDevido"
+                if str(p.valor.value).upper() == "INFORMADO"
+                else "tipoDaBaseTabelada"
+            )
+            try:
+                self._page.wait_for_selector(
+                    f"[id$=':{_ancora}']", state="visible", timeout=8000
+                )
+                self._page.wait_for_timeout(800)
+                self.log(f"    ✓ #80-CP painel de '{p.valor.value}' renderizado ({_ancora})")
+            except Exception:
+                self.log(
+                    f"    ⚠ #80-CP painel de '{p.valor.value}' não renderizou em 8s "
+                    f"(âncora {_ancora}) — o save pode não submeter"
+                )
 
         # Caracteristica — dispara mudarCaracteristica
         try:
