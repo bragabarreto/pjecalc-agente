@@ -965,7 +965,7 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 
 | Verba | `valor` padrão | Como preencher |
 |---|---|---|
-| **SALDO DE SALÁRIO** | CALCULADO (regra) — **INFORMADO** (exceção, ver abaixo) | CALCULADO: base=HISTORICO_SALARIAL (última rem.), divisor=OUTRO_VALOR=30, multiplicador=1, quantidade=INFORMADA (dias trabalhados no mês da rescisão). **EXCEÇÃO obrigatória → INFORMADO** quando (a) a sentença FIXA o valor bruto do saldo (ex.: "R$ 1.886,67 = 8/30 de R$ 7.075,00"); OU (b) há valor já pago/depositado a deduzir (ConPag, adiantamento, depósito judicial); OU (c) a base inclui salário pago por fora (remuneração real = registrado + extrafolha). Ver §4.4.quater. |
+| **SALDO DE SALÁRIO** | **SEMPRE CALCULADO** | base=HISTORICO_SALARIAL (último salário) com **`proporcionaliza: SIM`**, divisor=OUTRO_VALOR=1, multiplicador=1, quantidade=INFORMADA=1. Período = **1º dia do mês da dispensa → data da dispensa** (NUNCA com projeção de aviso prévio). A proporcionalidade faz o PJE-Calc ratear a base pelos dias do período — **não conte dias nem calcule o valor**. Ver §4.4.saldo. |
 | **13º SALÁRIO** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1, quantidade=AVOS |
 | **FÉRIAS + 1/3** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1.33, quantidade=AVOS |
 | **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, **divisor=OUTRO_VALOR=30 (SEMPRE — base diária)**, multiplicador=1, quantidade=INFORMADA=<dias de aviso: 30 + 3/ano, Lei 12.506/2011>. NUNCA divisor=1. |
@@ -985,6 +985,35 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **INDENIZAÇÃO POR DANO MORAL/MATERIAL** | **INFORMADO** | valor único da condenação |
 | **MULTA CONVENCIONAL** | **INFORMADO** | valor único conforme CCT |
 | **INDENIZAÇÃO ADICIONAL (Estabilidade)** | CALCULADO | base=MAIOR_REMUNERACAO, divisor=OUTRO_VALOR=1, multiplicador=1, quantidade=INFORMADA (meses de estabilidade); proporcionalizar=SIM |
+
+### §4.4.saldo — SALDO DE SALÁRIO (≠ salário retido)
+
+⚠️ **INVARIANTE PERMANENTE — NÃO REVERTER**
+
+O saldo de salário é **sempre** a fração do **último mês de trabalho**, proporcional
+aos dias trabalhados. Portanto:
+
+- **Período**: do **1º dia do mês da dispensa** até a **data da dispensa**.
+  NUNCA incluir a projeção do aviso prévio indenizado — o aviso é verba própria.
+- **Valor**: **CALCULADO**, nunca INFORMADO. Quem apura é o PJE-Calc; você só
+  ajusta os parâmetros. Mesmo quando a sentença declara o valor, emita CALCULADO
+  e registre o valor da sentença em `comentarios` como conferência.
+- **Base**: o último salário (`HISTORICO_SALARIAL`), com **`proporcionaliza: SIM`**.
+  É a proporcionalidade que gera o rateio pelos dias do período.
+- **Fórmula**: `divisor = OUTRO_VALOR 1`, `multiplicador = 1`,
+  `quantidade = INFORMADA 1`. A proporcionalidade já faz o trabalho.
+
+❌ **NÃO faça a conta você**: `R$ 1.701,00 / 30 × 12 = R$ 680,40` emitido como
+`valor_informado_brl` é exatamente o erro que esta regra elimina. Contar dias
+é uma fonte de erro a mais (auditoria de 08/09/2026 achou saldo com
+`quantidade=30` e outro com `divisor=220`), e dispensável: o período já
+expressa os dias.
+
+⚠️ **SALDO ≠ SALÁRIO RETIDO.** Salário retido é mês **INTEGRAL** não pago —
+verba própria, com o nome do mês, período do mês inteiro. Saldo é só a fração
+do mês da dispensa. Se a sentença defere salários de meses anteriores +
+o saldo do mês da rescisão, emita **verbas separadas**: uma por salário retido
+e uma de SALDO DE SALÁRIO. Nunca chame o retido de "saldo".
 
 ### §4.4.sumula340 — HORAS EXTRAS sobre PARCELA VARIÁVEL (Súmula 340 do TST)
 

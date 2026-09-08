@@ -4172,3 +4172,65 @@ def test_inv131_checarValor_reneutralizado_antes_do_click():
     sil = src[src.find("def _silenciar_dialog_confirma_valor"):]
     assert "neutralizado" in sil[:2600], (
         "REGRESSÃO #80-CQ: silenciador voltou a não verificar a própria sobrescrita")
+
+
+def test_inv132_saldo_salario_calculado_com_proporcionalidade():
+    """#80-CR: SALDO DE SALÁRIO é SEMPRE CALCULADO com proporcionalidade, e o
+    período vai do 1º dia do mês da dispensa até a dispensa.
+
+    Regra do usuário (juiz/calculista, 08/09/2026): o saldo é sempre a fração
+    do último mês trabalhado; a base é o último salário com a opção de
+    proporcionalidade marcada, que faz o PJE-Calc ratear pelos dias do período.
+    O aviso prévio indenizado projetado NUNCA entra. E o preferido é que o
+    PJE-Calc apure — o sistema só ajusta os parâmetros.
+
+    Auditoria de 56 processos: `proporcionaliza=SIM` aparecia em ZERO; 41
+    saldos eram INFORMADO (28 sem exceção nenhuma), com a IA fazendo a conta à
+    mão. Dos 15 CALCULADO, 13 usavam divisor=30 + quantidade=<dias contados>,
+    modelo que já produziu `quantidade=30` num saldo e `divisor=220` em outro."""
+    from modules.json_normalizer import normalize_v2_json
+    pc = {"estado_uf": "CE", "municipio": "X", "data_admissao": "01/02/2024",
+          "data_demissao": "13/05/2026", "data_ajuizamento": "01/06/2026",
+          "data_inicio_calculo": "01/02/2024", "data_termino_calculo": "18/06/2026"}
+
+    def _saldo(**par):
+        base = {"id": "v", "nome_pjecalc": "SALDO DE SALÁRIO", "parametros": par}
+        return normalize_v2_json(
+            {"parametros_calculo": pc, "verbas_principais": [base]}
+        )["verbas_principais"][0]["parametros"]
+
+    # INFORMADO com valor calculado à mão → CALCULADO + proporcionalidade
+    p = _saldo(valor="INFORMADO", periodo_inicio="01/05/2026", periodo_fim="13/05/2026",
+               valor_devido={"tipo": "INFORMADO", "valor_informado_brl": 775.14})
+    assert p["valor"] == "CALCULADO", "REGRESSÃO #80-CR: saldo voltou a ser INFORMADO"
+    fc = p["formula_calculado"]
+    assert fc["base_calculo"]["proporcionaliza"] == "SIM", (
+        "REGRESSÃO #80-CR: proporcionalidade do saldo removida — é ela que faz "
+        "o PJE-Calc ratear pelos dias do período")
+    assert fc["divisor"]["valor"] == 1 and fc["multiplicador"] == 1
+    assert fc["quantidade"]["valor"] == 1, (
+        "REGRESSÃO #80-CR: voltou a contar dias na quantidade")
+    assert p["valor_devido"]["valor_informado_brl"] is None
+
+    # período com AP projetado → cortado na dispensa; início no 1º do mês
+    p2 = _saldo(valor="CALCULADO", periodo_inicio="09/05/2026", periodo_fim="18/06/2026")
+    assert p2["periodo_inicio"] == "01/05/2026" and p2["periodo_fim"] == "13/05/2026", (
+        "REGRESSÃO #80-CR: período do saldo deve ir do 1º dia do mês da dispensa "
+        "até a dispensa, sem projeção de aviso prévio")
+
+    # SALÁRIO RETIDO rotulado como saldo → NÃO coagir (é verba de mês integral)
+    p3 = _saldo(valor="INFORMADO", periodo_inicio="01/03/2026", periodo_fim="31/03/2026",
+                valor_devido={"tipo": "INFORMADO", "valor_informado_brl": 2000.0})
+    assert p3["valor"] == "INFORMADO", (
+        "REGRESSÃO #80-CR: salário retido (mês fora da dispensa) não pode ser "
+        "coagido para o modelo do saldo")
+
+
+def test_inv133_saldo_salario_no_prompt():
+    """#80-CR: a regra do saldo tem de estar no prompt (camada primária)."""
+    from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL as P
+    assert "§4.4.saldo" in P, "REGRESSÃO #80-CR: seção do saldo sumiu do prompt"
+    assert "proporcionaliza: SIM" in P or "`proporcionaliza: SIM`" in P
+    assert "SALÁRIO RETIDO" in P, (
+        "REGRESSÃO #80-CR: distinção saldo × salário retido removida do prompt")
+    assert "NUNCA incluir a projeção do aviso prévio" in P

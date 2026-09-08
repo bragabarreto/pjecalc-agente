@@ -554,6 +554,48 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — SALDO DE SALÁRIO: CALCULADO + proporcionalidade (#80-CR)
+
+> **Regra do usuário (juiz/calculista, 08/09/2026):**
+>
+> > "O saldo de salário é sempre referente ao último mês de trabalho, em
+> > proporcionalidade aos dias trabalhados. O período deve contemplar do início
+> > do último mês de trabalho até a data da dispensa, **nunca** considerando o
+> > aviso prévio indenizado projetado. A base é o último salário, sempre
+> > selecionada a opção de proporcionalidade. **O preferido é que o PJE-Calc
+> > apure o valor e o sistema apenas ajuste os parâmetros conforme a sentença.**"
+>
+> **Modelo obrigatório:** `valor=CALCULADO`, base `HISTORICO_SALARIAL` (último
+> salário) com **`proporcionaliza=SIM`**, `divisor=OUTRO_VALOR=1`,
+> `multiplicador=1`, `quantidade=INFORMADA=1`, período do **1º dia do mês da
+> dispensa até a dispensa**. A proporcionalidade faz o PJE-Calc ratear a base
+> pelos dias do período — **não se conta dias**.
+>
+> **Auditoria que motivou (56 processos, 08/09/2026):**
+> - `proporcionaliza=SIM` em **0 de 56**;
+> - **41 saldos como INFORMADO**, dos quais **28 sem exceção nenhuma** — a IA
+>   fazia a conta à mão ("R$ 1.701,00 / 30 × 12 = R$ 680,40") e informava o
+>   resultado, em vez de deixar o PJE-Calc apurar;
+> - dos 15 CALCULADO, 13 usavam `divisor=30 + quantidade=<dias>`, modelo que
+>   depende de a IA contar certo — e produziu `quantidade=30` num saldo e
+>   `divisor=220` em outro. A proporcionalidade elimina a contagem.
+>
+> ⚠️ **SALDO ≠ SALÁRIO RETIDO.** Retido é mês **INTEGRAL** não pago (verba
+> própria, período do mês inteiro); saldo é a fração do **mês da dispensa**. O
+> normalizer **não coage** verba de saldo cujo período cai fora do mês da
+> dispensa — apenas sinaliza, porque renomear mudaria a identidade da verba.
+> Medido: 8 verbas nessa situação (0000200-70 tinha três "SALDO DE SALÁRIO",
+> sendo dez/jan salários retidos e só fev o saldo real).
+>
+> **Defesas:** prompt (`extraction_v2.py`, §4.4.saldo) + normalizer
+> (`_norm_saldo_salario_calculado_proporcional`). Efeito medido no corpus:
+> 36 coagidos, 12 já CALCULADO ganhando a proporcionalidade, 8 sinalizados
+> como retido.
+>
+> Protegido por `test_inv132` e `test_inv133`.
+
+---
+
 ## Regra obrigatória — Súmula 340 do TST: multiplicador é SÓ o adicional (#80-CH)
 
 > **Horas extras sobre PARCELA VARIÁVEL** (comissionista, produtividade, peça,

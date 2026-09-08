@@ -478,6 +478,109 @@ _SUM340_SINAIS = (
 )
 
 
+def _norm_saldo_salario_calculado_proporcional(data: dict[str, Any]) -> None:
+    """SALDO DE SALÁRIO = CALCULADO + proporcionalidade (#80-CR).
+
+    Regra do usuário (juiz/calculista, 08/09/2026), confirmada por auditoria:
+
+      "O saldo de salário é sempre referente ao último mês de trabalho, em
+       proporcionalidade aos dias trabalhados. O período deve contemplar do
+       início do último mês de trabalho até a data da dispensa, NUNCA
+       considerando o aviso prévio indenizado projetado. A base é o último
+       salário, sempre selecionada a opção de proporcionalidade — o que gera
+       o cálculo proporcional aos dias do período. O preferido é que o
+       PJE-Calc apure o valor e o sistema apenas ajuste os parâmetros."
+
+    **Medido em 56 processos (08/09/2026):** `proporcionaliza=SIM` aparecia em
+    ZERO deles; 41 traziam o saldo como INFORMADO e, destes, 28 SEM nenhuma das
+    exceções documentadas — a IA fazia a conta à mão ("R$ 1.701,00 / 30 x 12 =
+    R$ 680,40") e informava o resultado, em vez de deixar o PJE-Calc apurar.
+    Dos 15 CALCULADO, 13 usavam `divisor=30 + quantidade=<dias>`, modelo que
+    depende de a IA contar os dias certo (um saiu com `quantidade=30` num
+    saldo, outro com `divisor=220`). A proporcionalidade elimina a contagem: o
+    PJE-Calc rateia a base pelos dias do próprio período.
+
+    ⚠ NÃO confundir com SALÁRIO RETIDO: retido é mês INTEGRAL não pago (verba
+    própria); saldo é a fração do MÊS DA DISPENSA. Verba de saldo cujo período
+    não cai no mês da dispensa é retido rotulado errado — aqui só sinalizamos,
+    porque renomear mudaria a identidade da verba.
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    pc = data.get("parametros_calculo") or {}
+    dem = pc.get("data_demissao") if isinstance(pc, dict) else None
+    import logging
+    from datetime import datetime as _dt
+    _log = logging.getLogger(__name__)
+    dem_d = None
+    if dem:
+        try:
+            dem_d = _dt.strptime(dem, "%d/%m/%Y")
+        except Exception:
+            dem_d = None
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        nome = " ".join(str(v.get(k) or "") for k in ("nome_pjecalc", "expresso_alvo"))
+        if "SALDO" not in nome.upper():
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        pi, pf = p.get("periodo_inicio"), p.get("periodo_fim")
+        # salário retido rotulado como saldo → sinalizar, não coagir
+        if dem_d and pi:
+            try:
+                pi_d = _dt.strptime(pi, "%d/%m/%Y")
+                if (pi_d.year, pi_d.month) != (dem_d.year, dem_d.month):
+                    _log.warning(
+                        "Normalizer #80-CR: '%s' com período %s→%s FORA do mês da "
+                        "dispensa (%s) — provável SALÁRIO RETIDO rotulado como saldo; "
+                        "não coagido, revisar na prévia",
+                        v.get("nome_pjecalc"), pi, pf, dem,
+                    )
+                    continue
+            except Exception:
+                pass
+        # período: 1º dia do mês da dispensa → dispensa (sem projeção de AP)
+        if dem_d:
+            novo_pi = dem_d.replace(day=1).strftime("%d/%m/%Y")
+            if pi != novo_pi or pf != dem:
+                _log.warning(
+                    "Normalizer #80-CR: período do saldo '%s' %s→%s → %s→%s "
+                    "(1º dia do mês da dispensa até a dispensa, sem AP projetado)",
+                    v.get("nome_pjecalc"), pi, pf, novo_pi, dem,
+                )
+            p["periodo_inicio"], p["periodo_fim"] = novo_pi, dem
+        # valor: CALCULADO com proporcionalidade (PJE-Calc apura)
+        antes = str(p.get("valor"))
+        p["valor"] = "CALCULADO"
+        fc = p.get("formula_calculado")
+        if not isinstance(fc, dict):
+            fc = {}
+            p["formula_calculado"] = fc
+        bc = fc.get("base_calculo")
+        if not isinstance(bc, dict):
+            bc = {"tipo": "HISTORICO_SALARIAL"}
+            fc["base_calculo"] = bc
+        bc["proporcionaliza"] = "SIM"
+        fc["divisor"] = {"tipo": "OUTRO_VALOR", "valor": 1}
+        fc["multiplicador"] = 1
+        fc["quantidade"] = {"tipo": "INFORMADA", "valor": 1}
+        vd = p.get("valor_devido")
+        if isinstance(vd, dict):
+            vd["tipo"] = "CALCULADO"
+            vd["valor_informado_brl"] = None
+        if antes != "CALCULADO":
+            _log.warning(
+                "Normalizer #80-CR: saldo '%s' %s → CALCULADO com "
+                "proporcionalidade (o PJE-Calc apura; o valor da sentença "
+                "serve de conferência, não de entrada)",
+                v.get("nome_pjecalc"), antes,
+            )
+
+
 def _norm_sumula_340_multiplicador(data: dict[str, Any]) -> None:
     """Súmula 340 do TST — HE sobre parcela variável = SÓ O ADICIONAL (#80-CH).
 
@@ -1917,6 +2020,10 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # (comissionista/produtividade/peça) condena SÓ o adicional: multiplicador
     # 0.5/0.55/0.6, nunca 1.5/1.55/1.6.
     _norm_sumula_340_multiplicador(data)
+
+    # Salvaguarda #80-CR: SALDO DE SALÁRIO = CALCULADO + proporcionalidade,
+    # período do 1º dia do mês da dispensa até a dispensa (sem AP projetado).
+    _norm_saldo_salario_calculado_proporcional(data)
 
     # Salvaguarda #75: ocorrência NÃO-MENSAL com periodo_fim POSTERIOR à
     # demissão → cap em data_demissao (PJE-Calc rejeita; bloqueia automação).
