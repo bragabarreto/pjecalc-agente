@@ -5049,7 +5049,7 @@ class PlaywrightAutomatorV2:
         legítima para pedir confirmação no bot.
         """
         try:
-            self._page.evaluate(
+            _st = self._page.evaluate(
                 """() => {
                     try { window.checarValor = function() { return true; }; } catch(_) {}
                     // Belt-and-suspenders: também marca como "já confirmado"
@@ -5059,8 +5059,24 @@ class PlaywrightAutomatorV2:
                             window.lista.push('formulario:salvar');
                         }
                     } catch(_) {}
+                    // #80-CQ: devolver o estado p/ o caller VERIFICAR. O
+                    // re-render A4J do painel de fórmula (radio `valor`)
+                    // re-executa o <script> do xhtml e pode REDEFINIR
+                    // checarValor, desfazendo a sobrescrita em silêncio.
+                    try {
+                        return {
+                            neutralizado: (typeof window.checarValor === 'function'
+                                           && window.checarValor() === true),
+                            fonte: (window.checarValor || '').toString().slice(0, 80)
+                        };
+                    } catch(e) { return {neutralizado: false, fonte: 'erro: ' + e}; }
                 }"""
             )
+            if isinstance(_st, dict) and not _st.get("neutralizado"):
+                self.log(
+                    f"    ⚠ #80-CQ checarValor NÃO neutralizado ({_st.get('fonte')!r}) — "
+                    f"o modal de confirmação vai bloquear o save silenciosamente"
+                )
         except Exception:
             pass
 
@@ -7266,6 +7282,40 @@ class PlaywrightAutomatorV2:
                         }"""
                     )
                     self.log(f"    🔎 #80-CN campos pós-save: {_det.get('campos')}")
+                    # #80-CQ: o modal jConfirm de checarValor bloqueia o save
+                    # SEM deixar rastro (confirma() devolve false → o onclick
+                    # devolve false → nada é submetido). É o único mecanismo
+                    # conhecido que produz exatamente este quadro: sem sucesso,
+                    # sem erro, campos intactos e bean inalterado. Só dispara
+                    # quando `valor` muda CALCULADO⇄INFORMADO — e no
+                    # 0000977-55 a única verba que muda é o SALDO DE SALÁRIO.
+                    try:
+                        _modal = self._page.evaluate(
+                            """() => {
+                                const alvos = ['#popup_container', '.jconfirm',
+                                               '#popup_ok', '.popup_message',
+                                               '[id*=popup]'];
+                                const achados = [];
+                                for (const sel of alvos) {
+                                    for (const el of document.querySelectorAll(sel)) {
+                                        if (el.offsetParent === null) continue;
+                                        achados.push(sel + ' :: ' +
+                                            (el.textContent||'').replace(/\\s+/g,' ').trim().slice(0,80));
+                                    }
+                                }
+                                return {
+                                    modais: achados.slice(0, 4),
+                                    checarValor: (window.checarValor || '').toString().slice(0, 90)
+                                };
+                            }"""
+                        )
+                        if _modal.get("modais"):
+                            self.log(
+                                f"    🛑 #80-CQ MODAL BLOQUEANDO O SAVE: {_modal['modais']}"
+                            )
+                        self.log(f"    🔎 #80-CQ checarValor no momento do save: {_modal.get('checarValor')!r}")
+                    except Exception as _emq:
+                        self.log(f"    🔎 #80-CQ sonda do modal falhou: {str(_emq)[:100]}")
                     if _det.get("erros"):
                         self.log(f"    🔎 #80-CN erros de CAMPO (inclusive ocultos): {_det['erros']}")
                     if _det.get("alerta"):
