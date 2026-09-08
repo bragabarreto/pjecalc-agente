@@ -4138,3 +4138,37 @@ def test_inv130_radio_valor_espera_painel_renderizar():
         "seguinte pega o DOM antigo e o save não submete")
     assert "valorInformadoDoDevido" in seg and "tipoDaBaseTabelada" in seg, (
         "REGRESSÃO #80-CP: âncoras dos dois painéis (INFORMADO/CALCULADO) perdidas")
+
+
+def test_inv131_checarValor_reneutralizado_antes_do_click():
+    """#80-CQ: `checarValor` tem de ser re-neutralizado IMEDIATAMENTE antes do
+    click em Salvar — neutralizar só no topo do helper não basta.
+
+    Medido no 0000977-55 (08/09/2026): o silenciador do topo funcionava (não
+    houve aviso de "NÃO neutralizado"), mas no momento do save `checarValor`
+    era de novo a função ORIGINAL do PJE-Calc — o re-render A4J re-executa o
+    <script> do xhtml e apaga a sobrescrita.
+
+    Com a original no ar e `valor` alterado (CALCULADO⇄INFORMADO), ela chama
+    confirma(), que abre modal jQuery e devolve FALSE: o onclick devolve false
+    e NADA é submetido. Daí o quadro que nenhuma outra hipótese explicava —
+    sem mensagem de sucesso, sem erro de campo (#80-CN), campos com os valores
+    digitados e bean inalterado (#80-CO: 01/02/2024 em vez de 01/05/2026).
+
+    Só dispara em verba que muda `valor`: no mesmo cálculo AVISO PRÉVIO,
+    FÉRIAS + 1/3 e MULTA 477 salvam pelo mesmo caminho e persistem."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def _clicar_salvar_flex")
+    assert ini > 0
+    corpo = src[ini:ini + 4200]
+    i_hover = corpo.find("target.hover(")
+    i_sil = corpo.find("_silenciar_dialog_confirma_valor()", i_hover)
+    i_click = corpo.find("target.click(timeout=timeout_ms)")
+    assert 0 < i_hover < i_sil < i_click, (
+        "REGRESSÃO #80-CQ: a re-neutralização de checarValor saiu de imediatamente "
+        "antes do click — o re-render A4J restaura a original e o modal bloqueia "
+        "o save em silêncio")
+    # o silenciador precisa continuar reportando se a sobrescrita valeu
+    sil = src[src.find("def _silenciar_dialog_confirma_valor"):]
+    assert "neutralizado" in sil[:2600], (
+        "REGRESSÃO #80-CQ: silenciador voltou a não verificar a própria sobrescrita")

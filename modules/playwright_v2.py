@@ -1052,6 +1052,19 @@ class PlaywrightAutomatorV2:
                             self._page.wait_for_timeout(100)
                             target.hover(timeout=2000)
                             self._page.wait_for_timeout(80)
+                            # ⚠ #80-CQ — RE-NEUTRALIZAR IMEDIATAMENTE ANTES DO
+                            # CLICK. NÃO REMOVER. O silenciamento no topo deste
+                            # helper É DESFEITO: medido no 0000977-55
+                            # (08/09/2026), no momento do save `checarValor` era
+                            # de novo a função ORIGINAL do PJE-Calc — o
+                            # re-render A4J re-executa o <script> do xhtml e
+                            # apaga a sobrescrita. Com a original no ar e
+                            # `valor` alterado, ela chama confirma(), que abre
+                            # modal e devolve FALSE: o onclick devolve false e
+                            # NADA é submetido — sem sucesso, sem erro, campos
+                            # com o que foi digitado e bean intacto (exatamente
+                            # o quadro do SALDO DE SALÁRIO, #80-CN/#80-CO).
+                            self._silenciar_dialog_confirma_valor()
                             target.click(timeout=timeout_ms)
                             self.log(f"  ✓ click {nome} humano (cascata flex via {sel!r})")
                         except Exception as _eh:
