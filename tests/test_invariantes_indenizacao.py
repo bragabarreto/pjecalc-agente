@@ -3520,7 +3520,7 @@ def test_inv106_reflexos_bean_ground_truth_by3():
 
     # (c) reconciler lê <ativo> explícito do bloco Reflexo
     ini = src.find("def _reconciliar_fidelidade_pjc")
-    corpo = src[ini:ini + 9000]
+    corpo = src[ini:ini + 16000]
     assert "<ativo>(true|false)</ativo>" in corpo, (
         "REGRESSÃO #80-BY-3: reconciler não lê o <ativo> real do Reflexo")
     # e usa atribuição 1-para-1 (melhor ajuste) p/ não gerar duplicados falsos
@@ -4367,7 +4367,7 @@ def test_inv136_ferias_navega_por_clique_no_sidebar_e_nao_pula_calado():
     declara — pulá-la em silêncio quebra as duas pontas."""
     src = PLAYWRIGHT_V2
     ini = src.find("def fase_ferias")
-    corpo = src[ini:ini + 9000]
+    corpo = src[ini:ini + 16000]
     assert '_navegar_menu_via_click("li_calculo_ferias")' in corpo, (
         "REGRESSÃO #80-CU: Férias voltou a navegar por URL — a tabela `#{lista}` "
         "vem vazia e os períodos deferidos não são informados")
@@ -4584,3 +4584,33 @@ def test_inv140_releitura_nao_confirma_save_recusado():
     assert "self._msgs_save_falho = []" in src, (
         "REGRESSÃO #80-CZ: mensagens não são mais zeradas por verba — erro de "
         "uma verba vetaria a confirmação de outra")
+
+
+def test_inv141_ferias_linha_casada_por_periodo_aquisitivo():
+    """#80-DB: na seção Férias, a linha é a que TEM aquele período aquisitivo —
+    não a de mesmo índice na lista da prévia.
+
+    As linhas da tabela vêm do CONTRATO, em ordem cronológica, e a prévia
+    declara só os PAs relevantes. Quando há mais linhas que períodos, o
+    casamento por índice marca as PRIMEIRAS linhas (tipicamente os PAs
+    GOZADOS) como INDENIZADAS e deixa as deferidas no default — inversão
+    completa. O PJE-Calc recusa a liquidação: "Os períodos de gozo de férias
+    gravados nas ocorrências das verbas não podem divergir dos registros de
+    férias gozadas constantes da página Férias" (0000763-64, 09/09/2026: 3
+    linhas × 2 períodos declarados).
+
+    Só passou a doer quando o save das Férias começou a funcionar (#80-CU/CV):
+    antes a fase era um no-op e o erro de mapeamento não chegava ao bean.
+
+    Fallback para o índice quando nem todos os períodos casam — mas com log."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def fase_ferias")
+    corpo = src[ini:ini + 20000]
+    assert "_mapa_linha" in corpo, (
+        "REGRESSÃO #80-DB: mapeamento PA→linha removido da fase Férias")
+    assert "_mapa_linha.get(i, i)" in corpo, (
+        "REGRESSÃO #80-DB: a linha voltou a ser o índice da prévia")
+    assert "45" in corpo[corpo.find("_mapa_linha"):corpo.find("_mapa_linha") + 3000], (
+        "REGRESSÃO #80-DB: tolerância de casamento do PA removida")
+    assert "caindo no índice" in corpo, (
+        "REGRESSÃO #80-DB: fallback por índice deixou de ser anunciado")

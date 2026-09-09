@@ -645,6 +645,39 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Férias: a linha é a do PERÍODO AQUISITIVO, não o índice (#80-DB)
+
+> **Na seção Férias, a linha a editar é a que TEM aquele período aquisitivo —
+> nunca a de mesmo índice na lista da prévia.**
+>
+> As linhas da tabela vêm do **CONTRATO**, em ordem cronológica; a prévia
+> declara só os PAs relevantes. Com mais linhas que períodos declarados, o
+> casamento por índice marca as PRIMEIRAS linhas — tipicamente os PAs
+> **GOZADOS** — como INDENIZADAS, e deixa as deferidas no default. Inversão
+> completa.
+>
+> O PJE-Calc então recusa a liquidação:
+> *"Os períodos de gozo de férias gravados nas ocorrências das verbas não podem
+> divergir dos registros de férias gozadas constantes da página Férias."*
+>
+> **Medido no 0000763-64 (09/09/2026):** 3 linhas na página × 2 períodos
+> declarados (`13/09/2024`, `13/09/2025`, ambos INDENIZADAS).
+>
+> ⚠️ **Só passou a doer quando o save das Férias começou a funcionar
+> (#80-CU/CV).** Antes o clique caía no botão de importar CSV e a fase inteira
+> era um no-op — o erro de mapeamento nunca chegava ao bean. O PJC anterior
+> desse processo mostra o efeito da fase morta: **5 ocorrências** de férias
+> (PAs 2021–2025) valoradas em R$ 13.343,13, com três PAs gozados incluídos.
+>
+> **Fix:** ler o PA de cada linha (primeira data do `<tr>`), casar com
+> `ferias.periodos` por PA (tolerância de 45 dias, como no #80-CT) e editar a
+> linha casada. Se algum período não casar, cai no índice — **com log**, nunca
+> em silêncio.
+>
+> Protegido por `test_inv141`.
+
+---
+
 ## Regra obrigatória — Releitura NÃO confirma save RECUSADO (#80-CZ)
 
 > **O #80-CO (confirmar o save de parâmetros por releitura do bean) vale APENAS

@@ -11142,7 +11142,79 @@ class PlaywrightAutomatorV2:
                         f"(extraído de editaveis)"
                     )
 
-        # Editar cada período — tentar mapear por índice ao JSON
+        # #80-DB — mapear PERÍODO AQUISITIVO → LINHA da tabela do PJE-Calc.
+        #
+        # O casamento por ÍNDICE (`linha i` ⇢ `ferias.periodos[i]`) é errado
+        # sempre que a página tem MAIS linhas que a prévia declara: as linhas
+        # vêm do CONTRATO, em ordem cronológica, e as primeiras costumam ser os
+        # períodos GOZADOS. Marcar as primeiras como INDENIZADAS inverte tudo —
+        # e o PJE-Calc recusa a liquidação com "Os períodos de gozo de férias
+        # gravados nas ocorrências das verbas não podem divergir dos registros
+        # de férias gozadas constantes da página Férias" (0000763-64, com 3
+        # linhas × 2 períodos declarados).
+        #
+        # Só passou a doer agora porque o save das Férias passou a FUNCIONAR
+        # (#80-CU/CV): antes o clique caía no botão de importar CSV e a
+        # fase inteira era um no-op, então o erro de mapeamento não chegava ao
+        # bean.
+        _mapa_linha: dict[int, int] = {}
+        try:
+            _pas_tabela = self._page.evaluate(
+                """(prefixo) => {
+                    const out = [];
+                    for (const el of document.querySelectorAll("[id*=':situacao']")) {
+                        const m = el.id.match(/:(\\d+):situacao$/);
+                        if (!m) continue;
+                        const tr = el.closest('tr');
+                        const txt = tr ? (tr.textContent || '') : '';
+                        const datas = txt.match(/\\d{2}\\/\\d{2}\\/\\d{4}/g) || [];
+                        out.push({idx: parseInt(m[1], 10), datas: datas.slice(0, 2)});
+                    }
+                    return out;
+                }""",
+                prefixo,
+            )
+        except Exception as _e:
+            _pas_tabela = []
+            self.log(f"  ⚠ #80-DB leitura dos PAs da tabela: {str(_e)[:110]}")
+
+        if _pas_tabela:
+            from datetime import datetime as _dtf
+
+            def _pd(x):
+                try:
+                    return _dtf.strptime(x, "%d/%m/%Y")
+                except Exception:
+                    return None
+
+            _linhas_pa = {r["idx"]: _pd(r["datas"][0]) for r in _pas_tabela
+                          if r.get("datas")}
+            self.log(
+                f"  ℹ #80-DB PAs na tabela: "
+                f"{ {k: (v.strftime('%d/%m/%Y') if v else '?') for k, v in sorted(_linhas_pa.items())} }"
+            )
+            _usadas: set[int] = set()
+            for _i, _p in enumerate(ferias.periodos):
+                _alvo = _pd(_p.periodo_aquisitivo_inicio)
+                if not _alvo:
+                    continue
+                _cand = [(abs((v - _alvo).days), k) for k, v in _linhas_pa.items()
+                         if v and k not in _usadas and abs((v - _alvo).days) <= 45]
+                if _cand:
+                    _cand.sort()
+                    _mapa_linha[_i] = _cand[0][1]
+                    _usadas.add(_cand[0][1])
+            if len(_mapa_linha) == len(ferias.periodos):
+                if any(_mapa_linha[k] != k for k in _mapa_linha):
+                    self.log(f"  ✓ #80-DB linhas remapeadas por PA: {_mapa_linha}")
+            else:
+                self.log(
+                    f"  ⚠ #80-DB só {len(_mapa_linha)}/{len(ferias.periodos)} "
+                    f"período(s) casaram com uma linha por PA — caindo no índice"
+                )
+                _mapa_linha = {}
+
+        # Editar cada período — linha por PA (#80-DB), índice como fallback
         for i, p in enumerate(ferias.periodos):
             self.log(
                 f"  → Período {i+1}: aquisitivo "
@@ -11167,15 +11239,17 @@ class PlaywrightAutomatorV2:
                 )
                 continue
 
-            # Cascata de seletores para cada campo da linha i
+            # Cascata de seletores para cada campo da linha (#80-DB: a linha é
+            # a que TEM esse período aquisitivo, não a de mesmo índice)
+            _lin = _mapa_linha.get(i, i)
             row_prefix_candidates = []
             if prefixo:
                 # JSF dataTable padrão: prefixo:N:campo
-                row_prefix_candidates.append(f"{prefixo}:{i}:")
+                row_prefix_candidates.append(f"{prefixo}:{_lin}:")
             row_prefix_candidates.extend([
-                f"dataTable:{i}:",
-                f"listagem:{i}:",
-                f"rowData:{i}:",
+                f"dataTable:{_lin}:",
+                f"listagem:{_lin}:",
+                f"rowData:{_lin}:",
             ])
 
             def _try_field(suffixes_per_row, valor_callback, kind="preencher"):
