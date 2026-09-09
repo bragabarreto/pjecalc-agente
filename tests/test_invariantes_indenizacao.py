@@ -4394,8 +4394,11 @@ def test_inv138_ferias_filtradas_por_indice_antes_do_liquidar():
     do usuário, 09/09/2026): ajusta-se o parâmetro e liquida-se uma vez.
 
     Caminhos refutados por medição: a seção Férias não filtra a verba
-    (#80-CU/#80-CV); o período da verba não exclui PAs anteriores (o PJE-Calc
-    os deriva do CONTRATO); a derivação por avos erra ±1."""
+    (#80-CU/#80-CV); a derivação por avos erra ±1.
+
+    ⚠️ O período da verba GOVERNA a série (medido depois, #80-CY): o PJE-Calc a
+    deriva do `periodo_inicio` com 1 ano de ATRASO. Este filtro segue sendo
+    necessário para o excesso à DIREITA e para PAs não contíguos."""
     src = PLAYWRIGHT_V2
     assert "def _filtrar_ferias_por_periodo_aquisitivo" in src, (
         "REGRESSÃO #80-CX: filtro de férias por período aquisitivo removido")
@@ -4415,3 +4418,100 @@ def test_inv138_ferias_filtradas_por_indice_antes_do_liquidar():
     assert "return self.fase_liquidar_e_exportar()" not in fase, (
         "REGRESSÃO #80-CX: voltou a re-liquidar — desnecessário, a sequência de "
         "PAs é derivável da prévia antes de liquidar")
+
+
+def test_inv139_ferias_periodo_estreitado_ate_o_1o_pa_deferido():
+    """#80-CY: o período da verba de FÉRIAS é estreitado para que a série de
+    períodos aquisitivos do PJE-Calc comece no 1º PA DEFERIDO.
+
+    Regra do usuário (09/09/2026): *"nas duas verbas, limitar sempre o período
+    da condenação ao período envolvido na condenação referente à verba"*.
+
+    Modelo medido em 92 processos / 54 verbas de férias com ocorrência
+    PERIODO_AQUISITIVO (09/09/2026)::
+
+        primeiro PA = max(admissão, aniversário da admissão ≤ periodo_inicio,
+                          menos 1 ano)
+        PA[k]       = primeiro PA + k anos,  enquanto PA[k] ≤ periodo_fim
+
+    54/54 no primeiro PA — e 7 desses casos DISCRIMINAM esse modelo da hipótese
+    concorrente "1º PA = admissão", com os 7 confirmando que quem manda é o
+    período da verba. 53/54 na contagem.
+
+    É o ATRASO de um ano que explicava o excesso: a IA já emitia o período
+    começando no PA deferido e o PJE-Calc apurava o PA anterior assim mesmo.
+    Por isso o fix é `periodo_inicio = 1º PA deferido + 1 ano`, não a limitação
+    literal (que já estava feita e era inócua).
+
+    ⚠️ Só ESTREITA — alargar reintroduz o PA anterior. `periodo_fim` fica
+    INTOCADO: encurtá-lo mexeria nos avos do PA proporcional final."""
+    src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
+    assert "_norm_ferias_periodo_limitado_ao_deferido" in src, (
+        "REGRESSÃO #80-CY: normalização do período das férias removida")
+    corpo = src[src.find("def _norm_ferias_periodo_limitado_ao_deferido"):]
+    corpo = corpo[:corpo.find("\ndef _norm_cap_periodo_fim_na_demissao")]
+    assert "nunca alargar" in corpo, (
+        "REGRESSÃO #80-CY: guarda anti-alargamento removida")
+    assert "GOZADAS" in corpo, (
+        "REGRESSÃO #80-CY: PA gozado voltou a contar como deferido")
+    assert "periodo_fim" not in corpo.split("p[\"periodo_inicio\"] = ")[1][:200], (
+        "REGRESSÃO #80-CY: periodo_fim voltou a ser alterado")
+
+    from modules.json_normalizer import (
+        _norm_ferias_periodo_limitado_ao_deferido as _norm)
+
+    # 0000977-55: admissão 01/02/2024, PA 2024 GOZADAS, PA 2025 deferido.
+    # Com periodo_inicio=01/02/2025 o PJE-Calc gerava o PA 01/02/2024.
+    data = {
+        "parametros_calculo": {"data_admissao": "01/02/2024",
+                               "data_demissao": "13/05/2026"},
+        "ferias": {"periodos": [
+            {"periodo_aquisitivo_inicio": "01/02/2024",
+             "periodo_aquisitivo_fim": "31/01/2025", "situacao": "GOZADAS"},
+            {"periodo_aquisitivo_inicio": "01/02/2025",
+             "periodo_aquisitivo_fim": "31/01/2026", "situacao": "INDENIZADAS"},
+        ]},
+        "verbas_principais": [{"nome_pjecalc": "FERIAS + 1/3", "parametros": {
+            "caracteristica": "FERIAS",
+            "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
+            "periodo_inicio": "01/02/2025", "periodo_fim": "13/05/2026"}}],
+    }
+    _norm(data)
+    p = data["verbas_principais"][0]["parametros"]
+    assert p["periodo_inicio"] == "01/02/2026", (
+        f"#80-CY não estreitou até o 1º PA deferido: {p['periodo_inicio']}")
+    assert p["periodo_fim"] == "13/05/2026", "#80-CY mexeu no periodo_fim"
+
+    # Idempotente e nunca alarga: reaplicar não muda nada.
+    _norm(data)
+    assert data["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2026"
+
+    # Série já começa no PA deferido → intocado.
+    ok = {
+        "parametros_calculo": {"data_admissao": "01/02/2024"},
+        "ferias": {"periodos": [{"periodo_aquisitivo_inicio": "01/02/2024",
+                                 "periodo_aquisitivo_fim": "31/01/2025",
+                                 "situacao": "INDENIZADAS"}]},
+        "verbas_principais": [{"nome_pjecalc": "FERIAS + 1/3", "parametros": {
+            "caracteristica": "FERIAS",
+            "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
+            "periodo_inicio": "01/02/2025", "periodo_fim": "13/05/2026"}}],
+    }
+    _norm(ok)
+    assert ok["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2025", (
+        "#80-CY estreitou período que já começava no PA deferido")
+
+    # Guarda: novo início ultrapassaria o periodo_fim → mantém.
+    curto = {
+        "parametros_calculo": {"data_admissao": "01/02/2024"},
+        "ferias": {"periodos": [{"periodo_aquisitivo_inicio": "01/02/2025",
+                                 "periodo_aquisitivo_fim": "31/01/2026",
+                                 "situacao": "INDENIZADAS"}]},
+        "verbas_principais": [{"nome_pjecalc": "FERIAS + 1/3", "parametros": {
+            "caracteristica": "FERIAS",
+            "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
+            "periodo_inicio": "01/02/2025", "periodo_fim": "30/06/2025"}}],
+    }
+    _norm(curto)
+    assert curto["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2025", (
+        "#80-CY estreitou além do periodo_fim")

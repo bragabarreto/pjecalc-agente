@@ -743,6 +743,130 @@ def _norm_13_ocorrencia_proporcional(data: dict[str, Any]) -> None:
             )
 
 
+def _norm_ferias_periodo_limitado_ao_deferido(data: dict[str, Any]) -> None:
+    """Período da verba de FÉRIAS limitado ao que a condenação abrange — #80-CY.
+
+    Regra do usuário (juiz/calculista, 09/09/2026): *"nas duas verbas, limitar
+    sempre o período da condenação ao período envolvido na condenação referente
+    à verba — assim já se evita incluir na condenação período não abrangido por
+    ela."*
+
+    **O PJE-Calc deriva os períodos aquisitivos com um ano de ATRASO em relação
+    ao início do período da verba** — modelo medido em 92 processos / 54 verbas
+    de férias com ocorrência PERIODO_AQUISITIVO (09/09/2026)::
+
+        primeiro PA = max(admissão, aniversário da admissão ≤ periodo_inicio,
+                          menos 1 ano)
+        PA[k]       = primeiro PA + k anos,  enquanto PA[k] ≤ periodo_fim
+
+    Acerto: **54/54** no primeiro PA (7 casos discriminam o modelo da hipótese
+    concorrente "1º PA = admissão", e nos 7 é o período da verba que manda) e
+    53/54 na contagem.
+
+    É esse atraso que explica o excesso recorrente: a IA já emitia o período
+    começando no PA deferido (0000977-55: `01/02/2025`), e mesmo assim o
+    PJE-Calc apurava o PA ANTERIOR (`01/02/2024`) — que a sentença não deferiu.
+    Limitar o período "ao da condenação" no sentido literal é, portanto,
+    **inócuo**: já estava assim.
+
+    Fix: inverter o modelo — `periodo_inicio = 1º PA deferido + 1 ano`, de modo
+    que a série comece exatamente no primeiro PA da condenação. O PJE-Calc
+    passa a NÃO gerar as ocorrências dos PAs anteriores, em vez de gerá-las para
+    o bot zerar depois (#80-CX, que segue como rede de segurança para o excesso
+    à direita e para PAs não contíguos).
+
+    ⚠️ Só ESTREITA (`novo > atual`), nunca alarga: alargar reintroduziria PA
+    anterior. `periodo_fim` fica INTOCADO — encurtá-lo mexeria nos avos do PA
+    proporcional final, que é justamente o que se quer preservar.
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    pc = data.get("parametros_calculo") or {}
+    adm = pc.get("data_admissao") if isinstance(pc, dict) else None
+    fer = data.get("ferias") or {}
+    periodos = fer.get("periodos") if isinstance(fer, dict) else None
+    if not adm or not isinstance(periodos, list) or not periodos:
+        return
+
+    from datetime import datetime as _dt
+    import logging
+    _log = logging.getLogger(__name__)
+
+    def _p(s):
+        try:
+            return _dt.strptime(s, "%d/%m/%Y")
+        except (ValueError, TypeError):
+            return None
+
+    def _mais(d, k):
+        try:
+            return d.replace(year=d.year + k)
+        except ValueError:
+            return d.replace(month=2, day=28, year=d.year + k)
+
+    d_adm = _p(adm)
+    if not d_adm:
+        return
+
+    # PAs DEFERIDOS: gozadas/sem direito não geram crédito.
+    deferidos = []
+    for pa in periodos:
+        if not isinstance(pa, dict):
+            continue
+        if str(pa.get("situacao") or "").upper() in ("GOZADAS", "NAO_DIREITO"):
+            continue
+        d = _p(pa.get("periodo_aquisitivo_inicio"))
+        if d:
+            deferidos.append(d)
+    if not deferidos:
+        return
+    p0 = min(deferidos)
+
+    for v in verbas:
+        if not isinstance(v, dict):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        if p.get("caracteristica") != "FERIAS":
+            continue
+        if p.get("ocorrencia_pagamento") != "PERIODO_AQUISITIVO":
+            continue
+        pi = _p(p.get("periodo_inicio"))
+        if not pi:
+            continue
+        # PA que o período ATUAL faria o PJE-Calc gerar primeiro
+        k = pi.year - d_adm.year
+        cand = _mais(d_adm, k)
+        if cand > pi:
+            cand = _mais(d_adm, k - 1)
+        atual_primeiro = max(d_adm, _mais(cand, -1))
+        if atual_primeiro >= p0:
+            continue  # já começa no PA deferido (ou depois) — nada a estreitar
+        novo_pi = _mais(p0, 1)
+        if novo_pi <= pi:
+            continue  # nunca alargar
+        pf = _p(p.get("periodo_fim"))
+        if pf and novo_pi > pf:
+            _log.warning(
+                "Normalizer: FÉRIAS '%s' — novo periodo_inicio %s ultrapassaria "
+                "periodo_fim %s; mantido %s (#80-CY)",
+                v.get("nome_pjecalc"), novo_pi.strftime("%d/%m/%Y"),
+                p.get("periodo_fim"), p.get("periodo_inicio"),
+            )
+            continue
+        antigo = p.get("periodo_inicio")
+        p["periodo_inicio"] = novo_pi.strftime("%d/%m/%Y")
+        _log.warning(
+            "Normalizer: FÉRIAS '%s' periodo_inicio %s → %s — o PJE-Calc "
+            "geraria o PA %s (não deferido); 1º PA deferido é %s e a série "
+            "atrasa 1 ano do período (#80-CY)",
+            v.get("nome_pjecalc"), antigo, p["periodo_inicio"],
+            atual_primeiro.strftime("%d/%m/%Y"), p0.strftime("%d/%m/%Y"),
+        )
+
+
 def _norm_cap_periodo_fim_na_demissao(data: dict[str, Any]) -> None:
     """Coerência ocorrência×período (PJE-Calc / validador Regra 1) — #75.
 
@@ -2029,6 +2153,11 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # demissão → cap em data_demissao (PJE-Calc rejeita; bloqueia automação).
     # APÓS o _norm_13 (que pode setar DEZEMBRO) — o cap é a última palavra.
     _norm_cap_periodo_fim_na_demissao(data)
+
+    # Salvaguarda #80-CY: período da verba de FÉRIAS estreitado para que a série
+    # de períodos aquisitivos do PJE-Calc (que ATRASA 1 ano do periodo_inicio)
+    # comece no 1º PA deferido — evita gerar a ocorrência do PA anterior.
+    _norm_ferias_periodo_limitado_ao_deferido(data)
 
     # Salvaguarda #78: com prescricao_quinquenal=True, periodo_inicio (verba/
     # reflexo) e data_inicio_calculo NÃO podem ser anteriores ao piso

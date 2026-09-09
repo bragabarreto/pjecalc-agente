@@ -3274,8 +3274,13 @@ class PlaywrightAutomatorV2:
         série começa, e isso o período da verba determina.
 
         Caminhos refutados por medição antes deste: a seção Férias não filtra a
-        verba (#80-CU/#80-CV), o período da verba não exclui PAs anteriores (o
-        PJE-Calc os deriva do CONTRATO) e a derivação por avos erra ±1.
+        verba (#80-CU/#80-CV) e a derivação por avos erra ±1.
+
+        ⚠️ O período da verba GOVERNA a série — medido depois, no #80-CY: são 7
+        casos (em 54) que discriminam o modelo da hipótese "1º PA = admissão", e
+        nos 7 quem manda é o `periodo_inicio`. O normalizer estreita o período
+        para a série começar no 1º PA deferido; este filtro cobre o excesso à
+        DIREITA (PA proporcional final) e os PAs não contíguos.
         """
         from datetime import datetime as _dt
         pas = list(getattr(getattr(self.previa, "ferias", None), "periodos", None) or [])

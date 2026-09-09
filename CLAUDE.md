@@ -634,7 +634,7 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 > | tentativa | resultado |
 > |---|---|
 > | seção Férias (marcar GOZADAS) | com `✓ Férias salvas`, a verba **seguiu gerando** a ocorrência (#80-CU/#80-CV) |
-> | estreitar o período da verba | 0000977-55 já tinha período 01/02/2025→13/05/2026 e o PA 01/02/2024→31/01/2025 saiu assim mesmo — **os PAs vêm do CONTRATO** |
+> | estreitar o período da verba (literal) | 0000977-55 já tinha período 01/02/2025→13/05/2026 e o PA 01/02/2024→31/01/2025 saiu assim mesmo — a série **atrasa 1 ano** do período (ver #80-CY) |
 > | derivar avos de `ferias.periodos` | erra **±1** (0001107-45 dá 18; o real é 19) |
 > | casar ocorrência por data | ambíguo: 3/3 linhas casaram (#80-CW) |
 >
@@ -642,6 +642,62 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 > não deferido; confirmação pelo **re-render do bean**, nunca pelo click (#80-CK).
 >
 > Protegido por `test_inv138`.
+
+---
+
+## Regra obrigatória — Férias: o período da verba ATRASA 1 ano na série de PAs (#80-CY)
+
+> **O PJE-Calc deriva os períodos aquisitivos com um ano de atraso em relação ao
+> `periodo_inicio` da verba. Por isso "limitar o período à condenação" no sentido
+> literal é INÓCUO — o normalizer estreita até `1º PA deferido + 1 ano`.**
+>
+> Regra do usuário (09/09/2026): *"nas duas verbas, limitar sempre o período da
+> condenação ao período envolvido na condenação referente à verba — assim já se
+> evita incluir na condenação período não abrangido por ela."*
+>
+> **Modelo medido** (92 processos, 54 verbas de férias com ocorrência
+> `PERIODO_AQUISITIVO`, 09/09/2026):
+> ```
+> primeiro PA = max(admissão, aniversário da admissão ≤ periodo_inicio, menos 1 ano)
+> PA[k]       = primeiro PA + k anos,  enquanto PA[k] ≤ periodo_fim
+> ```
+> **54/54** no primeiro PA e **53/54** na contagem. Sete desses casos
+> DISCRIMINAM esse modelo da hipótese concorrente "1º PA = admissão" — e nos
+> sete quem manda é o período da verba, não o contrato:
+>
+> | processo | admissão | periodo_inicio | 1º PA apurado |
+> |---|---|---|---|
+> | 0000670-04 | 02/12/2015 | 02/12/2025 | 02/12/2024 |
+> | 0000565-27 | 09/02/2022 | 09/02/2024 | 09/02/2023 |
+> | 0000740-55 | 04/04/2018 | 16/05/2020 | 04/04/2019 |
+> | 0000200-70 | 22/12/2023 | 22/12/2025 | 22/12/2024 |
+> | 0001972-05 | 01/06/2017 | 01/06/2024 | 01/06/2023 |
+> | 0000228-38 | 05/05/2021 | 05/05/2024 | 05/05/2023 |
+> | 0000352-21 | 12/04/2010 | 12/04/2025 | 12/04/2024 |
+>
+> Isso corrige a leitura anterior (#80-CX) de que "os PAs vêm do CONTRATO": a
+> medida que a sustentava (0000977-55, admissão 01/02/2024 e período começando
+> em 01/02/2025) NÃO discrimina os dois modelos — ambos previam 01/02/2024.
+>
+> **Fix** (`_norm_ferias_periodo_limitado_ao_deferido`): `periodo_inicio` =
+> `1º PA deferido + 1 ano`, para que a série comece exatamente no primeiro PA da
+> condenação. O PJE-Calc deixa de GERAR as ocorrências dos PAs anteriores, em
+> vez de gerá-las para o bot zerar depois.
+>
+> ⚠️ **Só ESTREITA** (`novo > atual`) — alargar reintroduz o PA anterior.
+> ⚠️ **`periodo_fim` fica INTOCADO** — encurtá-lo mexeria nos avos do PA
+> proporcional final, justamente o que se quer preservar.
+> ⚠️ PA `GOZADAS`/`NAO_DIREITO` não conta como deferido.
+>
+> **O #80-CX continua necessário** e não é redundante: cobre o excesso à
+> DIREITA (o PA proporcional final, que a série gera até `periodo_fim`) e os PAs
+> não contíguos (0001107-45 defere PAs salteados — nenhum ajuste de período
+> resolve isso, porque a série é contígua por construção).
+>
+> Efeito medido no corpus: **8 de 208** prévias com férias `PERIODO_AQUISITIVO`
+> são alteradas — mudança estreita e dirigida.
+>
+> Protegido por `test_inv139`.
 
 ---
 
