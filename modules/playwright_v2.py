@@ -3255,76 +3255,109 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"    ⚠ {nome}: erro geral: {e}")
 
-    def _zerar_ferias_fora_do_pa(self, suspeitas: list) -> bool:
-        """#80-CW — 2º passe: zera as ocorrências de férias cujo PERÍODO
-        AQUISITIVO não foi deferido. Retorna True se algo foi zerado.
+    def _filtrar_ferias_por_periodo_aquisitivo(self, v) -> None:
+        """#80-CX — zera as ocorrências de FÉRIAS cujo período aquisitivo NÃO
+        consta de `ferias.periodos`. Roda ANTES do Liquidar; uma liquidação só.
 
-        Por que só dá para fazer DEPOIS de liquidar+exportar: a grade editável
-        (`parametrizar-ocorrencia.xhtml`) expõe apenas `dataInicial`,
-        `valorDevido` e `ativo` — NÃO o período aquisitivo. Quem carrega o PA de
-        cada ocorrência é o PJC exportado (`dataFinalPeriodoAquisitivo`). O PJC
-        dá o vínculo PA→data; a grade aceita a edição por data. Fechado o ciclo,
-        re-liquida-se.
+        **A chave é o ÍNDICE da linha, não a data.** Duas ocorrências podem
+        dividir a mesma data (0000977-55: 13/05/2026 tem o PA integral e o
+        proporcional; 0001107-45: 11/10/2025 idem) — casar por data pegava as
+        duas e a guarda abortava ("3/3 linhas casaram"). Já o índice é
+        inequívoco: uma linha por PA, em ordem cronológica.
 
-        Medições que descartaram os caminhos mais simples (08–09/09/2026):
-        - seção Férias: mesmo com o PA marcado GOZADAS e `✓ Férias salvas`, a
-          verba seguiu gerando a ocorrência (#80-CU/#80-CV);
-        - período da verba: no 0000977-55 o período já era 01/02/2025→13/05/2026
-          e o PA 01/02/2024→31/01/2025 foi gerado assim mesmo — o PJE-Calc deriva
-          os PAs do CONTRATO, não do período da verba;
-        - avos: a derivação erra ±1 (0001107-45: 18 vs 19 reais).
+        Sequência dos PAs, derivável só da prévia (validada em 33/33 PJCs reais
+        em 09/09/2026):
+            1º PA  = max(admissão, aniversário da admissão ≤ (início do período
+                     da verba) − 1 ano)
+            PA[k]  = 1º PA + k anos
+        Os PAs sempre caem no aniversário da admissão; o que varia é onde a
+        série começa, e isso o período da verba determina.
+
+        Caminhos refutados por medição antes deste: a seção Férias não filtra a
+        verba (#80-CU/#80-CV), o período da verba não exclui PAs anteriores (o
+        PJE-Calc os deriva do CONTRATO) e a derivação por avos erra ±1.
         """
         from datetime import datetime as _dt
-        mudou = False
-        for f in suspeitas:
-            nome = f.get("verba")
-            datas = {o["data"] for o in (f.get("ocorrencias") or [])}
-            if not nome or not datas:
-                continue
-            v = next(
-                (x for x in (self.previa.verbas_principais or [])
-                 if (x.nome_pjecalc or "") == nome),
-                None,
-            )
-            if v is None:
-                self.log(f"    ⚠ #80-CW verba '{nome}' não achada na prévia — pulando")
-                continue
-            self.log(f"    → #80-CW zerando {len(datas)} ocorrência(s) de '{nome}' "
-                     f"com período aquisitivo NÃO deferido: {sorted(datas)}")
-            if not self._abrir_ocorrencias_da_verba(v):
-                self.log(f"    🛑 #80-CW não abriu as ocorrências de '{nome}'")
-                continue
-            linhas = self._ler_ocorrencias_da_grade()
-            alvos = [r for r in linhas if r.get("dataInicial") in datas]
-            if not alvos:
-                self.log(f"    ⚠ #80-CW nenhuma linha casou as datas na grade "
-                         f"(lidas: {[r.get('dataInicial') for r in linhas][:6]})")
-                continue
-            # ⚠ nunca zerar TUDO: se todas as linhas casaram, a leitura está
-            # errada — abortar em vez de esvaziar a verba.
-            if len(alvos) >= len(linhas):
-                self.log(f"    🛑 #80-CW abortado: {len(alvos)}/{len(linhas)} linhas "
-                         f"casaram — zeraria a verba inteira")
-                continue
-            for r in alvos:
-                self._zerar_ocorrencia(r["idx"])
+        pas = list(getattr(getattr(self.previa, "ferias", None), "periodos", None) or [])
+        if not pas:
+            return
+        pc = self.previa.parametros_calculo
+        adm = getattr(pc, "data_admissao", None)
+        pi = getattr(v.parametros, "periodo_inicio", None)
+        if not adm or not pi:
+            return
+
+        def _p(x):
             try:
-                self._clicar("salvar")
-                self._aguardar_ajax(8000)
-                self._page.wait_for_timeout(1200)
-            except Exception as e:
-                self.log(f"    ⚠ #80-CW salvar: {str(e)[:110]}")
-            rel = {r["idx"]: r for r in self._ler_ocorrencias_da_grade()}
-            resist = [r for r in alvos
-                      if rel.get(r["idx"]) and rel[r["idx"]].get("ativo") is not False
-                      and self._valor_nao_zerado(rel[r["idx"]]["valor"])]
-            if resist:
-                self.log(f"    🛑 #80-CW {len(resist)} ocorrência(s) resistiram em '{nome}'")
-            else:
-                self.log(f"    ✓ #80-CW {len(alvos)} ocorrência(s) de '{nome}' zeradas "
-                         f"e confirmadas no bean")
-                mudou = True
-        return mudou
+                return _dt.strptime(x, "%d/%m/%Y")
+            except Exception:
+                return None
+
+        def _mais(d, k):
+            try:
+                return d.replace(year=d.year + k)
+            except ValueError:
+                return d.replace(month=2, day=28, year=d.year + k)
+
+        adm_d, pi_d = _p(adm), _p(pi)
+        if not adm_d or not pi_d:
+            return
+        k = pi_d.year - adm_d.year
+        cand = _mais(adm_d, k)
+        if cand > pi_d:
+            cand = _mais(adm_d, k - 1)
+        primeiro = max(adm_d, _mais(cand, -1))
+        declarados = []
+        for pa in pas:
+            d = _p(getattr(pa, "periodo_aquisitivo_inicio", None) or "")
+            if d and str(getattr(pa, "situacao", "") or "").upper() != "GOZADAS":
+                declarados.append(d)
+        if not declarados:
+            return
+
+        nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
+        self.log(f"    → #80-CX escopo das FÉRIAS de '{nome}': PAs deferidos "
+                 f"{[d.strftime('%d/%m/%Y') for d in declarados]}")
+        if not self._abrir_ocorrencias_da_verba(v):
+            self.log(f"    🛑 #80-CX não abriu as ocorrências de '{nome}'")
+            return
+        linhas = sorted(self._ler_ocorrencias_da_grade(), key=lambda r: r["idx"])
+        if not linhas:
+            self.log(f"    🛑 #80-CX grade vazia em '{nome}'")
+            return
+        fora = []
+        for k2, r in enumerate(linhas):
+            pa = _mais(primeiro, k2)
+            dentro = any(abs((pa - d).days) <= 45 for d in declarados)
+            self.log(f"       linha {k2}: PA {pa.strftime('%d/%m/%Y')} → "
+                     f"{'DEFERIDO' if dentro else 'NÃO deferido'} "
+                     f"(oc {r.get('dataInicial')}, val '{r.get('valor')}')")
+            if not dentro:
+                fora.append(r)
+        if not fora:
+            self.log("    ✓ #80-CX todas as ocorrências são de PA deferido")
+            return
+        if len(fora) >= len(linhas):
+            self.log(f"    🛑 #80-CX abortado: {len(fora)}/{len(linhas)} linhas fora — "
+                     f"zeraria a verba inteira")
+            return
+        for r in fora:
+            self._zerar_ocorrencia(r["idx"])
+        try:
+            self._clicar("salvar")
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1200)
+        except Exception as e:
+            self.log(f"    ⚠ #80-CX salvar: {str(e)[:110]}")
+        rel = {r["idx"]: r for r in self._ler_ocorrencias_da_grade()}
+        resist = [r for r in fora
+                  if rel.get(r["idx"]) and rel[r["idx"]].get("ativo") is not False
+                  and self._valor_nao_zerado(rel[r["idx"]]["valor"])]
+        if resist:
+            self.log(f"    🛑 #80-CX {len(resist)} ocorrência(s) resistiram em '{nome}'")
+        else:
+            self.log(f"    ✓ #80-CX {len(fora)} ocorrência(s) de PA não deferido "
+                     f"zeradas e confirmadas no bean")
 
     def _abrir_ocorrencias_da_verba(self, v) -> bool:
         """Navega até a grade de Ocorrências da verba. True se abriu."""
@@ -12783,6 +12816,13 @@ class PlaywrightAutomatorV2:
             for _v in (self.previa.verbas_principais or []):
                 if getattr(_v.parametros, "janela_ocorrencias_inicio", None):
                     self._filtrar_ocorrencias_por_janela(_v)
+                # #80-CX: férias — escopo por período aquisitivo (chave = índice
+                # da linha; a data é ambígua quando duas ocorrências a dividem)
+                if getattr(_v.parametros, "caracteristica", None) == "FERIAS":
+                    try:
+                        self._filtrar_ferias_por_periodo_aquisitivo(_v)
+                    except Exception as _ef:
+                        self.log(f"  ⚠ #80-CX férias: {str(_ef)[:140]}")
         except Exception as _e:
             self.log(f"  ⚠ escopo deferido pré-Liquidar: {str(_e)[:150]}")
         self._sonda_escopo("B2-pos-filtro-pre-liquidar")
@@ -13905,24 +13945,6 @@ class PlaywrightAutomatorV2:
                 self._fidelidade_resultado = {"escopo_deferido": _esc}
         except Exception as _e:
             self.log(f"  ⚠ #80-CG guarda de escopo deferido falhou: {str(_e)[:150]}")
-
-        # ── #80-CW: 2º passe das FÉRIAS (uma única vez) ──
-        # A grade não expõe o período aquisitivo; o PJC exportado sim. Com o
-        # PJC em mãos sabemos QUAIS datas correspondem a PA não deferido — e a
-        # grade aceita edição por data. Zera, re-liquida e re-exporta.
-        try:
-            _fid = getattr(self, "_fidelidade_resultado", None) or {}
-            _e2 = _fid.get("escopo_deferido") or {}
-            _sus = [f for f in (_e2.get("ferias_suspeitas") or [])
-                    if f.get("criterio") == "periodo_aquisitivo"]
-            if _sus and not getattr(self, "_2o_passe_ferias", False):
-                self._2o_passe_ferias = True  # guarda anti-laço
-                if self._zerar_ferias_fora_do_pa(_sus):
-                    self.log("  ↻ #80-CW re-liquidando e re-exportando após zerar "
-                             "as férias de período aquisitivo não deferido")
-                    return self.fase_liquidar_e_exportar()
-        except Exception as _e:
-            self.log(f"  ⚠ #80-CW 2º passe das férias: {str(_e)[:150]}")
 
         return self._pjc_path
 

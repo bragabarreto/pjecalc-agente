@@ -605,33 +605,41 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
-## Regra obrigatória — Férias: 2º passe pós-liquidação zera por data (#80-CW)
+## Regra obrigatória — Férias: escopo por PA, chave é o ÍNDICE da linha (#80-CX)
 
-> **A ocorrência de férias de período aquisitivo NÃO deferido é zerada num
-> SEGUNDO passe, depois de liquidar e exportar. Não há como fazer antes.**
+> **As ocorrências de férias de período aquisitivo NÃO deferido são zeradas
+> ANTES do Liquidar. A chave é o ÍNDICE da linha — NUNCA a data.**
 >
-> **Ciclo:** liquidar → exportar → ler o PA de cada ocorrência no PJC → mapear
-> PA→`dataInicial` → voltar à grade → zerar por data → **re-liquidar e
-> re-exportar** (guarda `_2o_passe_ferias`, uma única vez).
+> **Por que não a data:** duas ocorrências podem dividi-la — 0000977-55 tem o PA
+> integral e o proporcional em `13/05/2026`; 0001107-45 idem em `11/10/2025`,
+> uma devida e outra não. A tentativa por data (#80-CW) casou **3/3 linhas** e
+> abortou pela guarda: a guarda funcionou, a chave é que estava errada.
 >
-> **Por que só depois:** a grade editável (`parametrizar-ocorrencia.xhtml`)
-> expõe apenas `dataInicial`, `valorDevido` e `ativo`. Quem carrega
-> `dataFinalPeriodoAquisitivo` é o **PJC exportado**. O PJC dá o vínculo
-> PA→data; a grade aceita a edição por data.
+> **Sequência dos PAs — derivável só da prévia (validada em 33/33 PJCs reais,
+> 09/09/2026):**
+> ```
+> 1º PA  = max(admissão, aniversário da admissão ≤ (início do período da verba) − 1 ano)
+> PA[k]  = 1º PA + k anos
+> ```
+> Os PAs sempre caem no aniversário da admissão; o período da verba só determina
+> onde a série começa.
 >
-> **Caminhos mais simples, todos refutados por medição (08–09/09/2026):**
+> ⚠️ **Uma liquidação só** (observação do usuário, 09/09/2026): como a sequência
+> é derivável antes de liquidar, NÃO se faz segundo passe nem re-liquidação —
+> ajusta-se o parâmetro e liquida-se uma vez. O #80-CW (liquidar → exportar →
+> ler o PA no PJC → zerar → re-liquidar) foi **removido**.
+>
+> **Caminhos refutados por medição (08–09/09/2026):**
 >
 > | tentativa | resultado |
 > |---|---|
 > | seção Férias (marcar GOZADAS) | com `✓ Férias salvas`, a verba **seguiu gerando** a ocorrência (#80-CU/#80-CV) |
-> | estreitar o período da verba | 0000977-55 já tinha período 01/02/2025→13/05/2026 e o PA 01/02/2024→31/01/2025 foi gerado assim mesmo — **os PAs vêm do CONTRATO** |
+> | estreitar o período da verba | 0000977-55 já tinha período 01/02/2025→13/05/2026 e o PA 01/02/2024→31/01/2025 saiu assim mesmo — **os PAs vêm do CONTRATO** |
 > | derivar avos de `ferias.periodos` | erra **±1** (0001107-45 dá 18; o real é 19) |
+> | casar ocorrência por data | ambíguo: 3/3 linhas casaram (#80-CW) |
 >
-> ⚠️ **Guarda obrigatória:** se TODAS as linhas da grade casarem as datas-alvo,
-> ABORTAR — a leitura está errada e zeraria a verba inteira.
->
-> ⚠️ Confirmação pelo **re-render do bean** (`_ler_ocorrencias_da_grade`), nunca
-> pelo click — mesma lição do #80-CK.
+> ⚠️ Guardas: abortar se TODAS as linhas ficarem fora; PA `GOZADAS` conta como
+> não deferido; confirmação pelo **re-render do bean**, nunca pelo click (#80-CK).
 >
 > Protegido por `test_inv138`.
 

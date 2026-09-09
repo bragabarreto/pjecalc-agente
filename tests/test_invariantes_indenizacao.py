@@ -4377,36 +4377,41 @@ def test_inv137_ferias_salva_pelo_botao_certo():
         "importar CSV e faz o save das férias virar erro de arquivo")
 
 
-def test_inv138_segundo_passe_ferias_por_data():
-    """#80-CW: 2º passe que zera as ocorrências de férias de período aquisitivo
-    NÃO deferido — liquidar → exportar → ler o PA no PJC → zerar por data na
-    grade → re-liquidar.
+def test_inv138_ferias_filtradas_por_indice_antes_do_liquidar():
+    """#80-CX: as ocorrências de férias de período aquisitivo NÃO deferido são
+    zeradas ANTES do Liquidar, e a chave é o ÍNDICE da linha — nunca a data.
 
-    Só é possível DEPOIS de exportar: a grade editável
-    (parametrizar-ocorrencia.xhtml) expõe apenas dataInicial, valorDevido e
-    ativo; quem carrega o período aquisitivo é o PJC
-    (`dataFinalPeriodoAquisitivo`). O PJC dá o vínculo PA→data e a grade aceita
-    a edição por data.
+    Por que não a data: duas ocorrências podem dividi-la (0000977-55 tem o PA
+    integral e o proporcional em 13/05/2026; 0001107-45 idem em 11/10/2025).
+    O 2º passe por data (#80-CW) casou 3/3 linhas e abortou pela guarda — a
+    guarda funcionou, a chave é que estava errada.
 
-    Caminhos mais simples, todos refutados por medição (08–09/09/2026):
-    - seção Férias: com o PA marcado GOZADAS e `✓ Férias salvas`, a verba seguiu
-      gerando a ocorrência (#80-CU/#80-CV);
-    - período da verba: no 0000977-55 o período já era 01/02/2025→13/05/2026 e o
-      PA 01/02/2024→31/01/2025 foi gerado assim mesmo — os PAs vêm do CONTRATO;
-    - derivação por avos: erra ±1 (0001107-45 dá 18, o real é 19)."""
+    Sequência dos PAs, derivável só da prévia (validada em 33/33 PJCs reais):
+        1º PA = max(admissão, aniversário da admissão ≤ (início do período da
+                verba) − 1 ano);  PA[k] = 1º PA + k anos.
+
+    Como é derivável antes de liquidar, NÃO se liquida duas vezes (observação
+    do usuário, 09/09/2026): ajusta-se o parâmetro e liquida-se uma vez.
+
+    Caminhos refutados por medição: a seção Férias não filtra a verba
+    (#80-CU/#80-CV); o período da verba não exclui PAs anteriores (o PJE-Calc
+    os deriva do CONTRATO); a derivação por avos erra ±1."""
     src = PLAYWRIGHT_V2
-    assert "def _zerar_ferias_fora_do_pa" in src, (
-        "REGRESSÃO #80-CW: 2º passe das férias removido")
-    corpo = src[src.find("def _zerar_ferias_fora_do_pa"):
-                src.find("def _sonda_escopo")]
-    # guarda: nunca zerar a verba inteira
+    assert "def _filtrar_ferias_por_periodo_aquisitivo" in src, (
+        "REGRESSÃO #80-CX: filtro de férias por período aquisitivo removido")
+    corpo = src[src.find("def _filtrar_ferias_por_periodo_aquisitivo"):
+                src.find("def _abrir_ocorrencias_da_verba")]
+    assert "enumerate(linhas)" in corpo and "_mais(primeiro, k2)" in corpo, (
+        "REGRESSÃO #80-CX: a chave voltou a não ser o índice da linha")
     assert "zeraria a verba inteira" in corpo, (
-        "REGRESSÃO #80-CW: sem a guarda, uma leitura ruim da grade zera tudo")
-    # confirmação no bean, não no click
-    assert "_ler_ocorrencias_da_grade" in corpo and "resist" in corpo
-    # guarda anti-laço + re-liquidação
+        "REGRESSÃO #80-CX: guarda anti-zerar-tudo removida")
+    assert "GOZADAS" in corpo, (
+        "REGRESSÃO #80-CX: PA gozado voltou a contar como deferido")
+    assert "resist" in corpo, (
+        "REGRESSÃO #80-CX: confirmação no bean removida (lição do #80-CK)")
+    # roda ANTES do Liquidar, junto do filtro do 13º — e sem 2ª liquidação
     fase = src[src.find("def fase_liquidar_e_exportar"):]
-    assert "_2o_passe_ferias" in fase, (
-        "REGRESSÃO #80-CW: guarda anti-laço do 2º passe removida")
-    assert "return self.fase_liquidar_e_exportar()" in fase, (
-        "REGRESSÃO #80-CW: sem re-liquidar, a zeragem não chega ao PJC")
+    assert "_filtrar_ferias_por_periodo_aquisitivo(_v)" in fase
+    assert "return self.fase_liquidar_e_exportar()" not in fase, (
+        "REGRESSÃO #80-CX: voltou a re-liquidar — desnecessário, a sequência de "
+        "PAs é derivável da prévia antes de liquidar")
