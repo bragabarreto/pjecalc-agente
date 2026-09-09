@@ -13871,6 +13871,33 @@ class PlaywrightAutomatorV2:
                 if not pv:
                     continue
                 valoradas = [o for o in pv["ocs"] if abs(o["valor"]) > 0.004]
+                # #80-CS: estimar os avos DEFERIDOS a partir de ferias.periodos
+                # p/ o aviso apontar QUAIS ocorrências conferir, não só "N para
+                # M períodos". A estimativa é aproximada (±1 avo: medida contra
+                # o PJC definitivo do 0001107-45 deu 18 onde o calculista
+                # manteve 19; no 0000772-26 deu 12 onde a sentença defere 13),
+                # por isso NÃO decide nada — só orienta a conferência humana.
+                _alvo_avos = 0
+                for _pa in pas:
+                    if str(getattr(_pa, "situacao", "") or "").upper() == "GOZADAS":
+                        continue
+                    _i = _dtm.datetime.strptime(_pa.periodo_aquisitivo_inicio, "%d/%m/%Y") \
+                        if getattr(_pa, "periodo_aquisitivo_inicio", None) else None
+                    _f = _dtm.datetime.strptime(_pa.periodo_aquisitivo_fim, "%d/%m/%Y") \
+                        if getattr(_pa, "periodo_aquisitivo_fim", None) else None
+                    if not _i or not _f or _f < _i:
+                        continue
+                    _n = (_f.year - _i.year) * 12 + (_f.month - _i.month)
+                    if _f.day - _i.day + 1 >= 15:
+                        _n += 1
+                    _n = max(0, min(12, _n))
+                    _alvo_avos += _n * (2 if getattr(_pa, "dobra", False) else 1)
+                _ger_avos = 0.0
+                for _o in valoradas:
+                    try:
+                        _ger_avos += float(_o["avos"])
+                    except Exception:
+                        pass
                 # ⚠ Limiar = nº de PAs deferidos, SEM tolerância (#80-CG).
                 # Medido nos 13 pares gerado↔definitivo disponíveis: com "+1
                 # para o proporcional da rescisão" o gate perde os DOIS casos
@@ -13888,6 +13915,9 @@ class PlaywrightAutomatorV2:
                         "verba": v.nome_pjecalc,
                         "periodos_aquisitivos_deferidos": len(pas),
                         "ocorrencias_valoradas": len(valoradas),
+                        "avos_gerados": round(_ger_avos, 2),
+                        "avos_deferidos_aprox": _alvo_avos,
+                        "excesso_aprox": round(max(0.0, _ger_avos - _alvo_avos), 2),
                         "ocorrencias": [
                             {"data": o["data"].strftime("%d/%m/%Y"),
                              "avos": o["avos"][:5], "valor": round(o["valor"], 2)}
@@ -13957,7 +13987,10 @@ class PlaywrightAutomatorV2:
                     self.log(f"          – {o['data']} | {o['avos']} avos | R$ {o['valor']:,.2f}")
             for f in res["ferias_suspeitas"]:
                 self.log(f"      • {f['verba']}: {f['ocorrencias_valoradas']} ocorrência(s) valoradas "
-                         f"para {f['periodos_aquisitivos_deferidos']} período(s) aquisitivo(s) deferido(s)")
+                         f"para {f['periodos_aquisitivos_deferidos']} período(s) aquisitivo(s) deferido(s) "
+                         f"— {f.get('avos_gerados')} avos gerados x ~{f.get('avos_deferidos_aprox')} "
+                         f"deferidos (excesso ~{f.get('excesso_aprox')} avos). "
+                         f"⚠ estimativa ±1 avo: confira ANTES de zerar")
                 for o in f["ocorrencias"]:
                     self.log(f"          – {o['data']} | {o['avos']} avos | R$ {o['valor']:,.2f}")
             for pv_ in res.get("periodos_divergentes", []):

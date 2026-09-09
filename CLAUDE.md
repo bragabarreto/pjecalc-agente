@@ -554,6 +554,40 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Férias: DETECÇÃO, nunca zeragem automática (#80-CS)
+
+> **O gate dimensiona o excesso das férias (avos gerados × deferidos) para
+> orientar a conferência, mas NÃO decide o que zerar. NÃO automatizar.**
+>
+> **Por que (medido em 08/09/2026 contra ground truth):** derivar os avos
+> deferidos de `ferias.periodos` erra **±1**:
+>
+> | caso | derivação | verdade |
+> |---|---|---|
+> | 0001107-45 (PJC definitivo) | 18 | **19** (o calculista manteve 12 + 7) |
+> | 0000772-26 (sentença) | 12 | **13** (integrais + 1/12) |
+>
+> Um avo de erro faz a seleção automática escolher o subconjunto errado e
+> **subestimar o título** — erro pior que o excesso que a regra combate.
+>
+> **Por que o 13º pode e as férias não:** o 13º tem `janela_ocorrencias_*`,
+> uma janela de DATAS derivada do período deferido, e o bot inativa por data
+> (#80-CM). A ocorrência de férias não carrega o período aquisitivo de origem,
+> e várias dividem a mesma data (0000772-26 tem duas em 30/04/2026;
+> 0001107-45 idem em 11/10/2025, uma devida e outra não). Não há chave.
+>
+> **O que o gate faz:** lista as ocorrências com data, avos e valor, e informa
+> `avos_gerados × avos_deferidos_aprox (excesso ~N avos)`, com aviso explícito
+> de estimativa ±1. Períodos aquisitivos `GOZADAS` contam zero.
+>
+> **Caminho para automatizar no futuro:** a IA declarar explicitamente, por
+> período aquisitivo, os avos deferidos — aí a chave passa a existir e o
+> mecanismo do #80-CM pode ser estendido.
+>
+> Protegido por `test_inv134`.
+
+---
+
 ## Regra obrigatória — SALDO DE SALÁRIO: CALCULADO + proporcionalidade (#80-CR)
 
 > **Regra do usuário (juiz/calculista, 08/09/2026):**

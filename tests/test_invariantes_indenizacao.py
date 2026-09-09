@@ -4234,3 +4234,36 @@ def test_inv133_saldo_salario_no_prompt():
     assert "SALÁRIO RETIDO" in P, (
         "REGRESSÃO #80-CR: distinção saldo × salário retido removida do prompt")
     assert "NUNCA incluir a projeção do aviso prévio" in P
+
+
+def test_inv134_ferias_alerta_traz_avos_e_nao_decide():
+    """#80-CS: o alerta de férias informa avos gerados × deferidos (estimativa)
+    para orientar a conferência — e NUNCA decide o que zerar.
+
+    Por que não automatizar: a derivação dos avos a partir de `ferias.periodos`
+    erra ±1 contra o ground truth. Medido (08/09/2026): no PJC DEFINITIVO do
+    0001107-45 o calculista manteve 19 avos (12 + 7) e a derivação dá 18; no
+    0000772-26 a sentença defere 13 e a derivação dá 12. Um avo de erro faz a
+    seleção automática escolher o subconjunto errado e SUBESTIMAR o título —
+    erro pior que o excesso que a regra combate.
+
+    Diferente do 13º, que tem janela de datas derivada do período deferido, a
+    ocorrência de férias não carrega o período aquisitivo de origem e várias
+    dividem a mesma data (0000772-26 tem duas em 30/04/2026). Enquanto não
+    houver declaração explícita por ocorrência, o gate DETECTA e o humano
+    decide."""
+    src = PLAYWRIGHT_V2
+    corpo = src[src.find("def _verificar_escopo_deferido_pjc"):
+                src.find("def _norm_desc_fidelidade")]
+    assert "avos_deferidos_aprox" in corpo and "avos_gerados" in corpo, (
+        "REGRESSÃO #80-CS: alerta de férias voltou a não dimensionar o excesso")
+    assert "excesso_aprox" in corpo
+    assert "GOZADAS" in corpo, (
+        "REGRESSÃO #80-CS: período aquisitivo GOZADO voltou a contar como deferido")
+    assert "±1 avo" in corpo or "estimativa" in corpo, (
+        "REGRESSÃO #80-CS: sumiu o aviso de que a estimativa não é exata — sem "
+        "ele o número vira decisão automática, que é o que NÃO se quer aqui")
+    # a zeragem automática continua restrita ao 13º (janela de datas)
+    filt = src[src.find("def _filtrar_ocorrencias_por_janela"):
+               src.find("def _configurar_ocorrencias_informado_inline")]
+    assert "janela_ocorrencias_inicio" in filt and "avos" not in filt.split("def ")[0][:400]
