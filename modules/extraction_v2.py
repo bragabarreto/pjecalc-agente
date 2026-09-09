@@ -1653,12 +1653,41 @@ Liste TODOS os sábados (ou dias específicos) com a jornada exata. Apagar dia i
     "periodo_aquisitivo_inicio": "DD/MM/YYYY", "periodo_aquisitivo_fim": "DD/MM/YYYY",
     "periodo_concessivo_inicio": "DD/MM/YYYY", "periodo_concessivo_fim": "DD/MM/YYYY",
     "prazo_dias": 30, "situacao": "INDENIZADAS|GOZADAS|PARCIAL_GOZADAS|NAO_DIREITO",
+    "deferido": true,
     "dobra": false, "abono": false, "dias_abono": 0, "gozo_1": {...}, "gozo_2": null
   }],
   "ferias_coletivas_inicio_primeiro_ano": null,
   "prazo_ferias_proporcionais": null
 }
 ```
+
+## §6.ferias — INVARIANTE PERMANENTE — NÃO REVERTER
+
+**A aba Férias espelha o CONTRATO INTEIRO, não só o que a sentença deferiu.**
+
+O PJE-Calc gera essa tabela sozinho, a partir de admissão + desligamento
+(manual §7): períodos aquisitivos sucessivos de UM ANO contados da ADMISSÃO,
+até o desligamento — o último costuma ser PROPORCIONAL (termina na dispensa).
+Liste TODOS eles, mesmo os antigos e os já gozados. Declarar só os condenados
+esconde a omissão de quem revisa a prévia.
+
+Situação SUGERIDA pelo manual (confira contra a sentença e a defesa):
+- `GOZADAS` — o período concessivo termina EM ou ANTES do desligamento
+- `INDENIZADAS` — o concessivo termina DEPOIS do desligamento (inclui o
+  proporcional final)
+
+**`deferido` (true/false) é campo SEPARADO de `situacao` — não confunda:**
+- `situacao` é FATO: o empregado gozou as férias ou não.
+- `deferido` é DIREITO: a sentença mandou PAGAR aquele período aquisitivo.
+
+São independentes. Férias **GOZADAS mas não pagas** — ou pagas sem o terço —
+são `situacao=GOZADAS` **com `deferido=true`**. Só marque `deferido=false` no
+período que a condenação claramente NÃO alcança.
+
+Ao ler o dispositivo, delimite quais períodos aquisitivos entram: "férias
+vencidas 2023/2024 e proporcionais" ⇒ `deferido=true` nesses dois e `false` nos
+anteriores. Na dúvida entre incluir e excluir um período, marque `true` e
+descreva a dúvida em `comentarios` — sobra é conferível na prévia, falta não.
 
 # 7. FGTS, CONTRIBUICAO_SOCIAL, IMPOSTO_DE_RENDA, HONORARIOS, CUSTAS, CORRECAO_JUROS_MULTA
 

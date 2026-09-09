@@ -1012,6 +1012,16 @@ class PeriodoFerias(BaseModel):
     periodo_concessivo_fim: Optional[str] = None
     prazo_dias: int = 30
     situacao: Literal["INDENIZADAS", "GOZADAS", "PARCIAL_GOZADAS", "NAO_DIREITO"] = "INDENIZADAS"
+    # #80-DC — a CONDENAÇÃO alcança este período aquisitivo?
+    #
+    # `situacao` é FATO (o empregado gozou ou não); `deferido` é DIREITO (a
+    # sentença mandou pagar). São independentes: férias GOZADAS mas não pagas —
+    # ou pagas sem o terço — seguem sendo condenação (0000763-64, em que o
+    # calculista valorou os 5 períodos, inclusive 3 gozados).
+    #
+    # None = o normalizer resolve (declarado pela IA e não-gozado ⇒ True;
+    # completado a partir do contrato ⇒ False, para revisão na prévia).
+    deferido: Optional[bool] = None
     dobra: bool = False
     abono: bool = False
     dias_abono: int = 0

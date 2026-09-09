@@ -822,6 +822,164 @@ def _norm_13_ocorrencia_proporcional(data: dict[str, Any]) -> None:
             )
 
 
+# ─── Férias: cadeia oficial dos períodos aquisitivos (#80-DC) ──────────────────
+#
+# Manual PJE-Calc §7: "O sistema gera automaticamente os dados de férias a partir
+# de: datas de admissão e desligamento, regime de trabalho, faltas
+# injustificadas"; "Período Aquisitivo: períodos sucessivos de um ano contados da
+# data de admissão"; "Período Concessivo: um ano contado do dia seguinte ao
+# término de cada aquisitivo"; situação sugerida = GOZADAS quando o concessivo
+# termina em/antes do desligamento, INDENIZADAS quando termina depois.
+#
+# Medido no corpus (09/09/2026):
+#   gozo padrão    = fim do concessivo − (prazo − 1) dias        151/151
+#   data da ocorr. = gozo (gozadas) | desligamento (indenizadas)  31/31
+#   a verba gera a ocorrência do PA ⟺ data ∈ [periodo_inicio, periodo_fim]  31/31
+
+
+def _fer_mais_anos(d, k: int):
+    from datetime import datetime as _dt  # noqa: F401
+    try:
+        return d.replace(year=d.year + k)
+    except ValueError:
+        return d.replace(month=2, day=28, year=d.year + k)
+
+
+def _fer_parse(s: str | None):
+    from datetime import datetime as _dt
+    try:
+        return _dt.strptime(s, "%d/%m/%Y")
+    except (ValueError, TypeError):
+        return None
+
+
+def _fer_data_ocorrencia(pa: dict, dem_d):
+    """Data em que a ocorrência deste período aquisitivo cai na verba.
+
+    GOZADAS → início do gozo (o declarado, ou o padrão do PJE-Calc: fim do
+    concessivo − (prazo − 1) dias). Demais → o desligamento.
+    """
+    from datetime import timedelta as _td
+    sit = str(pa.get("situacao") or "").upper()
+    if sit in ("GOZADAS", "PARCIAL_GOZADAS"):
+        g1 = pa.get("gozo_1")
+        if isinstance(g1, dict):
+            d = _fer_parse(g1.get("data_inicio"))
+            if d:
+                return d
+        pa_fim = _fer_parse(pa.get("periodo_aquisitivo_fim"))
+        if pa_fim is None:
+            pa_ini = _fer_parse(pa.get("periodo_aquisitivo_inicio"))
+            if pa_ini is None:
+                return dem_d
+            pa_fim = _fer_mais_anos(pa_ini, 1) - _td(days=1)
+        # concessivo termina um ano depois do fim do aquisitivo
+        conc_fim = _fer_mais_anos(pa_fim, 1)
+        try:
+            prazo = int(pa.get("prazo_dias") or 30)
+        except (TypeError, ValueError):
+            prazo = 30
+        return conc_fim - _td(days=max(prazo, 1) - 1)
+    return dem_d
+
+
+def _fer_deferido(pa: dict) -> bool:
+    """A condenação alcança este PA? `situacao` é fato; `deferido` é direito."""
+    d = pa.get("deferido")
+    if isinstance(d, bool):
+        return d
+    return str(pa.get("situacao") or "").upper() not in ("GOZADAS", "NAO_DIREITO")
+
+
+def _norm_ferias_completar_periodos_do_contrato(data: dict[str, Any]) -> None:
+    """A aba Férias espelha o CONTRATO INTEIRO, não só o deferido — #80-DC.
+
+    O PJE-Calc gera a tabela de períodos aquisitivos de admissão + desligamento
+    (manual §7). A prévia declarava só os períodos que a IA julgou condenados —
+    e quando ela subdeclarava, a omissão ficava INVISÍVEL na revisão.
+
+    **0000763-64 (09/09/2026):** a prévia declarou 2 dos 5 períodos; o PJC
+    definitivo do calculista valorou os 5 (R$ 12.446,12 × R$ 4.915,89 nossos).
+    Enquanto o erro do sistema era de EXCESSO, a subdeclaração ficava encoberta;
+    depois do #80-CY ela virou subcálculo — pior, porque não salta aos olhos.
+
+    Fix: completar a lista com os PAs que faltam, com a situação SUGERIDA pelo
+    manual, e `deferido=False`. Nada muda no valor — os acrescentados nascem
+    fora da condenação — mas aparecem na prévia para o revisor marcar.
+    """
+    pc = data.get("parametros_calculo") or {}
+    adm = pc.get("data_admissao") if isinstance(pc, dict) else None
+    dem = pc.get("data_demissao") if isinstance(pc, dict) else None
+    fer = data.get("ferias")
+    if not isinstance(fer, dict):
+        return
+    periodos = fer.get("periodos")
+    if not isinstance(periodos, list):
+        return
+    adm_d, dem_d = _fer_parse(adm), _fer_parse(dem)
+    if not adm_d or not dem_d or dem_d <= adm_d:
+        return
+
+    from datetime import timedelta as _td
+    import logging
+    _log = logging.getLogger(__name__)
+
+    # resolve `deferido` do que a IA declarou (preserva o comportamento atual:
+    # declarado e não-gozado = deferido)
+    declarados = {}
+    for pa in periodos:
+        if not isinstance(pa, dict):
+            continue
+        if pa.get("deferido") is None:
+            pa["deferido"] = _fer_deferido(pa)
+        d = _fer_parse(pa.get("periodo_aquisitivo_inicio"))
+        if d:
+            declarados[d.date()] = pa
+
+    acrescentados = []
+    k = 0
+    while True:
+        pa_ini = _fer_mais_anos(adm_d, k)
+        if pa_ini > dem_d:
+            break
+        pa_fim = _fer_mais_anos(pa_ini, 1) - _td(days=1)
+        proporcional = pa_fim > dem_d
+        if proporcional:
+            pa_fim = dem_d
+        k += 1
+        if any(abs((d - pa_ini.date()).days) <= 45 for d in declarados):
+            continue
+        conc_ini = pa_fim + _td(days=1)
+        conc_fim = _fer_mais_anos(_fer_mais_anos(pa_ini, 1) - _td(days=1), 1)
+        # manual §7: gozadas quando o concessivo termina em/antes do desligamento
+        situacao = "GOZADAS" if (not proporcional and conc_fim <= dem_d) else "INDENIZADAS"
+        novo = {
+            "periodo_aquisitivo_inicio": pa_ini.strftime("%d/%m/%Y"),
+            "periodo_aquisitivo_fim": pa_fim.strftime("%d/%m/%Y"),
+            "prazo_dias": 30,
+            "situacao": situacao,
+            "dobra": False,
+            "abono": False,
+            "dias_abono": 0,
+            "deferido": False,
+        }
+        if not proporcional:
+            novo["periodo_concessivo_inicio"] = conc_ini.strftime("%d/%m/%Y")
+            novo["periodo_concessivo_fim"] = conc_fim.strftime("%d/%m/%Y")
+        periodos.append(novo)
+        acrescentados.append(f"{novo['periodo_aquisitivo_inicio']} ({situacao})")
+
+    periodos.sort(key=lambda x: (_fer_parse(x.get("periodo_aquisitivo_inicio"))
+                                 or _fer_parse("01/01/1900")))
+    if acrescentados:
+        _log.warning(
+            "Normalizer #80-DC: aba Férias completada com %d período(s) do "
+            "contrato que a prévia não declarava — %s. Marcados 'deferido=False' "
+            "(não entram no cálculo); se a sentença os alcança, marcar na prévia",
+            len(acrescentados), ", ".join(acrescentados),
+        )
+
+
 def _norm_ferias_periodo_limitado_ao_deferido(data: dict[str, Any]) -> None:
     """Período da verba de FÉRIAS limitado ao que a condenação abrange — #80-CY.
 
@@ -830,31 +988,24 @@ def _norm_ferias_periodo_limitado_ao_deferido(data: dict[str, Any]) -> None:
     à verba — assim já se evita incluir na condenação período não abrangido por
     ela."*
 
-    **Os PAs vêm da ABA Férias, que o PJE-Calc gera de admissão + desligamento**
-    (manual oficial §7). O período da verba não os cria: ele FILTRA quais deles
-    geram ocorrência, pela DATA DA OCORRÊNCIA — início do gozo (gozadas) ou o
-    desligamento (indenizadas). Cadeia medida no corpus (09/09/2026)::
+    **Os PAs vêm da ABA Férias, gerada de admissão + desligamento** (manual §7).
+    O período da verba não os cria: FILTRA quais geram ocorrência, pela DATA DA
+    OCORRÊNCIA — início do gozo (gozadas) ou o desligamento (indenizadas). Ver
+    a cadeia medida em `_fer_data_ocorrencia`.
 
-        gozo padrão    = fim do concessivo − (prazo − 1) dias        151/151
-        data da ocorr. = gozo (gozadas) | desligamento (indenizadas)  31/31
-        gera ocorrência ⟺ data ∈ [periodo_inicio, periodo_fim]        31/31
+    **Critério (#80-DC, exato):** o `periodo_inicio` mais BAIXO que ainda deixa
+    de fora todos os PAs não deferidos —
 
-    ⚠ Isso CORRIGE a leitura anterior ("a série atrasa 1 ano do periodo_inicio"):
-    aquela fórmula ajustava 54/54 por ser um PROXY — o gozo padrão cai perto de
-    um ano depois do início do PA. Descrevia a correlação, não o mecanismo.
+        pi = (maior data de ocorrência NÃO deferida anterior ao 1º deferido) + 1 dia
+           = data do 1º deferido, se não houver nenhuma antes
 
-    Fix: `periodo_inicio = 1º PA deferido + 1 ano`, que exclui os PAs anteriores
-    porque a data de gozo deles fica atrás desse marco. O PJE-Calc deixa de
-    GERAR as ocorrências, em vez de gerá-las para o bot zerar depois (#80-CX,
-    que segue como rede de segurança para o excesso à direita e para PAs não
-    contíguos).
+    Erra-se de propósito para o lado CEDO: se a data estimada ficar tarde demais
+    perde-se um PA DEFERIDO (subcálculo, irrecuperável); se ficar cedo demais
+    entra um PA a mais, que o #80-CX zera depois (recuperável).
 
-    ⚠ O critério EXATO seria `periodo_inicio = min(data_da_ocorrência dos PAs
-    deferidos)`. O proxy coincide com ele quando a condenação alcança os ÚLTIMOS
-    PAs (caso comum); quando defere PAs ANTIGOS, elimina-os indevidamente —
-    0000763-64 (09/09/2026): o calculista valorou 5 PAs (R$ 12.446,12) e o
-    sistema entregou 2 (R$ 4.915,89), porque a prévia declarava só 2. GOZADAS
-    não significa "não devido": férias gozadas e não pagas seguem condenação.
+    ⚠ Substitui o proxy `1º PA deferido + 1 ano` (#80-CY original), que
+    funcionava só porque o gozo padrão cai perto de um ano depois do início do
+    PA — e que eliminava indevidamente PAs ANTIGOS deferidos (0000763-64).
 
     ⚠️ Só ESTREITA (`novo > atual`), nunca alarga: alargar reintroduziria PA
     anterior. `periodo_fim` fica INTOCADO — encurtá-lo mexeria nos avos do PA
@@ -864,45 +1015,27 @@ def _norm_ferias_periodo_limitado_ao_deferido(data: dict[str, Any]) -> None:
     if not isinstance(verbas, list):
         return
     pc = data.get("parametros_calculo") or {}
-    adm = pc.get("data_admissao") if isinstance(pc, dict) else None
+    dem_d = _fer_parse(pc.get("data_demissao") if isinstance(pc, dict) else None)
     fer = data.get("ferias") or {}
     periodos = fer.get("periodos") if isinstance(fer, dict) else None
-    if not adm or not isinstance(periodos, list) or not periodos:
+    if not dem_d or not isinstance(periodos, list) or not periodos:
         return
 
-    from datetime import datetime as _dt
+    from datetime import timedelta as _td
     import logging
     _log = logging.getLogger(__name__)
 
-    def _p(s):
-        try:
-            return _dt.strptime(s, "%d/%m/%Y")
-        except (ValueError, TypeError):
-            return None
-
-    def _mais(d, k):
-        try:
-            return d.replace(year=d.year + k)
-        except ValueError:
-            return d.replace(month=2, day=28, year=d.year + k)
-
-    d_adm = _p(adm)
-    if not d_adm:
-        return
-
-    # PAs DEFERIDOS: gozadas/sem direito não geram crédito.
-    deferidos = []
+    dentro, fora = [], []
     for pa in periodos:
         if not isinstance(pa, dict):
             continue
-        if str(pa.get("situacao") or "").upper() in ("GOZADAS", "NAO_DIREITO"):
+        d = _fer_data_ocorrencia(pa, dem_d)
+        if d is None:
             continue
-        d = _p(pa.get("periodo_aquisitivo_inicio"))
-        if d:
-            deferidos.append(d)
-    if not deferidos:
+        (dentro if _fer_deferido(pa) else fora).append(d)
+    if not dentro or not fora:
         return
-    p0 = min(deferidos)
+    primeiro = min(dentro)
 
     for v in verbas:
         if not isinstance(v, dict):
@@ -914,37 +1047,27 @@ def _norm_ferias_periodo_limitado_ao_deferido(data: dict[str, Any]) -> None:
             continue
         if p.get("ocorrencia_pagamento") != "PERIODO_AQUISITIVO":
             continue
-        pi = _p(p.get("periodo_inicio"))
-        if not pi:
+        pi = _fer_parse(p.get("periodo_inicio"))
+        pf = _fer_parse(p.get("periodo_fim"))
+        if not pi or not pf:
             continue
-        # PA que o período ATUAL faria o PJE-Calc gerar primeiro
-        k = pi.year - d_adm.year
-        cand = _mais(d_adm, k)
-        if cand > pi:
-            cand = _mais(d_adm, k - 1)
-        atual_primeiro = max(d_adm, _mais(cand, -1))
-        if atual_primeiro >= p0:
-            continue  # já começa no PA deferido (ou depois) — nada a estreitar
-        novo_pi = _mais(p0, 1)
+        # ⚠ CIRÚRGICO: só mexer quando há ocorrência INDEVIDA a excluir. Sem
+        # esta guarda o critério estreitava 197 de 208 prévias do corpus — em
+        # 189 delas sem nada a remover, só encurtando o período à toa.
+        indevidas = [d for d in fora if pi <= d <= pf and d < primeiro]
+        if not indevidas:
+            continue
+        novo_pi = max(indevidas) + _td(days=1)
         if novo_pi <= pi:
             continue  # nunca alargar
-        pf = _p(p.get("periodo_fim"))
-        if pf and novo_pi > pf:
-            _log.warning(
-                "Normalizer: FÉRIAS '%s' — novo periodo_inicio %s ultrapassaria "
-                "periodo_fim %s; mantido %s (#80-CY)",
-                v.get("nome_pjecalc"), novo_pi.strftime("%d/%m/%Y"),
-                p.get("periodo_fim"), p.get("periodo_inicio"),
-            )
-            continue
         antigo = p.get("periodo_inicio")
         p["periodo_inicio"] = novo_pi.strftime("%d/%m/%Y")
         _log.warning(
-            "Normalizer: FÉRIAS '%s' periodo_inicio %s → %s — o PJE-Calc "
-            "geraria o PA %s (não deferido); 1º PA deferido é %s e a série "
-            "atrasa 1 ano do período (#80-CY)",
-            v.get("nome_pjecalc"), antigo, p["periodo_inicio"],
-            atual_primeiro.strftime("%d/%m/%Y"), p0.strftime("%d/%m/%Y"),
+            "Normalizer: FÉRIAS '%s' periodo_inicio %s → %s — %d ocorrência(s) "
+            "de PA NÃO deferido ficam fora (últimas em %s); a 1ª deferida ocorre "
+            "em %s (#80-CY/#80-DC)",
+            v.get("nome_pjecalc"), antigo, p["periodo_inicio"], len(indevidas),
+            max(indevidas).strftime("%d/%m/%Y"), primeiro.strftime("%d/%m/%Y"),
         )
 
 
@@ -2235,9 +2358,13 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # APÓS o _norm_13 (que pode setar DEZEMBRO) — o cap é a última palavra.
     _norm_cap_periodo_fim_na_demissao(data)
 
-    # Salvaguarda #80-CY: período da verba de FÉRIAS estreitado para que a série
-    # de períodos aquisitivos do PJE-Calc (que ATRASA 1 ano do periodo_inicio)
-    # comece no 1º PA deferido — evita gerar a ocorrência do PA anterior.
+    # Salvaguarda #80-DC: a aba Férias espelha o CONTRATO — completar os PAs que
+    # a prévia não declarou (deferido=False) para que a omissão seja VISÍVEL.
+    _norm_ferias_completar_periodos_do_contrato(data)
+
+    # Salvaguarda #80-CY: período da verba de FÉRIAS estreitado até a 1ª data de
+    # ocorrência deferida — o PJE-Calc deixa de gerar as ocorrências dos PAs não
+    # deferidos anteriores. DEPOIS do #80-DC (que resolve `deferido`).
     _norm_ferias_periodo_limitado_ao_deferido(data)
 
     # Salvaguarda #78: com prescricao_quinquenal=True, periodo_inicio (verba/

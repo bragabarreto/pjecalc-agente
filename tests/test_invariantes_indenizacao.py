@@ -4401,7 +4401,7 @@ def test_inv137_ferias_salva_pelo_botao_certo():
     de férias — tem de ser setado antes do click."""
     src = PLAYWRIGHT_V2
     ini = src.find("def fase_ferias")
-    corpo = src[ini:ini + 20000]
+    corpo = src[ini:ini + 26000]
     i_save = corpo.find("#80-CV")
     assert i_save > 0, "REGRESSÃO #80-CV: save específico das Férias removido"
     bloco = corpo[i_save:i_save + 2000]
@@ -4457,29 +4457,28 @@ def test_inv138_ferias_filtradas_por_indice_antes_do_liquidar():
         "PAs é derivável da prévia antes de liquidar")
 
 
-def test_inv139_ferias_periodo_estreitado_ate_o_1o_pa_deferido():
-    """#80-CY: o período da verba de FÉRIAS é estreitado para que o PJE-Calc não
-    gere ocorrência dos períodos aquisitivos NÃO deferidos.
+def test_inv139_ferias_periodo_estreitado_ate_a_1a_ocorrencia_deferida():
+    """#80-CY/#80-DC: o período da verba de FÉRIAS é estreitado até a 1ª DATA DE
+    OCORRÊNCIA deferida, para o PJE-Calc não gerar os PAs não deferidos.
 
-    Regra do usuário (09/09/2026): *"nas duas verbas, limitar sempre o período
-    da condenação ao período envolvido na condenação referente à verba"*.
-
-    **Mecanismo real** (manual §7 + corpus, 09/09/2026): os PAs vêm da ABA
-    Férias, gerada de admissão + desligamento. O período da verba FILTRA quais
-    geram ocorrência, pela DATA DA OCORRÊNCIA::
+    **Mecanismo** (manual §7 + corpus, 09/09/2026): os PAs vêm da ABA Férias,
+    gerada de admissão + desligamento. O período da verba FILTRA quais geram
+    ocorrência, pela data da ocorrência::
 
         gozo padrão    = fim do concessivo − (prazo − 1) dias        151/151
         data da ocorr. = gozo (gozadas) | desligamento (indenizadas)  31/31
         gera ocorrência ⟺ data ∈ [periodo_inicio, periodo_fim]        31/31
 
-    A leitura anterior ("a série atrasa 1 ano do periodo_inicio") era um PROXY:
-    ajustava 54/54 porque o gozo padrão cai perto de um ano depois do início do
-    PA. `1º PA deferido + 1 ano` funciona por deixar as datas de gozo dos PAs
-    anteriores para trás — mas o critério EXATO é
-    `min(data_da_ocorrência dos PAs deferidos)`.
+    Critério: o menor `periodo_inicio` que ainda deixa de fora todos os não
+    deferidos — `(maior data não deferida anterior à 1ª deferida) + 1 dia`.
+    Erra-se para o lado CEDO de propósito: tarde demais PERDE um PA deferido
+    (subcálculo irrecuperável); cedo demais inclui um a mais, que o #80-CX zera.
 
-    ⚠️ Só ESTREITA — alargar reintroduz o PA anterior. `periodo_fim` fica
-    INTOCADO: encurtá-lo mexeria nos avos do PA proporcional final."""
+    Substitui o proxy `1º PA deferido + 1 ano`, que só funcionava porque o gozo
+    padrão cai perto de um ano depois do início do PA — e que eliminava PAs
+    ANTIGOS deferidos (0000763-64).
+
+    ⚠️ Só ESTREITA; `periodo_fim` INTOCADO (mexeria nos avos do proporcional)."""
     src = (REPO_ROOT / "modules" / "json_normalizer.py").read_text(encoding="utf-8")
     assert "_norm_ferias_periodo_limitado_ao_deferido" in src, (
         "REGRESSÃO #80-CY: normalização do período das férias removida")
@@ -4487,25 +4486,43 @@ def test_inv139_ferias_periodo_estreitado_ate_o_1o_pa_deferido():
     corpo = corpo[:corpo.find("\ndef _norm_cap_periodo_fim_na_demissao")]
     assert "nunca alargar" in corpo, (
         "REGRESSÃO #80-CY: guarda anti-alargamento removida")
-    assert "GOZADAS" in corpo, (
-        "REGRESSÃO #80-CY: PA gozado voltou a contar como deferido")
-    assert "periodo_fim" not in corpo.split("p[\"periodo_inicio\"] = ")[1][:200], (
-        "REGRESSÃO #80-CY: periodo_fim voltou a ser alterado")
+    assert "_fer_data_ocorrencia" in corpo and "_fer_deferido" in corpo, (
+        "REGRESSÃO #80-DC: voltou a derivar o período por fórmula de PA em vez "
+        "da data da ocorrência")
 
     from modules.json_normalizer import (
-        _norm_ferias_periodo_limitado_ao_deferido as _norm)
+        _norm_ferias_periodo_limitado_ao_deferido as _norm,
+        _fer_data_ocorrencia, _fer_deferido)
+    from datetime import datetime
 
-    # 0000977-55: admissão 01/02/2024, PA 2024 GOZADAS, PA 2025 deferido.
-    # Com periodo_inicio=01/02/2025 o PJE-Calc gerava o PA 01/02/2024.
+    # A cadeia do gozo padrão: PA 01/02/2024→31/01/2025, concessivo até
+    # 31/01/2026, prazo 30 ⇒ gozo começa em 02/01/2026 (medido 151/151).
+    gozada = {"periodo_aquisitivo_inicio": "01/02/2024",
+              "periodo_aquisitivo_fim": "31/01/2025",
+              "prazo_dias": 30, "situacao": "GOZADAS"}
+    assert _fer_data_ocorrencia(gozada, datetime(2026, 5, 13)) == datetime(2026, 1, 2), (
+        "REGRESSÃO #80-DC: gozo padrão ≠ fim do concessivo − (prazo − 1)")
+    # gozo DECLARADO prevalece sobre o padrão
+    com_gozo = dict(gozada, gozo_1={"data_inicio": "05/04/2025"})
+    assert _fer_data_ocorrencia(com_gozo, datetime(2026, 5, 13)) == datetime(2025, 4, 5)
+    # indenizadas ocorrem no desligamento
+    indeniz = {"periodo_aquisitivo_inicio": "01/02/2025", "situacao": "INDENIZADAS"}
+    assert _fer_data_ocorrencia(indeniz, datetime(2026, 5, 13)) == datetime(2026, 5, 13)
+
+    # `situacao` é FATO, `deferido` é DIREITO — e o segundo manda
+    assert _fer_deferido({"situacao": "GOZADAS"}) is False
+    assert _fer_deferido({"situacao": "GOZADAS", "deferido": True}) is True, (
+        "REGRESSÃO #80-DC: férias gozadas e NÃO PAGAS seguem sendo condenação")
+    assert _fer_deferido({"situacao": "INDENIZADAS"}) is True
+
+    # 0000977-55: gozado ocorre em 02/01/2026, deferido em 13/05/2026 ⇒ 03/01/2026
     data = {
         "parametros_calculo": {"data_admissao": "01/02/2024",
                                "data_demissao": "13/05/2026"},
-        "ferias": {"periodos": [
-            {"periodo_aquisitivo_inicio": "01/02/2024",
-             "periodo_aquisitivo_fim": "31/01/2025", "situacao": "GOZADAS"},
-            {"periodo_aquisitivo_inicio": "01/02/2025",
-             "periodo_aquisitivo_fim": "31/01/2026", "situacao": "INDENIZADAS"},
-        ]},
+        "ferias": {"periodos": [gozada,
+                                {"periodo_aquisitivo_inicio": "01/02/2025",
+                                 "periodo_aquisitivo_fim": "31/01/2026",
+                                 "situacao": "INDENIZADAS"}]},
         "verbas_principais": [{"nome_pjecalc": "FERIAS + 1/3", "parametros": {
             "caracteristica": "FERIAS",
             "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
@@ -4513,44 +4530,111 @@ def test_inv139_ferias_periodo_estreitado_ate_o_1o_pa_deferido():
     }
     _norm(data)
     p = data["verbas_principais"][0]["parametros"]
-    assert p["periodo_inicio"] == "01/02/2026", (
-        f"#80-CY não estreitou até o 1º PA deferido: {p['periodo_inicio']}")
+    assert p["periodo_inicio"] == "03/01/2026", (
+        f"#80-CY não estreitou até depois do gozo não deferido: {p['periodo_inicio']}")
     assert p["periodo_fim"] == "13/05/2026", "#80-CY mexeu no periodo_fim"
+    _norm(data)  # idempotente, nunca alarga
+    assert data["verbas_principais"][0]["parametros"]["periodo_inicio"] == "03/01/2026"
 
-    # Idempotente e nunca alarga: reaplicar não muda nada.
-    _norm(data)
-    assert data["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2026"
-
-    # Série já começa no PA deferido → intocado.
-    ok = {
-        "parametros_calculo": {"data_admissao": "01/02/2024"},
-        "ferias": {"periodos": [{"periodo_aquisitivo_inicio": "01/02/2024",
-                                 "periodo_aquisitivo_fim": "31/01/2025",
+    # PA gozado mas DEFERIDO (gozadas não pagas) → não pode ser excluído
+    devido = {
+        "parametros_calculo": {"data_admissao": "01/02/2024",
+                               "data_demissao": "13/05/2026"},
+        "ferias": {"periodos": [dict(gozada, deferido=True),
+                                {"periodo_aquisitivo_inicio": "01/02/2025",
                                  "situacao": "INDENIZADAS"}]},
         "verbas_principais": [{"nome_pjecalc": "FERIAS + 1/3", "parametros": {
             "caracteristica": "FERIAS",
             "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
             "periodo_inicio": "01/02/2025", "periodo_fim": "13/05/2026"}}],
     }
-    _norm(ok)
-    assert ok["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2025", (
-        "#80-CY estreitou período que já começava no PA deferido")
+    _norm(devido)
+    # pode estreitar, mas NUNCA além da ocorrência do gozado deferido (02/01/2026)
+    _pi = datetime.strptime(
+        devido["verbas_principais"][0]["parametros"]["periodo_inicio"], "%d/%m/%Y")
+    assert _pi <= datetime(2026, 1, 2), (
+        f"REGRESSÃO #80-DC: PA gozado e DEFERIDO excluído pelo estreitamento ({_pi:%d/%m/%Y})")
 
-    # Guarda: novo início ultrapassaria o periodo_fim → mantém.
-    curto = {
-        "parametros_calculo": {"data_admissao": "01/02/2024"},
-        "ferias": {"periodos": [{"periodo_aquisitivo_inicio": "01/02/2025",
-                                 "periodo_aquisitivo_fim": "31/01/2026",
-                                 "situacao": "INDENIZADAS"}]},
+    # nada deferido → não mexe
+    nada = {
+        "parametros_calculo": {"data_admissao": "01/02/2024",
+                               "data_demissao": "13/05/2026"},
+        "ferias": {"periodos": [gozada]},
         "verbas_principais": [{"nome_pjecalc": "FERIAS + 1/3", "parametros": {
             "caracteristica": "FERIAS",
             "ocorrencia_pagamento": "PERIODO_AQUISITIVO",
-            "periodo_inicio": "01/02/2025", "periodo_fim": "30/06/2025"}}],
+            "periodo_inicio": "01/02/2025", "periodo_fim": "13/05/2026"}}],
     }
-    _norm(curto)
-    assert curto["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2025", (
-        "#80-CY estreitou além do periodo_fim")
+    _norm(nada)
+    assert nada["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2025"
 
+
+def test_inv142_ferias_aba_espelha_o_contrato():
+    """#80-DC: a aba Férias espelha o CONTRATO INTEIRO, não só o deferido.
+
+    O PJE-Calc gera a tabela de PAs a partir de admissão + desligamento (manual
+    §7). A prévia declarava só o que a IA julgou condenado — e a subdeclaração
+    ficava INVISÍVEL na revisão.
+
+    **0000763-64 (09/09/2026):** a prévia declarou 2 dos 5 períodos; o PJC
+    definitivo do calculista valorou os 5 (R$ 12.446,12 × R$ 4.915,89 nossos).
+    Enquanto o erro do sistema era de excesso, a omissão ficava encoberta; com o
+    #80-CY ela virou SUBCÁLCULO — pior, porque não salta aos olhos.
+
+    Os períodos acrescentados nascem `deferido=False`: o valor não muda, mas
+    aparecem na prévia para o revisor marcar."""
+    from modules.json_normalizer import (
+        _norm_ferias_completar_periodos_do_contrato as _compl)
+
+    # 0000763-64: admissão 13/09/2021, desligamento 11/05/2026, prévia com 2 PAs
+    d = {
+        "parametros_calculo": {"data_admissao": "13/09/2021",
+                               "data_demissao": "11/05/2026"},
+        "ferias": {"periodos": [
+            {"periodo_aquisitivo_inicio": "13/09/2024",
+             "periodo_aquisitivo_fim": "12/09/2025", "situacao": "INDENIZADAS"},
+            {"periodo_aquisitivo_inicio": "13/09/2025",
+             "periodo_aquisitivo_fim": "11/05/2026", "situacao": "INDENIZADAS"},
+        ]},
+    }
+    _compl(d)
+    pas = d["ferias"]["periodos"]
+    inicios = [p["periodo_aquisitivo_inicio"] for p in pas]
+    assert inicios == ["13/09/2021", "13/09/2022", "13/09/2023",
+                       "13/09/2024", "13/09/2025"], (
+        f"REGRESSÃO #80-DC: aba não espelha o contrato — {inicios}")
+    por_ini = {p["periodo_aquisitivo_inicio"]: p for p in pas}
+    # acrescentados: situação sugerida pelo manual + FORA da condenação
+    for i in ("13/09/2021", "13/09/2022", "13/09/2023"):
+        assert por_ini[i]["situacao"] == "GOZADAS", (
+            f"#80-DC: {i} deveria vir GOZADAS (concessivo ≤ desligamento)")
+        assert por_ini[i]["deferido"] is False, (
+            "REGRESSÃO #80-DC: período acrescentado entrou no cálculo sem "
+            "revisão humana")
+    # declarados pela IA seguem deferidos
+    for i in ("13/09/2024", "13/09/2025"):
+        assert por_ini[i]["deferido"] is True
+
+    # o último PA é PROPORCIONAL (termina no desligamento) e é indenizado
+    assert por_ini["13/09/2025"]["periodo_aquisitivo_fim"] == "11/05/2026"
+
+    # idempotente: rodar de novo não duplica
+    _compl(d)
+    assert len(d["ferias"]["periodos"]) == 5, "REGRESSÃO #80-DC: duplicou PAs"
+
+    # PA declarado como GOZADO continua fora da condenação por padrão…
+    d2 = {
+        "parametros_calculo": {"data_admissao": "01/02/2024",
+                               "data_demissao": "13/05/2026"},
+        "ferias": {"periodos": [
+            {"periodo_aquisitivo_inicio": "01/02/2024",
+             "periodo_aquisitivo_fim": "31/01/2025", "situacao": "GOZADAS"}]},
+    }
+    _compl(d2)
+    por2 = {p["periodo_aquisitivo_inicio"]: p for p in d2["ferias"]["periodos"]}
+    assert por2["01/02/2024"]["deferido"] is False
+    # …e o proporcional final do contrato é criado
+    assert "01/02/2026" in por2 and por2["01/02/2026"]["deferido"] is False
 
 def test_inv140_releitura_nao_confirma_save_recusado():
     """#80-CZ: o #80-CO só vale para o save SILENCIOSO — mensagem EXPLÍCITA de
@@ -4612,3 +4696,30 @@ def test_inv141_ferias_linha_casada_por_periodo_aquisitivo():
         "REGRESSÃO #80-DB: tolerância de casamento do PA removida")
     assert "caindo no índice" in corpo, (
         "REGRESSÃO #80-DB: fallback por índice deixou de ser anunciado")
+
+
+def test_inv143_ferias_conta_todas_as_linhas_da_tabela():
+    """#80-DD: a contagem de linhas da aba Férias usa a lista COMPLETA de
+    `:situacao` — nunca a `editaveis`, que é truncada.
+
+    `editaveis` volta no máximo 40 ids e cada linha da tabela tem ~14 campos
+    (prazo, situacao, dobra, abono, dias_abono, 3× gozo com início/fim/dobra).
+    Contar linhas por ela parava em **3**: num contrato de 5 períodos
+    aquisitivos, dois nunca eram vistos — e cada um virava
+    "🛑 #80-CU período aquisitivo … SEM linha na tabela do PJE-Calc", com as
+    férias apurando fora do deferido.
+
+    Medido no 0000763-64 (09/09/2026): contrato 13/09/2021→11/05/2026 = 5 PAs,
+    e o log dizia "3 linha(s) (extraído de editaveis)"."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def fase_ferias")
+    corpo = src[ini:ini + 26000]
+    assert "situacoes" in corpo, (
+        "REGRESSÃO #80-DD: lista completa de `:situacao` removida do diagnóstico")
+    assert 'diag.get("situacoes")' in corpo, (
+        "REGRESSÃO #80-DD: a contagem de linhas voltou a depender de `editaveis`")
+    # a lista completa tem de vir ANTES do fallback truncado
+    i_full = corpo.find('diag.get("situacoes")')
+    i_trunc = corpo.find('e.endswith(":situacao")')
+    assert i_full < i_trunc, (
+        "REGRESSÃO #80-DD: `editaveis` (truncada) voltou a ter precedência")

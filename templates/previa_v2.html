@@ -2721,10 +2721,21 @@ function renderFerias() {
   const arr = (previaData.ferias||{}).periodos || [];
   arr.forEach((p, idx) => {
     const sit = p.situacao||'INDENIZADAS';
+    // #80-DC: `situacao` é FATO (gozou ou não), `deferido` é DIREITO (a sentença
+    // mandou pagar). Férias gozadas e NÃO pagas seguem sendo condenação — por
+    // isso são campos independentes. `deferido` ausente = resolve pela situação.
+    const _def = (p.deferido === undefined || p.deferido === null)
+      ? (sit !== 'GOZADAS' && sit !== 'PERDIDAS' && sit !== 'NAO_DIREITO')
+      : !!p.deferido;
     const div = document.createElement('div');
     div.className = 'fieldgroup';
     div.innerHTML = `
-      <div class="fieldgroup-title">Período ${idx+1}
+      <div class="fieldgroup-title" style="background:${_def?'':'#fff8e1'}">Período ${idx+1}
+        <label style="font-weight:600;margin-left:14px;cursor:pointer;color:${_def?'#2b8a3e':'#e67700'};">
+          <input type="checkbox"${_def?' checked':''} onchange="previaData.ferias.periodos[${idx}].deferido=this.checked;renderFerias();validarPrevia()">
+          Deferido na condenação
+        </label>
+        <span style="font-weight:400;color:#868e96;margin-left:8px;">${_def?'':'— não entra no cálculo'}</span>
         <button onclick="previaData.ferias.periodos.splice(${idx},1);renderFerias();validarPrevia()" style="float:right;color:#e74c3c;background:none;border:none;cursor:pointer;">✕</button>
       </div>
       <div class="grid-3">
@@ -2777,6 +2788,7 @@ function adicionarPeriodoFerias() {
   if (!previaData.ferias) previaData.ferias = {periodos:[]};
   if (!previaData.ferias.periodos) previaData.ferias.periodos = [];
   previaData.ferias.periodos.push({
+    deferido:true,
     periodo_aquisitivo_inicio:'',periodo_aquisitivo_fim:'',
     periodo_concessivo_inicio:'',periodo_concessivo_fim:'',
     prazo_dias:30, situacao:'INDENIZADAS', dobra:false, abono:false, dias_abono:0

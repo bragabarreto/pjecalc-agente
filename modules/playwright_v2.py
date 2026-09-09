@@ -3312,10 +3312,20 @@ class PlaywrightAutomatorV2:
         if cand > pi_d:
             cand = _mais(adm_d, k - 1)
         primeiro = max(adm_d, _mais(cand, -1))
+        # #80-DC: quem manda é `deferido` (DIREITO), não `situacao` (FATO) —
+        # férias gozadas e NÃO PAGAS seguem sendo condenação (0000763-64, em que
+        # o calculista valorou 3 períodos gozados). `deferido=None` (prévia
+        # antiga) resolve pelo comportamento anterior: gozado = não deferido.
         declarados = []
         for pa in pas:
             d = _p(getattr(pa, "periodo_aquisitivo_inicio", None) or "")
-            if d and str(getattr(pa, "situacao", "") or "").upper() != "GOZADAS":
+            if not d:
+                continue
+            _def = getattr(pa, "deferido", None)
+            if _def is None:
+                _def = str(getattr(pa, "situacao", "") or "").upper() not in (
+                    "GOZADAS", "NAO_DIREITO")
+            if _def:
                 declarados.append(d)
         if not declarados:
             return
@@ -11104,11 +11114,18 @@ class PlaywrightAutomatorV2:
                 const editaveis = [...document.querySelectorAll('input,select')]
                     .filter(e => /situacao|abono|dobra|gozo|prazo/i.test(e.id||''))
                     .map(e => e.id).slice(0, 40);
+                // #80-DD: os ids de `:situacao` (um por linha) vão INTEIROS —
+                // `editaveis` é truncado em 40 e cada linha tem ~14 campos, de
+                // modo que contar linhas por ele dava no MÁXIMO 3.
+                const situacoes = [...document.querySelectorAll('select,input')]
+                    .map(e => e.id || '')
+                    .filter(id => /:\d+:situacao$/.test(id));
                 return {
                     n_rows: rows.length,
                     sample,
                     prefixo_comum,
-                    editaveis
+                    editaveis,
+                    situacoes
                 };
             }"""
         )
@@ -11125,8 +11142,14 @@ class PlaywrightAutomatorV2:
         # As linhas auto-geradas usam formulario:j_id106:N:campo — detectar via editaveis.
         if n_linhas == 0:
             import re as _re
-            _editaveis = diag.get("editaveis", [])
-            _sit_ids = [e for e in _editaveis if e.endswith(":situacao")]
+            # #80-DD: preferir a lista COMPLETA de `:situacao`; `editaveis` é
+            # truncado em 40 ids e ~14 campos por linha faziam a contagem parar
+            # em 3 — num contrato de 5 períodos aquisitivos, dois nunca eram
+            # vistos ("período aquisitivo NÃO foi informado" em cascata).
+            _sit_ids = list(diag.get("situacoes") or [])
+            if not _sit_ids:
+                _editaveis = diag.get("editaveis", [])
+                _sit_ids = [e for e in _editaveis if e.endswith(":situacao")]
             if _sit_ids:
                 _m = _re.match(r"^(.+):\d+:situacao$", _sit_ids[0])
                 if _m:
