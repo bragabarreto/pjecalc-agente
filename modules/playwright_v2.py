@@ -11093,10 +11093,39 @@ class PlaywrightAutomatorV2:
                         break
 
         # UM ÚNICO SAVE no final (manual oficial: "Clicar 'Salvar' após modificações")
-        # Cascata flex porque página pode ter salvar/confirmar/aplicar dependendo do estado.
+        #
+        # ⚠ #80-CV — NÃO usar a cascata flex AQUI. NÃO REVERTER.
+        # `ferias.xhtml` tem DOIS botões e a cascata casava o errado:
+        #   <a4j:commandButton value="Confirmar" actionListener="importarCSV()"
+        #                      process="pnlFileUpload">      ← importa CSV
+        #   <h:commandButton   value="Salvar"    actionListener="salvar"
+        #        onclick="$('formulario:isSalvarFerias').value='true'; ...">
+        # Medido no 0000977-55 (09/09/2026): o log dizia
+        # `✓ click salvar (cascata flex via value: value:CONFIRMAR)` e a página
+        # respondia `Erro. Campo obrigatório: Selecionar Arquivo CSV` — o save
+        # das férias NUNCA acontecia, mesmo com a tabela populada e as
+        # situações (GOZADAS/INDENIZADAS) já marcadas.
+        # O `isSalvarFerias` é o flag que o bean lê p/ tratar como save de
+        # férias; sem ele o actionListener não faz o que se espera.
         if n_linhas > 0:
             try:
-                clicou = self._clicar_salvar_flex(timeout_ms=8000)
+                clicou = self._page.evaluate(
+                    """() => {
+                        const flag = document.querySelector("[id$=':isSalvarFerias']");
+                        if (flag) flag.value = 'true';
+                        const btns = [...document.querySelectorAll(
+                            'input[type=submit],input[type=button],button')];
+                        const alvo = btns.find(b =>
+                            ((b.value || b.textContent || '').trim().toUpperCase() === 'SALVAR')
+                            && b.offsetParent !== null);
+                        if (!alvo) return false;
+                        alvo.click();
+                        return true;
+                    }"""
+                )
+                if not clicou:
+                    self.log("  🛑 #80-CV botão 'Salvar' das Férias não encontrado — "
+                             "os períodos aquisitivos NÃO serão persistidos")
                 if clicou:
                     self._aguardar_ajax(10000)
                     sucesso = self._aguardar_operacao_sucesso(timeout_ms=15000, bloqueante=False)

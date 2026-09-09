@@ -4342,3 +4342,36 @@ def test_inv136_ferias_navega_por_clique_no_sidebar_e_nao_pula_calado():
     gate = src[src.find("def _verificar_escopo_deferido_pjc"):
                src.find("def _norm_desc_fidelidade")]
     assert "ferias_nao_informadas" in gate
+
+
+def test_inv137_ferias_salva_pelo_botao_certo():
+    """#80-CV: o save da Fase 7 clica o botão 'Salvar' das Férias, NUNCA a
+    cascata flex — que casava o 'Confirmar' de importar CSV.
+
+    `ferias.xhtml` tem dois botões:
+        <a4j:commandButton value="Confirmar" actionListener="importarCSV()"
+                           process="pnlFileUpload">
+        <h:commandButton   value="Salvar"    actionListener="salvar"
+             onclick="$('formulario:isSalvarFerias').value='true'; ...">
+
+    Medido no 0000977-55 (09/09/2026): o log dizia
+    `✓ click salvar (cascata flex via value: value:CONFIRMAR)` e a página
+    respondia `Erro. Campo obrigatório: Selecionar Arquivo CSV`. Resultado: com
+    a tabela populada pelo #80-CU e as situações já marcadas (GOZADAS /
+    INDENIZADAS), o save NUNCA acontecia e o PJC saía idêntico.
+
+    O `isSalvarFerias` é o flag que o bean lê para tratar a submissão como save
+    de férias — tem de ser setado antes do click."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def fase_ferias")
+    corpo = src[ini:ini + 20000]
+    i_save = corpo.find("#80-CV")
+    assert i_save > 0, "REGRESSÃO #80-CV: save específico das Férias removido"
+    bloco = corpo[i_save:i_save + 2000]
+    assert "isSalvarFerias" in bloco, (
+        "REGRESSÃO #80-CV: flag isSalvarFerias não é mais setado antes do click")
+    assert "'SALVAR'" in bloco, (
+        "REGRESSÃO #80-CV: o botão deixou de ser casado por value=='SALVAR'")
+    assert "_clicar_salvar_flex" not in bloco, (
+        "REGRESSÃO #80-CV: voltou a cascata flex, que casa o 'Confirmar' de "
+        "importar CSV e faz o save das férias virar erro de arquivo")

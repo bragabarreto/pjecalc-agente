@@ -587,7 +587,21 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 > sidebar vier incompleto, e **falha nunca silenciosa**: período aquisitivo sem
 > linha vira `🛑 #80-CU` no log e `ferias_nao_informadas` no gate.
 >
-> Protegido por `test_inv136`.
+> **#80-CV — e o save tem de ser o botão CERTO.** Com a tabela finalmente
+> populada, o save ainda não acontecia: `ferias.xhtml` tem DOIS botões e a
+> cascata flex casava o errado —
+> `<a4j:commandButton value="Confirmar" actionListener="importarCSV()">`
+> (importar CSV) em vez de
+> `<h:commandButton value="Salvar" onclick="$('formulario:isSalvarFerias').value='true'">`.
+> O log dizia `✓ click salvar (cascata flex via value: value:CONFIRMAR)` e a
+> página respondia **`Erro. Campo obrigatório: Selecionar Arquivo CSV`** — as
+> situações (GOZADAS/INDENIZADAS) eram marcadas e jogadas fora.
+>
+> A Fase 7 clica o botão por `value == 'SALVAR'` e seta `isSalvarFerias=true`
+> antes (é o flag que o bean lê p/ tratar a submissão como save de férias).
+> **NÃO voltar a usar `_clicar_salvar_flex` nesta página.**
+>
+> Protegido por `test_inv136` e `test_inv137`.
 
 ---
 
