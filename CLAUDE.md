@@ -693,6 +693,37 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — A aba Férias NÃO lista o PA proporcional (#80-DE)
+
+> **A aba Férias só tem linha para períodos aquisitivos COMPLETOS. O
+> PROPORCIONAL final não aparece — e isso NÃO é pendência.**
+>
+> Medido em **60/60** processos do corpus (09/09/2026): o número de linhas da
+> aba é exatamente o número de PAs cujo ano se completou até o desligamento. O
+> proporcional é apurado na **ocorrência da verba** (+ campo "Prazo das Férias
+> Proporcionais"), não na aba.
+>
+> A tela do 0000228-38 confirma: contrato 05/05/2021→19/01/2026, **4 linhas**
+> (2021/22 … 2024/25), sem 2025/26 — ainda que a verba gere a ocorrência do PA
+> 05/05/2025 com 10 avos.
+>
+> **Duas consequências, ambas corrigidas:**
+>
+> 1. Período proporcional sem linha vira `ℹ`, nunca `🛑 #80-CU` — senão toda
+>    rescisão fora do aniversário de admissão acusa pendência falsa ("as férias
+>    vão apurar fora do deferido").
+> 2. O mapeamento por PA (#80-DB) aceita casamento **PARCIAL**. Como o
+>    proporcional NUNCA casa, exigir 100% fazia cair no índice **sempre** —
+>    anulando o #80-DB justo depois de o #80-DC completar a aba. Sem o
+>    mapeamento, com 5 declarados × 4 linhas, o índice só acerta por sorte.
+>
+> ⚠️ O PA proporcional CONTINUA em `ferias.periodos`: é ele que carrega o
+> `deferido` da ocorrência proporcional, que o #80-CX consulta.
+>
+> Protegido por `test_inv144`.
+
+---
+
 ## Regra obrigatória — Férias: contar linhas pela lista COMPLETA de `:situacao` (#80-DD)
 
 > **A contagem de linhas da aba Férias usa a lista completa de `:situacao` —

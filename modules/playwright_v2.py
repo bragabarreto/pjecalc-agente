@@ -11180,6 +11180,7 @@ class PlaywrightAutomatorV2:
         # (#80-CU/CV): antes o clique caía no botão de importar CSV e a
         # fase inteira era um no-op, então o erro de mapeamento não chegava ao
         # bean.
+        from datetime import datetime as _dtf
         _mapa_linha: dict[int, int] = {}
         try:
             _pas_tabela = self._page.evaluate(
@@ -11202,8 +11203,6 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ #80-DB leitura dos PAs da tabela: {str(_e)[:110]}")
 
         if _pas_tabela:
-            from datetime import datetime as _dtf
-
             def _pd(x):
                 try:
                     return _dtf.strptime(x, "%d/%m/%Y")
@@ -11227,15 +11226,24 @@ class PlaywrightAutomatorV2:
                     _cand.sort()
                     _mapa_linha[_i] = _cand[0][1]
                     _usadas.add(_cand[0][1])
-            if len(_mapa_linha) == len(ferias.periodos):
-                if any(_mapa_linha[k] != k for k in _mapa_linha):
-                    self.log(f"  ✓ #80-DB linhas remapeadas por PA: {_mapa_linha}")
-            else:
+            # #80-DE: mapeamento PARCIAL vale. Descartá-lo por inteiro fazia
+            # cair no índice SEMPRE, porque o período PROPORCIONAL final nunca
+            # tem linha (a aba só lista PAs completos — medido 60/60). Os que
+            # casaram são editados pela linha certa; os que não casaram são
+            # tratados abaixo, um a um.
+            if not _mapa_linha:
                 self.log(
-                    f"  ⚠ #80-DB só {len(_mapa_linha)}/{len(ferias.periodos)} "
-                    f"período(s) casaram com uma linha por PA — caindo no índice"
+                    f"  ⚠ #80-DB nenhum período casou com uma linha por PA "
+                    f"({len(ferias.periodos)} declarados × {n_linhas} linhas) — "
+                    f"caindo no índice"
                 )
-                _mapa_linha = {}
+            elif len(_mapa_linha) < len(ferias.periodos):
+                self.log(
+                    f"  ℹ #80-DB {len(_mapa_linha)}/{len(ferias.periodos)} "
+                    f"período(s) casaram por PA: {_mapa_linha}"
+                )
+            elif any(_mapa_linha[k] != k for k in _mapa_linha):
+                self.log(f"  ✓ #80-DB linhas remapeadas por PA: {_mapa_linha}")
 
         # Editar cada período — linha por PA (#80-DB), índice como fallback
         for i, p in enumerate(ferias.periodos):
@@ -11243,7 +11251,27 @@ class PlaywrightAutomatorV2:
                 f"  → Período {i+1}: aquisitivo "
                 f"{p.periodo_aquisitivo_inicio} → {p.periodo_aquisitivo_fim}"
             )
-            if i >= n_linhas:
+            # #80-DE: o PA PROPORCIONAL final (fim antes de completar o ano)
+            # NÃO tem linha na aba — o PJE-Calc só lista períodos COMPLETOS
+            # (60/60 no corpus) e trata o proporcional na ocorrência da verba
+            # + campo "Prazo das Férias Proporcionais". Não é pendência.
+            _proporcional = False
+            try:
+                _ini_pa = _dtf.strptime(p.periodo_aquisitivo_inicio, "%d/%m/%Y")
+                _fim_pa = _dtf.strptime(p.periodo_aquisitivo_fim, "%d/%m/%Y")
+                _proporcional = (_fim_pa - _ini_pa).days < 360
+            except Exception:
+                pass
+            _sem_linha = (_mapa_linha and i not in _mapa_linha) or \
+                         (not _mapa_linha and i >= n_linhas)
+            if _sem_linha and _proporcional:
+                self.log(
+                    f"    ℹ período aquisitivo {p.periodo_aquisitivo_inicio}"
+                    f"→{p.periodo_aquisitivo_fim} é PROPORCIONAL — sem linha na "
+                    f"aba por definição (#80-DE); apurado na ocorrência da verba"
+                )
+                continue
+            if _sem_linha:
                 # ⚠ #80-CU: NUNCA silencioso. Se o período aquisitivo deferido
                 # não tem linha, ele NÃO será informado ao PJE-Calc — que então
                 # apura as férias do contrato inteiro. Era o que acontecia

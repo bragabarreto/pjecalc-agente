@@ -4723,3 +4723,41 @@ def test_inv143_ferias_conta_todas_as_linhas_da_tabela():
     i_trunc = corpo.find('e.endswith(":situacao")')
     assert i_full < i_trunc, (
         "REGRESSÃO #80-DD: `editaveis` (truncada) voltou a ter precedência")
+
+
+def test_inv144_aba_ferias_nao_lista_o_pa_proporcional():
+    """#80-DE: a aba Férias só lista períodos aquisitivos COMPLETOS — o
+    PROPORCIONAL final NÃO tem linha, e isso não é pendência.
+
+    Medido em 60/60 processos do corpus (09/09/2026): o número de linhas da aba
+    é exatamente o número de PAs cujo ano se completou até o desligamento. O
+    proporcional é apurado na OCORRÊNCIA da verba (+ campo "Prazo das Férias
+    Proporcionais"), não na aba. A tela do usuário no 0000228-38 confirma:
+    contrato 05/05/2021→19/01/2026, 4 linhas (2021/22 … 2024/25), sem 2025/26.
+
+    Duas consequências, ambas cobertas aqui:
+
+    1. O período proporcional sem linha vira `ℹ`, nunca `🛑 #80-CU` — senão
+       toda rescisão fora do aniversário de admissão acusaria uma pendência
+       falsa ("as férias vão apurar fora do deferido").
+    2. O mapeamento por PA (#80-DB) precisa aceitar casamento PARCIAL. Como o
+       proporcional NUNCA casa, exigir 100% fazia cair no índice SEMPRE,
+       anulando o #80-DB justo depois de o #80-DC completar a aba."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def fase_ferias")
+    corpo = src[ini:ini + 26000]
+    assert "#80-DE" in corpo, (
+        "REGRESSÃO #80-DE: tratamento do PA proporcional removido")
+    assert "_proporcional" in corpo and "360" in corpo, (
+        "REGRESSÃO #80-DE: detecção do período proporcional removida")
+    # o ℹ do proporcional tem de vir ANTES do 🛑 do #80-CU
+    i_prop = corpo.find("é PROPORCIONAL — sem linha")
+    i_cu = corpo.find("🛑 #80-CU período aquisitivo")
+    assert 0 < i_prop < i_cu, (
+        "REGRESSÃO #80-DE: proporcional voltou a ser acusado como pendência")
+    # mapeamento parcial preservado
+    assert "if not _mapa_linha:" in corpo, (
+        "REGRESSÃO #80-DE: mapeamento parcial por PA voltou a ser descartado")
+    assert "_mapa_linha = {}" not in corpo.split("#80-DE")[1][:1500], (
+        "REGRESSÃO #80-DE: o mapa por PA volta a ser zerado quando algum "
+        "período não casa — e o proporcional nunca casa")
