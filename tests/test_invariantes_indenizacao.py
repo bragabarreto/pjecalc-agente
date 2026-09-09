@@ -4458,27 +4458,25 @@ def test_inv138_ferias_filtradas_por_indice_antes_do_liquidar():
 
 
 def test_inv139_ferias_periodo_estreitado_ate_o_1o_pa_deferido():
-    """#80-CY: o período da verba de FÉRIAS é estreitado para que a série de
-    períodos aquisitivos do PJE-Calc comece no 1º PA DEFERIDO.
+    """#80-CY: o período da verba de FÉRIAS é estreitado para que o PJE-Calc não
+    gere ocorrência dos períodos aquisitivos NÃO deferidos.
 
     Regra do usuário (09/09/2026): *"nas duas verbas, limitar sempre o período
     da condenação ao período envolvido na condenação referente à verba"*.
 
-    Modelo medido em 92 processos / 54 verbas de férias com ocorrência
-    PERIODO_AQUISITIVO (09/09/2026)::
+    **Mecanismo real** (manual §7 + corpus, 09/09/2026): os PAs vêm da ABA
+    Férias, gerada de admissão + desligamento. O período da verba FILTRA quais
+    geram ocorrência, pela DATA DA OCORRÊNCIA::
 
-        primeiro PA = max(admissão, aniversário da admissão ≤ periodo_inicio,
-                          menos 1 ano)
-        PA[k]       = primeiro PA + k anos,  enquanto PA[k] ≤ periodo_fim
+        gozo padrão    = fim do concessivo − (prazo − 1) dias        151/151
+        data da ocorr. = gozo (gozadas) | desligamento (indenizadas)  31/31
+        gera ocorrência ⟺ data ∈ [periodo_inicio, periodo_fim]        31/31
 
-    54/54 no primeiro PA — e 7 desses casos DISCRIMINAM esse modelo da hipótese
-    concorrente "1º PA = admissão", com os 7 confirmando que quem manda é o
-    período da verba. 53/54 na contagem.
-
-    É o ATRASO de um ano que explicava o excesso: a IA já emitia o período
-    começando no PA deferido e o PJE-Calc apurava o PA anterior assim mesmo.
-    Por isso o fix é `periodo_inicio = 1º PA deferido + 1 ano`, não a limitação
-    literal (que já estava feita e era inócua).
+    A leitura anterior ("a série atrasa 1 ano do periodo_inicio") era um PROXY:
+    ajustava 54/54 porque o gozo padrão cai perto de um ano depois do início do
+    PA. `1º PA deferido + 1 ano` funciona por deixar as datas de gozo dos PAs
+    anteriores para trás — mas o critério EXATO é
+    `min(data_da_ocorrência dos PAs deferidos)`.
 
     ⚠️ Só ESTREITA — alargar reintroduz o PA anterior. `periodo_fim` fica
     INTOCADO: encurtá-lo mexeria nos avos do PA proporcional final."""

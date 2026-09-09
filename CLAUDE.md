@@ -709,57 +709,65 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
-## Regra obrigatória — Férias: o período da verba ATRASA 1 ano na série de PAs (#80-CY)
+## Regra obrigatória — Férias: os PAs vêm da ABA, e o período filtra pela DATA DA OCORRÊNCIA (#80-CY)
 
-> **O PJE-Calc deriva os períodos aquisitivos com um ano de atraso em relação ao
-> `periodo_inicio` da verba. Por isso "limitar o período à condenação" no sentido
-> literal é INÓCUO — o normalizer estreita até `1º PA deferido + 1 ano`.**
+> **Os períodos aquisitivos NÃO são derivados do período da verba. Eles vêm da
+> aba Férias, que o PJE-Calc gera de admissão + desligamento. O período da verba
+> filtra quais deles geram ocorrência — pela DATA DA OCORRÊNCIA, que é o início
+> do GOZO (gozadas) ou o DESLIGAMENTO (indenizadas).**
 >
-> Regra do usuário (09/09/2026): *"nas duas verbas, limitar sempre o período da
-> condenação ao período envolvido na condenação referente à verba — assim já se
-> evita incluir na condenação período não abrangido por ela."*
+> Manual oficial, §7 (`knowledge/pje_calc_official/manual_completo.md:207`):
+> *"O sistema gera automaticamente os dados de férias a partir de: datas de
+> admissão e desligamento, regime de trabalho, registros de faltas
+> injustificadas"*; *"Período Aquisitivo: períodos sucessivos de um ano contados
+> da data de admissão"*. O mapeamento DOM diz o mesmo
+> (`docs/dom-mapping/08-paginas-secundarias.md:192`): "Aquisitivo / Concessivo
+> (datas — **derivadas das datas do contrato**)".
 >
-> **Modelo medido** (92 processos, 54 verbas de férias com ocorrência
-> `PERIODO_AQUISITIVO`, 09/09/2026):
+> **Cadeia completa, medida no corpus (09/09/2026):**
 > ```
-> primeiro PA = max(admissão, aniversário da admissão ≤ periodo_inicio, menos 1 ano)
-> PA[k]       = primeiro PA + k anos,  enquanto PA[k] ≤ periodo_fim
+> 1. PA[k]          = admissão + k anos                          (manual §7)
+> 2. concessivo[k]  = PA_fim[k] + 1 dia  →  + 1 ano              (manual §7)
+> 3. situação       = GOZADAS se concessivo ≤ desligamento,
+>                     INDENIZADAS se termina depois              (manual §7)
+> 4. gozo padrão    = fim do concessivo − (prazo − 1) dias       151/151
+> 5. data da ocorr. = início do gozo (gozadas) | desligamento (indenizadas)  31/31
+> 6. a verba gera ocorrência do PA  ⟺  data ∈ [periodo_inicio, periodo_fim]  31/31
 > ```
-> **54/54** no primeiro PA e **53/54** na contagem. Sete desses casos
-> DISCRIMINAM esse modelo da hipótese concorrente "1º PA = admissão" — e nos
-> sete quem manda é o período da verba, não o contrato:
 >
-> | processo | admissão | periodo_inicio | 1º PA apurado |
-> |---|---|---|---|
-> | 0000670-04 | 02/12/2015 | 02/12/2025 | 02/12/2024 |
-> | 0000565-27 | 09/02/2022 | 09/02/2024 | 09/02/2023 |
-> | 0000740-55 | 04/04/2018 | 16/05/2020 | 04/04/2019 |
-> | 0000200-70 | 22/12/2023 | 22/12/2025 | 22/12/2024 |
-> | 0001972-05 | 01/06/2017 | 01/06/2024 | 01/06/2023 |
-> | 0000228-38 | 05/05/2021 | 05/05/2024 | 05/05/2023 |
-> | 0000352-21 | 12/04/2010 | 12/04/2025 | 12/04/2024 |
+> ⚠️ **Isto CORRIGE a leitura anterior de que "o período da verba governa a série
+> com 1 ano de atraso".** Aquela fórmula (`1º PA = max(admissão, aniversário ≤
+> periodo_inicio, menos 1 ano)`) ajustava 54/54 por ser um **proxy**: o gozo
+> padrão cai perto de um ano depois do início do PA (é o fim do concessivo menos
+> o prazo). Ela descrevia a correlação, não o mecanismo. O passo 6 é o mecanismo.
 >
-> Isso corrige a leitura anterior (#80-CX) de que "os PAs vêm do CONTRATO": a
-> medida que a sustentava (0000977-55, admissão 01/02/2024 e período começando
-> em 01/02/2025) NÃO discrimina os dois modelos — ambos previam 01/02/2024.
+> **Consequência prática do fix `_norm_ferias_periodo_limitado_ao_deferido`:**
+> estreitar `periodo_inicio` exclui PAs **pela data do gozo** — o que coincide
+> com "não deferido" no caso comum (a condenação alcança os ÚLTIMOS PAs), mas
+> **não é o mesmo critério**. Quando a sentença defere PAs ANTIGOS, o
+> estreitamento os elimina indevidamente:
 >
-> **Fix** (`_norm_ferias_periodo_limitado_ao_deferido`): `periodo_inicio` =
-> `1º PA deferido + 1 ano`, para que a série comece exatamente no primeiro PA da
-> condenação. O PJE-Calc deixa de GERAR as ocorrências dos PAs anteriores, em
-> vez de gerá-las para o bot zerar depois.
+> | 0000763-64 | PAs valorados | total |
+> |---|---|---|
+> | PJC definitivo do calculista | 2021, 2022, 2023, 2024, 2025 | R$ 12.446,12 |
+> | sistema após o estreitamento | 2024, 2025 | R$ 4.915,89 |
 >
-> ⚠️ **Só ESTREITA** (`novo > atual`) — alargar reintroduz o PA anterior.
-> ⚠️ **`periodo_fim` fica INTOCADO** — encurtá-lo mexeria nos avos do PA
-> proporcional final, justamente o que se quer preservar.
-> ⚠️ PA `GOZADAS`/`NAO_DIREITO` não conta como deferido.
+> A prévia declarava só 2 dos 5 PAs; o estreitamento converteu a subdeclaração
+> em **subcálculo de R$ 7.530,23**. Antes o erro era de excesso (~R$ 900 a
+> maior); passou a ser de falta — pior, porque não salta aos olhos na
+> conferência.
 >
-> **O #80-CX continua necessário** e não é redundante: cobre o excesso à
-> DIREITA (o PA proporcional final, que a série gera até `periodo_fim`) e os PAs
-> não contíguos (0001107-45 defere PAs salteados — nenhum ajuste de período
-> resolve isso, porque a série é contígua por construção).
+> ⚠️ **O critério EXATO, derivável da prévia**, é
+> `periodo_inicio = min(data_da_ocorrência dos PAs deferidos)` — e não
+> `1º PA deferido + 1 ano`. Com a cadeia acima, essa data é calculável sem que a
+> IA declare o gozo.
 >
-> Efeito medido no corpus: **8 de 208** prévias com férias `PERIODO_AQUISITIVO`
-> são alteradas — mudança estreita e dirigida.
+> ⚠️ Só ESTREITA; `periodo_fim` fica INTOCADO (encurtá-lo mexeria nos avos do PA
+> proporcional final); PA `GOZADAS`/`NAO_DIREITO` não conta como deferido.
+> ⚠️ **GOZADAS ≠ não devido.** Férias gozadas mas não pagas (ou pagas sem o
+> terço) seguem sendo condenação — foi o caso do 0000763-64.
+>
+> Efeito no corpus: **8 de 208** prévias com férias `PERIODO_AQUISITIVO`.
 >
 > Protegido por `test_inv139`.
 

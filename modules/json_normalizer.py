@@ -830,29 +830,31 @@ def _norm_ferias_periodo_limitado_ao_deferido(data: dict[str, Any]) -> None:
     à verba — assim já se evita incluir na condenação período não abrangido por
     ela."*
 
-    **O PJE-Calc deriva os períodos aquisitivos com um ano de ATRASO em relação
-    ao início do período da verba** — modelo medido em 92 processos / 54 verbas
-    de férias com ocorrência PERIODO_AQUISITIVO (09/09/2026)::
+    **Os PAs vêm da ABA Férias, que o PJE-Calc gera de admissão + desligamento**
+    (manual oficial §7). O período da verba não os cria: ele FILTRA quais deles
+    geram ocorrência, pela DATA DA OCORRÊNCIA — início do gozo (gozadas) ou o
+    desligamento (indenizadas). Cadeia medida no corpus (09/09/2026)::
 
-        primeiro PA = max(admissão, aniversário da admissão ≤ periodo_inicio,
-                          menos 1 ano)
-        PA[k]       = primeiro PA + k anos,  enquanto PA[k] ≤ periodo_fim
+        gozo padrão    = fim do concessivo − (prazo − 1) dias        151/151
+        data da ocorr. = gozo (gozadas) | desligamento (indenizadas)  31/31
+        gera ocorrência ⟺ data ∈ [periodo_inicio, periodo_fim]        31/31
 
-    Acerto: **54/54** no primeiro PA (7 casos discriminam o modelo da hipótese
-    concorrente "1º PA = admissão", e nos 7 é o período da verba que manda) e
-    53/54 na contagem.
+    ⚠ Isso CORRIGE a leitura anterior ("a série atrasa 1 ano do periodo_inicio"):
+    aquela fórmula ajustava 54/54 por ser um PROXY — o gozo padrão cai perto de
+    um ano depois do início do PA. Descrevia a correlação, não o mecanismo.
 
-    É esse atraso que explica o excesso recorrente: a IA já emitia o período
-    começando no PA deferido (0000977-55: `01/02/2025`), e mesmo assim o
-    PJE-Calc apurava o PA ANTERIOR (`01/02/2024`) — que a sentença não deferiu.
-    Limitar o período "ao da condenação" no sentido literal é, portanto,
-    **inócuo**: já estava assim.
+    Fix: `periodo_inicio = 1º PA deferido + 1 ano`, que exclui os PAs anteriores
+    porque a data de gozo deles fica atrás desse marco. O PJE-Calc deixa de
+    GERAR as ocorrências, em vez de gerá-las para o bot zerar depois (#80-CX,
+    que segue como rede de segurança para o excesso à direita e para PAs não
+    contíguos).
 
-    Fix: inverter o modelo — `periodo_inicio = 1º PA deferido + 1 ano`, de modo
-    que a série comece exatamente no primeiro PA da condenação. O PJE-Calc
-    passa a NÃO gerar as ocorrências dos PAs anteriores, em vez de gerá-las para
-    o bot zerar depois (#80-CX, que segue como rede de segurança para o excesso
-    à direita e para PAs não contíguos).
+    ⚠ O critério EXATO seria `periodo_inicio = min(data_da_ocorrência dos PAs
+    deferidos)`. O proxy coincide com ele quando a condenação alcança os ÚLTIMOS
+    PAs (caso comum); quando defere PAs ANTIGOS, elimina-os indevidamente —
+    0000763-64 (09/09/2026): o calculista valorou 5 PAs (R$ 12.446,12) e o
+    sistema entregou 2 (R$ 4.915,89), porque a prévia declarava só 2. GOZADAS
+    não significa "não devido": férias gozadas e não pagas seguem condenação.
 
     ⚠️ Só ESTREITA (`novo > atual`), nunca alarga: alargar reintroduziria PA
     anterior. `periodo_fim` fica INTOCADO — encurtá-lo mexeria nos avos do PA
