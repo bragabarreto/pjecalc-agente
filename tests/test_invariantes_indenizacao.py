@@ -4375,3 +4375,38 @@ def test_inv137_ferias_salva_pelo_botao_certo():
     assert "_clicar_salvar_flex" not in bloco, (
         "REGRESSÃO #80-CV: voltou a cascata flex, que casa o 'Confirmar' de "
         "importar CSV e faz o save das férias virar erro de arquivo")
+
+
+def test_inv138_segundo_passe_ferias_por_data():
+    """#80-CW: 2º passe que zera as ocorrências de férias de período aquisitivo
+    NÃO deferido — liquidar → exportar → ler o PA no PJC → zerar por data na
+    grade → re-liquidar.
+
+    Só é possível DEPOIS de exportar: a grade editável
+    (parametrizar-ocorrencia.xhtml) expõe apenas dataInicial, valorDevido e
+    ativo; quem carrega o período aquisitivo é o PJC
+    (`dataFinalPeriodoAquisitivo`). O PJC dá o vínculo PA→data e a grade aceita
+    a edição por data.
+
+    Caminhos mais simples, todos refutados por medição (08–09/09/2026):
+    - seção Férias: com o PA marcado GOZADAS e `✓ Férias salvas`, a verba seguiu
+      gerando a ocorrência (#80-CU/#80-CV);
+    - período da verba: no 0000977-55 o período já era 01/02/2025→13/05/2026 e o
+      PA 01/02/2024→31/01/2025 foi gerado assim mesmo — os PAs vêm do CONTRATO;
+    - derivação por avos: erra ±1 (0001107-45 dá 18, o real é 19)."""
+    src = PLAYWRIGHT_V2
+    assert "def _zerar_ferias_fora_do_pa" in src, (
+        "REGRESSÃO #80-CW: 2º passe das férias removido")
+    corpo = src[src.find("def _zerar_ferias_fora_do_pa"):
+                src.find("def _sonda_escopo")]
+    # guarda: nunca zerar a verba inteira
+    assert "zeraria a verba inteira" in corpo, (
+        "REGRESSÃO #80-CW: sem a guarda, uma leitura ruim da grade zera tudo")
+    # confirmação no bean, não no click
+    assert "_ler_ocorrencias_da_grade" in corpo and "resist" in corpo
+    # guarda anti-laço + re-liquidação
+    fase = src[src.find("def fase_liquidar_e_exportar"):]
+    assert "_2o_passe_ferias" in fase, (
+        "REGRESSÃO #80-CW: guarda anti-laço do 2º passe removida")
+    assert "return self.fase_liquidar_e_exportar()" in fase, (
+        "REGRESSÃO #80-CW: sem re-liquidar, a zeragem não chega ao PJC")

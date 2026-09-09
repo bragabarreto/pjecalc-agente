@@ -3255,6 +3255,116 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"    ⚠ {nome}: erro geral: {e}")
 
+    def _zerar_ferias_fora_do_pa(self, suspeitas: list) -> bool:
+        """#80-CW — 2º passe: zera as ocorrências de férias cujo PERÍODO
+        AQUISITIVO não foi deferido. Retorna True se algo foi zerado.
+
+        Por que só dá para fazer DEPOIS de liquidar+exportar: a grade editável
+        (`parametrizar-ocorrencia.xhtml`) expõe apenas `dataInicial`,
+        `valorDevido` e `ativo` — NÃO o período aquisitivo. Quem carrega o PA de
+        cada ocorrência é o PJC exportado (`dataFinalPeriodoAquisitivo`). O PJC
+        dá o vínculo PA→data; a grade aceita a edição por data. Fechado o ciclo,
+        re-liquida-se.
+
+        Medições que descartaram os caminhos mais simples (08–09/09/2026):
+        - seção Férias: mesmo com o PA marcado GOZADAS e `✓ Férias salvas`, a
+          verba seguiu gerando a ocorrência (#80-CU/#80-CV);
+        - período da verba: no 0000977-55 o período já era 01/02/2025→13/05/2026
+          e o PA 01/02/2024→31/01/2025 foi gerado assim mesmo — o PJE-Calc deriva
+          os PAs do CONTRATO, não do período da verba;
+        - avos: a derivação erra ±1 (0001107-45: 18 vs 19 reais).
+        """
+        from datetime import datetime as _dt
+        mudou = False
+        for f in suspeitas:
+            nome = f.get("verba")
+            datas = {o["data"] for o in (f.get("ocorrencias") or [])}
+            if not nome or not datas:
+                continue
+            v = next(
+                (x for x in (self.previa.verbas_principais or [])
+                 if (x.nome_pjecalc or "") == nome),
+                None,
+            )
+            if v is None:
+                self.log(f"    ⚠ #80-CW verba '{nome}' não achada na prévia — pulando")
+                continue
+            self.log(f"    → #80-CW zerando {len(datas)} ocorrência(s) de '{nome}' "
+                     f"com período aquisitivo NÃO deferido: {sorted(datas)}")
+            if not self._abrir_ocorrencias_da_verba(v):
+                self.log(f"    🛑 #80-CW não abriu as ocorrências de '{nome}'")
+                continue
+            linhas = self._ler_ocorrencias_da_grade()
+            alvos = [r for r in linhas if r.get("dataInicial") in datas]
+            if not alvos:
+                self.log(f"    ⚠ #80-CW nenhuma linha casou as datas na grade "
+                         f"(lidas: {[r.get('dataInicial') for r in linhas][:6]})")
+                continue
+            # ⚠ nunca zerar TUDO: se todas as linhas casaram, a leitura está
+            # errada — abortar em vez de esvaziar a verba.
+            if len(alvos) >= len(linhas):
+                self.log(f"    🛑 #80-CW abortado: {len(alvos)}/{len(linhas)} linhas "
+                         f"casaram — zeraria a verba inteira")
+                continue
+            for r in alvos:
+                self._zerar_ocorrencia(r["idx"])
+            try:
+                self._clicar("salvar")
+                self._aguardar_ajax(8000)
+                self._page.wait_for_timeout(1200)
+            except Exception as e:
+                self.log(f"    ⚠ #80-CW salvar: {str(e)[:110]}")
+            rel = {r["idx"]: r for r in self._ler_ocorrencias_da_grade()}
+            resist = [r for r in alvos
+                      if rel.get(r["idx"]) and rel[r["idx"]].get("ativo") is not False
+                      and self._valor_nao_zerado(rel[r["idx"]]["valor"])]
+            if resist:
+                self.log(f"    🛑 #80-CW {len(resist)} ocorrência(s) resistiram em '{nome}'")
+            else:
+                self.log(f"    ✓ #80-CW {len(alvos)} ocorrência(s) de '{nome}' zeradas "
+                         f"e confirmadas no bean")
+                mudou = True
+        return mudou
+
+    def _abrir_ocorrencias_da_verba(self, v) -> bool:
+        """Navega até a grade de Ocorrências da verba. True se abriu."""
+        cands = [v.nome_pjecalc]
+        if getattr(v, "expresso_alvo", None) and v.expresso_alvo != v.nome_pjecalc:
+            cands.append(v.expresso_alvo)
+        try:
+            self._aguardar_servidor_ocioso(f"#80-CW '{v.nome_pjecalc}'")
+        except Exception:
+            pass
+        self._navegar_menu("li_calculo_verbas")
+        self._aguardar_ajax(8000)
+        self._page.wait_for_timeout(1200)
+        tid = self._page.evaluate(
+            """(cs) => {
+                const ls = [...document.querySelectorAll('a.linkOcorrencias')]
+                    .filter(a => !a.id.includes(':listaReflexo:'));
+                for (const a of ls) {
+                    const tr = a.closest('tr'); if (!tr) continue;
+                    for (const td of tr.querySelectorAll('td'))
+                        if (cs.some(c => c && (td.textContent||'').trim() === c)) return a.id;
+                }
+                return null;
+            }""",
+            cands,
+        )
+        if not tid:
+            return False
+        try:
+            self._page.locator(f"a#{tid.replace(':', chr(92) + ':')}").first.click(force=True)
+            try:
+                self._page.wait_for_url("**/parametrizar-ocorrencia.jsf**", timeout=12000)
+            except Exception:
+                pass
+            self._aguardar_ajax(8000)
+            self._page.wait_for_timeout(1200)
+            return True
+        except Exception:
+            return False
+
     def _sonda_escopo(self, tag: str) -> None:
         """#80-CL — DIAGNÓSTICO (gated por env DIAG_ESCOPO=1). READ-ONLY.
 
@@ -13795,6 +13905,24 @@ class PlaywrightAutomatorV2:
                 self._fidelidade_resultado = {"escopo_deferido": _esc}
         except Exception as _e:
             self.log(f"  ⚠ #80-CG guarda de escopo deferido falhou: {str(_e)[:150]}")
+
+        # ── #80-CW: 2º passe das FÉRIAS (uma única vez) ──
+        # A grade não expõe o período aquisitivo; o PJC exportado sim. Com o
+        # PJC em mãos sabemos QUAIS datas correspondem a PA não deferido — e a
+        # grade aceita edição por data. Zera, re-liquida e re-exporta.
+        try:
+            _fid = getattr(self, "_fidelidade_resultado", None) or {}
+            _e2 = _fid.get("escopo_deferido") or {}
+            _sus = [f for f in (_e2.get("ferias_suspeitas") or [])
+                    if f.get("criterio") == "periodo_aquisitivo"]
+            if _sus and not getattr(self, "_2o_passe_ferias", False):
+                self._2o_passe_ferias = True  # guarda anti-laço
+                if self._zerar_ferias_fora_do_pa(_sus):
+                    self.log("  ↻ #80-CW re-liquidando e re-exportando após zerar "
+                             "as férias de período aquisitivo não deferido")
+                    return self.fase_liquidar_e_exportar()
+        except Exception as _e:
+            self.log(f"  ⚠ #80-CW 2º passe das férias: {str(_e)[:150]}")
 
         return self._pjc_path
 

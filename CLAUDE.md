@@ -605,6 +605,38 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Férias: 2º passe pós-liquidação zera por data (#80-CW)
+
+> **A ocorrência de férias de período aquisitivo NÃO deferido é zerada num
+> SEGUNDO passe, depois de liquidar e exportar. Não há como fazer antes.**
+>
+> **Ciclo:** liquidar → exportar → ler o PA de cada ocorrência no PJC → mapear
+> PA→`dataInicial` → voltar à grade → zerar por data → **re-liquidar e
+> re-exportar** (guarda `_2o_passe_ferias`, uma única vez).
+>
+> **Por que só depois:** a grade editável (`parametrizar-ocorrencia.xhtml`)
+> expõe apenas `dataInicial`, `valorDevido` e `ativo`. Quem carrega
+> `dataFinalPeriodoAquisitivo` é o **PJC exportado**. O PJC dá o vínculo
+> PA→data; a grade aceita a edição por data.
+>
+> **Caminhos mais simples, todos refutados por medição (08–09/09/2026):**
+>
+> | tentativa | resultado |
+> |---|---|
+> | seção Férias (marcar GOZADAS) | com `✓ Férias salvas`, a verba **seguiu gerando** a ocorrência (#80-CU/#80-CV) |
+> | estreitar o período da verba | 0000977-55 já tinha período 01/02/2025→13/05/2026 e o PA 01/02/2024→31/01/2025 foi gerado assim mesmo — **os PAs vêm do CONTRATO** |
+> | derivar avos de `ferias.periodos` | erra **±1** (0001107-45 dá 18; o real é 19) |
+>
+> ⚠️ **Guarda obrigatória:** se TODAS as linhas da grade casarem as datas-alvo,
+> ABORTAR — a leitura está errada e zeraria a verba inteira.
+>
+> ⚠️ Confirmação pelo **re-render do bean** (`_ler_ocorrencias_da_grade`), nunca
+> pelo click — mesma lição do #80-CK.
+>
+> Protegido por `test_inv138`.
+
+---
+
 ## Regra obrigatória — Férias: DETECÇÃO, nunca zeragem automática (#80-CS)
 
 > **O gate dimensiona o excesso das férias (avos gerados × deferidos) para
