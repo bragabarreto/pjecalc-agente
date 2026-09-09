@@ -4304,3 +4304,41 @@ def test_inv135_ferias_casadas_por_periodo_aquisitivo():
     assert "PeriodoAquisitivo" not in filt, (
         "REGRESSÃO #80-CT: o filtro do browser não pode usar o PA — a grade "
         "editável não o expõe")
+
+
+def test_inv136_ferias_navega_por_clique_no_sidebar_e_nao_pula_calado():
+    """#80-CU: a Fase 7 (Férias) navega por CLIQUE no sidebar, e período
+    aquisitivo sem linha na tabela NUNCA é pulado em silêncio.
+
+    Diagnóstico (0000977-55, 08/09/2026): a fase caiu no fallback de URL direta
+    ("→ navegou para li_calculo_ferias via url-nav direto") e a tabela veio
+    vazia — a URL direta não invoca o factory @Begin do Seam, e a tabela é
+    `#{lista}`, populada pelo bean (mesmo invariante já documentado para
+    `prepararMinicrudsDasBasesCadastradas`). Resultado no log:
+
+        ℹ Diagnóstico Férias: 0 linha(s) auto-geradas
+        → Período 1: aquisitivo 01/02/2024 → 31/01/2025
+          ⚠ JSON tem 2 períodos, mas só 0 linhas — pulando excedente
+        ℹ Sem linhas de férias para salvar (página vazia)
+
+    Ou seja: os períodos aquisitivos DEFERIDOS nunca chegavam ao PJE-Calc, que
+    então apurava as férias do contrato inteiro. É a RAIZ do excesso que o
+    #80-CT apenas detectava depois, no PJC.
+
+    Princípio (regra do usuário): a prévia é fiel aos limites da condenação e a
+    automação é fiel à prévia. A seção Férias é justamente onde a condenação se
+    declara — pulá-la em silêncio quebra as duas pontas."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def fase_ferias")
+    corpo = src[ini:ini + 9000]
+    assert '_navegar_menu_via_click("li_calculo_ferias")' in corpo, (
+        "REGRESSÃO #80-CU: Férias voltou a navegar por URL — a tabela `#{lista}` "
+        "vem vazia e os períodos deferidos não são informados")
+    assert "_fechar_e_reabrir_calculo" in corpo, (
+        "REGRESSÃO #80-CU: sem o F+R, sidebar incompleto deixa a fase sem tabela")
+    assert "#80-CU período aquisitivo" in corpo and "_pendencias_ferias" in corpo, (
+        "REGRESSÃO #80-CU: período sem linha voltou a ser pulado em silêncio")
+    # e a pendência aparece no gate
+    gate = src[src.find("def _verificar_escopo_deferido_pjc"):
+               src.find("def _norm_desc_fidelidade")]
+    assert "ferias_nao_informadas" in gate

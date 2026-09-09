@@ -10834,7 +10834,26 @@ class PlaywrightAutomatorV2:
             return
 
         self.log(f"Fase 7 — Férias ({len(ferias.periodos)} período(s))")
-        self._navegar_menu("li_calculo_ferias")
+        # ⚠ #80-CU — a página de Férias EXIGE navegação por CLIQUE no sidebar.
+        # A tabela é `#{lista}`, populada pelo bean Seam; a URL direta NÃO
+        # invoca o factory @Begin (invariante já documentado no CLAUDE.md para
+        # `prepararMinicrudsDasBasesCadastradas`), então `#{lista}` vem VAZIA e
+        # a fase inteira vira no-op: "0 linha(s) auto-geradas" → cada período
+        # declarado é pulado com "pulando excedente" → os períodos aquisitivos
+        # deferidos NUNCA chegam ao PJE-Calc, que então apura as férias de todo
+        # o contrato. É a raiz do excesso de férias que o #80-CT só detectava.
+        if not self._navegar_menu_via_click("li_calculo_ferias"):
+            self.log("  ⚠ #80-CU sidebar sem 'li_calculo_ferias' — reabrindo o "
+                     "cálculo p/ restaurar o menu antes de tentar de novo")
+            try:
+                self._fechar_e_reabrir_calculo()
+            except Exception as _e:
+                self.log(f"    ⚠ F+R: {str(_e)[:110]}")
+            if not self._navegar_menu_via_click("li_calculo_ferias"):
+                self.log("  🛑 #80-CU NÃO foi possível abrir Férias por clique no "
+                         "sidebar — a tabela virá vazia e os períodos aquisitivos "
+                         "deferidos NÃO serão informados ao PJE-Calc")
+                self._navegar_menu("li_calculo_ferias")
         self._aguardar_ajax(10000)
         self._page.wait_for_timeout(1500)
 
@@ -10949,9 +10968,21 @@ class PlaywrightAutomatorV2:
                 f"{p.periodo_aquisitivo_inicio} → {p.periodo_aquisitivo_fim}"
             )
             if i >= n_linhas:
+                # ⚠ #80-CU: NUNCA silencioso. Se o período aquisitivo deferido
+                # não tem linha, ele NÃO será informado ao PJE-Calc — que então
+                # apura as férias do contrato inteiro. Era o que acontecia
+                # sempre que a fase caía na navegação por URL (bean Seam sem
+                # iniciar() → `#{lista}` vazia).
                 self.log(
-                    f"    ⚠ JSON tem {len(ferias.periodos)} períodos, mas só {n_linhas} "
-                    f"linhas auto-geradas — pulando excedente"
+                    f"    🛑 #80-CU período aquisitivo {p.periodo_aquisitivo_inicio}"
+                    f"→{p.periodo_aquisitivo_fim} SEM linha na tabela do PJE-Calc "
+                    f"({len(ferias.periodos)} declarados × {n_linhas} linhas) — "
+                    f"NÃO será informado; as férias vão apurar fora do deferido"
+                )
+                if not hasattr(self, "_pendencias_ferias"):
+                    self._pendencias_ferias = []
+                self._pendencias_ferias.append(
+                    f"{p.periodo_aquisitivo_inicio}→{p.periodo_aquisitivo_fim}"
                 )
                 continue
 
@@ -14020,6 +14051,12 @@ class PlaywrightAutomatorV2:
                 "pjc": "; ".join(f"{a}→{b}" for a, b in sorted(achados)),
             })
 
+        # ── #80-CU: períodos aquisitivos que não chegaram ao PJE-Calc ──
+        _pf = list(getattr(self, "_pendencias_ferias", []) or [])
+        if _pf:
+            res["ok"] = False
+            res["ferias_nao_informadas"] = _pf
+
         # ── pendências acumuladas na fase de verbas (escopo não aplicado) ──
         pend = list(getattr(self, "_pendencias_escopo", []) or [])
         if pend:
@@ -14055,6 +14092,9 @@ class PlaywrightAutomatorV2:
                 self.log(f"      • {pv_['verba']}: período da prévia {pv_['previa']} "
                          f"NÃO chegou ao PJC (lá está {pv_['pjc']}) — save de "
                          f"parâmetros dessa verba não persistiu")
+            for _p in res.get("ferias_nao_informadas", []):
+                self.log(f"      • período aquisitivo {_p} NÃO foi informado na seção "
+                         f"Férias do PJE-Calc — as férias apuram fora do deferido")
             for pd in res.get("pendencias_aplicacao", []):
                 self.log(f"      • escopo NÃO aplicado em {pd['verba']} ({pd['janela']}): {pd['motivo']}")
             if res.get("periodos_divergentes"):

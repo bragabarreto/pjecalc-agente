@@ -554,6 +554,43 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Fase 7 (Férias) navega por CLIQUE no sidebar (#80-CU)
+
+> **Princípio (regra do usuário, 08/09/2026):** *"o essencial é que a prévia
+> seja fiel aos limites da condenação e que a automação seja fiel à prévia. No
+> PJE-Calc as férias têm um campo específico, os parâmetros da verba têm o
+> período de condenação e os parâmetros da verba — tudo bem alinhado ao
+> conteúdo da condenação, não há como errar."*
+>
+> **A seção Férias é onde a condenação se declara — e ela estava sendo pulada.**
+>
+> Diagnóstico (0000977-55, 08/09/2026):
+> ```
+> → navegou para li_calculo_ferias via url-nav direto
+> ℹ Diagnóstico Férias: 0 linha(s) auto-geradas
+> → Período 1: aquisitivo 01/02/2024 → 31/01/2025
+>   ⚠ JSON tem 2 períodos, mas só 0 linhas auto-geradas — pulando excedente
+> ℹ Sem linhas de férias para salvar (página vazia)
+> ```
+>
+> A tabela é `#{lista}`, populada pelo bean Seam. A **URL direta NÃO invoca o
+> factory `@Begin`** (mesmo invariante já documentado para
+> `prepararMinicrudsDasBasesCadastradas`), então a lista vem VAZIA e a fase
+> inteira vira no-op: os períodos aquisitivos DEFERIDOS nunca chegam ao
+> PJE-Calc, que passa a apurar as férias do **contrato inteiro**.
+>
+> **É a RAIZ do excesso de férias** que o #80-CT só detectava depois, no PJC
+> exportado — e explica por que o excesso aparecia em quase todo cálculo com
+> mais de um período aquisitivo.
+>
+> **Correção:** `_navegar_menu_via_click("li_calculo_ferias")` com F+R quando o
+> sidebar vier incompleto, e **falha nunca silenciosa**: período aquisitivo sem
+> linha vira `🛑 #80-CU` no log e `ferias_nao_informadas` no gate.
+>
+> Protegido por `test_inv136`.
+
+---
+
 ## Regra obrigatória — Férias: DETECÇÃO, nunca zeragem automática (#80-CS)
 
 > **O gate dimensiona o excesso das férias (avos gerados × deferidos) para
