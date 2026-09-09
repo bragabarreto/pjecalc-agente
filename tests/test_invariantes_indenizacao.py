@@ -4441,12 +4441,20 @@ def test_inv138_ferias_filtradas_por_indice_antes_do_liquidar():
         "REGRESSÃO #80-CX: filtro de férias por período aquisitivo removido")
     corpo = src[src.find("def _filtrar_ferias_por_periodo_aquisitivo"):
                 src.find("def _abrir_ocorrencias_da_verba")]
-    assert "enumerate(linhas)" in corpo and "_mais(primeiro, k2)" in corpo, (
-        "REGRESSÃO #80-CX: a chave voltou a não ser o índice da linha")
+    assert "enumerate(linhas)" in corpo and "elegiveis[k2]" in corpo, (
+        "REGRESSÃO #80-CX/#80-DF: a linha voltou a não ser casada com o "
+        "k-ésimo PA ELEGÍVEL (data de ocorrência dentro do período da verba)")
+    assert "len(elegiveis) != len(linhas)" in corpo, (
+        "REGRESSÃO #80-DF: guarda de contagem removida — zerar a linha errada "
+        "é SUBCÁLCULO (0000228-38 perdeu R$ 13.300,00 assim)")
+    assert "_fer_data_ocorrencia" in corpo, (
+        "REGRESSÃO #80-DF: o filtro voltou a adivinhar o PA por fórmula em vez "
+        "de usar a data da ocorrência")
     assert "zeraria a verba inteira" in corpo, (
         "REGRESSÃO #80-CX: guarda anti-zerar-tudo removida")
-    assert "GOZADAS" in corpo, (
-        "REGRESSÃO #80-CX: PA gozado voltou a contar como deferido")
+    assert "_fer_deferido" in corpo, (
+        "REGRESSÃO #80-DC: o filtro voltou a decidir por `situacao` (FATO) em "
+        "vez de `deferido` (DIREITO) — férias gozadas e NÃO PAGAS são condenação")
     assert "resist" in corpo, (
         "REGRESSÃO #80-CX: confirmação no bean removida (lição do #80-CK)")
     # roda ANTES do Liquidar, junto do filtro do 13º — e sem 2ª liquidação
@@ -4748,8 +4756,12 @@ def test_inv144_aba_ferias_nao_lista_o_pa_proporcional():
     corpo = src[ini:ini + 26000]
     assert "#80-DE" in corpo, (
         "REGRESSÃO #80-DE: tratamento do PA proporcional removido")
-    assert "_proporcional" in corpo and "360" in corpo, (
+    assert "_proporcional" in corpo and "data_demissao" in corpo, (
         "REGRESSÃO #80-DE: detecção do período proporcional removida")
+    assert "Medir pelo SPAN declarado não serve" in corpo, (
+        "REGRESSÃO #80-DE: voltou a medir o proporcional pelo span declarado — "
+        "a IA emite o ano cheio (0000228-38: 05/05/2025→04/05/2026 com "
+        "dispensa em 19/01/2026)")
     # o ℹ do proporcional tem de vir ANTES do 🛑 do #80-CU
     i_prop = corpo.find("é PROPORCIONAL — sem linha")
     i_cu = corpo.find("🛑 #80-CU período aquisitivo")

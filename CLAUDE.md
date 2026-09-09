@@ -605,141 +605,46 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
-## Regra obrigatória — Férias: escopo por PA, chave é o ÍNDICE da linha (#80-CX)
+## Regra obrigatória — Férias: linha = k-ésimo PA ELEGÍVEL (#80-CX/#80-DF)
 
 > **As ocorrências de férias de período aquisitivo NÃO deferido são zeradas
-> ANTES do Liquidar. A chave é o ÍNDICE da linha — NUNCA a data.**
+> ANTES do Liquidar. Qual PA está em cada linha NÃO se adivinha por fórmula:**
 >
-> **Por que não a data:** duas ocorrências podem dividi-la — 0000977-55 tem o PA
-> integral e o proporcional em `13/05/2026`; 0001107-45 idem em `11/10/2025`,
-> uma devida e outra não. A tentativa por data (#80-CW) casou **3/3 linhas** e
-> abortou pela guarda: a guarda funcionou, a chave é que estava errada.
->
-> **Sequência dos PAs — derivável só da prévia (validada em 33/33 PJCs reais,
-> 09/09/2026):**
 > ```
-> 1º PA  = max(admissão, aniversário da admissão ≤ (início do período da verba) − 1 ano)
-> PA[k]  = 1º PA + k anos
+> data da ocorrência = início do gozo (gozadas) | desligamento (indenizadas)
+> elegível ⟺ data ∈ [periodo_inicio, periodo_fim]        31/31
+> gozo padrão = fim do concessivo − (prazo − 1) dias    151/151
+> linha[k] = k-ésimo PA elegível (a grade vem em ordem cronológica)
 > ```
-> Os PAs sempre caem no aniversário da admissão; o período da verba só determina
-> onde a série começa.
 >
-> ⚠️ **Uma liquidação só** (observação do usuário, 09/09/2026): como a sequência
-> é derivável antes de liquidar, NÃO se faz segundo passe nem re-liquidação —
-> ajusta-se o parâmetro e liquida-se uma vez. O #80-CW (liquidar → exportar →
-> ler o PA no PJC → zerar → re-liquidar) foi **removido**.
+> ⚠️ **A fórmula anterior era um PROXY do gozo padrão** — `1º PA = max(admissão,
+> aniversário ≤ periodo_inicio − 1 ano)`, `PA[k] = 1º PA + k`. Ela ficou
+> **DESSINCRONIZADA** quando o #80-CY passou a derivar o período pela data da
+> ocorrência: no 0000228-38 (09/09/2026) previu a série começando em 05/05/2023
+> quando a grade tinha os PAs 2024 e 2025, e **zerou o PA 05/05/2024, deferido
+> — R$ 13.300,00 a menos**. Subcálculo é justamente o erro que este filtro
+> existe para não cometer.
+>
+> ⚠️ **Guardas obrigatórias:** o número de PAs elegíveis TEM de bater com o de
+> linhas da grade — se não bate, **abortar** (não adivinhar); abortar se TODAS
+> as linhas ficarem fora; `deferido` (DIREITO) manda, não `situacao` (FATO)
+> — #80-DC; confirmação pelo **re-render do bean**, nunca pelo click (#80-CK).
+>
+> ⚠️ **Uma liquidação só** (regra do usuário, 09/09/2026): a série é derivável
+> antes de liquidar, então não há segundo passe nem re-liquidação. O #80-CW
+> (liquidar → exportar → ler o PA no PJC → zerar → re-liquidar) foi **removido**.
 >
 > **Caminhos refutados por medição (08–09/09/2026):**
 >
 > | tentativa | resultado |
 > |---|---|
-> | seção Férias (marcar GOZADAS) | com `✓ Férias salvas`, a verba **seguiu gerando** a ocorrência (#80-CU/#80-CV) |
-> | estreitar o período da verba (literal) | 0000977-55 já tinha período 01/02/2025→13/05/2026 e o PA 01/02/2024→31/01/2025 saiu assim mesmo — a série **atrasa 1 ano** do período (ver #80-CY) |
+> | seção Férias (marcar GOZADAS) | com `✓ Férias salvas`, a verba **seguiu gerando** a ocorrência (#80-CU/CV) |
+> | estreitar o período da verba (literal) | inócuo — a data de ocorrência é que filtra (#80-CY) |
 > | derivar avos de `ferias.periodos` | erra **±1** (0001107-45 dá 18; o real é 19) |
-> | casar ocorrência por data | ambíguo: 3/3 linhas casaram (#80-CW) |
->
-> ⚠️ Guardas: abortar se TODAS as linhas ficarem fora; PA `GOZADAS` conta como
-> não deferido; confirmação pelo **re-render do bean**, nunca pelo click (#80-CK).
+> | casar ocorrência por data | ambíguo: várias dividem a data do desligamento (#80-CW) |
+> | derivar o PA por fórmula de aniversário | proxy; dessincronizou e causou subcálculo (#80-DF) |
 >
 > Protegido por `test_inv138`.
-
----
-
-## Regra obrigatória — Férias: a aba espelha o CONTRATO; `deferido` ≠ `situacao` (#80-DC)
-
-> **A aba Férias lista TODOS os períodos aquisitivos do contrato — e um campo
-> SEPARADO diz quais a condenação alcança.**
->
-> O PJE-Calc gera a tabela de admissão + desligamento (manual §7). A prévia
-> declarava só os que a IA julgou condenados, e a subdeclaração ficava
-> **invisível** na revisão.
->
-> **0000763-64 (09/09/2026):** a prévia declarou 2 dos 5 períodos; o PJC
-> definitivo do calculista valorou os 5 (R$ 12.446,12 × R$ 4.915,89 nossos).
-> Enquanto o erro do sistema era de EXCESSO a omissão ficava encoberta; com o
-> #80-CY virou **subcálculo** — pior, porque não salta aos olhos.
->
-> | campo | natureza | pergunta |
-> |---|---|---|
-> | `situacao` | **FATO** | o empregado gozou as férias? |
-> | `deferido` | **DIREITO** | a sentença mandou pagar este período? |
->
-> ⚠️ **São independentes.** Férias **GOZADAS mas não pagas** — ou pagas sem o
-> terço — são `situacao=GOZADAS` **com `deferido=true`**. Foi exatamente o caso
-> do 0000763-64, em que o calculista valorou três períodos gozados.
->
-> `_norm_ferias_completar_periodos_do_contrato` acrescenta os PAs que faltam,
-> com a situação sugerida pelo manual e **`deferido=False`**: o valor não muda —
-> nascem fora da condenação — mas aparecem na prévia (destacados em âmbar, com
-> checkbox) para o revisor marcar. `deferido=None` de prévias antigas resolve
-> pelo comportamento anterior (gozado ⇒ não deferido).
->
-> **Critério do período da verba** (`#80-CY`, agora exato): o menor
-> `periodo_inicio` que ainda deixa de fora os PAs não deferidos —
-> `(maior data de ocorrência indevida anterior à 1ª deferida) + 1 dia`.
->
-> ⚠️ **CIRÚRGICO: só mexe quando há ocorrência INDEVIDA a excluir.** Sem essa
-> guarda o critério estreitava **197 de 208** prévias do corpus, 189 delas sem
-> nada a remover. Com ela: **10**.
->
-> ⚠️ Erra-se de propósito para o lado **CEDO**: tarde demais PERDE um PA
-> deferido (subcálculo irrecuperável); cedo demais inclui um a mais, que o
-> #80-CX zera (recuperável).
->
-> Efeito no corpus: aba completada em **24** prévias (+62 PAs); período
-> estreitado em **10**.
->
-> Protegido por `test_inv139` e `test_inv142`.
-
----
-
-## Regra obrigatória — A aba Férias NÃO lista o PA proporcional (#80-DE)
-
-> **A aba Férias só tem linha para períodos aquisitivos COMPLETOS. O
-> PROPORCIONAL final não aparece — e isso NÃO é pendência.**
->
-> Medido em **60/60** processos do corpus (09/09/2026): o número de linhas da
-> aba é exatamente o número de PAs cujo ano se completou até o desligamento. O
-> proporcional é apurado na **ocorrência da verba** (+ campo "Prazo das Férias
-> Proporcionais"), não na aba.
->
-> A tela do 0000228-38 confirma: contrato 05/05/2021→19/01/2026, **4 linhas**
-> (2021/22 … 2024/25), sem 2025/26 — ainda que a verba gere a ocorrência do PA
-> 05/05/2025 com 10 avos.
->
-> **Duas consequências, ambas corrigidas:**
->
-> 1. Período proporcional sem linha vira `ℹ`, nunca `🛑 #80-CU` — senão toda
->    rescisão fora do aniversário de admissão acusa pendência falsa ("as férias
->    vão apurar fora do deferido").
-> 2. O mapeamento por PA (#80-DB) aceita casamento **PARCIAL**. Como o
->    proporcional NUNCA casa, exigir 100% fazia cair no índice **sempre** —
->    anulando o #80-DB justo depois de o #80-DC completar a aba. Sem o
->    mapeamento, com 5 declarados × 4 linhas, o índice só acerta por sorte.
->
-> ⚠️ O PA proporcional CONTINUA em `ferias.periodos`: é ele que carrega o
-> `deferido` da ocorrência proporcional, que o #80-CX consulta.
->
-> Protegido por `test_inv144`.
-
----
-
-## Regra obrigatória — Férias: contar linhas pela lista COMPLETA de `:situacao` (#80-DD)
-
-> **A contagem de linhas da aba Férias usa a lista completa de `:situacao` —
-> NUNCA `editaveis`, que é truncada em 40 ids.**
->
-> Cada linha tem ~14 campos (prazo, situacao, dobra, abono, dias_abono e 3×
-> gozo com início/fim/dobra). Contar linhas por `editaveis` parava em **3**:
-> num contrato de 5 períodos aquisitivos, dois nunca eram vistos — e cada um
-> virava `🛑 #80-CU período aquisitivo … SEM linha na tabela do PJE-Calc`, com
-> as férias apurando fora do deferido.
->
-> **Medido no 0000763-64 (09/09/2026):** contrato 13/09/2021→11/05/2026 = 5 PAs,
-> e o log dizia *"3 linha(s) (extraído de editaveis)"*. É a origem da cascata de
-> "período aquisitivo NÃO foi informado" que apareceu no lote do #80-CY.
->
-> Protegido por `test_inv143`.
 
 ---
 

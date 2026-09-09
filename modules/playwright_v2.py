@@ -3257,39 +3257,44 @@ class PlaywrightAutomatorV2:
 
     def _filtrar_ferias_por_periodo_aquisitivo(self, v) -> None:
         """#80-CX — zera as ocorrências de FÉRIAS cujo período aquisitivo NÃO
-        consta de `ferias.periodos`. Roda ANTES do Liquidar; uma liquidação só.
+        é deferido. Roda ANTES do Liquidar; uma liquidação só.
 
-        **A chave é o ÍNDICE da linha, não a data.** Duas ocorrências podem
-        dividir a mesma data (0000977-55: 13/05/2026 tem o PA integral e o
-        proporcional; 0001107-45: 11/10/2025 idem) — casar por data pegava as
-        duas e a guarda abortava ("3/3 linhas casaram"). Já o índice é
-        inequívoco: uma linha por PA, em ordem cronológica.
+        **Qual PA está em cada linha da grade?** Não se adivinha por fórmula: o
+        conjunto de PAs que o PJE-Calc gera é exatamente o dos que têm DATA DE
+        OCORRÊNCIA dentro do período da verba, e a grade os traz em ordem
+        cronológica. Logo `linha[k] = k-ésimo PA elegível` (#80-DF).
 
-        Sequência dos PAs, derivável só da prévia (validada em 33/33 PJCs reais
-        em 09/09/2026):
-            1º PA  = max(admissão, aniversário da admissão ≤ (início do período
-                     da verba) − 1 ano)
-            PA[k]  = 1º PA + k anos
-        Os PAs sempre caem no aniversário da admissão; o que varia é onde a
-        série começa, e isso o período da verba determina.
+            data da ocorrência = início do gozo (gozadas) | desligamento
+            elegível ⟺ data ∈ [periodo_inicio, periodo_fim]        31/31
+            gozo padrão = fim do concessivo − (prazo − 1) dias    151/151
 
-        Caminhos refutados por medição antes deste: a seção Férias não filtra a
-        verba (#80-CU/#80-CV) e a derivação por avos erra ±1.
+        ⚠ A fórmula anterior (`1º PA = max(admissão, aniversário ≤ periodo_inicio
+        − 1 ano)`; `PA[k] = 1º PA + k`) era um PROXY do gozo padrão. Ela ficou
+        DESSINCRONIZADA quando o #80-CY passou a derivar o período pela data da
+        ocorrência: no 0000228-38 (09/09/2026) previu a série começando em
+        05/05/2023, com a grade tendo na verdade os PAs 2024 e 2025 — e zerou o
+        PA 05/05/2024, **deferido**, R$ 13.300,00 a menos. Subcálculo é o erro
+        que este filtro existe para não cometer.
 
-        ⚠️ O período da verba GOVERNA a série — medido depois, no #80-CY: são 7
-        casos (em 54) que discriminam o modelo da hipótese "1º PA = admissão", e
-        nos 7 quem manda é o `periodo_inicio`. O normalizer estreita o período
-        para a série começar no 1º PA deferido; este filtro cobre o excesso à
-        DIREITA (PA proporcional final) e os PAs não contíguos.
+        ⚠ Guardas: número de PAs elegíveis TEM de bater com o de linhas — se não
+        bate, aborta (não adivinha); aborta se TODAS as linhas ficarem fora;
+        `deferido` (direito) manda, não `situacao` (fato) — #80-DC; confirmação
+        pelo re-render do bean, nunca pelo click (#80-CK).
+
+        Caminhos refutados por medição: a seção Férias não filtra a verba
+        (#80-CU/CV); a derivação por avos erra ±1; casar ocorrência por data é
+        ambíguo (várias dividem a data do desligamento — #80-CW).
         """
         from datetime import datetime as _dt
+        from modules.json_normalizer import _fer_data_ocorrencia, _fer_deferido
         pas = list(getattr(getattr(self.previa, "ferias", None), "periodos", None) or [])
         if not pas:
             return
         pc = self.previa.parametros_calculo
-        adm = getattr(pc, "data_admissao", None)
         pi = getattr(v.parametros, "periodo_inicio", None)
-        if not adm or not pi:
+        pf = getattr(v.parametros, "periodo_fim", None)
+        dem = getattr(pc, "data_demissao", None)
+        if not pi or not pf or not dem:
             return
 
         def _p(x):
@@ -3298,35 +3303,24 @@ class PlaywrightAutomatorV2:
             except Exception:
                 return None
 
-        def _mais(d, k):
-            try:
-                return d.replace(year=d.year + k)
-            except ValueError:
-                return d.replace(month=2, day=28, year=d.year + k)
-
-        adm_d, pi_d = _p(adm), _p(pi)
-        if not adm_d or not pi_d:
+        pi_d, pf_d, dem_d = _p(pi), _p(pf), _p(dem)
+        if not pi_d or not pf_d or not dem_d:
             return
-        k = pi_d.year - adm_d.year
-        cand = _mais(adm_d, k)
-        if cand > pi_d:
-            cand = _mais(adm_d, k - 1)
-        primeiro = max(adm_d, _mais(cand, -1))
-        # #80-DC: quem manda é `deferido` (DIREITO), não `situacao` (FATO) —
-        # férias gozadas e NÃO PAGAS seguem sendo condenação (0000763-64, em que
-        # o calculista valorou 3 períodos gozados). `deferido=None` (prévia
-        # antiga) resolve pelo comportamento anterior: gozado = não deferido.
-        declarados = []
+
+        # PAs elegíveis = os que o PJE-Calc gera, em ordem cronológica
+        elegiveis = []
         for pa in pas:
-            d = _p(getattr(pa, "periodo_aquisitivo_inicio", None) or "")
-            if not d:
+            d = pa.model_dump() if hasattr(pa, "model_dump") else dict(pa)
+            ini = _p(d.get("periodo_aquisitivo_inicio"))
+            if not ini:
                 continue
-            _def = getattr(pa, "deferido", None)
-            if _def is None:
-                _def = str(getattr(pa, "situacao", "") or "").upper() not in (
-                    "GOZADAS", "NAO_DIREITO")
-            if _def:
-                declarados.append(d)
+            ocor = _fer_data_ocorrencia(d, dem_d)
+            if ocor and pi_d <= ocor <= pf_d:
+                elegiveis.append((ini, _fer_deferido(d), ocor))
+        elegiveis.sort(key=lambda x: x[0])
+        if not elegiveis:
+            return
+        declarados = [e[0] for e in elegiveis if e[1]]
         if not declarados:
             return
 
@@ -3340,10 +3334,19 @@ class PlaywrightAutomatorV2:
         if not linhas:
             self.log(f"    🛑 #80-CX grade vazia em '{nome}'")
             return
+        # #80-DF: linha k = k-ésimo PA elegível. Se as contagens não batem, o
+        # modelo não descreve esta grade — abortar em vez de adivinhar (zerar a
+        # linha errada é SUBCÁLCULO, o erro que este filtro existe p/ evitar).
+        if len(elegiveis) != len(linhas):
+            self.log(
+                f"    🛑 #80-CX abortado em '{nome}': {len(elegiveis)} PA(s) "
+                f"elegível(is) × {len(linhas)} linha(s) na grade — não casa; "
+                f"elegíveis={[e[0].strftime('%d/%m/%Y') for e in elegiveis]}"
+            )
+            return
         fora = []
         for k2, r in enumerate(linhas):
-            pa = _mais(primeiro, k2)
-            dentro = any(abs((pa - d).days) <= 45 for d in declarados)
+            pa, dentro, _ocor = elegiveis[k2]
             self.log(f"       linha {k2}: PA {pa.strftime('%d/%m/%Y')} → "
                      f"{'DEFERIDO' if dentro else 'NÃO deferido'} "
                      f"(oc {r.get('dataInicial')}, val '{r.get('valor')}')")
@@ -11180,7 +11183,9 @@ class PlaywrightAutomatorV2:
         # (#80-CU/CV): antes o clique caía no botão de importar CSV e a
         # fase inteira era um no-op, então o erro de mapeamento não chegava ao
         # bean.
-        from datetime import datetime as _dtf
+        from datetime import datetime as _dtf, timedelta as _td_ferias
+        def _td_dias(n):
+            return _td_ferias(days=n)
         _mapa_linha: dict[int, int] = {}
         try:
             _pas_tabela = self._page.evaluate(
@@ -11255,11 +11260,22 @@ class PlaywrightAutomatorV2:
             # NÃO tem linha na aba — o PJE-Calc só lista períodos COMPLETOS
             # (60/60 no corpus) e trata o proporcional na ocorrência da verba
             # + campo "Prazo das Férias Proporcionais". Não é pendência.
+            # Proporcional = o ano aquisitivo NÃO se completa até o
+            # desligamento. Medir pelo SPAN declarado não serve: a IA emite
+            # `periodo_aquisitivo_fim` do ano cheio (0000228-38 declarou
+            # 05/05/2025→04/05/2026 com dispensa em 19/01/2026).
             _proporcional = False
             try:
                 _ini_pa = _dtf.strptime(p.periodo_aquisitivo_inicio, "%d/%m/%Y")
-                _fim_pa = _dtf.strptime(p.periodo_aquisitivo_fim, "%d/%m/%Y")
-                _proporcional = (_fim_pa - _ini_pa).days < 360
+                _dem_s = getattr(self.previa.parametros_calculo, "data_demissao", None)
+                _dem_pa = _dtf.strptime(_dem_s, "%d/%m/%Y") if _dem_s else None
+                if _dem_pa:
+                    try:
+                        _fim_ano = _ini_pa.replace(year=_ini_pa.year + 1)
+                    except ValueError:
+                        _fim_ano = _ini_pa.replace(month=2, day=28,
+                                                   year=_ini_pa.year + 1)
+                    _proporcional = (_fim_ano - _td_dias(1)) > _dem_pa
             except Exception:
                 pass
             _sem_linha = (_mapa_linha and i not in _mapa_linha) or \
