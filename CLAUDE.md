@@ -818,10 +818,26 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 > Medido: 8 verbas nessa situação (0000200-70 tinha três "SALDO DE SALÁRIO",
 > sendo dez/jan salários retidos e só fev o saldo real).
 >
+> ⚠️ **#80-DA — só coagir quando houver COMO NOMEAR a base.** Um
+> `base_calculo` HISTORICO_SALARIAL sem `historico_nome` faz o bot tentar
+> incluir o histórico `''` na tabela da verba; o PJE-Calc RECUSA o save
+> (*"Campo obrigatório: Histórico Salarial"*) e a liquidação trava em *"Falta
+> selecionar pelo menos um Histórico Salarial para apurar o Valor Devido da
+> Verba SALDO DE SALÁRIO"* — a coerção transformava um saldo INFORMADO que
+> funcionava num cálculo **sem PJC**. Medido em 0000228-38, 0000565-27 e
+> 0001972-05 (09/09/2026).
+>
+> A base é escolhida por `_historico_base_do_saldo`, nesta ordem: (1) histórico
+> único; (2) um chamado "ÚLTIMA REMUNERAÇÃO"; (3) exatamente UM vigente na
+> dispensa. Com dois vigentes (`SALARIO BASE` + `ADICIONAL DE INSALUBRIDADE`,
+> 0000565-27) a escolha é **jurídica, não mecânica**: o saldo fica como a IA
+> emitiu e só o período é ajustado. Preservar o valor da IA é melhor que
+> arriscar uma base incompleta — e muito melhor que não liquidar.
+>
 > **Defesas:** prompt (`extraction_v2.py`, §4.4.saldo) + normalizer
-> (`_norm_saldo_salario_calculado_proporcional`). Efeito medido no corpus:
-> 36 coagidos, 12 já CALCULADO ganhando a proporcionalidade, 8 sinalizados
-> como retido.
+> (`_norm_saldo_salario_calculado_proporcional`). Efeito medido no corpus (203
+> prévias com saldo): **35 coagidos**, 23 preservados (sem base nomeável ou
+> salário retido).
 >
 > Protegido por `test_inv132` e `test_inv133`.
 

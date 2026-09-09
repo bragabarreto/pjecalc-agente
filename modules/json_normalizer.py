@@ -478,6 +478,57 @@ _SUM340_SINAIS = (
 )
 
 
+def _historico_base_do_saldo(data: dict[str, Any], dem_d) -> str | None:
+    """Qual histórico salarial é a base do SALDO DE SALÁRIO — #80-DA.
+
+    A regra do usuário é "a base é o ÚLTIMO salário". Quando isso é
+    determinável sem adivinhação, devolve o nome; caso contrário devolve
+    None e o saldo NÃO é coagido para CALCULADO (fica como a IA emitiu).
+
+    Ordem: (1) histórico único; (2) um chamado "ÚLTIMA REMUNERAÇÃO";
+    (3) exatamente UM vigente na dispensa. Com dois vigentes (ex.:
+    'SALARIO BASE' + 'ADICIONAL DE INSALUBRIDADE', 0000565-27) a escolha é
+    jurídica, não mecânica — melhor preservar o valor da IA do que arriscar
+    uma base incompleta.
+    """
+    import unicodedata as _ud
+    from datetime import datetime as _dt
+
+    hs = data.get("historico_salarial")
+    if not isinstance(hs, list) or not hs:
+        return None
+    nomes = [h.get("nome") for h in hs if isinstance(h, dict) and h.get("nome")]
+    if len(nomes) == 1:
+        return nomes[0]
+
+    def _n(t: str) -> str:
+        return "".join(c for c in _ud.normalize("NFD", str(t))
+                       if _ud.category(c) != "Mn").upper().strip()
+
+    for nome in nomes:
+        if _n(nome) == "ULTIMA REMUNERACAO":
+            return nome
+
+    if dem_d is None:
+        return None
+    vigentes = []
+    for h in hs:
+        if not isinstance(h, dict) or not h.get("nome"):
+            continue
+        ini, fim = h.get("competencia_inicial"), h.get("competencia_final")
+        try:
+            d_ini = _dt.strptime(ini, "%d/%m/%Y") if ini else None
+            d_fim = _dt.strptime(fim, "%d/%m/%Y") if fim else None
+        except Exception:
+            continue
+        if d_ini and d_ini > dem_d:
+            continue
+        if d_fim and d_fim < dem_d.replace(day=1):
+            continue
+        vigentes.append(h["nome"])
+    return vigentes[0] if len(vigentes) == 1 else None
+
+
 def _norm_saldo_salario_calculado_proporcional(data: dict[str, Any]) -> None:
     """SALDO DE SALÁRIO = CALCULADO + proporcionalidade (#80-CR).
 
@@ -554,7 +605,32 @@ def _norm_saldo_salario_calculado_proporcional(data: dict[str, Any]) -> None:
                 )
             p["periodo_inicio"], p["periodo_fim"] = novo_pi, dem
         # valor: CALCULADO com proporcionalidade (PJE-Calc apura)
+        #
+        # ⚠ #80-DA — só coagir quando houver COMO NOMEAR a base. Um
+        # `base_calculo` HISTORICO_SALARIAL sem `historico_nome` faz o bot
+        # tentar incluir o histórico '' na tabela da verba; o PJE-Calc recusa
+        # o save ("Campo obrigatório: Histórico Salarial") e a liquidação
+        # trava em "Falta selecionar pelo menos um Histórico Salarial para
+        # apurar o Valor Devido da Verba SALDO DE SALÁRIO" — ou seja, a
+        # coerção transformava um saldo INFORMADO que funcionava num cálculo
+        # sem PJC. Medido em 0000228-38, 0000565-27 e 0001972-05 (09/09/2026).
         antes = str(p.get("valor"))
+        fc_atual = p.get("formula_calculado")
+        bc_atual = fc_atual.get("base_calculo") if isinstance(fc_atual, dict) else None
+        nome_base = None
+        if isinstance(bc_atual, dict) and bc_atual.get("historico_nome"):
+            nome_base = bc_atual["historico_nome"]
+        else:
+            nome_base = _historico_base_do_saldo(data, dem_d)
+        if not nome_base:
+            _log.warning(
+                "Normalizer #80-DA: saldo '%s' mantido %s — não há histórico "
+                "salarial identificável para a base (o PJE-Calc recusaria o "
+                "save com 'Campo obrigatório: Histórico Salarial'); o período "
+                "foi ajustado e o valor da IA preservado",
+                v.get("nome_pjecalc"), antes,
+            )
+            continue
         p["valor"] = "CALCULADO"
         fc = p.get("formula_calculado")
         if not isinstance(fc, dict):
@@ -564,6 +640,9 @@ def _norm_saldo_salario_calculado_proporcional(data: dict[str, Any]) -> None:
         if not isinstance(bc, dict):
             bc = {"tipo": "HISTORICO_SALARIAL"}
             fc["base_calculo"] = bc
+        bc.setdefault("tipo", "HISTORICO_SALARIAL")
+        if not bc.get("historico_nome"):
+            bc["historico_nome"] = nome_base
         bc["proporcionaliza"] = "SIM"
         fc["divisor"] = {"tipo": "OUTRO_VALOR", "valor": 1}
         fc["multiplicador"] = 1

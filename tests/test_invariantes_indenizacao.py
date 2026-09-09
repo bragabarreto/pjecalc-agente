@@ -4193,10 +4193,15 @@ def test_inv132_saldo_salario_calculado_com_proporcionalidade():
           "data_demissao": "13/05/2026", "data_ajuizamento": "01/06/2026",
           "data_inicio_calculo": "01/02/2024", "data_termino_calculo": "18/06/2026"}
 
-    def _saldo(**par):
+    _hist = [{"nome": "ULTIMA REMUNERACAO", "tipo_valor": "INFORMADO",
+              "valor_brl": 1800.0, "competencia_inicial": "01/02/2024",
+              "competencia_final": "13/05/2026"}]
+
+    def _saldo(historicos=None, **par):
         base = {"id": "v", "nome_pjecalc": "SALDO DE SALÁRIO", "parametros": par}
         return normalize_v2_json(
-            {"parametros_calculo": pc, "verbas_principais": [base]}
+            {"parametros_calculo": pc, "verbas_principais": [base],
+             "historico_salarial": _hist if historicos is None else historicos}
         )["verbas_principais"][0]["parametros"]
 
     # INFORMADO com valor calculado à mão → CALCULADO + proporcionalidade
@@ -4224,6 +4229,38 @@ def test_inv132_saldo_salario_calculado_com_proporcionalidade():
     assert p3["valor"] == "INFORMADO", (
         "REGRESSÃO #80-CR: salário retido (mês fora da dispensa) não pode ser "
         "coagido para o modelo do saldo")
+
+    # #80-DA: a base tem de ser NOMEADA — base HISTORICO_SALARIAL sem
+    # `historico_nome` faz o bot incluir o histórico '' e o PJE-Calc recusa o
+    # save ("Campo obrigatório: Histórico Salarial").
+    assert fc["base_calculo"].get("historico_nome") == "ULTIMA REMUNERACAO", (
+        "REGRESSÃO #80-DA: base do saldo sem histórico nomeado")
+
+    # sem histórico identificável → NÃO coagir (preservar o valor da IA)
+    p4 = _saldo(historicos=[
+        {"nome": "SALARIO BASE", "tipo_valor": "INFORMADO", "valor_brl": 1500.0,
+         "competencia_inicial": "01/02/2024", "competencia_final": "13/05/2026"},
+        {"nome": "ADICIONAL DE INSALUBRIDADE", "tipo_valor": "INFORMADO",
+         "valor_brl": 300.0, "competencia_inicial": "01/02/2024",
+         "competencia_final": "13/05/2026"}],
+        valor="INFORMADO", periodo_inicio="01/05/2026", periodo_fim="13/05/2026",
+        valor_devido={"tipo": "INFORMADO", "valor_informado_brl": 775.14})
+    assert p4["valor"] == "INFORMADO", (
+        "REGRESSÃO #80-DA: saldo coagido para CALCULADO sem base nomeável — "
+        "o PJE-Calc recusa o save e a liquidação trava")
+    assert p4["periodo_inicio"] == "01/05/2026", (
+        "REGRESSÃO #80-DA: o período deve ser ajustado mesmo sem coerção")
+
+    # histórico único → serve de base mesmo com nome qualquer
+    p5 = _saldo(historicos=[{"nome": "SALARIO", "tipo_valor": "INFORMADO",
+                             "valor_brl": 1500.0,
+                             "competencia_inicial": "01/02/2024",
+                             "competencia_final": "13/05/2026"}],
+                valor="INFORMADO", periodo_inicio="01/05/2026",
+                periodo_fim="13/05/2026",
+                valor_devido={"tipo": "INFORMADO", "valor_informado_brl": 775.14})
+    assert p5["valor"] == "CALCULADO"
+    assert p5["formula_calculado"]["base_calculo"]["historico_nome"] == "SALARIO"
 
 
 def test_inv133_saldo_salario_no_prompt():
