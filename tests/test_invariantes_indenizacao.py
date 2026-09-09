@@ -4515,3 +4515,35 @@ def test_inv139_ferias_periodo_estreitado_ate_o_1o_pa_deferido():
     _norm(curto)
     assert curto["verbas_principais"][0]["parametros"]["periodo_inicio"] == "01/02/2025", (
         "#80-CY estreitou além do periodo_fim")
+
+
+def test_inv140_releitura_nao_confirma_save_recusado():
+    """#80-CZ: o #80-CO só vale para o save SILENCIOSO — mensagem EXPLÍCITA de
+    recusa do servidor VETA a confirmação por releitura.
+
+    Medido no 0000228-38 (09/09/2026): o #80-N capturou "Campo obrigatório:
+    Histórico Salarial" e o #80-CO ainda assim declarou "✓ CONFIRMADO por
+    releitura" — o período batia por já estar gravado de execução anterior,
+    enquanto a base histórico ficara por preencher. Como o #80-CO retorna True,
+    `ParametrosVerbaAbortadosError` não é levantada e o retry ×3 do #80-BY NÃO
+    engata: uma falha recuperável virou terminal, com a liquidação travada em
+    "Falta selecionar pelo menos um Histórico Salarial para apurar o Valor
+    Devido da Verba SALDO DE SALÁRIO".
+
+    As mensagens são zeradas por verba — erro de OUTRA verba não pode vetar
+    esta."""
+    src = PLAYWRIGHT_V2
+    corpo = src[src.find("def _save_persistiu_por_releitura"):
+                src.find("def _reler_periodo_da_verba")]
+    assert "_msgs_save_falho" in corpo, (
+        "REGRESSÃO #80-CZ: o #80-CO voltou a ignorar as mensagens JSF do save")
+    assert "campo obrigat" in corpo, (
+        "REGRESSÃO #80-CZ: sinais de recusa do servidor removidos do veto")
+    # o veto precisa vir ANTES da releitura (senão navega à toa e confirma)
+    assert corpo.find("_msgs_save_falho") < corpo.find("_reler_periodo_da_verba"), (
+        "REGRESSÃO #80-CZ: veto deixou de preceder a releitura")
+    assert "self._msgs_save_falho = list(_msgs or [])" in src, (
+        "REGRESSÃO #80-CZ: as mensagens do #80-N deixaram de ser guardadas")
+    assert "self._msgs_save_falho = []" in src, (
+        "REGRESSÃO #80-CZ: mensagens não são mais zeradas por verba — erro de "
+        "uma verba vetaria a confirmação de outra")

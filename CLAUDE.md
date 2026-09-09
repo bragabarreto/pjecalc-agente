@@ -645,6 +645,37 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Releitura NÃO confirma save RECUSADO (#80-CZ)
+
+> **O #80-CO (confirmar o save de parâmetros por releitura do bean) vale APENAS
+> para o save SILENCIOSO — sem mensagem de sucesso E sem erro. Mensagem
+> EXPLÍCITA de recusa do servidor VETA a confirmação.**
+>
+> **Bug (0000228-38, 09/09/2026):** o `#80-N` capturou
+> `['Campo obrigatório: Histórico Salarial…']` e, na linha seguinte, o `#80-CO`
+> declarou `✓ save CONFIRMADO por releitura pós-Cancelar` — o período batia
+> porque já estava gravado de uma execução anterior, enquanto o campo que
+> faltava (a base histórico) ficara por preencher.
+>
+> O estrago não é o log enganoso: como o `#80-CO` retorna `True`,
+> `ParametrosVerbaAbortadosError` NÃO é levantada e **o retry ×3 do #80-BY não
+> engata** (`test_inv104`). Uma falha recuperável virou terminal — a liquidação
+> travou em *"Falta selecionar pelo menos um Histórico Salarial para apurar o
+> Valor Devido da Verba SALDO DE SALÁRIO"* e o cálculo saiu sem PJC.
+>
+> **Fix:** `_msgs_save_falho` guarda o que o `#80-N` leu; o `#80-CO` veta a
+> confirmação quando alguma mensagem casa `campo obrigat | obrigatorio |
+> invalid | incompativ | nao pode | erro:` (comparação sem acentos). O veto vem
+> **antes** da releitura — não adianta navegar para depois desconsiderar.
+>
+> ⚠️ As mensagens são **zeradas por verba** (topo de
+> `_configurar_parametros_pos_expresso`): erro de OUTRA verba não pode vetar a
+> confirmação desta.
+>
+> Protegido por `test_inv140`.
+
+---
+
 ## Regra obrigatória — Férias: o período da verba ATRASA 1 ano na série de PAs (#80-CY)
 
 > **O PJE-Calc deriva os períodos aquisitivos com um ano de atraso em relação ao

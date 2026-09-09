@@ -6311,6 +6311,33 @@ class PlaywrightAutomatorV2:
         que manteve 19 processos com a verba rescisória no período do Expresso
         (contrato inteiro), que é o que o #80-CI denuncia.
         """
+        # #80-CZ — VETO: o #80-CO só vale para o save SILENCIOSO (sem sucesso E
+        # sem erro). Se o servidor RECUSOU explicitamente, confirmar por
+        # releitura é falso-positivo: o período pode bater por já estar gravado
+        # de uma execução anterior, enquanto o campo que faltava (a base
+        # histórico) ficou por preencher.
+        #
+        # Medido no 0000228-38 (09/09/2026): o #80-N capturou "Campo
+        # obrigatório: Histórico Salarial" e mesmo assim o #80-CO declarou
+        # "CONFIRMADO por releitura" — o retry ×3 do #80-BY não engatou e a
+        # liquidação travou em "Falta selecionar pelo menos um Histórico
+        # Salarial para apurar o Valor Devido da Verba SALDO DE SALÁRIO".
+        _msgs = list(getattr(self, "_msgs_save_falho", None) or [])
+        if _msgs:
+            import unicodedata as _ud
+            def _n(t: str) -> str:
+                return "".join(c for c in _ud.normalize("NFD", str(t))
+                               if _ud.category(c) != "Mn").lower()
+            _sinais = ("campo obrigat", "obrigatorio", "invalid", "incompativ",
+                       "nao pode", "erro:", "erro.")
+            _rej = [m for m in _msgs if any(x in _n(m) for x in _sinais)]
+            if _rej:
+                self.log(
+                    f"    ✗ #80-CZ save de '{v.nome_pjecalc}' RECUSADO pelo "
+                    f"servidor — releitura não confirma: {_rej[0][:120]}"
+                )
+                return False
+
         alvo = getattr(v.parametros, "periodo_inicio", None)
         if not alvo:
             return False
@@ -6426,6 +6453,9 @@ class PlaywrightAutomatorV2:
         - Reflexos têm linkParametrizar com title="Parametrizar" (SEM "da Verba")
           — disambiguar via id*=':listaReflexo:'.
         """
+        # #80-CZ: zerar as mensagens JSF do save anterior — sem isso, um erro de
+        # OUTRA verba vetaria a confirmação por releitura desta.
+        self._msgs_save_falho = []
         # Setar nome da verba no contexto para que _vincular_cartao_ponto_quantidade
         # possa escolher a coluna correta do cartão (Hs EXT para HE, etc.)
         self._verba_atual_nome = v.nome_pjecalc or getattr(v, "expresso_alvo", None)
@@ -7411,6 +7441,9 @@ class PlaywrightAutomatorV2:
                         return out.slice(0, 12);
                     }"""
                 )
+                # #80-CZ: guardar p/ o #80-CO — mensagem EXPLÍCITA de rejeição
+                # veta a confirmação por releitura (senão o retry ×3 não engata).
+                self._msgs_save_falho = list(_msgs or [])
                 if _msgs:
                     self.log(f"    🔎 #80-N mensagens JSF no save falho de '{v.nome_pjecalc}': {_msgs}")
                 else:
