@@ -13806,7 +13806,12 @@ class PlaywrightAutomatorV2:
                         if dt is None:
                             continue
                         ocs.append({"data": dt, "valor": _num(dd.get("devido", "0")),
-                                    "avos": dd.get("quantidade", "")})
+                                    "avos": dd.get("quantidade", ""),
+                                    # #80-CT: o PJC carrega o período aquisitivo
+                                    # de cada ocorrência de férias — é a chave
+                                    # que casa ocorrência ↔ ferias.periodos.
+                                    "pa_fim": _ms(dd.get("dataFinalPeriodoAquisitivo", "")),
+                                    "pa_ini": _ms(dd.get("dataInicialPeriodoAquisitivo", ""))})
             _pi_el, _pf_el = el.find("periodoInicial"), el.find("periodoFinal")
             _pi = _ms(_pi_el.text) if _pi_el is not None and _pi_el.text else None
             _pf = _ms(_pf_el.text) if _pf_el is not None and _pf_el.text else None
@@ -13909,6 +13914,52 @@ class PlaywrightAutomatorV2:
                 # silêncio custa dinheiro no título executivo.
                 # NÃO afrouxar para len(pas)+1 sem antes remedir o corpus.
                 limite = len(pas)
+                # ── #80-CT: casar por PERÍODO AQUISITIVO quando o PJC o traz ──
+                # Valida 4/4 contra o PJC definitivo do 0001107-45: as duas
+                # ocorrências que o calculista manteve são exatamente as cujo PA
+                # consta de `ferias.periodos`; as duas que ele zerou têm PA de
+                # anos não deferidos. Tolerância de 45 dias no fim do PA porque
+                # a data declarada pela IA diverge da apurada pelo PJE-Calc
+                # (0000772-26: declarado 01/05/2026, apurado 08/06/2026) —
+                # 45 dias não alcança o PA vizinho, que dista um ano.
+                _pa_decl = []
+                for _pa in pas:
+                    if str(getattr(_pa, "situacao", "") or "").upper() == "GOZADAS":
+                        continue
+                    _pf = getattr(_pa, "periodo_aquisitivo_fim", None)
+                    if _pf:
+                        try:
+                            _pa_decl.append(_dtm.datetime.strptime(_pf, "%d/%m/%Y"))
+                        except Exception:
+                            pass
+                _fora_pa = None
+                if _pa_decl and all(o.get("pa_fim") for o in valoradas):
+                    _casa = lambda o: any(
+                        abs((o["pa_fim"] - d).days) <= 45 for d in _pa_decl)
+                    _dentro = [o for o in valoradas if _casa(o)]
+                    # se NADA casou, a declaração não corresponde ao apurado —
+                    # reportar como inconclusivo em vez de acusar tudo
+                    if _dentro:
+                        _fora_pa = [o for o in valoradas if not _casa(o)]
+                if _fora_pa is not None:
+                    if _fora_pa:
+                        res["ok"] = False
+                        res["ferias_suspeitas"].append({
+                            "verba": v.nome_pjecalc,
+                            "periodos_aquisitivos_deferidos": len(pas),
+                            "ocorrencias_valoradas": len(valoradas),
+                            "criterio": "periodo_aquisitivo",
+                            "total_excesso": round(sum(o["valor"] for o in _fora_pa), 2),
+                            "ocorrencias": [
+                                {"data": o["data"].strftime("%d/%m/%Y"),
+                                 "avos": o["avos"][:5], "valor": round(o["valor"], 2),
+                                 "pa": (o["pa_ini"].strftime("%d/%m/%Y") + "→" +
+                                        o["pa_fim"].strftime("%d/%m/%Y"))
+                                       if o.get("pa_ini") and o.get("pa_fim") else "?"}
+                                for o in _fora_pa
+                            ],
+                        })
+                    continue
                 if len(valoradas) > limite:
                     res["ok"] = False
                     res["ferias_suspeitas"].append({
@@ -13986,6 +14037,13 @@ class PlaywrightAutomatorV2:
                 for o in e["ocorrencias"]:
                     self.log(f"          – {o['data']} | {o['avos']} avos | R$ {o['valor']:,.2f}")
             for f in res["ferias_suspeitas"]:
+                if f.get("criterio") == "periodo_aquisitivo":
+                    self.log(f"      • {f['verba']}: {len(f['ocorrencias'])} ocorrência(s) de período "
+                             f"aquisitivo NÃO deferido = R$ {f['total_excesso']:,.2f} — zere estas:")
+                    for o in f["ocorrencias"]:
+                        self.log(f"          – {o['data']} | {o['avos']} avos | "
+                                 f"R$ {o['valor']:,.2f} | PA {o['pa']}")
+                    continue
                 self.log(f"      • {f['verba']}: {f['ocorrencias_valoradas']} ocorrência(s) valoradas "
                          f"para {f['periodos_aquisitivos_deferidos']} período(s) aquisitivo(s) deferido(s) "
                          f"— {f.get('avos_gerados')} avos gerados x ~{f.get('avos_deferidos_aprox')} "

@@ -4267,3 +4267,40 @@ def test_inv134_ferias_alerta_traz_avos_e_nao_decide():
     filt = src[src.find("def _filtrar_ocorrencias_por_janela"):
                src.find("def _configurar_ocorrencias_informado_inline")]
     assert "janela_ocorrencias_inicio" in filt and "avos" not in filt.split("def ")[0][:400]
+
+
+def test_inv135_ferias_casadas_por_periodo_aquisitivo():
+    """#80-CT: a ocorrência de férias no PJC carrega `dataInicialPeriodoAquisitivo`
+    e `dataFinalPeriodoAquisitivo` — é a CHAVE que casa ocorrência ↔
+    `ferias.periodos`. O gate usa isso e nomeia exatamente o que zerar.
+
+    Validado contra o PJC DEFINITIVO do 0001107-45 (08/09/2026): as duas
+    ocorrências que o calculista manteve são exatamente as cujo PA consta de
+    ferias.periodos; as duas que ele zerou (R$ 2.101,71 + R$ 2.227,80 =
+    R$ 4.329,51) têm PA de anos não deferidos. 4/4.
+
+    Tolerância de 45 dias no fim do PA: a data declarada pela IA diverge da
+    apurada pelo PJE-Calc (0000772-26 declarou 01/05/2026, apurado 08/06/2026).
+    45 dias não alcança o PA vizinho, que dista um ano.
+
+    ⚠ Continua sendo DETECÇÃO, não zeragem: a grade editável
+    (parametrizar-ocorrencia.xhtml) NÃO expõe o período aquisitivo — só
+    dataInicial, valorDevido e ativo. A chave existe no PJC exportado, não no
+    formulário, então o bot não tem como casar em tempo de preenchimento."""
+    src = PLAYWRIGHT_V2
+    corpo = src[src.find("def _verificar_escopo_deferido_pjc"):
+                src.find("def _norm_desc_fidelidade")]
+    assert "dataFinalPeriodoAquisitivo" in corpo, (
+        "REGRESSÃO #80-CT: chave do período aquisitivo removida do índice")
+    assert '"criterio": "periodo_aquisitivo"' in corpo
+    assert "45" in corpo, "REGRESSÃO #80-CT: tolerância do fim do PA removida"
+    # guarda: se NADA casar, não acusar tudo (a declaração é que está fora)
+    assert "if _dentro:" in corpo, (
+        "REGRESSÃO #80-CT: sem a guarda, uma declaração divergente faria o gate "
+        "acusar TODAS as ocorrências como indevidas")
+    # e segue sem zeragem automática de férias
+    filt = src[src.find("def _filtrar_ocorrencias_por_janela"):
+               src.find("def _configurar_ocorrencias_informado_inline")]
+    assert "PeriodoAquisitivo" not in filt, (
+        "REGRESSÃO #80-CT: o filtro do browser não pode usar o PA — a grade "
+        "editável não o expõe")

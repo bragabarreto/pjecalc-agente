@@ -580,11 +580,30 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 > `avos_gerados × avos_deferidos_aprox (excesso ~N avos)`, com aviso explícito
 > de estimativa ±1. Períodos aquisitivos `GOZADAS` contam zero.
 >
-> **Caminho para automatizar no futuro:** a IA declarar explicitamente, por
-> período aquisitivo, os avos deferidos — aí a chave passa a existir e o
-> mecanismo do #80-CM pode ser estendido.
+> **#80-CT — a chave EXISTE no PJC (mas não na grade).** A ocorrência de férias
+> carrega `dataInicialPeriodoAquisitivo` / `dataFinalPeriodoAquisitivo`. O gate
+> passou a casar ocorrência ↔ `ferias.periodos` por essa chave (tolerância de
+> **45 dias** no fim do PA — a data declarada pela IA diverge da apurada:
+> 0000772-26 declarou 01/05/2026, o PJE-Calc apurou 08/06/2026; 45 dias não
+> alcança o PA vizinho, que dista um ano). Agora o aviso NOMEIA as ocorrências
+> a zerar, com PA e valor.
 >
-> Protegido por `test_inv134`.
+> **Validação contra o PJC definitivo do 0001107-45: 4/4.** As duas que o
+> calculista manteve são exatamente as de PA declarado; as duas que ele zerou
+> (R$ 2.101,71 + R$ 2.227,80 = R$ 4.329,51) têm PA de anos não deferidos.
+>
+> ⚠️ **Guarda obrigatória:** se NENHUMA ocorrência casar, o gate NÃO acusa todas
+> — a declaração é que está fora do apurado. Sem isso, o 0000772-26 acusaria as
+> 4 (R$ 8.831,40) em vez das 3 corretas (R$ 6.488,37).
+>
+> ⚠️ **Ainda assim NÃO automatiza a zeragem:** a grade editável
+> (`parametrizar-ocorrencia.xhtml`) **não expõe** o período aquisitivo — só
+> `dataInicial`, `valorDevido` e `ativo`. A chave existe no PJC exportado, não
+> no formulário, então o bot não tem como casar em tempo de preenchimento.
+> Automatizar exigiria que o PJE-Calc expusesse o PA na grade, ou um segundo
+> passe pós-liquidação (liquidar → exportar → reabrir → zerar → religuidar).
+>
+> Protegido por `test_inv134` e `test_inv135`.
 
 ---
 
