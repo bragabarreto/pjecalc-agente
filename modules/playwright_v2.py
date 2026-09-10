@@ -11035,7 +11035,7 @@ class PlaywrightAutomatorV2:
             self.log(f"  ✓ Overrides aplicados e CONFIRMADOS em {len(por_mes)} mês(es)")
 
     def fase_faltas(self) -> None:
-        self.log("Fase 6 — Faltas")
+        self.log("Fase 2a — Faltas")
         self._navegar_menu("li_calculo_faltas")
         for f in self.previa.faltas:
             self._preencher("dataInicioPeriodoFaltaInputDate", f.data_inicio)
@@ -11069,10 +11069,10 @@ class PlaywrightAutomatorV2:
         """
         ferias = getattr(self.previa, "ferias", None)
         if not ferias or not ferias.periodos:
-            self.log("Fase 7 — Férias: sem períodos (pulando)")
+            self.log("Fase 2b — Férias: sem períodos (pulando)")
             return
 
-        self.log(f"Fase 7 — Férias ({len(ferias.periodos)} período(s))")
+        self.log(f"Fase 2b — Férias ({len(ferias.periodos)} período(s))")
         # ⚠ #80-CU — a página de Férias EXIGE navegação por CLIQUE no sidebar.
         # A tabela é `#{lista}`, populada pelo bean Seam; a URL direta NÃO
         # invoca o factory @Begin (invariante já documentado no CLAUDE.md para
@@ -11609,7 +11609,7 @@ class PlaywrightAutomatorV2:
         else:
             self.log("  ℹ Sem linhas de férias para salvar (página vazia)")
 
-        self.log("Fase 7 concluída")
+        self.log("Fase 2b concluída")
 
     def fase_fgts(self) -> None:
         self.log("Fase 8 — FGTS")
