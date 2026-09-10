@@ -4881,3 +4881,39 @@ def test_inv147_pagina_de_ferias_confirmada_antes_de_preencher():
     i_preenche = corpo.find("Campos globais (no topo da página)")
     assert 0 < i_conf < i_preenche, (
         "REGRESSÃO #80-DI: a confirmação deixou de preceder o preenchimento")
+
+
+def test_inv148_evolucao_espera_a_listagem_renderizar():
+    """#80-DJ: a evolução salarial só é lida DEPOIS que a `listagemMC` renderiza.
+
+    A tabela de ocorrências mensais só existe após o round-trip A4J do
+    `cmdGerarOcorrencias`. Lendo na hora, a lista vinha VAZIA e a evolução era
+    descartada com um aviso — o histórico ficava com o valor ÚNICO em todas as
+    competências, e toda verba que usa o histórico passava a calcular pelo
+    último salário.
+
+    Medido no 0000763-64 (10/09/2026): as férias de 2021/2022/2023 saíram com
+    base R$ 2.112,09 (último salário) em vez de 1.800,43 / 1.883,61 / 1.977,79
+    (a vigente em cada período) — R$ 897 a mais que o PJC do calculista, com os
+    períodos aquisitivos já corretos.
+
+    O log denunciava a contradição em duas linhas seguidas::
+
+        ✓ Ocorrências geradas para 'SALARIO BASE'
+        ⚠ #80-L sem ocorrências geradas p/ 'SALARIO BASE' — evolução não aplicada
+    """
+    src = PLAYWRIGHT_V2
+    i = src.find("def _aplicar_evolucao_ocorrencias_historico")
+    assert i > 0, "REGRESSÃO #80-L: aplicação da evolução removida"
+    corpo = src[i:i + 9000]
+    assert "#80-DJ" in corpo, (
+        "REGRESSÃO #80-DJ: espera pela listagemMC removida")
+    assert "wait_for_selector" in corpo, (
+        "REGRESSÃO #80-DJ: leitura da listagem voltou a ser imediata")
+    i_wait = corpo.find("#80-DJ")
+    i_read = corpo.find("Ler o mês (coluna `data`)")
+    assert 0 < i_wait < i_read, (
+        "REGRESSÃO #80-DJ: a espera deixou de preceder a leitura")
+    assert "sem ocorrências geradas" in corpo, (
+        "REGRESSÃO #80-L: aviso de evolução não aplicada removido — a falha "
+        "voltaria a ser silenciosa")

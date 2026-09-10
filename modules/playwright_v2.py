@@ -2290,6 +2290,30 @@ class PlaywrightAutomatorV2:
         steps = sorted(
             ((_ci(s.competencia), s.valor_brl) for s in ev), key=lambda t: t[0]
         )
+        # #80-DJ: a `listagemMC` só existe DEPOIS do round-trip A4J do
+        # `cmdGerarOcorrencias`. Ler na hora devolvia lista vazia e a evolução
+        # era descartada com um aviso — o histórico ficava com o valor ÚNICO em
+        # todas as competências.
+        #
+        # Efeito medido no 0000763-64 (10/09/2026): as férias de 2021/2022/2023
+        # saíram com a base do ÚLTIMO salário (R$ 2.112,09) em vez da vigente em
+        # cada período (1.800,43 / 1.883,61 / 1.977,79) — R$ 897 a mais que o
+        # PJC do calculista. Atinge QUALQUER cálculo com progressão salarial, em
+        # toda verba que use o histórico.
+        for _t in range(1, 5):
+            try:
+                self._page.wait_for_selector(
+                    "input[id*=':listagemMC:'][id$=':valor']",
+                    state="attached", timeout=8000,
+                )
+                break
+            except Exception:
+                if _t == 1:
+                    self.log(f"    ⏳ #80-DJ aguardando a listagem de ocorrências "
+                             f"de '{hist.nome}' renderizar (A4J do Gerar)")
+                self._aguardar_ajax(6000)
+                self._page.wait_for_timeout(1200)
+
         # Ler o mês (coluna `data`) de cada linha de ocorrência da listagemMC.
         linhas = self._page.evaluate(
             r"""() => [...document.querySelectorAll("input[id*=':listagemMC:'][id$=':valor']")]

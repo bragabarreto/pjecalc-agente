@@ -648,6 +648,35 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Evolução salarial: esperar a `listagemMC` renderizar (#80-DJ)
+
+> **A evolução do histórico só pode ser lida DEPOIS que a `listagemMC` renderiza
+> — ela só existe após o round-trip A4J do `cmdGerarOcorrencias`.**
+>
+> Lendo na hora, a lista vinha VAZIA e a evolução era descartada: o histórico
+> ficava com o valor ÚNICO em todas as competências, e **toda verba que usa o
+> histórico passava a calcular pelo último salário**.
+>
+> O log denunciava a contradição em duas linhas seguidas, e ninguém tinha olhado:
+> ```
+> ✓ Ocorrências geradas para 'SALARIO BASE'
+> ⚠ #80-L sem ocorrências geradas p/ 'SALARIO BASE' — evolução não aplicada
+> ```
+>
+> **Medido no 0000763-64 (10/09/2026):** a prévia declara 6 degraus de evolução;
+> as férias de 2021/2022/2023 saíram com base R$ 2.112,09 (último salário) em vez
+> de 1.800,43 / 1.883,61 / 1.977,79 (a vigente em cada período) — **R$ 897 a mais**
+> que o PJC do calculista, com os períodos aquisitivos JÁ corretos. As bases das
+> ocorrências no PJC provam: definitivo `1800.43, 1883.61, 1977.79, 2112.09`;
+> nosso, `2112.09` em todas.
+>
+> ⚠️ Não é problema de férias — atinge **qualquer cálculo com progressão
+> salarial**, em toda verba que use o histórico.
+>
+> Protegido por `test_inv148`.
+
+---
+
 ## Regra obrigatória — FALTAS e FÉRIAS antes de Histórico/Verbas (#80-DH/#80-DI)
 
 > **A ordem do manual é `Dados → Faltas → Férias → Histórico → Verbas → Cartão`.
