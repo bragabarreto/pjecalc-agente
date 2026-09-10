@@ -3520,7 +3520,7 @@ def test_inv106_reflexos_bean_ground_truth_by3():
 
     # (c) reconciler lê <ativo> explícito do bloco Reflexo
     ini = src.find("def _reconciliar_fidelidade_pjc")
-    corpo = src[ini:ini + 16000]
+    corpo = src[ini:ini + 22000]
     assert "<ativo>(true|false)</ativo>" in corpo, (
         "REGRESSÃO #80-BY-3: reconciler não lê o <ativo> real do Reflexo")
     # e usa atribuição 1-para-1 (melhor ajuste) p/ não gerar duplicados falsos
@@ -4367,7 +4367,7 @@ def test_inv136_ferias_navega_por_clique_no_sidebar_e_nao_pula_calado():
     declara — pulá-la em silêncio quebra as duas pontas."""
     src = PLAYWRIGHT_V2
     ini = src.find("def fase_ferias")
-    corpo = src[ini:ini + 16000]
+    corpo = src[ini:ini + 22000]
     assert '_navegar_menu_via_click("li_calculo_ferias")' in corpo, (
         "REGRESSÃO #80-CU: Férias voltou a navegar por URL — a tabela `#{lista}` "
         "vem vazia e os períodos deferidos não são informados")
@@ -4401,7 +4401,7 @@ def test_inv137_ferias_salva_pelo_botao_certo():
     de férias — tem de ser setado antes do click."""
     src = PLAYWRIGHT_V2
     ini = src.find("def fase_ferias")
-    corpo = src[ini:ini + 26000]
+    corpo = src[ini:ini + 32000]
     i_save = corpo.find("#80-CV")
     assert i_save > 0, "REGRESSÃO #80-CV: save específico das Férias removido"
     bloco = corpo[i_save:i_save + 2000]
@@ -4721,7 +4721,7 @@ def test_inv143_ferias_conta_todas_as_linhas_da_tabela():
     e o log dizia "3 linha(s) (extraído de editaveis)"."""
     src = PLAYWRIGHT_V2
     ini = src.find("def fase_ferias")
-    corpo = src[ini:ini + 26000]
+    corpo = src[ini:ini + 32000]
     assert "situacoes" in corpo, (
         "REGRESSÃO #80-DD: lista completa de `:situacao` removida do diagnóstico")
     assert 'diag.get("situacoes")' in corpo, (
@@ -4753,7 +4753,7 @@ def test_inv144_aba_ferias_nao_lista_o_pa_proporcional():
        anulando o #80-DB justo depois de o #80-DC completar a aba."""
     src = PLAYWRIGHT_V2
     ini = src.find("def fase_ferias")
-    corpo = src[ini:ini + 26000]
+    corpo = src[ini:ini + 32000]
     assert "#80-DE" in corpo, (
         "REGRESSÃO #80-DE: tratamento do PA proporcional removido")
     assert "_proporcional" in corpo and "data_demissao" in corpo, (
@@ -4801,7 +4801,7 @@ def test_inv145_situacao_nao_gozada_limpa_o_gozo():
     na prévia era descartado em silêncio."""
     src = PLAYWRIGHT_V2
     ini = src.find("def fase_ferias")
-    corpo = src[ini:ini + 30000]
+    corpo = src[ini:ini + 36000]
     assert "#80-DG" in corpo, (
         "REGRESSÃO #80-DG: limpeza do gozo em período não-gozado removida")
     assert "dataInicialDoPeriodoDeGozo" in corpo, (
@@ -4817,3 +4817,67 @@ def test_inv145_situacao_nao_gozada_limpa_o_gozo():
         "gozo que a prévia acabou de declarar")
     assert "PARCIAL_GOZADAS" in corpo, (
         "REGRESSÃO #80-DG: gozo parcial voltou a ser limpo como se não fosse gozo")
+
+
+def test_inv146_faltas_e_ferias_antes_do_historico():
+    """#80-DH: FALTAS e FÉRIAS rodam ANTES de Histórico/Verbas, como manda o
+    manual (§"Sequência de Preenchimento Recomendada": Dados → Faltas → Férias
+    → Histórico → Verbas → Cartão → …).
+
+    Estavam como fases 6 e 7, DEPOIS das Verbas — e o comentário do código
+    afirmava seguir o manual, o que não era verdade.
+
+    Por que a ordem importa:
+    - as ocorrências da verba de FÉRIAS são geradas na fase de Verbas a partir
+      do que a ABA diz naquele momento; ajustá-la depois deixa as ocorrências
+      com o gozo antigo e a liquidação bloqueia com "Os períodos de gozo de
+      férias gravados nas ocorrências das verbas não podem divergir dos
+      registros de férias gozadas constantes da página Férias" (0000763-64 e
+      0000382-56);
+    - as FALTAS injustificadas mudam o PRAZO de cada período aquisitivo
+      (manual §7), logo precedem a conferência da aba;
+    - a aba é derivada de admissão/desligamento (fase 1) e não depende de verba
+      alguma."""
+    src = PLAYWRIGHT_V2
+    i_faltas = src.find('_run_fase("Fase 2a (Faltas)"')
+    i_ferias = src.find('_run_fase("Fase 2b (Férias)"')
+    i_hist = src.find('_run_fase("Fase 3 (Histórico)"')
+    i_verbas = src.find('_run_fase("Fase 5 (Verbas)"')
+    assert i_faltas > 0 and i_ferias > 0, (
+        "REGRESSÃO #80-DH: Faltas/Férias saíram da posição do manual")
+    assert i_faltas < i_ferias < i_hist < i_verbas, (
+        "REGRESSÃO #80-DH: a ordem do manual (Faltas → Férias → Histórico → "
+        "Verbas) foi quebrada")
+    assert '_run_fase("Fase 7 (Férias)"' not in src, (
+        "REGRESSÃO #80-DH: Férias voltou a rodar depois das Verbas")
+
+
+def test_inv147_pagina_de_ferias_confirmada_antes_de_preencher():
+    """#80-DI: a fase Férias CONFIRMA que a página carregou antes de preencher.
+
+    `_navegar_menu_via_click` devolve True pelo CLIQUE, não pelo destino.
+    Quando o bean Seam não inicia, a fase seguia adiante e reportava
+    "0 linha(s) auto-geradas" + "Sem linhas de férias para salvar (página
+    vazia)" — e os períodos aquisitivos deferidos NUNCA chegavam ao PJE-Calc.
+    Medido no 0000763-64 (09–10/09/2026) em duas execuções seguidas: a aba
+    ficou com as situações que o PJE-Calc sugeriu.
+
+    Âncoras: botão Regerar, campo Prazo das Férias Proporcionais, ou qualquer
+    `:situacao` de linha — mais a URL. Nenhuma presente = página morta →
+    F+R + retry ×3 → pendência explícita (nunca silencioso)."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def fase_ferias")
+    corpo = src[ini:ini + 36000]
+    assert "#80-DI" in corpo, (
+        "REGRESSÃO #80-DI: confirmação da página de Férias removida")
+    assert "prazoFeriasProporcionais" in corpo and "regerarFeriasColetivas" in corpo, (
+        "REGRESSÃO #80-DI: âncoras da página de Férias removidas")
+    assert "_fechar_e_reabrir_calculo" in corpo, (
+        "REGRESSÃO #80-DI: recovery (F+R) da página de Férias removido")
+    assert "_pendencias_ferias" in corpo, (
+        "REGRESSÃO #80-DI: falha da página voltou a ser silenciosa")
+    # a confirmação precisa vir ANTES de qualquer preenchimento
+    i_conf = corpo.find("#80-DI")
+    i_preenche = corpo.find("Campos globais (no topo da página)")
+    assert 0 < i_conf < i_preenche, (
+        "REGRESSÃO #80-DI: a confirmação deixou de preceder o preenchimento")

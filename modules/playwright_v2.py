@@ -309,9 +309,28 @@ class PlaywrightAutomatorV2:
             except Exception as e_rec:
                 self.log(f"  ⚠ Recentes erro: {e_rec} — continuando")
 
-        # ORDEM CONFORME MANUAL OFICIAL PJE-Calc (§"Sequencia de Preenchimento Recomendada"):
-        # 3.Histórico → 4.Verbas → 5.Cartão Ponto → 6.Faltas → 7.Férias → 8.FGTS → 9.CS
-        # → 10.IRPF → 11.Honorários → 12.Custas → 13.Correção → 14.Liquidar
+        # ORDEM CONFORME MANUAL OFICIAL PJE-Calc (§"Sequencia de Preenchimento
+        # Recomendada"): 1.Dados → **2.Faltas → 3.Férias** → 4.Histórico →
+        # 5.Verbas → 6.Cartão → … → FGTS → CS → IRPF → Honorários → Custas →
+        # Correção → Liquidar
+        #
+        # ⚠ #80-DH — FALTAS e FÉRIAS foram MOVIDAS para cá (antes do Histórico),
+        # que é onde o manual as coloca. Estavam como fases 6 e 7, DEPOIS das
+        # Verbas, e o comentário antigo afirmava seguir o manual — não seguia.
+        #
+        # Por que a ordem importa, e não é preciosismo:
+        #  • as ocorrências da verba de FÉRIAS são geradas na fase de Verbas a
+        #    partir do que a ABA diz naquele momento. Ajustar a aba DEPOIS deixa
+        #    as ocorrências com o gozo antigo, e a liquidação bloqueia com "Os
+        #    períodos de gozo de férias gravados nas ocorrências das verbas não
+        #    podem divergir dos registros de férias gozadas constantes da página
+        #    Férias" (0000763-64 e 0000382-56, 09–10/09/2026);
+        #  • as FALTAS injustificadas mudam o PRAZO de cada período aquisitivo
+        #    (manual §7: 5 faltas→30 dias, 14→24, 23→18, 32→12, >32→perdidas),
+        #    logo têm de estar lançadas antes de a aba ser conferida;
+        #  • a aba é derivada de admissão/desligamento (fase 1) — não depende de
+        #    verba alguma, então nada obriga a deixá-la para o fim. Rodá-la cedo
+        #    ainda pega uma conversa Seam nova, em vez da 5ª reabertura.
         #
         # Verbas vêm ANTES de FGTS/CS/IRPF porque essas fases precisam que a base de
         # cálculo (verbas + reflexos) esteja populada — sem isso o PJE-Calc não
@@ -319,6 +338,10 @@ class PlaywrightAutomatorV2:
         #
         # Como Verbas muda o conv_id (cada Expresso cria nova conv), reabrir via
         # Recentes APÓS verbas para restaurar conv estável com tudo populado.
+        # #80-DH: Faltas e Férias ANTES do Histórico/Verbas (manual §"Sequência")
+        _run_fase("Fase 2a (Faltas)", self.fase_faltas, bool(self.previa.faltas))
+        _run_fase("Fase 2b (Férias)", self.fase_ferias,
+                  bool(self.previa.ferias.periodos))
         _run_fase("Fase 3 (Histórico)", self.fase_historico_salarial)
         # CARTÃO DE PONTO ANTES DE VERBAS (reordenação 18/05/2026):
         # O manual oficial CSJT (§9.7) sugere Verbas antes de Cartão, mas
@@ -359,8 +382,6 @@ class PlaywrightAutomatorV2:
             self._fechar_e_reabrir_calculo("pós-Correções")
         except Exception as e:
             self.log(f"  ⚠ Fechar+Reabrir pós-Correções falhou: {e}")
-        _run_fase("Fase 6 (Faltas)", self.fase_faltas, bool(self.previa.faltas))
-        _run_fase("Fase 7 (Férias)", self.fase_ferias, bool(self.previa.ferias.periodos))
         _run_fase("Fase 8 (FGTS)", self.fase_fgts)
         _run_fase("Fase 9 (CS/INSS)", self.fase_contribuicao_social)
         _run_fase("Fase 10 (IRPF)", self.fase_imposto_de_renda)
@@ -11050,6 +11071,58 @@ class PlaywrightAutomatorV2:
                 self._navegar_menu("li_calculo_ferias")
         self._aguardar_ajax(10000)
         self._page.wait_for_timeout(1500)
+
+        # #80-DI — CONFIRMAR que a página de Férias carregou de verdade.
+        #
+        # `_navegar_menu_via_click` devolve True pelo CLIQUE, não pelo destino.
+        # Quando o bean Seam não inicia, a fase seguia adiante e reportava
+        # "0 linha(s) auto-geradas" + "Sem linhas de férias para salvar (página
+        # vazia)" — e os períodos aquisitivos deferidos NUNCA chegavam ao
+        # PJE-Calc. Medido no 0000763-64 (09–10/09/2026), duas execuções
+        # seguidas: aba intocada, com as situações que o PJE-Calc sugeriu.
+        #
+        # Âncoras da página (ferias.jsf): o botão Regerar, o campo Prazo das
+        # Férias Proporcionais, ou qualquer `:situacao` de linha. Nenhuma delas
+        # presente = não estamos na página (ou ela veio morta).
+        for _tent in range(1, 4):
+            _anc = self._page.evaluate(
+                """() => ({
+                    url: location.pathname + location.search,
+                    regerar: !!document.querySelector("input[id$=':regerarFeriasColetivas'], input[id$=':regerarFerias']"),
+                    prazo: !!document.querySelector("input[id$=':prazoFeriasProporcionais']"),
+                    linhas: document.querySelectorAll("[id$=':situacao']").length,
+                    erro: /Erro Interno|Error/i.test(document.body.innerText.slice(0, 400))
+                })"""
+            )
+            if (_anc.get("regerar") or _anc.get("prazo") or _anc.get("linhas")) \
+                    and "ferias" in (_anc.get("url") or ""):
+                if _tent > 1:
+                    self.log(f"    ✓ #80-DI página de Férias recuperada (tent {_tent})")
+                break
+            self.log(
+                f"    ⚠ #80-DI página de Férias NÃO carregou (tent {_tent}/3): "
+                f"url={str(_anc.get('url'))[-52:]} regerar={_anc.get('regerar')} "
+                f"prazo={_anc.get('prazo')} linhas={_anc.get('linhas')} "
+                f"erro={_anc.get('erro')}"
+            )
+            if _tent == 3:
+                self.log(
+                    "    🛑 #80-DI Férias inacessível — os períodos aquisitivos "
+                    "deferidos NÃO serão informados; a aba fica com a sugestão "
+                    "do PJE-Calc"
+                )
+                if not hasattr(self, "_pendencias_ferias"):
+                    self._pendencias_ferias = []
+                self._pendencias_ferias.append("página de Férias não carregou")
+                break
+            self._aguardar_servidor_ocioso("#80-DI reabrir Férias")
+            try:
+                self._fechar_e_reabrir_calculo("#80-DI Férias vazia")
+            except Exception as _e:
+                self.log(f"      ⚠ F+R: {str(_e)[:100]}")
+            self._navegar_menu_via_click("li_calculo_ferias")
+            self._aguardar_ajax(10000)
+            self._page.wait_for_timeout(1500)
 
         # Campos globais (no topo da página)
         if ferias.ferias_coletivas_inicio_primeiro_ano:

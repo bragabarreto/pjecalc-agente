@@ -648,6 +648,54 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — FALTAS e FÉRIAS antes de Histórico/Verbas (#80-DH/#80-DI)
+
+> **A ordem do manual é `Dados → Faltas → Férias → Histórico → Verbas → Cartão`.
+> Faltas e Férias rodavam como fases 6 e 7, DEPOIS das Verbas — e o comentário
+> do código afirmava seguir o manual. Não seguia.**
+>
+> Manual oficial, §"Sequência de Preenchimento Recomendada"
+> (`knowledge/pje_calc_official/manual_completo.md:1102`):
+> ```
+> 1. Dados do Calculo > Salvar
+> 2. Faltas > Salvar
+> 3. Ferias (verificar sugestoes) > Salvar
+> 4. Historico Salarial > Salvar
+> 5. Verbas > Salvar
+> ```
+>
+> **Por que não é preciosismo:**
+> - as ocorrências da verba de FÉRIAS são geradas na fase de Verbas a partir do
+>   que a **aba diz naquele momento**. Ajustar a aba depois deixa as ocorrências
+>   com o gozo antigo, e a liquidação BLOQUEIA com *"Os períodos de gozo de
+>   férias gravados nas ocorrências das verbas não podem divergir dos registros
+>   de férias gozadas constantes da página Férias"* — 0000763-64 e 0000382-56
+>   (09–10/09/2026). O #80-DG trata o sintoma; a ordem trata a causa.
+> - as **FALTAS injustificadas mudam o PRAZO** de cada período aquisitivo
+>   (manual §7: ≤5 faltas→30 dias, ≤14→24, ≤23→18, ≤32→12, >32→perdidas), logo
+>   precisam estar lançadas antes de a aba ser conferida;
+> - a aba é derivada de admissão/desligamento (fase 1) e **não depende de verba
+>   alguma** — nada obrigava a deixá-la para o fim. Cedo, ainda pega uma conversa
+>   Seam nova em vez da 5ª reabertura.
+>
+> ⚠️ **#80-DI — a fase CONFIRMA que a página carregou.**
+> `_navegar_menu_via_click` devolve `True` pelo CLIQUE, não pelo destino. Com o
+> bean Seam morto, a fase seguia adiante e reportava *"0 linha(s) auto-geradas"*
+> + *"Sem linhas de férias para salvar (página vazia)"* — e os períodos
+> aquisitivos deferidos NUNCA chegavam ao PJE-Calc (0000763-64, duas execuções
+> seguidas: a aba ficou com a sugestão do PJE-Calc).
+>
+> Âncoras de `ferias.jsf`: botão Regerar, campo `prazoFeriasProporcionais`, ou
+> qualquer `:situacao` de linha — mais a URL. Nenhuma presente ⇒ F+R + retry ×3
+> ⇒ pendência explícita. **Nunca silencioso.**
+>
+> ⚠️ A ordem de Cartão↔Verbas NÃO muda: o cartão precede as verbas por causa do
+> dropdown de colunas do `IMPORTADA_DO_CARTAO` (razão documentada em 18/05/2026).
+>
+> Protegido por `test_inv146` e `test_inv147`.
+
+---
+
 ## Regra obrigatória — Situação não-gozada LIMPA o gozo (#80-DG)
 
 > **Ao marcar um período aquisitivo como INDENIZADAS (ou qualquer situação
