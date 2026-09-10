@@ -648,6 +648,163 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Situação não-gozada LIMPA o gozo (#80-DG)
+
+> **Ao marcar um período aquisitivo como INDENIZADAS (ou qualquer situação
+> não-gozada), o bot TEM de limpar os campos de gozo daquela linha.**
+>
+> O PJE-Calc pré-preenche o período de gozo de toda linha que ele sugere como
+> GOZADAS (= fim do concessivo − (prazo − 1), medido 151/151). Quando a sentença
+> diz que aquele período é INDENIZADO, trocar só a `situacao` deixa o gozo
+> auto-gerado para trás — e a liquidação BLOQUEIA:
+>
+> *"Os períodos de gozo de férias gravados nas ocorrências das verbas não podem
+> divergir dos registros de férias gozadas constantes da página Férias."*
+>
+> **Medido no 0000382-56 (10/09/2026), lendo o H2 direto** (admissão 19/08/2019,
+> dispensa 19/10/2024 — o PJE-Calc sugeriu GOZADAS para quatro períodos e a
+> sentença deferiu três como indenizados):
+>
+> ```
+> 2019/2020 | G | gozo 20/07/2021   ok
+> 2021/2022 | I | gozo 20/07/2023   ⚠ indenizada COM gozo
+> 2020/2021, 2022/2023, 2023/2024 | I | null
+> ```
+>
+> A prévia não declara gozo algum — o `20/07/2023` é resíduo do
+> auto-preenchimento. **Uma linha basta** para travar o cálculo inteiro.
+>
+> ⚠️ **O id REAL do campo é `dataInicialDoPeriodoDeGozo{j}`** (e
+> `dataFinalDoPeriodoDeGozo{j}`, `dobraDoPeriodoDeGozo{j}`). O id antigo **não
+> casava com nada**: o gozo declarado na prévia era descartado em silêncio.
+>
+> ⚠️ A limpeza vem ANTES da escrita dos gozos declarados — invertido, apagaria o
+> que a prévia acabou de informar. `PARCIAL_GOZADAS` não é limpo.
+>
+> Protegido por `test_inv145`.
+
+---
+
+## Regra obrigatória — Editar prévia no disco NÃO basta: há cache em memória
+
+> **`_load_previa` consulta `_PREVIA_STORE` (memória) ANTES do arquivo.** Editar
+> `data/calculations/previa_v2/<sessao>.json` direto é INÓCUO enquanto a sessão
+> estiver em cache — a execução usa a versão antiga e o diagnóstico sai errado.
+>
+> **Custou um lote inteiro (0000763-64, 10/09/2026):** marquei os 5 períodos
+> aquisitivos como deferidos no arquivo, rodei, e o log mostrou o período
+> `15/08/2025` com apenas 2 deferidos — o estado ANTERIOR. A conclusão "a
+> marcação de `deferido` não funciona" teria sido falsa.
+>
+> **Como editar de verdade:** `PATCH /api/previa/v2/{sessao}/salvar` com a
+> prévia completa no corpo → `_save_previa` grava arquivo E cache. Reiniciar o
+> container também limpa o cache (mas custa 3–5 min de Tomcat).
+>
+> Depois de qualquer manutenção em massa nos arquivos, **sincronizar o cache**
+> reenviando cada prévia pelo endpoint.
+
+---
+
+## Regra obrigatória — Férias: a aba espelha o CONTRATO; `deferido` ≠ `situacao` (#80-DC)
+
+> **A aba Férias lista TODOS os períodos aquisitivos do contrato — e um campo
+> SEPARADO diz quais a condenação alcança.**
+>
+> O PJE-Calc gera a tabela de admissão + desligamento (manual §7). A prévia
+> declarava só os que a IA julgou condenados, e a subdeclaração ficava
+> **invisível** na revisão.
+>
+> **0000763-64 (09/09/2026):** a prévia declarou 2 dos 5 períodos; o PJC
+> definitivo do calculista valorou os 5 (R$ 12.446,12 × R$ 4.915,89 nossos).
+> Enquanto o erro do sistema era de EXCESSO a omissão ficava encoberta; com o
+> #80-CY virou **subcálculo** — pior, porque não salta aos olhos.
+>
+> | campo | natureza | pergunta |
+> |---|---|---|
+> | `situacao` | **FATO** | o empregado gozou as férias? |
+> | `deferido` | **DIREITO** | a sentença mandou pagar este período? |
+>
+> ⚠️ **São independentes.** Férias **GOZADAS mas não pagas** — ou pagas sem o
+> terço — são `situacao=GOZADAS` **com `deferido=true`**. Foi exatamente o caso
+> do 0000763-64, em que o calculista valorou três períodos gozados.
+>
+> `_norm_ferias_completar_periodos_do_contrato` acrescenta os PAs que faltam,
+> com a situação sugerida pelo manual e **`deferido=False`**: o valor não muda —
+> nascem fora da condenação — mas aparecem na prévia (destacados em âmbar, com
+> checkbox) para o revisor marcar. `deferido=None` de prévias antigas resolve
+> pelo comportamento anterior (gozado ⇒ não deferido).
+>
+> **Critério do período da verba** (`#80-CY`, agora exato): o menor
+> `periodo_inicio` que ainda deixa de fora os PAs não deferidos —
+> `(maior data de ocorrência indevida anterior à 1ª deferida) + 1 dia`.
+>
+> ⚠️ **CIRÚRGICO: só mexe quando há ocorrência INDEVIDA a excluir.** Sem essa
+> guarda o critério estreitava **197 de 208** prévias do corpus, 189 delas sem
+> nada a remover. Com ela: **10**.
+>
+> ⚠️ Erra-se de propósito para o lado **CEDO**: tarde demais PERDE um PA
+> deferido (subcálculo irrecuperável); cedo demais inclui um a mais, que o
+> #80-CX zera (recuperável).
+>
+> Efeito no corpus: aba completada em **24** prévias (+62 PAs); período
+> estreitado em **10**.
+>
+> Protegido por `test_inv139` e `test_inv142`.
+
+
+---
+
+## Regra obrigatória — A aba Férias NÃO lista o PA proporcional (#80-DE)
+
+> **A aba Férias só tem linha para períodos aquisitivos COMPLETOS. O
+> PROPORCIONAL final não aparece — e isso NÃO é pendência.**
+>
+> Medido em **60/60** processos do corpus (09/09/2026): o número de linhas da
+> aba é exatamente o número de PAs cujo ano se completou até o desligamento. O
+> proporcional é apurado na **ocorrência da verba** (+ campo "Prazo das Férias
+> Proporcionais"), não na aba.
+>
+> A tela do 0000228-38 confirma: contrato 05/05/2021→19/01/2026, **4 linhas**
+> (2021/22 … 2024/25), sem 2025/26 — ainda que a verba gere a ocorrência do PA
+> 05/05/2025 com 10 avos.
+>
+> **Duas consequências, ambas corrigidas:**
+>
+> 1. Período proporcional sem linha vira `ℹ`, nunca `🛑 #80-CU` — senão toda
+>    rescisão fora do aniversário de admissão acusa pendência falsa ("as férias
+>    vão apurar fora do deferido").
+> 2. O mapeamento por PA (#80-DB) aceita casamento **PARCIAL**. Como o
+>    proporcional NUNCA casa, exigir 100% fazia cair no índice **sempre** —
+>    anulando o #80-DB justo depois de o #80-DC completar a aba. Sem o
+>    mapeamento, com 5 declarados × 4 linhas, o índice só acerta por sorte.
+>
+> ⚠️ O PA proporcional CONTINUA em `ferias.periodos`: é ele que carrega o
+> `deferido` da ocorrência proporcional, que o #80-CX consulta.
+>
+> Protegido por `test_inv144`.
+
+
+---
+
+## Regra obrigatória — Férias: contar linhas pela lista COMPLETA de `:situacao` (#80-DD)
+
+> **A contagem de linhas da aba Férias usa a lista completa de `:situacao` —
+> NUNCA `editaveis`, que é truncada em 40 ids.**
+>
+> Cada linha tem ~14 campos (prazo, situacao, dobra, abono, dias_abono e 3×
+> gozo com início/fim/dobra). Contar linhas por `editaveis` parava em **3**:
+> num contrato de 5 períodos aquisitivos, dois nunca eram vistos — e cada um
+> virava `🛑 #80-CU período aquisitivo … SEM linha na tabela do PJE-Calc`, com
+> as férias apurando fora do deferido.
+>
+> **Medido no 0000763-64 (09/09/2026):** contrato 13/09/2021→11/05/2026 = 5 PAs,
+> e o log dizia *"3 linha(s) (extraído de editaveis)"*. É a origem da cascata de
+> "período aquisitivo NÃO foi informado" que apareceu no lote do #80-CY.
+>
+> Protegido por `test_inv143`.
+
+---
+
 ## Regra obrigatória — Férias: a linha é a do PERÍODO AQUISITIVO, não o índice (#80-DB)
 
 > **Na seção Férias, a linha a editar é a que TEM aquele período aquisitivo —
