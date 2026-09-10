@@ -11384,29 +11384,81 @@ class PlaywrightAutomatorV2:
             except Exception as e:
                 self.log(f"    ⚠ abono período {i+1}: {e}")
 
+            # #80-DG — situação NÃO-gozada tem de LIMPAR o gozo auto-gerado.
+            #
+            # O PJE-Calc pré-preenche o gozo de todo período que ele sugere como
+            # GOZADAS (fim do concessivo − (prazo−1)). Quando a sentença diz que
+            # aquele período é INDENIZADO, o bot troca a `situacao` — mas o gozo
+            # ficava lá. A liquidação então BLOQUEIA com "Os períodos de gozo de
+            # férias gravados nas ocorrências das verbas não podem divergir dos
+            # registros de férias gozadas constantes da página Férias".
+            #
+            # Medido no 0000382-56 (10/09/2026), direto no H2:
+            #     2019/2020 | G | 2021-07-20   ok
+            #     2021/2022 | I | 2023-07-20   ⚠ indenizada COM gozo
+            #     2020/2021, 2022/2023, 2023/2024 | I | null
+            # A prévia não declara gozo nenhum: o 2023-07-20 é resíduo do
+            # auto-preenchimento. Uma linha basta para travar o cálculo.
+            _sit_alvo = str(getattr(p, "situacao", "") or "").upper()
+            if _sit_alvo not in ("GOZADAS", "PARCIAL_GOZADAS", "GOZADAS_PARCIALMENTE"):
+                for rp in row_prefix_candidates:
+                    try:
+                        _limpos = self._page.evaluate(
+                            """(rp) => {
+                                let n = 0;
+                                for (const j of [1, 2, 3]) {
+                                    for (const suf of ['dataInicialDoPeriodoDeGozo' + j,
+                                                       'dataFinalDoPeriodoDeGozo' + j]) {
+                                        for (const el of document.querySelectorAll(
+                                                `input[id$='${rp}${suf}'], input[id$='${rp}${suf}InputDate']`)) {
+                                            if (el.value) {
+                                                el.value = '';
+                                                el.dispatchEvent(new Event('input', {bubbles: true}));
+                                                el.dispatchEvent(new Event('change', {bubbles: true}));
+                                                n++;
+                                            }
+                                        }
+                                    }
+                                }
+                                return n;
+                            }""",
+                            rp,
+                        )
+                    except Exception:
+                        _limpos = 0
+                    if _limpos:
+                        self.log(
+                            f"    ✓ #80-DG {_limpos} campo(s) de gozo limpos "
+                            f"(período {i+1} é {_sit_alvo}, não gozado)"
+                        )
+                        self._aguardar_ajax(2000)
+                        break
+
             # Gozos (até 3)
             for j, gozo in enumerate([p.gozo_1, p.gozo_2, p.gozo_3], start=1):
                 if not (gozo and gozo.data_inicio):
                     continue
                 for rp in row_prefix_candidates:
-                    inicio = self._page.locator(
-                        f"input[id$='{rp}gozoInicio{j}InputDate']"
-                    )
+                    # #80-DG: o id REAL é `dataInicialDoPeriodoDeGozo{j}` — o
+                    # o id antigo (`gozo`+`Inicio…`) não casava com nada, e o
+                    # gozo declarado na prévia era descartado em silêncio.
+                    _id_ini = f"{rp}dataInicialDoPeriodoDeGozo{j}InputDate"
+                    _id_fim = f"{rp}dataFinalDoPeriodoDeGozo{j}InputDate"
+                    inicio = self._page.locator(f"input[id$='{_id_ini}']")
+                    if inicio.count() == 0:
+                        _id_ini = f"{rp}dataInicialDoPeriodoDeGozo{j}"
+                        _id_fim = f"{rp}dataFinalDoPeriodoDeGozo{j}"
+                        inicio = self._page.locator(f"input[id$='{_id_ini}']")
                     if inicio.count() > 0:
                         try:
-                            self._preencher(
-                                f"{rp}gozoInicio{j}InputDate",
-                                gozo.data_inicio,
-                                obrigatorio=False,
-                            )
-                            self._preencher(
-                                f"{rp}gozoFim{j}InputDate",
-                                gozo.data_fim,
-                                obrigatorio=False,
-                            )
+                            self._preencher(_id_ini, gozo.data_inicio,
+                                            obrigatorio=False)
+                            self._preencher(_id_fim, gozo.data_fim,
+                                            obrigatorio=False)
                             if gozo.dobra:
                                 cb_dobra = self._page.locator(
-                                    f"input[type='checkbox'][id$='{rp}gozoDobra{j}']"
+                                    f"input[type='checkbox']"
+                                    f"[id$='{rp}dobraDoPeriodoDeGozo{j}']"
                                 )
                                 if cb_dobra.count() > 0 and not cb_dobra.first.is_checked():
                                     cb_dobra.first.click(force=True)

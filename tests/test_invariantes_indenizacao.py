@@ -4773,3 +4773,47 @@ def test_inv144_aba_ferias_nao_lista_o_pa_proporcional():
     assert "_mapa_linha = {}" not in corpo.split("#80-DE")[1][:1500], (
         "REGRESSÃO #80-DE: o mapa por PA volta a ser zerado quando algum "
         "período não casa — e o proporcional nunca casa")
+
+
+def test_inv145_situacao_nao_gozada_limpa_o_gozo():
+    """#80-DG: período marcado como NÃO gozado tem de ter o gozo LIMPO.
+
+    O PJE-Calc pré-preenche o período de gozo de toda linha que ele sugere como
+    GOZADAS (= fim do concessivo − (prazo − 1), medido 151/151). Quando a
+    sentença diz que aquele período é INDENIZADO, o bot troca a `situacao` — e
+    o gozo auto-gerado ficava lá. A liquidação BLOQUEIA:
+
+        "Os períodos de gozo de férias gravados nas ocorrências das verbas não
+         podem divergir dos registros de férias gozadas constantes da página
+         Férias."
+
+    Medido no 0000382-56 (10/09/2026), lendo o H2 direto::
+
+        2019/2020 | G | 2021-07-20   ok
+        2021/2022 | I | 2023-07-20   ⚠ indenizada COM gozo
+        2020/2021, 2022/2023, 2023/2024 | I | null
+
+    A prévia não declara gozo nenhum — o 2023-07-20 é resíduo do
+    auto-preenchimento. **Uma linha basta** para travar o cálculo inteiro.
+
+    ⚠️ O id REAL do campo é `dataInicialDoPeriodoDeGozo{j}`. O
+    `gozoInicio{j}InputDate` usado antes não casava com nada: o gozo declarado
+    na prévia era descartado em silêncio."""
+    src = PLAYWRIGHT_V2
+    ini = src.find("def fase_ferias")
+    corpo = src[ini:ini + 30000]
+    assert "#80-DG" in corpo, (
+        "REGRESSÃO #80-DG: limpeza do gozo em período não-gozado removida")
+    assert "dataInicialDoPeriodoDeGozo" in corpo, (
+        "REGRESSÃO #80-DG: voltou o id inexistente `gozoInicio{j}InputDate` — "
+        "o gozo da prévia é descartado em silêncio")
+    assert "gozoInicio" not in corpo, (
+        "REGRESSÃO #80-DG: id antigo (que não casa com nada) reintroduzido")
+    # a limpeza tem de vir ANTES da escrita dos gozos declarados
+    i_limpa = corpo.find("#80-DG")
+    i_escreve = corpo.find("# Gozos (até 3)")
+    assert 0 < i_limpa < i_escreve, (
+        "REGRESSÃO #80-DG: a limpeza deixou de preceder a escrita — apagaria o "
+        "gozo que a prévia acabou de declarar")
+    assert "PARCIAL_GOZADAS" in corpo, (
+        "REGRESSÃO #80-DG: gozo parcial voltou a ser limpo como se não fosse gozo")
