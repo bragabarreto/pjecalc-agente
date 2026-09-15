@@ -10341,7 +10341,7 @@ class PlaywrightAutomatorV2:
         for idx, cp in enumerate(cartoes_validos):
             if n_cartoes > 1:
                 self.log(f"  ── Cartão {idx+1}/{n_cartoes} ──")
-            self._processar_um_cartao_de_ponto(cp)
+            self._processar_um_cartao_de_ponto(cp, idx=idx + 1, total=n_cartoes)
         # #80-BF/BE: repetir em bloco os fracassos definitivos (o SSE é longo —
         # a linha isolada do momento da falha se perde na revisão do usuário)
         if getattr(self, "_cartao_nao_salvo", False):
@@ -10355,8 +10355,21 @@ class PlaywrightAutomatorV2:
                 f"⚠️ #80-BE ATENÇÃO: overrides de jornada NÃO CONFIRMADOS em "
                 f"{len(_mf)} mês(es): {', '.join(_mf)} — revisar na Grade de Ocorrências"
             )
+        # #80-DN: cartão salvo mas NÃO APURADO — as colunas Hs EXT / Hs
+        # Trabalhadas / Hs Interjornada ficam ZERO no período e toda verba
+        # IMPORTADA_DO_CARTAO liquida a MENOR (0001156-86: HE 50% R$ 6.637,50
+        # contra R$ 24.432,97; INTERVALO INTERJORNADAS R$ 0 contra R$ 2.965,91).
+        _pc = getattr(self, "_pendencias_cartao", None)
+        if _pc:
+            for _p in _pc:
+                self.log(
+                    f"⚠️ #80-DN ATENÇÃO: cartão {_p['cartao']} ({_p['periodo']}) NÃO "
+                    f"APURADO — verbas IMPORTADA_DO_CARTAO subapuradas nesse período "
+                    f"({_p['motivo']}). No PJE-Calc: Cartão de Ponto → Visualizar "
+                    f"Cartão → Apurar Cartão de Ponto, depois Regerar Ocorrências das verbas"
+                )
 
-    def _processar_um_cartao_de_ponto(self, cp) -> None:
+    def _processar_um_cartao_de_ponto(self, cp, idx: int = 1, total: int = 1) -> None:
         """Processa UM cartão de ponto — chamado pela fase_cartao_de_ponto em loop.
 
         #80-BF (0000565-27, 13/07/2026) — NÃO REVERTER: o save do cartão
@@ -10425,12 +10438,24 @@ class PlaywrightAutomatorV2:
         # vincular. Manual oficial CSJT (linha 502): "Apurar Cartão de
         # Ponto: Definir Dia do Fechamento Mensal, adicionar exceções,
         # clicar Apurar".
+        # #80-DN: apuração VERIFICADA (retry ×3 + tabela) — a falha vira
+        # pendência explícita; "Fase 5 concluída" limpo só com confirmação.
+        ok_apuracao = False
         try:
-            self._apurar_cartao_de_ponto()
+            ok_apuracao = self._apurar_cartao_de_ponto(cp, idx=idx, total=total)
         except Exception as e_apurar:
-            self.log(f"  ⚠ Falha apurar cartão (não-crítico, mas HE não terá Quantidade): {e_apurar}")
+            self.log(f"  ⚠ Falha apurar cartão: {e_apurar}")
+            self._registrar_pendencia_cartao(
+                idx, total, cp, f"exceção na apuração: {str(e_apurar)[:160]}"
+            )
 
-        self.log("Fase 5 concluída")
+        if ok_apuracao:
+            self.log("Fase 5 concluída")
+        else:
+            self.log(
+                f"🛑 Fase 5 concluída COM PENDÊNCIA — cartão {idx}/{total} não apurado — "
+                f"verbas IMPORTADA_DO_CARTAO subapuradas"
+            )
 
     def _cartao_presente_na_listagem(self, cp) -> bool:
         """#80-BF: ground truth do save do cartão — navega à LISTAGEM de Cartão
@@ -10939,21 +10964,192 @@ class PlaywrightAutomatorV2:
             self.log(f"  ⚠ Fase 5 — Salvar: {e}")
             return False
 
-    def _apurar_cartao_de_ponto(self) -> None:
+    # ── #80-DN — Apuração do Cartão de Ponto VERIFICADA (0001156-86, 15/09/2026) ──
+    #
+    # Sessão b3d85551: no Cartão 2/2 (11/10/2025→17/04/2026) o log mostrou
+    #   "⚠ Página 'Montar' não carregou — tentando URL goto cartaodeponto.jsf"
+    #   "ℹ conversationId atualizado: 1060 → 1111"
+    #   "⚠ URL goto cartaodeponto.jsf também falhou ... — pulando apuração"
+    #   "Fase 5 concluída"
+    # e NENHUM gate acusou. Efeito: Hs EXT / Hs Trabalhadas / Hs Interjornada
+    # ficaram ZERO de 11/2025 a 04/2026; HE 50% liquidou R$ 6.637,50 contra
+    # R$ 24.432,97 no PJC definitivo do calculista e INTERVALO INTERJORNADAS
+    # liquidou R$ 0 contra R$ 2.965,91.
+    #
+    # Causas (duas, encadeadas):
+    #  1. o bot navegou (sidebar → Visualizar Cartão) logo após o SAVE PESADO
+    #     do cartão, com o servidor ainda ocupado — mesma raiz do #80-H
+    #     ("listagem fantasma" = LockTimeout no @Synchronized, que MATA a
+    #     conversa Seam). A página "Montar" nunca renderizou.
+    #  2. o fallback por URL direta (`goto cartaodeponto.jsf?conversationId`)
+    #     NÃO invoca o factory @Begin do bean (invariante Seam documentado no
+    #     CLAUDE.md p/ `prepararMinicrudsDasBasesCadastradas` e p/ Férias
+    #     #80-CU) — o Seam abriu conversa NOVA (1060→1111) sem o cálculo
+    #     carregado e o botão Apurar não existe nessa página.
+    #
+    # Fix (NÃO REVERTER):
+    #  (a) gate `_aguardar_servidor_ocioso` (#80-H) ANTES de navegar;
+    #  (b) retry ×3 com `_fechar_e_reabrir_calculo` + sidebar por CLIQUE —
+    #      o fallback por URL foi REMOVIDO (nunca funcionou: abre conversa sem
+    #      bean);
+    #  (c) após apurar, LER a tabela OCORRÊNCIAS DO CARTÃO DE PONTO
+    #      (`tabOcorrencias`, cartaodeponto.xhtml) e exigir Hs Trabalhadas > 0
+    #      em TODOS os meses do período do cartão — ground truth do bean;
+    #  (d) falha NUNCA silenciosa: `_registrar_pendencia_cartao` → relatório
+    #      final e guarda pós-PJC (`cartao_meses_zerados` em
+    #      `_verificar_escopo_deferido_pjc`).
+    #
+    # Protegido por `test_inv154` / `test_inv156`.
+
+    @staticmethod
+    def _meses_entre(di: str | None, df: str | None) -> list[str]:
+        """Competências MM/AAAA cobertas por [di, df] (DD/MM/AAAA). Lista vazia
+        se alguma data for inválida."""
+        import datetime as _d
+        try:
+            a = _d.datetime.strptime(str(di), "%d/%m/%Y")
+            b = _d.datetime.strptime(str(df), "%d/%m/%Y")
+        except Exception:
+            return []
+        out: list[str] = []
+        y, m = a.year, a.month
+        while (y, m) <= (b.year, b.month):
+            out.append(f"{m:02d}/{y}")
+            m += 1
+            if m > 12:
+                m, y = 1, y + 1
+        return out
+
+    @staticmethod
+    def _num_celula_br(txt: str) -> float:
+        """'218,5000' → 218.5; ' - ' / '' → 0.0."""
+        t = (txt or "").strip().replace(".", "").replace(",", ".")
+        try:
+            return float(t)
+        except Exception:
+            return 0.0
+
+    def _ler_ocorrencias_cartao_apuradas(self) -> dict[str, dict[str, float]]:
+        """#80-DN: lê a tabela OCORRÊNCIAS DO CARTÃO DE PONTO renderizada
+        (`rich:dataTable id="tabOcorrencias"`, colunas dinâmicas de
+        `listaColunas`: Hs Trabalhadas / Hs EXT / Hs Intrajornada /
+        Hs Interjornada / Dias Trabalhado) → {'MM/AAAA': {coluna: valor}}."""
+        try:
+            raw = self._page.evaluate(
+                """() => {
+                    const norm = s => (s||'').replace(/\\s+/g,' ').trim();
+                    const tb = document.querySelector("table[id$=':tabOcorrencias']");
+                    const trs = tb ? [...tb.querySelectorAll('tr')] : [...document.querySelectorAll('tr')];
+                    let headers = [];
+                    const rows = [];
+                    for (const tr of trs) {
+                        const ths = [...tr.querySelectorAll('th')];
+                        if (!headers.length && ths.length >= 3) headers = ths.map(th => norm(th.textContent));
+                        const tds = [...tr.querySelectorAll('td')];
+                        if (tds.length >= 3 && /^\\d{2}\\/\\d{4}$/.test(norm(tds[0].textContent))) {
+                            rows.push(tds.map(td => norm(td.textContent)));
+                        }
+                    }
+                    return {headers, rows};
+                }"""
+            ) or {}
+        except Exception:
+            return {}
+        headers = list(raw.get("headers") or [])
+        out: dict[str, dict[str, float]] = {}
+        for r in raw.get("rows") or []:
+            cols: dict[str, float] = {}
+            for i, cel in enumerate(r[1:], start=1):
+                h = headers[i] if i < len(headers) and headers[i] else f"col{i}"
+                cols[h] = self._num_celula_br(cel)
+            out[r[0]] = cols
+        return out
+
+    def _meses_cartao_sem_apuracao(self, cp, tabela: dict) -> list[str]:
+        """#80-DN: meses do período do cartão SEM 'Hs Trabalhadas' > 0 na
+        tabela apurada (ou ausentes dela). Sem período conhecido, exige ao
+        menos uma linha."""
+        meses = self._meses_entre(getattr(cp, "data_inicial", None),
+                                  getattr(cp, "data_final", None)) if cp is not None else []
+        if not meses:
+            return [] if tabela else ["(tabela de ocorrências vazia)"]
+        faltam: list[str] = []
+        for mes in meses:
+            cols = tabela.get(mes) or {}
+            if not cols:
+                faltam.append(mes)
+                continue
+            hs = [v for h, v in cols.items()
+                  if h.lower().startswith("hs") and "trabalhad" in h.lower()]
+            val = max(hs) if hs else max(cols.values(), default=0.0)
+            if val <= 0.0:
+                faltam.append(mes)
+        return faltam
+
+    def _registrar_pendencia_cartao(self, idx: int, total: int, cp, motivo: str) -> None:
+        """#80-DN: acumula cartões NÃO apurados p/ o relatório final e a guarda
+        pós-PJC — nunca silencioso."""
+        periodo = f"{getattr(cp, 'data_inicial', '?')}→{getattr(cp, 'data_final', '?')}"
+        if not hasattr(self, "_pendencias_cartao"):
+            self._pendencias_cartao = []
+        self._pendencias_cartao.append(
+            {"cartao": f"{idx}/{total}", "periodo": periodo, "motivo": motivo}
+        )
+        self.log(
+            f"  🛑 #80-DN cartão {idx}/{total} ({periodo}) NÃO APURADO — verbas "
+            f"IMPORTADA_DO_CARTAO subapuradas (Hs EXT / Hs Trabalhadas / Hs "
+            f"Interjornada = 0 nesses meses): {motivo}"
+        )
+
+    def _apurar_cartao_de_ponto(self, cp=None, idx: int = 1, total: int = 1) -> bool:
         """Apura o Cartão de Ponto — gera as ocorrências (Hs EXT, Hs Trabalhadas,
         Hs Intrajornada, Dias Trabalhados) que serão vinculáveis às verbas HE.
 
         Fluxo confirmado manualmente (18/05/2026 sessão cecf7937):
-        1. Navegar para Cartão de Ponto (apuracao-cartaodeponto.jsf)
+        1. Navegar para Cartão de Ponto (apuracao-cartaodeponto.jsf) por CLIQUE
         2. Clicar botão "Visualizar Cartão" → vai para cartaodeponto.jsf (Montar)
         3. Manter "Dia do Fechamento Mensal" = 31 (default)
         4. Clicar botão "Apurar Cartão de Ponto"
         5. Aguardar "Operação realizada com sucesso" + tabela de ocorrências
+        6. #80-DN: VERIFICAR a tabela — todos os meses do cartão com
+           Hs Trabalhadas > 0
 
         Sem este passo, a verba HE 50% com tipoDaQuantidade=IMPORTADA_DO_CARTAO
         terá dropdown vazio e ficará com Quantidade=0,0000.
+
+        Retorna True só com a apuração CONFIRMADA na tabela. Falha definitiva
+        registra pendência (#80-DN) — nunca silenciosa.
         """
         self.log("  → Apurando Cartão de Ponto (gerar ocorrências)...")
+        rotulo = f"cartão {idx}/{total}"
+        ultimo_motivo = "sem tentativa"
+        for _tent in range(1, 4):
+            if _tent > 1:
+                self.log(
+                    f"    → #80-DN retry {_tent}/3 da apuração do {rotulo} — "
+                    f"Fechar+Reabrir + sidebar por CLIQUE (conversa nova)"
+                )
+                if not self._fechar_e_reabrir_calculo(contexto=f"#80-DN apuração {rotulo}"):
+                    ultimo_motivo = "Fechar+Reabrir falhou (cálculo não reaberto via Recentes)"
+                    self.log(f"    ⚠ #80-DN {ultimo_motivo}")
+                    continue
+            # (a) gate #80-H: o save do cartão (e a apuração anterior) são
+            # operações pesadas — navegar com o servidor ocupado mata a conversa.
+            self._aguardar_servidor_ocioso(contexto=f"#80-DN pré-apuração {rotulo}")
+            try:
+                motivo = self._tentar_apurar_cartao(cp)
+            except Exception as _e:
+                motivo = f"exceção: {type(_e).__name__}: {str(_e)[:160]}"
+            if motivo is None:
+                return True
+            ultimo_motivo = motivo
+            self.log(f"    ⚠ #80-DN tentativa {_tent}/3 do {rotulo} falhou: {motivo}")
+        self._registrar_pendencia_cartao(idx, total, cp, ultimo_motivo)
+        return False
+
+    def _tentar_apurar_cartao(self, cp) -> str | None:
+        """Uma tentativa de apuração. Retorna None no sucesso CONFIRMADO ou o
+        motivo (str) da falha."""
         # CRÍTICO: navegar via CLICK NO LINK DO SIDEBAR (executando o onclick
         # A4J.AJAX.Submit nativo) — NÃO via URL nav direto.
         # URL-nav cria uma conv fresh onde o backing bean do cálculo não
@@ -10980,12 +11176,11 @@ class PlaywrightAutomatorV2:
             self.log(f"    ✓ click sidebar Cartão de Ponto ({clicou_menu})")
             self._aguardar_ajax(5000)
         else:
-            self.log("    ⚠ Link 'Cartão de Ponto' do sidebar não encontrado — fallback _navegar_menu")
-            try:
-                self._navegar_menu("li_calculo_cartao_ponto")
-                self._aguardar_ajax(4000)
-            except Exception:
-                pass
+            # #80-DN: fallback também por CLIQUE (li do sidebar) — nunca URL.
+            self.log("    ⚠ Link 'Cartão de Ponto' do sidebar não encontrado — fallback _navegar_menu_via_click")
+            if not self._navegar_menu_via_click("li_calculo_cartao_ponto"):
+                return "sidebar 'Cartão de Ponto' não encontrado (página sem menu do cálculo)"
+            self._aguardar_ajax(4000)
         # Aguardar especificamente os botões da listagem renderizarem
         try:
             self._page.wait_for_selector(
@@ -10994,8 +11189,7 @@ class PlaywrightAutomatorV2:
                 timeout=15000,
             )
         except Exception:
-            self.log("    ⚠ Painel de ações Cartão de Ponto (Novo/Grade/Visualizar) não renderizou em 15s — pulando apuração")
-            return
+            return "painel de ações Cartão de Ponto (Novo/Grade/Visualizar) não renderizou em 15s"
         # Procurar botão "Visualizar Cartão" — id EXATO `formulario:importarCartao`
         # (CONFUSO: o id é `importarCartao` mas o value/label é "Visualizar Cartão").
         # ATENÇÃO: NÃO usar `[id*="visualizar"]` porque casa com
@@ -11040,12 +11234,16 @@ class PlaywrightAutomatorV2:
                     self.log(f"       {b['tag']} id={b['id']!r} val={b['val']!r}")
             except Exception:
                 self.log("    ⚠ Botão 'Visualizar Cartão' não encontrado — sem diagnóstico")
-            return
+            return "botão 'Visualizar Cartão' não encontrado"
         self.log(f"    ✓ click Visualizar Cartão ({clicou_vis})")
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(2000)
         # Aguardar a página Montar carregar (id `formulario:montarApartirDaApuracao`
         # é o botão "Apurar Cartão de Ponto" — id legado JSF é confuso mas é o que existe)
+        # #80-DN: sem fallback por URL — `goto cartaodeponto.jsf?conversationId`
+        # não invoca o @Begin do bean e abre conversa nova SEM o cálculo (log
+        # da 0001156-86: "conversationId atualizado: 1060 → 1111" e botão
+        # ausente). A recuperação é o retry com Fechar+Reabrir do chamador.
         try:
             self._page.wait_for_selector(
                 "[id$=':montarApartirDaApuracao'], [id='formulario:montarApartirDaApuracao']",
@@ -11053,31 +11251,11 @@ class PlaywrightAutomatorV2:
                 timeout=15000,
             )
         except Exception:
-            # ⚠ FALLBACK (24/05/2026): se o botão Apurar não apareceu via
-            # Visualizar Cartão, tentar URL goto direto para cartaodeponto.jsf
-            # (página onde o botão Apurar reside, com sidebar completo).
-            self.log("    ⚠ Página 'Montar' não carregou — tentando URL goto cartaodeponto.jsf")
             try:
-                self._capturar_conversation_id()
-                if self._calculo_conversation_id:
-                    self._page.goto(
-                        f"{self.pjecalc_url}/pages/cartaodeponto/cartaodeponto.jsf"
-                        f"?conversationId={self._calculo_conversation_id}",
-                        wait_until="domcontentloaded", timeout=20000,
-                    )
-                    self._aguardar_ajax(8000)
-                    self._page.wait_for_timeout(2000)
-                    self._page.wait_for_selector(
-                        "[id$=':montarApartirDaApuracao']",
-                        state="visible", timeout=10000,
-                    )
-                    self.log("    ✓ Botão Apurar disponível após URL goto")
-                else:
-                    self.log("    ⚠ Sem conversationId para URL goto — pulando apuração")
-                    return
-            except Exception as _e:
-                self.log(f"    ⚠ URL goto cartaodeponto.jsf também falhou: {_e} — pulando apuração")
-                return
+                _url_tail = self._page.url[-70:]
+            except Exception:
+                _url_tail = "?"
+            return f"página 'Montar' (cartaodeponto.jsf) não carregou — botão Apurar ausente (url=...{_url_tail})"
         # Clicar Apurar Cartão de Ponto
         clicou_apurar = self._page.evaluate(
             """() => {
@@ -11100,8 +11278,7 @@ class PlaywrightAutomatorV2:
             }"""
         )
         if not clicou_apurar:
-            self.log("    ⚠ Botão 'Apurar Cartão de Ponto' não encontrado — pulando")
-            return
+            return "botão 'Apurar Cartão de Ponto' não encontrado"
         self.log(f"    ✓ click Apurar Cartão de Ponto ({clicou_apurar})")
         # #80-R (MARIA THAYSNARA 0000632-89, 27/06/2026): apuração Drools com
         # cartão pesado (130+ overrides × 61 meses 12x36) pode levar >60s na
@@ -11109,31 +11286,29 @@ class PlaywrightAutomatorV2:
         # computando → @Synchronized LockTimeout em toda a fase de verbas.
         self._aguardar_ajax(120000)
         sucesso = self._aguardar_operacao_sucesso(timeout_ms=30000, bloqueante=False)
-        if sucesso:
-            self.log("  ✓ Cartão de Ponto APURADO — ocorrências geradas")
-            # Capturar tabela de ocorrências para log diagnóstico
-            try:
-                resumo = self._page.evaluate(
-                    """() => {
-                        const trs = [...document.querySelectorAll('tr')];
-                        const data = [];
-                        for (const tr of trs) {
-                            const tds = [...tr.querySelectorAll('td')];
-                            if (tds.length >= 5 && /^\\d{2}\\/\\d{4}$/.test((tds[0].textContent||'').trim())) {
-                                data.push(tds.map(td => (td.textContent||'').trim()).join(' | '));
-                            }
-                        }
-                        return data;
-                    }"""
-                )
-                if resumo:
-                    self.log(f"    📊 Ocorrências apuradas:")
-                    for linha in resumo[:6]:
-                        self.log(f"       {linha}")
-            except Exception:
-                pass
-        else:
-            self.log("  ⚠ Apuração disparada mas sem mensagem de sucesso explícita")
+        if not sucesso:
+            self.log("  ⚠ Apuração disparada mas sem mensagem de sucesso explícita — conferindo a tabela")
+        # (c) #80-DN — GROUND TRUTH: a tabela de ocorrências renderizada pelo bean.
+        tabela = self._ler_ocorrencias_cartao_apuradas()
+        meses_cp = self._meses_entre(getattr(cp, "data_inicial", None),
+                                     getattr(cp, "data_final", None)) if cp is not None else []
+        if tabela:
+            self.log("    📊 Ocorrências apuradas:")
+            _mostrar = [m for m in tabela if not meses_cp or m in meses_cp] or list(tabela)
+            for mes in _mostrar[:14]:
+                cols = tabela[mes]
+                self.log("       " + " | ".join([mes] + [f"{h}={v:g}" for h, v in cols.items()]))
+        faltam = self._meses_cartao_sem_apuracao(cp, tabela)
+        if faltam:
+            return (
+                f"apuração NÃO confirmada — sem Hs Trabalhadas > 0 em "
+                f"{len(faltam)} mês(es) do cartão: {', '.join(faltam)}"
+            )
+        self.log(
+            f"  ✓ Cartão de Ponto APURADO — ocorrências geradas e CONFIRMADAS na "
+            f"tabela ({len(meses_cp) or len(tabela)} mês(es) com Hs Trabalhadas > 0)"
+        )
+        return None
 
     def _aplicar_ocorrencias_override(self, overrides: list) -> None:
         """Aplica overrides de jornada na Grade de Ocorrências.
@@ -11918,191 +12093,347 @@ class PlaywrightAutomatorV2:
 
         self.log("Fase 2b concluída")
 
+    # ── #80-DO — FGTS: página CONFIRMADA pelo DOM real + releitura do bean ──
+    #
+    # Sessão b3d85551 (0001156-86, 15/09/2026): o clique no sidebar FGTS caiu em
+    # principal.jsf (conversa morta pós-Fase 4); o recovery reabriu o cálculo
+    # via Recentes (calculo.jsf) e clicou `li_calculo_fgts` por JS, mas a
+    # navegação NÃO aconteceu — e o diagnóstico só CONTAVA radios+checkboxes:
+    #   "[DIAG-fgts-retry] radios+checkboxes pós-click-menu: 24"
+    # Os 24 eram os de calculo.xhtml (23 selectOneRadio/selectBooleanCheckbox:
+    # prescricaoFgts, projetaAvisoIndenizado, sabadoDiaUtil…), não os de
+    # fgts.xhtml. Todos os campos do FGTS "não encontrado — pulando" e o
+    # "✓ click salvar / Operação realizada com sucesso" foi o SAVE DE DADOS DO
+    # CÁLCULO. O PJC saiu com destinoDoFgts=PAGAR e multa=false embora a prévia
+    # tivesse multa.ativa=true (sentença condena FGTS + 40%), e o log disse
+    # "Fase 8 concluída".
+    #
+    # Fix (NÃO REVERTER):
+    #  1. `_abrir_pagina_fgts`: gate #80-H + clique no sidebar + confirmação
+    #     pelo DOM REAL (url fgts.jsf E radios `tipoDeVerba` E checkbox
+    #     `multa` — ids de fgts.xhtml); diag dumpa os ids reais quando erra.
+    #  2. retry ×3 com `_fechar_e_reabrir_calculo` (conversa nova) — sem URL
+    #     direta (fgts.jsf por URL não inicializa o bean, CLAUDE.md).
+    #  3. NUNCA clicar Salvar sem a página confirmada — gravaria OUTRA página.
+    #  4. releitura do bean pós-save (#80-BK): reabrir a página por clique e
+    #     comparar destino/compor/multa/percentual/incidência/467/LC110 com a
+    #     prévia; divergência → nova tentativa; no fim, pendência explícita
+    #     (`fgts_nao_aplicado`) + guarda pós-PJC (`fgts_divergente`).
+    #
+    # Protegido por `test_inv155` / `test_inv156`.
+
+    _FGTS_SEL_TIPO_VERBA = "input[type='radio'][id*=':tipoDeVerba']"
+
+    def _abrir_pagina_fgts(self, tentativa: int = 1) -> bool:
+        """#80-DO: abre fgts.jsf por CLIQUE no sidebar (Seam init) e CONFIRMA
+        pelo DOM real. Retorna False (com dump dos ids reais) se a página
+        aberta não for o FGTS."""
+        self._aguardar_servidor_ocioso(contexto=f"#80-DO pré-FGTS t{tentativa}")
+        if not self._navegar_menu_via_click("li_calculo_fgts"):
+            self.log("  ⚠ #80-DO li_calculo_fgts ausente no sidebar (página sem menu do cálculo)")
+        self._aguardar_ajax(8000)
+        try:
+            self._page.wait_for_selector(self._FGTS_SEL_TIPO_VERBA, state="attached", timeout=15000)
+        except Exception:
+            pass
+        try:
+            diag = self._page.evaluate(
+                """() => {
+                    const body = document.body?.textContent || '';
+                    const campos = [...document.querySelectorAll('input[type=radio],input[type=checkbox],select')]
+                        .map(el => (el.id || el.name || '').replace(/^formulario:/, '').replace(/:\\d+$/, ''))
+                        .filter(Boolean);
+                    return {
+                        url: location.href.slice(-70),
+                        tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException')
+                                 || body.includes('Erro Interno no Servidor'),
+                        tem_form: !!document.getElementById('formulario'),
+                        n_tipo_verba: document.querySelectorAll("input[type=radio][id*=':tipoDeVerba']").length,
+                        n_multa: document.querySelectorAll("input[type=checkbox][id$=':multa']").length,
+                        campos: [...new Set(campos)].slice(0, 40),
+                    };
+                }"""
+            ) or {}
+        except Exception as _e:
+            self.log(f"  ⚠ #80-DO diag FGTS falhou: {str(_e)[:120]}")
+            return False
+        ok = (
+            "fgts.jsf" in str(diag.get("url", ""))
+            and int(diag.get("n_tipo_verba") or 0) > 0
+            and int(diag.get("n_multa") or 0) > 0
+            and not diag.get("tem_500")
+        )
+        self.log(
+            f"  [DIAG-fgts] t{tentativa} url=...{diag.get('url')} tem_form={diag.get('tem_form')} "
+            f"tem_500={diag.get('tem_500')} radios tipoDeVerba={diag.get('n_tipo_verba')} "
+            f"checkbox multa={diag.get('n_multa')} → {'OK' if ok else 'PÁGINA ERRADA'}"
+        )
+        if not ok:
+            self.log(f"  [DIAG-fgts-ids] campos reais da página aberta: {diag.get('campos')}")
+        return ok
+
+    def _ler_estado_fgts(self) -> dict:
+        """#80-DO: estado dos campos do FGTS como o bean os renderizou
+        (ground truth pós-save). Cada entrada: {valor, disabled}."""
+        try:
+            return self._page.evaluate(
+                """() => {
+                    const radio = (suf) => {
+                        const r = [...document.querySelectorAll("input[type=radio][id*=':" + suf + "']")];
+                        const c = r.find(x => x.checked);
+                        return {valor: c ? c.value : null, disabled: r.length ? r.every(x => x.disabled) : null, n: r.length};
+                    };
+                    const cb = (suf) => {
+                        const c = document.querySelector("input[type=checkbox][id$=':" + suf + "']");
+                        return c ? {valor: c.checked, disabled: c.disabled} : {valor: null, disabled: null};
+                    };
+                    const sel = (suf) => {
+                        const s = document.querySelector("select[id$=':" + suf + "']");
+                        return s ? {valor: s.value, disabled: s.disabled} : {valor: null, disabled: null};
+                    };
+                    return {
+                        tipoDeVerba: radio('tipoDeVerba'),
+                        comporPrincipal: radio('comporPrincipal'),
+                        multa: cb('multa'),
+                        tipoDoValorDaMulta: radio('tipoDoValorDaMulta'),
+                        multaDoFgts: radio('multaDoFgts'),
+                        incidenciaDoFgts: sel('incidenciaDoFgts'),
+                        multaDoArtigo467: cb('multaDoArtigo467'),
+                        multa10: cb('multa10'),
+                    };
+                }"""
+            ) or {}
+        except Exception:
+            return {}
+
+    def _fgts_esperado(self) -> dict:
+        """#80-DO: o que a prévia manda gravar no FGTS, por id do DOM
+        (fgts.xhtml). Campos da multa só entram com `multa.ativa`; percentual e
+        incidência só com valor CALCULADA (gridMultaCalculada)."""
+        f = self.previa.fgts
+
+        def _v(x):
+            if x is None:
+                return None
+            return x.value if hasattr(x, "value") else str(x)
+
+        esp = {
+            "tipoDeVerba": _v(f.tipo_verba),
+            "comporPrincipal": _v(f.compor_principal),
+            "multa": bool(f.multa.ativa),
+            "multaDoArtigo467": bool(getattr(f, "multa_artigo_467", False)),
+            "multa10": bool(getattr(f, "multa_10_lc110", False)),
+        }
+        if f.multa.ativa:
+            esp["tipoDoValorDaMulta"] = _v(f.multa.tipo_valor)
+            if str(_v(f.multa.tipo_valor) or "").upper() == "CALCULADA":
+                esp["multaDoFgts"] = _v(f.multa.percentual)
+                esp["incidenciaDoFgts"] = _v(f.incidencia)
+        return {k: v for k, v in esp.items() if v is not None}
+
+    @staticmethod
+    def _divergencias_fgts(estado: dict, esperado: dict) -> list[str]:
+        """#80-DO: compara a releitura do bean com a prévia. Marca campo
+        DESABILITADO (deveCobrarMulta=false etc.) para o chamador não repetir
+        à toa."""
+        out: list[str] = []
+        for campo, esp in esperado.items():
+            st = (estado or {}).get(campo) or {}
+            atual = st.get("valor")
+            if atual is None:
+                out.append(f"{campo}: campo ausente/sem valor no bean (prévia={esp})")
+                continue
+            if isinstance(esp, bool):
+                iguais = bool(atual) == esp
+            else:
+                iguais = str(atual).strip().upper() == str(esp).strip().upper()
+            if not iguais:
+                suf = " [campo DESABILITADO pelo PJE-Calc]" if st.get("disabled") else ""
+                out.append(f"{campo}: bean={atual} ≠ prévia={esp}{suf}")
+        return out
+
+    def _registrar_pendencia_fgts(self, motivos: list[str]) -> None:
+        """#80-DO: acumula a falha do FGTS p/ o relatório final — nunca
+        silenciosa."""
+        if not hasattr(self, "_pendencias_fgts"):
+            self._pendencias_fgts = []
+        self._pendencias_fgts.extend(motivos)
+
     def fase_fgts(self) -> None:
         self.log("Fase 8 — FGTS")
-        # Click sidebar (Seam init) — URL direta não dispara @PostConstruct do bean
-        if not self._navegar_menu_via_click("li_calculo_fgts"):
-            self._navegar_menu("li_calculo_fgts")  # fallback URL direta
-        self._aguardar_ajax(8000)
-        self._page.wait_for_timeout(1500)
-
-        # Diagnóstico FGTS — inclui dump completo de ids/names para depuração
-        _diag_fgts = self._page.evaluate("""() => {
-            const body = document.body?.textContent || '';
-            const allInputs = [...document.querySelectorAll('input,select')].map(el => ({
-                tag: el.tagName, type: el.type || '', id: (el.id||'').slice(-40),
-                name: (el.name||'').slice(-40), value: (el.value||'').slice(0,20)
-            }));
-            return {
-                url: location.href.slice(-60),
-                tem_500: body.includes('HTTP Status 500') || body.includes('NullPointerException'),
-                tem_form: !!document.getElementById('formulario'),
-                radios_id: document.querySelectorAll('input[type=radio][id*=tipoDeVerba]').length,
-                radios_name: document.querySelectorAll('input[type=radio][name*=tipoDeVerba]').length,
-                todos_inputs: allInputs.length,
-                inputs_dump: allInputs.slice(0, 25),
-                msgs: [...document.querySelectorAll('.rich-messages-label,.rf-msgs-sum')]
-                    .map(e=>(e.textContent||'').trim()).slice(0,3)
-            };
-        }""")
-        self.log(f"  [DIAG-fgts] url={_diag_fgts['url']} tem_form={_diag_fgts['tem_form']} "
-                 f"tem_500={_diag_fgts['tem_500']} radios_id={_diag_fgts['radios_id']} "
-                 f"radios_name={_diag_fgts['radios_name']} n_inputs={_diag_fgts['todos_inputs']}")
-        self.log(f"  [DIAG-fgts-inputs] {_diag_fgts['inputs_dump']}")
-
-        # Verificar que página renderizou — usar tem_form (não tipoDeVerba, que pode ter ID dinâmico)
-        if _diag_fgts['tem_500'] or not _diag_fgts['tem_form']:
-            self.log("  ⚠ Fase 8 FGTS: página não renderizou (HTTP 500 ou sem formulário) — pulando")
-            return
-        # Checar se há campos reais de FGTS (radios ou checkboxes) — não só a frame da página.
-        # Conv pré-Expresso renderiza a frame (Salvar/Ocorrências) mas sem campos reais.
-        _n_form_fields = _diag_fgts.get('radios_id', 0) + _diag_fgts.get('radios_name', 0)
-        if _n_form_fields == 0:
-            # Contar radios+checkboxes no DOM diretamente
-            _n_actual = self._page.evaluate(
-                """() => document.querySelectorAll(
-                    'input[type=radio],input[type=checkbox]'
-                ).length"""
-            )
-            self.log(f"  [DIAG-fgts-fields] radios+checkboxes na página: {_n_actual}")
-            if _n_actual == 0:
-                # Tentar recuperar conv Seam reabrindo + CLICK no menu (não URL direta!)
-                # URL direta com conversationId NÃO dispara init() do bean Seam — só
-                # o click sidebar invoca o handler JSF que carrega o bean.
-                self.log("  ⚠ Fase 8 FGTS: bean ausente — tentando reabrir cálculo + click menu lateral")
-                try:
-                    if self._reabrir_calculo_via_recentes():
-                        # CLICK NO MENU em vez de URL direta — essencial para Seam init
-                        clicou = self._page.evaluate("""() => {
-                            const li = document.getElementById('li_calculo_fgts');
-                            if (li) { const a = li.querySelector('a'); if (a) { a.click(); return true; } }
-                            return false;
-                        }""")
-                        if clicou:
-                            self._aguardar_ajax(8000)
-                            self._capturar_conversation_id()
-                            self.log(f"  ✓ Click menu FGTS — conv: {self._calculo_conversation_id}")
-                        else:
-                            self.log("  ⚠ li_calculo_fgts não encontrado no menu")
-                            return
-                        _n_retry = self._page.evaluate(
-                            """() => document.querySelectorAll('input[type=radio],input[type=checkbox]').length"""
-                        )
-                        self.log(f"  [DIAG-fgts-retry] radios+checkboxes pós-click-menu: {_n_retry}")
-                        if _n_retry == 0:
-                            self.log("  ⚠ Fase 8 FGTS: ainda sem campos após click menu — pulando")
-                            return
-                    else:
-                        self.log("  ⚠ Reabertura via Recentes falhou — pulando FGTS")
-                        return
-                except Exception as e:
-                    self.log(f"  ⚠ Falha ao reabrir cálculo para FGTS: {e} — pulando")
-                    return
-
-        f = self.previa.fgts
-        # Cada campo é tolerante (não aborta a fase se faltar um)
-        def _safe(callback, msg):
-            try:
-                callback()
-            except Exception as e:
-                self.log(f"  ⚠ FGTS {msg}: {e}")
-
-        _safe(lambda: self._marcar_radio("tipoDeVerba", f.tipo_verba), "tipoDeVerba")
-        # Princípio CLAUDE.md: fidelidade ao JSON. Bot NÃO sobrescreve. Se IA gerou
-        # comporPrincipal=NAO, segue NAO. Eventuais erros de extração são tratados
-        # no prompt da IA (extraction_v2.py), não no bot.
-        _safe(lambda: self._marcar_radio("comporPrincipal", f.compor_principal.value if hasattr(f.compor_principal, 'value') else str(f.compor_principal)), "comporPrincipal")
-        _safe(lambda: self._marcar_checkbox("multa", f.multa.ativa), "multa")
-        if f.multa.ativa:
-            _safe(lambda: self._marcar_radio("tipoDoValorDaMulta", f.multa.tipo_valor), "tipoDoValorDaMulta")
-            _safe(lambda: self._marcar_radio("multaDoFgts", f.multa.percentual), "multaDoFgts")
-        _safe(lambda: self._selecionar("incidenciaDoFgts", f.incidencia), "incidenciaDoFgts")
-        _safe(lambda: self._marcar_checkbox("multaDoArtigo467", f.multa_artigo_467), "multaDoArtigo467")
-        _safe(lambda: self._marcar_checkbox("multa10", f.multa_10_lc110), "multa10")
-
-        # Seção "Saldo e/ou Saque" — saldo FGTS já depositado a ser deduzido.
-        # Documentado pelo usuário 12/05/2026: NÃO é uma verba Expresso, mas
-        # sim um campo da própria página FGTS. Para cada saldo:
-        #   1. Preencher data + valor
-        #   2. Clicar botão "+" (adicionar) — adiciona à tabela
-        #   3. Marcar checkbox "Deduzir do FGTS"
-        # #80-BM (0001972-05, 18/07/2026) — NÃO REVERTER: IDs REAIS da seção
-        # "Saldo e/ou Saque" (fgts.xhtml:209-247), substituindo os chutes
-        # antigos (dataSaldoFGTS/valorSaldoFGTS/heurística de "+") que NUNCA
-        # bateram com o DOM:
-        #   - Data:  rich:calendar id="competencia" → input `competenciaInputDate`
-        #   - Valor: h:inputText id="valor"
-        #   - Adicionar: a4j:commandLink id="cmdIncluir" (botaoAddItem)
-        #   - Checkbox `deduzirDoFGTS` (CASE exato) nasce DISABLED enquanto
-        #     listaDeOperacoes está vazia — a operação PRECISA entrar ANTES.
-        # Ground truth: rich:dataTable id="listagem" (painelListaOperacoes).
-        saldos = getattr(f, "saldos_a_deduzir", None) or []
-        for idx, saldo in enumerate(saldos):
-            try:
-                self.log(f"  → #80-BM Saldo FGTS a deduzir [{idx+1}/{len(saldos)}]: {saldo.data} = {saldo.valor_brl}")
-                ok_op = False
-                for _t in range(1, 3):
-                    self._preencher("competenciaInputDate", saldo.data, obrigatorio=False)
-                    self._preencher("valor", _fmt_br(saldo.valor_brl), obrigatorio=False)
-                    try:
-                        self._page.locator("a[id$=':cmdIncluir']").first.click(force=True)
-                    except Exception:
-                        self._page.evaluate(
-                            """() => { const a = document.querySelector("a[id$=':cmdIncluir']"); if (a) a.click(); }"""
-                        )
-                    self._aguardar_ajax(6000)
-                    self._page.wait_for_timeout(800)
-                    ok_op = bool(self._page.evaluate(
-                        """(dt) => {
-                            const tb = document.querySelector("table[id$=':listagem']");
-                            return !!(tb && tb.textContent.includes(dt));
-                        }""",
-                        saldo.data,
-                    ))
-                    if ok_op:
-                        self.log("    ✓ #80-BM operação de saldo CONFIRMADA na listagem")
-                        break
-                    self.log(f"    ⚠ #80-BM operação não apareceu na listagem (tentativa {_t}/2)")
-                if not ok_op:
-                    self.log(
-                        "    🛑 #80-BM saldo FGTS NÃO adicionado — a dedução "
-                        "precisará ser lançada MANUALMENTE na seção FGTS do PJE-Calc"
-                    )
-            except Exception as e:
-                self.log(f"    ⚠ Falha ao adicionar saldo FGTS: {e}")
-
-        # Marcar checkbox "Deduzir do FGTS" — APÓS a(s) operação(ões), pois o
-        # checkbox fica disabled com a lista vazia. Verificação pós-AJAX.
-        if getattr(f, "deduzir_do_fgts", False) or saldos:
-            marcado = False
-            for cb_suf in ("deduzirDoFGTS", "deduzirDoFgts", "deduzirFGTS"):
-                try:
-                    if self._page.locator(f"input[type='checkbox'][id$=':{cb_suf}']").count() == 0:
-                        continue
-                    try:
-                        self._page.wait_for_function(
-                            """(suf) => { const cb = [...document.querySelectorAll("input[type=checkbox]")]
-                                .find(c => (c.id||'').endsWith(suf)); return cb && !cb.disabled; }""",
-                            arg=cb_suf, timeout=8000,
-                        )
-                    except Exception:
-                        pass
-                    self._marcar_checkbox(cb_suf, True)
-                    self._aguardar_ajax(3000)
-                    marcado = bool(self._page.evaluate(
-                        """(suf) => { const cb = [...document.querySelectorAll("input[type=checkbox]")]
-                            .find(c => (c.id||'').endsWith(suf)); return !!(cb && cb.checked); }""",
-                        cb_suf,
-                    ))
-                    break
-                except Exception:
+        # #80-DO (ver bloco de comentário acima de `_abrir_pagina_fgts`): a
+        # página é CONFIRMADA pelo DOM real antes de qualquer preenchimento;
+        # retry ×3 com Fechar+Reabrir; releitura do bean pós-save; falha vira
+        # pendência explícita — nunca "Fase 8 concluída" por cima de outra página.
+        esperado = self._fgts_esperado()
+        confirmado = False
+        divergencias: list[str] = []
+        for _t80dl in range(1, 4):
+            if _t80dl > 1:
+                self.log(f"  → #80-DO tentativa {_t80dl}/3 — Fechar+Reabrir + clique no menu FGTS")
+                if not self._fechar_e_reabrir_calculo(contexto=f"#80-DO FGTS t{_t80dl}"):
+                    self.log("  ⚠ #80-DO Fechar+Reabrir falhou — próxima tentativa")
                     continue
-            self.log(f"  {'✓' if marcado else '🛑'} #80-BM 'Deduzir do FGTS' marcado (confirmado={marcado})")
+            if not self._abrir_pagina_fgts(_t80dl):
+                self.log(
+                    "  ⚠ #80-DO página FGTS NÃO carregou — NADA será salvo nesta "
+                    "tentativa (Salvar aqui gravaria OUTRA página)"
+                )
+                continue
 
-        _safe(lambda: self._clicar("salvar"), "salvar")
-        self._aguardar_ajax(8000)
-        self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
-        self.log("Fase 8 concluída")
+            f = self.previa.fgts
+            # Cada campo é tolerante (não aborta a fase se faltar um)
+            def _safe(callback, msg):
+                try:
+                    callback()
+                except Exception as e:
+                    self.log(f"  ⚠ FGTS {msg}: {e}")
+
+            _safe(lambda: self._marcar_radio("tipoDeVerba", f.tipo_verba), "tipoDeVerba")
+            # Princípio CLAUDE.md: fidelidade ao JSON. Bot NÃO sobrescreve. Se IA gerou
+            # comporPrincipal=NAO, segue NAO. Eventuais erros de extração são tratados
+            # no prompt da IA (extraction_v2.py), não no bot.
+            _safe(lambda: self._marcar_radio("comporPrincipal", f.compor_principal.value if hasattr(f.compor_principal, 'value') else str(f.compor_principal)), "comporPrincipal")
+            _safe(lambda: self._marcar_checkbox("multa", f.multa.ativa), "multa")
+            if f.multa.ativa:
+                # #80-DO: o checkbox `multa` tem a4j:support onchange que re-renderiza
+                # tipoDoValorDaMulta/gridMultaCalculada (fgts.xhtml) — os radios
+                # nascem DISABLED e só habilitam após o round-trip. Sem esperar,
+                # o click cai num radio disabled e o bean fica com o default.
+                self._aguardar_ajax(6000)
+                try:
+                    self._page.wait_for_function(
+                        """() => { const r = document.querySelector("input[type=radio][id*=':tipoDoValorDaMulta']");
+                                   return !!r && !r.disabled; }""",
+                        timeout=8000,
+                    )
+                except Exception:
+                    self.log("  ⚠ #80-DO radios da multa não habilitaram após marcar 'multa' (deveCobrarMulta=false?)")
+                _safe(lambda: self._marcar_radio("tipoDoValorDaMulta", f.multa.tipo_valor), "tipoDoValorDaMulta")
+                self._aguardar_ajax(4000)  # reRender gridMultaCalculada/gridMultaInformada
+                _safe(lambda: self._marcar_radio("multaDoFgts", f.multa.percentual), "multaDoFgts")
+                # o select `incidenciaDoFgts` só existe habilitado com multa
+                # marcada (disabled="#{... or not registro.multa}") — fora disso o
+                # select_option esperaria actionability à toa.
+                _safe(lambda: self._selecionar("incidenciaDoFgts", f.incidencia), "incidenciaDoFgts")
+            _safe(lambda: self._marcar_checkbox("multaDoArtigo467", f.multa_artigo_467), "multaDoArtigo467")
+            _safe(lambda: self._marcar_checkbox("multa10", f.multa_10_lc110), "multa10")
+
+            # Seção "Saldo e/ou Saque" — saldo FGTS já depositado a ser deduzido.
+            # Documentado pelo usuário 12/05/2026: NÃO é uma verba Expresso, mas
+            # sim um campo da própria página FGTS. Para cada saldo:
+            #   1. Preencher data + valor
+            #   2. Clicar botão "+" (adicionar) — adiciona à tabela
+            #   3. Marcar checkbox "Deduzir do FGTS"
+            # #80-BM (0001972-05, 18/07/2026) — NÃO REVERTER: IDs REAIS da seção
+            # "Saldo e/ou Saque" (fgts.xhtml:209-247), substituindo os chutes
+            # antigos (dataSaldoFGTS/valorSaldoFGTS/heurística de "+") que NUNCA
+            # bateram com o DOM:
+            #   - Data:  rich:calendar id="competencia" → input `competenciaInputDate`
+            #   - Valor: h:inputText id="valor"
+            #   - Adicionar: a4j:commandLink id="cmdIncluir" (botaoAddItem)
+            #   - Checkbox `deduzirDoFGTS` (CASE exato) nasce DISABLED enquanto
+            #     listaDeOperacoes está vazia — a operação PRECISA entrar ANTES.
+            # Ground truth: rich:dataTable id="listagem" (painelListaOperacoes).
+            saldos = getattr(f, "saldos_a_deduzir", None) or []
+            for idx, saldo in enumerate(saldos):
+                try:
+                    self.log(f"  → #80-BM Saldo FGTS a deduzir [{idx+1}/{len(saldos)}]: {saldo.data} = {saldo.valor_brl}")
+                    ok_op = False
+                    for _t in range(1, 3):
+                        self._preencher("competenciaInputDate", saldo.data, obrigatorio=False)
+                        self._preencher("valor", _fmt_br(saldo.valor_brl), obrigatorio=False)
+                        try:
+                            self._page.locator("a[id$=':cmdIncluir']").first.click(force=True)
+                        except Exception:
+                            self._page.evaluate(
+                                """() => { const a = document.querySelector("a[id$=':cmdIncluir']"); if (a) a.click(); }"""
+                            )
+                        self._aguardar_ajax(6000)
+                        self._page.wait_for_timeout(800)
+                        ok_op = bool(self._page.evaluate(
+                            """(dt) => {
+                                const tb = document.querySelector("table[id$=':listagem']");
+                                return !!(tb && tb.textContent.includes(dt));
+                            }""",
+                            saldo.data,
+                        ))
+                        if ok_op:
+                            self.log("    ✓ #80-BM operação de saldo CONFIRMADA na listagem")
+                            break
+                        self.log(f"    ⚠ #80-BM operação não apareceu na listagem (tentativa {_t}/2)")
+                    if not ok_op:
+                        self.log(
+                            "    🛑 #80-BM saldo FGTS NÃO adicionado — a dedução "
+                            "precisará ser lançada MANUALMENTE na seção FGTS do PJE-Calc"
+                        )
+                except Exception as e:
+                    self.log(f"    ⚠ Falha ao adicionar saldo FGTS: {e}")
+
+            # Marcar checkbox "Deduzir do FGTS" — APÓS a(s) operação(ões), pois o
+            # checkbox fica disabled com a lista vazia. Verificação pós-AJAX.
+            if getattr(f, "deduzir_do_fgts", False) or saldos:
+                marcado = False
+                for cb_suf in ("deduzirDoFGTS", "deduzirDoFgts", "deduzirFGTS"):
+                    try:
+                        if self._page.locator(f"input[type='checkbox'][id$=':{cb_suf}']").count() == 0:
+                            continue
+                        try:
+                            self._page.wait_for_function(
+                                """(suf) => { const cb = [...document.querySelectorAll("input[type=checkbox]")]
+                                    .find(c => (c.id||'').endsWith(suf)); return cb && !cb.disabled; }""",
+                                arg=cb_suf, timeout=8000,
+                            )
+                        except Exception:
+                            pass
+                        self._marcar_checkbox(cb_suf, True)
+                        self._aguardar_ajax(3000)
+                        marcado = bool(self._page.evaluate(
+                            """(suf) => { const cb = [...document.querySelectorAll("input[type=checkbox]")]
+                                .find(c => (c.id||'').endsWith(suf)); return !!(cb && cb.checked); }""",
+                            cb_suf,
+                        ))
+                        break
+                    except Exception:
+                        continue
+                self.log(f"  {'✓' if marcado else '🛑'} #80-BM 'Deduzir do FGTS' marcado (confirmado={marcado})")
+
+            _safe(lambda: self._clicar("salvar"), "salvar")
+            self._aguardar_ajax(8000)
+            self._aguardar_operacao_sucesso(timeout_ms=10000, bloqueante=False)
+
+            # #80-DO / #80-BK: confirmar pelo RE-RENDER do bean — reabrir a
+            # página por clique (gate + Seam init) e reler os campos.
+            if not self._abrir_pagina_fgts(_t80dl):
+                divergencias = ["página FGTS não recarregou para a releitura do bean pós-save"]
+                self.log(f"  ⚠ #80-DO {divergencias[0]}")
+                continue
+            estado = self._ler_estado_fgts()
+            divergencias = self._divergencias_fgts(estado, esperado)
+            if not divergencias:
+                confirmado = True
+                _resumo = ", ".join(f"{k}={v}" for k, v in esperado.items())
+                self.log(f"  ✓ #80-DO FGTS CONFIRMADO por releitura do bean: {_resumo}")
+                break
+            self.log("  ⚠ #80-DO releitura do bean DIVERGE da prévia:")
+            for _d in divergencias:
+                self.log(f"      • {_d}")
+            if divergencias and all("DESABILITADO" in _d for _d in divergencias):
+                self.log(
+                    "  ℹ #80-DO a divergência está em campo que o PJE-Calc mantém "
+                    "desabilitado neste cálculo — repetir não muda; registrando pendência"
+                )
+                break
+
+        if confirmado:
+            self.log("Fase 8 concluída")
+        else:
+            _motivos = divergencias or ["página FGTS não carregou em 3 tentativas — nada foi salvo"]
+            self._registrar_pendencia_fgts(_motivos)
+            self.log(
+                "🛑 Fase 8 concluída COM PENDÊNCIA — FGTS NÃO aplicado conforme a prévia "
+                "(destino/multa/incidência): " + "; ".join(_motivos)
+            )
 
     def fase_contribuicao_social(self) -> None:
         # #80-CE (0000408-54, 28/07/2026): a Fase 9 morria de primeira com
@@ -14865,6 +15196,38 @@ class PlaywrightAutomatorV2:
                 "pjc": "; ".join(f"{a}→{b}" for a, b in sorted(achados)),
             })
 
+        # ── #80-DN: cartão de ponto — meses do período SEM apuração no PJC ──
+        # (0001156-86: 11/2025–04/2026 com Hs Trabalhadas/Hs EXT/Hs
+        # Interjornada = 0 em todas as colunas → HE 50% e INTERVALO
+        # INTERJORNADAS liquidaram a MENOR). Nenhum alerta do PJE-Calc pega
+        # isso: a liquidação fecha com totalErros=0 e quantidade zero.
+        try:
+            _cz = self._cartao_meses_zerados_pjc(root)
+        except Exception as _e:
+            _cz = []
+            self.log(f"  ⚠ #80-DN guarda do cartão de ponto falhou: {str(_e)[:120]}")
+        if _cz:
+            res["ok"] = False
+            res["cartao_meses_zerados"] = _cz
+        _pc = list(getattr(self, "_pendencias_cartao", []) or [])
+        if _pc:
+            res["ok"] = False
+            res["cartoes_nao_apurados"] = _pc
+
+        # ── #80-DO: FGTS do PJC × prévia (destino/multa/percentual/incidência) ──
+        try:
+            _fd = self._fgts_divergente_pjc(root)
+        except Exception as _e:
+            _fd = []
+            self.log(f"  ⚠ #80-DO guarda do FGTS falhou: {str(_e)[:120]}")
+        if _fd:
+            res["ok"] = False
+            res["fgts_divergente"] = _fd
+        _pfg = list(getattr(self, "_pendencias_fgts", []) or [])
+        if _pfg:
+            res["ok"] = False
+            res["fgts_nao_aplicado"] = _pfg
+
         # ── #80-CU: períodos aquisitivos que não chegaram ao PJE-Calc ──
         _pf = list(getattr(self, "_pendencias_ferias", []) or [])
         if _pf:
@@ -14911,12 +15274,101 @@ class PlaywrightAutomatorV2:
                          f"Férias do PJE-Calc — as férias apuram fora do deferido")
             for pd in res.get("pendencias_aplicacao", []):
                 self.log(f"      • escopo NÃO aplicado em {pd['verba']} ({pd['janela']}): {pd['motivo']}")
+            for _cz in res.get("cartao_meses_zerados", []):
+                self.log(f"      • #80-DN cartão de ponto {_cz['cartao']}: {len(_cz['meses'])} mês(es) "
+                         f"SEM apuração no PJC ({', '.join(_cz['meses'])}) — verbas "
+                         f"IMPORTADA_DO_CARTAO subapuradas; apurar o cartão no PJE-Calc e "
+                         f"Regerar Ocorrências")
+            for _pc in res.get("cartoes_nao_apurados", []):
+                self.log(f"      • #80-DN cartão {_pc['cartao']} ({_pc['periodo']}) NÃO apurado "
+                         f"pela automação: {_pc['motivo']}")
+            for _fd in res.get("fgts_divergente", []):
+                self.log(f"      • #80-DO FGTS {_fd['campo']}: PJC={_fd['pjc']} ≠ prévia={_fd['previa']}")
+            for _pf2 in res.get("fgts_nao_aplicado", []):
+                self.log(f"      • #80-DO FGTS não aplicado pela automação: {_pf2}")
             if res.get("periodos_divergentes"):
                 self.log("      → o período de uma verba só muda por save de parâmetros: "
                          "corrija-o no PJE-Calc e Regerar Ocorrências (Sobrescrever) "
                          "para a verba voltar a apurar dentro do deferido")
             self.log("      → revise os itens acima no PJE-Calc antes de incorporar o cálculo")
         return res
+
+    def _cartao_meses_zerados_pjc(self, root) -> list[dict]:
+        """#80-DN — guarda READ-ONLY: meses do período de cada cartão da prévia
+        cujas ocorrências de cartão no PJC (`OcorrenciaDoCartaoDePonto`, uma por
+        coluna: Hs Trabalhadas / Hs EXT / Hs Intrajornada / Hs Interjornada /
+        Dias Trabalhado) estão TODAS zeradas ou ausentes.
+
+        Validado: no PJC gerado do 0001156-86 acusa exatamente 11/2025–04/2026
+        (cartão 2/2 não apurado); no PJC definitivo do calculista, silêncio.
+        """
+        import datetime as _dtm
+        por_mes: dict[str, float] = {}
+        for oc in root.iter("OcorrenciaDoCartaoDePonto"):
+            d = oc.find("dataOcorrencia")
+            v = oc.find("valor")
+            try:
+                dt = _dtm.datetime.fromtimestamp(int((d.text or "").strip()) / 1000)
+            except Exception:
+                continue
+            try:
+                val = abs(float((v.text or "0").strip())) if v is not None else 0.0
+            except Exception:
+                val = 0.0
+            mes = dt.strftime("%m/%Y")
+            por_mes[mes] = max(por_mes.get(mes, 0.0), val)
+        if not por_mes:
+            # PJC sem ocorrências de cartão: ou não há cartão na prévia, ou o
+            # cartão não foi salvo (#80-BF já denuncia) — não acusar aqui.
+            return []
+        cartoes = list(getattr(self.previa, "cartoes_de_ponto", None) or [])
+        if not cartoes and getattr(self.previa, "cartao_de_ponto", None):
+            cartoes = [self.previa.cartao_de_ponto]
+        out: list[dict] = []
+        for cp in cartoes:
+            di = getattr(cp, "data_inicial", None)
+            df = getattr(cp, "data_final", None)
+            meses = self._meses_entre(di, df)
+            zerados = [m for m in meses if por_mes.get(m, 0.0) <= 0.0]
+            if zerados:
+                out.append({"cartao": f"{di}→{df}", "meses": zerados})
+        return out
+
+    def _fgts_divergente_pjc(self, root) -> list[dict]:
+        """#80-DO — guarda READ-ONLY: parâmetros do `<Fgts>` do PJC × prévia.
+        Compara só o que a prévia manda (`_fgts_esperado`): destino, compor,
+        multa, tipo/percentual/incidência da multa, art. 467, LC 110."""
+        fg = None
+        for el in root.iter("Fgts"):
+            if el.find("destinoDoFgts") is not None:
+                fg = el
+                break
+        if fg is None:
+            return []
+        mapa = {
+            "tipoDeVerba": "destinoDoFgts",
+            "comporPrincipal": "comporPrincipal",
+            "multa": "multa",
+            "tipoDoValorDaMulta": "tipoDoValorDaMulta",
+            "multaDoFgts": "multaDoFgts",
+            "incidenciaDoFgts": "incidenciaDoFgts",
+            "multaDoArtigo467": "multaDoArtigo467",
+            "multa10": "multa10",
+        }
+        out: list[dict] = []
+        for campo, esp in self._fgts_esperado().items():
+            tag = mapa.get(campo)
+            el = fg.find(tag) if tag else None
+            if el is None or el.text is None:
+                continue
+            atual = el.text.strip()
+            if isinstance(esp, bool):
+                ok = (atual.lower() == "true") == esp
+            else:
+                ok = atual.upper() == str(esp).upper()
+            if not ok:
+                out.append({"campo": tag, "previa": esp, "pjc": atual})
+        return out
 
     @staticmethod
     def _norm_desc_fidelidade(s: str) -> str:
