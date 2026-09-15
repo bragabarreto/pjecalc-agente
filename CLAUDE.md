@@ -1121,6 +1121,64 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Súmula 340 base mista = DUAS verbas (#80-DK)
+
+> **Regra do usuário (15/09/2026, 0001156-86):** verba de **duração do
+> trabalho** (horas extras, adicional noturno, intervalos inter/intrajornada,
+> sobreaviso, in itinere) com remuneração **parte FIXA + parte VARIÁVEL** exige
+> **DUAS verbas**, uma por parcela, com indicação específica no nome — **mesmo
+> que a sentença não cite a Súmula 340**. Nunca multiplicador médio.
+>
+> **Bug (0001156-86, sessão b3d85551):** a IA emitiu UMA verba
+> `HORAS EXTRAS 50%` com `historico_nome=SALARIO BASE` +
+> `bases_compostas=[COMISSOES]` + mult 1.5 (idem INTERVALO INTERJORNADAS). O
+> #80-CH detectava a base mista e só AVISAVA; o PJE-Calc aplicou a hora CHEIA
+> também sobre as comissões. O calculista corrigiu à mão criando
+> `HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL` e `INTERVALO INTERJORNADAS -
+> REMUNERAÇÃO VARIAVEL` (PJC definitivo CALCULO_278573).
+>
+> **Receita (do PJC definitivo):**
+>
+> | campo | FIXA | VARIÁVEL |
+> |---|---|---|
+> | nome | `HORAS EXTRAS 50%` | `HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL` (≤50, #80-O) |
+> | estratégia / alvo | `expresso_direto` / `HORAS EXTRAS 50%` | `expresso_adaptado` / **mesmo alvo** (passada extra #80-BY-12 cria a 2ª e renomeia; Manual fica Manual) |
+> | `parcela` | FIXA | **VARIAVEL** |
+> | base | histórico fixo (sem a variável em `bases_compostas`) | histórico `parcela=VARIAVEL` (COMISSOES) |
+> | divisor | 220 / CARGA_HORARIA | **`IMPORTADA_DO_CARTAO` coluna "Hs Trabalhadas"** se a quantidade vem do cartão; senão o da fixa |
+> | multiplicador | 1.5 | **0.5** (= mult − 1; mult ≤ 1 fica igual — adicional noturno 0.2) |
+> | quantidade / período / incidências / ocorrência | — | idênticos |
+> | reflexos | RSR/aviso/13º/férias | espelhados, alvo `<REFLEXO> SOBRE <nome variável>` |
+>
+> **Defesas (3 camadas + bot):**
+> 1. **Prompt** (`extraction_v2.py`, §4.4.sumula340.mista) — tabela fixa × variável,
+>    aplicada a HE/interjornada/intrajornada/adicional noturno; a linha do
+>    ADICIONAL NOTURNO abre a exceção do divisor importado para a verba variável.
+> 2. **Normalizer** (`_norm_sumula_340_base_mista_duas_verbas`, ANTES do #80-CH):
+>    detecta histórico fixo + parcela variável (`bases_compostas` → histórico
+>    `parcela=VARIAVEL` ou sinal de comissão; fallback: comentário cita comissão
+>    e há UM histórico VARIAVEL) e DIVIDE na prévia. Idempotente (irmã
+>    `- REMUNERAÇÃO VARIÁVEL` já existente ⇒ não divide). `#80-AF` deixa de
+>    coagir o divisor quando `parcela=VARIAVEL` com coluna declarada. O aviso
+>    "BASE MISTA" do #80-CH silencia quando a irmã existe.
+> 3. **Bot** (`playwright_v2.py`) — só APLICA, mas tinha 3 lacunas que fariam a
+>    verba variável sair errada em silêncio: (a) o Divisor `IMPORTADA_DO_CARTAO`
+>    é um **mini-crud** (`tipoImportadadoDoCartaoDePontoDivisor` +
+>    `incluirCartaoDePontoDivisor` + `listagemCartaoDePontoDivisor`,
+>    verba-calculo.xhtml 979-1030) e o bot só selecionava a option — novo
+>    `_vincular_cartao_ponto_divisor` com native click, verificação na listagem
+>    e `🛑 #80-DK` no log; (b) a heurística de coluna mandava INTERJORNADAS para
+>    "Intrajornada" — agora "Interjornada"; (c) com duas verbas de mesmo prefixo,
+>    o Exibir e o checkbox do reflexo casavam por `includes()` — passada 0 por
+>    célula EXATA (inv2) antes do includes.
+>
+> ⚠️ **Fidelidade prévia↔automação:** a divisão ocorre no normalizer, ANTES da
+> prévia; o revisor vê as duas verbas e o bot apenas aplica.
+>
+> Protegido por `test_inv149`, `test_inv150` e `test_inv151`.
+
+---
+
 ## Regra obrigatória — Súmula 340 do TST: multiplicador é SÓ o adicional (#80-CH)
 
 > **Horas extras sobre PARCELA VARIÁVEL** (comissionista, produtividade, peça,

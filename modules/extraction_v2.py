@@ -970,7 +970,7 @@ Para cada verba, escolha `valor` com base na natureza econômica:
 | **FÉRIAS + 1/3** | CALCULADO | sistema apura; base=HISTORICO_SALARIAL, **divisor=OUTRO_VALOR=12 (constante CLT)**, multiplicador=1.33, quantidade=AVOS |
 | **AVISO PRÉVIO** | CALCULADO | base=MAIOR_REMUNERACAO, **divisor=OUTRO_VALOR=30 (SEMPRE — base diária)**, multiplicador=1, quantidade=INFORMADA=<dias de aviso: 30 + 3/ano, Lei 12.506/2011>. NUNCA divisor=1. |
 | **HORAS EXTRAS 50%/100%** | CALCULADO | base=HISTORICO_SALARIAL, divisor=CARGA_HORARIA (ou OUTRO_VALOR=220), multiplicador=1.5/2.0, quantidade=INFORMADA mensal OU IMPORTADA_DO_CARTAO. ⚠️ **Se a base for PARCELA VARIÁVEL (comissões/produtividade/peça) → Súmula 340 TST: multiplicador = SÓ O ADICIONAL** (0.5 / 0.55 / 0.6 …), ver §4.4.sumula340. |
-| **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, **quantidade=IMPORTADA_DO_CARTAO** (horas noturnas), **divisor=OUTRO_VALOR = carga horária mensal FIXA** (ex.: 220, ou a jornada mensal do cartão). ⚠️ NUNCA `divisor=IMPORTADA_DO_CARTAO` — o divisor é a carga horária (base do valor-hora), não uma coluna do cartão; importá-lo gera "divisor zero" e trava o save. |
+| **ADICIONAL NOTURNO** | CALCULADO | base=HISTORICO_SALARIAL, multiplicador=0.20, **quantidade=IMPORTADA_DO_CARTAO** (horas noturnas), **divisor=OUTRO_VALOR = carga horária mensal FIXA** (ex.: 220, ou a jornada mensal do cartão). ⚠️ NUNCA `divisor=IMPORTADA_DO_CARTAO` na verba da parcela FIXA — o divisor é a carga horária (base do valor-hora), não uma coluna do cartão. Única exceção: a verba **`- REMUNERAÇÃO VARIÁVEL`** (§4.4.sumula340.mista), cujo divisor é `IMPORTADA_DO_CARTAO`/`Hs Trabalhadas`. |
 | **ADICIONAL INSALUBRIDADE** | CALCULADO | base=SALARIO_MINIMO (ou histórico se sentença disser), multiplicador=0.10/0.20/0.40, quantidade=INFORMADA=1 |
 | **MULTA 477 CLT** | CALCULADO | base=MAIOR_REMUNERACAO, quantidade=INFORMADA=1, divisor=OUTRO_VALOR=1, multiplicador=1 |
 | **VALE TRANSPORTE** | **INFORMADO** | mensalizar (R$/dia × dias úteis médios = 22). NÃO usar CALCULADO. |
@@ -1050,10 +1050,45 @@ sobre comissões/produtividade" — a súmula foi compreendida e o multiplicador
 cheio assim mesmo. O PJC exportado liquidou **R$ 14.302,70** em 23 ocorrências
 onde o correto eram **~R$ 5.075,15** — **R$ 9.227 a maior** (2,8× o devido).
 
-⚠️ Quando o empregado é **misto** (parte fixa + parte variável), a sentença
-costuma deferir HE cheia (1.5) sobre a parte FIXA e HE só-adicional (0.5) sobre a
-parte VARIÁVEL: emita **duas verbas distintas**, cada uma com sua base e seu
-multiplicador. Nunca aplique um multiplicador médio.
+#### §4.4.sumula340.mista — REMUNERAÇÃO MISTA (parte FIXA + parte VARIÁVEL) = DUAS VERBAS
+
+⚠️ **INVARIANTE PERMANENTE — NÃO REVERTER** (regra do usuário, 15/09/2026, 0001156-86)
+
+Quando o empregado tem **salário fixo + parcela variável** (comissões,
+produtividade, prêmios por venda, gorjetas…), **TODA verba de duração do
+trabalho** — HORAS EXTRAS, INTERVALO INTERJORNADAS, INTERVALO INTRAJORNADA,
+ADICIONAL NOTURNO, SOBREAVISO, HORAS IN ITINERE — é emitida como **DUAS
+verbas**, uma por parcela, **mesmo que a sentença não cite a Súmula 340**.
+A hora normal da parcela variável já foi paga nas comissões: sobre ela só cabe
+o **adicional**; sobre a parte fixa cabe a hora **cheia**.
+
+❌ **NUNCA** uma verba só com `historico_nome=SALARIO BASE` +
+`bases_compostas=[COMISSOES]` + `multiplicador 1.5` — o PJE-Calc aplicaria a
+hora CHEIA também sobre as comissões (foi o erro do 0001156-86, corrigido à
+mão pelo calculista). ❌ **NUNCA** multiplicador médio.
+
+**Receita (PJC definitivo do calculista, CALCULO_278573):**
+
+| campo | verba FIXA | verba VARIÁVEL |
+|---|---|---|
+| `nome_pjecalc` | `HORAS EXTRAS 50%` | `HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL` |
+| `estrategia_preenchimento` / `expresso_alvo` | `expresso_direto` / `HORAS EXTRAS 50%` | `expresso_adaptado` / **o MESMO** `HORAS EXTRAS 50%` |
+| `parametros.parcela` | `FIXA` | **`VARIAVEL`** |
+| `base_calculo` | `HISTORICO_SALARIAL` / `SALARIO BASE` (sem a variável em `bases_compostas`) | `HISTORICO_SALARIAL` / **`COMISSOES`** (o histórico `parcela=VARIAVEL`) |
+| `divisor` | `OUTRO_VALOR=220` (ou `CARGA_HORARIA`) | **`IMPORTADA_DO_CARTAO`, `tipo_cartao_ponto="Hs Trabalhadas"`** quando há cartão de ponto (comissões ÷ horas trabalhadas = valor-hora variável); sem cartão, o mesmo divisor da fixa |
+| `multiplicador` | `1.5` (hora cheia) | **`0.5`** (= adicional/100 — `mult_fixa − 1`) |
+| `quantidade` | `IMPORTADA_DO_CARTAO` (Hs EXT) ou `INFORMADA` | **idêntica** à fixa |
+| período, incidências, característica, ocorrência | — | **idênticos** à fixa |
+| `reflexos` | RSR / AVISO / 13º / FÉRIAS sobre `HORAS EXTRAS 50%` | **espelhados**, alvo `<REFLEXO> SOBRE HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL` |
+
+Mesma receita para `INTERVALO INTERJORNADAS` → `INTERVALO INTERJORNADAS -
+REMUNERAÇÃO VARIÁVEL` (quantidade `Hs Interjornadas`), `INTERVALO INTRAJORNADA`
+(quantidade `Hs Intrajornada`) e `ADICIONAL NOTURNO` (multiplicador 0.2 nas
+duas — o adicional noturno já é só adicional; muda a base e o divisor).
+
+O sufixo é sempre **` - REMUNERAÇÃO VARIÁVEL`**; o nome inteiro cabe em 50
+caracteres (limite do campo Nome do PJE-Calc). O histórico da parcela variável
+TEM de existir em `historico_salarial` com `parcela: "VARIAVEL"`.
 
 
 

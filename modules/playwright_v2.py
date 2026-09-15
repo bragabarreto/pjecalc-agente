@@ -5483,6 +5483,10 @@ class PlaywrightAutomatorV2:
             n = nome_verba.upper()
             if "INTRAJORNADA" in n:
                 preferir = "Intrajornada"
+            elif "INTERJORNADA" in n:
+                # #80-DK: INTERVALO INTERJORNADAS tem coluna própria
+                # ("Hs Interjornadas"); antes caía em "Intrajornada".
+                preferir = "Interjornada"
             elif "HORAS EXTRAS" in n or " HE " in f" {n} " or n.startswith("HE "):
                 preferir = "Hs EXT"
             elif "INTERVALO" in n:
@@ -5583,6 +5587,90 @@ class PlaywrightAutomatorV2:
             self.log("    ℹ coluna incluída (sem label p/ verificar)")
         elif not incluido_ok:
             self.log(f"    🛑 #80-A coluna '{sel_label}' NÃO confirmada após 3 tentativas — quantidade pode sair 0")
+
+    def _vincular_cartao_ponto_divisor(self, tipo_cartao_ponto=None, nome_verba: str | None = None) -> None:
+        """#80-DK — após marcar tipoDeDivisor=IMPORTADA_DO_CARTAO, seleciona a
+        COLUNA do cartão no dropdown do DIVISOR, clica "Incluir" e VERIFICA
+        que a coluna entrou na listagem (ground truth do bean).
+
+        DOM (verba-calculo.xhtml 979-1030): `panelDivisorImportadoCartaoDePonto`
+        contém `tipoImportadadoDoCartaoDePontoDivisor` (select, s:convertEntity
+        → casar pela LABEL), `incluirCartaoDePontoDivisor` (a4j:commandLink,
+        immediate) e `listagemCartaoDePontoDivisor` (rich:dataTable).
+
+        Uso: verba da parcela VARIÁVEL (Súmula 340) — comissões ÷ "Hs
+        Trabalhadas" = valor-hora variável (receita do calculista, 0001156-86).
+        Antes deste helper o bot só selecionava a option: o divisor ficava sem
+        coluna e a liquidação dava divisor zero / "Campo obrigatório: Cartão
+        de Ponto" — razão do #80-AF. Falha NUNCA silenciosa (🛑 no log).
+        """
+        SEL = "select[id$=':tipoImportadadoDoCartaoDePontoDivisor']"
+        try:
+            self._page.wait_for_selector(SEL, state="visible", timeout=6000)
+        except Exception:
+            self.log("    🛑 #80-DK dropdown do cartão (Divisor) não apareceu — divisor IMPORTADA_DO_CARTAO SEM coluna (liquidação pode dar divisor zero)")
+            return
+        preferir = None
+        if tipo_cartao_ponto:
+            preferir = tipo_cartao_ponto.value if hasattr(tipo_cartao_ponto, "value") else str(tipo_cartao_ponto)
+        if not preferir:
+            preferir = "Hs Trabalhadas"
+        sel = self._page.locator(SEL).first
+
+        def _label_presente() -> bool:
+            try:
+                return bool(self._page.evaluate(
+                    """(lbl) => {
+                        const norm = s => (s||'').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'')
+                            .toUpperCase().replace(/\\s+/g,' ').trim();
+                        const alvo = norm(lbl);
+                        const tab = document.querySelector("table[id$=':listagemCartaoDePontoDivisor']");
+                        if (!tab) return false;
+                        for (const td of tab.querySelectorAll('td')) {
+                            if (norm(td.textContent) === alvo) return true;
+                        }
+                        return false;
+                    }""",
+                    preferir,
+                ))
+            except Exception:
+                return False
+
+        if _label_presente():
+            self.log(f"    ✓ #80-DK coluna '{preferir}' já vinculada ao Divisor (sem re-incluir)")
+            return
+        sel_label = None
+        for _tent in range(3):
+            try:
+                sel_label = self._selecionar_primeira_opcao_cartao(sel, preferir_label=preferir)
+                self._page.evaluate(
+                    """(q) => { const s=document.querySelector(q); if (s) s.dispatchEvent(new Event('change',{bubbles:true})); }""",
+                    SEL,
+                )
+                self._aguardar_ajax(1500)
+            except Exception as e:
+                self.log(f"    ⚠ #80-DK selecionar coluna do Divisor: {e}")
+            if not sel_label:
+                self.log(f"    🛑 #80-DK coluna '{preferir}' não existe no dropdown do Divisor — cartão apurado? divisor ficará SEM coluna")
+                return
+            try:
+                loc = self._page.locator(
+                    "a[id$=':incluirCartaoDePontoDivisor'], input[id$=':incluirCartaoDePontoDivisor']"
+                ).first
+                if loc.count() == 0:
+                    self.log("    🛑 #80-DK botão incluirCartaoDePontoDivisor não encontrado — divisor SEM coluna")
+                    return
+                loc.click(force=True)  # NATIVE — dispara A4J de verdade (#80-A)
+                self._aguardar_ajax(4000)
+                self._page.wait_for_timeout(600)
+                self.log(f"    ✓ click incluirCartaoDePontoDivisor (native, tent {_tent+1})")
+            except Exception as e:
+                self.log(f"    ⚠ #80-DK native click Incluir (Divisor) falhou (tent {_tent+1}): {e}")
+            if _label_presente():
+                self.log(f"    ✓ #80-DK coluna '{sel_label}' CONFIRMADA na listagem do Divisor")
+                return
+            self.log("    ⟳ #80-DK coluna do Divisor ainda não confirmada — re-selecionando + retry")
+        self.log(f"    🛑 #80-DK coluna '{preferir}' NÃO confirmada no Divisor após 3 tentativas — divisor pode sair zero")
 
     def _selecionar_primeira_opcao_cartao(self, sel_locator, preferir_label: str | None = None) -> str | None:
         """Seleciona option do dropdown de coluna do cartão de ponto.
@@ -6035,8 +6123,15 @@ class PlaywrightAutomatorV2:
                 # Divisor (radio)
                 if self._marcar_radio_se_diferente("tipoDeDivisor", f.divisor.tipo.value):
                     self._aguardar_ajax(2000)
-                if f.divisor.tipo.value == "IMPORTADA_DO_CARTAO" and getattr(f.divisor, "tipo_cartao_ponto", None):
-                    self._selecionar_se_diferente("tipoImportadadoDoCartaoDePontoDivisor", f.divisor.tipo_cartao_ponto)
+                if f.divisor.tipo.value == "IMPORTADA_DO_CARTAO":
+                    # #80-DK: o Divisor importado do cartão é um MINI-CRUD igual
+                    # ao da Quantidade (select + "Incluir" + listagem). Só
+                    # selecionar a option NÃO vincula nada ao bean → divisor
+                    # vazio/zero. Vincular com verificação, nunca em silêncio.
+                    self._vincular_cartao_ponto_divisor(
+                        getattr(f.divisor, "tipo_cartao_ponto", None),
+                        nome_verba=getattr(self, "_verba_atual_nome", None) or getattr(v, "nome_pjecalc", None),
+                    )
                 # Quantidade (helper especializado — pula APURADA/AVOS, vincula cartão IMPORTADA_DO_CARTAO)
                 self._configurar_quantidade_radio(f.quantidade.tipo.value, f.quantidade, v=v)
             # Dobrar Valor Devido
@@ -8741,7 +8836,24 @@ class PlaywrightAutomatorV2:
             click_exibir_ok = self._page.evaluate(
                 """([candidatos, alvoReflexo]) => {
                     const norm = s => (s||'').toUpperCase();
+                    const tight = s => norm(s).replace(/\\s+/g,' ').trim();
                     const trs = [...document.querySelectorAll('tr')];
+                    // #80-DK (Súmula 340): "HORAS EXTRAS 50%" e "HORAS EXTRAS 50% -
+                    // REMUNERAÇÃO VARIÁVEL" coexistem — includes() casaria a
+                    // linha errada. Passada 0: célula com texto EXATAMENTE igual
+                    // ao candidato (inv2); só depois o includes() legado.
+                    for (const c of candidatos) {
+                        const cT = tight(c);
+                        for (const tr of trs) {
+                            const exibir = tr.querySelector(':scope > td span.linkDestinacoes, :scope > td > span.linkDestinacoes');
+                            if (!exibir) continue;
+                            const tds = [...tr.querySelectorAll(':scope > td')];
+                            if (!tds.some(td => tight(td.textContent) === cT)) continue;
+                            exibir.click();
+                            try { exibir.dispatchEvent(new MouseEvent('click', {bubbles:true})); } catch(e) {}
+                            return 'exibir-clicked:'+c;
+                        }
+                    }
                     for (const c of candidatos) {
                         const cN = norm(c);
                         for (const tr of trs) {
@@ -8840,6 +8952,15 @@ class PlaywrightAutomatorV2:
                     const rows = cbs.map(cb => ({cb, txt: norm(cb.closest('tr') ? cb.closest('tr').textContent : '')})).filter(r => r.txt);
                     const labels = rows.map(r => r.txt);
                     if (!cands.length) return {cbId: null, labels};
+                    // (0) #80-DK: célula EXATAMENTE igual ao candidato — "AVISO
+                    // PRÉVIO SOBRE HORAS EXTRAS 50%" é substring de "... SOBRE
+                    // HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL"; o includes()
+                    // marcaria o reflexo da verba-irmã.
+                    for (const r of rows) {
+                        const tr = r.cb.closest('tr');
+                        const tds = tr ? [...tr.querySelectorAll('td')] : [];
+                        if (tds.some(td => cands.includes(norm(td.textContent)))) return {cbId: r.cb.id, labels};
+                    }
                     // (1) substring exata
                     for (const r of rows) {
                         if (cands.some(c => r.txt.includes(c))) return {cbId: r.cb.id, labels};

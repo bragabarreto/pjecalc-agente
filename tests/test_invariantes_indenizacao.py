@@ -4917,3 +4917,196 @@ def test_inv148_evolucao_espera_a_listagem_renderizar():
     assert "sem ocorrências geradas" in corpo, (
         "REGRESSÃO #80-L: aviso de evolução não aplicada removido — a falha "
         "voltaria a ser silenciosa")
+
+
+def _previa_sumula_340_mista(nome="HORAS EXTRAS 50%", alvo="HORAS EXTRAS 50%",
+                             qtd_tipo="IMPORTADA_DO_CARTAO", mult=1.5,
+                             estrategia="expresso_direto", comentarios="HE 50%",
+                             bases_compostas=None, hist_var_parcela="VARIAVEL"):
+    pc = {"estado_uf": "CE", "municipio": "X", "data_admissao": "10/07/2025",
+          "data_demissao": "17/04/2026", "data_ajuizamento": "01/05/2026",
+          "data_inicio_calculo": "10/07/2025", "data_termino_calculo": "17/04/2026"}
+    if bases_compostas is None:
+        bases_compostas = [{"verba": "COMISSOES", "integralizar": "NAO"}]
+    return {"parametros_calculo": pc,
+            "historico_salarial": [
+                {"nome": "SALARIO BASE", "parcela": "FIXA"},
+                {"nome": "COMISSOES", "parcela": hist_var_parcela}],
+            "verbas_principais": [
+                {"id": "v07", "nome_sentenca": nome.title(), "nome_pjecalc": nome,
+                 "estrategia_preenchimento": estrategia, "expresso_alvo": alvo,
+                 "parametros": {"parcela": "FIXA", "valor": "CALCULADO",
+                                "periodo_inicio": "10/07/2025", "periodo_fim": "17/04/2026",
+                                "caracteristica": "COMUM", "ocorrencia_pagamento": "MENSAL",
+                                "comentarios": comentarios,
+                                "formula_calculado": {
+                                    "base_calculo": {"tipo": "HISTORICO_SALARIAL",
+                                                     "historico_nome": "SALARIO BASE",
+                                                     "proporcionaliza": "NAO",
+                                                     "bases_compostas": bases_compostas},
+                                    "divisor": {"tipo": "OUTRO_VALOR", "valor": 220},
+                                    "multiplicador": mult,
+                                    "quantidade": {"tipo": qtd_tipo, "valor": 8}}},
+                 "reflexos": [
+                     {"id": "r1", "nome": f"Aviso Previo sobre {nome.title()}",
+                      "estrategia_reflexa": "checkbox_painel",
+                      "expresso_reflex_alvo": f"AVISO PRÉVIO SOBRE {nome}"},
+                     {"id": "r2", "nome": f"13o sobre {nome.title()}",
+                      "estrategia_reflexa": "checkbox_painel",
+                      "expresso_reflex_alvo": f"13º SALÁRIO SOBRE {nome}"}]}]}
+
+
+def test_inv149_sumula_340_base_mista_divide_em_duas_verbas():
+    """#80-DK (0001156-86, 15/09/2026): verba de DURAÇÃO DO TRABALHO com base
+    MISTA (histórico FIXO em `historico_nome` + parcela VARIÁVEL em
+    `bases_compostas`) é DIVIDIDA em duas na prévia — nunca uma verba só com
+    hora cheia sobre as comissões, nunca multiplicador médio.
+
+    Receita do PJC definitivo do calculista (CALCULO_278573):
+      fixa     → base SALARIO BASE, divisor 220, mult 1.5, qtd cartão, reflexos
+      variável → parcela VARIAVEL, base COMISSOES, divisor IMPORTADA_DO_CARTAO
+                 "Hs Trabalhadas", mult 0.5, mesma qtd, reflexos espelhados,
+                 nome "<verba> - REMUNERAÇÃO VARIÁVEL"."""
+    from modules.json_normalizer import normalize_v2_json
+
+    out = normalize_v2_json(_previa_sumula_340_mista())
+    vs = out["verbas_principais"]
+    assert [v["nome_pjecalc"] for v in vs] == [
+        "HORAS EXTRAS 50%", "HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL"]
+    fixa, var = vs
+    ff, fv = (v["parametros"]["formula_calculado"] for v in vs)
+
+    # FIXA: perde a base variável; hora cheia e divisor intocados (#80-CH não coage)
+    assert ff["base_calculo"]["historico_nome"] == "SALARIO BASE"
+    assert ff["base_calculo"]["bases_compostas"] == []
+    assert ff["multiplicador"] == 1.5
+    assert ff["divisor"] == {"tipo": "OUTRO_VALOR", "valor": 220}
+    assert fixa["parametros"]["parcela"] == "FIXA"
+    assert fixa["estrategia_preenchimento"] == "expresso_direto"
+
+    # VARIÁVEL: receita do calculista
+    assert var["id"] != fixa["id"]
+    assert var["parametros"]["parcela"] == "VARIAVEL"
+    assert fv["base_calculo"]["historico_nome"] == "COMISSOES"
+    assert fv["base_calculo"]["bases_compostas"] == []
+    assert fv["multiplicador"] == 0.5, "só o adicional (mult − 1)"
+    assert fv["divisor"]["tipo"] == "IMPORTADA_DO_CARTAO"
+    assert fv["divisor"]["tipo_cartao_ponto"] == "Hs Trabalhadas"
+    assert fv["quantidade"] == ff["quantidade"]
+    for k in ("periodo_inicio", "periodo_fim", "caracteristica", "ocorrencia_pagamento"):
+        assert var["parametros"][k] == fixa["parametros"][k]
+    # 2ª verba do MESMO alvo Expresso → expresso_adaptado (#80-BY-12 cria e renomeia)
+    assert var["estrategia_preenchimento"] == "expresso_adaptado"
+    assert var["expresso_alvo"] == "HORAS EXTRAS 50%"
+    # reflexos espelhados com o rótulo real do painel
+    assert [r["expresso_reflex_alvo"] for r in var["reflexos"]] == [
+        "AVISO PRÉVIO SOBRE HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL",
+        "13º SALÁRIO SOBRE HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL"]
+    assert {r["id"] for r in var["reflexos"]}.isdisjoint({r["id"] for r in fixa["reflexos"]})
+    # #80-AF NÃO desfaz o divisor da parcela variável
+    assert fv["divisor"]["tipo"] == "IMPORTADA_DO_CARTAO"
+
+    # idempotência: re-normalizar a prévia já dividida NÃO cria 3ª verba
+    out2 = normalize_v2_json(out)
+    assert len(out2["verbas_principais"]) == 2
+
+    # sem cartão (quantidade INFORMADA): divisor da variável = divisor da fixa
+    out = normalize_v2_json(_previa_sumula_340_mista(qtd_tipo="INFORMADA"))
+    fv = out["verbas_principais"][1]["parametros"]["formula_calculado"]
+    assert fv["divisor"] == {"tipo": "OUTRO_VALOR", "valor": 220}
+    assert fv["multiplicador"] == 0.5
+
+    # intervalo interjornadas e adicional noturno seguem a mesma receita;
+    # adicional (mult ≤ 1) NÃO é reduzido — já é só adicional
+    out = normalize_v2_json(_previa_sumula_340_mista(nome="INTERVALO INTERJORNADAS",
+                                                     alvo="INTERVALO INTERJORNADAS"))
+    assert out["verbas_principais"][1]["nome_pjecalc"] == "INTERVALO INTERJORNADAS - REMUNERAÇÃO VARIÁVEL"
+    out = normalize_v2_json(_previa_sumula_340_mista(nome="ADICIONAL NOTURNO",
+                                                     alvo="ADICIONAL NOTURNO", mult=0.2))
+    assert out["verbas_principais"][1]["parametros"]["formula_calculado"]["multiplicador"] == 0.2
+
+    # nome respeita o maxlength=50 do PJE-Calc (#80-O) — trunca a base, não o sufixo
+    out = normalize_v2_json(_previa_sumula_340_mista(
+        nome="HORAS EXTRAS 50% ALEM DA 8A DIARIA E 44A SEMANAL", alvo="HORAS EXTRAS 50%"))
+    n = out["verbas_principais"][1]["nome_pjecalc"]
+    assert len(n) <= 50 and n.endswith(" - REMUNERAÇÃO VARIÁVEL")
+
+    # verba MANUAL permanece manual (sem expresso_alvo)
+    out = normalize_v2_json(_previa_sumula_340_mista(estrategia="manual", alvo=None))
+    assert out["verbas_principais"][1]["estrategia_preenchimento"] == "manual"
+    assert out["verbas_principais"][1]["expresso_alvo"] is None
+
+    # a IA marca `parametros.parcela=VARIAVEL` na verba ÚNICA mista (55 prévias
+    # do corpus) — isso NÃO é "já dividida": divide e a fixa volta a FIXA
+    d = _previa_sumula_340_mista(); d["verbas_principais"][0]["parametros"]["parcela"] = "VARIAVEL"
+    out = normalize_v2_json(d)
+    assert [v["parametros"]["parcela"] for v in out["verbas_principais"]] == ["FIXA", "VARIAVEL"]
+    # já dividida pela IA no padrão "PARTE FIXA / PARTE VARIÁVEL": não divide de novo
+    d = _previa_sumula_340_mista(nome="HORAS EXTRAS 50% - PARTE FIXA", bases_compostas=[], comentarios="comissoes")
+    d["verbas_principais"].append({"id": "v09", "nome_sentenca": "HE var",
+        "nome_pjecalc": "HORAS EXTRAS 50% - PARTE VARIÁVEL (SÚMULA 340 TST)",
+        "estrategia_preenchimento": "expresso_adaptado", "expresso_alvo": "HORAS EXTRAS 50%",
+        "parametros": {"parcela": "VARIAVEL", "valor": "CALCULADO",
+                       "formula_calculado": {"base_calculo": {"tipo": "HISTORICO_SALARIAL", "historico_nome": "COMISSOES"},
+                                             "divisor": {"tipo": "OUTRO_VALOR", "valor": 220}, "multiplicador": 0.5,
+                                             "quantidade": {"tipo": "INFORMADA", "valor": 8}}}})
+    assert len(normalize_v2_json(d)["verbas_principais"]) == 2
+
+    # sinal secundário: sem bases_compostas, mas comentário cita comissões e
+    # há exatamente UM histórico VARIAVEL → divide também
+    out = normalize_v2_json(_previa_sumula_340_mista(
+        bases_compostas=[], comentarios="HE sobre salario fixo + comissoes"))
+    assert len(out["verbas_principais"]) == 2
+
+    # NÃO divide: base composta só de parcelas FIXAS
+    out = normalize_v2_json(_previa_sumula_340_mista(hist_var_parcela="FIXA",
+                                                     comentarios="HE"))
+    assert len(out["verbas_principais"]) == 1
+    # NÃO divide: verba que não é de duração do trabalho
+    out = normalize_v2_json(_previa_sumula_340_mista(nome="ADICIONAL DE INSALUBRIDADE",
+                                                     alvo="ADICIONAL DE INSALUBRIDADE"))
+    assert len(out["verbas_principais"]) == 1
+
+
+def test_inv150_sumula_340_duas_verbas_no_prompt():
+    """#80-DK: a receita das DUAS verbas (fixa × variável) tem de estar no
+    prompt — camada primária; o normalizer é salvaguarda."""
+    from modules.extraction_v2 import SYSTEM_PROMPT_V2_EXTERNAL as P
+    assert "§4.4.sumula340.mista" in P, "REGRESSÃO #80-DK: seção da remuneração mista sumiu"
+    for frag in (
+        "uma por parcela",
+        "- REMUNERAÇÃO VARIÁVEL",
+        "Hs Trabalhadas",
+        "mesmo que a sentença não cite a Súmula 340",
+        "INTERVALO INTERJORNADAS", "INTERVALO INTRAJORNADA", "ADICIONAL NOTURNO",
+        "`parametros.parcela`", "`VARIAVEL`",
+        "NUNCA** multiplicador médio",
+    ):
+        assert frag in P, f"REGRESSÃO #80-DK: '{frag}' sumiu do prompt"
+    # a proibição de divisor importado do cartão abre exceção para a parcela variável
+    assert "Única exceção: a verba **`- REMUNERAÇÃO VARIÁVEL`**" in P
+
+
+def test_inv151_bot_vincula_coluna_do_divisor_e_casa_nome_exato():
+    """#80-DK: (1) o divisor IMPORTADA_DO_CARTAO é um MINI-CRUD (select +
+    Incluir + listagem) — só selecionar a option não vincula nada; o bot tem
+    de clicar `incluirCartaoDePontoDivisor` com verificação e denunciar a
+    lacuna no log (🛑), nunca em silêncio. (2) Com "HORAS EXTRAS 50%" e
+    "HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL" na listagem, o Exibir e o
+    checkbox do reflexo casam por célula EXATA antes do includes()."""
+    src = PLAYWRIGHT_V2
+    i = src.index("def _vincular_cartao_ponto_divisor(")
+    corpo = src[i:i + 6000]
+    assert "incluirCartaoDePontoDivisor" in corpo
+    assert "listagemCartaoDePontoDivisor" in corpo
+    assert "🛑 #80-DK" in corpo, "falha do vínculo do divisor tem de ser denunciada"
+    assert '"Hs Trabalhadas"' in corpo
+    # o preenchimento do form usa o helper (não o select solto de antes)
+    assert "self._vincular_cartao_ponto_divisor(" in src
+    assert 'self._selecionar_se_diferente("tipoImportadadoDoCartaoDePontoDivisor"' not in src
+    # heurística de coluna: interjornadas não cai em Intrajornada
+    assert 'preferir = "Interjornada"' in src
+    # match exato antes do includes (Exibir e checkbox do reflexo)
+    assert src.count("#80-DK") >= 4
+    assert "tight(td.textContent) === cT" in src
+    assert "cands.includes(norm(td.textContent))" in src

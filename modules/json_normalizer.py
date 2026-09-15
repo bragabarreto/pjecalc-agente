@@ -660,6 +660,265 @@ def _norm_saldo_salario_calculado_proporcional(data: dict[str, Any]) -> None:
             )
 
 
+# ─── #80-DK — Súmula 340 TST: base MISTA (fixa + variável) = DUAS verbas ────
+# Regra do usuário (15/09/2026, 0001156-86): verba de DURAÇÃO DO TRABALHO
+# (horas extras, adicional noturno, intervalos inter/intrajornada, sobreaviso…)
+# com remuneração parte FIXA + parte VARIÁVEL exige DUAS verbas, uma por
+# parcela, com indicação específica no nome — mesmo que a sentença não cite a
+# Súmula 340. Receita do PJC definitivo do calculista (CALCULO_278573):
+#   • FIXA:     base histórico fixo, divisor 220 (ou carga horária), mult 1.5,
+#               quantidade IMPORTADA_DO_CARTAO (Hs EXT), reflexos RSR/aviso/13º/férias
+#   • VARIÁVEL: parcela VARIAVEL, base histórico das comissões, divisor
+#               IMPORTADA_DO_CARTAO coluna "Hs Trabalhadas", mult 0.5 (só o
+#               adicional), mesma quantidade, mesmos reflexos, nome com sufixo
+#               " - REMUNERAÇÃO VARIÁVEL".
+_DURACAO_TRABALHO_SINAIS = (
+    "HORA EXTRA", "HORAS EXTRAS", "HORA-EXTRA", "HORAS-EXTRAS", " HE ",
+    "INTERVALO", "INTERJORNADA", "INTRAJORNADA", "ADICIONAL NOTURNO",
+    "HORA NOTURNA", "HORAS NOTURNAS", "SOBREAVISO", "PRONTIDAO",
+    "IN ITINERE", "ITINERE",
+)
+_SUFIXO_REMUNERACAO_VARIAVEL = " - REMUNERAÇÃO VARIÁVEL"
+_COLUNA_CARTAO_HS_TRABALHADAS = "Hs Trabalhadas"
+_MAXLEN_DESCRICAO_PJECALC = 50  # #80-O
+
+
+def _sa_upper(s: Any) -> str:
+    """Upper sem acentos e com espaços colapsados (comparação tolerante)."""
+    import unicodedata as _ud
+    nfkd = _ud.normalize("NFKD", str(s or ""))
+    sem = "".join(c for c in nfkd if not _ud.combining(c))
+    return " ".join(sem.upper().split())
+
+
+def _historico_parcela(data: dict[str, Any], nome: Any) -> str | None:
+    """'FIXA' | 'VARIAVEL' do histórico salarial de nome `nome`; None se não existir."""
+    alvo = _sa_upper(nome)
+    if not alvo:
+        return None
+    for h in data.get("historico_salarial") or []:
+        if isinstance(h, dict) and _sa_upper(h.get("nome")) == alvo:
+            return "VARIAVEL" if _sa_upper(h.get("parcela")) == "VARIAVEL" else "FIXA"
+    return None
+
+
+def _eh_parcela_variavel(data: dict[str, Any], nome: Any) -> bool:
+    """O histórico `nome` é parcela VARIÁVEL? Decide pelo `parcela` do
+    historico_salarial; se o histórico não existir, pelo nome (sinais da
+    Súmula 340: comissão, produtividade, gorjeta, peça…)."""
+    parc = _historico_parcela(data, nome)
+    if parc is not None:
+        return parc == "VARIAVEL"
+    n = _sa_upper(nome)
+    return any(_sa_upper(sig) in n for sig in _SUM340_SINAIS)
+
+
+def _eh_verba_duracao_trabalho(v: dict) -> bool:
+    blob = " " + _sa_upper(" ".join(
+        str(v.get(k) or "") for k in ("nome_pjecalc", "nome_sentenca", "expresso_alvo")
+    )) + " "
+    return any(sig in blob for sig in _DURACAO_TRABALHO_SINAIS)
+
+
+def _nome_variavel(nome_base: str) -> str:
+    """`<nome> - REMUNERAÇÃO VARIÁVEL`, respeitando o maxlength=50 do campo
+    Nome do PJE-Calc (#80-O): trunca o NOME-BASE, nunca o sufixo."""
+    suf = _SUFIXO_REMUNERACAO_VARIAVEL
+    base = " ".join(str(nome_base or "").split())
+    limite = _MAXLEN_DESCRICAO_PJECALC - len(suf)
+    if len(base) > limite:
+        base = base[:limite].rstrip(" -")
+    return base + suf
+
+
+def _tem_sufixo_variavel(nome: Any) -> bool:
+    """O nome já identifica a verba da parcela VARIÁVEL? (sufixo canônico
+    " - REMUNERAÇÃO VARIÁVEL" ou variantes que a IA já emitiu:
+    "PARTE VARIÁVEL (SÚMULA 340 TST)", "PARCELA VARIÁVEL")."""
+    n = _sa_upper(nome)
+    return any(t in n for t in ("REMUNERACAO VARIAVEL", "PARCELA VARIAVEL", "PARTE VARIAVEL"))
+
+
+def _nome_base_sem_parte_fixa(nome: Any) -> str:
+    """'HORAS EXTRAS 50% - PARTE FIXA' → 'HORAS EXTRAS 50%'."""
+    n = _sa_upper(nome)
+    for t in (" - PARTE FIXA", " PARTE FIXA", " - PARCELA FIXA", " - REMUNERACAO FIXA"):
+        if n.endswith(t):
+            return n[: -len(t)].strip()
+    return n
+
+
+def _verba_irma_variavel_existe(verbas: list, v: dict) -> bool:
+    """Já existe a verba-irmã `<nome> - REMUNERAÇÃO VARIÁVEL`? (idempotência:
+    re-normalizar uma prévia já dividida NÃO pode dividir de novo)."""
+    nome = _nome_base_sem_parte_fixa(v.get("nome_pjecalc") or v.get("expresso_alvo") or v.get("nome_sentenca"))
+    if not nome:
+        return False
+    for o in verbas:
+        if o is v or not isinstance(o, dict):
+            continue
+        on = _sa_upper(o.get("nome_pjecalc") or "")
+        if on.startswith(nome) and _tem_sufixo_variavel(on):
+            return True
+    return False
+
+
+def _norm_sumula_340_base_mista_duas_verbas(data: dict[str, Any]) -> None:
+    """Súmula 340 TST — verba de duração do trabalho com base MISTA → DUAS verbas (#80-DK).
+
+    INVARIANTE PERMANENTE — NÃO REVERTER.
+
+    O #80-CH detectava a base mista (histórico FIXO em `historico_nome` +
+    parcela VARIÁVEL em `bases_compostas`) e apenas AVISAVA. Como a IA
+    continuava emitindo UMA verba (0001156-86: `historico_nome=SALARIO BASE`,
+    `bases_compostas=[COMISSOES]`, mult 1.5), o PJE-Calc aplicava a hora CHEIA
+    (1.5) também sobre as comissões — excesso que o calculista corrigiu à mão
+    criando `HORAS EXTRAS 50% - REMUNERAÇÃO VARIÁVEL` (e o mesmo para o
+    INTERVALO INTERJORNADAS).
+
+    Regra do usuário (15/09/2026): parte FIXA + parte VARIÁVEL exigem DUAS
+    verbas, uma por parcela, com indicação específica no nome, mesmo que a
+    sentença não cite a súmula. Nunca multiplicador médio.
+
+    Divisão (ANTES da prévia — fidelidade prévia↔automação; o bot só aplica):
+      • FIXA (a verba original): perde as bases variáveis de `bases_compostas`;
+        tudo o mais intocado (mult 1.5, divisor 220, quantidade, reflexos).
+      • VARIÁVEL (nova, logo após a fixa): `parcela=VARIAVEL`; base = histórico
+        variável (o 1º como `historico_nome`, demais em `bases_compostas`);
+        `multiplicador = mult − 1` (só o adicional) quando mult > 1;
+        `divisor = IMPORTADA_DO_CARTAO / "Hs Trabalhadas"` quando a quantidade
+        vem do cartão (comissões ÷ horas trabalhadas = valor-hora variável),
+        senão o divisor da fixa; quantidade, período, incidências,
+        ocorrência, característica copiados; reflexos espelhados com o alvo
+        `<REFLEXO> SOBRE <nome variável>` (rótulo real do painel);
+        estratégia `expresso_adaptado` com o MESMO `expresso_alvo` — o bot
+        cria a 2ª verba do mesmo canônico via passada extra (#80-BY-12) e a
+        renomeia; verba Manual permanece Manual.
+    """
+    verbas = data.get("verbas_principais")
+    if not isinstance(verbas, list):
+        return
+    import logging
+    _log = logging.getLogger(__name__)
+    hists_var = [
+        h.get("nome") for h in (data.get("historico_salarial") or [])
+        if isinstance(h, dict) and _sa_upper(h.get("parcela")) == "VARIAVEL" and h.get("nome")
+    ]
+    novas: list[tuple[int, dict]] = []
+    ids_existentes = {str(x.get("id")) for x in verbas if isinstance(x, dict)}
+    for i, v in enumerate(verbas):
+        if not isinstance(v, dict) or not _eh_verba_duracao_trabalho(v):
+            continue
+        p = v.get("parametros")
+        if not isinstance(p, dict):
+            continue
+        nome_base = str(v.get("nome_pjecalc") or v.get("expresso_alvo") or v.get("nome_sentenca") or "").strip()
+        # ⚠ `parametros.parcela` NÃO decide: a IA marca VARIAVEL na verba ÚNICA
+        # mista (55 prévias do corpus: SALÁRIO DEVIDO + PRÊMIOS, mult 1.5). O
+        # indicador de "já é a verba variável" é o NOME (sufixo).
+        if not nome_base or _tem_sufixo_variavel(nome_base):
+            continue
+        if _verba_irma_variavel_existe(verbas, v):
+            continue
+        fc = p.get("formula_calculado")
+        if not isinstance(fc, dict):
+            continue
+        base = fc.get("base_calculo")
+        if not isinstance(base, dict) or _sa_upper(base.get("tipo")) != "HISTORICO_SALARIAL":
+            continue
+        hist_fixo = base.get("historico_nome")
+        if not hist_fixo or _eh_parcela_variavel(data, hist_fixo):
+            continue  # base já é SÓ variável → #80-CH (só adicional) cuida
+        comp = [c for c in (base.get("bases_compostas") or []) if isinstance(c, dict) and c.get("verba")]
+        var_comp = [c for c in comp if _eh_parcela_variavel(data, c.get("verba"))]
+        fix_comp = [c for c in comp if c not in var_comp]
+        if var_comp:
+            var_nomes = [str(c["verba"]) for c in var_comp]
+            origem = "bases_compostas"
+        else:
+            # sinal secundário: a verba fala em comissão/produtividade… E há
+            # exatamente UM histórico VARIÁVEL cadastrado → é ele a base variável
+            blob = _sa_upper(" ".join([nome_base, str(v.get("nome_sentenca") or ""),
+                                       str(p.get("comentarios") or "")]))
+            if len(hists_var) == 1 and any(_sa_upper(s) in blob for s in _SUM340_SINAIS):
+                var_nomes = [str(hists_var[0])]
+                origem = "comentário + histórico VARIAVEL único"
+            else:
+                continue
+
+        # ── FIXA: perde as bases variáveis; parcela passa a FIXA (a base que
+        # sobra é o histórico fixo — a IA marcava VARIAVEL por causa da mistura)
+        base["bases_compostas"] = fix_comp
+        p["parcela"] = "FIXA"
+
+        # ── VARIÁVEL: cópia com a receita do calculista
+        nv = copy.deepcopy(v)
+        nid = f"{v.get('id')}_var"
+        while nid in ids_existentes:
+            nid += "_"
+        ids_existentes.add(nid)
+        nv["id"] = nid
+        nv["nome_pjecalc"] = _nome_variavel(nome_base)
+        nv["nome_sentenca"] = f"{v.get('nome_sentenca') or nome_base} - remuneração variável (Súmula 340 TST)"
+        estr = _sa_upper(v.get("estrategia_preenchimento"))
+        if estr in ("EXPRESSO_DIRETO", "EXPRESSO_ADAPTADO") and v.get("expresso_alvo"):
+            nv["estrategia_preenchimento"] = "expresso_adaptado"  # mesmo alvo → #80-BY-12
+        else:
+            nv["estrategia_preenchimento"] = "manual"
+            nv["expresso_alvo"] = None
+        np_ = nv["parametros"]
+        np_["parcela"] = "VARIAVEL"
+        nfc = np_["formula_calculado"]
+        nbase = nfc["base_calculo"]
+        nbase["historico_nome"] = var_nomes[0]
+        nbase["bases_compostas"] = [
+            {"verba": n, "integralizar": next(
+                (str(c.get("integralizar") or "NAO") for c in var_comp if str(c.get("verba")) == n), "NAO")}
+            for n in var_nomes[1:]
+        ]
+        try:
+            mult = float(fc.get("multiplicador"))
+        except (TypeError, ValueError):
+            mult = None
+        novo_mult = round(mult - 1.0, 4) if (mult is not None and mult > 1.0) else mult
+        if novo_mult is not None:
+            nfc["multiplicador"] = novo_mult
+        q = fc.get("quantidade") if isinstance(fc.get("quantidade"), dict) else {}
+        if _sa_upper(q.get("tipo")) == "IMPORTADA_DO_CARTAO":
+            nfc["divisor"] = {"tipo": "IMPORTADA_DO_CARTAO", "valor": None,
+                              "tipo_cartao_ponto": _COLUNA_CARTAO_HS_TRABALHADAS}
+        # reflexos espelhados: o rótulo do painel é "<REFLEXO> SOBRE <nome da verba>"
+        for r in nv.get("reflexos") or []:
+            if not isinstance(r, dict):
+                continue
+            if r.get("id"):
+                r["id"] = f"{r['id']}_var"
+            if r.get("verba_principal_id"):
+                r["verba_principal_id"] = nid
+            if r.get("nome"):
+                r["nome"] = f"{r['nome']}{_SUFIXO_REMUNERACAO_VARIAVEL}"
+            alvo = str(r.get("expresso_reflex_alvo") or "")
+            if " SOBRE " in alvo.upper():
+                pref = alvo[: alvo.upper().rindex(" SOBRE ")]
+                r["expresso_reflex_alvo"] = f"{pref} SOBRE {nv['nome_pjecalc']}"
+        np_["comentarios"] = (
+            f"SUMULA 340 TST — PARCELA VARIAVEL ({', '.join(var_nomes)}): "
+            f"so o adicional (mult {novo_mult}); base {var_nomes[0]}"
+            + (" / divisor Hs Trabalhadas do cartao" if _sa_upper(q.get("tipo")) == "IMPORTADA_DO_CARTAO" else "")
+            + ". " + str(p.get("comentarios") or "")
+        ).strip()
+        novas.append((i, nv))
+        _log.warning(
+            "Normalizer #80-DK: verba '%s' tem base MISTA (fixa '%s' + variável %s, "
+            "via %s) → DIVIDIDA em duas (Súmula 340 TST): fixa mantém mult %s; "
+            "'%s' parcela VARIAVEL mult %s%s",
+            nome_base, hist_fixo, var_nomes, origem, mult, nv["nome_pjecalc"], novo_mult,
+            " + divisor IMPORTADA_DO_CARTAO/Hs Trabalhadas" if _sa_upper(q.get("tipo")) == "IMPORTADA_DO_CARTAO" else "",
+        )
+    for i, nv in reversed(novas):
+        verbas.insert(i + 1, nv)
+
+
 def _norm_sumula_340_multiplicador(data: dict[str, Any]) -> None:
     """Súmula 340 do TST — HE sobre parcela variável = SÓ O ADICIONAL (#80-CH).
 
@@ -737,6 +996,10 @@ def _norm_sumula_340_multiplicador(data: dict[str, Any]) -> None:
             t in _hist for t in ("SALARIO", "SALÁRIO", "REMUNERACAO", "REMUNERAÇÃO",
                                  "PISO", "ORDENADO", "VENCIMENTO")
         )
+        if _hist_fixo and _verba_irma_variavel_existe(verbas, v):
+            # #80-DK já dividiu (ou a prévia já traz a irmã "- REMUNERAÇÃO
+            # VARIÁVEL"): a fixa é legitimamente hora cheia — nada a avisar.
+            continue
         if _hist_fixo:
             _log.warning(
                 "Normalizer #80-CH: verba '%s' tem BASE MISTA (fixo '%s' + parcela "
@@ -1720,6 +1983,17 @@ def _norm_divisor_cartao_para_carga_horaria(data: dict[str, Any]) -> None:
             continue
         if str(div.get("tipo") or "").upper() != "IMPORTADA_DO_CARTAO":
             continue
+        # #80-DK — EXCEÇÃO: parcela VARIÁVEL (Súmula 340) com coluna declarada.
+        # Receita do calculista (0001156-86): comissões ÷ "Hs Trabalhadas" do
+        # cartão = valor-hora da parcela variável. O bot agora vincula a coluna
+        # do DIVISOR (mini-crud Incluir + verificação) — a razão original desta
+        # coerção ("o bot só vincula a coluna da QUANTIDADE") não vale aqui.
+        if _sa_upper(p.get("parcela")) == "VARIAVEL" and div.get("tipo_cartao_ponto"):
+            _log.info(
+                "Normalizer #80-AF: verba '%s' parcela VARIAVEL mantém divisor "
+                "IMPORTADA_DO_CARTAO/%s (#80-DK)", v.get("nome_pjecalc"), div.get("tipo_cartao_ponto"),
+            )
+            continue
         div["tipo"] = "OUTRO_VALOR"
         div["valor"] = carga
         div["tipo_cartao_ponto"] = None
@@ -2347,6 +2621,10 @@ def normalize_v2_json(payload: dict[str, Any]) -> dict[str, Any]:
     # Salvaguarda #80-CH: Súmula 340 TST — HE sobre parcela variável
     # (comissionista/produtividade/peça) condena SÓ o adicional: multiplicador
     # 0.5/0.55/0.6, nunca 1.5/1.55/1.6.
+    # Salvaguarda #80-DK (ANTES do #80-CH): base MISTA (histórico fixo +
+    # parcela variável) → DUAS verbas, fixa (hora cheia) + "- REMUNERAÇÃO
+    # VARIÁVEL" (só o adicional, base comissões, divisor Hs Trabalhadas).
+    _norm_sumula_340_base_mista_duas_verbas(data)
     _norm_sumula_340_multiplicador(data)
 
     # Salvaguarda #80-CR: SALDO DE SALÁRIO = CALCULADO + proporcionalidade,
