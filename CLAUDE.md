@@ -677,6 +677,49 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Bases compostas: históricos ADICIONAIS entram na base da verba (#80-DM)
+
+> **`formula_calculado.base_calculo.bases_compostas` (`[{verba, integralizar}]`)
+> é campo real da prévia e o bot o IGNORAVA.** No 0001156-86 (15/09/2026)
+> 13º, FÉRIAS + 1/3, HE 50% e INTERVALO declaravam base `SALARIO BASE` +
+> compostas `COMISSOES` (+ `ADICIONAL ACUMULO DE FUNCAO`); o PJC gerado saiu
+> com **1** `HistoricoSalarialDaVerba` por verba, o PJC definitivo do
+> calculista tem **2** (SALARIO BASE + COMISSOES) no 13º e nas férias.
+> Violação direta da fidelidade prévia↔automação — e silenciosa.
+>
+> **DOM (`verba-calculo.xhtml`, região `tipoDaBaseTabelada == HISTORICO_SALARIAL`):**
+> o PJE-Calc soma N históricos à base REPETINDO o ciclo
+> `baseHistoricos` → `proporcionalizaHistorico` → `incluirBaseHistorico`;
+> cada inclusão vira uma linha da tabela `listagemHistoricosDaVerba`
+> (colunas *Histórico Salarial* / *Proporcionalizar*) — a mesma ground truth
+> do bean já usada pelo #80-M para o histórico principal. Somar **outra
+> VERBA** à base é outro bloco: `baseVerbaDeCalculo` + `integralizarBase` +
+> `incluirItemProp` (tabela `listagem2`, colunas *Verbas/Reflexo* /
+> *Integralizar*).
+>
+> **Implementado em `_incluir_bases_compostas_historico`** (chamado em
+> `_preencher_form_parametros_verba` logo após a cadeia de tipos de base):
+> 1. item cujo `verba` casa (sem acento/caixa) com o NOME de um histórico
+>    salarial da prévia → select por label + click **NATIVO** em
+>    `incluirBaseHistorico` + **verificação na tabela** + retry ×3;
+> 2. `integralizar` **não existe para histórico** no PJE-Calc (só para verba,
+>    via `integralizarBase`). O histórico adicional recebe o MESMO
+>    *Proporcionalizar* da base (`base_calculo.proporcionaliza`) — é o que o
+>    PJC definitivo mostra (`aplicarProporcionalidade=false` nos dois
+>    históricos do 13º e das férias). O valor de `integralizar` é logado (`ℹ`);
+> 3. item que NÃO é histórico (soma de outra verba) → `🛑 #80-DM … NÃO
+>    suportada pelo bot; incluir manualmente`. **Nunca silencioso.**
+> 4. a equivalência `MAIOR_REMUNERACAO ≡ HISTORICO+ÚLTIMA REMUNERAÇÃO` (skip do
+>    re-render) é **desligada** quando há bases compostas — o painel de
+>    históricos só renderiza em HISTORICO_SALARIAL.
+>
+> ⚠️ Ainda **não suportado**: base composta por OUTRA VERBA
+> (`incluirItemProp`). O DOM está mapeado acima; o bot apenas denuncia.
+>
+> Protegido por `test_inv152` (grep) e `test_inv153` (fluxo com página stub).
+
+---
+
 ## Regra obrigatória — FALTAS e FÉRIAS antes de Histórico/Verbas (#80-DH/#80-DI)
 
 > **A ordem do manual é `Dados → Faltas → Férias → Histórico → Verbas → Cartão`.
