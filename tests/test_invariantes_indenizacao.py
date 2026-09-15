@@ -5110,3 +5110,144 @@ def test_inv151_bot_vincula_coluna_do_divisor_e_casa_nome_exato():
     assert src.count("#80-DK") >= 4
     assert "tight(td.textContent) === cT" in src
     assert "cands.includes(norm(td.textContent))" in src
+
+# ─── #80-DM — Bases compostas: históricos ADICIONAIS na base da verba ────────
+
+
+def test_inv152_bases_compostas_historicos_adicionais_incluidos():
+    """#80-DM (0001156-86, 15/09/2026): a prévia declara
+    `formula_calculado.base_calculo.bases_compostas` ([{verba, integralizar}])
+    em 13º/FÉRIAS/HE/INTERVALO e o bot IGNORAVA o campo (`grep bases_compostas`
+    no bot não retornava nada). O PJC saía com 1 `HistoricoSalarialDaVerba`
+    (SALARIO BASE) onde o PJC definitivo do calculista tinha SALARIO BASE +
+    COMISSOES — violação da fidelidade prévia↔automação.
+
+    DOM (`verba-calculo.xhtml`): históricos adicionais entram repetindo
+    `baseHistoricos` → `proporcionalizaHistorico` → `incluirBaseHistorico`, e
+    cada um vira linha da tabela `listagemHistoricosDaVerba` (ground truth do
+    bean, a mesma do #80-M). `integralizar` só existe p/ OUTRA VERBA
+    (`integralizarBase`/`incluirItemProp`) — item que não é histórico é
+    logado como NÃO suportado, nunca silencioso.
+    """
+    src = PLAYWRIGHT_V2
+    i = src.find("def _incluir_bases_compostas_historico")
+    assert i > 0, "REGRESSÃO #80-DM: helper de bases compostas removido"
+    corpo = src[i:i + 9000]
+    # ground truth do bean: tabela listagemHistoricosDaVerba
+    assert "_tabela_historicos_verba_tem" in corpo
+    assert "listagemHistoricosDaVerba" in src[src.find("_JS_TABELA_HIST_VERBA_TEM"):i]
+    # click NATIVO (não JS btn.click) + retry + confirmação
+    assert "incluirBaseHistorico" in corpo
+    assert ".first.click(timeout=" in corpo
+    assert "range(1, 4)" in corpo
+    assert "CONFIRMADO na base da verba" in corpo
+    # falha nunca silenciosa
+    assert "NÃO confirmado na base" in corpo
+    assert "NÃO é histórico salarial da" in corpo
+    assert "NÃO suportada pelo" in corpo
+    # Proporcionalizar do histórico adicional segue o da base
+    assert "proporcionalizaHistorico" in corpo
+    # call site dentro de _preencher_form_parametros_verba
+    j = src.find("def _preencher_form_parametros_verba")
+    k = src.find("def _verba_periodo_curto")
+    assert 0 < j < k
+    fn = src[j:k]
+    assert "self._incluir_bases_compostas_historico(" in fn, (
+        "REGRESSÃO #80-DM: bases compostas não são mais aplicadas no form")
+    # a equivalência MAIOR_REMUNERACAO≡HISTORICO NÃO pode esconder o painel
+    # de históricos quando há bases compostas
+    a = fn.find("skip_equivalente = (")
+    b = fn.find("CRÍTICO (21/05/2026)")
+    assert 0 < a < b
+    assert "bases_compostas" in fn[a:b] and "skip_equivalente = False" in fn[a:b], (
+        "REGRESSÃO #80-DM: equivalência preservaria MAIOR_REMUNERACAO e os "
+        "históricos adicionais ficariam de fora")
+
+
+def test_inv153_bases_compostas_fluxo_com_stub():
+    """#80-DM — exercita o helper com uma página stub: histórico da prévia é
+    incluído (select → Proporcionalizar da base → click nativo → confirmação na
+    tabela), o próprio principal é pulado, e item que não é histórico vira
+    🛑 explícito sem clique."""
+    pytest.importorskip("pydantic")
+    import unicodedata
+    from types import SimpleNamespace as NS
+
+    pw = pytest.importorskip("modules.playwright_v2")
+    Bot = pw.PlaywrightAutomatorV2
+
+    def norm(s):
+        s = "".join(c for c in unicodedata.normalize("NFKD", s or "") if not unicodedata.combining(c))
+        return " ".join(s.split()).upper()
+
+    class _Loc:
+        def __init__(self, page):
+            self._p = page
+        @property
+        def first(self):
+            return self
+        def click(self, timeout=None):
+            self._p.clicks += 1
+            if self._p.selecionado:
+                self._p.tabela.add(norm(self._p.selecionado))
+
+    class _Page:
+        OPTS = ["SALARIO BASE", "COMISSÕES", "ADICIONAL ACUMULO DE FUNCAO"]
+        def __init__(self):
+            self.tabela = {norm("SALARIO BASE")}
+            self.selecionado = None
+            self.clicks = 0
+        def evaluate(self, js, arg=None):
+            if "listagemHistoricosDaVerba" in js:
+                return norm(arg) in self.tabela
+            if "baseHistoricos" in js:
+                m = [o for o in self.OPTS if norm(o) == norm(arg)]
+                if m:
+                    self.selecionado = m[0]
+                    return {"ok": True, "value": "9", "label": m[0]}
+                return {"ok": False, "why": "option não encontrada", "opts": self.OPTS}
+            raise AssertionError("JS inesperado")
+        def wait_for_timeout(self, ms):
+            pass
+        def locator(self, sel):
+            assert "incluirBaseHistorico" in sel
+            return _Loc(self)
+
+    bot = object.__new__(Bot)
+    bot._page = _Page()
+    bot.previa = NS(historico_salarial=[NS(nome="SALARIO BASE"), NS(nome="COMISSOES"),
+                                        NS(nome="ADICIONAL ACUMULO DE FUNCAO")])
+    logs, selects = [], []
+    bot.log = logs.append
+    bot._aguardar_ajax = lambda *a, **k: None
+    bot._selecionar_se_diferente = lambda dom_id, val, **k: selects.append((dom_id, val)) or True
+
+    f = NS(base_calculo=NS(
+        tipo="HISTORICO_SALARIAL", historico_nome="SALARIO BASE",
+        proporcionaliza=NS(value="NAO"),
+        bases_compostas=[
+            NS(verba="COMISSOES", integralizar=NS(value="NAO")),      # histórico → inclui
+            NS(verba="SALARIO BASE", integralizar="SIM"),             # principal → skip
+            NS(verba="ADICIONAL NOTURNO 20%", integralizar="SIM"),    # outra verba → 🛑
+        ]))
+    Bot._incluir_bases_compostas_historico(bot, f, painel_historico=True)
+
+    assert norm("COMISSOES") in bot._page.tabela
+    assert bot._page.clicks == 1, "só o histórico adicional real deve ser clicado"
+    assert ("proporcionalizaHistorico", "NAO") in selects, "Proporcionalizar segue o da base"
+    txt = "\n".join(logs)
+    assert "✓ #80-DM histórico adicional 'COMISSOES' CONFIRMADO" in txt
+    assert "próprio histórico principal — skip" in txt
+    assert "🛑 #80-DM base composta 'ADICIONAL NOTURNO 20%' NÃO é histórico salarial" in txt
+
+    # painel de históricos ausente (base MAIOR_REMUNERACAO etc.) → 🛑 e nada clicado
+    bot2 = object.__new__(Bot)
+    bot2._page = _Page()
+    bot2.previa = bot.previa
+    logs2 = []
+    bot2.log = logs2.append
+    bot2._aguardar_ajax = lambda *a, **k: None
+    bot2._selecionar_se_diferente = lambda *a, **k: True
+    Bot._incluir_bases_compostas_historico(bot2, f, painel_historico=False)
+    assert bot2._page.clicks == 0
+    assert sum("🛑 #80-DM base composta" in l for l in logs2) == 3

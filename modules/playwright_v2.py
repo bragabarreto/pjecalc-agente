@@ -5926,6 +5926,15 @@ class PlaywrightAutomatorV2:
                         and desejado_tipo == "HISTORICO_SALARIAL"
                         and _hist_ascii == "ULTIMA REMUNERACAO"
                     )
+                    # #80-DM: base COMPOSTA (históricos adicionais somados à
+                    # base) só existe no painel HISTORICO_SALARIAL — preservar
+                    # MAIOR_REMUNERACAO deixaria os históricos extras de fora.
+                    if skip_equivalente and getattr(f.base_calculo, "bases_compostas", None):
+                        skip_equivalente = False
+                        self.log(
+                            "    ⊙ #80-DM base composta — equivalência "
+                            "MAIOR_REMUNERACAO≡HISTORICO NÃO aplicada (precisa do painel de históricos)"
+                        )
                     if skip_equivalente:
                         self.log("    ⊙ tipoDaBaseTabelada=MAIOR_REMUNERACAO preservado (≡ HISTORICO+ÚLTIMA; evita re-render destrutivo)")
                     else:
@@ -6120,6 +6129,20 @@ class PlaywrightAutomatorV2:
                             self._selecionar("salarioCategoria", f.base_calculo.salario_categoria_nome, obrigatorio=False)
                         else:
                             self._selecionar_se_diferente("salarioCategoria", f.base_calculo.salario_categoria_nome)
+                # #80-DM (0001156-86, 15/09/2026): bases COMPOSTAS — históricos
+                # ADICIONAIS somados à base (`base_calculo.bases_compostas`). O
+                # bot ignorava o campo e o PJC saía com 1 histórico onde a
+                # prévia (e o PJC definitivo) tinham 2. Falha nunca silenciosa.
+                try:
+                    self._incluir_bases_compostas_historico(
+                        f,
+                        painel_historico=(
+                            f.base_calculo.tipo == TipoBaseCalculo.HISTORICO_SALARIAL
+                            and not skip_equivalente
+                        ),
+                    )
+                except Exception as _e_bc:
+                    self.log(f"    ⚠ #80-DM bases compostas: {_e_bc}")
                 # Divisor (radio)
                 if self._marcar_radio_se_diferente("tipoDeDivisor", f.divisor.tipo.value):
                     self._aguardar_ajax(2000)
@@ -6371,6 +6394,169 @@ class PlaywrightAutomatorV2:
 
         # Aguardar AJAX residual antes de o caller chamar Salvar
         self._aguardar_ajax(2000)
+
+    # ─── #80-DM — Bases compostas: históricos ADICIONAIS na base da verba ────
+
+    _JS_TABELA_HIST_VERBA_TEM = """(nome) => {
+        // comparação SEM ACENTO (prévia ASCII × tabela acentuada) — #80-BS
+        const norm = s => (s||'').normalize('NFD')
+            .replace(/[\\u0300-\\u036f]/g,'')
+            .replace(/\\s+/g,' ').trim().toUpperCase();
+        const t = document.querySelector("[id$=':listagemHistoricosDaVerba']");
+        if (!t) return false;
+        const alvo = norm(nome);
+        // igualdade EXATA por célula (não includes): 'COMISSOES' não pode
+        // casar com uma linha 'COMISSOES RETIDAS'
+        return [...t.querySelectorAll('tr')].some(r =>
+            [...r.querySelectorAll('td')].some(td => norm(td.textContent) === alvo)
+        );
+    }"""
+
+    _JS_SELECIONAR_BASE_HISTORICO = """(nome) => {
+        const sel = document.querySelector("select[id$=':baseHistoricos']");
+        if (!sel) return {ok: false, why: 'select não existe'};
+        const norm = s => (s||'').normalize('NFD')
+            .replace(/[\\u0300-\\u036f]/g,'')
+            .replace(/\\s+/g,' ').trim().toUpperCase();
+        const opts = [...sel.options];
+        const wanted = opts.find(o => norm(o.textContent) === norm(nome));
+        if (!wanted) return {ok: false, why: 'option não encontrada',
+                             opts: opts.map(o => o.textContent.trim())};
+        sel.value = wanted.value;
+        sel.dispatchEvent(new Event('change', {bubbles: true}));
+        return {ok: true, value: sel.value, label: wanted.textContent.trim()};
+    }"""
+
+    def _tabela_historicos_verba_tem(self, nome: str) -> bool:
+        """Ground truth do bean: o histórico `nome` está na tabela
+        `listagemHistoricosDaVerba` (Base de Cálculo da verba)?"""
+        try:
+            return bool(self._page.evaluate(self._JS_TABELA_HIST_VERBA_TEM, nome))
+        except Exception:
+            return False
+
+    def _incluir_bases_compostas_historico(self, f, *, painel_historico: bool) -> None:
+        """#80-DM (0001156-86, 15/09/2026): históricos ADICIONAIS da base composta.
+
+        A prévia declara `formula_calculado.base_calculo.bases_compostas`
+        (`[{verba, integralizar}]`) e o bot IGNORAVA o campo: o PJC saía com
+        1 `HistoricoSalarialDaVerba` (SALARIO BASE) onde o PJC definitivo do
+        calculista tinha SALARIO BASE + COMISSOES (13º e FÉRIAS + 1/3) —
+        violação da fidelidade prévia↔automação.
+
+        DOM (`verba-calculo.xhtml`, região HISTORICO_SALARIAL): o PJE-Calc soma
+        N históricos à base REPETINDO `baseHistoricos` → `proporcionalizaHistorico`
+        → `incluirBaseHistorico`; cada inclusão vira uma linha da tabela
+        `listagemHistoricosDaVerba` (colunas Histórico Salarial / Proporcionalizar)
+        — a mesma ground truth do bean usada p/ o histórico principal.
+
+        Regras:
+        - item cujo `verba` casa (sem acento/caixa) com o NOME de um histórico
+          salarial da prévia → incluído com click NATIVO + verificação na
+          tabela + retry ×3 (padrão do histórico principal);
+        - `integralizar` NÃO existe p/ histórico no PJE-Calc (só p/ OUTRA VERBA,
+          via `integralizarBase`); o histórico adicional recebe o MESMO
+          Proporcionalizar da base (`base_calculo.proporcionaliza`) — é o que o
+          PJC definitivo do 0001156-86 mostra (`aplicarProporcionalidade=false`
+          nos dois históricos do 13º e das férias);
+        - item que NÃO é histórico (soma de OUTRA VERBA à base:
+          `baseVerbaDeCalculo` + `integralizarBase` + `incluirItemProp`) → 🛑 log
+          explícito de NÃO suportado. NUNCA silencioso.
+        """
+        base = getattr(f, "base_calculo", None)
+        itens = list(getattr(base, "bases_compostas", None) or [])
+        if not itens:
+            return
+
+        import unicodedata as _ud_bc
+
+        def _norm(s) -> str:
+            s = "".join(
+                c for c in _ud_bc.normalize("NFKD", str(s or ""))
+                if not _ud_bc.combining(c)
+            )
+            return " ".join(s.split()).upper()
+
+        hist_nomes: dict[str, str] = {}
+        for h in (getattr(self.previa, "historico_salarial", None) or []):
+            n = getattr(h, "nome", None)
+            if n:
+                hist_nomes[_norm(n)] = str(n).strip()
+        principal = _norm(getattr(base, "historico_nome", "") or "")
+        prop = getattr(base, "proporcionaliza", None)
+        prop_val = prop.value if hasattr(prop, "value") else (str(prop) if prop else None)
+
+        if not painel_historico:
+            for it in itens:
+                self.log(
+                    f"    🛑 #80-DM base composta '{getattr(it, 'verba', '')}' NÃO aplicada — "
+                    f"a base da verba não está em HISTORICO_SALARIAL no PJE-Calc "
+                    f"(painel de históricos ausente); incluir manualmente"
+                )
+            return
+
+        for it in itens:
+            nome_raw = str(getattr(it, "verba", "") or "").strip()
+            integ = getattr(it, "integralizar", None)
+            integ = integ.value if hasattr(integ, "value") else integ
+            chave = _norm(nome_raw)
+            if not chave:
+                self.log("    ⚠ #80-DM base composta sem nome de verba — ignorada")
+                continue
+            if chave not in hist_nomes:
+                self.log(
+                    f"    🛑 #80-DM base composta '{nome_raw}' NÃO é histórico salarial da "
+                    f"prévia (históricos: {sorted(hist_nomes.values())}) — soma de OUTRA "
+                    f"VERBA à base (baseVerbaDeCalculo/incluirItemProp) NÃO suportada pelo "
+                    f"bot; incluir manualmente no PJE-Calc"
+                )
+                continue
+            nome = hist_nomes[chave]
+            if chave == principal:
+                self.log(f"    ⊙ #80-DM base composta '{nome}' é o próprio histórico principal — skip")
+                continue
+            self.log(
+                f"    ℹ #80-DM '{nome}': integralizar={integ} não existe p/ histórico no "
+                f"PJE-Calc — Proporcionalizar segue o da base ({prop_val or 'atual do form'})"
+            )
+            if self._tabela_historicos_verba_tem(nome):
+                self.log(f"    ⊙ #80-DM histórico adicional '{nome}' já na base da verba (skip incluir)")
+                continue
+            _ok = False
+            for _t in range(1, 4):
+                try:
+                    r = self._page.evaluate(self._JS_SELECIONAR_BASE_HISTORICO, nome)
+                    if not (r and r.get("ok")):
+                        self.log(
+                            f"    ⚠ #80-DM baseHistoricos='{nome}' NÃO selecionado (tent {_t}/3): "
+                            f"{(r or {}).get('why')} opts={(r or {}).get('opts')}"
+                        )
+                        self._aguardar_ajax(2000)
+                        self._page.wait_for_timeout(600)
+                        continue
+                    self._aguardar_ajax(2500)
+                    if prop_val:
+                        self._selecionar_se_diferente("proporcionalizaHistorico", prop_val)
+                        self._aguardar_ajax(2000)
+                    # click NATIVO (não JS btn.click — o bean não recebia o
+                    # <a4j:commandLink>; padrão DOM≠bean já documentado).
+                    self._page.locator(
+                        "a[id$=':incluirBaseHistorico'], input[id$=':incluirBaseHistorico']"
+                    ).first.click(timeout=5000)
+                except Exception as _ce:
+                    self.log(f"    ⚠ #80-DM incluir histórico '{nome}' (tent {_t}/3): {_ce}")
+                self._aguardar_ajax(5000)
+                self._page.wait_for_timeout(900)
+                if self._tabela_historicos_verba_tem(nome):
+                    _ok = True
+                    self.log(f"    ✓ #80-DM histórico adicional '{nome}' CONFIRMADO na base da verba (tabela)")
+                    break
+                self.log(f"    ⚠ #80-DM histórico '{nome}' não apareceu na tabela (tent {_t}/3) — retry")
+            if not _ok:
+                self.log(
+                    f"    🛑 #80-DM histórico adicional '{nome}' NÃO confirmado na base — "
+                    f"PJC sairá com base INCOMPLETA (prévia ≠ automação)"
+                )
 
     def _verba_periodo_curto(self, v) -> bool:
         """True se o período da verba é subconjunto ESTRITO do período do cálculo.
