@@ -400,13 +400,40 @@ async def instrucoes_v2(sessao_id: str, request: Request, rerun: bool = False):
                         f"<p><b>{_pd['verba']}</b> — a automação não conseguiu "
                         f"aplicar o escopo deferido ({_pd['janela']}): "
                         f"{_pd['motivo']}</p>")
+                # #80-DN: cartão de ponto sem apuração → verbas IMPORTADA_DO_CARTAO
+                # (HE, intervalos) liquidam a MENOR nesses meses.
+                for _cz in _esc.get("cartao_meses_zerados", []):
+                    _eb.append(
+                        f"<p><b>Cartão de Ponto {_cz['cartao']}</b> — meses SEM "
+                        f"apuração no PJC (todas as colunas zeradas): "
+                        f"<b>{', '.join(_cz['meses'])}</b>. As verbas apuradas pelo "
+                        f"cartão (HE, intervalos) liquidaram a MENOR nesses meses. "
+                        f"No PJE-Calc: Cartão de Ponto → Visualizar Cartão → Apurar "
+                        f"Cartão de Ponto, depois Regerar Ocorrências das verbas.</p>")
+                for _pc in _esc.get("cartoes_nao_apurados", []):
+                    _eb.append(
+                        f"<p><b>Cartão de Ponto {_pc['cartao']}</b> ({_pc['periodo']}) — "
+                        f"a automação NÃO conseguiu apurar: {_pc['motivo']}</p>")
+                # #80-DO: FGTS gravado diferente da prévia (destino/multa/…).
+                _fd_ = _esc.get("fgts_divergente", [])
+                if _fd_:
+                    _itens = "".join(
+                        f"<li>{_d['campo']}: PJC={_d['pjc']} × prévia={_d['previa']}</li>"
+                        for _d in _fd_)
+                    _eb.append(
+                        f"<p><b>FGTS</b> — parâmetros do PJC diferentes da prévia "
+                        f"(corrija na seção FGTS do PJE-Calc e re-Liquidar):</p>"
+                        f"<ul>{_itens}</ul>")
+                for _pf in _esc.get("fgts_nao_aplicado", []):
+                    _eb.append(f"<p><b>FGTS</b> — a automação não aplicou: {_pf}</p>")
                 _esc_html = (
                     '<div style="background:#f8d7da;color:#842029;padding:10px 14px;'
                     'border-radius:6px;margin:0.8rem 0;font-size:0.88rem;">'
                     "🛑 <b>PJC diverge do deferido</b> — competências de 13º/férias "
-                    "além da condenação e/ou verba cujo período da prévia não "
-                    "chegou ao PJC. A liquidação fecha sem erro, mas o cálculo "
-                    "não obedece ao título executivo:" + "".join(_eb) +
+                    "além da condenação, verba cujo período da prévia não "
+                    "chegou ao PJC, cartão de ponto sem apuração ou FGTS "
+                    "diferente da prévia. A liquidação fecha sem erro, mas o "
+                    "cálculo não obedece ao título executivo:" + "".join(_eb) +
                     '<span style="color:#6c757d;">Após zerar, Regerar '
                     "Ocorrências (Manter) e re-Liquidar.</span></div>"
                 )

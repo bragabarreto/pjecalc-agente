@@ -4917,3 +4917,116 @@ def test_inv148_evolucao_espera_a_listagem_renderizar():
     assert "sem ocorrências geradas" in corpo, (
         "REGRESSÃO #80-L: aviso de evolução não aplicada removido — a falha "
         "voltaria a ser silenciosa")
+
+
+def test_inv154_apuracao_do_cartao_verificada_com_retry():
+    """#80-DN (0001156-86, sessão b3d85551, 15/09/2026): no Cartão 2/2 a página
+    "Montar" não carregou (navegação logo após o save pesado, com o servidor
+    ocupado — raiz do #80-H), o fallback por URL abriu conversa NOVA sem o bean
+    (1060→1111) e a apuração foi PULADA com "Fase 5 concluída" limpo. Hs EXT /
+    Hs Trabalhadas / Hs Interjornada ficaram ZERO de 11/2025 a 04/2026: HE 50%
+    liquidou R$ 6.637,50 contra R$ 24.432,97 no PJC definitivo e INTERVALO
+    INTERJORNADAS R$ 0 contra R$ 2.965,91. Nenhum gate acusou.
+
+    Invariantes: (a) gate #80-H antes de navegar; (b) retry ×3 com
+    Fechar+Reabrir e sidebar por CLIQUE — sem `goto` de URL; (c) tabela de
+    ocorrências LIDA e Hs Trabalhadas > 0 exigido nos meses do cartão;
+    (d) falha registra pendência e o "Fase 5 concluída" deixa de ser limpo.
+    """
+    src = PLAYWRIGHT_V2
+    i = src.find("def _apurar_cartao_de_ponto")
+    assert i > 0
+    corpo = src[i:src.find("def _aplicar_ocorrencias_override", i)]
+    assert "_aguardar_servidor_ocioso" in corpo, (
+        "REGRESSÃO #80-DN: gate #80-H removido da apuração do cartão")
+    assert "_fechar_e_reabrir_calculo" in corpo and "range(1, 4)" in corpo, (
+        "REGRESSÃO #80-DN: retry ×3 com Fechar+Reabrir removido")
+    assert ".goto(" not in corpo and "/pages/cartaodeponto/cartaodeponto.jsf" not in corpo, (
+        "REGRESSÃO #80-DN: fallback por URL direta voltou — não invoca o @Begin "
+        "do bean e abre conversa sem o cálculo (1060→1111 na 0001156-86)")
+    assert "_navegar_menu_via_click(\"li_calculo_cartao_ponto\")" in corpo, (
+        "REGRESSÃO #80-DN: fallback do sidebar deve ser por CLIQUE")
+    assert "_ler_ocorrencias_cartao_apuradas" in corpo and "_meses_cartao_sem_apuracao" in corpo, (
+        "REGRESSÃO #80-DN: apuração deixou de ser verificada na tabela")
+    assert "_registrar_pendencia_cartao" in corpo, (
+        "REGRESSÃO #80-DN: falha da apuração voltou a ser silenciosa")
+    # leitura da tabela: id real do rich:dataTable + coluna Hs Trabalhadas
+    j = src.find("def _ler_ocorrencias_cartao_apuradas")
+    assert "tabOcorrencias" in src[j:j + 3000]
+    k = src.find("def _meses_cartao_sem_apuracao")
+    assert "trabalhad" in src[k:k + 2000]
+    # orquestrador: Fase 5 só é "concluída" limpa com apuração confirmada
+    orq = src.split("def _processar_um_cartao_de_ponto")[1].split(
+        "def _cartao_presente_na_listagem")[0]
+    assert "ok_apuracao = self._apurar_cartao_de_ponto(cp, idx=idx, total=total)" in orq
+    assert "Fase 5 concluída COM PENDÊNCIA" in orq and "subapuradas" in orq, (
+        "REGRESSÃO #80-DN: 'Fase 5 concluída' voltou a sair limpo sem apuração")
+    fase = src.split("def fase_cartao_de_ponto")[1].split("def _processar_um_cartao_de_ponto")[0]
+    assert "_pendencias_cartao" in fase and "#80-DN ATENÇÃO" in fase, (
+        "REGRESSÃO #80-DN: resumo em bloco dos cartões não apurados removido")
+
+
+def test_inv155_fgts_pagina_confirmada_e_releitura_do_bean():
+    """#80-DO (0001156-86, sessão b3d85551, 15/09/2026): o clique no menu FGTS
+    não navegou; o diag só CONTAVA radios+checkboxes ("pós-click-menu: 24") —
+    eram os 23 componentes de calculo.xhtml, não os de fgts.xhtml. Todos os
+    campos "não encontrado — pulando", e o "✓ click salvar / Operação
+    realizada com sucesso" foi o save de DADOS DO CÁLCULO. PJC saiu com
+    destinoDoFgts=PAGAR e multa=false contra multa.ativa=true na prévia; log
+    disse "Fase 8 concluída".
+
+    Invariantes: página confirmada pelo DOM real (url fgts.jsf + radios
+    tipoDeVerba + checkbox multa) ANTES de preencher; dump dos ids reais quando
+    erra; retry ×3 com Fechar+Reabrir; Salvar NUNCA sem a página confirmada;
+    releitura do bean pós-save comparada com a prévia; falha vira pendência.
+    """
+    src = PLAYWRIGHT_V2
+    corpo = src.split("def fase_fgts")[1].split("def fase_contribuicao_social")[0]
+    assert "_abrir_pagina_fgts" in corpo and "range(1, 4)" in corpo, (
+        "REGRESSÃO #80-DO: página FGTS deixou de ser confirmada/retryada")
+    assert "_fechar_e_reabrir_calculo" in corpo, (
+        "REGRESSÃO #80-DO: retry sem Fechar+Reabrir")
+    # o Salvar vem DEPOIS da confirmação da página (nunca por cima de outra página)
+    assert corpo.index("_abrir_pagina_fgts") < corpo.index('_clicar("salvar")')
+    assert "gravaria OUTRA página" in corpo
+    assert "_ler_estado_fgts" in corpo and "_divergencias_fgts" in corpo, (
+        "REGRESSÃO #80-DO: releitura do bean pós-save removida")
+    assert corpo.index('_clicar("salvar")') < corpo.index("_ler_estado_fgts")
+    assert "_registrar_pendencia_fgts" in corpo and "Fase 8 concluída COM PENDÊNCIA" in corpo, (
+        "REGRESSÃO #80-DO: falha do FGTS voltou a ser silenciosa")
+    # helper de abertura: ids REAIS de fgts.xhtml + dump dos ids reais
+    h = src.split("def _abrir_pagina_fgts")[1].split("\n    def ")[0]
+    assert "fgts.jsf" in h and ":tipoDeVerba" in h and ":multa'" in h, (
+        "REGRESSÃO #80-DO: confirmação pelo DOM real (fgts.jsf/tipoDeVerba/multa) removida")
+    assert "_aguardar_servidor_ocioso" in h and "_navegar_menu_via_click(\"li_calculo_fgts\")" in h
+    assert "DIAG-fgts-ids" in h, "REGRESSÃO #80-DO: dump dos ids reais removido"
+    # cascata A4J da multa: esperar os radios habilitarem após o checkbox
+    assert "tipoDoValorDaMulta']\");" in corpo and "!r.disabled" in corpo, (
+        "REGRESSÃO #80-DO: espera pelo re-render dos radios da multa removida")
+    # a contagem cega de radios+checkboxes não pode voltar como critério
+    assert "radios+checkboxes pós-click-menu" not in corpo
+
+
+def test_inv156_guarda_pos_pjc_cartao_zerado_e_fgts_divergente():
+    """#80-DN/#80-DO: a guarda READ-ONLY pós-PJC (`_verificar_escopo_deferido_pjc`)
+    denuncia (1) meses do período de um cartão da prévia com as ocorrências de
+    cartão TODAS zeradas no PJC e (2) parâmetros do <Fgts> diferentes da
+    prévia — além das pendências acumuladas pelas fases. Validado contra o
+    PJC gerado do 0001156-86 (acusa 11/2025–04/2026 e multa=false) e contra o
+    PJC definitivo do calculista (cartão silencioso)."""
+    src = PLAYWRIGHT_V2
+    g = src.split("def _verificar_escopo_deferido_pjc")[1].split("def _cartao_meses_zerados_pjc")[0]
+    for chave in ("cartao_meses_zerados", "cartoes_nao_apurados",
+                  "fgts_divergente", "fgts_nao_aplicado"):
+        assert f'res["{chave}"]' in g, f"REGRESSÃO: chave {chave} removida da guarda pós-PJC"
+    assert "_pendencias_cartao" in g and "_pendencias_fgts" in g
+    h = src.split("def _cartao_meses_zerados_pjc")[1].split("\n    def ")[0]
+    assert "OcorrenciaDoCartaoDePonto" in h and "dataOcorrencia" in h, (
+        "REGRESSÃO #80-DN: guarda não lê mais as ocorrências de cartão do PJC")
+    f = src.split("def _fgts_divergente_pjc")[1].split("\n    def ")[0]
+    assert "destinoDoFgts" in f and "multaDoFgts" in f
+    # webapp exibe as novas chaves no painel do processo
+    web = (REPO_ROOT / "modules" / "webapp_v2.py").read_text(encoding="utf-8")
+    for chave in ("cartao_meses_zerados", "cartoes_nao_apurados",
+                  "fgts_divergente", "fgts_nao_aplicado"):
+        assert chave in web, f"REGRESSÃO: painel do processo não exibe {chave}"

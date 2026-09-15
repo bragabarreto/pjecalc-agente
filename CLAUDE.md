@@ -419,6 +419,71 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Apuração do Cartão de Ponto é VERIFICADA na tabela (#80-DN)
+
+> **Cartão salvo ≠ cartão apurado. Sem a apuração, as colunas Hs EXT / Hs
+> Trabalhadas / Hs Interjornada ficam ZERO no período e toda verba
+> `IMPORTADA_DO_CARTAO` liquida a MENOR — com `totalErros=0`.**
+>
+> **0001156-86 (sessão b3d85551, 15/09/2026):** no Cartão 2/2
+> (11/10/2025→17/04/2026) o log disse *"Página 'Montar' não carregou — tentando
+> URL goto cartaodeponto.jsf"*, *"conversationId atualizado: 1060 → 1111"*,
+> *"URL goto também falhou … — pulando apuração"* e **"Fase 5 concluída"**.
+> Nenhum gate acusou. HE 50% liquidou R$ 6.637,50 contra R$ 24.432,97 no PJC
+> definitivo; INTERVALO INTERJORNADAS R$ 0 contra R$ 2.965,91.
+>
+> Duas causas encadeadas:
+> 1. o bot navegou (sidebar → Visualizar Cartão) logo após o **save pesado**
+>    do cartão, com o servidor ocupado — mesma raiz do #80-H (LockTimeout no
+>    @Synchronized mata a conversa);
+> 2. o fallback por **URL direta** não invoca o `@Begin` do bean (invariante
+>    Seam já documentado p/ `prepararMinicrudsDasBasesCadastradas` e Férias
+>    #80-CU): abriu conversa NOVA sem o cálculo, e o botão Apurar não existe lá.
+>
+> **Fix (`_apurar_cartao_de_ponto` / `_tentar_apurar_cartao`):** gate
+> `_aguardar_servidor_ocioso` antes de navegar; retry ×3 com
+> `_fechar_e_reabrir_calculo` + sidebar por CLIQUE (fallback por URL
+> **removido**); após apurar, a tabela `tabOcorrencias` (cartaodeponto.xhtml)
+> é LIDA e **Hs Trabalhadas > 0 é exigido em todos os meses do cartão**;
+> falha → `_registrar_pendencia_cartao` → *"🛑 Fase 5 concluída COM PENDÊNCIA
+> — cartão N não apurado — verbas IMPORTADA_DO_CARTAO subapuradas"* + resumo
+> em bloco + guarda pós-PJC `cartao_meses_zerados` (meses do período do cartão
+> com `OcorrenciaDoCartaoDePonto` zerada em TODAS as colunas; validada: acusa
+> 11/2025–04/2026 no PJC gerado e silencia no definitivo).
+>
+> Protegido por `test_inv154` e `test_inv156`.
+
+---
+
+## Regra obrigatória — FGTS: página CONFIRMADA pelo DOM real + releitura do bean (#80-DO)
+
+> **Contar radios/checkboxes NÃO prova que a página FGTS abriu. Salvar sem a
+> página confirmada grava OUTRA página.**
+>
+> **0001156-86 (sessão b3d85551, 15/09/2026):** o clique no menu FGTS caiu em
+> `principal.jsf` (conversa morta pós-Fase 4); o recovery reabriu o cálculo via
+> Recentes e clicou `li_calculo_fgts` por JS, mas a navegação NÃO aconteceu. O
+> diag só contava: *"radios+checkboxes pós-click-menu: 24"* — eram os **23
+> componentes de `calculo.xhtml`** (prescricaoFgts, projetaAvisoIndenizado,
+> sabadoDiaUtil…). Todos os campos do FGTS *"não encontrado — pulando"* e o
+> *"✓ click salvar / Operação realizada com sucesso"* foi o **save de Dados do
+> Cálculo**. PJC: `destinoDoFgts=PAGAR`, `multa=false` (prévia:
+> `multa.ativa=true`, sentença condena FGTS + 40%). Log: *"Fase 8 concluída"*.
+>
+> **Fix:** `_abrir_pagina_fgts` = gate #80-H + clique no sidebar + confirmação
+> pelo DOM REAL (`fgts.jsf` na URL **e** radios `tipoDeVerba` **e** checkbox
+> `multa` — ids de `fgts.xhtml`), com dump dos ids reais quando erra; retry ×3
+> com Fechar+Reabrir; **nunca Salvar sem a página confirmada**; após o save,
+> releitura do bean (#80-BK — reabrir por clique e comparar
+> destino/compor/multa/tipo/percentual/incidência/467/LC110 com a prévia);
+> divergência → nova tentativa; no fim, pendência `fgts_nao_aplicado` + guarda
+> pós-PJC `fgts_divergente` (`<Fgts>` × prévia). A cascata A4J da multa
+> (checkbox → reRender dos radios) é esperada antes de marcar os radios.
+>
+> Protegido por `test_inv155` e `test_inv156`.
+
+---
+
 ## Regra obrigatória — Escopo deferido: ZERAR o valorDevido, não só desmarcar (#80-CG)
 
 > **Quando a sentença defere 13º ou FÉRIAS apenas PROPORCIONAIS, as ocorrências
