@@ -5363,3 +5363,39 @@ def test_inv156_guarda_pos_pjc_cartao_zerado_e_fgts_divergente():
     for chave in ("cartao_meses_zerados", "cartoes_nao_apurados",
                   "fgts_divergente", "fgts_nao_aplicado"):
         assert chave in web, f"REGRESSÃO: painel do processo não exibe {chave}"
+
+
+def test_inv157_apuracao_unica_multi_cartao_e_excluir_apuracao_anterior():
+    """#80-DQ (0001156-86, 15/09/2026): com N cartões, o bot apurava após CADA
+    cartão. A página Montar (cartaodeponto.xhtml:32) só renderiza o painel com
+    o botão "Apurar Cartão de Ponto" quando `lista.rowCount eq 0`; a apuração
+    do cartão 1 preenchia a lista (com zeros nos meses do cartão 2) e, para o
+    cartão 2, a página mostrava `tabOcorrencias` + Excluir/Voltar — "botão
+    Apurar ausente" nas 3 tentativas com Fechar+Reabrir (URL já em
+    cartaodeponto.jsf). HE 50% seguia com Hs EXT = 0 de 11/2025 a 04/2026.
+
+    Invariantes: (a) com total > 1 a apuração é adiada e feita UMA vez por
+    fase_cartao_de_ponto após o último cartão; (b) a verificação da tabela
+    cobre os meses de TODOS os cartões (`cartoes=`); (c) se a Montar já tem
+    apuração (retry parcial), Excluir + jConfirm `#popup_ok` e reabrir — nunca
+    pular; (d) sem `goto` de URL (mantém #80-DN).
+    """
+    src = PLAYWRIGHT_V2
+    fase = src.split("def fase_cartao_de_ponto")[1].split("def _processar_um_cartao_de_ponto")[0]
+    assert "self._cartoes_fase5" in fase and "cartoes=_salvos" in fase, (
+        "REGRESSÃO #80-DQ: apuração única multi-cartão removida de fase_cartao_de_ponto")
+    assert "apuração ÚNICA" in fase and "Fase 5 concluída COM PENDÊNCIA" in fase
+    proc = src.split("def _processar_um_cartao_de_ponto")[1].split("def _cartao_presente_na_listagem")[0]
+    assert "if total > 1:" in proc and "apuração adiada" in proc, (
+        "REGRESSÃO #80-DQ: cartão intermediário voltou a apurar (esconde o botão Apurar p/ os seguintes)")
+    i = src.find("def _tentar_apurar_cartao")
+    corpo = src[i:src.find("def _aplicar_ocorrencias_override", i)]
+    assert "_pagina_montar_tem_apuracao_anterior" in corpo and "_excluir_apuracao_anterior_cartao" in corpo, (
+        "REGRESSÃO #80-DQ: Montar com apuração anterior deixou de ser tratada (Excluir + reabrir)")
+    assert "#popup_ok" in corpo and "[id$=':excluir']" in corpo, (
+        "REGRESSÃO #80-DQ: Excluir precisa confirmar o jConfirm (#popup_ok) do confirma() de geral.js")
+    assert "tabOcorrencias" in corpo
+    assert ".goto(" not in corpo, "REGRESSÃO #80-DN: fallback por URL voltou"
+    # verificação global: união dos meses de todos os cartões
+    assert "cartoes: list | None = None" in corpo and "for _c in _alvos" in corpo, (
+        "REGRESSÃO #80-DQ: verificação da tabela deixou de cobrir todos os cartões")

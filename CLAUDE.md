@@ -419,6 +419,34 @@ remove a verba autônoma, injeta reflexos, exclui MULTA/INDENIZAÇÃO/DEDUÇÕES
 
 ---
 
+## Regra obrigatória — Multi-cartão: apuração ÚNICA após o último cartão (#80-DQ)
+
+> **O botão "Apurar Cartão de Ponto" da página Montar só renderiza com a lista
+> de ocorrências VAZIA** (`cartaodeponto.xhtml:32`,
+> `rendered="#{lista.rowCount eq 0}"`). Com ocorrências apuradas a página
+> mostra `tabOcorrencias` + botões **Excluir/Voltar** — e nada mais.
+>
+> **0001156-86 (2ª reexecução, 15/09/2026, já com o #80-DN):** o cartão 1/2
+> apurou na 2ª tentativa; o cartão 2/2 falhou nas 3 tentativas com
+> Fechar+Reabrir, todas com a URL **já em `cartaodeponto.jsf`** e "botão
+> Apurar ausente". Não era conversa morta: a apuração do cartão 1 tinha
+> preenchido a lista (zeros nos meses do cartão 2) e o botão sumiu. A
+> apuração do PJE-Calc é **global** — gera as colunas de todos os períodos de
+> uma vez (PJC definitivo: 2 `ApuracaoCartaoDePonto`, 1 conjunto de colunas).
+>
+> **Fix:** (1) com N cartões, `_processar_um_cartao_de_ponto` só salva; a
+> apuração é feita **UMA vez** por `fase_cartao_de_ponto` após o último
+> cartão, e a verificação da tabela exige `Hs Trabalhadas > 0` nos meses de
+> **todos** os cartões salvos; (2) se a Montar já mostra apuração (retry
+> parcial), `_excluir_apuracao_anterior_cartao` clica **Excluir**, confirma o
+> jConfirm do PJE-Calc (`confirma()` em `js/geral.js` → overlay com
+> `#popup_ok`; ao confirmar, o helper re-clica o botão e o A4J submete),
+> verifica que a tabela sumiu e reabre a Montar — nunca pula.
+>
+> Protegido por `test_inv157`.
+
+---
+
 ## Regra obrigatória — Apuração do Cartão de Ponto é VERIFICADA na tabela (#80-DN)
 
 > **Cartão salvo ≠ cartão apurado. Sem a apuração, as colunas Hs EXT / Hs

@@ -10338,10 +10338,52 @@ class PlaywrightAutomatorV2:
         # Processar cada cartão em sequência. _processar_um_cartao_de_ponto
         # já navega para a listagem + clica Novo internamente, então não
         # precisamos pre-navegar aqui.
+        # #80-DQ: a apuração é ÚNICA para todos os cartões (ver
+        # _processar_um_cartao_de_ponto) — a verificação da tabela precisa dos
+        # períodos de TODOS eles.
+        self._cartoes_fase5 = list(cartoes_validos)
         for idx, cp in enumerate(cartoes_validos):
             if n_cartoes > 1:
                 self.log(f"  ── Cartão {idx+1}/{n_cartoes} ──")
             self._processar_um_cartao_de_ponto(cp, idx=idx + 1, total=n_cartoes)
+        if n_cartoes > 1:
+            # #80-DQ (0001156-86, 15/09/2026): com N cartões, apurar UMA vez,
+            # após o último salvo. O botão "Apurar Cartão de Ponto" da página
+            # Montar só renderiza com a lista de ocorrências VAZIA
+            # (`rendered="#{lista.rowCount eq 0}"`, cartaodeponto.xhtml:32);
+            # apurar após o cartão 1 preenchia a lista (com zeros nos meses
+            # do cartão 2) e o botão SUMIA para o cartão 2 — 3 tentativas de
+            # Fechar+Reabrir falhavam igual ("botão Apurar ausente" com a
+            # URL já em cartaodeponto.jsf). A apuração é global: gera as
+            # colunas de todos os períodos de uma vez (PJC definitivo: 2
+            # ApuracaoCartaoDePonto, 1 conjunto de colunas).
+            _salvos = [c for c in cartoes_validos
+                       if c not in (getattr(self, "_cartoes_nao_salvos", None) or [])]
+            if not _salvos:
+                self.log("  🛑 #80-DQ nenhum cartão salvo — apuração única NÃO executada")
+            else:
+                self.log(
+                    f"  → #80-DQ apuração ÚNICA dos {len(_salvos)}/{n_cartoes} cartões salvos "
+                    f"(o PJE-Calc apura todos os períodos de uma vez)"
+                )
+                ok_apuracao = False
+                try:
+                    ok_apuracao = self._apurar_cartao_de_ponto(
+                        cartoes_validos[-1], idx=n_cartoes, total=n_cartoes, cartoes=_salvos,
+                    )
+                except Exception as e_apurar:
+                    self.log(f"  ⚠ Falha apurar cartões: {e_apurar}")
+                    self._registrar_pendencia_cartao(
+                        n_cartoes, n_cartoes, cartoes_validos[-1],
+                        f"exceção na apuração: {str(e_apurar)[:160]}",
+                    )
+                if ok_apuracao:
+                    self.log("Fase 5 concluída")
+                else:
+                    self.log(
+                        f"🛑 Fase 5 concluída COM PENDÊNCIA — apuração única dos {n_cartoes} "
+                        f"cartões não confirmada — verbas IMPORTADA_DO_CARTAO subapuradas"
+                    )
         # #80-BF/BE: repetir em bloco os fracassos definitivos (o SSE é longo —
         # a linha isolada do momento da falha se perde na revisão do usuário)
         if getattr(self, "_cartao_nao_salvo", False):
@@ -10406,6 +10448,7 @@ class PlaywrightAutomatorV2:
 
         if not salvo:
             self._cartao_nao_salvo = True
+            self._cartoes_nao_salvos = (getattr(self, "_cartoes_nao_salvos", None) or []) + [cp]
             self.log(
                 "  🛑 #80-BF CARTÃO DE PONTO NÃO SALVO após 2 tentativas — APURAÇÃO PULADA; "
                 "a jornada precisará ser lançada MANUALMENTE no PJE-Calc "
@@ -10440,6 +10483,15 @@ class PlaywrightAutomatorV2:
         # clicar Apurar".
         # #80-DN: apuração VERIFICADA (retry ×3 + tabela) — a falha vira
         # pendência explícita; "Fase 5 concluída" limpo só com confirmação.
+        # #80-DQ: com N cartões a apuração é ÚNICA, feita por
+        # fase_cartao_de_ponto após o último cartão (o botão Apurar some
+        # assim que existe uma apuração — ver comentário lá).
+        if total > 1:
+            self.log(
+                f"  ℹ #80-DQ apuração adiada — o PJE-Calc apura TODOS os cartões de uma "
+                f"vez; será feita após o cartão {total}/{total}"
+            )
+            return
         ok_apuracao = False
         try:
             ok_apuracao = self._apurar_cartao_de_ponto(cp, idx=idx, total=total)
@@ -11101,7 +11153,8 @@ class PlaywrightAutomatorV2:
             f"Interjornada = 0 nesses meses): {motivo}"
         )
 
-    def _apurar_cartao_de_ponto(self, cp=None, idx: int = 1, total: int = 1) -> bool:
+    def _apurar_cartao_de_ponto(self, cp=None, idx: int = 1, total: int = 1,
+                                cartoes: list | None = None) -> bool:
         """Apura o Cartão de Ponto — gera as ocorrências (Hs EXT, Hs Trabalhadas,
         Hs Intrajornada, Dias Trabalhados) que serão vinculáveis às verbas HE.
 
@@ -11121,7 +11174,7 @@ class PlaywrightAutomatorV2:
         registra pendência (#80-DN) — nunca silenciosa.
         """
         self.log("  → Apurando Cartão de Ponto (gerar ocorrências)...")
-        rotulo = f"cartão {idx}/{total}"
+        rotulo = f"cartão {idx}/{total}" if not cartoes or len(cartoes) <= 1 else f"{len(cartoes)} cartões"
         ultimo_motivo = "sem tentativa"
         for _tent in range(1, 4):
             if _tent > 1:
@@ -11137,7 +11190,7 @@ class PlaywrightAutomatorV2:
             # operações pesadas — navegar com o servidor ocupado mata a conversa.
             self._aguardar_servidor_ocioso(contexto=f"#80-DN pré-apuração {rotulo}")
             try:
-                motivo = self._tentar_apurar_cartao(cp)
+                motivo = self._tentar_apurar_cartao(cp, cartoes=cartoes)
             except Exception as _e:
                 motivo = f"exceção: {type(_e).__name__}: {str(_e)[:160]}"
             if motivo is None:
@@ -11147,9 +11200,92 @@ class PlaywrightAutomatorV2:
         self._registrar_pendencia_cartao(idx, total, cp, ultimo_motivo)
         return False
 
-    def _tentar_apurar_cartao(self, cp) -> str | None:
+    def _tentar_apurar_cartao(self, cp, cartoes: list | None = None) -> str | None:
         """Uma tentativa de apuração. Retorna None no sucesso CONFIRMADO ou o
-        motivo (str) da falha."""
+        motivo (str) da falha. `cartoes`: todos os cartões cujo período a
+        tabela tem de cobrir (#80-DQ — apuração única, multi-período)."""
+        for _passada in (1, 2):
+            motivo = self._abrir_pagina_montar_cartao()
+            if motivo:
+                return motivo
+            if self._pagina_montar_tem_botao_apurar():
+                break
+            # #80-DQ: a página Montar renderiza o botão Apurar SOMENTE com a
+            # lista de ocorrências vazia (`rendered="#{lista.rowCount eq 0}"`).
+            # Se já existe uma apuração (tentativa anterior parcial, ou
+            # apuração feita cedo demais), a página mostra a tabela
+            # `tabOcorrencias` + botões Excluir/Voltar. Excluir (confirmando o
+            # jConfirm do PJE-Calc) e reabrir a Montar — nunca "pular".
+            if _passada == 1 and self._pagina_montar_tem_apuracao_anterior():
+                self.log(
+                    "    ℹ #80-DQ Montar já tem ocorrências apuradas (apuração anterior) — "
+                    "botão Apurar oculto; Excluindo para reapurar todos os períodos"
+                )
+                if not self._excluir_apuracao_anterior_cartao():
+                    return "apuração anterior existente e 'Excluir' não confirmado — botão Apurar segue oculto"
+                continue
+            try:
+                _url_tail = self._page.url[-70:]
+            except Exception:
+                _url_tail = "?"
+            return f"página 'Montar' (cartaodeponto.jsf) não carregou — botão Apurar ausente (url=...{_url_tail})"
+        return self._clicar_apurar_e_verificar(cp, cartoes=cartoes)
+
+    def _pagina_montar_tem_botao_apurar(self) -> bool:
+        try:
+            self._page.wait_for_selector(
+                "[id$=':montarApartirDaApuracao'], [id='formulario:montarApartirDaApuracao']",
+                state="visible",
+                timeout=15000,
+            )
+            return True
+        except Exception:
+            return False
+
+    def _pagina_montar_tem_apuracao_anterior(self) -> bool:
+        """#80-DQ: a Montar está mostrando `tabOcorrencias` + botão `excluir`
+        (= já existe apuração; o painel Apurar não renderiza)."""
+        try:
+            return bool(self._page.evaluate(
+                """() => {
+                    const tab = document.querySelector("table[id$=':tabOcorrencias']");
+                    const exc = document.querySelector("[id$=':excluir']");
+                    return !!(tab || exc);
+                }"""
+            ))
+        except Exception:
+            return False
+
+    def _excluir_apuracao_anterior_cartao(self) -> bool:
+        """#80-DQ: clica Excluir na Montar e confirma o jConfirm do PJE-Calc
+        (`confirma()` em js/geral.js: overlay jQuery.alerts com `#popup_ok`;
+        ao confirmar, o helper re-clica o botão e o A4J submete). Verifica que
+        a tabela sumiu. Nunca silencioso."""
+        for _t in range(1, 3):
+            try:
+                self._page.locator("[id$=':excluir']").first.click(force=True, timeout=5000)
+            except Exception as e:
+                self.log(f"    ⚠ #80-DQ click Excluir (tent {_t}/2): {e}")
+                self._page.wait_for_timeout(800)
+                continue
+            self._page.wait_for_timeout(600)
+            try:
+                self._page.wait_for_selector("#popup_ok", state="visible", timeout=5000)
+                self._page.locator("#popup_ok").first.click(timeout=3000)
+                self.log("    ✓ #80-DQ Excluir confirmado (jConfirm OK)")
+            except Exception:
+                self.log("    ℹ #80-DQ jConfirm não apareceu após Excluir — seguindo (pode ter sido submetido direto)")
+            self._aguardar_ajax(15000)
+            self._page.wait_for_timeout(1000)
+            if not self._pagina_montar_tem_apuracao_anterior():
+                self.log("    ✓ #80-DQ apuração anterior EXCLUÍDA (tabela removida)")
+                return True
+            self.log(f"    ⚠ #80-DQ tabela de ocorrências ainda presente após Excluir (tent {_t}/2)")
+        return False
+
+    def _abrir_pagina_montar_cartao(self) -> str | None:
+        """Sidebar 'Cartão de Ponto' (CLIQUE) → 'Visualizar Cartão' → página
+        Montar (cartaodeponto.jsf). Retorna None ou o motivo da falha."""
         # CRÍTICO: navegar via CLICK NO LINK DO SIDEBAR (executando o onclick
         # A4J.AJAX.Submit nativo) — NÃO via URL nav direto.
         # URL-nav cria uma conv fresh onde o backing bean do cálculo não
@@ -11238,24 +11374,17 @@ class PlaywrightAutomatorV2:
         self.log(f"    ✓ click Visualizar Cartão ({clicou_vis})")
         self._aguardar_ajax(8000)
         self._page.wait_for_timeout(2000)
-        # Aguardar a página Montar carregar (id `formulario:montarApartirDaApuracao`
-        # é o botão "Apurar Cartão de Ponto" — id legado JSF é confuso mas é o que existe)
         # #80-DN: sem fallback por URL — `goto cartaodeponto.jsf?conversationId`
         # não invoca o @Begin do bean e abre conversa nova SEM o cálculo (log
         # da 0001156-86: "conversationId atualizado: 1060 → 1111" e botão
         # ausente). A recuperação é o retry com Fechar+Reabrir do chamador.
-        try:
-            self._page.wait_for_selector(
-                "[id$=':montarApartirDaApuracao'], [id='formulario:montarApartirDaApuracao']",
-                state="visible",
-                timeout=15000,
-            )
-        except Exception:
-            try:
-                _url_tail = self._page.url[-70:]
-            except Exception:
-                _url_tail = "?"
-            return f"página 'Montar' (cartaodeponto.jsf) não carregou — botão Apurar ausente (url=...{_url_tail})"
+        # (O botão Apurar é verificado pelo chamador — #80-DQ.)
+        return None
+
+    def _clicar_apurar_e_verificar(self, cp, cartoes: list | None = None) -> str | None:
+        """Clica "Apurar Cartão de Ponto" na Montar e CONFIRMA na tabela
+        (#80-DN); com `cartoes`, exige Hs Trabalhadas > 0 nos meses de TODOS
+        (#80-DQ)."""
         # Clicar Apurar Cartão de Ponto
         clicou_apurar = self._page.evaluate(
             """() => {
@@ -11290,19 +11419,28 @@ class PlaywrightAutomatorV2:
             self.log("  ⚠ Apuração disparada mas sem mensagem de sucesso explícita — conferindo a tabela")
         # (c) #80-DN — GROUND TRUTH: a tabela de ocorrências renderizada pelo bean.
         tabela = self._ler_ocorrencias_cartao_apuradas()
-        meses_cp = self._meses_entre(getattr(cp, "data_inicial", None),
-                                     getattr(cp, "data_final", None)) if cp is not None else []
+        _alvos = list(cartoes) if cartoes else ([cp] if cp is not None else [])
+        meses_cp: list[str] = []
+        for _c in _alvos:
+            for _m in self._meses_entre(getattr(_c, "data_inicial", None),
+                                        getattr(_c, "data_final", None)):
+                if _m not in meses_cp:
+                    meses_cp.append(_m)
         if tabela:
             self.log("    📊 Ocorrências apuradas:")
             _mostrar = [m for m in tabela if not meses_cp or m in meses_cp] or list(tabela)
             for mes in _mostrar[:14]:
                 cols = tabela[mes]
                 self.log("       " + " | ".join([mes] + [f"{h}={v:g}" for h, v in cols.items()]))
-        faltam = self._meses_cartao_sem_apuracao(cp, tabela)
+        faltam: list[str] = []
+        for _c in (_alvos or [None]):
+            for _m in self._meses_cartao_sem_apuracao(_c, tabela):
+                if _m not in faltam:
+                    faltam.append(_m)
         if faltam:
             return (
                 f"apuração NÃO confirmada — sem Hs Trabalhadas > 0 em "
-                f"{len(faltam)} mês(es) do cartão: {', '.join(faltam)}"
+                f"{len(faltam)} mês(es) do(s) cartão(ões): {', '.join(faltam)}"
             )
         self.log(
             f"  ✓ Cartão de Ponto APURADO — ocorrências geradas e CONFIRMADAS na "
